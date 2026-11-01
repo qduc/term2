@@ -27,6 +27,8 @@ export type AgentWireV2ChangeType =
   | 'queue_changed'
   | 'session_rotated'
   | 'reasoning'
+  | 'message'
+  | 'task_changed'
   | 'tool_progress'
   | 'task_progress'
   | 'automatic_memory_notice'
@@ -261,6 +263,14 @@ function exactChange(event: WireEvent, branch?: AgentWireV2Branch): AgentWireV2C
       return change({ type: event.type, payload: event.payload }, branch);
     case 'reasoning':
       return change({ type: 'reasoning', payload: event.payload }, branch);
+    // Accepted transcript/task updates have real native producers but no shared
+    // v2 names yet. Preserve their exact public payload; do not relabel them as
+    // terminals or synthesize missing fields. Shared v2 parser/consumer intake
+    // is a separate owner dependency (see m6-v2-remaining-vocabulary-final.md).
+    case 'message':
+      return change({ type: 'message', payload: event.payload }, branch);
+    case 'task_changed':
+      return change({ type: 'task_changed', payload: event.payload }, branch);
     case 'tool_progress':
       return change({ type: 'tool_progress', payload: event.payload }, branch);
     case 'tool_call_streaming_delta':

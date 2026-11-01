@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { normalizeApplicationInput } from '../../rewrite/dist/source/services/agent-runtime/application-run-loop.js';
 import { getProfileMetadata } from '../../rewrite/dist/source/services/profiles/active-profile.js';
+import { profileIdFromLegacyMode } from '../../rewrite/dist/source/services/profiles/legacy-adapter.js';
 import { itemToInput } from '../../rewrite/dist/rewrite/src/model/provider-items.js';
 import { validateFact } from '../../rewrite/dist/rewrite/src/session/log-facts.js';
 import { replay } from '../../rewrite/dist/rewrite/src/session/replay.js';
@@ -85,12 +86,15 @@ export function convertValidatedV3(input, options = {}) {
     const fallback = options.fallback ?? {};
     const provider = state.provider ?? fallback.provider;
     const modelName = state.model ?? fallback.model;
-    const profileId = state.activeProfileId ?? fallback.profileId;
+    const derivedProfile = state.activeProfileId === undefined && state.appMode !== undefined;
+    if (derivedProfile && !object(state.appMode)) refuse('missing-configuration');
+    const profileId = state.activeProfileId ?? (derivedProfile ? profileIdFromLegacyMode(state.appMode) : fallback.profileId);
     const workspace = state.projectPath ?? fallback.workspace;
     if (![provider, modelName, profileId, workspace].every(text)) refuse('missing-configuration');
     if (!workspace.startsWith('/')) refuse('unsupported-workspace');
     const reasoning = state.reasoningEffort;
-    if (reasoning !== undefined && !efforts.has(reasoning)) refuse('unsupported-reasoning');
+    if (reasoning !== undefined && reasoning !== 'default' && !efforts.has(reasoning)) refuse('unsupported-reasoning');
+    const nativeReasoning = reasoning === 'default' ? undefined : reasoning;
     let metadata;
     try {
       metadata = getProfileMetadata(profileId);
@@ -106,7 +110,7 @@ export function convertValidatedV3(input, options = {}) {
     // changed registry profile with the same name.
     const init = envelopes.filter(({ event }) => event.type === 'session_init').at(-1)?.event;
     if (
-      init?.activeProfileId === profileId &&
+      (init?.activeProfileId === profileId || (derivedProfile && init?.activeProfileId === undefined)) &&
       ((init.activeProfileVersion !== undefined && init.activeProfileVersion !== profile.version) ||
         (init.activeProfileDigest !== undefined && init.activeProfileDigest !== profile.digest))
     )
@@ -128,14 +132,14 @@ export function convertValidatedV3(input, options = {}) {
       model,
       profile,
       appVersion: 'v3-offline-converter/1',
-      ...(reasoning !== undefined ? { reasoning } : {}),
+      ...(nativeReasoning !== undefined ? { reasoning: nativeReasoning } : {}),
     });
     add(endAt, {
       type: 'configuration_changed',
       profile,
       configuration: {
         model,
-        ...(reasoning !== undefined ? { reasoning } : {}),
+        ...(nativeReasoning !== undefined ? { reasoning: nativeReasoning } : {}),
         ...(state.temperature !== undefined ? { temperature: state.temperature } : {}),
       },
       intent: {
@@ -156,13 +160,23 @@ export function convertValidatedV3(input, options = {}) {
       }
     }
     let ambiguousMessageTimestamps = 0;
-    const ids = new Set();
+    const noticeId = `${id}-v3-import-notice`;
+    const originalIds = new Set(state.messages.map((message) => message?.id));
+    const ids = new Set([noticeId]);
+    let remappedObservationIdentityCount = 0;
+    let generatedId = 0;
     for (const restoredMessage of state.messages) {
       // Replay adds incidental optional undefined properties. Persisted JSON
       // cannot carry them; observations retain the exact durable JSON shape.
       const source = JSON.parse(JSON.stringify(restoredMessage));
-      if (!object(source) || !text(source.id) || ids.has(source.id)) refuse('invalid-message-identity');
-      ids.add(source.id);
+      if (!object(source) || !text(source.id)) refuse('invalid-message-identity');
+      let observationId = source.id;
+      if (ids.has(observationId)) {
+        do observationId = `${id}-v3-observation-${generatedId++}`;
+        while (originalIds.has(observationId) || ids.has(observationId));
+        remappedObservationIdentityCount++;
+      }
+      ids.add(observationId);
       const matches = (messageTimes.get(source.id) ?? []).filter(({ message }) => isDeepStrictEqual(message, source));
       const times = [...new Set(matches.map(({ ts }) => ts))];
       const known = times.length === 1;
@@ -181,15 +195,13 @@ export function convertValidatedV3(input, options = {}) {
         type: 'transcript_message',
         turnId,
         message: {
-          id: source.id,
+          id: observationId,
           role,
           content: [{ type: 'text', text: content }],
           presentation: { sourceMessage: source, timestampBasis: known ? 'source-message-event' : 'import-settlement' },
         },
       });
     }
-    const noticeId = `${id}-v3-import-notice`;
-    if (ids.has(noticeId)) refuse('invalid-message-identity');
     add(endAt, {
       type: 'transcript_message',
       turnId,
@@ -262,9 +274,11 @@ export function convertValidatedV3(input, options = {}) {
         providerInputCount: normalized.length,
         costRecordCount: costs.length,
         ambiguousMessageTimestamps,
+        derivedProfileCount: Number(derivedProfile),
+        remappedObservationIdentityCount,
         restorationTurnCount: 1,
         continuationBroken: true,
-        fallbackFieldCount: [state.provider, state.model, state.activeProfileId, state.projectPath].filter(
+        fallbackFieldCount: [state.provider, state.model, derivedProfile ? profileId : state.activeProfileId, state.projectPath].filter(
           (value) => value === undefined,
         ).length,
         replayWarningCount: state.replayWarnings?.length ?? 0,

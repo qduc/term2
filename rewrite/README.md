@@ -149,6 +149,24 @@ from the map. Adopted adapters and the direct path's short named list in
 `check-layers.mjs` may import `source/`, and `source/` cannot import from
 `rewrite/`.
 
+Concrete source-tool assembly lives in `app/source-tools.ts`: it binds source
+run-code to a concrete nested approval owner and session access/policy state.
+The native `tools/` contracts do not construct those upper-layer owners. Host
+configuration types use the existing Session facade rather than importing
+model/tool types directly.
+
+Source mappings describe jobs, not directory names: the input React context is
+client state, provider-management policy is model-owned, the plan-mode
+interceptor is tool policy, and the provider-picker integration fixture is app
+composition. The source-edge list still records legacy coupling: provider-picker
+readiness reaches provider auth/registry through `utils/ai/provider-credentials`,
+model-picker metadata imports setting keys, and rewind display metadata imports
+the store's authoritative target type. These exact existing edges (plus the
+picker's provider-policy seam and legacy gateway's interceptor installation) are
+grandfathered, not evidence that clients or shared helpers have unrestricted
+model/config/Session access. Every reached target's closure is still checked;
+new source edges and reverse `source/` → `rewrite/` imports remain prohibited.
+
 The direct headless path is a separate program,
 `node rewrite/dist/rewrite/src/app/cli.js "<prompt>"`, with no fallback to the
 old engine. It stores native conversation logs in its own directory and does

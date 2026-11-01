@@ -1,7 +1,5 @@
 /** Direct in-process host boundary; the bridge Host remains isolated in index.ts. */
-import type { DirectSession, DirectSessionStore } from '../session/facade-types.js';
-import type { ModelRef } from '../model/index.js';
-import type { Workspace } from '../tools/index.js';
+import type { DirectSession, DirectSessionState, DirectSessionStore } from '../session/facade-types.js';
 import type { Principal, WorkspaceGrant } from './index.js';
 import type { WireCommand, WireCommandResult, WireEvent, WireSnapshot } from '../protocol/direct-wire.js';
 import type { DirectCommandCapabilities } from '../protocol/direct-capabilities.js';
@@ -35,11 +33,14 @@ export type DirectAccess =
   | { readonly kind: 'read' | 'write'; readonly sessionId: string };
 export type DirectHostDeps = {
   readonly sessions: DirectSessionStore;
-  readonly defaultModel: ModelRef;
+  readonly defaultModel: DirectSessionState['model'];
   /** Required on every operation, including command sends; no implicit local/remote allow. */
   authorize(principal: Principal, access: DirectAccess): void | Promise<void>;
   /** Validates the grant and returns a workspace; no unchecked path from a client. */
-  resolveWorkspace(principal: Principal, grant: WorkspaceGrant): Workspace | Promise<Workspace>;
+  resolveWorkspace(
+    principal: Principal,
+    grant: WorkspaceGrant,
+  ): DirectSessionState['workspace'] | Promise<DirectSessionState['workspace']>;
   /** Actual M3/M4 operations, if installed. Missing operations fail unavailable. */
   capabilities?(session: DirectSession): DirectCommandCapabilities;
 };

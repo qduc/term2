@@ -38,7 +38,7 @@ import type { AnyToolDefinition } from '../../../source/tools/types.js';
 import type { Item, ItemId, ReasoningEffort } from '../model/index.js';
 import type { DirectNestedAuthority } from '../session/direct-branches.js';
 import type { DirectContextPort } from '../session/direct-capabilities.js';
-import { createSourceToolRegistry, sourceToolContext } from '../tools/source-tools.js';
+import { createSourceToolRegistry, sourceToolContext } from './source-tools.js';
 import type {
   NestedRunRequest,
   NestedRunResult,

@@ -1,3 +1,4 @@
+import { writeMockCliSettings } from '../test-helpers/mock-cli-settings.js';
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash, createPublicKey, generateKeyPairSync } from 'node:crypto';
 import fs from 'node:fs';
@@ -336,9 +337,7 @@ describe('term2 serve (child process)', () => {
     fs.mkdirSync(workspaceRoot, { recursive: true });
     const workspace = realpathSync(workspaceRoot);
     disposables.push(() => rmSync(tempHome, { recursive: true, force: true }));
-    const settingsDir = resolveSettingsDirectory({ homeDir: tempHome });
-    fs.mkdirSync(settingsDir, { recursive: true });
-    fs.writeFileSync(path.join(settingsDir, 'settings.json'), '{}', 'utf-8');
+    writeMockCliSettings(tempHome);
 
     const { publicKey, privateKey } = generateKeyPairSync('rsa', {
       modulusLength: 2048,

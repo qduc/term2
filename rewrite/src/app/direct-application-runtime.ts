@@ -311,6 +311,7 @@ export function createDirectRuntimes(
               settings,
               workspace: context.workspace,
               subject: { kind: 'main' },
+              offeredTools: surface.tools,
               adaptTool: (definition) => memoryBinding.adapt(surface, definition),
               onWarning: (message) => logger.warn(message),
             },

@@ -11,7 +11,11 @@ import { createNestedAuthorizer } from './direct-application-nested.js';
 import { runPolicy } from './direct-application-policy.js';
 import type { DirectConfigMemoryBinding } from './direct-config-memory.js';
 import { borrowDirectConfigSurfaceOptions } from './direct-config-remote.js';
-import { createDirectConfigSettings, type DirectConfigurationIntent } from './direct-config-settings.js';
+import {
+  createDirectConfigSettings,
+  type DirectAppConfiguration,
+  type DirectConfigurationIntent,
+} from './direct-config-settings.js';
 import { readDirectInputPreviewConfiguration } from './direct-input-preview.js';
 import { createDirectVerificationOperations } from './direct-verifier.js';
 import { withGenerationGuard } from './run.js';
@@ -37,7 +41,7 @@ export type DirectConfigurationOptions = {
   readonly selection: ProfileSelection;
   readonly scope: SessionScope;
   readonly surfaceOptions: Omit<ToolSurfaceOptions, 'workspace'>;
-  readonly configuration: DirectCommandConfiguration;
+  readonly configuration: DirectAppConfiguration;
   /** Already-created Session capabilities. Do not invoke the context factory again. */
   readonly capabilities: DirectContextCapabilities;
   readonly memoryBinding: DirectConfigMemoryBinding;
@@ -93,7 +97,7 @@ export async function prepareDirectConfiguration(
             ...(rebound.verification?.limits ? { limits: rebound.verification.limits } : {}),
           }
         : undefined;
-    const { notice, profileName: _profileName, runtime, decideInteraction: _decide, ...request } = surface;
+    const { notice: _notice, profileName: _profileName, runtime, decideInteraction: _decide, ...request } = surface;
     let disposed = false;
     return {
       configuration: {
@@ -119,7 +123,8 @@ export async function prepareDirectConfiguration(
       },
       request: {
         ...request,
-        ...(notice ? { notice } : {}),
+        // Initial profile priming is not a reusable request notice. Accepted
+        // transitions use the runtime planner/native one-shot field instead.
         previewMode: readDirectInputPreviewConfiguration(settings, model).mode,
       },
       capabilities: {

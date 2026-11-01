@@ -29,6 +29,7 @@ import {
   type DirectSessionSettings,
 } from './direct-application-runtime.js';
 import { LOCAL_PRINCIPAL, type DirectAuthority, type DirectAuthorityFactory } from './direct-application-workspaces.js';
+import type { DirectConfigurationIntent } from './direct-config-settings.js';
 import { createDirectInputPreview } from './direct-input-preview.js';
 import { createDirectMcpRefresh } from './direct-application-mcp.js';
 import type { DirectMcp } from './direct-mcp.js';
@@ -57,11 +58,23 @@ export type DirectSessionDetails = {
   contextWindow(model: ModelRef): number | null;
 };
 
+/** Non-secret configuration and its native mutation revision from one synchronous
+ * live capture. This is not a historical snapshot or the global settings revision. */
+export type DirectSessionConfiguration = {
+  readonly sessionId: string;
+  readonly commandRevision: string;
+  readonly model: ModelRef;
+  readonly reasoningEffort: DirectConfigurationIntent['reasoningEffort'];
+  readonly profileId: string;
+};
+
 export type DirectApplication = {
   readonly host: DirectHost;
   readonly principal: Principal;
   /** Non-interactive policy for one attached session; its answer still goes through the wire. */
   headlessPolicy(sessionId: string, autoApprove: boolean, signal: AbortSignal): HeadlessApprovalDecider;
+  /** Caller authorizes logical ownership before requesting current selection. */
+  sessionConfiguration(sessionId: string): Promise<DirectSessionConfiguration>;
   /** Canonical workspace of a direct session, for clients whose snapshot has none. */
   sessionRoot(principal: Principal, sessionId: string): Promise<string>;
   /** Copies a session this mode may run into a new one, without opening the source. Returns the new id. */
@@ -157,6 +170,26 @@ export async function createDirectApplication(options: DirectApplicationOptions)
       writeGoal(await store.open(sessionId), goal, source);
     },
     goal: async (sessionId) => stateOf(await store.open(sessionId)).context.goal.goal,
+    async sessionConfiguration(sessionId) {
+      const session = await store.open(sessionId);
+      const capture = session.capture(() => undefined);
+      try {
+        // No await between capture, revision and installed-settings reads: a
+        // command cannot install a different selection inside this observation.
+        const commandRevision = session.commandRevision();
+        const record = runtimes.get(session.id);
+        if (!record) throw new Error('Session configuration runtime is unavailable.');
+        return {
+          sessionId: session.id,
+          commandRevision,
+          model: capture.state.model,
+          reasoningEffort: record.configurationSettings.get('agent.reasoningEffort'),
+          profileId: record.profileId,
+        };
+      } finally {
+        capture.unsubscribe();
+      }
+    },
     sessionDetails(sessionId, seq) {
       const lineage = readDirectLogLineage(
         options.conversationsDir,
@@ -187,7 +220,7 @@ export async function createDirectApplication(options: DirectApplicationOptions)
       const state = stateOf(session);
       if (state.activeTurnId !== null) throw new DirectProtocolError('rejected', 'Stop the running turn first.');
       const target = model ?? state.model;
-      runtimes.authorizeModel(target, state.model);
+      await runtimes.authorizeModel(target, state.model);
       const next = await successor(store, runtimes, options.conversationsDir, session, state, target);
       const admission = await next.submitWithDelivery({
         clientRequestId: randomUUID(),

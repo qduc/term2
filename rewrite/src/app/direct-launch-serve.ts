@@ -8,15 +8,18 @@
 import { appendFile } from 'node:fs/promises';
 import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
+import { getProfileLabel } from '../../../source/services/profiles/labels.js';
 import { defaultServeStateDir } from '../../../source/gateway/serve-args.js';
 import { getDefaultShellSandboxRunner } from '../../../source/utils/shell/sandbox/shell-sandbox-runner.js';
 import { createDirectServerHost, createServerAuthentication } from '../host/server.js';
 import { SqliteReplayLedger } from '../host/server-auth.js';
 import type { Principal } from '../host/in-process-direct-types.js';
 import type { ServerSessionPresentation, ServerTransportOptions } from '../host/server-contracts.js';
+import type { WireSnapshot } from '../protocol/direct-wire.js';
 import { DirectProtocolError } from '../protocol/direct-errors.js';
 import { readDirectLogLineage } from '../session/direct-rolling-log.js';
 import { createDirectApplication, type DirectApplication } from './direct-application.js';
+import { prepareDirectSessionConfigurationCommand } from './direct-config-settings.js';
 import type { DirectAuthorityFactory } from './direct-application-workspaces.js';
 import {
   bindDirectSessionAccess,
@@ -138,7 +141,17 @@ type PresentationOptions = {
   readonly allowWrite: boolean;
 };
 
-function presentation(options: PresentationOptions): ServerSessionPresentation {
+/** Server owner consumes this additive callback after retaining keyed configure
+ * fields in HTTP validation and native/protocol admission. No route activation here. */
+type DirectServeSessionPresentation = ServerSessionPresentation & {
+  prepareConfiguration(
+    principal: Principal,
+    snapshot: WireSnapshot,
+    body: unknown,
+  ): ReturnType<typeof prepareDirectSessionConfigurationCommand>;
+};
+
+function presentation(options: PresentationOptions): DirectServeSessionPresentation {
   const { app, directory, grants, configuration, allowWrite } = options;
   const owned = (principal: Principal, sessionId: string, seq: number | null) => {
     // Authority stays on the original logical start, validated through the same
@@ -159,25 +172,25 @@ function presentation(options: PresentationOptions): ServerSessionPresentation {
         earliestReplayableSequence: earliestSeq,
       };
     },
-    configuration(principal, snapshot) {
-      const { started, grant } = owned(principal, snapshot.sessionId, snapshot.seq);
+    async configuration(principal, snapshot) {
+      const { grant } = owned(principal, snapshot.sessionId, snapshot.seq);
       const { workspace } = grants.resolveWorkspace(principal, grant);
-      const { revision, defaultsRevision } = configuration.read();
+      const current = await app.sessionConfiguration(snapshot.sessionId);
+      const { defaultsRevision } = configuration.read();
       return {
-        sessionId: snapshot.sessionId,
-        providerId: snapshot.model.provider,
-        modelId: snapshot.model.model,
-        // A live session may have been reconfigured since it started. The start fact
-        // leaves this out when nothing was chosen.
-        reasoningEffort:
-          app.sessionDetails(snapshot.sessionId, snapshot.seq).settings?.get('agent.reasoningEffort') ??
-          started.reasoning ??
-          'default',
-        mode: app.sessionDetails(snapshot.sessionId, snapshot.seq).profileId ?? started.profile.id ?? 'unknown',
+        sessionId: current.sessionId,
+        providerId: current.model.provider,
+        modelId: current.model.model,
+        reasoningEffort: current.reasoningEffort,
+        mode: getProfileLabel(current.profileId),
         toolPolicy: directServeToolPosture(workspace.access === 'read_write' && allowWrite),
-        configRevision: revision,
+        configRevision: current.commandRevision,
         defaultsRevision,
       };
+    },
+    prepareConfiguration(principal, snapshot, body) {
+      owned(principal, snapshot.sessionId, snapshot.seq);
+      return prepareDirectSessionConfigurationCommand(body);
     },
   };
 }
@@ -222,6 +235,14 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
     selection,
     surface: () => ({ autoApprove: false, interactive: true, allowUnsandboxed: false }),
     approvalAlwaysAsks: true,
+    async authorizeModel(next, previous) {
+      if (next.provider !== previous.provider) {
+        throw new Error('Provider is bound to this session; create a new session to change it.');
+      }
+      // A same-selection refresh/rollover does not depend on a fresh catalog.
+      if (next.model === previous.model) return;
+      await configuration.assertModel(next.provider, next.model);
+    },
     authority: serverAuthority(grants, directory, args.localOwnerUserId),
   });
   const auditPath = path.join(stateDir, 'server-audit.jsonl');

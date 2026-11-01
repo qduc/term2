@@ -1,4 +1,7 @@
 /** Isolated, source-schema-validated settings for one prepared runtime generation. */
+import { z } from 'zod';
+import { getProfileMetadata } from '../../../source/services/profiles/active-profile.js';
+import { canonicalProfileId, legacyModeFromProfileId } from '../../../source/services/profiles/legacy-adapter.js';
 import {
   SettingsSchema,
   type SettingKey,
@@ -8,6 +11,47 @@ import { ModelSelectionSchema } from '../../../source/services/settings/model-se
 import { getProvider } from '../../../source/providers/index.js';
 import type { ISettingsService } from '../../../source/services/service-interfaces.js';
 import type { DirectCommandConfiguration } from '../session/direct-command-types.js';
+
+/** App preparation accepts selection intent. Native/protocol ingress must retain
+ * both fields; effective accepted configuration remains source-resolved values. */
+export type DirectAppConfiguration = Omit<DirectCommandConfiguration, 'reasoning'> & {
+  readonly reasoning?: SettingValue<'agent.reasoningEffort'>;
+  readonly profileId?: string;
+};
+
+const sessionUpdate = z
+  .object({
+    clientRequestId: z.string().min(1),
+    expectedRevision: z.string().min(1),
+    admission: z.literal('idle').optional(),
+    modelSelection: ModelSelectionSchema.strict().optional(),
+    reasoningEffort: SettingsSchema.shape.agent.unwrap().shape.reasoningEffort.optional(),
+    mode: z.enum(['standard', 'bare', 'lite', 'plan', 'mentor', 'orchestrator']).optional(),
+  })
+  .strict();
+
+/** A pure HTTP-to-native intent translation. Preserve the caller's invocation key
+ * and native revision on retries; do not read current revision, guess defaults,
+ * mutate settings, or resolve a model's effective reasoning before acceptance.
+ * Unknown fields and empty mutation bodies are rejected, never partially applied. */
+export function prepareDirectSessionConfigurationCommand(body: unknown) {
+  const value = sessionUpdate.parse(body);
+  if (value.modelSelection === undefined && value.reasoningEffort === undefined && value.mode === undefined) {
+    throw new Error('Session configuration mutation requires at least one selection field.');
+  }
+  const configuration: DirectAppConfiguration = {
+    ...(value.modelSelection !== undefined ? { model: value.modelSelection } : {}),
+    ...(value.reasoningEffort !== undefined ? { reasoning: value.reasoningEffort } : {}),
+    ...(value.mode !== undefined ? { profileId: canonicalProfileId(`builtin:${value.mode}`) } : {}),
+  };
+  return {
+    type: 'configure' as const,
+    commandId: value.clientRequestId,
+    admission: 'idle' as const,
+    expectedRevision: value.expectedRevision,
+    configuration,
+  };
+}
 
 export type DirectConfigurationIntent = {
   readonly modelSelection: ReturnType<typeof ModelSelectionSchema.parse>;
@@ -24,7 +68,7 @@ export type DirectConfigurationIntent = {
  */
 export function createDirectConfigSettings(
   current: ISettingsService,
-  patch: DirectCommandConfiguration,
+  patch: DirectAppConfiguration,
 ): { readonly settings: ISettingsService; readonly intent: DirectConfigurationIntent } {
   const snapshot = Object.fromEntries(
     Object.keys(SettingsSchema.shape).map((root) => [root, structuredClone(current.getDynamic(root))]),
@@ -59,6 +103,21 @@ export function createDirectConfigSettings(
   if (patch.temperature !== undefined) {
     agent.temperature = patch.temperature;
     sources.set('agent.temperature', 'cli');
+  }
+  if (patch.profileId !== undefined) {
+    // Resolve before changing the private snapshot; invalid profiles fail the
+    // complete preparation. Source owns aliases and legacy compatibility flags.
+    const profileId = getProfileMetadata(patch.profileId).activeProfileId;
+    const app = snapshot.app as Record<string, unknown>;
+    app.activeProfileId = profileId;
+    sources.set('app.activeProfileId', 'cli');
+    try {
+      const legacy = legacyModeFromProfileId(profileId);
+      Object.assign(app, legacy);
+      for (const key of Object.keys(legacy)) sources.set(`app.${key}`, 'cli');
+    } catch {
+      // SettingsService likewise leaves custom-profile compatibility flags alone.
+    }
   }
   const data = SettingsSchema.parse(snapshot);
   const read = (key: string): unknown => {

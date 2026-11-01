@@ -2,7 +2,7 @@ import type { AgentClient } from '../../../../source/lib/agent-client.js';
 import type { SettingsReader } from '../../config/index.js';
 import { createAdoptedEngine, InvalidAdoptedInputError } from '../../engine/adopted/index.js';
 import type { AdoptedModelRegistry } from '../../model/adopted/index.js';
-import { createAdoptedToolRegistry, type AdoptedToolRegistryOptions } from '../../tools/adopted/index.js';
+import { createOriginalToolCatalog } from '../../engine/adopted/tool-catalog.js';
 import { createAppAgentAssembler } from './agent-tools.js';
 import { turnPrompt } from '../../session/adopted/turn-prompt.js';
 
@@ -20,11 +20,10 @@ export function createAppAdoptedEngine(options: {
     | 'validateApplicationAgent'
     | 'agentOverride'
   >;
-  readonly toolOptions?: AdoptedToolRegistryOptions;
   readonly bindSessionClient?: (client: AgentClient) => void;
 }) {
-  const tools = createAdoptedToolRegistry([], options.toolOptions);
-  const assembleAgent = createAppAgentAssembler(tools, options.toolOptions);
+  const tools = createOriginalToolCatalog([]);
+  const assembleAgent = createAppAgentAssembler(tools);
   const engine = createAdoptedEngine({
     deps: { models: options.models, tools, settings: options.settings },
     clientOptions: options.clientOptions,

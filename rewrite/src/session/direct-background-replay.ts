@@ -36,6 +36,14 @@ export function recoverDirectBackground(
   const recovery: DirectBackgroundFact[] = [];
   for (const task of projectDirectBackground(facts)) {
     if (terminal(task)) continue;
+    if (task.pendingQuestion)
+      recovery.push({
+        type: 'task_question_closed',
+        at,
+        taskId: task.taskId,
+        messageId: task.pendingQuestion.messageId,
+        resolution: { kind: 'interrupted' },
+      });
     for (const request of task.pendingInteractions) {
       recovery.push({
         type: 'task_interaction_closed',
@@ -84,9 +92,38 @@ function applyFact(
       tasks.set(taskId, { ...task, status: 'cancelling' });
       break;
     case 'task_finished':
-      if (task.pendingInteractions.length) throw new Error('Task finished with unresolved interactions.');
+      if (task.pendingInteractions.length || task.pendingQuestion)
+        throw new Error('Task finished with unresolved waits.');
       tasks.set(taskId, { ...task, status: fact.result.kind, completedAt: fact.at, result: fact.result });
       break;
+    case 'task_question_opened':
+      if (
+        task.kind !== 'subagent' ||
+        task.mode !== 'background' ||
+        task.status === 'cancelling' ||
+        task.pendingQuestion
+      )
+        throw new Error('Task cannot open an orchestrator question.');
+      tasks.set(taskId, {
+        ...task,
+        status: 'waiting_for_answer',
+        lastActivityAt: fact.at,
+        pendingQuestion: fact.question,
+      });
+      break;
+    case 'task_question_closed': {
+      if (task.pendingQuestion?.messageId !== fact.messageId) throw new Error('Task question is not pending.');
+      if (task.status === 'cancelling' && fact.resolution.kind === 'answered')
+        throw new Error('Cannot answer a cancelling task.');
+      const status =
+        task.status === 'cancelling'
+          ? 'cancelling'
+          : task.pendingInteractions.length
+          ? 'waiting_for_answer'
+          : 'running';
+      tasks.set(taskId, { ...task, status, lastActivityAt: fact.at, pendingQuestion: undefined });
+      break;
+    }
     case 'task_interaction_opened':
       if (fact.request.sessionId !== task.sessionId || task.status === 'cancelling')
         throw new Error('Invalid task interaction owner.');
@@ -103,7 +140,11 @@ function applyFact(
         throw new Error('Task interaction is not pending.');
       const pendingInteractions = task.pendingInteractions.filter((request) => request.requestId !== fact.requestId);
       const status =
-        task.status === 'cancelling' ? 'cancelling' : pendingInteractions.length ? 'waiting_for_answer' : 'running';
+        task.status === 'cancelling'
+          ? 'cancelling'
+          : pendingInteractions.length || task.pendingQuestion
+          ? 'waiting_for_answer'
+          : 'running';
       tasks.set(taskId, { ...task, status, pendingInteractions });
       break;
     }

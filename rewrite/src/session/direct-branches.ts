@@ -54,6 +54,7 @@ export function createDirectBranchDriver(options: {
         deps: {
           ...deps,
           tools: options.authority.tools,
+          askOrchestrator: request.mode === 'background' ? context.askOrchestrator : undefined,
           toolContext: deps.toolContext ? { ...deps.toolContext, workspace: options.authority.workspace } : undefined,
           // Root context/steering/goal authority must not enter a nested request.
           takeSteering: undefined,
@@ -179,9 +180,10 @@ export function createDirectBranchDriver(options: {
       let outcome: NestedRunResult['outcome'];
       if (terminal.kind === 'interrupted') {
         const cause = terminal.terminalCause;
-        outcome = cause === 'budget_exhausted'
-          ? { kind: 'budget_exhausted' }
-          : { kind: 'interrupted', ...(cause !== undefined ? { terminalCause: cause } : {}) };
+        outcome =
+          cause === 'budget_exhausted'
+            ? { kind: 'budget_exhausted' }
+            : { kind: 'interrupted', ...(cause !== undefined ? { terminalCause: cause } : {}) };
       } else outcome = terminal;
       // Accepted physical starts, including scripted leaves, are execution
       // evidence. Provider call names and offered declarations are not usage.

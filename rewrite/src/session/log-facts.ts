@@ -202,6 +202,8 @@ const nativeTypes = new Set([
   'task_finished',
   'task_interaction_opened',
   'task_interaction_closed',
+  'task_question_opened',
+  'task_question_closed',
   'configuration_changed',
 ]);
 
@@ -611,6 +613,32 @@ export function validateFact(fact: Record<string, unknown>, where: string, scope
         }
         if (result['kind'] === 'failed') validateModelError(result['error'], fail, 'result.error');
       }
+      break;
+    }
+    case 'task_question_opened': {
+      if (typeof fact['at'] !== 'number' || !Number.isFinite(fact['at']) || fact['at'] < 0) fail('at');
+      text(fact['taskId'], 'taskId');
+      const question = object(fact['question'], 'question');
+      text(question['messageId'], 'question.messageId');
+      text(question['question'], 'question.question');
+      if (
+        typeof question['question'] !== 'string' ||
+        !question['question'].trim() ||
+        question['question'].length > 1200
+      )
+        fail('question.question');
+      break;
+    }
+    case 'task_question_closed': {
+      if (typeof fact['at'] !== 'number' || !Number.isFinite(fact['at']) || fact['at'] < 0) fail('at');
+      text(fact['taskId'], 'taskId');
+      text(fact['messageId'], 'messageId');
+      const value = object(fact['resolution'], 'resolution');
+      if (value['kind'] === 'answered') {
+        text(value['answer'], 'resolution.answer');
+        if (typeof value['answer'] !== 'string' || !value['answer'].trim() || value['answer'].length > 2000)
+          fail('resolution.answer');
+      } else if (value['kind'] !== 'cancelled' && value['kind'] !== 'interrupted') fail('resolution.kind');
       break;
     }
     case 'task_interaction_opened': {

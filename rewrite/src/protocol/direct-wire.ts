@@ -156,6 +156,7 @@ export type WireTask = {
   readonly role?: string;
   readonly model?: WireModel;
   readonly mode?: 'foreground' | 'background';
+  readonly pendingQuestion?: { readonly messageId: string; readonly question: string };
   readonly status: 'running' | 'awaiting_interaction' | 'cancelling' | 'completed' | 'cancelled' | 'failed' | 'interrupted';
   readonly startedAt?: number;
   readonly lastActivityAt?: number;
@@ -270,7 +271,7 @@ export type WireNativeCommandOutcome =
   | { readonly kind: 'interrupted'; readonly reason: 'outcome_unobserved' };
 export type WireCommandReceipt = { readonly request: WireNativeCommandRequest; readonly revision: string; readonly outcome?: WireNativeCommandOutcome };
 /** Accepted Session planning notices; deliveries identify actual silent turns. */
-export type WireBackgroundNotice = { readonly id: string; readonly kind: 'completion' | 'control' | 'check_in'; readonly taskIds: readonly string[]; readonly text: string };
+export type WireBackgroundNotice = { readonly id: string; readonly kind: 'completion' | 'control' | 'check_in' | 'question'; readonly taskIds: readonly string[]; readonly text: string };
 export type WireNoticeDelivery = { readonly clientRequestId: string; readonly turnId: string; readonly notificationIds: readonly string[] };
 export type WireNotifications = { readonly notices: readonly WireBackgroundNotice[]; readonly deliveries: readonly WireNoticeDelivery[] };
 export type WireNotificationDrainResult =
@@ -402,7 +403,7 @@ export type WireEventPayloads = {
   retry_eligibility: WireRetry;
   configuration: WireConfiguration;
   queue_changed: { readonly change: WireQueueChange; readonly entries: readonly WireQueueEntry[]; readonly state: WireSnapshot['queueState']; readonly pauseReason?: WireSnapshot['queuePauseReason']; readonly admission?: WireAdmission; readonly messages?: readonly WireMessage[]; readonly submissions?: readonly WireSubmissionRecord[] };
-  task_changed: { readonly change: 'task_started' | 'task_backgrounded' | 'task_stop_requested' | 'task_finished'; readonly at: number; readonly task: WireTask };
+  task_changed: { readonly change: 'task_started' | 'task_backgrounded' | 'task_stop_requested' | 'task_finished' | 'task_question_opened' | 'task_question_closed'; readonly at: number; readonly task: WireTask };
   task_progress: { readonly taskId: string; readonly at: number; readonly kind: 'text' | 'tool_progress' | 'activity'; readonly chunk: string; readonly executionId?: string };
   subagent: { readonly agentId: string; readonly branchId?: string; readonly turnId?: string; readonly parentTurnId?: string; readonly rootTurnId?: string; readonly role?: string; readonly event: WireEvent };
   compacted: { readonly replaced: number; readonly summaryId: string };

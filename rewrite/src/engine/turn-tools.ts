@@ -262,6 +262,14 @@ export class TurnTools {
     return {
       ...this.deps.toolContext!,
       signal: this.signal,
+      ...(this.deps.askOrchestrator
+        ? {
+            askOrchestrator: (question: string) => {
+              this.#checkBody(current());
+              return this.deps.askOrchestrator!(question);
+            },
+          }
+        : {}),
       ...(this.deps.subagents
         ? {
             subagents: {
@@ -269,6 +277,8 @@ export class TurnTools {
               get: (target: string) => subagents().get(target),
               wait: (target: string, signal: AbortSignal) => subagents().wait(target, signal),
               cancel: (target: string) => subagents().cancel(target),
+              message: (target: string, message: string, replyTo?: string) =>
+                subagents().message(target, message, replyTo),
             },
           }
         : {}),

@@ -19,10 +19,7 @@ import type { DirectQueueState } from './direct-queue-types.js';
 import type { Fact, TurnOutcomeName, DirectTurnFact, DirectCompactionFact, DirectHistoryFact } from './facts.js';
 import { reduceDirectCommandReceipts } from './direct-command-receipts.js';
 import type { DirectCommandReceipts } from './direct-command-types.js';
-import {
-  reduceDirectNotifications,
-  type DirectNotificationState,
-} from './direct-notifications.js';
+import { reduceDirectNotifications, type DirectNotificationState } from './direct-notifications.js';
 import { parseDirectConfigurationFact } from './direct-configuration.js';
 
 export type ReplayOptions = {
@@ -347,9 +344,11 @@ function replayProjection(
         'task_finished',
         'task_interaction_opened',
         'task_interaction_closed',
+        'task_question_opened',
+        'task_question_closed',
       ].includes(fact.type)
     ) {
-      // The decoder recognizes exactly six task variants; projection rejects invalid transitions.
+      // Task projection rejects invalid transitions; no live continuations are restored.
       backgroundFacts.push(fact as DirectBackgroundFact);
       return;
     }

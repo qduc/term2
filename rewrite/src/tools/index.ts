@@ -66,12 +66,26 @@ export type SubagentTaskState = {
     | { readonly kind: 'interrupted'; readonly reason: string; readonly value?: unknown };
   readonly pendingInteractions: readonly unknown[];
 };
+export type SubagentMessageResult =
+  | { readonly ok: true; readonly runId: string; readonly status: 'running'; readonly delivery: 'answered' }
+  | {
+      readonly ok: false;
+      readonly target: string;
+      readonly code:
+        | 'not_active'
+        | 'unsupported_control'
+        | 'invalid_guidance'
+        | 'question_not_pending'
+        | 'question_mismatch'
+        | 'question_pending';
+    };
 export type SubagentTaskPort = {
   list(): readonly SubagentTaskState[];
   get(target: string): SubagentTaskState | undefined;
   /** Abort only this waiter; cancellation of the child is a distinct explicit operation. */
   wait(target: string, signal: AbortSignal): Promise<SubagentTaskState | undefined>;
   cancel(target: string): { readonly ok: boolean; readonly code?: string };
+  message(target: string, message: string, replyTo?: string): SubagentMessageResult;
 };
 export type NestedRunRequest = {
   /** Original caller task input, preserved separately from resolved instructions/history. */
@@ -127,6 +141,8 @@ export type ToolContext = {
   /** Runs a subagent. The engine injects it, so tools never import engine/. */
   runNested(request: NestedRunRequest): Promise<NestedRunResult>;
   readonly subagents?: SubagentTaskPort;
+  /** Task-scoped async child question; never a user interaction or synthetic answer. */
+  readonly askOrchestrator?: (question: string) => Promise<string>;
   readonly workspace: Workspace;
   readonly settings: SettingsReader;
   readonly signal: AbortSignal;

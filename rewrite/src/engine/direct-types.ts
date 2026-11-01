@@ -110,6 +110,7 @@ export type TurnDeps = {
   readonly tools?: ToolRegistry;
   readonly toolContext?: ToolContextSeed;
   readonly maxParallelToolCalls?: number;
+  readonly askOrchestrator?: ToolContext['askOrchestrator'];
   readonly takeSteering?: (turnId: TurnId) => readonly Item[] | Promise<readonly Item[]>;
   readonly prepareRequest?: (
     request: ModelRequest,

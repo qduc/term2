@@ -248,12 +248,21 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
     const filesChanged: string[] = [];
     const searchViaShell = resolveSubagentSearchViaShell(settings, definition.canRunShell);
     const parentNames = new Set(options.graph().map((tool) => tool.name));
+    const askOrchestrator =
+      mode === 'background'
+        ? (question: string) => {
+            const ask = current().askOrchestrator;
+            if (!ask) throw new Error('Session orchestrator question port is unavailable');
+            return ask(question);
+          }
+        : undefined;
     const definitions = factory
-      .buildToolDefinitions(definition, filesChanged, task, searchViaShell, true)
+      .buildToolDefinitions(definition, filesChanged, task, searchViaShell, true, undefined, undefined, askOrchestrator)
       .filter(
         (tool) =>
           (parentNames.has(tool.name) ||
             (!definition.isScriptGeneric && definition.canRead && WORKSPACE_READ_TOOLS.has(tool.name)) ||
+            (askOrchestrator && tool.name === 'ask_orchestrator') ||
             (definition.role === 'reviewer' && tool.name === 'run_explorer')) &&
           (!executionContext.isRemote() || !options.remoteUnavailable.has(tool.name)),
       )
@@ -452,9 +461,8 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
         ? { ok: true, runId: task.taskId, status: 'cancelling' }
         : { ok: false, code: 'not_active', target };
     },
-    sendSubagentMessage({ target }) {
-      current();
-      return { ok: false, code: 'unsupported_control', target };
+    sendSubagentMessage({ target, message, reply_to }) {
+      return controls().message(target, message, reply_to);
     },
   };
   return {

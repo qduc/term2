@@ -66,12 +66,17 @@ scenario is the one whose CLI never reached the state it waits for.
   first-run/menu ownership must not count as idle.
   The explicitly selected direct-native entry does not publish these source-only
   channels. `direct-composer.ts` recognizes only its latest complete full Ink render:
-  adjacent model/status, ordinary single-line end-cursor composer, and native footer.
+  model/status context, ordinary single-line end-cursor composer, and active native
+  footer. Ordinary notice/queue/goal/command rows may separate status and composer.
   Native freshness tokens are decoded-string offsets, not source revision counts.
   Exact fresh composer rendering acknowledges text; PTY echo/transcript does not.
   Cursor styling alone does not prove ownership (it remains rendered while input
-  is disabled). Panels, intervening notices/errors, wrapped/multiline/image input,
-  and source-only revision/approval handshakes remain unsupported, not synthesized.
+  is disabled). The product must gate the ordinary footer with the same activation
+  condition as its editor; overlay/disconnected/submitting frames must not advertise
+  ordinary Enter keys. Wrapped/multiline/image input and source-only revision/approval
+  handshakes remain unsupported, not synthesized. `turn-decisions.blackbox.ts`
+  observes fresh complete native question frames with the exact fixture prompt and
+  modal keyboard footer instead of waiting for a source approval sidecar.
   Keep independent response/request/command observations before settled idle waits.
 - `scripts/provider-black-box/provider-capability-matrix.ts` and
   `provider-session-capability-manifest.ts` own the test-side capability rows,

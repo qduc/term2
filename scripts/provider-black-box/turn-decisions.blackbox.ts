@@ -2,8 +2,10 @@ import { createServer, type ServerResponse } from 'node:http';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { expect, it } from 'vitest';
+import { stripVTControlCharacters } from 'node:util';
 import { readHarnessApprovalReady } from '../../source/lib/harness-input-idle.js';
 import { createIsolatedWorkspaceLease, writePtyTextAndSubmit } from './provider-test-harness.js';
+import { usesDirectComposer } from '../../source/test-helpers/direct-composer.js';
 
 it('resumes repeated questions once per decision and settles cancellation before the next turn', async () => {
   const requests: Record<string, unknown>[] = [];
@@ -53,6 +55,9 @@ it('resumes repeated questions once per decision and settles cancellation before
     cols: 120,
     rows: 40,
   });
+  const directEntry = usesDirectComposer([
+    process.env.TERM2_TEST_CLI ? resolve(process.env.TERM2_TEST_CLI) : join(process.cwd(), 'dist/cli.js'),
+  ]);
   const complete = (index: number, output: Record<string, unknown>[]) => {
     const response = pending[index];
     if (!response) throw new Error(`Missing request ${index}`);
@@ -79,7 +84,25 @@ it('resumes repeated questions once per decision and settles cancellation before
     (requests[index]!.input as Record<string, unknown>[]).filter(
       (item) => item.type === 'function_call_output' && item.call_id === callId,
     );
-  const ready = async (callId: string, after: number) => {
+  const ready = async (callId: string, prompt: string, after: number) => {
+    if (directEntry) {
+      // The native entry has no source readiness sidecar. The fixture prompt
+      // and keyboard footer must occur in the latest complete render after
+      // the caller's native output-offset token, not transcript or partial output.
+      await child.waitForState((snapshot) => {
+        const start = snapshot.output.lastIndexOf('\x1b[?2026h');
+        if (start < after) return false;
+        const end = snapshot.output.indexOf('\x1b[?2026l', start);
+        if (end < 0) return false;
+        const frame = stripVTControlCharacters(snapshot.output.slice(start, end));
+        return (
+          frame.includes(`Question 1/1: ${prompt}`) &&
+          frame.includes('Ctrl+G return to composer') &&
+          frame.includes('↑/↓ select')
+        );
+      });
+      return;
+    }
     try {
       await child.waitForState(() => {
         const current = readHarnessApprovalReady(lease.paths.idlePath);
@@ -99,19 +122,23 @@ it('resumes repeated questions once per decision and settles cancellation before
     const firstIdle = child.readIdleGeneration();
     await writePtyTextAndSubmit(child, 'ANSWER_A_QUESTION');
     await child.waitForState(() => requests.length === 1);
-    const offset0 = readHarnessApprovalReady(lease.paths.idlePath)?.revision ?? 0;
+    const offset0 = directEntry
+      ? child.readComposerRevision()
+      : readHarnessApprovalReady(lease.paths.idlePath)?.revision ?? 0;
     complete(0, [question('answered-question', 'SELECT_ONE_COLOR')]);
     await child.waitForVisibleOutput('SELECT_ONE_COLOR');
-    await ready('answered-question', offset0);
+    await ready('answered-question', 'SELECT_ONE_COLOR', offset0);
     await child.write('2');
     await child.waitForState(() => requests.length === 2);
     expect(outputs(1, 'answered-question')).toHaveLength(1);
     expect(String(outputs(1, 'answered-question')[0]!.output)).toContain('Violet');
     expect(requests[1]!.previous_response_id).toBe('question-response-0');
-    const offset1 = readHarnessApprovalReady(lease.paths.idlePath)?.revision ?? 0;
+    const offset1 = directEntry
+      ? child.readComposerRevision()
+      : readHarnessApprovalReady(lease.paths.idlePath)?.revision ?? 0;
     complete(1, [question('second-answered-question', 'SELECT_A_SECOND_COLOR')]);
     await child.waitForVisibleOutput('SELECT_A_SECOND_COLOR');
-    await ready('second-answered-question', offset1);
+    await ready('second-answered-question', 'SELECT_A_SECOND_COLOR', offset1);
     await child.write('1');
     await child.waitForState(() => requests.length === 3);
     expect(outputs(2, 'second-answered-question')).toHaveLength(1);
@@ -125,10 +152,12 @@ it('resumes repeated questions once per decision and settles cancellation before
     const beforeCancel = child.readIdleGeneration();
     await writePtyTextAndSubmit(child, 'CANCEL_A_QUESTION');
     await child.waitForState(() => requests.length === 4);
-    const offset3 = readHarnessApprovalReady(lease.paths.idlePath)?.revision ?? 0;
+    const offset3 = directEntry
+      ? child.readComposerRevision()
+      : readHarnessApprovalReady(lease.paths.idlePath)?.revision ?? 0;
     complete(3, [question('cancelled-question', 'CANCEL_THIS_QUESTION')]);
     await child.waitForVisibleOutput('CANCEL_THIS_QUESTION');
-    await ready('cancelled-question', offset3);
+    await ready('cancelled-question', 'CANCEL_THIS_QUESTION', offset3);
     await child.write('\u001b');
     await child.waitForIdleInput({ after: beforeCancel });
     expect(requests).toHaveLength(4);

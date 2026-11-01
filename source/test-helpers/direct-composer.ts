@@ -2,6 +2,8 @@ import { stripVTControlCharacters } from 'node:util';
 
 const BEGIN_FRAME = '\x1b[?2026h';
 const END_FRAME = '\x1b[?2026l';
+const MODEL_STATUS = /^[^\n]+\/[^\n]+ · ([^·]+) · [\d,]+ in \/ [\d,]+ out/;
+const ACTIVE_CURSOR = /\x1b\[7m \x1b\[27m(?:\x1b\[[\d;]*m)*$/;
 
 /** Native test entry selection, never a fallback from a failed source-marker wait. */
 export function usesDirectComposer(args: readonly string[]): boolean {
@@ -12,8 +14,9 @@ export function usesDirectComposer(args: readonly string[]): boolean {
  * Offsets index the decoded JS string, not bytes or source revision/generation counts.
  * A cursor is not proof of keyboard ownership: callers still need their independent
  * response/command boundary, and text submission requires a fresh exact value render.
- * Panels/notices between status and composer, wrapping, images and non-end cursors
- * deliberately do not match; this is not a terminal emulator or a menu handshake.
+ * The ordinary footer must share the product editor activation condition. Status
+ * may be separated by ordinary notice/queue/goal rows. Wrapping, images and non-end
+ * cursors deliberately do not match; this is not a terminal emulator or menu handshake.
  */
 export function readDirectComposer(
   output: string,
@@ -22,19 +25,29 @@ export function readDirectComposer(
   if (start < 0) return null;
   const end = output.indexOf(END_FRAME, start);
   if (end < 0) return null; // Never fall back to an older frame while a newer one is incomplete.
+  // CR is the PTY line terminator, not composer content. Keep every other
+  // byte intact: in particular, do not trim or collapse spaces in a draft.
   const lines = output
     .slice(start + BEGIN_FRAME.length, end)
-    .replaceAll('\r', '')
-    .split('\n');
+    .split('\n')
+    .map((line) => (line.endsWith('\r') ? line.slice(0, -1) : line));
   for (let index = lines.length - 2; index > 0; index -= 1) {
     const row = lines[index]!;
     const visible = stripVTControlCharacters(row);
-    const status = stripVTControlCharacters(lines[index - 1]!);
     const footer = stripVTControlCharacters(lines[index + 1]!);
-    const phase = /^[^\n]+\/[^\n]+ · ([^·]+) · [\d,]+ in \/ [\d,]+ out/.exec(status)?.[1];
-    if (!phase || !visible.startsWith('❯ ') || !/\x1b\[7m \x1b\[27m(?:\x1b\[[\d;]*m)*$/.test(row)) continue;
+    if (!visible.startsWith('❯ ') || !ACTIVE_CURSOR.test(row)) continue;
     if (!/^Enter (?:send|steer) │ Alt\+Enter follow-up │/.test(footer)) continue;
-    return { start, end: end + END_FRAME.length, value: visible.slice(2, -1), idle: phase === 'idle' };
+    // Status panels are ordinary rows and may be separated from the composer
+    // by Queue/memory/Goal/Command/notice rows. A footer between them would
+    // indicate another render surface, so never anchor across one.
+    let statusIndex = index - 1;
+    while (statusIndex >= 0) {
+      const candidate = stripVTControlCharacters(lines[statusIndex]!);
+      if (/^Enter (?:send|steer) │ Alt\+Enter follow-up │/.test(candidate)) break;
+      const phase = MODEL_STATUS.exec(candidate)?.[1];
+      if (phase) return { start, end: end + END_FRAME.length, value: visible.slice(2, -1), idle: phase === 'idle' };
+      statusIndex -= 1;
+    }
   }
   return null;
 }

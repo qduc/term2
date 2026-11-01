@@ -1,8 +1,8 @@
 /** Read-only CLI discovery. Native logical lineages are the only history source. */
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { readDirectLogLineage, readDirectLogLineages, type DirectLogLineage } from '../session/direct-rolling-log.js';
-import { latestDirectConfiguration } from '../session/direct-configuration.js';
+import { readDirectLogLineage, type DirectLogLineage } from '../session/direct-rolling-log.js';
+import { withNativeCatalogue, type NativeCatalogueEntry } from './native-catalogue.js';
 import { resolveDirectRemoteConnection } from './direct-remote-config.js';
 import type { SessionOptions } from './cli-args.js';
 
@@ -33,13 +33,13 @@ function belongsTo(lineage: DirectLogLineage, selected: Selection): boolean {
   return normalize(metadata.workspace) === normalize(selected.root);
 }
 
-function recent(directory: string, selected: Selection): readonly DirectLogLineage[] {
-  return readDirectLogLineages(directory)
-    .filter((lineage) => belongsTo(lineage, selected))
-    .sort((a, b) => {
-      const updated = (lineage: DirectLogLineage): string => lineage.entries.at(-1)!.at;
-      return updated(b).localeCompare(updated(a)) || a.logicalSessionId.localeCompare(b.logicalSessionId);
-    });
+function recent(directory: string, selected: Selection): readonly NativeCatalogueEntry[] {
+  return withNativeCatalogue(directory, (catalogue) =>
+    catalogue.list({
+      ...selected,
+      ...(selected.target === 'local' ? {} : { binding: { client: 'ssh', id: selected.target } }),
+    }),
+  );
 }
 
 function notFound(reference: string): Error {
@@ -60,7 +60,7 @@ export async function resolveNativeResume(directory: string, options: SessionOpt
   if (reference === 'last') {
     const latest = recent(directory, selected)[0];
     if (!latest) throw notFound(reference);
-    lineage = latest;
+    return { ...options, resumeId: latest.id };
   } else {
     if (!NATIVE_ID.test(reference) || !existsSync(path.join(directory, `${reference}.jsonl`))) {
       throw notFound(reference);
@@ -80,38 +80,12 @@ export async function listNativeConversations(directory: string, options: Sessio
   const conversations = recent(directory, await selection(options)).slice(0, 10);
   const lines = ['Recent Conversations (last 10):'];
   for (const lineage of conversations) {
-    const facts = lineage.entries.map((entry) => entry.fact);
-    const configuration = latestDirectConfiguration(facts);
-    const model = configuration?.configuration.model ?? lineage.metadata.model;
-    const profile = configuration?.profile ?? lineage.metadata.profile;
-    // Imported transcript observations are ordinary native display facts; their
-    // hidden context-restoration turn is not a user admission. Deduplicate by
-    // message identity when an observation supplies a derived message's display.
-    const messages = new Map<string, string>();
-    for (const fact of facts) {
-      if (fact.type === 'turn_started' && fact.display !== false) {
-        for (const item of fact.input) {
-          if (item.type === 'user_message')
-            messages.set(item.id, item.content.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join(' '));
-        }
-      } else if (fact.type === 'transcript_message') {
-        if (fact.message.role === 'user')
-          messages.set(
-            fact.message.id,
-            fact.message.content.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join(' '),
-          );
-        else messages.delete(fact.message.id);
-      }
-    }
-    const preview = messages.values().next().value?.replace(/\s+/g, ' ');
     lines.push(
-      `\n${lineage.logicalSessionId}  ${lineage.entries.at(-1)!.at}`,
-      `  ${messages.size} message${messages.size === 1 ? '' : 's'} | model: ${model.model} | mode: ${profile.id.replace(
-        /^builtin:/,
-        '',
-      )}`,
-      ...(preview ? [`  ${preview}`] : []),
-      `  term2 --resume ${lineage.logicalSessionId}`,
+      `\n${lineage.id}  ${lineage.updated}`,
+      `  ${lineage.messages} message${lineage.messages === 1 ? '' : 's'} | model: ${
+        lineage.model
+      } | mode: ${lineage.profile.replace(/^builtin:/, '')}`,
+      `  term2 --resume ${lineage.id}`,
     );
   }
   if (conversations.length === 0) lines.push('No conversations found for this project.');

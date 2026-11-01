@@ -3,6 +3,9 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { expect, it } from 'vitest';
 import { createIsolatedWorkspaceLease, writePtyTextAndSubmit } from './provider-test-harness.js';
+import { usesDirectComposer } from '../../source/test-helpers/direct-composer.js';
+
+const direct = usesDirectComposer([process.env.TERM2_TEST_CLI ?? '']);
 
 it('rejects missing criteria evidence and leaves an unverifiable goal active', async () => {
   const requests: Record<string, unknown>[] = [];
@@ -106,20 +109,40 @@ it('rejects missing criteria evidence and leaves an unverifiable goal active', a
     expect(String(outputs(4, 'achieved')[0]!.output)).toContain('achieved proposed');
     complete(4, [message('PROPOSED_DONE')]);
     await child.waitForVisibleOutput('Completion verification blocked');
-    expect(child.getVisibleOutput().replace(/\s+/g, ' ')).toContain(
-      'Completion verification blocked: Unsupported workspace: the working directory is not inside a Git repository, so completion cannot be verified. The durable goal remains active.',
-    );
+    const blockedOutput = child.getVisibleOutput().replace(/\s+/g, ' ');
+    if (direct) {
+      expect(blockedOutput).toContain('Completion verification blocked:');
+      expect(blockedOutput).toContain('not a git repository');
+      expect(blockedOutput).toContain('The durable goal remains active.');
+    } else {
+      expect(blockedOutput).toContain(
+        'Completion verification blocked: Unsupported workspace: the working directory is not inside a Git repository, so completion cannot be verified. The durable goal remains active.',
+      );
+    }
     await child.waitForIdleInput({ after: afterBlocked });
     expect(requests).toHaveLength(5);
     const files = (await readdir(lease.paths.conversationsDir)).filter((file) => file.endsWith('.jsonl'));
     const history = (
       await Promise.all(files.map((file) => readFile(join(lease.paths.conversationsDir, file), 'utf8')))
     ).join('\n');
-    const changes = history
+    const events = history
       .trim()
       .split('\n')
-      .map((line) => JSON.parse(line).event)
-      .filter((event) => event.type === 'goal_changed');
+      .map((line) => {
+        const row = JSON.parse(line);
+        if (direct) expect(row.v).toBe(2);
+        return direct ? row.fact : row.event;
+      });
+    const changes = events.filter((event) => event.type === 'goal_changed');
+    if (direct) {
+      const terminal = events.find(
+        (event) => event.type === 'turn_ended' && event.terminalCause === 'completion_verification_blocked',
+      );
+      expect(terminal).toMatchObject({ outcome: 'interrupted', terminalCause: 'completion_verification_blocked' });
+      expect(terminal.notice).toContain('not a git repository');
+      // Unsupported workspaces fail before an attempt is admitted; do not invent an ended attempt.
+      expect(events.filter((event) => event.type === 'completion_verification_started')).toHaveLength(0);
+    }
     expect(changes).toHaveLength(1);
     expect(String(outputs(4, 'achieved')[0]!.output)).toContain(`[goal ${changes[0].goal.id}]`);
     expect(changes[0].goal).toMatchObject({

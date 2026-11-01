@@ -68,7 +68,7 @@ function seed(id: string, next?: string): void {
     ]);
     log.append([
       rotation(id, next),
-      { type: 'command_finished', commandId: 'rotate', outcome: { kind: 'rolled_over', sessionId: next } },
+      { type: 'command_finished', commandId: 'rotate', outcome: { kind: 'rolled_over', sessionId: id } },
     ]);
   }
   log.close();

@@ -108,6 +108,20 @@ conversation storage.
   `replay.fromSeq`; headless one-shot resume uses `connect(principal, id)` and
   does not reset or replay client state.
 
+## Background drain timing
+
+`runDirectHeadless` keeps one overall background deadline. `driveBackground`
+may wait only until the next notification-drain poll when Session is still busy
+settling the previous turn. Expiring that shorter wait must re-enter the driver,
+not cancel work as if the overall deadline had expired. A completed child and
+an enqueued notice do not establish that the delivery turn has been admitted.
+Keep an outstanding iterator read until its event is consumed, including when
+a drain command is awaited between polling windows; clearing it on resolution
+can discard the first delivery frame. Keep the deadline check in the driver;
+increasing the configured timeout cannot
+repair a poll/deadline mix-up. The event wait during an active delivery turn uses
+the actual remaining deadline and still fails when that expires.
+
 ## Remaining shared contract gaps
 
 - **Host assembly:** this candidate has the `DirectHost`/`DirectConnection`

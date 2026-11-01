@@ -120,7 +120,9 @@ a drain command is awaited between polling windows; clearing it on resolution
 can discard the first delivery frame. Keep the deadline check in the driver;
 increasing the configured timeout cannot
 repair a poll/deadline mix-up. The event wait during an active delivery turn uses
-the actual remaining deadline and still fails when that expires.
+the actual remaining deadline and still fails when that expires. An explicit
+background abort retains the `cancelled` outcome after the same cleanup, so the
+app can map SIGINT/SIGTERM to their signal exit codes rather than ordinary error.
 
 ## Remaining shared contract gaps
 

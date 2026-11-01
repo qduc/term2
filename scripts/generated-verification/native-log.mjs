@@ -7,10 +7,27 @@ import { createLog, openLog, readFactLines } from '../../rewrite/src/session/log
 import { captureDirectFinalWindow, recoverDirectFinalWindow } from '../../rewrite/src/session/direct-final.ts';
 import { adoptedModelConversion } from '../../rewrite/src/model/adopted/index.ts';
 
+// Decode embedded provider JSON once, while also inspecting literal ref framing.
+function storedStrings(value, out = []) {
+  if (typeof value === 'string') {
+    let parsed;
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      /* ordinary text */
+    }
+    if (parsed !== null && typeof parsed === 'object') storedStrings(parsed, out);
+    else out.push(value);
+  } else if (value !== null && typeof value === 'object')
+    Object.values(value).forEach((child) => storedStrings(child, out));
+  return out;
+}
+
 const unit = fc.record({
   body: fc.string({ minLength: 1, maxLength: 40 }),
   size: fc.integer({ min: 200, max: 3000 }),
   structured: fc.boolean(),
+  promptEcho: fc.boolean(),
   display: fc.constantFrom('same', 'framed', 'different'),
   reopen: fc.boolean(),
   rotate: fc.boolean(),
@@ -39,7 +56,15 @@ export const nativeLogProperties = [
           // Identity-specific, long markers avoid mistaking genuine equal output
           // from separate executions for redundant storage. Include JSON escapes.
           const body = `BEGIN_PAYLOAD_${n}_` + u.body.repeat(Math.ceil(u.size / u.body.length)) + `_END_PAYLOAD_${n}`;
-          sentinels.push(body);
+          const argumentUnit = u.body + '\n"\\🙂';
+          const argument =
+            `BEGIN_ARGUMENT_${n}_` + argumentUnit.repeat(Math.ceil(u.size / argumentUnit.length)) + '_END';
+          sentinels.push(body, argument);
+          const input = { code: argument };
+          const call = adoptedModelConversion.inputToItem(
+            { type: 'tool_call', id: callId, name: 'probe', arguments: JSON.stringify(input) },
+            'mock',
+          );
           const sourceOutput = u.structured
             ? [{ type: 'text', text: body + '\n"\\\ud83d\ude42' }]
             : `model prefix\n${body}`;
@@ -54,9 +79,31 @@ export const nativeLogProperties = [
             {
               type: 'turn_started',
               turnId,
-              input: [{ type: 'user_message', id: `user-${n}`, content: [{ type: 'text', text: 'probe' }] }],
+              input: [
+                {
+                  type: 'user_message',
+                  id: `user-${n}`,
+                  content: [{ type: 'text', text: u.promptEcho ? argument : 'probe' }],
+                },
+              ],
             },
-            { type: 'tool_started', turnId, executionId, callId, toolName: 'probe', input: {} },
+            { type: 'item', turnId, executionId, item: call },
+            { type: 'tool_started', turnId, executionId, callId, toolName: 'probe', input },
+            {
+              type: 'item',
+              turnId,
+              item: {
+                type: 'reasoning',
+                id: `reasoning-${n}`,
+                summary: argument,
+                providerMetadata: { signature: argument },
+              },
+            },
+            {
+              type: 'item',
+              turnId,
+              item: { type: 'provider_opaque', id: `opaque-${n}`, provider: 'mock', item: { encrypted: argument } },
+            },
             {
               type: 'tool_finished',
               turnId,
@@ -112,28 +159,34 @@ export const nativeLogProperties = [
         }
         writer.close();
         const raw = paths.map((file) => readFileSync(file, 'utf8')).join('');
-        const storedStrings = [];
-        const collect = (value) => {
-          if (typeof value === 'string') {
-            // Structured canonical outputs are nested JSON strings. Count their
-            // decoded leaves once, not their escaped outer representation.
-            let parsed;
-            try {
-              parsed = JSON.parse(value);
-            } catch {
-              /* ordinary text */
-            }
-            if (parsed !== null && typeof parsed === 'object') collect(parsed);
-            else storedStrings.push(value);
-          } else if (value !== null && typeof value === 'object') Object.values(value).forEach(collect);
-        };
-        for (const line of raw.trim().split('\n')) collect(JSON.parse(line));
+        const physical = raw
+          .trim()
+          .split('\n')
+          .map((line) => JSON.parse(line));
+        const strings = physical.flatMap((line) => storedStrings(line));
         for (const body of sentinels)
           assert.equal(
-            storedStrings.filter((value) => value.includes(body)).length,
+            strings.filter((value) => value.includes(body)).length,
             1,
-            'large tool payload persisted more than once',
+            'large payload persisted more than once',
           );
+        // Inspect every large semantic leaf in the generated facts, not only
+        // named tool sentinels. Deltas/history snapshots are approved exceptions.
+        for (const turnId of units.map((_, n) => `turn-${n}`)) {
+          const eligible = (fact) => fact.turnId === turnId && !['text_delta', 'history_replaced'].includes(fact.type);
+          const actual = physical.filter((line) => eligible(line.fact)).flatMap((line) => storedStrings(line));
+          const large = new Set(
+            expected
+              .filter(eligible)
+              .flatMap((fact) => storedStrings(fact))
+              .filter((text) => text.length >= 200),
+          );
+          for (const text of large)
+            assert(
+              actual.filter((value) => value.includes(text)).length <= 1,
+              'same-turn large string repeated in physical facts',
+            );
+        }
         assert(!raw.includes('finalWindow'), 'derived terminal window persisted');
         // A syntactically valid, unterminated line remains torn, including refs.
         const last = paths.at(-1);

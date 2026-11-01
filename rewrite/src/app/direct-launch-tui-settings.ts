@@ -3,8 +3,10 @@
  * the session's own settings. A session's tools read a copy of those once it has
  * been reconfigured, so a change only counts once the Session has rebuilt them:
  * its receipt says whether that happened, and these commands report that receipt
- * rather than the write. Nothing here reaches settings.json, which the old CLI
- * still owns, so every change lasts for this session only.
+ * rather than the write. Approval mode and sandbox preference also save through
+ * the app's global settings owner after application, as their source commands do.
+ * Other changes remain session-only. Saving a sandbox preference does not add
+ * sandbox execution support to the direct executable.
  */
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
@@ -45,10 +47,16 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
   };
 
   /** One keyed command, sent once. Sending the current model changes nothing but the tool graph. */
-  const rebuild = async (connection: TuiConnection, undo: () => void, done: string): Promise<CommandResult> => {
+  const rebuild = async (
+    connection: TuiConnection,
+    undo: () => void,
+    done: string,
+    applied?: () => CommandResult,
+  ): Promise<CommandResult> => {
     const command = { type: 'configure', commandId: randomUUID(), configuration: { model: latest().model } } as const;
     const result = await sendNativeCommand(connection, command);
-    if (result.kind === 'finished' && result.receipt.outcome?.kind === 'configured') return { message: done };
+    if (result.kind === 'finished' && result.receipt.outcome?.kind === 'configured')
+      return applied ? applied() : { message: done };
     // Refused outright, so it must not arrive with some later rebuild. Anything less
     // certain stays written: the Session may well have installed it.
     if (result.kind === 'rejected' || result.kind === 'error') undo();
@@ -82,9 +90,16 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
     apply: () => void,
     undo: () => void,
     done: string,
+    key: 'shell.autoApproveMode' | 'sandbox.enabled',
   ): Promise<CommandResult> => {
     apply();
-    return detailsOf(connection.sessionId).rebuilt ? rebuild(connection, undo, done) : { message: done };
+    const save = (): CommandResult => {
+      const result = app.saveApprovalPreference(connection.sessionId, key);
+      return {
+        message: result.status === 'saved' ? done : `${done} Could not save preference (${result.reason}).`,
+      };
+    };
+    return detailsOf(connection.sessionId).rebuilt ? rebuild(connection, undo, done, save) : save();
   };
 
   return {
@@ -173,7 +188,10 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
         connection,
         () => settings.set('sandbox.enabled', enabled, { persist: false }),
         () => settings.set('sandbox.enabled', !enabled, { persist: false }),
-        `Shell sandbox ${enabled ? 'enabled' : 'disabled'} for this session.`,
+        `Shell sandbox mode ${
+          enabled ? 'enabled' : 'disabled'
+        } (preference only; direct sandbox execution is unavailable).`,
+        'sandbox.enabled',
       );
     },
 
@@ -185,7 +203,8 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
         connection,
         () => settings.set('shell.autoApproveMode', mode as never, { persist: false }),
         () => settings.set('shell.autoApproveMode', previous, { persist: false }),
-        `Tool auto-approval set to ${mode} for this session.`,
+        `Tool auto-approval set to ${mode}.`,
+        'shell.autoApproveMode',
       );
     },
   };

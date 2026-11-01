@@ -6,6 +6,7 @@
 import { randomUUID } from 'node:crypto';
 import { getModelContextWindow } from '../../../source/providers/model-catalog/catalog.js';
 import { SkillsService, type SkillInfo } from '../../../source/services/skills/skills-service.js';
+import { SettingsService, type DurableWriteResult } from '../../../source/services/settings/settings-service.js';
 import { createDirectInProcessHost } from '../host/in-process-direct.js';
 import type { DirectHost, Principal } from '../host/in-process-direct-types.js';
 import type { HeadlessApprovalDecider } from '../clients/headless/index.js';
@@ -85,6 +86,8 @@ export type DirectApplication = {
   goal(sessionId: string): Promise<DurableGoal | undefined>;
   /** Pass a snapshot's `seq` to read that cut rather than the log's current end. */
   sessionDetails(sessionId: string, seq?: number | null): DirectSessionDetails;
+  /** Save only an applied interactive approval preference, never session model/profile overrides. */
+  saveApprovalPreference(sessionId: string, key: 'shell.autoApproveMode' | 'sandbox.enabled'): DurableWriteResult;
   /** The skills under a local workspace root, read fresh so a new one shows up without a restart. */
   skills(root: string): readonly SkillInfo[];
   /** Starts a new session on `model`, or this one's, with `text` as its first turn. Returns its id. */
@@ -144,6 +147,14 @@ export async function createDirectApplication(options: DirectApplicationOptions)
   return {
     host,
     principal: LOCAL_PRINCIPAL,
+    saveApprovalPreference(sessionId, key) {
+      const settings = runtimes.get(sessionId)?.settings;
+      if (!settings) throw new Error('This session has no live runtime.');
+      // ProviderRegistryDeps permits read/write adapters without durable settlement.
+      // Only the app's real file owner can attest that a preference was saved.
+      if (!(selection.settings instanceof SettingsService)) return { status: 'not-persisted', reason: 'disabled' };
+      return selection.settings.setDynamic(key, settings.getDynamic(key));
+    },
     headlessPolicy: (sessionId, autoApprove, signal) =>
       headlessPolicy({ store, runtimes, directory: options.conversationsDir, sessionId, autoApprove, signal }),
     async sessionRoot(principal, sessionId) {

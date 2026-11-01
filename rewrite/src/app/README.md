@@ -28,8 +28,30 @@ value union is not permission to serialize arbitrary settings objects.
 
 `createDirectTuiSettings` in `direct-launch-tui-settings.ts` prevents structural
 profile changes once wire messages exist. Wire history has no system-message
-role to exclude. `cli.ts` is the process entrypoint: the Discord bridge's numeric
+role to exclude. Its `/auto-approve` and `/sandbox` commands save the applied
+preference through `DirectApplication.saveApprovalPreference`, using the global
+settings owner for targeted file updates rather than persisting session model or
+profile overrides. A rejected rebuild does not save; an uncertain rebuild does
+not claim success. A failed file write leaves the applied session value visible
+and reports that saving failed. Other direct TUI setting changes remain
+session-only. The sandbox preference is retained configuration, not a claim of
+direct sandbox execution support. Restart still explicitly carries the live
+approval/sandbox values in its exec environment.
+Interactive startup enables the source settings owner's ordinary file creation,
+recovery and schema/default migrations as well as explicit preference saves.
+CLI profile/model/reasoning overrides still opt out of persistence. Headless,
+ACP and serve startup persistence policy is unchanged.
+
+`cli.ts` is the process entrypoint: the Discord bridge's numeric
 or numeric-string `process.exitCode` is normalized to the numeric `main` result.
+
+`startDirectHooks` owns one public root lifecycle per app, not per durable native
+leaf. First attachment starts it (including an empty resumed leaf); `/clear`,
+session switching and client disconnects do not end it. App shutdown drains the
+host before emitting the single root end and closing the shared hook runner.
+Session observers still retain their native turn/tool correlation; they cannot
+close the shared runner. This preserves the root lifecycle contract used by
+Herdr registration without treating a new native leaf as a new process.
 
 ## Interactive startup admission
 

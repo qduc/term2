@@ -12,9 +12,10 @@ export function publicTurnResults(state: DirectSessionState, known: readonly Wir
   return state.turnResults.map(result => {
     const messages = result.messages.map(item => {
       const content = publicContent(item.content);
-      const previous = known.find(message => message.id === item.id);
+      const { presentation: _presentation, ...previous } = known.find(message => message.id === item.id) ?? {};
       const draft = state.drafts.find(message => message.id === item.id);
       return { ...previous, id: item.id, role: item.role, turnId: result.turnId, content, text: contentText(content),
+        ...(item.presentation ? { presentation: structuredClone(item.presentation) } : {}),
         ...(draft ? { draft: true, modelStep: draft.modelStep } : {}) };
     });
     return { turnId: result.turnId, messages, ...publicTerminal(result), finalText: completedFinalText(result.outcome, messages) };

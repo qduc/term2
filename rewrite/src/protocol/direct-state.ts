@@ -39,10 +39,10 @@ export function publicWireConfiguration(state: DirectSessionState): WireConfigur
 export function snapshotDirectState(state: DirectSessionState & { readonly tasks?: readonly DirectTaskState[]; readonly queue?: DirectQueueState; readonly context?: DirectContextState }, previous?: WireSnapshot): WireSnapshot {
   const messages = state.messages.map(item => {
       const content = publicContent(item.content);
-      const known = previous?.messages.find(message => message.id === item.id);
+      const { presentation: _presentation, ...known } = previous?.messages.find(message => message.id === item.id) ?? {};
       const draft = state.drafts.find(draft => draft.id === item.id);
       const correlated = item as typeof item & { readonly turnId?: string; readonly modelStep?: number };
-      return { ...known, ...(correlated.turnId ? { turnId: correlated.turnId } : {}), ...(correlated.modelStep !== undefined ? { modelStep: correlated.modelStep } : {}), ...(draft ? { draft: true, turnId: draft.turnId, modelStep: draft.modelStep } : {}), id: item.id, role: item.role, content, text: contentText(content) };
+      return { ...known, ...(item.presentation ? { presentation: structuredClone(item.presentation) } : {}), ...(correlated.turnId ? { turnId: correlated.turnId } : {}), ...(correlated.modelStep !== undefined ? { modelStep: correlated.modelStep } : {}), ...(draft ? { draft: true, turnId: draft.turnId, modelStep: draft.modelStep } : {}), id: item.id, role: item.role, content, text: contentText(content) };
   });
   const turnResults = publicTurnResults(state, messages);
   // A captured successor state can arrive without the live reset event (for example

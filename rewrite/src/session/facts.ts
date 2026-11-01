@@ -78,6 +78,8 @@ export type DirectTurnFact =
   | { readonly type: 'budget_observed'; readonly turnId: TurnId; readonly evidence: RunBudgetEvent }
   | {
       readonly type: 'turn_started';
+      /** Suppress derived display only; admission and provider replay are unchanged. */
+      readonly display?: false;
       /** Actual command-owned auxiliary invocation, not a human or background-notice admission. */
       readonly maintenance?: { readonly kind: 'compaction'; readonly commandId: string };
       readonly requestConfiguration?: import('./direct-preview.js').DirectPreviewConfiguration;
@@ -96,6 +98,7 @@ export type DirectTurnFact =
   | { readonly type: 'text_delta'; readonly turnId: TurnId; readonly delta: string; readonly modelStep?: number }
   | {
       readonly type: 'item';
+      readonly display?: false;
       readonly turnId: TurnId;
       readonly item: Item;
       readonly executionId?: ExecutionId;
@@ -157,6 +160,8 @@ export type FactLine = {
 /** Provider transcript edits do not retract physical execution audit facts. */
 export type DirectHistoryFact = {
   readonly type: 'history_replaced';
+  /** Provider-only replacement: leave the independently observed public transcript intact. */
+  readonly retainTranscript?: true;
   readonly turnId?: TurnId;
   readonly reason: 'compaction' | 'retry_turn' | 'retry_tool' | 'rewind';
   /** Exact engine attempt whose replacement was accepted; old/other edits may omit it. */
@@ -196,6 +201,11 @@ export type DirectBranchFact =
 
 export type Fact =
   | SessionStartedFact
+  | {
+      readonly type: 'transcript_message';
+      readonly turnId?: TurnId;
+      readonly message: Omit<import('./facade-types.js').DirectMessage, 'turnId'>;
+    }
   | DirectTurnFact
   | DirectHistoryFact
   | DirectBranchFact

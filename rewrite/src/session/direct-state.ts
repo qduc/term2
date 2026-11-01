@@ -87,11 +87,12 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
         ...(modelStep === undefined ? {} : { modelStep }),
       });
   };
-  if (fact.type === 'turn_started' && !fact.silent)
+  if (fact.type === 'transcript_message') add('message', fact.message.id, fact.turnId);
+  if (fact.type === 'turn_started' && !fact.silent && fact.display !== false)
     for (const item of fact.input) if (item.type === 'user_message') add('message', item.id, fact.turnId);
   if (fact.type === 'text_delta')
     add('message', directDraftId(fact.turnId, fact.modelStep), fact.turnId, fact.modelStep);
-  if (fact.type === 'item') {
+  if (fact.type === 'item' && fact.display !== false) {
     const item = fact.item;
     if (item.type === 'assistant_message' || item.type === 'user_message') {
       const draft = timeline.find(
@@ -140,6 +141,11 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
     };
   }
   switch (fact.type) {
+    case 'transcript_message':
+      return {
+        ...state,
+        messages: replaceMessage(state.messages, { ...fact.message, ...(fact.turnId ? { turnId: fact.turnId } : {}) }),
+      };
     case 'session_rotated':
       return {
         ...state,
@@ -160,6 +166,7 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
         // Task/queue/command/goal/notification owners and request-cost accounting survive.
       };
     case 'history_replaced': {
+      if (fact.retainTranscript) return state;
       const retained = new Set<string>(fact.history.map((item) => item.id));
       const messages = fact.history.flatMap((item) => {
         const known = state.messages.find((message) => message.id === item.id);
@@ -201,7 +208,7 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
         terminal: null,
         messages: [
           ...state.messages,
-          ...(fact.silent
+          ...(fact.silent || fact.display === false
             ? []
             : fact.input.flatMap((item) => messageFor(item).map((message) => ({ ...message, turnId: fact.turnId })))),
         ],
@@ -233,6 +240,7 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
       };
     }
     case 'item': {
+      if (fact.display === false) return state;
       if (fact.item.type === 'tool_call' && fact.executionId) {
         const tool: DirectDisplayTool = {
           executionId: fact.executionId,

@@ -45,11 +45,20 @@ export type DirectAdmission =
       readonly original: Exclude<DirectAdmission, { readonly kind: 'duplicate' }>;
     }
   | { readonly kind: 'rejected'; readonly clientRequestId: string; readonly reason: string };
+export type TranscriptJson =
+  | null
+  | boolean
+  | number
+  | string
+  | readonly TranscriptJson[]
+  | { readonly [key: string]: TranscriptJson };
 export type DirectMessage = {
   readonly id: string;
   readonly turnId?: TurnId;
-  readonly role: 'user' | 'assistant';
+  readonly role: 'user' | 'assistant' | 'system' | 'tool';
   readonly content: readonly ContentPart[];
+  /** Display-only JSON data; never provider context or restored authority. */
+  readonly presentation?: Readonly<Record<string, TranscriptJson>>;
 };
 export type DirectToolDisplay = {
   readonly executionId: ExecutionId;

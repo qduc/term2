@@ -70,12 +70,13 @@ They omit text previews so warm listing needs metadata rather than log replay.
 
 ## Tools and delegation
 
-Local surfaces use a session-owned `ExecutionContext.pin` home/lease, retained
+Local surfaces use a native `LocalExecutionContext` home/lease, retained
 across configured generations. Worktree tools use the existing git inventory and
 running-shell guards; `enter`/`exit` never publish a process-wide root. Native
 source-tool contexts read that lease for each execution. Child tool graphs
 snapshot the current root at admission so a later parent switch cannot retarget
-a running child. Read-only and SSH surfaces do not offer local worktree tools.
+a running child. Bare, read-only, and SSH surfaces do not offer local worktree tools.
+The source context stays frozen; native leases must not alter its old-CLI behavior.
 Legacy command-safety helpers that default to the process-global root do not
 follow these local leases: sibling-worktree reads can require extra approval.
 Sandbox configuration and file tools receive the explicit execution root; do not
@@ -164,6 +165,14 @@ process-loss recovery records interruption and never reconstructs a waiter.
 Public task snapshots carry `pendingQuestion` separately from user interactions.
 
 ### Local shell task bridge
+
+The default surface follows the frozen old CLI's existing session mode:
+local interactive sessions receive the shell registry/output capability; batch
+and SSH sessions do not. `createToolSurface` uses the existing `interactive`
+signal, not a new feature flag. The unchanged old/direct batch goldens pin prompt
+text, shell and `run_code` schemas, and advertised tools only for that mode;
+interactive shell jobs require their own actual-session verification.
+Subagent background controls are not shell-job controls.
 
 `createDirectShellTools` adapts the source shell's prepared runner to the
 engine-injected `ToolContext.shellTasks` port. The adapter does not instantiate

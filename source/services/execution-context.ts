@@ -16,8 +16,6 @@ import { publishActiveWorkspaceRoot } from './workspace/active-workspace-root.js
  */
 export class ExecutionContext {
   private activeWorkspace?: string;
-  /** A pinned context owns its home and never publishes a process-wide lease. */
-  private pinnedHome?: string;
 
   constructor(private readonly sshService?: ISSHService, private readonly remoteDir?: string) {}
 
@@ -33,7 +31,7 @@ export class ExecutionContext {
     if (this.isRemote() && this.remoteDir) {
       return this.remoteDir;
     }
-    return this.activeWorkspace ?? this.pinnedHome ?? process.cwd();
+    return this.activeWorkspace ?? process.cwd();
   }
 
   /** The root the session started in, regardless of any active workspace lease. */
@@ -41,7 +39,7 @@ export class ExecutionContext {
     if (this.isRemote() && this.remoteDir) {
       return this.remoteDir;
     }
-    return this.pinnedHome ?? process.cwd();
+    return process.cwd();
   }
 
   /** The leased root, or undefined when the session is operating in its home root. */
@@ -61,28 +59,28 @@ export class ExecutionContext {
     if (!path.isAbsolute(root)) {
       throw new Error(`Active workspace must be an absolute path, received: ${root}`);
     }
-    if (this.pinnedHome === undefined) publishActiveWorkspaceRoot(root);
+    publishActiveWorkspaceRoot(root);
     this.activeWorkspace = root;
   }
 
   /** Releases the lease, returning the session to its home root. */
   exitWorkspace(): void {
-    if (this.pinnedHome === undefined) publishActiveWorkspaceRoot(undefined);
+    publishActiveWorkspaceRoot(undefined);
     this.activeWorkspace = undefined;
   }
 
   /**
-   * Session-local home for a child or concurrent owner. Its worktree lease can
-   * change without publishing process-wide state, and exit returns to this home
-   * rather than process.cwd(). Snapshot a child's root at admission; never share
-   * a mutable parent lease with a running child.
+   * Run-local root for a child subagent (or any concurrent owner that must not
+   * retarget the session). Same absolute-path lease as {@link enterWorkspace},
+   * but does **not** publish {@link publishActiveWorkspaceRoot} — concurrent
+   * pins therefore cannot stomp the parent session's process-wide fallback.
    */
   static pin(root: string): ExecutionContext {
     if (!path.isAbsolute(root)) {
       throw new Error(`Active workspace must be an absolute path, received: ${root}`);
     }
     const ctx = new ExecutionContext();
-    ctx.pinnedHome = root;
+    ctx.activeWorkspace = root;
     return ctx;
   }
 }

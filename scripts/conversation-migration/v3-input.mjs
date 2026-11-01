@@ -7,6 +7,7 @@ import {
   resolveEnvelopeIdentities,
 } from '../../rewrite/dist/source/services/conversation/conversation-decoder.js';
 import { replayEvents } from '../../rewrite/dist/source/services/conversation/conversation-replay.js';
+import { validPersistedEvent } from './v3-input-validation.mjs';
 
 // The legacy decoder deliberately accepts unknown facts. Migration must not.
 const kinds = new Set(
@@ -69,7 +70,7 @@ function validate(raw, file, line) {
   } catch {
     fail('invalid-event', file, line);
   }
-  if (!decoded) fail('invalid-event', file, line);
+  if (!decoded || !validPersistedEvent(raw.event)) fail('invalid-event', file, line);
   return decoded;
 }
 

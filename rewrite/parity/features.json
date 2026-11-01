@@ -68,7 +68,8 @@
       "status": "todo",
       "manual": true,
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "bbcfd57f triage: resolveNativeResume in rewrite/src/app/cli-conversations.ts requires exact native conv_<uuid> format for explicit IDs; last selects the most recent native lineage; scripts/migrate-conversations.mjs is absent. Native-only resume is not proof of old v3 conversation migration/resume. Keep todo; do not credit separate unintegrated migration work."
     },
     "behaviour:profile-tool-surface": {
       "status": "in_progress",
@@ -482,212 +483,246 @@
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "bbcfd57f triage: scripts/migrate-conversations.mjs is absent; resolveNativeResume in rewrite/src/app/cli-conversations.ts uses native IDs/readDirectLogLineage, not a v3 importer. This legacy event import remains todo/unverified on this candidate. Adopted source log/replay reachability is not direct migration parity; separate unintegrated migration evidence is not credited."
     },
     "log-event:approval_resolved": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "bbcfd57f triage: scripts/migrate-conversations.mjs is absent; resolveNativeResume in rewrite/src/app/cli-conversations.ts uses native IDs/readDirectLogLineage, not a v3 importer. This legacy event import remains todo/unverified on this candidate. Adopted source log/replay reachability is not direct migration parity; separate unintegrated migration evidence is not credited."
     },
     "log-event:assistant_journal_delta": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "bbcfd57f triage: scripts/migrate-conversations.mjs is absent; resolveNativeResume in rewrite/src/app/cli-conversations.ts uses native IDs/readDirectLogLineage, not a v3 importer. This legacy event import remains todo/unverified on this candidate. Adopted source log/replay reachability is not direct migration parity; separate unintegrated migration evidence is not credited."
     },
     "log-event:assistant_journal_item": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "bbcfd57f triage: scripts/migrate-conversations.mjs is absent; resolveNativeResume in rewrite/src/app/cli-conversations.ts uses native IDs/readDirectLogLineage, not a v3 importer. This legacy event import remains todo/unverified on this candidate. Adopted source log/replay reachability is not direct migration parity; separate unintegrated migration evidence is not credited."
     },
     "log-event:assistant_turn": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "bbcfd57f triage: scripts/migrate-conversations.mjs is absent; resolveNativeResume in rewrite/src/app/cli-conversations.ts uses native IDs/readDirectLogLineage, not a v3 importer. This legacy event import remains todo/unverified on this candidate. Adopted source log/replay reachability is not direct migration parity; separate unintegrated migration evidence is not credited."
     },
     "log-event:background_shell_completed": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "bbcfd57f triage: scripts/migrate-conversations.mjs is absent; resolveNativeResume in rewrite/src/app/cli-conversations.ts uses native IDs/readDirectLogLineage, not a v3 importer. This legacy event import remains todo/unverified on this candidate. Adopted source log/replay reachability is not direct migration parity; separate unintegrated migration evidence is not credited."
     },
     "log-event:background_shell_output": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "bbcfd57f triage: scripts/migrate-conversations.mjs is absent; resolveNativeResume in rewrite/src/app/cli-conversations.ts uses native IDs/readDirectLogLineage, not a v3 importer. This legacy event import remains todo/unverified on this candidate. Adopted source log/replay reachability is not direct migration parity; separate unintegrated migration evidence is not credited."
     },
     "log-event:background_shell_started": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "bbcfd57f triage: scripts/migrate-conversations.mjs is absent; resolveNativeResume in rewrite/src/app/cli-conversations.ts uses native IDs/readDirectLogLineage, not a v3 importer. This legacy event import remains todo/unverified on this candidate. Adopted source log/replay reachability is not direct migration parity; separate unintegrated migration evidence is not credited."
     },
     "log-event:command_message": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "bbcfd57f triage: scripts/migrate-conversations.mjs is absent; resolveNativeResume in rewrite/src/app/cli-conversations.ts uses native IDs/readDirectLogLineage, not a v3 importer. This legacy event import remains todo/unverified on this candidate. Adopted source log/replay reachability is not direct migration parity; separate unintegrated migration evidence is not credited."
     },
     "log-event:context_checkpoint_created": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "bbcfd57f triage: scripts/migrate-conversations.mjs is absent; resolveNativeResume in rewrite/src/app/cli-conversations.ts uses native IDs/readDirectLogLineage, not a v3 importer. This legacy event import remains todo/unverified on this candidate. Adopted source log/replay reachability is not direct migration parity; separate unintegrated migration evidence is not credited."
     },
     "log-event:context_compaction_recorded": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "bbcfd57f triage: scripts/migrate-conversations.mjs is absent; resolveNativeResume in rewrite/src/app/cli-conversations.ts uses native IDs/readDirectLogLineage, not a v3 importer. This legacy event import remains todo/unverified on this candidate. Adopted source log/replay reachability is not direct migration parity; separate unintegrated migration evidence is not credited."
     },
     "log-event:error": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "bbcfd57f triage: scripts/migrate-conversations.mjs is absent; resolveNativeResume in rewrite/src/app/cli-conversations.ts uses native IDs/readDirectLogLineage, not a v3 importer. This legacy event import remains todo/unverified on this candidate. Adopted source log/replay reachability is not direct migration parity; separate unintegrated migration evidence is not credited."
     },
     "log-event:events_retracted": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "bbcfd57f triage: scripts/migrate-conversations.mjs is absent; resolveNativeResume in rewrite/src/app/cli-conversations.ts uses native IDs/readDirectLogLineage, not a v3 importer. This legacy event import remains todo/unverified on this candidate. Adopted source log/replay reachability is not direct migration parity; separate unintegrated migration evidence is not credited."
     },
     "log-event:goal_changed": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "bbcfd57f triage: scripts/migrate-conversations.mjs is absent; resolveNativeResume in rewrite/src/app/cli-conversations.ts uses native IDs/readDirectLogLineage, not a v3 importer. This legacy event import remains todo/unverified on this candidate. Adopted source log/replay reachability is not direct migration parity; separate unintegrated migration evidence is not credited."
     },
     "log-event:memory_injected": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "bbcfd57f triage: scripts/migrate-conversations.mjs is absent; resolveNativeResume in rewrite/src/app/cli-conversations.ts uses native IDs/readDirectLogLineage, not a v3 importer. This legacy event import remains todo/unverified on this candidate. Adopted source log/replay reachability is not direct migration parity; separate unintegrated migration evidence is not credited."
     },
     "log-event:openai_root_checkpoint_lifecycle": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "bbcfd57f triage: scripts/migrate-conversations.mjs is absent; resolveNativeResume in rewrite/src/app/cli-conversations.ts uses native IDs/readDirectLogLineage, not a v3 importer. This legacy event import remains todo/unverified on this candidate. Adopted source log/replay reachability is not direct migration parity; separate unintegrated migration evidence is not credited."
     },
     "log-event:openai_root_selector_parity": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "bbcfd57f triage: scripts/migrate-conversations.mjs is absent; resolveNativeResume in rewrite/src/app/cli-conversations.ts uses native IDs/readDirectLogLineage, not a v3 importer. This legacy event import remains todo/unverified on this candidate. Adopted source log/replay reachability is not direct migration parity; separate unintegrated migration evidence is not credited."
     },
     "log-event:personal_memory_context": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
       "parity": [],
       "consumedByNewCode": true,
-      "note": "Local human-admission snapshots are retained by the adopted source log/replay; direct M1 remains text-only and does not port personal-memory injection."
+      "note": "bbcfd57f triage: scripts/migrate-conversations.mjs is absent; resolveNativeResume in rewrite/src/app/cli-conversations.ts uses native IDs/readDirectLogLineage, not a v3 importer. This legacy event import remains todo/unverified on this candidate. Adopted source log/replay reachability is not direct migration parity; separate unintegrated migration evidence is not credited."
     },
     "log-event:session_cleared": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "bbcfd57f triage: scripts/migrate-conversations.mjs is absent; resolveNativeResume in rewrite/src/app/cli-conversations.ts uses native IDs/readDirectLogLineage, not a v3 importer. This legacy event import remains todo/unverified on this candidate. Adopted source log/replay reachability is not direct migration parity; separate unintegrated migration evidence is not credited."
     },
     "log-event:session_init": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "bbcfd57f triage: scripts/migrate-conversations.mjs is absent; resolveNativeResume in rewrite/src/app/cli-conversations.ts uses native IDs/readDirectLogLineage, not a v3 importer. This legacy event import remains todo/unverified on this candidate. Adopted source log/replay reachability is not direct migration parity; separate unintegrated migration evidence is not credited."
     },
     "log-event:session_rollover": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "bbcfd57f triage: scripts/migrate-conversations.mjs is absent; resolveNativeResume in rewrite/src/app/cli-conversations.ts uses native IDs/readDirectLogLineage, not a v3 importer. This legacy event import remains todo/unverified on this candidate. Adopted source log/replay reachability is not direct migration parity; separate unintegrated migration evidence is not credited."
     },
     "log-event:settings_changed": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "bbcfd57f triage: scripts/migrate-conversations.mjs is absent; resolveNativeResume in rewrite/src/app/cli-conversations.ts uses native IDs/readDirectLogLineage, not a v3 importer. This legacy event import remains todo/unverified on this candidate. Adopted source log/replay reachability is not direct migration parity; separate unintegrated migration evidence is not credited."
     },
     "log-event:subagent_completed": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "bbcfd57f triage: scripts/migrate-conversations.mjs is absent; resolveNativeResume in rewrite/src/app/cli-conversations.ts uses native IDs/readDirectLogLineage, not a v3 importer. This legacy event import remains todo/unverified on this candidate. Adopted source log/replay reachability is not direct migration parity; separate unintegrated migration evidence is not credited."
     },
     "log-event:subagent_interrupted": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "bbcfd57f triage: scripts/migrate-conversations.mjs is absent; resolveNativeResume in rewrite/src/app/cli-conversations.ts uses native IDs/readDirectLogLineage, not a v3 importer. This legacy event import remains todo/unverified on this candidate. Adopted source log/replay reachability is not direct migration parity; separate unintegrated migration evidence is not credited."
     },
     "log-event:subagent_question": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "bbcfd57f triage: scripts/migrate-conversations.mjs is absent; resolveNativeResume in rewrite/src/app/cli-conversations.ts uses native IDs/readDirectLogLineage, not a v3 importer. This legacy event import remains todo/unverified on this candidate. Adopted source log/replay reachability is not direct migration parity; separate unintegrated migration evidence is not credited."
     },
     "log-event:subagent_started": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "bbcfd57f triage: scripts/migrate-conversations.mjs is absent; resolveNativeResume in rewrite/src/app/cli-conversations.ts uses native IDs/readDirectLogLineage, not a v3 importer. This legacy event import remains todo/unverified on this candidate. Adopted source log/replay reachability is not direct migration parity; separate unintegrated migration evidence is not credited."
     },
     "log-event:subagent_tool_started": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "bbcfd57f triage: scripts/migrate-conversations.mjs is absent; resolveNativeResume in rewrite/src/app/cli-conversations.ts uses native IDs/readDirectLogLineage, not a v3 importer. This legacy event import remains todo/unverified on this candidate. Adopted source log/replay reachability is not direct migration parity; separate unintegrated migration evidence is not credited."
     },
     "log-event:subagent_transferred": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "bbcfd57f triage: scripts/migrate-conversations.mjs is absent; resolveNativeResume in rewrite/src/app/cli-conversations.ts uses native IDs/readDirectLogLineage, not a v3 importer. This legacy event import remains todo/unverified on this candidate. Adopted source log/replay reachability is not direct migration parity; separate unintegrated migration evidence is not credited."
     },
     "log-event:tool_output_rewound": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "bbcfd57f triage: scripts/migrate-conversations.mjs is absent; resolveNativeResume in rewrite/src/app/cli-conversations.ts uses native IDs/readDirectLogLineage, not a v3 importer. This legacy event import remains todo/unverified on this candidate. Adopted source log/replay reachability is not direct migration parity; separate unintegrated migration evidence is not credited."
     },
     "log-event:tool_result": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "bbcfd57f triage: scripts/migrate-conversations.mjs is absent; resolveNativeResume in rewrite/src/app/cli-conversations.ts uses native IDs/readDirectLogLineage, not a v3 importer. This legacy event import remains todo/unverified on this candidate. Adopted source log/replay reachability is not direct migration parity; separate unintegrated migration evidence is not credited."
     },
     "log-event:tool_started": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "bbcfd57f triage: scripts/migrate-conversations.mjs is absent; resolveNativeResume in rewrite/src/app/cli-conversations.ts uses native IDs/readDirectLogLineage, not a v3 importer. This legacy event import remains todo/unverified on this candidate. Adopted source log/replay reachability is not direct migration parity; separate unintegrated migration evidence is not credited."
     },
     "log-event:undo": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "bbcfd57f triage: scripts/migrate-conversations.mjs is absent; resolveNativeResume in rewrite/src/app/cli-conversations.ts uses native IDs/readDirectLogLineage, not a v3 importer. This legacy event import remains todo/unverified on this candidate. Adopted source log/replay reachability is not direct migration parity; separate unintegrated migration evidence is not credited."
     },
     "log-event:user_input_accepted": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "bbcfd57f triage: scripts/migrate-conversations.mjs is absent; resolveNativeResume in rewrite/src/app/cli-conversations.ts uses native IDs/readDirectLogLineage, not a v3 importer. This legacy event import remains todo/unverified on this candidate. Adopted source log/replay reachability is not direct migration parity; separate unintegrated migration evidence is not credited."
     },
     "log-event:user_message": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "bbcfd57f triage: scripts/migrate-conversations.mjs is absent; resolveNativeResume in rewrite/src/app/cli-conversations.ts uses native IDs/readDirectLogLineage, not a v3 importer. This legacy event import remains todo/unverified on this candidate. Adopted source log/replay reachability is not direct migration parity; separate unintegrated migration evidence is not credited."
     },
     "log-event:user_turn_retried": {
       "status": "todo",
       "source": "source/services/logging/conversation-log-events.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "bbcfd57f triage: scripts/migrate-conversations.mjs is absent; resolveNativeResume in rewrite/src/app/cli-conversations.ts uses native IDs/readDirectLogLineage, not a v3 importer. This legacy event import remains todo/unverified on this candidate. Adopted source log/replay reachability is not direct migration parity; separate unintegrated migration evidence is not credited."
     },
     "provider:ai-sdk-anthropic": {
       "status": "todo",
@@ -750,14 +785,16 @@
       "parity": []
     },
     "setting:agent.backgroundCheckIn.enabled": {
-      "status": "todo",
+      "status": "in_progress",
       "source": "source/services/settings/settings-schema.ts",
-      "parity": []
+      "parity": [],
+      "note": "bbcfd57f current implementation trace: createDirectRuntimes passes this setting to backgroundCheckIns in rewrite/src/app/direct-application-runtime.ts. No named candidate behavioral scenario was established in this bounded reconciliation; parity remains empty. Wiring is not covered behavior or compile-derived proof."
     },
     "setting:agent.backgroundCheckIn.intervalMs": {
-      "status": "todo",
+      "status": "in_progress",
       "source": "source/services/settings/settings-schema.ts",
-      "parity": []
+      "parity": [],
+      "note": "bbcfd57f current implementation trace: createDirectRuntimes passes this setting to backgroundCheckIns in rewrite/src/app/direct-application-runtime.ts. No named candidate behavioral scenario was established in this bounded reconciliation; parity remains empty. Wiring is not covered behavior or compile-derived proof."
     },
     "setting:agent.backgroundWaitTimeoutMs": {
       "status": "todo",
@@ -800,9 +837,10 @@
       "parity": []
     },
     "setting:agent.completionVerification": {
-      "status": "todo",
+      "status": "in_progress",
       "source": "source/services/settings/settings-schema.ts",
-      "parity": []
+      "parity": [],
+      "note": "bbcfd57f current implementation trace: verificationOperations and createDirectRuntimes read this setting in rewrite/src/app/direct-application-runtime.ts. No named candidate behavioral scenario was established in this bounded reconciliation; parity remains empty. Wiring is not covered behavior or compile-derived proof."
     },
     "setting:agent.contextCompaction.compactThreshold": {
       "status": "todo",
@@ -850,11 +888,12 @@
       "parity": []
     },
     "setting:agent.maxOutputTokens": {
-      "status": "todo",
+      "status": "adopted",
       "source": "source/services/settings/settings-schema.ts",
       "parity": [
         "settings-batch"
-      ]
+      ],
+      "note": "bbcfd57f: unchanged settings-batch golden passed through the built direct CLI; provider request max_tokens=1234. Reuses source settings/profile adapters. Named evidence: m6-parity-inventory-evidence/settings-batch.log and selection-checks.jsonl; rewrite/parity/scenarios/settings-batch.json and goldens/settings-batch.json. This proves the startup scenario, not every live configure/resume path."
     },
     "setting:agent.maxParallelToolCalls": {
       "status": "todo",
@@ -897,11 +936,12 @@
       "parity": []
     },
     "setting:agent.modelSelection": {
-      "status": "todo",
+      "status": "adopted",
       "source": "source/services/settings/settings-schema.ts",
       "parity": [
         "settings-batch"
-      ]
+      ],
+      "note": "bbcfd57f: unchanged settings-batch golden passed through the built direct CLI; provider request model=mock-beta. Reuses source settings/profile adapters. Named evidence: m6-parity-inventory-evidence/settings-batch.log and selection-checks.jsonl; rewrite/parity/scenarios/settings-batch.json and goldens/settings-batch.json. This proves the startup scenario, not every live configure/resume path."
     },
     "setting:agent.openai.apiKey": {
       "status": "todo",
@@ -929,11 +969,12 @@
       "parity": []
     },
     "setting:agent.reasoningEffort": {
-      "status": "todo",
+      "status": "adopted",
       "source": "source/services/settings/settings-schema.ts",
       "parity": [
         "settings-batch"
-      ]
+      ],
+      "note": "bbcfd57f: unchanged settings-batch golden passed through the built direct CLI; provider request reasoning_effort=high. Reuses source settings/profile adapters. Named evidence: m6-parity-inventory-evidence/settings-batch.log and selection-checks.jsonl; rewrite/parity/scenarios/settings-batch.json and goldens/settings-batch.json. This proves the startup scenario, not every live configure/resume path."
     },
     "setting:agent.retryAttempts": {
       "status": "todo",
@@ -1051,11 +1092,12 @@
       "parity": []
     },
     "setting:agent.temperature": {
-      "status": "todo",
+      "status": "adopted",
       "source": "source/services/settings/settings-schema.ts",
       "parity": [
         "settings-batch"
-      ]
+      ],
+      "note": "bbcfd57f: unchanged settings-batch golden passed through the built direct CLI; provider request temperature=0.2. Reuses source settings/profile adapters. Named evidence: m6-parity-inventory-evidence/settings-batch.log and selection-checks.jsonl; rewrite/parity/scenarios/settings-batch.json and goldens/settings-batch.json. This proves the startup scenario, not every live configure/resume path."
     },
     "setting:agent.transport": {
       "status": "todo",
@@ -1073,11 +1115,12 @@
       "parity": []
     },
     "setting:app.activeProfileId": {
-      "status": "todo",
+      "status": "adopted",
       "source": "source/services/settings/settings-schema.ts",
       "parity": [
         "settings-batch"
-      ]
+      ],
+      "note": "bbcfd57f: unchanged settings-batch golden passed through the built direct CLI; CLI Profile: pair plus pair prompt/tool surface. Reuses source settings/profile adapters. Named evidence: m6-parity-inventory-evidence/settings-batch.log and selection-checks.jsonl; rewrite/parity/scenarios/settings-batch.json and goldens/settings-batch.json. This proves the startup scenario, not every live configure/resume path."
     },
     "setting:app.liteMode": {
       "status": "todo",
@@ -1333,11 +1376,12 @@
       "parity": []
     },
     "setting:tools.fileWrite.enabled": {
-      "status": "todo",
+      "status": "in_progress",
       "source": "source/services/settings/settings-schema.ts",
       "parity": [
         "settings-batch"
-      ]
+      ],
+      "note": "bbcfd57f: unchanged settings-batch passes with this toggle false and the corresponding tools absent from the provider request (m6-parity-inventory-evidence/settings-batch.log; rewrite/parity/goldens/settings-batch.json). This mixed-profile negative case alone does not prove the enabled side or every execution path; retain in_progress, not adopted/ported."
     },
     "setting:tools.logFileOperations": {
       "status": "todo",
@@ -1345,11 +1389,12 @@
       "parity": []
     },
     "setting:tools.memory.enabled": {
-      "status": "todo",
+      "status": "in_progress",
       "source": "source/services/settings/settings-schema.ts",
       "parity": [
         "settings-batch"
-      ]
+      ],
+      "note": "bbcfd57f: unchanged settings-batch passes with this toggle false and the corresponding tools absent from the provider request (m6-parity-inventory-evidence/settings-batch.log; rewrite/parity/goldens/settings-batch.json). This mixed-profile negative case alone does not prove the enabled side or every execution path; retain in_progress, not adopted/ported."
     },
     "setting:tools.mentor.enabled": {
       "status": "todo",
@@ -1362,11 +1407,12 @@
       "parity": []
     },
     "setting:tools.shell.enabled": {
-      "status": "todo",
+      "status": "in_progress",
       "source": "source/services/settings/settings-schema.ts",
       "parity": [
         "settings-batch"
-      ]
+      ],
+      "note": "bbcfd57f: unchanged settings-batch passes with this toggle false and the corresponding tools absent from the provider request (m6-parity-inventory-evidence/settings-batch.log; rewrite/parity/goldens/settings-batch.json). This mixed-profile negative case alone does not prove the enabled side or every execution path; retain in_progress, not adopted/ported."
     },
     "setting:tools.skills.enabled": {
       "status": "todo",
@@ -1374,11 +1420,12 @@
       "parity": []
     },
     "setting:tools.subagents.enabled": {
-      "status": "todo",
+      "status": "in_progress",
       "source": "source/services/settings/settings-schema.ts",
       "parity": [
         "settings-batch"
-      ]
+      ],
+      "note": "bbcfd57f: unchanged settings-batch passes with this toggle false and the corresponding tools absent from the provider request (m6-parity-inventory-evidence/settings-batch.log; rewrite/parity/goldens/settings-batch.json). This mixed-profile negative case alone does not prove the enabled side or every execution path; retain in_progress, not adopted/ported."
     },
     "setting:tools.userInteraction.enabled": {
       "status": "todo",
@@ -1386,11 +1433,12 @@
       "parity": []
     },
     "setting:tools.web.enabled": {
-      "status": "todo",
+      "status": "in_progress",
       "source": "source/services/settings/settings-schema.ts",
       "parity": [
         "settings-batch"
-      ]
+      ],
+      "note": "bbcfd57f: unchanged settings-batch passes with this toggle false and the corresponding tools absent from the provider request (m6-parity-inventory-evidence/settings-batch.log; rewrite/parity/goldens/settings-batch.json). This mixed-profile negative case alone does not prove the enabled side or every execution path; retain in_progress, not adopted/ported."
     },
     "setting:ui.displayMode": {
       "status": "todo",
@@ -1418,9 +1466,10 @@
       "parity": []
     },
     "setting:verifier.model": {
-      "status": "todo",
+      "status": "in_progress",
       "source": "source/services/settings/settings-schema.ts",
-      "parity": []
+      "parity": [],
+      "note": "bbcfd57f current implementation trace: verificationOperations selects this setting in rewrite/src/app/direct-application-runtime.ts. No named candidate behavioral scenario was established in this bounded reconciliation; parity remains empty. Wiring is not covered behavior or compile-derived proof."
     },
     "setting:webSearch.exa.apiKey": {
       "status": "todo",

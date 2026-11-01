@@ -29,6 +29,7 @@ import { LOG_FORMAT_VERSION, type Fact, type FactLine, type SessionStartedFact }
 import { readFactLines } from './log.js';
 import { DIRECT_LOCK_DIRECTORY, readDirectLogLineage } from './direct-rolling-log.js';
 import { latestDirectConfiguration } from './direct-configuration.js';
+import { acquireDirectWriterLock } from './direct-writer-lock.js';
 import { replay } from './replay.js';
 
 const DIRECT_ID = /^conv_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -117,6 +118,10 @@ export async function forkDirectConversation(request: DirectForkRequest): Promis
   const lines = [...copied, ...recovery];
   const stable = replay(lines.map((line) => line.fact));
   if (stable.recoveryFacts.length !== 0) throw new Error('direct fork replay did not settle');
+  // Reserve the destination before publishing its first segment. A reader may
+  // discover that prefix immediately; it must not acquire a writable facade
+  // until the complete lineage is validated or failed publication is cleaned up.
+  const release = acquireDirectWriterLock(logPath(directory, id));
   const created: string[] = [];
   try {
     for (const [index, segment] of lineage.segments.entries()) {
@@ -152,6 +157,8 @@ export async function forkDirectConversation(request: DirectForkRequest): Promis
     }
     if (failures.length > 1) throw new AggregateError(failures, 'direct fork failed and copied lineage cleanup failed');
     throw error;
+  } finally {
+    release();
   }
 
   const started = lines[0]?.fact;

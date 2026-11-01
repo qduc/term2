@@ -80,8 +80,11 @@ export type TurnSpec = {
   /** Native branch admission only; root run-budget policy is separate. */
   readonly limits?: { readonly maxModelCalls: number; readonly maxToolCalls: number };
 };
+export type DirectManualCompactionOutcome =
+  | { readonly kind: 'compacted' }
+  | { readonly kind: 'blocked'; readonly reason: string };
 export type TurnResult =
-  | { readonly kind: 'completed'; readonly notice?: string }
+  | { readonly kind: 'completed'; readonly notice?: string; readonly compaction?: DirectManualCompactionOutcome }
   | { readonly kind: 'cancelled' }
   | {
       readonly kind: 'interrupted';

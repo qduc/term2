@@ -83,7 +83,9 @@ export async function compactDirectHistory(input: DirectCompactionInput): Promis
   input.signal.throwIfAborted();
   validateSettings(input);
   const estimate = estimateDirectContext(input.request, input.contextWindow);
-  if (!input.settings.enabled) return { kind: 'blocked', reason: 'disabled', estimate };
+  // The setting schedules automatic maintenance; an explicit compact command
+  // is independent, as in the source Session's compactContext manual path.
+  if (!input.manual && !input.settings.enabled) return { kind: 'blocked', reason: 'disabled', estimate };
   if (!hasCompleteDirectToolPairs(input.request.input)) return { kind: 'blocked', reason: 'unsettled_tools', estimate };
   const policy = resolveModelContextPolicy({
     contextWindow: input.contextWindow,

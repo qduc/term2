@@ -33,7 +33,15 @@ export type AgentWireV2ChangeType =
   | 'command_started'
   | 'command_finished'
   | 'history_replaced'
-  | 'configuration';
+  | 'configuration'
+  | 'cost'
+  | 'request_cost_recorded'
+  | 'goal'
+  | 'goal_proposed'
+  | 'verification'
+  | 'notice'
+  | 'background_notice_enqueued'
+  | 'background_notices_delivered';
 
 /** Must match the shared source's v2 live allowlist. A live batch cannot carry durable state. */
 const LIVE_CHANGE_TYPES = new Set<AgentWireV2ChangeType>([
@@ -228,6 +236,26 @@ function exactChange(event: WireEvent, branch?: AgentWireV2Branch): AgentWireV2C
     }
     case 'configuration':
       return change({ type: 'configuration', payload: event.payload }, branch);
+    // Accepted native evidence additions. Cost is aggregate state, not an
+    // increment; request records retain their own physical identity/ancestry.
+    case 'cost':
+      return change({ type: 'cost', payload: event.payload });
+    case 'request_cost_recorded':
+      // The payload already owns turn/root/parent ancestry. Do not add a second
+      // branch wrapper or treat it as another charge.
+      return change({ type: 'request_cost_recorded', payload: event.payload });
+    case 'goal':
+      return change({ type: 'goal', payload: event.payload }, branch);
+    case 'goal_proposed':
+      return change({ type: 'goal_proposed', payload: event.payload }, branch);
+    case 'verification':
+      return change({ type: 'verification', payload: event.payload }, branch);
+    case 'notice':
+      return change({ type: 'notice', payload: event.payload }, branch);
+    case 'background_notice_enqueued':
+      return change({ type: 'background_notice_enqueued', payload: event.payload }, branch);
+    case 'background_notices_delivered':
+      return change({ type: 'background_notices_delivered', payload: event.payload }, branch);
     case 'command_started':
     case 'command_finished':
       return change({ type: event.type, payload: event.payload }, branch);

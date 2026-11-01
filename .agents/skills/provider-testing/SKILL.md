@@ -56,14 +56,23 @@ scenario is the one whose CLI never reached the state it waits for.
 - `scripts/provider-black-box/provider-test-harness.ts` owns child-process,
   stateful PTY, isolated-workspace, restart, and temporary-environment lifecycle.
   Keep it asynchronous; synchronous child execution can deadlock the fake server.
-  Interactive ready/idle waits use `child.waitForIdleInput()`, not a prompt
-  glyph. The shipped CLI publishes an incrementing generation to
+  Source interactive ready/idle waits use `child.waitForIdleInput()`, not a prompt
+  glyph. The source CLI publishes an incrementing generation to
   `TERM2_HARNESS_IDLE_PATH` when the composer owns the keyboard and no turn is
   in flight (`source/lib/harness-input-idle.ts`). Text submission uses
   `writePtyTextAndSubmit()`, which waits for the CLI's companion composer-state
   acknowledgment before sending Enter; fixed sleeps and PTY echo do not prove
   Ink consumed the text. A PTY-stripped `❯` is not a readiness signal, and
   first-run/menu ownership must not count as idle.
+  The explicitly selected direct-native entry does not publish these source-only
+  channels. `direct-composer.ts` recognizes only its latest complete full Ink render:
+  adjacent model/status, ordinary single-line end-cursor composer, and native footer.
+  Native freshness tokens are decoded-string offsets, not source revision counts.
+  Exact fresh composer rendering acknowledges text; PTY echo/transcript does not.
+  Cursor styling alone does not prove ownership (it remains rendered while input
+  is disabled). Panels, intervening notices/errors, wrapped/multiline/image input,
+  and source-only revision/approval handshakes remain unsupported, not synthesized.
+  Keep independent response/request/command observations before settled idle waits.
 - `scripts/provider-black-box/provider-capability-matrix.ts` and
   `provider-session-capability-manifest.ts` own the test-side capability rows,
   typed lifecycle ledgers, and aggregate accounting.

@@ -1,3 +1,5 @@
+import { usesDirectComposer, waitForDirectComposer } from './direct-composer.js';
+import { waitForHarnessIdleGeneration, waitForHarnessComposerValue } from '../lib/harness-input-idle.js';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { stripVTControlCharacters } from 'node:util';
@@ -15,6 +17,8 @@ export type SpawnTerminalOptions = {
 };
 
 export type TerminalSession = {
+  directComposer: boolean;
+  hasExited: () => boolean;
   getOutput: () => string;
   getVisibleOutput: () => string;
   write: (data: string) => void;
@@ -194,6 +198,8 @@ export function spawnTerminal(command: string, args: string[], options: SpawnTer
   const getVisibleOutput = () => stripVTControlCharacters(output);
 
   return {
+    directComposer: usesDirectComposer(args),
+    hasExited: () => exitState !== null,
     getOutput: () => output,
     getVisibleOutput,
     write: (data: string) => {
@@ -208,4 +214,32 @@ export function spawnTerminal(command: string, args: string[], options: SpawnTer
       terminal.kill();
     },
   };
+}
+
+/** Source marker or explicitly selected native ordinary-composer render; token is opaque. */
+export async function waitForTerminalIdle(
+  terminal: TerminalSession,
+  idlePath: string,
+  options: { after?: number; timeoutMs?: number } = {},
+): Promise<number> {
+  if (!terminal.directComposer) return waitForHarnessIdleGeneration(idlePath, options);
+  return waitForDirectComposer(terminal, { ...options, idle: true, timeoutMs: options.timeoutMs ?? 15_000 });
+}
+
+/** Acknowledge exact text consumption, never historical transcript output or PTY echo. */
+export async function waitForTerminalComposer(
+  terminal: TerminalSession,
+  idlePath: string,
+  value: string,
+  options: { afterRevision?: number; timeoutMs?: number } = {},
+): Promise<void> {
+  if (!terminal.directComposer) {
+    await waitForHarnessComposerValue(idlePath, value, options);
+    return;
+  }
+  await waitForDirectComposer(terminal, {
+    value,
+    after: options.afterRevision ?? terminal.getOutput().length,
+    timeoutMs: options.timeoutMs ?? 15_000,
+  });
 }

@@ -1,11 +1,11 @@
-import { testCliPath } from './test-helpers/terminal-e2e.js';
+import { testCliPath, waitForTerminalIdle } from './test-helpers/terminal-e2e.js';
 import { writeMockCliSettings } from './test-helpers/mock-cli-settings.js';
 import { afterEach, expect, it } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnTerminal, type TerminalSession } from './test-helpers/terminal-e2e.js';
-import { HARNESS_IDLE_ENV, waitForHarnessIdleGeneration } from './lib/harness-input-idle.js';
+import { HARNESS_IDLE_ENV } from './lib/harness-input-idle.js';
 
 // tsx cold-starts the whole app through an on-demand transform; inside CI's
 // full-suite run that competes with dozens of vitest workers for every core,
@@ -65,7 +65,7 @@ it.sequential.each(['lite', 'bare'])(
     // --lite is an alias of Bare, so both start the same Profile; the identity
     // is checked in the session header below.
     await session.waitForOutput('BARE', STARTUP_TIMEOUT_MS);
-    await waitForHarnessIdleGeneration(idlePath, { timeoutMs: STARTUP_TIMEOUT_MS });
+    await waitForTerminalIdle(session, idlePath, { timeoutMs: STARTUP_TIMEOUT_MS });
 
     {
       const headers = fs

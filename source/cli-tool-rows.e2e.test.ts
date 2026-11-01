@@ -1,4 +1,4 @@
-import { testCliPath } from './test-helpers/terminal-e2e.js';
+import { testCliPath, waitForTerminalIdle, waitForTerminalComposer } from './test-helpers/terminal-e2e.js';
 import { afterEach, expect, it } from 'vitest';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -6,11 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnTerminal, createTestChildEnv, type TerminalSession } from './test-helpers/terminal-e2e.js';
-import {
-  HARNESS_IDLE_ENV,
-  waitForHarnessComposerValue,
-  waitForHarnessIdleGeneration,
-} from './lib/harness-input-idle.js';
+import { HARNESS_IDLE_ENV } from './lib/harness-input-idle.js';
 import { resolveSettingsDirectory } from './services/settings/settings-path.js';
 
 // Runs the built terminal UI (`pnpm build` output, as CI does before test:e2e) in a real pty against
@@ -126,23 +122,23 @@ it('the terminal UI shows a later turn tool call that reuses an earlier call id'
   );
 
   session = spawnTerminal('node', [builtCli], { cwd: workspace, env });
-  let idle = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
+  let idle = await waitForTerminalIdle(session, idlePath, { timeoutMs: 60_000 });
 
   // Submit only once the composer holds the text; Enter in the same write is taken as pasted input.
   const submit = async (text: string) => {
     session!.write(text);
-    await waitForHarnessComposerValue(idlePath, text, { timeoutMs: 60_000 });
+    await waitForTerminalComposer(session!, idlePath, text, { timeoutMs: 60_000 });
     session!.write('\r');
   };
 
   await submit('tidy the workspace');
   await session.waitForOutput('first turn done', 60_000);
-  idle = await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
+  idle = await waitForTerminalIdle(session, idlePath, { after: idle, timeoutMs: 60_000 });
   const afterFirstTurn = session.getVisibleOutput().length;
 
   await submit('second turn');
   await session.waitForOutput('second turn done', 60_000);
-  await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
+  await waitForTerminalIdle(session, idlePath, { after: idle, timeoutMs: 60_000 });
   const secondTurnOutput = session.getVisibleOutput().slice(afterFirstTurn);
 
   // Quit the way a user does, so the app finishes its writes before the test removes its directories.

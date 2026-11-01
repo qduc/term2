@@ -1,4 +1,4 @@
-import { testCliPath } from './test-helpers/terminal-e2e.js';
+import { testCliPath, waitForTerminalIdle, waitForTerminalComposer } from './test-helpers/terminal-e2e.js';
 import { afterEach, expect, it } from 'vitest';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -6,11 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnTerminal, createTestChildEnv, type TerminalSession } from './test-helpers/terminal-e2e.js';
-import {
-  HARNESS_IDLE_ENV,
-  waitForHarnessComposerValue,
-  waitForHarnessIdleGeneration,
-} from './lib/harness-input-idle.js';
+import { HARNESS_IDLE_ENV } from './lib/harness-input-idle.js';
 import { resolveSettingsDirectory } from './services/settings/settings-path.js';
 
 const projectRoot = fileURLToPath(new URL('..', import.meta.url));
@@ -178,10 +174,10 @@ it(
     );
 
     session = spawnTerminal('node', [builtCli], { cwd: workspace, env, cols: COLS, rows: ROWS });
-    let idle = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
+    let idle = await waitForTerminalIdle(session, idlePath, { timeoutMs: 60_000 });
     const submit = async (text: string) => {
       session!.write(text);
-      await waitForHarnessComposerValue(idlePath, text);
+      await waitForTerminalComposer(session!, idlePath, text);
       session!.write('\r');
     };
 
@@ -189,7 +185,7 @@ it(
     await session.waitForOutput('Allow once', 60_000);
     session.write('\r');
     await session.waitForOutput('first shell started', 30_000);
-    idle = await waitForHarnessIdleGeneration(idlePath, { after: idle });
+    idle = await waitForTerminalIdle(session, idlePath, { after: idle });
 
     const beforeSecondApproval = session.getVisibleOutput().length;
     await submit('start second foreground shell');
@@ -244,7 +240,7 @@ it(
     expect(session.getVisibleOutput()).not.toContain('Task is no longer transferable');
 
     session.write('\x1b');
-    await waitForHarnessIdleGeneration(idlePath, { after: idle });
+    await waitForTerminalIdle(session, idlePath, { after: idle });
     session.write('\x03');
     await session.waitForOutput('Press Ctrl+C again to exit', 30_000);
     session.write('\x03');

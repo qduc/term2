@@ -223,6 +223,8 @@ describe('provider black-box harness', () => {
 
       const result = await workspace.runCli({
         cwd: workspace.root,
+        // This is the harness child, not the selected product executable.
+        cliPath: CHILD,
         args: ['spawn-tree-and-hang'],
         env: { TERM2_HARNESS_TREE_PID_PATH: pidPath },
         deadlineMs: 1_000,

@@ -21,6 +21,9 @@ export type ToolSurfaceOptions = {
       >;
     };
   };
+  /** App-owned local home/lease shared across configured generations. Must match
+   * the authorized workspace home; SSH always uses its connected adapter. */
+  readonly localExecutionContext?: import('../../../source/services/execution-context.js').ExecutionContext;
   readonly autoApprove?: boolean;
   readonly interactive?: boolean;
   /** The client owns a session browser, making model-requested rollover available. */

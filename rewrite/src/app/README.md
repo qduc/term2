@@ -70,6 +70,13 @@ They omit text previews so warm listing needs metadata rather than log replay.
 
 ## Tools and delegation
 
+Local surfaces use a session-owned `ExecutionContext.pin` home/lease, retained
+across configured generations. Worktree tools use the existing git inventory and
+running-shell guards; `enter`/`exit` never publish a process-wide root. Native
+source-tool contexts read that lease for each execution. Child tool graphs
+snapshot the current root at admission so a later parent switch cannot retarget
+a running child. Read-only and SSH surfaces do not offer local worktree tools.
+
 `createToolSurface` in `tool-surface.ts` builds the offered tools and matching
 execution and approval capabilities together. It keeps a mutable copy of the
 source's readonly graph for native capability replacement; the source still
@@ -92,6 +99,12 @@ populated index and the empty-index wording are both resolved from the real
 snapshot rather than guessed.
 MCP capture in `direct-mcp-source.ts` reserves the executable `describe` name from the
 run-code runtime, the same owner used by tool assembly.
+
+`configure_task_check_in` preserves the source's synchronous `target` callback
+contract and maps seconds to native scheduler milliseconds. Returning a Promise
+here serializes as `{}` in the source tool, while an `id` parameter loses named
+aliases; the adapter derives its parameter type from `AgentFactoryDeps` to keep
+that boundary explicit.
 
 `createDirectSubagentTools` in `direct-subagent-tools.ts` exposes source callback
 contracts over Session's admitted nested requests and task controls:

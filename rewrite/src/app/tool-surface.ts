@@ -49,7 +49,10 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     : undefined;
   // Pin one context per surface; never retarget process.cwd or the global
   // active-workspace fallback while another Session owns tools/background work.
-  const executionContext = remote?.executionContext ?? ExecutionContext.pin(workspace.root);
+  const executionContext =
+    remote?.executionContext ?? options.localExecutionContext ?? ExecutionContext.pin(workspace.root);
+  if (!remote && (executionContext.isRemote() || executionContext.getHomeWorkspace() !== workspace.root))
+    throw new Error('Local tool context does not match the authorized workspace home');
   // SkillsService is local-fs-only. Never scan a same-spelled remote path locally.
   const skillsService = remote ? undefined : new SkillsService(logger, executionContext.getCwd());
   skillsService?.discoverSkills();
@@ -221,7 +224,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
         bindRunCodeRegistry(sourceGraph);
         return registry.adaptTool(wrapped);
       },
-      toolContext: toolContext(selection, workspace),
+      toolContext: toolContext(selection, workspace, executionContext),
       maxParallelToolCalls: settings.get('agent.maxParallelToolCalls') ?? 3,
       async dispose() {
         advisoryAbort.abort();
@@ -295,9 +298,15 @@ function displayName(profileId: string): string {
   return profileId === 'builtin:standard' ? 'full' : profileId.replace(/^builtin:/, '');
 }
 
-function toolContext({ settings }: ProfileSelection, workspace: Workspace): ToolContextSeed {
+function toolContext(
+  { settings }: ProfileSelection,
+  workspace: Workspace,
+  executionContext: ExecutionContext,
+): ToolContextSeed {
   return {
-    workspace,
+    get workspace() {
+      return Object.freeze({ ...workspace, root: executionContext.getCwd() });
+    },
     settings: {
       get: (key) => settings.getDynamic(key) as ReturnType<ToolContextSeed['settings']['get']>,
       watch(listener) {

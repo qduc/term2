@@ -2,7 +2,7 @@
  * Session must accept/validate these facts and expose task state before production use.
  */
 import type { DirectBackgroundFact, DirectTaskInteraction, DirectTaskResult, DirectTaskState } from '../session/direct-background-types.js';
-import type { WireEvent, WireSnapshot, WireTask, WireTaskOwner, WireTaskResult } from './direct-wire.js';
+import type { WireEvent, WireSnapshot, WireTask, WireTaskOwner, WireTaskResult, WireToolUseCount } from './direct-wire.js';
 import { parseWireOrigin } from './direct-parse.js';
 import { publicInteraction } from './direct-public.js';
 
@@ -23,9 +23,28 @@ function output(value: unknown): string | undefined {
   }
   return texts.length ? texts.join('\n') : undefined;
 }
+function toolUseCounts(value: unknown): readonly WireToolUseCount[] | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const raw = (value as Record<string, unknown>).toolUseCounts;
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw)) return undefined;
+  const counts: WireToolUseCount[] = [];
+  const names = new Set<string>();
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') return undefined;
+    const { toolName, count } = item as Record<string, unknown>;
+    if (typeof toolName !== 'string' || toolName.length === 0 || names.has(toolName)) return undefined;
+    if (typeof count !== 'number' || !Number.isSafeInteger(count) || count < 1) return undefined;
+    names.add(toolName);
+    counts.push({ toolName, count });
+  }
+  return counts;
+}
 export function publicTaskResult(result: DirectTaskResult): WireTaskResult {
   const text = 'value' in result ? output(result.value) : undefined;
+  const counts = 'value' in result ? toolUseCounts(result.value) : undefined;
   return { kind: result.kind, ...(text !== undefined ? { output: text } : {}),
+    ...(counts !== undefined ? { toolUseCounts: counts } : {}),
     ...(result.kind === 'failed' ? { error: { kind: result.error.kind, message: result.error.message, retryable: result.error.retryable } } : {}),
     ...(result.kind === 'interrupted' ? { reason: result.reason } : {}),
   };
@@ -38,7 +57,8 @@ export function publicTask(task: DirectTaskState): WireTask {
     ...(task.parentExecutionId ? { parentExecutionId: task.parentExecutionId } : {}),
     ...(task.sourceCallId ? { sourceCallId: task.sourceCallId } : {}),
     ...(task.origin ? { origin: parseWireOrigin(task.origin) } : {}),
-    kind: task.kind, label: task.label, ...(task.name ? { name: task.name } : {}),
+    kind: task.kind, label: task.label, ...(task.input !== undefined ? { input: task.input } : {}),
+    ...(task.name ? { name: task.name } : {}),
     ...(task.role ? { role: task.role } : {}), ...(task.kind === 'subagent' ? { agentId: task.taskId } : {}),
     ...(task.model ? { model: { provider: task.model.provider, model: task.model.model } } : {}),
     mode: task.mode, status: task.status === 'waiting_for_answer' ? 'awaiting_interaction' : task.status,

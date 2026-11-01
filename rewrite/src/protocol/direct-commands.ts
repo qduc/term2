@@ -55,6 +55,7 @@ async function dispatch(session: DirectSession, command: WireCommand, operations
     case 'retry': case 'compact': case 'configure': case 'rewind': case 'rollover':
       return publicCommandResult(command.commandId, await session.command(nativeCommandRequest(command)));
     case 'command_status': return commandStatus(session, command.commandId);
+    case 'command_revision': return { ok: true, kind: 'command_revision', revision: session.commandRevision() };
     case 'drain_background_notifications': {
       const result = await session.drainBackgroundNotifications(command.requestId);
       return result.kind === 'not_admitting'

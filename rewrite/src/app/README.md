@@ -139,3 +139,26 @@ uncorrelated steering cannot consume it; ordinary steering outside a question
 remains unsupported. Stop, settlement and writer failure reject pending waits;
 process-loss recovery records interruption and never reconstructs a waiter.
 Public task snapshots carry `pendingQuestion` separately from user interactions.
+
+### Local shell task bridge
+
+`createDirectShellTools` adapts the source shell's prepared runner to the
+engine-injected `ToolContext.shellTasks` port. The adapter does not instantiate
+the source lifecycle registry: the native Session admits a `kind: 'shell'` task
+before running a command, and the source job ID is that task's canonical ID.
+Foreground leases use the same task when moved to background. Source command
+policy and pre-execution approvals still run before this admission; the bridge
+does not grant approval or add a second engine loop. SSH background shell remains
+unavailable through this local bridge.
+
+Session stop/close and `/restart stop` wait for the prepared runner **and its
+cleanup**, including cleanup of a background admission cancelled before kickoff.
+An abort request alone is not a terminal receipt. Shell controls reject other
+Sessions' IDs and non-shell tasks; monitor cancellation also resolves the watch's
+job through the invoking Session, since a retained surface can serve several
+Sessions. The shell adapter keeps only live watch/output
+callbacks; terminal state and formatted process results live in Session facts.
+Monitor firings enter the existing durable background-notice lane. Raw progress
+and watch buffers do not survive process loss; unfinished recovered tasks become
+interrupted, not reattached subprocesses. Sandbox post-execution pauses are not
+introduced by this bridge.

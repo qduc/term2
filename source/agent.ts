@@ -15,7 +15,7 @@ import {
   createShellToolDefinition,
   type BackgroundShellExecutionResult,
 } from './tools/system/shell.js';
-import type { BackgroundShellRegistry } from './services/shell/background-shell-registry.js';
+import type { BackgroundShellRegistryPort } from './services/shell/background-shell-registry.js';
 import type { BackgroundShellOutputBundle } from './services/shell/background-shell-watches.js';
 import { createAskMentorToolDefinition } from './tools/agent/ask-mentor.js';
 import { createAskUserToolDefinition } from './tools/agent/ask-user.js';
@@ -293,7 +293,7 @@ export const getAgentDefinition = (
     readOnly?: boolean;
     allowUnsandboxed?: boolean;
     /** Root-session-only capability. Nested/subagent factories do not receive it. */
-    backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
+    backgroundShellRegistry?: BackgroundShellRegistryPort<BackgroundShellExecutionResult>;
     /** Root-session-only output store + watch layer for background jobs. */
     backgroundShellOutput?: BackgroundShellOutputBundle;
     shellChildRegistry?: ShellChildRegistry;

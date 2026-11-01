@@ -86,7 +86,7 @@ export class DirectBackgroundTasks {
     }
     this.#linkParent(entry, request.parentSignal);
     // Admission returns a stable handle before the scheduled body starts.
-    void this.#execute(entry, operation);
+    void this.#execute(entry, operation, request.cleanup);
     return { taskId: entry.task.taskId, result: entry.result as Promise<DirectTaskResult<Value>> };
   }
 
@@ -141,6 +141,14 @@ export class DirectBackgroundTasks {
   /** All task interactions, independently of the foreground Turn's lifetime. */
   pendingInteractions() {
     return this.#interactions.pending();
+  }
+
+  /** Live shell output never changes admission or terminal state. */
+  shellProgress(target: string, chunk: string): boolean {
+    const entry = this.#resolve(target);
+    if (!entry || entry.task.kind !== 'shell' || entry.outcome || entry.controller.signal.aborted) return false;
+    this.#context(entry).progress(chunk, 'tool_progress', entry.task.parentExecutionId);
+    return true;
   }
 
   /** Session routes background answers here after selecting this exact request ID. */
@@ -298,6 +306,7 @@ export class DirectBackgroundTasks {
   async #execute<Value>(
     entry: Entry,
     operation: (context: DirectTaskContext) => Promise<DirectTaskResult<Value>>,
+    cleanup?: () => Promise<void> | void,
   ): Promise<void> {
     // The owning engine releases on actual dispatch, park or termination.
     // Cancellation releases too, so close/poison never waits on a silent parent.
@@ -312,6 +321,11 @@ export class DirectBackgroundTasks {
         failure.kind === 'cancelled' || (entry.controller.signal.aborted && aborted)
           ? { kind: 'cancelled' }
           : { kind: 'failed', error: failure };
+    }
+    try {
+      await cleanup?.();
+    } catch (error) {
+      result = { kind: 'failed', error: directTaskError(error), value: result.value };
     }
     // Record known outcomes even after cancellation; abort alone proves no terminal.
     this.#finish(entry, result);

@@ -34,7 +34,7 @@ import {
   type ToolRegistry,
 } from '../tools/types.js';
 import type { SessionAccessState } from '../services/session/session-access-state.js';
-import type { BackgroundShellRegistry } from '../services/shell/background-shell-registry.js';
+import type { BackgroundShellRegistryPort } from '../services/shell/background-shell-registry.js';
 import type { BackgroundShellOutputBundle } from '../services/shell/background-shell-watches.js';
 import type { BackgroundShellExecutionResult } from '../tools/system/shell.js';
 import { getCatalogModel } from '../providers/model-catalog/catalog.js';
@@ -129,7 +129,7 @@ export interface AgentFactoryDeps {
   readOnly?: boolean;
   allowUnsandboxed?: boolean;
   /** Root-session-owned background shell capability. */
-  backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
+  backgroundShellRegistry?: BackgroundShellRegistryPort<BackgroundShellExecutionResult>;
   /** Root-session-owned output store + watch layer for background jobs. */
   backgroundShellOutput?: BackgroundShellOutputBundle;
   shellChildRegistry?: ShellChildRegistry;

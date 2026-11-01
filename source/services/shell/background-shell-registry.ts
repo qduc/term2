@@ -481,6 +481,14 @@ export class BackgroundShellRegistry<TResult> {
   }
 }
 
+/** Prepared shell execution seam; implementations may delegate lifecycle to a native Session. */
+export type BackgroundShellRegistryPort<TResult> = Pick<
+  BackgroundShellRegistry<TResult>,
+  'launch' | 'startForeground' | 'get' | 'cancel' | 'list'
+> & {
+  recordOutputChunk(id: string, stream?: 'stdout' | 'stderr', text?: string): boolean;
+};
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }

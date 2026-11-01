@@ -319,7 +319,9 @@ export type WireSnapshot = {
   readonly notices: readonly WireNotice[];
   readonly lastError: WireError | null;
   readonly terminal: ({ readonly turnId: string } & WireTerminal) | null;
-  /** null means the facade cannot yet supply authoritative mixed transcript ordering. */
+  /** First accepted display positions. Tool IDs resolve to tools or unmatched
+   * results by real executionId; a result slot does not imply a call/start/name.
+   * null means authoritative mixed transcript ordering is unavailable. */
   readonly timeline: readonly { readonly kind: 'message' | 'tool'; readonly id: string }[] | null;
 };
 

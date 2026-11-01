@@ -111,6 +111,13 @@ timers, sub-event IDs, invented timestamps or replay journal are added. Several
 command messages sharing a call ID retain their actual message identities;
 native execution IDs may contain colons.
 
+Tool timeline IDs can reference an actual unmatched result execution, without a
+named tool descriptor. Browser hydration accepts that exact result evidence as a
+valid reference; it does not manufacture a named tool/start or reorder arrays.
+ACP uses the same slot for unnamed output in accepted mixed replay. The existing
+browser raw native-evidence panel retains unmatched results; this compatibility
+change does not claim a new browser mixed-transcript result renderer.
+
 ## Branch and context boundaries
 
 Optional native `snapshot.branches` preserves absence (capability unavailable)

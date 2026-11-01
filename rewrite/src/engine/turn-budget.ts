@@ -40,7 +40,8 @@ export class TurnBudgetControl {
     pending.resolve(decision);
   }
 
-  /** Stable per-physical-request records survive failures and history compaction. */
+  /** Stable per-physical-request records survive failures and history compaction.
+   * Model cached input is normalized as cache-read tokens, not extra prompt tokens. */
   record(input: {
     requestId: string;
     model: ModelRef;
@@ -61,7 +62,7 @@ export class TurnBudgetControl {
             usage: {
               prompt_tokens: input.usage.inputTokens,
               completion_tokens: input.usage.outputTokens,
-              cached_tokens: input.usage.cachedInputTokens,
+              cache_read_tokens: input.usage.cachedInputTokens,
               total_tokens: input.usage.inputTokens + input.usage.outputTokens,
             },
           }

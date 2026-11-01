@@ -4,7 +4,7 @@ import type { WireBudgetRequest, WireCommand, WireEvent, WireInteraction } from 
 import type { AcpLogger, EmitUpdate, PromptExecution, PromptOutcome } from './contract.js';
 import { errorMessage } from './contract.js';
 import { AcpRenderer, MissingAcpWireContract, terminalOutcome } from './render.js';
-import { requestPermission } from './requests.js';
+import { requestPermission } from './permissions.js';
 import { requestBudget } from './budget.js';
 import type { PromptInput } from './input.js';
 

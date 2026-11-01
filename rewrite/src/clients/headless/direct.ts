@@ -265,9 +265,6 @@ export async function runDirectHeadless(
   }
   if (options.signal?.aborted) return result('cancelled', 1);
   options.signal?.addEventListener('abort', onAbort, { once: true });
-  if (output === 'json') {
-    json({ type: 'session_start', ...(options.profileMetadata ?? {}) });
-  }
 
   let iterator: AsyncIterator<WireEvent> | null = null;
   try {
@@ -289,11 +286,7 @@ export async function runDirectHeadless(
         return result('failed', 1);
       }
       if (decided.reportRejection === true && decided.decision.kind === 'deny') {
-        if (output === 'json') {
-          json({ type: 'approval_rejected', reason: decided.decision.reason ?? null });
-        } else {
-          io.stderr.write(rejectionLine(decided.decision.reason));
-        }
+        io.stderr.write(rejectionLine(decided.decision.reason));
       }
       const answerFailure = await sendAnswer(interaction.requestId, decided.decision);
       if (answerFailure === null) return null;
@@ -380,6 +373,7 @@ export async function runDirectHeadless(
       });
       return pending;
     };
+    // Every race arm has the same discriminator; a wake/timeout is not an iterator item.
     const waitEvent = async (
       ms: number,
     ): Promise<
@@ -390,15 +384,15 @@ export async function runDirectHeadless(
       if (ms <= 0) return { kind: 'timeout' };
       let timer: ReturnType<typeof setTimeout> | undefined;
       let wake!: () => void;
-      const wakePromise = new Promise<'wake'>((resolve) => {
-        wake = () => resolve('wake');
+      const wakePromise = new Promise<{ readonly kind: 'wake' }>((resolve) => {
+        wake = () => resolve({ kind: 'wake' });
       });
       wakeBackground = wake;
       try {
         const waited = await Promise.race([
           nextEvent().then((value) => ({ kind: 'event' as const, value })),
-          new Promise<'timeout'>((resolve) => {
-            timer = setTimeout(() => resolve('timeout'), ms);
+          new Promise<{ readonly kind: 'timeout' }>((resolve) => {
+            timer = setTimeout(() => resolve({ kind: 'timeout' }), ms);
           }),
           wakePromise,
         ]);
@@ -526,7 +520,6 @@ export async function runDirectHeadless(
       }
       const event = next.value;
       if (event.sessionId !== sessionId) continue;
-      if (output === 'json') json(event);
 
       if (event.type === 'background_notice_enqueued') {
         const notice = event.payload.notice;
@@ -732,7 +725,7 @@ function fail(
 /** Nested subagent lines keep the old stderr labels; everything else stays nested. */
 function renderNested(
   agentId: string,
-  role: string,
+  role: string | undefined,
   event: WireEvent,
   output: 'plain' | 'json',
   io: HeadlessIo,
@@ -740,9 +733,10 @@ function renderNested(
   quiet: boolean,
 ): void {
   if (output === 'json' || quiet) return;
+  const label = role === undefined ? '[subagent]' : `[subagent: ${role}]`;
   switch (event.type) {
     case 'tool_started':
-      io.stderr.write(`[subagent: ${role}] ${toolStartLine(event.payload.tool).replace(/^\[tool\]\s*/, '')}`);
+      io.stderr.write(`${label} ${toolStartLine(event.payload.tool).replace(/^\[tool\]\s*/, '')}`);
       break;
     case 'retrying':
       io.stderr.write(retryLine(event.payload, agentId));

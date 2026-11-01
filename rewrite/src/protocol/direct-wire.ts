@@ -290,6 +290,8 @@ export type WireSnapshot = {
   readonly activeTurnId: string | null;
   readonly messages: readonly WireMessage[];
   readonly tools: readonly WireTool[];
+  /** Accepted branch read models at this outer seq; absent means unsupported, not empty history. */
+  readonly branches?: readonly WireBranchSnapshot[];
   /** Results without accepted call metadata are retained, never assigned an invented tool name. */
   readonly unmatchedToolResults?: readonly WireToolResult[];
   readonly pendingInteractions: readonly WireInteraction[];
@@ -319,6 +321,40 @@ export type WireSnapshot = {
   readonly terminal: ({ readonly turnId: string } & WireTerminal) | null;
   /** null means the facade cannot yet supply authoritative mixed transcript ordering. */
   readonly timeline: readonly { readonly kind: 'message' | 'tool'; readonly id: string }[] | null;
+};
+
+/** Accepted public child evidence at the enclosing logical Session's single cut.
+ * No child configuration/model/queue is inferred from the root. Raw live-only
+ * reasoning/progress are not replayable through this read model.
+ */
+export type WireBranchSnapshot = {
+  readonly branchId: string;
+  readonly taskId: string;
+  readonly turnId: string;
+  readonly parentTurnId?: string;
+  readonly rootTurnId?: string;
+  /** Last actual branch_started/branch_event seq, not an independent resume cursor.
+   * Joined task interactions/costs may be newer, up to the enclosing snapshot.seq.
+   */
+  readonly acceptedSeq: number;
+  readonly messages: readonly WireMessage[];
+  readonly tools: readonly WireTool[];
+  readonly unmatchedToolResults: readonly WireToolResult[];
+  readonly timeline: WireSnapshot['timeline'];
+  readonly pendingInteractions: readonly WireInteraction[];
+  readonly pendingBudgets: readonly WireBudgetRequest[];
+  readonly turnResults: readonly WireTurnResult[];
+  /** Actual accepted child observations; null until a usage fact exists, never estimated. */
+  readonly usage: WireUsage | null;
+  /** Accepted summaries only; null until a summary exists, not a recovered live prefix. */
+  readonly reasoning: string | null;
+  readonly reasoningIdentity: NonNullable<WireSnapshot['reasoningIdentity']> | null;
+  readonly terminal: WireSnapshot['terminal'];
+  readonly notices: readonly WireNotice[];
+  /** Same physical records selected by producing turnId; never additional charges. */
+  readonly requestCosts: readonly WireRequestCost[];
+  /** No branch queue fact producer exists; null is unavailable, not an empty queue. */
+  readonly queue: null;
 };
 
 export type WireEventPayloads = {

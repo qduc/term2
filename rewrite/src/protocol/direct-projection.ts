@@ -16,7 +16,7 @@ import { completedFinalText } from './direct-turn-results.js';
 import { publicQueue, publicQueueChange } from './direct-queue.js';
 import { taskFactEvent } from './direct-tasks.js';
 import type { Fact } from '../session/facts.js';
-import type { WireConfiguration, WireEvent, WireEventPayloads, WireEventType, WireModel, WireSnapshot } from './direct-wire.js';
+import type { WireBranchSnapshot, WireConfiguration, WireEvent, WireEventPayloads, WireEventType, WireModel, WireSnapshot } from './direct-wire.js';
 import { publicInteraction, publicJson, publicMessage, publicToolContent, publicTerminal } from './direct-public.js';
 import { runtimeDirectError, snapshotDirectState } from './direct-state.js';
 import { reduceWireEvent } from './direct-reducer.js';
@@ -37,7 +37,7 @@ export class DirectProjection {
   #state: WireSnapshot;
   #queue: DirectQueueState;
   #workspace: DirectSessionState['workspace'];
-  #branches = new Map<string, { readonly projection: DirectProjection; readonly taskId: string; readonly parentTurnId?: string; readonly rootTurnId?: string; readonly role?: string }>();
+  #branches = new Map<string, { readonly projection: DirectProjection; readonly taskId: string; readonly turnId: string; acceptedSeq: number; hasAcceptedUsage: boolean; readonly parentTurnId?: string; readonly rootTurnId?: string; readonly role?: string }>();
   constructor(state: DirectSessionState & { readonly queue?: DirectQueueState }, seq: number | null = null) {
     this.#state = { ...snapshotDirectState(state), seq };
     this.#workspace = state.workspace;
@@ -49,7 +49,33 @@ export class DirectProjection {
     projection.#state = { ...projection.#state, timeline: [] };
     return projection;
   }
-  get snapshot(): WireSnapshot { return this.#state; }
+  /** One public root/branch cut; no log read or second clock is introduced. */
+  get snapshot(): WireSnapshot {
+    return { ...this.#state, branches: this.#branchSnapshots(this.#state) };
+  }
+
+  #branchSnapshots(root: WireSnapshot): readonly WireBranchSnapshot[] {
+    return [...this.#branches].map(([branchId, branch]) => {
+      const child = branch.projection.snapshot;
+      return {
+        branchId, taskId: branch.taskId, turnId: branch.turnId,
+        ...(branch.parentTurnId !== undefined ? { parentTurnId: branch.parentTurnId } : {}),
+        ...(branch.rootTurnId !== undefined ? { rootTurnId: branch.rootTurnId } : {}),
+        acceptedSeq: branch.acceptedSeq,
+        messages: child.messages, tools: child.tools,
+        unmatchedToolResults: child.unmatchedToolResults ?? [], timeline: child.timeline,
+        pendingInteractions: root.pendingInteractions.filter(request =>
+          request.taskId === branch.taskId && request.turnId === branch.turnId),
+        pendingBudgets: child.pendingBudgets ?? [], turnResults: child.turnResults ?? [],
+        usage: branch.hasAcceptedUsage ? child.usage : null,
+        reasoning: child.reasoningIdentity ? child.reasoning : null,
+        reasoningIdentity: child.reasoningIdentity ?? null,
+        terminal: child.terminal, notices: child.notices,
+        requestCosts: (root.requestCosts ?? []).filter(cost => cost.turnId === branch.turnId),
+        queue: null,
+      };
+    });
+  }
 
   /** Updates arrive once in Session publication order; never called from a tool body. */
   update(update: DirectProtocolUpdate): readonly WireEvent[] {
@@ -90,7 +116,7 @@ export class DirectProjection {
       const events: readonly WireEvent[] = [
         ...(freshError ? [this.#event('error', { error }, null, this.#state.activeTurnId)] : []),
         ...(freshError && this.#state.activeTurnId ? [this.#event('turn_ended', { outcome: 'failed', error }, null, this.#state.activeTurnId)] : []),
-        this.#event('snapshot', { snapshot }, null, null),
+        this.#event('snapshot', { snapshot: { ...snapshot, branches: this.#branchSnapshots(snapshot) } }, null, null),
       ];
 
       for (const event of events) this.#state = reduceWireEvent(this.#state, event);
@@ -169,8 +195,8 @@ export class DirectProjection {
       case 'branch_started': {
         const task = this.#state.tasks.find(task => task.id === fact.taskId);
         const projection = DirectProjection.forReplay(initialDirectState(this.#state.sessionId, this.#workspace, task?.model ?? this.#state.model));
-        const parentTurnId = fact.parentTurnId ?? task?.turnId;
-        this.#branches.set(fact.branchId, { projection, taskId: fact.taskId,
+        const parentTurnId = fact.parentTurnId;
+        this.#branches.set(fact.branchId, { projection, taskId: fact.taskId, turnId: fact.turnId, acceptedSeq: seq, hasAcceptedUsage: false,
           ...(parentTurnId !== undefined ? { parentTurnId } : {}),
           ...(fact.rootTurnId !== undefined ? { rootTurnId: fact.rootTurnId } : {}),
           ...(task?.role ? { role: task.role } : {}),
@@ -217,7 +243,10 @@ export class DirectProjection {
     if (!branch) throw new Error('Branch event has no accepted branch identity');
     // The wrapper is the accepted outer boundary for a branch fact. Preserve its
     // real accepted timestamp; nested child frames keep the existing null root cursor.
-    return branch.projection.update({ type: 'fact', position: 0, seq, at, fact }).map(event => ({
+    const events = branch.projection.update({ type: 'fact', position: 0, seq, at, fact });
+    branch.acceptedSeq = seq;
+    if (fact.type === 'usage') branch.hasAcceptedUsage = true;
+    return events.map(event => ({
       ...this.#event('subagent', { agentId: branch.taskId, branchId,
         ...(branch.parentTurnId !== undefined ? { parentTurnId: branch.parentTurnId } : {}),
         ...(branch.rootTurnId !== undefined ? { rootTurnId: branch.rootTurnId } : {}),

@@ -1,57 +1,142 @@
 import React, { useRef, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import type { TaskView } from './state.js';
+import { terminalTextWidth, truncateTerminalText } from '../../../../source/components/layout/terminal-text-budget.js';
+import { useTerminalSize } from './terminal.js';
 
 /** Inspect a wire task and send only explicitly selected task-ID-scoped operations. */
-export function TaskManager({ tasks, onClose, onAction }: {
+export function TaskManager({
+  tasks,
+  onClose,
+  onAction,
+}: {
   readonly tasks: readonly TaskView[];
   readonly onClose: () => void;
   readonly onAction: (id: string, action: 'cancel' | 'check_in' | 'foreground' | 'background') => Promise<void>;
 }): React.ReactElement {
-  const [selected, setSelected] = useState(0);
-  const [taskId, setTaskId] = useState<string | null>(null);
-  const [action, setAction] = useState(0);
+  const { columns } = useTerminalSize();
+  const live = tasks
+    .filter((item) => ['running', 'awaiting_interaction', 'cancelling'].includes(item.status))
+    .sort((a, b) => Number(b.wire?.mode === 'foreground') - Number(a.wire?.mode === 'foreground'));
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [details, setDetails] = useState(false);
+  const [armedId, setArmedId] = useState<string | null>(null);
+  const [transferredId, setTransferredId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const pending = useRef(false);
-  const task = tasks.find(item => item.id === taskId);
+  const selected = Math.max(
+    0,
+    live.findIndex((item) => item.id === selectedId),
+  );
+  const task = live[selected];
   const actions = ['Check in', 'Move to foreground', 'Move to background', 'Cancel task'];
   const send = async (which: number) => {
     if (!task || pending.current) return;
     const operation = (['check_in', 'foreground', 'background', 'cancel'] as const)[which];
-    pending.current = true; setBusy(true); setNotice(null);
-    try { await onAction(task.id, operation); setNotice(`Requested ${actions[which].toLowerCase()}; watch task status for the result.`); }
-    catch (error) { setNotice(error instanceof Error ? error.message : String(error)); }
-    finally { pending.current = false; setBusy(false); }
+    pending.current = true;
+    setBusy(true);
+    setNotice(null);
+    setTransferredId(null);
+    try {
+      await onAction(task.id, operation);
+      if (operation === 'background') setTransferredId(task.id);
+      setNotice(`Requested ${actions[which].toLowerCase()}; watch task status for the result.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : String(error));
+    } finally {
+      pending.current = false;
+      setBusy(false);
+    }
   };
   useInput((input, key) => {
     if (busy) return;
-    if (key.escape) { if (taskId) { setTaskId(null); setSelected(0); setNotice(null); } else onClose(); return; }
-    if (key.upArrow) { if (taskId) setAction(value => Math.max(0, value - 1)); else setSelected(value => Math.max(0, value - 1)); return; }
-    if (key.downArrow) { if (taskId) setAction(value => Math.min(actions.length - 1, value + 1)); else setSelected(value => Math.min(Math.max(0, tasks.length - 1), value + 1)); return; }
+    if (key.escape || (key.ctrl && input === 'g') || input === '\x07') {
+      onClose();
+      return;
+    }
+    if (key.upArrow || key.downArrow) {
+      if (live.length) setSelectedId(live[(selected + (key.upArrow ? live.length - 1 : 1)) % live.length]!.id);
+      setDetails(false);
+      setArmedId(null);
+      setNotice(null);
+      setTransferredId(null);
+      return;
+    }
+    if (!task) return;
+    if (!key.ctrl && !key.meta && input === 'b' && task.wire?.mode === 'foreground') {
+      setSelectedId(task.id);
+      setArmedId(task.id);
+      setNotice(null);
+      return;
+    }
+    if (key.return) {
+      if (armedId === task.id) {
+        setArmedId(null);
+        void send(2);
+      } else setDetails(true);
+      return;
+    }
     const number = /^[1-9]$/.test(input) ? Number(input) - 1 : -1;
-    if (!key.return && number < 0) return;
-    const index = number < 0 ? (taskId ? action : selected) : number;
-    if (taskId) {
-      if (!task) setNotice('Task is no longer available.');
-      else if (index < actions.length) void send(index);
-    } else if (tasks[index]) { setTaskId(tasks[index].id); setAction(0); setNotice(null); }
+    if (details && number >= 0 && number < actions.length) void send(number);
   });
-  return <Box flexDirection="column" borderStyle="round" paddingX={1}>
-    <Text bold>{task ? `${task.label} · ${task.status}` : 'Background tasks'}</Text>
-    {task ? <Box flexDirection="column">
-      <Text>Task: {task.id}{task.agentId ? ` · Agent: ${task.agentId}` : ''}{task.turnId ? ` · Turn: ${task.turnId}` : ''}</Text>
-      {task.wire?.kind || task.wire?.mode ? <Text>{[task.wire.kind, task.wire.mode].filter(Boolean).join(' · ')}</Text> : null}
-      {task.detail ? <Text>{task.detail}</Text> : null}
-      {task.wire?.progress ? <Text>Progress: {task.wire.progress}</Text> : null}
-      {task.wire?.result ? <Text>Result: {task.wire.result.kind}{task.wire.result.output ? `\n${task.wire.result.output}` : ''}{task.wire.result.error ? `\n${task.wire.result.error.message}` : ''}{task.wire.result.reason ? `\n${task.wire.result.reason}` : ''}</Text> : null}
-      <Text>Operations depend on the host's task-control capability.</Text>
-    </Box> : null}
-    {taskId && !task ? <Text>Task is no longer available.</Text> : null}
-    {!taskId && !tasks.length ? <Text>No background tasks.</Text> : null}
-    {(taskId ? actions : tasks.map(item => `${item.label} · ${item.status}`)).map((label, index) =>
-      <Text key={index}>{index === (taskId ? action : selected) ? '❯' : ' '} {index + 1}. {label}</Text>)}
-    {notice ? <Text>{notice}</Text> : null}
-    <Text>↑/↓ select · Enter choose · Esc back</Text>
-  </Box>;
+  return (
+    <Box flexDirection="column" borderStyle="round" paddingX={1}>
+      <Text bold>Manage background tasks</Text>
+      {live.map((item, index) => {
+        const kind = item.wire?.kind === 'shell' ? 'Shell' : item.role ?? 'Task';
+        const prefix = `${index === selected ? '❯' : ' '} [${kind}${
+          item.wire?.mode === 'foreground' ? ' · foreground' : ''
+        }] `;
+        const suffix = ` · ${item.status.replaceAll('_', ' ')}`;
+        const label = (item.wire?.input ?? item.label).replace(/\s+/g, ' ').trim();
+        const budget = Math.max(1, columns - 4 - terminalTextWidth(prefix) - terminalTextWidth(suffix));
+        return (
+          <Text key={item.id}>
+            {prefix}
+            {truncateTerminalText(label, budget)}
+            {suffix}
+          </Text>
+        );
+      })}
+      {details && task ? (
+        <Box flexDirection="column">
+          <Text>
+            ID: {task.id}
+            {task.agentId ? ` · Agent: ${task.agentId}` : ''}
+            {task.turnId ? ` · Turn: ${task.turnId}` : ''}
+          </Text>
+          {task.wire?.kind || task.wire?.mode ? (
+            <Text>{[task.wire.kind, task.wire.mode].filter(Boolean).join(' · ')}</Text>
+          ) : null}
+          {task.detail ? <Text>{task.detail}</Text> : null}
+          {task.wire?.progress ? <Text>Progress: {task.wire.progress}</Text> : null}
+          {task.wire?.result ? (
+            <Text>
+              Result: {task.wire.result.kind}
+              {task.wire.result.output ? `\n${task.wire.result.output}` : ''}
+              {task.wire.result.error ? `\n${task.wire.result.error.message}` : ''}
+              {task.wire.result.reason ? `\n${task.wire.result.reason}` : ''}
+            </Text>
+          ) : null}
+          <Text>Operations depend on the host's task-control capability.</Text>
+          {actions.map((label, index) => (
+            <Text key={label}>
+              {index + 1}. {label}
+            </Text>
+          ))}
+        </Box>
+      ) : null}
+      {!live.length ? <Text>No background tasks.</Text> : null}
+      {armedId === task?.id && task ? (
+        <Text>Press Enter to put this {task.wire?.kind ?? 'task'} in the background</Text>
+      ) : null}
+      {transferredId && tasks.some((item) => item.id === transferredId && item.wire?.mode === 'background') ? (
+        <Text>Moved to background</Text>
+      ) : notice ? (
+        <Text>{notice}</Text>
+      ) : null}
+      <Text>↑/↓ select · Enter details/confirm · b background · 1–4 operation in details · Esc close</Text>
+    </Box>
+  );
 }

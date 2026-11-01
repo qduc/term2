@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { testCliPath, spawnTerminal, createTestChildEnv, type TerminalSession } from './test-helpers/terminal-e2e.js';
 import {
@@ -24,7 +25,25 @@ let root = '';
 let shellReleasePath = '';
 
 afterEach(async () => {
-  if (shellReleasePath) fs.writeFileSync(shellReleasePath, '');
+  if (shellReleasePath) {
+    // Keep the release file alive until both fixture loops have observed it.
+    // Disposing the PTY does not terminate independently backgrounded shells.
+    const fixtureShells = () =>
+      execFileSync('ps', ['-eo', 'pid=,args='], { encoding: 'utf8' })
+        .split('\n')
+        .filter((line) => line.includes(`while [ ! -e '${shellReleasePath}' ]`))
+        .map((line) => Number(line.trim().split(/\s+/, 1)[0]));
+    fs.writeFileSync(shellReleasePath, '');
+    const deadline = Date.now() + 3_000;
+    while (fixtureShells().length && Date.now() < deadline) await sleep(30);
+    for (const pid of fixtureShells()) {
+      try {
+        process.kill(pid, 'SIGKILL');
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+      }
+    }
+  }
   shellReleasePath = '';
   session?.dispose();
   session = null;

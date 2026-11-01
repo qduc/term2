@@ -112,7 +112,8 @@ export function TuiSession({
       return;
     }
     if (taskOpen || budgetOpen || rewindTargets) return;
-    if (key.ctrl && input === 'g' && state.interactions.length && !busy) setInteractionOpen(true);
+    if (((key.ctrl && input === 'g') || input === '\x07') && !busy)
+      (state.interactions.length ? setInteractionOpen : setTaskOpen)(true);
     if (key.ctrl && input === 'b' && state.budgets.length && !busy) setBudgetOpen(true);
     if (key.meta && key.return && state.activeTurnId && !busy && !editing)
       void submit(editor.value, images, 'follow_up');
@@ -485,7 +486,7 @@ export function TuiSession({
             ['Alt+Enter', 'follow-up'],
             ['↑/↓', 'history'],
             ['PgUp/PgDn', 'scroll'],
-            ['Ctrl+G', 'approvals'],
+            ['Ctrl+G', 'approvals/tasks'],
             ['Ctrl+B', 'budget'],
             ['/tasks', 'manage tasks'],
             ['/', 'commands'],

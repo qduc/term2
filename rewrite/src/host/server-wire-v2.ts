@@ -32,6 +32,7 @@ export type AgentWireV2ChangeType =
   | 'tool_called'
   | 'error'
   | 'tool_progress'
+  | 'tool_call_streaming_delta'
   | 'task_progress'
   | 'automatic_memory_notice'
   | 'command_started'
@@ -79,20 +80,36 @@ export type AgentWireV2Change = {
   readonly branch?: AgentWireV2Branch;
 };
 
+/** Mirrors shared AgentAcceptedChangeTypeV2: accepted names never include error. */
+export type AgentWireV2AcceptedChangeType = Exclude<AgentWireV2ChangeType, 'error'>;
+/** Mirrors shared AgentLiveChangeTypeV2; `turn_failed` remains an accepted name too. */
+export type AgentWireV2LiveChangeType =
+  | 'reasoning_delta'
+  | 'tool_progress'
+  | 'tool_call_streaming_delta'
+  | 'task_progress'
+  | 'automatic_memory_notice'
+  | 'retry'
+  | 'retry_exhausted'
+  | 'error'
+  | 'turn_failed';
+export type AgentWireV2AcceptedChange = AgentWireV2Change & { readonly type: AgentWireV2AcceptedChangeType };
+export type AgentWireV2LiveChange = AgentWireV2Change & { readonly type: AgentWireV2LiveChangeType };
+
 export type AgentWireV2Accepted = {
   readonly schemaVersion: 2;
   readonly kind: 'accepted';
   readonly sessionId: string;
   readonly seq: number;
   readonly occurredAt: string;
-  readonly changes: readonly AgentWireV2Change[];
+  readonly changes: readonly AgentWireV2AcceptedChange[];
 };
 
 export type AgentWireV2Live = {
   readonly schemaVersion: 2;
   readonly kind: 'live';
   readonly sessionId: string;
-  readonly changes: readonly AgentWireV2Change[];
+  readonly changes: readonly AgentWireV2LiveChange[];
 };
 
 export type AgentWireV2Envelope = AgentWireV2Accepted | AgentWireV2Live;
@@ -146,7 +163,7 @@ export function encodeAgentWireV2(
   if (event.type === 'snapshot') return null;
   const changes = changesFor(event, interactions, context);
   if (event.seq === null) {
-    const live = changes.filter(change => LIVE_CHANGE_TYPES.has(change.type));
+    const live = changes.filter(isLiveChange);
     return live.length ? { schemaVersion: 2, kind: 'live', sessionId: event.sessionId, changes: live } : null;
   }
   // Native runtime errors are synchronized state observations, never accepted
@@ -163,8 +180,16 @@ export function encodeAgentWireV2(
     sessionId: event.sessionId,
     seq: event.seq,
     occurredAt: event.occurredAt,
-    changes,
+    changes: changes.filter(isAcceptedChange),
   };
+}
+
+function isLiveChange(change: AgentWireV2Change): change is AgentWireV2LiveChange {
+  return LIVE_CHANGE_TYPES.has(change.type);
+}
+
+function isAcceptedChange(change: AgentWireV2Change): change is AgentWireV2AcceptedChange {
+  return change.type !== 'error';
 }
 
 /** Convert a native configure result into the exact shared v2 response shape. The conversion
@@ -281,7 +306,9 @@ function exactChange(event: WireEvent, branch?: AgentWireV2Branch): AgentWireV2C
     case 'message':
       return change({ type: 'message', payload: event.payload }, branch);
     case 'task_changed':
-      return change({ type: 'task_changed', payload: event.payload }, branch);
+      // Shared v2 task descriptors are root metadata; a branch wrapper is invalid.
+      if (branch) return unavailable('task_changed is root task metadata');
+      return change({ type: 'task_changed', payload: event.payload });
     case 'tool_called':
       return change({ type: 'tool_called', payload: event.payload }, branch);
     case 'error':

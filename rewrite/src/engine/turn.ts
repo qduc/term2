@@ -162,9 +162,9 @@ async function drive(
         await tools.run(calls, history);
         if (tools.exhausted) throw new NativeBudgetExhausted('Native child tool-call budget exhausted');
         if (tools.stopped) break;
-        // A lone final goal check is itself the normal-stop boundary; don't
-        // dispatch another model just to rediscover its accepted receipt.
-        if (calls.length !== 1 || calls[0]!.item.toolName !== 'goal_check') continue;
+        // A goal_check receipt is a tool result, not the model's final answer.
+        // Let the model consume it before applying normal-stop policy, as for other tools.
+        continue;
       }
       const decision = await deps.normalStop?.({ turnId: spec.turnId, signal });
       if (signal.aborted) throw cancelled();

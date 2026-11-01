@@ -68,7 +68,11 @@ module**, beyond the version-specific [wire contract](WIRE.md). M6 entries are
 source targets, not activated or verified support. Maintain this section when
 changing exported UI/hook/facade contracts, HTTP entry points, trust/ownership
 boundaries, compatibility or recovery limits; keep WIRE.md aligned when their
-wire semantics change. Tiny internal helpers do not need separate boilerplate
+wire semantics change. Shared rule provenance is agent-runtime ORIGINAL
+`67d3cba8151d83eee851a9eb5638e27e6f193f64` (parent option-B docs
+`c01d054a253bb2451c2cb8bc9e4bcc6ea37375d6`); this browser module applies the
+same user requirement without changing another owner's instructions.
+Tiny internal helpers do not need separate boilerplate
 documents. TypeScript exports establish the exact signatures; the map explains
 who may use them and what they own.
 

@@ -21,6 +21,8 @@ const configuration = z
 const request = z
   .object({
     commandId: id,
+    admission: z.literal('idle').optional(),
+    expectedRevision: id.optional(),
     operation: z.discriminatedUnion('kind', [
       z.object({ kind: z.literal('retry'), target: z.enum(['turn', 'tool']), executionId: id.optional() }).strict(),
       z.object({ kind: z.literal('compact') }).strict(),
@@ -166,7 +168,9 @@ export function recoverDirectCommands(state: DirectCommandReceipts): readonly Di
 }
 
 function requestKey(input: DirectCommandRequest): string {
-  const operation = input.operation;
+  return JSON.stringify([input.admission ?? null, input.expectedRevision ?? null, operationKey(input.operation)]);
+}
+function operationKey(operation: DirectCommandRequest['operation']): string {
   switch (operation.kind) {
     case 'retry':
       return JSON.stringify([operation.kind, operation.target, operation.executionId ?? null]);

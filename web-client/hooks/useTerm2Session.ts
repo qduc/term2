@@ -7,6 +7,7 @@ import { consumeSseResponse } from '../lib/term2/sse';
 import {
   applyTerm2Event,
   clearTerm2LiveEvidence,
+  presentTerm2SessionView,
   emptyTerm2SessionView,
 } from '../lib/term2/event-adapter';
 import type {
@@ -224,7 +225,7 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
               streamHadActivity = true;
               delay = BACKOFF_BASE;
               if (generation !== generationRef.current || sessionIdRef.current !== id) return;
-              const enrichedEvent = {
+              const enrichedEvent = event.kind === 'accepted' ? {
                 ...event,
                 changes: event.changes.map((change) => {
                   if (change.type !== 'user_message_accepted' || typeof change.payload.clientRequestId !== 'string') return change;
@@ -232,7 +233,7 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
                   const pendingText = pendingTextRef.current.get(requestId);
                   return pendingText === undefined ? change : { ...change, payload: { ...change.payload, text: pendingText } };
                 }),
-              } as typeof event;
+              } : event;
               const next = applyTerm2Event(viewRef.current, enrichedEvent);
               for (const change of event.changes) {
                 if (change.type === 'user_message_accepted' && typeof change.payload.clientRequestId === 'string')
@@ -523,7 +524,7 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
   );
 
   return {
-    view,
+    view: presentTerm2SessionView(view),
     workspaces,
     sessions,
     workspaceCursor,

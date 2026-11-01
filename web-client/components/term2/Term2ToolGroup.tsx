@@ -12,13 +12,15 @@ import { Term2CommandCard } from './Term2CommandCard';
 export function Term2ToolGroup({ commands }: { commands: Term2Command[] }) {
   const [userOpen, setUserOpen] = useState<boolean | null>(null);
   if (commands.length === 0) return null;
-  const running = commands.filter((c) => c.status === 'running' || c.status === 'pending').length;
+  const running = commands.filter((c) => c.status === 'running').length;
+  const pending = commands.filter((c) => c.status === 'pending').length;
   const failed = commands.filter((c) => c.status === 'failed').length;
-  const open = userOpen ?? running > 0;
+  const open = userOpen ?? (running > 0 || pending > 0);
   const summary =
     running > 0
-      ? `Working · ${commands.length - running} of ${commands.length} tool calls done`
-      : `Used ${commands.length} ${commands.length === 1 ? 'tool' : 'tools'}`;
+      ? `${running} running tool entries · ${pending} pending start`
+      : pending > 0 ? `${pending} accepted tool calls pending start`
+      : `${commands.length} tool/result ${commands.length === 1 ? 'entry' : 'entries'}`;
   return (
     <section aria-label="Tool calls" className="text-sm">
       <button

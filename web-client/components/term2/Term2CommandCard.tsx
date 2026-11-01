@@ -74,13 +74,13 @@ function targetOf(args: Record<string, unknown> | null): string {
 
 export function describeCommand(command: Term2Command): { verb: string; target: string } {
   const verbs = VERBS[command.toolName];
-  const active = command.status === 'running' || command.status === 'pending';
+  const active = command.status === 'running';
   const target = targetOf(parseArgs(command.argumentsText));
-  return { verb: verbs ? (active ? verbs[0] : verbs[1]) : command.toolName, target };
+  return { verb: command.status === 'pending' ? `Pending ${command.toolName} (not started)` : verbs ? (active ? verbs[0] : verbs[1]) : command.toolName, target };
 }
 
 export function StatusIcon({ status }: { status: Term2Command['status'] }) {
-  if (status === 'running' || status === 'pending') {
+  if (status === 'running') {
     return <Loader2 aria-hidden className="h-3.5 w-3.5 animate-spin text-teal-600 dark:text-teal-400" />;
   }
   if (status === 'completed') return <Check aria-hidden className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />;
@@ -205,6 +205,7 @@ export function Term2CommandCard({ command }: { command: Term2Command }) {
               </pre>
             </details>
           )}
+          {command.nativeTool && <details><summary className="text-xs">Exact accepted tool descriptor (execution/call/parent identity and input)</summary><pre className="overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(command.nativeTool, null, 2)}</pre></details>}
           {command.output && <Output text={command.output} />}
           {command.error && <p className="text-xs text-red-600 dark:text-red-400">{command.error}</p>}
         </div>

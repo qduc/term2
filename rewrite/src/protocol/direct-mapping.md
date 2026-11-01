@@ -445,7 +445,7 @@ loop. Headless owns its native-task-aware drain/wait sequence and timeout/cancel
 reporting. Native notification decoder registration remains its owner's dependency.
 No tests/checks/builds/reviews/runtime evidence collected.
 
-## Bounded legacy JSON live deltas, not a final window
+## Bounded legacy JSON live deltas and accepted terminal window
 
 `direct-json.ts#legacyTextDelta` and `legacyReasoningDelta` copy actual wire
 chunks into their source ConversationEvent DTOs with `type` and `delta` only.
@@ -456,19 +456,23 @@ reasoning summary is not emitted as a new reasoning_delta. The original wire
 turn/branch envelope retains ownership; consumers must select the correct scope
 before using these unscoped legacy DTOs. No event, cursor or identity is allocated.
 
-`DIRECT_LEGACY_JSON_FINAL_WINDOW_AVAILABLE` is statically false. It is an explicit
-negative declaration for the complete legacy final contract, not a per-session
-runtime readiness promise. Existing cost, command-message and argument-progress
-helpers plus these delta helpers are partial slices, not an ungating condition.
+`WireTerminal.finalWindow` now carries the exact accepted root
+`DirectFinalWindow` (version `public-turn-v1`) for a terminal. `WireTurnResult`
+retains it in the snapshot, and `direct-json.ts#legacyFinalResponse` projects its
+`final` record into the old DTO, filtering only command-message IDs the consumer
+actually emitted live. It preserves actual per-turn usage, ordered public items,
+accepted source command DTOs, root-tree cost records and terminal cause. It does
+not synthesize `providerHistory`, private/opaque items or a live prefix. The
+optional `legacyCoverage` extension exposes the producer's public-item,
+reasoning, usage, command and cost coverage instead of silently claiming full
+legacy parity.
 
-The consumed native turnResults contain public messages and terminal metadata,
-not authoritative ordered PersistedAssistantTurnItem records, per-turn terminal
-usage/reasoning or source live/final command/cost partition. Session cumulative
-usage and public message/tool/timeline projections must not be presented as those
-windows. No legacy final, remaining live event family, private providerHistory or
-complete --json parity is supplied by these helpers. Headless owns its existing
-client completion/error records and keeps --json fail-closed until genuine native
-public final-window authority and required event coverage are delivered.
+`DIRECT_LEGACY_JSON_FINAL_WINDOW_AVAILABLE` remains false as a declaration about
+the complete legacy ConversationEvent/private-history schema, not the bounded
+terminal window. Headless consumes the final window and exact live slices; a
+terminal without a window fails explicitly rather than emitting a partial final.
+Approval descriptors, tool-dispatch/retry families and private provider history
+are still not projected by the protocol, so this is not complete --json parity.
 
 ## Accepted branch hydration at one logical Session cut
 

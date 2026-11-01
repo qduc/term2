@@ -71,5 +71,6 @@ export function publicTerminal(terminal: WireTerminal): WireTerminal {
     ...(terminal.terminalCause !== undefined ? { terminalCause: terminal.terminalCause } : {}),
     ...(terminal.notice !== undefined ? { notice: terminal.notice } : {}),
     ...(terminal.finalText !== undefined ? { finalText: terminal.finalText } : {}),
+    ...(terminal.finalWindow !== undefined ? { finalWindow: structuredClone(terminal.finalWindow) } : {}),
   };
 }

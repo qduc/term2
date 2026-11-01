@@ -110,15 +110,18 @@ conversation storage.
   without implying completion, and dispose sessions on shutdown. The app
   integration owner switches `app/run.ts`/`app/cli.ts` to this client once that
   exists.
-- **`--json` schema:** old `--json` streams private `ConversationEvent`
-  records (`tool_call_streaming_delta`, `cost_update`, `command_message`,
-  `final` with `turnItems`/`costRecords`, ...). Protocol now provides exact
-  accepted slices for live argument counts (`legacyToolCallStreamingDelta`),
-  request costs (`legacyRequestCostUpdate`) and source-formatted commands
-  (`legacyCommandMessages`), but an authoritative final/turn-item window is
-  still absent. Those slices alone are not the legacy schema, so `--json` still
-  exits 1 with a precise missing-producer error. Never emit raw wire events as
-  legacy JSON.
+- **`--json` schema:** the direct client emits `session_start`, the exact live
+  slices available from protocol (`text_delta`, `reasoning_delta`,
+  `tool_call_streaming_delta`, `cost_update`, and complete source
+  `command_message` records), and the authoritative `final` from
+  `WireTerminal.finalWindow`. That final preserves per-turn public `turnItems`,
+  usage, root-tree costs, ordered items and terminal cause; command messages
+  already emitted live are excluded. Its `legacyCoverage` field records the
+  producer's public-item/summary/usage/command/cost limits. A terminal without a
+  final window fails explicitly instead of emitting a partial final. Provider
+  history, private/opaque items, approval descriptors and the remaining legacy
+  live event families are not projected; this is not complete old `--json`
+  parity. Never emit raw wire events as legacy JSON.
 - **Approval policy inputs:** the wire exposes `toolName`, `input`, `summary`,
   `detail`, `risk`, typed `questions` and `supportedGrants` (empty under the
   current M2 request contract), but not the old safety classification, the

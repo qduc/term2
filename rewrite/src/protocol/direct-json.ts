@@ -1,12 +1,14 @@
-/** Exact legacy records for native producers that actually exist. This is NOT a
- * complete --json read model: callers must retain the fail-closed legacy gate.
+/** Exact legacy records for native producers that actually exist. The accepted
+ * terminal window is exposed separately through WireTerminal.finalWindow; this
+ * module does not claim the complete legacy ConversationEvent schema.
  */
 import type { CommandMessage } from '../../../source/tools/types.js';
-import type { CommandMessageEvent, CostUpdateEvent, ReasoningDeltaEvent, TextDeltaEvent, ToolCallStreamingDeltaEvent } from '../../../source/services/conversation/conversation-events.js';
-import type { WireEvent } from './direct-wire.js';
+import type { CommandMessageEvent, CostUpdateEvent, FinalResponseEvent, ReasoningDeltaEvent, TextDeltaEvent, ToolCallStreamingDeltaEvent } from '../../../source/services/conversation/conversation-events.js';
+import type { WireEvent, WireFinalWindow } from './direct-wire.js';
 
-/** Static negative capability for the complete old final contract, not runtime
- * readiness. Bounded helpers below do not supply final/turnItems/providerHistory.
+/** Static negative capability for the complete old ConversationEvent schema.
+ * The bounded accepted final window is exposed separately on WireTerminal;
+ * it does not supply providerHistory or the remaining legacy event families.
  */
 export const DIRECT_LEGACY_JSON_FINAL_WINDOW_AVAILABLE = false;
 
@@ -24,6 +26,28 @@ export function legacyTextDelta(event: Extract<WireEvent, { readonly type: 'text
  */
 export function legacyReasoningDelta(event: Extract<WireEvent, { readonly type: 'reasoning_delta' }>): ReasoningDeltaEvent {
   return { type: 'reasoning_delta', delta: event.payload.delta };
+}
+
+/** Project the immutable accepted terminal window into the old final DTO. The caller
+ * passes command IDs it actually emitted live; those are omitted from final exactly as
+ * the old stream did. providerHistory and private provider items are never synthesized. */
+export type LegacyFinalResponse = FinalResponseEvent & { readonly legacyCoverage?: WireFinalWindow['coverage'] };
+export function legacyFinalResponse(window: WireFinalWindow, emittedCommandMessageIds: ReadonlySet<string>): LegacyFinalResponse {
+  const record = window.record;
+  const commandMessages = record.commandMessages.filter(message => !emittedCommandMessageIds.has(message.id));
+  return {
+    type: 'final',
+    finalText: record.finalText,
+    ...(record.reasoningText !== undefined ? { reasoningText: record.reasoningText } : {}),
+    ...(commandMessages.length > 0 ? { commandMessages: commandMessages.map(message => structuredClone(message)) } : {}),
+    ...(record.usage !== undefined ? { usage: { ...record.usage } } : {}),
+    ...(record.costRecords.length > 0 ? { costRecords: record.costRecords.map(cost => structuredClone(cost)) } : {}),
+    ...(record.turnItems.length > 0 ? { turnItems: record.turnItems.map(item => structuredClone(item)) } : {}),
+    ...(record.terminalCause !== undefined ? { terminalCause: record.terminalCause } : {}),
+    // Extra provenance field: old consumers ignore it; it makes public-item/private
+    // omissions and accepted-summary/usage limits explicit instead of silent.
+    legacyCoverage: { ...window.coverage },
+  };
 }
 
 /** Project one actual settled request record verbatim; ancestry remains on the wire

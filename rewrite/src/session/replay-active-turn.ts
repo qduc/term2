@@ -9,6 +9,11 @@ const OUTCOME_UNOBSERVED =
   'Its effect may or may not have occurred. Verify the current state before any retry, and ' +
   'do not re-run non-idempotent operations blindly.';
 
+const LIVE_OUTCOME_UNOBSERVED =
+  "Outcome unobserved: the turn ended before this operation's result was recorded. " +
+  'Its effect may or may not have occurred. Verify the current state before any retry, and ' +
+  'do not re-run non-idempotent operations blindly.';
+
 type Call = Extract<Item, { type: 'tool_call' }>;
 type Start = Extract<Fact, { type: 'tool_started' }>;
 type Slot = { item: Item | null };
@@ -116,7 +121,9 @@ export function hasUnsettledReplayRoots(turn: ActiveReplayTurn): boolean {
   );
 }
 
-export function recoverReplayRoots(turn: ActiveReplayTurn): Fact[] {
+/** Only drained live settlement can infer non-execution from an absent durable start.
+ * Reopen keeps the conservative restart fallback; accepted results always win. */
+export function recoverReplayRoots(turn: ActiveReplayTurn, settlement: 'restart' | 'live' = 'restart'): Fact[] {
   const facts: Fact[] = [];
   const occurrences = [...turn.calls];
   for (const [executionId, execution] of turn.executions) {
@@ -135,12 +142,19 @@ export function recoverReplayRoots(turn: ActiveReplayTurn): Fact[] {
   for (const occurrence of occurrences) {
     if (occurrence.settled) continue;
     const { executionId, call } = occurrence;
-    const known = executionId === undefined ? undefined : turn.executions.get(executionId)?.result;
+    const execution = executionId === undefined ? undefined : turn.executions.get(executionId);
+    const known = execution?.result;
+    const missing =
+      settlement === 'restart'
+        ? OUTCOME_UNOBSERVED
+        : execution?.start
+        ? LIVE_OUTCOME_UNOBSERVED
+        : 'Tool execution was interrupted before it started.';
     const item: Item = {
       type: 'tool_result',
       id: `${executionId ?? occurrence.key}:result` as ItemId,
       callId: call.callId,
-      output: known?.output ?? OUTCOME_UNOBSERVED,
+      output: known?.output ?? missing,
       isError: known?.isError ?? true,
       ...(known?.providerOutput === undefined ? {} : { providerOutput: known.providerOutput }),
       ...(call.toolType === undefined ? {} : { toolType: call.toolType }),

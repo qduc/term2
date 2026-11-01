@@ -42,6 +42,8 @@ export type ReplayOptions = {
    * and a terminal are not invented. Busy preview passes false with recoverQueue false.
    */
   readonly recoverActiveTurn?: boolean;
+  /** Live means the handle has drained: absent durable admission proves no body ran. */
+  readonly rootSettlement?: 'restart' | 'live';
 };
 /** Accepted evidence only. Missing outcome stays unobserved, even after root recovery. */
 export type ReplayedCompaction = {
@@ -428,7 +430,7 @@ function replayProjection(
   const unfinished = (): ActiveTurn | null => active;
   const turn = unfinished();
   if (turn && repairActiveTurn) {
-    const repairs: Fact[] = [...recoverReplayRoots(turn)];
+    const repairs: Fact[] = [...recoverReplayRoots(turn, options.rootSettlement)];
     for (const { request } of turn.interactions.values())
       repairs.push({
         type: 'interaction_closed',

@@ -27,8 +27,9 @@ import type { Workspace } from '../tools/index.js';
 import type { DirectBinding } from './facade-types.js';
 import { LOG_FORMAT_VERSION, type Fact, type FactLine, type SessionStartedFact } from './facts.js';
 import { readFactLines } from './log.js';
-import { readDirectLogLineage } from './direct-rolling-log.js';
+import { DIRECT_LOCK_DIRECTORY, readDirectLogLineage } from './direct-rolling-log.js';
 import { latestDirectConfiguration } from './direct-configuration.js';
+import { acquireDirectWriterLock } from './direct-writer-lock.js';
 import { replay } from './replay.js';
 
 const DIRECT_ID = /^conv_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -117,6 +118,10 @@ export async function forkDirectConversation(request: DirectForkRequest): Promis
   const lines = [...copied, ...recovery];
   const stable = replay(lines.map((line) => line.fact));
   if (stable.recoveryFacts.length !== 0) throw new Error('direct fork replay did not settle');
+  // Reserve the destination before publishing its first segment. A reader may
+  // discover that prefix immediately; it must not acquire a writable facade
+  // until the complete lineage is validated or failed publication is cleaned up.
+  const release = acquireDirectWriterLock(logPath(directory, id));
   const created: string[] = [];
   try {
     for (const [index, segment] of lineage.segments.entries()) {
@@ -152,6 +157,8 @@ export async function forkDirectConversation(request: DirectForkRequest): Promis
     }
     if (failures.length > 1) throw new AggregateError(failures, 'direct fork failed and copied lineage cleanup failed');
     throw error;
+  } finally {
+    release();
   }
 
   const started = lines[0]?.fact;
@@ -169,7 +176,7 @@ export async function forkDirectConversation(request: DirectForkRequest): Promis
   };
 }
 
-/** Store rule: only exact conv_<uuid>.jsonl files, and never open a foreign name. */
+/** Store rule: exact logs and the reserved lock directory; never open foreign data. */
 async function assertDirectDirectory(directory: string, sourceId: string): Promise<void> {
   let names: string[];
   try {
@@ -182,6 +189,11 @@ async function assertDirectDirectory(directory: string, sourceId: string): Promi
   }
   let found = false;
   for (const name of names) {
+    if (name === DIRECT_LOCK_DIRECTORY) {
+      if (!(await lstat(path.join(directory, name))).isDirectory())
+        throw new Error('direct Session lock path is not a directory');
+      continue;
+    }
     if (!name.endsWith('.jsonl') || !DIRECT_ID.test(name.slice(0, -'.jsonl'.length))) {
       throw new Error(`refusing direct conversations directory with foreign entry ${JSON.stringify(name)}`);
     }

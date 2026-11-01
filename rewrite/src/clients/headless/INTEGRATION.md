@@ -110,7 +110,20 @@ conversation storage.
   and `budget_paused` to exit 2.
 - An abort before the turn starts detaches without cancelling another turn;
   the app's host disposal owns a queued admission. An abort after it starts
-  sends one `cancel` and still waits for `turn_ended`.
+  sends one `cancel` with the owned `expectedTurnId` and `discardQueue:false`
+  and still waits for `turn_ended`. Event delivery can lag Session queue
+  advancement: a stale owned turn must not cancel a successor or a separately
+  owned pending command. Matching cancellation cancels pending steers but
+  retains ordinary queued follow-ups (paused until queue resume). Supplying
+  only `expectedTurnId` is not equivalent: native abort defaults to discarding
+  the queue.
+- If another connection's history command has already requested cancellation
+  of that same turn, identity-aware abort returns `cancellation_requested`
+  without cancelling the command reservation or replanning its queue. For
+  example, a pending retry keeps its pending steers for Session's command
+  settlement/requeue policy. Unlike unqualified session cancel, foreground
+  headless abort must not cancel that independently owned command. A retry
+  already accepted as a new turn is likewise outside the old target's scope.
 - Pending interactions in the attach snapshot are answered by policy before
   submit. A failed answer (for example stale) is reported, a best-effort
   foreground cancel is sent, and the run fails; it is never reported as

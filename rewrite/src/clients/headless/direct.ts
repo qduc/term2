@@ -279,7 +279,9 @@ export async function runDirectHeadless(
     }
     if (cancelSent) return;
     cancelSent = true;
-    void connection.send({ type: 'cancel' }).catch(() => undefined);
+    // Event consumption can lag Session queue advancement. Cancel only our
+    // turn, retaining ordinary follow-ups just like foreground cancellation.
+    void connection.send({ type: 'cancel', expectedTurnId: targetTurnId, discardQueue: false }).catch(() => undefined);
   };
 
   if (options.expectedSessionId !== undefined && options.expectedSessionId !== sessionId) {

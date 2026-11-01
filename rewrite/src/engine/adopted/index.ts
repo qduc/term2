@@ -16,7 +16,7 @@ export { createAdoptedToolContext, createRunNested, type AdoptedNestedBinding } 
 import type { AdoptedEngineDeps } from './dependencies.js';
 import { convertSourceItems } from './conversion.js';
 import type { OriginalToolCatalog } from './tool-catalog.js';
-import { isAdoptedSettingsPair } from '../../config/adopted/settings.js';
+import { isLegacySettingsPair } from './settings.js';
 import type {
   ApprovalDecision,
   ApprovalRequest,
@@ -239,7 +239,7 @@ export function createAdoptedEngine(options: {
 }): AdoptedEngine {
   const { deps } = options;
   if (
-    !isAdoptedSettingsPair(deps.settings, options.clientOptions.deps.settings) ||
+    !isLegacySettingsPair(deps.settings, options.clientOptions.deps.settings) ||
     deps.models.settingsService !== options.clientOptions.deps.settings
   ) {
     throw new Error('Adopted engine requires one paired scoped settings service');

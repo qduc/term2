@@ -25,7 +25,7 @@ import { createAppAdoptedSessionHandleFactory } from '../src/app/adopted/session
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createAdoptedSettings } from '../src/config/adopted/settings.js';
+import { createLegacyAppSettings } from '../src/app/adopted/settings.js';
 import { createAdoptedModelRegistry } from '../src/model/adopted/index.js';
 import { createProviderRegistry } from '../../source/providers/registry.js';
 import { SessionContextService } from '../../source/services/session/session-context-service.js';
@@ -67,7 +67,7 @@ const provider: any = {
 };
 const providers = createProviderRegistry();
 providers.upsertProvider(provider);
-const { service: host, source } = createAdoptedSettings({
+const { service: host, source } = createLegacyAppSettings({
   disableLogging: true,
   disableFilePersistence: true,
   cli: {

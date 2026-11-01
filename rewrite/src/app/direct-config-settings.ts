@@ -1,5 +1,6 @@
 /** Isolated, source-schema-validated settings for one prepared runtime generation. */
 import { z } from 'zod';
+import { SettingsService } from '../../../source/services/settings/settings-service.js';
 import { getProfileMetadata } from '../../../source/services/profiles/active-profile.js';
 import { canonicalProfileId, legacyModeFromProfileId } from '../../../source/services/profiles/legacy-adapter.js';
 import {
@@ -12,6 +13,13 @@ import { ModelSelectionSchema } from '../../../source/services/settings/model-se
 import { getProvider } from '../../../source/providers/index.js';
 import type { ISettingsService } from '../../../source/services/service-interfaces.js';
 import type { DirectCommandConfiguration } from '../session/direct-command-types.js';
+
+export type DirectSettingsOptions = NonNullable<ConstructorParameters<typeof SettingsService>[0]>;
+
+/** Construct the settings owner without allocating a historical scoped-service facade. */
+export function createDirectSettingsService(options: DirectSettingsOptions = {}): SettingsService {
+  return new SettingsService(options);
+}
 
 /** App preparation accepts selection intent. Native/protocol ingress must retain
  * both fields; effective accepted configuration remains source-resolved values. */

@@ -6,7 +6,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { LocalSessionStore } from '../src/session/local-store.ts';
-import { createAdoptedSettings } from '../src/config/adopted/settings.ts';
+import { createLegacyAppSettings } from '../src/app/adopted/settings.ts';
 import { createAdoptedModelRegistry } from '../src/model/adopted/index.ts';
 import { createAppAdoptedEngine } from '../src/app/adopted/engine.ts';
 import { createProviderRegistry } from '../../source/providers/registry.ts';
@@ -69,7 +69,7 @@ providers.upsertProvider({
     throw new Error('unexpected provider dispatch');
   },
 });
-const { service: host, source } = createAdoptedSettings({
+const { service: host, source } = createLegacyAppSettings({
   disableLogging: true,
   disableFilePersistence: true,
   cli: { agent: { modelSelection: { provider: 'openai', model: 'fixture' } } as any },

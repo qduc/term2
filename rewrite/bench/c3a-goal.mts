@@ -7,7 +7,7 @@ import path from 'node:path';
 import { LocalSessionStore } from '../src/session/local-store.ts';
 import { CanonicalSessionLog, loadCanonicalConversation } from '../src/session/adopted/conversation-log.ts';
 import { createAppAdoptedSessionHandleFactory } from '../src/app/adopted/session.ts';
-import { createAdoptedSettings } from '../src/config/adopted/settings.ts';
+import { createLegacyAppSettings } from '../src/app/adopted/settings.ts';
 import { createAdoptedModelRegistry } from '../src/model/adopted/index.ts';
 import { createProviderRegistry } from '../../source/providers/registry.ts';
 import { SessionContextService } from '../../source/services/session/session-context-service.ts';
@@ -56,7 +56,7 @@ const provider: any = {
 };
 const providers = createProviderRegistry();
 providers.upsertProvider(provider);
-const { service: host, source } = createAdoptedSettings({
+const { service: host, source } = createLegacyAppSettings({
   settingsDir: path.join(root, 'settings'),
   disableLogging: true,
   disableFilePersistence: true,

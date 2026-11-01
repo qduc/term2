@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
-import { forkAdoptedSettingsBinding } from '../../config/adopted/settings.js';
+import { forkLegacySettingsBinding } from '../../engine/adopted/settings.js';
 import { forkAdoptedModelRegistry, type AdoptedModelRegistry } from '../../model/adopted/index.js';
 import { projectRuntimeSettings } from '../../session/adopted/settings.js';
 import {
@@ -93,7 +93,7 @@ export function createAppAdoptedSessionHandleFactory(options: {
         reasoningEffort: isReasoningSetting(reason) ? reason : 'default',
         ...(isTemperatureSetting(temp) ? { temperature: temp } : {}),
       });
-      const binding = forkAdoptedSettingsBinding(engineOptions.settings, hostSettings, initial.snapshot);
+      const binding = forkLegacySettingsBinding(engineOptions.settings, hostSettings, initial.snapshot);
       graphModels = forkAdoptedModelRegistry(engineOptions.models, binding.service);
       assembly = createAppAdoptedEngine({
         ...engineOptions,

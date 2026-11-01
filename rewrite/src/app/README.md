@@ -23,6 +23,13 @@ traffic store fixes its enabled state at construction. Session runtime bindings
 may reuse the already-resolved logger; canonical conversation persistence is
 separate and remains enabled. This is startup policy, not a runtime toggle.
 
+`createAppSettings` constructs only the concrete `SettingsService` through
+`createDirectSettingsService`; it does not allocate the historical scoped-service
+facade. The settings owner retains its directory, logger, and persistence policies.
+Historical bench composition uses `createLegacyAppSettings` separately. Its engine
+boundary translates source settings onto the source-independent config scope and
+owns paired-service identity and runtime forks; native startup does not use it.
+
 `createDirectRuntimes` in `direct-application-runtime.ts` builds session-owned
 settings and tool generations. `createDirectConfigSettings` in
 `direct-config-settings.ts` produces a read-only, source-schema-validated settings

@@ -36,7 +36,7 @@ import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
 import { once } from 'node:events';
-import { createAdoptedSettings } from '../src/config/adopted/settings.js';
+import { createLegacyAppSettings } from '../src/app/adopted/settings.js';
 import { createAdoptedModelRegistry } from '../src/model/adopted/index.js';
 import { createAppAdoptedEngine } from '../src/app/adopted/engine.js';
 import { loadCanonicalConversation } from '../src/session/adopted/conversation-log.js';
@@ -99,7 +99,7 @@ const provider: any = {
 };
 const providers = createProviderRegistry();
 providers.upsertProvider(provider);
-const { service: host, source } = createAdoptedSettings({
+const { service: host, source } = createLegacyAppSettings({
   disableLogging: true,
   disableFilePersistence: true,
   cli: {

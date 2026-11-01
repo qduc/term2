@@ -276,6 +276,13 @@ export const getAgentDefinition = (
     proposeGoal?: { appendGoal: (goal: DurableGoal) => void | Promise<void>; hasPriorProposal: () => boolean };
     skillsService?: SkillsService;
     includeMemory?: boolean;
+    /** Native owners can insert their real leaves at the source assembly slots. */
+    onNativeToolSlots?: (slots: {
+      beforeMemory: readonly string[];
+      beforeRollover: readonly string[];
+      beforeGoal: readonly string[];
+      sessions: boolean;
+    }) => void;
     projectInstructions?: string;
     agentRuntime?: Pick<AgentRuntime, 'agent'> | null;
     postExecuteDeniedRead?: boolean;
@@ -561,6 +568,7 @@ export const getAgentDefinition = (
     tools.push(worktreeTools.enter, worktreeTools.exit);
   }
 
+  const beforeMemory = tools.map((tool) => tool.name);
   if (hasCapability('memory')) tools.push(...memoryCapability.tools);
   if (hasCapability('subagents')) {
     tools.push(
@@ -585,6 +593,7 @@ export const getAgentDefinition = (
     );
   }
   if (hasCapability('sessions') && sessionBrowser) tools.push(...createSessionBrowserToolDefinitions(sessionBrowser));
+  const beforeRollover = tools.map((tool) => tool.name);
   if (hasCapability('sessions') && requestSessionRollover)
     tools.push(createSessionRolloverToolDefinition(requestSessionRollover));
 
@@ -602,6 +611,13 @@ export const getAgentDefinition = (
       }),
     );
   }
+
+  deps.onNativeToolSlots?.({
+    beforeMemory,
+    beforeRollover,
+    beforeGoal: tools.map((tool) => tool.name),
+    sessions: hasCapability('sessions'),
+  });
 
   // The stop self-check is root-only (only the root receives `getGoal`) and is
   // available in Bare too: selecting a small tool surface cannot waive goal verification.

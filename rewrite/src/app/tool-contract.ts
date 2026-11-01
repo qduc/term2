@@ -23,6 +23,8 @@ export type ToolSurfaceOptions = {
   };
   readonly autoApprove?: boolean;
   readonly interactive?: boolean;
+  /** The client owns a session browser, making model-requested rollover available. */
+  readonly sessionBrowser?: boolean;
   /** Already-authorized workspace. Defaults only to the existing local CLI cwd.
    * Unsupported targets fail; assembly must never promote read access to write. */
   readonly workspace?: Workspace;
@@ -46,6 +48,13 @@ export type AgentSurface = {
   readonly providerOptions?: Readonly<Record<string, unknown>>;
   readonly notice: string | null;
   readonly runtime: {
+    /** Source-owned assembly slots for Session leaves and session capabilities. */
+    readonly nativeToolSlots: {
+      readonly beforeMemory: readonly string[];
+      readonly beforeRollover: readonly string[];
+      readonly beforeGoal: readonly string[];
+      readonly sessions: boolean;
+    };
     /** Adapt native-owned source leaves against this SAME surface's policy/lifecycle context. */
     /** Withdraw the previous native leaf offering before building a replacement capability snapshot. */
     resetAdaptedTools(): void;

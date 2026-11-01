@@ -73,6 +73,12 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     { settingsService: settings },
   );
   let sourceGraph: AnyToolDefinition[] = [];
+  let nativeToolSlots: {
+    beforeMemory: readonly string[];
+    beforeRollover: readonly string[];
+    beforeGoal: readonly string[];
+    sessions: boolean;
+  } = { beforeMemory: [], beforeRollover: [], beforeGoal: [], sessions: false };
   let baseGraph: AnyToolDefinition[] = [];
   const delegation = createDirectSubagentTools({
     selection,
@@ -107,6 +113,9 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     readOnly,
     shellChildRegistry: shellChildren,
     skillsService,
+    onNativeToolSlots(slots) {
+      nativeToolSlots = slots;
+    },
     onToolGraph(graph) {
       sourceGraph = [...graph];
       baseGraph = [...graph];
@@ -181,6 +190,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     ...(providerOptions !== undefined ? { providerOptions } : {}),
     notice,
     runtime: {
+      nativeToolSlots,
       tools: registry,
       resolveNestedAuthority: delegation.resolveNestedAuthority,
       bindTaskCheckIn: delegation.bindTaskCheckIn,
@@ -200,8 +210,13 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
         });
         if (!wrapped) throw new Error('Native source leaf was not adapted');
         const old = sourceGraph.findIndex((tool) => tool.name === wrapped.name);
-        if (old < 0) sourceGraph.push(wrapped);
-        else sourceGraph[old] = wrapped;
+        if (old < 0) {
+          const preceding = new Set(nativeToolSlots.beforeMemory);
+          let at = sourceGraph.reduce((at, tool, index) => (preceding.has(tool.name) ? index + 1 : at), 0);
+          const fixed = new Set(baseGraph.map((tool) => tool.name));
+          while (at < sourceGraph.length && !fixed.has(sourceGraph[at]!.name)) at++;
+          sourceGraph.splice(at, 0, wrapped);
+        } else sourceGraph[old] = wrapped;
         bindRunCodeRegistry(sourceGraph);
         return registry.adaptTool(wrapped);
       },

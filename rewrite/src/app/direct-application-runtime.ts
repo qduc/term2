@@ -327,6 +327,8 @@ export function createDirectRuntimes(
           // Only a client with a person behind it can answer these.
           unattended: !interactive,
           proposeGoal: interactive,
+          nativeToolSlots: surface.runtime.nativeToolSlots,
+          modelRollover: surfaceOptions.sessionBrowser === true && surface.runtime.nativeToolSlots.sessions,
         };
         installed = { ...installed, bound: { port, capabilities } };
         return capabilities;

@@ -97,6 +97,13 @@ export interface AgentFactoryDeps {
   skillsService?: SkillsService;
   /** Retain the complete wrapped graph, including script-only leaves, for native capability binding. */
   onToolGraph?: (tools: ToolRegistry) => void;
+  /** Exact source assembly positions for Session-owned tools. */
+  onNativeToolSlots?: (slots: {
+    beforeMemory: readonly string[];
+    beforeRollover: readonly string[];
+    beforeGoal: readonly string[];
+    sessions: boolean;
+  }) => void;
   /** Omit local memory discovery when another owner supplies context or the workspace is remote. */
   includeMemory?: boolean;
   /** Project text already loaded from the execution target; profile gates still apply. */
@@ -573,6 +580,7 @@ export function buildAgent(
       getAskUserAnswer: deps.getAskUserAnswer,
       skillsService: deps.skillsService,
       includeMemory: deps.includeMemory,
+      onNativeToolSlots: deps.onNativeToolSlots,
       projectInstructions: deps.projectInstructions,
       agentRuntime: deps.getAgentRuntime?.() ?? null,
       postExecuteDeniedRead: Boolean(deps.postExecutePauseCapability),

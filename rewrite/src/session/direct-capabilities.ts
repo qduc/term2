@@ -40,6 +40,15 @@ export type DirectContextCapabilities = {
   /** Effective source settings, re-read for each advisory tick. */
   readonly backgroundCheckIns?: () => import('./direct-background-check-ins.js').DirectBackgroundCheckInSettings;
   readonly proposeGoal?: boolean;
+  /** Source assembly names before native slots; refreshed on configuration. */
+  readonly nativeToolSlots?: {
+    readonly beforeMemory: readonly string[];
+    readonly beforeRollover: readonly string[];
+    readonly beforeGoal: readonly string[];
+    readonly sessions: boolean;
+  };
+  /** Model-facing rollover availability is distinct from native rollover control. */
+  readonly modelRollover?: boolean;
   readonly automaticMemory?: (input: {
     readonly admissionId: string;
     readonly text: string;
@@ -131,7 +140,7 @@ export function bindDirectCapabilities(options: {
         }),
       );
     }
-    if (options.canRollover?.())
+    if (capabilities.modelRollover !== false && options.canRollover?.())
       bound.push(
         createDirectRolloverTool((request) =>
           turnId && options.requestRollover
@@ -157,7 +166,29 @@ export function bindDirectCapabilities(options: {
         ...bound,
       ],
     };
-    return { request: { ...request, instructions, tools: [...specs, ...bound.map((tool) => tool.spec)] }, tools };
+    const ordered = [...specs];
+    const slots = capabilities.nativeToolSlots;
+    if (slots) {
+      const memory = bound.filter(
+        (tool) => !['goal_check', 'propose_goal', 'session_rollover'].includes(tool.spec.name),
+      );
+      const insertAfter = (names: readonly string[], additions: readonly Tool[]) => {
+        const prior = new Set(names);
+        const at = ordered.reduce((at, tool, index) => (prior.has(tool.name) ? index + 1 : at), 0);
+        ordered.splice(at, 0, ...additions.map((tool) => tool.spec));
+      };
+      insertAfter(slots.beforeMemory, memory);
+      const memoryNames = memory.map((tool) => tool.spec.name);
+      const rollover = overrides.get('session_rollover');
+      if (rollover) insertAfter([...slots.beforeRollover, ...memoryNames], [rollover]);
+      const namesBeforeGoal = [...slots.beforeGoal, ...memoryNames, ...(rollover ? ['session_rollover'] : [])];
+      const goalTools = ['propose_goal', 'goal_check'].flatMap((name) => {
+        const tool = overrides.get(name);
+        return tool ? [tool] : [];
+      });
+      insertAfter(namesBeforeGoal, goalTools);
+    } else ordered.push(...bound.map((tool) => tool.spec));
+    return { request: { ...request, instructions, tools: ordered }, tools };
   };
 
   return {

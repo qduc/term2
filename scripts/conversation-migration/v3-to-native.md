@@ -23,7 +23,9 @@ and `createdAt` are required; noncanonical instants fail `invalid-timestamp`.
 
 `options.fallback` may explicitly supply missing `provider`, `model`, `profileId`
 or `workspace`. Existing values win, including invalid values that must fail;
-fallback is not an override. Missing required configuration fails
+fallback is not an override. When profile ID is absent but appMode is recorded,
+the compiled `profileIdFromLegacyMode` selects the profile before fallback is
+considered; absent both, only an explicit fallback may supply it. Missing required configuration fails
 `missing-configuration`. Workspaces must be absolute local paths. Any recorded
 `sshHost` fails `unsupported-remote-identity`, rather than granting local access
 for a remote source. No workspace grant or binding is synthesized.
@@ -31,7 +33,8 @@ for a remote source. No workspace grant or binding is synthesized.
 The native profile header uses actual compiled `getProfileMetadata`. Unknown
 profiles fail `unsupported-profile`; a conflicting version/digest on the selected
 init fails `profile-mismatch`. Unsupported reasoning fails
-`unsupported-reasoning`. Model/provider identifiers are preserved, not guessed
+`unsupported-reasoning`. Explicit `default` is retained as intent and in the
+notice, but omitted from native effort fields. Model/provider identifiers are preserved, not guessed
 from a catalog. The native `configuration_changed` retains model, reasoning and
 temperature; absent reasoning remains default intent, not an invented effort.
 The import notice also retains the original JSON-valued appMode/profile/effort/
@@ -50,7 +53,12 @@ contains only that original message, allowing exact reconstruction of its durabl
 JSON shape, including sender, humanInputAt, skill, reasoning, usage, approvals and
 subagent metadata. Incidental own `undefined` properties added by legacy replay
 are omitted, because they cannot originate in persisted JSON. No whole legacy
-state, seed or archive is retained.
+state, seed or archive is retained. Repeated source IDs and the reserved notice ID
+are deterministically remapped only where needed for unique native observation IDs;
+generated IDs avoid every original ID and already assigned ID. The original IDs
+remain in sourceMessage, including every repetition. `derivedProfileCount` and
+`remappedObservationIdentityCount` expose aggregate fidelity information;
+`fallbackFieldCount` excludes a profile derived from recorded appMode.
 
 An unambiguous identical direct message event supplies its original envelope
 timestamp (`presentation.timestampBasis: source-message-event`). Otherwise `at`

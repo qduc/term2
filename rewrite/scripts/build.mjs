@@ -4,8 +4,12 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildInputs, writeBuildReceipt } from '../../scripts/build-provenance.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const inputs = buildInputs(repo, 'direct');
+// Never certify obsolete modules left behind by a source deletion or failed build.
+fs.rmSync(path.join(repo, 'rewrite/dist'), { recursive: true, force: true });
 const result = spawnSync('pnpm', ['exec', 'tsc', '-p', 'rewrite/tsconfig.build.json'], {
   cwd: repo,
   stdio: 'inherit',
@@ -21,3 +25,5 @@ fs.copyFileSync(
   path.join(repo, 'source/providers/provider-presets.json'),
   path.join(emittedSource, 'providers/provider-presets.json'),
 );
+
+writeBuildReceipt(repo, 'direct', inputs);

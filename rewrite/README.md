@@ -249,3 +249,32 @@ The fault matrix distinguishes failures before write, after admission, and at
 pending/final event boundaries. A failed fsync may leave a complete atomic
 terminal batch when the write reached the kernel first; the caller still
 receives failure and the transaction is never partially projected.
+
+## Local nine-golden scores
+
+Build both CLIs, then run the read-only score command (optional argument selects
+another checkout root):
+
+```sh
+pnpm build
+node rewrite/scripts/build.mjs
+node scripts/golden-scores.mjs /path/to/term2
+```
+
+The reporter checks both `.term2-build-provenance.json` receipts before running
+any scenarios and again before printing `direct: N/9` and `old CLI: N/9`.
+Exit 0 means both are 9/9; 1 means a real score below 9/9; 2 means no trustworthy
+score (missing/stale build or runner failure). It never records goldens.
+Both normal build commands capture HEAD and SHA256 hashes of actual owned
+source/config/build inputs, including untracked files, and final output bytes;
+mtime and the old version-only `build-info.json` are not freshness evidence.
+The direct build now clears its generated output first. Old builds without
+receipts must be rebuilt. A commit, dirty input edit or output replacement
+requires rebuilding the affected CLI, even if timestamps are unchanged.
+
+Input coverage is deliberately conservative (whole source/build-script trees,
+root package/lock/config files, and native source/config/scripts for direct).
+Receipts assume installed dependencies follow the package/lock files, not
+hand-edited `node_modules`; owned input/output symlinks are refused. Before/after
+checks catch observed concurrent changes, not an edit-and-revert racing a read;
+run builds and scores without concurrent edits in that checkout.

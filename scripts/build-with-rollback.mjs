@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { buildWithRollback } from './build-output.mjs';
+import { buildInputs, writeBuildReceipt } from './build-provenance.mjs';
 
 /**
  * `pnpm build` entry point. Keeps the previous `dist/` recoverable at
@@ -11,6 +12,8 @@ import { buildWithRollback } from './build-output.mjs';
  */
 
 const projectRoot = fileURLToPath(new URL('..', import.meta.url));
+
+const inputs = buildInputs(projectRoot, 'old');
 
 const run = (command, args) => () =>
   new Promise((resolve) => {
@@ -35,6 +38,15 @@ const exitCode = await buildWithRollback({
     run(process.execPath, ['scripts/write-build-info.mjs']),
     run('pnpm', ['run', 'post-build']),
     run(process.execPath, ['scripts/embed-agent-wire.mjs']),
+    async () => {
+      try {
+        writeBuildReceipt(projectRoot, 'old', inputs);
+        return 0;
+      } catch (error) {
+        console.error(`[build] ${error.message}`);
+        return 1;
+      }
+    },
   ],
   log: (message) => console.log(message),
 });

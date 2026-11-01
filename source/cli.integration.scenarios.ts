@@ -1763,9 +1763,10 @@ fs.createWriteStream = (filename, options) => {
       // exercise the persistence boundary.
       const tempHome = createCliHome();
       const settingsFile = writeSettings(tempHome, {
-        agent: { retryAttempts: 0, modelSelection: { model: 'keep-session-model', provider: 'openai' } },
+        agent: { retryAttempts: 0, modelSelection: { model: 'keep-session-model', provider: 'saved-mock' } },
         providers: [
           { name: 'mockprov', type: 'openai-compatible', baseUrl: 'http://127.0.0.1:65535/v1', apiKey: 'test-key' },
+          { name: 'saved-mock', type: 'openai-compatible', baseUrl: 'http://127.0.0.1:65535/v1', apiKey: 'test-key' },
         ],
       });
 

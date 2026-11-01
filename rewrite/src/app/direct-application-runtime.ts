@@ -15,7 +15,6 @@ import type {
   DirectContextPort,
 } from '../session/direct-capabilities.js';
 import type { DirectBinding } from '../session/facade-types.js';
-import type { DirectCommandConfiguration } from '../session/direct-command-types.js';
 import type { DirectPreparedConfiguration } from '../session/direct-configuration.js';
 import type { DirectRolloverPreparer } from '../session/direct-session-rotation.js';
 import type { DirectVerificationOperations } from '../session/direct-goal-verification.js';
@@ -28,7 +27,7 @@ import { prepareSessionRollover } from './direct-application-rollover.js';
 import { createDirectConfigMemoryBinding } from './direct-config-memory.js';
 import { borrowDirectConfigSurfaceOptions } from './direct-config-remote.js';
 import { prepareDirectConfiguration } from './direct-config-runtime.js';
-import { createDirectConfigSettings } from './direct-config-settings.js';
+import { createDirectConfigSettings, type DirectAppConfiguration } from './direct-config-settings.js';
 import { readDirectInputPreviewConfiguration } from './direct-input-preview.js';
 import { createDirectSessionMemory } from './direct-memory.js';
 import { runPolicy } from './direct-application-policy.js';
@@ -52,7 +51,7 @@ export type DirectRuntimeOptions = {
   /** Bound to one session, never to whichever session a client shows now. Its workspace comes from authority. */
   readonly surface: (sessionId: string) => Omit<ToolSurfaceOptions, 'workspace'>;
   /** Decides whether a session may move to another model. Without it, none may. */
-  readonly authorizeModel?: (next: ModelRef, previous: ModelRef) => void;
+  readonly authorizeModel?: (next: ModelRef, previous: ModelRef) => void | Promise<void>;
   /** After any resumed selection is restored, so this reports what actually runs. */
   readonly onSurface?: (surface: AgentSurface, profile: ReturnType<typeof getProfileMetadata>) => void;
 };
@@ -63,6 +62,8 @@ export type DirectRuntimeRecord = {
   readonly scope: SessionScope;
   /** The session's own settings, and the one place a change is written. */
   readonly settings: DirectSessionSettings;
+  /** Accepted immutable selection, never the TUI's pending mutable settings. */
+  readonly configurationSettings: ProfileSelection['settings'];
   readonly profileId: string;
   /** Its tools read a copy of `settings`, so a change needs a rebuild to reach them. */
   readonly rebuilt: boolean;
@@ -73,7 +74,7 @@ export type DirectRuntimeRecord = {
 export type DirectRuntimes = {
   create(context: DirectRuntimeContext): DirectConversationRuntime;
   /** Throws unless this application lets a session move from `previous` to `next`. */
-  authorizeModel(next: ModelRef, previous: ModelRef): void;
+  authorizeModel(next: ModelRef, previous: ModelRef): void | Promise<void>;
   /** An open session's runtime, for app-owned policy and commands. */
   get(sessionId: string): DirectRuntimeRecord | undefined;
   /** A session created during `operation` starts with this session's profile and effort, not the launch defaults. */
@@ -195,10 +196,24 @@ export function createDirectRuntimes(
       const profile = getProfileMetadata(String(settings.get('app.activeProfileId')));
       const { notice, profileName: _profileName, runtime, decideInteraction: _decide, ...request } = surface;
       let tasks: DirectBackgroundTasks | undefined;
-      const publish = (published: AgentSurface, profileId: string, rebuilt: boolean): void => {
-        records.set(context.id, { surface: published, scope, settings, profileId, rebuilt, tasks: () => tasks });
+      const initialSettings = createDirectConfigSettings(settings, {}).settings;
+      const publish = (
+        published: AgentSurface,
+        profileId: string,
+        rebuilt: boolean,
+        configurationSettings: ProfileSelection['settings'],
+      ): void => {
+        records.set(context.id, {
+          surface: published,
+          scope,
+          settings,
+          configurationSettings,
+          profileId,
+          rebuilt,
+          tasks: () => tasks,
+        });
       };
-      publish(surface, profile.activeProfileId, false);
+      publish(surface, profile.activeProfileId, false, initialSettings);
       options.onSurface?.(surface, profile);
       const models = withGenerationGuard(withSessionScope(createProviderRegistry(selection), scope), selection);
       const verification = verificationOperations(selection, models, context);
@@ -212,7 +227,7 @@ export function createDirectRuntimes(
         // TUI selection settings may already name a requested but unaccepted profile.
         readonly settings: ProfileSelection['settings'];
         readonly bound?: { readonly port: DirectContextPort; readonly capabilities: DirectContextCapabilities };
-      } = { context, settings: createDirectConfigSettings(settings, {}).settings };
+      } = { context, settings: initialSettings };
       const rollover: DirectRolloverPreparer = (request, signal) => {
         const { bound } = installed;
         if (!bound) throw new Error('This session has not finished starting.');
@@ -225,7 +240,7 @@ export function createDirectRuntimes(
           prepare: () => configure({}),
         });
       };
-      const configure = async (configuration: DirectCommandConfiguration): Promise<DirectPreparedConfiguration> => {
+      const configure = async (configuration: DirectAppConfiguration): Promise<DirectPreparedConfiguration> => {
         const { bound } = installed;
         if (!bound) throw new Error('This session has not finished starting.');
         const generation = await prepareDirectConfiguration({
@@ -268,10 +283,11 @@ export function createDirectRuntimes(
               bound: { port: bound.port, capabilities },
             };
             generations.push(dispose);
-            publish(generation.surface, nextProfile.id, true);
+            publish(generation.surface, nextProfile.id, true, generation.settings);
             queueMicrotask(() => {
               try {
                 // Generations are read-only copies, so the next one has to start from this.
+                settings.set('app.activeProfileId', nextProfile.id, { persist: false });
                 settings.set('agent.modelSelection', intent.modelSelection, { persist: false });
                 settings.set('agent.reasoningEffort', intent.reasoningEffort, { persist: false });
                 if (intent.temperature !== undefined) {

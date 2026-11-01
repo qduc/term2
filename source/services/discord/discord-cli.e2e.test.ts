@@ -1,3 +1,4 @@
+import { testCliPath } from '../../test-helpers/terminal-e2e.js';
 import { writeMockCliSettings } from '../../test-helpers/mock-cli-settings.js';
 import { afterEach, expect, it } from 'vitest';
 import fs from 'node:fs';
@@ -111,7 +112,7 @@ it.each(
     };
     writeMockCliSettings(root, env);
     function launch() {
-      const child = spawn(process.execPath, ['--import', preload, 'dist/cli.js', 'discord', configFile], {
+      const child = spawn(process.execPath, ['--import', preload, testCliPath('dist/cli.js'), 'discord', configFile], {
         cwd: process.cwd(),
         env,
         stdio: ['ignore', 'pipe', 'pipe'],

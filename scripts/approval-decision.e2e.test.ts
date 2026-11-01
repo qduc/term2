@@ -1,3 +1,4 @@
+import { testCliPath } from '../source/test-helpers/terminal-e2e.js';
 import { createServer } from 'node:http';
 import { spawnSync } from 'node:child_process';
 import { mkdir, writeFile, readdir, readFile } from 'node:fs/promises';
@@ -94,7 +95,15 @@ it.skipIf(!hasSandbox).each(['deny', 'allow-once', 'escape', 'auto-approve'] as 
     try {
       const child = await workspace.start({
         command: process.execPath,
-        args: [resolve('dist/cli.js'), '--provider', 'fixture-provider', '--model', 'fixture', '--profile', 'bare'],
+        args: [
+          testCliPath(resolve('dist/cli.js')),
+          '--provider',
+          'fixture-provider',
+          '--model',
+          'fixture',
+          '--profile',
+          'bare',
+        ],
         cwd: join(workspace.root, 'work'),
         cols: 140,
         rows: 40,

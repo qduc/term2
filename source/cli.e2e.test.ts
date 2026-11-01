@@ -1,3 +1,4 @@
+import { testCliPath } from './test-helpers/terminal-e2e.js';
 import { writeMockCliSettings } from './test-helpers/mock-cli-settings.js';
 import { afterEach, expect, it } from 'vitest';
 import fs from 'node:fs';
@@ -45,7 +46,7 @@ it.sequential.each(['lite', 'bare'])(
     const idlePath = path.join(tempHome, 'input-idle');
     session = spawnTerminal(
       'node',
-      ['--import', 'tsx', 'source/cli.tsx', ...(profile === 'lite' ? ['--lite'] : ['--profile', 'bare'])],
+      ['--import', 'tsx', testCliPath('source/cli.tsx'), ...(profile === 'lite' ? ['--lite'] : ['--profile', 'bare'])],
       {
         cwd: process.cwd(),
         env: {

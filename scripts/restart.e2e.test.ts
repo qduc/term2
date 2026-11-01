@@ -1,9 +1,16 @@
 import { createServer } from 'node:http';
 import { cp, mkdir, readFile, readdir, symlink, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { join, resolve, relative } from 'node:path';
 import ts from 'typescript';
 import { expect, it } from 'vitest';
 import { createIsolatedWorkspaceLease, writePtyTextAndSubmit } from './provider-black-box/provider-test-harness.js';
+
+// The native entry needs its adopted source dependencies beside it in a private build tree.
+function restartEntry(root: string): string {
+  return process.env.TERM2_TEST_CLI
+    ? join(root, 'direct-dist', relative(resolve('rewrite/dist'), resolve(process.env.TERM2_TEST_CLI)))
+    : join(root, 'dist/cli.js');
+}
 
 it.skipIf(process.platform !== 'linux' || !process.execve)(
   'reloads changed compiled core in the same PTY process, retaining history and an empty latest leaf',
@@ -61,6 +68,10 @@ export default function register(term2) { for (const type of ['session.start', '
         );
 
         await cp(resolve('dist'), join(root, 'dist'), { recursive: true });
+        if (process.env.TERM2_TEST_CLI) {
+          // Restart faults may delete the entry. Never mutate the runner's shared build.
+          await cp(resolve('rewrite/dist'), join(root, 'direct-dist'), { recursive: true });
+        }
         await cp(resolve('package.json'), join(root, 'package.json'));
         await symlink(resolve('node_modules'), join(root, 'node_modules'), 'dir');
         await mkdir(paths.logDir, { recursive: true });
@@ -86,7 +97,7 @@ export default function register(term2) { for (const type of ['session.start', '
       },
     });
     try {
-      const entry = join(workspace.root, 'dist/cli.js');
+      const entry = restartEntry(workspace.root);
       const child = await workspace.start({
         command: process.execPath,
         args: [entry, '--profile', 'bare'],
@@ -217,6 +228,10 @@ it.each(['runner', 'missing-entry', 'cleanup', 'lock', 'writer-close', 'native-e
       prepare: async (root, paths) => {
         await mkdir(join(root, 'work'));
         await cp(resolve('dist'), join(root, 'dist'), { recursive: true });
+        if (process.env.TERM2_TEST_CLI) {
+          // Restart faults may delete the entry. Never mutate the runner's shared build.
+          await cp(resolve('rewrite/dist'), join(root, 'direct-dist'), { recursive: true });
+        }
         await cp(resolve('package.json'), join(root, 'package.json'));
         await symlink(resolve('node_modules'), join(root, 'node_modules'), 'dir');
         await mkdir(paths.logDir, { recursive: true });
@@ -236,7 +251,7 @@ it.each(['runner', 'missing-entry', 'cleanup', 'lock', 'writer-close', 'native-e
             memory: { enabled: false },
           }),
         );
-        const cli = join(root, 'dist/cli.js');
+        const cli = restartEntry(root);
         let code = (await readFile(cli, 'utf8')).replace(
           'const controlArgv',
           `process.on('exit', code => fs.writeFileSync(${JSON.stringify(
@@ -267,7 +282,7 @@ it.each(['runner', 'missing-entry', 'cleanup', 'lock', 'writer-close', 'native-e
       },
     });
     try {
-      const entry = join(workspace.root, 'dist/cli.js');
+      const entry = restartEntry(workspace.root);
       const child = await workspace.start({
         command: process.execPath,
         args: [...(fault === 'runner' ? ['--trace-warnings'] : []), entry, '--profile', 'bare'],

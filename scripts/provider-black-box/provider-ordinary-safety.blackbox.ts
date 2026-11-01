@@ -1,3 +1,4 @@
+import { testCliPath } from '../../source/test-helpers/terminal-e2e.js';
 import { mkdir, writeFile, readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
@@ -170,7 +171,7 @@ it('completes a tiny small-model request with real fresh and reloaded settings',
   for (let i = 0; i < 2; i++) {
     const result = await lease.runCli({
       cwd: lease.root,
-      cliPath: join(process.cwd(), 'dist/cli.js'),
+      cliPath: testCliPath(join(process.cwd(), 'dist/cli.js')),
       args: ['tiny ordinary request', '--provider', 'fixture-provider', '--model', 'rekaai/reka-edge'],
       env: {
         NODE_ENV: 'production',

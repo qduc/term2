@@ -15,7 +15,7 @@ pnpm test:provider-black-box
 
 This command builds `dist/` first, then runs the dedicated configuration in `vitest.provider-black-box.config.ts`. It is intentionally separate from ordinary `pnpm test` because it launches the built CLI in isolated child processes.
 
-Global setup primes a disposable Node compile cache with `dist/cli.js --help`
+Global setup primes a disposable Node compile cache with the selected CLI (`dist/cli.js` by default) and `--help`
 before starting the workers. Only compiled bytecode is shared: every scenario
 still starts fresh processes and isolated application state. The cache is
 removed on teardown and is disabled for V8 coverage or
@@ -87,7 +87,17 @@ across the same four jobs. Each lane schedules its files through isolated Vitest
 projects using the original tier configurations and one two-worker queue.
 Integration CLI launchers and provider suites use the job's freshly built,
 built CLI; standalone integration runs still prepare a private build. E2E
-retains its source and built-entry coverage. Discovery assigns new files automatically.
+retains its source and built-entry coverage by default. For an alternate executable,
+set an absolute `TERM2_TEST_CLI` before starting Vitest: kept terminal e2e launches,
+provider black-box CLI launches and provider compile-cache priming use that entry.
+Restart e2e copies the selected rewrite build into private fixture storage before
+fault injection; it never removes the runner's selected entry. In-process imports
+(including provider contract tests and fake-Codex e2e) still exercise `source/`,
+not the alternate engine. An aggregate green tier is not proof every check ran
+that engine: audit launched entry paths and report non-CLI checks separately.
+A first-run wizard still requires an unconfigured HOME; if verification policy
+requires a preselected mock on every launch, exclude it explicitly rather than
+seeding settings and claiming wizard coverage. Discovery assigns new files automatically.
 CI runs all assigned files after assertion failures and propagates collection,
 test, and unhandled failures. The published local provider command above retains
 `--bail=1`; it and the other full-suite commands remain available locally.

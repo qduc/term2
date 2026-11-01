@@ -1,3 +1,4 @@
+import { testCliPath } from './test-helpers/terminal-e2e.js';
 import { expect, it } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -54,7 +55,7 @@ it.each(['unreachable', 'catalog'] as const)(
         'node',
         '--import',
         'tsx',
-        'source/cli.tsx',
+        testCliPath('source/cli.tsx'),
       ],
       { cols: 120, rows: 40 },
     );

@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { stripVTControlCharacters } from 'node:util';
 
@@ -37,6 +38,11 @@ export function createTestChildEnv(overrides: NodeJS.ProcessEnv = {}): NodeJS.Pr
     env.NODE_COMPILE_CACHE = process.env.TERM2_TEST_NODE_COMPILE_CACHE;
   }
   return { ...env, ...overrides };
+}
+
+/** Resolve an explicitly selected CLI in the runner, before fixtures change cwd or filter env. */
+export function testCliPath(fallback: string): string {
+  return process.env.TERM2_TEST_CLI ? path.resolve(process.env.TERM2_TEST_CLI) : fallback;
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000;

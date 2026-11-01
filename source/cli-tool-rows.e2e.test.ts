@@ -1,3 +1,4 @@
+import { testCliPath } from './test-helpers/terminal-e2e.js';
 import { afterEach, expect, it } from 'vitest';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -15,7 +16,7 @@ import { resolveSettingsDirectory } from './services/settings/settings-path.js';
 // Runs the built terminal UI (`pnpm build` output, as CI does before test:e2e) in a real pty against
 // an OpenAI-compatible chat-completions double, and reads what the terminal rendered.
 const projectRoot = fileURLToPath(new URL('..', import.meta.url));
-const builtCli = path.join(projectRoot, 'dist', 'cli.js');
+const builtCli = testCliPath(path.join(projectRoot, 'dist', 'cli.js'));
 const TIMEOUT_MS = 120_000;
 
 let session: TerminalSession | null = null;

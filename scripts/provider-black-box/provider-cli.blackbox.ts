@@ -1,3 +1,4 @@
+import { testCliPath } from '../../source/test-helpers/terminal-e2e.js';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -127,6 +128,8 @@ describe('assembled provider CLI black-box', () => {
         cwd: process.cwd(),
         cliPath: join(process.cwd(), 'tools/supervised-term2/launch.mjs'),
         args: [
+          '--entry',
+          testCliPath(join(process.cwd(), 'dist/cli.js')),
           '--prompt',
           join(workspace.root, 'handoff.txt'),
           '--lock',

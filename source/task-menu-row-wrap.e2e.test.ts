@@ -1,3 +1,4 @@
+import { testCliPath } from './test-helpers/terminal-e2e.js';
 import { afterEach, expect, it } from 'vitest';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -13,7 +14,7 @@ import {
 import { resolveSettingsDirectory } from './services/settings/settings-path.js';
 
 const projectRoot = fileURLToPath(new URL('..', import.meta.url));
-const builtCli = path.join(projectRoot, 'dist', 'cli.js');
+const builtCli = testCliPath(path.join(projectRoot, 'dist', 'cli.js'));
 const TIMEOUT_MS = 120_000;
 const COLS = 80;
 const ROWS = 24;

@@ -102,6 +102,11 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
     // Live argument evidence is not a finalized tool, root output, or replayable state.
     case 'tool_call_streaming_delta': return state;
     case 'request_cost_recorded': return { ...state, requestCosts: [...(state.requestCosts ?? []).filter(cost => cost.record.requestId !== event.payload.record.requestId), event.payload] };
+    // Lifecycle evidence is a public audit event, not transcript, usage, cost or
+    // terminal state. Retain it on the stream; the snapshot has no duplicate field.
+    case 'compaction_started':
+    case 'compaction_completed':
+    case 'compaction_failed': return state;
     case 'session_rotated': {
       if (event.payload.logicalSessionId !== state.sessionId) throw new Error('Session rotation belongs to a different logical session');
       // Foreground provider context is physically replaced. Task/queue/command/

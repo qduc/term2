@@ -11,6 +11,7 @@ import { argumentStreamEvent } from './direct-argument-stream.js';
 import { commandFactEvent } from './direct-command-receipts.js';
 import { publicRequestCost } from './direct-costs.js';
 import { budgetFactEvent } from './direct-budget.js';
+import { publicCompactionCompleted, publicCompactionFailed, publicCompactionStarted } from './direct-compaction.js';
 import { completedFinalText } from './direct-turn-results.js';
 import { publicQueue, publicQueueChange } from './direct-queue.js';
 import { taskFactEvent } from './direct-tasks.js';
@@ -144,6 +145,9 @@ export class DirectProjection {
       case 'command_started':
       case 'command_finished': return [commandFactEvent(fact, this.#state, seq)];
       case 'request_cost_recorded': return [this.#event('request_cost_recorded', publicRequestCost(fact), seq, fact.turnId)];
+      case 'compaction_started': return [this.#event('compaction_started', publicCompactionStarted(fact), seq, fact.turnId)];
+      case 'compaction_completed': return [this.#event('compaction_completed', publicCompactionCompleted(fact), seq, fact.turnId)];
+      case 'compaction_failed': return [this.#event('compaction_failed', publicCompactionFailed(fact), seq, fact.turnId)];
       case 'session_rotated': return [this.#event('session_rotated', {
         logicalSessionId: fact.logicalSessionId,
         backingSessionId: fact.sessionId,
@@ -155,7 +159,10 @@ export class DirectProjection {
       case 'budget_opened':
       case 'budget_closed':
       case 'budget_observed': return [budgetFactEvent(fact, this.#state.sessionId, seq)];
-      case 'history_replaced': return [this.#event('history_replaced', { reason: fact.reason }, seq, turnId)];
+      case 'history_replaced': return [this.#event('history_replaced', {
+        reason: fact.reason,
+        ...(fact.compactionId !== undefined ? { compactionId: fact.compactionId } : {}),
+      }, seq, turnId)];
       case 'model_response_completed': return [this.#event('model_response_completed', {
         modelStep: fact.modelStep, stopReason: fact.stopReason, ...(fact.costUsd !== undefined ? { costUsd: fact.costUsd } : {}),
       }, seq, turnId)];
@@ -208,11 +215,15 @@ export class DirectProjection {
   #branch(branchId: string, fact: Fact, seq: number, at: string): readonly WireEvent[] {
     const branch = this.#branches.get(branchId);
     if (!branch) throw new Error('Branch event has no accepted branch identity');
-    return branch.projection.update({ type: 'fact', position: 0, seq, at, fact }).map(event =>
-      this.#event('subagent', { agentId: branch.taskId, branchId,
+    // The wrapper is the accepted outer boundary for a branch fact. Preserve its
+    // real accepted timestamp; nested child frames keep the existing null root cursor.
+    return branch.projection.update({ type: 'fact', position: 0, seq, at, fact }).map(event => ({
+      ...this.#event('subagent', { agentId: branch.taskId, branchId,
         ...(branch.parentTurnId !== undefined ? { parentTurnId: branch.parentTurnId } : {}),
         ...(branch.rootTurnId !== undefined ? { rootTurnId: branch.rootTurnId } : {}),
-        ...(branch.role ? { role: branch.role } : {}), event: { ...event, seq: null } }, seq, branch.parentTurnId ?? null));
+        ...(branch.role ? { role: branch.role } : {}), event: { ...event, seq: null } }, seq, branch.parentTurnId ?? null),
+      occurredAt: at,
+    }));
   }
   #item(fact: Extract<Fact, { type: 'item' }>, seq: number): readonly WireEvent[] {
     const { item, executionId, turnId } = fact;

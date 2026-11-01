@@ -15,7 +15,8 @@ export type CanonicalEventContext = {
 type Candidate = { type: AgentEventType; payload: Readonly<Record<string, unknown>> };
 
 /** Returns at most one numeric-ID envelope per accepted boundary. Non-public projection updates
- * return null. Missing required accepted evidence throws instead of lying to a retained BFF.
+ * return null. Missing accepted evidence or unsupported consumer semantics throws
+ * instead of silently omitting a lifecycle boundary or lying to a retained BFF.
  */
 export function encodeCanonicalEvent(
   event: WireEvent,
@@ -225,8 +226,19 @@ function canonicalCandidate(
       return nestedCandidate(event, interactions, context);
     case 'task_changed':
       return taskCandidate(event, context);
+    case 'compaction_started':
+    case 'compaction_completed':
+    case 'compaction_failed':
+      // Real lifecycle evidence is present, but the frozen consumer cannot carry
+      // its attempt/estimate/request/failure semantics faithfully. In particular,
+      // do not guess a terminal provider, relabel estimates as measured tokens or
+      // coerce blocked/interrupted/cancelled into a pinned errorCategory.
+      return missing(
+        'canonical compaction lifecycle requires a versioned consumer contract; use direct event format',
+      );
     case 'compacted':
-      return missing('canonical compaction requires accepted provider, strategy and timing evidence');
+      // This presentation notice is neither an attempt start nor its outcome.
+      return missing('the compacted notice cannot substitute for a canonical compaction lifecycle boundary');
     // These change the public read model but have no equivalent pinned root event. In particular,
     // a message is not a terminal, and a cumulative reasoning summary is not a reasoning delta.
     case 'snapshot':
@@ -257,12 +269,20 @@ function nestedCandidate(
   context: CanonicalEventContext,
 ): Candidate | null {
   const { event: child, agentId } = event.payload;
-  if (
-    child.type === 'tool_call_streaming_delta' ||
-    child.type === 'background_notice_enqueued' ||
-    child.type === 'background_notices_delivered'
-  )
-    return null;
+  switch (child.type) {
+    case 'compaction_started':
+    case 'compaction_completed':
+    case 'compaction_failed':
+      // Preserve the branch wrapper in direct transport. Never promote the child
+      // to root or replace its null cursor with a made-up pinned boundary.
+      return missing(
+        'canonical branch compaction lifecycle requires a versioned consumer contract; use direct event format',
+      );
+    case 'tool_call_streaming_delta':
+    case 'background_notice_enqueued':
+    case 'background_notices_delivered':
+      return null;
+  }
   // Current wire carries the actual parent separately. Older payloads may use accepted cut
   // context, but neither a child turnId nor rootTurnId is a substitute for the immediate parent.
   const task = context.task?.id === agentId ? context.task : undefined;

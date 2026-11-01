@@ -140,9 +140,9 @@ async function withSession(
 ): Promise<ServerResult> {
   let fromSeq: number | undefined;
   if (route.purpose === 'events_connect') {
-    // Durable cursors/timestamps and direct rotation now exist. Canonical still needs task and
-    // compaction evidence plus supported aggregate queue, rotation/reset and transient replay
-    // contracts. Omitting an unrepresentable boundary is not pinned consumer parity.
+    // Durable task/compaction evidence, cursors/timestamps and direct rotation now exist.
+    // Canonical still needs faithful consumer mappings plus supported aggregate queue,
+    // rotation/reset and transient replay contracts. Omitting a boundary is not parity.
     const format = input.url.searchParams.get('format');
     if (format !== null && format !== 'direct') return publicError(400, 'validation_error', 'event format is invalid');
     const query = input.url.searchParams.get('after');

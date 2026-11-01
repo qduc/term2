@@ -12,7 +12,7 @@ import {
 } from '../../../source/services/agent-runtime/permission-boundary.js';
 import type { AgentSpec } from '../../../source/services/agent-runtime/types.js';
 import { ToolApprovalPolicyRegistry } from '../../../source/services/approval/tool-approval-policy-registry.js';
-import type { ExecutionContext } from '../../../source/services/execution-context.js';
+import { ExecutionContext } from '../../../source/services/execution-context.js';
 import { resolveActiveEnforcement } from '../../../source/services/profiles/active-profile.js';
 import type { SessionAccessState } from '../../../source/services/session/session-access-state.js';
 import { SubagentPoolEntrySchema } from '../../../source/services/settings/settings-schema.js';
@@ -209,8 +209,11 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
     if (definition.canWrite && (options.readOnly || planMode)) throw new Error('This session cannot delegate writes');
     if (definition.canWrite && !params.worktree)
       throw new Error('Write-capable subagents require an existing worktree');
-    let executionContext = options.executionContext;
-    let workspace = options.workspace;
+    // Children retain their admission root even if the parent later changes its lease.
+    let executionContext = options.executionContext.isRemote()
+      ? options.executionContext
+      : ExecutionContext.pin(options.executionContext.getCwd());
+    let workspace = Object.freeze({ ...options.workspace, root: executionContext.getCwd() });
     if (params.worktree) {
       const pinned = await pinWorkerWorktree({
         name: params.worktree,
@@ -491,21 +494,17 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
       const result = configureTaskCheckIn(target.id, policy);
       if (!result.ok) throw new Error(`Task check-in configuration refused: ${result.code}`);
     },
-    async configureTaskCheckIn(params: {
-      kind?: 'shell' | 'subagent';
-      id: string;
-      enabled?: boolean;
-      interval_seconds?: number;
-      next_due_in_seconds?: number;
-    }) {
+    configureTaskCheckIn(params: Parameters<NonNullable<AgentFactoryDeps['configureTaskCheckIn']>>[0]) {
       current();
       if (!configureTaskCheckIn) throw new Error('Session task check-in authority is not bound');
-      const result = configureTaskCheckIn(params.id, {
+      const result = configureTaskCheckIn(params.target, {
         ...(params.enabled !== undefined ? { enabled: params.enabled } : {}),
         ...(params.interval_seconds !== undefined ? { intervalMs: params.interval_seconds * 1000 } : {}),
-        ...(params.next_due_in_seconds !== undefined ? { nextDueInMs: params.next_due_in_seconds * 1000 } : {}),
+        ...(params.next_check_in_seconds !== undefined ? { nextDueInMs: params.next_check_in_seconds * 1000 } : {}),
       });
-      return result;
+      return result.ok
+        ? { ok: true, message: `Task check-in configuration updated for ${params.target}.` }
+        : { ok: false, error: result.code };
     },
     resolveNestedAuthority(request: NestedRunRequest): DirectNestedAuthority {
       const authority = authorities.get(request);

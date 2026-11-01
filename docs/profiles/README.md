@@ -110,7 +110,11 @@ for scope, opt-out and privacy; no profile switch is required.
 Bare carries no tool for what the shell can do: file reads, search, edits, and
 skill loading all go through the shell, so the sandbox is Bare's write boundary.
 The model-facing tools are the shell, `goal_check` (root sessions), `run_code`, and,
-in interactive sessions, `session_rollover`, which scripts cannot call. Web, memory,
+when configured, `ask_mentor`. Interactive sessions also expose `ask_user` and
+`session_rollover`; none of these three can be called inside scripts.
+Writable local sessions also expose `enter_worktree` and `exit_worktree` directly:
+these lease an existing git worktree and restore the session's original home,
+without changing process-wide cwd or another session's root. Web, memory,
 sessions, MCP, and background-job tools have no shell equivalent; they are
 script-only `tools.*` members of `run_code`, listed by name, and the model calls
 `tools.describe(name)` for a schema. Script calls keep the same approval prompts

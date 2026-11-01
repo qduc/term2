@@ -156,6 +156,8 @@ export const builtinProfiles: readonly ProfileDefinition[] = [
         kind: 'tools',
         include: [
           'shell',
+          'user-interaction',
+          'mentor',
           'skills',
           'web',
           'memory',

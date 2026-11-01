@@ -577,9 +577,8 @@ export const getAgentDefinition = (
   // Worktree switching re-roots the local filesystem; in remote mode the remote
   // directory owns the execution root, so the tools have nothing to lease.
   if (
-    !bareMode &&
     !readOnly &&
-    (filesystemReadEnabled || filesystemWriteEnabled) &&
+    (filesystemReadEnabled || filesystemWriteEnabled || (bareMode && hasCapability('shell'))) &&
     executionContext &&
     !executionContext.isRemote()
   ) {

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { randomUUID } from 'node:crypto';
 import type { DirectConnection, DirectReplayConnection } from '../../host/in-process-direct-types.js';
 import type { WireSnapshot } from '../../protocol/direct-wire.js';
 import { reduceWireEvent } from '../../protocol/direct-reducer.js';
@@ -38,11 +39,28 @@ export function useClient(
     callback.current?.(wire);
     void (async () => {
       try {
+        // The wire wakes this attached client; only Session may consume notices
+        // and admit their silent turn. Never resume a paused user queue to do so.
+        const drain = async () => {
+          if (!active || wire.status !== 'idle' || wire.activeTurnId || wire.queueState !== 'idle' || wire.queue.length)
+            return;
+          const delivered = new Set(wire.notifications?.deliveries.flatMap((item) => item.notificationIds));
+          if (!wire.notifications?.notices.some((item) => !delivered.has(item.id))) return;
+          const result = await connection.send({
+            type: 'drain_background_notifications',
+            requestId: `drain_${randomUUID()}`,
+          });
+          if (!result.ok) throw new Error(`Background notification drain failed: ${result.message}`);
+        };
+        await drain();
         for await (const event of connection.events) {
           if (!active) return;
           wire = reduceWireEvent(wire, event);
           setCurrent({ connection, wire, error: null });
           callback.current?.(wire);
+          // Await admission, not completion. Keep one attempt in flight without
+          // timers; a busy Session is reconsidered at its next wire boundary.
+          await drain();
         }
         if (active)
           setCurrent((previous) =>

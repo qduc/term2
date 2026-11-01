@@ -92,13 +92,21 @@ export function importDirectSession({ directory, id, entries }: DirectImportOpti
     // Reject successors even if the root bytes themselves are identical (or absent).
     for (const name of names) {
       if (name === `${id}.jsonl`) continue;
-      const first = readFileSync(join(directory, name), 'utf8').split('\n', 1)[0]!;
-      if (!first) continue;
-      const header = (
-        JSON.parse(first) as {
-          fact?: { type?: string; logicalSessionId?: string; predecessor?: { sessionId?: string } };
-        }
-      ).fact;
+      // Match R8 discovery's acceptance boundary: unrelated malformed or torn
+      // headers have no trustworthy association and cannot deny a healthy import.
+      const data = readFileSync(join(directory, name));
+      const end = data.indexOf(0x0a);
+      if (end < 0) continue;
+      let header: { type?: string; logicalSessionId?: string; predecessor?: { sessionId?: string } } | undefined;
+      try {
+        header = (
+          JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(data.subarray(0, end))) as {
+            fact?: typeof header;
+          } | null
+        )?.fact;
+      } catch {
+        continue;
+      }
       if (
         header?.type === 'session_rotated' &&
         (header.logicalSessionId === id || header.predecessor?.sessionId === id)

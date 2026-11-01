@@ -29,3 +29,8 @@ and a newly created destination may remain after failure. Cooperating Session
 writers are excluded; this is not protection against a hostile process replacing
 directories concurrently. Staging requires a writable parent on the same
 filesystem; mount-point destinations that cannot hard-link fail without publishing.
+
+Publication's rotation-collision probe ignores unrelated undecodable/torn first
+headers, consistent with R8. Readable links naming the target still reject, even
+when the rest of that header is invalid. Existing-target duplicate checks use the
+shared strict lineage reader. This does not infer associations from corrupt bytes.

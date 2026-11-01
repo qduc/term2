@@ -1,3 +1,4 @@
+import { writeMockCliSettings } from '../../test-helpers/mock-cli-settings.js';
 import { afterEach, expect, it } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -108,6 +109,7 @@ it.each(
       TERM2_DISCORD_BOT_TOKEN: 'OFFLINE_CLI_TOKEN',
       TERM2_DISCORD_GATEWAY: 'off',
     };
+    writeMockCliSettings(root, env);
     function launch() {
       const child = spawn(process.execPath, ['--import', preload, 'dist/cli.js', 'discord', configFile], {
         cwd: process.cwd(),

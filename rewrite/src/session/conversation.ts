@@ -1,3 +1,5 @@
+import { ConversationJournal, modelError } from './conversation-journal.js';
+import { ownConversationTurn, factFor, terminalFact, failedTurn } from './conversation-turn.js';
 /**
  * The direct conversation owns the engine reader and the durable writer. An
  * engine envelope is accepted only after its fact has committed. Public events
@@ -27,7 +29,12 @@ import {
   type DirectNotificationFact,
   type DirectNotificationState,
 } from './direct-notifications.js';
-import { parseDirectConfigurationFact, type DirectPreparedConfiguration } from './direct-configuration.js';
+import type { DirectPreparedConfiguration } from './direct-configuration.js';
+import {
+  installConversationGeneration,
+  prepareConversationGeneration,
+  type PreparedConversationGeneration,
+} from './conversation-generation.js';
 import { directRolloverAtBoundary } from './direct-rollover.js';
 import { parseDirectSessionRotation } from './direct-session-rotation.js';
 import { captureDirectCommandHistory } from './direct-history-capture.js';
@@ -119,9 +126,6 @@ function conversation(
   let continuity = deps.continuity
     ? { ...deps.continuity, state: deps.continuity.state ?? new DirectContinuity() }
     : undefined;
-  let commandReceipts: DirectCommandReceipts = [];
-  let historyRevision = 0;
-  let notifications: DirectNotificationState = { notices: [], deliveries: [] };
   let commandOwner: {
     readonly commandId: string;
     readonly kind: import('./direct-command-types.js').DirectCommandOperation['kind'];
@@ -129,27 +133,11 @@ function conversation(
     done?: Promise<unknown>;
   } | null = null;
   const rolloverDestination = (): string | undefined => {
-    for (const receipt of commandReceipts) {
+    for (const receipt of journal.commandReceipts) {
       if (receipt.outcome?.kind === 'rolled_over' && receipt.outcome.sessionId !== id) return receipt.outcome.sessionId;
     }
     return undefined;
   };
-  let context = initialDirectContextState();
-  let queueState: DirectQueueState = createDirectQueueState();
-  let taskStates: readonly DirectTaskState[] = [];
-  const requestIds = new Set<InteractionRequestId>();
-  for (const fact of facts) {
-    if (isDirectCommandFactType(fact.type))
-      commandReceipts = reduceDirectCommandReceipts(commandReceipts, fact as DirectCommandFact);
-    if (isDirectNotificationFactType(fact.type))
-      notifications = reduceDirectNotifications(notifications, fact as DirectNotificationFact);
-    if (changesRootHistory(fact)) ++historyRevision;
-    context = reduceDirectContext(context, fact, queueState.records);
-    if (isDirectQueueFact(fact)) queueState = reduceDirectQueue(queueState, fact);
-    if (isDirectTaskFact(fact)) taskStates = reduceDirectBackground(taskStates, fact);
-    if (fact.type === 'interaction_opened' || fact.type === 'task_interaction_opened')
-      requestIds.add(fact.request.requestId);
-  }
   let nextTurnId = Math.max(
     1,
     ...facts.flatMap((fact) => {
@@ -164,115 +152,31 @@ function conversation(
     }),
   );
   let queueSettings: Omit<TurnRequest, 'input' | 'submission'> | undefined;
-  let recoveryMaterialized = false;
   let completionHeld: TurnId | null = null;
   const branchHandles = new Set<TurnHandle>();
   const runBudgets = new DirectRunBudgets(
     deps.budget,
     (fact) => {
-      if (!commit([fact])) throw new Error(logFailure!.message);
+      if (!commit([fact])) throw new Error(journal.failure!.message);
     },
     facts,
   );
   let tasks: BackgroundTasksType | undefined;
   let capabilities: ReturnType<typeof bindDirectCapabilities> | undefined;
-  let hookStatus: 'idle' | 'working' | 'waiting_for_user' | 'waiting_for_approval' = 'idle';
   let closed = false;
-  let logFailure: ModelError | null = null;
 
-  const writerFailure = (): ModelError | null => logFailure;
-  const poison = (error: unknown): void => {
-    if (logFailure) return;
-    logFailure = modelError(error);
-    tasks?.poison(logFailure);
-    active?.cancel();
-    commandOwner?.abort.abort();
-    for (const handle of branchHandles) handle.cancel();
-  };
-  // Projection validation is synchronous and precedes disk mutation. Nothing
-  // awaits/reenters between generation CAS, candidate reduction and append.
-  const commit = (next: readonly Fact[]): boolean => {
-    if (logFailure) return false;
-    if (next.length === 0) return true;
-    let projectedNotices = notifications;
-    let projectedReceipts = commandReceipts;
-    let projectedContext = context;
-    let projectedQueue = queueState;
-    let projectedTasks = taskStates;
-    const reserved = new Set(requestIds);
-    for (const fact of next) {
-      if (isDirectNotificationFactType(fact.type))
-        projectedNotices = reduceDirectNotifications(projectedNotices, fact as DirectNotificationFact);
-      if (isDirectCommandFactType(fact.type))
-        projectedReceipts = reduceDirectCommandReceipts(projectedReceipts, fact as DirectCommandFact);
-      projectedContext = reduceDirectContext(projectedContext, fact, projectedQueue.records);
-      if (isDirectQueueFact(fact)) projectedQueue = reduceDirectQueue(projectedQueue, fact);
-      if (isDirectTaskFact(fact)) projectedTasks = reduceDirectBackground(projectedTasks, fact);
-      if (fact.type === 'interaction_opened' || fact.type === 'task_interaction_opened') {
-        if (reserved.has(fact.request.requestId)) throw new Error('Duplicate Session interaction request ID');
-        reserved.add(fact.request.requestId);
-      }
-    }
-    let lines: readonly FactLine[];
-    try {
-      lines = deps.log.append(next);
-    } catch (error) {
-      poison(error);
-      return false;
-    }
-    notifications = projectedNotices;
-    commandReceipts = projectedReceipts;
-    historyRevision += next.filter(changesRootHistory).length;
-    context = projectedContext;
-    queueState = projectedQueue;
-    taskStates = projectedTasks;
-    for (const requestId of reserved) requestIds.add(requestId);
-    facts.push(...next);
-    for (const line of lines) capabilities?.accepted(line);
-    let root: TurnId | undefined;
-    const waits = new Map<string, 'approval' | 'question' | 'budget'>();
-    for (const fact of facts) {
-      if (fact.type === 'turn_started') {
-        root = fact.turnId;
-        waits.clear();
-      }
-      if (fact.type === 'interaction_opened' && fact.turnId === root)
-        waits.set(fact.request.requestId, fact.request.kind);
-      if (fact.type === 'budget_opened' && fact.turnId === root) waits.set(fact.requestId, 'budget');
-      if (fact.type === 'interaction_closed' || fact.type === 'budget_closed') waits.delete(fact.requestId);
-      if (fact.type === 'turn_ended' && fact.turnId === root) {
-        root = undefined;
-        waits.clear();
-      }
-    }
-    const current = waits.size
-      ? [...waits.values()].some((kind) => kind === 'approval')
-        ? 'waiting_for_approval'
-        : 'waiting_for_user'
-      : root
-      ? 'working'
-      : 'idle';
-    if (current !== hookStatus) {
-      capabilities?.status(
-        hookStatus,
-        current,
-        current === 'idle' ? 'turn_finished' : waits.size ? 'approval_requested' : 'turn_started',
-        root,
-      );
-      hookStatus = current;
-    }
-
-    return true;
-  };
-  const liveReplay = () => replay(facts, { recoverQueue: false });
-  const recover = (): boolean => {
-    if (recoveryMaterialized) return !logFailure;
-    const recovered = replay(facts);
-    const taskRecovery = recoverDirectBackground(facts.filter(isDirectTaskFact), Date.now());
-    if (!commit([...recovered.recoveryFacts, ...taskRecovery, ...recoverDirectCommands(commandReceipts)])) return false;
-    recoveryMaterialized = true;
-    return true;
-  };
+  const journal = new ConversationJournal(deps.log, facts, {
+    accepted: (line) => capabilities?.accepted(line),
+    status: (...args) => capabilities?.status(...args),
+    failed(error) {
+      tasks?.poison(error);
+      active?.cancel();
+      commandOwner?.abort.abort();
+      for (const handle of branchHandles) handle.cancel();
+    },
+  });
+  const { commit, liveReplay, recover, poison } = journal;
+  const writerFailure = (): ModelError | null => journal.failure;
   tasks = new DirectBackgroundTasks({
     sessionId: id,
     sink: {
@@ -283,7 +187,7 @@ function conversation(
             : fact.type === 'task_interaction_opened'
             ? fact.request.taskId
             : fact.taskId;
-        const previous = taskStates.find((task) => task.taskId === taskId);
+        const previous = journal.taskStates.find((task) => task.taskId === taskId);
         const notice =
           previous &&
           !closed &&
@@ -304,7 +208,7 @@ function conversation(
           !recover() ||
           !commit([fact, ...(notice ? [{ type: 'background_notice_enqueued' as const, notice }] : [])])
         )
-          throw new Error(logFailure?.message ?? 'Session is closed');
+          throw new Error(journal.failure?.message ?? 'Session is closed');
       },
       publish: (event) => deps.publishTask?.(event),
       failed: poison,
@@ -315,18 +219,18 @@ function conversation(
     tasks,
     settings: () => checkInSettings?.() ?? { enabled: false, intervalMs: 1 },
     emit(event) {
-      if (closed || logFailure) return;
+      if (closed || journal.failure) return;
       if (!commit([{ type: 'background_notice_enqueued', notice: directCheckInNotice(event) }]))
-        throw new Error(logFailure!.message);
+        throw new Error(journal.failure!.message);
     },
   });
   const configureTaskCheckIn: Conversation['configureTaskCheckIn'] = (target, policy) =>
-    closed || logFailure ? { ok: false, code: 'not_active' } : checkIns.configure(target, policy);
+    closed || journal.failure ? { ok: false, code: 'not_active' } : checkIns.configure(target, policy);
   const contextCommit = (generation: number, next: readonly DirectContextFact[], turnId?: TurnId): boolean => {
     if (
       closed ||
-      logFailure ||
-      context.goal.generation !== generation ||
+      journal.failure ||
+      journal.context.goal.generation !== generation ||
       (turnId !== undefined && (!active || active.turnId !== turnId || active.cancelled))
     )
       return false;
@@ -341,7 +245,7 @@ function conversation(
     get backingSessionId() {
       return deps.rotationBoundary?.().sessionId ?? id;
     },
-    read: () => structuredClone(context),
+    read: () => structuredClone(journal.context),
     commit: (generation, next) => contextCommit(generation, next),
     tasks,
     configureTaskCheckIn,
@@ -359,10 +263,10 @@ function conversation(
   checkInTimer?.unref();
   capabilities = bindDirectCapabilities({
     sessionId: id,
-    read: () => context,
+    read: () => journal.context,
     facts: () => facts,
     commit: contextCommit,
-    validTurn: (turnId) => !!active && active.turnId === turnId && !active.cancelled && !closed && !logFailure,
+    validTurn: (turnId) => !!active && active.turnId === turnId && !active.cancelled && !closed && !journal.failure,
     baseTools: deps.tools,
     capabilities: supplied,
     canRollover: () => !!runtimeDeps.rollover,
@@ -374,7 +278,7 @@ function conversation(
         active.cancelled ||
         commandOwner ||
         closed ||
-        logFailure
+        journal.failure
       )
         return { ok: false, status: 'rollover_blocked', error: 'This root no longer has rollover authority.' };
       const existing = facts.find((fact) => fact.type === 'rollover_requested' && fact.turnId === turnId);
@@ -386,7 +290,7 @@ function conversation(
       const commandId = `rollover:${randomUUID()}`;
       if (
         !contextCommit(
-          context.goal.generation,
+          journal.context.goal.generation,
           [{ type: 'rollover_requested', turnId, commandId, request: structuredClone(request) }],
           turnId,
         )
@@ -405,232 +309,14 @@ function conversation(
     newMessageId: randomUUID,
     newTurnId: () => `turn-${nextTurnId++}` as TurnId,
     now: () => new Date().toISOString(),
-    dispatchHeld: !!active || !!completionHeld || !!commandOwner || closed || !!logFailure,
+    dispatchHeld: !!active || !!completionHeld || !!commandOwner || closed || !!journal.failure,
   });
   const boundary = (turnId: TurnId): readonly Item[] => {
-    if (!active || active.turnId !== turnId || active.cancelled || commandOwner || closed || logFailure) return [];
-    const plan = planDirectQueue(queueState, { kind: 'boundary', turnId }, environment());
-    if (!commit(plan.facts)) throw new Error(logFailure!.message);
+    if (!active || active.turnId !== turnId || active.cancelled || commandOwner || closed || journal.failure) return [];
+    const plan = planDirectQueue(journal.queueState, { kind: 'boundary', turnId }, environment());
+    if (!commit(plan.facts)) throw new Error(journal.failure!.message);
     return plan.effect?.kind === 'steer' ? plan.effect.modelInput : [];
   };
-
-  function ownTurn(
-    turnId: TurnId,
-    handle: TurnHandle,
-  ): Turn & { readonly turnId: TurnId; readonly cancelled: boolean; stop(): Promise<void> } {
-    const requests = new Map<InteractionRequestId, InteractionRequest>();
-    const budgets = new Map<InteractionRequestId, Extract<TurnEvent, { type: 'budget_required' }>>();
-    const engine = handle.events[Symbol.asyncIterator]();
-    let cancelled = false;
-    let started = false;
-    let done = false;
-    let released = false;
-    let terminal: TurnResult | null = null;
-    let streamFailure: ModelError | null = null;
-
-    const closeInteractions = (): void => {
-      const closures: Fact[] = [...requests.keys()].map((requestId) => ({
-        type: 'interaction_closed',
-        turnId,
-        requestId,
-        resolution: { kind: 'cancelled' },
-      }));
-      requests.clear();
-      for (const requestId of budgets.keys())
-        closures.push({ type: 'budget_closed', turnId, requestId, decision: { kind: 'stop' }, source: 'system' });
-      budgets.clear();
-      commit(closures);
-    };
-    const cancel = (): void => {
-      if (released || cancelled) return;
-      cancelled = true;
-      closeInteractions();
-      handle.cancel();
-    };
-    const settle = (result: TurnResult): void => {
-      if (terminal) return;
-      closeInteractions();
-      const outcome = streamFailure
-        ? { kind: 'failed' as const, error: streamFailure }
-        : cancelled && result.kind === 'completed'
-        ? { kind: 'cancelled' as const }
-        : result;
-      if (!logFailure) {
-        // The same deterministic repair used on reopen supplies missing root
-        // results. Its interrupted terminal is replaced by the actual outcome.
-        const repairs = liveReplay().recoveryFacts.filter((fact) => fact.type !== 'turn_ended');
-        const ended = terminalFact(turnId, outcome);
-        commit([...repairs, ended]);
-      }
-      terminal = logFailure ? { kind: 'failed', error: logFailure } : outcome;
-    };
-    const consume = ({ token, event }: AcceptedTurnEvent, draining: boolean): TurnEvent | null => {
-      if (event.type === 'turn_ended') {
-        settle(event.result);
-        if (logFailure) handle.cancel();
-        else handle.accept(token);
-        return null;
-      }
-      if (terminal || logFailure) return null;
-      // Cleanup outcomes still matter, but late text/progress and unadmitted
-      // starts must not become visible or authorize work after cancellation.
-      const cleanup =
-        event.type === 'tool_execution_finished' ||
-        event.type === 'compaction_completed' ||
-        event.type === 'compaction_failed' ||
-        (event.type === 'item' && event.item.type === 'tool_result');
-      if ((cancelled || draining) && !cleanup) return null;
-      const fact = factFor(turnId, event);
-      if (fact && !commit([fact])) {
-        cancel();
-        return null;
-      }
-      if (event.type === 'budget_required') budgets.set(event.requestId, event);
-      if (event.type === 'interaction_required') requests.set(event.request.requestId, event.request);
-      handle.accept(token);
-      return cancelled || draining ? null : event;
-    };
-    const drain = async (): Promise<void> => {
-      while (!done) {
-        try {
-          const next = await engine.next();
-          done = next.done === true;
-          if (!next.done) consume(next.value, true);
-        } catch (error) {
-          done = true;
-          streamFailure ??= modelError(error);
-        }
-      }
-      if (!terminal) settle(streamFailure ? { kind: 'failed', error: streamFailure } : lostTerminal);
-    };
-
-    async function* drive(): AsyncGenerator<TurnEvent, void> {
-      started = true;
-      try {
-        while (!done) {
-          const next = await engine.next();
-          done = next.done === true;
-          if (next.done) break;
-          const event = consume(next.value, false);
-          if (event) yield event;
-        }
-      } catch (error) {
-        streamFailure = modelError(error);
-      } finally {
-        // Do not use for-await's implicit iterator.return: the engine may have
-        // outstanding bodies whose finish events must be consumed first.
-        if (!done) cancel();
-        try {
-          await drain();
-          if (!cancelled && !logFailure && capabilities?.finalizeHuman) {
-            const admission = facts.find((fact) => fact.type === 'turn_started' && fact.turnId === turnId);
-            if (
-              admission?.type === 'turn_started' &&
-              !admission.silent &&
-              !admission.maintenance &&
-              !admission.retryContext &&
-              isDirectHumanOrigin(admission.submission?.origin)
-            ) {
-              const content = admission.input.flatMap((item) =>
-                item.type === 'user_message' ? [...item.content] : [],
-              );
-              const notice = await capabilities.finalizeHuman({
-                admissionId: admission.submission?.messageId ?? turnId,
-                text: content.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n'),
-                images: content.filter((part) => part.type === 'image'),
-              });
-              if (notice) deps.publishNotice?.(notice);
-            }
-          }
-        } finally {
-          released = true;
-          if (active?.turnId === turnId) active = null;
-        }
-      }
-      yield { type: 'turn_ended', result: terminal! };
-    }
-    const stream = drive();
-    const stop = async (): Promise<void> => {
-      cancel();
-      // Returning a never-started async generator skips its finally block.
-      // Start it under cancellation so the same reader drains in that case too.
-      if (!started) await stream.next();
-      await stream.return();
-    };
-
-    return {
-      events: {
-        [Symbol.asyncIterator]() {
-          return {
-            next: () => stream.next(),
-            return: async () => {
-              await stop();
-              return { done: true as const, value: undefined };
-            },
-          };
-        },
-      },
-      turnId,
-      get cancelled() {
-        return cancelled;
-      },
-      cancel,
-      stop,
-      answerBudget(requestId, decision, provenance = { source: 'system' }): AnswerResult {
-        if (released || cancelled || terminal || !budgets.has(requestId)) return { kind: 'stale' };
-        if (decision.kind === 'extend' && (decision.grantedBy !== 'human' || provenance.source !== 'user'))
-          return { kind: 'failed', error: modelError('Budget extension requires an explicit human answer') };
-        if (decision.kind === 'steer')
-          return { kind: 'failed', error: modelError('Use durable queued steering before resuming a budget wait') };
-        if (
-          !commit([
-            {
-              type: 'budget_closed',
-              turnId,
-              requestId,
-              decision,
-              source: provenance.source === 'user' ? 'user' : 'system',
-            },
-          ])
-        ) {
-          cancel();
-          return { kind: 'failed', error: logFailure! };
-        }
-        budgets.delete(requestId);
-        handle.answerBudget(requestId, decision);
-        return { kind: 'accepted' };
-      },
-      answer(requestId, decision, provenance: AnswerProvenance = { source: 'system' }): AnswerResult {
-        const request = requests.get(requestId);
-        if (released || cancelled || terminal || !request) return { kind: 'stale' };
-        if (!validDecision(request, decision))
-          return { kind: 'failed', error: modelError('invalid interaction decision') };
-        if (
-          !commit([
-            {
-              type: 'interaction_closed',
-              turnId,
-              requestId,
-              resolution: decision,
-              resolutionSource: provenance.source,
-              ...(provenance.automaticApproval !== undefined
-                ? { automaticApproval: provenance.automaticApproval }
-                : {}),
-            },
-          ])
-        ) {
-          cancel();
-          return { kind: 'failed', error: logFailure! };
-        }
-        requests.delete(requestId);
-        // Stop is continuation control, not cancellation: the selected allowed
-        // body (or unanswered question result) must settle first. The engine
-        // suppresses later bodies/model steps while retaining cleanup ownership.
-        handle.answer(requestId, decision);
-        return { kind: 'accepted' };
-      },
-    };
-  }
 
   const start = (
     request: TurnRequest,
@@ -650,7 +336,7 @@ function conversation(
     if (active || (completionHeld && !planned?.accepted))
       throw new Error(`conversation ${id} already owns a foreground completion boundary`);
     if (commandOwner && !planned?.accepted) throw new Error('Session history is reserved by a command');
-    if (logFailure || !recover()) throw new Error(logFailure!.message);
+    if (journal.failure || !recover()) throw new Error(journal.failure!.message);
     if (
       request.submission &&
       (!request.submission.clientRequestId ||
@@ -681,7 +367,7 @@ function conversation(
         },
       ])
     )
-      throw new Error(logFailure!.message);
+      throw new Error(journal.failure!.message);
     const { input, notice: requestNotice, submission: _submission, previewMode: _previewMode, ...settings } = request;
     // Rejected admission, read-only preview, maintenance and empty retry input
     // cannot consume a pending profile transition. Like source pendingModeNotice,
@@ -711,7 +397,7 @@ function conversation(
           rootTurnId: turnId,
           authority,
           accept: (fact) => {
-            if (!commit([fact])) throw new Error(logFailure!.message);
+            if (!commit([fact])) throw new Error(journal.failure!.message);
           },
           factFor,
           handles: branchHandles,
@@ -764,7 +450,13 @@ function conversation(
           subagents: subagentPort,
         },
       );
-      const turn = ownTurn(turnId, handle);
+      const turn = ownConversationTurn(turnId, handle, journal, {
+        capabilities: capabilities!,
+        publishNotice: deps.publishNotice,
+        released: () => {
+          if (active?.turnId === turnId) active = null;
+        },
+      });
       active = turn;
       if (planned) completionHeld = turnId;
       return { turnId, turn };
@@ -772,7 +464,7 @@ function conversation(
       const failure = modelError(error);
       const ended = terminalFact(turnId, { kind: 'failed', error: failure });
       commit([ended]);
-      return { turnId, turn: failedTurn(logFailure ?? failure) };
+      return { turnId, turn: failedTurn(journal.failure ?? failure) };
     }
   };
   const startEffect = (
@@ -796,18 +488,18 @@ function conversation(
   const subagentPort: NonNullable<TurnDeps['subagents']> = (parent) => {
     const check = (): void => {
       parent.signal.throwIfAborted();
-      if (closed || logFailure) throw new Error(logFailure?.message ?? 'Session is closed');
+      if (closed || journal.failure) throw new Error(journal.failure?.message ?? 'Session is closed');
     };
     const get = (target: string): import('../tools/index.js').SubagentTaskState | undefined => {
       check();
-      const task = tasks!.get(target) ?? taskStates.find((task) => task.taskId === target);
+      const task = tasks!.get(target) ?? journal.taskStates.find((task) => task.taskId === target);
       return task?.kind === 'subagent' ? { ...task, kind: 'subagent' } : undefined;
     };
     return {
       list() {
         check();
         const live = new Map(tasks!.list().map((task) => [task.taskId, task]));
-        return taskStates.flatMap((accepted) => {
+        return journal.taskStates.flatMap((accepted) => {
           const task = live.get(accepted.taskId) ?? accepted;
           return task.kind === 'subagent' ? [{ ...task, kind: 'subagent' as const }] : [];
         });
@@ -831,7 +523,7 @@ function conversation(
       },
     };
   };
-  const revision = (): string => `${id}:${historyRevision}`;
+  const revision = (): string => `${id}:${journal.historyRevision}`;
   const commandSnapshot = () =>
     captureDirectCommandHistory({
       sessionId: id,
@@ -841,70 +533,30 @@ function conversation(
       executionsSettled: !active && !completionHeld,
     });
   // Prepare every potentially throwing value before durable configuration acceptance.
-  const prepareGeneration = (candidate: DirectPreparedConfiguration) => {
-    if (
-      candidate.capabilities.hooks !== supplied?.hooks ||
-      candidate.capabilities.automaticMemory !== supplied?.automaticMemory ||
-      candidate.capabilities.memory?.globalContext !== supplied?.memory?.globalContext ||
-      candidate.capabilities.memory?.facts !== supplied?.memory?.facts
-    )
-      throw new Error('Configure attempted to replace the Session hooks or memory lifetime');
-    const expectedWorkspace = deps.toolContext?.workspace;
-    const nextWorkspace = candidate.deps.toolContext?.workspace;
-    if (
-      expectedWorkspace &&
-      (!nextWorkspace ||
-        nextWorkspace.root !== expectedWorkspace.root ||
-        nextWorkspace.target !== expectedWorkspace.target ||
-        nextWorkspace.access !== expectedWorkspace.access)
-    )
-      throw new Error('Configure cannot change Session workspace authority');
-    if (
-      candidate.profileTransitionNotice !== undefined &&
-      (typeof candidate.profileTransitionNotice !== 'string' || !candidate.profileTransitionNotice.trim())
-    )
-      throw new Error('Profile transition notice must be nonempty text');
-    const configurationFact = parseDirectConfigurationFact({
-      type: 'configuration_changed',
-      configuration: candidate.configuration,
-      intent: candidate.intent,
-      profile: candidate.profile,
-    });
-    const nextRequest = { ...candidate.request, model: candidate.configuration.model };
-    const nextDeps: ConversationDeps = {
-      ...candidate.deps,
-      log: deps.log,
-      context: deps.context,
-      rotationBoundary: deps.rotationBoundary,
-      configure: candidate.deps.configure ?? runtimeDeps.configure,
-      rollover: candidate.deps.rollover ?? runtimeDeps.rollover,
-      publishTask: deps.publishTask,
-      publishBranch: deps.publishBranch,
-      publishNotice: deps.publishNotice,
-    };
-    // Never reuse an opaque provider checkpoint across a configuration revision.
-    const nextContinuity = nextDeps.continuity
-      ? { ...nextDeps.continuity, state: nextDeps.continuity.state ?? new DirectContinuity() }
-      : undefined;
-    return { configurationFact, nextRequest, nextDeps, nextContinuity };
-  };
+  const prepareGeneration = (candidate: DirectPreparedConfiguration): PreparedConversationGeneration =>
+    prepareConversationGeneration(deps, runtimeDeps, supplied, candidate);
   const installGeneration = (
     candidate: DirectPreparedConfiguration,
     prepared: ReturnType<typeof prepareGeneration>,
   ): void => {
-    const { nextRequest, nextDeps, nextContinuity } = prepared;
     try {
-      continuity?.state.clear();
-      runtimeDeps = nextDeps;
-      continuity = nextContinuity;
-      configuredRequest = nextRequest;
-      queueSettings = nextRequest;
-      supplied = candidate.capabilities;
-      capabilities!.replace(candidate.deps.tools, supplied);
-      checkInSettings = supplied.backgroundCheckIns;
-      candidate.install();
-      if (candidate.profileTransitionNotice)
-        pendingProfileNotice = [pendingProfileNotice, candidate.profileTransitionNotice].filter(Boolean).join('\n\n');
+      installConversationGeneration(
+        candidate,
+        prepared,
+        continuity,
+        capabilities!.replace,
+        (generation) => {
+          runtimeDeps = generation.nextDeps;
+          continuity = generation.nextContinuity;
+          configuredRequest = generation.nextRequest;
+          queueSettings = generation.nextRequest;
+          supplied = candidate.capabilities;
+          checkInSettings = supplied.backgroundCheckIns;
+        },
+        (notice) => {
+          if (notice) pendingProfileNotice = [pendingProfileNotice, notice].filter(Boolean).join('\n\n');
+        },
+      );
     } catch (error) {
       poison(error);
       throw error;
@@ -912,9 +564,9 @@ function conversation(
   };
   // Live detached work is allowed. Only actual foreground/pending decisions veto.
   const rolloverBlocked = (commandId: string): boolean => {
-    if (active || queueState.active) return true;
+    if (active || journal.queueState.active) return true;
     if (completionHeld && directRolloverAtBoundary(facts, completionHeld)?.commandId !== commandId) return true;
-    if (taskStates.some((task) => task.pendingInteractions.length > 0)) return true;
+    if (journal.taskStates.some((task) => task.pendingInteractions.length > 0)) return true;
     const waiting = new Set<string>();
     for (const fact of facts) {
       if (fact.type === 'interaction_opened') waiting.add(fact.request.requestId);
@@ -930,16 +582,18 @@ function conversation(
     currentRequest: (fallback) => configuredRequest ?? fallback,
     drainBackgroundNotifications(clientRequestId, settings) {
       if (!clientRequestId.trim()) throw new Error('Background drain requires a nonempty invocation ID');
-      if (closed || logFailure || !recover())
-        return { result: { kind: 'not_admitting', reason: logFailure?.message ?? 'Session is closed' } };
-      const previous = notifications.deliveries.find((delivery) => delivery.clientRequestId === clientRequestId);
+      if (closed || journal.failure || !recover())
+        return { result: { kind: 'not_admitting', reason: journal.failure?.message ?? 'Session is closed' } };
+      const previous = journal.notifications.deliveries.find(
+        (delivery) => delivery.clientRequestId === clientRequestId,
+      );
       if (previous)
         return {
           result: { kind: 'duplicate', turnId: previous.turnId, notificationIds: [...previous.notificationIds] },
         };
       if (rolloverDestination())
         return { result: { kind: 'not_admitting', reason: `Session rolled over to ${rolloverDestination()}` } };
-      if (active || completionHeld || commandOwner || queueState.active || queueState.pending.length)
+      if (active || completionHeld || commandOwner || journal.queueState.active || journal.queueState.pending.length)
         return { result: { kind: 'busy' } };
       // Only accepted closure disproves a question notice. In particular, a
       // recovered interrupted task has no live continuation to answer. Preserve
@@ -949,7 +603,7 @@ function conversation(
           fact.type === 'task_question_closed' ? [`question:${fact.taskId}:${fact.messageId}`] : [],
         ),
       );
-      const notices = pendingDirectNotifications(notifications).filter(
+      const notices = pendingDirectNotifications(journal.notifications).filter(
         (notice) => notice.kind !== 'question' || !closedQuestions.has(notice.id),
       );
       if (!notices.length) return { result: { kind: 'empty' } };
@@ -979,16 +633,16 @@ function conversation(
     },
     commandRevision: revision,
     rewindTargets() {
-      if (active || completionHeld || commandOwner || closed || logFailure) return [];
+      if (active || completionHeld || commandOwner || closed || journal.failure) return [];
       return listDirectRewindTargets(commandSnapshot());
     },
     command(request, settings, settleForeground) {
       request = structuredClone(request);
-      if (closed || logFailure || !recover())
+      if (closed || journal.failure || !recover())
         return Promise.resolve({
-          result: { kind: 'not_admitting' as const, reason: logFailure?.message ?? 'Session is closed' },
+          result: { kind: 'not_admitting' as const, reason: journal.failure?.message ?? 'Session is closed' },
         });
-      const proposal = planDirectCommandStart(commandReceipts, request, revision());
+      const proposal = planDirectCommandStart(journal.commandReceipts, request, revision());
       if (proposal.kind !== 'start')
         return Promise.resolve({
           result: proposal.kind === 'conflict' ? proposal : { ...structuredClone(proposal), replayed: true },
@@ -998,14 +652,16 @@ function conversation(
           result: { kind: 'not_admitting' as const, reason: `Session rolled over to ${rolloverDestination()}` },
         });
       // Reserve synchronously, before cancellation or any async model operation.
-      if (!commit([proposal.fact])) throw new Error(logFailure!.message);
+      if (!commit([proposal.fact])) throw new Error(journal.failure!.message);
       const finish = (outcome: DirectCommandOutcome): DirectCommandResult => {
-        if (!commit([planDirectCommandFinish(commandReceipts, request.commandId, outcome)]))
-          throw new Error(logFailure!.message);
+        if (!commit([planDirectCommandFinish(journal.commandReceipts, request.commandId, outcome)]))
+          throw new Error(journal.failure!.message);
         return {
           kind: 'finished',
           replayed: false,
-          receipt: structuredClone(commandReceipts.find((receipt) => receipt.request.commandId === request.commandId)!),
+          receipt: structuredClone(
+            journal.commandReceipts.find((receipt) => receipt.request.commandId === request.commandId)!,
+          ),
         };
       };
       // These optional caller preconditions are checked in this synchronous
@@ -1018,7 +674,10 @@ function conversation(
         });
       if (
         request.admission === 'idle' &&
-        (active || completionHeld || queueState.active || (!queueState.pause && queueState.pending.length > 0))
+        (active ||
+          completionHeld ||
+          journal.queueState.active ||
+          (!journal.queueState.pause && journal.queueState.pending.length > 0))
       )
         return Promise.resolve({
           result: finish({ kind: 'rejected', code: 'busy', message: 'This command requires an idle Session.' }),
@@ -1051,7 +710,7 @@ function conversation(
             message: `${request.operation.kind} lacks its actual native runtime authority.`,
           }),
         });
-      if (request.operation.kind === 'configure' && (active || completionHeld || queueState.active))
+      if (request.operation.kind === 'configure' && (active || completionHeld || journal.queueState.active))
         return Promise.resolve({
           result: finish({
             kind: 'rejected',
@@ -1092,7 +751,7 @@ function conversation(
               const preparedRollover = await runtimeDeps.rollover!(request.operation.request, owner.abort.signal);
               if (preparedRollover.kind === 'rejected') return { result: finish(preparedRollover) };
               candidate = preparedRollover.generation;
-              if (closed || logFailure || owner.abort.signal.aborted)
+              if (closed || journal.failure || owner.abort.signal.aborted)
                 return {
                   result: finish({
                     kind: 'rejected',
@@ -1131,7 +790,7 @@ function conversation(
                 const turnId = `turn-${nextTurnId++}` as TurnId;
                 const origin = { kind: 'control' as const, id: 'session-rollover' };
                 const admission = submitDirectQueue(
-                  queueState,
+                  journal.queueState,
                   {
                     clientRequestId,
                     content: preparedRollover.handoff,
@@ -1184,11 +843,11 @@ function conversation(
                 history: [],
                 ...(handoff ? { handoff } : {}),
               });
-              const finished = planDirectCommandFinish(commandReceipts, request.commandId, {
+              const finished = planDirectCommandFinish(journal.commandReceipts, request.commandId, {
                 kind: 'rolled_over',
                 sessionId: id,
               });
-              if (!commit([rotation, ...seedFacts, finished])) throw new Error(logFailure!.message);
+              if (!commit([rotation, ...seedFacts, finished])) throw new Error(journal.failure!.message);
               installed = true; // Accepted generation ownership is never discarded.
               installGeneration(candidate, prepared);
               const started = seed
@@ -1202,7 +861,7 @@ function conversation(
                   kind: 'finished',
                   replayed: false,
                   receipt: structuredClone(
-                    commandReceipts.find((receipt) => receipt.request.commandId === request.commandId)!,
+                    journal.commandReceipts.find((receipt) => receipt.request.commandId === request.commandId)!,
                   ),
                 },
                 ...(started ? { started } : {}),
@@ -1216,7 +875,7 @@ function conversation(
             await settleForeground();
             if (active) await active.stop();
           }
-          if (closed || logFailure || owner.abort.signal.aborted)
+          if (closed || journal.failure || owner.abort.signal.aborted)
             return {
               result: finish({
                 kind: 'rejected',
@@ -1233,7 +892,7 @@ function conversation(
               candidate = await runtimeDeps.configure!(operation.configuration, owner.abort.signal);
               if (
                 closed ||
-                logFailure ||
+                journal.failure ||
                 owner.abort.signal.aborted ||
                 commandOwner !== owner ||
                 revision() !== expectedRevision
@@ -1247,11 +906,11 @@ function conversation(
                 };
               const prepared = prepareGeneration(candidate);
               const { configurationFact } = prepared;
-              const finished = planDirectCommandFinish(commandReceipts, request.commandId, {
+              const finished = planDirectCommandFinish(journal.commandReceipts, request.commandId, {
                 kind: 'configured',
                 configuration: candidate.configuration,
               });
-              if (!commit([configurationFact, finished])) throw new Error(logFailure!.message);
+              if (!commit([configurationFact, finished])) throw new Error(journal.failure!.message);
               // Never discard a durably accepted generation, even if the app
               // violates its no-throw installation contract.
               installed = true;
@@ -1261,7 +920,7 @@ function conversation(
                   kind: 'finished',
                   replayed: false,
                   receipt: structuredClone(
-                    commandReceipts.find((receipt) => receipt.request.commandId === request.commandId)!,
+                    journal.commandReceipts.find((receipt) => receipt.request.commandId === request.commandId)!,
                   ),
                 },
               };
@@ -1289,7 +948,7 @@ function conversation(
                 },
               ])
             )
-              throw new Error(logFailure!.message);
+              throw new Error(journal.failure!.message);
             const started = start(
               { ...settings, input: [] },
               {
@@ -1348,15 +1007,15 @@ function conversation(
             };
           if (plan.next.kind === 'rewound') {
             const outcome = { kind: 'rewound' as const, draft: plan.next.draft };
-            if (!commit([plan.fact, planDirectCommandFinish(commandReceipts, request.commandId, outcome)]))
-              throw new Error(logFailure!.message);
+            if (!commit([plan.fact, planDirectCommandFinish(journal.commandReceipts, request.commandId, outcome)]))
+              throw new Error(journal.failure!.message);
             continuity?.state.clear();
             return {
               result: {
                 kind: 'finished',
                 replayed: false,
                 receipt: structuredClone(
-                  commandReceipts.find((receipt) => receipt.request.commandId === request.commandId)!,
+                  journal.commandReceipts.find((receipt) => receipt.request.commandId === request.commandId)!,
                 ),
               },
             };
@@ -1368,7 +1027,7 @@ function conversation(
               result: finish({
                 kind: 'rejected',
                 code: 'ineligible',
-                message: 'Retry has no retained accepted root context.',
+                message: 'Retry has no retained accepted root journal.context.',
               }),
             };
           const turnId = `turn-${nextTurnId++}` as TurnId;
@@ -1383,10 +1042,10 @@ function conversation(
                 retryContext: { sourceTurnId: source.turnId, throughItemId: through.id },
                 ...(configuration ? { requestConfiguration: configuration } : {}),
               },
-              planDirectCommandFinish(commandReceipts, request.commandId, { kind: 'retried', turnId }),
+              planDirectCommandFinish(journal.commandReceipts, request.commandId, { kind: 'retried', turnId }),
             ])
           )
-            throw new Error(logFailure!.message);
+            throw new Error(journal.failure!.message);
           continuity?.state.clear();
           const started = start(
             { ...settings, input: [] },
@@ -1397,14 +1056,14 @@ function conversation(
               kind: 'finished',
               replayed: false,
               receipt: structuredClone(
-                commandReceipts.find((receipt) => receipt.request.commandId === request.commandId)!,
+                journal.commandReceipts.find((receipt) => receipt.request.commandId === request.commandId)!,
               ),
             },
             started,
           };
         } catch (error) {
-          if (logFailure) throw new Error(logFailure.message);
-          const accepted = commandReceipts.find((receipt) => receipt.request.commandId === request.commandId);
+          if (journal.failure) throw new Error(journal.failure.message);
+          const accepted = journal.commandReceipts.find((receipt) => receipt.request.commandId === request.commandId);
           if (accepted?.outcome)
             return { result: { kind: 'finished', replayed: false, receipt: structuredClone(accepted) } };
           return {
@@ -1428,7 +1087,8 @@ function conversation(
       return done;
     },
     abort(expectedTurnId, discardQueue = true) {
-      if (closed || logFailure) return { kind: 'not_admitting', reason: logFailure?.message ?? 'session is closed' };
+      if (closed || journal.failure)
+        return { kind: 'not_admitting', reason: journal.failure?.message ?? 'session is closed' };
       const target = active?.turnId ?? completionHeld;
       if (target !== expectedTurnId || active?.cancelled)
         return {
@@ -1440,26 +1100,26 @@ function conversation(
             ? 'cancellation_requested'
             : 'not_current',
         };
-      const cancelPlan = planDirectQueue(queueState, { kind: 'cancel', turnId: expectedTurnId }, environment());
+      const cancelPlan = planDirectQueue(journal.queueState, { kind: 'cancel', turnId: expectedTurnId }, environment());
       const discardPlan = discardQueue
         ? planDirectQueue(cancelPlan.state, { kind: 'discard' }, environment())
         : undefined;
       const discardedMessageIds =
         discardPlan?.facts.flatMap((fact) => (fact.type === 'queue_discarded' ? [...fact.messageIds] : [])) ?? [];
       if (!commit([...cancelPlan.facts, ...(discardPlan?.facts ?? [])]))
-        return { kind: 'not_admitting', reason: logFailure!.message };
+        return { kind: 'not_admitting', reason: journal.failure!.message };
       active?.cancel();
       return { kind: 'aborted', turnId: expectedTurnId, discardedMessageIds };
     },
     snapshotInputPreview(request) {
-      if (closed || logFailure) throw new Error(logFailure?.message ?? 'Session is closed');
+      if (closed || journal.failure) throw new Error(journal.failure?.message ?? 'Session is closed');
       const configuration = directPreviewConfiguration(request);
       if (!configuration) throw new Error('App has not supplied the effective previewMode');
       // Preview the accepted live cut, including in-flight Items/deltas, without
       // synthesizing crash-time tool results, wait closures or root terminals.
       // An unfinished projection's interrupted status is not a live failure.
       const history = replay(facts, { recoverQueue: false, recoverActiveTurn: false }).history;
-      // This is the same pure admission plan, but its returned context facts are
+      // This is the same pure admission plan, but its returned journal.context facts are
       // deliberately NOT accepted. No memory/notice/goal state is consumed.
       const human = capabilities!.humanPlan('preview', request.input);
       const notice = [pendingProfileNotice, request.notice].filter(Boolean).join('\n\n');
@@ -1486,21 +1146,24 @@ function conversation(
         kind: selected.chained ? 'delta' : 'full_history',
         configuration,
         queueActive:
-          !!active || !!completionHeld || !!queueState.active || (!queueState.pause && queueState.pending.length > 0),
+          !!active ||
+          !!completionHeld ||
+          !!journal.queueState.active ||
+          (!journal.queueState.pause && journal.queueState.pending.length > 0),
         toolOccurrences: directPreviewOccurrences(facts, selected.request.input),
       });
     },
     rolloverAtBoundary: (turnId) => directRolloverAtBoundary(facts, turnId),
-    context: () => structuredClone(context),
+    context: () => structuredClone(journal.context),
     setGoal(generation, goal, source = 'user') {
-      if (closed || logFailure || !recover()) return false;
+      if (closed || journal.failure || !recover()) return false;
       return contextCommit(generation, [{ type: 'goal_changed', ...(goal ? { goal } : {}), source }]);
     },
     run(request) {
       try {
         return start(request).turn;
       } catch (error) {
-        if (logFailure) return failedTurn(logFailure);
+        if (journal.failure) return failedTurn(journal.failure);
         throw error;
       }
     },
@@ -1528,15 +1191,15 @@ function conversation(
           };
         }
       }
-      if (closed || logFailure || !recover())
+      if (closed || journal.failure || !recover())
         return {
           admission: {
             kind: 'rejected',
             clientRequestId: request.clientRequestId,
-            reason: logFailure?.message ?? 'session is closed',
+            reason: journal.failure?.message ?? 'session is closed',
           },
         };
-      const plan = submitDirectQueue(queueState, request, environment());
+      const plan = submitDirectQueue(journal.queueState, request, environment());
       queueSettings = settings;
       if (plan.effect?.kind === 'start') {
         const started = startEffect(plan.effect, plan.facts);
@@ -1544,14 +1207,14 @@ function conversation(
       }
       if (!commit(plan.facts))
         return {
-          admission: { kind: 'rejected', clientRequestId: request.clientRequestId, reason: logFailure!.message },
+          admission: { kind: 'rejected', clientRequestId: request.clientRequestId, reason: journal.failure!.message },
         };
       return { admission: plan.result };
     },
     queue(command) {
-      if (closed || logFailure || !recover()) return { kind: 'rejected', reason: 'invalid' };
+      if (closed || journal.failure || !recover()) return { kind: 'rejected', reason: 'invalid' };
       if (command.kind === 'settled' && commandOwner) command = { ...command, preservePendingSteers: true };
-      const plan = planDirectQueue(queueState, command, environment());
+      const plan = planDirectQueue(journal.queueState, command, environment());
       if (plan.effect?.kind === 'start') throw new Error('Use advanceQueue for dispatch');
       if (!commit(plan.facts)) return { kind: 'rejected', reason: 'invalid' };
       if (
@@ -1565,17 +1228,19 @@ function conversation(
     },
     advanceQueue(settings) {
       if (settings) queueSettings = settings;
-      if (active || commandOwner || closed || logFailure || rolloverDestination() || !queueSettings) return undefined;
-      const plan = planDirectQueue(queueState, { kind: 'dispatch' }, environment());
+      if (active || commandOwner || closed || journal.failure || rolloverDestination() || !queueSettings)
+        return undefined;
+      const plan = planDirectQueue(journal.queueState, { kind: 'dispatch' }, environment());
       if (plan.effect?.kind === 'start') return startEffect(plan.effect, plan.facts);
-      if (!commit(plan.facts)) throw new Error(logFailure!.message);
+      if (!commit(plan.facts)) throw new Error(journal.failure!.message);
       return undefined;
     },
     answerBudget(requestId, decision, provenance) {
       return active?.answerBudget(requestId, decision, provenance) ?? { kind: 'stale' };
     },
     answer(requestId, decision, provenance) {
-      if (closed || logFailure) return logFailure ? { kind: 'failed', error: logFailure } : { kind: 'stale' };
+      if (closed || journal.failure)
+        return journal.failure ? { kind: 'failed', error: journal.failure } : { kind: 'stale' };
       const root = active?.answer(requestId, decision, provenance);
       if (root && root.kind !== 'stale') return root;
       return tasks!.answer(requestId, decision);
@@ -1587,111 +1252,11 @@ function conversation(
       try {
         await commandOwner?.done;
         await Promise.all([active?.stop(), tasks!.close()]);
-        await capabilities!.close(!!logFailure);
+        await capabilities!.close(!!journal.failure);
       } finally {
         deps.log.close();
       }
     },
-  };
-}
-
-const lostTerminal: TurnResult = {
-  kind: 'failed',
-  error: { kind: 'provider', message: 'turn ended without a terminal event', retryable: false },
-};
-
-function modelError(error: unknown): ModelError {
-  return { kind: 'provider', message: error instanceof Error ? error.message : String(error), retryable: false };
-}
-
-function validDecision(request: InteractionRequest, decision: InteractionDecision): boolean {
-  if (!decision || typeof decision !== 'object') return false;
-  if (decision.stopAfterApprovalResolution !== undefined && typeof decision.stopAfterApprovalResolution !== 'boolean')
-    return false;
-  if (request.kind === 'question') return decision.kind === 'answer' && typeof decision.answer === 'string';
-  return (
-    decision.kind === 'allow' ||
-    (decision.kind === 'deny' && (decision.reason === undefined || typeof decision.reason === 'string'))
-  );
-}
-
-function failedTurn(error: ModelError): Turn {
-  return {
-    events: (async function* () {
-      yield { type: 'turn_ended', result: { kind: 'failed', error } } as const;
-    })(),
-    cancel() {},
-    answer: () => ({ kind: 'stale' }),
-    answerBudget: () => ({ kind: 'stale' }),
-  };
-}
-
-/** Reasoning/progress/attempt notices stay transient; authority-bearing facts fsync. */
-function factFor(
-  turnId: TurnId,
-  event: Exclude<TurnEvent, { type: 'turn_ended' }>,
-): DirectTurnFact | DirectHistoryFact | null {
-  switch (event.type) {
-    case 'text_delta':
-      return {
-        type: 'text_delta',
-        turnId,
-        delta: event.delta,
-        ...(event.modelStep !== undefined ? { modelStep: event.modelStep } : {}),
-      };
-    case 'item':
-      return {
-        type: 'item',
-        turnId,
-        item: event.item,
-        ...(event.executionId !== undefined ? { executionId: event.executionId } : {}),
-        ...(event.modelStep !== undefined ? { modelStep: event.modelStep } : {}),
-      };
-    case 'budget_required':
-      return { ...event, type: 'budget_opened' };
-    case 'budget_observed':
-      return { ...event, turnId };
-    case 'compaction_started':
-    case 'compaction_completed':
-    case 'compaction_failed':
-    case 'model_response_completed':
-      return { ...event, turnId };
-    case 'history_replaced':
-      return { ...event, turnId };
-    case 'usage':
-      return {
-        type: 'usage',
-        turnId,
-        usage: event.usage,
-        ...(event.modelStep !== undefined ? { modelStep: event.modelStep } : {}),
-      };
-    case 'tool_start_requested':
-      return {
-        type: 'tool_started',
-        turnId,
-        executionId: event.executionId,
-        callId: event.callId,
-        toolName: event.toolName,
-        input: event.input,
-        ...(event.parentExecutionId !== undefined ? { parentExecutionId: event.parentExecutionId } : {}),
-      };
-    case 'tool_execution_finished':
-      return { type: 'tool_finished', turnId, executionId: event.executionId, result: event.result };
-    case 'interaction_required':
-      return { type: 'interaction_opened', turnId, request: event.request };
-    default:
-      return null;
-  }
-}
-
-function terminalFact(turnId: TurnId, result: TurnResult): Extract<Fact, { type: 'turn_ended' }> {
-  return {
-    type: 'turn_ended',
-    turnId,
-    outcome: result.kind,
-    ...(result.kind === 'failed' ? { error: result.error } : {}),
-    ...('terminalCause' in result && result.terminalCause ? { terminalCause: result.terminalCause } : {}),
-    ...('notice' in result && result.notice ? { notice: result.notice } : {}),
   };
 }
 
@@ -1711,20 +1276,4 @@ function withNotice(input: readonly Item[], notice: string): readonly Item[] {
     content[textIndex] = { ...part, text: `${notice}\n\n${part.text}` };
     return { ...item, content };
   });
-}
-
-/** Physical audit/branch progress and compaction lifecycle do not invalidate a
- * root history token. For compaction, history_replaced alone owns transcript mutation. */
-function changesRootHistory(fact: Fact): boolean {
-  return [
-    'turn_started',
-    'turn_ended',
-    'text_delta',
-    'item',
-    'history_replaced',
-    'configuration_changed',
-    'session_rotated',
-    'queue_steered',
-    'memory_personal_snapshot',
-  ].includes(fact.type);
 }

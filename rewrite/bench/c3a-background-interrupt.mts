@@ -22,7 +22,7 @@ import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
 import { once } from 'node:events';
-import { createAdoptedSettings } from '../src/config/adopted/settings.ts';
+import { createLegacyAppSettings } from '../src/app/adopted/settings.ts';
 import { createAdoptedModelRegistry } from '../src/model/adopted/index.ts';
 import { createAppAdoptedSessionHandleFactory } from '../src/app/adopted/session.ts';
 import { CanonicalSessionLog, loadCanonicalConversation } from '../src/session/adopted/conversation-log.ts';
@@ -137,7 +137,7 @@ async function makeGraph(label: string) {
   };
   const providers = createProviderRegistry();
   providers.upsertProvider(provider);
-  const { service: host, source } = createAdoptedSettings({
+  const { service: host, source } = createLegacyAppSettings({
     disableLogging: true,
     disableFilePersistence: true,
     cli: {

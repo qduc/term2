@@ -1,5 +1,5 @@
 import type { ILoggingService } from '../../../../source/services/service-interfaces.js';
-import { createAdoptedSettings } from '../../config/adopted/settings.js';
+import { createAppSettings } from '../settings.js';
 import { getProviderIds } from '../../../../source/providers/index.js';
 import { loadProviderItems } from '../../../../source/providers/provider-service.js';
 import {
@@ -55,7 +55,7 @@ export type DirectProductPorts = {
 
 /** Real settings, credential, OAuth and catalog leaves. Does not open conversation logs. */
 export function createDirectProductPorts(options: { settingsDir?: string } = {}): DirectProductPorts {
-  const { service } = createAdoptedSettings(options.settingsDir ? { settingsDir: options.settingsDir } : {});
+  const { service } = createAppSettings(options.settingsDir ? { settingsDir: options.settingsDir } : {});
   const catalog = new ModelCatalogSession({ settingsService: service, loggingService: silentLog });
   return {
     settings: settingsBackend(service),
@@ -92,7 +92,7 @@ export function createDirectProductPorts(options: { settingsDir?: string } = {})
   };
 }
 
-type ProductSettings = ReturnType<typeof createAdoptedSettings>['service'];
+type ProductSettings = ReturnType<typeof createAppSettings>['service'];
 
 function settingsBackend(service: ProductSettings): DirectSettingsBackend {
   return {

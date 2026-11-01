@@ -1,9 +1,9 @@
-import { createAdoptedSettings, type AdoptedSettingsOptions } from '../config/adopted/settings.js';
+import { createDirectSettingsService, type DirectSettingsOptions } from './direct-config-settings.js';
 
-export type AppSettingsOptions = AdoptedSettingsOptions;
-export type AppSettings = ReturnType<typeof createAdoptedSettings>;
+export type AppSettingsOptions = DirectSettingsOptions;
+export type AppSettings = { readonly service: ReturnType<typeof createDirectSettingsService> };
 
-/** Builds the legacy settings owner and its rewrite adapter at the app boundary. */
+/** Builds only the concrete settings owner; native sessions own their runtime generations. */
 export function createAppSettings(options: AppSettingsOptions = {}): AppSettings {
-  return createAdoptedSettings(options);
+  return { service: createDirectSettingsService(options) };
 }

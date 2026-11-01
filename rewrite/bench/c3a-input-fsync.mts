@@ -5,7 +5,7 @@ import { createSessionRuntimeInternals } from '../../source/services/session/ses
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createAdoptedSettings } from '../src/config/adopted/settings.ts';
+import { createLegacyAppSettings } from '../src/app/adopted/settings.ts';
 import { createAdoptedModelRegistry } from '../src/model/adopted/index.ts';
 import { createAppAdoptedEngine } from '../src/app/adopted/engine.ts';
 import { loadCanonicalConversation } from '../src/session/adopted/conversation-log.ts';
@@ -46,7 +46,7 @@ const provider: any = {
 };
 const providers = createProviderRegistry();
 providers.upsertProvider(provider);
-const { service: host, source } = createAdoptedSettings({
+const { service: host, source } = createLegacyAppSettings({
   disableLogging: true,
   disableFilePersistence: true,
   cli: {

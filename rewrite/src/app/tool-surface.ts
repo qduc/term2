@@ -108,7 +108,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     shellChildRegistry: shellChildren,
     skillsService,
     onToolGraph(graph) {
-      sourceGraph = graph;
+      sourceGraph = [...graph];
       baseGraph = [...graph];
     },
     includeMemory: !remote && options.includeMemory !== false,

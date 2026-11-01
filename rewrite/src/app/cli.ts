@@ -10,7 +10,10 @@ import { fileURLToPath } from 'node:url';
 import envPaths from 'env-paths';
 import { getAllProviders, getProviderIds } from '../../../source/providers/index.js';
 import { LoggingService } from '../../../source/services/logging/logging-service.js';
-import { VALID_REASONING_EFFORTS, type ModelSettingsReasoningEffort } from '../../../source/services/models/reasoning-effort.js';
+import {
+  VALID_REASONING_EFFORTS,
+  type ModelSettingsReasoningEffort,
+} from '../../../source/services/models/reasoning-effort.js';
 import { resolveProfile } from '../../../source/services/profiles/resolver.js';
 import { BARE_PROFILE_ID, canonicalProfileId } from '../../../source/services/profiles/legacy-adapter.js';
 import { SessionContextService } from '../../../source/services/session/session-context-service.js';
@@ -119,9 +122,7 @@ function exitCodeForSignal(signal: NodeJS.Signals): number {
   return signal === 'SIGINT' ? 130 : 143;
 }
 
-async function runWithSignals(
-  request: DirectHeadlessRequest,
-): Promise<{
+async function runWithSignals(request: DirectHeadlessRequest): Promise<{
   readonly kind: 'completed' | 'cancelled' | 'failed' | 'context_paused' | 'blocked' | 'budget_paused';
   readonly signal?: NodeJS.Signals;
 }> {
@@ -297,7 +298,11 @@ async function applyModelOverrides(
   if (resolution.status === 'cancelled') return pickerEligible ? null : 'Cancelled.';
   for (const warning of resolution.warnings ?? []) stderr.write(`${warning}\n`);
   // --model is a per-session override: persist:false keeps the saved defaults intact.
-  settings.set('agent.modelSelection', { model: resolution.modelId, provider: resolution.provider }, { persist: false });
+  settings.set(
+    'agent.modelSelection',
+    { model: resolution.modelId, provider: resolution.provider },
+    { persist: false },
+  );
   if (resolution.reasoningEffort && validReasoning === undefined) {
     settings.set('agent.reasoningEffort', resolution.reasoningEffort, { persist: false });
   }
@@ -477,7 +482,7 @@ async function main(argv: readonly string[]): Promise<number> {
     case 'discord':
       // The bridge reports SIGINT/SIGTERM through process.exitCode, which the current CLI keeps as the exit status.
       await launchDirect({ kind: 'discord', argv: command.argv });
-      return process.exitCode ?? 0;
+      return Number(process.exitCode ?? 0);
   }
 }
 

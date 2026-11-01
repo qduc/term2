@@ -2,9 +2,11 @@
 import type { InteractionDecision, InteractionRequest, ToolContextSeed } from '../engine/index.js';
 import type { Item, ReasoningEffort, ToolSpec } from '../model/index.js';
 import type { DirectRemoteWorkspace } from './direct-remote.js';
+import type { LoggingService } from '../../../source/services/logging/logging-service.js';
 import type { ProviderRegistryDeps } from '../model/provider.js';
 import type { ToolRegistry, Workspace } from '../tools/index.js';
-export type ProfileSelection = ProviderRegistryDeps;
+/** App settings generations share the concrete logger whose configuration they update. */
+export type ProfileSelection = ProviderRegistryDeps & { readonly logger: LoggingService };
 export type ToolSurfaceOptions = {
   /** App-owned local manager, shared across sessions/configured generations.
    * Capture ONCE per surface generation; never connect or close the manager here. */

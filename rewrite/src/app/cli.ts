@@ -29,6 +29,7 @@ import type { InteractivePickerRequest } from '../../../source/services/models/m
 import { HARNESS_IDLE_ENV } from '../../../source/lib/harness-input-idle.js';
 import { isControlSocketName } from '../../../source/services/control-socket/control-socket.js';
 import { createAppSettings } from './settings.js';
+import { runLogin, runListModelsCommand } from './cli-account-commands.js';
 import { listNativeConversations, resolveNativeResume } from './cli-conversations.js';
 import {
   launchDirect,
@@ -172,65 +173,6 @@ async function runWithSignals(request: DirectHeadlessRequest): Promise<{
   turnHasStarted = handle.turnActive();
   const result = await handle.result;
   return { kind: result.kind, ...(receivedSignal === undefined ? {} : { signal: receivedSignal }) };
-}
-
-/** The browser login's prompts, written as the current CLI writes them (source/cli.tsx). */
-function oauthLoginIo(providerLabel: string) {
-  return {
-    pasteInput: stdin.isTTY ? stdin : undefined,
-    onPasteRejected: (message: string) => {
-      console.error(message);
-    },
-    onPrompt: (url: string) => {
-      console.log(`Opening your browser to log in to ${providerLabel}.`);
-      console.log(`If it does not open, visit:\n${url}\n`);
-      console.log(
-        'If you are remote and the browser cannot reach this machine, copy the redirected localhost URL from the address bar (or just its code), paste it here, and press Enter.',
-      );
-    },
-  };
-}
-
-async function runLogin(provider: 'grok' | 'codex'): Promise<number> {
-  if (provider === 'grok') {
-    const { loginToGrok } = await import('../../../source/providers/grok-auth.js');
-    try {
-      const tokens = await loginToGrok(oauthLoginIo('Grok'));
-      console.log(`Logged in to Grok${tokens.email ? ` as ${tokens.email}` : ''}.`);
-      return 0;
-    } catch (error) {
-      console.error(`Grok login failed: ${errorMessage(error)}`);
-      return 1;
-    }
-  }
-  const { loginToCodex } = await import('../../../source/providers/codex-auth.js');
-  try {
-    await loginToCodex(oauthLoginIo('Codex'));
-    console.log('Logged in to Codex.');
-    return 0;
-  } catch (error) {
-    console.error(`Codex login failed: ${errorMessage(error)}`);
-    return 1;
-  }
-}
-
-async function runListModelsCommand(search: string | null, refresh: boolean): Promise<number> {
-  const { runListModels } = await import('../../../source/services/models/model-listing.js');
-  const { service: listingSettings } = createAppSettings({
-    env: buildEnvOverrides(),
-    loggingServiceOptions: { sessionContextService: new SessionContextService() },
-  });
-  const listingLogger = listingSettings.getLoggingService();
-  const outcome = await runListModels({
-    settingsService: listingSettings,
-    loggingService: listingLogger,
-    ...(search === null ? {} : { search }),
-    refresh,
-  });
-  for (const warning of outcome.warnings) stderr.write(`${warning}\n`);
-  if (outcome.error) stderr.write(`${outcome.error}\n`);
-  if (outcome.output) stdout.write(`${outcome.output}\n`);
-  return outcome.exitCode;
 }
 
 /**

@@ -67,3 +67,34 @@ projection receives the same explicit live/reopen recovery policy as before.
 `replay-rotation.ts` validates command-correlated rotations and priority handoffs.
 Only the root projector clears provider slots after a validated rotation; queue,
 background tasks, costs, goals and notices remain accepted audit state.
+
+## Native completion verification task budgets
+
+`createDirectGoalVerifier` identifies a verification task by logical Session ID
+and durable goal ID, not goal generation or workspace revision. The first accepted
+`completion_verification_started` fact pins the existing three native count
+limits. App assembly reads `agent.verificationMaxRepairs` for that new task (0–10,
+default 3); the gate and verification ceilings remain 4 each. Larger repair
+settings are upper bounds, not a promise to bypass those ceilings.
+
+Replay treats started facts without `limits` as the historical 3/4/4 budget.
+Later attempts must retain the first task pin, including across restart, setting
+changes, goal reopening with the same ID, and runtime reconfiguration. A fresh
+goal ID creates a new task. Generation remains a stale-callback fence, not a
+budget reset. No verification database or migration is involved in this native
+path; the source completion boundary retains its separate persisted-record owner.
+
+Only an accepted FAIL can admit a repair, and only while the accepted repair
+count is below the pinned maximum. Exhaustion returns the existing typed blocked
+completion result; it neither achieves the goal nor deletes partial work,
+context, reports or facts. PASS, inconclusive/error and cancellation keep their
+existing settlement paths. An unfinished attempt is not redispatched on reopen.
+Recovery uses existing explicit goal/recovery actions, not a setting increase on
+the same task. Rolling back this wiring loses custom-budget enforcement on older
+binaries; it does not remove accepted work.
+
+The defect was possible because app assembly omitted the already-declared limit
+capability while the native attempt projection retained counts but no budget.
+Keeping the pin in the existing validated started fact prevents live settings
+from silently rewriting a task's policy and makes conflicting replay pins fail
+at the same append-before-publication boundary as other context transitions.

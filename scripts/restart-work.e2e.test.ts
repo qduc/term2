@@ -1,3 +1,4 @@
+import { testCliPath } from '../source/test-helpers/terminal-e2e.js';
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { connect } from 'node:net';
@@ -159,7 +160,7 @@ it
       const child = await workspace.start({
         command: process.execPath,
         args: [
-          resolve('dist/cli.js'),
+          testCliPath(resolve('dist/cli.js')),
           '--profile',
           'bare',
           '--control-socket=restart-work',

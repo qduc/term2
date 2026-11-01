@@ -1,5 +1,11 @@
 import { spawn } from 'node:child_process';
 import { stripVTControlCharacters } from 'node:util';
+import path from 'node:path';
+
+/** Resolve an explicitly selected CLI before fixtures change cwd or filter env. */
+export function testCliPath(fallback: string): string {
+  return process.env.TERM2_TEST_CLI ? path.resolve(process.env.TERM2_TEST_CLI) : fallback;
+}
 
 export type TerminalExit = {
   exitCode: number;

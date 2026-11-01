@@ -1,8 +1,25 @@
-/** Server-owned agent-wire v2 envelope adaptation. The shared v2 parser/artifact is not
- * bundled yet; these structural types mirror the authoritative source contract pending that
- * artifact. One accepted envelope is one real FactLine boundary and one SSE cursor.
+/** Server-owned agent-wire v2 envelope adaptation. This source imports the exact
+ * shared v2 exports; the pinned 0.1.0 artifact does not contain them yet, so
+ * compilation/activation waits for the packaged 0.2.0 artifact and pin update.
+ * One accepted envelope is one real FactLine boundary and one SSE cursor.
  */
-import type { AgentEventType } from '@qduc/agent-wire';
+import type {
+  AgentAcceptedChangeTypeV2,
+  AgentAcceptedEnvelopeV2,
+  AgentBranchV2,
+  AgentChangeTypeV2,
+  AgentConfigurationV2,
+  AgentConfigureCommandResultV2,
+  AgentConfigureOutcomeV2,
+  AgentConfigureReceiptV2,
+  AgentConfigureResultV2,
+  AgentConfigureSelectionV2,
+  AgentEventEnvelopeV2,
+  AgentLiveChangeTypeV2,
+  AgentLiveEnvelopeV2,
+  AgentReasoningV2,
+} from '@qduc/agent-wire';
+import { AGENT_CHANGE_TYPES_V2, AGENT_LIVE_CHANGE_TYPES_V2 } from '@qduc/agent-wire';
 import type {
   WireCommandReceipt,
   WireCommandResult,
@@ -22,136 +39,36 @@ import { ServerHttpError } from './server-errors.js';
  * browser/BFF migration. Do not flip this to claim support from the pinned v1 package. */
 export const AGENT_WIRE_V2_RUNTIME_AVAILABLE: boolean = false;
 
-export type AgentWireV2ChangeType =
-  | AgentEventType
-  | 'queue_changed'
-  | 'session_rotated'
-  | 'reasoning'
-  | 'message'
-  | 'task_changed'
-  | 'tool_called'
-  | 'error'
-  | 'tool_progress'
-  | 'tool_call_streaming_delta'
-  | 'task_progress'
-  | 'automatic_memory_notice'
-  | 'command_started'
-  | 'command_finished'
-  | 'history_replaced'
-  | 'configuration'
-  | 'cost'
-  | 'request_cost_recorded'
-  | 'goal'
-  | 'goal_proposed'
-  | 'verification'
-  | 'notice'
-  | 'background_notice_enqueued'
-  | 'background_notices_delivered';
+/** Public aliases to the exact shared v2 exports. No local vocabulary copy. */
+export type AgentWireV2ChangeType = AgentChangeTypeV2;
+export type AgentWireV2Branch = AgentBranchV2;
+export type AgentWireV2AcceptedChangeType = AgentAcceptedChangeTypeV2;
+export type AgentWireV2LiveChangeType = AgentLiveChangeTypeV2;
+export type AgentWireV2AcceptedChange = AgentAcceptedEnvelopeV2['changes'][number];
+export type AgentWireV2LiveChange = AgentLiveEnvelopeV2['changes'][number];
+export type AgentWireV2Accepted = AgentAcceptedEnvelopeV2;
+export type AgentWireV2Live = AgentLiveEnvelopeV2;
+export type AgentWireV2Envelope = AgentEventEnvelopeV2;
+export type { AgentConfigureCommandResultV2, AgentConfigureResultV2 } from '@qduc/agent-wire';
 
-/** Must match the shared source's v2 live allowlist. A live batch cannot carry durable state. */
-const LIVE_CHANGE_TYPES = new Set<AgentWireV2ChangeType>([
-  'reasoning_delta',
-  'error',
-  // DirectProjection.synchronize emits a null-seq turn_ended after a fresh
-  // runtime error. Keep that real transient terminal live-only; it must never
-  // acquire an accepted cursor. The canonical failed terminal is the smallest
-  // existing payload that settles the client without inventing durable history.
-  'turn_failed',
-  'tool_progress',
-  'tool_call_streaming_delta',
-  'task_progress',
-  'automatic_memory_notice',
-  'retry',
-  'retry_exhausted',
-]);
-
-export type AgentWireV2Branch = {
-  readonly branchId: string;
-  readonly taskId: string;
-  readonly turnId: string;
-  readonly parentTurnId?: string;
-  readonly rootTurnId?: string;
-};
-
-export type AgentWireV2Change = {
-  readonly type: AgentWireV2ChangeType;
-  /** Native/public payload. The shared parser owns final structural validation. */
+/** Internal unvalidated projection draft. The shared exports above own the
+ * accepted/live vocabulary; the shared parser owns payload validation. */
+type AgentWireV2ChangeDraft = {
+  readonly type: AgentChangeTypeV2;
   readonly payload: unknown;
-  readonly branch?: AgentWireV2Branch;
+  readonly branch?: AgentBranchV2;
 };
 
-/** Mirrors shared AgentAcceptedChangeTypeV2: accepted names never include error. */
-export type AgentWireV2AcceptedChangeType = Exclude<AgentWireV2ChangeType, 'error'>;
-/** Mirrors shared AgentLiveChangeTypeV2; `turn_failed` remains an accepted name too. */
-export type AgentWireV2LiveChangeType =
-  | 'reasoning_delta'
-  | 'tool_progress'
-  | 'tool_call_streaming_delta'
-  | 'task_progress'
-  | 'automatic_memory_notice'
-  | 'retry'
-  | 'retry_exhausted'
-  | 'error'
-  | 'turn_failed';
-export type AgentWireV2AcceptedChange = AgentWireV2Change & { readonly type: AgentWireV2AcceptedChangeType };
-export type AgentWireV2LiveChange = AgentWireV2Change & { readonly type: AgentWireV2LiveChangeType };
+/** Exact shared runtime allowlists. Accepted and live are intentionally separate:
+ * accepted envelopes never contain `error`; live envelopes may contain error and
+ * the synchronized `turn_failed` companion. */
+const ACCEPTED_CHANGE_TYPES = new Set<string>(AGENT_CHANGE_TYPES_V2);
+const LIVE_CHANGE_TYPES = new Set<string>(AGENT_LIVE_CHANGE_TYPES_V2);
 
-export type AgentWireV2Accepted = {
-  readonly schemaVersion: 2;
-  readonly kind: 'accepted';
-  readonly sessionId: string;
-  readonly seq: number;
-  readonly occurredAt: string;
-  readonly changes: readonly AgentWireV2AcceptedChange[];
-};
-
-export type AgentWireV2Live = {
-  readonly schemaVersion: 2;
-  readonly kind: 'live';
-  readonly sessionId: string;
-  readonly changes: readonly AgentWireV2LiveChange[];
-};
-
-export type AgentWireV2Envelope = AgentWireV2Accepted | AgentWireV2Live;
-
-type AgentReasoningV2 = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
-type AgentConfigurationV2 = { readonly model: WireModel; readonly reasoning?: AgentReasoningV2; readonly temperature?: number };
-type AgentConfigureSelectionV2 = {
-  readonly model?: WireModel;
-  readonly reasoning?: 'default' | AgentReasoningV2;
-  readonly temperature?: number;
-  readonly profileId?: string;
-};
-type AgentConfigureOutcomeV2 =
-  | { readonly kind: 'configured'; readonly configuration: AgentConfigurationV2 }
-  | { readonly kind: 'rejected'; readonly code: 'ineligible' | 'stale' | 'busy' | 'unavailable' | 'cancelled' | 'failed'; readonly message: string }
-  | { readonly kind: 'interrupted'; readonly reason: 'outcome_unobserved' };
-type AgentConfigureReceiptV2 = {
-  readonly request: {
-    readonly commandId: string;
-    readonly operation: { readonly kind: 'configure'; readonly configuration: AgentConfigureSelectionV2 };
-    readonly admission?: 'idle';
-    readonly expectedRevision?: string;
-  };
-  readonly revision: string;
-  readonly outcome?: AgentConfigureOutcomeV2;
-};
 type ConfigureNonReceiptCode =
   | 'invalid_command' | 'unavailable' | 'stale_interaction' | 'request_conflict' | 'rejected'
   | 'closed' | 'not_found' | 'forbidden' | 'storage_failure' | 'too_late'
   | 'internal_error' | 'replay_unavailable' | 'not_admitting';
-export type AgentConfigureCommandResultV2 =
-  | { readonly ok: true; readonly kind: 'command_pending'; readonly replayed?: boolean; readonly receipt: AgentConfigureReceiptV2 & { readonly outcome?: never } }
-  | { readonly ok: true; readonly kind: 'command_finished'; readonly replayed?: boolean; readonly receipt: AgentConfigureReceiptV2 & { readonly outcome: Extract<AgentConfigureOutcomeV2, { kind: 'configured' }> } }
-  | { readonly ok: false; readonly code: 'command_rejected'; readonly replayed?: boolean; readonly commandId: string; readonly message: string; readonly receipt: AgentConfigureReceiptV2 & { readonly outcome: Extract<AgentConfigureOutcomeV2, { kind: 'rejected' }> } }
-  | { readonly ok: false; readonly code: 'command_interrupted'; readonly replayed?: boolean; readonly commandId: string; readonly message: string; readonly receipt: AgentConfigureReceiptV2 & { readonly outcome: Extract<AgentConfigureOutcomeV2, { kind: 'interrupted' }> } }
-  | { readonly ok: false; readonly code: ConfigureNonReceiptCode; readonly message: string; readonly commandId?: string };
-
-export type AgentConfigureResultV2 = {
-  readonly schemaVersion: 2;
-  readonly sessionId: string;
-  readonly result: AgentConfigureCommandResultV2;
-};
 
 /** Project one public event. Accepted boundaries always carry their original seq/at; live-only
  * events never acquire a synthetic cursor. Non-public snapshot/state updates do not emit frames. */
@@ -184,12 +101,12 @@ export function encodeAgentWireV2(
   };
 }
 
-function isLiveChange(change: AgentWireV2Change): change is AgentWireV2LiveChange {
+function isLiveChange(change: AgentWireV2ChangeDraft): change is AgentWireV2LiveChange {
   return LIVE_CHANGE_TYPES.has(change.type);
 }
 
-function isAcceptedChange(change: AgentWireV2Change): change is AgentWireV2AcceptedChange {
-  return change.type !== 'error';
+function isAcceptedChange(change: AgentWireV2ChangeDraft): change is AgentWireV2AcceptedChange {
+  return ACCEPTED_CHANGE_TYPES.has(change.type);
 }
 
 /** Convert a native configure result into the exact shared v2 response shape. The conversion
@@ -207,7 +124,7 @@ function changesFor(
   interactions: ServerInteractions,
   context: CanonicalEventContext,
   branch?: AgentWireV2Branch,
-): AgentWireV2Change[] {
+): AgentWireV2ChangeDraft[] {
   if (event.type === 'snapshot') return [];
   if (event.type === 'subagent') return subagentChanges(event, interactions, context);
   const exact = exactChange(event, branch);
@@ -224,7 +141,7 @@ function subagentChanges(
   event: Extract<WireEvent, { type: 'subagent' }>,
   interactions: ServerInteractions,
   context: CanonicalEventContext,
-): AgentWireV2Change[] {
+): AgentWireV2ChangeDraft[] {
   const { branchId, turnId, agentId, parentTurnId, rootTurnId } = event.payload;
   if (!branchId || !turnId)
     return unavailable('branch v2 change requires accepted branch and turn identity');
@@ -238,7 +155,7 @@ function subagentChanges(
   return changesFor(event.payload.event, interactions, context, branch);
 }
 
-function exactChange(event: WireEvent, branch?: AgentWireV2Branch): AgentWireV2Change | null {
+function exactChange(event: WireEvent, branch?: AgentWireV2Branch): AgentWireV2ChangeDraft | null {
   switch (event.type) {
     case 'queue_changed':
       return change({ type: 'queue_changed', payload: event.payload }, branch);
@@ -329,7 +246,7 @@ function exactChange(event: WireEvent, branch?: AgentWireV2Branch): AgentWireV2C
   }
 }
 
-function change(candidate: { readonly type: AgentWireV2ChangeType; readonly payload: unknown }, branch?: AgentWireV2Branch): AgentWireV2Change {
+function change(candidate: { readonly type: AgentWireV2ChangeType; readonly payload: unknown }, branch?: AgentWireV2Branch): AgentWireV2ChangeDraft {
   return {
     type: candidate.type,
     payload: candidate.payload,

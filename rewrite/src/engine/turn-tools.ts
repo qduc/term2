@@ -289,6 +289,7 @@ export class TurnTools {
       runNested: (request) => {
         const parent = current();
         this.#checkBody(parent);
+        this.#checkStart(parent);
         if (!this.deps.runNested) throw new Error('Direct nested execution is not configured');
         const work = this.deps.runNested(request, {
           turnId: this.spec.turnId,

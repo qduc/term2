@@ -1,7 +1,10 @@
 import type { NormalizedUsage } from '../../../utils/ai/token-usage.js';
 import type { RunOutputFormat } from '../types.js';
 
-export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
+import type { JsonValue } from '../../../utils/json-value.js';
+
+// Preserve the workflow API while the transport contract lives below its consumers.
+export { isJsonValue, type JsonValue } from '../../../utils/json-value.js';
 
 export interface WorkflowAgentConfig {
   name?: string;
@@ -75,15 +78,4 @@ export const DEFAULT_WORKFLOW_LIMITS: WorkflowLimits = {
 
 export interface WorkflowEvaluator {
   evaluate(input: WorkflowInput): Promise<WorkflowResult>;
-}
-
-export function isJsonValue(value: unknown, ancestors = new Set<object>()): value is JsonValue {
-  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
-  if (typeof value === 'number') return Number.isFinite(value);
-  if (typeof value !== 'object' || ancestors.has(value as object)) return false;
-  ancestors.add(value as object);
-  const values = Array.isArray(value) ? value : Object.values(value as Record<string, unknown>);
-  const valid = values.every((item) => isJsonValue(item, ancestors));
-  ancestors.delete(value as object);
-  return valid;
 }

@@ -47,6 +47,16 @@ pieces together for production.
   parked in memory under that checkpoint, so a decision continues it.
 - **Names are jobs.** No layer is called service, adapter or orchestrator.
 
+## Shared JSON transport contract
+
+`source/utils/json-value.ts` owns `JsonValue` and `isJsonValue` for workflow,
+sandbox-host and scripted tool-return consumers. The type and validator are
+transport primitives, not workflow policy: importing the workflow domain from
+these tool leaves inverted ownership. Workflow and host type modules retain
+their existing exports for callers. Moving the implementation does not change
+which values validate; in particular finite numbers and shared acyclic objects
+remain accepted, while ancestor cycles are rejected.
+
 ## Native tracer fixture
 
 The pre-C2 native engine example is isolated under `bench/native-tracer/` with

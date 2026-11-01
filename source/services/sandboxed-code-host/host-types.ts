@@ -1,4 +1,4 @@
-import type { JsonValue } from '../agent-runtime/workflow/workflow-types.js';
+import type { JsonValue } from '../../utils/json-value.js';
 
 export type { JsonValue };
 

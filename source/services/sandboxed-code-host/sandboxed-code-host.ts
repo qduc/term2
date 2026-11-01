@@ -1,5 +1,5 @@
 import type { Worker } from 'node:worker_threads';
-import { isJsonValue, type JsonValue } from '../agent-runtime/workflow/workflow-types.js';
+import { isJsonValue, type JsonValue } from '../../utils/json-value.js';
 import { createSandbox, serializeSandboxInputData } from './sandbox.js';
 import {
   isCapabilityOutcome,

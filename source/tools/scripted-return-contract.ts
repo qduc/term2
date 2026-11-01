@@ -1,5 +1,5 @@
 import { z, type ZodTypeAny } from 'zod';
-import { isJsonValue, type JsonValue } from '../services/agent-runtime/workflow/workflow-types.js';
+import { isJsonValue, type JsonValue } from '../utils/json-value.js';
 import type { AnyToolDefinition } from './types.js';
 
 /** The two runtime states; prose is intentionally not a third contract state. */

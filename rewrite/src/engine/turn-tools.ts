@@ -12,9 +12,10 @@ import type {
   ToolResult,
   ToolRegistry,
 } from '../tools/index.js';
-import type { InteractionRequest, TurnDeps, TurnSpec } from './direct-types.js';
+import type { TurnDeps, TurnSpec } from './direct-types.js';
 import { NativeBudgetExhausted, type TurnBudgetControl } from './turn-budget.js';
 import { TurnEvents, cancelled } from './turn-events.js';
+import { TurnToolInteractions } from './turn-tool-interactions.js';
 
 type CallItem = Extract<Item, { type: 'tool_call' }>;
 type Execution = {
@@ -43,12 +44,6 @@ type Plan = {
   readonly parallelSafe: boolean;
   readonly result?: ToolResult;
 };
-type PendingInteraction = {
-  readonly request: InteractionRequest;
-  ready: boolean;
-  resolve(decision: InteractionDecision): void;
-  reject(error: Error): void;
-};
 type StopTarget = {
   executionId?: ExecutionId;
   readonly parentExecutionId?: ExecutionId;
@@ -62,10 +57,9 @@ export class TurnTools {
   #physicalCalls = 0;
   #completed = 0;
   readonly #scope = new AsyncLocalStorage<Execution>();
-  readonly #interactions = new Map<InteractionRequestId, PendingInteraction>();
+  readonly #interactions: TurnToolInteractions;
   readonly #running = new Set<Promise<unknown>>();
   #executionOrdinal = 0;
-  #questionOrdinal = 0;
   #closed = false;
   #stop: StopTarget | undefined;
 
@@ -78,6 +72,7 @@ export class TurnTools {
   ) {
     this.#offered = new Set(spec.tools.map((tool) => tool.name));
     this.#registry = deps.tools;
+    this.#interactions = new TurnToolInteractions(spec, deps, signal, events, budget);
   }
 
   /** Bind declarations AND execution authority to this actual request snapshot. */
@@ -146,18 +141,12 @@ export class TurnTools {
 
   /** Only a live, durably opened request can consume a matching decision. */
   answer(id: InteractionRequestId, decision: InteractionDecision): void {
-    const pending = this.#interactions.get(id);
-    if (!pending?.ready || this.#closed || this.signal.aborted) return;
-    if (pending.request.kind === 'approval' && decision.kind === 'answer') return;
-    if (pending.request.kind === 'question' && decision.kind === 'allow') return;
-    this.#interactions.delete(id);
-    pending.resolve(decision);
+    this.#interactions.answer(id, decision);
   }
 
   cancel(): void {
     this.#closed = true;
-    for (const pending of this.#interactions.values()) pending.reject(cancelled());
-    this.#interactions.clear();
+    this.#interactions.cancel();
   }
 
   async cleanup(): Promise<void> {
@@ -399,37 +388,13 @@ export class TurnTools {
     const nested =
       input.toolName !== execution.toolName ||
       (input.sourceCallId !== undefined && input.sourceCallId !== execution.callId);
-    const request: InteractionRequest = {
-      ...input,
-      requestId: `${this.spec.turnId}:question:${++this.#questionOrdinal}` as InteractionRequestId,
-      turnId: this.spec.turnId,
-      ...(nested
-        ? { parentExecutionId: execution.executionId }
-        : {
-            executionId: execution.executionId,
-            ...(execution.parentExecutionId ? { parentExecutionId: execution.parentExecutionId } : {}),
-          }),
-    };
-    const decision = new Promise<InteractionDecision>((resolve, reject) => {
-      this.#interactions.set(request.requestId, { request, ready: false, resolve, reject });
-    });
-    void decision.catch(() => {});
-    try {
-      await this.events.publish({ type: 'interaction_required', request }, () => {
-        const pending = this.#interactions.get(request.requestId);
-        if (pending) pending.ready = true;
-      });
-      const answer = await this.budget.humanWait(() => decision);
-      this.#check();
-      if (answer.stopAfterApprovalResolution || (request.kind === 'question' && answer.kind === 'deny')) {
-        this.#stop ??= nested
-          ? { parentExecutionId: execution.executionId, toolName: input.toolName, sourceCallId: input.sourceCallId }
-          : { executionId: execution.executionId, toolName: input.toolName };
-      }
-      return answer;
-    } finally {
-      this.#interactions.delete(request.requestId);
+    const answer = await this.#interactions.request(execution, input);
+    if (answer.stopAfterApprovalResolution || (input.kind === 'question' && answer.kind === 'deny')) {
+      this.#stop ??= nested
+        ? { parentExecutionId: execution.executionId, toolName: input.toolName, sourceCallId: input.sourceCallId }
+        : { executionId: execution.executionId, toolName: input.toolName };
     }
+    return answer;
   }
 
   #rawArguments(execution: Execution): string {

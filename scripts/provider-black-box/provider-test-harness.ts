@@ -518,6 +518,9 @@ function createPtyChild(options: {
     visibleOutput = stripVTControlCharacters(output);
   };
 
+  // Preserve UTF-8 characters split across arbitrary PTY pipe chunks.
+  terminal.stdout?.setEncoding('utf8');
+  terminal.stderr?.setEncoding('utf8');
   terminal.stdout?.on('data', appendOutput);
   terminal.stderr?.on('data', appendOutput);
   terminal.on('error', (error) => {

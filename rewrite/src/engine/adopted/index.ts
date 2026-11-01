@@ -13,16 +13,15 @@ import type { AgentStream } from '../../../../source/services/agent-stream.js';
 import type { ApplicationRunEvent } from '../../../../source/contracts/application-stream.js';
 import type { Item, ToolCallId } from '../../model/index.js';
 export { createAdoptedToolContext, createRunNested, type AdoptedNestedBinding } from './nested.js';
-import type { AdoptedModelRegistry } from '../../model/adopted/index.js';
+import type { AdoptedEngineDeps } from './dependencies.js';
 import { convertSourceItems } from './conversion.js';
-import type { AdoptedToolRegistry } from '../../tools/adopted/index.js';
+import type { OriginalToolCatalog } from './tool-catalog.js';
 import { isAdoptedSettingsPair } from '../../config/adopted/settings.js';
 import type {
   ApprovalDecision,
   ApprovalRequest,
   CheckpointId,
   Engine,
-  EngineDeps,
   EngineEvent,
   TurnCheckpoint,
   TurnId,
@@ -216,7 +215,7 @@ const failure = (message: string): EngineEvent => ({
 
 /** Adapter lifecycle over the real application client. Binding of its dependencies is supplied by the adopted composition. */
 export function createAdoptedEngine(options: {
-  readonly deps: EngineDeps & { readonly models: AdoptedModelRegistry; readonly tools: AdoptedToolRegistry };
+  readonly deps: AdoptedEngineDeps;
   readonly clientOptions: Omit<
     ConstructorParameters<typeof AgentClient>[0],
     | 'driverFactory'
@@ -277,7 +276,7 @@ export function createAdoptedEngine(options: {
     },
     selectApplicationAgent: (agent) => {
       if (!selectedInput) throw new Error('No adopted turn is active');
-      let tools: ReturnType<AdoptedToolRegistry['originals']>;
+      let tools: ReturnType<OriginalToolCatalog['originals']>;
       try {
         tools = deps.tools.originals(selectedInput.toolNames);
       } catch {

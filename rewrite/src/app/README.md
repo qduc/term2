@@ -242,3 +242,12 @@ the existing durable background-notice lane. Raw progress
 and watch buffers do not survive process loss; unfinished recovered tasks become
 interrupted, not reattached subprocesses. Sandbox post-execution pauses are not
 introduced by this bridge.
+
+## Historical source tool catalog
+
+`adopted/agent-tools.ts` still assembles source generations for the historical
+engine bridge and benches. Its `engine/adopted/tool-catalog.ts` catalog retains
+source-definition identity, ordered lookup and atomic generation replacement;
+it does not implement native parsing, approval, execution or display. The native
+CLI uses `source-tools.ts` for that adaptation. Keeping only the catalog avoids
+maintaining a second, unused source-to-native tool adapter.

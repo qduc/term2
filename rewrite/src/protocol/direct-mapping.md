@@ -344,8 +344,7 @@ may omit rootTurnId; it remains absent, not guessed from the latest session turn
 ## Accepted source-formatted command slice and concrete cost dependencies
 
 `direct-json.ts#legacyCommandMessages` consumes only the accepted `tool_finished`
-public display. Native `app/source-tools.ts#displayFor` and
-`tools/adopted/index.ts#displayFor` retain the actual source `formatCommandMessage`
+public display. Native `app/source-tools.ts#displayFor` retains the actual source `formatCommandMessage`
 array, optionally wrapped with `messages`/`approvalPresentation`. The helper
 recognizes those existing `CommandMessage` DTOs and clones them to exact
 `command_message` records, retaining actual identity/sender/status/output and

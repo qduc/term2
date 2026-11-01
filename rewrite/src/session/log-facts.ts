@@ -585,6 +585,27 @@ export function validateFact(fact: Record<string, unknown>, where: string, scope
             seen.add(name);
           }
         }
+        // Absent stays unknown. [] is an accepted observation of no physical starts.
+        // Do not derive counts from toolsUsed, labels, output, or call names.
+        if (typeof value === 'object' && value !== null && !Array.isArray(value) && 'toolUseCounts' in value) {
+          const toolUseCounts = (value as Record<string, unknown>)['toolUseCounts'];
+          if (!Array.isArray(toolUseCounts)) fail('result.value.toolUseCounts');
+          const seen = new Set<string>();
+          for (const entry of toolUseCounts) {
+            if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) fail('result.value.toolUseCounts');
+            const record = entry as Record<string, unknown>;
+            const keys = Object.keys(record);
+            if (keys.length !== 2 || !keys.includes('toolName') || !keys.includes('count'))
+              fail('result.value.toolUseCounts');
+            const toolName = record['toolName'];
+            const count = record['count'];
+            if (typeof toolName !== 'string' || toolName.length === 0 || seen.has(toolName))
+              fail('result.value.toolUseCounts');
+            if (typeof count !== 'number' || !Number.isSafeInteger(count) || count < 1)
+              fail('result.value.toolUseCounts');
+            seen.add(toolName);
+          }
+        }
         if (result['kind'] === 'failed') {
           const error = object(result['error'], 'result.error');
           if (

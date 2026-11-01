@@ -1,4 +1,5 @@
 /** `/restart`: hand this session to a freshly loaded process, once nothing here can write to it. */
+import fs from 'node:fs';
 import { createRestartPlan } from '../../../source/utils/process-restart.js';
 import type { WireCommand, WireCommandResult, WireSnapshot } from '../protocol/direct-wire.js';
 import type { DirectApplication } from './direct-application.js';
@@ -6,13 +7,17 @@ import type { DirectControlBridge, DirectControlHold } from './direct-launch-con
 
 export type DirectRestartPlan = ReturnType<typeof createRestartPlan>;
 
-/** Only runners that re-exec cleanly. The source check also pins `dist/cli.js`, which this entry is not. */
+/** Reject unusable entries before releasing the current session; do not pin the legacy build layout. */
 function assertSupported(): void {
   if (process.platform === 'win32' || typeof process.execve !== 'function') {
     throw new Error('In-place restart requires POSIX Node with process.execve support.');
   }
   if (process.execArgv.length || process.env.NODE_OPTIONS?.trim()) {
     throw new Error('In-place restart does not support Node flags, loaders or NODE_OPTIONS.');
+  }
+  const entry = process.argv[1];
+  if (!entry || !fs.statSync(entry).isFile()) {
+    throw new Error('In-place restart requires the current built CLI entry.');
   }
 }
 
@@ -76,7 +81,16 @@ export async function prepareRestart(
   ssh: RestartTarget,
   stopTasks?: (command: WireCommand) => Promise<WireCommandResult>,
 ): Promise<DirectRestartPlan> {
-  assertSupported();
+  const restart = plan(latest(), app, bridge, ssh);
+  try {
+    assertSupported();
+  } catch (error) {
+    throw new Error(
+      `Restart failed: ${error instanceof Error ? error.message : String(error)}\nManual resume: ${
+        restart.manualCommand
+      }`,
+    );
+  }
   assertIdle(latest(), stopTasks !== undefined);
   const hold: DirectControlHold | undefined = bridge.hold();
   try {

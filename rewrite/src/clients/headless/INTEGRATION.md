@@ -114,7 +114,8 @@ conversation storage.
   slices available from protocol (`text_delta`, `reasoning_delta`,
   `tool_call_streaming_delta`, `cost_update`, and complete source
   `command_message` records), and the authoritative `final` from
-  `WireTerminal.finalWindow`. That final preserves per-turn public `turnItems`,
+  `WireTerminal.finalWindow`. `session_start.legacyJson` declares the exact live
+  families and the unavailable families; the final preserves per-turn public `turnItems`,
   usage, root-tree costs, ordered items and terminal cause; command messages
   already emitted live are excluded. Its `legacyCoverage` field records the
   producer's public-item/summary/usage/command/cost limits. A terminal without a

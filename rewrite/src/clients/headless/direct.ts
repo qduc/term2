@@ -47,6 +47,32 @@ const RECOVERABLE_ERROR_KINDS = new Set([
   'provider_context_overflow',
   'context_paused',
 ]);
+/** Bounded legacy NDJSON declaration: consumers can see exactly what is exact and
+ * what remains unavailable instead of treating the stream as full old parity. */
+const LEGACY_JSON_LIVE_RECORDS = [
+  'text_delta',
+  'reasoning_delta',
+  'tool_call_streaming_delta',
+  'cost_update',
+  'command_message',
+] as const;
+const LEGACY_JSON_UNAVAILABLE = [
+  'providerHistory',
+  'approval_required',
+  'tool_started',
+  'tool_dispatched',
+  'reasoning_started',
+  'retry',
+  'retry_exhausted',
+  'tool_recovery',
+  'memory_injected',
+  'usage_update',
+  'run_budget',
+  'context_compaction_started',
+  'context_compaction_completed',
+  'context_compaction_failed',
+  'background_subagent_events',
+] as const;
 
 /**
  * The conservative headless policy. Without `--auto-approve` every tool
@@ -166,7 +192,16 @@ export async function runDirectHeadless(
   const json = (record: unknown): void => {
     io.stdout.write(`${JSON.stringify(record)}\n`);
   };
-  if (output === 'json') json({ type: 'session_start', ...(options.profileMetadata ?? {}) });
+  if (output === 'json')
+    json({
+      type: 'session_start',
+      ...(options.profileMetadata ?? {}),
+      legacyJson: {
+        finalWindow: 'public-turn-v1',
+        liveRecords: [...LEGACY_JSON_LIVE_RECORDS],
+        unavailable: [...LEGACY_JSON_UNAVAILABLE],
+      },
+    });
 
   const errorText = (message: string, code?: string): void => {
     if (output === 'json') {

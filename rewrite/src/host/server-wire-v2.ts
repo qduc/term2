@@ -23,6 +23,7 @@ import { AGENT_CHANGE_TYPES_V2, AGENT_LIVE_CHANGE_TYPES_V2 } from '@qduc/agent-w
 import type {
   WireCommandReceipt,
   WireCommandResult,
+  WireConfigureRequest,
   WireConfiguration,
   WireEvent,
   WireModel,
@@ -335,6 +336,15 @@ function configureResult(result: WireCommandResult): AgentConfigureCommandResult
   };
 }
 
+/** Exact requested selection; preserve optionality and never synthesize a default. */
+function configureSelection(configuration: WireConfigureRequest): AgentConfigureSelectionV2 {
+  return {
+    ...(configuration.model !== undefined ? { model: { ...configuration.model } } : {}),
+    ...(configuration.reasoning !== undefined ? { reasoning: configuration.reasoning } : {}),
+    ...(configuration.temperature !== undefined ? { temperature: configuration.temperature } : {}),
+    ...(configuration.profileId !== undefined ? { profileId: configuration.profileId } : {}),
+  };
+}
 function configureReceiptBase(receipt: WireCommandReceipt): Omit<AgentConfigureReceiptV2, 'outcome'> {
   const request = receipt.request;
   if (request.operation.kind !== 'configure')

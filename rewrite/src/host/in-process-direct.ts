@@ -31,6 +31,8 @@ export function createDirectInProcessHost(deps: DirectHostDeps): DirectHost {
     }
     return pending;
   }
+  function connection(principal: Principal, attached: DirectAttachment): DirectConnection;
+  function connection(principal: Principal, attached: DirectAttachment, fromSeq: number): DirectReplayConnection;
   function connection(principal: Principal, attached: DirectAttachment, fromSeq?: number): DirectConnection | DirectReplayConnection {
     open();
     const view = fromSeq === undefined ? attached.connect() : directReplayView(attached.session, fromSeq);
@@ -86,7 +88,10 @@ export function createDirectInProcessHost(deps: DirectHostDeps): DirectHost {
       if (fromSeq !== undefined && (!Number.isSafeInteger(fromSeq) || fromSeq < 0)) {
         throw new DirectProtocolError('invalid_command', 'Invalid durable replay cursor.');
       }
-      return connection({ ...principal }, await attachment(sessionId), fromSeq);
+      const attached = await attachment(sessionId);
+      return fromSeq === undefined
+        ? connection({ ...principal }, attached)
+        : connection({ ...principal }, attached, fromSeq);
     }) as DirectHost['connect'],
     dispose() {
       if (!disposal) {

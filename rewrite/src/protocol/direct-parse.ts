@@ -81,7 +81,7 @@ export function parseWireOrigin(raw: unknown): WireOrigin {
   if (value.kind === 'control') {
     fields(value, ['kind', 'id', 'source']);
     return { kind: 'control', ...(value.id !== undefined ? { id: id(value.id, 'origin id') } : {}),
-      ...(value.source !== undefined ? { source: choice(value.source, ['orchestrator'], 'control source') } : {}) };
+      ...(value.source !== undefined ? { source: choice(value.source, ['orchestrator'] as const, 'control source') } : {}) };
   }
   fields(value, ['kind', 'id']);
   return { kind: choice(value.kind, ['cli', 'tui', 'acp', 'api'], 'origin'),
@@ -131,7 +131,7 @@ function configureRequest(raw: unknown): WireConfigureRequest {
   }
   if (value.temperature !== undefined && (typeof value.temperature !== 'number' || !Number.isFinite(value.temperature))) invalid('Expected finite temperature');
   return { ...(model ? { model } : {}),
-    ...(value.reasoning !== undefined ? { reasoning: choice(value.reasoning, ['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'], 'reasoning') } : {}),
+    ...(value.reasoning !== undefined ? { reasoning: choice(value.reasoning, ['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const, 'reasoning') } : {}),
     ...(value.temperature !== undefined ? { temperature: value.temperature as number } : {}),
     ...(value.profileId !== undefined ? { profileId: id(value.profileId, 'profileId') } : {}) };
 }
@@ -146,7 +146,7 @@ export function parseWireCommand(raw: unknown): WireCommand {
       return { type: value.type, requestId: id(value.requestId, 'requestId'), text: text(value.text, 'text'),
         ...(value.attachments !== undefined ? { attachments: (value.attachments as unknown[]).map(content) } : {}),
         ...(value.origin !== undefined ? { origin: parseWireOrigin(value.origin) } : {}),
-        ...(value.delivery !== undefined ? { delivery: choice(value.delivery, ['auto', 'steer', 'follow_up', 'reject_if_busy'], 'delivery') } : {}) };
+        ...(value.delivery !== undefined ? { delivery: choice(value.delivery, ['auto', 'steer', 'follow_up', 'reject_if_busy'] as const, 'delivery') } : {}) };
     }
     case 'answer': fields(value, ['type', 'requestId', 'decision', 'provenance']);
       return { type: 'answer', requestId: id(value.requestId, 'requestId'), decision: decision(value.decision), ...(value.provenance !== undefined ? { provenance: provenance(value.provenance) } : {}) };

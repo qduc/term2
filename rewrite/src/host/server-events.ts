@@ -74,7 +74,7 @@ export function canonicalCandidate(
       const messages = legacyCommandMessages(event);
       if (messages.length > 1)
         return missing('canonical command messages require separate accepted boundaries, not shared numeric IDs');
-      if (messages.length === 1) return commandMessageCandidate(event, messages[0]!);
+      if (messages.length === 1) return commandMessageCandidate(event, messages[0]!.message);
       const toolName = event.payload.toolName;
       if (toolName === undefined) return missing('canonical tool results require their accepted execution metadata');
       return {

@@ -92,10 +92,13 @@ export class DirectProjection {
         const task = this.#state.tasks.find(task => task.id === progress.taskId);
         const { type: _type, ...payload } = progress;
         events = [this.#event('task_progress', payload, null, task?.turnId ?? null)];
-      } else events = update.event.type === 'reasoning_delta'
-        ? [this.#event('reasoning_delta', { delta: update.event.delta, modelStep: null, messageId: null }, null, this.#state.activeTurnId)]
-        : [this.#event('tool_progress', { executionId: update.event.executionId, chunk: update.event.chunk }, null,
-          this.#state.tools.find(tool => tool.executionId === update.event.executionId)?.turnId ?? null)];
+      } else if (update.event.type === 'reasoning_delta') {
+        events = [this.#event('reasoning_delta', { delta: update.event.delta, modelStep: null, messageId: null }, null, this.#state.activeTurnId)];
+      } else {
+        const progress = update.event;
+        events = [this.#event('tool_progress', { executionId: progress.executionId, chunk: progress.chunk }, null,
+          this.#state.tools.find(tool => tool.executionId === progress.executionId)?.turnId ?? null)];
+      }
     } else {
       events = this.#fact(update);
     }
@@ -170,10 +173,17 @@ export class DirectProjection {
       case 'background_notices_delivered': return [this.#event('background_notices_delivered', { clientRequestId: fact.clientRequestId, turnId: fact.turnId, notificationIds: [...fact.notificationIds] }, seq, fact.turnId)];
       case 'command_started':
       case 'command_finished': return [commandFactEvent(fact, this.#state, seq)];
+      case 'configuration_changed': return [this.#event('configuration', {
+        model: { provider: fact.configuration.model.provider, model: fact.configuration.model.model },
+        ...(fact.configuration.reasoning !== undefined ? { reasoning: fact.configuration.reasoning } : {}),
+        ...(fact.configuration.temperature !== undefined ? { temperature: fact.configuration.temperature } : {}),
+      }, seq, null)];
       case 'request_cost_recorded': return [this.#event('request_cost_recorded', publicRequestCost(fact), seq, fact.turnId)];
       case 'compaction_started': return [this.#event('compaction_started', publicCompactionStarted(fact), seq, fact.turnId)];
       case 'compaction_completed': return [this.#event('compaction_completed', publicCompactionCompleted(fact), seq, fact.turnId)];
       case 'compaction_failed': return [this.#event('compaction_failed', publicCompactionFailed(fact), seq, fact.turnId)];
+      // Accepted handoff intent; the successor boundary is the public session_rotated frame.
+      case 'rollover_requested': return [];
       case 'session_rotated': return [this.#event('session_rotated', {
         logicalSessionId: fact.logicalSessionId,
         backingSessionId: fact.sessionId,

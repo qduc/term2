@@ -6,7 +6,7 @@ import type { TuiProps } from './integration.js';
 import type { WireRewindTarget, WireSubmission } from '../../protocol/direct-wire.js';
 import { useTheme } from '../../../../source/components/theme.js';
 import { useSkin } from '../../../../source/skins/SkinContext.js';
-import { DEFAULT_SETTINGS } from '../../../../source/services/settings/settings-schema.js';
+import { terminalPreferenceDefaults } from '../../host/terminal-preference-defaults.js';
 import { useClient } from './use-client.js';
 import { Activity } from './views.js';
 import { InteractionPanel } from './interaction-panel.js';
@@ -51,7 +51,7 @@ export function TuiSession({
   readonly transitionNotice?: string;
 }): React.ReactElement {
   const { state, error: connectionError } = useClient(connection, retainedSnapshot, onSnapshot, onLiveEvent);
-  const preferences = integration.preferences?.(connection.sessionId) ?? DEFAULT_SETTINGS.ui;
+  const preferences = integration.preferences?.(connection.sessionId) ?? terminalPreferenceDefaults();
   const { columns, rows } = useTerminalSize();
   const [interactionOpen, setInteractionOpen] = useState(false);
   const [dismissedInteractionId, setDismissedInteractionId] = useState<string | null>(null);

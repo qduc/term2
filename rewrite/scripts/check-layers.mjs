@@ -67,6 +67,7 @@ const DIRECT_SOURCE_IMPORTERS = new Set([
   'engine/direct-recovery-compaction.ts',
   'engine/direct-recovery.ts',
   'engine/turn-budget.ts',
+  'host/terminal-preference-defaults.ts',
   'model/failure.ts',
   'model/index.ts',
   'model/provider-items.ts',
@@ -194,6 +195,8 @@ const SOURCE_LAYERS = [
   ['clients', 'context/InputContext.tsx'],
   ['clients', 'app.tsx'],
   ['clients', 'non-interactive.ts'],
+  // Terminal OSC output helper, reached by the app-owned focus notifier.
+  ['clients', 'services/notification-service.ts'],
   ['clients', 'services/control-socket/'],
   ['clients', 'services/discord/'],
   ['shared', 'utils/'],

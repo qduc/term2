@@ -315,8 +315,11 @@ node scripts/golden-scores.mjs /path/to/term2
 
 The reporter checks both `.term2-build-provenance.json` receipts before running
 any scenarios and again before printing `direct: N/9` and `old CLI: N/9`.
-Exit 0 means both are 9/9; 1 means a real score below 9/9; 2 means no trustworthy
-score (missing/stale build or runner failure). It never records goldens.
+After the single nine-scenario pass per CLI, it repeats `subagent-batch` 24 times
+per CLI at six parallel and prints the loaded totals. A single mismatch fails;
+failed occurrences are never retried or outvoted. Exit 0 requires both 9/9 and
+24/24; 1 means a real mismatch; 2 means no trustworthy score (missing/stale build
+or runner failure). It never records goldens.
 Both normal build commands capture HEAD and SHA256 hashes of actual owned
 source/config/build inputs, including untracked files, and final output bytes;
 mtime and the old version-only `build-info.json` are not freshness evidence.

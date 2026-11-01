@@ -47,6 +47,10 @@ policy and interceptors registered by `buildAgentTools`; it must not re-register
 the wrapped `needsApproval` interrupt marker as the authorization predicate.
 Bare suppresses inline memory guidance without changing
 access, personal-context opt-in, snapshots, or the local-only store boundary.
+When Session owns memory tools/context, `promptMemoryEnabled` builds a
+description-only source capability so the prompt can truthfully mention memory;
+source memory tools remain absent, and Session omits its duplicate inline
+guidance while retaining the global/personal context snapshots.
 MCP capture in `direct-mcp-source.ts` reserves the executable `describe` name from the
 run-code runtime, the same owner used by tool assembly.
 

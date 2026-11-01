@@ -106,6 +106,8 @@ export interface AgentFactoryDeps {
   }) => void;
   /** Omit local memory discovery when another owner supplies context or the workspace is remote. */
   includeMemory?: boolean;
+  /** Describe real native-owned memory in the prompt without offering source tools. */
+  promptMemoryEnabled?: boolean;
   /** Project text already loaded from the execution target; profile gates still apply. */
   projectInstructions?: string;
   /** Bind policy callbacks and physical bodies to their actual source leaf and invocation. */
@@ -580,6 +582,7 @@ export function buildAgent(
       getAskUserAnswer: deps.getAskUserAnswer,
       skillsService: deps.skillsService,
       includeMemory: deps.includeMemory,
+      promptMemoryEnabled: deps.promptMemoryEnabled,
       onNativeToolSlots: deps.onNativeToolSlots,
       projectInstructions: deps.projectInstructions,
       agentRuntime: deps.getAgentRuntime?.() ?? null,

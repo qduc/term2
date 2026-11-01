@@ -29,7 +29,7 @@ import { borrowDirectConfigSurfaceOptions } from './direct-config-remote.js';
 import { prepareDirectConfiguration } from './direct-config-runtime.js';
 import { createDirectConfigSettings, type DirectAppConfiguration } from './direct-config-settings.js';
 import { readDirectInputPreviewConfiguration } from './direct-input-preview.js';
-import { createDirectSessionMemory } from './direct-memory.js';
+import { createDirectSessionMemory, directMainMemoryEnabled } from './direct-memory.js';
 import { runPolicy } from './direct-application-policy.js';
 import { createDirectVerificationOperations } from './direct-verifier.js';
 import { withGenerationGuard } from './run.js';
@@ -186,11 +186,18 @@ export function createDirectRuntimes(
       const settings = sessionSettings(options, context);
       const selection = { settings, logger, sessionContext };
       const surfaceOptions = options.surface(context.id);
+      const promptMemoryEnabled = context.workspace.target === 'local' && directMainMemoryEnabled(settings);
       // The Session owns memory, so the surface must not offer it a second time. It
       // borrows SSH because the connection outlives this tool graph and this session.
+      // The prompt may still describe that real native capability without source tools.
       const surface = loadSurface(
         selection,
-        borrowDirectConfigSurfaceOptions({ ...surfaceOptions, includeMemory: false, workspace: context.workspace }),
+        borrowDirectConfigSurfaceOptions({
+          ...surfaceOptions,
+          includeMemory: false,
+          promptMemoryEnabled,
+          workspace: context.workspace,
+        }),
       );
       const scope = scopeFor(context.id, new Date().toISOString());
       const profile = getProfileMetadata(String(settings.get('app.activeProfileId')));
@@ -305,18 +312,27 @@ export function createDirectRuntimes(
         tasks = port.tasks;
         bindCheckIns(surface, port);
         const hooks = hookRuntime?.session(context, settings);
+        const sessionMemory = createDirectSessionMemory(
+          {
+            settings,
+            workspace: context.workspace,
+            subject: { kind: 'main' },
+            offeredTools: surface.tools,
+            adaptTool: (definition) => memoryBinding.adapt(surface, definition),
+            onWarning: (message) => logger.warn(message),
+          },
+          port,
+        );
+        // The source prompt already describes this capability in its canonical
+        // position when promptMemoryEnabled is set; do not append the same text a
+        // second time. Global personal context remains Session-owned.
+        const nativeMemory =
+          promptMemoryEnabled && sessionMemory.memory !== undefined
+            ? { ...sessionMemory.memory, guidance: '' }
+            : sessionMemory.memory;
         const capabilities: DirectContextCapabilities = {
-          ...createDirectSessionMemory(
-            {
-              settings,
-              workspace: context.workspace,
-              subject: { kind: 'main' },
-              offeredTools: surface.tools,
-              adaptTool: (definition) => memoryBinding.adapt(surface, definition),
-              onWarning: (message) => logger.warn(message),
-            },
-            port,
-          ),
+          ...sessionMemory,
+          ...(nativeMemory !== undefined ? { memory: nativeMemory } : {}),
           ...(hooks ? { hooks } : {}),
           ...(verification ? { verification: { operations: verification } } : {}),
           verificationEnabled: () => settings.get('agent.completionVerification') !== false,

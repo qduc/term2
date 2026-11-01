@@ -34,6 +34,9 @@ export type ToolSurfaceOptions = {
   readonly projectInstructions?: string;
   /** False when native Session context owns memory; always false over SSH. */
   readonly includeMemory?: boolean;
+  /** Prompt-only memory description when Session owns the actual memory tools.
+   * Never enables source memory tools; it only keeps the source prompt truthful. */
+  readonly promptMemoryEnabled?: boolean;
   readonly allowUnsandboxed?: boolean;
   readonly discordSend?: import('../../../source/services/discord/discord-outbound.js').DiscordSend;
   readonly isDiscordInputEnabled?: () => boolean;

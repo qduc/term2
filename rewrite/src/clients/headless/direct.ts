@@ -26,10 +26,12 @@ import {
   legacyRequestCostUpdate,
   legacyRetry,
   legacyRunBudget,
+  legacyAcceptedUsage,
   legacyTextDelta,
   legacyToolDispatched,
   legacyToolStarted,
   legacyToolCallStreamingDelta,
+  legacyUsageUpdate,
 } from '../../protocol/direct-json.js';
 import type {
   DirectHeadlessOptions,
@@ -152,6 +154,17 @@ export async function runDirectHeadless(
   const reportedErrors = new Set<string>();
   const answered = new Set<string>();
   const emittedCommandMessageIds = new Set<string>();
+  const legacyRequestIds = new Map<string, string>();
+  let nextLegacyRequestId = 0;
+  const legacyRequestId = (nativeId: string): string => {
+    const existing = legacyRequestIds.get(nativeId);
+    if (existing !== undefined) return existing;
+    const assigned = `req-${++nextLegacyRequestId}`;
+    legacyRequestIds.set(nativeId, assigned);
+    return assigned;
+  };
+  const pendingUsageUpdates: ReturnType<typeof legacyUsageUpdate>[] = [];
+  const pendingLegacyToolStarts = new Map<string, Extract<WireEvent, { readonly type: 'tool_called' }>>();
   let targetTurnId: string | null = null;
   let lastTurnId: string | null = null;
   let finalText = '';
@@ -163,6 +176,8 @@ export async function runDirectHeadless(
   let backgroundCancelled = false;
   /** Per-message streamed length, so a completed message writes only its missing suffix. */
   const streamedByMessage = new Map<string, number>();
+  /** Exact text observed from this message's first delta in the current target turn. */
+  const streamedTextByMessage = new Map<string, string>();
   let cancelSent = false;
   let abortedBeforeStart = false;
 
@@ -598,8 +613,12 @@ export async function runDirectHeadless(
             (streamedByMessage.get(event.payload.messageId) ?? 0) + event.payload.delta.length,
           );
           streamedText += event.payload.delta;
-          if (output === 'plain') io.stdout.write(event.payload.delta);
-          else json(legacyTextDelta(event));
+          {
+            const fullText = (streamedTextByMessage.get(event.payload.messageId) ?? '') + event.payload.delta;
+            streamedTextByMessage.set(event.payload.messageId, fullText);
+            if (output === 'plain') io.stdout.write(event.payload.delta);
+            else json(legacyTextDelta(event, fullText));
+          }
           break;
         case 'reasoning_delta':
           if (!forTurn) break;
@@ -613,15 +632,28 @@ export async function runDirectHeadless(
           if (
             output === 'json' &&
             (event.payload.turnId === targetTurnId || event.payload.rootTurnId === targetTurnId)
-          )
-            json(legacyRequestCostUpdate(event));
+          ) {
+            json(legacyRequestCostUpdate(event, legacyRequestId(event.payload.record.requestId)));
+            if (event.payload.record.usage !== undefined) pendingUsageUpdates.push(legacyUsageUpdate(event.payload.record.usage));
+          }
+          break;
+        case 'usage':
+          if (forTurn && output === 'json') pendingUsageUpdates.push(legacyAcceptedUsage(event.payload.usage));
           break;
         case 'tool_finished':
           if (!forTurn || output !== 'json') break;
-          for (const message of legacyCommandMessages(event)) {
-            emittedCommandMessageIds.add(message.message.id);
-            json(message);
+          {
+            const pending = pendingLegacyToolStarts.get(event.payload.executionId);
+            if (pending !== undefined) {
+              pendingLegacyToolStarts.delete(event.payload.executionId);
+              const record = legacyToolStarted(pending);
+              if (record !== undefined) json(record);
+            }
           }
+          for (const message of legacyCommandMessages(event, {
+            providerCallId: true,
+            onSourceId: (id) => emittedCommandMessageIds.add(id),
+          })) json(message);
           break;
         case 'message': {
           if (!forTurn) break;
@@ -640,13 +672,19 @@ export async function runDirectHeadless(
           // Announce root calls before approval/dispatch; run_code children are not root diagnostics.
           if (forTurn && output === 'plain' && !quiet && event.payload.tool.parentExecutionId === undefined)
             io.stderr.write(toolStartLine(event.payload.tool));
-          if (forTurn && output === 'json') {
-            const record = legacyToolStarted(event);
-            if (record !== undefined) json(record);
-          }
+          // The old tool_started boundary was the dispatched call, after its settled
+          // request cost. Hold the real planned-call DTO until the matching physical
+          // start (or a result/terminal fallback); never synthesize or drop it.
+          if (forTurn && output === 'json') pendingLegacyToolStarts.set(event.payload.tool.executionId, event);
           break;
         case 'tool_started':
           if (forTurn && output === 'json') {
+            const pending = pendingLegacyToolStarts.get(event.payload.tool.executionId);
+            if (pending !== undefined) {
+              pendingLegacyToolStarts.delete(event.payload.tool.executionId);
+              const record = legacyToolStarted(pending);
+              if (record !== undefined) json(record);
+            }
             const record = legacyToolDispatched(event);
             if (record !== undefined) json(record);
           }
@@ -677,6 +715,12 @@ export async function runDirectHeadless(
         case 'turn_ended': {
           if (!forTurn) break;
           if (output === 'json') {
+            for (const pending of pendingLegacyToolStarts.values()) {
+              const record = legacyToolStarted(pending);
+              if (record !== undefined) json(record);
+            }
+            pendingLegacyToolStarts.clear();
+            for (const usage of pendingUsageUpdates.splice(0)) json(usage);
             const window = event.payload.finalWindow;
             if (window === undefined) {
               json({
@@ -687,7 +731,7 @@ export async function runDirectHeadless(
               });
               return result('error', 1);
             }
-            const finalRecord = legacyFinalResponse(window, emittedCommandMessageIds);
+            const finalRecord = legacyFinalResponse(window, emittedCommandMessageIds, legacyRequestId);
             json(finalRecord);
             if (event.payload.outcome === 'completed') completedText = finalRecord.finalText;
           }

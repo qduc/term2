@@ -15,11 +15,22 @@ function initialSnapshot(connection: ClientConnection, retained?: WireSnapshot):
 }
 
 /** Fold a fresh snapshot or a retained cursor state, then ordered catch-up and live events. */
-export function useClient(connection: ClientConnection, retained?: WireSnapshot, onSnapshot?: (state: WireSnapshot) => void): { state: TuiState; error: string | null } {
+export function useClient(
+  connection: ClientConnection,
+  retained?: WireSnapshot,
+  onSnapshot?: (state: WireSnapshot) => void,
+): { state: TuiState; error: string | null } {
   const callback = useRef(onSnapshot);
   callback.current = onSnapshot;
-  const [current, setCurrent] = useState(() => ({ connection, wire: initialSnapshot(connection, retained), error: null as string | null }));
-  const visible = current.connection === connection ? current : { connection, wire: initialSnapshot(connection, retained), error: null };
+  const [current, setCurrent] = useState(() => ({
+    connection,
+    wire: initialSnapshot(connection, retained),
+    error: null as string | null,
+  }));
+  const visible =
+    current.connection === connection
+      ? current
+      : { connection, wire: initialSnapshot(connection, retained), error: null };
   useEffect(() => {
     let active = true;
     let wire = initialSnapshot(connection, retained);
@@ -33,15 +44,26 @@ export function useClient(connection: ClientConnection, retained?: WireSnapshot,
           setCurrent({ connection, wire, error: null });
           callback.current?.(wire);
         }
-        if (active) setCurrent(previous => previous.connection === connection ? { ...previous, error: 'Connection closed.' } : previous);
+        if (active)
+          setCurrent((previous) =>
+            previous.connection === connection ? { ...previous, error: 'Connection closed.' } : previous,
+          );
       } catch (error) {
-        if (active) setCurrent(previous => previous.connection === connection
-          ? { ...previous, error: `Connection failed: ${error instanceof Error ? error.message : String(error)}` } : previous);
+        if (active)
+          setCurrent((previous) =>
+            previous.connection === connection
+              ? { ...previous, error: `Connection failed: ${error instanceof Error ? error.message : String(error)}` }
+              : previous,
+          );
       }
     })();
-    return () => { active = false; connection.close(); };
+    return () => {
+      active = false;
+      connection.close();
+    };
   }, [connection]);
-  // Preserve projection identity until the underlying wire snapshot changes.
+  // Viewport measurements update local React state. Keep their unchanged wire
+  // input stable so those updates do not schedule another transcript render.
   const state = useMemo(() => projectSnapshot(visible.wire), [visible.wire]);
   return { state, error: visible.error };
 }

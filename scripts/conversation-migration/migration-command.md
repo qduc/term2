@@ -36,6 +36,16 @@ their ancestors must not be concurrently renamed/replaced; these checks are not
 a malicious-concurrent-filesystem snapshot or protection against changes that occur
 entirely between observations.
 
+A paired `<basename>.queue.json` is admitted only when it is a valid persisted
+queue-v1 record with neither queued items nor an active execution. Queued or
+active work refuses that conversation as `QUEUED_WORK_PRESENT`; malformed,
+nonregular (including symbolic-link), unreadable, or observably changing sidecars
+refuse it as `QUEUE_SIDECAR_INVALID`. Valid empty records (including paused ones)
+and absent sidecars permit migration. The command reads but never imports,
+rewrites, quarantines, or removes the sidecar. It checks again after conversion
+and before writing provenance, so observed owned work cannot be silently stranded
+by publication. These observations do not replace the quiescent-copy precondition.
+
 ## Module interface and safe reports
 
 `parseMigrationArguments(args)` returns `{ sourceCopy, destination, provenance }`
@@ -55,7 +65,7 @@ or failed. Reader details are deliberately collapsed to `INPUT_FAILED`; neither
 paths nor individual log identifiers are part of reports.
 
 Fixed per-log codes are `SOURCE_LOCKED`, `INPUT_FAILED`, `UNSUPPORTED_ID`,
-`SOURCE_CHANGED`, `FOREIGN_TARGET`, `TARGET_REFUSED`, `TARGET_MISSING`,
+`QUEUED_WORK_PRESENT`, `QUEUE_SIDECAR_INVALID`, `SOURCE_CHANGED`, `FOREIGN_TARGET`, `TARGET_REFUSED`, `TARGET_MISSING`,
 `CONVERSION_FAILED`, `PUBLICATION_FAILED`, `ALREADY_MIGRATED`, and `MIGRATED`.
 The executable prints exactly one JSON aggregate, exits 0 for all successful/noop,
 2 for any failed/skipped log, and 1 with `{ codes: { COMMAND_REFUSED: 1 } }` for
@@ -73,7 +83,7 @@ source and destination directory paths. `records[oldUuid]` contains the exact
 initial-prefix byte length/SHA-256, accepted final sequence, and `pending` or
 `complete`. Only lowercase, exact UUID spellings are supported; no fallback names,
 case normalization, random ID mapping or source-derived path traversal is allowed.
-The ignored `.json` is deliberately not an authority hash.
+The ignored `.json` and an accepted empty queue sidecar are deliberately not authority hashes.
 
 The per-private-directory `acquireDirectWriterLock` on `command-authority` serializes
 cooperating processes with process-death recovery. It is outside native/source
@@ -87,12 +97,13 @@ normal operation removes its own scratch. No automatic stale-lock deletion exist
 
 For each newly admitted log:
 
-1. Strict-read/replay the source and compute its canonical/delta identity. Reject
+1. Strict-read/replay the source, refuse invalid or owned paired queue state, and
+   compute its canonical/delta identity. Reject
    an existing native root with no receipt, even if it might coincidentally match.
 2. Convert, then call the **real** `importDirectSession` into a unique private
    scratch namespace. This obtains deterministic native bytes/hash and accepted
    sequence using the real encoder, hydration and replay; there is no second encoder.
-3. Save and fsync a pending receipt **before** publication. If replacing an existing
+3. Recheck the queue sidecar, then save and fsync a pending receipt **before** publication. If replacing an existing
    pending intent with no target, regenerated native hash/length/sequence must match.
 4. Strict-read/replay the source again immediately before calling native publication;
    any lock, corruption or changed authority hash refuses publication. A changed copy

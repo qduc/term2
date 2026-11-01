@@ -27,7 +27,7 @@ type ProjectedContextFact = Exclude<DirectContextFact, { type: 'rollover_request
 export function contextFactEvent(fact: ProjectedContextFact, state: WireSnapshot, seq: number): WireEvent {
   const base = { sessionId: state.sessionId, seq, turnId: 'turnId' in fact ? fact.turnId : null };
   switch (fact.type) {
-    case 'goal_changed': return { ...base, type: 'goal', payload: { goal: fact.goal ? publicGoal(fact.goal) : null, generation: (state.goalGeneration ?? 0) + 1 } };
+    case 'goal_changed': return { ...base, type: 'goal', payload: { goal: fact.goal ? publicGoal(fact.goal) : null, generation: (state.goalGeneration ?? 0) + 1, source: fact.source } };
     case 'goal_proposed': return { ...base, type: 'goal_proposed', payload: { goal: publicGoal(fact.goal) } };
     case 'completion_verification_started': return { ...base, type: 'verification', payload: { verification: {
       attemptId: fact.attemptId, goalGeneration: fact.goalGeneration, revision: fact.proposal.revision, status: 'running',

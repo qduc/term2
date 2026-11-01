@@ -93,8 +93,8 @@ export function createDirectGoalCheckTool(deps: {
     parse: (raw) => directGoalCheckSchema.parse(raw),
     approval: () => ({ kind: 'none' }),
     async execute(raw) {
+      const current = deps.readGoal();
       try {
-        const current = deps.readGoal();
         const check = parseDirectGoalCheck(raw, current.goal);
         if (request.generation !== current.generation || request.goal?.id !== current.goal?.id) {
           throw new Error(
@@ -110,8 +110,11 @@ export function createDirectGoalCheckTool(deps: {
         };
         return { output: `${directGoalCheckReceipt(request)} ${guidance[check.status]}`, isError: false };
       } catch (error) {
+        const guidance = !current.goal
+          ? ' Continue the ordinary request/tool workflow without goal_check; this tool does not create a goal.'
+          : '';
         return {
-          output: `Error: goal_check was not recorded: ${error instanceof Error ? error.message : String(error)}`,
+          output: `Error: goal_check was not recorded: ${error instanceof Error ? error.message : String(error)}.${guidance}`,
           isError: true,
         };
       }

@@ -411,7 +411,8 @@ export type WireEventPayloads = {
   notice: WireNotice;
   /** Session-owned public command notice; no private memory snapshot/receipt is serialized. */
   automatic_memory_notice: { readonly success: boolean; readonly command: string; readonly output: string };
-  goal: { readonly goal: WireGoal | null; readonly generation?: number };
+  /** Accepted goal-change provenance; clients must not infer self-check completion from status alone. */
+  goal: { readonly goal: WireGoal | null; readonly generation?: number; readonly source?: 'user' | 'launcher' | 'proposal' | 'goal_check' };
   goal_proposed: { readonly goal: WireGoal };
   verification: { readonly verification: WireVerification | null };
   error: { readonly error: WireError };

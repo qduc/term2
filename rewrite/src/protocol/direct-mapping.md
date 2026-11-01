@@ -564,3 +564,13 @@ This native DTO addition does not implement shared-wire artifacts, server/browse
 serialization/parsing, external consumer migration, raw-stream retention or M6
 activation. Those owners must integrate the actual shape and keep the combined
 gate closed until required implementation and authorized verification finish.
+
+## Accepted goal provenance
+
+`contextFactEvent` carries the accepted `goal_changed.source` in the public
+`goal` event. Consumers may announce model-check closure only for an achieved
+`goal_check` change, not from a tool acknowledgement or an achieved status alone.
+The headless client uses the shared source formatter on stderr; it does not
+accept a goal write, infer verification, or add a legacy event to native history.
+This retains the distinction from user/launcher/proposal changes at the client
+boundary instead of trying to reconstruct who changed the goal from status.

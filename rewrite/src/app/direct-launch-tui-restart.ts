@@ -26,7 +26,8 @@ function liveTasks(snapshot: WireSnapshot): WireSnapshot['tasks'] {
 }
 
 function assertIdle(snapshot: WireSnapshot, stopTasks: boolean): void {
-  if (snapshot.activeTurnId !== null) throw new Error('Finish or cancel the running turn before restarting.');
+  if (snapshot.activeTurnId !== null)
+    throw new Error('Finish or stop the current foreground operation before restarting.');
   const live = liveTasks(snapshot);
   if (live.length && !stopTasks) {
     const names = live.map((task) => `${task.id} (${task.status})`).join(', ');

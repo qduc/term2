@@ -4,13 +4,11 @@ import { randomUUID } from 'node:crypto';
 import type { AgentFactoryDeps } from '../../../source/lib/agent-factory.js';
 import { getCatalogModel } from '../../../source/providers/model-catalog/catalog.js';
 import { resolveOutputAllocation } from '../../../source/services/agent-runtime/model-context-policy.js';
-import type { ResolvedSubagentLaunch } from '../../../source/lib/subagent-bridge.js';
 import { adaptLegacyDefinition } from '../../../source/services/agent-runtime/legacy-adapter.js';
 import {
   createRootAgentAuthoritySnapshot,
   resolveAgentSpecForChild,
 } from '../../../source/services/agent-runtime/permission-boundary.js';
-import type { AgentSpec } from '../../../source/services/agent-runtime/types.js';
 import { ToolApprovalPolicyRegistry } from '../../../source/services/approval/tool-approval-policy-registry.js';
 import { ExecutionContext } from '../../../source/services/execution-context.js';
 import { resolveActiveEnforcement } from '../../../source/services/profiles/active-profile.js';
@@ -29,7 +27,6 @@ import type {
   SubagentResult,
   SubagentDefinition,
   SubagentRunHandle,
-  SubagentRunStatus,
 } from '../../../source/services/subagents/types.js';
 import { SUBAGENT_ROLES } from '../../../source/services/subagents/types.js';
 import {
@@ -37,19 +34,18 @@ import {
   pinWorkerWorktree,
 } from '../../../source/services/subagents/worker-worktree.js';
 import type { AnyToolDefinition } from '../../../source/tools/types.js';
-import type { Item, ItemId, ReasoningEffort } from '../model/index.js';
+import type { ItemId, ReasoningEffort } from '../model/index.js';
 import type { DirectNestedAuthority } from '../session/direct-branches.js';
 import type { DirectContextPort } from '../session/direct-capabilities.js';
 import { createSourceToolRegistry, sourceToolContext } from './source-tools.js';
-import type {
-  NestedRunRequest,
-  NestedRunResult,
-  SubagentTaskState,
-  Tool,
-  ToolContext,
-  Workspace,
-} from '../tools/index.js';
+import type { NestedRunRequest, Tool, ToolContext, Workspace } from '../tools/index.js';
 import type { ProfileSelection } from './tool-contract.js';
+import {
+  createDirectDelegationCallbacks,
+  projectResult,
+  type Launch,
+  type ExecutionEvidence,
+} from './direct-subagent-callbacks.js';
 
 export type DirectSubagentToolsOptions = {
   readonly selection: ProfileSelection;
@@ -69,34 +65,6 @@ export type DirectSubagentToolsOptions = {
 // Named source roles grant workspace reads independently of the parent's prompt
 // profile. AgentSpec children still inherit the parent's effective-tool ceiling.
 const WORKSPACE_READ_TOOLS = new Set(['read_file', 'grep', 'glob', 'read_code_outline', 'code_context_search']);
-
-type Launch = {
-  role?: string;
-  task?: string;
-  agent_spec?: AgentSpec;
-  name?: string;
-  continue_run_id?: string;
-  worktree?: string;
-  authorizedWorktreePath?: string;
-  mentorConsultation?: boolean;
-  mentorModel?: { provider: string; model: string; reasoningEffort?: string };
-};
-type ExecutionEvidence = {
-  readonly filesChanged: readonly string[];
-  readonly toolCounts: Map<string, number>;
-};
-type DelegationCallbacks = Pick<
-  AgentFactoryDeps,
-  | 'runSubagent'
-  | 'runSubagentAsync'
-  | 'runResolvedSubagent'
-  | 'runResolvedSubagentAsync'
-  | 'getSubagentResult'
-  | 'getSubagentStatus'
-  | 'cancelSubagentRun'
-  | 'sendSubagentMessage'
-  | 'createMentor'
->;
 
 /**
  * Build real source child definitions and policies, but never a source runner.
@@ -122,11 +90,6 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
     if (!context) throw new Error('Subagent operation has no admitted direct tool execution');
     context.signal.throwIfAborted();
     return context;
-  };
-  const controls = () => {
-    const context = current();
-    if (!context.subagents) throw new Error('Session subagent controls are unavailable');
-    return context.subagents;
   };
   const withInvocation: NonNullable<AgentFactoryDeps['withToolInvocation']> = (name, invocation, operation) => {
     const context = sourceToolContext(invocation);
@@ -403,82 +366,7 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
       task: request.input,
     };
   };
-  const resolved = (params: ResolvedSubagentLaunch): Launch => {
-    const value = params.resolvedDefinition;
-    if (!('ok' in value) || !value.ok)
-      throw new Error('Native script delegation requires a successful host AgentSpec boundary');
-    return {
-      agent_spec: value.spec,
-      worktree: params.worktree ?? value.worktree,
-      authorizedWorktreePath: params.authorizedWorktreePath ?? value.authorizedWorktreePath,
-      name: params.name,
-      continue_run_id: params.continue_run_id,
-    };
-  };
-  const callbacks: DelegationCallbacks = {
-    runSubagent: (params) => run(params),
-    runSubagentAsync: start,
-    runResolvedSubagent: (params) => run(resolved(params)),
-    runResolvedSubagentAsync: (params) => start(resolved(params)),
-    async createMentor(task) {
-      const configured = SubagentPoolEntrySchema.array().parse(settings.get('agent.mentorPool'));
-      // Same bounded sampling contract as the source mentor: a configured
-      // pool defines consultations, otherwise mentorSamples repeats one model.
-      const count = Math.max(1, Math.min(8, Math.floor(settings.get('agent.mentorSamples') ?? 1)));
-      const models = configured.length ? configured.slice(0, 8) : Array.from({ length: count }, () => undefined);
-      const results = await Promise.all(
-        models.map((mentorModel) => run({ role: 'mentor', task, mentorModel, mentorConsultation: true })),
-      );
-      for (const result of results)
-        if (result.status !== 'completed') throw new Error(result.error ?? `Mentor consultation ${result.status}`);
-      return results.length === 1
-        ? results[0]!.finalText
-        : results.map((result, index) => `### Mentor ${index + 1}\n\n${result.finalText}`).join('\n\n');
-    },
-    getSubagentStatus(params) {
-      const tasks = controls();
-      return params.runId
-        ? projectStatus(tasks.get(params.runId), params.runId, executionEvidence)
-        : tasks.list().map((task) => projectStatus(task, task.taskId, executionEvidence));
-    },
-    async getSubagentResult({ runId }) {
-      const context = current();
-      const task = await controls().wait(runId, context.signal);
-      if (!task) throw new Error(`Unknown subagent run: ${runId}`);
-      if (!task.result) throw new Error(`Subagent run has no accepted terminal result: ${runId}`);
-      const result = task.result.value as NestedRunResult | undefined;
-      if (result?.outcome && Array.isArray(result.items))
-        return projectResult(
-          { ...result, runId: task.taskId },
-          task.role ?? 'agent',
-          executionEvidence.get(task.taskId),
-        );
-      return projectResult(
-        {
-          runId: task.taskId,
-          items: [],
-          outcome:
-            task.result.kind === 'failed'
-              ? { kind: 'failed', error: task.result.error }
-              : { kind: task.result.kind === 'cancelled' ? 'cancelled' : 'interrupted' },
-        },
-        task.role ?? 'agent',
-        executionEvidence.get(task.taskId),
-      );
-    },
-    cancelSubagentRun({ target }) {
-      const tasks = controls();
-      const task = tasks.get(target);
-      if (!task) return { ok: false, code: 'not_active', target };
-      const decision = tasks.cancel(task.taskId);
-      return decision.ok
-        ? { ok: true, runId: task.taskId, status: 'cancelling' }
-        : { ok: false, code: 'not_active', target };
-    },
-    sendSubagentMessage({ target, message, reply_to }) {
-      return controls().message(target, message, reply_to);
-    },
-  };
+  const callbacks = createDirectDelegationCallbacks(settings, { current, run, start }, executionEvidence);
   return {
     callbacks,
     withInvocation,
@@ -521,63 +409,5 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
       configureTaskCheckIn = undefined;
       scope.disable();
     },
-  };
-}
-
-/** Project accepted outcomes and execution evidence, never requested calls or invented usage/diffs. */
-function projectResult(result: NestedRunResult, role: string, evidence?: ExecutionEvidence): SubagentResult {
-  const runId = result.runId ?? (result.outcome.kind === 'background' ? result.outcome.runId : undefined);
-  if (!runId) throw new Error('Session did not return an accepted subagent run ID');
-  // Native distinct-name receipts are not counts. Keep only actual adapter
-  // execution entries; missing telemetry must not become a fabricated count.
-  const acceptedNames = result.toolsUsed === undefined ? undefined : new Set(result.toolsUsed);
-  const tools = [...(evidence?.toolCounts ?? [])].filter(([name]) => !acceptedNames || acceptedNames.has(name));
-  // Only runAsync returns an admission handle. Foreground and settled task
-  // retrieval must never present a background receipt as a terminal result.
-  if (result.outcome.kind === 'background')
-    throw new Error('Expected a subagent result, received background admission');
-  const status = result.outcome.kind === 'budget_exhausted' ? 'interrupted' : result.outcome.kind;
-  return {
-    agentId: runId,
-    role,
-    status,
-    finalText: result.items
-      .filter((item): item is Extract<Item, { type: 'assistant_message' }> => item.type === 'assistant_message')
-      .map((item) =>
-        item.content
-          .filter((part) => part.type === 'text')
-          .map((part) => part.text)
-          .join(''),
-      )
-      .join('\n'),
-    filesChanged: [...new Set(evidence?.filesChanged ?? [])],
-    toolsUsed: tools.map(([toolName, count]) => ({ toolName, count })),
-    ...(result.outcome.kind === 'failed' ? { error: result.outcome.error.message } : {}),
-    ...(result.outcome.kind === 'budget_exhausted' ? { terminalCause: 'budget_exhausted' as const } : {}),
-    ...(result.outcome.kind === 'interrupted' && result.outcome.terminalCause !== undefined
-      ? { terminalCause: result.outcome.terminalCause }
-      : {}),
-  };
-}
-
-/** Status is a Session snapshot, never a second tool-owned lifecycle projection. */
-function projectStatus(
-  task: SubagentTaskState | undefined,
-  target: string,
-  evidence: ReadonlyMap<string, ExecutionEvidence>,
-): SubagentRunStatus {
-  return {
-    runId: task?.taskId ?? target,
-    ...(task?.name ? { name: task.name } : {}),
-    role: task?.role ?? 'agent',
-    status: task?.status ?? 'not_found',
-    // Source requires strings; unknown original input stays blank, never relabelled.
-    task: task?.input ?? '',
-    taskPreview: task?.input ?? '',
-    startedAt: task?.startedAt ?? 0,
-    elapsedMs: task ? Math.max(0, (task.completedAt ?? Date.now()) - task.startedAt) : 0,
-    toolCounts: Object.fromEntries(evidence.get(task?.taskId ?? target)?.toolCounts ?? []),
-    ...(task?.model ? { model: { provider: task.model.provider, id: task.model.model } } : {}),
-    ...(task ? { lastActivityAt: task.lastActivityAt } : {}),
   };
 }

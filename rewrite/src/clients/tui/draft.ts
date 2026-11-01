@@ -7,8 +7,14 @@ export function restoreAttachments(parts: readonly WireContent[]): { images: Ima
   const images: ImageRef[] = [];
   const other: WireContent[] = [];
   for (const part of parts) {
-    if (part.type === 'image') images.push({ id: randomUUID(), data: part.data, mimeType: part.mediaType,
-      byteSize: Buffer.from(part.data, 'base64').length, displayNumber: images.length + 1 });
+    if (part.type === 'image')
+      images.push({
+        id: randomUUID(),
+        data: part.data,
+        mimeType: part.mediaType,
+        byteSize: Buffer.from(part.data, 'base64').length,
+        displayNumber: images.length + 1,
+      });
     else other.push(part);
   }
   return { images, other };
@@ -17,20 +23,36 @@ export function restoreAttachments(parts: readonly WireContent[]): { images: Ima
 /** Preserve raw base64 image bytes in the direct public content shape. */
 export function wireImages(images: readonly ImageRef[], originals: readonly WireContent[] = []): WireContent[] {
   const remaining = [...originals];
-  return images.map(image => {
-    const index = remaining.findIndex(part => part.type === 'image' && part.data === image.data && part.mediaType === image.mimeType);
+  return images.map((image) => {
+    const index = remaining.findIndex(
+      (part) => part.type === 'image' && part.data === image.data && part.mediaType === image.mimeType,
+    );
     if (index >= 0) return remaining.splice(index, 1)[0];
     return { type: 'image', mediaType: image.mimeType, data: image.data };
   });
 }
 
 /** Keep restored attachment ordering and metadata when the editor changes only some images. */
-export function wireAttachments(images: readonly ImageRef[], other: readonly WireContent[], originals: readonly WireContent[]): WireContent[] {
+export function wireAttachments(
+  images: readonly ImageRef[],
+  other: readonly WireContent[],
+  originals: readonly WireContent[],
+): WireContent[] {
   const remaining = [...other, ...wireImages(images, originals)];
   const ordered: WireContent[] = [];
   for (const part of originals) {
-    const index = remaining.findIndex(item => item === part);
+    const index = remaining.findIndex((item) => item === part);
     if (index >= 0) ordered.push(...remaining.splice(index, 1));
   }
   return [...ordered, ...remaining];
+}
+
+/** Keep the first text part as the composer primary; preserve every other part in order. */
+export function primaryDraft(content: readonly WireContent[]) {
+  const primary = content.findIndex((part) => part.type === 'text');
+  const first = content[primary];
+  return {
+    text: first?.type === 'text' ? first.text : '',
+    attachments: content.filter((_part, index) => index !== primary),
+  };
 }

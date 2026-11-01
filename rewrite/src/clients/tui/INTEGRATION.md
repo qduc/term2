@@ -17,3 +17,22 @@ The app's `switchSession` attaches the successor and returns an optional notice 
 Retry, compact, rewind and rollover use a fresh stable UUID per deliberate invocation and are sent once. Pending is not success; transport loss or interrupted outcome is reported as uncertain, without automatically repeating the effect. The retained ID can be queried with `/command-status <id>`; `/command-apply <id>` explicitly restores a completed rewind draft or follows a completed rollover successor. A pending rewind originally requested as resend is restored for review, not automatically resent. Snapshot command receipts remain visible. App-owned configure commands need the same keyed receipt semantics; they are not implemented by this subtree.
 
 This interface note is not a verification certificate. Integration verification must cover snapshot/replay, input ownership and terminal rendering (including automatic foreground versus explicit background decisions), attachments and late queue edits, task and budget decisions, switching/rebind notices, and actual application integration. Module presence or an accepted wire receipt alone is not proof that the keyboard workflow reaches the next provider/tool output.
+
+## Internal ownership
+
+`index.tsx` retains the unkeyed terminal interrupt gesture and cross-session notices;
+`session.tsx` owns the keyed session, ordered commands, modal routing and the shared
+composer/editor-footer activation condition. Moving the session component does not
+move the stable modal listener or install another keyboard owner.
+
+`session-composer.ts` owns the editor draft, image echo/remount reconciliation,
+attachment restoration, queued-edit draft snapshot, and interaction/queue ID lists
+captured when typing a numbered command. It installs no input listener.
+`interaction-command.ts` validates a numbered `/answer` against that captured list
+and returns the exact request/decision; the session sends it with user provenance.
+
+Queued preference integration must reconcile `bcc30ac1` across these seams: its
+public live-event callback still crosses the unkeyed shell into `useClient`, while
+history-size belongs at the composer hook's `useEditor` call. Paste threshold and
+focus-sequence filtering stay at the session input surface alongside the existing
+inactive-composer guard. That queued feature is not activated by this extraction.

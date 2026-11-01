@@ -51,3 +51,10 @@ hidden by a green single pass. The scorer therefore retains the unchanged
 nine-golden pass and adds 24 `subagent-batch` occurrences at six parallel for
 each CLI; any failed occurrence fails the score. Keep that guard when changing
 scheduling—do not replace dispatch with a timer or response observation.
+
+## Tool result representation
+
+`turn-tool-results.ts` owns script-result audit normalization and provider-facing
+`tool_result` item construction. It does not publish facts, mutate history or
+choose a stop. `TurnTools` retains physical admission, selected-start policy,
+execution capabilities, child cleanup, ordered settlement and stop selection.

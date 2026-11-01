@@ -1,6 +1,6 @@
 /** Turn-local tool planning, physical admission, interactions and ordered settlement. */
 import { AsyncLocalStorage } from 'node:async_hooks';
-import type { Item, ItemId, ToolCallId, ModelRequest } from '../model/index.js';
+import type { Item, ToolCallId, ModelRequest } from '../model/index.js';
 import type {
   ApprovalRequirement,
   ExecutionId,
@@ -17,6 +17,7 @@ import type { TurnDeps, TurnSpec } from './direct-types.js';
 import { NativeBudgetExhausted, type TurnBudgetControl } from './turn-budget.js';
 import { TurnEvents, cancelled } from './turn-events.js';
 import { TurnToolInteractions } from './turn-tool-interactions.js';
+import { childResult, errorResult, toolResultItem } from './turn-tool-results.js';
 
 type CallItem = Extract<Item, { type: 'tool_call' }>;
 type Execution = {
@@ -227,15 +228,7 @@ export class TurnTools {
   }
 
   async #result(call: RootCall, result: ToolResult, history: Item[]): Promise<void> {
-    const item: Item = {
-      type: 'tool_result',
-      id: `${call.executionId}:result` as ItemId,
-      callId: call.item.callId,
-      output: result.output,
-      isError: result.isError,
-      ...(result.providerOutput !== undefined ? { providerOutput: result.providerOutput } : {}),
-      ...(call.item.toolType !== undefined ? { toolType: call.item.toolType } : {}),
-    };
+    const item = toolResultItem(call.executionId, call.item, result);
     await this.events.publish({ type: 'item', item, executionId: call.executionId, modelStep: call.modelStep });
     history.push(item);
     if (result.stopAfterExecution) this.#stop = call.execution;
@@ -488,27 +481,4 @@ export class TurnTools {
 
 function readyParallel(plan: Plan): boolean {
   return plan.parallelSafe && plan.approval?.kind === 'none' && !plan.result;
-}
-
-function errorResult(error: unknown): ToolResult {
-  return { output: error instanceof Error ? error.message : String(error), isError: true };
-}
-
-/** Audit normalization never replaces the structured value returned to a script. */
-function childResult(value: unknown): ToolResult {
-  if (typeof value === 'object' && value !== null && 'output' in value && typeof value.output === 'string') {
-    const result = value as ToolResult;
-    return {
-      output: result.output,
-      isError: result.isError === true,
-      ...(result.providerOutput !== undefined ? { providerOutput: result.providerOutput } : {}),
-      ...(result.display !== undefined ? { display: result.display } : {}),
-    };
-  }
-  if (typeof value === 'string') return { output: value, isError: false };
-  try {
-    return { output: JSON.stringify(value) ?? String(value), isError: false };
-  } catch {
-    return { output: 'Unserializable tool result', isError: false };
-  }
 }

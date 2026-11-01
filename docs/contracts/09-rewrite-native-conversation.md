@@ -13,9 +13,10 @@ engine acceptance token.
   validation, append-before-publication, recovered command/task materialization,
   and the permanent write-failure latch.
 - `conversation-turn.ts` is the sole reader of a foreground engine handle. It
-  appends an event before accepting its engine token, appends an answer before
-  releasing it, and drains physical cleanup after cancellation or a consumer
-  returns early.
+  owns the admission batch that keeps raw input durable while deriving model-only
+  human timing and memory input. It appends an event before accepting its engine
+  token, appends an answer before releasing it, and drains physical cleanup after
+  cancellation or a consumer returns early.
 - `conversation-generation.ts` owns the live runtime generation, continuity and
   one-shot profile notice. It validates a prepared configuration before durable
   acceptance, installs only after acceptance, and builds read-only input previews.

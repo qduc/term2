@@ -13,12 +13,17 @@ export function useTranscriptViewport(state: TuiState, columns: number, rows: nu
   const [offset, setOffset] = useState(0);
   const height = Math.max(1, rows - 9);
   useEffect(() => {
-    const rendered = renderToString(
-      <ThemeProvider theme={theme}><SkinProvider skin={skin}>
-        <Transcript state={state} messages={state.messages} columns={columns} live />
-      </SkinProvider></ThemeProvider>, { columns: Math.max(1, columns) },
-    );
-    setLines(rendered ? rendered.split('\n') : []);
+    // Ink shares its reconciler with the live root. renderToString must finish
+    // outside React's effect/commit stack or it can free a still-pending Yoga root.
+    const pending = setImmediate(() => {
+      const rendered = renderToString(
+        <ThemeProvider theme={theme}><SkinProvider skin={skin}>
+          <Transcript state={state} messages={state.messages} columns={columns} live />
+        </SkinProvider></ThemeProvider>, { columns: Math.max(1, columns) },
+      );
+      setLines(rendered ? rendered.split('\n') : []);
+    });
+    return () => clearImmediate(pending);
   }, [state, columns, theme, skin]);
   const maxOffset = Math.max(0, lines.length - height);
   const visibleOffset = Math.min(offset, maxOffset);

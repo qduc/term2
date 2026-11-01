@@ -130,7 +130,9 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
       release ??= acquireDirectWriterLock(rollingLog.path);
       const ownedRelease = release;
       log = {
-        get path() { return rollingLog.path; },
+        get path() {
+          return rollingLog.path;
+        },
         append: (facts) => rollingLog.append(facts),
         close() {
           // Never release the authority if closing the underlying writer fails.

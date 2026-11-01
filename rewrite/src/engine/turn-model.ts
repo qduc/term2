@@ -22,7 +22,6 @@ export class TurnModel {
   readonly #compaction: TurnCompaction;
   #standardTier = false;
   #downgraded = false;
-  #auxiliaryRetry: Retry | undefined;
 
   constructor(
     readonly spec: TurnSpec,
@@ -127,7 +126,6 @@ export class TurnModel {
           tools: { completed: 0, allCompleted: true, completedPairsInHistory: pairs },
         });
         if (decision.kind === 'stop') throw error;
-        this.#auxiliaryRetry = decision;
         this.#standardTier ||= decision.useStandardServiceTier;
         this.#downgraded ||= decision.downgradeTransport;
         if (decision.downgradeTransport) this.#continuity.breakChaining();

@@ -280,7 +280,12 @@ export async function runWithSession(session: ConversationSessionLike, config: N
 
   const onEvent = (event: ConversationEvent) => {
     if (config.json) {
-      stdout.write(JSON.stringify(event) + '\n');
+      // Provider argument identity belongs to native consumers, not the legacy JSON wire format.
+      const outputEvent =
+        event.type === 'tool_call_streaming_delta'
+          ? { type: event.type, toolName: event.toolName, argumentCharCount: event.argumentCharCount }
+          : event;
+      stdout.write(JSON.stringify(outputEvent) + '\n');
       return;
     }
 

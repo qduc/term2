@@ -174,7 +174,7 @@ export function planDirectInstructions(
   // accepted snapshot. Substitute the one real guidance/context here; do not
   // append it again or read a second snapshot.
   const instructions = base.includes(DIRECT_MEMORY_GUIDANCE_MARKER)
-    ? base.replace(DIRECT_MEMORY_GUIDANCE_MARKER, suffix)
+    ? base.replace(DIRECT_MEMORY_GUIDANCE_MARKER, () => suffix)
     : base + (suffix ? `\n\n${suffix}` : '');
   return {
     instructions: instructions + renderDurableGoalContext(goal.goal),

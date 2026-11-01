@@ -1,7 +1,7 @@
 /** Assembles one Session's runtime from the real tool surface. Runs no provider and no tool. */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { isDeepStrictEqual } from 'node:util';
-import { ExecutionContext } from '../../../source/services/execution-context.js';
+import { LocalExecutionContext } from './adopted/local-execution-context.js';
 import { installationVersion } from '../../../source/providers/fetch/logging-middleware.js';
 import { getProfileMetadata } from '../../../source/services/profiles/active-profile.js';
 import { planProfileTransition } from '../../../source/services/profiles/profile-transition.js';
@@ -192,7 +192,7 @@ export function createDirectRuntimes(
       const surfaceOptions = {
         ...suppliedSurfaceOptions,
         ...(!suppliedSurfaceOptions.remote
-          ? { localExecutionContext: ExecutionContext.pin(context.workspace.root) }
+          ? { localExecutionContext: new LocalExecutionContext(context.workspace.root) }
           : {}),
       };
       const promptMemoryEnabled = context.workspace.target === 'local' && directMainMemoryEnabled(settings);

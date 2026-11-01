@@ -8,7 +8,8 @@ import { resolveRequestOutput } from '../../../source/services/agent-runtime/mod
 import { NonInteractiveApprovalPolicy } from '../../../source/services/approval/non-interactive-approval-policy.js';
 import { ToolApprovalPolicyRegistry } from '../../../source/services/approval/tool-approval-policy-registry.js';
 import type { ShellAutoApprovalAgentClient } from '../../../source/services/conversation-agent-client.js';
-import { ExecutionContext } from '../../../source/services/execution-context.js';
+import type { ExecutionContext } from '../../../source/services/execution-context.js';
+import { LocalExecutionContext } from './adopted/local-execution-context.js';
 import { primeActiveProfileNoticeIfActive } from '../../../source/services/mode-notices.js';
 import { installPlanModeInterceptor } from '../../../source/services/plan-mode-interceptor.js';
 import { SessionAccessState } from '../../../source/services/session/session-access-state.js';
@@ -51,7 +52,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
   // Pin one context per surface; never retarget process.cwd or the global
   // active-workspace fallback while another Session owns tools/background work.
   const executionContext =
-    remote?.executionContext ?? options.localExecutionContext ?? ExecutionContext.pin(workspace.root);
+    remote?.executionContext ?? options.localExecutionContext ?? new LocalExecutionContext(workspace.root);
   if (!remote && (executionContext.isRemote() || executionContext.getHomeWorkspace() !== workspace.root))
     throw new Error('Local tool context does not match the authorized workspace home');
   // SkillsService is local-fs-only. Never scan a same-spelled remote path locally.
@@ -105,6 +106,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     remoteUnavailable: REMOTE_UNAVAILABLE,
   });
   const shell = createDirectShellTools();
+  const allowBackgroundShell = options.interactive === true && !remote;
   const deps: AgentFactoryDeps = {
     settings,
     logger,
@@ -141,9 +143,10 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
       return null;
     },
     executeScriptedTool: executeSourceChild,
-    allowBackgroundShell: !remote,
-    backgroundShellRegistry: remote ? undefined : shell.registry,
-    backgroundShellOutput: remote ? undefined : shell.output,
+    // Match the frozen old CLI: interactive local sessions only, never batch.
+    allowBackgroundShell,
+    backgroundShellRegistry: allowBackgroundShell ? shell.registry : undefined,
+    backgroundShellOutput: allowBackgroundShell ? shell.output : undefined,
     allowAskUser: options.interactive === true,
     allowUnsandboxed:
       options.allowUnsandboxed !== false && !readOnly && (remote?.sourcePolicy.allowUnsandboxed ?? true),

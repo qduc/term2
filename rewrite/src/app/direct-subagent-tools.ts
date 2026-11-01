@@ -12,7 +12,8 @@ import {
 } from '../../../source/services/agent-runtime/permission-boundary.js';
 import type { AgentSpec } from '../../../source/services/agent-runtime/types.js';
 import { ToolApprovalPolicyRegistry } from '../../../source/services/approval/tool-approval-policy-registry.js';
-import { ExecutionContext } from '../../../source/services/execution-context.js';
+import type { ExecutionContext } from '../../../source/services/execution-context.js';
+import { LocalExecutionContext } from './adopted/local-execution-context.js';
 import { resolveActiveEnforcement } from '../../../source/services/profiles/active-profile.js';
 import type { SessionAccessState } from '../../../source/services/session/session-access-state.js';
 import { SubagentPoolEntrySchema } from '../../../source/services/settings/settings-schema.js';
@@ -212,7 +213,7 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
     // Children retain their admission root even if the parent later changes its lease.
     let executionContext = options.executionContext.isRemote()
       ? options.executionContext
-      : ExecutionContext.pin(options.executionContext.getCwd());
+      : new LocalExecutionContext(options.executionContext.getCwd());
     let workspace = Object.freeze({ ...options.workspace, root: executionContext.getCwd() });
     if (params.worktree) {
       const pinned = await pinWorkerWorktree({

@@ -25,6 +25,14 @@ the current public messages, drafts and timeline intact. Without it, the existin
 history-based public pruning remains in force, including retry/rewind behavior.
 This is an explicit per-replacement choice, not a new compaction policy.
 
+Failure lesson: checking only current message/tool arrays missed hidden provider
+content in recovered final-window items and records. Item display suppression also
+applies to that public projection, not to provider replay, usage/costs or physical
+tool audit. A shared ID is not permission to replace an explicit transcript
+observation with provider text or role: default history replacement prunes those
+observations by retained ID only. Ephemeral message provenance distinguishes them
+from ordinary derived messages, whose retry refresh behavior remains unchanged.
+
 Observed text uses the ordinary version-2 same-turn payload codec, including
 presentation strings. No reference kind or exclusion is added. Correlated
 observations and hidden provider facts can share one physical body; observations

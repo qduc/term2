@@ -5,9 +5,8 @@ product CLI. It imports no app, settings resolver, provider or runtime legacy
 fallback. Build the compiled native dependencies using `node rewrite/scripts/build.mjs`.
 The production converter is loaded lazily from `./v3-to-native.mjs`; absence or
 rejection produces `CONVERSION_FAILED`, never an invented production conversion.
-Command-only synthetic controls do not establish converter fidelity or
-whole-importer acceptance; verify the real converter through persisted source,
-native replay and the resumed provider boundary as separate checks.
+Actual-converter integration verification is pending; synthetic command controls
+do not establish importer fidelity or whole-importer acceptance.
 
 ## Explicit authority
 

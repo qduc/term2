@@ -461,7 +461,10 @@ function conversation(
       // Cleanup outcomes still matter, but late text/progress and unadmitted
       // starts must not become visible or authorize work after cancellation.
       const cleanup =
-        event.type === 'tool_execution_finished' || (event.type === 'item' && event.item.type === 'tool_result');
+        event.type === 'tool_execution_finished' ||
+        event.type === 'compaction_completed' ||
+        event.type === 'compaction_failed' ||
+        (event.type === 'item' && event.item.type === 'tool_result');
       if ((cancelled || draining) && !cleanup) return null;
       const fact = factFor(turnId, event);
       if (fact && !commit([fact])) {
@@ -1618,6 +1621,9 @@ function factFor(
       return { ...event, type: 'budget_opened' };
     case 'budget_observed':
       return { ...event, turnId };
+    case 'compaction_started':
+    case 'compaction_completed':
+    case 'compaction_failed':
     case 'model_response_completed':
       return { ...event, turnId };
     case 'history_replaced':
@@ -1677,7 +1683,8 @@ function withNotice(input: readonly Item[], notice: string): readonly Item[] {
   });
 }
 
-/** Physical audit/branch progress do not invalidate a root history token. */
+/** Physical audit/branch progress and compaction lifecycle do not invalidate a
+ * root history token. For compaction, history_replaced alone owns transcript mutation. */
 function changesRootHistory(fact: Fact): boolean {
   return [
     'turn_started',

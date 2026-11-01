@@ -5,6 +5,7 @@
 import type { AgentEventEnvelope } from '@qduc/agent-wire';
 import type { DirectConnection, DirectReplayConnection } from './in-process-direct-types.js';
 import type { WireEvent } from '../protocol/direct-wire.js';
+import type { AgentWireV2Envelope } from './server-wire-v2.js';
 import type { ServerResult } from './server-contracts.js';
 
 export const SERVER_EVENT_HEARTBEAT_INTERVAL_MS = 15_000;
@@ -12,9 +13,11 @@ export const SERVER_EVENT_HEARTBEAT_INTERVAL_MS = 15_000;
 // detach only the network subscriber: durable Session work and future attachments remain intact.
 const DRAIN_TIMEOUT_MS = 10_000;
 const MAX_BUFFERED_EVENTS = 256;
-type StreamFrame = { readonly id: number | null; readonly data: unknown };
+type StreamFrame = { readonly id: number | null; readonly event?: 'accepted' | 'live'; readonly data: unknown };
 type StreamEncoding = {
-  readonly format: 'direct-wire-v1' | 'agent-wire-v1';
+  readonly format: 'direct-wire-v1' | 'agent-wire-v1' | 'agent-wire-v2';
+  /** V2 accepted frames retain their real accepted seq even when replay is unavailable. */
+  readonly acceptedIds?: boolean;
   readonly snapshot: boolean;
   encode(event: WireEvent): StreamFrame | null;
 };
@@ -42,9 +45,29 @@ export function canonicalEventStream(
     },
   });
 }
+export function agentWireV2EventStream(
+  connection: DirectConnection | DirectReplayConnection,
+  encode: (event: WireEvent) => AgentWireV2Envelope | null,
+): ServerResult {
+  return eventStream(connection, {
+    format: 'agent-wire-v2',
+    snapshot: false,
+    acceptedIds: true,
+    encode(event) {
+      const envelope = encode(event);
+      if (!envelope) return null;
+      return {
+        id: envelope.kind === 'accepted' ? envelope.seq : null,
+        event: envelope.kind,
+        data: envelope,
+      };
+    },
+  });
+}
 function eventStream(connection: DirectConnection | DirectReplayConnection, encoding: StreamEncoding): ServerResult {
   const replay = 'replay' in connection ? connection.replay : null;
-  const resumable = replay !== null || (connection.snapshot !== null && connection.snapshot.seq !== null);
+  const resumable =
+    replay !== null || (encoding.snapshot && connection.snapshot !== null && connection.snapshot.seq !== null);
 
   return {
     status: 200,
@@ -55,7 +78,7 @@ function eventStream(connection: DirectConnection | DirectReplayConnection, enco
       connection: 'keep-alive',
       'x-accel-buffering': 'no',
       'x-term2-event-format': encoding.format,
-      'x-term2-event-mode': replay ? 'replay-live' : 'snapshot-live',
+      'x-term2-event-mode': replay ? 'replay-live' : encoding.snapshot ? 'snapshot-live' : 'live',
       'x-term2-replay': resumable ? 'atomic' : 'unavailable',
       ...(replay ? { 'x-term2-replay-from': String(replay.fromSeq), 'x-term2-replay-to': String(replay.toSeq) } : {}),
     },
@@ -94,9 +117,9 @@ function eventStream(connection: DirectConnection | DirectReplayConnection, enco
           const frame = encoding.encode(event);
           // Folded read-model updates are not SSE frames and consume no numeric cursor.
           if (!frame) return true;
-          return response.write(
-            `${resumable && frame.id !== null ? `id: ${frame.id}\n` : ''}data: ${JSON.stringify(frame.data)}\n\n`,
-          );
+          const eventLine = frame.event ? `event: ${frame.event}\n` : '';
+          const idLine = (resumable || encoding.acceptedIds) && frame.id !== null ? `id: ${frame.id}\n` : '';
+          return response.write(`${eventLine}${idLine}data: ${JSON.stringify(frame.data)}\n\n`);
         };
         const writeDraining = async (event: WireEvent) => {
           if (write(event) || closed) return;

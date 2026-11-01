@@ -363,7 +363,7 @@ export type WireEventPayloads = {
   queue_changed: { readonly change: WireQueueChange; readonly entries: readonly WireQueueEntry[]; readonly state: WireSnapshot['queueState']; readonly pauseReason?: WireSnapshot['queuePauseReason']; readonly admission?: WireAdmission; readonly messages?: readonly WireMessage[]; readonly submissions?: readonly WireSubmissionRecord[] };
   task_changed: { readonly change: 'task_started' | 'task_backgrounded' | 'task_stop_requested' | 'task_finished'; readonly at: number; readonly task: WireTask };
   task_progress: { readonly taskId: string; readonly at: number; readonly kind: 'text' | 'tool_progress' | 'activity'; readonly chunk: string; readonly executionId?: string };
-  subagent: { readonly agentId: string; readonly branchId?: string; readonly parentTurnId?: string; readonly rootTurnId?: string; readonly role?: string; readonly event: WireEvent };
+  subagent: { readonly agentId: string; readonly branchId?: string; readonly turnId?: string; readonly parentTurnId?: string; readonly rootTurnId?: string; readonly role?: string; readonly event: WireEvent };
   compacted: { readonly replaced: number; readonly summaryId: string };
   cost: { readonly totalUsd: number; readonly currency: 'USD' };
   notice: WireNotice;

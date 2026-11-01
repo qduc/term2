@@ -37,7 +37,7 @@ export class DirectProjection {
   #state: WireSnapshot;
   #queue: DirectQueueState;
   #workspace: DirectSessionState['workspace'];
-  #branches = new Map<string, { readonly projection: DirectProjection; readonly taskId: string; readonly parentTurnId?: string; readonly rootTurnId?: string; readonly role?: string }>();
+  #branches = new Map<string, { readonly projection: DirectProjection; readonly taskId: string; readonly turnId: string; readonly parentTurnId?: string; readonly rootTurnId?: string; readonly role?: string }>();
   constructor(state: DirectSessionState & { readonly queue?: DirectQueueState }, seq: number | null = null) {
     this.#state = { ...snapshotDirectState(state), seq };
     this.#workspace = state.workspace;
@@ -170,7 +170,7 @@ export class DirectProjection {
         const task = this.#state.tasks.find(task => task.id === fact.taskId);
         const projection = DirectProjection.forReplay(initialDirectState(this.#state.sessionId, this.#workspace, task?.model ?? this.#state.model));
         const parentTurnId = fact.parentTurnId ?? task?.turnId;
-        this.#branches.set(fact.branchId, { projection, taskId: fact.taskId,
+        this.#branches.set(fact.branchId, { projection, taskId: fact.taskId, turnId: fact.turnId,
           ...(parentTurnId !== undefined ? { parentTurnId } : {}),
           ...(fact.rootTurnId !== undefined ? { rootTurnId: fact.rootTurnId } : {}),
           ...(task?.role ? { role: task.role } : {}),
@@ -218,7 +218,7 @@ export class DirectProjection {
     // The wrapper is the accepted outer boundary for a branch fact. Preserve its
     // real accepted timestamp; nested child frames keep the existing null root cursor.
     return branch.projection.update({ type: 'fact', position: 0, seq, at, fact }).map(event => ({
-      ...this.#event('subagent', { agentId: branch.taskId, branchId,
+      ...this.#event('subagent', { agentId: branch.taskId, branchId, turnId: branch.turnId,
         ...(branch.parentTurnId !== undefined ? { parentTurnId: branch.parentTurnId } : {}),
         ...(branch.rootTurnId !== undefined ? { rootTurnId: branch.rootTurnId } : {}),
         ...(branch.role ? { role: branch.role } : {}), event: { ...event, seq: null } }, seq, branch.parentTurnId ?? null),

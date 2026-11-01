@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DirectConnection, DirectReplayConnection } from '../../host/in-process-direct-types.js';
 import type { WireSnapshot } from '../../protocol/direct-wire.js';
 import { reduceWireEvent } from '../../protocol/direct-reducer.js';
@@ -41,5 +41,7 @@ export function useClient(connection: ClientConnection, retained?: WireSnapshot,
     })();
     return () => { active = false; connection.close(); };
   }, [connection]);
-  return { state: projectSnapshot(visible.wire), error: visible.error };
+  // Preserve projection identity until the underlying wire snapshot changes.
+  const state = useMemo(() => projectSnapshot(visible.wire), [visible.wire]);
+  return { state, error: visible.error };
 }

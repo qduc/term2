@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { randomUUID } from 'node:crypto';
 import { Box, Text, useInput } from 'ink';
 import { MultilineInput, type ImageRef } from 'ink-prompt';
@@ -78,12 +78,23 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
   const [taskOpen, setTaskOpen] = useState(false);
   const [budgetOpen, setBudgetOpen] = useState(false);
   const [images, setImages] = useState<ImageRef[]>([]);
+  const ignoreInitialImages = useRef(false);
+  const onImagesChange = useCallback((next: ImageRef[]) => {
+    if (ignoreInitialImages.current) { ignoreInitialImages.current = false; return; }
+    setImages(previous => previous.length === next.length && previous.every((image, index) => {
+      const other = next[index];
+      return other && image.id === other.id && image.data === other.data && image.mimeType === other.mimeType
+        && image.byteSize === other.byteSize && image.displayNumber === other.displayNumber;
+    }) ? previous : next);
+  }, []);
   const [otherParts, setOtherParts] = useState<readonly WireContent[]>([]);
   const [originalParts, setOriginalParts] = useState<readonly WireContent[]>([]);
   const [rewindTargets, setRewindTargets] = useState<readonly WireRewindTarget[] | null>(null);
   const [editing, setEditing] = useState<{ id: string; restoreText: string; restoreCursor: number; restoreImages: ImageRef[]; restoreOther: readonly WireContent[]; restoreOriginal: readonly WireContent[]; knownParts?: readonly WireContent[] } | null>(null);
   const viewport = useTranscriptViewport(state, columns, rows, !interactionOpen && !taskOpen && !budgetOpen && !rewindTargets);
   const editor = useEditor(state.messages.filter(message => message.role === 'user').map(message => ({ text: message.historyText ?? message.text, attachments: message.attachments ?? [] })));
+  // The remounted editor first reports its empty internal images before syncing props.
+  const replaceInput = (text: string, cursor?: number) => { ignoreInitialImages.current = true; editor.replace(text, cursor); };
   const { InputFrame, PromptMarker, Hints } = useSkin();
   const theme = useTheme();
   const [notice, setNotice] = useState<string | null>(null);
@@ -92,7 +103,7 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
   const answerOwners = useRef<readonly string[] | null>(null);
   const queueOwners = useRef<readonly string[] | null>(null);
   interrupt.current = () => {
-    if (editor.value.length > 0) editor.replace('');
+    if (editor.value.length > 0) replaceInput('');
     else if (state.activeTurnId || state.interactions.length) {
       void cancelForeground(connection, state.activeTurnId ?? undefined).then(setNotice, error => {
         setNotice(error instanceof Error ? error.message : String(error));
@@ -121,7 +132,7 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
 
   const restoreDraft = (draft: { readonly text: string; readonly attachments: readonly WireContent[] }, cursor?: number) => {
     const restored = restoreAttachments(draft.attachments);
-    editor.replace(draft.text, cursor); setImages(restored.images); setOtherParts(restored.other); setOriginalParts(draft.attachments);
+    replaceInput(draft.text, cursor); setImages(restored.images); setOtherParts(restored.other); setOriginalParts(draft.attachments);
   };
   const executeRewind = async (targetId: string, disposition: 'edit' | 'resend') => {
     if (pending.current) return;
@@ -150,14 +161,14 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
     try {
       if (editing) {
         if (input.trim() === '/queue cancel') {
-          editor.replace(editing.restoreText, editing.restoreCursor); setImages(editing.restoreImages); setOtherParts(editing.restoreOther); setOriginalParts(editing.restoreOriginal); setEditing(null); return;
+          replaceInput(editing.restoreText, editing.restoreCursor); setImages(editing.restoreImages); setOtherParts(editing.restoreOther); setOriginalParts(editing.restoreOriginal); setEditing(null); return;
         }
         try {
           const parts = wireAttachments(submittedImages, otherParts, originalParts);
           if (!editing.knownParts && parts.length) throw new Error('Queued attachments are unavailable; cannot safely replace them.');
           const changed = editing.knownParts && JSON.stringify(parts) !== JSON.stringify(editing.knownParts);
           await queueAction(connection, 'edit', editing.id, input, changed ? parts : undefined);
-          editor.replace(editing.restoreText, editing.restoreCursor); setImages(editing.restoreImages); setOtherParts(editing.restoreOther); setOriginalParts(editing.restoreOriginal); setEditing(null);
+          replaceInput(editing.restoreText, editing.restoreCursor); setImages(editing.restoreImages); setOtherParts(editing.restoreOther); setOriginalParts(editing.restoreOriginal); setEditing(null);
           setNotice('Queued message updated.'); return;
         } catch (error) {
           if (error instanceof WireCommandFailure && error.code === 'too_late') {
@@ -340,7 +351,7 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
         maxHeight={Math.max(1, rows - 8)}
         isActive={!busy && !connectionError && !interactionOpen && !taskOpen && !budgetOpen && !rewindTargets}
         images={images}
-        onImagesChange={setImages}
+        onImagesChange={onImagesChange}
         enableImagePaste
         onPasteError={reason => setNotice(`Image paste failed: ${reason}`)}
         ignoreInput={(input, key) => key.pageUp || key.pageDown || (key.ctrl && (key.upArrow || key.downArrow || input === 'g' || input === 'b')) || (Boolean(state.activeTurnId) && key.meta && key.return)}

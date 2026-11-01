@@ -1,3 +1,4 @@
+import { notifyProviderRequestDispatched } from './request-dispatch.js';
 import { ResponseToolArgumentScopes } from './tool-argument-stream-scope.js';
 import { randomUUID } from 'node:crypto';
 import { ResponsesWS } from 'openai/resources/responses/ws';
@@ -255,6 +256,7 @@ export class CodexResponsesTransport {
         const dispatchRequestEvent = () => {
           const readyState = (socket as any).socket?.readyState;
           socket.send(requestEvent);
+          notifyProviderRequestDispatched();
           recordWebSocketDispatch(request, readyState === WEBSOCKET_OPEN ? 'flushed' : 'unknown');
         };
         if ((socket as any).socket?.readyState === WEBSOCKET_CONNECTING) {

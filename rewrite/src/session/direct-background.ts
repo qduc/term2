@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { setImmediate } from 'node:timers/promises';
 import { createCodenameRunId } from './codename-run-id.js';
 import type { ModelError } from '../model/index.js';
 import type { InteractionDecision, InteractionRequestId, SubagentMessageResult } from '../tools/index.js';
@@ -28,6 +27,8 @@ type Entry = {
   readonly resolve: (result: DirectTaskResult) => void;
   readonly backgrounded: Promise<void>;
   readonly releaseForeground: () => void;
+  readonly kickoff: Promise<void>;
+  readonly releaseKickoff: () => void;
   mode: DirectTaskMode;
   status: 'running' | 'cancelling' | DirectTaskResult['kind'];
   lastActivityAt: number;
@@ -89,6 +90,11 @@ export class DirectBackgroundTasks {
     return { taskId: entry.task.taskId, result: entry.result as Promise<DirectTaskResult<Value>> };
   }
 
+  /** Release only tasks already admitted by this parent, never future launches. */
+  releaseParent(parentTurnId: string): void {
+    for (const entry of this.#entries.values()) if (entry.task.parentTurnId === parentTurnId) entry.releaseKickoff();
+  }
+
   /** Active tasks first; terminal results remain queryable for this Session's lifetime. */
   list(): readonly DirectTaskState[] {
     return [...this.#entries.values()]
@@ -107,6 +113,8 @@ export class DirectBackgroundTasks {
     signal.throwIfAborted();
     const entry = this.#resolve(target);
     if (!entry) return undefined;
+    // An explicit join parks the caller, including launch-and-wait in one tool.
+    entry.releaseKickoff();
     if (entry.outcome) return this.#state(entry);
     await new Promise<void>((resolve, reject) => {
       const abort = () => {
@@ -191,6 +199,7 @@ export class DirectBackgroundTasks {
     // Close waits explicitly; do not rely on throwing from an AbortSignal listener.
     this.#interactions.cancelTask(entry.task.taskId);
     this.#questions.cancel(entry.task.taskId);
+    entry.releaseKickoff();
     entry.controller.abort();
     return { ok: true, task: this.#state(entry) };
   }
@@ -218,6 +227,7 @@ export class DirectBackgroundTasks {
     for (const entry of this.#entries.values()) {
       if (entry.outcome) continue;
       entry.status = 'cancelling';
+      entry.releaseKickoff();
       entry.controller.abort();
     }
     this.#sink.failed(this.#failure);
@@ -251,8 +261,15 @@ export class DirectBackgroundTasks {
     const backgrounded = new Promise<void>((done) => {
       releaseForeground = done;
     });
+    let releaseKickoff!: () => void;
+    const kickoff = new Promise<void>((done) => {
+      releaseKickoff = done;
+    });
+    if (request.mode !== 'background' || !request.parentTurnId) releaseKickoff();
     return {
       task,
+      kickoff,
+      releaseKickoff,
       controller: new AbortController(),
       result,
       resolve,
@@ -282,11 +299,9 @@ export class DirectBackgroundTasks {
     entry: Entry,
     operation: (context: DirectTaskContext) => Promise<DirectTaskResult<Value>>,
   ): Promise<void> {
-    // Give the launching tool's receipt/continuation a turn before background
-    // work competes with it. This is not a barrier on the parent: a held model
-    // response or a tool awaiting this task must not prevent the body starting.
-    if (entry.mode === 'background') await setImmediate();
-    else await Promise.resolve();
+    // The owning engine releases on actual dispatch, park or termination.
+    // Cancellation releases too, so close/poison never waits on a silent parent.
+    await entry.kickoff;
     let result: DirectTaskResult;
     try {
       result = entry.controller.signal.aborted ? { kind: 'cancelled' } : await operation(this.#context(entry));

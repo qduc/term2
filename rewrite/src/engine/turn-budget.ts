@@ -96,6 +96,7 @@ export class TurnBudgetControl {
 
   /** Exclude overlapping human waits once, not once per parallel tool. */
   async humanWait<T>(operation: () => Promise<T>): Promise<T> {
+    this.deps.onTurnBoundary?.({ turnId: this.spec.turnId, kind: 'parked' });
     if (++this.#waiters === 1) this.state?.pause();
     try {
       return await operation();

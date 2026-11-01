@@ -28,6 +28,7 @@ function createTurn(spec: TurnSpec, deps: TurnDeps, operation: 'conversation' | 
   const model = new TurnModel(spec, deps, controller.signal, channel, tools, budget);
   let settled = false;
   const cancel = (): void => {
+    deps.onTurnBoundary?.({ turnId: spec.turnId, kind: 'cancelled' });
     if (!settled) model.clear();
     controller.abort();
     channel.cancel();
@@ -200,6 +201,8 @@ async function drive(
     events.cancel();
   } finally {
     if (signal.aborted || result.kind !== 'completed') model.clear();
+    // Release before cleanup: a tool may own a still-gated child it must join.
+    deps.onTurnBoundary?.({ turnId: spec.turnId, kind: 'ended' });
     // Session cannot go idle while root/scripted descendants still have bodies.
     tools.cancel();
     await tools.cleanup();

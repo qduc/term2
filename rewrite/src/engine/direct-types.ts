@@ -106,6 +106,11 @@ export type InteractionRequest = ToolInteractionRequest & {
 };
 export type ToolContextSeed = Pick<ToolContext, 'workspace' | 'settings'>;
 export type TurnDeps = {
+  /** Transient lifecycle, not a durable fact or response/first-token observation. */
+  readonly onTurnBoundary?: (context: {
+    readonly turnId: TurnId;
+    readonly kind: 'request_dispatched' | 'parked' | 'ended' | 'cancelled';
+  }) => void;
   readonly models: ModelRegistry;
   readonly tools?: ToolRegistry;
   readonly toolContext?: ToolContextSeed;

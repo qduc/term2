@@ -1,3 +1,4 @@
+import { notifyProviderRequestDispatched } from '../request-dispatch.js';
 import { composeFetch, FetchMiddleware } from './compose.js';
 import { createLoggingMiddleware } from './logging-middleware.js';
 import { createRateLimitMiddleware } from './rate-limit-middleware.js';
@@ -28,7 +29,12 @@ export function createProviderFetch({
   middlewares = [],
   fetchImpl = fetch,
 }: CreateProviderFetchOptions): typeof fetch {
-  return composeFetch(fetchImpl, [
+  const dispatchFetch: typeof fetch = (input, init) => {
+    const response = fetchImpl(input, init);
+    notifyProviderRequestDispatched();
+    return response;
+  };
+  return composeFetch(dispatchFetch, [
     // Preprocessing and decorators execute first (outermost)
     ...middlewares,
     // Logging wraps rate-limit so it catches any errors thrown by the rate-limit check

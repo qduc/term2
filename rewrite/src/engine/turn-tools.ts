@@ -270,6 +270,7 @@ export class TurnTools {
         ? {
             askOrchestrator: (question: string) => {
               this.#checkBody(current());
+              this.deps.onTurnBoundary?.({ turnId: this.spec.turnId, kind: 'parked' });
               return this.deps.askOrchestrator!(question);
             },
           }
@@ -279,7 +280,11 @@ export class TurnTools {
             subagents: {
               list: () => subagents().list(),
               get: (target: string) => subagents().get(target),
-              wait: (target: string, signal: AbortSignal) => subagents().wait(target, signal),
+              wait: (target: string, signal: AbortSignal) => {
+                const controls = subagents();
+                this.deps.onTurnBoundary?.({ turnId: this.spec.turnId, kind: 'parked' });
+                return controls.wait(target, signal);
+              },
               cancel: (target: string) => subagents().cancel(target),
               message: (target: string, message: string, replyTo?: string) =>
                 subagents().message(target, message, replyTo),
@@ -291,6 +296,7 @@ export class TurnTools {
         this.#checkBody(parent);
         this.#checkStart(parent);
         if (!this.deps.runNested) throw new Error('Direct nested execution is not configured');
+        if (request.mode !== 'background') this.deps.onTurnBoundary?.({ turnId: this.spec.turnId, kind: 'parked' });
         const work = this.deps.runNested(request, {
           turnId: this.spec.turnId,
           parentExecutionId: parent.executionId,

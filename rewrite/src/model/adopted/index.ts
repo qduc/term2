@@ -1,3 +1,4 @@
+import { observeProviderRequestDispatch } from '../../../../source/providers/request-dispatch.js';
 import type {
   ContextCompactionSessionState,
   StreamedModelTurn,
@@ -602,10 +603,13 @@ export function createAdoptedModelRegistry(options: AdoptedModelRegistryOptions)
     const model: Model = {
       ref,
       contextWindow,
-      async *stream(request, signal) {
+      async *stream(request, signal, onDispatched) {
         try {
           const streamed = await original;
-          yield* modelEvents(streamed, toProviderRequest(request, signal), ref.provider, signal);
+          yield* observeProviderRequestDispatch(
+            modelEvents(streamed, toProviderRequest(request, signal), ref.provider, signal),
+            onDispatched,
+          );
         } catch (error) {
           throw toModelError(error, signal);
         }

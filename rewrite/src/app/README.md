@@ -36,8 +36,15 @@ or numeric-string `process.exitCode` is normalized to the numeric `main` result.
 `createToolSurface` in `tool-surface.ts` builds the offered tools and matching
 execution and approval capabilities together. It keeps a mutable copy of the
 source's readonly graph for native capability replacement; the source still
-owns its original graph. Replacement rebinds the script registry. MCP capture
-in `direct-mcp-source.ts` reserves the executable `describe` name from the
+owns its original graph. Replacement rebinds the script registry. Memory leaves are adapted into that script graph before the shared source
+`isDirectlyCallable` predicate filters their top-level presentation when the
+actual surface offers `run_code`; otherwise the leaves remain directly callable. The source
+tool spec keeps `description` live: `run_code` binds its catalog after initial
+surface assembly, and a copied string silently omits native memory leaves.
+`direct-config-memory.ts` re-adapts the captured leaves on configuration even
+when none is top-level. Bare suppresses inline memory guidance without changing
+access, personal-context opt-in, snapshots, or the local-only store boundary.
+MCP capture in `direct-mcp-source.ts` reserves the executable `describe` name from the
 run-code runtime, the same owner used by tool assembly.
 
 `createDirectSubagentTools` in `direct-subagent-tools.ts` exposes source callback

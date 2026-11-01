@@ -68,7 +68,10 @@ export async function executeSourceChild(
 export function sourceToolSpec(definition: AnyToolDefinition): ToolSpec {
   return {
     name: definition.name,
-    description: definition.description,
+    // run_code derives its catalog from the late-bound, generation-owned graph.
+    get description() {
+      return definition.description;
+    },
     inputSchema: definition.modelTool
       ? {}
       : isZodToolParameterSchema(definition.parameters)

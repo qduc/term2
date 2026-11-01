@@ -7,9 +7,11 @@ import {
 import { resolveActiveProfile } from '../../../source/services/profiles/active-profile.js';
 import type { ISettingsService } from '../../../source/services/service-interfaces.js';
 import { resolveDisabledCapabilities } from '../../../source/services/tool-toggles.js';
+import { isDirectlyCallable, TOOL_NAME_RUN_CODE } from '../../../source/tools/system/run-code/index.js';
 import type { AnyToolDefinition } from '../../../source/tools/types.js';
 import type { DirectContextCapabilities, DirectContextPort } from '../session/direct-capabilities.js';
 import { createDirectAutomaticMemory, createDirectMemoryCapability } from '../session/direct-memory.js';
+import type { ToolSpec } from '../model/index.js';
 import type { Tool, Workspace } from '../tools/index.js';
 
 export type DirectSessionMemoryOptions = {
@@ -17,6 +19,8 @@ export type DirectSessionMemoryOptions = {
   /** Current authorized identity, not a path recovered from session metadata. */
   readonly workspace: Workspace;
   readonly subject: MemoryCapabilitySubject;
+  /** Actual base offering: without run_code, source leaves remain directly callable. */
+  readonly offeredTools: readonly Pick<ToolSpec, 'name'>[];
   /** The owning surface's adapter, retaining its normal approval/interceptor gates. */
   readonly adaptTool: (definition: AnyToolDefinition) => Tool;
   readonly onWarning?: (message: string) => void;
@@ -38,6 +42,7 @@ export function createDirectSessionMemory(
 
   const { settings, subject } = options;
   let includeContext = false;
+  let includeGuidance = true;
   let personalContextOptIn = false;
   if (subject.kind === 'main') {
     const profile = resolveActiveProfile(settings);
@@ -50,10 +55,11 @@ export function createDirectSessionMemory(
     const bare = profile.identity.id === 'builtin:bare';
     includeContext = !bare && profile.context.sources.some((source) => source.source === 'memory' && source.enabled);
     personalContextOptIn = bare;
+    includeGuidance = !bare;
   }
 
   const builder = new MemoryCapabilityBuilder(settings, { onWarning: options.onWarning });
-  const memory = createDirectMemoryCapability({
+  const capability = createDirectMemoryCapability({
     builder,
     adaptTool: options.adaptTool,
     subject,
@@ -62,6 +68,14 @@ export function createDirectSessionMemory(
     includeContext,
     personalContextOptIn,
   });
+  // Adapt every leaf into run_code before applying the source top-level policy.
+  const memory = {
+    ...capability,
+    tools: options.offeredTools.some((tool) => tool.name === TOOL_NAME_RUN_CODE)
+      ? capability.tools.filter((tool) => isDirectlyCallable(tool.spec))
+      : capability.tools,
+    guidance: includeGuidance ? capability.guidance : '',
+  };
   if (subject.kind !== 'main' || memory.access === 'none' || process.env.TERM2_AUTOMATIC_MEMORY_CANARY !== '1') {
     return { memory };
   }

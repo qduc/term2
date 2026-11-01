@@ -1,4 +1,5 @@
 /** Re-adapt one Session's existing memory leaves, without a second memory lifetime. */
+import { isDirectlyCallable, TOOL_NAME_RUN_CODE } from '../../../source/tools/system/run-code/index.js';
 import type { AnyToolDefinition } from '../../../source/tools/types.js';
 import type { DirectContextCapabilities } from '../session/direct-capabilities.js';
 import type { AgentSurface } from './tool-contract.js';
@@ -19,13 +20,12 @@ export function createDirectConfigMemoryBinding() {
       return tool;
     },
     rebind(surface: AgentSurface, capabilities: DirectContextCapabilities): DirectContextCapabilities {
-      if (!capabilities.memory || capabilities.memory.tools.length === 0) return capabilities;
-      const captured = capabilities.memory.tools.map((tool) => {
-        const definition = definitions.get(tool.spec.name);
-        if (!definition) throw new Error(`Cannot configure: native memory leaf '${tool.spec.name}' was not captured.`);
-        return definition;
-      });
-      const tools = captured.map((definition) => surface.runtime.adaptTool(definition));
+      if (!capabilities.memory || capabilities.memory.access === 'none') return capabilities;
+      // Hidden scripted leaves still belong to every configured generation.
+      const adapted = [...definitions.values()].map((definition) => surface.runtime.adaptTool(definition));
+      const tools = surface.tools.some((tool) => tool.name === TOOL_NAME_RUN_CODE)
+        ? adapted.filter((tool) => isDirectlyCallable(tool.spec))
+        : adapted;
       return { ...capabilities, memory: { ...capabilities.memory, tools } };
     },
   };

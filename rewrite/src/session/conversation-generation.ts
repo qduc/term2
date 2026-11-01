@@ -149,7 +149,7 @@ export class ConversationGeneration {
     // synthesizing crash-time tool results, wait closures or root terminals.
     // An unfinished projection's interrupted status is not a live failure.
     const history = replay(facts, { recoverQueue: false, recoverActiveTurn: false }).history;
-    // This is the same pure admission plan, but its returned journal.context facts are
+    // This is the same pure admission plan, but its returned context facts are
     // deliberately NOT accepted. No memory/notice/goal state is consumed.
     const human = capabilities.humanPlan('preview', request.input);
     const notice = this.notice(request.notice);

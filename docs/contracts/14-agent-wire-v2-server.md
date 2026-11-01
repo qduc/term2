@@ -41,8 +41,9 @@ rotation identity, context-compaction attempt evidence including real
 are retained. The server explicitly maps the proposed accepted-only `cost`,
 `request_cost_recorded`, `goal`, `goal_proposed`, `verification`, `notice`,
 `background_notice_enqueued` and `background_notices_delivered` names to their
-exact native payloads; the shared 0.2.0 source must add those names before the
-gate can open. `request_cost_recorded` and aggregate `cost` are not branch
+exact native payloads; shared source delta `af3d0ff` now adds those accepted
+names and rejects branch wrappers on cost/request receipt, but the unbuilt
+artifact keeps the gate closed. `request_cost_recorded` and aggregate `cost` are not branch
 wrapped; request records retain physical ancestry and are upsert-only, never a
 second charge. Changes without a shared name (for example generic `message` or
 task history) are not relabelled; the accepted boundary may be an empty batch.

@@ -149,6 +149,7 @@ export type {
   ToolContextSeed,
   TurnDeps,
   TurnEvent,
+  TurnCompactionEvent,
   TurnHandle,
   TurnResult,
   TurnSpec,

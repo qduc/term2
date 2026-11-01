@@ -1,7 +1,7 @@
 /** Real compaction operations, returning proposals for Session's sole writer. */
 import { createHash, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import type { Item, ItemId, Model, ModelRequest, Usage } from '../model/index.js';
+import type { Item, ItemId, Model, ModelRef, ModelRequest, Usage } from '../model/index.js';
 import { resolveModelContextPolicy } from '../../../source/services/agent-runtime/model-context-policy.js';
 import {
   CONTEXT_COMPACTION_INSTRUCTIONS,
@@ -24,6 +24,26 @@ export type DirectContextEstimate = {
   readonly safetyReserveTokens: number;
   readonly hardFitTokens: number;
 };
+/** A real compaction attempt, not a physical-dispatch or history-acceptance claim.
+ * Estimates describe the frozen compaction input, not measured provider usage. */
+export type DirectCompactionStart = {
+  readonly trigger: 'manual' | 'automatic';
+  readonly model: ModelRef;
+  readonly strategy?: 'native' | 'local';
+  readonly before: DirectContextEstimate;
+  readonly contextWindow?: number;
+  readonly maxRequestInputTokens?: number | null;
+  readonly lastCompletedInputTokens?: number;
+};
+/** Observed auxiliary request evidence; unavailable usage/cost stays absent. */
+export type DirectCompactionRequest = {
+  readonly requestId: string;
+  readonly modelStep: number;
+  readonly model: ModelRef;
+  readonly outcome: 'completed' | 'failed' | 'cancelled';
+  readonly usage?: Usage;
+  readonly costUsd?: number | string;
+};
 export type DirectCompactionInput = {
   readonly request: ModelRequest;
   readonly model: Model;
@@ -37,6 +57,9 @@ export type DirectCompactionInput = {
   /** Host-recorded receipt previews from the last accepted local checkpoint. */
   readonly checkpointReceipts?: readonly string[];
   readonly manual?: boolean;
+  /** Await acceptance before attempting compaction. Automatic no-op scheduling
+   * emits nothing; manual evaluation starts even if its plan is then blocked. */
+  readonly onStarted?: (evidence: DirectCompactionStart) => Promise<void>;
   /** Request-local accounting, including usage observed before a failed summary. */
   readonly onSummaryUsage?: (usage: Usage, requestOrdinal: number) => void;
 };
@@ -83,6 +106,30 @@ export async function compactDirectHistory(input: DirectCompactionInput): Promis
   input.signal.throwIfAborted();
   validateSettings(input);
   const estimate = estimateDirectContext(input.request, input.contextWindow);
+  // Selection is source-backed capability/configuration, not proof of dispatch.
+  // Explicit native unavailability has no selected available strategy.
+  const strategy =
+    input.settings.mode === 'native' && !input.model.compact
+      ? undefined
+      : input.settings.mode !== 'local' && input.model.compact
+      ? 'native'
+      : 'local';
+  const start = (): Promise<void> =>
+    input.onStarted?.({
+      trigger: input.manual ? 'manual' : 'automatic',
+      model: input.request.model,
+      ...(strategy !== undefined ? { strategy } : {}),
+      before: estimate,
+      ...(input.contextWindow !== undefined ? { contextWindow: input.contextWindow } : {}),
+      ...(input.maxRequestInputTokens !== undefined ? { maxRequestInputTokens: input.maxRequestInputTokens } : {}),
+      ...(input.lastCompletedInputTokens !== undefined
+        ? { lastCompletedInputTokens: input.lastCompletedInputTokens }
+        : {}),
+    }) ?? Promise.resolve();
+  if (input.manual) {
+    await start();
+    input.signal.throwIfAborted();
+  }
   // The setting schedules automatic maintenance; an explicit compact command
   // is independent, as in the source Session's compactContext manual path.
   if (!input.manual && !input.settings.enabled) return { kind: 'blocked', reason: 'disabled', estimate };
@@ -100,6 +147,8 @@ export async function compactDirectHistory(input: DirectCompactionInput): Promis
   if (!input.manual && input.rearmAtEstimatedTokens !== undefined && measured < input.rearmAtEstimatedTokens) {
     return { kind: 'deferred', reason: 'hysteresis', estimate };
   }
+  if (!input.manual) await start();
+  input.signal.throwIfAborted();
   // An explicit native choice never silently substitutes local summarization.
   if (input.settings.mode === 'native' && !input.model.compact)
     return { kind: 'blocked', reason: 'native_unavailable', estimate };

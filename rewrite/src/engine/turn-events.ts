@@ -8,8 +8,14 @@ type Receipt = {
   accepted?: () => void;
 };
 
+// These outcomes are chosen only after an accepted compaction start; success
+// additionally requires accepted history replacement. Cancellation must not
+// erase that evidence or relabel accepted replacement as failed compaction.
 const isCleanup = (event: TurnEvent): boolean =>
-  event.type === 'tool_execution_finished' || (event.type === 'item' && event.item.type === 'tool_result');
+  event.type === 'compaction_completed' ||
+  event.type === 'compaction_failed' ||
+  event.type === 'tool_execution_finished' ||
+  (event.type === 'item' && event.item.type === 'tool_result');
 
 export class TurnEvents {
   readonly #queue: AcceptedTurnEvent[] = [];

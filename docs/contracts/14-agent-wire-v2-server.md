@@ -45,8 +45,36 @@ exact native payloads; shared source delta `af3d0ff` now adds those accepted
 names and rejects branch wrappers on cost/request receipt, but the unbuilt
 artifact keeps the gate closed. `request_cost_recorded` and aggregate `cost` are not branch
 wrapped; request records retain physical ancestry and are upsert-only, never a
-second charge. Changes without a shared name (for example generic `message` or
-task history) are not relabelled; the accepted boundary may be an empty batch.
+second charge. Native accepted `message` and `task_changed` are mapped to those
+exact requested names with their complete native public payloads; see
+“Required remaining accepted vocabulary” below. Changes without a shared name
+are not relabelled; the accepted boundary may be an empty batch.
+
+### Required remaining accepted vocabulary (M6)
+
+The candidate native producer has two concrete accepted changes that were
+previously dropped and that M6 transcript/task-history parity needs:
+
+- `message`: exact `{message: WireMessage, replacesDraftId?: string}` from the
+  accepted `item` fact. The message retains its real `id`, role, content/text,
+  optional turn/modelStep/execution identity, error/draft flags and exact
+  replacement relation. No provider history or private content is added.
+- `task_changed`: exact `{change: task_started|task_backgrounded|task_stop_requested|task_finished,
+  at: number, task: WireTask}` from the accepted task fact. Preserve the task's
+  actual optional input/name/role/model/mode/timestamps/progress/result and
+  `toolUseCounts`; absent and empty remain distinct. A stop request or child
+  terminal is not task completion.
+
+The server source maps these names now. The shared v2 source must add them to
+the accepted allowlist and validate their payloads; the browser must reduce
+them. Until that cross-owner intake is complete, the v2 gate stays closed and
+an activation attempt with these names would be invalid, not silently downgraded.
+
+`status_changed` is not added by this step: the candidate native producer has
+no accepted `status_changed` fact. Status is current snapshot state and the
+existing accepted lifecycle events; inventing a status event would fabricate
+replay provenance. If a native accepted status producer is added later, it
+needs a separate exact `{status}` contract and consumer intake.
 
 Live frames are named `event: live`, have no SSE id or seq/time fields, and carry
 only the shared v2 live change types. They never advance a resume checkpoint and
@@ -94,5 +122,5 @@ vendored tarball, migrate browser/BFF code, or activate the gate. The next
 combined migration must update both consumer pins plus the browser parser,
 atomic reducer, sparse cursor, hydration/replay and BFF config handling, then
 provide independent verification. Until then no v2 runtime support, replay
-parity, fresh branch history, aggregate cost reconstruction or M6 completion is
-claimed.
+parity, fresh branch history, aggregate cost reconstruction, complete M6
+transcript/task-history delivery or M6 completion is claimed.

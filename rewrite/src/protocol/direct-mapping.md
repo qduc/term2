@@ -469,3 +469,51 @@ windows. No legacy final, remaining live event family, private providerHistory o
 complete --json parity is supplied by these helpers. Headless owns its existing
 client completion/error records and keeps --json fail-closed until genuine native
 public final-window authority and required event coverage are delivered.
+
+## Accepted branch hydration at one logical Session cut
+
+`DirectProjection.snapshot` exposes `WireSnapshot.branches` from the existing
+accepted branch projection map. `DirectAttachment` reconstructs that map from
+`Session.captureFrom(0)` before returning a connection snapshot; synchronization
+snapshots also carry the branch read models. No second journal, reader, sequence
+or timestamp is introduced. The outer `sessionId`/`seq` is the single hydration
+and subsequent replay cut. Branch `acceptedSeq` is only the last real
+`branch_started`/`branch_event` boundary; task interaction and request-cost joins
+can be newer, up to the outer cut, and never create separate resume cursors.
+
+Each `WireBranchSnapshot` carries actual `branchId`, `taskId`, child `turnId` and
+only recorded optional `parentTurnId`/`rootTurnId`. Its messages, tools, mixed
+timeline, accepted summaries, budget state and terminal observations come from
+that branch's existing public reducer. These are accepted public context/items,
+not private provider history or proof that an unfinished branch is still running.
+No root configuration/model or inferred task outcome is exposed as child state.
+Usage stays null until an actual accepted child usage fact; reasoning stays null
+until an accepted summary. Raw live reasoning/progress remain non-replayable.
+
+Pending interactions join the root's task-owned public requests by exact taskId
+and child turnId. Request costs select the root's accepted physical records by
+producing child turnId and retain their requestId and native ancestry. They are
+views of the SAME charges: do not sum them again with root requestCosts, optional
+response costUsd or an aggregate cost. No usage/price comes from compaction
+estimates or request references. Child queue is explicitly null (unavailable):
+the branch fact grammar has no queue producer. Root queue is not child history.
+An absent branches capability is unavailable; [] from this producer means no
+accepted branch_started exists in the reconstructed prefix. Branch models survive
+root context rotation, while native root transcript/usage follow the existing
+foreground reset semantics and physical request-cost accounting survives.
+
+Native WireSnapshot already includes root tasks, queue/submissions, requestCosts,
+goal/verification and notice/notification evidence. The canonical HTTP
+`projectServerSession` is a different, narrower DTO; its omission of those fields
+must not be mistaken for their absence from the native producer. Versioned HTTP
+hydration needs the native snapshot, not that canonical narrowing. V2 accepted
+codecs/consumers must explicitly preserve real native request_cost_recorded,
+goal/goal_proposed/verification/notice and background notice changes instead of
+falling through a lossy v1 mapper. A `cost` wire type is not a cost producer:
+the current accepted projection emits request receipts and optional response
+costUsd, not a synthesized aggregate total. No aggregate event is added here.
+
+This native DTO addition does not implement shared-wire artifacts, server/browser
+serialization/parsing, external consumer migration, raw-stream retention or M6
+activation. Those owners must integrate the actual shape and keep the combined
+gate closed until required implementation and authorized verification finish.

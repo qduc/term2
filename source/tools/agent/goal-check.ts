@@ -15,7 +15,7 @@ import {
   getCallIdFromItem,
 } from '../format-helpers.js';
 
-const GOAL_CHECK_DESCRIPTION =
+export const GOAL_CHECK_DESCRIPTION =
   'Use only when a durable session goal is active; do not call when no goal is set. Report your self-check ' +
   'against that goal. While the goal is active, call this by itself ' +
   'as the last tool call before ending a turn, after any work and after reading its results. Reporting achieved ' +

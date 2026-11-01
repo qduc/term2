@@ -1,6 +1,7 @@
 /** Root goal data and tools. Session supplies all state and accepts every write. */
 import { z } from 'zod';
 import { createDurableGoal, MAX_GOAL_FIELD_LENGTH } from '../../../source/services/conversation/durable-goal.js';
+import { GOAL_CHECK_DESCRIPTION } from '../../../source/tools/agent/goal-check.js';
 import { goalCheckParameters } from '../../../source/services/conversation/durable-goal-stop-check.js';
 import { renderDurableGoalContext } from '../../../source/prompts/durable-goal-context.js';
 import type { DurableGoal } from '../../../source/services/logging/conversation-log-events.js';
@@ -85,11 +86,7 @@ export function createDirectGoalCheckTool(deps: {
   return {
     spec: {
       name: 'goal_check',
-      description:
-        'Use only for an active durable session goal. Call by itself as the last tool call after all work and results. ' +
-        'Report achieved with concrete outcome and criteria evidence, blocked with the exact missing input or capability, ' +
-        'not_achieved to keep working, or deferred when newer user instructions take priority. Achieved proposes completion ' +
-        'subject to harness verification; it grants no permission and does not override newer instructions.',
+      description: GOAL_CHECK_DESCRIPTION,
       inputSchema: z.toJSONSchema(directGoalCheckSchema),
     },
     parallelSafe: false,

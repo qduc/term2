@@ -114,7 +114,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     includeMemory: !remote && options.includeMemory !== false,
     projectInstructions: options.projectInstructions,
     withToolInvocation: delegation.withInvocation,
-    getGoal: () => undefined,
+    // Session owns the live goal tool and applicability context.
     ...delegation.callbacks,
     getAskUserAnswer: () => answers.getStore(),
     async checkToolInterceptors(name, params, callId) {

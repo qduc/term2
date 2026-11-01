@@ -110,12 +110,13 @@ protocol maps that source-backed contract. Combined execution remains unverified
   The projector folds the real queue reducer and
   obtains canonical raw steer input BEFORE reducing queue_steered. It never
   appends a second item fact or emits N cursor-sharing message frames.
-- Original task input and toolsUsed are not separate fields in the consumed native
-  task descriptor/result contract. DirectSubagents.start retains request.task as
-  label; the branch driver returns items/outcome. Protocol keeps label distinct
-  from result output and does not expose arbitrary provider items, relabel output
-  as input, or invent tools-used metadata. Native accepted public metadata is
-  required before those additional pinned fields can be projected.
+- Native task descriptors may carry original launcher `input`; it is projected as
+  `WireTask.input` verbatim when present, and remains absent when unknown. The
+  branch result may carry actual accepted physical-start `toolUseCounts`; it is
+  projected as `WireTaskResult.toolUseCounts` only after shape/identity validation.
+  Absent means unknown, an actual empty array means no physical starts, and
+  `toolsUsed`/labels/result text are never used to infer counts. Protocol does not
+  expose arbitrary provider items or relabel output as input.
 - Public submission records retain original/current content, delivery, origin,
   receipt, stage, owning turn and accepted outcome. finalText is null unless an
   accepted historical completed turn result is actually correlated to that turn.
@@ -260,8 +261,12 @@ methods; `DirectCommandCapabilities` no longer defines parallel injected version
 `submitWithDelivery({...request,delivery})` preserves auto/reject_if_busy/steer/
 follow_up semantics under native admission. An expected-turn cancel calls atomic
 `Session.abort(expectedTurnId,discardQueue?)` and returns
-`{ok:true,kind:'abort',result:<native DirectAbortResult>}`. `no_op` means no new
-abort, **not** evidence the turn physically settled; `not_admitting` is distinct.
+`{ok:true,kind:'abort',result:<native DirectAbortResult>}`. `no_op` carries the
+requested `turnId` and native `status`: `terminal_accepted` means an actual
+accepted root terminal for that turn exists; `cancellation_requested` means the
+same current root is already cancelled without stronger terminal evidence;
+`not_current` means neither. `no_op` is not physical settlement and
+`not_admitting` remains distinct.
 Untargeted cancel remains a request acknowledgement, never task completion.
 
 `answer` accepts optional explicit `provenance` and passes it to every native
@@ -374,6 +379,15 @@ reconstructs start context before projecting a tail finish; shared public fold
 upserts by request.commandId only. It is not another acceptance/deduplication policy.
 `command_status` captures the actual Session receipt window atomically, detaches,
 and returns the same typed response or not_found; it never calls command().
+`command_revision` reads the native current root-history/configuration revision
+(`DirectSession.commandRevision()`) without a mutation, receipt allocation or
+cursor inference. It is the supported status/configure-discovery read; callers
+must still pass that exact revision back in a keyed request for atomic checking.
+Keyed wire requests may carry `admission:'idle'` and/or `expectedRevision`;
+both are forwarded verbatim to native command admission, whose original same-key
+receipt replay happens before evaluating current preconditions. Changed
+preconditions under the same key remain a native conflict; protocol does not add
+a lock, retry loop, default idle policy or replay flag.
 `list_rewind_targets` maps native revision-scoped IDs/labels, not a UI index guess.
 
 Server legacy command selector `commandId:compact|retry-tool|retry-turn` is NOT the

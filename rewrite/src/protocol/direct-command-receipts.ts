@@ -13,12 +13,16 @@ type KeyedCommand = Extract<WireCommand, { readonly type: 'retry' | 'compact' | 
  */
 export function nativeCommandRequest(command: KeyedCommand): DirectCommandRequest {
   const commandId = command.commandId;
+  const preconditions = {
+    ...(command.admission !== undefined ? { admission: command.admission } : {}),
+    ...(command.expectedRevision !== undefined ? { expectedRevision: command.expectedRevision } : {}),
+  };
   switch (command.type) {
-    case 'retry': return { commandId, operation: { kind: 'retry', target: command.target,
+    case 'retry': return { commandId, ...preconditions, operation: { kind: 'retry', target: command.target,
       ...(command.executionId !== undefined ? { executionId: command.executionId as ExecutionId } : {}) } };
-    case 'configure': return { commandId, operation: { kind: 'configure', configuration: structuredClone(command.configuration) } };
-    case 'rewind': return { commandId, operation: { kind: 'rewind', targetId: command.targetId } };
-    case 'compact': case 'rollover': return { commandId, operation: { kind: command.type } };
+    case 'configure': return { commandId, ...preconditions, operation: { kind: 'configure', configuration: structuredClone(command.configuration) } };
+    case 'rewind': return { commandId, ...preconditions, operation: { kind: 'rewind', targetId: command.targetId } };
+    case 'compact': case 'rollover': return { commandId, ...preconditions, operation: { kind: command.type } };
   }
 }
 

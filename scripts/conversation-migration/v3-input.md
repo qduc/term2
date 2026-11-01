@@ -2,7 +2,9 @@
 
 `readV3Conversation(path)` in `v3-input.mjs` is synchronous and read-only. Build
 dependencies with `node rewrite/scripts/build.mjs` before importing it. It imports
-compiled legacy decoder/replay modules, not the persistence loader or a TS runner.
+compiled legacy decoder/replay modules and the adopted Session fact validator,
+not a TS runner. The validator module shares imports with the adopted legacy
+store, but this reader never calls its persistence loaders or store constructors.
 It has no CLI, provider, network, discovery, output-writing, or repair responsibility.
 
 ## Result
@@ -95,3 +97,27 @@ a mutation after return cannot be excluded. Run migration only on quiescent copi
 the parent owns destination commit, provenance persistence, and any later source
 revalidation. This boundary never opens a source for writing, creates directories,
 unlinks files, or treats metadata as authoritative.
+
+## Adopted Session adjuncts
+
+The v3 boundary also admits the adopted Session's binding, admission, turn,
+interaction, interruption, closure and network facts. The ordinary legacy
+`LogEvent` union does not declare these, although `replayEvents` uses them for
+accepted-input references, compaction eligibility and interrupted subagents.
+`validateSessionFact` checks their version and required fields on a clone; the
+original decoded event is retained without interaction sanitization. Unknown
+adjunct kinds still fail. Settings baseline validation remains with the legacy
+decoder. Admitting a schema-valid adjunct does not invent lifecycle validity: the
+existing replay remains responsible for its accepted-input/reference checks.
+
+### Compatibility failure lesson
+
+A closed allowlist copied only from `LogEvent` rejected lawful
+`session_turn_started`, making a valid `user_input_accepted` impossible to replay.
+The earlier reader controls checked malformed accepted snapshots but had no
+positive fixture with its required turn binding. The reader must treat the
+adopted Session adjunct schema as a second v3 authority, not classify all facts
+outside `LogEvent` as corrupt. Reuse its validator rather than duplicating those
+field rules, and exercise both lawful ordinary/batched lifecycle records and
+missing required fields. Source DTO equality is checked independently of the
+validator's sanitized clone.

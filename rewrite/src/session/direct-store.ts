@@ -18,6 +18,7 @@ import {
   type DirectLogLineage,
 } from './direct-rolling-log.js';
 import { replay } from './replay.js';
+import { acquireDirectWriterLock } from './direct-writer-lock.js';
 import { latestDirectConfiguration, type DirectConfigurationState } from './direct-configuration.js';
 
 export type DirectRuntimeContext = {
@@ -62,8 +63,9 @@ type Summary = { readonly id: string; readonly workspace: Workspace; readonly mo
 const DIRECT_ID = /^conv_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 /**
- * One live writable facade per ID in this store. Opening replays without writing
- * or resuming execution. No index, side journal, migration or second writer exists.
+ * One writable facade per logical ID across cooperating stores/processes. The root
+ * inode lock survives physical rotation and process death releases it automatically.
+ * Opening replays without writing or resuming execution; no migration occurs.
  * Binding metadata is immutable; an expected binding is checked before writable open.
  */
 export function createDirectSessionStore(options: DirectSessionStoreOptions): DirectLocalStore {
@@ -99,10 +101,12 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
     context: DirectRuntimeContext,
     entries: readonly FactLine[],
     lineage?: DirectLogLineage,
+    acquired?: () => void,
   ): Promise<DirectLiveSession> => {
     const initial = entries.map((entry) => entry.fact);
     let runtime: DirectConversationRuntime | undefined;
     let log: ConversationLog | undefined;
+    let release = acquired;
     try {
       runtime = await options.createRuntime(context);
       if (runtime.deps.toolContext && !sameWorkspace(runtime.deps.toolContext.workspace, context.workspace)) {
@@ -121,6 +125,19 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
       directLogNames(directory);
       const rollingLog = createDirectRollingLog(directory, context.id, lineage);
       log = rollingLog;
+      // New roots have no readable header until attach appends session_started.
+      // Lock the root before that publication; opened roots arrive already locked.
+      release ??= acquireDirectWriterLock(rollingLog.path);
+      const ownedRelease = release;
+      log = {
+        get path() { return rollingLog.path; },
+        append: (facts) => rollingLog.append(facts),
+        close() {
+          // Never release the authority if closing the underlying writer fails.
+          rollingLog.close();
+          ownedRelease();
+        },
+      };
       const ownedRuntime = runtime;
       const ownedLog = log;
       return createDirectSession({
@@ -176,6 +193,7 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
       } catch (closeError) {
         failures.push(closeError);
       }
+      if (!log) release?.();
       try {
         await runtime?.dispose?.();
       } catch (disposeError) {
@@ -225,26 +243,40 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
       const lineage = readDirectLogLineage(directory, id);
       const { entries, metadata, logicalSessionId } = lineage;
       const facts = entries.map((entry) => entry.fact);
-      const configuration = latestDirectConfiguration(facts);
       validateExpectedBinding(metadata.binding, binding);
       replay(facts); // validates actual direct history; never repairs on open
       assertOpen();
-      // Every caller's binding is checked before joining a shared live writer.
-      // remember installs its construction promise before workspace/runtime assembly.
+      // Resolve aliases before locking, then reread under the logical root lock:
+      // another process may have appended or rotated since discovery.
       return remember(logicalSessionId, async () => {
-        const workspace = await resolveWorkspace(metadata.workspace, metadata.workspaceIdentity);
-        return construct(
-          {
-            id: logicalSessionId,
-            workspace,
-            model: configuration?.configuration.model ?? metadata.model,
-            metadata,
-            ...(configuration ? { configuration } : {}),
-            ...(metadata.binding ? { binding: metadata.binding } : {}),
-          },
-          entries,
-          lineage,
-        );
+        const release = acquireDirectWriterLock(path.join(directory, `${logicalSessionId}.jsonl`));
+        let handedOff = false;
+        try {
+          const current = readDirectLogLineage(directory, logicalSessionId);
+          const currentFacts = current.entries.map((entry) => entry.fact);
+          const currentMetadata = current.metadata;
+          const currentConfiguration = latestDirectConfiguration(currentFacts);
+          validateExpectedBinding(currentMetadata.binding, binding);
+          replay(currentFacts);
+          const workspace = await resolveWorkspace(currentMetadata.workspace, currentMetadata.workspaceIdentity);
+          handedOff = true;
+          return await construct(
+            {
+              id: logicalSessionId,
+              workspace,
+              model: currentConfiguration?.configuration.model ?? currentMetadata.model,
+              metadata: currentMetadata,
+              ...(currentConfiguration ? { configuration: currentConfiguration } : {}),
+              ...(currentMetadata.binding ? { binding: currentMetadata.binding } : {}),
+            },
+            current.entries,
+            current,
+            release,
+          );
+        } catch (error) {
+          if (!handedOff) release();
+          throw error;
+        }
       });
     },
     async list(cursor) {

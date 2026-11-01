@@ -940,7 +940,15 @@ function conversation(
         return { result: { kind: 'not_admitting', reason: `Session rolled over to ${rolloverDestination()}` } };
       if (active || completionHeld || commandOwner || queueState.active || queueState.pending.length)
         return { result: { kind: 'busy' } };
-      const notices = pendingDirectNotifications(notifications);
+      // Only accepted closure disproves a question notice. In particular, a
+      // recovered interrupted task has no live continuation to answer. Preserve
+      // other notices and unknown questions, and keep historical deliveries valid.
+      const closedQuestions = new Set(facts.flatMap((fact) =>
+        fact.type === 'task_question_closed' ? [`question:${fact.taskId}:${fact.messageId}`] : [],
+      ));
+      const notices = pendingDirectNotifications(notifications).filter(
+        (notice) => notice.kind !== 'question' || !closedQuestions.has(notice.id),
+      );
       if (!notices.length) return { result: { kind: 'empty' } };
       const turnId = `turn-${nextTurnId++}` as TurnId;
       const notificationIds = notices.map((notice) => notice.id);

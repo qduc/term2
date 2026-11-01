@@ -172,11 +172,129 @@ function shellCallFrames(response: string, callId: ToolCallId, args: Record<stri
   ];
 }
 
-type SavedEvent = {
-  type: string;
-  arguments?: { command?: unknown };
-  message?: { command?: unknown; isApprovalRejection?: boolean; success?: boolean };
-};
+// This old-side process fixture reads public disk records locally. Importing the
+// rewrite's parser/replay here would reverse the one-way architecture boundary.
+type SavedRecord = ReturnType<typeof JSON.parse>;
+type SavedHistory = { format: 'native' | 'legacy'; records: readonly SavedRecord[] };
+
+/** Inspect complete fixture logs without repairing, recovering or translating records.
+ * Keep both vocabularies explicit, including legacy crash-atomic event batches.
+ * These are envelope assertions, not a replacement for either runtime's replay validator.
+ */
+function readSavedHistory(file: string): SavedHistory {
+  const text = fs.readFileSync(file, 'utf8');
+  expect(text.endsWith('\n'), `unterminated fixture history: ${file}`).toBe(true);
+  const envelopes = text
+    .trimEnd()
+    .split('\n')
+    .map((line) => JSON.parse(line));
+  expect(envelopes.length, `empty saved history: ${file}`).toBeGreaterThan(0);
+  const format = Object.hasOwn(envelopes[0], 'fact') ? 'native' : 'legacy';
+  if (format === 'native') {
+    const records = envelopes.map((entry, index) => {
+      expect(entry).toMatchObject({ v: 1, seq: index + 1, at: expect.any(String), fact: { type: expect.any(String) } });
+      expect(Object.hasOwn(entry, 'event'), 'mixed saved envelope').toBe(false);
+      return entry.fact;
+    });
+    return { format, records };
+  }
+  const eventOf = (entry: SavedRecord) => {
+    expect(entry).toMatchObject({
+      v: expect.any(Number),
+      seq: expect.any(Number),
+      ts: expect.any(String),
+      event: { type: expect.any(String) },
+    });
+    expect(Object.hasOwn(entry, 'fact'), 'mixed saved envelope').toBe(false);
+    expect(entry.event.truncated, 'truncated fixture event').not.toBe(true);
+    return entry.event;
+  };
+  const records = envelopes.flatMap((entry) => {
+    const event = eventOf(entry);
+    if (event.type !== 'session_fact_batch') return [event];
+    expect(event.version).toBe(1);
+    expect(Array.isArray(event.entries)).toBe(true);
+    expect(event.entries.length).toBeGreaterThan(0);
+    return event.entries.map(eventOf);
+  });
+  return { format, records };
+}
+
+/** Native planned calls/results are item facts; tool_started/finished are physical work only.
+ * In particular a denied call must have a bound denial/result and NO physical execution.
+ * Join by executionId, never the provider callId that these scenarios intentionally reuse.
+ */
+function savedShellObservations(history: SavedHistory) {
+  if (history.format === 'legacy') {
+    return {
+      planned: history.records.flatMap((event) =>
+        event.type === 'tool_started' ? [String(event.arguments?.command)] : [],
+      ),
+      results: history.records.flatMap((event) =>
+        event.type === 'command_message'
+          ? [
+              {
+                command: String(event.message.command),
+                isApprovalRejection: event.message.isApprovalRejection === true,
+                success: event.message.success,
+              },
+            ]
+          : [],
+      ),
+    };
+  }
+  const facts = history.records;
+  const calls = facts.filter((fact) => fact.type === 'item' && fact.item.type === 'tool_call');
+  const executionIds = calls.map((fact) => fact.executionId);
+  expect(executionIds.every(Boolean), 'planned calls need execution identities').toBe(true);
+  expect(new Set(executionIds).size, 'provider call IDs are not execution identities').toBe(calls.length);
+  const results = calls.map((call) => {
+    if (call.item.type !== 'tool_call') throw new Error('expected planned call');
+    expect(call.item.toolName).toBe('shell');
+    const command = String((call.item.input as { command: unknown }).command);
+    const outcomes = facts.filter(
+      (fact) =>
+        fact.type === 'item' &&
+        fact.item.type === 'tool_result' &&
+        fact.turnId === call.turnId &&
+        fact.executionId === call.executionId,
+    );
+    expect(outcomes, `saved result for ${command}`).toHaveLength(1);
+    const outcome = outcomes[0]!;
+    if (outcome.item.type !== 'tool_result') throw new Error('expected tool result');
+    const waits = facts.filter(
+      (fact) =>
+        fact.type === 'interaction_opened' &&
+        fact.turnId === call.turnId &&
+        fact.request.executionId === call.executionId,
+    );
+    const decisions = waits.flatMap((wait) =>
+      facts.filter(
+        (fact) =>
+          fact.type === 'interaction_closed' &&
+          fact.turnId === call.turnId &&
+          fact.requestId === wait.request.requestId,
+      ),
+    );
+    expect(decisions).toHaveLength(waits.length);
+    const denied = decisions.some((decision) => decision.resolution.kind === 'deny');
+    const starts = facts.filter((fact) => fact.type === 'tool_started' && fact.executionId === call.executionId);
+    const finishes = facts.filter((fact) => fact.type === 'tool_finished' && fact.executionId === call.executionId);
+    expect(starts, `physical starts for ${command}`).toHaveLength(denied ? 0 : 1);
+    expect(finishes, `physical results for ${command}`).toHaveLength(denied ? 0 : 1);
+    if (denied) expect(outcome.item.isError).toBe(true);
+    else {
+      expect(starts[0]).toMatchObject({ toolName: 'shell', input: call.item.input, callId: call.item.callId });
+      expect(finishes[0]!.result).toMatchObject({ output: outcome.item.output, isError: outcome.item.isError });
+    }
+    return { command, isApprovalRejection: denied, success: !outcome.item.isError };
+  });
+  expect(facts.filter((fact) => fact.type === 'item' && fact.item.type === 'tool_result')).toHaveLength(calls.length);
+  expect(facts.filter((fact) => fact.type === 'tool_started')).toHaveLength(
+    results.filter((result) => !result.isApprovalRejection).length,
+  );
+  return { planned: results.map((result) => result.command), results };
+}
 type ScriptedShellCall = { callId: ToolCallId; args: (workspace: string) => Record<string, unknown> };
 
 /**
@@ -232,12 +350,9 @@ async function runShellCallsScenario(calls: ScriptedShellCall[], seed: Record<st
     );
     // The session log the CLI saved for this conversation (what resume replays), read back from disk.
     const conversationsDir = path.join(root, 'conversations');
-    const savedEvents = fs
-      .readdirSync(conversationsDir)
-      .filter((name) => name.endsWith('.jsonl'))
-      .flatMap((name) => fs.readFileSync(path.join(conversationsDir, name), 'utf8').split('\n'))
-      .filter((line) => line.trim())
-      .map((line) => (JSON.parse(line) as { event: SavedEvent }).event);
+    const logPaths = fs.readdirSync(conversationsDir).filter((name) => name.endsWith('.jsonl'));
+    expect(logPaths, stderr).toHaveLength(1);
+    const saved = savedShellObservations(readSavedHistory(path.join(conversationsDir, logPaths[0]!)));
     const files = Object.fromEntries(
       fs
         .readdirSync(workspace)
@@ -252,26 +367,11 @@ async function runShellCallsScenario(calls: ScriptedShellCall[], seed: Record<st
       commands,
       // Read before the root is removed. Also proves the run wrote no project config here.
       files,
-      /** Commands of the saved tool_started events, in order. */
-      savedToolStarts: savedEvents.flatMap((event) =>
-        event.type === 'tool_started' ? [String(event.arguments?.command)] : [],
-      ),
-      /** Commands of the saved command_message events (each execution's output record), in order. */
-      savedCommandOutputs: savedEvents.flatMap((event) =>
-        event.type === 'command_message' ? [String(event.message?.command)] : [],
-      ),
-      /** The saved command_message records: what ran, and whether it is recorded as refused. */
-      savedCommandRecords: savedEvents.flatMap((event) =>
-        event.type === 'command_message'
-          ? [
-              {
-                command: String(event.message?.command),
-                isApprovalRejection: event.message?.isApprovalRejection === true,
-                success: event.message?.success,
-              },
-            ]
-          : [],
-      ),
+      /** Accepted planned calls (legacy tool_started or native tool_call items). */
+      savedPlannedCommands: saved.planned,
+      /** Commands with a durable result, including refused calls that never physically ran. */
+      savedResultCommands: saved.results.map((result) => result.command),
+      savedCommandRecords: saved.results,
       /** The `[tool] shell: <command>` lines the user saw, in order. */
       toolLines: stderr.split('\n').filter((line) => line.startsWith('[tool] shell')),
     };
@@ -338,8 +438,8 @@ function expectSecondCallRefused(run: Awaited<ReturnType<typeof runApprovalReuse
   // The user saw each call once, the refused one included: one `[tool]` line per call, never more.
   expect(run.toolLines, report).toEqual([expectedToolLine(run.approvedCommand), expectedToolLine(run.refusedCommand)]);
   // The saved session log records both calls and both outcomes, once each.
-  expect(run.savedToolStarts).toEqual([run.approvedCommand, run.refusedCommand]);
-  expect(run.savedCommandOutputs).toEqual([run.approvedCommand, run.refusedCommand]);
+  expect(run.savedPlannedCommands).toEqual([run.approvedCommand, run.refusedCommand]);
+  expect(run.savedResultCommands).toEqual([run.approvedCommand, run.refusedCommand]);
   // Three provider turns: first call, second call, final text. The provider received both calls
   // back with results that match them.
   expect(run.requests).toHaveLength(3);
@@ -524,14 +624,14 @@ fs.createWriteStream = (filename, options) => {
       expect(stderr).toContain('term2 needs an interactive terminal');
       const logPath = fs.readdirSync(conversationsDir).find((file) => file.endsWith('.jsonl'));
       expect(logPath, stderr).toBeDefined();
-      const events = fs
-        .readFileSync(path.join(conversationsDir, logPath!), 'utf8')
-        .trim()
-        .split('\n')
-        .map((line) => JSON.parse(line).event);
-      expect(events.map((event) => event.type)).toEqual(['session_init', 'goal_changed']);
+      const savedLog = readSavedHistory(path.join(conversationsDir, logPath!));
+      const events = savedLog.records;
+      expect(events.map((event) => event.type)).toEqual([
+        savedLog.format === 'native' ? 'session_started' : 'session_init',
+        'goal_changed',
+      ]);
       expect(events[1]).toMatchObject({
-        version: 1,
+        ...(savedLog.format === 'legacy' ? { version: 1 } : { source: 'launcher' }),
         goal: { outcome: 'Interactive outcome', successCriteria: 'Visible result', status: 'active' },
       });
     });
@@ -561,22 +661,24 @@ fs.createWriteStream = (filename, options) => {
         expect(stderr).toContain('Goal stop check unresolved');
         const logPath = fs.readdirSync(conversationsDir).find((file) => file.endsWith('.jsonl'));
         expect(logPath).toBeDefined();
-        const events = fs
-          .readFileSync(path.join(conversationsDir, logPath!), 'utf8')
-          .trim()
-          .split('\n')
-          .map((line) => JSON.parse(line).event);
+        const savedLog = readSavedHistory(path.join(conversationsDir, logPath!));
+        const events = savedLog.records;
         const goalIndex = events.findIndex((event) => event.type === 'goal_changed');
-        const firstRequestArtifactIndex = events.findIndex((event) => event.type === 'assistant_journal_item');
+        const firstRequestArtifactIndex = events.findIndex((event) =>
+          savedLog.format === 'native'
+            ? event.type === 'item' && event.item.type === 'assistant_message'
+            : event.type === 'assistant_journal_item',
+        );
         expect(goalIndex).toBeGreaterThanOrEqual(0);
         expect(firstRequestArtifactIndex, JSON.stringify(events.map((event) => event.type))).toBeGreaterThan(goalIndex);
-        expect(events[goalIndex].goal).toMatchObject({
+        const recordedGoal = events.find((event) => event.type === 'goal_changed')!.goal;
+        expect(recordedGoal).toMatchObject({
           outcome: 'Noninteractive outcome',
           successCriteria: 'Provider returns',
         });
         // The unresolved stop check never rewrites durable goal status.
         expect(events.filter((event) => event.type === 'goal_changed')).toHaveLength(1);
-        expect(events[goalIndex].goal.status).toBe('active');
+        expect(recordedGoal!.status).toBe('active');
       } finally {
         await mock.close();
         fs.rmSync(tempHome, { recursive: true, force: true });
@@ -685,14 +787,11 @@ fs.createWriteStream = (filename, options) => {
             if (background) expect(result.stdout).toContain('Foreground partial output');
           }
           const saved = fs.readdirSync(conversationsDir).find((name) => name.endsWith('.jsonl'))!;
-          const events = fs
-            .readFileSync(path.join(conversationsDir, saved), 'utf8')
-            .trim()
-            .split('\n')
-            .map((line) => JSON.parse(line).event);
+          const savedLog = readSavedHistory(path.join(conversationsDir, saved));
+          const events = savedLog.records;
           const goals = events.filter((event) => event.type === 'goal_changed');
           expect(goals).toHaveLength(1);
-          expect(goals[0].goal.status).toBe('active');
+          expect(goals[0]!.goal!.status).toBe('active');
           if (background) expect(events.some((event) => event.type === 'subagent_completed')).toBe(true);
         } finally {
           await mock.close();
@@ -774,11 +873,8 @@ fs.createWriteStream = (filename, options) => {
         expect(output.at(-1)).toMatchObject({ type: 'completed', finalText: 'Ordinary result: 42' });
         expect(result.stderr).not.toContain('Goal stop check unresolved');
         const saved = fs.readdirSync(conversationsDir).find((name) => name.endsWith('.jsonl'))!;
-        const events = fs
-          .readFileSync(path.join(conversationsDir, saved), 'utf8')
-          .trim()
-          .split('\n')
-          .map((line) => JSON.parse(line).event);
+        const savedLog = readSavedHistory(path.join(conversationsDir, saved));
+        const events = savedLog.records;
         expect(events.some((event) => event.type === 'goal_changed')).toBe(false);
       } finally {
         await mock.close();
@@ -847,12 +943,9 @@ fs.createWriteStream = (filename, options) => {
           expect(events.at(-1)).toMatchObject({ type: 'completed', finalText: 'Honest fixture response' });
           expect(result.stderr).not.toContain('Goal stop check unresolved');
           const saved = fs.readdirSync(conversationsDir).find((name) => name.endsWith('.jsonl'))!;
-          const log = fs
-            .readFileSync(path.join(conversationsDir, saved), 'utf8')
-            .trim()
-            .split('\n')
-            .map((line) => JSON.parse(line).event);
-          expect(log.filter((event) => event.type === 'goal_changed').map((event) => event.goal.status)).toEqual([
+          const savedLog = readSavedHistory(path.join(conversationsDir, saved));
+          const log = savedLog.records;
+          expect(log.filter((event) => event.type === 'goal_changed').map((event) => event.goal!.status)).toEqual([
             'active',
           ]);
         } finally {
@@ -918,19 +1011,16 @@ fs.createWriteStream = (filename, options) => {
           "Goal (achieved): Noninteractive outcome\nSuccess criteria: Provider returns\nCompletion accepted after the model's goal_check.",
         );
         const logPath = fs.readdirSync(conversationsDir).find((file) => file.endsWith('.jsonl'));
-        const events = fs
-          .readFileSync(path.join(conversationsDir, logPath!), 'utf8')
-          .trim()
-          .split('\n')
-          .map((line) => JSON.parse(line).event);
+        const savedLog = readSavedHistory(path.join(conversationsDir, logPath!));
+        const events = savedLog.records;
         const goals = events.filter((event) => event.type === 'goal_changed');
         expect(goals).toHaveLength(2);
-        expect(goals[0].goal.status).toBe('active');
-        expect(goals[0].source).toBeUndefined();
+        expect(goals[0]!.goal!.status).toBe('active');
+        expect(goals[0]!.source).toBe(savedLog.format === 'native' ? 'launcher' : undefined);
         expect(goals[1]).toMatchObject({
-          version: 1,
+          ...(savedLog.format === 'legacy' ? { version: 1 } : {}),
           source: 'goal_check',
-          goal: { id: goals[0].goal.id, outcome: 'Noninteractive outcome', status: 'achieved' },
+          goal: { id: goals[0]!.goal!.id, outcome: 'Noninteractive outcome', status: 'achieved' },
         });
       } finally {
         await mock.close();
@@ -1150,14 +1240,11 @@ fs.createWriteStream = (filename, options) => {
         );
         expect(status).toBe(1);
         expect(stderr).toContain('term2 needs an interactive terminal');
-        const events = fs
-          .readFileSync(path.join(conversationsDir, `${id}.jsonl`), 'utf8')
-          .trim()
-          .split('\n')
-          .map((line) => JSON.parse(line).event);
+        const savedLog = readSavedHistory(path.join(conversationsDir, `${id}.jsonl`));
+        const events = savedLog.records;
         const goals = events.filter((event) => event.type === 'goal_changed');
         expect(goals).toHaveLength(explicit ? 2 : 1);
-        expect(goals.at(-1).goal.outcome).toBe(explicit ? 'Replacement' : 'Original');
+        expect(goals.at(-1)!.goal!.outcome).toBe(explicit ? 'Replacement' : 'Original');
       }
     });
 
@@ -1978,8 +2065,8 @@ fs.createWriteStream = (filename, options) => {
         // ...so the user must see both, once each.
         expect(run.toolLines, report).toEqual(run.commands.map(expectedToolLine));
         // The saved session log (what resume replays) records both executions and both outputs, once each.
-        expect(run.savedToolStarts).toEqual(run.commands);
-        expect(run.savedCommandOutputs).toEqual(run.commands);
+        expect(run.savedPlannedCommands).toEqual(run.commands);
+        expect(run.savedResultCommands).toEqual(run.commands);
         const { calls } = lastWireToolExchange(run.requests);
         expect(calls.map((call) => call.id)).toEqual(['call_0', 'call_0']);
       },
@@ -1998,8 +2085,8 @@ fs.createWriteStream = (filename, options) => {
       expect(run.files, report).toEqual({ 'one.txt': 'one\n' });
       expect(run.stderr.match(/\[approval required\] shell/g), report).toHaveLength(1);
       expect(run.toolLines, report).toEqual([expectedToolLine(run.commands[0])]);
-      expect(run.savedToolStarts).toEqual(run.commands);
-      expect(run.savedCommandOutputs).toEqual(run.commands);
+      expect(run.savedPlannedCommands).toEqual(run.commands);
+      expect(run.savedResultCommands).toEqual(run.commands);
     });
 
     // A refused call's id can come back on a call that does run. The later execution must be shown and
@@ -2213,17 +2300,29 @@ fs.createWriteStream = (filename, options) => {
             activeProfileDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
           });
           const saved = fs.readdirSync(conversationsDir).find((name) => name.endsWith('.jsonl'))!;
-          const events = fs
-            .readFileSync(path.join(conversationsDir, saved), 'utf8')
-            .trim()
-            .split('\n')
-            .map((line) => JSON.parse(line).event);
-          expect(events.filter((event) => event.type === 'session_init').at(-1)).toMatchObject({
-            type: 'session_init',
-            activeProfileId: 'builtin:bare',
-            activeProfileVersion: emitted[0].activeProfileVersion,
-            activeProfileDigest: emitted[0].activeProfileDigest,
-          });
+          const savedLog = readSavedHistory(path.join(conversationsDir, saved));
+          const events = savedLog.records;
+          const starts = events.filter(
+            (event) => event.type === (savedLog.format === 'native' ? 'session_started' : 'session_init'),
+          );
+          if (savedLog.format === 'native') expect(starts).toHaveLength(1);
+          expect(starts.at(-1)).toMatchObject(
+            savedLog.format === 'native'
+              ? {
+                  type: 'session_started',
+                  profile: {
+                    id: 'builtin:bare',
+                    version: emitted[0].activeProfileVersion,
+                    digest: emitted[0].activeProfileDigest,
+                  },
+                }
+              : {
+                  type: 'session_init',
+                  activeProfileId: 'builtin:bare',
+                  activeProfileVersion: emitted[0].activeProfileVersion,
+                  activeProfileDigest: emitted[0].activeProfileDigest,
+                },
+          );
           expect(events.filter((e) => e.type === 'goal_changed')).toHaveLength(0);
         } finally {
           await mock.close();

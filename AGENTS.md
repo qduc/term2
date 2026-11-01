@@ -42,6 +42,9 @@ under `source/skins/<name>/`; component colour literals bypass this boundary.
 
 ## Evidence and institutional knowledge
 
+Every large module must have a maintained public-interface document throughout
+its life; update it as the interface evolves.
+
 When verification fails, consult the recurring failure notes in the `testing`
 skill and relevant area docs. Historical matches are leads, not proof that a
 failure is pre-existing: compare the signature and environment, inspect intervening

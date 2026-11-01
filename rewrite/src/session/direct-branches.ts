@@ -128,6 +128,8 @@ export function createDirectBranchDriver(options: {
           if (
             context.signal.aborted &&
             event.type !== 'tool_execution_finished' &&
+            event.type !== 'compaction_completed' &&
+            event.type !== 'compaction_failed' &&
             !(event.type === 'item' && event.item.type === 'tool_result')
           )
             continue;

@@ -8,6 +8,7 @@
 
 import type {
   TurnId,
+  TurnCompactionEvent,
   ExecutionId,
   InteractionDecision,
   InteractionRequest,
@@ -54,7 +55,12 @@ export type SubmissionMetadata = {
 
 export type TurnOutcomeName = 'completed' | 'cancelled' | 'failed' | 'interrupted';
 
+/** Observed engine lifecycle with its real owning turn, using the sole log's seq/at.
+ * Estimates/request references are evidence, not additional usage or transcript edits. */
+export type DirectCompactionFact = TurnCompactionEvent & { readonly turnId: TurnId };
+
 export type DirectTurnFact =
+  | DirectCompactionFact
   | {
       readonly type: 'budget_opened';
       readonly requestId: InteractionRequestId;
@@ -153,6 +159,8 @@ export type DirectHistoryFact = {
   readonly type: 'history_replaced';
   readonly turnId?: TurnId;
   readonly reason: 'compaction' | 'retry_turn' | 'retry_tool' | 'rewind';
+  /** Exact engine attempt whose replacement was accepted; old/other edits may omit it. */
+  readonly compactionId?: string;
   readonly history: readonly Item[];
   readonly rearmAtEstimatedTokens?: number;
   readonly checkpointReceipts?: readonly string[];

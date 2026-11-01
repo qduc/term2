@@ -221,7 +221,7 @@ export class ConversationCommands {
               configuration: candidate.configuration,
             });
             if (!this.journal.commit([configurationFact, finished])) throw new Error(this.journal.failure!.message);
-            // Never discard a durably accepted this.generation, even if the app
+            // Never discard a durably accepted generation, even if the app
             // violates its no-throw installation contract.
             installed = true;
             this.installGeneration(candidate, prepared);
@@ -276,7 +276,7 @@ export class ConversationCommands {
           let terminal: TurnResult | undefined;
           try {
             // Same Session reader/acceptance path as a conversational root.
-            // Budget waits are published and answered through this.admission.active.answerBudget.
+            // Budget waits are published and answered through the active turn answerBudget.
             for await (const event of started.turn.events) if (event.type === 'turn_ended') terminal = event.result;
           } finally {
             owner.abort.signal.removeEventListener('abort', cancel);
@@ -343,7 +343,7 @@ export class ConversationCommands {
             result: finish({
               kind: 'rejected',
               code: 'ineligible',
-              message: 'Retry has no retained accepted root journal.context.',
+              message: 'Retry has no retained accepted root context.',
             }),
           };
         const turnId = this.admission.newTurnId();

@@ -109,6 +109,11 @@ export async function runMigration(options, synthetic = {}) {
     }
     for (const name of canonicals) {
       const oldId = name.slice(0, -6);
+      // Older stores may name the canonical file with the persisted `conv_`
+      // prefix.  It is the same UUID identity as the unprefixed legacy form;
+      // keep one normalized map/target identity rather than manufacturing
+      // `conv_conv_<uuid>`.
+      const legacyId = oldId.startsWith('conv_') ? oldId.slice('conv_'.length) : oldId;
       const path = join(paths.source, name);
       let input = readV3Conversation(path);
       if (input.status === 'skipped-locked') {
@@ -121,13 +126,13 @@ export async function runMigration(options, synthetic = {}) {
         code('INPUT_FAILED');
         continue;
       }
-      if (!UUID.test(oldId)) {
+      if (!UUID.test(legacyId)) {
         counts.failed++;
         code('UNSUPPORTED_ID');
         continue;
       }
       const source = sourceIdentity(input);
-      let record = state.records[oldId];
+      let record = state.records[legacyId];
       if (record && !same(record.source, source)) {
         counts.failed++;
         code('SOURCE_CHANGED');
@@ -136,7 +141,7 @@ export async function runMigration(options, synthetic = {}) {
       if (!record) {
         let occupied = false;
         try {
-          fs.lstatSync(join(paths.native, `conv_${oldId}.jsonl`));
+          fs.lstatSync(join(paths.native, `conv_${legacyId}.jsonl`));
           occupied = true;
         } catch (error) {
           if (error.code !== 'ENOENT') occupied = true;
@@ -183,7 +188,7 @@ export async function runMigration(options, synthetic = {}) {
       try {
         convert ??= synthetic.convert ?? (await import('./v3-to-native.mjs')).convertValidatedV3;
         converted = await convert(input);
-        if (converted.id !== `conv_${oldId}`) throw new Error('mismatched ID');
+        if (converted.id !== `conv_${legacyId}`) throw new Error('mismatched ID');
         // Real encoding/replay in private scratch, not a second native encoder.
         scratch = fs.mkdtempSync(join(paths.privateDirectory, '.encode-'));
         const stage = join(scratch, 'native');
@@ -215,7 +220,7 @@ export async function runMigration(options, synthetic = {}) {
         }
       }
       // Durable intent precedes real publication. A failed save stops the command.
-      state.records[oldId] = receipt;
+      state.records[legacyId] = receipt;
       writeProvenance(paths, state);
       input = undefined;
       const check = readV3Conversation(path);

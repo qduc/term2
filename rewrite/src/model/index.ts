@@ -6,6 +6,12 @@
  * Depends on: nothing.
  */
 
+import type { RetryRecoveryBudget } from '../../../source/services/retry/retry-recovery-budget.js';
+
+export { ModelFailure } from './failure.js';
+export type { ModelRecoveryEvidence } from './failure.js';
+export type ModelRecoveryBudget = RetryRecoveryBudget;
+
 // ---------- Conversation items (provider-neutral history) ----------
 
 export type ItemId = string & { readonly __brand: 'ItemId' };
@@ -33,7 +39,13 @@ export type ProviderInputItem = {
 };
 
 export type Item =
-  | { readonly type: 'user_message'; readonly id: ItemId; readonly content: readonly ContentPart[] }
+  | {
+      readonly type: 'user_message';
+      readonly id: ItemId;
+      readonly content: readonly ContentPart[];
+      /** App-owned receipt context; serializes before this item, never orphaned by history edits. */
+      readonly conversationTiming?: string;
+    }
   | { readonly type: 'assistant_message'; readonly id: ItemId; readonly content: readonly ContentPart[] }
   | {
       readonly type: 'reasoning';
@@ -105,6 +117,16 @@ export type ModelRequest = {
   readonly previousResponseId?: string | null;
   /** Send a self-contained request and suppress provider-side continuation. */
   readonly disableChaining?: boolean;
+  /**
+   * Live-only engine-owned reservation. Presence disables ALL adapter/SDK
+   * physical retries so every dispatch re-enters engine request preparation.
+   * Never serialize this capability to providers or Session facts.
+   */
+  readonly recovery?: { readonly budget: ModelRecoveryBudget; readonly dispatchClaimed?: boolean };
+  /** OpenAI Responses standard tier; unsupported adapters reject this flag. */
+  readonly useStandardServiceTier?: boolean;
+  /** A self-contained HTTP request on supported WS adapters, not an implicit retry. */
+  readonly downgradeTransport?: boolean;
 };
 
 export type Usage = {
@@ -115,7 +137,21 @@ export type Usage = {
 
 export type StopReason = 'end_turn' | 'tool_use' | 'max_tokens' | 'refusal';
 
+/** Actual provider argument progress, not reconstructed from a completed call. */
+export type ToolCallArgumentProgress = {
+  readonly type: 'tool_call_streaming_delta';
+  readonly argumentCharCount: number;
+  readonly toolName?: string;
+  /** Present only when the provider has supplied the real call ID. */
+  readonly callId?: ToolCallId;
+  /** Responses output item identity is not interchangeable with callId. */
+  readonly itemId?: string;
+  /** Provider output/tool-call stream slot, not an engine execution ordinal. */
+  readonly callIndex?: number;
+};
+
 export type ModelEvent =
+  | ToolCallArgumentProgress
   | { readonly type: 'text_delta'; readonly delta: string; readonly partId?: string }
   | {
       readonly type: 'reasoning_delta';
@@ -151,13 +187,24 @@ export type ModelError = {
   readonly retryAfterMs?: number;
 };
 
+export type ModelCapabilities = {
+  readonly continuity: boolean;
+  readonly standardServiceTier: boolean;
+  readonly httpTransportDowngrade: boolean;
+};
+
 export interface Model {
   readonly ref: ModelRef;
   readonly contextWindow: number;
-  /** Retries retryable errors internally and reports them as `retrying` events. Throws `ModelError` when it gives up. */
-  stream(request: ModelRequest, signal: AbortSignal): AsyncIterable<ModelEvent>;
+  /** Actual catalog capacity; absent for uncatalogued models. */
+  readonly catalogContextWindow?: number;
+  readonly capabilities?: ModelCapabilities;
+  /** With recovery injected, one physical attempt only. Throws live ModelFailure; serialize only its ModelError fields.
+   * onDispatched runs at transport submission, before any response (not generator creation).
+   */
+  stream(request: ModelRequest, signal: AbortSignal, onDispatched?: () => void): AsyncIterable<ModelEvent>;
   /** Native compaction where the provider supports it. */
-  compact?(request: ModelRequest, signal: AbortSignal): Promise<readonly Item[]>;
+  compact?(request: ModelRequest, signal: AbortSignal, onDispatched?: () => void): Promise<readonly Item[]>;
 }
 
 export interface ModelRegistry {

@@ -140,5 +140,18 @@ export interface Compactor {
 
 // Everything above serves the bridge and goes when it does. The turn surface
 // below is the direct path, and its types stand alone for that reason.
-export type { TurnEvent, TurnHandle, TurnResult, TurnSpec } from './turn.js';
-export { startTurn } from './turn.js';
+export type {
+  AcceptedTurnEvent,
+  ExecutionId,
+  InteractionDecision,
+  InteractionRequest,
+  InteractionRequestId,
+  ToolContextSeed,
+  TurnDeps,
+  TurnEvent,
+  TurnCompactionEvent,
+  TurnHandle,
+  TurnResult,
+  TurnSpec,
+} from './direct-types.js';
+export { startTurn, startCompaction } from './turn.js';

@@ -13,7 +13,43 @@ const allowlistPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 's
 // The direct path outside adopted/ that may import source/. Its closure is walked
 // like an adopted file's. Which modules actually load is checked by the M1 bench,
 // because IMPORT below also matches type imports and import().
-const DIRECT_SOURCE_IMPORTERS = new Set(['app/agent-surface.ts', 'app/cli.ts', 'app/run.ts', 'model/provider.ts']);
+const DIRECT_SOURCE_IMPORTERS = new Set([
+  'app/agent-surface.ts',
+  'app/cli.ts',
+  'app/run.ts',
+  'engine/direct-recovery-budget.ts',
+  'engine/direct-recovery-compaction.ts',
+  'engine/direct-recovery.ts',
+  'engine/turn-budget.ts',
+  'model/failure.ts',
+  'model/index.ts',
+  'model/provider-items.ts',
+  'model/provider.ts',
+  'model/retry.ts',
+  'session/direct-context.ts',
+  'session/direct-final.ts',
+  'session/direct-goal-verification.ts',
+  'session/direct-goal.ts',
+  'session/direct-hooks.ts',
+  'session/direct-memory.ts',
+  'session/direct-queue.ts',
+]);
+
+// Reused source leaves whose existing source-layer label is above the direct
+// importer. These are specific retry evidence/policy/budget helpers and compaction
+// text, not legacy run-loop/session authority. Do not reclassify their directories
+// or exempt their transitive dependencies: the normal closure walk still applies.
+const DIRECT_SOURCE_LAYER_EXCEPTIONS = new Set([
+  'engine/direct-recovery-compaction.ts -> prompts/context-compaction.ts',
+  'model/failure.ts -> services/retry/conversation-retry-policy.ts',
+  'model/failure.ts -> services/retry/retry-error-classification.ts',
+  'model/failure.ts -> services/retry/retry-errors.ts',
+  'model/failure.ts -> services/retry/retry-recovery-budget.ts',
+  'model/failure.ts -> services/retry/upstream-retry-policy.ts',
+  'model/index.ts -> services/retry/retry-recovery-budget.ts',
+  'model/retry.ts -> services/retry/retry-recovery-budget.ts',
+  'model/retry.ts -> services/retry/upstream-retry-policy.ts',
+]);
 
 const LAYER_DEPENDENCIES = {
   config: [],
@@ -252,7 +288,11 @@ for (const entry of files(rewriteSrc)) {
     else {
       const layer = sourceLayer(target);
       if (!layer) reachedUnknown.add(sourceRelative(target));
-      const allowed = layer === 'shared' || layer === adoptedLayer || LAYER_DEPENDENCIES[adoptedLayer]?.includes(layer);
+      const allowed =
+        layer === 'shared' ||
+        layer === adoptedLayer ||
+        LAYER_DEPENDENCIES[adoptedLayer]?.includes(layer) ||
+        DIRECT_SOURCE_LAYER_EXCEPTIONS.has(`${relative} -> ${sourceRelative(target)}`);
       if (layer && !allowed) {
         problems.add(
           `${path.relative(repo, entry)} (${adoptedLayer}/) directly imports source/${sourceRelative(

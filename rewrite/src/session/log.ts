@@ -19,27 +19,21 @@
 import { closeSync, fsyncSync, ftruncateSync, openSync, readFileSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { LogPayloads } from './log-payloads.js';
+import { isKnownDirectFactType, validateFact } from './log-facts.js';
 import { LOG_FORMAT_VERSION, type Fact, type FactLine } from './facts.js';
 
 export interface ConversationLog {
   readonly path: string;
-  append(facts: readonly Fact[]): void;
+  /** Hydrated accepted envelopes, returned only after the write and required fsync succeed. */
+  append(facts: readonly Fact[]): readonly FactLine[];
   close(): void;
 }
-
-const FACT_TYPES: ReadonlySet<string> = new Set([
-  'session_started',
-  'turn_started',
-  'text_delta',
-  'item',
-  'usage',
-  'turn_ended',
-]);
 
 const NEWLINE = 0x0a;
 
 type ParsedLog = {
-  readonly facts: readonly Fact[];
+  readonly entries: readonly FactLine[];
   readonly lastSeq: number;
   /** Byte length of the terminated lines; anything after it is a torn tail. */
   readonly complete: number;
@@ -51,11 +45,20 @@ const UTF8 = new TextDecoder('utf-8', { fatal: true });
  * Parses every terminated line. A last line without `\n` is not a fact and is
  * only reported through `complete` and `lastSeq`, so callers can truncate it.
  */
-function parseLog(data: Buffer, path: string): ParsedLog {
-  if (data.length === 0) return { facts: [], lastSeq: 0, complete: 0 };
+function continuationSeq(afterSeq: number | undefined): number {
+  if (afterSeq === undefined) return 0;
+  if (!Number.isSafeInteger(afterSeq) || afterSeq < 0) {
+    throw new Error('log afterSeq must be a nonnegative safe integer');
+  }
+  return afterSeq;
+}
+
+function parseLog(data: Buffer, path: string, afterSeq = 0, prefix: readonly FactLine[] = []): ParsedLog {
+  const payloads = new LogPayloads(prefix);
+  if (data.length === 0) return { entries: [], lastSeq: afterSeq, complete: 0 };
 
   const complete = data.lastIndexOf(NEWLINE) + 1;
-  if (complete === 0) return { facts: [], lastSeq: 0, complete: 0 };
+  if (complete === 0) return { entries: [], lastSeq: afterSeq, complete: 0 };
 
   let text: string;
   try {
@@ -68,8 +71,8 @@ function parseLog(data: Buffer, path: string): ParsedLog {
   // The empty string after the final newline.
   lines.pop();
 
-  const facts: Fact[] = [];
-  let lastSeq = 0;
+  const entries: FactLine[] = [];
+  let lastSeq = afterSeq;
 
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index]!;
@@ -110,22 +113,37 @@ function parseLog(data: Buffer, path: string): ParsedLog {
       throw new Error(`${where}: log fact is not an object`);
     }
     const type = (fact as Record<string, unknown>)['type'];
-    if (typeof type !== 'string' || !FACT_TYPES.has(type)) {
+    if (typeof type !== 'string' || !isKnownDirectFactType(type)) {
       throw new Error(`${where}: unknown fact type ${JSON.stringify(String(type))}`);
     }
 
-    facts.push(fact as Fact);
+    try {
+      payloads.decode(seq, fact as Fact, record['refs']);
+      validateFact(fact as Record<string, unknown>, where);
+    } catch (error) {
+      throw new Error(`${where}: invalid ${type}: ${errorMessage(error)}`, { cause: error });
+    }
+    payloads.accept(seq, fact as Fact);
+    entries.push({ v: LOG_FORMAT_VERSION, seq, at: record['at'], fact: fact as Fact });
     lastSeq = seq;
   }
 
-  return { facts, lastSeq, complete };
+  return { entries, lastSeq, complete };
 }
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function createConversationLog(path: string, fd: number, firstSeq: number, tornFrom?: number): ConversationLog {
+function createConversationLog(
+  path: string,
+  fd: number,
+  firstSeq: number,
+  prefix: readonly FactLine[] = [],
+  tornFrom?: number,
+  timestamp: () => string = () => new Date().toISOString(),
+): ConversationLog {
+  const payloads = new LogPayloads(prefix);
   let sequence = firstSeq;
   let handle: number | null = fd;
   let dead = false;
@@ -134,27 +152,37 @@ function createConversationLog(path: string, fd: number, firstSeq: number, tornF
   return {
     path,
 
-    append(facts: readonly Fact[]): void {
+    append(facts: readonly Fact[]): readonly FactLine[] {
       if (dead) {
         throw new Error(`conversation log ${path} is unusable after an earlier write failure`);
       }
       if (handle === null) {
         throw new Error(`conversation log ${path} is closed`);
       }
-      if (facts.length === 0) return;
+      if (facts.length === 0) return [];
 
       const fd = handle;
 
       try {
+        const entries: FactLine[] = [];
         const lines = facts.map((fact) => {
+          // Normalize once, honoring JSON/toJSON just as the old writer did.
+          // Projections must never re-enter the durable vocabulary.
+          const normalized = JSON.parse(JSON.stringify(fact)) as Fact;
+          if (normalized.type === 'turn_ended') delete (normalized as { finalWindow?: unknown }).finalWindow;
+          if (normalized.type === 'branch_event' && normalized.fact.type === 'turn_ended')
+            delete (normalized.fact as { finalWindow?: unknown }).finalWindow;
           const line: FactLine = {
             v: LOG_FORMAT_VERSION,
             seq: sequence,
-            at: new Date().toISOString(),
-            fact,
+            at: timestamp(),
+            fact: normalized,
           };
+          const compact = payloads.encode(sequence, normalized);
+          payloads.accept(sequence, normalized);
           sequence += 1;
-          return `${JSON.stringify(line)}\n`;
+          entries.push(line);
+          return `${JSON.stringify({ ...line, ...compact })}\n`;
         });
         const buffer = Buffer.from(lines.join(''), 'utf8');
         if (pendingTruncate !== undefined) {
@@ -173,6 +201,7 @@ function createConversationLog(path: string, fd: number, firstSeq: number, tornF
         if (!facts.every((fact) => fact.type === 'text_delta')) {
           fsyncSync(fd);
         }
+        return entries;
       } catch (error) {
         dead = true;
         handle = null;
@@ -194,21 +223,50 @@ function createConversationLog(path: string, fd: number, firstSeq: number, tornF
   };
 }
 
+export type LogContinuationOptions = {
+  /** Predecessor's last accepted seq. The next line must be this value plus one. Default 0. */
+  readonly afterSeq?: number;
+  /** Accepted predecessor envelopes, required when payload references cross rotation. */
+  readonly prefix?: readonly FactLine[];
+};
+
 /** Opens `<dir>/<id>.jsonl` with 'wx'. The directory refusal (D9) happens in app before this. */
-export function createLog(dir: string, id: string): ConversationLog {
+export function createLog(
+  dir: string,
+  id: string,
+  options: LogContinuationOptions & { readonly timestamp?: () => string } = {},
+): ConversationLog {
   const path = join(dir, `${id}.jsonl`);
-  return createConversationLog(path, openSync(path, 'wx'), 1);
+  return createConversationLog(
+    path,
+    openSync(path, 'wx'),
+    continuationSeq(options.afterSeq) + 1,
+    options.prefix,
+    undefined,
+    options.timestamp,
+  );
 }
 
 /** Changes no bytes: continues the seq, and leaves a torn final line for the next append to remove. */
-export function openLog(path: string): ConversationLog {
+export function openLog(path: string, options: LogContinuationOptions = {}): ConversationLog {
   const data = readFileSync(path);
-  const { lastSeq, complete } = parseLog(data, path);
+  const { lastSeq, complete, entries } = parseLog(data, path, continuationSeq(options.afterSeq), options.prefix);
   // Append mode: after the truncate, writes land at the new end without a position.
-  return createConversationLog(path, openSync(path, 'a'), lastSeq + 1, complete !== data.length ? complete : undefined);
+  return createConversationLog(
+    path,
+    openSync(path, 'a'),
+    lastSeq + 1,
+    [...(options.prefix ?? []), ...entries],
+    complete !== data.length ? complete : undefined,
+  );
 }
 
-/** Pure read; never writes. */
-export function readFacts(path: string): readonly Fact[] {
-  return parseLog(readFileSync(path), path).facts;
+/** Pure read of accepted envelopes with payload references hydrated; ignores only a torn final line. */
+export function readFactLines(path: string, options: LogContinuationOptions = {}): readonly FactLine[] {
+  return parseLog(readFileSync(path), path, continuationSeq(options.afterSeq), options.prefix).entries;
+}
+
+/** Pure fact projection of the same validated entries; never writes. */
+export function readFacts(path: string, options: LogContinuationOptions = {}): readonly Fact[] {
+  return readFactLines(path, options).map((entry) => entry.fact);
 }

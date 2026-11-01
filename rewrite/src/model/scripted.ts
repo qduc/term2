@@ -22,7 +22,8 @@ export function scriptedModel(ref: ModelRef = { provider: 'scripted', model: 'tr
   return {
     ref,
     contextWindow: 100_000,
-    async *stream(request: ModelRequest): AsyncIterable<ModelEvent> {
+    async *stream(request: ModelRequest, _signal, onDispatched): AsyncIterable<ModelEvent> {
+      onDispatched?.();
       const last = request.input.at(-1);
       if (last?.type === 'tool_result') {
         const text = last.isError ? `The tool failed: ${last.output}` : `Done. Tool said: ${last.output}`;

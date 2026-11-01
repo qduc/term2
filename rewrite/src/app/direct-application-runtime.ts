@@ -3,6 +3,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { isDeepStrictEqual } from 'node:util';
 import { installationVersion } from '../../../source/providers/fetch/logging-middleware.js';
 import { getProfileMetadata } from '../../../source/services/profiles/active-profile.js';
+import { planProfileTransition } from '../../../source/services/profiles/profile-transition.js';
 import { RUNTIME_MODIFIABLE_SETTINGS } from '../../../source/services/settings/settings-schema.js';
 import { buildEnvOverrides } from '../../../source/services/settings/settings-service.js';
 import type { ModelRef } from '../model/index.js';
@@ -14,21 +15,20 @@ import type {
   DirectContextPort,
 } from '../session/direct-capabilities.js';
 import type { DirectBinding } from '../session/facade-types.js';
-import type {
-  DirectCommandConfiguration,
-  DirectCommandOutcome,
-  DirectRolloverRequest,
-} from '../session/direct-command-types.js';
+import type { DirectCommandConfiguration } from '../session/direct-command-types.js';
 import type { DirectPreparedConfiguration } from '../session/direct-configuration.js';
+import type { DirectRolloverPreparer } from '../session/direct-session-rotation.js';
 import type { DirectVerificationOperations } from '../session/direct-goal-verification.js';
 import type { DirectConversationRuntime, DirectRuntimeContext } from '../session/direct-store.js';
 import { loadSurface } from './agent-surface.js';
 import type { DirectHookRuntime } from './direct-application-hooks.js';
 import { withSessionScope, type SessionScope } from './direct-application-models.js';
 import { createNestedAuthorizer } from './direct-application-nested.js';
+import { prepareSessionRollover } from './direct-application-rollover.js';
 import { createDirectConfigMemoryBinding } from './direct-config-memory.js';
 import { borrowDirectConfigSurfaceOptions } from './direct-config-remote.js';
 import { prepareDirectConfiguration } from './direct-config-runtime.js';
+import { createDirectConfigSettings } from './direct-config-settings.js';
 import { readDirectInputPreviewConfiguration } from './direct-input-preview.js';
 import { createDirectSessionMemory } from './direct-memory.js';
 import { runPolicy } from './direct-application-policy.js';
@@ -53,8 +53,6 @@ export type DirectRuntimeOptions = {
   readonly surface: (sessionId: string) => Omit<ToolSurfaceOptions, 'workspace'>;
   /** Decides whether a session may move to another model. Without it, none may. */
   readonly authorizeModel?: (next: ModelRef, previous: ModelRef) => void;
-  /** Runs inside the Session's command reservation. */
-  readonly rollover: (sessionId: string, request?: DirectRolloverRequest) => Promise<DirectCommandOutcome>;
   /** After any resumed selection is restored, so this reports what actually runs. */
   readonly onSurface?: (surface: AgentSurface, profile: ReturnType<typeof getProfileMetadata>) => void;
 };
@@ -211,9 +209,22 @@ export function createDirectRuntimes(
       const generations: (() => void | Promise<void>)[] = [() => runtime.dispose?.()];
       let installed: {
         readonly context: DirectRuntimeContext;
+        // TUI selection settings may already name a requested but unaccepted profile.
+        readonly settings: ProfileSelection['settings'];
         readonly bound?: { readonly port: DirectContextPort; readonly capabilities: DirectContextCapabilities };
-      } = { context };
-      const rollover = (request?: DirectRolloverRequest) => options.rollover(context.id, request);
+      } = { context, settings: createDirectConfigSettings(settings, {}).settings };
+      const rollover: DirectRolloverPreparer = (request, signal) => {
+        const { bound } = installed;
+        if (!bound) throw new Error('This session has not finished starting.');
+        return prepareSessionRollover({
+          previousSessionId: bound.port.backingSessionId,
+          request,
+          signal,
+          taskInventory: () =>
+            bound.port.tasks.list().map(({ kind, taskId, status }) => ({ kind, id: taskId, status })),
+          prepare: () => configure({}),
+        });
+      };
       const configure = async (configuration: DirectCommandConfiguration): Promise<DirectPreparedConfiguration> => {
         const { bound } = installed;
         if (!bound) throw new Error('This session has not finished starting.');
@@ -227,12 +238,21 @@ export function createDirectRuntimes(
           memoryBinding,
           authorizeModel,
         });
-        bindCheckIns(generation.surface, bound.port);
+        let profileTransitionNotice: string | undefined;
+        try {
+          bindCheckIns(generation.surface, bound.port);
+          profileTransitionNotice =
+            planProfileTransition(installed.settings, generation.profile.id).composedNotice ?? undefined;
+        } catch (error) {
+          await generation.dispose();
+          throw error;
+        }
         const { configuration: effective, intent, profile: nextProfile, request, capabilities, dispose } = generation;
         return {
           configuration: effective,
           intent,
           profile: nextProfile,
+          ...(profileTransitionNotice ? { profileTransitionNotice } : {}),
           request,
           capabilities,
           dispose,
@@ -244,6 +264,7 @@ export function createDirectRuntimes(
           install() {
             installed = {
               context: { ...installed.context, model: effective.model },
+              settings: generation.settings,
               bound: { port: bound.port, capabilities },
             };
             generations.push(dispose);

@@ -255,6 +255,8 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
       }
     },
     async switchSession(sessionId) {
+      // Native rollover rotates the backing log, not this attached logical Session.
+      if (sessionId === latest().sessionId) return;
       const next = await host.connect(principal, sessionId);
       // The session has really changed by now, so the client follows it even if control cannot.
       const failure = await bridge.rebind(sessionId).then(

@@ -15,6 +15,7 @@ import { SqliteReplayLedger } from '../host/server-auth.js';
 import type { Principal } from '../host/in-process-direct-types.js';
 import type { ServerSessionPresentation, ServerTransportOptions } from '../host/server-contracts.js';
 import { DirectProtocolError } from '../protocol/direct-errors.js';
+import { readDirectLogLineage } from '../session/direct-rolling-log.js';
 import { createDirectApplication, type DirectApplication } from './direct-application.js';
 import type { DirectAuthorityFactory } from './direct-application-workspaces.js';
 import {
@@ -23,7 +24,6 @@ import {
   directServeToolPosture,
   DirectGlobalConfiguration,
   DirectWorkspaceAuthority,
-  sessionStart,
 } from './direct-host-config.js';
 import type { DirectLaunchRequest } from './direct-launch-types.js';
 
@@ -140,8 +140,10 @@ type PresentationOptions = {
 
 function presentation(options: PresentationOptions): ServerSessionPresentation {
   const { app, directory, grants, configuration, allowWrite } = options;
-  const owned = (principal: Principal, sessionId: string) => {
-    const started = sessionStart(directory, sessionId);
+  const owned = (principal: Principal, sessionId: string, seq: number | null) => {
+    // Authority stays on the original logical start, validated through the same
+    // accepted lineage/cut as the presentation, never on a physical filename alias.
+    const started = readDirectLogLineage(directory, sessionId, seq === null ? {} : { throughSeq: seq }).metadata;
     if (started.binding?.client !== principal.userId) {
       throw new DirectProtocolError('forbidden', 'Workspace grant does not authorize this principal.');
     }
@@ -151,14 +153,14 @@ function presentation(options: PresentationOptions): ServerSessionPresentation {
     metadata(principal, snapshot) {
       const { createdAt, updatedAt, earliestSeq } = app.sessionDetails(snapshot.sessionId, snapshot.seq);
       return {
-        workspaceId: owned(principal, snapshot.sessionId).grant.workspaceId,
+        workspaceId: owned(principal, snapshot.sessionId, snapshot.seq).grant.workspaceId,
         createdAt,
         updatedAt,
         earliestReplayableSequence: earliestSeq,
       };
     },
     configuration(principal, snapshot) {
-      const { started, grant } = owned(principal, snapshot.sessionId);
+      const { started, grant } = owned(principal, snapshot.sessionId, snapshot.seq);
       const { workspace } = grants.resolveWorkspace(principal, grant);
       const { revision, defaultsRevision } = configuration.read();
       return {
@@ -168,10 +170,10 @@ function presentation(options: PresentationOptions): ServerSessionPresentation {
         // A live session may have been reconfigured since it started. The start fact
         // leaves this out when nothing was chosen.
         reasoningEffort:
-          app.sessionDetails(snapshot.sessionId).settings?.get('agent.reasoningEffort') ??
+          app.sessionDetails(snapshot.sessionId, snapshot.seq).settings?.get('agent.reasoningEffort') ??
           started.reasoning ??
           'default',
-        mode: app.sessionDetails(snapshot.sessionId).profileId ?? started.profileId ?? 'unknown',
+        mode: app.sessionDetails(snapshot.sessionId, snapshot.seq).profileId ?? started.profile.id ?? 'unknown',
         toolPolicy: directServeToolPosture(workspace.access === 'read_write' && allowWrite),
         configRevision: revision,
         defaultsRevision,

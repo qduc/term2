@@ -54,11 +54,9 @@ function messageOf(error: unknown): string {
 }
 
 function metadataFor(app: DirectApplication, root: string): (snapshot: WireSnapshot) => ControlSessionMetadata {
-  // A session's creation time never changes, and this runs on every status read.
-  const details = new Map<string, ReturnType<DirectApplication['sessionDetails']>>();
   return (snapshot) => {
-    const known = details.get(snapshot.sessionId) ?? app.sessionDetails(snapshot.sessionId);
-    details.set(snapshot.sessionId, known);
+    // The logical ID survives rollover; backing log and installed profile do not.
+    const known = app.sessionDetails(snapshot.sessionId, snapshot.seq);
     return {
       workspaceRoot: root,
       version: installationVersion,

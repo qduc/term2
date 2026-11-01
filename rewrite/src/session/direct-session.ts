@@ -16,6 +16,7 @@ import type {
   DirectSubmission,
 } from './facade-types.js';
 import type { Fact, FactLine } from './facts.js';
+import { recoverDirectFinalWindow } from './direct-final.js';
 import type { ConversationLog } from './log.js';
 import {
   initialDirectState,
@@ -78,10 +79,19 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
 
   // Replayed entries get positions in this runtime's projection order; these
   // are not historical ordinals from the process that originally wrote them.
+  // A historical root terminal without a final window is projected from its
+  // accepted facts, read-only, and marked derived; the log is never migrated.
+  const acceptedFacts: Fact[] = [];
   for (const entry of options.entries) {
-    state = reduceDirectFact(state, entry.fact, entry.seq);
+    let fact = entry.fact;
+    if (fact.type === 'turn_ended' && fact.finalWindow === undefined) {
+      const finalWindow = recoverDirectFinalWindow(acceptedFacts, fact);
+      if (finalWindow !== undefined) fact = { ...fact, finalWindow };
+    }
+    state = reduceDirectFact(state, fact, entry.seq);
     seq = entry.seq;
-    durable.push({ type: 'fact', position: ++position, seq: entry.seq, at: entry.at, fact: entry.fact });
+    durable.push({ type: 'fact', position: ++position, seq: entry.seq, at: entry.at, fact });
+    acceptedFacts.push(fact);
   }
   const resumedAtSeq = seq;
   let reopened = true;
@@ -120,21 +130,34 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
     },
     append(facts) {
       const accepted = JSON.parse(JSON.stringify(facts)) as Fact[];
+      // A recovered active turn's synthetic terminal can lack a window because
+      // older repair facts never carried one. Project the window read-only from
+      // the accepted prefix; persist the original fact unchanged.
+      const projected: Fact[] = [];
+      for (const fact of accepted) {
+        let next = fact;
+        if (fact.type === 'turn_ended' && fact.finalWindow === undefined) {
+          const finalWindow = recoverDirectFinalWindow([...acceptedFacts, ...projected], fact);
+          if (finalWindow !== undefined) next = { ...fact, finalWindow };
+        }
+        projected.push(next);
+      }
       // Invalid projections fail before disk mutation; install/publication happen
       // only after the sole underlying writer has accepted the complete batch.
       let candidate = state;
-      for (const [index, fact] of accepted.entries()) candidate = reduceDirectFact(candidate, fact, seq + index + 1);
+      for (const [index, fact] of projected.entries()) candidate = reduceDirectFact(candidate, fact, seq + index + 1);
       const lines = options.log.append(accepted);
       state = candidate;
+      acceptedFacts.push(...accepted);
       reopened = false;
-      for (const line of lines) {
+      for (const [index, line] of lines.entries()) {
         seq = line.seq;
         const update: DirectDurableUpdate = {
           type: 'fact',
           position: ++position,
           seq: line.seq,
           at: line.at,
-          fact: line.fact,
+          fact: projected[index] ?? line.fact,
         };
         durable.push(update);
         publish(update);

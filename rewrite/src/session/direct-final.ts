@@ -17,6 +17,9 @@ export type DirectFinalItem = {
 export type DirectFinalWindow = {
   readonly version: 'public-turn-v1';
   readonly turnId: TurnId;
+  /** Present only when a read-only projection rebuilt this window from accepted
+   * facts because the original terminal predates final-window persistence. */
+  readonly derivedFromAcceptedFacts?: true;
   /** Actual accepted public items, with native IDs kept separate from provider identities. */
   readonly items: readonly DirectFinalItem[];
   readonly record: {
@@ -114,6 +117,18 @@ export function directPublicCommandMessages(display: unknown): readonly CommandM
 /** Freeze the public evidence at terminal acceptance. Later background costs do not rewrite this cut.
  * Private provider_input/provider_opaque/reasoning metadata are intentionally not a public contract.
  * This window does NOT claim complete legacy --json coverage or observer-specific streaming state. */
+/** Rebuild a missing historical window for a read-only projection. The original
+ * terminal remains unchanged and is never migrated; callers must keep the derived
+ * marker visible to consumers instead of presenting it as an accepted window. */
+export function recoverDirectFinalWindow(
+  facts: readonly Fact[],
+  terminal: Extract<Fact, { type: 'turn_ended' }>,
+): DirectFinalWindow | undefined {
+  if (terminal.finalWindow !== undefined) return terminal.finalWindow;
+  if (!facts.some((fact) => fact.type === 'turn_started' && fact.turnId === terminal.turnId)) return undefined;
+  return { ...captureDirectFinalWindow(facts, terminal), derivedFromAcceptedFacts: true };
+}
+
 export function captureDirectFinalWindow(
   facts: readonly Fact[],
   terminal: Extract<Fact, { type: 'turn_ended' }>,

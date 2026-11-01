@@ -41,14 +41,30 @@ rotation identity, context-compaction attempt evidence including real
 are retained. The server explicitly maps the proposed accepted-only `cost`,
 `request_cost_recorded`, `goal`, `goal_proposed`, `verification`, `notice`,
 `background_notice_enqueued` and `background_notices_delivered` names to their
-exact native payloads; shared source delta `af3d0ff` now adds those accepted
-names and rejects branch wrappers on cost/request receipt, but the unbuilt
-artifact keeps the gate closed. `request_cost_recorded` and aggregate `cost` are not branch
+exact native payloads; shared source prior delta `af3d0ff` added those accepted
+names and rejects branch wrappers on cost/request receipt. Shared final
+`a4bcebc4` now also adds accepted `message`, `task_changed` and `tool_called`,
+adds live `error`/`turn_failed`, exports accepted/live change types, and rejects
+accepted `error`; the unbuilt artifact keeps the gate closed. `request_cost_recorded` and aggregate `cost` are not branch
 wrapped; request records retain physical ancestry and are upsert-only, never a
 second charge. Native accepted `message` and `task_changed` are mapped to those
 exact requested names with their complete native public payloads; see
 “Required remaining accepted vocabulary” below. Changes without a shared name
 are not relabelled; the accepted boundary may be an empty batch.
+
+### Accepted/live type boundary
+
+The local mirror follows shared final `a4bcebc4`:
+
+- accepted changes use `AgentWireV2AcceptedChangeType` (the shared
+  `AgentAcceptedChangeTypeV2` equivalent); `error` is not in that allowlist;
+- live changes use `AgentWireV2LiveChangeType` (the shared
+  `AgentLiveChangeTypeV2` equivalent), including `error` and `turn_failed`;
+- the general change union includes both, but envelope kind narrows the batch.
+  `turn_failed` is a normal accepted terminal and also the transient
+  synchronized-failure name; kind and absence of a cursor distinguish them.
+- The server rejects an accepted error before constructing the envelope and
+  rejects a branch wrapper on `task_changed`; shared `a4bcebc4` does the same.
 
 ### Required remaining accepted vocabulary (M6)
 
@@ -65,10 +81,13 @@ previously dropped and that M6 transcript/task-history parity needs:
   `toolUseCounts`; absent and empty remain distinct. A stop request or child
   terminal is not task completion.
 
-The server source maps these names now. The shared v2 source must add them to
-the accepted allowlist and validate their payloads; the browser must reduce
-them. Until that cross-owner intake is complete, the v2 gate stays closed and
-an activation attempt with these names would be invalid, not silently downgraded.
+The server source maps these names now. Shared final `a4bcebc4` adds them to
+the accepted allowlist and validates their payloads, exports
+`AgentAcceptedChangeTypeV2`/`AgentLiveChangeTypeV2`, and rejects accepted
+`error`; the local mirror now follows that split. Browser reduction remains
+external intake. Until that combined intake is complete, the v2 gate stays
+closed and an activation attempt with these names would be invalid, not
+silently downgraded.
 
 `status_changed` is not added by this step: the candidate native producer has
 no accepted `status_changed` fact. Status is current snapshot state and the

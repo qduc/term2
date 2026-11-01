@@ -112,6 +112,8 @@ export function spawnTerminal(command: string, args: string[], options: SpawnTer
     exitReject = reject;
   });
 
+  // Preserve UTF-8 characters split across arbitrary PTY pipe chunks.
+  terminal.stdout?.setEncoding('utf8');
   terminal.stdout?.on('data', (chunk: Buffer | string) => {
     output += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
   });

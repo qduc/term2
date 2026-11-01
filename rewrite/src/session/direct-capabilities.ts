@@ -87,9 +87,8 @@ export function bindDirectCapabilities(options: {
       capabilities.memory,
     );
     const bound: Tool[] = [...(capabilities.memory?.tools ?? [])];
-    if (requestGoal.goal?.status === 'active') {
-      bound.push(createDirectGoalCheckTool({ requestGoal, readGoal: () => options.read().goal }));
-    }
+    // Visibility is stable across goal changes; execution rejects an inactive goal.
+    bound.push(createDirectGoalCheckTool({ requestGoal, readGoal: () => options.read().goal }));
     if (capabilities.proposeGoal && !requestGoal.goal && !requestGoal.proposalMade) {
       bound.push(
         createDirectProposeGoalTool({
@@ -141,7 +140,7 @@ export function bindDirectCapabilities(options: {
         ),
       );
     const overrides = new Map(bound.map((tool) => [tool.spec.name, tool]));
-    // Never retain a stale/source goal declaration when no direct goal exists.
+    // Replace source declarations with Session-owned tools, never their legacy callbacks.
     const specs = request.tools.filter(
       (tool) => !['goal_check', 'propose_goal', 'session_rollover'].includes(tool.name) && !overrides.has(tool.name),
     );

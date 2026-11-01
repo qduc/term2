@@ -2,7 +2,7 @@
 import '../../../source/env-setup.js';
 
 import { readdir } from 'node:fs/promises';
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { stdin, stdout, stderr } from 'node:process';
 import { homedir } from 'node:os';
 import path from 'node:path';
@@ -29,6 +29,7 @@ import type { InteractivePickerRequest } from '../../../source/services/models/m
 import { HARNESS_IDLE_ENV } from '../../../source/lib/harness-input-idle.js';
 import { isControlSocketName } from '../../../source/services/control-socket/control-socket.js';
 import { createAppSettings } from './settings.js';
+import { listNativeConversations, resolveNativeResume } from './cli-conversations.js';
 import {
   launchDirect,
   runDirectHeadlessOnHost,
@@ -80,23 +81,7 @@ function packageVersion(): string {
  * resume, not SSH, and (without a prompt, or with --auto-approve for a prompt).
  */
 function homeGuardApplies(options: SessionOptions, hasPrompt: boolean): boolean {
-  return (
-    !options.lite &&
-    options.resumeId === null &&
-    options.ssh === null &&
-    (!hasPrompt || options.autoApprove)
-  );
-}
-
-/**
- * A native resume names a direct conv_ log that must already exist. Only its
- * presence is checked here; nothing is read, so no other conversation is touched.
- */
-function requireNativeConversation(resumeId: string | null): void {
-  if (resumeId === null) return;
-  if (!existsSync(path.join(conversationsDirectory(), `${resumeId}.jsonl`))) {
-    throw new Error(`No conversation found to resume (${resumeId}).`);
-  }
+  return !options.lite && options.resumeId === null && options.ssh === null && (!hasPrompt || options.autoApprove);
 }
 
 function conversationsDirectory(): string {
@@ -486,16 +471,20 @@ async function main(argv: readonly string[]): Promise<number> {
       return runLogin(command.provider);
     case 'list-models':
       return runListModelsCommand(command.search, command.refresh);
-    case 'interactive':
+    case 'list-conversations':
+      stdout.write(await listNativeConversations(conversationsDirectory(), command.options));
+      return 0;
+    case 'interactive': {
       if (command.refused) throw refused(command.refused);
+      const options = await resolveNativeResume(conversationsDirectory(), command.options);
       if (!(stdin.isTTY && stdout.isTTY)) {
-        if (command.options.resumeId !== null) throw new Error('--resume requires a follow-up prompt');
+        if (options.resumeId !== null) throw new Error('--resume requires a follow-up prompt');
         // A non-lite start from the home directory is refused with the warning first, as the current CLI does.
         if (
           shouldWarnOnHomeDirectoryStart({
             cwd: path.resolve(process.cwd()),
             homeDir: path.resolve(homedir()),
-            isNonLiteStart: homeGuardApplies(command.options, false),
+            isNonLiteStart: homeGuardApplies(options, false),
           })
         ) {
           stderr.write(`${HOME_DIRECTORY_START_WARNING.trimEnd()}\nCancelled.\n`);
@@ -504,12 +493,11 @@ async function main(argv: readonly string[]): Promise<number> {
         stderr.write(`${NO_PROMPT_MESSAGE}\n`);
         return 1;
       }
-      requireNativeConversation(command.options.resumeId);
-      return runInteractive(command.options);
+      return runInteractive(options);
+    }
     case 'headless':
       if (command.refused) throw refused(command.refused);
-      requireNativeConversation(command.options.resumeId);
-      return runHeadless(command.prompt, command.options);
+      return runHeadless(command.prompt, await resolveNativeResume(conversationsDirectory(), command.options));
     case 'serve':
       return runServe(command.args);
     case 'acp':

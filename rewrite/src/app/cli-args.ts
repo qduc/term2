@@ -46,7 +46,13 @@ export type Command =
   | { readonly kind: 'discord-help' }
   | { readonly kind: 'login'; readonly provider: 'grok' | 'codex' }
   | { readonly kind: 'list-models'; readonly search: string | null; readonly refresh: boolean }
-  | { readonly kind: 'headless'; readonly prompt: string; readonly options: SessionOptions; readonly refused: Refusal | null }
+  | { readonly kind: 'list-conversations'; readonly options: SessionOptions }
+  | {
+      readonly kind: 'headless';
+      readonly prompt: string;
+      readonly options: SessionOptions;
+      readonly refused: Refusal | null;
+    }
   | { readonly kind: 'interactive'; readonly options: SessionOptions; readonly refused: Refusal | null }
   | { readonly kind: 'serve'; readonly args: ServeArgs }
   | { readonly kind: 'acp'; readonly args: AcpArgs }
@@ -71,7 +77,8 @@ type Flag = {
 
 /** Builds one flag. `suffix` is its help placeholder: ' <x>' takes a value, '[=<x>]' takes only an inline one. */
 const opt = (names: string[], suffix: string, help: string, refusal?: string, value?: Flag['value']): Flag => {
-  const kind: Flag['value'] = value ?? (suffix.startsWith(' <') ? 'next-or-empty' : suffix.startsWith('[=') ? 'optional' : undefined);
+  const kind: Flag['value'] =
+    value ?? (suffix.startsWith(' <') ? 'next-or-empty' : suffix.startsWith('[=') ? 'optional' : undefined);
   return { names, label: names.join(', ') + suffix, help, value: kind, refusal };
 };
 
@@ -81,12 +88,14 @@ const FLAGS: readonly Flag[] = [
   opt(['-p', '--provider'], ' <provider>', 'Override the configured provider (e.g. openai, openrouter)'),
   opt(['-r', '--reasoning'], ' <effort>', 'Set reasoning effort (default, none, minimal, low, medium, high, xhigh)'),
   opt(['--goal'], ' <text>', 'Persist a user-authored session outcome (max 2,000 characters)'),
+  opt(['--goal-criteria'], ' <text>', 'Optional success criteria (max 2,000 characters; requires --goal)'),
   opt(
-    ['--goal-criteria'],
-    ' <text>',
-    'Optional success criteria (max 2,000 characters; requires --goal)',
+    ['--profile'],
+    ' <name>',
+    'Select a profile (full, bare, plan, pair, mentor, orchestrator; lite = bare)',
+    undefined,
+    'required',
   ),
-  opt(['--profile'], ' <name>', 'Select a profile (full, bare, plan, pair, mentor, orchestrator; lite = bare)', undefined, 'required'),
   opt(['-l', '--lite'], '', 'Start in the Bare profile (alias kept from Lite)'),
   opt(['--auto-approve'], '', 'Allow tool execution for a non-interactive prompt'),
   // Quiet only changes the non-interactive runner; the TUI ignores it, as the current CLI does.
@@ -106,9 +115,19 @@ const FLAGS: readonly Flag[] = [
   opt(['--control-socket'], '[=<name>]', 'Enable a local socket for the interactive TUI'),
   opt(['--grok-login'], '', 'Log in to Grok in a browser (OAuth) and exit'),
   opt(['--codex-login'], '', 'Log in to Codex/ChatGPT in a browser (OAuth) and exit'),
-  opt(['--list-models'], ' [search]', 'Print available models grouped by provider, filtered by an optional search term'),
+  opt(
+    ['--list-models'],
+    ' [search]',
+    'Print available models grouped by provider, filtered by an optional search term',
+  ),
   opt(['--refresh'], '', 'With --list-models, bypass the model catalog cache and re-fetch before listing'),
-  opt(['-R', '--resume'], ' <id>', 'Resume an exact direct conversation ID with a follow-up prompt.'),
+  opt(
+    ['-R', '--resume'],
+    ' [conversation-id|ls]',
+    'Resume a native conversation (default: last), or list recent conversations.',
+    undefined,
+    'next-or-empty',
+  ),
   opt(['--fork'], '', 'Fork the resumed conversation into a new session (requires --resume)'),
   opt(['-h', '--help'], '', 'Show help'),
   opt(['-v', '--version'], '', 'Show version'),
@@ -117,8 +136,6 @@ const FLAGS: readonly Flag[] = [
 const FLAG_BY_NAME = new Map(FLAGS.flatMap((flag) => flag.names.map((name) => [name, flag] as const)));
 const longName = (flag: Flag): string => flag.names.find((name) => name.startsWith('--')) ?? flag.names[0]!;
 
-const OLD_CONVERSATIONS =
-  'resuming the last conversation or listing them reads old conversations, whose access is an open owner decision; direct resume takes an exact conv_ ID';
 const SUBCOMMANDS = new Set(['serve', 'acp', 'control', 'discord']);
 const CONTROL_COMMANDS = new Set(['list', 'status', 'get', 'submit', 'steer', 'interrupt', 'wait-turn']);
 
@@ -151,9 +168,7 @@ https://github.com/qduc/term2/blob/main/docs/reference/discord-bridge.md
 Candidate: live Discord/mobile validation is still outstanding.
 `;
 
-const optionLines = FLAGS.map(
-  (flag) => `  ${flag.label.padEnd(38)}${flag.help}${flag.refusal ? ' *' : ''}`,
-).join('\n');
+const optionLines = FLAGS.map((flag) => `  ${flag.label.padEnd(38)}${flag.help}${flag.refusal ? ' *' : ''}`).join('\n');
 
 export const HELP = `Usage: term2 [options] [prompt...]
        term2 <serve|acp|control|discord> [arguments]
@@ -175,7 +190,9 @@ Subcommands:
   term2 discord [config.json] | --save-token [config.json] | --help *
         Run the Discord bridge. --help prints its reference.
 
-The direct CLI supports one prompt per invocation. Resume requires an exact direct conversation ID and a follow-up prompt.
+The direct CLI supports one prompt per invocation. --resume [conversation-id|last] selects a native conversation;
+bare --resume selects the last one for this workspace. Use --resume ls (or list) to browse.
+A non-interactive resume requires a follow-up prompt.
 * Not available in the direct executable yet. These fail with an error; they never start the current CLI.
 `;
 
@@ -187,11 +204,9 @@ export class UsageError extends Error {
 type RawValue = string | true;
 
 function parseResumeId(value: string): string {
-  if (value.startsWith('-')) throw new Error('--resume requires an exact conversation ID');
-  // Lowercase only: the direct store and the fork operation reject uppercase hex, and an uppercase id is not rewritten.
-  if (!/^conv_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value)) {
-    throw new Error('--resume requires an exact direct conversation ID');
-  }
+  // References are data, never paths. Unknown safe references get the normal
+  // not-found diagnostic; only exact native IDs are opened by discovery.
+  if (!/^[a-zA-Z0-9_-]+$/.test(value)) throw new Error('--resume requires a conversation ID or last');
   return value;
 }
 
@@ -228,8 +243,7 @@ function buildSessionOptions(raw: ReadonlyMap<string, RawValue>): SessionOptions
     autoApprove: raw.has('--auto-approve'),
     lite,
     profile: textOf(raw, '--profile'),
-    // Bare `--resume`, `ls` and `list` are old-conversation forms; they are refused, not parsed as IDs.
-    resumeId: resume === null || resume === '' || resume === 'ls' || resume === 'list' ? null : parseResumeId(resume),
+    resumeId: resume === null || resume === 'ls' || resume === 'list' ? null : parseResumeId(resume || 'last'),
     fork: raw.has('--fork'),
     model: textOf(raw, '--model'),
     provider: textOf(raw, '--provider') || null,
@@ -245,8 +259,6 @@ function buildSessionOptions(raw: ReadonlyMap<string, RawValue>): SessionOptions
 
 /** The first parsed option the app does not consume in this mode. Refusal happens before any side effect. */
 function refusalFor(raw: ReadonlyMap<string, RawValue>, mode: 'headless' | 'interactive'): Refusal | null {
-  const resume = textOf(raw, '--resume');
-  if (resume === '' || resume === 'ls' || resume === 'list') return { flag: '--resume', reason: OLD_CONVERSATIONS };
   for (const flag of FLAGS) {
     if (!flag.refusal || (mode === 'interactive' && flag.interactiveNoOp)) continue;
     if (isSet(raw, longName(flag))) return { flag: longName(flag), reason: flag.refusal };
@@ -320,7 +332,8 @@ export function parseCommandLine(argv: readonly string[]): Command {
   if (raw.has('--version')) return { kind: 'version' };
   if (raw.has('--grok-login')) return { kind: 'login', provider: 'grok' };
   if (raw.has('--codex-login')) return { kind: 'login', provider: 'codex' };
-  if (raw.has('--refresh') && !raw.has('--list-models')) throw new Error('--refresh can only be used with --list-models.');
+  if (raw.has('--refresh') && !raw.has('--list-models'))
+    throw new Error('--refresh can only be used with --list-models.');
   if (raw.has('--list-models')) {
     if (raw.has('--resume') || raw.has('--fork')) {
       throw new Error('--list-models cannot be combined with --resume or --fork.');
@@ -334,6 +347,12 @@ export function parseCommandLine(argv: readonly string[]): Command {
   if (prompt === '' && !raw.has('--resume')) return { kind: 'help' };
 
   const options = buildSessionOptions(raw);
+  const resume = textOf(raw, '--resume');
+  if (resume === 'ls' || resume === 'list') {
+    if (positional.length > 0) throw new Error('--resume ls does not accept a prompt.');
+    if (options.fork) throw new Error('--fork cannot be combined with --resume ls.');
+    return { kind: 'list-conversations', options };
+  }
   if (prompt === null) return { kind: 'interactive', options, refused: refusalFor(raw, 'interactive') };
   return { kind: 'headless', prompt, options, refused: refusalFor(raw, 'headless') };
 }

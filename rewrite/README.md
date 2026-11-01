@@ -194,6 +194,11 @@ and isolate settings; shell-approval modes stay on default Bare. An unoffered
 The build script emits the TypeScript tree and copies the runtime assets just as
 the root build does: prompts come from `source/prompts/` and provider presets
 from `source/providers/provider-presets.json`.
+The production build config also explicitly includes
+`source/utils/worker-cwd-preload.cts`. `workerBootstrapExecArgv` locates its
+emitted `.cjs` through a URL, not a static import, so transitive compilation
+alone misses it. Without that entry, built `run_code` workers fail at startup
+before executing any tool, even though the CLI and provider turn can complete.
 
 ## C2 canonical-log proof
 

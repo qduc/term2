@@ -1,9 +1,15 @@
 /** The sole direct model boundary: preparation, recovery and accepted continuity. */
+import { randomUUID } from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 import type { Item, ItemId, Model, ModelError, ModelEvent, ModelRequest, Usage } from '../model/index.js';
-import type { DirectManualCompactionOutcome, TurnDeps, TurnSpec } from './direct-types.js';
+import type { DirectManualCompactionOutcome, TurnCompactionEvent, TurnDeps, TurnSpec } from './direct-types.js';
 import { DirectRecovery, type DirectRecoveryDecision, type DirectRecoveryFailure } from './direct-recovery.js';
 import { DirectContinuity, selfContained } from './direct-recovery-continuity.js';
-import { compactDirectHistory, type DirectCompactionResult } from './direct-recovery-compaction.js';
+import {
+  compactDirectHistory,
+  type DirectCompactionResult,
+  type DirectCompactionRequest,
+} from './direct-recovery-compaction.js';
 import { hasCompleteDirectToolPairs } from './direct-recovery-history.js';
 import { NativeBudgetExhausted, type TurnBudgetControl } from './turn-budget.js';
 import { TurnEvents, cancelled } from './turn-events.js';
@@ -12,6 +18,9 @@ import { TurnTools, type RootCall } from './turn-tools.js';
 type Done = Extract<ModelEvent, { type: 'done' }>;
 type Retry = Extract<DirectRecoveryDecision, { kind: 'retry' }>;
 class CompactionWrapUp extends Error {}
+// A configured successful attempt must return its accepted result, not silently
+// fall through as undefined and make a manual command report unavailable.
+type CompactionAttemptResult = DirectCompactionResult | { readonly kind: 'unavailable' | 'wrap_up' };
 
 export class TurnModel {
   readonly #recovery: DirectRecovery;
@@ -103,8 +112,8 @@ export class TurnModel {
       try {
         const surface = await this.#request(history, this.#step + 1);
         const result = await this.#compact(surface.request, history, true);
-        if (result?.kind === 'compacted') return { kind: 'compacted' };
-        return { kind: 'blocked', reason: result?.kind === 'blocked' ? result.reason : result?.kind ?? 'unavailable' };
+        if (result.kind === 'compacted') return { kind: 'compacted' };
+        return { kind: 'blocked', reason: result.kind === 'blocked' ? result.reason : result.kind };
       } catch (error) {
         if (this.signal.aborted) throw cancelled();
         if (error instanceof NativeBudgetExhausted) throw error;
@@ -219,9 +228,25 @@ export class TurnModel {
       throw new NativeBudgetExhausted('Native child model-call budget exhausted');
   }
 
-  async #compact(request: ModelRequest, history: Item[], manual = false): Promise<DirectCompactionResult | undefined> {
-    if (!this.deps.compaction) return;
+  async #compact(request: ModelRequest, history: Item[], manual = false): Promise<CompactionAttemptResult> {
+    if (!this.deps.compaction) return { kind: 'unavailable' };
     const sourceLength = history.length;
+    let attempt: { compactionId: string; started: number; accepted: boolean } | undefined;
+    let outcomeChosen = false;
+    const requests: DirectCompactionRequest[] = [];
+    const failed = async (
+      failure: Extract<TurnCompactionEvent, { type: 'compaction_failed' }>['failure'],
+    ): Promise<void> => {
+      if (!attempt?.accepted || outcomeChosen) return;
+      outcomeChosen = true;
+      await this.events.publish({
+        type: 'compaction_failed',
+        compactionId: attempt.compactionId,
+        failure,
+        durationMs: performance.now() - attempt.started,
+        requests,
+      });
+    };
     const model = this.deps.models.resolve(request.model);
     const control = this;
     // The compactor uses the same boundary for every auxiliary physical request.
@@ -229,28 +254,28 @@ export class TurnModel {
     const summaryModel: Model = {
       ref: model.ref,
       contextWindow: model.contextWindow,
-      stream: (summary, signal) => control.#summary(model, summary, history, signal, request.instructions),
+      stream: (summary, signal) =>
+        control.#summary(model, summary, history, signal, request.instructions, (record) => requests.push(record)),
       ...(model.compact
         ? {
             compact: async (native: ModelRequest, signal: AbortSignal) => {
               const { request: prepared, modelStep } = await control.#auxiliary(native, history, request.instructions);
               control.budget.dispatched();
+              let outcome: DirectCompactionRequest['outcome'] = 'failed';
               try {
                 const items = await model.compact!(prepared, signal);
                 await control.events.publish({ type: 'model_response_completed', modelStep, stopReason: 'end_turn' });
-                control.budget.record({
-                  requestId: `${control.spec.turnId}:model:${modelStep}`,
-                  model: native.model,
-                  outcome: 'completed',
-                });
+                outcome = 'completed';
                 return items;
-              } catch (error) {
-                control.budget.record({
+              } finally {
+                const record: DirectCompactionRequest = {
                   requestId: `${control.spec.turnId}:model:${modelStep}`,
-                  model: native.model,
-                  outcome: signal.aborted ? 'cancelled' : 'failed',
-                });
-                throw error;
+                  modelStep,
+                  model: prepared.model,
+                  outcome: signal.aborted ? 'cancelled' : outcome,
+                };
+                requests.push(record);
+                control.budget.record(record);
               }
             },
           }
@@ -267,30 +292,66 @@ export class TurnModel {
         ...this.#compactionState,
         lastCompletedInputTokens: this.#lastInputTokens,
         ...(manual ? { manual: true } : {}),
+        onStarted: async (evidence) => {
+          const started = { compactionId: `compaction_${randomUUID()}`, started: performance.now(), accepted: false };
+          attempt = started;
+          await this.events.publish(
+            { type: 'compaction_started', compactionId: started.compactionId, ...evidence },
+            () => {
+              started.accepted = true;
+            },
+          );
+        },
       });
+      if (result.kind !== 'compacted') {
+        if (result.kind === 'blocked') await failed({ kind: 'blocked', reason: result.reason });
+        return result;
+      }
+      // Steering admitted during summaries is newer than the frozen compact input.
+      const replacement = [...result.history, ...history.slice(sourceLength)];
+      await this.events.publish({
+        type: 'history_replaced',
+        history: replacement,
+        reason: 'compaction',
+        ...(attempt ? { compactionId: attempt.compactionId } : {}),
+        rearmAtEstimatedTokens: result.rearmAtEstimatedTokens,
+        checkpointReceipts: result.checkpointReceipts,
+      });
+      history.splice(0, history.length, ...replacement);
+      this.#compactionState = {
+        rearmAtEstimatedTokens: result.rearmAtEstimatedTokens,
+        checkpointReceipts: result.checkpointReceipts,
+      };
+      this.#lastInputTokens = undefined;
+      this.#continuity.clear();
+      // Success is the accepted replacement, not private summary output. Choose
+      // the outcome before publishing so cancellation cannot turn it into failure.
+      if (attempt?.accepted) {
+        outcomeChosen = true;
+        await this.events.publish({
+          type: 'compaction_completed',
+          compactionId: attempt.compactionId,
+          strategy: result.strategy,
+          after: result.estimate,
+          durationMs: performance.now() - attempt.started,
+          requests,
+        });
+      }
+      return result;
     } catch (error) {
-      // A child critical boundary needs a root tools-disabled final response,
-      // not an internal summary masquerading as that wrap-up.
-      if (error instanceof CompactionWrapUp) return;
+      await failed(
+        this.signal.aborted
+          ? { kind: 'cancelled' }
+          : error instanceof CompactionWrapUp
+          ? { kind: 'interrupted', reason: 'budget_wrap_up' }
+          : error instanceof NativeBudgetExhausted
+          ? { kind: 'interrupted', reason: 'budget_exhausted' }
+          : { kind: 'failed', error: toModelError(error) },
+      );
+      // Child wrap-up is a root tools-disabled response, not an internal summary.
+      if (error instanceof CompactionWrapUp) return { kind: 'wrap_up' };
       throw error;
     }
-    if (result.kind !== 'compacted') return result;
-    // Steering admitted during summaries is newer than the frozen compact input.
-    const replacement = [...result.history, ...history.slice(sourceLength)];
-    await this.events.publish({
-      type: 'history_replaced',
-      history: replacement,
-      reason: 'compaction',
-      rearmAtEstimatedTokens: result.rearmAtEstimatedTokens,
-      checkpointReceipts: result.checkpointReceipts,
-    });
-    history.splice(0, history.length, ...replacement);
-    this.#compactionState = {
-      rearmAtEstimatedTokens: result.rearmAtEstimatedTokens,
-      checkpointReceipts: result.checkpointReceipts,
-    };
-    this.#lastInputTokens = undefined;
-    this.#continuity.clear();
   }
 
   async #auxiliary(
@@ -340,6 +401,7 @@ export class TurnModel {
     history: Item[],
     signal: AbortSignal,
     preparedInstructions: string,
+    onRequest: (record: DirectCompactionRequest) => void,
   ): AsyncGenerator<ModelEvent> {
     const prepared = await this.#auxiliary(request, history, preparedInstructions);
     const requestId = `${this.spec.turnId}:model:${prepared.modelStep}`;
@@ -368,14 +430,22 @@ export class TurnModel {
         }
         yield event;
       }
+    } catch (error) {
+      outcome = 'failed';
+      throw error;
     } finally {
-      this.budget.record({
+      const record: DirectCompactionRequest = {
         requestId,
-        model: request.model,
-        serviceTier: prepared.request.useStandardServiceTier ? 'standard' : undefined,
-        usage,
-        costUsd: done?.costUsd,
+        modelStep: prepared.modelStep,
+        model: prepared.request.model,
+        ...(usage !== undefined ? { usage } : {}),
+        ...(done?.costUsd !== undefined ? { costUsd: done.costUsd } : {}),
         outcome: signal.aborted ? 'cancelled' : outcome,
+      };
+      onRequest(record);
+      this.budget.record({
+        ...record,
+        serviceTier: prepared.request.useStandardServiceTier ? 'standard' : undefined,
       });
     }
   }

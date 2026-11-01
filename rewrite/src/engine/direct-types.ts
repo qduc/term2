@@ -26,7 +26,13 @@ import type {
 import type { TurnId } from './index.js';
 import type { DirectRecoveryOptions } from './direct-recovery.js';
 import type { DirectContinuity, DirectContinuityBinding } from './direct-recovery-continuity.js';
-import type { DirectCompactionSettings } from './direct-recovery-compaction.js';
+import type {
+  DirectCompactionSettings,
+  DirectCompactionResult,
+  DirectCompactionStart,
+  DirectCompactionRequest,
+  DirectContextEstimate,
+} from './direct-recovery-compaction.js';
 import type {
   ModelRequestCost,
   RunBudget,
@@ -129,13 +135,38 @@ export type TurnDeps = {
     context: { readonly turnId: TurnId; readonly parentExecutionId: ExecutionId; readonly signal: AbortSignal },
   ) => Promise<NestedRunResult>;
 };
+/** One accepted start and at most one observed outcome per engine attempt.
+ * Session supplies turn/branch/session identity and durable seq/at, never engine. */
+export type TurnCompactionEvent =
+  | ({ readonly type: 'compaction_started'; readonly compactionId: string } & DirectCompactionStart)
+  | {
+      readonly type: 'compaction_completed';
+      readonly compactionId: string;
+      readonly strategy: 'native' | 'local';
+      readonly after: DirectContextEstimate;
+      readonly durationMs: number;
+      readonly requests: readonly DirectCompactionRequest[];
+    }
+  | {
+      readonly type: 'compaction_failed';
+      readonly compactionId: string;
+      readonly failure:
+        | { readonly kind: 'blocked'; readonly reason: Extract<DirectCompactionResult, { kind: 'blocked' }>['reason'] }
+        | { readonly kind: 'interrupted'; readonly reason: 'budget_wrap_up' | 'budget_exhausted' }
+        | { readonly kind: 'cancelled' }
+        | { readonly kind: 'failed'; readonly error: ModelError };
+      readonly durationMs: number;
+      readonly requests: readonly DirectCompactionRequest[];
+    };
 export type TurnEvent =
+  | TurnCompactionEvent
   /** Live-only progress. The actual physical request scopes reused provider IDs. */
   | (ToolCallArgumentProgress & { readonly turnId: TurnId; readonly modelStep: number })
   | {
       readonly type: 'history_replaced';
       readonly history: readonly Item[];
       readonly reason: 'compaction';
+      readonly compactionId?: string;
       readonly rearmAtEstimatedTokens?: number;
       readonly checkpointReceipts?: readonly string[];
     }

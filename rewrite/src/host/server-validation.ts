@@ -1,4 +1,5 @@
 /** Gateway-compatible ingress validation, independent of all runtime/session persistence. */
+import type { CommandBody, SessionUpdateBody } from './server-contracts.js';
 import { ServerHttpError } from './server-errors.js';
 export function hasDeferredModelSelectionField(body: unknown): boolean {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
@@ -111,12 +112,23 @@ export function isOAuthSelectBody(body: unknown): body is { accountId: string } 
   );
 }
 
-export function isSessionUpdateBody(
-  body: unknown,
-): body is { modelSelection?: { model: string; provider: string }; reasoningEffort?: string; mode?: string } {
+export function isSessionUpdateBody(body: unknown): body is SessionUpdateBody {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
   const value = body as Record<string, unknown>;
-  if (Object.keys(value).some((key) => !['modelSelection', 'reasoningEffort', 'mode'].includes(key))) return false;
+  if (Object.keys(value).length === 0) return true; // Explicit read-only discovery.
+  if (
+    Object.keys(value).some(
+      (key) =>
+        !['clientRequestId', 'expectedRevision', 'admission', 'modelSelection', 'reasoningEffort', 'mode'].includes(key),
+    ) ||
+    typeof value.clientRequestId !== 'string' ||
+    value.clientRequestId.length === 0 ||
+    typeof value.expectedRevision !== 'string' ||
+    value.expectedRevision.length === 0 ||
+    (value.admission !== undefined && value.admission !== 'idle') ||
+    (value.modelSelection === undefined && value.reasoningEffort === undefined && value.mode === undefined)
+  )
+    return false;
   if (value.modelSelection !== undefined) {
     const selection = value.modelSelection;
     if (!selection || typeof selection !== 'object' || Array.isArray(selection)) return false;
@@ -131,12 +143,14 @@ export function isSessionUpdateBody(
   }
   if (
     value.reasoningEffort !== undefined &&
-    !['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'].includes(String(value.reasoningEffort))
+    (typeof value.reasoningEffort !== 'string' ||
+      !['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'].includes(value.reasoningEffort))
   )
     return false;
   return (
     value.mode === undefined ||
-    ['standard', 'bare', 'lite', 'plan', 'mentor', 'orchestrator'].includes(String(value.mode))
+    (typeof value.mode === 'string' &&
+      ['standard', 'bare', 'lite', 'plan', 'mentor', 'orchestrator'].includes(value.mode))
   );
 }
 
@@ -173,11 +187,14 @@ export function isTurnBody(body: unknown): body is { turnId: string } {
   );
 }
 
-export function isCommandBody(body: unknown): body is { commandId: string; clientRequestId: string } {
+export function isCommandBody(body: unknown): body is CommandBody {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
   const value = body as Record<string, unknown>;
   return (
-    Object.keys(value).length === 2 &&
+    Object.keys(value).every((key) => ['commandId', 'clientRequestId', 'admission', 'expectedRevision'].includes(key)) &&
+    (value.admission === undefined || value.admission === 'idle') &&
+    (value.expectedRevision === undefined ||
+      (typeof value.expectedRevision === 'string' && value.expectedRevision.length > 0)) &&
     typeof value.commandId === 'string' &&
     value.commandId.length > 0 &&
     value.commandId.length <= 256 &&

@@ -2,12 +2,12 @@
 import { z } from 'zod';
 import type { ModelRef, ReasoningEffort } from '../model/index.js';
 import type { DirectContextCapabilities } from './direct-capabilities.js';
-import type { DirectCommandConfiguration } from './direct-command-types.js';
+import type { DirectAcceptedConfiguration } from './direct-command-types.js';
 import type { ConversationDeps, TurnRequest } from './direct-types.js';
 import type { Fact, SessionStartedFact } from './facts.js';
 
 export type DirectConfigurationState = {
-  readonly configuration: DirectCommandConfiguration & { readonly model: ModelRef };
+  readonly configuration: DirectAcceptedConfiguration;
   readonly intent: {
     readonly modelSelection: ModelRef;
     readonly reasoningEffort: 'default' | ReasoningEffort;

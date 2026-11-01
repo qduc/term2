@@ -1,13 +1,17 @@
-export const TERM2_CONTRACT_VERSION = 1 as const;
+import type { NativeState } from './native-state';
+import type { SessionHydration, NativeBranchHydration } from './hydration';
+export const TERM2_CONTRACT_VERSION = 2 as const;
 /**
  * Digest of the immutable v1 (P105) identity choices. The M4 event additions
  * are additive beyond that fixture and are not covered by this digest.
  */
 export const TERM2_FREEZE_SHA = '11b1f3637e6110e73b63d8a199b0e9a9d4001b78c49eec0fbe2a9725e01d2fdc';
 
-import { AGENT_EVENT_TYPES } from '@qduc/agent-wire';
+import { AGENT_CHANGE_TYPES_V2, parseAgentEventEnvelopeV2, type AgentEventEnvelopeV2, type AgentChangeV2, type AgentBranchV2 } from '@qduc/agent-wire';
+export type { AgentChangeV2 } from '@qduc/agent-wire';
+export const TERM2_WIRE_PROTOCOL = 'agent-wire-v2' as const;
 
-export const TERM2_EVENT_TYPES = AGENT_EVENT_TYPES;
+export const TERM2_EVENT_TYPES = AGENT_CHANGE_TYPES_V2;
 export type Term2EventType = (typeof TERM2_EVENT_TYPES)[number];
 export const TERM2_EVENT_TYPE_SET = new Set<string>(TERM2_EVENT_TYPES);
 
@@ -101,14 +105,7 @@ export interface SessionProjection extends SessionListItem {
   sessionConfig?: SessionConfigRecord;
 }
 
-export interface AgentEventEnvelope {
-  schemaVersion: 1;
-  id: number;
-  sessionId: string;
-  type: Term2EventType;
-  occurredAt: string;
-  payload: Record<string, unknown>;
-}
+export type AgentEventEnvelope = AgentEventEnvelopeV2;
 
 export interface SessionPage {
   sessions: SessionListItem[];
@@ -210,13 +207,14 @@ export interface SettingsWriteResult {
   projection: SettingsProjection;
 }
 export interface SessionConfigRecord {
+  sessionId?: string;
   configRevision: string;
   providerId: string;
   modelId: string;
   reasoningEffort: string;
   mode: 'standard' | 'lite' | 'plan' | 'mentor' | 'orchestrator';
-  defaultsRevision: string;
-  toolPolicy?: {
+  defaultsRevision: string | number;
+  toolPolicy?: { allowWrite: boolean; autoApprove: boolean; allowUnsandboxed: boolean; sshEnabled: boolean } | {
     sandbox?: 'enabled' | 'disabled';
     approval?: 'off' | 'advisory' | 'auto';
     maxParallelToolCalls?: number;
@@ -224,11 +222,16 @@ export interface SessionConfigRecord {
     compaction?: Record<string, boolean | number | string | null>;
   };
 }
+/** Stable caller-owned admission; retain this exact object on ambiguous retries. */
 export interface SessionConfigUpdate {
+  clientRequestId: string;
+  expectedRevision: string;
+  admission?: 'idle';
   modelSelection?: { model: string; provider: string };
-  reasoningEffort?: string;
+  reasoningEffort?: 'default' | 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
   mode?: SessionConfigRecord['mode'];
 }
+
 export interface MessageAdmission {
   sessionId: string;
   clientRequestId: string;
@@ -295,6 +298,8 @@ export type Term2ConnectionStatus =
   | 'reconnecting'
   | 'error';
 export interface Term2Command {
+  /** Actual accepted command-message identity, when supplied. */
+  messageId?: string;
   callId: string;
   toolName: string;
   status: 'pending' | 'running' | 'completed' | 'failed' | 'aborted' | 'unknown';
@@ -328,7 +333,7 @@ export interface Term2TurnView {
   userText?: string;
   text: string;
   reasoning: string;
-  status: 'pending' | 'streaming' | 'completed' | 'failed' | 'aborted' | 'rejected';
+  status: 'pending' | 'streaming' | 'completed' | 'failed' | 'aborted' | 'rejected' | 'unknown';
   commands: Term2Command[];
   subagents?: Term2SubagentCard[];
   /** Transient turn-level note (retry/compaction); cleared on terminal events. */
@@ -339,12 +344,25 @@ export interface Term2TurnView {
 export interface Term2SessionView {
   sessionId: string;
   projection: SessionProjection | null;
+  hydration?: SessionHydration;
+  nativeBranch?: NativeBranchHydration;
+  rootEvidence?: Readonly<Record<string, unknown>>;
+  nativeState?: NativeState;
   turns: Term2TurnView[];
   pendingInteraction: InteractionProjection;
   status: Term2ConnectionStatus;
   lastAppliedSequence: number;
   error: string | null;
   reloadRequired: boolean;
+  /** Actual branch ownership; branch streams never mutate the root transcript. */
+  replayMode?: 'atomic' | 'unavailable';
+  retiredTurns?: Term2TurnView[];
+  branches?: Record<string, { identity: AgentBranchV2; view: Term2SessionView }>;
+  /** Native evidence retained verbatim, separate from model usage totals. */
+  nativeChanges?: readonly AgentChangeV2[];
+  /** Connection-local UI observations only; never persisted or replay-checkpointed. */
+  liveChanges?: readonly AgentChangeV2[];
+
 }
 
 export const INTERACTION_OUTCOMES = new Set<InteractionOutcome>(['approved', 'rejected', 'cancelled', 'continued']);
@@ -356,7 +374,6 @@ export class Term2ProtocolError extends Error {
   }
 }
 
-const ID_PATTERN = /^[A-Za-z0-9_-]{1,256}$/;
 const OPTION_CHOICE_ID_PATTERN = /^option:[0-9]+$/;
 const FIXED_CHOICE_IDS = new Set(['custom', 'decline', 'cancel']);
 const SAFE_TEXT_MAX = 100_000;
@@ -715,6 +732,7 @@ export function parseProjection(value: unknown): SessionProjection {
       'mode',
       'defaultsRevision',
       'toolPolicy',
+      'sessionId',
     ]);
     if (!['standard', 'lite', 'plan', 'mentor', 'orchestrator'].includes(String(config.mode)))
       throw new Term2ProtocolError('Invalid session config');
@@ -724,7 +742,8 @@ export function parseProjection(value: unknown): SessionProjection {
       modelId: stringValue(config.modelId, 512),
       reasoningEffort: stringValue(config.reasoningEffort, 128),
       mode: config.mode as SessionConfigRecord['mode'],
-      defaultsRevision: stringValue(config.defaultsRevision, 256),
+      defaultsRevision: typeof config.defaultsRevision === 'number' ? integerValue(config.defaultsRevision) : stringValue(config.defaultsRevision, 256),
+      ...(config.sessionId === undefined ? {} : { sessionId: idValue(config.sessionId) }),
       ...(config.toolPolicy === undefined
         ? {}
         : { toolPolicy: config.toolPolicy as SessionConfigRecord['toolPolicy'] }),
@@ -766,20 +785,33 @@ export function parseProjection(value: unknown): SessionProjection {
   return projection;
 }
 
+/** Parse only the explicitly negotiated v2 dialect, never auto-downgrade. */
 export function parseEventEnvelope(value: unknown, expectedSessionId?: string): AgentEventEnvelope {
-  const input = objectValue(value);
-  exactKeys(input, ['schemaVersion', 'id', 'sessionId', 'type', 'occurredAt', 'payload']);
-  if (input.schemaVersion !== 1 || !TERM2_EVENT_TYPE_SET.has(String(input.type)))
-    throw new Term2ProtocolError('Unsupported term2 event');
-  const event: AgentEventEnvelope = {
-    schemaVersion: 1,
-    id: integerValue(input.id),
-    sessionId: idValue(input.sessionId),
-    type: input.type as Term2EventType,
-    occurredAt: stringValue(input.occurredAt, 128),
-    payload: objectValue(input.payload),
-  };
-  if (event.id < 1 || (expectedSessionId && event.sessionId !== expectedSessionId))
-    throw new Term2ProtocolError('Event identity mismatch');
-  return event;
+  try {
+    const envelope = parseAgentEventEnvelopeV2(value, expectedSessionId);
+    for (const change of envelope.changes) {
+      const payload: Readonly<Record<string, unknown>> = change.payload;
+      if (change.type === 'reasoning') {
+        stringValue(payload.text);
+        idValue(payload.messageId);
+        if (payload.modelStep !== null) integerValue(payload.modelStep);
+      }
+      if (change.type === 'tool_progress' || change.type === 'task_progress') {
+        stringValue(payload.chunk);
+        if (change.type === 'tool_progress') idValue(payload.executionId);
+        else { idValue(payload.taskId); if (typeof payload.at !== 'number' || !Number.isFinite(payload.at)) throw new Term2ProtocolError('Invalid native task progress'); }
+      }
+      if (change.type === 'queue_changed') {
+        if (!Array.isArray(payload.entries)) throw new Term2ProtocolError('Missing native queue projection');
+        for (const value of payload.entries) {
+          const entry = objectValue(value);
+          idValue(entry.messageId); idValue(entry.clientRequestId); stringValue(entry.text);
+          if (entry.delivery !== 'queued' && entry.delivery !== 'steering') throw new Term2ProtocolError('Invalid native queue delivery');
+        }
+      }
+    }
+    return envelope;
+  } catch {
+    throw new Term2ProtocolError('Invalid agent-wire-v2 event');
+  }
 }

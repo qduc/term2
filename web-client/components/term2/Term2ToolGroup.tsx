@@ -43,8 +43,8 @@ export function Term2ToolGroup({ commands }: { commands: Term2Command[] }) {
       </button>
       {open && (
         <div className="t2-enter mt-1 space-y-px rounded-xl border border-black/[0.06] bg-zinc-50/60 p-1 dark:border-white/[0.06] dark:bg-white/[0.02]">
-          {commands.map((command) => (
-            <Term2CommandCard key={command.callId} command={command} />
+          {commands.map((command, index) => (
+            <Term2CommandCard key={command.messageId ?? index} command={command} />
           ))}
         </div>
       )}

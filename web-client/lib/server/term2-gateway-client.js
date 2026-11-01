@@ -1,3 +1,4 @@
+import { parseAgentConfigureResultV2 } from '@qduc/agent-wire';
 import fs from 'fs';
 import http from 'http';
 import https from 'https';
@@ -34,6 +35,8 @@ const OPAQUE_ID = /^[A-Za-z0-9_-]{1,256}$/u;
 const INTERNAL_PREFIX = '/private/agent/v1/';
 const SAFE_ERROR_CODES = new Set([
   'gateway_unavailable',
+  'agent_wire_v2_unavailable',
+  'hydration_unavailable',
   'not_found',
   'workspace_forbidden',
   'validation_error',
@@ -82,6 +85,8 @@ const SAFE_ERROR_CODES = new Set([
 
 const SAFE_ERROR_MESSAGES = Object.freeze({
   gateway_unavailable: 'Agent gateway unavailable',
+  agent_wire_v2_unavailable: 'agent-wire-v2 is gated until the shared artifact and consumer migration are combined',
+  hydration_unavailable: 'Native accepted hydration is unavailable',
   not_found: 'Resource not found',
   workspace_forbidden: 'Workspace is not available',
   validation_error: 'Invalid request',
@@ -97,7 +102,7 @@ const SAFE_ERROR_MESSAGES = Object.freeze({
   cursor_compacted: 'Event cursor requires reload',
   projection_too_large: 'Session projection is too large',
   invalid_cursor: 'Invalid cursor',
-  protocol_conflict: 'Cursor values disagree',
+  protocol_conflict: 'Protocol values disagree',
   request_too_large: 'Request is too large',
   attachments_not_enabled: 'Attachments are not available',
   cursor_invalid: 'Invalid cursor',
@@ -502,6 +507,7 @@ export class Term2GatewayClient {
     rpcPath,
     body,
     query = '',
+    preserveConfigureResult = false,
     correlationId = randomUUID(),
   } = {}) {
     this.#assertEnabled();
@@ -513,7 +519,7 @@ export class Term2GatewayClient {
     // endpoint GET, but never send session_read upstream as GET.
     const upstreamMethod = purpose === 'session_read' ? 'POST' : method;
     const options = this.#requestOptions({ method: upstreamMethod, rpcPath, query, assertion, body, correlationId });
-    return this.#send(options, body, { correlationId, stream: false });
+    return this.#send(options, body, { correlationId, stream: false, configureSessionId: preserveConfigureResult && purpose === 'session_update' ? sessionId : undefined });
   }
 
   async request(args = {}) {
@@ -539,7 +545,7 @@ export class Term2GatewayClient {
       });
     assertOpaqueId(workspaceId, 'workspace ID');
     assertOpaqueId(sessionId, 'session ID');
-    if (typeof query !== 'string' || !/^$|\?after=\d{1,15}$/u.test(query))
+    if (typeof query !== 'string' || !/^(?:|\?after=\d{1,16}|\?format=agent-wire-v2(?:&after=\d{1,16})?)$/u.test(query))
       throw new Term2GatewayError('validation_error', 'Invalid gateway operation', {
         statusCode: 400,
         retryable: false,
@@ -553,7 +559,7 @@ export class Term2GatewayClient {
     return this.#retryAfterPairing(() => this.#streamOnce(args));
   }
 
-  #send(options, body, { correlationId, stream, signal }) {
+  #send(options, body, { correlationId, stream, signal, configureSessionId }) {
     return new Promise((resolve, reject) => {
       let settled = false;
       const timeoutMs = stream ? this.gatewayConfig.streamTimeoutMs : this.gatewayConfig.requestTimeoutMs;
@@ -620,6 +626,16 @@ export class Term2GatewayClient {
                 : null;
             } catch {
               /* safe generic mapping */
+            }
+            if (configureSessionId && parsed?.schemaVersion === 2) {
+              try {
+                parseAgentConfigureResultV2(parsed, configureSessionId);
+                settled = true;
+                if (timer) clearTimeout(timer);
+                cleanupAbortListener();
+                resolve({ statusCode: response.statusCode, headers: response.headers, body: parsed });
+                return;
+              } catch { /* malformed native results use the existing safe failure path */ }
             }
             if (response.statusCode >= 200 && response.statusCode < 300) {
               settled = true;

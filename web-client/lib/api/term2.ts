@@ -1,6 +1,9 @@
+import { parseSessionHydration } from '../term2/hydration';
+import { parseAgentConfigureResultV2, type AgentConfigureResultV2 } from '@qduc/agent-wire';
 import { httpClient, HttpError, type HttpResponse } from '../http';
 import {
   parsePendingInteraction,
+  Term2ProtocolError,
   parseProjection,
   type AbortResult,
   type BrowseResult,
@@ -19,6 +22,7 @@ import {
   type Term2CommandId,
   type Term2CommandResult,
   TERM2_COMMAND_IDS,
+  TERM2_WIRE_PROTOCOL,
   TERM2_COMMAND_OUTCOMES_BY_COMMAND,
   type WorkspacePage,
 } from '../term2/types';
@@ -470,7 +474,8 @@ function validateSessionConfig(value: unknown): SessionConfigRecord {
     modelId: text(input.modelId, 512),
     reasoningEffort: text(input.reasoningEffort, 128),
     mode: input.mode as SessionConfigRecord['mode'],
-    defaultsRevision: text(input.defaultsRevision, 256),
+    defaultsRevision: typeof input.defaultsRevision === 'number' && Number.isSafeInteger(input.defaultsRevision) && input.defaultsRevision >= 0 ? input.defaultsRevision : text(input.defaultsRevision, 256),
+    ...(input.sessionId === undefined ? {} : { sessionId: id(input.sessionId) }),
     ...(input.toolPolicy === undefined ? {} : { toolPolicy: input.toolPolicy as SessionConfigRecord['toolPolicy'] }),
   };
 }
@@ -789,19 +794,29 @@ export const term2Client = {
       signal,
     );
   },
-  updateSessionConfig(sessionId: string, update: SessionConfigUpdate, signal?: AbortSignal) {
-    if (
-      Object.keys(update).some((key) => !['model', 'reasoningEffort', 'mode'].includes(key)) ||
-      Object.values(update).some((value) => typeof value !== 'string') ||
-      (update.mode !== undefined && !['standard', 'lite', 'plan', 'mentor', 'orchestrator'].includes(update.mode))
-    )
-      throw new Term2ApiError(400, 'Invalid session config');
-    return postJson(
-      `/term2/sessions/${encodeURIComponent(id(sessionId))}/config`,
-      update,
-      validateSessionConfigResponse,
-      signal,
-    );
+  /** Discovery is current state, never an interpretation of a command receipt. */
+  readSessionConfig(sessionId: string, signal?: AbortSignal) {
+    return postJson(`/term2/sessions/${encodeURIComponent(id(sessionId))}/config?format=${TERM2_WIRE_PROTOCOL}`, {}, value => {
+      const config = validateSessionConfigResponse(value);
+      if (config.sessionId !== sessionId) throw new Term2ApiError(503, 'Configuration discovery session mismatch');
+      return config;
+    }, signal);
+  },
+  /** No automatic retry/re-key/rebase. Callers retain the original request until settled. */
+  async updateSessionConfig(sessionId: string, update: SessionConfigUpdate, signal?: AbortSignal): Promise<AgentConfigureResultV2> {
+    const path = `/term2/sessions/${encodeURIComponent(id(sessionId))}/config?format=${TERM2_WIRE_PROTOCOL}`;
+    let value: unknown;
+    try {
+      const response = await httpClient.post<unknown>(path, update, { signal, skipAuth: true, skipRetry: true });
+      value = response.data;
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') throw error;
+      // Native failures may carry the original receipt even on non-2xx HTTP.
+      if (error instanceof HttpError && error.data?.schemaVersion === 2) value = error.data;
+      else throw apiError(error);
+    }
+    try { return parseAgentConfigureResultV2(value, sessionId); }
+    catch { throw new Term2ApiError(503, 'Invalid agent-wire-v2 configure response'); }
   },
   listWorkspaces(limit = 20, cursor?: string | null, signal?: AbortSignal) {
     return getJson(`/agent/workspaces${query(limit, cursor)}`, validateWorkspacePage, signal);
@@ -812,8 +827,16 @@ export const term2Client = {
   createSession(workspaceId: string, signal?: AbortSignal) {
     return postJson('/agent/sessions', { workspaceId }, validateSession, signal);
   },
-  getSession(sessionId: string, signal?: AbortSignal) {
-    return getJson(`/agent/sessions/${encodeURIComponent(sessionId)}`, validateSession, signal);
+  async hydrateSession(sessionId: string, signal?: AbortSignal) {
+    try {
+      const response = await httpClient.get<unknown>(`/agent/sessions/${encodeURIComponent(id(sessionId))}?format=${TERM2_WIRE_PROTOCOL}`, { signal, skipAuth: true, skipRetry: true });
+      if (response.headers.get('x-term2-hydration-format') !== TERM2_WIRE_PROTOCOL || response.headers.get('x-term2-hydration') !== 'current-accepted') throw new Term2ApiError(503, 'Native accepted hydration was not negotiated');
+      return parseSessionHydration(response.data, sessionId);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') throw error;
+      if (error instanceof Term2ProtocolError) throw error;
+      throw apiError(error);
+    }
   },
   submitMessage(sessionId: string, text: string, clientRequestId: string, signal?: AbortSignal) {
     return postJson(
@@ -853,12 +876,12 @@ export const term2Client = {
   async openEvents(sessionId: string, after: number, signal?: AbortSignal): Promise<HttpResponse<Response>> {
     try {
       return await httpClient.get<Response>(
-        `/agent/sessions/${encodeURIComponent(sessionId)}/events?after=${encodeURIComponent(String(after))}`,
+        `/agent/sessions/${encodeURIComponent(sessionId)}/events?format=${TERM2_WIRE_PROTOCOL}${after > 0 ? `&after=${encodeURIComponent(String(after))}` : ''}`,
         {
           signal,
           skipAuth: true,
           skipRetry: true,
-          headers: { Accept: 'text/event-stream', 'Last-Event-ID': String(after) },
+          headers: { Accept: 'text/event-stream', ...(after > 0 ? { 'Last-Event-ID': String(after) } : {}) },
         },
       );
     } catch (error) {

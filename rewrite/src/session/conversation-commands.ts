@@ -10,7 +10,7 @@ import type { DirectCommandOutcome, DirectCommandResult } from './direct-command
 import type { DirectPreparedConfiguration } from './direct-configuration.js';
 import { captureDirectCommandHistory } from './direct-history-capture.js';
 import { directPreviewConfiguration } from './direct-preview.js';
-import { directRolloverAtBoundary } from './direct-rollover.js';
+import { directAcceptedRolloverAt, directRolloverAtBoundary } from './direct-rollover.js';
 import type { Conversation, ConversationDeps, StartedConversationTurn } from './direct-types.js';
 
 export class ConversationCommands {
@@ -45,9 +45,11 @@ export class ConversationCommands {
   // Live detached work is allowed. Only actual foreground/pending decisions veto.
   private readonly rolloverBlocked = (commandId: string): boolean => {
     if (this.admission.active || this.journal.queueState.active) return true;
+    // The held root's own command is already reserved (command_started), so ask for its
+    // accepted request, not the unconsumed boundary; any other command stays vetoed.
     if (
       this.admission.completionHeld &&
-      directRolloverAtBoundary(this.journal.facts, this.admission.completionHeld)?.commandId !== commandId
+      directAcceptedRolloverAt(this.journal.facts, this.admission.completionHeld)?.commandId !== commandId
     )
       return true;
     if (this.journal.taskStates.some((task) => task.pendingInteractions.length > 0)) return true;

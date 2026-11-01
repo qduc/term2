@@ -14,10 +14,6 @@
       "lines": 827,
       "reason": "Not yet reviewed for a job seam; its submission wrapper grows by one forward per session command."
     },
-    "rewrite/src/model/adopted/index.ts": {
-      "lines": 748,
-      "reason": "Not yet reviewed for a job seam."
-    },
     "rewrite/src/session/adopted/conversation-log.ts": {
       "lines": 631,
       "reason": "Prettier expands the existing SessionFact union by four lines after reconciliation; no behavior or new job added. Keep the fact union with its decoder rather than extract a formatting-only seam."

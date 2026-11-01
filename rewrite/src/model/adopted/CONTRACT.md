@@ -12,3 +12,8 @@ Disposal remains deferred until pending identity resolution and detached reads s
 Borrowed transports are never closed by the adopted registry, while owned transports
 close once after all helper references release. Provider dispatch observation remains
 at the model stream boundary.
+
+The repository root TypeScript project excludes `rewrite/`. Check this boundary
+with `pnpm exec tsc -p rewrite/tsconfig.json --noEmit` as well as the source check.
+Dispatch callbacks have the zero-argument `Model.stream` contract; checking only
+the source project misses incompatible signatures in this adopted boundary.

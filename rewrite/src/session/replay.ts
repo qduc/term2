@@ -125,6 +125,17 @@ function replayProjection(
   const maintenanceCommands = new Set<string>();
   const maintenanceTurns = new Set<TurnId>();
   const rolloverTurns = new Set<TurnId>();
+  const rotationCommands = new Set<string>();
+  let rolloverSeed:
+    | {
+        readonly commandId: string;
+        readonly clientRequestId: string;
+        readonly messageId: string;
+        readonly turnId: TurnId;
+        seeded: boolean;
+        started: boolean;
+      }
+    | undefined;
   let notifications: DirectNotificationState = { notices: [], deliveries: [] };
   const noticeDeliveries = new Set<TurnId>();
   const silentTurns = new Set<TurnId>();
@@ -193,6 +204,70 @@ function replayProjection(
     }
   };
 
+  const controlHandoff = (
+    origin: { readonly kind?: string; readonly id?: string; readonly source?: string } | undefined,
+  ): boolean => origin?.kind === 'control' && origin.id === 'session-rollover' && origin.source === undefined;
+
+  const authorizeRolloverSeed = (fact: Extract<Fact, { type: 'queue_started' }>): void => {
+    if (!('rolloverCommandId' in fact)) {
+      if (rolloverSeed && !rolloverSeed.started && fact.messageId === rolloverSeed.messageId) {
+        throw new Error('replay: rollover handoff started without its command marker');
+      }
+      return;
+    }
+    const marker = fact.rolloverCommandId;
+    if (typeof marker !== 'string' || marker.length === 0) throw new Error('replay: rollover seed command id is empty');
+    if (!rolloverSeed || rolloverSeed.seeded || marker !== rolloverSeed.commandId) {
+      throw new Error('replay: rollover seed is not the current rotation');
+    }
+    if (fact.messageId !== rolloverSeed.messageId || fact.turnId !== rolloverSeed.turnId) {
+      throw new Error('replay: rollover seed does not match the rotation handoff');
+    }
+    const record = queue.state.records.find((item) => item.messageId === fact.messageId);
+    if (
+      !record ||
+      record.stage !== 'queued' ||
+      record.admission.kind !== 'queued' ||
+      record.admission.turnId !== fact.turnId ||
+      record.turnId !== fact.turnId ||
+      record.request.delivery !== 'follow_up' ||
+      record.request.clientRequestId !== rolloverSeed.clientRequestId ||
+      !controlHandoff(record.request.origin)
+    ) {
+      throw new Error('replay: rollover seed is not the admitted control handoff');
+    }
+    rolloverSeed.seeded = true;
+  };
+
+  const acceptRotation = (fact: Extract<Fact, { type: 'session_rotated' }>): void => {
+    if (active) throw new Error('replay: session rotated during an active root');
+    if (!sessionId || fact.logicalSessionId !== sessionId) {
+      throw new Error('replay: rotation logical id is not the original Session');
+    }
+    if (rolloverSeed && !rolloverSeed.started) throw new Error('replay: previous rotation handoff was not started');
+    const receipt = commandReceipts.find((item) => item.request.commandId === fact.commandId);
+    if (!receipt || receipt.outcome !== undefined || receipt.request.operation.kind !== 'rollover') {
+      throw new Error('replay: rotation has no pending rollover command');
+    }
+    if (rotationCommands.has(fact.commandId)) throw new Error('replay: rollover command already rotated');
+    rotationCommands.add(fact.commandId);
+    // Drop root provider context only. Tasks, queue, goal, notifications, and costs stay.
+    slots = [];
+    compactionState = undefined;
+    lastRootTurnId = undefined;
+    humanSlots.clear();
+    rolloverSeed = fact.handoff
+      ? {
+          commandId: fact.commandId,
+          clientRequestId: fact.handoff.clientRequestId,
+          messageId: fact.handoff.messageId,
+          turnId: fact.handoff.turnId,
+          seeded: false,
+          started: false,
+        }
+      : undefined;
+  };
+
   const consume = (fact: Fact): void => {
     if (isDirectCommandFactType(fact.type)) {
       // Receipts are not provider history and are not recovered here.
@@ -215,6 +290,7 @@ function replayProjection(
       return;
     }
     if (isDirectQueueFactType(fact.type)) {
+      if (fact.type === 'queue_started') authorizeRolloverSeed(fact);
       for (const item of queue.accept(fact, active?.turnId ?? null)) appendHuman(item);
       // Human steers reset the goal window; automatic steers keep the same reminders.
       if (fact.type === 'queue_steered') context = reduceDirectContext(context, fact, queue.state.records);
@@ -229,6 +305,10 @@ function replayProjection(
         }
         if (rolloverTurns.has(accepted.turnId)) throw new Error('replay: root already requested rollover');
         rolloverTurns.add(accepted.turnId);
+        return;
+      }
+      if (accepted.type === 'session_rotated') {
+        acceptRotation(accepted);
         return;
       }
       context = reduceDirectContext(context, accepted, queue.state.records);
@@ -270,7 +350,24 @@ function replayProjection(
           throw new Error('replay: background notice delivery is not a silent turn');
         }
         lastOutcome = null;
-        if (fact.maintenance) {
+        if (rolloverSeed?.seeded && !rolloverSeed.started) {
+          // The handoff is provider context for the new physical log, not a human admission.
+          if (
+            fact.turnId !== rolloverSeed.turnId ||
+            fact.maintenance ||
+            fact.silent ||
+            fact.retryContext ||
+            !controlHandoff(fact.submission?.origin) ||
+            fact.submission?.clientRequestId !== rolloverSeed.clientRequestId ||
+            fact.submission?.messageId !== rolloverSeed.messageId
+          ) {
+            throw new Error('replay: rollover handoff turn does not match its admission');
+          }
+          for (const item of fact.input) slots.push({ item });
+          rolloverSeed.started = true;
+        } else if (rolloverSeed && !rolloverSeed.started) {
+          throw new Error('replay: rotation handoff started before its priority seed');
+        } else if (fact.maintenance) {
           // Compaction is an empty root owned by one pending compact command. It contributes no user transcript.
           if (fact.submission || fact.silent || fact.retryContext || fact.input.length !== 0) {
             throw new Error('replay: maintenance is not a human, silent, or retry admission');
@@ -518,6 +615,7 @@ function replayProjection(
   if (options.recoverQueue !== false) {
     recoveryFacts.push(...queue.reconcileTerminal(), ...queue.pausePending());
   }
+  if (rolloverSeed && !rolloverSeed.started) throw new Error('replay: rotation handoff was not started');
   for (const turnId of noticeDeliveries) {
     if (!silentTurns.has(turnId)) throw new Error('replay: background notice delivery has no silent turn');
   }

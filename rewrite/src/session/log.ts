@@ -44,11 +44,19 @@ const UTF8 = new TextDecoder('utf-8', { fatal: true });
  * Parses every terminated line. A last line without `\n` is not a fact and is
  * only reported through `complete` and `lastSeq`, so callers can truncate it.
  */
-function parseLog(data: Buffer, path: string): ParsedLog {
-  if (data.length === 0) return { entries: [], lastSeq: 0, complete: 0 };
+function continuationSeq(afterSeq: number | undefined): number {
+  if (afterSeq === undefined) return 0;
+  if (!Number.isSafeInteger(afterSeq) || afterSeq < 0) {
+    throw new Error('log afterSeq must be a nonnegative safe integer');
+  }
+  return afterSeq;
+}
+
+function parseLog(data: Buffer, path: string, afterSeq = 0): ParsedLog {
+  if (data.length === 0) return { entries: [], lastSeq: afterSeq, complete: 0 };
 
   const complete = data.lastIndexOf(NEWLINE) + 1;
-  if (complete === 0) return { entries: [], lastSeq: 0, complete: 0 };
+  if (complete === 0) return { entries: [], lastSeq: afterSeq, complete: 0 };
 
   let text: string;
   try {
@@ -62,7 +70,7 @@ function parseLog(data: Buffer, path: string): ParsedLog {
   lines.pop();
 
   const entries: FactLine[] = [];
-  let lastSeq = 0;
+  let lastSeq = afterSeq;
 
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index]!;
@@ -197,26 +205,31 @@ function createConversationLog(path: string, fd: number, firstSeq: number, tornF
   };
 }
 
+export type LogContinuationOptions = {
+  /** Predecessor's last accepted seq. The next line must be this value plus one. Default 0. */
+  readonly afterSeq?: number;
+};
+
 /** Opens `<dir>/<id>.jsonl` with 'wx'. The directory refusal (D9) happens in app before this. */
-export function createLog(dir: string, id: string): ConversationLog {
+export function createLog(dir: string, id: string, options: LogContinuationOptions = {}): ConversationLog {
   const path = join(dir, `${id}.jsonl`);
-  return createConversationLog(path, openSync(path, 'wx'), 1);
+  return createConversationLog(path, openSync(path, 'wx'), continuationSeq(options.afterSeq) + 1);
 }
 
 /** Changes no bytes: continues the seq, and leaves a torn final line for the next append to remove. */
-export function openLog(path: string): ConversationLog {
+export function openLog(path: string, options: LogContinuationOptions = {}): ConversationLog {
   const data = readFileSync(path);
-  const { lastSeq, complete } = parseLog(data, path);
+  const { lastSeq, complete } = parseLog(data, path, continuationSeq(options.afterSeq));
   // Append mode: after the truncate, writes land at the new end without a position.
   return createConversationLog(path, openSync(path, 'a'), lastSeq + 1, complete !== data.length ? complete : undefined);
 }
 
 /** Pure read of the exact accepted envelopes; ignores only an unterminated final line. */
-export function readFactLines(path: string): readonly FactLine[] {
-  return parseLog(readFileSync(path), path).entries;
+export function readFactLines(path: string, options: LogContinuationOptions = {}): readonly FactLine[] {
+  return parseLog(readFileSync(path), path, continuationSeq(options.afterSeq)).entries;
 }
 
 /** Pure fact projection of the same validated entries; never writes. */
-export function readFacts(path: string): readonly Fact[] {
-  return readFactLines(path).map((entry) => entry.fact);
+export function readFacts(path: string, options: LogContinuationOptions = {}): readonly Fact[] {
+  return readFactLines(path, options).map((entry) => entry.fact);
 }

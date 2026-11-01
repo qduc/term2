@@ -158,7 +158,12 @@ Sessions' IDs and non-shell tasks; monitor cancellation also resolves the watch'
 job through the invoking Session, since a retained surface can serve several
 Sessions. The shell adapter keeps only live watch/output
 callbacks; terminal state and formatted process results live in Session facts.
-Monitor firings enter the existing durable background-notice lane. Raw progress
+Monitor firings use the admitted launch handle's `notify` callback, retaining its
+physical execution identity even when a later monitor invocation schedules replay.
+Resolving ambient execution identity at timer delivery can instead attribute the
+launcher's notification to the monitor and silently fail Session's ownership check.
+Synchronous controls still resolve the invoking Session. Monitor firings enter
+the existing durable background-notice lane. Raw progress
 and watch buffers do not survive process loss; unfinished recovered tasks become
 interrupted, not reattached subprocesses. Sandbox post-execution pauses are not
 introduced by this bridge.

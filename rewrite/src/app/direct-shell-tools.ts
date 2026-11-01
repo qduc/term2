@@ -20,7 +20,7 @@ import { sourceToolContext } from './source-tools.js';
 export function createDirectShellTools() {
   const scope = new AsyncLocalStorage<ShellTaskPort>();
   // Output/watch callbacks only, never task lifecycle or cancellation state.
-  const outputs = new Map<string, ShellTaskPort>();
+  const outputs = new Map<string, (key: string, text: string) => boolean>();
   const watchJobs = new Map<string, string>();
   const store = new BackgroundShellOutputStore();
   const watches = new BackgroundShellWatches({
@@ -29,8 +29,7 @@ export function createDirectShellTools() {
       schedule: (callback, delay) => setTimeout(callback, delay),
       cancel: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
     },
-    onFiring: (firing) =>
-      outputs.get(firing.jobId)?.notify(firing.jobId, `${firing.watchId}:${firing.seq}`, JSON.stringify(firing)),
+    onFiring: (firing) => outputs.get(firing.jobId)?.(`${firing.watchId}:${firing.seq}`, JSON.stringify(firing)),
   });
   const current = () => {
     const port = scope.getStore();
@@ -73,7 +72,7 @@ export function createDirectShellTools() {
         }
       },
     });
-    outputs.set(handle.id, port);
+    outputs.set(handle.id, handle.notify);
     // Session schedules the body after returning this admitted handle.
     options.onStarted?.(handle.id);
     return { handle, settled: handle.settled.then(job) };

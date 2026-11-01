@@ -16,7 +16,7 @@ export function directShellTasks(
     const task = tasks.get(id);
     return task?.kind === 'shell' && task.taskId === id ? task : undefined;
   };
-  return {
+  const port: ShellTaskPort = {
     start<T>(request: ShellTaskStart<T>) {
       const handle = tasks.start<T>(
         {
@@ -52,6 +52,7 @@ export function directShellTasks(
           if (outcome.result.value !== undefined) return { kind: 'result' as const, value: outcome.result.value };
           throw new Error(outcome.result.kind === 'failed' ? outcome.result.error.message : 'Shell task cancelled');
         }),
+        notify: (key, text) => port.notify(handle.taskId, key, text),
       };
     },
     get: (id) => {
@@ -85,6 +86,7 @@ export function directShellTasks(
       return true;
     },
   };
+  return port;
 }
 
 function state(task: DirectTaskState): ShellTaskState {

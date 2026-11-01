@@ -712,7 +712,9 @@ export async function runDirectHeadless(
             return result('blocked', 2);
           }
           if (outcome === 'completed') {
-            completedText = finalText || streamedText || completedText;
+            // JSON already took the accepted final window's finalText; plain output
+            // preserves its streamed/last-message behavior.
+            if (output !== 'json') completedText = finalText || streamedText || completedText;
             if (background === null) {
               background = { deadline: Date.now() + backgroundWaitTimeoutMs, nextDrainAt: 0, drainRequestId: null };
               targetTurnId = null;

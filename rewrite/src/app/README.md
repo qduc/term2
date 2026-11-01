@@ -53,14 +53,19 @@ with logical ID as the deterministic tie-breaker. Rotated physical logs list onc
 Discovery filters local paths and SSH endpoint identities before selection; the
 store/runtime still enforce the current workspace grant on writable open.
 
-Exact native IDs are resolved before the non-TTY follow-up-prompt check, so missing
+Exact native IDs and lowercase raw UUID aliases are resolved before the non-TTY
+follow-up-prompt check, so missing
 and foreign-project references report their real diagnostic. Profile/model labels
 use the latest accepted configuration where present. Goal/profile restoration is
 still Session/runtime-owned: discovery neither rewrites facts nor substitutes
 launcher defaults. No native log-format changes, legacy log reads, or migration
-fallback are part of this boundary. Legacy-ID alias resolution remains a separate
-migration integration dependency. Native discovery is kept separate from that
-legacy-data policy so a legacy-data hold cannot disable browsing native records.
+fallback are part of this boundary. A raw exact UUID normalizes to `conv_<uuid>`,
+the standalone migrator's deterministic ID; it succeeds only when that native log
+exists and matches the current workspace. Partial, uppercase and otherwise
+noncanonical IDs do not alias. Discovery does not read the private provenance map
+or old store. Listings include native user transcript observations in their
+message count/preview, deduplicate observed/derived display by message ID, and do
+not count hidden context-restoration input as a user admission.
 
 ## Tools and delegation
 

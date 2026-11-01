@@ -7,6 +7,7 @@ import { resolveDirectRemoteConnection } from './direct-remote-config.js';
 import type { SessionOptions } from './cli-args.js';
 
 const NATIVE_ID = /^conv_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const IMPORTED_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 type Selection = { readonly target: string; readonly root: string | null };
 
 async function selection(options: SessionOptions): Promise<Selection> {
@@ -47,10 +48,13 @@ function notFound(reference: string): Error {
   );
 }
 
-/** Resolve before terminal checks, settings/tool construction, or writable open. */
+/** Resolve native IDs and exact imported UUID aliases before any writable open. */
 export async function resolveNativeResume(directory: string, options: SessionOptions): Promise<SessionOptions> {
-  const reference = options.resumeId;
-  if (reference === null) return options;
+  const requested = options.resumeId;
+  if (requested === null) return options;
+  // The standalone migrator chooses this deterministic native ID. This is only
+  // spelling normalization: no legacy-store read, fuzzy match, or fallback.
+  const reference = IMPORTED_UUID.test(requested) ? `conv_${requested}` : requested;
   const selected = await selection(options);
   let lineage: DirectLogLineage;
   if (reference === 'last') {
@@ -80,18 +84,32 @@ export async function listNativeConversations(directory: string, options: Sessio
     const configuration = latestDirectConfiguration(facts);
     const model = configuration?.configuration.model ?? lineage.metadata.model;
     const profile = configuration?.profile ?? lineage.metadata.profile;
-    const messages = facts.flatMap((fact) =>
-      fact.type === 'turn_started' ? fact.input.filter((item) => item.type === 'user_message') : [],
-    );
-    const preview = messages[0]?.content
-      .flatMap((part) => (part.type === 'text' ? [part.text] : []))
-      .join(' ')
-      .replace(/\s+/g, ' ');
+    // Imported transcript observations are ordinary native display facts; their
+    // hidden context-restoration turn is not a user admission. Deduplicate by
+    // message identity when an observation supplies a derived message's display.
+    const messages = new Map<string, string>();
+    for (const fact of facts) {
+      if (fact.type === 'turn_started' && fact.display !== false) {
+        for (const item of fact.input) {
+          if (item.type === 'user_message')
+            messages.set(item.id, item.content.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join(' '));
+        }
+      } else if (fact.type === 'transcript_message') {
+        if (fact.message.role === 'user')
+          messages.set(
+            fact.message.id,
+            fact.message.content.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join(' '),
+          );
+        else messages.delete(fact.message.id);
+      }
+    }
+    const preview = messages.values().next().value?.replace(/\s+/g, ' ');
     lines.push(
       `\n${lineage.logicalSessionId}  ${lineage.entries.at(-1)!.at}`,
-      `  ${messages.length} message${messages.length === 1 ? '' : 's'} | model: ${
-        model.model
-      } | mode: ${profile.id.replace(/^builtin:/, '')}`,
+      `  ${messages.size} message${messages.size === 1 ? '' : 's'} | model: ${model.model} | mode: ${profile.id.replace(
+        /^builtin:/,
+        '',
+      )}`,
       ...(preview ? [`  ${preview}`] : []),
       `  term2 --resume ${lineage.logicalSessionId}`,
     );

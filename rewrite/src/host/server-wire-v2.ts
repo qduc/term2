@@ -43,7 +43,10 @@ export type AgentWireV2ChangeType =
   | 'background_notice_enqueued'
   | 'background_notices_delivered';
 
-/** Must match the shared source's v2 live allowlist. A live batch cannot carry durable state. */
+/** Must match the shared source's v2 live allowlist. A live batch cannot carry durable state.
+ * User decision 2026-11-01: raw reasoning/tool progress are live-only, including across
+ * reconnect/crash; accepted summaries/final results are the recovery surface. Provider-native
+ * reasoning/tool history remains in provider history and is not reconstructed here. */
 const LIVE_CHANGE_TYPES = new Set<AgentWireV2ChangeType>([
   'reasoning_delta',
   'tool_progress',

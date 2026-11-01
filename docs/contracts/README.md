@@ -47,7 +47,7 @@ Draft contracts represent workstream records and characterization tests currentl
 | 08 | [Conversation durability and recovery](./08-conversation-durability-and-recovery.md) | `ConversationLogWriter`, `conversation-persistence`, `HistoryService`, `conversation-decoder`/`replay` | 4 files, 166 tests (166 passed, 0 expected failures) — VP-decided repairs landed (D1/D3/D4/D5/D6 plus synchronous sidecar removal and stale-lock liveness) |
 | 09 | [Execution-root authority and workspace lease](./09-execution-root-authority-and-workspace-lease.md) | `ExecutionContext`, worktree admission (`workspace/worktree-transition.ts`), active-root fallback (`workspace/active-workspace-root.ts`) | docs-only landing + 8-file characterization gate passed 2026-08-16 (101 tests); G2/G5/G6 merged |
 | 12 | [Queue persistence and recovery](./12-queue-persistence-and-recovery.md) | `QueueController` (`queue-controller.ts`), `createSessionQueuePersistence` (`queue-persistence.ts`) | 3 files, 93 tests — R1 flipped green, merged 2026-08-16; residual decisions confirmed retain-current by President 2026-08-16; owner-reviewed |
-| 14 | [Agent-wire v2 server transport (gated)](./14-agent-wire-v2-server.md) | Direct host server SSE/hydration/configure adapter; shared artifact and browser/BFF migration are external dependencies | source-only; all checks deferred under M6 freeze |
+| 14 | [Agent-wire v2 server transport (gated)](./14-agent-wire-v2-server.md) | Direct host server SSE/hydration/configure adapter; shared artifact, native producers and browser/BFF migration are external dependencies | source-only; public interface/ownership/limitations maintained there; all checks deferred under M6 freeze |
 
 ## How to read a record
 

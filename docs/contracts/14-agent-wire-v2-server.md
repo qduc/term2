@@ -52,6 +52,29 @@ Live frames are named `event: live`, have no SSE id or seq/time fields, and carr
 only the shared v2 live change types. They never advance a resume checkpoint and
 do not claim replay parity. Reconnect uses the last fully applied accepted seq.
 
+## Raw-stream retention exception
+
+Raw `reasoning_delta` chunks and intermediate `tool_progress` updates are
+**live-only**, including after reconnect or a crash. This is an explicit
+raw-stream replay-parity exception chosen by the user on 2026-11-01 (Discord
+`1566281061087059989`), not full replay parity. The server does not persist
+these transient prefixes, add a journal, synthesize IDs/cursors/timestamps or
+reconstruct interrupted prefixes from accepted state. Losing a transient prefix
+is expected; live data is never relabelled as accepted evidence.
+
+The recovery surface is accepted evidence: an accepted `reasoning` summary,
+final command/tool results, and accepted queue/task/goal/cost/notice facts.
+Hydration returns the current accepted snapshot only; it does not recreate raw
+reasoning or progress history.
+
+This exception does **not** permit stripping provider-required history.
+Provider-native reasoning items, signatures, encrypted metadata, tool calls and
+tool results remain in provider-native conversation history and must be
+forwarded unchanged for provider continuation. UI/live deltas are not
+provider-native history. Actual provider continuation after reconnect/tool
+cycles must be verified once all M6 implementation is complete; no such runtime
+verification is claimed here.
+
 ## Hydration and replay
 
 V2 SSE has no snapshot frame. A separate current-accepted hydration route is
@@ -70,9 +93,39 @@ and an absent field means capability unavailable; each entry keeps actual
 reconnect cursor), accepted transcript/tool/order, pending interactions/budgets,
 turn results, nullable usage/reasoning, terminal/notices, requestCosts views and
 `queue:null`. RequestCosts are selected views by producing child turnId, never
-additional charges; root queue is never copied. Raw reasoning/progress are not
-reconstructed. See `m6-v2-hydration-interface.md` for the exact client sequence
-and gaps.
+additional charges; root queue is never copied. Raw reasoning/progress are
+live-only under the retention exception above; hydration does not reconstruct
+them, and accepted summaries/final results are the recovery surface. See
+`m6-v2-hydration-interface.md` for the exact client sequence and gaps.
+
+## Public interface, ownership and compatibility
+
+The public interface of this module is the four explicit route surfaces above:
+v2 SSE (`accepted`/`live`), v2 hydration, v2 configure/discovery, and the
+`x-term2-event-format`/`x-term2-hydration*` headers. Route selection is explicit;
+there is no version inference or fallback.
+
+- **Server owner:** `rewrite/src/host/server-wire-v2.ts` plus its call sites in
+  `server.ts`, `server-sse.ts`, `server-session.ts`, `server-commands.ts` and
+  `server-events.ts`, with direct projection inputs from
+  `protocol/direct-wire.ts` and `protocol/direct-projection.ts`. These files own
+  negotiation, accepted/live framing, allowlist filtering, hydration assembly
+  and the configure result wrapper.
+- **External owners:** the shared `@qduc/agent-wire` package owns v2
+  schema/parsers and accepted change vocabulary; native Session/producer owners
+  own real accepted facts, sequence identity and provider-native history; the
+  browser/BFF owner owns v2 parsing, atomic reduction, replay checkpoints and UI
+  presentation. This server file does not claim those responsibilities.
+- **Compatibility:** v1 is unchanged. v2 is opt-in and gated by
+  `AGENT_WIRE_V2_RUNTIME_AVAILABLE`; while closed, v2 routes return
+  `503 agent_wire_v2_unavailable`. The pinned 0.1.0 artifact cannot parse v2, so
+  no runtime support is claimed. A successful format query or parser test is not
+  consumer acceptance.
+- **Known limitations:** generic status/message/task history may have no shared
+  accepted change name and can produce a real empty accepted batch; aggregate
+  `cost` is not synthesized when no producer emits it; historical notices and
+  branch-local data require actual native state; raw reasoning/progress are not
+  replayable. These limitations are not permission to invent data.
 
 ## Configure receipts
 
@@ -94,5 +147,5 @@ vendored tarball, migrate browser/BFF code, or activate the gate. The next
 combined migration must update both consumer pins plus the browser parser,
 atomic reducer, sparse cursor, hydration/replay and BFF config handling, then
 provide independent verification. Until then no v2 runtime support, replay
-parity, fresh branch history, aggregate cost reconstruction or M6 completion is
-claimed.
+parity, raw reasoning/progress replay, fresh branch history, aggregate cost
+reconstruction, provider-continuation verification or M6 completion is claimed.

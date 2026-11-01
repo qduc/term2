@@ -3,8 +3,10 @@
 Scope: direct `direct-wire.ts`, `DirectProjection`, `reduceWireEvent` and
 `host/in-process-direct*`. The old unprefixed protocol/index exports still serve
 the isolated bridge. This document describes implementation, not runtime acceptance.
-Tests, probes, typechecks, guards, builds, independent reviews and cold reads are deferred
-until after M6 by explicit user instruction.
+The earlier pre-M6 verification hold no longer applies. The native-v2 unit has
+focused persistence, generated-property, build/type/lint, independent-review and
+fenced CLI evidence; see `m6-native-format-final.md` in the coordinator task records.
+That evidence is scoped to the native-format unit, not complete M6 acceptance.
 
 ## Accepted data, snapshots and reconnect
 

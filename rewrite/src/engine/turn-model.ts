@@ -264,7 +264,9 @@ export class TurnModel {
               control.budget.dispatched();
               let outcome: DirectCompactionRequest['outcome'] = 'failed';
               try {
-                const items = await model.compact!(prepared, signal);
+                const items = await model.compact!(prepared, signal, () => {
+                  control.deps.onTurnBoundary?.({ turnId: control.spec.turnId, kind: 'request_dispatched' });
+                });
                 await control.events.publish({ type: 'model_response_completed', modelStep, stopReason: 'end_turn' });
                 outcome = 'completed';
                 return items;
@@ -416,7 +418,9 @@ export class TurnModel {
     let outcome: 'completed' | 'failed' | 'cancelled' = 'failed';
     this.budget.dispatched();
     try {
-      for await (const event of model.stream(prepared.request, signal)) {
+      for await (const event of model.stream(prepared.request, signal, () => {
+        this.deps.onTurnBoundary?.({ turnId: this.spec.turnId, kind: 'request_dispatched' });
+      })) {
         if (signal.aborted) throw cancelled();
         if (event.type === 'usage') {
           usage = event.usage;
@@ -466,7 +470,9 @@ export class TurnModel {
     let usage: Usage | undefined;
     let outcome: 'completed' | 'failed' | 'cancelled' = 'failed';
     try {
-      for await (const event of this.deps.models.resolve(request.model).stream(request, this.signal)) {
+      for await (const event of this.deps.models.resolve(request.model).stream(request, this.signal, () => {
+        this.deps.onTurnBoundary?.({ turnId: this.spec.turnId, kind: 'request_dispatched' });
+      })) {
         if (this.signal.aborted) throw cancelled();
         if (done) throw new Error('Model emitted events after its terminal response');
         switch (event.type) {

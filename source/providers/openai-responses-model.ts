@@ -1,3 +1,4 @@
+import { notifyProviderRequestDispatched } from './request-dispatch.js';
 import { ResponseToolArgumentScopes } from './tool-argument-stream-scope.js';
 import type {
   StreamedModelTurn,
@@ -865,6 +866,7 @@ export class OpenAIResponsesWSModelWithPromptCacheKey extends OpenAIResponsesMod
           this.lane,
         ),
       } as any);
+      notifyProviderRequestDispatched();
       const normalizationState = createResponseEventNormalizationState();
       iterator = socket.stream()[Symbol.asyncIterator]();
       while (true) {

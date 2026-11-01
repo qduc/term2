@@ -1,3 +1,4 @@
+import { observeProviderRequestDispatch } from '../../../source/providers/request-dispatch.js';
 /**
  * Real providers behind `ModelRegistry`, without the adopted adapter. The only
  * place that sees provider shapes: `Item` converts here and nowhere else.
@@ -131,7 +132,7 @@ function lazyModel(
     capabilities,
     contextWindow: catalogContextWindow ?? DEFAULT_CONTEXT_WINDOW,
     ...(catalogContextWindow !== undefined ? { catalogContextWindow } : {}),
-    async *stream(request, signal) {
+    async *stream(request, signal, onDispatched) {
       const transport = request.downgradeTransport ? 'http' : deps.settings.get('agent.transport') ?? 'websocket';
       try {
         signal.throwIfAborted();
@@ -172,14 +173,17 @@ function lazyModel(
               linked.throwIfAborted();
               const turn = await turnModel(transport);
               linked.throwIfAborted();
-              yield* modelEvents(
-                turn,
-                { ...prepared, signal: linked },
-                ref.provider,
-                linked,
-                capabilities.continuity
-                  ? { kind: 'direct_response', owner, provider: ref.provider, model: ref.model, transport }
-                  : undefined,
+              yield* observeProviderRequestDispatch(
+                modelEvents(
+                  turn,
+                  { ...prepared, signal: linked },
+                  ref.provider,
+                  linked,
+                  capabilities.continuity
+                    ? { kind: 'direct_response', owner, provider: ref.provider, model: ref.model, transport }
+                    : undefined,
+                ),
+                onDispatched,
               );
             } finally {
               // Returning early from a generator alone does not close HTTP/WS.

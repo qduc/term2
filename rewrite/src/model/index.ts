@@ -193,10 +193,12 @@ export interface Model {
   /** Actual catalog capacity; absent for uncatalogued models. */
   readonly catalogContextWindow?: number;
   readonly capabilities?: ModelCapabilities;
-  /** With recovery injected, one physical attempt only. Throws live ModelFailure; serialize only its ModelError fields. */
-  stream(request: ModelRequest, signal: AbortSignal): AsyncIterable<ModelEvent>;
+  /** With recovery injected, one physical attempt only. Throws live ModelFailure; serialize only its ModelError fields.
+   * onDispatched runs at transport submission, before any response (not generator creation).
+   */
+  stream(request: ModelRequest, signal: AbortSignal, onDispatched?: () => void): AsyncIterable<ModelEvent>;
   /** Native compaction where the provider supports it. */
-  compact?(request: ModelRequest, signal: AbortSignal): Promise<readonly Item[]>;
+  compact?(request: ModelRequest, signal: AbortSignal, onDispatched?: () => void): Promise<readonly Item[]>;
 }
 
 export interface ModelRegistry {

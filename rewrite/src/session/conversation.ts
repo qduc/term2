@@ -702,6 +702,7 @@ function conversation(
         const driver = createDirectBranchDriver({
           createDeps: (branchTurnId) => ({
             ...turnDeps,
+            onTurnBoundary: ({ turnId }) => tasks!.releaseParent(turnId),
             budget: runBudgets.open(branchTurnId, parent.turnId, turnDeps.budget),
             runNested,
             subagents: subagentPort,
@@ -753,6 +754,7 @@ function conversation(
         },
         {
           ...turnDeps,
+          onTurnBoundary: ({ turnId }) => tasks!.releaseParent(turnId),
           budget: runBudgets.open(turnId, undefined, turnDeps.budget),
           continuity: turnContinuity,
           takeSteering: boundary,

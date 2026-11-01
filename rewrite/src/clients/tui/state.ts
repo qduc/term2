@@ -30,6 +30,8 @@ export type InteractionView = {
   readonly title: string;
   readonly detail?: string;
   readonly owner?: string;
+  readonly turnId: string;
+  readonly taskId?: string;
   /** Only choices actually offered by the protocol may be rendered. */
   readonly choices: readonly { readonly id: string; readonly label: string }[];
   readonly acceptsText?: boolean;

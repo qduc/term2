@@ -113,6 +113,7 @@ function TuiSession({
   const { state, error: connectionError } = useClient(connection, retainedSnapshot, onSnapshot);
   const { columns, rows } = useTerminalSize();
   const [interactionOpen, setInteractionOpen] = useState(false);
+  const [dismissedInteractionId, setDismissedInteractionId] = useState<string | null>(null);
   const [taskOpen, setTaskOpen] = useState(false);
   const [budgetOpen, setBudgetOpen] = useState(false);
   const [images, setImages] = useState<ImageRef[]>([]);
@@ -151,11 +152,19 @@ function TuiSession({
     restoreOriginal: readonly WireContent[];
     knownParts?: readonly WireContent[];
   } | null>(null);
+  // Snapshot-derived ownership has no effect-sized gap in which decision keys
+  // can land in the ordinary composer. Background requests keep the Ctrl+G picker.
+  const rootInteraction = state.interactions.find((item) => item.turnId === state.activeTurnId && !item.taskId);
+  const foregroundInteraction =
+    !interactionOpen && !taskOpen && !budgetOpen && !rewindTargets && rootInteraction?.id !== dismissedInteractionId
+      ? rootInteraction
+      : undefined;
+  const interactionActive = interactionOpen || Boolean(foregroundInteraction);
   const viewport = useTranscriptViewport(
     state,
     columns,
     rows,
-    !interactionOpen && !taskOpen && !budgetOpen && !rewindTargets,
+    !interactionActive && !taskOpen && !budgetOpen && !rewindTargets,
   );
   const editor = useEditor(
     state.messages
@@ -189,7 +198,7 @@ function TuiSession({
       if (key.meta && key.return && state.activeTurnId && !busy && !editing)
         void submit(editor.value, images, 'follow_up');
     },
-    { isActive: !interactionOpen && !taskOpen && !budgetOpen && !rewindTargets },
+    { isActive: !interactionActive && !taskOpen && !budgetOpen && !rewindTargets },
   );
 
   const changeInput = (value: string) => {
@@ -554,11 +563,25 @@ function TuiSession({
         />
       ) : null}
       {editing ? <Text>Editing queued message · Enter saves · /queue cancel restores draft</Text> : null}
-      {interactionOpen ? (
+      {interactionActive ? (
         <InteractionPanel
+          key={foregroundInteraction?.id ?? 'picker'}
           interactions={state.interactions}
           width={columns}
-          onClose={() => setInteractionOpen(false)}
+          initialRequestId={foregroundInteraction?.id}
+          onClose={() => {
+            setDismissedInteractionId(rootInteraction?.id ?? null);
+            setInteractionOpen(false);
+          }}
+          onCancel={
+            foregroundInteraction
+              ? async () => {
+                  if (foregroundInteraction.kind === 'question')
+                    await answerInteraction(connection, foregroundInteraction.id, { kind: 'decline' });
+                  else setNotice(await cancelForeground(connection, foregroundInteraction.turnId));
+                }
+              : undefined
+          }
           onAnswer={(id, decision) => answerInteraction(connection, id, decision)}
         />
       ) : null}
@@ -586,7 +609,7 @@ function TuiSession({
           cursorOverride={editor.cursorOverride}
           width={Math.max(1, columns - 4)}
           maxHeight={Math.max(1, rows - 8)}
-          isActive={!busy && !connectionError && !interactionOpen && !taskOpen && !budgetOpen && !rewindTargets}
+          isActive={!busy && !connectionError && !interactionActive && !taskOpen && !budgetOpen && !rewindTargets}
           images={images}
           onImagesChange={onImagesChange}
           enableImagePaste

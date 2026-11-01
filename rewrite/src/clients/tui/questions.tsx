@@ -1,13 +1,15 @@
 import React, { useRef, useState } from 'react';
-import { Box, Text, useInput } from 'ink';
+import { Box, Text } from 'ink';
+import { useInteractionInput, type InteractionInput } from './interaction-input.js';
 import { MultilineInput } from 'ink-prompt';
 import type { WireDecision, WireQuestion } from '../../protocol/direct-wire.js';
 
 /** Collect all typed questions locally and resolve the request once with canonical IDs. */
-export function Questions({ questions, width, active = true, onBack, onAnswer }: {
+export function Questions({ questions, width, inputHandler, active = true, onBack, onAnswer }: {
   readonly questions: readonly WireQuestion[];
   readonly width: number;
   readonly active?: boolean;
+  readonly inputHandler: InteractionInput;
   readonly onBack: () => void;
   readonly onAnswer: (decision: WireDecision) => Promise<void>;
 }): React.ReactElement {
@@ -65,8 +67,8 @@ export function Questions({ questions, width, active = true, onBack, onAnswer }:
     if (next === 0) void send({ kind: 'decline' });
     else void send({ kind: 'answer', answer: '', stopAfterApprovalResolution: true });
   };
-  useInput((input, key) => {
-    if (busy) return;
+  useInteractionInput(inputHandler, (input, key) => {
+    if (!active || busy) return;
     if (key.escape) { if (entry) { setEntry(false); setText(''); } else if (index) { setIndex(index - 1); setSelected(0); } else onBack(); return; }
     if (entry || key.ctrl || key.meta) return;
     if (key.upArrow) { setSelected(current => Math.max(0, current - 1)); return; }
@@ -75,7 +77,7 @@ export function Questions({ questions, width, active = true, onBack, onAnswer }:
     if ((key.rightArrow || input.toLowerCase() === 'n') && index + 1 < questions.length) { setIndex(index + 1); setSelected(0); return; }
     const number = /^[1-9]$/.test(input) ? Number(input) - 1 : -1;
     if (key.return || number >= 0) { const position = number < 0 ? selected : number; if (position < choices.length) choose(position); }
-  }, { isActive: active });
+  });
   return <Box flexDirection="column">
     <Text bold>Question {index + 1}/{questions.length}: {question.prompt}</Text>
     {!entry && choices.map((choice, position) => {
@@ -85,7 +87,7 @@ export function Questions({ questions, width, active = true, onBack, onAnswer }:
     })}
     {question.multiple && Array.isArray(value) && value.length ? <Text>Selected: {value.join(', ')}</Text> : null}
     {entry ? <MultilineInput value={text} onChange={setText} width={Math.max(1, width - 6)} isActive={active && !busy}
-      ignoreInput={(input, key) => key.escape || (key.ctrl && input === 'g')}
+      ignoreInput={(input, key) => !active || busy || key.escape || (key.ctrl && input === 'g')}
       onSubmit={input => {
         if (!input.trim()) { setError('Enter an answer.'); return; }
         setEntry(false); setText('');

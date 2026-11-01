@@ -10,6 +10,7 @@ import { detectTerminalBackground } from '../../../source/theme/detect-terminal-
 import { shouldDetectBackground } from '../../../source/theme/resolve-theme.js';
 import { SettingsThemeProvider } from '../../../source/theme/ThemeContext.js';
 import { getInkRenderOptions } from '../../../source/utils/ink-render-options.js';
+import { getProfileLabel } from '../../../source/services/profiles/labels.js';
 import {
   confirmHomeDirectoryStart,
   HOME_DIRECTORY_START_WARNING,
@@ -148,6 +149,11 @@ async function runTui(
       stderr.write(`${INTERACTIVE_TERMINAL_REQUIRED}\n`);
       return 1;
     }
+
+    // Read the opened session, not the launch defaults: resume may restore a
+    // different profile before the terminal announces its active workflow.
+    const { profileId } = await app.sessionConfiguration(initial.sessionId);
+    stderr.write(`Profile: ${getProfileLabel(profileId).toUpperCase()}\n`);
 
     // Ask before Ink takes stdin: the terminal's reply arrives as input.
     const detectedBackground = shouldDetectBackground(settings.get('ui.theme'), process.env)

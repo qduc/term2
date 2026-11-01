@@ -277,6 +277,13 @@ function toProviderRequest(
     ) {
       providerOptions = { ...providerOptions, service_tier: 'flex' };
     }
+    // The source agent factory also supplies a top-level tier. Responses reads
+    // wire extensions only from extraBody; an explicit extra-body tier wins.
+    const tier = providerOptions?.service_tier;
+    const body = isRecord(providerOptions?.extraBody) ? providerOptions.extraBody : {};
+    if (tier !== undefined && body.service_tier === undefined) {
+      providerOptions = { ...providerOptions, extraBody: { ...body, service_tier: tier } };
+    }
   }
 
   // Mirrors `getAgent` (cache key) and `toApplicationCodexSettings` (codex). Other

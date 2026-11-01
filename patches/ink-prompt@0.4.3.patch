@@ -1,0 +1,22 @@
+diff --git a/dist/components/MultilineInput/index.js b/dist/components/MultilineInput/index.js
+index 2855a945825bfea3dba1f504895271689b9baf23..5dd91b9e30bc25f3f31cbdd6f37c348247bbd0ad 100644
+--- a/dist/components/MultilineInput/index.js
++++ b/dist/components/MultilineInput/index.js
+@@ -182,9 +182,15 @@ export const MultilineInput = ({ value, onChange, onSubmit, placeholder, showCur
+         }
+     }, [textInput.images]);
+     const handleSubmit = useCallback(() => {
++        // Controlled parents own submit clearing. Publish the complete local
++        // snapshot before submission, including changes not yet sent by effects.
++        if (value !== undefined) {
++            onChange?.(textInput.value);
++            onCursorChange?.(textInput.cursorOffset);
++        }
+         onSubmit?.(textInput.value, textInput.images);
+-        textInput.setText('');
+-    }, [onSubmit, textInput.value, textInput.setText, textInput.images]);
++        if (value === undefined) textInput.setText('');
++    }, [value, onChange, onCursorChange, onSubmit, textInput.value, textInput.cursorOffset, textInput.setText, textInput.images]);
+     const handlePaste = useCallback(() => {
+         clipboardPaste().then((result) => {
+             if (result.kind === 'text') {

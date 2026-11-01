@@ -219,6 +219,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  ink-prompt@0.4.3: 2c3328b0429fedb7f428731e8dda7723a0eba552b4bca1126bf4ed5b38c86934
+
 importers:
 
   .:
@@ -267,7 +270,7 @@ importers:
         version: 7.0.1(@types/react@19.2.7)(react@19.2.0)
       ink-prompt:
         specifier: ^0.4.3
-        version: 0.4.3(ink@7.0.1(@types/react@19.2.7)(react@19.2.0))(react@19.2.0)
+        version: 0.4.3(patch_hash=2c3328b0429fedb7f428731e8dda7723a0eba552b4bca1126bf4ed5b38c86934)(ink@7.0.1(@types/react@19.2.7)(react@19.2.0))(react@19.2.0)
       jiti:
         specifier: ^2.7.0
         version: 2.7.0
@@ -6216,7 +6219,7 @@ snapshots:
 
   ini@1.3.8: {}
 
-  ink-prompt@0.4.3(ink@7.0.1(@types/react@19.2.7)(react@19.2.0))(react@19.2.0):
+  ink-prompt@0.4.3(patch_hash=2c3328b0429fedb7f428731e8dda7723a0eba552b4bca1126bf4ed5b38c86934)(ink@7.0.1(@types/react@19.2.7)(react@19.2.0))(react@19.2.0):
     dependencies:
       ink: 7.0.1(@types/react@19.2.7)(react@19.2.0)
       react: 19.2.0

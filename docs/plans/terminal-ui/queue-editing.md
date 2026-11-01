@@ -2,6 +2,47 @@
 
 Status: **complete and merged.** Steps 1–4 merged to main: Steps 1–2 in `ccc02324` / `b5f31095`, Step 3 in `f1eebcc5` (`19a3f22d`), and Step 4 in `061427c8` (all included by `a7a0d677`).
 
+## Composer synchronization diagnostic
+
+A pasted image in ink-prompt 0.4.3 can render before its passive `onChange` effect
+publishes tokenized text to the controller. Fast Enter then submits local text
+while `App.handleSubmit` captures an older text-only snapshot. Pending controlled
+state synchronization can restore the submitted draft after the library clears
+its local text; the next command is appended to that draft. The revision guard
+in `submitAdmittedTurn` must still protect newer drafts and delayed `too_late`
+queued-edit fallbacks. Merely publishing local text in `handleWrapperSubmit`
+before routing is insufficient: pending effects can advance the revision and
+restore the submitted draft afterward. Do not weaken the revision guard or mask
+this wrong-value acknowledgment failure with a longer timeout.
+
+The controlled editor now has one submit-clear owner: the App controller clears
+an accepted draft using the existing text/revision predicate. The ink-prompt
+patch synchronously publishes local text and cursor before submitting, and skips
+its own automatic clear only for controlled inputs. InputBox ignores idempotent
+text/cursor echoes against the current controller, not a rendered snapshot, and
+explicitly clears the queue-save editor before its asynchronous save. The
+uncontrolled library behavior is unchanged. Do not replace the guarded clear
+with an unconditional adapter clear: an older queued-edit fallback or a newer
+draft typed during admission must survive.
+
+`pnpm` patches are checkout policy, not consumer package policy. The build embeds
+the installed patched ink-prompt under `dist/node_modules` using the existing
+embedded-module packaging route. That copy is generated, not a second maintained
+source. When an upstream version adopts the same controlled-submit contract,
+remove the patch and embedding together after checking installed-package behavior.
+
+The focused `scripts/provider-black-box/input-notice.blackbox.ts` workflow drives
+paste → submit → retry → next turn through the built CLI and a loopback provider.
+When its composer wait reports a newer revision, inspect the actual composer
+value: revision advancement does not imply that the expected text was accepted.
+A serial passing rerun does not rule out this render/publication ordering.
+
+For the large-request Cancel/reconfirm fixture, retaining the draft while the
+confirmation is open means its earlier composer acknowledgement is still valid.
+Wait for a new composer-owned idle generation after Cancel before sending the
+next Enter; an `afterRevision: 0` text match alone does not prove input ownership
+has returned. This is separate from the image paste/submit publication race.
+
 ## Resume here
 
 **Steps 1–4 (`## Build order`) are done and merged to `main`**: Steps 1–2 are

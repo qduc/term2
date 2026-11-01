@@ -118,7 +118,11 @@ it.skipIf(process.platform !== 'linux')('confirms a large uncached request after
     await child.write('\r');
     await child.waitForVisibleOutput('Large request');
     expect(requests).toHaveLength(2);
+    const confirmationGeneration = child.readIdleGeneration();
     await child.write('n');
+    // Retaining the draft while the dialog is open is valid. Its old composer
+    // acknowledgement cannot prove that Cancel returned input ownership.
+    await child.waitForIdleInput({ after: confirmationGeneration });
     await child.waitForComposerValue('LARGE_DRAFT_START' + 'x'.repeat(270_000) + 'LARGE_DRAFT_END', {
       afterRevision: 0,
     });

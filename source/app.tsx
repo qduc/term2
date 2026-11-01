@@ -672,6 +672,17 @@ const App: FC<AppProps> = ({
     setPendingModeSwitch(null);
   }, []);
 
+  // The controller owns clearing accepted submissions. A stale queued fallback
+  // or a later editor revision must never clear the current draft.
+  const clearSubmittedDraft = useCallback(
+    (turn: UserTurn, submittedEditor: ReturnType<typeof controller.getSnapshot>['editor']) => {
+      if (submittedEditor.text === turn.text && controller.getSnapshot().editor.revision === submittedEditor.revision) {
+        replaceInput('');
+      }
+    },
+    [controller, replaceInput],
+  );
+
   const submitAdmittedTurn = useCallback(
     async (
       turn: UserTurn,
@@ -680,18 +691,11 @@ const App: FC<AppProps> = ({
     ) => {
       const result = options ? submitTurnForAdmission(turn, options) : submitTurnForAdmission(turn);
       if (result.kind === 'submitted') {
-        // A delayed queued-edit fallback may submit older text, and routing
-        // may yield while another draft is typed. Clear only the submitted draft.
-        if (
-          submittedEditor.text === turn.text &&
-          controller.getSnapshot().editor.revision === submittedEditor.revision
-        ) {
-          replaceInput('');
-        }
+        clearSubmittedDraft(turn, submittedEditor);
         await result.completion;
       }
     },
-    [controller, replaceInput, submitTurnForAdmission],
+    [clearSubmittedDraft, controller, submitTurnForAdmission],
   );
 
   const redrawMessageList = useCallback(() => {
@@ -1395,11 +1399,13 @@ const App: FC<AppProps> = ({
         decision: { answer: 'no', rejectionReason: turn.text },
       });
       setWaitingForRejectionReason(false);
+      clearSubmittedDraft(turn, submittedEditor);
       return;
     }
     if (nestedApproval && !pendingApproval && waitingForRejectionReason) {
       await resolveNestedApproval({ answer: 'n', rejectionReason: turn.text });
       setWaitingForRejectionReason(false);
+      clearSubmittedDraft(turn, submittedEditor);
       return;
     }
     const value = turn.text;

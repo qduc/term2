@@ -35,6 +35,7 @@ const exitCode = await buildWithRollback({
     run(process.execPath, ['scripts/write-build-info.mjs']),
     run('pnpm', ['run', 'post-build']),
     run(process.execPath, ['scripts/embed-agent-wire.mjs']),
+    run(process.execPath, ['scripts/embed-ink-prompt.mjs']),
   ],
   log: (message) => console.log(message),
 });

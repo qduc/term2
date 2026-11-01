@@ -229,9 +229,9 @@ const InputBox: FC<Props> = ({
         return;
       }
       cursorOffsetRef.current = nextOffset;
-      setCursorOffset(nextOffset);
+      if (nextOffset !== controller.getSnapshot().editor.cursor) setCursorOffset(nextOffset);
     },
-    [contextCursorOverride, cursorOffset, propsCursorOverride, setCursorOffset],
+    [contextCursorOverride, controller, cursorOffset, propsCursorOverride, setCursorOffset],
   );
 
   const handleImagesChange = useCallback(
@@ -422,6 +422,7 @@ const InputBox: FC<Props> = ({
         queueSaveConsumedRef.current = true;
         setEditingQueueItem(null);
         resetHistory();
+        onChange('');
         setImages(editedItem.restoreDraft.images ?? []);
         void onEditQueuedMessage(editedItem.id, editedTurn)
           .then((result) => {
@@ -447,6 +448,7 @@ const InputBox: FC<Props> = ({
       queueInteractionEnabled,
       images,
       loggingService,
+      onChange,
       onEditQueuedMessage,
       onSubmit,
       resetHistory,
@@ -509,18 +511,18 @@ const InputBox: FC<Props> = ({
   const handleMultilineChange = useCallback(
     (newValue: string) => {
       const filtered = newValue.replace(/\x1b\[I|\x1b\[O/g, '');
-      if (!isShellMode && inputValueRef.current === '' && filtered.startsWith('!')) {
+      if (!isShellMode && controller.getSnapshot().editor.text === '' && filtered.startsWith('!')) {
         onChange(filtered.slice(1));
         remountInput();
         onShellModeEnter?.();
         return;
       }
-      // ink-prompt can echo the controlled value when it mounts. Treat that
-      // as synchronization, not an edit, so it cannot move a middle cursor
-      // to the end during the menu-to-editor handoff.
-      if (filtered !== inputValueRef.current) onChange(filtered);
+      // A submit can publish local text before its pending change effect.
+      // Compare against the owner, not a render-time snapshot: duplicate echoes
+      // must not create edits/revisions or move the cursor to the end.
+      if (filtered !== controller.getSnapshot().editor.text) onChange(filtered);
     },
-    [isShellMode, onChange, onShellModeEnter, remountInput],
+    [controller, isShellMode, onChange, onShellModeEnter, remountInput],
   );
 
   return (

@@ -169,6 +169,10 @@ export function captureDirectFinalWindow(
       });
     }
     if (fact.type !== 'item') continue;
+    if (fact.display === false) {
+      omitted = true;
+      continue;
+    }
     const item = fact.item;
     if (item.type === 'assistant_message' && fact.modelStep !== undefined) {
       completedSteps.add(fact.modelStep);

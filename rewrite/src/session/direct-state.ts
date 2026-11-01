@@ -24,8 +24,13 @@ export type DirectDisplayTool = DirectToolDisplay & {
   /** A model call is not evidence that its physical body started. */
   readonly phase: 'called' | 'started' | 'completed' | 'unknown';
 };
+type DirectReadMessage = DirectMessage & {
+  /** Ephemeral read-model provenance, never a durable fact or wire field. */
+  readonly transcriptObservation?: true;
+};
 /** The shared public read model plus explicit non-durable runtime failure. */
-export type DirectPublicState = Omit<DirectSessionState, 'tools'> & {
+export type DirectPublicState = Omit<DirectSessionState, 'tools' | 'messages'> & {
+  readonly messages: readonly DirectReadMessage[];
   readonly tools: readonly DirectDisplayTool[];
   readonly runtimeError: ModelError | null;
 };
@@ -144,7 +149,11 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
     case 'transcript_message':
       return {
         ...state,
-        messages: replaceMessage(state.messages, { ...fact.message, ...(fact.turnId ? { turnId: fact.turnId } : {}) }),
+        messages: replaceMessage(state.messages, {
+          ...fact.message,
+          ...(fact.turnId ? { turnId: fact.turnId } : {}),
+          transcriptObservation: true,
+        }),
       };
     case 'session_rotated':
       return {
@@ -170,7 +179,7 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
       const retained = new Set<string>(fact.history.map((item) => item.id));
       const messages = fact.history.flatMap((item) => {
         const known = state.messages.find((message) => message.id === item.id);
-        return known ? [{ ...known, ...messageFor(item)[0] }] : [];
+        return known ? [known.transcriptObservation ? known : { ...known, ...messageFor(item)[0] }] : [];
       });
       const messageIds = new Set(messages.map((message) => message.id));
       return {
@@ -412,10 +421,10 @@ function messageFor(item: {
 }
 
 function replaceMessage(
-  messages: readonly DirectMessage[],
-  message: DirectMessage,
+  messages: readonly DirectReadMessage[],
+  message: DirectReadMessage,
   replaces = message.id,
-): readonly DirectMessage[] {
+): readonly DirectReadMessage[] {
   const index = messages.findIndex((entry) => entry.id === replaces || entry.id === message.id);
   if (index < 0) return [...messages, message];
   return messages.flatMap((entry, offset) =>

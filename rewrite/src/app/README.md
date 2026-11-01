@@ -64,3 +64,11 @@ The compile-time seam matters: changing source callback signatures, schemas, or
 host projection types must be reconciled here, not hidden with casts or invented
 terminal data. A successful typecheck establishes contract compatibility, not
 provider execution, approval/reconnect behavior, or continuation parity.
+
+## Compiled worker bootstrap
+
+The rewrite build explicitly includes `source/utils/worker-cwd-preload.cts`.
+`workerBootstrapExecArgv` locates its emitted `.cjs` sibling by URL, not a static
+import, so following the app's TypeScript import graph alone omits it. Source-mode
+`run_code` can work while the compiled CLI fails before scripted delegation starts;
+verify the built CLI's worker path, not only an in-process app surface.

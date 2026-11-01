@@ -241,7 +241,7 @@ export function validateFact(fact: Record<string, unknown>, where: string, scope
     parseDirectConfigurationFact(fact);
     return;
   }
-  const fail = (field: string): never => {
+  const fail: (field: string) => never = (field) => {
     throw new Error(`${where}: invalid ${String(fact['type'])}.${field}`);
   };
   const text = (value: unknown, field: string): void => {
@@ -888,7 +888,7 @@ function validateBudgetEvidence(value: unknown, where: string): void {
 
 /** Validate the clean ModelRequestCost/NormalizedUsage data without repricing or stripping extensions. */
 function validateRequestCost(value: unknown, where: string): void {
-  const fail = (field: string): never => {
+  const fail: (field: string) => never = (field) => {
     throw new Error(`${where}: invalid request cost ${field}`);
   };
   if (!value || typeof value !== 'object' || Array.isArray(value)) fail('record');

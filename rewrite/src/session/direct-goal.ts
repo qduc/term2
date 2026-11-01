@@ -82,7 +82,7 @@ export function directGoalCheckReceipt(state: DirectGoalState): string {
 export function createDirectGoalCheckTool(deps: {
   readonly requestGoal: DirectGoalState;
   readonly readGoal: () => DirectGoalState;
-}): Tool<DirectGoalCheck> {
+}): Tool<DirectGoalCheck> & { readonly parallelSafe: false } {
   const request = { ...deps.requestGoal, goal: deps.requestGoal.goal && { ...deps.requestGoal.goal } };
   return {
     spec: {
@@ -143,7 +143,7 @@ export function createDirectProposeGoalTool(deps: {
     readonly approved: boolean;
     readonly source: 'user' | 'policy' | 'system';
   }>;
-}): Tool<z.infer<typeof proposalSchema>> {
+}): Tool<z.infer<typeof proposalSchema>> & { readonly parallelSafe: false } {
   return {
     spec: {
       name: 'propose_goal',

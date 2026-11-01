@@ -17,10 +17,9 @@ import { projectDirectBackground } from './direct-background-replay.js';
 import type { DirectBackgroundFact, DirectTaskState } from './direct-background-types.js';
 import type { DirectQueueState } from './direct-queue-types.js';
 import type { Fact, TurnOutcomeName, DirectTurnFact, DirectCompactionFact, DirectHistoryFact } from './facts.js';
-import { isDirectCommandFactType, reduceDirectCommandReceipts } from './direct-command-receipts.js';
+import { reduceDirectCommandReceipts } from './direct-command-receipts.js';
 import type { DirectCommandReceipts } from './direct-command-types.js';
 import {
-  isDirectNotificationFactType,
   reduceDirectNotifications,
   type DirectNotificationState,
 } from './direct-notifications.js';
@@ -289,12 +288,12 @@ function replayProjection(
   };
 
   const consume = (fact: Fact): void => {
-    if (isDirectCommandFactType(fact.type)) {
+    if (fact.type === 'command_started' || fact.type === 'command_finished') {
       // Receipts are not provider history and are not recovered here.
       commandReceipts = reduceDirectCommandReceipts(commandReceipts, fact);
       return;
     }
-    if (isDirectNotificationFactType(fact.type)) {
+    if (fact.type === 'background_notice_enqueued' || fact.type === 'background_notices_delivered') {
       if (fact.type === 'background_notices_delivered' && startedTurns.has(fact.turnId)) {
         throw new Error('replay: background notice delivery does not own its turn');
       }

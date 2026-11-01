@@ -108,7 +108,7 @@ export async function forkDirectConversation(request: DirectForkRequest): Promis
   }));
   const projected = replay(copied.map((line) => line.fact));
   const stampedAt = new Date().toISOString();
-  const recovery = projected.recoveryFacts.map((fact, index) => ({
+  const recovery = projected.recoveryFacts.map<FactLine>((fact, index) => ({
     v: LOG_FORMAT_VERSION,
     seq: copied.at(-1)!.seq + index + 1,
     at: stampedAt,

@@ -117,12 +117,23 @@ export class DirectRunBudgets {
   #remaining(turnId: TurnId, run: Run): BudgetOptions['policy'] {
     // Include costs since the engine's last boundary without consuming its stage
     // latches. The disposable accounting clock never drives or admits work.
-    const snapshot = run.state.snapshot();
-    const accounting = new RunBudget({ ...run.policy, ...snapshot.limits });
-    accounting.pause();
+    const now = Date.now();
+    const snapshot = run.state.snapshot(now);
+    const remaining = run.state.remainingPolicy(now);
+    // Rebase the disposable clock on the actual unspent (extension-aware)
+    // envelope plus already observed usage. If a dimension is already exhausted,
+    // the final clamp keeps it at zero; no overdraw or correction grants headroom.
+    const accounting = new RunBudget({
+      ...run.policy,
+      maxUsdMicros: remaining.maxUsdMicros + snapshot.pricedUsdMicros,
+      maxUnpricedTokens: remaining.maxUnpricedTokens + snapshot.unpricedTokens,
+      maxActiveTimeMs: remaining.maxActiveTimeMs + snapshot.activeTimeMs,
+      turnBackstop: remaining.turnBackstop + snapshot.turns,
+    }, now);
+    accounting.pause(now);
     const ownRequests = [...this.#costs.values()].filter((fact) => fact.turnId === turnId).length;
     accounting.evaluate({ turns: Math.max(snapshot.turns, ownRequests), costRecords: this.records(turnId) });
-    return clampRunBudgetPolicy(accounting.remainingPolicy(), run.state.remainingPolicy());
+    return clampRunBudgetPolicy(accounting.remainingPolicy(now), remaining);
   }
 
   #ancestor(turnId: TurnId, ancestor: TurnId, fact: DirectRequestCostFact): boolean {

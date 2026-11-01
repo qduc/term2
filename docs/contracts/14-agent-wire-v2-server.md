@@ -57,11 +57,21 @@ V2 SSE has no snapshot frame. A separate current-accepted hydration route is
 `GET /sessions/:id?format=agent-wire-v2`; it returns seq plus the exact public
 direct `WireSnapshot`, a same-cut InteractionDTOv1 resolver field, and real
 earliest replay metadata. It is not a replay event and has no synthetic
-timestamp. The snapshot does not reconstruct fresh
-aggregate cost, historical notices or branch-local history; those remain
-native-owner gaps and must not be fabricated from request records, task metadata
-or compaction estimates. See the task handoff
-`m6-v2-hydration-interface.md` for the exact client sequence and gaps.
+timestamp. The snapshot does not reconstruct fresh aggregate cost or historical
+notices; those remain native-owner gaps and must not be fabricated from request
+records, task metadata or compaction estimates.
+
+Native ORIGINAL `838664750acec8a65de2526a7712c743e9d17989` supplies optional
+`branches: WireBranchSnapshot[]` at the same outer cut. When integrated, the
+server passes it through unchanged: `[]` means real no accepted branch_started
+and an absent field means capability unavailable; each entry keeps actual
+`branchId/taskId/turnId`, optional recorded ancestry, `acceptedSeq` (not a
+reconnect cursor), accepted transcript/tool/order, pending interactions/budgets,
+turn results, nullable usage/reasoning, terminal/notices, requestCosts views and
+`queue:null`. RequestCosts are selected views by producing child turnId, never
+additional charges; root queue is never copied. Raw reasoning/progress are not
+reconstructed. See `m6-v2-hydration-interface.md` for the exact client sequence
+and gaps.
 
 ## Configure receipts
 

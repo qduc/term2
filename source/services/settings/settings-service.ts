@@ -152,6 +152,7 @@ export class SettingsService {
     cli?: Partial<SettingsData>;
     env?: Partial<SettingsData>;
     loggingService?: LoggingService;
+    loggingServiceOptions?: Omit<NonNullable<ConstructorParameters<typeof LoggingService>[0]>, 'disableLogging'>;
   }) {
     const {
       settingsDir = resolveSettingsDirectory(),
@@ -160,17 +161,21 @@ export class SettingsService {
       cli = {},
       env = {},
       loggingService,
+      loggingServiceOptions,
     } = options ?? {};
 
     const resolvedDisableLogging = disableLogging || parseBooleanEnv(process.env.DISABLE_LOGGING);
 
     this.settingsDir = settingsDir;
-    this.disableLogging = resolvedDisableLogging;
+    // Until validated settings are available, an owned logger must be silent:
+    // constructing an enabled file transport already creates diagnostic files.
+    this.disableLogging = loggingService ? resolvedDisableLogging : true;
     this.sources = new Map();
     this.startupEnv = structuredClone(env);
     this.startupCli = structuredClone(cli);
 
-    // Use injected LoggingService or create a new one if not provided
+    // Injected loggers retain their caller-owned lifecycle. Owned loggers are
+    // bootstrapped without file sinks, then created once with effective policy.
     this.loggingService =
       loggingService ||
       new LoggingService({
@@ -224,13 +229,6 @@ export class SettingsService {
         quarantinedPath,
         recoveredSectionKeys: recovery.recoveredSectionKeys,
       };
-      if (!this.disableLogging) {
-        this.loggingService.warn('Recovered settings from a corrupt file; original bytes preserved', {
-          settingsFile: settingsFilePath,
-          quarantinedPath,
-          recoveredSectionKeys: recovery.recoveredSectionKeys,
-        });
-      }
     }
 
     const { config: fileConfig, migrated: migratedLegacyAncillarySettings } = migrateLegacyAncillarySettings(
@@ -252,6 +250,20 @@ export class SettingsService {
       disableLogging: this.disableLogging,
       loggingService: this.loggingService,
     });
+    this.disableLogging = resolvedDisableLogging || this.settings.logging.disableLogging;
+    if (!loggingService) {
+      this.loggingService = new LoggingService({
+        ...loggingServiceOptions,
+        disableLogging: this.disableLogging,
+      });
+    }
+    if (this.recoveryResult.recovered && !this.disableLogging) {
+      this.loggingService.warn('Recovered settings from a corrupt file; original bytes preserved', {
+        settingsFile: settingsFilePath,
+        quarantinedPath: this.recoveryResult.quarantinedPath,
+        recoveredSectionKeys: this.recoveryResult.recoveredSectionKeys,
+      });
+    }
     this.sources = trackSettingSources(DEFAULT_SETTINGS, fileConfig, env, cli);
     if (!Object.hasOwn((rawFileConfig as any)?.agent ?? {}, 'maxOutputTokens')) {
       this.sources.set(
@@ -392,6 +404,11 @@ export class SettingsService {
         }
       }
     }
+  }
+
+  /** Returns the shared logger; owned loggers resolve startup privacy policy before opening file sinks. */
+  getLoggingService(): LoggingService {
+    return this.loggingService;
   }
 
   private hasLegacyProviderFormat(rawFileConfig: any): boolean {

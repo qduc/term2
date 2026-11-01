@@ -216,8 +216,11 @@ async function runLogin(provider: 'grok' | 'codex'): Promise<number> {
 
 async function runListModelsCommand(search: string | null, refresh: boolean): Promise<number> {
   const { runListModels } = await import('../../../source/services/models/model-listing.js');
-  const listingLogger = new LoggingService({ sessionContextService: new SessionContextService() });
-  const { service: listingSettings } = createAppSettings({ env: buildEnvOverrides(), loggingService: listingLogger });
+  const { service: listingSettings } = createAppSettings({
+    env: buildEnvOverrides(),
+    loggingServiceOptions: { sessionContextService: new SessionContextService() },
+  });
+  const listingLogger = listingSettings.getLoggingService();
   const outcome = await runListModels({
     settingsService: listingSettings,
     loggingService: listingLogger,
@@ -334,12 +337,12 @@ async function runHeadless(prompt: string, options: SessionOptions): Promise<num
   await checkConversationsDirectory(directory);
 
   const sessionContext = new SessionContextService();
-  const logger = new LoggingService({ sessionContextService: sessionContext });
   const { service: settings } = createAppSettings({
     env: buildEnvOverrides(),
     disableFilePersistence: true,
-    loggingService: logger,
+    loggingServiceOptions: { sessionContextService: sessionContext },
   });
+  const logger = settings.getLoggingService();
   const modelError = await applyModelOverrides(options, settings, logger, false);
   if (modelError !== null) {
     stderr.write(`${modelError}\n`);
@@ -396,12 +399,12 @@ async function runInteractive(options: SessionOptions): Promise<number> {
   await checkConversationsDirectory(directory);
 
   const sessionContext = new SessionContextService();
-  const logger = new LoggingService({ sessionContextService: sessionContext });
   const { service: settings } = createAppSettings({
     env: buildEnvOverrides(),
     disableFilePersistence: true,
-    loggingService: logger,
+    loggingServiceOptions: { sessionContextService: sessionContext },
   });
+  const logger = settings.getLoggingService();
   // The picker gate of source/services/models/model-picker-host.tsx: TTY on both ends, no --json, no harness marker.
   const pickerEligible = Boolean(stdin.isTTY && stdout.isTTY) && !options.output.json && !process.env[HARNESS_IDLE_ENV];
   const modelError = await applyModelOverrides(options, settings, logger, pickerEligible);
@@ -436,12 +439,12 @@ async function launcherBase(): Promise<Pick<DirectLaunchBase, 'conversationsDir'
   await checkConversationsDirectory(directory);
 
   const sessionContext = new SessionContextService();
-  const logger = new LoggingService({ sessionContextService: sessionContext });
   const { service: settings } = createAppSettings({
     env: buildEnvOverrides(),
     disableFilePersistence: true,
-    loggingService: logger,
+    loggingServiceOptions: { sessionContextService: sessionContext },
   });
+  const logger = settings.getLoggingService();
   return { conversationsDir: directory, selection: { settings, logger, sessionContext } };
 }
 

@@ -19,6 +19,34 @@ evaluator lane are accepted behavior, now characterized by green tests.
 
 *Cross-reference:* Durable conversation state persistence, atomic session save/replay, lockfile descriptor management, and `fsync` write durability belong to the separately tracked **SB-02** service boundary.
 
+### Direct CLI startup privacy
+
+The direct CLI (`rewrite/src/app/cli.ts`) must resolve stored
+`logging.disableLogging` before opening diagnostic file sinks, including
+provider/evaluator traffic and opt-in `TERM2_RAW_TRAFFIC` sidecars. Its four
+bootstrap sites (headless, interactive, model listing, shared ACP/server) use
+the logger owned by `SettingsService` through `loggingServiceOptions` and
+`getLoggingService()`. The service loads and merges validated settings once
+with a silent bootstrap logger, then constructs the shared logger with the
+effective disable flag. An explicit disable option or true `DISABLE_LOGGING`
+environment flag remains authoritative over stored false. Caller-injected
+loggers still have caller-owned construction policy; passing an already-enabled
+logger is not a privacy-safe startup path. This does not disable canonical
+conversation persistence or implement a live logging toggle.
+
+**Root cause / prevention:** the direct startup previously constructed its
+logger before settings; applying only level and console suppression afterward
+could not undo file creation or disable the traffic store. The setting and sink
+lifecycle were separate sources of policy, so setter/readback checks missed
+the leak. Keep owned logger creation behind validated settings resolution;
+verify privacy through an actual provider/tool/provider process workflow,
+checking zero diagnostic files *and* durable conversation state, with a stored
+false control that really writes traffic. Environment-only checks do not cover
+the persisted-setting boundary. Settings-load diagnostics before policy
+resolution are intentionally silent for owned loggers; parse failures still
+throw and successful corruption recovery is reported after resolution when
+logging is enabled.
+
 ## 2. Owners
 
 - **Enforcement:**

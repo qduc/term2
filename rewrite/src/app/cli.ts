@@ -2,7 +2,7 @@
 import '../../../source/env-setup.js';
 
 import { readdir } from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { stdin, stdout, stderr } from 'node:process';
 import { homedir } from 'node:os';
 import path from 'node:path';
@@ -18,7 +18,10 @@ import { resolveProfile } from '../../../source/services/profiles/resolver.js';
 import { BARE_PROFILE_ID, canonicalProfileId } from '../../../source/services/profiles/legacy-adapter.js';
 import { SessionContextService } from '../../../source/services/session/session-context-service.js';
 import { buildEnvOverrides } from '../../../source/services/settings/settings-service.js';
-import { shouldWarnOnHomeDirectoryStart } from '../../../source/utils/home-directory-start-guard.js';
+import {
+  HOME_DIRECTORY_START_WARNING,
+  shouldWarnOnHomeDirectoryStart,
+} from '../../../source/utils/home-directory-start-guard.js';
 import type { AcpArgs } from '../../../source/acp-v2/serve-args.js';
 import type { ServeArgs } from '../../../source/gateway/serve-args.js';
 import type { DirectLaunchBase } from './direct-launch-types.js';
@@ -38,6 +41,7 @@ import {
   DISCORD_HELP,
   HELP,
   parseCommandLine,
+  UsageError,
   type Command,
   type Refusal,
   type SessionOptions,
@@ -68,6 +72,17 @@ function packageVersion(): string {
     const parent = path.dirname(directory);
     if (parent === directory) return 'unknown';
     directory = parent;
+  }
+}
+
+/**
+ * A native resume names a direct conv_ log that must already exist. Only its
+ * presence is checked here; nothing is read, so no other conversation is touched.
+ */
+function requireNativeConversation(resumeId: string | null): void {
+  if (resumeId === null) return;
+  if (!existsSync(path.join(conversationsDirectory(), `${resumeId}.jsonl`))) {
+    throw new Error(`No conversation found to resume (${resumeId}).`);
   }
 }
 
@@ -462,12 +477,25 @@ async function main(argv: readonly string[]): Promise<number> {
       if (command.refused) throw refused(command.refused);
       if (!(stdin.isTTY && stdout.isTTY)) {
         if (command.options.resumeId !== null) throw new Error('--resume requires a follow-up prompt');
+        // A non-lite start from the home directory is refused with the warning first, as the current CLI does.
+        if (
+          shouldWarnOnHomeDirectoryStart({
+            cwd: path.resolve(process.cwd()),
+            homeDir: path.resolve(homedir()),
+            isNonLiteStart: !command.options.lite,
+          })
+        ) {
+          stderr.write(`${HOME_DIRECTORY_START_WARNING.trimEnd()}\nCancelled.\n`);
+          return 1;
+        }
         stderr.write(`${NO_PROMPT_MESSAGE}\n`);
         return 1;
       }
+      requireNativeConversation(command.options.resumeId);
       return runInteractive(command.options);
     case 'headless':
       if (command.refused) throw refused(command.refused);
+      requireNativeConversation(command.options.resumeId);
       return runHeadless(command.prompt, command.options);
     case 'serve':
       return runServe(command.args);
@@ -492,6 +520,6 @@ void main(process.argv.slice(2)).then(
   (code) => process.exit(code),
   (error: unknown) => {
     stderr.write(`error ${errorMessage(error)}\n`);
-    process.exit(1);
+    process.exit(error instanceof UsageError ? error.exitCode : 1);
   },
 );

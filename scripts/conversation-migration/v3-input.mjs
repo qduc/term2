@@ -8,6 +8,16 @@ import {
 } from '../../rewrite/dist/source/services/conversation/conversation-decoder.js';
 import { replayEvents } from '../../rewrite/dist/source/services/conversation/conversation-replay.js';
 import { validPersistedEvent } from './v3-input-validation.mjs';
+import { validateSessionFact } from '../../rewrite/dist/rewrite/src/session/adopted/conversation-log.js';
+
+// These adjuncts are v3 facts owned by the adopted Session, not the legacy
+// LogEvent union. Reuse its strict schema rather than the permissive decoder.
+const lifecycleKinds = new Set(
+  `session_bound session_admitted session_admission_settled session_turn_started
+session_turn_ended session_interaction_pending session_interaction_recovered
+session_interaction_resolved session_interrupted session_closed
+session_network_requested session_network_resolved`.split(/\s+/),
+);
 
 // The legacy decoder deliberately accepts unknown facts. Migration must not.
 const kinds = new Set(
@@ -62,10 +72,16 @@ function validate(raw, file, line) {
     (raw.eventId !== undefined && (typeof raw.eventId !== 'string' || !raw.eventId))
   )
     fail('invalid-envelope', file, line);
-  if (!raw.event || !kinds.has(raw.event.type)) fail('unknown-event-kind', file, line);
+  if (!raw.event || (!kinds.has(raw.event.type) && !lifecycleKinds.has(raw.event.type)))
+    fail('unknown-event-kind', file, line);
   if (raw.event.truncated === true) fail('truncated-event', file, line);
   let decoded;
   try {
+    if (lifecycleKinds.has(raw.event.type)) {
+      // Interaction validation sanitizes its argument. Validate a clone so
+      // migration preserves the original durable DTO, including additive keys.
+      validateSessionFact(structuredClone(raw.event));
+    }
     decoded = decodeLogEnvelope(raw);
   } catch {
     fail('invalid-event', file, line);

@@ -40,6 +40,8 @@ export type DirectContextCapabilities = {
   /** Effective source settings, re-read for each advisory tick. */
   readonly backgroundCheckIns?: () => import('./direct-background-check-ins.js').DirectBackgroundCheckInSettings;
   readonly proposeGoal?: boolean;
+  /** App-owned native search; Session only registers it under the profile's sessions slot. */
+  readonly sessionSearch?: Tool;
   /** Source assembly names before native slots; refreshed on configuration. */
   readonly nativeToolSlots?: {
     readonly beforeMemory: readonly string[];
@@ -96,6 +98,7 @@ export function bindDirectCapabilities(options: {
       capabilities.memory,
     );
     const bound: Tool[] = [...(capabilities.memory?.tools ?? [])];
+    if (capabilities.nativeToolSlots?.sessions && capabilities.sessionSearch) bound.push(capabilities.sessionSearch);
     // Visibility is stable across goal changes; execution rejects an inactive goal.
     bound.push(createDirectGoalCheckTool({ requestGoal, readGoal: () => options.read().goal }));
     if (capabilities.proposeGoal && !requestGoal.goal && !requestGoal.proposalMade) {

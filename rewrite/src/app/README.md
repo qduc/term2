@@ -45,7 +45,8 @@ in `cli.ts`: it silently loses the user-authored goal.
 
 ## Native CLI conversation discovery
 
-`cli-conversations.ts` lists existing native logical lineages without opening a
+`cli-conversations.ts` lists existing native logical lineages through the shared
+[derived catalogue](native-catalogue.md), without opening a
 writable Session or creating a runtime. `--resume ls` and `--resume list` show the
 last ten matching conversations. `--resume last` and bare `--resume` select the
 matching lineage with the newest accepted fact timestamp (not copied-file mtime),
@@ -63,9 +64,9 @@ fallback are part of this boundary. A raw exact UUID normalizes to `conv_<uuid>`
 the standalone migrator's deterministic ID; it succeeds only when that native log
 exists and matches the current workspace. Partial, uppercase and otherwise
 noncanonical IDs do not alias. Discovery does not read the private provenance map
-or old store. Listings include native user transcript observations in their
-message count/preview, deduplicate observed/derived display by message ID, and do
-not count hidden context-restoration input as a user admission.
+or old store. Listings count current visible native user messages, deduplicate
+observed/derived display by message ID, and do not count hidden restoration input.
+They omit text previews so warm listing needs metadata rather than log replay.
 
 ## Tools and delegation
 

@@ -1,6 +1,8 @@
 'use client';
 
 import type { AgentChangeV2, Term2SessionView } from '../../lib/term2/types';
+import type { NativeRequestCost } from '../../lib/term2/native-state';
+import { summarizeReceiptCosts } from '../../lib/term2/receipt-cost';
 import { Term2Markdown } from './Term2Markdown';
 import { Term2SubagentCard } from './Term2SubagentCard';
 import { Term2ToolGroup } from './Term2ToolGroup';
@@ -45,7 +47,7 @@ function HydrationEvidence({ view }: { view: Term2SessionView }) {
     <p>This is the source-backed hydration cut; later accepted/live changes are shown separately below. Task metadata is not a branch transcript.</p>
     <p>{snapshot.branches === undefined ? 'Branch hydration capability unavailable; no child history was fabricated.' : snapshot.branches.length === 0 ? 'No accepted branches at this cut.' : 'Native branch observations at this same root cut are rendered separately below; their acceptedSeq is not a reconnect cursor.'}</p>
     <p>Usage at cut: input {String(usage.inputTokens)} · output {String(usage.outputTokens)} · cached input {String(usage.cachedInputTokens)}</p>
-    <p>Aggregate cost at cut: {cost && typeof cost.totalUsd === 'number' && cost.currency === 'USD' ? `${cost.totalUsd} USD (as supplied)` : 'unavailable'}. Request-cost records are retained, not re-summed or billed again. Historical notices/aggregate costs may be incomplete on fresh process hydration.</p>
+    <p>Native aggregate evidence at hydration cut: {cost && typeof cost.totalUsd === 'number' && cost.currency === 'USD' ? `${cost.totalUsd} USD (as supplied)` : 'unavailable'}. Separate native observation, not the receipt-derived amount below; never added to it. Historical billing coverage is unknown.</p>
     {arrays('queue').length > 0 && <div><h4>Queue at cut</h4><ul>{arrays('queue').map((entry, index) => <li key={typeof entry.messageId === 'string' ? entry.messageId : index}>{typeof entry.delivery === 'string' ? entry.delivery : ''}: {typeof entry.text === 'string' ? entry.text : ''}</li>)}</ul></div>}
     {arrays('tasks').length > 0 && <div><h4>Native task metadata at cut</h4>{arrays('tasks').map((task, index) => <details key={typeof task.id === 'string' ? task.id : index}><summary>{typeof task.id === 'string' ? task.id : ''} · {typeof task.status === 'string' ? task.status : ''}{typeof task.label === 'string' ? ` · ${task.label}` : ''}</summary><pre className="overflow-auto whitespace-pre-wrap">{JSON.stringify(task, null, 2)}</pre></details>)}</div>}
     {typeof snapshot.reasoning === 'string' && snapshot.reasoning && <details><summary>Root reasoning at cut (native owner in exact fields)</summary><Term2Markdown text={snapshot.reasoning} /></details>}
@@ -66,6 +68,20 @@ function BranchEvidence({ view }: { view: Term2SessionView }) {
     {view.nativeState?.messages === undefined && branch.messages.filter(message => typeof message.turnId !== 'string' || message.role === 'tool').map(message => <article key={String(message.id)}><p>Native message {String(message.id)} (no guessed ownership)</p><Term2Markdown text={String(message.text)} /></article>)}
     {branch.timeline === null && branch.tools.length > 0 && <p role="alert">Mixed branch transcript ordering is unavailable; exact messages/tools remain in the native fields below.</p>}
     <details><summary>Exact accepted branch fields, nullable evidence and request costs</summary><pre className="overflow-auto whitespace-pre-wrap">{JSON.stringify(branch, null, 2)}</pre></details>
+  </section>;
+}
+
+/** Root-only receipt presentation; branch panels are views of these same charges. */
+function ReceiptCostEvidence({ receipts }: { receipts: readonly NativeRequestCost[] | undefined }) {
+  const summary = summarizeReceiptCosts(receipts);
+  return <section aria-label="Physical request receipt summary">
+    <h4>Physical request receipts (latest record per request)</h4>
+    <p>Known receipt amount: {summary && summary.pricedRequests > 0
+      ? `${(summary.knownUsdMicros / 1_000_000).toFixed(6)} USD (${summary.knownUsdMicros} USD micros)`
+      : 'unavailable (no priced receipt evidence)'}</p>
+    <p>Priced requests: {summary?.pricedRequests ?? 'unavailable'} · Unpriced requests: {summary?.unpricedRequests ?? 'unavailable'} · Receipt pricing status: {summary?.state ?? 'unavailable'} (receipt set only).</p>
+    <p>Historical coverage: unknown. This is not a complete session bill. Catalog-sourced amounts, when supplied, are estimates; unpriced or missing receipts are not zero. Branch receipt views are the same physical charges, not additional costs.</p>
+    {receipts === undefined && <p>Receipt evidence unavailable; no request count was inferred.</p>}
   </section>;
 }
 
@@ -91,10 +107,11 @@ function PublicStateEvidence({ view, isBranch }: { view: Term2SessionView; isBra
       {state.tasks.length === 0 && <p>No tasks in supplied state.</p>}
       {state.tasks.map(task => <article key={String(task.id)} className="my-2 rounded border border-zinc-200 p-2 dark:border-zinc-800"><p className="font-semibold">Task {String(task.id)} · {String(task.status)}{typeof task.name === 'string' ? ` · ${task.name}` : ''}{typeof task.label === 'string' ? ` · ${task.label}` : ''}</p><details><summary>Exact task descriptor and result</summary><pre className="overflow-auto whitespace-pre-wrap">{JSON.stringify(task, null, 2)}</pre></details></article>)}
     </div>}
-    {'cost' in state && <p>Aggregate cost: {state.cost === null ? 'unavailable (native null)' : state.cost === undefined ? 'unavailable' : `${state.cost.totalUsd} ${state.cost.currency} (native replacement state)`}. Not added to request receipts.</p>}
+    {!isBranch && <ReceiptCostEvidence receipts={state.requestCosts} />}
+    {'cost' in state && <p>Native aggregate evidence: {state.cost === null ? 'unavailable (native null)' : state.cost === undefined ? 'unavailable' : `${state.cost.totalUsd} ${state.cost.currency} (native replacement state)`}. Separate actual native evidence, not the receipt-derived amount and never added to it. Historical coverage is unknown.</p>}
     {state.requestCosts !== undefined && <div>
       <h4>Physical request receipts{isBranch ? ' · branch-selected view of root records' : ''}</h4>
-      <p>No receipt is summed into an aggregate here. Corrections replace the same request ID; signed accounting and omitted metrics are preserved. Branch copies and compaction references are not extra charges.</p>
+      <p>The receipt summary is presentation only, not a native aggregate or another bill. Corrections replace the same request ID; signed accounting and omitted metrics are preserved. Branch copies and compaction references are not extra charges.</p>
       {state.requestCosts.length === 0 && <p>No request receipts in the supplied state.</p>}
       {state.requestCosts.map(receipt => <details key={receipt.record.requestId}>
         <summary>{receipt.record.requestId} · {String(receipt.record.outcome)} · turn {receipt.turnId} · root {receipt.rootTurnId}{receipt.parentTurnId !== undefined ? ` · parent ${receipt.parentTurnId}` : ''}</summary>

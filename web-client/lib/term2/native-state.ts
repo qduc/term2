@@ -3,7 +3,7 @@ import { Term2ProtocolError, type Term2AcceptedChange } from './types';
 type Fields = Readonly<Record<string, unknown>>;
 export type NativeRequestCost = Fields & {
   turnId: string; rootTurnId: string; parentTurnId?: string;
-  record: Fields & { requestId: string };
+  record: Fields & { requestId: string; usdMicros?: number; source?: 'provider' | 'catalog' };
 };
 export type NativeMessage = Fields & {
   id: string; role: 'user' | 'assistant' | 'tool'; content: readonly unknown[]; text: string;

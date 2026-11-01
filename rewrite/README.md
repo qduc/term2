@@ -249,3 +249,45 @@ The fault matrix distinguishes failures before write, after admission, and at
 pending/final event boundaries. A failed fsync may leave a complete atomic
 terminal batch when the write reached the kernel first; the caller still
 receives failure and the transaction is never partially projected.
+
+## Owner scope: dropped and deferred features
+
+Owner decisions on 2026-11-01 narrow current parity work to everyday Bare use
+(including `--lite`), control socket, Discord and SSH. Goldens stay unchanged;
+mentor-only catalog entries needed by Bare remain. Shared or ambiguous settings
+and dependencies stay until their consumers are traced. These scope decisions
+are not permission to delete code or change the legacy CLI before the flip.
+
+- **MCP servers — dropped.** A future return can reuse
+  `app/direct-mcp-source.ts` and `app/tool-surface.ts`, but needs the source MCP
+  manager, catalog binding, connection lifecycle and approval policy together.
+- **Plan, pair, mentor and orchestrator profiles/modes, and
+  `run_agent_workflow` — dropped.** Reintegration would go through
+  `source/services/profiles/` and the offered tool surface, with profile prompts,
+  settings and workflow execution dependencies. Bare, `--lite`, subagent
+  `ask_orchestrator` and the retained mentor catalog are not dropped.
+- **ACP — dropped.** `clients/acp/` remains the adapter seam, depending on session
+  attachment, rendering and permission/question mapping; it is not just a CLI
+  subcommand to re-enable.
+- **Sandbox execution — dropped.** This crosses execution: a return needs shell
+  policy in `source/utils/shell/sandbox/`, approval rules and sandboxed code-host
+  lifecycle together, not a new isolated adapter. Shared settings remain.
+- **Web server/browser and canonical v2 wire — deferred, not dropped.** Retain
+  candidate server/browser code, branches and the vendored wire artifact; gates
+  remain closed. Web is the milestone after kept-core M6 and before the default
+  flip, so there must be no gap where neither CLI serves it. The existing
+  `host/server` and browser/protocol seams still need the canonical gate,
+  branch/tool/approval browser paths, reconnect replay limits and aggregate cost
+  contract established. Reconnect replay is protocol-demanding, not a UI-only
+  plug-in. Run the existing real-browser plain-text turn exercise once at M6's
+  end, not per commit; no web repair work is authorized now. Deferred inventory
+  entries remain incomplete and block the default flip, just like `todo`.
+
+The traced direct control/Discord runtime uses the in-process Host and direct
+protocol plus shared `source/services/control-socket/` and
+`source/services/discord/` modules, not the HTTP server or ACP backend. The CLI
+still statically imports `source/gateway/serve-args.ts` and
+`source/acp-v2/serve-args.ts`; preserve those modules while the imports exist.
+This bounded trace does not authorize deleting the whole gateway/ACP trees or
+legacy dependencies. Existing source integration tests do not by themselves
+prove direct integration; no live SSH fixture was identified in that trace.

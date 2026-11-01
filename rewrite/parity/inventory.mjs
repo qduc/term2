@@ -105,7 +105,7 @@ function loadManifest() {
   return fs.existsSync(manifestPath) ? JSON.parse(fs.readFileSync(manifestPath, 'utf8')) : { features: {} };
 }
 
-const STATUSES = new Set(['todo', 'in_progress', 'adopted', 'ported', 'dropped']);
+const STATUSES = new Set(['todo', 'in_progress', 'adopted', 'ported', 'deferred', 'dropped']);
 const scenarioIds = () =>
   fs.existsSync(scenariosDir)
     ? new Set(
@@ -138,7 +138,9 @@ function main() {
     if (!found.has(id) && !entry.manual && entry.status !== 'dropped') {
       problems.push(`${id}: tracked but no longer in source/; mark it "dropped" with a note, or "manual"`);
     }
-    if (entry.status === 'dropped' && !entry.note) problems.push(`${id}: dropped needs a note saying why`);
+    if (['dropped', 'deferred'].includes(entry.status) && !entry.note) {
+      problems.push(`${id}: ${entry.status} needs a note saying why`);
+    }
     if (['adopted', 'ported'].includes(entry.status) && (entry.parity ?? []).length === 0) {
       problems.push(`${id}: ${entry.status} but no parity scenario proves it`);
     }
@@ -155,20 +157,23 @@ function main() {
   const byCategory = {};
   for (const [id, entry] of Object.entries(features)) {
     const category = id.slice(0, id.indexOf(':'));
-    byCategory[category] ??= { total: 0, adopted: 0, ported: 0, dropped: 0, covered: 0 };
+    byCategory[category] ??= { total: 0, adopted: 0, ported: 0, dropped: 0, deferred: 0, covered: 0 };
     const row = byCategory[category];
     row.total += 1;
     if (entry.status === 'adopted') row.adopted += 1;
     if (entry.status === 'ported') row.ported += 1;
     if (entry.status === 'dropped') row.dropped += 1;
+    if (entry.status === 'deferred') row.deferred += 1;
     if ((entry.parity ?? []).length > 0) row.covered += 1;
   }
-  console.log('category          total  covered adopted  ported  dropped');
+  console.log('category          total  covered adopted  ported  dropped deferred');
   for (const [category, row] of Object.entries(byCategory).sort()) {
     console.log(
       `${category.padEnd(16)} ${String(row.total).padStart(6)} ${String(row.covered).padStart(8)} ${String(
         row.adopted,
-      ).padStart(7)} ${String(row.ported).padStart(7)} ${String(row.dropped).padStart(8)}`,
+      ).padStart(7)} ${String(row.ported).padStart(7)} ${String(row.dropped).padStart(8)} ${String(
+        row.deferred,
+      ).padStart(8)}`,
     );
   }
 

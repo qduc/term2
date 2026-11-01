@@ -1,5 +1,5 @@
 {
-  "about": "Port tracker. One entry per feature of the current architecture. status: todo | in_progress | adopted | ported | dropped. parity: scenario ids in rewrite/parity/scenarios that prove it. Entries with manual: true are behaviours no extractor can see. Maintained by rewrite/parity/inventory.mjs.",
+  "about": "Port tracker. One entry per feature of the current architecture. status: todo | in_progress | adopted | ported | deferred | dropped. parity: scenario ids in rewrite/parity/scenarios that prove it. Entries with manual: true are behaviours no extractor can see. Maintained by rewrite/parity/inventory.mjs.",
   "features": {
     "behaviour:approval-call-binding": {
       "status": "todo",
@@ -58,10 +58,11 @@
       "consumedByNewCode": true
     },
     "behaviour:mcp-servers": {
-      "status": "todo",
+      "status": "dropped",
       "manual": true,
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "Dropped by owner decision 2026-11-01"
     },
     "behaviour:old-conversations-resumable": {
       "status": "todo",
@@ -88,10 +89,11 @@
       "consumedByNewCode": true
     },
     "behaviour:sandbox-execution": {
-      "status": "todo",
+      "status": "dropped",
       "manual": true,
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "Dropped by owner decision 2026-11-01"
     },
     "behaviour:skills-discovery": {
       "status": "todo",
@@ -242,9 +244,10 @@
       "parity": []
     },
     "cli-subcommand:acp": {
-      "status": "todo",
+      "status": "dropped",
       "source": "source/cli.tsx",
-      "parity": []
+      "parity": [],
+      "note": "Dropped by owner decision 2026-11-01"
     },
     "cli-subcommand:control": {
       "status": "todo",
@@ -257,135 +260,157 @@
       "parity": []
     },
     "cli-subcommand:serve": {
-      "status": "todo",
+      "status": "deferred",
       "source": "source/cli.tsx",
-      "parity": []
+      "parity": [],
+      "note": "Deferred by owner decision 2026-11-01; required before default flip"
     },
     "gateway-route:abort": {
-      "status": "todo",
+      "status": "deferred",
       "source": "source/gateway/gateway.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "Deferred by owner decision 2026-11-01; required before default flip"
     },
     "gateway-route:command_invoke": {
-      "status": "todo",
+      "status": "deferred",
       "source": "source/gateway/gateway.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "Deferred by owner decision 2026-11-01; required before default flip"
     },
     "gateway-route:credential_delete": {
-      "status": "todo",
+      "status": "deferred",
       "source": "source/gateway/gateway.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "Deferred by owner decision 2026-11-01; required before default flip"
     },
     "gateway-route:credential_write": {
-      "status": "todo",
+      "status": "deferred",
       "source": "source/gateway/gateway.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "Deferred by owner decision 2026-11-01; required before default flip"
     },
     "gateway-route:events_connect": {
-      "status": "todo",
+      "status": "deferred",
       "source": "source/gateway/gateway.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "Deferred by owner decision 2026-11-01; required before default flip"
     },
     "gateway-route:interaction_resolve": {
-      "status": "todo",
+      "status": "deferred",
       "source": "source/gateway/gateway.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "Deferred by owner decision 2026-11-01; required before default flip"
     },
     "gateway-route:message_submit": {
-      "status": "todo",
+      "status": "deferred",
       "source": "source/gateway/gateway.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "Deferred by owner decision 2026-11-01; required before default flip"
     },
     "gateway-route:model_list": {
-      "status": "todo",
+      "status": "deferred",
       "source": "source/gateway/gateway.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "Deferred by owner decision 2026-11-01; required before default flip"
     },
     "gateway-route:oauth_delete": {
-      "status": "todo",
+      "status": "deferred",
       "source": "source/gateway/gateway.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "Deferred by owner decision 2026-11-01; required before default flip"
     },
     "gateway-route:oauth_login": {
-      "status": "todo",
+      "status": "deferred",
       "source": "source/gateway/gateway.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "Deferred by owner decision 2026-11-01; required before default flip"
     },
     "gateway-route:oauth_select": {
-      "status": "todo",
+      "status": "deferred",
       "source": "source/gateway/gateway.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "Deferred by owner decision 2026-11-01; required before default flip"
     },
     "gateway-route:session_create": {
-      "status": "todo",
+      "status": "deferred",
       "source": "source/gateway/gateway.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "Deferred by owner decision 2026-11-01; required before default flip"
     },
     "gateway-route:session_list": {
-      "status": "todo",
+      "status": "deferred",
       "source": "source/gateway/gateway.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "Deferred by owner decision 2026-11-01; required before default flip"
     },
     "gateway-route:session_read": {
-      "status": "todo",
+      "status": "deferred",
       "source": "source/gateway/gateway.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "Deferred by owner decision 2026-11-01; required before default flip"
     },
     "gateway-route:session_update": {
-      "status": "todo",
+      "status": "deferred",
       "source": "source/gateway/gateway.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "Deferred by owner decision 2026-11-01; required before default flip"
     },
     "gateway-route:settings_read": {
-      "status": "todo",
+      "status": "deferred",
       "source": "source/gateway/gateway.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "Deferred by owner decision 2026-11-01; required before default flip"
     },
     "gateway-route:settings_write": {
-      "status": "todo",
+      "status": "deferred",
       "source": "source/gateway/gateway.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "Deferred by owner decision 2026-11-01; required before default flip"
     },
     "gateway-route:workspace_candidate_browse": {
-      "status": "todo",
+      "status": "deferred",
       "source": "source/gateway/gateway.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "Deferred by owner decision 2026-11-01; required before default flip"
     },
     "gateway-route:workspace_candidate_select": {
-      "status": "todo",
+      "status": "deferred",
       "source": "source/gateway/gateway.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "Deferred by owner decision 2026-11-01; required before default flip"
     },
     "gateway-route:workspace_candidate_validate": {
-      "status": "todo",
+      "status": "deferred",
       "source": "source/gateway/gateway.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "Deferred by owner decision 2026-11-01; required before default flip"
     },
     "gateway-route:workspace_list": {
-      "status": "todo",
+      "status": "deferred",
       "source": "source/gateway/gateway.ts",
       "parity": [],
-      "consumedByNewCode": true
+      "consumedByNewCode": true,
+      "note": "Deferred by owner decision 2026-11-01; required before default flip"
     },
     "hook-event:approval.requested": {
       "status": "todo",
@@ -1060,9 +1085,10 @@
       "parity": []
     },
     "setting:app.mentorMode": {
-      "status": "todo",
+      "status": "dropped",
       "source": "source/services/settings/settings-schema.ts",
-      "parity": []
+      "parity": [],
+      "note": "Dropped by owner decision 2026-11-01"
     },
     "setting:app.notifications": {
       "status": "todo",
@@ -1080,14 +1106,16 @@
       "parity": []
     },
     "setting:app.orchestratorMode": {
-      "status": "todo",
+      "status": "dropped",
       "source": "source/services/settings/settings-schema.ts",
-      "parity": []
+      "parity": [],
+      "note": "Dropped by owner decision 2026-11-01"
     },
     "setting:app.planMode": {
-      "status": "todo",
+      "status": "dropped",
       "source": "source/services/settings/settings-schema.ts",
-      "parity": []
+      "parity": [],
+      "note": "Dropped by owner decision 2026-11-01"
     },
     "setting:app.searchViaShell": {
       "status": "todo",
@@ -1105,9 +1133,10 @@
       "parity": []
     },
     "setting:enable_agent_workflow": {
-      "status": "todo",
+      "status": "dropped",
       "source": "source/services/settings/settings-schema.ts",
-      "parity": []
+      "parity": [],
+      "note": "Dropped by owner decision 2026-11-01"
     },
     "setting:environment.nodeEnv": {
       "status": "todo",
@@ -1195,14 +1224,16 @@
       "parity": []
     },
     "setting:sandbox.allowNetworking": {
-      "status": "todo",
+      "status": "dropped",
       "source": "source/services/settings/settings-schema.ts",
-      "parity": []
+      "parity": [],
+      "note": "Dropped by owner decision 2026-11-01"
     },
     "setting:sandbox.allowReadExtra": {
-      "status": "todo",
+      "status": "dropped",
       "source": "source/services/settings/settings-schema.ts",
-      "parity": []
+      "parity": [],
+      "note": "Dropped by owner decision 2026-11-01"
     },
     "setting:sandbox.dockerHostControlProjects": {
       "status": "todo",
@@ -1210,14 +1241,16 @@
       "parity": []
     },
     "setting:sandbox.enabled": {
-      "status": "todo",
+      "status": "dropped",
       "source": "source/services/settings/settings-schema.ts",
-      "parity": []
+      "parity": [],
+      "note": "Dropped by owner decision 2026-11-01"
     },
     "setting:sandbox.readPolicy": {
-      "status": "todo",
+      "status": "dropped",
       "source": "source/services/settings/settings-schema.ts",
-      "parity": []
+      "parity": [],
+      "note": "Dropped by owner decision 2026-11-01"
     },
     "setting:shell.autoApproveMode": {
       "status": "todo",
@@ -1460,14 +1493,16 @@
       "parity": []
     },
     "slash:mcp": {
-      "status": "todo",
+      "status": "dropped",
       "source": "source/commands/mcp-status-command.ts",
-      "parity": []
+      "parity": [],
+      "note": "Dropped by owner decision 2026-11-01"
     },
     "slash:mcp-login": {
-      "status": "todo",
+      "status": "dropped",
       "source": "source/commands/mcp-login-command.ts",
-      "parity": []
+      "parity": [],
+      "note": "Dropped by owner decision 2026-11-01"
     },
     "slash:model": {
       "status": "todo",
@@ -1500,9 +1535,10 @@
       "parity": []
     },
     "slash:sandbox": {
-      "status": "todo",
+      "status": "dropped",
       "source": "source/commands/sandbox-command.ts",
-      "parity": []
+      "parity": [],
+      "note": "Dropped by owner decision 2026-11-01"
     },
     "slash:skills": {
       "status": "todo",
@@ -1679,9 +1715,10 @@
       ]
     },
     "tool:run_agent_workflow": {
-      "status": "todo",
+      "status": "dropped",
       "source": "source/tools/run-agent-workflow.ts",
-      "parity": []
+      "parity": [],
+      "note": "Dropped by owner decision 2026-11-01"
     },
     "tool:run_code": {
       "status": "todo",

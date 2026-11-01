@@ -21,12 +21,14 @@ export function userTurnToProviderItem(
   const text = steering ? withSteeringNotice(rawText) : rawText;
 
   const baseline = turn.humanInputBaseline === undefined ? {} : { humanInputBaseline: turn.humanInputBaseline };
+  const gap = conversationTimeGap(turn.humanInputAt, history);
   const timing =
     turn.humanInputAt === undefined
       ? {}
       : {
           humanInputAt: turn.humanInputAt,
-          conversationTimeGap: conversationTimeGap(turn.humanInputAt, history),
+          // Keep the item identical after JSON persistence for strict rewind prefix checks.
+          ...(gap === undefined ? {} : { conversationTimeGap: gap }),
         };
 
   if (images.length === 0) {

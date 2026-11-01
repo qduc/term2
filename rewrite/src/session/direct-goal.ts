@@ -114,7 +114,9 @@ export function createDirectGoalCheckTool(deps: {
           ? ' Continue the ordinary request/tool workflow without goal_check; this tool does not create a goal.'
           : '';
         return {
-          output: `Error: goal_check was not recorded: ${error instanceof Error ? error.message : String(error)}.${guidance}`,
+          output: `Error: goal_check was not recorded: ${
+            error instanceof Error ? error.message : String(error)
+          }.${guidance}`,
           isError: true,
         };
       }

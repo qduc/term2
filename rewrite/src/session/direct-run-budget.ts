@@ -123,13 +123,16 @@ export class DirectRunBudgets {
     // Rebase the disposable clock on the actual unspent (extension-aware)
     // envelope plus already observed usage. If a dimension is already exhausted,
     // the final clamp keeps it at zero; no overdraw or correction grants headroom.
-    const accounting = new RunBudget({
-      ...run.policy,
-      maxUsdMicros: remaining.maxUsdMicros + snapshot.pricedUsdMicros,
-      maxUnpricedTokens: remaining.maxUnpricedTokens + snapshot.unpricedTokens,
-      maxActiveTimeMs: remaining.maxActiveTimeMs + snapshot.activeTimeMs,
-      turnBackstop: remaining.turnBackstop + snapshot.turns,
-    }, now);
+    const accounting = new RunBudget(
+      {
+        ...run.policy,
+        maxUsdMicros: remaining.maxUsdMicros + snapshot.pricedUsdMicros,
+        maxUnpricedTokens: remaining.maxUnpricedTokens + snapshot.unpricedTokens,
+        maxActiveTimeMs: remaining.maxActiveTimeMs + snapshot.activeTimeMs,
+        turnBackstop: remaining.turnBackstop + snapshot.turns,
+      },
+      now,
+    );
     accounting.pause(now);
     const ownRequests = [...this.#costs.values()].filter((fact) => fact.turnId === turnId).length;
     accounting.evaluate({ turns: Math.max(snapshot.turns, ownRequests), costRecords: this.records(turnId) });

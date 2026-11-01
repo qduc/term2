@@ -31,8 +31,12 @@ function interactionView(interaction: WireInteraction): InteractionView {
     id: interaction.requestId,
     kind: interaction.kind,
     title: interaction.summary || interaction.toolName,
-    detail: [interaction.detail, interaction.risk && `Risk: ${interaction.risk}`, JSON.stringify(interaction.input, null, 2)].filter(Boolean).join('\n'),
+    // Structured questions own their current page; raw args expose every page at once.
+    detail: interaction.kind === 'question' && interaction.questions?.length ? undefined
+      : [interaction.detail, interaction.risk && `Risk: ${interaction.risk}`, JSON.stringify(interaction.input, null, 2)].filter(Boolean).join('\n'),
     owner: interaction.taskId ?? interaction.parentExecutionId ?? interaction.turnId,
+    turnId: interaction.turnId,
+    taskId: interaction.taskId,
     choices: interaction.kind === 'approval'
       ? [{ id: 'allow', label: 'Allow' }, { id: 'deny', label: 'Deny (optional reason)' }, ...interaction.supportedGrants.map(grant => ({ id: `grant:${grant}`, label: `Grant: ${grant}` }))]
       : [{ id: 'answer', label: 'Answer (text required)' }, { id: 'stop', label: 'Stop after resolving question' }],

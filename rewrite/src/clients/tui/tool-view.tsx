@@ -9,7 +9,8 @@ import type { ToolView } from './state.js';
 export function ToolCall({ tool }: { readonly tool: ToolView }): React.ReactElement {
   const { ToolFrame, ToolHeader, ToolSection } = useSkin();
   const theme = useTheme();
-  const args = formatToolArgs(tool.name, tool.input, 'concise');
+  // Question text belongs to its interactive page, not an all-pages tool summary.
+  const args = tool.name === 'ask_user' ? '' : formatToolArgs(tool.name, tool.input, 'concise');
   const detail = tool.detail ?? '';
   const contentText = (tool.content ?? []).flatMap(part => part.type === 'text' ? [part.text] : []).join('\n');
   const extraText = contentText && contentText !== detail ? contentText : '';

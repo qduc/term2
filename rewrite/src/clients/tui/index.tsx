@@ -75,6 +75,7 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
   const { state, error: connectionError } = useClient(connection, retainedSnapshot, onSnapshot);
   const { columns, rows } = useTerminalSize();
   const [interactionOpen, setInteractionOpen] = useState(false);
+  const [dismissedInteractionId, setDismissedInteractionId] = useState<string | null>(null);
   const [taskOpen, setTaskOpen] = useState(false);
   const [budgetOpen, setBudgetOpen] = useState(false);
   const [images, setImages] = useState<ImageRef[]>([]);
@@ -82,7 +83,14 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
   const [originalParts, setOriginalParts] = useState<readonly WireContent[]>([]);
   const [rewindTargets, setRewindTargets] = useState<readonly WireRewindTarget[] | null>(null);
   const [editing, setEditing] = useState<{ id: string; restoreText: string; restoreCursor: number; restoreImages: ImageRef[]; restoreOther: readonly WireContent[]; restoreOriginal: readonly WireContent[]; knownParts?: readonly WireContent[] } | null>(null);
-  const viewport = useTranscriptViewport(state, columns, rows, !interactionOpen && !taskOpen && !budgetOpen && !rewindTargets);
+  // Snapshot-derived ownership has no effect-sized gap in which decision keys
+  // can land in the ordinary composer. Background requests keep the Ctrl+G picker.
+  const rootInteraction = state.interactions.find(item => item.turnId === state.activeTurnId && !item.taskId);
+  const foregroundInteraction = !interactionOpen && !taskOpen && !budgetOpen && !rewindTargets && rootInteraction?.id !== dismissedInteractionId
+    ? rootInteraction
+    : undefined;
+  const interactionActive = interactionOpen || Boolean(foregroundInteraction);
+  const viewport = useTranscriptViewport(state, columns, rows, !interactionActive && !taskOpen && !budgetOpen && !rewindTargets);
   const editor = useEditor(state.messages.filter(message => message.role === 'user').map(message => ({ text: message.historyText ?? message.text, attachments: message.attachments ?? [] })));
   const { InputFrame, PromptMarker, Hints } = useSkin();
   const theme = useTheme();
@@ -103,7 +111,7 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
     if (key.ctrl && input === 'g' && state.interactions.length && !busy) setInteractionOpen(true);
     if (key.ctrl && input === 'b' && state.budgets.length && !busy) setBudgetOpen(true);
     if (key.meta && key.return && state.activeTurnId && !busy && !editing) void submit(editor.value, images, 'follow_up');
-  }, { isActive: !interactionOpen && !taskOpen && !budgetOpen && !rewindTargets });
+  }, { isActive: !interactionActive && !taskOpen && !budgetOpen && !rewindTargets });
 
   const changeInput = (value: string) => {
     if (/^\/answer(?:\s|$)/.test(value)) {
@@ -317,7 +325,15 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
     {taskOpen ? <TaskManager tasks={state.tasks} onClose={() => setTaskOpen(false)} onAction={(id, action) => controlTask(connection, id, action)} /> : null}
     {rewindTargets ? <RewindPicker targets={rewindTargets} onClose={() => setRewindTargets(null)} onSelect={(id, disposition) => { void executeRewind(id, disposition); }} /> : null}
     {editing ? <Text>Editing queued message · Enter saves · /queue cancel restores draft</Text> : null}
-    {interactionOpen ? <InteractionPanel interactions={state.interactions} width={columns} onClose={() => setInteractionOpen(false)}
+    {interactionActive ? <InteractionPanel key={foregroundInteraction?.id ?? 'picker'} interactions={state.interactions} width={columns}
+      initialRequestId={foregroundInteraction?.id} onClose={() => {
+        setDismissedInteractionId(rootInteraction?.id ?? null);
+        setInteractionOpen(false);
+      }}
+      onCancel={foregroundInteraction ? async () => {
+        if (foregroundInteraction.kind === 'question') await answerInteraction(connection, foregroundInteraction.id, { kind: 'decline' });
+        else setNotice(await cancelForeground(connection, foregroundInteraction.turnId));
+      } : undefined}
       onAnswer={(id, decision) => answerInteraction(connection, id, decision)} /> : null}
     {connectionError ? <Text color={theme.danger}>{connectionError}</Text> : null}
     {transitionNotice ? <Text>{transitionNotice}</Text> : null}
@@ -338,7 +354,7 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
         cursorOverride={editor.cursorOverride}
         width={Math.max(1, columns - 4)}
         maxHeight={Math.max(1, rows - 8)}
-        isActive={!busy && !connectionError && !interactionOpen && !taskOpen && !budgetOpen && !rewindTargets}
+        isActive={!busy && !connectionError && !interactionActive && !taskOpen && !budgetOpen && !rewindTargets}
         images={images}
         onImagesChange={setImages}
         enableImagePaste

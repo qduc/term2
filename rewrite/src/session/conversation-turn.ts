@@ -9,12 +9,57 @@ import type {
   TurnId,
   TurnResult,
 } from '../engine/index.js';
-import type { ModelError } from '../model/index.js';
+import type { Item, ModelError } from '../model/index.js';
 import type { Fact, DirectTurnFact, DirectHistoryFact } from './facts.js';
-import type { Turn, AnswerResult, AnswerProvenance, ConversationDeps } from './direct-types.js';
+import type { Turn, TurnRequest, AnswerResult, AnswerProvenance, ConversationDeps } from './direct-types.js';
 import type { bindDirectCapabilities } from './direct-capabilities.js';
 import { ConversationJournal, modelError } from './conversation-journal.js';
 import { isDirectHumanOrigin } from './direct-origin.js';
+import { directPreviewConfiguration } from './direct-preview.js';
+import { planDirectTiming } from './direct-time-gap.js';
+
+/** Accept raw admission and memory facts before engine construction; timing is model-only. */
+export function admitConversationTurn(
+  turnId: TurnId,
+  request: TurnRequest,
+  planned: { readonly accepted?: true; readonly silent?: true; readonly facts: readonly Fact[] } | undefined,
+  journal: ConversationJournal,
+  capabilities: ReturnType<typeof bindDirectCapabilities>,
+): readonly Item[] {
+  const isHuman = !planned?.accepted && !planned?.silent && isDirectHumanOrigin(request.submission?.origin);
+  // Plan only the actual human input. Personal-memory user-shaped notices are
+  // automatic context and must not be mistaken for a missing human receipt.
+  const timingInput = isHuman
+    ? planDirectTiming(
+        journal.context.latestHumanInputAt,
+        [
+          ...journal.queueState.records,
+          ...(planned?.facts ?? []).flatMap((fact) => (fact.type === 'queue_submitted' ? [fact.record] : [])),
+        ],
+        request.input,
+      ).modelInput
+    : request.input;
+  const human = isHuman
+    ? capabilities.humanPlan(request.submission?.messageId ?? turnId, timingInput)
+    : { facts: capabilities.memoryFacts(), modelInput: timingInput };
+  if (
+    !planned?.accepted &&
+    !journal.commit([
+      ...(planned?.facts ?? []),
+      ...human.facts,
+      {
+        type: 'turn_started',
+        ...(planned?.silent ? { silent: true as const } : {}),
+        turnId,
+        input: request.input,
+        ...(directPreviewConfiguration(request) ? { requestConfiguration: directPreviewConfiguration(request) } : {}),
+        ...(request.submission ? { submission: request.submission } : {}),
+      },
+    ])
+  )
+    throw new Error(journal.failure!.message);
+  return human.modelInput;
+}
 
 /** Owns the handle until cleanup settles, including when its consumer returns early. */
 export function ownConversationTurn(

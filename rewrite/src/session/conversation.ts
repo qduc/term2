@@ -1,7 +1,7 @@
 import { ConversationBackground } from './conversation-background.js';
 import { ConversationCommands } from './conversation-commands.js';
 import { ConversationJournal, modelError } from './conversation-journal.js';
-import { failedTurn, ownConversationTurn, terminalFact } from './conversation-turn.js';
+import { admitConversationTurn, failedTurn, ownConversationTurn, terminalFact } from './conversation-turn.js';
 /**
  * The direct conversation owns the engine reader and the durable writer. An
  * engine envelope is accepted only after its fact has committed. Public events
@@ -17,8 +17,7 @@ import { bindDirectCapabilities } from './direct-capabilities.js';
 import type { DirectPreparedConfiguration } from './direct-configuration.js';
 import { type DirectContextFact } from './direct-context.js';
 import { planDirectTiming } from './direct-time-gap.js';
-import { isDirectHumanOrigin, parseDirectOrigin } from './direct-origin.js';
-import { directPreviewConfiguration } from './direct-preview.js';
+import { parseDirectOrigin } from './direct-origin.js';
 import type { DirectQueueEffect } from './direct-queue-types.js';
 import { planDirectQueue, submitDirectQueue } from './direct-queue.js';
 import { directRolloverAtBoundary } from './direct-rollover.js';
@@ -250,38 +249,7 @@ function conversation(
     const snapshot = planned?.accepted
       ? { history: planned.history!, compactionState: planned.compactionState }
       : liveReplay();
-    const isHuman = !planned?.accepted && !planned?.silent && isDirectHumanOrigin(request.submission?.origin);
-    // Plan only the actual human input. Personal-memory user-shaped notices are
-    // automatic context and must not be mistaken for a missing human receipt.
-    const timingInput = isHuman
-      ? planDirectTiming(
-          journal.context.latestHumanInputAt,
-          [
-            ...journal.queueState.records,
-            ...(planned?.facts ?? []).flatMap((fact) => (fact.type === 'queue_submitted' ? [fact.record] : [])),
-          ],
-          request.input,
-        ).modelInput
-      : request.input;
-    const human = isHuman
-      ? capabilities!.humanPlan(request.submission?.messageId ?? turnId, timingInput)
-      : { facts: capabilities!.memoryFacts(), modelInput: timingInput };
-    if (
-      !planned?.accepted &&
-      !commit([
-        ...(planned?.facts ?? []),
-        ...human.facts,
-        {
-          type: 'turn_started',
-          ...(planned?.silent ? { silent: true as const } : {}),
-          turnId,
-          input: request.input,
-          ...(directPreviewConfiguration(request) ? { requestConfiguration: directPreviewConfiguration(request) } : {}),
-          ...(request.submission ? { submission: request.submission } : {}),
-        },
-      ])
-    )
-      throw new Error(journal.failure!.message);
+    const modelInput = admitConversationTurn(turnId, request, planned, journal, capabilities!);
     const { input, notice: requestNotice, submission: _submission, previewMode: _previewMode, ...settings } = request;
     // Rejected admission, read-only preview, maintenance and empty retry input
     // cannot consume a pending profile transition. Like source pendingModeNotice,
@@ -299,7 +267,7 @@ function conversation(
           turnId,
           history: planned?.history ?? snapshot.history,
           ...(snapshot.compactionState ? { compactionState: snapshot.compactionState } : {}),
-          newItems: notice ? withNotice(human.modelInput, notice) : human.modelInput,
+          newItems: notice ? withNotice(modelInput, notice) : modelInput,
         },
         {
           ...turnDeps,

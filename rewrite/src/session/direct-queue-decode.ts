@@ -54,7 +54,12 @@ const schemas = {
   queue_edited: z.object({ type: z.literal('queue_edited'), messageId: id, content }),
   queue_retracted: z.object({ type: z.literal('queue_retracted'), messageId: id }),
   queue_discarded: z.object({ type: z.literal('queue_discarded'), messageIds: nonemptyIds }),
-  queue_started: z.object({ type: z.literal('queue_started'), messageId: id, turnId: id }),
+  queue_started: z.object({
+    type: z.literal('queue_started'),
+    messageId: id,
+    turnId: id,
+    rolloverCommandId: id.optional(),
+  }),
   queue_steered: z.object({ type: z.literal('queue_steered'), messageIds: nonemptyIds, turnId: id }),
   queue_cancelling: z.object({
     type: z.literal('queue_cancelling'),

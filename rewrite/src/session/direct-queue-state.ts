@@ -83,12 +83,27 @@ export function reduceDirectQueue(state: DirectQueueState, fact: DirectQueueFact
       return removePending(state, fact.messageIds, 'discarded');
     case 'queue_started': {
       const record = requirePending(state, fact.messageId);
-      if (state.active || state.pause || state.pending[0] !== fact.messageId || record.stage !== 'queued') {
+      // Replay authorizes the exact header/command/IDs and one seed per rotation.
+      // This local exception selects only that real queued control record, never retained work.
+      const rolloverCommandId = fact.rolloverCommandId;
+      if (
+        state.active ||
+        record.stage !== 'queued' ||
+        (rolloverCommandId !== undefined
+          ? rolloverCommandId.length === 0 ||
+            record.admission.kind !== 'queued' ||
+            record.admission.turnId !== fact.turnId ||
+            record.turnId !== fact.turnId ||
+            record.request.delivery !== 'follow_up' ||
+            record.request.origin?.kind !== 'control' ||
+            record.request.origin.id !== 'session-rollover'
+          : Boolean(state.pause) || state.pending[0] !== fact.messageId)
+      ) {
         throw new Error(`queue: cannot start ${fact.messageId}`);
       }
       return {
         ...state,
-        pending: state.pending.slice(1),
+        pending: state.pending.filter((id) => id !== fact.messageId),
         records: state.records.map((item) =>
           item.messageId === fact.messageId ? { ...item, stage: 'running', turnId: fact.turnId } : item,
         ),
@@ -134,8 +149,10 @@ export function reduceDirectQueue(state: DirectQueueState, fact: DirectQueueFact
             )
           : state;
       const retained = state.active!.retainedMessageIds ?? next.pending;
+      // A priority handoff does not resume the retained queue, whatever its outcome.
       const pause =
-        next.pending.length === 0
+        state.pause ??
+        (next.pending.length === 0
           ? undefined
           : stopping
           ? next.pending.some((id) => retained.includes(id))
@@ -145,7 +162,7 @@ export function reduceDirectQueue(state: DirectQueueState, fact: DirectQueueFact
           ? 'recovered_interrupted'
           : fact.outcome === 'failed'
           ? 'failure'
-          : undefined;
+          : undefined);
       return {
         ...next,
         active: undefined,

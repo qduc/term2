@@ -233,14 +233,14 @@ async function configureSession(
       'mode and default reasoning require direct Session configuration support',
       true,
     );
-  // Native keyed configure currently durably rejects unavailable. This HTTP contract has no
-  // stable mutation key or full mode/default/revision authority yet. Do not allocate a private
-  // command ID, send an obsolete unkeyed patch, or treat a receipt acknowledgement as installation.
+  // Native keyed configure does not supply this HTTP contract's missing stable mutation key
+  // or full mode/default/revision admission policy. Do not allocate a private command ID, send
+  // an obsolete unkeyed patch, or treat a receipt acknowledgement as installation.
   if (body.modelSelection !== undefined || body.reasoningEffort !== undefined)
     return publicError(
       503,
       'session_config_unavailable',
-      'session configuration requires native runtime installation and revision authority',
+      'session configuration requires an HTTP mutation key and configuration revision contract',
       true,
     );
   const fresh = await dependencies.host.connect(principal, connection.sessionId);

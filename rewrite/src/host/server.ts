@@ -140,8 +140,9 @@ async function withSession(
 ): Promise<ServerResult> {
   let fromSeq: number | undefined;
   if (route.purpose === 'events_connect') {
-    // Durable cursors/timestamps now exist, but canonical task/compaction and aggregate queue
-    // lifecycle data are still missing. Do not advertise an incomplete pinned stream to the BFF.
+    // Durable cursors/timestamps and direct rotation now exist. Canonical still needs task and
+    // compaction evidence plus supported aggregate queue, rotation/reset and transient replay
+    // contracts. Omitting an unrepresentable boundary is not pinned consumer parity.
     const format = input.url.searchParams.get('format');
     if (format !== null && format !== 'direct') return publicError(400, 'validation_error', 'event format is invalid');
     const query = input.url.searchParams.get('after');
@@ -158,7 +159,7 @@ async function withSession(
       return publicError(
         503,
         'event_envelope_unavailable',
-        'gateway-compatible event envelopes require accepted task, compaction and queue lifecycle data',
+        'gateway-compatible event envelopes require supported task, compaction, queue, rotation and replay mappings',
         true,
         { reloadRequired: true },
       );

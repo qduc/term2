@@ -201,10 +201,22 @@ it
           await child.waitForVisibleOutput('Resumed conversation:');
           const logs = (await readdir(workspace.paths.conversationsDir)).filter((file) => file.endsWith('.jsonl'));
           const log = await readFile(join(workspace.paths.conversationsDir, logs[0]!), 'utf8');
-          const events = log
+          const records = log
             .trim()
             .split('\n')
-            .map((line) => JSON.parse(line).event);
+            .map((line) => JSON.parse(line));
+          // Native persistence records facts, not legacy events. Observe the same
+          // shell completion contract without requiring the legacy storage format.
+          const shellTasks = new Set(
+            records
+              .filter(({ fact }) => fact?.type === 'task_started' && fact.task.kind === 'shell')
+              .map(({ fact }) => fact.task.taskId),
+          );
+          const events = records.map(({ event, fact }) =>
+            fact?.type === 'task_finished' && shellTasks.has(fact.taskId)
+              ? { type: 'background_shell_completed', status: fact.result.kind }
+              : event ?? fact,
+          );
           expect(events.filter((event) => event.type === 'background_shell_completed')).toEqual([
             expect.objectContaining({ status: 'cancelled' }),
           ]);

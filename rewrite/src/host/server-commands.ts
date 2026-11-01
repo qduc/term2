@@ -79,20 +79,21 @@ function projectReceipt(body: CommandBody, receipt: WireCommandReceipt, pending:
  * configuration. Retain request/revision/outcome identity; redact diagnostic text only. */
 export function projectServerNativeCommand(result: WireCommandResult): ServerResult {
   if (!('receipt' in result)) return result.ok ? unavailable('durable command receipt') : commandFailure(result);
+  return { status: result.ok ? (result.kind === 'command_pending' ? 202 : 200) : projectNegativeReceipt(result.receipt).status,
+    body: safeNativeCommandResult(result) };
+}
+/** Retain structural receipt evidence while applying the established safe diagnostic redaction. */
+export function safeNativeCommandResult(result: WireCommandResult): WireCommandResult {
+  if (!('receipt' in result))
+    return result.ok ? result : { ...result, message: 'Native command did not complete successfully.' };
   const { receipt } = result;
-  const status = result.ok ? (result.kind === 'command_pending' ? 202 : 200) : projectNegativeReceipt(receipt).status;
   const safeReceipt =
     receipt.outcome?.kind === 'rejected'
       ? { ...receipt, outcome: { ...receipt.outcome, message: 'Native command was rejected.' } }
       : receipt;
-  return {
-    status,
-    body: {
-      ...result,
-      ...(!result.ok ? { message: 'Native command did not complete successfully.' } : {}),
-      receipt: safeReceipt,
-    },
-  };
+  return result.ok
+    ? { ...result, receipt: safeReceipt }
+    : { ...result, message: 'Native command did not complete successfully.', receipt: safeReceipt };
 }
 function projectNegativeReceipt(receipt: WireCommandReceipt): ServerResult {
   const { outcome } = receipt;

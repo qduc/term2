@@ -16,7 +16,8 @@ import type { PrivateRoute } from './server-routes.js';
 import { ServerInteractions } from './server-interactions.js';
 import { handleSessionRoute } from './server-session.js';
 import { projectServerSession, sessionListItem } from './server-projection.js';
-import { directEventStream } from './server-sse.js';
+import { agentWireV2EventStream, directEventStream } from './server-sse.js';
+import { AGENT_WIRE_V2_RUNTIME_AVAILABLE, encodeAgentWireV2 } from './server-wire-v2.js';
 import { mapServerError, publicError, ServerHttpError, unavailable } from './server-errors.js';
 import * as validate from './server-validation.js';
 
@@ -144,7 +145,27 @@ async function withSession(
     // Canonical still needs faithful consumer mappings plus supported aggregate queue,
     // rotation/reset and transient replay contracts. Omitting a boundary is not parity.
     const format = input.url.searchParams.get('format');
-    if (format !== null && format !== 'direct') return publicError(400, 'validation_error', 'event format is invalid');
+    if (format !== null && format !== 'direct' && format !== 'agent-wire-v2')
+      return publicError(400, 'validation_error', 'event format is invalid');
+    const rawFormat = input.request.headers['x-term2-event-format'];
+    if (rawFormat !== undefined && typeof rawFormat !== 'string')
+      return publicError(400, 'validation_error', 'event format header is invalid');
+    if (rawFormat !== undefined && rawFormat !== 'agent-wire-v2')
+      return publicError(400, 'validation_error', 'event format header is invalid');
+    if (rawFormat === 'agent-wire-v2' && format !== 'agent-wire-v2')
+      return publicError(400, 'protocol_conflict', 'event format negotiation does not match');
+    if (format === 'agent-wire-v2' && !AGENT_WIRE_V2_RUNTIME_AVAILABLE)
+      return publicError(
+        503,
+        'agent_wire_v2_unavailable',
+        'agent-wire-v2 requires the shared v2 artifact and combined consumer migration',
+        true,
+        {
+          reloadRequired: true,
+          requiredFormat: 'agent-wire-v2',
+          requiredDependencies: ['shared-wire-v2-artifact', 'browser-v2-migration'],
+        },
+      );
     const query = input.url.searchParams.get('after');
     const raw = input.request.headers['last-event-id'];
     const header = typeof raw === 'string' ? raw : null;
@@ -171,7 +192,10 @@ async function withSession(
   let transferred = false;
   try {
     if (route.purpose === 'events_connect') {
-      const result = directEventStream(connection);
+      const result =
+        input.url.searchParams.get('format') === 'agent-wire-v2'
+          ? agentWireV2EventStream(connection, event => encodeAgentWireV2(event, interactions))
+          : directEventStream(connection);
       transferred = true;
       return result;
     }

@@ -12,7 +12,8 @@ export type CanonicalEventContext = {
   /** Accepted immutable task owner at the replay cut; never the latest unrelated task. */
   readonly task?: WireTask;
 };
-type Candidate = { type: AgentEventType; payload: Readonly<Record<string, unknown>> };
+export type CanonicalEventCandidate = { type: AgentEventType; payload: Readonly<Record<string, unknown>> };
+type Candidate = CanonicalEventCandidate;
 
 /** Returns at most one numeric-ID envelope per accepted boundary. Non-public projection updates
  * return null. Missing accepted evidence or unsupported consumer semantics throws
@@ -39,7 +40,7 @@ export function encodeCanonicalEvent(
   };
 }
 
-function canonicalCandidate(
+export function canonicalCandidate(
   event: WireEvent,
   interactions: ServerInteractions,
   context: CanonicalEventContext,
@@ -73,24 +74,7 @@ function canonicalCandidate(
       const messages = legacyCommandMessages(event);
       if (messages.length > 1)
         return missing('canonical command messages require separate accepted boundaries, not shared numeric IDs');
-      if (messages.length === 1) {
-        const message = messages[0]!.message;
-        const callId = message.callId ?? event.payload.callId;
-        const toolName = message.toolName ?? event.payload.toolName;
-        if (!callId || !toolName) return missing('canonical command display requires its accepted call identity');
-        return {
-          type: 'command_message',
-          payload: {
-            turnId: requiredTurn(event),
-            callId: text(callId, 256),
-            toolName: text(toolName, 256),
-            status: message.status,
-            output: text(message.output, 16_384),
-            ...(message.failureReason !== undefined ? { error: text(message.failureReason, 10_000) } : {}),
-            message: { id: text(message.id, 256), role: 'command', text: text(message.command, 16_384) },
-          },
-        };
-      }
+      if (messages.length === 1) return commandMessageCandidate(event, messages[0]!);
       const toolName = event.payload.toolName;
       if (toolName === undefined) return missing('canonical tool results require their accepted execution metadata');
       return {
@@ -470,6 +454,33 @@ function admissionCandidate(admission: WireAdmission): Candidate | null {
       messageId: admission.messageId,
     },
   };
+}
+/** One accepted command display message; multiple messages stay in the same accepted boundary. */
+function commandMessageCandidate(
+  event: Extract<WireEvent, { type: 'tool_finished' }>,
+  message: ReturnType<typeof legacyCommandMessages>[number]['message'],
+): Candidate {
+  const callId = message.callId ?? event.payload.callId;
+  const toolName = message.toolName ?? event.payload.toolName;
+  if (!callId || !toolName) return missing('canonical command display requires its accepted call identity');
+  return {
+    type: 'command_message',
+    payload: {
+      turnId: requiredTurn(event),
+      callId: text(callId, 256),
+      toolName: text(toolName, 256),
+      status: message.status,
+      output: text(message.output, 16_384),
+      ...(message.failureReason !== undefined ? { error: text(message.failureReason, 10_000) } : {}),
+      message: { id: text(message.id, 256), role: 'command', text: text(message.command, 16_384) },
+    },
+  };
+}
+/** V2 may publish every real command display in one accepted batch; v1 remains one-per-envelope. */
+export function canonicalCommandMessageCandidates(
+  event: Extract<WireEvent, { type: 'tool_finished' }>,
+): CanonicalEventCandidate[] {
+  return legacyCommandMessages(event).map(({ message }) => commandMessageCandidate(event, message));
 }
 function requiredTurn(event: WireEvent): string {
   return event.turnId ?? missing('canonical turn event requires its accepted turn identity');

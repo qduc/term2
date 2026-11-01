@@ -6,7 +6,8 @@ import { commandFailure, publicError, unavailable } from './server-errors.js';
 import type { ServerInteractions } from './server-interactions.js';
 import { parseWireCommand } from '../protocol/direct-parse.js';
 import { projectServerSession } from './server-projection.js';
-import { invokeServerCommand, projectServerNativeCommand } from './server-commands.js';
+import { invokeServerCommand, projectServerNativeCommand, safeNativeCommandResult } from './server-commands.js';
+import { AGENT_WIRE_V2_RUNTIME_AVAILABLE, encodeAgentConfigureResultV2 } from './server-wire-v2.js';
 import * as validate from './server-validation.js';
 
 /** Does not own Session lifetime; its caller closes every non-streaming attachment. */
@@ -18,7 +19,65 @@ export async function handleSessionRoute(
 ): Promise<ServerResult> {
   const { connection, body, claims, principal } = input;
   switch (route.purpose) {
-    case 'session_read':
+    case 'session_read': {
+      if (input.url.searchParams.get('format') === 'agent-wire-v2') {
+        const rawFormat = input.request.headers['x-term2-event-format'];
+        if (rawFormat !== undefined && (typeof rawFormat !== 'string' || rawFormat !== 'agent-wire-v2'))
+          return invalid('session hydration format header is invalid');
+        if (!AGENT_WIRE_V2_RUNTIME_AVAILABLE)
+          return publicError(
+            503,
+            'agent_wire_v2_unavailable',
+            'agent-wire-v2 hydration requires the shared v2 artifact and combined consumer migration',
+            true,
+            {
+              reloadRequired: true,
+              requiredFormat: 'agent-wire-v2',
+              requiredDependencies: ['shared-wire-v2-artifact', 'browser-v2-migration'],
+            },
+          );
+        if (!dependencies.presentation) return unavailable('direct session metadata projection');
+        if (connection.snapshot.seq === null)
+          return publicError(503, 'hydration_unavailable', 'session has no accepted hydration cursor', true, {
+            reloadRequired: true,
+          });
+        const metadata = await dependencies.presentation.metadata(principal, connection.snapshot);
+        const pending = connection.snapshot.pendingInteractions[0];
+        const budget = connection.snapshot.pendingBudgets?.[0];
+        // Same snapshot cut as the raw public interaction records. The DTO is the
+        // existing resolver contract, not a second attachment or a guessed revision.
+        const interaction = pending
+          ? {
+              state: 'pending' as const,
+              interaction: interactions.project(connection.snapshot.sessionId, pending),
+              turnId: pending.turnId,
+            }
+          : budget
+          ? {
+              state: 'pending' as const,
+              interaction: interactions.projectBudget(budget),
+              turnId: budget.turnId,
+            }
+          : null;
+        // The snapshot is the current accepted projection through this seq, not a replay event.
+        // Consumers must open the v2 SSE with after=seq and never re-apply this snapshot.
+        return {
+          status: 200,
+          headers: {
+            'x-term2-hydration-format': 'agent-wire-v2',
+            'x-term2-hydration': 'current-accepted',
+          },
+          body: {
+            schemaVersion: 2,
+            kind: 'snapshot',
+            sessionId: connection.snapshot.sessionId,
+            seq: connection.snapshot.seq,
+            snapshot: connection.snapshot,
+            interaction,
+            earliestReplayableSequence: metadata.earliestReplayableSequence,
+          },
+        };
+      }
       return dependencies.presentation
         ? {
             status: 200,
@@ -32,6 +91,7 @@ export async function handleSessionRoute(
             },
           }
         : unavailable('direct session metadata projection');
+    }
     case 'message_submit': {
       const direct = input.url.searchParams.get('format') === 'direct';
       if (!direct && validate.hasAttachments(body))
@@ -228,14 +288,39 @@ async function configureSession(
 ): Promise<ServerResult> {
   const { connection, body, principal } = input;
   if (!validate.isSessionUpdateBody(body)) return invalid('session config is invalid');
+  const format = input.url.searchParams.get('format');
+  const rawFormat = input.request.headers['x-term2-event-format'];
+  if (rawFormat !== undefined && typeof rawFormat !== 'string')
+    return invalid('session config format header is invalid');
+  if (rawFormat !== undefined && rawFormat !== 'agent-wire-v2')
+    return invalid('session config format header is invalid');
+  if (rawFormat === 'agent-wire-v2' && format !== 'agent-wire-v2')
+    return publicError(400, 'protocol_conflict', 'session config negotiation does not match');
+  const v2 = format === 'agent-wire-v2';
   const presentation = dependencies.presentation;
   if (!presentation?.configuration)
     return publicError(503, 'settings_unavailable', 'direct session config projection unavailable', true);
   if (Object.keys(body).length === 0) {
     // App observes installed settings and native commandRevision together. Do not
     // combine this attachment's old snapshot selection with a later revision query.
-    return { status: 200, body: await presentation.configuration(principal, connection.snapshot) };
+    return {
+      status: 200,
+      body: await presentation.configuration(principal, connection.snapshot),
+      ...(v2 ? { headers: { 'x-term2-config-format': 'agent-wire-v2' } } : {}),
+    };
   }
+  if (v2 && !AGENT_WIRE_V2_RUNTIME_AVAILABLE)
+    return publicError(
+      503,
+      'agent_wire_v2_unavailable',
+      'agent-wire-v2 configure requires the shared v2 artifact and combined consumer migration',
+      true,
+      {
+        reloadRequired: true,
+        requiredFormat: 'agent-wire-v2',
+        requiredDependencies: ['shared-wire-v2-artifact', 'browser-v2-migration'],
+      },
+    );
   if (!presentation.prepareConfiguration)
     return publicError(503, 'session_config_unavailable', 'session configuration preparation unavailable', true);
   let command: ReturnType<NonNullable<typeof presentation.prepareConfiguration>>;
@@ -259,16 +344,27 @@ async function configureSession(
   )
     return unavailable('stable prepared configuration command');
   // The pinned success projection cannot represent native pending/replayed or
-  // original accepted output. Keep that incomplete endpoint closed, not a fake
-  // success built from a later current configuration. Direct opts into receipts.
-  if (input.url.searchParams.get('format') !== 'direct')
+  // original accepted output. Direct opts into receipts; v2 wraps the same native
+  // result in the explicit versioned envelope. Canonical remains closed.
+  if (format !== 'direct' && format !== 'agent-wire-v2')
     return publicError(
       503,
       'session_config_unavailable',
       'canonical configuration mutation receipt contract unavailable',
       true,
     );
-  return projectServerNativeCommand(await connection.send(command));
+  const result = await connection.send(command);
+  if (format === 'agent-wire-v2') {
+    // Native non-receipt results are still versioned results; pre-dispatch validation/
+    // authorization failures use the normal safe HTTP error path.
+    const projected = projectServerNativeCommand(result);
+    return {
+      status: projected.status,
+      headers: { 'x-term2-config-format': 'agent-wire-v2' },
+      body: encodeAgentConfigureResultV2(connection.sessionId, safeNativeCommandResult(result)),
+    };
+  }
+  return projectServerNativeCommand(result);
 }
 function invalid(message: string): ServerResult {
   return publicError(400, 'validation_error', message);

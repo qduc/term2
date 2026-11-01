@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { setImmediate } from 'node:timers/promises';
 import type { ModelError } from '../model/index.js';
 import type { InteractionDecision, InteractionRequestId, SubagentMessageResult } from '../tools/index.js';
 import type { AnswerResult } from './direct-types.js';
@@ -82,7 +83,7 @@ export class DirectBackgroundTasks {
       throw error;
     }
     this.#linkParent(entry, request.parentSignal);
-    // A microtask lets the caller obtain its stable handle before the first body.
+    // Admission returns a stable handle before the scheduled body starts.
     void this.#execute(entry, operation);
     return { taskId: entry.task.taskId, result: entry.result as Promise<DirectTaskResult<Value>> };
   }
@@ -280,7 +281,11 @@ export class DirectBackgroundTasks {
     entry: Entry,
     operation: (context: DirectTaskContext) => Promise<DirectTaskResult<Value>>,
   ): Promise<void> {
-    await Promise.resolve();
+    // Give the launching tool's receipt/continuation a turn before background
+    // work competes with it. This is not a barrier on the parent: a held model
+    // response or a tool awaiting this task must not prevent the body starting.
+    if (entry.mode === 'background') await setImmediate();
+    else await Promise.resolve();
     let result: DirectTaskResult;
     try {
       result = entry.controller.signal.aborted ? { kind: 'cancelled' } : await operation(this.#context(entry));

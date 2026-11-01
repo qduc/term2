@@ -409,19 +409,10 @@ export async function runDirectHeadless(
     let pendingNext: Promise<IteratorResult<WireEvent>> | null = null;
     const nextEvent = (): Promise<IteratorResult<WireEvent>> => {
       if (pendingNext !== null) return pendingNext;
-      const pending = iterator!.next();
-      pendingNext = pending;
-      // Clear on either resolution: an event must be consumed once. Leaving the
-      // resolved promise cached makes the main loop reprocess the same frame.
-      void pending.then(
-        () => {
-          if (pendingNext === pending) pendingNext = null;
-        },
-        () => {
-          if (pendingNext === pending) pendingNext = null;
-        },
-      );
-      return pending;
+      // Retain the read until a caller consumes it, even if it resolves while
+      // a poll has timed out and a drain command is being awaited.
+      pendingNext = iterator!.next();
+      return pendingNext;
     };
     // Every race arm has the same discriminator; a wake/timeout is not an iterator item.
     const waitEvent = async (
@@ -519,9 +510,9 @@ export async function runDirectHeadless(
           if (!('waitMs' in driven)) return driven;
           const waited = await waitEvent(driven.waitMs);
           if (waited.kind === 'timeout') {
-            return failBackground(
-              `Background work did not finish within ${backgroundWaitTimeoutMs}ms; unfinished work was cancelled.`,
-            );
+            // This wait can end at the next notification-drain poll, before
+            // the total deadline. Let the driver check that deadline again.
+            continue;
           }
           if (waited.kind === 'wake') {
             return failBackground('Background work interrupted; unfinished work was cancelled.');
@@ -551,6 +542,7 @@ export async function runDirectHeadless(
           ready = waited.value;
         } else {
           ready = await nextEvent();
+          pendingNext = null;
         }
       }
       const next = ready;

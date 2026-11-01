@@ -1,9 +1,24 @@
 import { createServer } from 'node:http';
 import { cp, mkdir, readFile, readdir, symlink, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { join, resolve, relative } from 'node:path';
 import ts from 'typescript';
 import { expect, it } from 'vitest';
 import { createIsolatedWorkspaceLease, writePtyTextAndSubmit } from './provider-black-box/provider-test-harness.js';
+
+/** Patch only private fixture output, refusing stale/no-op fault stimuli. */
+async function patchFixtureModule(file: string, before: string, after: string): Promise<void> {
+  const code = await readFile(file, 'utf8');
+  const index = code.indexOf(before);
+  if (index < 0) throw new Error(`Missing fixture mutation anchor in ${file}: ${before}`);
+  await writeFile(file, code.slice(0, index) + after + code.slice(index + before.length));
+}
+
+// The native entry needs its adopted source dependencies beside it in a private build tree.
+function restartEntry(root: string): string {
+  return process.env.TERM2_TEST_CLI
+    ? join(root, 'direct-dist', relative(resolve('rewrite/dist'), resolve(process.env.TERM2_TEST_CLI)))
+    : join(root, 'dist/cli.js');
+}
 
 it.skipIf(process.platform !== 'linux' || !process.execve)(
   'reloads changed compiled core in the same PTY process, retaining history and an empty latest leaf',
@@ -61,6 +76,10 @@ export default function register(term2) { for (const type of ['session.start', '
         );
 
         await cp(resolve('dist'), join(root, 'dist'), { recursive: true });
+        if (process.env.TERM2_TEST_CLI) {
+          // Restart faults may delete the entry. Never mutate the runner's shared build.
+          await cp(resolve('rewrite/dist'), join(root, 'direct-dist'), { recursive: true });
+        }
         await cp(resolve('package.json'), join(root, 'package.json'));
         await symlink(resolve('node_modules'), join(root, 'node_modules'), 'dir');
         await mkdir(paths.logDir, { recursive: true });
@@ -86,7 +105,7 @@ export default function register(term2) { for (const type of ['session.start', '
       },
     });
     try {
-      const entry = join(workspace.root, 'dist/cli.js');
+      const entry = restartEntry(workspace.root);
       const child = await workspace.start({
         command: process.execPath,
         args: [entry, '--profile', 'bare'],
@@ -118,14 +137,24 @@ export default function register(term2) { for (const type of ['session.start', '
       await child.waitForIdleInput({ after: beforeFirstTurn });
       // Compile a changed real command module to the current entry's build tree.
       // The old process already imported A; only a fresh core can show B.
-      const source = (await readFile(resolve('source/commands/quit-command.ts'), 'utf8')).replace(
-        'Exit the application',
-        'Changed compiled core B',
-      );
-      const built = ts.transpileModule(source, {
-        compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 },
-      });
-      await writeFile(join(workspace.root, 'dist/commands/quit-command.js'), built.outputText);
+      if (process.env.TERM2_TEST_CLI) {
+        // Native commands have no legacy quit-command module. Change a real command
+        // diagnostic that /help reaches, after the running process has imported it.
+        await patchFixtureModule(
+          join(workspace.root, 'direct-dist/rewrite/src/app/direct-launch-tui-commands.js'),
+          'Exit the application',
+          'Changed compiled core B',
+        );
+      } else {
+        const source = (await readFile(resolve('source/commands/quit-command.ts'), 'utf8')).replace(
+          'Exit the application',
+          'Changed compiled core B',
+        );
+        const built = ts.transpileModule(source, {
+          compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 },
+        });
+        await writeFile(join(workspace.root, 'dist/commands/quit-command.js'), built.outputText);
+      }
       await writePtyTextAndSubmit(child, '/auto-approve advisory');
       await expect
         .poll(
@@ -217,6 +246,10 @@ it.each(['runner', 'missing-entry', 'cleanup', 'lock', 'writer-close', 'native-e
       prepare: async (root, paths) => {
         await mkdir(join(root, 'work'));
         await cp(resolve('dist'), join(root, 'dist'), { recursive: true });
+        if (process.env.TERM2_TEST_CLI) {
+          // Restart faults may delete the entry. Never mutate the runner's shared build.
+          await cp(resolve('rewrite/dist'), join(root, 'direct-dist'), { recursive: true });
+        }
         await cp(resolve('package.json'), join(root, 'package.json'));
         await symlink(resolve('node_modules'), join(root, 'node_modules'), 'dir');
         await mkdir(paths.logDir, { recursive: true });
@@ -236,38 +269,51 @@ it.each(['runner', 'missing-entry', 'cleanup', 'lock', 'writer-close', 'native-e
             memory: { enabled: false },
           }),
         );
-        const cli = join(root, 'dist/cli.js');
-        let code = (await readFile(cli, 'utf8')).replace(
-          'const controlArgv',
-          `process.on('exit', code => fs.writeFileSync(${JSON.stringify(
-            join(root, 'node-exit-code'),
-          )}, String(code)));\nconst controlArgv`,
-        );
-        if (fault === 'cleanup')
-          code = code.replace(
-            'await conversationService.shutdown();',
-            "if (restartPlan) throw new Error('fixture cleanup failure');\nawait conversationService.shutdown();",
+        const cli = restartEntry(root);
+        if (process.env.TERM2_TEST_CLI) {
+          // These source-only failure controls need a legacy writer/exit observer.
+          // Keep their assertions intact; the fenced direct baseline excludes them by name.
+          if (fault === 'cleanup' || fault === 'lock' || fault === 'writer-close')
+            throw new Error(`Direct coverage gap: ${fault} fixture depends on legacy cleanup internals.`);
+          if (fault === 'native-exec')
+            await patchFixtureModule(
+              join(root, 'direct-dist/rewrite/src/app/direct-launch-tui-restart.js'),
+              'process.execve?.(process.execPath,',
+              `process.execve?.(${JSON.stringify(join(root, 'missing-node'))},`,
+            );
+        } else {
+          let code = (await readFile(cli, 'utf8')).replace(
+            'const controlArgv',
+            `process.on('exit', code => fs.writeFileSync(${JSON.stringify(
+              join(root, 'node-exit-code'),
+            )}, String(code)));\nconst controlArgv`,
           );
-        if (fault === 'lock')
-          code = code.replace(
-            'await logWriter.close();',
-            "await logWriter.close();\nif (restartPlan) fs.writeFileSync(getConversationLockPath(logWriter.sessionId), 'fixture lock unlink failure');",
-          );
-        if (fault === 'writer-close')
-          code = code.replace(
-            'await logWriter.close();',
-            "await logWriter.close();\nif (restartPlan) throw new Error('fixture writer close failure');",
-          );
-        if (fault === 'native-exec')
-          code = code.replace(
-            'process.execve(process.execPath,',
-            `process.execve(${JSON.stringify(join(root, 'missing-node'))},`,
-          );
-        await writeFile(cli, code);
+          if (fault === 'cleanup')
+            code = code.replace(
+              'await conversationService.shutdown();',
+              "if (restartPlan) throw new Error('fixture cleanup failure');\nawait conversationService.shutdown();",
+            );
+          if (fault === 'lock')
+            code = code.replace(
+              'await logWriter.close();',
+              "await logWriter.close();\nif (restartPlan) fs.writeFileSync(getConversationLockPath(logWriter.sessionId), 'fixture lock unlink failure');",
+            );
+          if (fault === 'writer-close')
+            code = code.replace(
+              'await logWriter.close();',
+              "await logWriter.close();\nif (restartPlan) throw new Error('fixture writer close failure');",
+            );
+          if (fault === 'native-exec')
+            code = code.replace(
+              'process.execve(process.execPath,',
+              `process.execve(${JSON.stringify(join(root, 'missing-node'))},`,
+            );
+          await writeFile(cli, code);
+        }
       },
     });
     try {
-      const entry = join(workspace.root, 'dist/cli.js');
+      const entry = restartEntry(workspace.root);
       const child = await workspace.start({
         command: process.execPath,
         args: [...(fault === 'runner' ? ['--trace-warnings'] : []), entry, '--profile', 'bare'],

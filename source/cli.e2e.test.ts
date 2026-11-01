@@ -1,3 +1,4 @@
+import { writeMockCliSettings } from './test-helpers/mock-cli-settings.js';
 import { afterEach, expect, it } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -40,6 +41,7 @@ it.sequential.each(['lite', 'bare'])(
     tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-e2e-home-'));
     tempConversationsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-e2e-conversations-'));
 
+    writeMockCliSettings(tempHome);
     const idlePath = path.join(tempHome, 'input-idle');
     session = spawnTerminal(
       'node',

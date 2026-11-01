@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { TestProject } from 'vitest/node';
+import { writeMockCliSettings } from './mock-cli-settings.js';
 import { createTestChildEnv } from './terminal-e2e.js';
 
 /** V8 bytecode only: never reuse a process, module instance or application state. */
@@ -18,6 +19,7 @@ export function prepareCliCompileCache(project: TestProject, cliPath: string): (
   const root = mkdtempSync(join(tmpdir(), 'term2-cli-compile-cache-'));
   const cache = join(root, 'bytecode');
   try {
+    writeMockCliSettings(root);
     // Prime before workers compete for CPU or start short fixture deadlines.
     // --help exits without a provider; any startup failure fails the suite.
     execFileSync(process.execPath, [cliPath, '--help'], {

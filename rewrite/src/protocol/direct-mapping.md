@@ -383,6 +383,11 @@ and returns the same typed response or not_found; it never calls command().
 (`DirectSession.commandRevision()`) without a mutation, receipt allocation or
 cursor inference. It is the supported status/configure-discovery read; callers
 must still pass that exact revision back in a keyed request for atomic checking.
+Configure input is `WireConfigureRequest`, which retains requested `profileId`
+and `reasoning:'default'|effort` without normalization; accepted configuration
+events, snapshots and `configured` outcomes remain the narrower concrete
+`WireConfiguration` (actual model/effective reasoning/temperature only). Profile
+metadata remains in its existing accepted location, not in effective output.
 Keyed wire requests may carry `admission:'idle'` and/or `expectedRevision`;
 both are forwarded verbatim to native command admission, whose original same-key
 receipt replay happens before evaluating current preconditions. Changed

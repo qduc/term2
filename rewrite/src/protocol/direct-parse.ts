@@ -1,5 +1,5 @@
 /** Runtime command decoding shared by local and remote transports. Invalid input has no effect. */
-import type { WireAnswerProvenance, WireBudgetDecision, WireCommand, WireConfiguration, WireContent, WireDecision, WireOrigin, WireQuestionAnswer } from './direct-wire.js';
+import type { WireAnswerProvenance, WireBudgetDecision, WireCommand, WireConfigureRequest, WireContent, WireDecision, WireOrigin, WireQuestionAnswer } from './direct-wire.js';
 import { DirectProtocolError } from './direct-errors.js';
 
 type ObjectValue = Record<string, unknown>;
@@ -120,18 +120,20 @@ function commandPreconditions(value: ObjectValue): { readonly admission?: 'idle'
   return { ...admission,
     ...(value.expectedRevision !== undefined ? { expectedRevision: id(value.expectedRevision, 'expectedRevision') } : {}) };
 }
-function configuration(raw: unknown): WireConfiguration {
-  const value = object(raw); fields(value, ['model', 'reasoning', 'temperature']);
-  if (value.model === undefined && value.reasoning === undefined && value.temperature === undefined) invalid('Empty configuration patch');
-  let model: WireConfiguration['model'];
+function configureRequest(raw: unknown): WireConfigureRequest {
+  const value = object(raw); fields(value, ['model', 'reasoning', 'temperature', 'profileId']);
+  if (value.model === undefined && value.reasoning === undefined && value.temperature === undefined && value.profileId === undefined)
+    invalid('Empty configuration patch');
+  let model: WireConfigureRequest['model'];
   if (value.model !== undefined) {
     const ref = object(value.model); fields(ref, ['provider', 'model']);
     model = { provider: id(ref.provider, 'provider'), model: id(ref.model, 'model') };
   }
   if (value.temperature !== undefined && (typeof value.temperature !== 'number' || !Number.isFinite(value.temperature))) invalid('Expected finite temperature');
   return { ...(model ? { model } : {}),
-    ...(value.reasoning !== undefined ? { reasoning: choice(value.reasoning, ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'], 'reasoning') } : {}),
-    ...(value.temperature !== undefined ? { temperature: value.temperature as number } : {}) };
+    ...(value.reasoning !== undefined ? { reasoning: choice(value.reasoning, ['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'], 'reasoning') } : {}),
+    ...(value.temperature !== undefined ? { temperature: value.temperature as number } : {}),
+    ...(value.profileId !== undefined ? { profileId: id(value.profileId, 'profileId') } : {}) };
 }
 /** Does not normalize user text, request identities, or grant authority. Session owns admission/policy. */
 export function parseWireCommand(raw: unknown): WireCommand {
@@ -167,7 +169,7 @@ export function parseWireCommand(raw: unknown): WireCommand {
       return { type: 'retry', commandId: id(value.commandId, 'commandId'), target: choice(value.target, ['turn', 'tool'], 'retry target'),
         ...(value.executionId !== undefined ? { executionId: id(value.executionId, 'executionId') } : {}), ...commandPreconditions(value) };
     case 'configure': fields(value, ['type', 'commandId', 'configuration', 'admission', 'expectedRevision']);
-      return { type: 'configure', commandId: id(value.commandId, 'commandId'), configuration: configuration(value.configuration), ...commandPreconditions(value) };
+      return { type: 'configure', commandId: id(value.commandId, 'commandId'), configuration: configureRequest(value.configuration), ...commandPreconditions(value) };
     case 'queue_edit': fields(value, ['type', 'messageId', 'text', 'attachments']);
       if (value.attachments !== undefined && !Array.isArray(value.attachments)) invalid('Expected attachments array');
       return { type: 'queue_edit', messageId: id(value.messageId, 'messageId'), text: text(value.text, 'text'), ...(value.attachments !== undefined ? { attachments: (value.attachments as unknown[]).map(content) } : {}) };

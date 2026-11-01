@@ -100,6 +100,7 @@ export interface Projection {
 export { DIRECT_PROTOCOL_VERSION } from './direct-wire.js';
 export type {
   WireCommand as DirectWireCommand, WireCommandResult as DirectWireCommandResult,
+  WireConfigureRequest as DirectWireConfigureRequest,
   WireEvent as DirectWireEvent, WireSnapshot as DirectWireSnapshot,
   WireMessage as DirectWireMessage, WireInteraction as DirectWireInteraction,
 } from './direct-wire.js';

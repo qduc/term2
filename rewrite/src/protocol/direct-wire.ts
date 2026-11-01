@@ -173,6 +173,13 @@ export type WireVerification = {
   readonly report?: { readonly outcome: 'PASS' | 'FAIL' | 'INCONCLUSIVE' | 'ERROR' | 'TIMEOUT'; readonly evidence: string; readonly checked: readonly string[]; readonly limitations: readonly string[]; readonly verifierVersion: string };
 };
 export type WireConfiguration = { readonly model?: WireModel; readonly reasoning?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'; readonly temperature?: number };
+/** Requested configure selection only. Accepted output uses WireConfiguration. */
+export type WireConfigureRequest = {
+  readonly model?: WireModel;
+  readonly reasoning?: 'default' | 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+  readonly temperature?: number;
+  readonly profileId?: string;
+};
 /** Public reset boundary for a physical log rotation under one stable logical session.
  * It names the new physical header without exposing provider history or raw facts. */
 export type WireSessionRotation = {
@@ -190,7 +197,7 @@ export type WireRewindTarget = { readonly id: string; readonly label: string };
 export type WireNativeCommandOperation =
   | { readonly kind: 'retry'; readonly target: 'turn' | 'tool'; readonly executionId?: string }
   | { readonly kind: 'compact' }
-  | { readonly kind: 'configure'; readonly configuration: WireConfiguration }
+  | { readonly kind: 'configure'; readonly configuration: WireConfigureRequest }
   | { readonly kind: 'rewind'; readonly targetId: string }
   | { readonly kind: 'rollover' };
 export type WireCommandPreconditions = { readonly admission?: 'idle'; readonly expectedRevision?: string };
@@ -327,7 +334,7 @@ export type WireCommand =
   | { readonly type: 'cancel'; readonly target?: WireCancelTarget; readonly expectedTurnId?: string; readonly discardQueue?: boolean }
   | ({ readonly type: 'retry'; readonly commandId: string; readonly target: 'turn' | 'tool'; readonly executionId?: string } & WireCommandPreconditions)
   | ({ readonly type: 'compact'; readonly commandId: string } & WireCommandPreconditions)
-  | ({ readonly type: 'configure'; readonly commandId: string; readonly configuration: WireConfiguration } & WireCommandPreconditions)
+  | ({ readonly type: 'configure'; readonly commandId: string; readonly configuration: WireConfigureRequest } & WireCommandPreconditions)
   | { readonly type: 'queue_edit'; readonly messageId: string; readonly text: string; readonly attachments?: readonly WireContent[] }
   | { readonly type: 'queue_retract'; readonly messageId: string }
   | { readonly type: 'queue_resume' }

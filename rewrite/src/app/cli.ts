@@ -399,7 +399,6 @@ async function runInteractive(options: SessionOptions): Promise<number> {
   const logger = new LoggingService({ sessionContextService: sessionContext });
   const { service: settings } = createAppSettings({
     env: buildEnvOverrides(),
-    disableFilePersistence: true,
     loggingService: logger,
   });
   // The picker gate of source/services/models/model-picker-host.tsx: TTY on both ends, no --json, no harness marker.

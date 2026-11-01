@@ -3,6 +3,7 @@ import { cp, mkdir, readFile, readdir, symlink, writeFile } from 'node:fs/promis
 import { join, resolve, relative } from 'node:path';
 import ts from 'typescript';
 import { expect, it } from 'vitest';
+import { listControlAdvertisements } from '../source/services/control-socket/control-socket.js';
 import { createIsolatedWorkspaceLease, writePtyTextAndSubmit } from './provider-black-box/provider-test-harness.js';
 
 /** Patch only private fixture output, refusing stale/no-op fault stimuli. */
@@ -66,6 +67,7 @@ it.skipIf(process.platform !== 'linux' || !process.execve)(
       },
       prepare: async (root, paths) => {
         await mkdir(join(root, 'work'));
+        await mkdir(join(root, 'runtime'), { mode: 0o700 });
         await mkdir(join(root, '.term2/hooks'), { recursive: true });
         await writeFile(
           join(root, '.term2/hooks/restart.mjs'),
@@ -75,7 +77,7 @@ export default function register(term2) { for (const type of ['session.start', '
           )}, JSON.stringify({type,pid:process.pid,sessionId:event.sessionId,herdr:process.env.HERDR_PANE_ID,approval:process.env.SHELL_AUTO_APPROVE_MODE,sandbox:process.env.SANDBOX_ENABLED}) + '\\n')); }`,
         );
 
-        await cp(resolve('dist'), join(root, 'dist'), { recursive: true });
+        if (!process.env.TERM2_TEST_CLI) await cp(resolve('dist'), join(root, 'dist'), { recursive: true });
         if (process.env.TERM2_TEST_CLI) {
           // Restart faults may delete the entry. Never mutate the runner's shared build.
           await cp(resolve('rewrite/dist'), join(root, 'direct-dist'), { recursive: true });
@@ -99,6 +101,7 @@ export default function register(term2) { for (const type of ['session.start', '
               modelSelection: { model: 'fixture', provider: 'fixture-provider' },
               completionVerification: false,
             },
+            shell: { timeout: 23456 },
             memory: { enabled: false },
           }),
         );
@@ -108,7 +111,8 @@ export default function register(term2) { for (const type of ['session.start', '
       const entry = restartEntry(workspace.root);
       const child = await workspace.start({
         command: process.execPath,
-        args: [entry, '--profile', 'bare'],
+        args: [entry, '--profile', 'bare', ...(process.env.TERM2_TEST_CLI ? ['--control-socket=reload'] : [])],
+        env: { XDG_RUNTIME_DIR: join(workspace.root, 'runtime') },
         cwd: join(workspace.root, 'work'),
         cols: 180,
         rows: 50,
@@ -126,10 +130,15 @@ export default function register(term2) { for (const type of ['session.start', '
         };
       };
       const before = await identity();
+      const initialSettings = JSON.parse(await readFile(join(workspace.paths.logDir, 'settings.json'), 'utf8'));
+      // Native writer authority is SQLite, not a legacy .lock sidecar. Read the
+      // actual control binding; it follows /clear and survives exec via restart args.
       const activeLeaf = async () =>
-        (await readdir(workspace.paths.conversationsDir))
-          .find((file) => file.endsWith('.lock'))!
-          .replace(/\.lock$/, '');
+        process.env.TERM2_TEST_CLI
+          ? listControlAdvertisements(join(workspace.root, 'runtime'))[0]!.sessionId
+          : (await readdir(workspace.paths.conversationsDir))
+              .find((file) => file.endsWith('.lock'))!
+              .replace(/\.lock$/, '');
       const original = await activeLeaf();
       const beforeFirstTurn = child.readIdleGeneration();
       await writePtyTextAndSubmit(child, 'history-before-restart');
@@ -165,12 +174,24 @@ export default function register(term2) { for (const type of ['session.start', '
         .toBe('advisory');
       await writePtyTextAndSubmit(child, '/sandbox');
       await child.waitForVisibleOutput('Shell sandbox mode disabled');
+      expect(JSON.parse(await readFile(join(workspace.paths.logDir, 'settings.json'), 'utf8')).sandbox.enabled).toBe(
+        false,
+      );
+      const savedSettings = JSON.parse(await readFile(join(workspace.paths.logDir, 'settings.json'), 'utf8'));
+      expect(savedSettings.providers).toEqual(initialSettings.providers);
+      expect(savedSettings.agent).toEqual(initialSettings.agent);
+      expect(savedSettings.app).toEqual(initialSettings.app);
+      expect(savedSettings.memory).toEqual(initialSettings.memory);
+      expect(savedSettings.shell.timeout).toBe(23456);
       await writePtyTextAndSubmit(child, '/restart');
       await child.waitForVisibleOutput('Restart recovery command:');
       // Exec resets the idle counter, so the old generation is not an after token.
       await child.waitForState((snapshot) => snapshot.visibleOutput.includes('Resumed conversation'));
       await child.waitForIdleInput();
-      await expect.poll(() => child.readComposerRevision(), { timeout: 5000 }).toBe(1);
+      if (process.env.TERM2_TEST_CLI) {
+        // Direct revisions are real raw-render offsets, not the source's reset counter.
+        await child.waitForComposerValue('', { afterRevision: child.getOutput().lastIndexOf('Resumed conversation:') });
+      } else await expect.poll(() => child.readComposerRevision(), { timeout: 5000 }).toBe(1);
       expect(await identity()).toEqual(before);
       expect(await activeLeaf()).toBe(original);
       await writePtyTextAndSubmit(child, '/help');
@@ -181,10 +202,18 @@ export default function register(term2) { for (const type of ['session.start', '
       expect(JSON.stringify(requests[1])).toContain('history-before-restart');
       await child.waitForIdleInput({ after: turnIdle });
       await writePtyTextAndSubmit(child, '/clear');
-      await child.waitForVisibleOutput('Welcome to term²!');
+      if (!process.env.TERM2_TEST_CLI) await child.waitForVisibleOutput('Welcome to term²!');
       await expect.poll(activeLeaf, { timeout: 5000 }).not.toBe(original);
       const latest = await activeLeaf();
       expect(latest).not.toBe(original);
+      const emptyLeaf = await readFile(join(workspace.paths.conversationsDir, `${latest}.jsonl`), 'utf8');
+      if (process.env.TERM2_TEST_CLI)
+        expect(
+          emptyLeaf
+            .trim()
+            .split('\n')
+            .map((line) => JSON.parse(line).fact.type),
+        ).toEqual(['session_started']);
       const resumeCount = child.getVisibleOutput().split('Resumed conversation:').length;
       await writePtyTextAndSubmit(child, '/restart');
       await child.waitForState(
@@ -192,7 +221,9 @@ export default function register(term2) { for (const type of ['session.start', '
       );
       await child.waitForIdleInput();
       // A functional command is also an input/raw-mode check after the second exec.
-      await expect.poll(() => child.readComposerRevision(), { timeout: 5000 }).toBe(1);
+      if (process.env.TERM2_TEST_CLI)
+        await child.waitForComposerValue('', { afterRevision: child.getOutput().lastIndexOf('Resumed conversation:') });
+      else await expect.poll(() => child.readComposerRevision(), { timeout: 5000 }).toBe(1);
       const helpOutputOffset = child.getVisibleOutput().length;
       const beforeHelpRevision = child.readComposerRevision();
       await writePtyTextAndSubmit(child, '/help');
@@ -206,6 +237,8 @@ export default function register(term2) { for (const type of ['session.start', '
       expect(await identity()).toEqual(before);
       expect(await activeLeaf()).toBe(latest);
       expect(await readFile(join(workspace.paths.conversationsDir, `${latest}.jsonl`), 'utf8')).toContain(latest);
+      expect(await readFile(join(workspace.paths.conversationsDir, `${latest}.jsonl`), 'utf8')).toBe(emptyLeaf);
+      expect(requests).toHaveLength(2);
       await writePtyTextAndSubmit(child, '/quit');
       expect((await child.waitForExit()).exitCode).toBe(0);
       const hooks = (await readFile(join(workspace.root, 'hook-events.jsonl'), 'utf8'))

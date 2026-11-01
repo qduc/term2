@@ -51,6 +51,11 @@ export type AgentWireV2ChangeType =
 const LIVE_CHANGE_TYPES = new Set<AgentWireV2ChangeType>([
   'reasoning_delta',
   'error',
+  // DirectProjection.synchronize emits a null-seq turn_ended after a fresh
+  // runtime error. Keep that real transient terminal live-only; it must never
+  // acquire an accepted cursor. The canonical failed terminal is the smallest
+  // existing payload that settles the client without inventing durable history.
+  'turn_failed',
   'tool_progress',
   'tool_call_streaming_delta',
   'task_progress',

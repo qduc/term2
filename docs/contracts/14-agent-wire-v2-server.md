@@ -88,8 +88,19 @@ needs a separate exact `{status}` contract and consumer intake.
   with `seq:null` when synchronized runtime error state appears. It carries
   `{error: WireError}` only. The server maps it as `event: live` and refuses any
   accepted error boundary; consumers must not checkpoint it or infer a durable
-  terminal. It may accompany a transient `turn_ended`/snapshot update that is
-  not representable as accepted v2 evidence.
+  terminal.
+- `turn_failed` is the companion **live-only** lifecycle change for the same
+  synchronized runtime failure. Native `synchronize` emits a null-seq
+  `turn_ended` with the active turn and failed terminal; the server maps it
+  through the existing canonical failed-terminal shape as `event: live`
+  (`turnId`, failed outcome/reason, and any real cause). It has no SSE id, seq,
+  `occurredAt` or replay position, and is not an accepted terminal. It settles
+  the client's visible activity without claiming durable history; hydration and
+  the last accepted terminal remain authority. A synchronized state `snapshot`
+  is not re-emitted as a cursor-bearing event.
+- `status_changed` is not synthesized for this path: the native producer emits
+  no accepted or transient status event; status is represented by the transient
+  failed terminal plus the current snapshot/hydration state.
 - `model_response_completed` is accepted native audit with modelStep/stopReason/
   optional costUsd, but the shared reducer has no public state change and no
   current M6 client consumes it. It is not mapped in this step; do not synthesize

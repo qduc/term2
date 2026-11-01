@@ -1,7 +1,7 @@
 /** Snapshot projection of the actual native facade. Missing later fields are not inferred from private state. */
 import type { DirectSessionState, DirectToolDisplay } from '../session/facade-types.js';
 import type { DirectDisplayTool, DirectPublicState } from '../session/direct-state.js';
-import { DIRECT_PROTOCOL_VERSION, type WireSnapshot } from './direct-wire.js';
+import { DIRECT_PROTOCOL_VERSION, type WireConfiguration, type WireModel, type WireSnapshot } from './direct-wire.js';
 import type { DirectContextState } from '../session/direct-context.js';
 import { publicContext } from './direct-context.js';
 import type { DirectTaskState } from '../session/direct-background-types.js';
@@ -24,6 +24,17 @@ export function runtimeDirectError(state: DirectSessionState & Partial<Pick<Dire
 function toolStatus(tool: DirectToolDisplay & Partial<Pick<DirectDisplayTool, 'phase'>>) {
   return tool.phase ?? tool.status;
 }
+/** Exact public configuration fields; no native intent/profile/runtime graph. */
+export function publicWireConfiguration(state: DirectSessionState): WireConfiguration & { readonly model: WireModel } {
+  const configuration = state.configuration?.configuration;
+  return {
+    model: configuration?.model
+      ? { provider: configuration.model.provider, model: configuration.model.model }
+      : { provider: state.model.provider, model: state.model.model },
+    ...(configuration?.reasoning !== undefined ? { reasoning: configuration.reasoning } : {}),
+    ...(configuration?.temperature !== undefined ? { temperature: configuration.temperature } : {}),
+  };
+}
 
 export function snapshotDirectState(state: DirectSessionState & { readonly tasks?: readonly DirectTaskState[]; readonly queue?: DirectQueueState; readonly context?: DirectContextState }, previous?: WireSnapshot): WireSnapshot {
   const messages = state.messages.map(item => {
@@ -34,10 +45,17 @@ export function snapshotDirectState(state: DirectSessionState & { readonly tasks
       return { ...known, ...(correlated.turnId ? { turnId: correlated.turnId } : {}), ...(correlated.modelStep !== undefined ? { modelStep: correlated.modelStep } : {}), ...(draft ? { draft: true, turnId: draft.turnId, modelStep: draft.modelStep } : {}), id: item.id, role: item.role, content, text: contentText(content) };
   });
   const turnResults = publicTurnResults(state, messages);
+  // A captured successor state can arrive without the live reset event (for example
+  // on reconnect). Its physical header changed, so foreground-only leftovers from
+  // the predecessor must not survive either.
+  const rotated = previous !== undefined && previous.backingSessionId !== state.backingSessionId;
   return {
     protocolVersion: DIRECT_PROTOCOL_VERSION, sessionId: state.id, seq: previous?.seq ?? null,
+    backingSessionId: state.backingSessionId,
     status: state.status, model: { provider: state.model.provider, model: state.model.model },
-    configuration: { ...previous?.configuration, model: { provider: state.model.provider, model: state.model.model } },
+    configuration: state.configuration
+      ? publicWireConfiguration(state)
+      : { ...previous?.configuration, model: { provider: state.model.provider, model: state.model.model } },
     activeTurnId: state.status === 'idle' || state.status === 'closed' ? null : state.activeTurnId,
     messages,
     tools: state.tools.map(tool => {
@@ -48,7 +66,7 @@ export function snapshotDirectState(state: DirectSessionState & { readonly tasks
         ...(tool.providerOutput ? { content: publicToolContent(tool.providerOutput) } : {}),
         input: publicJson(tool.input), status: toolStatus(tool), ...(tool.output !== undefined ? { output: tool.output } : {}) };
     }),
-    unmatchedToolResults: previous?.unmatchedToolResults ?? [],
+    unmatchedToolResults: rotated ? [] : previous?.unmatchedToolResults ?? [],
     pendingInteractions: [...new Map([
       ...state.pendingInteractions.map(publicInteraction),
       ...(state.tasks ?? []).flatMap(task => task.pendingInteractions.map(request => publicTaskInteraction(request, publicTask(task)))),
@@ -61,8 +79,8 @@ export function snapshotDirectState(state: DirectSessionState & { readonly tasks
     notifications: structuredClone(state.notifications),
     admissions: (state.queue ? state.queue.records.map(record => record.admission) : state.admissions).map(admission => ({ ...admission })),
     usage: { ...state.usage }, reasoning: state.reasoning,
-    reasoningIdentity: previous?.reasoning === state.reasoning ? previous.reasoningIdentity ?? null : null,
-    retryEligibility: previous?.retryEligibility ?? { turn: false, tool: false },
+    reasoningIdentity: !rotated && previous?.reasoning === state.reasoning ? previous.reasoningIdentity ?? null : null,
+    retryEligibility: rotated ? { turn: false, tool: false } : previous?.retryEligibility ?? { turn: false, tool: false },
     ...(state.queue ? publicQueue(state.queue, turnResults) : { queue: previous?.queue ?? [], queueState: previous?.queueState ?? 'idle', queuePauseReason: previous?.queuePauseReason ?? null, submissions: previous?.submissions ?? [] }), tasks: state.tasks?.map(task => ({ ...previous?.tasks.find(known => known.id === task.taskId), ...publicTask(task) })) ?? previous?.tasks ?? [],
     cost: previous?.cost ?? null,
     ...(state.context ? publicContext(state.context) : { goal: previous?.goal ?? null, goalGeneration: previous?.goalGeneration ?? 0, verification: previous?.verification ?? null }),

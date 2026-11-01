@@ -163,6 +163,16 @@ export type WireVerification = {
   readonly report?: { readonly outcome: 'PASS' | 'FAIL' | 'INCONCLUSIVE' | 'ERROR' | 'TIMEOUT'; readonly evidence: string; readonly checked: readonly string[]; readonly limitations: readonly string[]; readonly verifierVersion: string };
 };
 export type WireConfiguration = { readonly model?: WireModel; readonly reasoning?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'; readonly temperature?: number };
+/** Public reset boundary for a physical log rotation under one stable logical session.
+ * It names the new physical header without exposing provider history or raw facts. */
+export type WireSessionRotation = {
+  readonly logicalSessionId: string;
+  readonly backingSessionId: string;
+  readonly predecessor: { readonly sessionId: string; readonly throughSeq: number };
+  readonly commandId: string;
+  readonly configuration: WireConfiguration & { readonly model: WireModel };
+  readonly handoff?: { readonly clientRequestId: string; readonly messageId: string; readonly turnId: string };
+};
 export type WireCancelTarget = { readonly kind: 'foreground' } | { readonly kind: 'task'; readonly id: string };
 export type WireRewindTarget = { readonly id: string; readonly label: string };
 
@@ -198,6 +208,8 @@ export type WireNotificationDrainResult =
 export type WireSnapshot = {
   readonly protocolVersion: typeof DIRECT_PROTOCOL_VERSION;
   readonly sessionId: string;
+  /** Actual current physical log; sessionId remains the stable logical facade. */
+  readonly backingSessionId: string;
   readonly seq: number | null;
   readonly status: WireStatus;
   readonly model: WireModel;
@@ -256,6 +268,8 @@ export type WireEventPayloads = {
   budget_observed: { readonly evidence: WireBudgetEvidence };
   history_replaced: { readonly reason: 'compaction' | 'retry_turn' | 'retry_tool' | 'rewind' };
   request_cost_recorded: WireRequestCost;
+  /** One accepted successor boundary; clients clear foreground state at this seq. */
+  session_rotated: WireSessionRotation;
   background_notice_enqueued: { readonly notice: WireBackgroundNotice };
   background_notices_delivered: WireNoticeDelivery;
   /** One accepted receipt fact, not proof a model/tool/successor completed. */

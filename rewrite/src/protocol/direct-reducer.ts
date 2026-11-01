@@ -102,6 +102,29 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
     // Live argument evidence is not a finalized tool, root output, or replayable state.
     case 'tool_call_streaming_delta': return state;
     case 'request_cost_recorded': return { ...state, requestCosts: [...(state.requestCosts ?? []).filter(cost => cost.record.requestId !== event.payload.record.requestId), event.payload] };
+    case 'session_rotated': {
+      if (event.payload.logicalSessionId !== state.sessionId) throw new Error('Session rotation belongs to a different logical session');
+      // Foreground provider context is physically replaced. Task/queue/command/
+      // notification owners, goal/context, and accepted cost/request audit survive.
+      return { ...state,
+        backingSessionId: event.payload.backingSessionId,
+        model: event.payload.configuration.model,
+        configuration: { ...event.payload.configuration },
+        status: 'idle' as const,
+        activeTurnId: null,
+        messages: [],
+        tools: [],
+        unmatchedToolResults: [],
+        reasoning: '',
+        reasoningIdentity: null,
+        usage: { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 },
+        terminal: null,
+        timeline: [],
+        turnResults: [],
+        lastError: null,
+        retryEligibility: { turn: false, tool: false },
+      };
+    }
     case 'budget_opened': return { ...state,
       pendingBudgets: [...(state.pendingBudgets ?? []).filter(request => request.requestId !== event.payload.request.requestId), event.payload.request],
     };

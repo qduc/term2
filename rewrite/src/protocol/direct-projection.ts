@@ -2,6 +2,7 @@
  * Session alone commits/answers; this class only maintains the public read model.
  */
 import type { DirectSessionState, DirectSessionUpdate } from '../session/facade-types.js';
+import type { DirectSessionRotationFact } from '../session/direct-session-rotation.js';
 import { directDraftId, initialDirectState } from '../session/direct-state.js';
 import { contextFactEvent } from './direct-context.js';
 import type { DirectQueueState } from '../session/direct-queue-types.js';
@@ -14,10 +15,19 @@ import { completedFinalText } from './direct-turn-results.js';
 import { publicQueue, publicQueueChange } from './direct-queue.js';
 import { taskFactEvent } from './direct-tasks.js';
 import type { Fact } from '../session/facts.js';
-import type { WireEvent, WireEventPayloads, WireEventType, WireSnapshot } from './direct-wire.js';
+import type { WireConfiguration, WireEvent, WireEventPayloads, WireEventType, WireModel, WireSnapshot } from './direct-wire.js';
 import { publicInteraction, publicJson, publicMessage, publicToolContent, publicTerminal } from './direct-public.js';
 import { runtimeDirectError, snapshotDirectState } from './direct-state.js';
 import { reduceWireEvent } from './direct-reducer.js';
+
+/** Public configuration copied from the accepted rotation header; never intent/profile. */
+function rotationConfiguration(fact: DirectSessionRotationFact): WireConfiguration & { readonly model: WireModel } {
+  return {
+    model: { provider: fact.configuration.model.provider, model: fact.configuration.model.model },
+    ...(fact.configuration.reasoning !== undefined ? { reasoning: fact.configuration.reasoning } : {}),
+    ...(fact.configuration.temperature !== undefined ? { temperature: fact.configuration.temperature } : {}),
+  };
+}
 
 /** The published native update vocabulary, including original accepted timestamps. */
 export type DirectProtocolUpdate = DirectSessionUpdate;
@@ -134,6 +144,14 @@ export class DirectProjection {
       case 'command_started':
       case 'command_finished': return [commandFactEvent(fact, this.#state, seq)];
       case 'request_cost_recorded': return [this.#event('request_cost_recorded', publicRequestCost(fact), seq, fact.turnId)];
+      case 'session_rotated': return [this.#event('session_rotated', {
+        logicalSessionId: fact.logicalSessionId,
+        backingSessionId: fact.sessionId,
+        predecessor: { ...fact.predecessor },
+        commandId: fact.commandId,
+        configuration: rotationConfiguration(fact),
+        ...(fact.handoff ? { handoff: { ...fact.handoff } } : {}),
+      }, seq, null)];
       case 'budget_opened':
       case 'budget_closed':
       case 'budget_observed': return [budgetFactEvent(fact, this.#state.sessionId, seq)];

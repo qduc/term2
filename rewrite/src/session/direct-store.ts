@@ -63,8 +63,8 @@ type Summary = { readonly id: string; readonly workspace: Workspace; readonly mo
 const DIRECT_ID = /^conv_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 /**
- * One writable facade per logical ID across cooperating stores/processes. The root
- * inode lock survives physical rotation and process death releases it automatically.
+ * One writable facade per logical ID across cooperating stores/processes. Its
+ * per-root authority survives physical rotation and process death releases it.
  * Opening replays without writing or resuming execution; no migration occurs.
  * Binding metadata is immutable; an expected binding is checked before writable open.
  */
@@ -126,7 +126,7 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
       const rollingLog = createDirectRollingLog(directory, context.id, lineage);
       log = rollingLog;
       // New roots have no readable header until attach appends session_started.
-      // Lock the root before that publication; opened roots arrive already locked.
+      // Acquire authority before that publication; opened roots arrive locked.
       release ??= acquireDirectWriterLock(rollingLog.path);
       const ownedRelease = release;
       log = {

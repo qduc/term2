@@ -7,7 +7,6 @@
  * opens storage, imports Session/Engine, or calls the bridge runtime.
  */
 import { randomUUID } from 'node:crypto';
-import { formatGoalClosedByCheck } from '../../../../source/services/conversation/durable-goal.js';
 import type { DirectConnection } from '../../host/in-process-direct-types.js';
 import type {
   WireAdmission,
@@ -21,6 +20,7 @@ import type {
 } from '../../protocol/direct-wire.js';
 import { interactionLine, rejectionLine, retryLine, toolStartLine } from './format.js';
 import {
+  formatGoalClosedByCheck,
   legacyCommandMessages,
   legacyFinalResponse,
   legacyReasoningDelta,

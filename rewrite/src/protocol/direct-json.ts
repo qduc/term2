@@ -8,6 +8,9 @@ import { getModelPricing } from '../../../source/services/cost/pricing.js';
 import type { CommandMessageEvent, CostUpdateEvent, FinalResponseEvent, ReasoningDeltaEvent, RetryEvent, RunBudgetEventNotice, TextDeltaEvent, ToolCallStreamingDeltaEvent, ToolDispatchedEvent, ToolStartedEvent, UsageUpdateEvent } from '../../../source/services/conversation/conversation-events.js';
 import type { WireBudgetEvidence, WireEvent, WireFinalWindow, WireUsage } from './direct-wire.js';
 
+// Retained presentation helpers cross the source boundary here, never in clients.
+export { formatGoalClosedByCheck } from '../../../source/services/conversation/durable-goal.js';
+
 /** Static negative capability for the complete old ConversationEvent schema.
  * The bounded accepted final window is exposed separately on WireTerminal;
  * it does not supply providerHistory or the remaining legacy event families.

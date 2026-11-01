@@ -47,7 +47,15 @@ export function readDirectComposer(
       const candidate = stripVTControlCharacters(lines[statusIndex]!);
       if (/^Enter (?:send|steer) │ Alt\+Enter follow-up │/.test(candidate)) break;
       const phase = MODEL_STATUS.exec(candidate)?.[1];
-      if (phase) return { start, end: end + END_FRAME.length, value: visible.slice(2, -1), idle: phase === 'idle' };
+      // An interrupted terminal can leave the ordinary composer ready for a new turn.
+      // Require its real send footer as well as the active cursor; never count a live steer.
+      if (phase)
+        return {
+          start,
+          end: end + END_FRAME.length,
+          value: visible.slice(2, -1),
+          idle: phase === 'idle' || (phase === 'interrupted' && footer.startsWith('Enter send │')),
+        };
       statusIndex -= 1;
     }
   }

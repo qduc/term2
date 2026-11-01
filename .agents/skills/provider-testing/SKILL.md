@@ -106,6 +106,7 @@ test, and unhandled failures. The published local provider command above retains
 
 ## Adding or changing a scenario
 
+- Native goal fixtures select v2 `fact` envelopes and native receipt wording from the explicit direct executable, never as fallback after a failed legacy assertion. Preserve goal identity, reminder bounds, active-goal state and blocked terminal-cause checks. An interrupted native turn is input-ready only when the latest active ordinary composer has its send footer; interrupted status alone does not prove readiness.
 - Assert semantic wire fields, roles, ordering, IDs, native reasoning/options,
   and authoritative completion/error events rather than full JSON snapshots.
 - Keep fixtures minimal, deterministic, harmless, and derived from sanitized

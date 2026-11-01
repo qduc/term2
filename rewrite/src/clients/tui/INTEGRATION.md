@@ -26,6 +26,8 @@ App-owned `/auto-approve`, `/effort`, `/model` and `/profile` without arguments 
 
 Retry, compact, rewind and rollover use a fresh stable UUID per deliberate invocation and are sent once. Pending is not success; transport loss or interrupted outcome is reported as uncertain, without automatically repeating the effect. The retained ID can be queried with `/command-status <id>`; `/command-apply <id>` explicitly restores a completed rewind draft or follows a completed rollover successor. A pending rewind originally requested as resend is restored for review, not automatically resent. Snapshot command receipts remain visible. App-owned configure commands need the same keyed receipt semantics; they are not implemented by this subtree.
 
+A supplied terminal notice is rendered alongside accepted Session notices, including goal-stop and completion-verification blockers. The TUI does not infer it from interrupted status or tool text; the wire terminal owns its exact message, and the next foreground admission clears that terminal presentation.
+
 This interface note is not a verification certificate. Integration verification must cover snapshot/replay, input ownership and terminal rendering (including automatic foreground versus explicit background decisions), attachments and late queue edits, task and budget decisions, switching/rebind notices, and actual application integration. Module presence or an accepted wire receipt alone is not proof that the keyboard workflow reaches the next provider/tool output.
 
 ## Internal ownership

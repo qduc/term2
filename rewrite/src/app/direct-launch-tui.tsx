@@ -126,7 +126,7 @@ async function runTui(
   });
   let unmount: (() => void) | null = null;
   let exitCode = 0;
-  // Ink leaves Ctrl+C to the composer, so an outside signal is the only other way out.
+  // Raw Ctrl+C is owned by Tui; outside signals unwind through the same cleanup.
   const onSignal = (signal: NodeJS.Signals): void => {
     exitCode = signal === 'SIGINT' ? 130 : 143;
     if (unmount) unmount();

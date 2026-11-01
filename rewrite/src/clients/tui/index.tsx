@@ -37,22 +37,38 @@ export function Tui(props: {
   readonly onSnapshot?: (snapshot: WireSnapshot) => void;
   readonly onExit: () => void;
 }): React.ReactElement {
+  // Signal keys stay above the keyed session/editor and every modal input owner.
+  const interrupt = useRef<() => void>(() => {});
+  const exitArmedUntil = useRef(0);
+  useInput((input, key) => {
+    if (!key.ctrl || input !== 'c') return;
+    const now = performance.now();
+    if (now < exitArmedUntil.current) {
+      exitArmedUntil.current = 0;
+      props.onExit();
+      return;
+    }
+    // Retain the terminal's two-second interrupt/confirm gesture.
+    exitArmedUntil.current = now + 2000;
+    interrupt.current();
+  });
   // Keep transition notices above the keyed per-session component.
   const [transition, setTransition] = useState<{ sessionId: string; message: string } | null>(null);
   const switchSession = props.integration.switchSession ? async (sessionId: string) => {
     const result = await props.integration.switchSession!(sessionId);
     setTransition(result && result.message ? { sessionId, message: result.message } : null);
   } : undefined;
-  return <TuiSession key={props.connection.sessionId} {...props} switchSession={switchSession}
+  return <TuiSession key={props.connection.sessionId} {...props} interrupt={interrupt} switchSession={switchSession}
     transitionNotice={transition?.sessionId === props.connection.sessionId ? transition.message : undefined} />;
 }
 
-function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onExit, switchSession, transitionNotice }: {
+function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onExit, interrupt, switchSession, transitionNotice }: {
   readonly connection: TuiConnection;
   readonly integration: TuiIntegration;
   readonly retainedSnapshot?: WireSnapshot;
   readonly onSnapshot?: (snapshot: WireSnapshot) => void;
   readonly onExit: () => void;
+  readonly interrupt: React.RefObject<() => void>;
   readonly switchSession?: (sessionId: string) => Promise<void>;
   readonly transitionNotice?: string;
 }): React.ReactElement {
@@ -75,6 +91,14 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
   const pending = useRef(false);
   const answerOwners = useRef<readonly string[] | null>(null);
   const queueOwners = useRef<readonly string[] | null>(null);
+  interrupt.current = () => {
+    if (editor.value.length > 0) editor.replace('');
+    else if (state.activeTurnId || state.interactions.length) {
+      void cancelForeground(connection, state.activeTurnId ?? undefined).then(setNotice, error => {
+        setNotice(error instanceof Error ? error.message : String(error));
+      });
+    } else setNotice('Press Ctrl+C again to exit');
+  };
   useInput((input, key) => {
     if (key.ctrl && input === 'g' && state.interactions.length && !busy) setInteractionOpen(true);
     if (key.ctrl && input === 'b' && state.budgets.length && !busy) setBudgetOpen(true);

@@ -16,6 +16,7 @@ import type { TuiIntegration } from './integration.js';
 import { useClient } from './use-client.js';
 import { Activity } from './views.js';
 import { InteractionPanel } from './interaction-panel.js';
+import type { InteractionInputHandler } from './interaction-input.js';
 import { RewindPicker } from './rewind-picker.js';
 import { TaskManager } from './task-manager.js';
 import { BudgetPanel } from './budget-panel.js';
@@ -160,6 +161,7 @@ function TuiSession({
       ? rootInteraction
       : undefined;
   const interactionActive = interactionOpen || Boolean(foregroundInteraction);
+  const interactionInput = useRef<InteractionInputHandler | null>(null);
   const viewport = useTranscriptViewport(
     state,
     columns,
@@ -192,15 +194,17 @@ function TuiSession({
       });
     } else setNotice('Press Ctrl+C again to exit');
   };
-  useInput(
-    (input, key) => {
-      if (key.ctrl && input === 'g' && state.interactions.length && !busy) setInteractionOpen(true);
-      if (key.ctrl && input === 'b' && state.budgets.length && !busy) setBudgetOpen(true);
-      if (key.meta && key.return && state.activeTurnId && !busy && !editing)
-        void submit(editor.value, images, 'follow_up');
-    },
-    { isActive: !interactionActive && !taskOpen && !budgetOpen && !rewindTargets },
-  );
+  useInput((input, key) => {
+    if (interactionActive) {
+      interactionInput.current?.(input, key);
+      return;
+    }
+    if (taskOpen || budgetOpen || rewindTargets) return;
+    if (key.ctrl && input === 'g' && state.interactions.length && !busy) setInteractionOpen(true);
+    if (key.ctrl && input === 'b' && state.budgets.length && !busy) setBudgetOpen(true);
+    if (key.meta && key.return && state.activeTurnId && !busy && !editing)
+      void submit(editor.value, images, 'follow_up');
+  });
 
   const changeInput = (value: string) => {
     if (/^\/answer(?:\s|$)/.test(value)) {
@@ -570,6 +574,7 @@ function TuiSession({
           interactions={state.interactions}
           width={columns}
           initialRequestId={foregroundInteraction?.id}
+          inputHandler={interactionInput}
           onClose={() => {
             setDismissedInteractionId(rootInteraction?.id ?? null);
             setInteractionOpen(false);
@@ -616,6 +621,7 @@ function TuiSession({
           enableImagePaste
           onPasteError={(reason) => setNotice(`Image paste failed: ${reason}`)}
           ignoreInput={(input, key) =>
+            !composerActive ||
             key.pageUp ||
             key.pageDown ||
             (key.ctrl && (key.upArrow || key.downArrow || input === 'g' || input === 'b')) ||

@@ -1,15 +1,17 @@
 import React, { useRef, useState } from 'react';
-import { Box, Text, useInput } from 'ink';
+import { Box, Text } from 'ink';
+import { useInteractionInput, type InteractionInput, type InteractionInputHandler } from './interaction-input.js';
 import { MultilineInput } from 'ink-prompt';
 import type { WireDecision } from '../../protocol/direct-wire.js';
 import type { InteractionView } from './state.js';
 import { Questions } from './questions.js';
 
 /** Keyboard-operated request picker; all decisions remain pinned to request IDs. */
-export function InteractionPanel({ interactions, width, initialRequestId, onClose, onCancel, onAnswer }: {
+export function InteractionPanel({ interactions, width, initialRequestId, inputHandler, onClose, onCancel, onAnswer }: {
   readonly interactions: readonly InteractionView[];
   readonly width: number;
   readonly initialRequestId?: string;
+  readonly inputHandler: InteractionInput;
   readonly onCancel?: () => Promise<void>;
   readonly onClose: () => void;
   readonly onAnswer: (requestId: string, decision: WireDecision) => Promise<void>;
@@ -21,6 +23,7 @@ export function InteractionPanel({ interactions, width, initialRequestId, onClos
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const pending = useRef(false);
+  const questionInput = useRef<InteractionInputHandler | null>(null);
   const request = interactions.find(item => item.id === requestId);
   const options = request ? (request.kind === 'approval'
     ? ['Allow once', 'Deny', 'Deny without reason', ...(request.supportedGrants ?? []).map(grant => `Grant: ${grant}`)]
@@ -41,10 +44,10 @@ export function InteractionPanel({ interactions, width, initialRequestId, onClos
     if (request) await commit(() => onAnswer(request.id, decision));
   };
   const structured = Boolean(request?.kind === 'question' && request.questions?.length);
-  useInput((input, key) => {
+  useInteractionInput(inputHandler, (input, key) => {
     if (pending.current) return;
     if (key.ctrl && input === 'g') { onClose(); return; }
-    if (structured) return;
+    if (structured) { questionInput.current?.(input, key); return; }
     if (key.escape) {
       if (onCancel) { void commit(onCancel); return; }
       if (entry) { setEntry(null); setText(''); }
@@ -81,12 +84,12 @@ export function InteractionPanel({ interactions, width, initialRequestId, onClos
     {request?.owner ? <Text>Owner: {request.owner}</Text> : null}
     {request?.detail ? <Text>{request.detail}</Text> : null}
     {requestId && !request ? <Text>Request no longer pending.</Text> : null}
-    {structured && request?.questions ? <Questions key={request.id} questions={request.questions} width={width} active={!busy} onBack={() => { if (onCancel) void commit(onCancel); else { setRequestId(null); setSelected(0); } }} onAnswer={send} /> : null}
+    {structured && request?.questions ? <Questions inputHandler={questionInput} key={request.id} questions={request.questions} width={width} active={!busy} onBack={() => { if (onCancel) void commit(onCancel); else { setRequestId(null); setSelected(0); } }} onAnswer={send} /> : null}
     {!structured && !entry && options.map((option, index) => <Text key={index}>{selected === index ? '❯' : ' '} {index + 1}. {option}</Text>)}
     {!structured && entry ? <Box flexDirection="column">
       <Text>{entry === 'reason' ? `Why?${onCancel ? ' (or Esc to cancel)' : ' (or Esc to go back)'} · Enter without a reason` : 'Your answer:'}</Text>
       <MultilineInput value={text} onChange={setText} width={Math.max(1, width - 6)} isActive={!busy}
-        ignoreInput={(input, key) => key.escape || (key.ctrl && input === 'g')}
+        ignoreInput={(input, key) => busy || key.escape || (key.ctrl && input === 'g')}
         onSubmit={value => {
           if (!value.trim() && entry !== 'reason') { setError('Enter an answer or press Escape to go back.'); return; }
           void send(entry === 'reason' ? (value.trim() ? { kind: 'deny', reason: value } : { kind: 'deny' }) : { kind: 'answer', answer: value }).catch(() => {});

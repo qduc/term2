@@ -9,6 +9,8 @@ import Database from 'better-sqlite3';
 import { resolveSettingsDirectory } from './services/settings/settings-path.js';
 import { createTestChildEnv } from './test-helpers/terminal-e2e.js';
 
+import { writeMockCliSettings } from './test-helpers/mock-cli-settings.js';
+
 import { integrationCliPath as cliPath } from './test-helpers/integration-cli.js';
 
 const projectRoot = fileURLToPath(new URL('..', import.meta.url));
@@ -136,8 +138,15 @@ function writeSettings(homeDir: string, settings: Record<string, unknown>): stri
   return settingsFile;
 }
 
+function createCliHome(): string {
+  const home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+  writeMockCliSettings(home);
+  return home;
+}
+
 beforeEach(() => {
   testDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-cli-test-')));
+  writeMockCliSettings(testDir);
   // Keep native conversation storage private; HOME, project guidance and scratch
   // are siblings, not entries in the conversation namespace.
   conversationsDir = path.join(testDir, 'conversations');
@@ -637,7 +646,7 @@ fs.createWriteStream = (filename, options) => {
     });
 
     it('positional launch durably records its goal before the first provider request', async () => {
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       const mock = await startModelMock(['mock-alpha']);
       writeSettings(tempHome, {
         agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
@@ -955,7 +964,7 @@ fs.createWriteStream = (filename, options) => {
     );
 
     it('positional launch closes the goal after a recorded achieved goal_check and reports it', async () => {
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       const check = {
         status: 'achieved',
         evidence: 'Provider returned the reply',
@@ -1031,7 +1040,7 @@ fs.createWriteStream = (filename, options) => {
     it.each(['', 'mock-verifier'])(
       'the shipped CLI verifies a durable goal with verifier.model=%s',
       async (verifierModel) => {
-        const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+        const tempHome = createCliHome();
         // The gate attests to a repository change set, so the workspace is a real Git
         // repository holding one uncommitted source file.
         const repo = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-verify-repo-')));
@@ -1269,7 +1278,7 @@ fs.createWriteStream = (filename, options) => {
     });
 
     it('CLI explains that an interactive terminal is required instead of exposing Ink raw-mode errors', async () => {
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       try {
         const { status, stderr } = await spawnCli(
           [cliPath(), '--lite'],
@@ -1395,7 +1404,7 @@ fs.createWriteStream = (filename, options) => {
     });
 
     it('CLI --resume prints message and exits when no conversation is found', () => {
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       let error: any;
       let stderr = '';
       try {
@@ -1454,7 +1463,7 @@ fs.createWriteStream = (filename, options) => {
     });
 
     it('CLI --list-models combined with --resume errors instead of misreading the resume id as a search term', () => {
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       let error: any;
       let stderr = '';
       try {
@@ -1481,7 +1490,7 @@ fs.createWriteStream = (filename, options) => {
     });
 
     it('CLI --list-models combined with --resume --fork errors', () => {
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       let error: any;
       let stderr = '';
       try {
@@ -1506,7 +1515,7 @@ fs.createWriteStream = (filename, options) => {
     });
 
     it('CLI --list-models without conflicting flags runs the listing errand, not a flag-conflict error', () => {
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       let stdout = '';
       let stderr = '';
       let status: number | null = 0;
@@ -1538,7 +1547,7 @@ fs.createWriteStream = (filename, options) => {
     });
 
     it('CLI --refresh without --list-models errors clearly instead of being silently ignored', () => {
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       let error: any;
       let stderr = '';
       try {
@@ -1564,7 +1573,7 @@ fs.createWriteStream = (filename, options) => {
     });
 
     it('CLI --list-models --refresh runs the listing errand, not the flag-conflict error', () => {
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       let stdout = '';
       let stderr = '';
       let status: number | null = 0;
@@ -1597,7 +1606,7 @@ fs.createWriteStream = (filename, options) => {
   }
   if (group === 'headless') {
     it('CLI prompts before starting in non-lite mode from home directory', () => {
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
 
       let error: any;
       let stderr = '';
@@ -1630,7 +1639,7 @@ fs.createWriteStream = (filename, options) => {
     });
 
     it('CLI prompts before starting in non-lite mode from root directory', () => {
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
 
       let error: any;
       let stderr = '';
@@ -1663,7 +1672,7 @@ fs.createWriteStream = (filename, options) => {
     });
 
     it('CLI accepts a custom provider from settings.json in non-interactive mode', () => {
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       const settingsDir = resolveSettingsDirectory({ homeDir: tempHome });
       fs.mkdirSync(settingsDir, { recursive: true });
       const providerName = 'my-custom-provider';
@@ -1675,6 +1684,7 @@ fs.createWriteStream = (filename, options) => {
           {
             agent: {
               retryAttempts: 0,
+              modelSelection: { provider: providerName, model: 'fixture-model' },
             },
             providers: [
               {
@@ -1722,7 +1732,7 @@ fs.createWriteStream = (filename, options) => {
       // catalog (codex's credential-free models endpoint); when that endpoint
       // began rejecting anonymous reads the resolution failed open to passthrough
       // and the CLI attempted a real provider connection instead.
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       const mock = await startModelMock(['mock-alpha', 'mock-beta']);
       writeSettings(tempHome, {
         agent: { retryAttempts: 0, modelSelection: { model: 'gpt-5.1', provider: 'mockprov' } },
@@ -1751,7 +1761,7 @@ fs.createWriteStream = (filename, options) => {
       // agent.modelSelection. Passthrough (all catalogs fail to load) also
       // reaches those set() calls, so an unreachable provider is enough to
       // exercise the persistence boundary.
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       const settingsFile = writeSettings(tempHome, {
         agent: { retryAttempts: 0, modelSelection: { model: 'keep-session-model', provider: 'openai' } },
         providers: [
@@ -1785,7 +1795,7 @@ fs.createWriteStream = (filename, options) => {
     it('CLI --json auto-selects an ambiguous model without asking for input', async () => {
       // Regression: the prompt defaulted to process.stdout, corrupting the NDJSON
       // event channel whenever an ambiguous pattern needed disambiguation.
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       const mock = await startModelMock(['mock-alpha', 'mock-beta']);
       writeSettings(tempHome, {
         agent: { retryAttempts: 0, modelSelection: { model: 'gpt-5.1', provider: 'mockprov' } },
@@ -1820,7 +1830,7 @@ fs.createWriteStream = (filename, options) => {
       // (openai/...) used to narrow the catalog load to that provider, so a
       // literal aggregator id was reported as no_match or silently switched and
       // persisted the wrong provider/model.
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       const mock = await startModelMock(['openai/gpt-test', 'mock-alpha']);
       const settingsFile = writeSettings(tempHome, {
         agent: { retryAttempts: 0, modelSelection: { model: 'original-default', provider: 'mockprov' } },
@@ -1876,7 +1886,7 @@ fs.createWriteStream = (filename, options) => {
       // test is about. The banner renders the resolved agent.model/agent.provider
       // before that crash, so its content is direct proof of what resolution
       // picked, independent of the crash.
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       const mock = await startModelMock(['mock-alpha', 'mock-beta']);
       writeSettings(tempHome, {
         agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
@@ -1902,7 +1912,7 @@ fs.createWriteStream = (filename, options) => {
     });
 
     it('CLI resolves -p <provider> -m <model> with nothing else to the model, not a prompt', async () => {
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       const mock = await startModelMock(['mock-alpha', 'mock-beta']);
       writeSettings(tempHome, {
         agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
@@ -1932,7 +1942,7 @@ fs.createWriteStream = (filename, options) => {
     });
 
     it('CLI still treats --model <value> <prompt> (two or more trailing tokens) as unambiguous', async () => {
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       const mock = await startModelMock(['mock-alpha', 'mock-beta']);
       writeSettings(tempHome, {
         agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
@@ -1956,7 +1966,7 @@ fs.createWriteStream = (filename, options) => {
     });
 
     it('CLI "term2 <prompt>" with no --model is unchanged', async () => {
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       const mock = await startModelMock(['mock-alpha']);
       writeSettings(tempHome, {
         agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
@@ -1987,7 +1997,7 @@ fs.createWriteStream = (filename, options) => {
       // already-configured default model is used, and the run proceeds to the
       // ordinary interactive-app boot (which then hits the same expected
       // non-TTY raw-mode failure every other no-prompt case in this file hits).
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       const mock = await startModelMock(['mock-alpha']);
       writeSettings(tempHome, {
         agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },

@@ -141,6 +141,7 @@ function createConversationLog(
   firstSeq: number,
   prefix: readonly FactLine[] = [],
   tornFrom?: number,
+  timestamp: () => string = () => new Date().toISOString(),
 ): ConversationLog {
   const payloads = new LogPayloads(prefix);
   let sequence = firstSeq;
@@ -174,7 +175,7 @@ function createConversationLog(
           const line: FactLine = {
             v: LOG_FORMAT_VERSION,
             seq: sequence,
-            at: new Date().toISOString(),
+            at: timestamp(),
             fact: normalized,
           };
           const compact = payloads.encode(sequence, normalized);
@@ -230,9 +231,20 @@ export type LogContinuationOptions = {
 };
 
 /** Opens `<dir>/<id>.jsonl` with 'wx'. The directory refusal (D9) happens in app before this. */
-export function createLog(dir: string, id: string, options: LogContinuationOptions = {}): ConversationLog {
+export function createLog(
+  dir: string,
+  id: string,
+  options: LogContinuationOptions & { readonly timestamp?: () => string } = {},
+): ConversationLog {
   const path = join(dir, `${id}.jsonl`);
-  return createConversationLog(path, openSync(path, 'wx'), continuationSeq(options.afterSeq) + 1, options.prefix);
+  return createConversationLog(
+    path,
+    openSync(path, 'wx'),
+    continuationSeq(options.afterSeq) + 1,
+    options.prefix,
+    undefined,
+    options.timestamp,
+  );
 }
 
 /** Changes no bytes: continues the seq, and leaves a torn final line for the next append to remove. */

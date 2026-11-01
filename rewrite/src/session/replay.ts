@@ -16,7 +16,7 @@ import { directPersonalMemoryItem, type DirectMemoryFact } from './direct-memory
 import { projectDirectBackground } from './direct-background-replay.js';
 import type { DirectBackgroundFact, DirectTaskState } from './direct-background-types.js';
 import type { DirectQueueState } from './direct-queue-types.js';
-import type { Fact, TurnOutcomeName, DirectTurnFact } from './facts.js';
+import type { Fact, TurnOutcomeName, DirectTurnFact, DirectCompactionFact, DirectHistoryFact } from './facts.js';
 import { isDirectCommandFactType, reduceDirectCommandReceipts } from './direct-command-receipts.js';
 import type { DirectCommandReceipts } from './direct-command-types.js';
 import {
@@ -35,6 +35,12 @@ export type ReplayOptions = {
    */
   readonly recoverActiveTurn?: boolean;
 };
+/** Accepted evidence only. Missing outcome stays unobserved, even after root recovery. */
+export type ReplayedCompaction = {
+  readonly start: Extract<DirectCompactionFact, { type: 'compaction_started' }>;
+  readonly replacement?: DirectHistoryFact;
+  readonly outcome?: Exclude<DirectCompactionFact, { type: 'compaction_started' }>;
+};
 export type ReplayedBranch = {
   readonly branchId: string;
   readonly taskId: string;
@@ -43,6 +49,8 @@ export type ReplayedBranch = {
   readonly parentTurnId?: TurnId;
   readonly rootTurnId?: TurnId;
   readonly history: readonly Item[];
+  /** This branch's attempts only, joined to its actual branch/task/turn identity above. */
+  readonly compactions: readonly ReplayedCompaction[];
   readonly status: 'idle' | 'interrupted';
 };
 export type ReplayedConversation = NativeReplayedConversation & {
@@ -55,6 +63,8 @@ export type ReplayedConversation = NativeReplayedConversation & {
   /** Accepted notices only. A drain admission is the sole delivery writer. */
   readonly notifications: DirectNotificationState;
   readonly branches: readonly ReplayedBranch[];
+  /** Root attempts only; never accounting, transcript, or recovery instructions. */
+  readonly compactions: readonly ReplayedCompaction[];
   readonly compactionState?: {
     readonly rearmAtEstimatedTokens?: number;
     readonly checkpointReceipts?: readonly string[];
@@ -145,6 +155,7 @@ function replayProjection(
   // a later physical receipt may correct or enrich the same request's record.
   const requestCosts = new Map<string, RequestCost>();
   let compactionState: ReplayedConversation['compactionState'];
+  const compactions = new Map<string, ReplayedCompaction>();
   const humanSlots = new Map<string, Slot>();
   const personalSnapshots = new Map<string, Extract<DirectMemoryFact, { type: 'memory_personal_snapshot' }>>();
   const deliveredSnapshots = new Set<string>();
@@ -176,6 +187,15 @@ function replayProjection(
       throw new Error(`replay: ${type} for turn ${turnId} while turn ${active.turnId} is open`);
     }
     return active;
+  };
+
+  const requireCompaction = (compactionId: string, turnId: TurnId): ReplayedCompaction => {
+    const attempt = compactions.get(compactionId);
+    if (!attempt || attempt.start.turnId !== turnId) {
+      throw new Error(`replay: compaction ${compactionId} has no matching start in this turn/scope`);
+    }
+    if (attempt.outcome) throw new Error(`replay: compaction ${compactionId} already has an outcome`);
+    return attempt;
   };
 
   const appendItem = (turn: ActiveTurn, fact: Extract<Fact, { type: 'item' }>): void => {
@@ -490,7 +510,31 @@ function replayProjection(
       case 'usage':
         requireActive(fact.turnId, fact.type);
         break;
+      case 'compaction_started':
+        requireActive(fact.turnId, fact.type);
+        if (compactions.has(fact.compactionId)) throw new Error('replay: duplicate compaction start');
+        compactions.set(fact.compactionId, { start: fact });
+        break;
+      case 'compaction_completed':
+      case 'compaction_failed': {
+        requireActive(fact.turnId, fact.type);
+        const attempt = requireCompaction(fact.compactionId, fact.turnId);
+        if (fact.type === 'compaction_completed' && !attempt.replacement)
+          throw new Error('replay: compaction completed without its accepted history replacement');
+        if (fact.type === 'compaction_failed' && attempt.replacement)
+          throw new Error('replay: compaction failed after its accepted history replacement');
+        compactions.set(fact.compactionId, { ...attempt, outcome: fact });
+        // Requests are references to physical accounting, not another charge or response receipt.
+        break;
+      }
       case 'history_replaced': {
+        if (fact.compactionId !== undefined) {
+          if (fact.reason !== 'compaction' || fact.turnId === undefined)
+            throw new Error('replay: compaction replacement has no owning compaction turn');
+          const attempt = requireCompaction(fact.compactionId, fact.turnId);
+          if (attempt.replacement) throw new Error('replay: duplicate compaction replacement');
+          compactions.set(fact.compactionId, { ...attempt, replacement: fact });
+        }
         if (fact.turnId !== undefined) {
           const turn = requireActive(fact.turnId, fact.type);
           if (hasUnsettledRoots(turn)) throw new Error('replay: history replacement has unsettled physical tool debt');
@@ -633,6 +677,7 @@ function replayProjection(
       ...(branch.parentTurnId === undefined ? {} : { parentTurnId: branch.parentTurnId }),
       ...(branch.rootTurnId === undefined ? {} : { rootTurnId: branch.rootTurnId }),
       history: view.history,
+      compactions: view.compactions,
       status: view.status,
     });
     if (
@@ -658,6 +703,7 @@ function replayProjection(
     commands: commandReceipts,
     notifications,
     branches: branchViews,
+    compactions: [...compactions.values()],
     ...(compactionState ? { compactionState } : {}),
   };
 }

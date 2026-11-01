@@ -186,6 +186,9 @@ const nativeTypes = new Set([
   'usage',
   'turn_ended',
   'history_replaced',
+  'compaction_started',
+  'compaction_completed',
+  'compaction_failed',
   'model_response_completed',
   'request_cost_recorded',
   'budget_opened',
@@ -418,8 +421,18 @@ export function validateFact(fact: Record<string, unknown>, where: string, scope
         fail('resolutionSource');
       if ('automaticApproval' in fact && typeof fact['automaticApproval'] !== 'boolean') fail('automaticApproval');
       break;
+    case 'compaction_started':
+    case 'compaction_completed':
+    case 'compaction_failed':
+      validateCompactionFact(fact, fail);
+      break;
     case 'history_replaced':
       optionalText(fact, 'turnId');
+      if ('compactionId' in fact) {
+        text(fact['compactionId'], 'compactionId');
+        text(fact['turnId'], 'turnId');
+        if (fact['reason'] !== 'compaction') fail('compactionId');
+      }
       if (!['compaction', 'retry_turn', 'retry_tool', 'rewind'].includes(fact['reason'] as string)) fail('reason');
       validateHistory(fact['history'], where);
       if (
@@ -441,16 +454,7 @@ export function validateFact(fact: Record<string, unknown>, where: string, scope
       if (!('modelStep' in fact)) fail('modelStep');
       if (!['end_turn', 'tool_use', 'max_tokens', 'refusal'].includes(fact['stopReason'] as string)) fail('stopReason');
       if ('providerMetadata' in fact) object(fact['providerMetadata'], 'providerMetadata');
-      if ('costUsd' in fact) {
-        const cost = fact['costUsd'];
-        if (
-          (typeof cost !== 'number' && typeof cost !== 'string') ||
-          (typeof cost === 'string' && !cost.trim()) ||
-          !Number.isFinite(Number(cost)) ||
-          Number(cost) < 0
-        )
-          fail('costUsd');
-      }
+      if ('costUsd' in fact) validateProviderCost(fact['costUsd'], fail, 'costUsd');
       break;
     case 'request_cost_recorded':
       text(fact['turnId'], 'turnId');
@@ -530,6 +534,9 @@ export function validateFact(fact: Record<string, unknown>, where: string, scope
           'usage',
           'turn_ended',
           'history_replaced',
+          'compaction_started',
+          'compaction_completed',
+          'compaction_failed',
           'model_response_completed',
           'budget_opened',
           'budget_closed',
@@ -550,11 +557,7 @@ export function validateFact(fact: Record<string, unknown>, where: string, scope
         fail('task.startedAt');
       for (const field of ['name', 'role', 'parentExecutionId', 'sourceCallId']) optionalText(task, field);
       if ('origin' in task && !validDirectQueueOrigin(task['origin'])) fail('task.origin');
-      if ('model' in task) {
-        const model = object(task['model'], 'task.model');
-        text(model['provider'], 'model.provider');
-        text(model['model'], 'model.model');
-      }
+      if ('model' in task) validateModelRef(task['model'], fail, 'task.model');
       if ('workspace' in task) {
         const workspace = object(task['workspace'], 'task.workspace');
         text(workspace['root'], 'workspace.root');
@@ -606,23 +609,7 @@ export function validateFact(fact: Record<string, unknown>, where: string, scope
             seen.add(toolName);
           }
         }
-        if (result['kind'] === 'failed') {
-          const error = object(result['error'], 'result.error');
-          if (
-            typeof error['message'] !== 'string' ||
-            typeof error['retryable'] !== 'boolean' ||
-            ![
-              'authentication',
-              'rate_limit',
-              'network',
-              'context_overflow',
-              'invalid_request',
-              'provider',
-              'cancelled',
-            ].includes(error['kind'] as string)
-          )
-            fail('result.error');
-        }
+        if (result['kind'] === 'failed') validateModelError(result['error'], fail, 'result.error');
       }
       break;
     }
@@ -645,6 +632,167 @@ export function validateFact(fact: Record<string, unknown>, where: string, scope
       } else if (value['kind'] !== 'cancelled' && value['kind'] !== 'interrupted') fail('resolution.kind');
       break;
     }
+  }
+}
+
+/** Existing native model/error/cost rules, shared with compaction request evidence. */
+function validateModelRef(value: unknown, fail: (field: string) => never, field: string): void {
+  const model = objectRecord(value, fail, field);
+  for (const key of ['provider', 'model'])
+    if (typeof model[key] !== 'string' || model[key] === '') fail(`${field}.${key}`);
+}
+
+function validateModelError(value: unknown, fail: (field: string) => never, field: string): void {
+  const error = objectRecord(value, fail, field);
+  if (
+    typeof error['message'] !== 'string' ||
+    typeof error['retryable'] !== 'boolean' ||
+    ![
+      'authentication',
+      'rate_limit',
+      'network',
+      'context_overflow',
+      'invalid_request',
+      'provider',
+      'cancelled',
+    ].includes(error['kind'] as string)
+  )
+    fail(field);
+}
+
+function validateProviderCost(value: unknown, fail: (field: string) => never, field: string): void {
+  if (
+    (typeof value !== 'number' && typeof value !== 'string') ||
+    (typeof value === 'string' && !value.trim()) ||
+    !Number.isFinite(Number(value)) ||
+    Number(value) < 0
+  )
+    fail(field);
+}
+
+/** Validate lifecycle evidence in place: never default or normalize missing metrics. */
+function validateCompactionFact(fact: Record<string, unknown>, fail: (field: string) => never): void {
+  const exact = (
+    record: Record<string, unknown>,
+    required: readonly string[],
+    optional: readonly string[],
+    field: string,
+  ): void => {
+    if (
+      required.some((key) => !(key in record)) ||
+      Object.keys(record).some((key) => !required.includes(key) && !optional.includes(key))
+    )
+      fail(field);
+  };
+  const number = (value: unknown, field: string): void => {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) fail(field);
+  };
+  const text = (value: unknown, field: string): void => {
+    if (typeof value !== 'string' || value === '') fail(field);
+  };
+  const strategy = (value: unknown): void => {
+    if (value !== 'native' && value !== 'local') fail('strategy');
+  };
+  const model = (value: unknown, field: string): void => {
+    validateModelRef(value, fail, field);
+    exact(objectRecord(value, fail, field), ['provider', 'model'], [], field);
+  };
+  const estimate = (value: unknown, field: string): void => {
+    const record = objectRecord(value, fail, field);
+    const keys = ['renderedInputTokens', 'outputReserveTokens', 'safetyReserveTokens', 'hardFitTokens'];
+    exact(record, keys, [], field);
+    for (const key of keys) number(record[key], `${field}.${key}`);
+  };
+  text(fact['turnId'], 'turnId');
+  text(fact['compactionId'], 'compactionId');
+  if (fact['type'] === 'compaction_started') {
+    exact(
+      fact,
+      ['type', 'turnId', 'compactionId', 'trigger', 'model', 'before'],
+      ['strategy', 'contextWindow', 'maxRequestInputTokens', 'lastCompletedInputTokens'],
+      'payload',
+    );
+    if (fact['trigger'] !== 'manual' && fact['trigger'] !== 'automatic') fail('trigger');
+    model(fact['model'], 'model');
+    estimate(fact['before'], 'before');
+    if ('strategy' in fact) strategy(fact['strategy']);
+    for (const key of ['contextWindow', 'lastCompletedInputTokens']) if (key in fact) number(fact[key], key);
+    if ('maxRequestInputTokens' in fact && fact['maxRequestInputTokens'] !== null)
+      number(fact['maxRequestInputTokens'], 'maxRequestInputTokens');
+    return;
+  }
+  const completed = fact['type'] === 'compaction_completed';
+  exact(
+    fact,
+    ['type', 'turnId', 'compactionId', 'durationMs', 'requests', ...(completed ? ['strategy', 'after'] : ['failure'])],
+    [],
+    'payload',
+  );
+  // Monotonic elapsed time can be fractional; the log clock has no role here.
+  number(fact['durationMs'], 'durationMs');
+  if (!Array.isArray(fact['requests'])) fail('requests');
+  const requestIds = new Set<string>();
+  for (const value of fact['requests'] as unknown[]) {
+    const request = objectRecord(value, fail, 'requests[]');
+    exact(request, ['requestId', 'modelStep', 'model', 'outcome'], ['usage', 'costUsd'], 'requests[]');
+    text(request['requestId'], 'requests.requestId');
+    const requestId = request['requestId'] as string;
+    if (requestIds.has(requestId)) fail('requests.requestId');
+    requestIds.add(requestId);
+    const step = request['modelStep'];
+    if (typeof step !== 'number' || !Number.isSafeInteger(step) || step < 0) fail('requests.modelStep');
+    model(request['model'], 'requests.model');
+    if (!['completed', 'failed', 'cancelled'].includes(request['outcome'] as string)) fail('requests.outcome');
+    if ('usage' in request) {
+      const usage = objectRecord(request['usage'], fail, 'requests.usage');
+      const keys = ['inputTokens', 'outputTokens', 'cachedInputTokens'];
+      exact(usage, keys, [], 'requests.usage');
+      for (const key of keys) number(usage[key], `requests.usage.${key}`);
+    }
+    if ('costUsd' in request) validateProviderCost(request['costUsd'], fail, 'requests.costUsd');
+  }
+  if (completed) {
+    strategy(fact['strategy']);
+    estimate(fact['after'], 'after');
+    return;
+  }
+  const failure = objectRecord(fact['failure'], fail, 'failure');
+  switch (failure['kind']) {
+    case 'blocked':
+      exact(failure, ['kind', 'reason'], [], 'failure');
+      if (
+        ![
+          'disabled',
+          'unknown_threshold',
+          'native_unavailable',
+          'unsettled_tools',
+          'no_complete_cold_turn',
+          'single_turn_too_large',
+          'opaque_context',
+          'summary_input_too_large',
+          'non_reducing',
+          'result_still_too_large',
+        ].includes(failure['reason'] as string)
+      )
+        fail('failure.reason');
+      break;
+    case 'interrupted':
+      exact(failure, ['kind', 'reason'], [], 'failure');
+      if (failure['reason'] !== 'budget_wrap_up' && failure['reason'] !== 'budget_exhausted') fail('failure.reason');
+      break;
+    case 'cancelled':
+      exact(failure, ['kind'], [], 'failure');
+      break;
+    case 'failed': {
+      exact(failure, ['kind', 'error'], [], 'failure');
+      validateModelError(failure['error'], fail, 'failure.error');
+      const error = objectRecord(failure['error'], fail, 'failure.error');
+      exact(error, ['kind', 'message', 'retryable'], ['retryAfterMs'], 'failure.error');
+      if ('retryAfterMs' in error) number(error['retryAfterMs'], 'failure.error.retryAfterMs');
+      break;
+    }
+    default:
+      fail('failure.kind');
   }
 }
 

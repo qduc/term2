@@ -27,7 +27,7 @@ import type { Workspace } from '../tools/index.js';
 import type { DirectBinding } from './facade-types.js';
 import { LOG_FORMAT_VERSION, type Fact, type FactLine, type SessionStartedFact } from './facts.js';
 import { readFactLines } from './log.js';
-import { readDirectLogLineage } from './direct-rolling-log.js';
+import { DIRECT_LOCK_DIRECTORY, readDirectLogLineage } from './direct-rolling-log.js';
 import { latestDirectConfiguration } from './direct-configuration.js';
 import { replay } from './replay.js';
 
@@ -169,7 +169,7 @@ export async function forkDirectConversation(request: DirectForkRequest): Promis
   };
 }
 
-/** Store rule: only exact conv_<uuid>.jsonl files, and never open a foreign name. */
+/** Store rule: exact logs and the reserved lock directory; never open foreign data. */
 async function assertDirectDirectory(directory: string, sourceId: string): Promise<void> {
   let names: string[];
   try {
@@ -182,6 +182,11 @@ async function assertDirectDirectory(directory: string, sourceId: string): Promi
   }
   let found = false;
   for (const name of names) {
+    if (name === DIRECT_LOCK_DIRECTORY) {
+      if (!(await lstat(path.join(directory, name))).isDirectory())
+        throw new Error('direct Session lock path is not a directory');
+      continue;
+    }
     if (!name.endsWith('.jsonl') || !DIRECT_ID.test(name.slice(0, -'.jsonl'.length))) {
       throw new Error(`refusing direct conversations directory with foreign entry ${JSON.stringify(name)}`);
     }

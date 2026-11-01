@@ -6,6 +6,8 @@ import { createLog, openLog, readFactLines, type ConversationLog } from './log.j
 import { parseDirectSessionRotation, type DirectSessionRotationFact } from './direct-session-rotation.js';
 
 const DIRECT_ID = /^conv_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+/** Dedicated metadata directory; its prefix also passes the CLI's name-only preflight. */
+export const DIRECT_LOCK_DIRECTORY = 'conv_locks';
 export type DirectLogBoundary = { readonly sessionId: string; readonly seq: number };
 export type DirectLogSegment = {
   readonly sessionId: string;
@@ -27,7 +29,7 @@ export interface DirectRollingLog extends ConversationLog {
   head(): DirectLogBoundary;
 }
 
-/** Exact namespace only; inspect names and regular-file identity before reading data. */
+/** Exact logs and the one reserved lock directory; never read foreign data. */
 export function directLogNames(directory: string): readonly string[] {
   let names: string[];
   try {
@@ -37,11 +39,16 @@ export function directLogNames(directory: string): readonly string[] {
     throw error;
   }
   for (const name of names) {
+    if (name === DIRECT_LOCK_DIRECTORY) {
+      if (!lstatSync(join(directory, name)).isDirectory())
+        throw new Error('direct Session lock path is not a directory');
+      continue;
+    }
     if (!name.endsWith('.jsonl') || !DIRECT_ID.test(name.slice(0, -6)))
       throw new Error(`refusing direct conversations directory with foreign entry ${JSON.stringify(name)}`);
     if (!lstatSync(join(directory, name)).isFile()) throw new Error(`direct log is not a regular file: ${name}`);
   }
-  return names;
+  return names.filter((name) => name !== DIRECT_LOCK_DIRECTORY);
 }
 
 /** Safe physical filename; neither a stored header nor a caller may escape the namespace. */

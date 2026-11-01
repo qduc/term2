@@ -81,17 +81,26 @@ async function fixture(holdFirst = false) {
   });
   const entry = join(workspace.root, 'direct-dist/rewrite/src/app/cli.js');
   const runtime = join(workspace.root, 'runtime');
-  const child = await workspace.start({
-    command: process.execPath,
-    args: [entry, '--profile', 'bare', '--control-socket=restart-native'],
-    env: { ...productionEnv, XDG_RUNTIME_DIR: runtime },
-    cwd: join(workspace.root, 'work'),
-    cols: 180,
-    rows: 50,
-  });
+  const start = (resumeId?: string) =>
+    workspace.start({
+      command: process.execPath,
+      args: [
+        entry,
+        '--profile',
+        'bare',
+        '--control-socket=restart-native',
+        ...(resumeId ? ['--resume', resumeId] : []),
+      ],
+      env: { ...productionEnv, XDG_RUNTIME_DIR: runtime },
+      cwd: join(workspace.root, 'work'),
+      cols: 180,
+      rows: 50,
+    });
+  const child = await start();
   return {
     workspace,
     child,
+    resume: start,
     requests,
     entry,
     async stopForeground() {
@@ -199,6 +208,26 @@ it.skipIf(process.platform !== 'linux' || !process.execve || !process.env.TERM2_
       await writePtyTextAndSubmit(child, '/quit');
       expect((await child.waitForExit()).exitCode).toBe(0);
       expect(requests).toHaveLength(1);
+      // Cold admission uses state produced by the real queue/control workflow,
+      // not a legacy sidecar or hand-authored native facts. Setup made one request;
+      // this new process and its exec must make zero additional requests.
+      const requestsBeforeColdResume = requests.length;
+      const resumed = await f.resume(before[0]!.file.replace(/\.jsonl$/, ''));
+      await resumed.waitForVisibleOutput('Resumed conversation:');
+      await resumed.waitForVisibleOutput('Queue: paused · manual');
+      await resumed.waitForComposerValue('');
+      expect(requests).toHaveLength(requestsBeforeColdResume);
+      const coldOffset = resumed.getOutput().length;
+      await writePtyTextAndSubmit(resumed, '/restart');
+      await resumed.waitForState((state) => state.output.slice(coldOffset).includes('Resumed conversation:'));
+      const resumedOffset = resumed.getOutput().lastIndexOf('Resumed conversation:');
+      await resumed.waitForComposerValue('', { afterRevision: resumedOffset });
+      await resumed.waitForState((state) => state.output.slice(resumedOffset).includes('Queue: paused · manual'));
+      await writePtyTextAndSubmit(resumed, '/help');
+      await resumed.waitForVisibleOutput('Keyboard shortcuts');
+      await writePtyTextAndSubmit(resumed, '/quit');
+      expect((await resumed.waitForExit()).exitCode).toBe(0);
+      expect(requests).toHaveLength(requestsBeforeColdResume);
       const after = await f.logs();
       expect(after.map((log) => log.file)).toEqual(before.map((log) => log.file));
       expect(after[0]!.text.startsWith(before[0]!.text)).toBe(true);

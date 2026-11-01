@@ -17,7 +17,7 @@ import { publicQueue, publicQueueChange } from './direct-queue.js';
 import { taskFactEvent } from './direct-tasks.js';
 import type { Fact } from '../session/facts.js';
 import type { WireBranchSnapshot, WireConfiguration, WireEvent, WireEventPayloads, WireEventType, WireModel, WireSnapshot } from './direct-wire.js';
-import { publicInteraction, publicJson, publicMessage, publicToolContent, publicTerminal } from './direct-public.js';
+import { contentText, publicContent, publicInteraction, publicJson, publicMessage, publicToolContent, publicTerminal } from './direct-public.js';
 import { runtimeDirectError, snapshotDirectState } from './direct-state.js';
 import { reduceWireEvent } from './direct-reducer.js';
 
@@ -199,6 +199,7 @@ export class DirectProjection {
       case 'budget_observed': return [budgetFactEvent(fact, this.#state.sessionId, seq)];
       case 'history_replaced': return [this.#event('history_replaced', {
         reason: fact.reason,
+        ...(fact.retainTranscript ? { retainTranscript: true as const } : {}),
         ...(fact.compactionId !== undefined ? { compactionId: fact.compactionId } : {}),
       }, seq, turnId)];
       case 'model_response_completed': return [this.#event('model_response_completed', {
@@ -217,10 +218,15 @@ export class DirectProjection {
       }
       case 'branch_event': return this.#branch(fact.branchId, fact.fact, seq, at);
       case 'session_started': return [this.#event('configuration', { model: fact.model, ...(fact.reasoning ? { reasoning: fact.reasoning } : {}) }, seq, null)];
+      case 'transcript_message': {
+        const content = publicContent(fact.message.content);
+        return [this.#event('message', { message: { ...fact.message, content,
+          text: contentText(content), ...(fact.turnId ? { turnId: fact.turnId } : {}) } }, seq, turnId)];
+      }
       case 'turn_started': return [
         this.#event('turn_started', { foreground: true, ...(fact.silent ? { silent: true as const } : {}),
           ...(fact.submission ? { admission: { kind: 'started' as const, clientRequestId: fact.submission.clientRequestId, messageId: fact.submission.messageId, turnId: fact.turnId } } : {}),
-          input: fact.silent ? [] : fact.input.flatMap(item => { const message = publicMessage(item, fact.turnId); return message ? [message] : []; }),
+          input: fact.silent || fact.display === false ? [] : fact.input.flatMap(item => { const message = publicMessage(item, fact.turnId); return message ? [message] : []; }),
         }, seq, turnId),
       ];
       case 'text_delta': {
@@ -267,6 +273,7 @@ export class DirectProjection {
     }));
   }
   #item(fact: Extract<Fact, { type: 'item' }>, seq: number): readonly WireEvent[] {
+    if (fact.display === false) return [];
     const { item, executionId, turnId } = fact;
     if (item.type === 'tool_call') {
       if (!executionId) throw new Error('Tool call fact has no execution identity');

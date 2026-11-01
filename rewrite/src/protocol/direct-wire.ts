@@ -47,7 +47,8 @@ export type WireInteraction = {
 };
 export type WireMessage = {
   readonly id: string;
-  readonly role: 'user' | 'assistant' | 'tool';
+  readonly role: 'user' | 'assistant' | 'tool' | 'system';
+  readonly presentation?: { readonly [key: string]: JsonValue };
   readonly content: readonly WireContent[];
   readonly text: string;
   readonly turnId?: string;
@@ -381,7 +382,7 @@ export type WireEventPayloads = {
   budget_opened: { readonly request: WireBudgetRequest };
   budget_closed: { readonly requestId: string; readonly decision: WireBudgetResolution; readonly source: 'user' | 'parent' | 'system' };
   budget_observed: { readonly evidence: WireBudgetEvidence };
-  history_replaced: { readonly reason: 'compaction' | 'retry_turn' | 'retry_tool' | 'rewind'; readonly compactionId?: string };
+  history_replaced: { readonly retainTranscript?: true; readonly reason: 'compaction' | 'retry_turn' | 'retry_tool' | 'rewind'; readonly compactionId?: string };
   request_cost_recorded: WireRequestCost;
   /** One accepted attempt boundary; estimates are not measured usage. */
   compaction_started: WireCompactionStarted;

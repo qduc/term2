@@ -6,6 +6,7 @@ const modelText = (model: { readonly provider: string; readonly model: string })
 const messageView = (message: WireMessage): Message => ({
   id: message.id,
   role: message.role,
+  ...(message.presentation ? { presentation: structuredClone(message.presentation) } : {}),
   text: message.content.length ? message.content.map(part => part.type === 'text' ? part.text : `[image: ${part.mediaType}]`).join('') : message.text,
   error: message.isError,
   ...(message.role === 'user' ? { historyText: message.content.filter(part => part.type === 'text').map(part => part.text).join('') || message.text, attachments: message.content.filter(part => part.type === 'image') } : {}),

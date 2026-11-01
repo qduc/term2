@@ -179,6 +179,11 @@ The direct CLI supports one prompt per invocation. Resume requires an exact dire
 * Not available in the direct executable yet. These fail with an error; they never start the current CLI.
 `;
 
+/** A usage error the current CLI reports with exit 2 (its argument parser's convention). Other parse errors stay exit 1. */
+export class UsageError extends Error {
+  readonly exitCode = 2;
+}
+
 type RawValue = string | true;
 
 function parseResumeId(value: string): string {
@@ -282,7 +287,7 @@ export function parseCommandLine(argv: readonly string[]): Command {
       const equals = token.startsWith('--') ? token.indexOf('=') : -1;
       const name = equals > 0 ? token.slice(0, equals) : token;
       const flag = FLAG_BY_NAME.get(name);
-      if (!flag) throw new Error(`Unknown option: ${token}`);
+      if (!flag) throw new UsageError(`Unknown flag: ${token}`);
       if (flag.value === undefined && equals > 0) throw new Error(`${name} does not take a value`);
       let value: RawValue = true;
       if (equals > 0) {

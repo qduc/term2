@@ -74,7 +74,7 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
   const configuration = createDirectTuiSettings(app, latest);
 
   const resume = async (sessionId: string | undefined): Promise<CommandResult> => {
-    if (sessionId) {
+    if (sessionId && sessionId !== 'ls') {
       return { sessionId };
     }
     const { sessions } = await host.listSessions(principal);
@@ -83,11 +83,20 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
   };
 
   const model = async (connection: TuiConnection, reference: string | undefined): Promise<CommandResult> => {
+    if (!reference)
+      return {
+        message: 'Choose a model: enter <provider>/<model>.',
+        draft: { text: '/model ', attachments: [] },
+      };
     return configure(connection, { model: parseModel(reference) });
   };
 
   const effort = async (connection: TuiConnection, value: string | undefined): Promise<CommandResult> => {
-    if (!value) throw new Error('Use /effort <level>.');
+    if (!value)
+      return {
+        message: 'Choose reasoning effort: default, none, minimal, low, medium, high, xhigh.',
+        draft: { text: '/effort ', attachments: [] },
+      };
     return configure(connection, { reasoning: value as NonNullable<Configuration['reasoning']> });
   };
 
@@ -206,8 +215,8 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
               '/help — Show commands and keyboard shortcuts',
               '/quit, /exit — Exit the application',
               '/restart [stop] — Reload this executable; stop consents to stopping background work',
-              '/resume [session], /clear, /rollover — Open or start a conversation',
-              '/model <provider>/<model>, /effort <level>, /profile <name> — Configure the session',
+              '/resume [ls|session], /clear, /rollover — List, open or start a conversation',
+              '/model [<provider>/<model>], /effort [<level>], /profile [<name>] — Configure the session; omit the argument to finish it in the composer',
               '/settings, /auto-approve, /sandbox, /usage, /goal, /skills, /handoff, /copy',
               '/compact, /retry-turn, /retry-tool, /rewind — Context and recovery',
               '/queue, /steer, /followup, /cancel, /tasks, /answer, /bridge — Work and input',

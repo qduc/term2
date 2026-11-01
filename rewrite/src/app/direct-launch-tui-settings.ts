@@ -112,7 +112,11 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
     },
 
     profile(connection: TuiConnection, id: string | undefined): Promise<CommandResult> {
-      if (!id) throw new Error('Use /profile <id>.');
+      if (!id)
+        return Promise.resolve({
+          message: 'Choose a profile: enter its name or full profile ID.',
+          draft: { text: '/profile ', attachments: [] },
+        });
       return switchProfile(connection, id.includes(':') ? id : `builtin:${id}`, `/profile ${id}`);
     },
 
@@ -196,7 +200,12 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
     },
 
     autoApprove(connection: TuiConnection, mode: string | undefined): Promise<CommandResult> {
-      if (!mode || !APPROVAL_MODES.includes(mode)) throw new Error(`Use /auto-approve ${APPROVAL_MODES.join('|')}.`);
+      if (!mode)
+        return Promise.resolve({
+          message: `Choose tool auto-approval: ${APPROVAL_MODES.join(', ')}.`,
+          draft: { text: '/auto-approve ', attachments: [] },
+        });
+      if (!APPROVAL_MODES.includes(mode)) throw new Error(`Use /auto-approve ${APPROVAL_MODES.join('|')}.`);
       const { settings } = detailsOf(connection.sessionId);
       const previous = settings.get('shell.autoApproveMode');
       return write(

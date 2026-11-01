@@ -154,7 +154,7 @@ export type WireTask = {
 /** Public task descriptor ownership; does not imply the parent foreground still runs. */
 export type WireTaskOwner = Pick<WireTask, 'id' | 'turnId' | 'sessionId' | 'parentExecutionId' | 'sourceCallId' | 'origin' | 'kind' | 'name' | 'role'>;
 export type WireRetry = { readonly turn: boolean; readonly tool: boolean };
-export type WireError = { readonly kind: string; readonly message: string; readonly retryable?: boolean };
+export type WireError = { readonly kind: string; readonly message: string; readonly retryable?: boolean; readonly retryAfterMs?: number };
 export type WireNotice = { readonly kind: string; readonly message: string };
 export type WireGoal = { readonly id: string; readonly text: string; readonly successCriteria?: string; readonly status: 'active' | 'blocked' | 'completed' | 'cancelled' | 'achieved' | 'abandoned' };
 export type WireVerification = {
@@ -163,6 +163,61 @@ export type WireVerification = {
   readonly report?: { readonly outcome: 'PASS' | 'FAIL' | 'INCONCLUSIVE' | 'ERROR' | 'TIMEOUT'; readonly evidence: string; readonly checked: readonly string[]; readonly limitations: readonly string[]; readonly verifierVersion: string };
 };
 export type WireConfiguration = { readonly model?: WireModel; readonly reasoning?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'; readonly temperature?: number };
+/** Native context estimates; these are not measured provider usage. */
+export type WireCompactionEstimate = {
+  readonly renderedInputTokens: number;
+  readonly outputReserveTokens: number;
+  readonly safetyReserveTokens: number;
+  readonly hardFitTokens: number;
+};
+/** Physical request evidence for an attempted compaction; not an extra charge. */
+export type WireCompactionRequest = {
+  readonly requestId: string;
+  readonly modelStep: number;
+  readonly model: WireModel;
+  readonly outcome: 'completed' | 'failed' | 'cancelled';
+  readonly usage?: WireUsage;
+  readonly costUsd?: number | string;
+};
+export type WireCompactionBlockedReason =
+  | 'disabled'
+  | 'unknown_threshold'
+  | 'native_unavailable'
+  | 'unsettled_tools'
+  | 'no_complete_cold_turn'
+  | 'single_turn_too_large'
+  | 'opaque_context'
+  | 'summary_input_too_large'
+  | 'non_reducing'
+  | 'result_still_too_large';
+export type WireCompactionFailure =
+  | { readonly kind: 'blocked'; readonly reason: WireCompactionBlockedReason }
+  | { readonly kind: 'interrupted'; readonly reason: 'budget_wrap_up' | 'budget_exhausted' }
+  | { readonly kind: 'cancelled' }
+  | { readonly kind: 'failed'; readonly error: WireError };
+export type WireCompactionStarted = {
+  readonly compactionId: string;
+  readonly trigger: 'manual' | 'automatic';
+  readonly model: WireModel;
+  readonly before: WireCompactionEstimate;
+  readonly strategy?: 'native' | 'local';
+  readonly contextWindow?: number;
+  readonly maxRequestInputTokens?: number | null;
+  readonly lastCompletedInputTokens?: number;
+};
+export type WireCompactionCompleted = {
+  readonly compactionId: string;
+  readonly strategy: 'native' | 'local';
+  readonly after: WireCompactionEstimate;
+  readonly durationMs: number;
+  readonly requests: readonly WireCompactionRequest[];
+};
+export type WireCompactionFailed = {
+  readonly compactionId: string;
+  readonly failure: WireCompactionFailure;
+  readonly durationMs: number;
+  readonly requests: readonly WireCompactionRequest[];
+};
 /** Public reset boundary for a physical log rotation under one stable logical session.
  * It names the new physical header without exposing provider history or raw facts. */
 export type WireSessionRotation = {
@@ -266,8 +321,12 @@ export type WireEventPayloads = {
   budget_opened: { readonly request: WireBudgetRequest };
   budget_closed: { readonly requestId: string; readonly decision: WireBudgetResolution; readonly source: 'user' | 'parent' | 'system' };
   budget_observed: { readonly evidence: WireBudgetEvidence };
-  history_replaced: { readonly reason: 'compaction' | 'retry_turn' | 'retry_tool' | 'rewind' };
+  history_replaced: { readonly reason: 'compaction' | 'retry_turn' | 'retry_tool' | 'rewind'; readonly compactionId?: string };
   request_cost_recorded: WireRequestCost;
+  /** One accepted attempt boundary; estimates are not measured usage. */
+  compaction_started: WireCompactionStarted;
+  compaction_completed: WireCompactionCompleted;
+  compaction_failed: WireCompactionFailed;
   /** One accepted successor boundary; clients clear foreground state at this seq. */
   session_rotated: WireSessionRotation;
   background_notice_enqueued: { readonly notice: WireBackgroundNotice };

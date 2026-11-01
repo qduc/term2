@@ -151,7 +151,7 @@ partial-question checkpoints or command receipts are already compatible.
 | subagent_started, subagent_completed, subagent_interrupted | native M4 task_changed mapper; Session/driver wiring pending |
 | subagent_tool_started, subagent_text_turn, subagent_command_message | scoped subagent presentation DTO / task progress; rich driver observations pending |
 | subagent_approval_required, subagent_question | task-scoped interaction mapper; real task answer routing pending |
-| context_compaction_started, context_compaction_completed, context_compaction_failed | compacted/notice DTO presentation only; no current Session producer |
+| context_compaction_started, context_compaction_completed, context_compaction_failed | Accepted `compaction_started/completed/failed` facts now map one-for-one to precise direct wire events; the existing `compacted` replaced/summary notice remains a separate presentation projection. Pinned consumer encoding is server-owned. |
 | final, error | actual message + turn_ended/error; error is not an inferred successful answer |
 
 Native expectedTurnId cancellation and keyed command receipt/outcome mapping are

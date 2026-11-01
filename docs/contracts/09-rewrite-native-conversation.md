@@ -68,6 +68,18 @@ projection receives the same explicit live/reopen recovery policy as before.
 Only the root projector clears provider slots after a validated rotation; queue,
 background tasks, costs, goals and notices remain accepted audit state.
 
+Root repair must distinguish reopen from drained live settlement. In
+`ownConversationTurn`, a missing result without a durable `tool_started` means
+the body was never admitted; cancellation at an approval prompt must not tell
+the next model that a session restarted or that this unstarted body may have
+had effects. `ConversationJournal.settledReplay` supplies this explicit live
+context to `recoverReplayRoots`. A started body without a recorded result still
+has an unobserved outcome, and a recorded result takes precedence in either
+context. Reopen retains the conservative restart fallback. Reusing reopen's
+fallback at normal settlement previously hid this distinction: checking only
+that Escape closed the prompt and prevented the effect missed the false result
+later delivered in the same session's provider input.
+
 ## Native completion verification task budgets
 
 `createDirectGoalVerifier` identifies a verification task by logical Session ID

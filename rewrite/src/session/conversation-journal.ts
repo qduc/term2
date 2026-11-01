@@ -159,6 +159,8 @@ export class ConversationJournal {
     return true;
   };
   readonly liveReplay = () => replay(this.facts, { recoverQueue: false });
+  /** Use only after the sole handle reader has drained all execution cleanup. */
+  readonly settledReplay = () => replay(this.facts, { recoverQueue: false, rootSettlement: 'live' });
   readonly recover = (): boolean => {
     if (this.#recoveryMaterialized) return !this.#failure;
     const recovered = replay(this.facts);

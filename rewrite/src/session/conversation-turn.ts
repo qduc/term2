@@ -65,9 +65,9 @@ export function ownConversationTurn(
       ? { kind: 'cancelled' as const }
       : result;
     if (!journal.failure) {
-      // The same deterministic repair used on reopen supplies missing root
-      // results. Its interrupted terminal is replaced by the actual outcome.
-      const repairs = journal.liveReplay().recoveryFacts.filter((fact) => fact.type !== 'turn_ended');
+      // Live settlement knows the handle has drained, unlike crash recovery.
+      // Preserve known outcomes and distinguish unadmitted calls from possible effects.
+      const repairs = journal.settledReplay().recoveryFacts.filter((fact) => fact.type !== 'turn_ended');
       const ended = terminalFact(turnId, outcome);
       journal.commit([...repairs, ended]);
     }

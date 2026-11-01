@@ -20,6 +20,7 @@ import type {
 } from '../../protocol/direct-wire.js';
 import { interactionLine, rejectionLine, retryLine, toolStartLine } from './format.js';
 import {
+  formatGoalClosedByCheck,
   legacyCommandMessages,
   legacyFinalResponse,
   legacyReasoningDelta,
@@ -106,7 +107,7 @@ function admissionIdentity(
   if (admission.kind === 'duplicate') return admissionIdentity(admission.original);
   return {
     messageId: admission.messageId,
-    turnId: admission.kind === 'started' ? (admission.turnId ?? null) : null,
+    turnId: admission.kind === 'started' ? admission.turnId ?? null : null,
   };
 }
 
@@ -234,9 +235,7 @@ export async function runDirectHeadless(
       void connection.send({ type: 'cancel', expectedTurnId: targetTurnId }).catch(() => undefined);
     }
     for (const task of activeTasks()) {
-      void connection
-        .send({ type: 'task_control', taskId: task.id, action: 'cancel' })
-        .catch(() => undefined);
+      void connection.send({ type: 'task_control', taskId: task.id, action: 'cancel' }).catch(() => undefined);
     }
   };
 
@@ -545,6 +544,20 @@ export async function runDirectHeadless(
       const event = next.value;
       if (event.sessionId !== sessionId) continue;
 
+      if (event.type === 'goal') {
+        const { goal, source } = event.payload;
+        if (source === 'goal_check' && goal?.status === 'achieved') {
+          io.stderr.write(
+            `${formatGoalClosedByCheck({
+              id: goal.id,
+              outcome: goal.text,
+              status: 'achieved',
+              ...(goal.successCriteria ? { successCriteria: goal.successCriteria } : {}),
+            })}\n`,
+          );
+        }
+        continue;
+      }
       if (event.type === 'background_notice_enqueued') {
         const notice = event.payload.notice;
         notices.set(notice.id, notice);
@@ -600,7 +613,8 @@ export async function runDirectHeadless(
           }
           continue;
         }
-        if (event.type === 'error') reportEventError(reportedErrors, io, event.payload.error.message, output, event.payload.error.kind);
+        if (event.type === 'error')
+          reportEventError(reportedErrors, io, event.payload.error.message, output, event.payload.error.kind);
         continue;
       }
 
@@ -656,7 +670,8 @@ export async function runDirectHeadless(
           for (const message of legacyCommandMessages(event, {
             providerCallId: true,
             onSourceId: (id) => emittedCommandMessageIds.add(id),
-          })) json(message);
+          }))
+            json(message);
           break;
         case 'message': {
           if (!forTurn) break;
@@ -709,7 +724,15 @@ export async function runDirectHeadless(
           break;
         case 'subagent':
           if (forTurn) {
-            renderNested(event.payload.agentId, event.payload.role, event.payload.event, output, io, reportedErrors, quiet);
+            renderNested(
+              event.payload.agentId,
+              event.payload.role,
+              event.payload.event,
+              output,
+              io,
+              reportedErrors,
+              quiet,
+            );
           }
           break;
         case 'error':
@@ -805,7 +828,9 @@ function reportEventError(
   kind?: string,
 ): void {
   if (output === 'json') {
-    io.stdout.write(`${JSON.stringify({ type: 'error', message, error: message, ...(kind === undefined ? {} : { kind }) })}\n`);
+    io.stdout.write(
+      `${JSON.stringify({ type: 'error', message, error: message, ...(kind === undefined ? {} : { kind }) })}\n`,
+    );
     return;
   }
   if (reported.has(message)) return;

@@ -1,6 +1,8 @@
 /** Dispatch for the direct executable's modes. Each mode loads only when chosen, so ACP's stdout and a headless start stay light. */
 import type { DirectLaunchRequest } from './direct-launch-types.js';
 
+export const INTERACTIVE_TERMINAL_REQUIRED = 'term2 needs an interactive terminal; for one-shot use: term2 "<prompt>"';
+
 export { runDirectHeadlessOnHost } from './direct-launch-headless.js';
 export type {
   DirectHeadlessHandle,

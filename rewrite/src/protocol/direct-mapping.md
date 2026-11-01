@@ -566,6 +566,17 @@ serialization/parsing, external consumer migration, raw-stream retention or M6
 activation. Those owners must integrate the actual shape and keep the combined
 gate closed until required implementation and authorized verification finish.
 
+## Accepted goal provenance
+
+`contextFactEvent` carries the accepted `goal_changed.source` in the public
+`goal` event. Consumers may announce model-check closure only for an achieved
+`goal_check` change, not from a tool acknowledgement or an achieved status alone.
+The headless client reaches the shared source formatter through the existing
+`direct-json.ts` presentation adapter, not a client-to-source import. It writes
+the summary on stderr; it does not accept a goal write, infer verification, or add a legacy event to native history.
+This retains the distinction from user/launcher/proposal changes at the client
+boundary instead of trying to reconstruct who changed the goal from status.
+
 
 ### Native log version 2: physical payload ownership
 
@@ -592,6 +603,21 @@ not inferred from a tool name. Sharing is within the accepted logical lineage;
 rotation readers/writers supply predecessor envelopes via `LogContinuationOptions.prefix`.
 `readDirectLogLineage` and `createDirectRollingLog` own this plumbing. An isolated
 successor file with references cannot be decoded without its predecessor.
+
+Discovery isolation: `readDirectLogLineages` reports unreadable native files with
+physical paths and skips affected lineages; `readDirectLogLineage` still refuses
+an unreadable requested or required segment. Directory namespace violations stay
+global refusals. A readable predecessor link is retained even when its rotation
+header is invalid, so a malformed related successor cannot silently shorten the
+lineage. Completely undecodable headers have no trustworthy association; readers
+do not invent one. Empty/incomplete first lines remain unaccepted creation artifacts.
+
+Isolation failure lesson: catching corruption only during full fact replay misses
+the earlier directory-wide first-header scan. Per-file discovery and per-lineage
+catalogue catches belong in the shared reader, not each list/open caller. The
+filesystem/store/CLI-discovery regression is
+`scripts/native-session-isolation.integration.test.ts`; it checks unrelated healthy
+roots and rotated aliases, strict related failures, diagnostics and unchanged bytes.
 
 `turn_ended` stores only terminal metadata; `recoverDirectFinalWindow` projects
 from the accepted prefix across history replacement and physical rotation.

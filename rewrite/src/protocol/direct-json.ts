@@ -5,8 +5,23 @@
 import type { CommandMessage } from '../../../source/tools/types.js';
 import type { ModelRequestCost } from '../../../source/services/cost/model-cost.js';
 import { getModelPricing } from '../../../source/services/cost/pricing.js';
-import type { CommandMessageEvent, CostUpdateEvent, FinalResponseEvent, ReasoningDeltaEvent, RetryEvent, RunBudgetEventNotice, TextDeltaEvent, ToolCallStreamingDeltaEvent, ToolDispatchedEvent, ToolStartedEvent, UsageUpdateEvent } from '../../../source/services/conversation/conversation-events.js';
+import type {
+  CommandMessageEvent,
+  CostUpdateEvent,
+  FinalResponseEvent,
+  ReasoningDeltaEvent,
+  RetryEvent,
+  RunBudgetEventNotice,
+  TextDeltaEvent,
+  ToolCallStreamingDeltaEvent,
+  ToolDispatchedEvent,
+  ToolStartedEvent,
+  UsageUpdateEvent,
+} from '../../../source/services/conversation/conversation-events.js';
 import type { WireBudgetEvidence, WireEvent, WireFinalWindow, WireUsage } from './direct-wire.js';
+
+// Retained presentation helpers cross the source boundary here, never in clients.
+export { formatGoalClosedByCheck } from '../../../source/services/conversation/durable-goal.js';
 
 /** Static negative capability for the complete old ConversationEvent schema.
  * The bounded accepted final window is exposed separately on WireTerminal;
@@ -28,21 +43,32 @@ export function legacyTextDelta(
  * delta. No fullText: native transients do not supply a complete replayable prefix.
  * Ownership remains on the wire envelope; this helper creates no block identity.
  */
-export function legacyReasoningDelta(event: Extract<WireEvent, { readonly type: 'reasoning_delta' }>): ReasoningDeltaEvent {
+export function legacyReasoningDelta(
+  event: Extract<WireEvent, { readonly type: 'reasoning_delta' }>,
+): ReasoningDeltaEvent {
   return { type: 'reasoning_delta', delta: event.payload.delta };
 }
 
 /** A planned call is the old tool_started boundary. The source DTO requires a
  * durable tool call ID, so a missing wire call ID is unavailable, not synthesized. */
-export function legacyToolStarted(event: Extract<WireEvent, { readonly type: 'tool_called' }>): ToolStartedEvent | undefined {
+export function legacyToolStarted(
+  event: Extract<WireEvent, { readonly type: 'tool_called' }>,
+): ToolStartedEvent | undefined {
   const { tool } = event.payload;
   return tool.callId === undefined
     ? undefined
-    : { type: 'tool_started', toolCallId: tool.callId, toolName: tool.toolName, arguments: structuredClone(tool.input) };
+    : {
+        type: 'tool_started',
+        toolCallId: tool.callId,
+        toolName: tool.toolName,
+        arguments: structuredClone(tool.input),
+      };
 }
 
 /** Physical start is the old tool_dispatched boundary; same exact ID requirement. */
-export function legacyToolDispatched(event: Extract<WireEvent, { readonly type: 'tool_started' }>): ToolDispatchedEvent | undefined {
+export function legacyToolDispatched(
+  event: Extract<WireEvent, { readonly type: 'tool_started' }>,
+): ToolDispatchedEvent | undefined {
   const { tool } = event.payload;
   return tool.callId === undefined
     ? undefined
@@ -50,10 +76,21 @@ export function legacyToolDispatched(event: Extract<WireEvent, { readonly type: 
 }
 
 const RETRY_TYPES = new Set<NonNullable<RetryEvent['retryType']>>([
-  'hallucination', 'parsing_error', 'behavior', 'flex_service_tier', 'upstream', 'conversation_state', 'connection_interrupted',
+  'hallucination',
+  'parsing_error',
+  'behavior',
+  'flex_service_tier',
+  'upstream',
+  'conversation_state',
+  'connection_interrupted',
 ]);
 const RETRY_ERROR_KINDS = new Set<NonNullable<RetryEvent['errorKind']>>([
-  'network', 'provider', 'rate_limit', 'authentication', 'cancelled', 'unknown',
+  'network',
+  'provider',
+  'rate_limit',
+  'authentication',
+  'cancelled',
+  'unknown',
 ]);
 
 /** Only emit the source retry DTO when the wire actually carries its required
@@ -96,7 +133,7 @@ export function legacyFinalResponse(
   requestId: (nativeId: string) => string = (nativeId) => nativeId,
 ): LegacyFinalResponse {
   const record = window.record;
-  const commandMessages = record.commandMessages.filter(message => !emittedCommandMessageIds.has(message.id));
+  const commandMessages = record.commandMessages.filter((message) => !emittedCommandMessageIds.has(message.id));
   // The old final DTO carried provider-facing result items and completed text,
   // not the durable tool_call admission items. Build a provider result view only
   // when the accepted window proves no private/unrepresentable provider content
@@ -129,10 +166,12 @@ export function legacyFinalResponse(
     type: 'final',
     finalText: record.finalText,
     ...(record.reasoningText !== undefined ? { reasoningText: record.reasoningText } : {}),
-    ...(commandMessages.length > 0 ? { commandMessages: commandMessages.map(message => structuredClone(message)) } : {}),
+    ...(commandMessages.length > 0
+      ? { commandMessages: commandMessages.map((message) => structuredClone(message)) }
+      : {}),
     ...(record.usage !== undefined ? { usage: legacyUsage(record.usage) } : {}),
     ...(record.costRecords.length > 0
-      ? { costRecords: record.costRecords.map(cost => legacyCostRecord(cost, requestId(cost.requestId))) }
+      ? { costRecords: record.costRecords.map((cost) => legacyCostRecord(cost, requestId(cost.requestId))) }
       : {}),
     ...(turnItems.length > 0 ? { turnItems } : {}),
     ...(record.terminalCause !== undefined ? { terminalCause: record.terminalCause } : {}),
@@ -219,14 +258,17 @@ export function legacyCommandMessages(
   const messages = Array.isArray(display)
     ? display
     : display && typeof display === 'object' && 'messages' in display
-      ? display.messages
-      : undefined;
+    ? display.messages
+    : undefined;
   if (!Array.isArray(messages)) return [];
-  return messages.filter(isCommandMessage).map(message => {
+  return messages.filter(isCommandMessage).map((message) => {
     options.onSourceId?.(message.id);
     return {
       type: 'command_message',
-      message: options.providerCallId === true ? legacyCommandMessage(message, event.payload.callId) : structuredClone(message),
+      message:
+        options.providerCallId === true
+          ? legacyCommandMessage(message, event.payload.callId)
+          : structuredClone(message),
     };
   });
 }
@@ -237,7 +279,8 @@ export function legacyCommandMessages(
  * foreign tool's ID). */
 function legacyCommandMessage(message: CommandMessage, providerCallId: string | undefined): CommandMessage {
   const copy = structuredClone(message);
-  if (providerCallId === undefined || typeof copy.callId !== 'string' || !copy.callId.startsWith('direct:')) return copy;
+  if (providerCallId === undefined || typeof copy.callId !== 'string' || !copy.callId.startsWith('direct:'))
+    return copy;
   const prefix = `${copy.callId}-`;
   return {
     ...copy,
@@ -250,17 +293,27 @@ function legacyCommandMessage(message: CommandMessage, providerCallId: string | 
 function isCommandMessage(value: unknown): value is CommandMessage {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const message = value as Record<string, unknown>;
-  return typeof message.id === 'string' && message.sender === 'command'
-    && typeof message.command === 'string' && typeof message.output === 'string'
-    && ['pending', 'running', 'completed', 'failed', 'aborted', 'unknown'].some(status => status === message.status)
-    && ['success', 'isApprovalRejection', 'autoApprovedByLlm'].every(key => message[key] === undefined || typeof message[key] === 'boolean')
-    && ['failureReason', 'toolName', 'callId'].every(key => message[key] === undefined || typeof message[key] === 'string');
+  return (
+    typeof message.id === 'string' &&
+    message.sender === 'command' &&
+    typeof message.command === 'string' &&
+    typeof message.output === 'string' &&
+    ['pending', 'running', 'completed', 'failed', 'aborted', 'unknown'].some((status) => status === message.status) &&
+    ['success', 'isApprovalRejection', 'autoApprovedByLlm'].every(
+      (key) => message[key] === undefined || typeof message[key] === 'boolean',
+    ) &&
+    ['failureReason', 'toolName', 'callId'].every(
+      (key) => message[key] === undefined || typeof message[key] === 'string',
+    )
+  );
 }
 
 /** Emit only the old actual count/name DTO. Producing turn/step/call/branch scope
  * stays in the wire envelope; no raw delta or finalized call is reconstructed.
  */
-export function legacyToolCallStreamingDelta(event: Extract<WireEvent, { readonly type: 'tool_call_streaming_delta' }>): ToolCallStreamingDeltaEvent {
+export function legacyToolCallStreamingDelta(
+  event: Extract<WireEvent, { readonly type: 'tool_call_streaming_delta' }>,
+): ToolCallStreamingDeltaEvent {
   return {
     type: 'tool_call_streaming_delta',
     ...(event.payload.toolName !== undefined ? { toolName: event.payload.toolName } : {}),

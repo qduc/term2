@@ -9,6 +9,8 @@ import Database from 'better-sqlite3';
 import { resolveSettingsDirectory } from './services/settings/settings-path.js';
 import { createTestChildEnv } from './test-helpers/terminal-e2e.js';
 
+import { writeMockCliSettings } from './test-helpers/mock-cli-settings.js';
+
 import { integrationCliPath as cliPath } from './test-helpers/integration-cli.js';
 
 const projectRoot = fileURLToPath(new URL('..', import.meta.url));
@@ -136,8 +138,15 @@ function writeSettings(homeDir: string, settings: Record<string, unknown>): stri
   return settingsFile;
 }
 
+function createCliHome(): string {
+  const home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+  writeMockCliSettings(home);
+  return home;
+}
+
 beforeEach(() => {
   testDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-cli-test-')));
+  writeMockCliSettings(testDir);
   // Keep native conversation storage private; HOME, project guidance and scratch
   // are siblings, not entries in the conversation namespace.
   conversationsDir = path.join(testDir, 'conversations');
@@ -637,7 +646,7 @@ fs.createWriteStream = (filename, options) => {
     });
 
     it('positional launch durably records its goal before the first provider request', async () => {
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       const mock = await startModelMock(['mock-alpha']);
       writeSettings(tempHome, {
         agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
@@ -955,7 +964,7 @@ fs.createWriteStream = (filename, options) => {
     );
 
     it('positional launch closes the goal after a recorded achieved goal_check and reports it', async () => {
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       const check = {
         status: 'achieved',
         evidence: 'Provider returned the reply',
@@ -1031,7 +1040,7 @@ fs.createWriteStream = (filename, options) => {
     it.each(['', 'mock-verifier'])(
       'the shipped CLI verifies a durable goal with verifier.model=%s',
       async (verifierModel) => {
-        const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+        const tempHome = createCliHome();
         // The gate attests to a repository change set, so the workspace is a real Git
         // repository holding one uncommitted source file.
         const repo = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-verify-repo-')));
@@ -1051,6 +1060,10 @@ fs.createWriteStream = (filename, options) => {
           evidence: 'Provider returned the reply',
           criteriaEvidence: 'math.ts exports add(a, b) returning a + b',
         };
+        const nativeVerifierInputs: {
+          revision: string;
+          probes: { id: string; description: string; content: string; complete: boolean }[];
+        }[] = [];
         const mock = await startModelMock(['mock-alpha', 'mock-verifier'], (n, body) => {
           const tools = Array.isArray(body?.tools) ? (body!.tools as Record<string, unknown>[]) : [];
           const messages = Array.isArray(body?.messages) ? (body!.messages as Record<string, unknown>[]) : [];
@@ -1058,8 +1071,53 @@ fs.createWriteStream = (filename, options) => {
             const fn = tool?.function as { name?: string } | undefined;
             return (fn?.name ?? (tool?.name as string | undefined)) === 'verification_probe';
           });
+          if (tools.length === 0) {
+            // Native verification has no model tool authority: the host supplies
+            // actual read-only probes, and accepts only a strict assessment of them.
+            const content = messages.at(-1)?.content;
+            const input = JSON.parse(
+              typeof content === 'string'
+                ? content
+                : (content as { type: string; text: string }[]).map((part) => part.text).join(''),
+            );
+            expect(input).toMatchObject({
+              goal: 'Ship math.ts',
+              criteria: 'math.ts exports add(a, b) returning a + b',
+              revision: expect.any(String),
+              omittedFileCount: 0,
+              hostLimitations: [],
+            });
+            const probes = input.probes as (typeof nativeVerifierInputs)[number]['probes'];
+            expect(probes.length).toBeGreaterThan(0);
+            expect(probes.every((probe) => probe.complete)).toBe(true);
+            const math = probes.find((probe) => probe.description === 'read_file math.ts');
+            expect(math?.content).toContain('export function add(a: number, b: number): number');
+            expect(math?.content).toContain('return a + b;');
+            nativeVerifierInputs.push(input);
+            return [
+              {
+                id: 'native-verdict',
+                choices: [
+                  {
+                    delta: {
+                      role: 'assistant',
+                      content: JSON.stringify({
+                        outcome: 'PASS',
+                        evidence: `${math!.id}: math.ts exports add(a, b) returning a + b.`,
+                        checked: [math!.id],
+                        limitations: [],
+                        coverage: 'complete',
+                        basis: 'static_evidence',
+                      }),
+                    },
+                  },
+                ],
+              },
+              { id: 'native-verdict', choices: [{ delta: {}, finish_reason: 'stop' }] },
+            ];
+          }
           if (isVerifier) {
-            // The first verifier round probes the repository; the second returns the verdict.
+            // The source verifier still owns its tool probe round and verdict round.
             if (!messages.some((message) => message?.role === 'tool')) {
               return [
                 {
@@ -1158,20 +1216,26 @@ fs.createWriteStream = (filename, options) => {
           expect(stderr).toContain('Goal (achieved): Ship math.ts');
           expect(stderr).toContain("Completion accepted after the model's goal_check.");
 
+          const saved = fs.readdirSync(conversationsDir).find((name) => name.endsWith('.jsonl'))!;
+          const savedLog = readSavedHistory(path.join(conversationsDir, saved));
+          const native = savedLog.format === 'native';
           const requests = mock.capturedRequests();
-          // Two worker rounds, then the fresh verifier's probe round and verdict round.
-          expect(requests).toHaveLength(4);
+          // Two worker rounds; native assesses host-collected evidence in one
+          // independent request, while source uses a probe and a verdict round.
+          expect(requests).toHaveLength(native ? 3 : 4);
           const verifierRequests = requests.slice(2);
           expect(mock.capturedModels()).toEqual([
             'mock-alpha',
             'mock-alpha',
-            verifierModel || 'mock-alpha',
-            verifierModel || 'mock-alpha',
+            ...(native
+              ? [verifierModel || 'mock-alpha']
+              : [verifierModel || 'mock-alpha', verifierModel || 'mock-alpha']),
           ]);
+          expect(nativeVerifierInputs).toHaveLength(native ? 1 : 0);
           for (const request of verifierRequests) {
             const tools = (request.tools as Record<string, unknown>[]) ?? [];
-            expect(tools).toHaveLength(1);
-            expect((tools[0]!.function as { name: string }).name).toBe('verification_probe');
+            expect(tools).toHaveLength(native ? 0 : 1);
+            if (!native) expect((tools[0]!.function as { name: string }).name).toBe('verification_probe');
           }
           // The verifier sees the goal, never the worker's prompt or its evidence.
           const verifierBody = JSON.stringify(verifierRequests);
@@ -1179,27 +1243,64 @@ fs.createWriteStream = (filename, options) => {
           expect(verifierBody).not.toContain('worker-prompt-sentinel');
           expect(verifierBody).not.toContain('Provider returned the reply');
 
-          // The gate persisted its decision before the goal was closed.
-          const dataPath = execFileSync(
-            process.execPath,
-            [
-              '--input-type=module',
-              '-e',
-              "import envPaths from 'env-paths'; process.stdout.write(envPaths('term2').data);",
-            ],
-            { cwd: projectRoot, env: createTestChildEnv({ HOME: tempHome }), encoding: 'utf8' },
-          );
-          const dbPath = path.join(dataPath, 'completion-verification.sqlite');
-          expect(fs.existsSync(dbPath)).toBe(true);
-          const db = new Database(dbPath, { readonly: true });
-          try {
-            const row = db.prepare('SELECT record FROM completion_verification').get() as { record: string };
-            const record = JSON.parse(row.record);
-            expect(record.state).toBe('COMPLETED');
-            expect(record.decision.action).toBe('independent_verify');
-            expect(record.report.outcome).toBe('PASS');
-          } finally {
-            db.close();
+          // Native accepted facts are the durable authority. Never require a
+          // legacy SQLite row or invent a verification event for this runtime.
+          if (native) {
+            const events = savedLog.records;
+            const started = events.findIndex((event) => event.type === 'completion_verification_started');
+            const decided = events.findIndex((event) => event.type === 'completion_verification_decided');
+            const reported = events.findIndex((event) => event.type === 'completion_verification_reported');
+            const ended = events.findIndex((event) => event.type === 'completion_verification_ended');
+            const achieved = events.findIndex(
+              (event) => event.type === 'goal_changed' && event.goal?.status === 'achieved',
+            );
+            expect(started).toBeGreaterThanOrEqual(0);
+            expect(decided).toBeGreaterThan(started);
+            expect(reported).toBeGreaterThan(decided);
+            expect(ended).toBeGreaterThan(reported);
+            expect(achieved).toBeGreaterThan(ended);
+            const attempt = events[started]!;
+            expect(events[decided]).toMatchObject({
+              attemptId: attempt.attemptId,
+              decision: { action: 'independent_verify' },
+            });
+            expect(events[reported]).toMatchObject({
+              attemptId: attempt.attemptId,
+              report: {
+                outcome: 'PASS',
+                verifierVersion: 'direct-provider-readonly-v1',
+                attemptId: attempt.attemptId,
+                revision: attempt.proposal.revision,
+                limitations: [],
+              },
+            });
+            expect(events[reported]!.report.checked).toEqual([expect.stringContaining('read_file math.ts')]);
+            expect(nativeVerifierInputs[0]!.revision).toBe(attempt.proposal.revision);
+            expect(events[ended]).toMatchObject({ attemptId: attempt.attemptId, outcome: 'complete' });
+            expect(events[achieved]).toMatchObject({ source: 'goal_check', goal: { status: 'achieved' } });
+          } else {
+            // The gate persisted its decision before the goal was closed.
+            const dataPath = execFileSync(
+              process.execPath,
+              [
+                '--input-type=module',
+                '-e',
+                "import envPaths from 'env-paths'; process.stdout.write(envPaths('term2').data);",
+              ],
+              { cwd: projectRoot, env: createTestChildEnv({ HOME: tempHome }), encoding: 'utf8' },
+            );
+            const dbPath = path.join(dataPath, 'completion-verification.sqlite');
+            expect(fs.existsSync(dbPath)).toBe(true);
+            const db = new Database(dbPath, { readonly: true });
+            try {
+              const row = db.prepare('SELECT record FROM completion_verification').get() as { record: string };
+              const record = JSON.parse(row.record);
+              expect(record.state).toBe('COMPLETED');
+              expect(record.decision.action).toBe('independent_verify');
+              expect(record.report.outcome).toBe('PASS');
+            } finally {
+              db.close();
+            }
           }
         } finally {
           await mock.close();
@@ -1269,7 +1370,7 @@ fs.createWriteStream = (filename, options) => {
     });
 
     it('CLI explains that an interactive terminal is required instead of exposing Ink raw-mode errors', async () => {
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       try {
         const { status, stderr } = await spawnCli(
           [cliPath(), '--lite'],
@@ -1395,7 +1496,7 @@ fs.createWriteStream = (filename, options) => {
     });
 
     it('CLI --resume prints message and exits when no conversation is found', () => {
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       let error: any;
       let stderr = '';
       try {
@@ -1454,7 +1555,7 @@ fs.createWriteStream = (filename, options) => {
     });
 
     it('CLI --list-models combined with --resume errors instead of misreading the resume id as a search term', () => {
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       let error: any;
       let stderr = '';
       try {
@@ -1481,7 +1582,7 @@ fs.createWriteStream = (filename, options) => {
     });
 
     it('CLI --list-models combined with --resume --fork errors', () => {
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       let error: any;
       let stderr = '';
       try {
@@ -1506,7 +1607,7 @@ fs.createWriteStream = (filename, options) => {
     });
 
     it('CLI --list-models without conflicting flags runs the listing errand, not a flag-conflict error', () => {
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       let stdout = '';
       let stderr = '';
       let status: number | null = 0;
@@ -1538,7 +1639,7 @@ fs.createWriteStream = (filename, options) => {
     });
 
     it('CLI --refresh without --list-models errors clearly instead of being silently ignored', () => {
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       let error: any;
       let stderr = '';
       try {
@@ -1564,7 +1665,7 @@ fs.createWriteStream = (filename, options) => {
     });
 
     it('CLI --list-models --refresh runs the listing errand, not the flag-conflict error', () => {
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       let stdout = '';
       let stderr = '';
       let status: number | null = 0;
@@ -1597,7 +1698,7 @@ fs.createWriteStream = (filename, options) => {
   }
   if (group === 'headless') {
     it('CLI prompts before starting in non-lite mode from home directory', () => {
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
 
       let error: any;
       let stderr = '';
@@ -1630,7 +1731,7 @@ fs.createWriteStream = (filename, options) => {
     });
 
     it('CLI prompts before starting in non-lite mode from root directory', () => {
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
 
       let error: any;
       let stderr = '';
@@ -1663,7 +1764,7 @@ fs.createWriteStream = (filename, options) => {
     });
 
     it('CLI accepts a custom provider from settings.json in non-interactive mode', () => {
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       const settingsDir = resolveSettingsDirectory({ homeDir: tempHome });
       fs.mkdirSync(settingsDir, { recursive: true });
       const providerName = 'my-custom-provider';
@@ -1675,6 +1776,7 @@ fs.createWriteStream = (filename, options) => {
           {
             agent: {
               retryAttempts: 0,
+              modelSelection: { provider: providerName, model: 'fixture-model' },
             },
             providers: [
               {
@@ -1722,7 +1824,7 @@ fs.createWriteStream = (filename, options) => {
       // catalog (codex's credential-free models endpoint); when that endpoint
       // began rejecting anonymous reads the resolution failed open to passthrough
       // and the CLI attempted a real provider connection instead.
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       const mock = await startModelMock(['mock-alpha', 'mock-beta']);
       writeSettings(tempHome, {
         agent: { retryAttempts: 0, modelSelection: { model: 'gpt-5.1', provider: 'mockprov' } },
@@ -1751,11 +1853,12 @@ fs.createWriteStream = (filename, options) => {
       // agent.modelSelection. Passthrough (all catalogs fail to load) also
       // reaches those set() calls, so an unreachable provider is enough to
       // exercise the persistence boundary.
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       const settingsFile = writeSettings(tempHome, {
-        agent: { retryAttempts: 0, modelSelection: { model: 'keep-session-model', provider: 'openai' } },
+        agent: { retryAttempts: 0, modelSelection: { model: 'keep-session-model', provider: 'saved-mock' } },
         providers: [
           { name: 'mockprov', type: 'openai-compatible', baseUrl: 'http://127.0.0.1:65535/v1', apiKey: 'test-key' },
+          { name: 'saved-mock', type: 'openai-compatible', baseUrl: 'http://127.0.0.1:65535/v1', apiKey: 'test-key' },
         ],
       });
 
@@ -1785,7 +1888,7 @@ fs.createWriteStream = (filename, options) => {
     it('CLI --json auto-selects an ambiguous model without asking for input', async () => {
       // Regression: the prompt defaulted to process.stdout, corrupting the NDJSON
       // event channel whenever an ambiguous pattern needed disambiguation.
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       const mock = await startModelMock(['mock-alpha', 'mock-beta']);
       writeSettings(tempHome, {
         agent: { retryAttempts: 0, modelSelection: { model: 'gpt-5.1', provider: 'mockprov' } },
@@ -1820,7 +1923,7 @@ fs.createWriteStream = (filename, options) => {
       // (openai/...) used to narrow the catalog load to that provider, so a
       // literal aggregator id was reported as no_match or silently switched and
       // persisted the wrong provider/model.
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       const mock = await startModelMock(['openai/gpt-test', 'mock-alpha']);
       const settingsFile = writeSettings(tempHome, {
         agent: { retryAttempts: 0, modelSelection: { model: 'original-default', provider: 'mockprov' } },
@@ -1876,7 +1979,7 @@ fs.createWriteStream = (filename, options) => {
       // test is about. The banner renders the resolved agent.model/agent.provider
       // before that crash, so its content is direct proof of what resolution
       // picked, independent of the crash.
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       const mock = await startModelMock(['mock-alpha', 'mock-beta']);
       writeSettings(tempHome, {
         agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
@@ -1902,7 +2005,7 @@ fs.createWriteStream = (filename, options) => {
     });
 
     it('CLI resolves -p <provider> -m <model> with nothing else to the model, not a prompt', async () => {
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       const mock = await startModelMock(['mock-alpha', 'mock-beta']);
       writeSettings(tempHome, {
         agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
@@ -1932,7 +2035,7 @@ fs.createWriteStream = (filename, options) => {
     });
 
     it('CLI still treats --model <value> <prompt> (two or more trailing tokens) as unambiguous', async () => {
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       const mock = await startModelMock(['mock-alpha', 'mock-beta']);
       writeSettings(tempHome, {
         agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
@@ -1956,7 +2059,7 @@ fs.createWriteStream = (filename, options) => {
     });
 
     it('CLI "term2 <prompt>" with no --model is unchanged', async () => {
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       const mock = await startModelMock(['mock-alpha']);
       writeSettings(tempHome, {
         agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
@@ -1987,7 +2090,7 @@ fs.createWriteStream = (filename, options) => {
       // already-configured default model is used, and the run proceeds to the
       // ordinary interactive-app boot (which then hits the same expected
       // non-TTY raw-mode failure every other no-prompt case in this file hits).
-      const tempHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-home-')));
+      const tempHome = createCliHome();
       const mock = await startModelMock(['mock-alpha']);
       writeSettings(tempHome, {
         agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },

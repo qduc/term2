@@ -31,6 +31,37 @@ profile changes once wire messages exist. Wire history has no system-message
 role to exclude. `cli.ts` is the process entrypoint: the Discord bridge's numeric
 or numeric-string `process.exitCode` is normalized to the numeric `main` result.
 
+## Interactive startup admission
+
+For a fresh CLI launch with `--goal`, an otherwise admitted interactive start
+must persist its native `session_started` and launcher `goal_changed` facts before
+refusing a missing terminal. `cli.ts` retains its earlier argument, resume and
+home-directory refusals; those are not admitted starts. `runTui` uses the same
+Session creation and `setGoal` path as terminal launches, then checks terminal
+availability before background detection, control sockets or Ink. `launchTui`
+does not open MCP for a non-TTY start. A no-goal CLI terminal refusal still
+creates no conversation. Do not restore an early unconditional terminal return
+in `cli.ts`: it silently loses the user-authored goal.
+
+## Native CLI conversation discovery
+
+`cli-conversations.ts` lists existing native logical lineages without opening a
+writable Session or creating a runtime. `--resume ls` and `--resume list` show the
+last ten matching conversations. `--resume last` and bare `--resume` select the
+matching lineage with the newest accepted fact timestamp (not copied-file mtime),
+with logical ID as the deterministic tie-breaker. Rotated physical logs list once.
+Discovery filters local paths and SSH endpoint identities before selection; the
+store/runtime still enforce the current workspace grant on writable open.
+
+Exact native IDs are resolved before the non-TTY follow-up-prompt check, so missing
+and foreign-project references report their real diagnostic. Profile/model labels
+use the latest accepted configuration where present. Goal/profile restoration is
+still Session/runtime-owned: discovery neither rewrites facts nor substitutes
+launcher defaults. No native log-format changes, legacy log reads, or migration
+fallback are part of this boundary. Legacy-ID alias resolution remains a separate
+migration integration dependency. Native discovery is kept separate from that
+legacy-data policy so a legacy-data hold cannot disable browsing native records.
+
 ## Tools and delegation
 
 `createToolSurface` in `tool-surface.ts` builds the offered tools and matching

@@ -5,6 +5,7 @@ export type Message = {
   readonly id: string;
   readonly role: 'user' | 'assistant' | 'tool' | 'system';
   readonly text: string;
+  readonly presentation?: Readonly<Record<string, JsonValue>>;
   readonly error?: boolean;
   readonly historyText?: string;
   readonly attachments?: readonly WireContent[];

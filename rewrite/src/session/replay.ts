@@ -285,6 +285,8 @@ function replayProjection(
   };
 
   const consume = (fact: Fact): void => {
+    // Display observations never enter provider slots, admission or lifecycle state.
+    if (fact.type === 'transcript_message') return;
     if (fact.type === 'command_started' || fact.type === 'command_finished') {
       // Receipts are not provider history and are not recovered here.
       commandReceipts = reduceDirectCommandReceipts(commandReceipts, fact);

@@ -192,6 +192,32 @@ const validateTaskLifecycleSchema: FactSchema = (fact, check: FactValidation) =>
 
 /** One local validator per fact type; shared shapes delegate without replay side effects. */
 const nativeSchemas: Record<string, FactSchema> = {
+  transcript_message: (fact, check) => {
+    if (Object.keys(fact).some((key) => !['type', 'turnId', 'message'].includes(key))) check.fail('payload');
+    check.optionalText(fact, 'turnId');
+    const message = check.object(fact['message'], 'message');
+    if (Object.keys(message).some((key) => !['id', 'role', 'content', 'presentation'].includes(key)))
+      check.fail('message');
+    check.text(message['id'], 'message.id');
+    if (!['user', 'assistant', 'system', 'tool'].includes(message['role'] as string)) check.fail('message.role');
+    directContentSchema.parse(message['content']);
+    for (const part of message['content'] as Record<string, unknown>[]) {
+      const allowed = part['type'] === 'text' ? ['type', 'text'] : ['type', 'mediaType', 'data', 'detail'];
+      if (Object.keys(part).some((key) => !allowed.includes(key))) check.fail('message.content');
+    }
+    if ('presentation' in message) {
+      check.object(message['presentation'], 'message.presentation');
+      const json = (value: unknown): boolean =>
+        value === null ||
+        typeof value === 'string' ||
+        typeof value === 'boolean' ||
+        (typeof value === 'number' && Number.isFinite(value)) ||
+        (Array.isArray(value)
+          ? value.every(json)
+          : typeof value === 'object' && value !== null && Object.values(value).every(json));
+      if (!json(message['presentation'])) check.fail('message.presentation');
+    }
+  },
   session_started: (fact, check) => {
     check.optionalText(fact, 'forkedFrom');
     if (
@@ -213,6 +239,7 @@ const nativeSchemas: Record<string, FactSchema> = {
     }
   },
   turn_started: (fact, check) => {
+    if ('display' in fact && fact['display'] !== false) check.fail('display');
     if ('requestConfiguration' in fact) validateRequestConfiguration(fact['requestConfiguration'], check.fail);
     const silent = 'silent' in fact;
     if (silent && fact['silent'] !== true) check.fail('silent');
@@ -262,6 +289,7 @@ const nativeSchemas: Record<string, FactSchema> = {
     }
   },
   item: (fact, check, where) => {
+    if ('display' in fact && fact['display'] !== false) check.fail('display');
     validateHistory([fact['item']], where);
     const item = check.object(fact['item'], 'item');
     if (item['type'] === 'tool_result' && 'stopAfterExecution' in item) check.fail('item.stopAfterExecution');
@@ -315,6 +343,7 @@ const nativeSchemas: Record<string, FactSchema> = {
   compaction_completed: validateCompactionSchema,
   compaction_failed: validateCompactionSchema,
   history_replaced: (fact, check, where) => {
+    if ('retainTranscript' in fact && fact['retainTranscript'] !== true) check.fail('retainTranscript');
     check.optionalText(fact, 'turnId');
     if ('compactionId' in fact) {
       check.text(fact['compactionId'], 'compactionId');

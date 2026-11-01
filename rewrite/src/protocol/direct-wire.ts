@@ -65,7 +65,8 @@ export type WireInteraction = {
 };
 export type WireMessage = {
   readonly id: string;
-  readonly role: 'user' | 'assistant' | 'tool';
+  readonly role: 'user' | 'assistant' | 'tool' | 'system';
+  readonly presentation?: { readonly [key: string]: JsonValue };
   readonly content: readonly WireContent[];
   readonly text: string;
   readonly turnId?: string;
@@ -591,6 +592,7 @@ export type WireEventPayloads = {
   };
   budget_observed: { readonly evidence: WireBudgetEvidence };
   history_replaced: {
+    readonly retainTranscript?: true;
     readonly reason: 'compaction' | 'retry_turn' | 'retry_tool' | 'rewind';
     readonly compactionId?: string;
   };

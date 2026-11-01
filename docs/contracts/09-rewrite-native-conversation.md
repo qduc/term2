@@ -98,3 +98,30 @@ capability while the native attempt projection retained counts but no budget.
 Keeping the pin in the existing validated started fact prevents live settings
 from silently rewriting a task's policy and makes conflicting replay pins fail
 at the same append-before-publication boundary as other context transitions.
+
+## Human receipt timing
+
+`direct-time-gap.ts` derives model-only timing from accepted queue `receivedAt`
+and structured human origin at `turn_started` and `queue_steered`. One pure
+projection serves live input and replay. The context clock retains the latest
+arrival (not dispatch time), so priority steers cannot move it backwards.
+Automatic, reaction, control, retry, maintenance and silent input do not advance
+it. A start without queue receipt evidence is unknown; no timestamp is guessed.
+Missing human receipt metadata resets a known baseline to unknown, so a gap
+is never asserted across that unknown arrival; later valid human input can
+reestablish the clock. Automatic memory notices are not human admissions. A noncanonical receipt timestamp poisons timing rather than
+inventing a gap; the poisoned clock remains across provider-context rotation.
+New submissions always stamp the receipt at acceptance; the optional persisted
+field is clock metadata, never queue identity or execution authority.
+
+Physical rotation already replays the complete native predecessor lineage, so
+there is no separate human-clock checkpoint. Legacy optional-checkpoint fixture
+mutations do not describe native storage. Native missing/invalid-receipt
+companions exercise disposable real CLI logs instead.
+
+Timing belongs to its user Item as model-only metadata, not an independent
+provider-history Item. Provider serialization expands the system notice directly
+before the unchanged human content. This prevents rewind, retry and compaction
+from orphaning a standalone timing notice when its user input is removed. Raw
+`turn_started.input`, queue bodies, and transcript observations stay unchanged.
+The native and adopted model serializers share the expansion function.

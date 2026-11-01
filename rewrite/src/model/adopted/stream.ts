@@ -1,3 +1,4 @@
+import { withConversationTiming } from '../provider-items.js';
 import { observeProviderRequestDispatch } from '../../../../source/providers/request-dispatch.js';
 import type {
   StreamedModelTurn,
@@ -23,7 +24,7 @@ export function toProviderRequest(request: ModelRequest, signal: AbortSignal): S
       : continuation !== undefined
       ? { previousResponseId: continuation }
       : {}),
-    input: request.input.map(itemToInput),
+    input: request.input.flatMap((item) => withConversationTiming(item, itemToInput(item))),
     tools: request.tools.map((tool) =>
       tool.modelTool
         ? { type: tool.modelTool.type, name: tool.name, description: tool.description, format: tool.modelTool.format }

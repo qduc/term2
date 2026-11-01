@@ -16,6 +16,7 @@ import { ConversationGeneration, withNotice, type PreparedConversationGeneration
 import { bindDirectCapabilities } from './direct-capabilities.js';
 import type { DirectPreparedConfiguration } from './direct-configuration.js';
 import { type DirectContextFact } from './direct-context.js';
+import { planDirectTiming } from './direct-time-gap.js';
 import { isDirectHumanOrigin, parseDirectOrigin } from './direct-origin.js';
 import { directPreviewConfiguration } from './direct-preview.js';
 import type { DirectQueueEffect } from './direct-queue-types.js';
@@ -210,8 +211,13 @@ function conversation(
     if (!active || active.turnId !== turnId || active.cancelled || commands.owner || closed || journal.failure)
       return [];
     const plan = planDirectQueue(journal.queueState, { kind: 'boundary', turnId }, environment());
+    const input =
+      plan.effect?.kind === 'steer'
+        ? planDirectTiming(journal.context.latestHumanInputAt, journal.queueState.records, plan.effect.modelInput)
+            .modelInput
+        : [];
     if (!commit(plan.facts)) throw new Error(journal.failure!.message);
-    return plan.effect?.kind === 'steer' ? plan.effect.modelInput : [];
+    return input;
   };
 
   const start = (
@@ -245,9 +251,21 @@ function conversation(
       ? { history: planned.history!, compactionState: planned.compactionState }
       : liveReplay();
     const isHuman = !planned?.accepted && !planned?.silent && isDirectHumanOrigin(request.submission?.origin);
+    // Plan only the actual human input. Personal-memory user-shaped notices are
+    // automatic context and must not be mistaken for a missing human receipt.
+    const timingInput = isHuman
+      ? planDirectTiming(
+          journal.context.latestHumanInputAt,
+          [
+            ...journal.queueState.records,
+            ...(planned?.facts ?? []).flatMap((fact) => (fact.type === 'queue_submitted' ? [fact.record] : [])),
+          ],
+          request.input,
+        ).modelInput
+      : request.input;
     const human = isHuman
-      ? capabilities!.humanPlan(request.submission?.messageId ?? turnId, request.input)
-      : { facts: capabilities!.memoryFacts(), modelInput: request.input };
+      ? capabilities!.humanPlan(request.submission?.messageId ?? turnId, timingInput)
+      : { facts: capabilities!.memoryFacts(), modelInput: timingInput };
     if (
       !planned?.accepted &&
       !commit([

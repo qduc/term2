@@ -8,9 +8,10 @@ import {
 import { directRolloverFactSchema, type DirectRolloverFact } from './direct-rollover.js';
 import { directSessionRotationSchema, type DirectSessionRotationFact } from './direct-session-rotation.js';
 import type { Fact } from './facts.js';
-import type { Item } from '../model/index.js';
+import type { Item, ItemId } from '../model/index.js';
 import type { DirectQueueRecord } from './direct-queue-types.js';
 import { isDirectHumanOrigin } from './direct-origin.js';
+import { planDirectTiming } from './direct-time-gap.js';
 import {
   renderDurableGoalContext,
   MAX_GOAL_FIELD_LENGTH,
@@ -44,6 +45,8 @@ export type DirectContextFact =
   | DirectSessionRotationFact;
 export type DirectContextState = {
   readonly goal: DirectGoalState;
+  /** Latest admitted human receipt, retained across provider-context rotation. */
+  readonly latestHumanInputAt?: string;
   readonly memory: DirectMemoryState;
   readonly verification: readonly DirectVerificationAttempt[];
   readonly goalReminders: readonly DirectGoalReminderFact[];
@@ -137,8 +140,29 @@ export function reduceDirectContext(
 ): DirectContextState {
   switch (fact.type) {
     case 'turn_started':
-    case 'queue_steered':
-      return startsDirectHumanWindow(fact, queueRecords) ? { ...state, goalReminders: [] } : state;
+    case 'queue_steered': {
+      if (!startsDirectHumanWindow(fact, queueRecords)) return state;
+      const input: readonly Item[] =
+        fact.type === 'turn_started'
+          ? fact.input
+          : fact.messageIds.flatMap((id) => {
+              const record = queueRecords.find((record) => record.messageId === id);
+              return record
+                ? [
+                    {
+                      type: 'user_message' as const,
+                      id: id as ItemId,
+                      content: record.content,
+                    },
+                  ]
+                : [];
+            });
+      return {
+        ...state,
+        goalReminders: [],
+        latestHumanInputAt: planDirectTiming(state.latestHumanInputAt, queueRecords, input).latestHumanInputAt,
+      };
+    }
     case 'goal_changed':
     case 'goal_proposed':
       return { ...state, goal: reduceDirectGoal(state.goal, fact) };

@@ -1,3 +1,4 @@
+import { planDirectTiming } from './direct-time-gap.js';
 /** Pure direct-log projection: no writes, dispatch, provider calls or restored authority. */
 import type { TurnId } from '../engine/index.js';
 import type { Item } from '../model/index.js';
@@ -10,6 +11,7 @@ import {
   isDirectContextFactType,
   parseDirectContextFact,
   reduceDirectContext,
+  startsDirectHumanWindow,
   type DirectContextState,
 } from './direct-context.js';
 import { directPersonalMemoryItem, type DirectMemoryFact } from './direct-memory.js';
@@ -178,7 +180,9 @@ function replayProjection(
     }
     if (isDirectQueueFactType(fact.type)) {
       if (fact.type === 'queue_started') rotation.authorizeSeed(fact, queue.state);
-      for (const item of queue.accept(fact, active?.turnId ?? null)) appendHuman(item);
+      const clock = context.latestHumanInputAt;
+      const input = queue.accept(fact, active?.turnId ?? null);
+      for (const item of planDirectTiming(clock, queue.state.records, input).modelInput) appendHuman(item);
       // Human steers reset the goal window; automatic steers keep the same reminders.
       if (fact.type === 'queue_steered') context = reduceDirectContext(context, fact, queue.state.records);
       return;
@@ -213,6 +217,7 @@ function replayProjection(
     }
     if (backgroundAudit.accept(fact)) return;
     queue.accept(fact, active?.turnId ?? null);
+    const clock = context.latestHumanInputAt;
     context = reduceDirectContext(context, fact, queue.state.records);
     switch (fact.type) {
       case 'session_started':
@@ -263,7 +268,10 @@ function replayProjection(
           silentTurns.add(fact.turnId);
         } else {
           let lastHuman: Slot | undefined;
-          for (const item of fact.input) {
+          const input = startsDirectHumanWindow(fact, queue.state.records)
+            ? planDirectTiming(clock, queue.state.records, fact.input).modelInput
+            : fact.input;
+          for (const item of input) {
             const slot = appendHuman(item);
             if (item.type === 'user_message') lastHuman = slot;
           }

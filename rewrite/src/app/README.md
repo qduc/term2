@@ -104,6 +104,11 @@ They omit text previews so warm listing needs metadata rather than log replay.
 
 ## Tools and delegation
 
+`direct-subagent-tools.ts` owns child admission, preparation, invocation scope and
+Session launch authority. `direct-subagent-callbacks.ts` adapts source delegation
+callbacks and projects accepted task status/results with actual execution evidence;
+it does not introduce a task lifecycle registry or grant child authority.
+
 Local surfaces use a native `LocalExecutionContext` home/lease, retained
 across configured generations. Worktree tools use the existing git inventory and
 running-shell guards; `enter`/`exit` never publish a process-wide root. Native

@@ -137,10 +137,43 @@ export type ToolInteractionRequest = {
   readonly presentation?: Readonly<Record<string, unknown>>;
 };
 
+/** Session-owned shell process lease. Admission precedes run; settlement includes cleanup. */
+export type ShellTaskPort = {
+  start<T>(request: ShellTaskStart<T>): {
+    readonly id: string;
+    readonly startedAt: number;
+    readonly settled: Promise<ShellTaskState>;
+    readonly foreground: Promise<{ readonly kind: 'result'; readonly value: T } | { readonly kind: 'background' }>;
+  };
+  get(id: string): ShellTaskState | undefined;
+  list(): readonly ShellTaskState[];
+  cancel(id: string): boolean;
+  output(id: string, chunk: string): boolean;
+  notify(id: string, key: string, text: string): boolean;
+};
+export type ShellTaskStart<T> = {
+  readonly command: string;
+  readonly mode: 'foreground' | 'background';
+  readonly run: (signal: AbortSignal) => Promise<T>;
+  readonly cleanup?: () => Promise<void> | void;
+  readonly status?: (value: T) => 'completed' | 'failed' | 'timed_out';
+};
+export type ShellTaskState = {
+  readonly id: string;
+  readonly command: string;
+  readonly mode: 'foreground' | 'background';
+  readonly startedAt: number;
+  readonly completedAt?: number;
+  readonly status: 'running' | 'cancelling' | 'completed' | 'cancelled' | 'failed' | 'interrupted';
+  readonly value?: unknown;
+  readonly error?: string;
+};
+
 export type ToolContext = {
   /** Runs a subagent. The engine injects it, so tools never import engine/. */
   runNested(request: NestedRunRequest): Promise<NestedRunResult>;
   readonly subagents?: SubagentTaskPort;
+  readonly shellTasks?: ShellTaskPort;
   /** Task-scoped async child question; never a user interaction or synthetic answer. */
   readonly askOrchestrator?: (question: string) => Promise<string>;
   readonly workspace: Workspace;

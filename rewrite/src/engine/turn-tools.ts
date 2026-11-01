@@ -11,6 +11,7 @@ import type {
   ToolInteractionRequest,
   ToolResult,
   ToolRegistry,
+  ShellTaskStart,
 } from '../tools/index.js';
 import type { TurnDeps, TurnSpec } from './direct-types.js';
 import { NativeBudgetExhausted, type TurnBudgetControl } from './turn-budget.js';
@@ -255,6 +256,46 @@ export class TurnTools {
     return {
       ...this.deps.toolContext!,
       signal: this.signal,
+      ...(this.deps.shellTasks
+        ? {
+            shellTasks: (() => {
+              const owned = () => {
+                const parent = current();
+                this.#checkBody(parent);
+                this.#checkStart(parent);
+                return this.deps.shellTasks!({
+                  turnId: this.spec.turnId,
+                  parentExecutionId: parent.executionId,
+                  signal: this.signal,
+                });
+              };
+              return {
+                start: <T>(request: ShellTaskStart<T>) => {
+                  const port = owned();
+                  const handle = port.start(request);
+                  if (request.mode === 'foreground')
+                    this.deps.onTurnBoundary?.({ turnId: this.spec.turnId, kind: 'parked' });
+                  return handle;
+                },
+                get: (id: string) => owned().get(id),
+                list: () => owned().list(),
+                cancel: (id: string) => owned().cancel(id),
+                output: (id: string, chunk: string) =>
+                  this.deps.shellTasks!({
+                    turnId: this.spec.turnId,
+                    parentExecutionId: current().executionId,
+                    signal: this.signal,
+                  }).output(id, chunk),
+                notify: (id: string, key: string, text: string) =>
+                  this.deps.shellTasks!({
+                    turnId: this.spec.turnId,
+                    parentExecutionId: current().executionId,
+                    signal: this.signal,
+                  }).notify(id, key, text),
+              };
+            })(),
+          }
+        : {}),
       ...(this.deps.askOrchestrator
         ? {
             askOrchestrator: (question: string) => {

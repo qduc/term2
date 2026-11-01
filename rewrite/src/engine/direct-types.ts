@@ -141,6 +141,11 @@ export type TurnDeps = {
     readonly parentExecutionId: ExecutionId;
     readonly signal: AbortSignal;
   }) => NonNullable<ToolContext['subagents']>;
+  readonly shellTasks?: (context: {
+    readonly turnId: TurnId;
+    readonly parentExecutionId: ExecutionId;
+    readonly signal: AbortSignal;
+  }) => NonNullable<ToolContext['shellTasks']>;
   /** Session owns task identity, branch receipts, interaction acceptance and transfers. */
   readonly runNested?: (
     request: NestedRunRequest,

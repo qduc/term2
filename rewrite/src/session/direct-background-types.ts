@@ -117,6 +117,8 @@ export type DirectTaskStart = Omit<DirectTaskDescriptor, 'taskId' | 'sessionId' 
   readonly mode: DirectTaskMode;
   /** Linked only while foreground-owned; transfer detaches this signal. */
   readonly parentSignal?: AbortSignal;
+  /** Runs even if cancellation prevents kickoff; settlement waits for cleanup. */
+  readonly cleanup?: () => Promise<void> | void;
 };
 export type DirectTaskContext = {
   readonly task: DirectTaskDescriptor;

@@ -45,6 +45,7 @@ const DIRECT_SOURCE_IMPORTERS = new Set([
   'app/direct-remote-context.ts',
   'app/direct-remote-tools.ts',
   'app/direct-remote.ts',
+  'app/direct-shell-tools.ts',
   'app/direct-subagent-tools.ts',
   'app/direct-verifier-workspace.ts',
   'app/direct-verifier.ts',

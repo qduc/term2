@@ -293,6 +293,7 @@ function conversation(
           normalStop: capabilities!.normalStop,
           runNested,
           subagents: background!.subagentPort,
+          shellTasks: (parent) => background!.shellTaskPort(parent, request.submission?.origin),
         },
       );
       const turn = ownConversationTurn(turnId, handle, journal, {

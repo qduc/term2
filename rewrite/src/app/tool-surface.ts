@@ -23,6 +23,7 @@ import type { Workspace } from '../tools/index.js';
 import type { Item, ItemId, ModelRegistry, ReasoningEffort } from '../model/index.js';
 import { createProviderRegistry } from '../model/provider.js';
 import { createDirectSubagentTools } from './direct-subagent-tools.js';
+import { createDirectShellTools } from './direct-shell-tools.js';
 import { createSourceToolRegistry, executeSourceChild, sourceToolSpec } from './source-tools.js';
 import type { AgentSurface, ProfileSelection, ToolSurfaceOptions } from './tool-contract.js';
 
@@ -103,6 +104,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     targetInvocation,
     remoteUnavailable: REMOTE_UNAVAILABLE,
   });
+  const shell = createDirectShellTools();
   const deps: AgentFactoryDeps = {
     settings,
     logger,
@@ -126,7 +128,8 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     includeMemory: !remote && options.includeMemory !== false,
     promptMemoryEnabled: !remote && options.promptMemoryEnabled === true,
     projectInstructions: options.projectInstructions,
-    withToolInvocation: delegation.withInvocation,
+    withToolInvocation: (name, context, operation) =>
+      shell.withInvocation(name, context, () => delegation.withInvocation(name, context, operation)),
     // Session owns the live goal tool and applicability context.
     ...delegation.callbacks,
     getAskUserAnswer: () => answers.getStore(),
@@ -138,7 +141,9 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
       return null;
     },
     executeScriptedTool: executeSourceChild,
-    allowBackgroundShell: false,
+    allowBackgroundShell: !remote,
+    backgroundShellRegistry: remote ? undefined : shell.registry,
+    backgroundShellOutput: remote ? undefined : shell.output,
     allowAskUser: options.interactive === true,
     allowUnsandboxed:
       options.allowUnsandboxed !== false && !readOnly && (remote?.sourcePolicy.allowUnsandboxed ?? true),
@@ -230,6 +235,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
         advisoryAbort.abort();
         registry.dispose();
         delegation.dispose();
+        shell.dispose();
         shellChildren.invalidate();
         sessionAccess.dispose();
         removePlanInterceptor();

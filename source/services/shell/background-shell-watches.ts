@@ -12,8 +12,14 @@ import type {
  */
 export interface BackgroundShellOutputBundle {
   store: BackgroundShellOutputStore;
-  watches: BackgroundShellWatches;
+  watches: BackgroundShellWatchesPort;
 }
+
+/** Output operations only; a native host can scope monitor controls to its Session. */
+export type BackgroundShellWatchesPort = Pick<
+  BackgroundShellWatches,
+  'open' | 'push' | 'registerWatch' | 'cancelWatch' | 'settleJob' | 'setOnFiring'
+>;
 
 /**
  * Watch semantics over a {@link BackgroundShellOutputStore}: attach a watch to

@@ -46,10 +46,10 @@ import type { ToolInvocationContext } from '../../services/agent-runtime/tool-in
 import {
   type BackgroundShellJob,
   type BackgroundShellTerminalStatus,
-  type BackgroundShellRegistry,
+  type BackgroundShellRegistryPort,
 } from '../../services/shell/background-shell-registry.js';
 import type {
-  BackgroundShellWatches,
+  BackgroundShellWatchesPort,
   BackgroundShellOutputBundle,
   RegisterShellOutputWatchOptions,
 } from '../../services/shell/background-shell-watches.js';
@@ -390,7 +390,7 @@ export const formatBackgroundShellCancelMonitorCommandMessage: FormatCommandMess
  * (legacy callers), the monitor tools are not registered.
  */
 export function createBackgroundShellJobToolDefinitions(
-  registry: BackgroundShellRegistry<BackgroundShellExecutionResult>,
+  registry: BackgroundShellRegistryPort<BackgroundShellExecutionResult>,
   output?: BackgroundShellOutputBundle,
 ): BackgroundShellJobToolDefinitions {
   const definitions: BackgroundShellJobToolDefinitions = {
@@ -693,9 +693,9 @@ export function createShellToolDefinition(deps: {
   /** Isolated legacy protocol for nested tools only. */
   nestedCompatibility?: NestedToolCompatibilityState;
   /** Root session-owned lifecycle for local background shell jobs. */
-  backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
+  backgroundShellRegistry?: BackgroundShellRegistryPort<BackgroundShellExecutionResult>;
   /** Root session-owned output store + watch layer for background jobs. */
-  backgroundShellWatches?: BackgroundShellWatches;
+  backgroundShellWatches?: BackgroundShellWatchesPort;
   /** Optional proactive check-in configuration sink. */
   configureCheckIn?: (
     target: { kind: 'shell' | 'subagent'; id: string },
@@ -1116,7 +1116,7 @@ export function createShellToolDefinition(deps: {
             sshService,
             childRegistry: sandboxed ? sandboxChildRegistry ?? shellChildRegistry : shellChildRegistry,
             onOutputChunk: (stream, text) => {
-              if (observedJobId) backgroundShellRegistry?.recordOutputChunk(observedJobId);
+              if (observedJobId) backgroundShellRegistry?.recordOutputChunk(observedJobId, stream, text);
               // Monitoring is background-only: the store stream is opened only
               // for the background branch, so a foreground lease job is never
               // pushed here. watches.push feeds the store and evaluates the

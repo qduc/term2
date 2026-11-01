@@ -120,6 +120,24 @@ conversation storage.
   `replay.fromSeq`; headless one-shot resume uses `connect(principal, id)` and
   does not reset or replay client state.
 
+## Internal ownership
+
+`runDirectHeadless` in `direct.ts` owns admission matching, the ordered event
+iterator, cancellation and background notice/task drain scheduling. It does not
+own legacy JSON accumulation or approval policy state.
+
+`createHeadlessOutput` in `direct-output.ts` owns streamed/final text
+reconciliation, legacy request IDs, deferred tool-start/usage records, output
+errors and terminal diagnostics. `endTurn` reports whether an accepted final
+window was available; only the driver chooses the resulting run outcome. Output
+state remains run-local, including across silent delivery turns.
+
+`createHeadlessAnswerer` in `direct-approvals.ts` deduplicates snapshot/live
+interaction requests and sends the policy decision. A false result means a
+failed answer with best-effort cancellation, not a terminal outcome.
+`decideHeadlessApproval` remains exported from `direct.ts` for existing callers.
+The driver still owns signal handling and waits for accepted terminals.
+
 ## Background drain timing
 
 `runDirectHeadless` keeps one overall background deadline. `driveBackground`

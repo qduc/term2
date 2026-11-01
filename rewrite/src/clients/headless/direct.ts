@@ -13,92 +13,19 @@ import type {
   WireBackgroundNotice,
   WireBudgetEvidence,
   WireCommandResult,
-  WireDecision,
   WireEvent,
-  WireInteraction,
   WireTask,
 } from '../../protocol/direct-wire.js';
-import { interactionLine, rejectionLine, retryLine, toolStartLine } from './format.js';
-import {
-  formatGoalClosedByCheck,
-  legacyCommandMessages,
-  legacyFinalResponse,
-  legacyReasoningDelta,
-  legacyRequestCostUpdate,
-  legacyRetry,
-  legacyRunBudget,
-  legacyAcceptedUsage,
-  legacyTextDelta,
-  legacyToolDispatched,
-  legacyToolStarted,
-  legacyToolCallStreamingDelta,
-  legacyUsageUpdate,
-} from '../../protocol/direct-json.js';
-import type {
-  DirectHeadlessOptions,
-  DirectHeadlessOutcome,
-  DirectHeadlessResult,
-  HeadlessDecision,
-  HeadlessIo,
-} from './types.js';
+import { createHeadlessAnswerer } from './direct-approvals.js';
+import { createHeadlessOutput } from './direct-output.js';
+import type { DirectHeadlessOptions, DirectHeadlessOutcome, DirectHeadlessResult } from './types.js';
 
-const NON_INTERACTIVE_REJECTION_REASON = 'Non-interactive mode: use --auto-approve to allow tool execution';
+export { decideHeadlessApproval } from './direct-approvals.js';
+
 const DEFAULT_BACKGROUND_WAIT_MS = 60 * 60 * 1000;
 const MAX_BACKGROUND_WAIT_MS = 24 * 60 * 60 * 1000;
-/** The old headless CLI's resumable context failures exit 2 rather than 1. */
 /** Old non-interactive exit 2 terminal causes that are not context pauses. */
 const BLOCKED_TERMINAL_CAUSES = new Set(['goal_check_unresolved', 'completion_verification_blocked']);
-const RECOVERABLE_ERROR_KINDS = new Set([
-  'request_input_limit',
-  'context_compaction_hard_fit',
-  'provider_context_overflow',
-  'context_paused',
-]);
-/**
- * The conservative headless policy. Without `--auto-approve` every tool
- * approval is denied, with the old reason sent to the model. With it, ordinary
- * tools and low/unknown-risk shell commands are allowed; medium/high-risk shell
- * commands are refused because this client cannot reproduce the old evaluator.
- * A question has no headless answerer. The empty answer plus
- * `stopAfterApprovalResolution` is a selected resolution (the source canonical
- * "no answer" result), not a cancellation; it settles that question and
- * suppresses later model work.
- */
-export function decideHeadlessApproval(interaction: WireInteraction, autoApprove: boolean): HeadlessDecision {
-  if (interaction.kind === 'question') {
-    return {
-      decision: { kind: 'answer', answer: '', stopAfterApprovalResolution: true },
-      reportRejection: false,
-    };
-  }
-  if (!autoApprove) {
-    return { decision: { kind: 'deny', reason: NON_INTERACTIVE_REJECTION_REASON }, reportRejection: false };
-  }
-  if (interaction.toolName !== 'shell' && interaction.toolName !== 'bash') {
-    return { decision: { kind: 'allow' } };
-  }
-  if (interaction.risk === 'medium' || interaction.risk === 'high') {
-    const command = commandText(interaction.input);
-    const level = interaction.risk === 'high' ? 'RED (dangerous)' : 'YELLOW (suspicious)';
-    return {
-      decision: {
-        kind: 'deny',
-        reason: `Heuristic validation failed: command is ${level} and cannot be executed automatically${
-          command ? `: ${command}` : ''
-        }`,
-      },
-      reportRejection: true,
-    };
-  }
-  return { decision: { kind: 'allow' } };
-}
-
-function commandText(input: unknown): string {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) return '';
-  const command = (input as Record<string, unknown>)['command'];
-  return typeof command === 'string' ? command : '';
-}
-
 /** Identity carried by the one cursor-addressable admission/turn-start frame. */
 function admissionIdentity(
   admission: WireAdmission,
@@ -107,7 +34,7 @@ function admissionIdentity(
   if (admission.kind === 'duplicate') return admissionIdentity(admission.original);
   return {
     messageId: admission.messageId,
-    turnId: admission.kind === 'started' ? (admission.turnId ?? null) : null,
+    turnId: admission.kind === 'started' ? admission.turnId ?? null : null,
   };
 }
 
@@ -115,10 +42,6 @@ export async function runDirectHeadless(
   connection: DirectConnection,
   options: DirectHeadlessOptions,
 ): Promise<DirectHeadlessResult> {
-  const io = options.io ?? { stdout: process.stdout, stderr: process.stderr };
-  const output = options.output ?? 'plain';
-  const autoApprove = options.autoApprove ?? false;
-  const quiet = options.quiet ?? false;
   const sessionId = connection.sessionId;
   const requestedBackgroundWait = options.backgroundWaitTimeoutMs;
   const backgroundWaitTimeoutMs =
@@ -152,56 +75,22 @@ export async function runDirectHeadless(
   const terminalTask = (status: WireTask['status']): boolean =>
     status === 'completed' || status === 'cancelled' || status === 'failed' || status === 'interrupted';
   const requestId = options.requestId ?? `req_${randomUUID()}`;
-  const reportedErrors = new Set<string>();
-  const answered = new Set<string>();
-  const emittedCommandMessageIds = new Set<string>();
-  const legacyRequestIds = new Map<string, string>();
-  let nextLegacyRequestId = 0;
-  const legacyRequestId = (nativeId: string): string => {
-    const existing = legacyRequestIds.get(nativeId);
-    if (existing !== undefined) return existing;
-    const assigned = `req-${++nextLegacyRequestId}`;
-    legacyRequestIds.set(nativeId, assigned);
-    return assigned;
-  };
-  const pendingUsageUpdates: ReturnType<typeof legacyUsageUpdate>[] = [];
-  const pendingLegacyToolStarts = new Map<string, Extract<WireEvent, { readonly type: 'tool_called' }>>();
   let targetTurnId: string | null = null;
   let lastTurnId: string | null = null;
-  let finalText = '';
-  let streamedText = '';
-  let completedText = '';
   let background: { deadline: number; nextDrainAt: number; drainRequestId: string | null } | null = null;
   let wakeBackground: (() => void) | null = null;
   let abortedInBackground = false;
   let backgroundCancelled = false;
-  /** Per-message streamed length, so a completed message writes only its missing suffix. */
-  const streamedByMessage = new Map<string, number>();
-  /** Exact text observed from this message's first delta in the current target turn. */
-  const streamedTextByMessage = new Map<string, string>();
   let cancelSent = false;
   let abortedBeforeStart = false;
 
-  const json = (record: unknown): void => {
-    io.stdout.write(`${JSON.stringify(record)}\n`);
-  };
-  if (output === 'json')
-    json({
-      type: 'session_start',
-      ...(options.profileMetadata ?? {}),
-    });
-
-  const errorText = (message: string, code?: string): void => {
-    if (output === 'json') {
-      json({ type: 'error', message, error: message, ...(code === undefined ? {} : { code }) });
-      return;
-    }
-    if (reportedErrors.has(message)) return;
-    reportedErrors.add(message);
-    io.stderr.write(`error ${message}\n`);
-  };
-
-  const result = (outcome: DirectHeadlessOutcome, exitCode: number, final = finalText): DirectHeadlessResult => ({
+  const presentation = createHeadlessOutput(options, sessionId);
+  const { errorText } = presentation;
+  const result = (
+    outcome: DirectHeadlessOutcome,
+    exitCode: number,
+    final = presentation.finalText,
+  ): DirectHeadlessResult => ({
     exitCode,
     outcome,
     finalText: final,
@@ -211,20 +100,7 @@ export async function runDirectHeadless(
 
   /** Headless never answers a run-budget check-in; it exits 2 without a grant. */
   const reportBudgetPause = (evidence?: WireBudgetEvidence): DirectHeadlessResult => {
-    // Session disposal currently closes the pending budget as a system stop.
-    // Do not promise an interactive review that does not exist.
-    const recovery = `Run budget paused. Work and completed results are retained, but this one-shot run cannot leave the budget request open: exiting closes it as a system stop. Resume with --resume ${sessionId} to inspect the stopped turn; budget review and extension are not available in headless. --auto-approve only approves tools.`;
-    if (output === 'json') {
-      json({
-        type: 'run_budget_paused',
-        code: 'run_budget_paused',
-        sessionId,
-        ...(evidence === undefined ? {} : { evidence }),
-        recovery,
-      });
-    } else {
-      io.stderr.write(`${recovery}\n`);
-    }
+    presentation.reportBudgetPause(evidence);
     return result('budget_paused', 2);
   };
 
@@ -235,18 +111,11 @@ export async function runDirectHeadless(
       void connection.send({ type: 'cancel', expectedTurnId: targetTurnId }).catch(() => undefined);
     }
     for (const task of activeTasks()) {
-      void connection
-        .send({ type: 'task_control', taskId: task.id, action: 'cancel' })
-        .catch(() => undefined);
+      void connection.send({ type: 'task_control', taskId: task.id, action: 'cancel' }).catch(() => undefined);
     }
   };
 
-  const finish = (): DirectHeadlessResult => {
-    const final = completedText;
-    if (output === 'plain') io.stdout.write('\n');
-    else json({ type: 'completed', finalText: final });
-    return result('completed', 0, final);
-  };
+  const finish = (): DirectHeadlessResult => result('completed', 0, presentation.finish());
 
   const failBackground = (message: string): DirectHeadlessResult => {
     cancelBackgroundWork();
@@ -294,58 +163,12 @@ export async function runDirectHeadless(
 
   let iterator: AsyncIterator<WireEvent> | null = null;
   try {
-    const decide = async (interaction: WireInteraction): Promise<HeadlessDecision> => {
-      if (options.decideApproval) return await options.decideApproval(interaction);
-      return decideHeadlessApproval(interaction, autoApprove);
-    };
-
-    const answer = async (interaction: WireInteraction): Promise<DirectHeadlessResult | null> => {
-      if (answered.has(interaction.requestId)) return null;
-      answered.add(interaction.requestId);
-      if (output === 'plain' && !quiet) io.stderr.write(interactionLine(interaction));
-      let decided: HeadlessDecision;
-      try {
-        decided = await decide(interaction);
-      } catch (error) {
-        errorText(error instanceof Error ? error.message : String(error));
-        void connection.send({ type: 'cancel' }).catch(() => undefined);
-        return result('failed', 1);
-      }
-      if (decided.reportRejection === true && decided.decision.kind === 'deny') {
-        io.stderr.write(rejectionLine(decided.decision.reason));
-      }
-      const answerFailure = await sendAnswer(interaction.requestId, decided.decision);
-      if (answerFailure === null) return null;
-      // Cancellation closes pending interactions before the policy answer lands.
-      // That stale answer is expected: keep the ordered stream and let the real
-      // terminal (cancelled) decide, rather than reporting a failure.
-      if (options.signal?.aborted && answerFailure.code === 'stale_interaction') return null;
-      void connection.send({ type: 'cancel' }).catch(() => undefined);
-      return result('failed', 1);
-    };
-
-    /** Null when the answer was accepted; otherwise the protocol failure. */
-    const sendAnswer = async (
-      requestId: string,
-      decision: WireDecision,
-    ): Promise<{ readonly code: string; readonly message: string } | null> => {
-      try {
-        const sent = await connection.send({ type: 'answer', requestId, decision });
-        if (sent.ok) return null;
-        errorText(sent.message, sent.code);
-        return { code: sent.code, message: sent.message };
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        errorText(message);
-        return { code: 'internal_error', message };
-      }
-    };
+    const answer = createHeadlessAnswerer(connection, options, errorText);
 
     // A resumed session may already be waiting on approvals. Settle them by the
     // same policy before submitting; a stale answer fails explicitly.
     for (const interaction of connection.snapshot.pendingInteractions) {
-      const failure = await answer(interaction);
-      if (failure) return failure;
+      if (!(await answer(interaction))) return result('failed', 1);
     }
     if (options.signal?.aborted) return result('cancelled', 1);
 
@@ -468,9 +291,7 @@ export async function runDirectHeadless(
           if (!endedTurns.has(result.turnId)) {
             targetTurnId = result.turnId;
             lastTurnId = result.turnId;
-            finalText = '';
-            streamedText = '';
-            streamedByMessage.clear();
+            presentation.resetTurn();
           }
           return null;
         }
@@ -547,15 +368,7 @@ export async function runDirectHeadless(
       if (event.sessionId !== sessionId) continue;
 
       if (event.type === 'goal') {
-        const { goal, source } = event.payload;
-        if (source === 'goal_check' && goal?.status === 'achieved') {
-          io.stderr.write(`${formatGoalClosedByCheck({
-            id: goal.id,
-            outcome: goal.text,
-            status: 'achieved',
-            ...(goal.successCriteria ? { successCriteria: goal.successCriteria } : {}),
-          })}\n`);
-        }
+        presentation.event(event, targetTurnId);
         continue;
       }
       if (event.type === 'background_notice_enqueued') {
@@ -571,8 +384,7 @@ export async function runDirectHeadless(
         continue;
       }
       if (event.type === 'interaction_opened') {
-        const failure = await answer(event.payload.interaction);
-        if (failure) return failure;
+        if (!(await answer(event.payload.interaction))) return result('failed', 1);
         continue;
       }
       if (event.type === 'task_changed') {
@@ -591,7 +403,7 @@ export async function runDirectHeadless(
       }
       if (event.type === 'budget_opened') {
         if (targetTurnId === null || event.payload.request.turnId === targetTurnId) {
-          if (output === 'json') json(legacyRunBudget(event.payload.request.evidence));
+          presentation.budgetEvidence(event.payload.request.evidence);
           return reportBudgetPause(event.payload.request.evidence);
         }
         continue;
@@ -613,191 +425,47 @@ export async function runDirectHeadless(
           }
           continue;
         }
-        if (event.type === 'error') reportEventError(reportedErrors, io, event.payload.error.message, output, event.payload.error.kind);
+        if (event.type === 'error') presentation.event(event, targetTurnId);
         continue;
       }
 
-      const forTurn = event.turnId === targetTurnId;
-      switch (event.type) {
-        case 'text_delta':
-          if (!forTurn) break;
-          streamedByMessage.set(
-            event.payload.messageId,
-            (streamedByMessage.get(event.payload.messageId) ?? 0) + event.payload.delta.length,
-          );
-          streamedText += event.payload.delta;
-          {
-            const fullText = (streamedTextByMessage.get(event.payload.messageId) ?? '') + event.payload.delta;
-            streamedTextByMessage.set(event.payload.messageId, fullText);
-            if (output === 'plain') io.stdout.write(event.payload.delta);
-            else json(legacyTextDelta(event, fullText));
-          }
-          break;
-        case 'reasoning_delta':
-          if (!forTurn) break;
-          if (output === 'json') json(legacyReasoningDelta(event));
-          else if (options.showReasoning === true) io.stderr.write(event.payload.delta);
-          break;
-        case 'tool_call_streaming_delta':
-          if (forTurn && output === 'json') json(legacyToolCallStreamingDelta(event));
-          break;
-        case 'request_cost_recorded':
-          if (
-            output === 'json' &&
-            (event.payload.turnId === targetTurnId || event.payload.rootTurnId === targetTurnId)
-          ) {
-            json(legacyRequestCostUpdate(event, legacyRequestId(event.payload.record.requestId)));
-            if (event.payload.record.usage !== undefined) json(legacyUsageUpdate(event.payload.record.usage));
-            // A usage fact for this settlement may have arrived first; publish it
-            // now, at the live request boundary, together with the cost record.
-            for (const usage of pendingUsageUpdates.splice(0)) json(usage);
-          }
-          break;
-        case 'usage':
-          if (forTurn && output === 'json') pendingUsageUpdates.push(legacyAcceptedUsage(event.payload.usage));
-          break;
-        case 'tool_finished':
-          if (!forTurn || output !== 'json') break;
-          {
-            const pending = pendingLegacyToolStarts.get(event.payload.executionId);
-            if (pending !== undefined) {
-              pendingLegacyToolStarts.delete(event.payload.executionId);
-              const record = legacyToolStarted(pending);
-              if (record !== undefined) json(record);
-            }
-          }
-          for (const message of legacyCommandMessages(event, {
-            providerCallId: true,
-            onSourceId: (id) => emittedCommandMessageIds.add(id),
-          })) json(message);
-          break;
-        case 'message': {
-          if (!forTurn) break;
-          const message = event.payload.message;
-          if (message.role !== 'assistant' || message.draft === true) break;
-          finalText = message.text;
-          const key = event.payload.replacesDraftId ?? message.id;
-          const streamed = streamedByMessage.get(key) ?? 0;
-          if (output === 'plain' && message.text.length > streamed) {
-            io.stdout.write(message.text.slice(streamed));
-          }
-          streamedByMessage.set(key, Math.max(streamed, message.text.length));
-          break;
+      presentation.event(event, targetTurnId);
+      if (event.type === 'turn_ended' && event.turnId === targetTurnId) {
+        if (!presentation.endTurn(event)) return result('error', 1);
+        lastTurnId = targetTurnId;
+        if (targetTurnId !== null) endedTurns.add(targetTurnId);
+        const outcome = event.payload.outcome;
+        const terminalCause = event.payload.terminalCause;
+        if (background !== null && (abortedInBackground || options.signal?.aborted)) {
+          return failBackground('Background work interrupted; unfinished work was cancelled.');
         }
-        case 'tool_called':
-          // Announce root calls before approval/dispatch; run_code children are not root diagnostics.
-          if (forTurn && output === 'plain' && !quiet && event.payload.tool.parentExecutionId === undefined)
-            io.stderr.write(toolStartLine(event.payload.tool));
-          // The old tool_started boundary was the dispatched call, after its settled
-          // request cost. Hold the real planned-call DTO until the matching physical
-          // start (or a result/terminal fallback); never synthesize or drop it.
-          if (forTurn && output === 'json') pendingLegacyToolStarts.set(event.payload.tool.executionId, event);
-          break;
-        case 'tool_started':
-          if (forTurn && output === 'json') {
-            const pending = pendingLegacyToolStarts.get(event.payload.tool.executionId);
-            if (pending !== undefined) {
-              pendingLegacyToolStarts.delete(event.payload.tool.executionId);
-              const record = legacyToolStarted(pending);
-              if (record !== undefined) json(record);
-            }
-            const record = legacyToolDispatched(event);
-            if (record !== undefined) json(record);
-          }
-          break;
-        case 'retrying':
-          if (forTurn && output === 'plain' && !quiet) io.stderr.write(retryLine(event.payload));
-          if (forTurn && output === 'json') {
-            const record = legacyRetry(event);
-            if (record !== undefined) json(record);
-          }
-          break;
-        case 'budget_observed':
-          if (forTurn && output === 'json') json(legacyRunBudget(event.payload.evidence));
-          break;
-        case 'notice':
-          if (forTurn && output === 'plain' && !quiet) {
-            io.stderr.write(`[${event.payload.kind}] ${event.payload.message}\n`);
-          }
-          break;
-        case 'subagent':
-          if (forTurn) {
-            renderNested(event.payload.agentId, event.payload.role, event.payload.event, output, io, reportedErrors, quiet);
-          }
-          break;
-        case 'error':
-          reportEventError(reportedErrors, io, event.payload.error.message, output, event.payload.error.kind);
-          break;
-        case 'turn_ended': {
-          if (!forTurn) break;
-          if (output === 'json') {
-            for (const pending of pendingLegacyToolStarts.values()) {
-              const record = legacyToolStarted(pending);
-              if (record !== undefined) json(record);
-            }
-            pendingLegacyToolStarts.clear();
-            for (const usage of pendingUsageUpdates.splice(0)) json(usage);
-            const window = event.payload.finalWindow;
-            if (window === undefined) {
-              json({
-                type: 'error',
-                code: 'legacy_final_window_unavailable',
-                message: 'Accepted terminal has no final window; refusing to emit a partial legacy --json final.',
-                error: 'Accepted terminal has no final window; refusing to emit a partial legacy --json final.',
-              });
-              return result('error', 1);
-            }
-            const finalRecord = legacyFinalResponse(window, emittedCommandMessageIds, legacyRequestId);
-            json(finalRecord);
-            if (event.payload.outcome === 'completed') completedText = finalRecord.finalText;
-          }
-          lastTurnId = targetTurnId;
-          if (targetTurnId !== null) endedTurns.add(targetTurnId);
-          const outcome = event.payload.outcome;
-          const terminalCause = event.payload.terminalCause;
-          if (background !== null && (abortedInBackground || options.signal?.aborted)) {
-            return failBackground('Background work interrupted; unfinished work was cancelled.');
-          }
-          if (outcome !== 'cancelled' && terminalCause !== undefined && BLOCKED_TERMINAL_CAUSES.has(terminalCause)) {
-            if (event.payload.notice !== undefined) {
-              // Verification is part of the answer contract, not just a tool diagnostic.
-              // Keep the accepted model answer and render the host's notice separately.
-              if (output !== 'json' && terminalCause === 'completion_verification_blocked')
-                io.stdout.write(`\n${event.payload.notice}\n`);
-              else io.stderr.write(`${event.payload.notice}\n`);
-            }
-            return result('blocked', 2);
-          }
-          if (outcome === 'completed') {
-            // JSON already took the accepted final window's finalText; plain output
-            // preserves its streamed/last-message behavior.
-            if (output !== 'json') completedText = finalText || streamedText || completedText;
-            if (background === null) {
-              background = { deadline: Date.now() + backgroundWaitTimeoutMs, nextDrainAt: 0, drainRequestId: null };
-              targetTurnId = null;
-              continue;
-            }
+        if (outcome !== 'cancelled' && terminalCause !== undefined && BLOCKED_TERMINAL_CAUSES.has(terminalCause)) {
+          presentation.blockedNotice(event.payload.notice, terminalCause);
+          return result('blocked', 2);
+        }
+        if (outcome === 'completed') {
+          // JSON already took the accepted final window's finalText; plain output
+          // preserves its streamed/last-message behavior.
+          presentation.completeTurn();
+          if (background === null) {
+            background = { deadline: Date.now() + backgroundWaitTimeoutMs, nextDrainAt: 0, drainRequestId: null };
             targetTurnId = null;
-            background.nextDrainAt = 0;
-            background.drainRequestId = null;
             continue;
           }
-          if (outcome === 'cancelled') return result('cancelled', 1);
-          if (outcome === 'interrupted') {
-            if (event.payload.error) errorText(event.payload.error.message, event.payload.error.kind);
-            else errorText('Turn interrupted.');
-            return result('interrupted', 1);
-          }
-          return fail(event.payload.error?.message ?? 'Turn failed.', event.payload.error?.kind, {
-            result,
-            errorText,
-            io,
-            output,
-            sessionId,
-          });
+          targetTurnId = null;
+          background.nextDrainAt = 0;
+          background.drainRequestId = null;
+          continue;
         }
-        default:
-          break;
+        if (outcome === 'cancelled') return result('cancelled', 1);
+        if (outcome === 'interrupted') {
+          if (event.payload.error) errorText(event.payload.error.message, event.payload.error.kind);
+          else errorText('Turn interrupted.');
+          return result('interrupted', 1);
+        }
+        return result(
+          ...presentation.failure(event.payload.error?.message ?? 'Turn failed.', event.payload.error?.kind),
+        );
       }
     }
   } catch (error) {
@@ -807,82 +475,5 @@ export async function runDirectHeadless(
     options.signal?.removeEventListener('abort', onAbort);
     if (options.closeConnection !== false) connection.close();
     if (iterator) await iterator.return?.();
-  }
-}
-
-function reportEventError(
-  reported: Set<string>,
-  io: HeadlessIo,
-  message: string,
-  output: 'plain' | 'json',
-  kind?: string,
-): void {
-  if (output === 'json') {
-    io.stdout.write(`${JSON.stringify({ type: 'error', message, error: message, ...(kind === undefined ? {} : { kind }) })}\n`);
-    return;
-  }
-  if (reported.has(message)) return;
-  reported.add(message);
-  io.stderr.write(`error ${message}\n`);
-}
-
-/** Failed terminal output and the old exit-2 resumable-context mapping. */
-function fail(
-  message: string,
-  kind: string | undefined,
-  context: {
-    readonly result: (outcome: DirectHeadlessOutcome, exitCode: number) => DirectHeadlessResult;
-    readonly errorText: (message: string, code?: string) => void;
-    readonly io: HeadlessIo;
-    readonly output: 'plain' | 'json';
-    readonly sessionId: string;
-  },
-): DirectHeadlessResult {
-  const recoverable = kind !== undefined && RECOVERABLE_ERROR_KINDS.has(kind);
-  if (!recoverable) {
-    context.errorText(message, kind);
-    return context.result('failed', 1);
-  }
-  const recovery = `Work is retained. Resume with --resume ${context.sessionId} after reviewing the context limit.`;
-  if (context.output === 'json') {
-    context.io.stdout.write(
-      `${JSON.stringify({
-        type: 'context_paused',
-        error: message,
-        code: kind,
-        sessionId: context.sessionId,
-        recovery,
-      })}\n`,
-    );
-  } else {
-    context.io.stderr.write(`error ${message}\n${recovery}\n`);
-  }
-  return context.result('context_paused', 2);
-}
-
-/** Nested subagent lines keep the old stderr labels; everything else stays nested. */
-function renderNested(
-  agentId: string,
-  role: string | undefined,
-  event: WireEvent,
-  output: 'plain' | 'json',
-  io: HeadlessIo,
-  reported: Set<string>,
-  quiet: boolean,
-): void {
-  if (output === 'json' || quiet) return;
-  const label = role === undefined ? '[subagent]' : `[subagent: ${role}]`;
-  switch (event.type) {
-    case 'tool_started':
-      io.stderr.write(`${label} ${toolStartLine(event.payload.tool).replace(/^\[tool\]\s*/, '')}`);
-      break;
-    case 'retrying':
-      io.stderr.write(retryLine(event.payload, agentId));
-      break;
-    case 'error':
-      reportEventError(reported, io, event.payload.error.message, output);
-      break;
-    default:
-      break;
   }
 }

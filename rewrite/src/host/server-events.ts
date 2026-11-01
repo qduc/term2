@@ -2,17 +2,21 @@
  * or tool identity is synthesized here. The caller supplies only authoritative replay-cut context
  * when a direct payload does not itself carry the immutable data needed by the pinned DTO.
  */
-import type { AgentEventEnvelope, AgentEventType } from '@qduc/agent-wire';
-import type { WireAdmission, WireEvent, WireTask, WireTaskOwner } from '../protocol/direct-wire.js';
+import type { AgentEventEnvelope } from '@qduc/agent-wire';
+import type { WireAdmission, WireEvent } from '../protocol/direct-wire.js';
 import { legacyCommandMessages } from '../protocol/direct-json.js';
 import type { ServerInteractions } from './server-interactions.js';
-import { ServerHttpError } from './server-errors.js';
+import { taskCandidate, taskIdentity } from './server-task-events.js';
+import {
+  requiredTurn,
+  text,
+  errorReason,
+  missing,
+  type CanonicalEventCandidate,
+  type CanonicalEventContext,
+} from './server-event-values.js';
+export type { CanonicalEventCandidate, CanonicalEventContext } from './server-event-values.js';
 
-export type CanonicalEventContext = {
-  /** Accepted immutable task owner at the replay cut; never the latest unrelated task. */
-  readonly task?: WireTask;
-};
-export type CanonicalEventCandidate = { type: AgentEventType; payload: Readonly<Record<string, unknown>> };
 type Candidate = CanonicalEventCandidate;
 
 /** Returns at most one numeric-ID envelope per accepted boundary. Non-public projection updates
@@ -45,7 +49,6 @@ export function canonicalCandidate(
   interactions: ServerInteractions,
   context: CanonicalEventContext,
 ): Candidate | null {
-  const turnId = event.turnId;
   switch (event.type) {
     case 'session_rotated':
       // The logical Session is unchanged, and pinned agent-wire has no rotation/reset event.
@@ -201,10 +204,10 @@ export function canonicalCandidate(
     case 'command_finished':
     case 'background_notice_enqueued':
     case 'background_notices_delivered':
-    // Live argument counts are not tool execution, accepted argument text or a numeric-ID event.
     case 'tool_call_streaming_delta':
-    // The pinned event vocabulary has no automatic-memory notice envelope.
     case 'automatic_memory_notice':
+      // Live argument counts are not tool execution, accepted argument text or a numeric-ID event.
+      // The pinned event vocabulary has no automatic-memory notice envelope.
       return null;
     case 'subagent':
       return nestedCandidate(event, interactions, context);
@@ -217,9 +220,7 @@ export function canonicalCandidate(
       // its attempt/estimate/request/failure semantics faithfully. In particular,
       // do not guess a terminal provider, relabel estimates as measured tokens or
       // coerce blocked/interrupted/cancelled into a pinned errorCategory.
-      return missing(
-        'canonical compaction lifecycle requires a versioned consumer contract; use direct event format',
-      );
+      return missing('canonical compaction lifecycle requires a versioned consumer contract; use direct event format');
     case 'compacted':
       // This presentation notice is neither an attempt start nor its outcome.
       return missing('the compacted notice cannot substitute for a canonical compaction lifecycle boundary');
@@ -335,7 +336,6 @@ function nestedCandidate(
     }
     case 'turn_started':
     case 'turn_ended':
-    // Task acceptance/settlement own subagent_started/completed, not a child root turn boundary.
     case 'text_delta':
     case 'reasoning':
     case 'reasoning_delta':
@@ -360,47 +360,10 @@ function nestedCandidate(
     case 'goal_proposed':
     case 'verification':
     case 'error':
+      // Task acceptance/settlement own subagent_started/completed, not a child root turn boundary.
       return null;
     default:
       return missing('canonical child lifecycle requires its accepted task-owned projection');
-  }
-}
-/** Use the accepted change kind, never a running snapshot, as lifecycle evidence. Numeric task
- * time is not an envelope timestamp: encodeCanonicalEvent keeps the original FactLine occurredAt.
- */
-function taskCandidate(
-  event: Extract<WireEvent, { type: 'task_changed' }>,
-  context: CanonicalEventContext,
-): Candidate | null {
-  const { change, task } = event.payload;
-  if (task.kind === 'shell') return null;
-  if (task.kind !== 'subagent') return missing('canonical task lifecycle requires its accepted task kind');
-  switch (change) {
-    case 'task_question_opened':
-    case 'task_question_closed':
-      // Native orchestrator pauses are not user interactions or terminal lifecycle events.
-      return null;
-    case 'task_backgrounded':
-    case 'task_stop_requested':
-      // The frozen vocabulary has no equivalent. Neither change means started or physically done.
-      return null;
-    case 'task_started':
-      // The current wire has no original input field. Never substitute a label or result text.
-      return missing('canonical task start requires its accepted original input projection');
-    case 'task_finished': {
-      const identity = taskIdentity(task.id, context, undefined, task);
-      const result = task.result;
-      if (!result) return missing('canonical task settlement requires its accepted result');
-      if (result.kind === 'interrupted') {
-        if (result.output === undefined) return missing('canonical task interruption requires actual final output');
-        return {
-          type: 'subagent_interrupted',
-          payload: { ...identity, finalText: text(result.output, 16_384) },
-        };
-      }
-      // Distinct tool names are not pinned per-tool counts, and missing output is not blank success.
-      return missing('canonical task completion requires actual final output and accepted tool-use counts');
-    }
   }
 }
 /** Preserve one accepted queue boundary. Aggregate native discard/cancel IDs cannot become
@@ -430,17 +393,6 @@ function queueCandidate(event: Extract<WireEvent, { type: 'queue_changed' }>): C
       // Root starts/terminals come from their actual separate accepted facts, not queue state.
       return null;
   }
-}
-/** Accept only the task's original parent identity. A nested branch's outer turnId is its child,
- * and a task interaction closure's outer turnId is already its parent; neither can be copied blindly.
- */
-function taskIdentity(taskId: string, context: CanonicalEventContext, role?: string, owner?: WireTaskOwner) {
-  const task = owner ?? context.task;
-  if (!task || task.id !== taskId || !task.turnId)
-    return missing('canonical nested events require their accepted parent task identity');
-  const acceptedRole = role ?? task.role;
-  if (!acceptedRole) return missing('canonical nested events require their accepted role');
-  return { turnId: task.turnId, agentId: text(task.id, 256), role: text(acceptedRole, 256) };
 }
 function admissionCandidate(admission: WireAdmission): Candidate | null {
   if (admission.kind === 'duplicate') return null; // A read/retry is not a second admission event.
@@ -485,35 +437,4 @@ export function canonicalCommandMessageCandidates(
   event: Extract<WireEvent, { type: 'tool_finished' }>,
 ): CanonicalEventCandidate[] {
   return legacyCommandMessages(event).map(({ message }) => commandMessageCandidate(event, message));
-}
-function requiredTurn(event: WireEvent): string {
-  return event.turnId ?? missing('canonical turn event requires its accepted turn identity');
-}
-function text(value: string, max = 65_536): string {
-  return value.slice(0, max).replace(/[\u0000\u007f]/gu, '\uFFFD');
-}
-function errorReason(kind: string | undefined): string {
-  switch (kind) {
-    case 'provider':
-      return 'provider_error';
-    case 'network':
-      return 'network_error';
-    case 'authentication':
-      return 'authentication_error';
-    case 'rate_limit':
-      return 'rate_limit';
-    case 'cancelled':
-      return 'cancelled';
-    case 'validation':
-      return 'validation_error';
-    case 'compaction':
-      return 'compaction_failed';
-    case 'retry_exhausted':
-      return 'retry_exhausted';
-    default:
-      return 'runtime_error';
-  }
-}
-function missing(message: string): never {
-  throw new ServerHttpError(503, 'event_envelope_unavailable', message, true, { reloadRequired: true });
 }

@@ -14,6 +14,7 @@ const allowlistPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 's
 // Type-only imports need admission too. Keep this a named list, not app/direct-*;
 // each admitted entry still has its complete source closure walked below.
 const DIRECT_SOURCE_IMPORTERS = new Set([
+  'app/cli-account-commands.ts',
   'app/cli-args.ts',
   'app/cli.ts',
   'app/direct-application-hooks.ts',

@@ -68,6 +68,10 @@ or old store. Listings count current visible native user messages, deduplicate
 observed/derived display by message ID, and do not count hidden restoration input.
 They omit text previews so warm listing needs metadata rather than log replay.
 
+`cli-account-commands.ts` owns login and model-catalog subcommands, including
+source OAuth prompts and catalogue diagnostics. They do not open a conversation;
+`cli.ts` retains process startup, mode selection and signal ownership.
+
 ## Tools and delegation
 
 `createToolSurface` in `tool-surface.ts` builds the offered tools and matching

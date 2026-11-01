@@ -67,6 +67,7 @@ import path from 'path';
 import type { ISettingsService, ILoggingService } from './services/service-interfaces.js';
 import { ExecutionContext } from './services/execution-context.js';
 import { buildPromptSpec } from './prompts/prompt-constructor.js';
+import { DIRECT_MEMORY_GUIDANCE_MARKER } from './prompts/memory-prompt-marker.js';
 import { ProfileResolutionError, resolveActiveProfile } from './services/profiles/index.js';
 import { shouldPreferPatchEditingModel } from './lib/tool-selection-policy.js';
 import { SkillsService } from './services/skills/skills-service.js';
@@ -459,6 +460,12 @@ export const getAgentDefinition = (
           },
         )
       : memoryCapability;
+  // This description-only view is resolved against Session's actual accepted
+  // snapshot at request planning; it must not assert index presence/absence yet.
+  const promptGuidance =
+    deps.includeMemory === false && deps.promptMemoryEnabled === true
+      ? DIRECT_MEMORY_GUIDANCE_MARKER
+      : promptMemoryCapability.guidance;
   const discordSendEnabled =
     Boolean(deps.discordSend) &&
     !readOnly &&
@@ -477,7 +484,7 @@ export const getAgentDefinition = (
     backgroundShellEnabled: backgroundTasksEnabled && allowBackgroundShell && Boolean(backgroundShellRegistry),
     sandboxEnabled,
     memoryEnabled: hasCapability('memory') && memoryContextEnabled && promptMemoryCapability.access !== 'none',
-    memoryGuidance: hasCapability('memory') ? promptMemoryCapability.guidance : '',
+    memoryGuidance: hasCapability('memory') ? promptGuidance : '',
     memoryContext: promptMemoryCapability.context,
     sessionBrowserEnabled: hasCapability('sessions') && sessionBrowserContextEnabled && Boolean(sessionBrowser),
     executionContext,

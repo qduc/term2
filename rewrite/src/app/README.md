@@ -48,9 +48,11 @@ the wrapped `needsApproval` interrupt marker as the authorization predicate.
 Bare suppresses inline memory guidance without changing
 access, personal-context opt-in, snapshots, or the local-only store boundary.
 When Session owns memory tools/context, `promptMemoryEnabled` builds a
-description-only source capability so the prompt can truthfully mention memory;
-source memory tools remain absent, and Session omits its duplicate inline
-guidance while retaining the global/personal context snapshots.
+description-only source capability with a marker in the prompt. Source memory
+tools remain absent and no second store read occurs; Session substitutes its one
+accepted guidance/global-context snapshot at `planDirectInstructions`, so a
+populated index and the empty-index wording are both resolved from the real
+snapshot rather than guessed.
 MCP capture in `direct-mcp-source.ts` reserves the executable `describe` name from the
 run-code runtime, the same owner used by tool assembly.
 

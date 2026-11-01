@@ -323,16 +323,10 @@ export function createDirectRuntimes(
           },
           port,
         );
-        // The source prompt already describes this capability in its canonical
-        // position when promptMemoryEnabled is set; do not append the same text a
-        // second time. Global personal context remains Session-owned.
-        const nativeMemory =
-          promptMemoryEnabled && sessionMemory.memory !== undefined
-            ? { ...sessionMemory.memory, guidance: '' }
-            : sessionMemory.memory;
+        // The source prompt holds a marker; planDirectInstructions substitutes the
+        // one real guidance/global context here instead of appending a duplicate.
         const capabilities: DirectContextCapabilities = {
           ...sessionMemory,
-          ...(nativeMemory !== undefined ? { memory: nativeMemory } : {}),
           ...(hooks ? { hooks } : {}),
           ...(verification ? { verification: { operations: verification } } : {}),
           verificationEnabled: () => settings.get('agent.completionVerification') !== false,

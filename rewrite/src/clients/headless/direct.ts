@@ -634,7 +634,10 @@ export async function runDirectHeadless(
             (event.payload.turnId === targetTurnId || event.payload.rootTurnId === targetTurnId)
           ) {
             json(legacyRequestCostUpdate(event, legacyRequestId(event.payload.record.requestId)));
-            if (event.payload.record.usage !== undefined) pendingUsageUpdates.push(legacyUsageUpdate(event.payload.record.usage));
+            if (event.payload.record.usage !== undefined) json(legacyUsageUpdate(event.payload.record.usage));
+            // A usage fact for this settlement may have arrived first; publish it
+            // now, at the live request boundary, together with the cost record.
+            for (const usage of pendingUsageUpdates.splice(0)) json(usage);
           }
           break;
         case 'usage':

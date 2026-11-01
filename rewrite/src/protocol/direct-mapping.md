@@ -509,11 +509,13 @@ source-required `callId`; `retry` only with the source-required toolName,
 maxRetries and a known retryType; and `run_budget` from accepted budget evidence. Transient `error` forwards the
 actual message and known kind; optional source code/finalText/stack are unavailable.
 Missing IDs/metadata make those records unavailable rather than synthesized.
-Provider history, private/opaque items, approval descriptors, `retry_exhausted`,
-`usage_update` (wire usage is cumulative, not the old live observation),
-context-compaction source event semantics, memory-injection and subagent/background
-event families remain unavailable or need a real producer contract. This is not
-complete --json parity.
+Headless also maps a settled request's cost-record usage and a real `usage` fact
+into old `usage_update` records at the request-cost boundary, so live consumers
+see them during intervening work; pending observations are flushed before a
+terminal when no cost settlement follows. Provider history, private/opaque items,
+approval descriptors, `retry_exhausted`, context-compaction source event semantics,
+memory-injection and subagent/background event families remain unavailable or
+need a real producer contract. This is not complete --json parity.
 
 ## Accepted branch hydration at one logical Session cut
 

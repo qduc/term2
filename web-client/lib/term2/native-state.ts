@@ -152,7 +152,7 @@ export function nativeStateFromSnapshot(snapshot: Fields): NativeState {
  * for a proposal, a notice, or a silent-turn delivery. Shared v2 owns the allowlist. */
 export function applyNativeState(previous: NativeState | undefined, change: Term2AcceptedChange): NativeState {
   const state = previous ?? {};
-  const payload = change.payload;
+  const payload = object(change.payload);
   switch (change.type) {
     case 'message': {
       const next: NativeMessageEntry = { message: message(payload.message),

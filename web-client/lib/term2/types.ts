@@ -380,6 +380,7 @@ export class Term2ProtocolError extends Error {
   }
 }
 
+const ID_PATTERN = /^[A-Za-z0-9_-]{1,256}$/;
 const OPTION_CHOICE_ID_PATTERN = /^option:[0-9]+$/;
 const FIXED_CHOICE_IDS = new Set(['custom', 'decline', 'cancel']);
 const SAFE_TEXT_MAX = 100_000;

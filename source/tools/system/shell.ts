@@ -940,6 +940,7 @@ export function createShellToolDefinition(deps: {
         const timeoutSource =
           timeout_ms !== undefined ? 'invocation' : background ? 'background_setting' : 'foreground_setting';
         const executionMode = background || transferred ? 'background' : 'foreground';
+        const maxOutputLines = settingsService.get('shell.maxOutputLines') ?? undefined;
         const maxOutputLengthValue = max_output_length ?? settingsService.get('shell.maxOutputChars');
         const configuredMaxOutputLength = settingsService.get('shell.maxOutputChars');
         // Clamp foreground requests to the configured maximum, mirroring the
@@ -964,6 +965,7 @@ export function createShellToolDefinition(deps: {
             mode: executionMode,
             workingDirectory: cwd,
             maxOutputLength: initialMaxOutputLength,
+            maxOutputLines,
           }),
         );
 
@@ -1285,6 +1287,7 @@ export function createShellToolDefinition(deps: {
             timeoutMs: timeout ?? undefined,
             timeoutSource,
             maxOutputLength: background || transferred ? backgroundMaxOutputLength : foregroundMaxOutputLength,
+            maxOutputLines,
             durationMs: Date.now() - startedAt,
           });
 

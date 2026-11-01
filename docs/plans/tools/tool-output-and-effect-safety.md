@@ -56,6 +56,32 @@ state is `unknown`, not "probably failed, try again."
 - Sandbox write policy (`utils/shell/sandbox/sandbox-policy.ts`) bounds where
   spooled output may be written.
 
+### Source shell output preferences
+
+The source `createShellToolDefinition` and `executeFormattedShellCommand` pass the effective
+`shell.maxOutputLines` and `shell.maxOutputChars` settings to
+`formatShellExecutionOutput`. Limits apply independently to stdout and stderr,
+not to the total tool-result envelope. Lines are logical data lines: interior
+blank lines count, an empty stream has zero, and a final newline is a delimiter
+rather than an extra line. Above the line threshold the formatter retains head
+and tail data (at a limit of one, the first line), with an omitted-line marker;
+status, runtime, marker and artifact note are additional metadata. Equality does
+not truncate. Existing presentation trimming of trailing whitespace is unchanged.
+Character bounding follows line bounding and can reduce retained data further.
+Neither preference changes the command's exit status or stops its execution.
+
+Any omitted data triggers the existing complete captured stdout/stderr artifact
+and `Full output saved to` note. The settings do not enlarge the executor's
+capture buffer or change artifact lifetime. This contract covers the source
+formatter and its callers, not native background output storage or readback.
+
+Failure lesson: reading only `shell.maxOutputChars` at the shell callers left the
+stored line preference inert; simply forwarding lines to the generic `trimOutput`
+was insufficient because its ten-line retention floor also defeats small limits.
+Keep small positive limits and delimiter/blank-line boundaries in real-executor
+checks, alongside the character-cap and nonzero-exit controls. The shell-specific
+formatter owns strict line retention without changing other tools' trim policy.
+
 ## Milestone 1 — bounded tool results
 
 Status: **done.**

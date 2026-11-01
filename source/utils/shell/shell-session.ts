@@ -40,6 +40,7 @@ export async function executeFormattedShellCommand(params: {
   const timeout = timeoutValue != null ? timeoutValue : undefined;
   const maxOutputLengthValue = params.settingsService.get('shell.maxOutputChars');
   const maxOutputLength = maxOutputLengthValue != null ? maxOutputLengthValue : undefined;
+  const maxOutputLines = params.settingsService.get('shell.maxOutputLines') ?? undefined;
   const startedAt = Date.now();
 
   const result = await executeShellCommand(params.command, {
@@ -57,6 +58,7 @@ export async function executeFormattedShellCommand(params: {
     exitCode: result.exitCode,
     timedOut: result.timedOut,
     maxOutputLength,
+    maxOutputLines,
     durationMs: Date.now() - startedAt,
   });
 

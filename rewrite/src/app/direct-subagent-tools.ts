@@ -64,6 +64,10 @@ export type DirectSubagentToolsOptions = {
   readonly remoteUnavailable: ReadonlySet<string>;
 };
 
+// Named source roles grant workspace reads independently of the parent's prompt
+// profile. AgentSpec children still inherit the parent's effective-tool ceiling.
+const WORKSPACE_READ_TOOLS = new Set(['read_file', 'grep', 'glob', 'read_code_outline', 'code_context_search']);
+
 type Launch = {
   role?: string;
   task?: string;
@@ -248,7 +252,9 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
       .buildToolDefinitions(definition, filesChanged, task, searchViaShell, true)
       .filter(
         (tool) =>
-          (parentNames.has(tool.name) || (definition.role === 'reviewer' && tool.name === 'run_explorer')) &&
+          (parentNames.has(tool.name) ||
+            (!definition.isScriptGeneric && definition.canRead && WORKSPACE_READ_TOOLS.has(tool.name)) ||
+            (definition.role === 'reviewer' && tool.name === 'run_explorer')) &&
           (!executionContext.isRemote() || !options.remoteUnavailable.has(tool.name)),
       )
       .map(
@@ -271,9 +277,7 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
               // Source empty-scope semantics must not turn an explicit denial into
               // an unrestricted read/write in this native authority snapshot.
               const write = ['apply_patch', 'search_replace', 'create_file'].includes(tool.name);
-              const read = ['read_file', 'grep', 'glob', 'read_code_outline', 'code_context_search'].includes(
-                tool.name,
-              );
+              const read = WORKSPACE_READ_TOOLS.has(tool.name);
               if (
                 (write && definition.filesystemScope?.write.length === 0) ||
                 (read && definition.filesystemScope?.read.length === 0)

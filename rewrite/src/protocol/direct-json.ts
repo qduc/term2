@@ -3,8 +3,8 @@
  * module does not claim the complete legacy ConversationEvent schema.
  */
 import type { CommandMessage } from '../../../source/tools/types.js';
-import type { CommandMessageEvent, CostUpdateEvent, FinalResponseEvent, ReasoningDeltaEvent, TextDeltaEvent, ToolCallStreamingDeltaEvent } from '../../../source/services/conversation/conversation-events.js';
-import type { WireEvent, WireFinalWindow } from './direct-wire.js';
+import type { CommandMessageEvent, CostUpdateEvent, FinalResponseEvent, ReasoningDeltaEvent, RetryEvent, RunBudgetEventNotice, TextDeltaEvent, ToolCallStreamingDeltaEvent, ToolDispatchedEvent, ToolStartedEvent } from '../../../source/services/conversation/conversation-events.js';
+import type { WireBudgetEvidence, WireEvent, WireFinalWindow } from './direct-wire.js';
 
 /** Static negative capability for the complete old ConversationEvent schema.
  * The bounded accepted final window is exposed separately on WireTerminal;
@@ -28,10 +28,65 @@ export function legacyReasoningDelta(event: Extract<WireEvent, { readonly type: 
   return { type: 'reasoning_delta', delta: event.payload.delta };
 }
 
+/** A planned call is the old tool_started boundary. The source DTO requires a
+ * durable tool call ID, so a missing wire call ID is unavailable, not synthesized. */
+export function legacyToolStarted(event: Extract<WireEvent, { readonly type: 'tool_called' }>): ToolStartedEvent | undefined {
+  const { tool } = event.payload;
+  return tool.callId === undefined
+    ? undefined
+    : { type: 'tool_started', toolCallId: tool.callId, toolName: tool.toolName, arguments: structuredClone(tool.input) };
+}
+
+/** Physical start is the old tool_dispatched boundary; same exact ID requirement. */
+export function legacyToolDispatched(event: Extract<WireEvent, { readonly type: 'tool_started' }>): ToolDispatchedEvent | undefined {
+  const { tool } = event.payload;
+  return tool.callId === undefined
+    ? undefined
+    : { type: 'tool_dispatched', toolCallId: tool.callId, toolName: tool.toolName };
+}
+
+const RETRY_TYPES = new Set<NonNullable<RetryEvent['retryType']>>([
+  'hallucination', 'parsing_error', 'behavior', 'flex_service_tier', 'upstream', 'conversation_state', 'connection_interrupted',
+]);
+const RETRY_ERROR_KINDS = new Set<NonNullable<RetryEvent['errorKind']>>([
+  'network', 'provider', 'rate_limit', 'authentication', 'cancelled', 'unknown',
+]);
+
+/** Only emit the source retry DTO when the wire actually carries its required
+ * toolName/maxRetries and a known retryType; otherwise the record is unavailable. */
+export function legacyRetry(event: Extract<WireEvent, { readonly type: 'retrying' }>): RetryEvent | undefined {
+  const { attempt, delayMs, error, toolName, maxRetries, retryType, retryAfterMs } = event.payload;
+  if (toolName === undefined || maxRetries === undefined) return undefined;
+  if (retryType !== undefined && !RETRY_TYPES.has(retryType as NonNullable<RetryEvent['retryType']>)) return undefined;
+  const errorKind = RETRY_ERROR_KINDS.has(error.kind as NonNullable<RetryEvent['errorKind']>)
+    ? (error.kind as NonNullable<RetryEvent['errorKind']>)
+    : undefined;
+  return {
+    type: 'retry',
+    toolName,
+    attempt,
+    maxRetries,
+    errorMessage: error.message,
+    ...(retryType !== undefined ? { retryType: retryType as NonNullable<RetryEvent['retryType']> } : {}),
+    ...(errorKind !== undefined ? { errorKind } : {}),
+    delayMs,
+    ...(retryAfterMs !== undefined ? { retryAfterMs } : {}),
+  };
+}
+
+/** The accepted budget evidence is already the source RunBudgetEvent shape. */
+export function legacyRunBudget(evidence: WireBudgetEvidence): RunBudgetEventNotice {
+  return { type: 'run_budget', evidence: structuredClone(evidence) };
+}
+
 /** Project the immutable accepted terminal window into the old final DTO. The caller
  * passes command IDs it actually emitted live; those are omitted from final exactly as
  * the old stream did. providerHistory and private provider items are never synthesized. */
-export type LegacyFinalResponse = FinalResponseEvent & { readonly legacyCoverage?: WireFinalWindow['coverage'] };
+export type LegacyFinalResponse = FinalResponseEvent & {
+  readonly legacyCoverage?: WireFinalWindow['coverage'];
+  /** True when a read-only replay rebuilt the window from accepted facts. */
+  readonly legacyDerived?: true;
+};
 export function legacyFinalResponse(window: WireFinalWindow, emittedCommandMessageIds: ReadonlySet<string>): LegacyFinalResponse {
   const record = window.record;
   const commandMessages = record.commandMessages.filter(message => !emittedCommandMessageIds.has(message.id));
@@ -44,9 +99,10 @@ export function legacyFinalResponse(window: WireFinalWindow, emittedCommandMessa
     ...(record.costRecords.length > 0 ? { costRecords: record.costRecords.map(cost => structuredClone(cost)) } : {}),
     ...(record.turnItems.length > 0 ? { turnItems: record.turnItems.map(item => structuredClone(item)) } : {}),
     ...(record.terminalCause !== undefined ? { terminalCause: record.terminalCause } : {}),
-    // Extra provenance field: old consumers ignore it; it makes public-item/private
-    // omissions and accepted-summary/usage limits explicit instead of silent.
+    // Extra provenance fields: old consumers ignore them; they make public-item/private
+    // omissions, accepted-summary/usage limits and replay-derived windows explicit.
     legacyCoverage: { ...window.coverage },
+    ...(window.derivedFromAcceptedFacts ? { legacyDerived: true as const } : {}),
   };
 }
 

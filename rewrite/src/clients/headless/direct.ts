@@ -24,7 +24,11 @@ import {
   legacyFinalResponse,
   legacyReasoningDelta,
   legacyRequestCostUpdate,
+  legacyRetry,
+  legacyRunBudget,
   legacyTextDelta,
+  legacyToolDispatched,
+  legacyToolStarted,
   legacyToolCallStreamingDelta,
 } from '../../protocol/direct-json.js';
 import type {
@@ -55,19 +59,20 @@ const LEGACY_JSON_LIVE_RECORDS = [
   'tool_call_streaming_delta',
   'cost_update',
   'command_message',
+  'run_budget',
+  'error',
+  'tool_started',
+  'tool_dispatched',
+  'retry',
 ] as const;
 const LEGACY_JSON_UNAVAILABLE = [
   'providerHistory',
   'approval_required',
-  'tool_started',
-  'tool_dispatched',
   'reasoning_started',
-  'retry',
   'retry_exhausted',
   'tool_recovery',
   'memory_injected',
   'usage_update',
-  'run_budget',
   'context_compaction_started',
   'context_compaction_completed',
   'context_compaction_failed',
@@ -270,10 +275,10 @@ export async function runDirectHeadless(
     return result('error', 1);
   };
 
-  // Old --json records are emitted only from exact native/public data. The
-  // authoritative terminal record comes from the accepted final window; if a
-  // terminal has no such window (old/recovered state), fail explicitly instead
-  // of presenting a partial final/stream as legacy parity.
+  // Old --json records are emitted only from exact native/public data. A missing
+  // final window on an old/recovered terminal was already rebuilt read-only from
+  // its accepted prefix when one exists; otherwise fail explicitly rather than
+  // presenting a partial final/stream as legacy parity.
 
   const onAbort = (): void => {
     if (background !== null) {
@@ -592,6 +597,7 @@ export async function runDirectHeadless(
       }
       if (event.type === 'budget_opened') {
         if (targetTurnId === null || event.payload.request.turnId === targetTurnId) {
+          if (output === 'json') json(legacyRunBudget(event.payload.request.evidence));
           return reportBudgetPause(event.payload.request.evidence);
         }
         continue;
@@ -613,7 +619,7 @@ export async function runDirectHeadless(
           }
           continue;
         }
-        if (event.type === 'error') reportEventError(reportedErrors, io, event.payload.error.message, output);
+        if (event.type === 'error') reportEventError(reportedErrors, io, event.payload.error.message, output, event.payload.error.kind);
         continue;
       }
 
@@ -664,11 +670,28 @@ export async function runDirectHeadless(
           streamedByMessage.set(key, Math.max(streamed, message.text.length));
           break;
         }
+        case 'tool_called':
+          if (forTurn && output === 'json') {
+            const record = legacyToolStarted(event);
+            if (record !== undefined) json(record);
+          }
+          break;
         case 'tool_started':
           if (forTurn && output === 'plain' && !quiet) io.stderr.write(toolStartLine(event.payload.tool));
+          if (forTurn && output === 'json') {
+            const record = legacyToolDispatched(event);
+            if (record !== undefined) json(record);
+          }
           break;
         case 'retrying':
           if (forTurn && output === 'plain' && !quiet) io.stderr.write(retryLine(event.payload));
+          if (forTurn && output === 'json') {
+            const record = legacyRetry(event);
+            if (record !== undefined) json(record);
+          }
+          break;
+        case 'budget_observed':
+          if (forTurn && output === 'json') json(legacyRunBudget(event.payload.evidence));
           break;
         case 'notice':
           if (forTurn && output === 'plain' && !quiet) {
@@ -681,7 +704,7 @@ export async function runDirectHeadless(
           }
           break;
         case 'error':
-          reportEventError(reportedErrors, io, event.payload.error.message, output);
+          reportEventError(reportedErrors, io, event.payload.error.message, output, event.payload.error.kind);
           break;
         case 'turn_ended': {
           if (!forTurn) break;
@@ -753,9 +776,15 @@ export async function runDirectHeadless(
   }
 }
 
-function reportEventError(reported: Set<string>, io: HeadlessIo, message: string, output: 'plain' | 'json'): void {
+function reportEventError(
+  reported: Set<string>,
+  io: HeadlessIo,
+  message: string,
+  output: 'plain' | 'json',
+  kind?: string,
+): void {
   if (output === 'json') {
-    io.stdout.write(`${JSON.stringify({ type: 'error', message, error: message })}\n`);
+    io.stdout.write(`${JSON.stringify({ type: 'error', message, error: message, ...(kind === undefined ? {} : { kind }) })}\n`);
     return;
   }
   if (reported.has(message)) return;

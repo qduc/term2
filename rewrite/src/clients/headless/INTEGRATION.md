@@ -67,11 +67,17 @@ conversation storage.
   required]`, `[question]`, retry and notice lines); errors, `Approval
   Rejected` verdicts and reasoning (when enabled) remain. JSON mode is
   unaffected.
-- `json` currently fails explicitly (exit 1) before submit because an
-  authoritative final/turn-item window is still missing. Live argument-stream,
-  cost and command slices exist, but alone are not the old schema. Emitting wire
-  events under the old flag would misstate parity; remove the gate only when the
-  protocol-owned read model is complete.
+- `json` emits the exact old records the native/public data actually supplies:
+  `text_delta`, `reasoning_delta`, `tool_call_streaming_delta`, `tool_started`,
+  `tool_dispatched`, `retry`, `error` (message and exact kind), `cost_update`,
+  `command_message`, `run_budget` and the authoritative `final` from
+  `WireTerminal.finalWindow`. A missing
+  `finalWindow` on an older/recovered terminal is rebuilt read-only from the
+  accepted fact prefix when that turn has a preceding `turn_started`; the final
+  carries `legacyDerived: true` and the stored fact is never rewritten. Without
+  that prefix the client emits `legacy_final_window_unavailable` and exits 1
+  rather than presenting a partial final. Provider history, private items and
+  the remaining unavailable families are never synthesized from raw wire events.
 - A stale interaction answer after abort is expected (Session closes pending
   interactions). The client keeps the ordered stream and lets the cancelled
   terminal decide instead of reporting a failure. A stale `closed` failure is
@@ -110,19 +116,22 @@ conversation storage.
   without implying completion, and dispose sessions on shutdown. The app
   integration owner switches `app/run.ts`/`app/cli.ts` to this client once that
   exists.
-- **`--json` schema:** the direct client emits `session_start`, the exact live
-  slices available from protocol (`text_delta`, `reasoning_delta`,
-  `tool_call_streaming_delta`, `cost_update`, and complete source
-  `command_message` records), and the authoritative `final` from
-  `WireTerminal.finalWindow`. `session_start.legacyJson` declares the exact live
-  families and the unavailable families; the final preserves per-turn public `turnItems`,
-  usage, root-tree costs, ordered items and terminal cause; command messages
-  already emitted live are excluded. Its `legacyCoverage` field records the
-  producer's public-item/summary/usage/command/cost limits. A terminal without a
-  final window fails explicitly instead of emitting a partial final. Provider
-  history, private/opaque items, approval descriptors and the remaining legacy
-  live event families are not projected; this is not complete old `--json`
-  parity. Never emit raw wire events as legacy JSON.
+- **`--json` schema:** the direct client emits `session_start`, exact live slices
+  (`text_delta`, `reasoning_delta`, `tool_call_streaming_delta`,
+  `tool_started`/`tool_dispatched` when the wire call ID is present, `retry`
+  when required metadata is present, `cost_update`, `command_message`,
+  `run_budget`), and the authoritative `final` from `WireTerminal.finalWindow`.
+  `session_start.legacyJson` declares the exact live families and the
+  unavailable families; the final preserves per-turn public `turnItems`, usage,
+  root-tree costs, ordered items and terminal cause; command messages already
+  emitted live are excluded. Its `legacyCoverage` field records the producer's
+  public-item/summary/usage/command/cost limits. An old/recovered terminal with
+  no stored window is projected read-only from the accepted prefix when a
+  preceding `turn_started` exists and marked `legacyDerived`; otherwise the
+  explicit `legacy_final_window_unavailable` path remains. Provider history,
+  private/opaque items, approval descriptors and the remaining legacy live
+  event families are not projected; this is not complete old `--json` parity.
+  Never emit raw wire events as legacy JSON.
 - **Approval policy inputs:** the wire exposes `toolName`, `input`, `summary`,
   `detail`, `risk`, typed `questions` and `supportedGrants` (empty under the
   current M2 request contract), but not the old safety classification, the

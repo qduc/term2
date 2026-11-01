@@ -486,10 +486,25 @@ legacy parity.
 
 `DIRECT_LEGACY_JSON_FINAL_WINDOW_AVAILABLE` remains false as a declaration about
 the complete legacy ConversationEvent/private-history schema, not the bounded
-terminal window. Headless consumes the final window and exact live slices; a
-terminal without a window fails explicitly rather than emitting a partial final.
-Approval descriptors, tool-dispatch/retry families and private provider history
-are still not projected by the protocol, so this is not complete --json parity.
+terminal window. Headless consumes the final window and exact live slices. If an
+older/recovered terminal has no stored window, `recoverDirectFinalWindow`
+projects one read-only from the accepted fact prefix only when that turn has a
+preceding `turn_started`; the projection carries `derivedFromAcceptedFacts` and
+headless adds `legacyDerived: true`. The original accepted fact is not rewritten
+or migrated. Without the prefix, headless emits
+`legacy_final_window_unavailable` and exits 1 rather than a partial final.
+
+Exact producer-backed live slices now include `tool_started` from `tool_called`
+and `tool_dispatched` from physical `tool_started` only when the wire carries the
+source-required `callId`; `retry` only with the source-required toolName,
+maxRetries and a known retryType; and `run_budget` from accepted budget evidence. Transient `error` forwards the
+actual message and known kind; optional source code/finalText/stack are unavailable.
+Missing IDs/metadata make those records unavailable rather than synthesized.
+Provider history, private/opaque items, approval descriptors, `retry_exhausted`,
+`usage_update` (wire usage is cumulative, not the old live observation),
+context-compaction source event semantics, memory-injection and subagent/background
+event families remain unavailable or need a real producer contract. This is not
+complete --json parity.
 
 ## Accepted branch hydration at one logical Session cut
 

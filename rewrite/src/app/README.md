@@ -76,6 +76,10 @@ running-shell guards; `enter`/`exit` never publish a process-wide root. Native
 source-tool contexts read that lease for each execution. Child tool graphs
 snapshot the current root at admission so a later parent switch cannot retarget
 a running child. Read-only and SSH surfaces do not offer local worktree tools.
+Legacy command-safety helpers that default to the process-global root do not
+follow these local leases: sibling-worktree reads can require extra approval.
+Sandbox configuration and file tools receive the explicit execution root; do not
+restore global publication to avoid those extra prompts.
 
 `createToolSurface` in `tool-surface.ts` builds the offered tools and matching
 execution and approval capabilities together. It keeps a mutable copy of the

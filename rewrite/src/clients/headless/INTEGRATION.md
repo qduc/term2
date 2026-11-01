@@ -61,7 +61,8 @@ conversation storage.
   `error message`. Retry lines use the newly supplied `toolName`,
   `maxRetries`, `retryType` and nested `agentId` when present, with the old
   `service_tier` form; otherwise the explicit fallback includes attempt/delay.
-  Reasoning goes to stderr only with `showReasoning`.
+  Nested tool lines use the supplied role; if absent they use `[subagent]`,
+  never an invented role. Reasoning goes to stderr only with `showReasoning`.
 - `quiet` suppresses plain non-error diagnostics (`[tool]`, `[approval
   required]`, `[question]`, retry and notice lines); errors, `Approval
   Rejected` verdicts and reasoning (when enabled) remain. JSON mode is

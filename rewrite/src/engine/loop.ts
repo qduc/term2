@@ -19,6 +19,10 @@ const itemId = (): ItemId => `item_${Date.now().toString(36)}_e${(nextId++).toSt
 /**
  * The turn loop: call the model, run the tool calls it asks for, repeat.
  *
+ * This compatibility loop is used by the native tracer, not the direct runtime.
+ * Its EngineEvent contract has no argument-stream event; the direct turn driver
+ * in turn-model.ts forwards that provider progress on the direct live stream.
+ *
  * Every step boundary emits a `checkpoint`. A tool that needs approval ends
  * the run as `suspended`; `resume` picks up from that checkpoint with the
  * decisions. Nothing here calls into a UI or writes storage.
@@ -153,6 +157,9 @@ async function* loop(
             break;
           case 'done':
             continuation = event.continuation;
+            break;
+          case 'tool_call_streaming_delta':
+            // Not part of the tracer's compatibility EngineEvent contract.
             break;
           default:
             yield event;

@@ -75,15 +75,16 @@ export async function requestPermission(input: {
     if (response?.outcome.outcome !== 'selected') {
       return { decision: { kind: 'deny', reason: 'Invalid permission response.' }, provenance: { source: 'system' } };
     }
+    const optionId = response.outcome.optionId;
     // Older clients used allow-once for the approve option; retain that alias.
-    switch (response.outcome.optionId) {
+    switch (optionId) {
       case 'approve':
       case 'allow-once':
         return { decision: { kind: 'allow' }, provenance: { source: 'user' } };
       case 'reject':
         return { decision: { kind: 'deny', reason: 'Permission denied by client.' }, provenance: { source: 'user' } };
       default: {
-        const grant = grants.find((grant) => grant === response.outcome.optionId);
+        const grant = grants.find((grant) => grant === optionId);
         return grant
           ? { decision: { kind: 'grant', grant }, provenance: { source: 'user' } }
           : {

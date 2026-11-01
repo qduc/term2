@@ -2,7 +2,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { DirectHost, DirectConnection, Principal, WorkspaceGrant } from './in-process-direct-types.js';
 export type { Principal } from './in-process-direct-types.js';
-import type { WireSnapshot } from '../protocol/direct-wire.js';
+import type { WireCommand, WireSnapshot } from '../protocol/direct-wire.js';
 
 export const ASSERTION_PURPOSES = [
   'workspace_list',
@@ -184,10 +184,20 @@ export type SessionConfiguration = {
   configRevision: string;
   defaultsRevision: string | number;
 };
-/** Read-only direct-store presentation data missing from WireSnapshot; no writer or legacy projection. */
+/** App-owned presentation and pure configuration intent preparation; no server settings writer. */
 export interface ServerSessionPresentation {
   metadata(principal: Principal, snapshot: WireSnapshot): SessionMetadata | Promise<SessionMetadata>;
   configuration?(principal: Principal, snapshot: WireSnapshot): SessionConfiguration | Promise<SessionConfiguration>;
+  /** Authorize the supplied logical snapshot cut and prepare the whole requested patch.
+   * No effects, generated invocation key, current-revision substitution or partial application. */
+  prepareConfiguration?(
+    principal: Principal,
+    snapshot: WireSnapshot,
+    body: unknown,
+  ): Extract<WireCommand, { readonly type: 'configure' }> & {
+    readonly admission: 'idle';
+    readonly expectedRevision: string;
+  };
 }
 export type ServerAudit = {
   operation: AssertionPurpose;
@@ -228,10 +238,20 @@ export type ServerSessionRequest = {
   request: IncomingMessage;
   interactionId?: string;
 };
+/** Only {} is discovery; a mutation requires the caller key and native revision. */
 export type SessionUpdateBody = {
+  clientRequestId?: string;
+  expectedRevision?: string;
+  admission?: 'idle';
   modelSelection?: { model: string; provider: string };
-  reasoningEffort?: string;
-  mode?: string;
+  reasoningEffort?: 'default' | 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+  mode?: 'standard' | 'bare' | 'lite' | 'plan' | 'mentor' | 'orchestrator';
+};
+export type CommandBody = {
+  commandId: string;
+  clientRequestId: string;
+  admission?: 'idle';
+  expectedRevision?: string;
 };
 export type InteractionResolveBody = {
   revision: number;

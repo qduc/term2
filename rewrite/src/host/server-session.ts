@@ -6,7 +6,7 @@ import { commandFailure, publicError, unavailable } from './server-errors.js';
 import type { ServerInteractions } from './server-interactions.js';
 import { parseWireCommand } from '../protocol/direct-parse.js';
 import { projectServerSession } from './server-projection.js';
-import { invokeServerCommand } from './server-commands.js';
+import { invokeServerCommand, projectServerNativeCommand } from './server-commands.js';
 import * as validate from './server-validation.js';
 
 /** Does not own Session lifetime; its caller closes every non-streaming attachment. */
@@ -151,19 +151,27 @@ export async function handleSessionRoute(
       if (!result.ok) return commandFailure(result);
       if (result.kind !== 'abort') return unavailable('turn abort receipt');
       if (result.result.kind === 'not_admitting')
-        return publicError(409, 'session_not_admitting', 'session is interrupted');
+        return publicError(409, 'session_not_admitting', 'session is interrupted', false, {
+          abortStatus: 'not_admitting',
+        });
       if (result.result.kind === 'no_op') {
-        // no_op also includes cancellation already requested; it is not physical settlement.
-        // Only immutable accepted terminal evidence permits the pinned alreadySettled claim.
-        const settled =
-          connection.snapshot.turnResults?.some((turn) => turn.turnId === body.turnId) ||
-          connection.snapshot.terminal?.turnId === body.turnId;
-        return settled
+        // Accepted terminal evidence is not proof of physical cleanup. Never infer
+        // this discriminator from a possibly older/newer attachment snapshot.
+        return result.result.status === 'terminal_accepted'
           ? {
               status: 200,
-              body: { sessionId: connection.sessionId, turnId: body.turnId, accepted: false, alreadySettled: true },
+              body: {
+                sessionId: connection.sessionId,
+                turnId: result.result.turnId,
+                accepted: false,
+                alreadySettled: true,
+                abortStatus: result.result.status,
+              },
             }
-          : publicError(409, 'session_not_admitting', 'turn cancellation was not admitted');
+          : publicError(409, 'session_not_admitting', 'turn cancellation was not admitted', false, {
+              turnId: result.result.turnId,
+              abortStatus: result.result.status,
+            });
       }
       return {
         status: 202,
@@ -220,38 +228,47 @@ async function configureSession(
 ): Promise<ServerResult> {
   const { connection, body, principal } = input;
   if (!validate.isSessionUpdateBody(body)) return invalid('session config is invalid');
-  if (busy(input)) return publicError(409, 'session_busy', 'session is busy');
-  const projection = dependencies.presentation?.configuration;
-  if (!projection)
+  const presentation = dependencies.presentation;
+  if (!presentation?.configuration)
     return publicError(503, 'settings_unavailable', 'direct session config projection unavailable', true);
-  // The frozen wire has neither mode/profile nor the reset-to-default reasoning operation.
-  // Reject the complete request before applying anything; never silently drop a field.
-  if (body.mode !== undefined || body.reasoningEffort === 'default')
-    return publicError(
-      503,
-      'session_config_unavailable',
-      'mode and default reasoning require direct Session configuration support',
-      true,
-    );
-  // Native keyed configure does not supply this HTTP contract's missing stable mutation key
-  // or full mode/default/revision admission policy. Do not allocate a private command ID, send
-  // an obsolete unkeyed patch, or treat a receipt acknowledgement as installation.
-  if (body.modelSelection !== undefined || body.reasoningEffort !== undefined)
-    return publicError(
-      503,
-      'session_config_unavailable',
-      'session configuration requires an HTTP mutation key and configuration revision contract',
-      true,
-    );
-  const fresh = await dependencies.host.connect(principal, connection.sessionId);
-  try {
-    return { status: 200, body: await dependencies.presentation!.configuration!(principal, fresh.snapshot) };
-  } finally {
-    fresh.close();
+  if (Object.keys(body).length === 0) {
+    // App observes installed settings and native commandRevision together. Do not
+    // combine this attachment's old snapshot selection with a later revision query.
+    return { status: 200, body: await presentation.configuration(principal, connection.snapshot) };
   }
-}
-function busy(input: ServerSessionRequest): boolean {
-  return input.connection.snapshot.status === 'running' || input.connection.snapshot.status === 'awaiting_interaction';
+  if (!presentation.prepareConfiguration)
+    return publicError(503, 'session_config_unavailable', 'session configuration preparation unavailable', true);
+  let command: ReturnType<NonNullable<typeof presentation.prepareConfiguration>>;
+  try {
+    command = presentation.prepareConfiguration(principal, connection.snapshot, body);
+  } catch (error) {
+    // Validation failures are safe400s; ownership/authority failures retain their
+    // existing host error mapping instead of being mislabeled as invalid input.
+    if (
+      error instanceof Error &&
+      (error.name === 'ZodError' || ('code' in error && error.code === 'invalid_command'))
+    )
+      return invalid('session config is invalid');
+    throw error;
+  }
+  if (
+    command.type !== 'configure' ||
+    command.commandId !== body.clientRequestId ||
+    command.expectedRevision !== body.expectedRevision ||
+    command.admission !== 'idle'
+  )
+    return unavailable('stable prepared configuration command');
+  // The pinned success projection cannot represent native pending/replayed or
+  // original accepted output. Keep that incomplete endpoint closed, not a fake
+  // success built from a later current configuration. Direct opts into receipts.
+  if (input.url.searchParams.get('format') !== 'direct')
+    return publicError(
+      503,
+      'session_config_unavailable',
+      'canonical configuration mutation receipt contract unavailable',
+      true,
+    );
+  return projectServerNativeCommand(await connection.send(command));
 }
 function invalid(message: string): ServerResult {
   return publicError(400, 'validation_error', message);

@@ -43,7 +43,8 @@ export function createDirectInProcessHost(deps: DirectHostDeps): DirectHost {
       async send(command: WireCommand): Promise<import('../protocol/direct-wire.js').WireCommandResult> {
         if (closed || disposed || view.events.closed) return { ok: false, code: 'closed', message: 'Connection is closed.' };
         try {
-          const readOnly = command.type === 'list_rewind_targets' || command.type === 'preview';
+          const readOnly = command.type === 'list_rewind_targets' || command.type === 'preview' ||
+            command.type === 'command_status' || command.type === 'command_revision';
           await deps.authorize(principal, { kind: readOnly ? 'read' : 'write', sessionId: attached.session.id });
           if (closed || disposed || view.events.closed) return { ok: false, code: 'closed', message: 'Connection is closed.' };
           return await applyDirectCommand(attached.session, command, deps.capabilities?.(attached.session));

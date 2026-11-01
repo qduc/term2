@@ -39,7 +39,13 @@ export type ProviderInputItem = {
 };
 
 export type Item =
-  | { readonly type: 'user_message'; readonly id: ItemId; readonly content: readonly ContentPart[] }
+  | {
+      readonly type: 'user_message';
+      readonly id: ItemId;
+      readonly content: readonly ContentPart[];
+      /** App-owned receipt context; serializes before this item, never orphaned by history edits. */
+      readonly conversationTiming?: string;
+    }
   | { readonly type: 'assistant_message'; readonly id: ItemId; readonly content: readonly ContentPart[] }
   | {
       readonly type: 'reasoning';

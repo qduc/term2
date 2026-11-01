@@ -26,7 +26,7 @@ export type DirectQueueRecord = {
   /** Original body retained for idempotence even after an edit or settlement. */
   readonly request: DirectQueueSubmission & { readonly delivery: DirectQueueDelivery };
   readonly messageId: string;
-  readonly receivedAt: string;
+  readonly receivedAt?: string;
   /** Current executable payload, not a text-only display cache. */
   readonly content: readonly ContentPart[];
   readonly admission: DirectQueueAdmission;

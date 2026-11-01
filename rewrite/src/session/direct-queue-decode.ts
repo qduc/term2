@@ -43,7 +43,7 @@ const record = z.object({
     humanInputAt: id.optional(),
   }),
   messageId: id,
-  receivedAt: id,
+  receivedAt: id.optional(),
   content,
   admission,
   stage: z.enum(['queued', 'pending_steer']),

@@ -28,6 +28,13 @@ export function toolDefinition(tool: ToolSpec): StreamedModelToolDefinition {
 
 // ---------- Item -> provider input ----------
 
+/** Expand app-owned timing beside its user item only at the provider boundary. */
+export function withConversationTiming(item: Item, input: StreamedModelTurnInput): readonly StreamedModelTurnInput[] {
+  return item.type === 'user_message' && item.conversationTiming
+    ? [{ type: 'message', role: 'system', content: [{ type: 'text', text: item.conversationTiming }] }, input]
+    : [input];
+}
+
 export function itemToInput(item: Item): StreamedModelTurnInput {
   switch (item.type) {
     case 'user_message':

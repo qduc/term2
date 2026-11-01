@@ -1,4 +1,4 @@
-/** Lossless portable Item/provider shapes. No execution, persistence or retries. */
+/** Portable Item/provider shapes. No execution, persistence or retries. */
 import { randomUUID } from 'node:crypto';
 import type {
   StreamedModelToolDefinition,
@@ -31,11 +31,25 @@ export function toolDefinition(tool: ToolSpec): StreamedModelToolDefinition {
 export function itemToInput(item: Item): StreamedModelTurnInput {
   switch (item.type) {
     case 'user_message':
-    case 'assistant_message':
+    case 'assistant_message': {
+      // Match source assistant context normalization without rewriting accepted
+      // Items or live deltas. Mixed/media messages retain their exact parts.
+      const content =
+        item.type === 'assistant_message' && item.content.every((part) => part.type === 'text')
+          ? [
+              {
+                type: 'text' as const,
+                text: item.content
+                  .map((part) => part.text)
+                  .join('\n\n')
+                  .trim(),
+              },
+            ]
+          : item.content;
       return {
         type: 'message',
         role: item.type === 'user_message' ? 'user' : 'assistant',
-        content: item.content.map((part) =>
+        content: content.map((part) =>
           part.type === 'text'
             ? { type: 'text' as const, text: part.text }
             : {
@@ -45,6 +59,7 @@ export function itemToInput(item: Item): StreamedModelTurnInput {
               },
         ),
       };
+    }
     case 'reasoning':
       return {
         type: 'reasoning',

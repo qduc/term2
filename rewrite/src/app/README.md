@@ -81,6 +81,15 @@ host projection types must be reconciled here, not hidden with casts or invented
 terminal data. A successful typecheck establishes contract compatibility, not
 provider execution, approval/reconnect behavior, or continuation parity.
 
+Native subagent task IDs use the source codename vocabulary so model-targeted
+handles remain pronounceable; they are still the Session's canonical task IDs,
+not aliases layered over UUIDs. `direct-subagent-tools.ts` inherits output
+allocation through the same configured-setting/catalog policy as the source
+runner; an explicit role allocation still wins. `itemToInput` canonicalizes
+text-only assistant context without rewriting accepted Items or live deltas.
+`directTaskNotice` renders accepted child outcomes in the source completion
+wording, while persistence keeps native task/branch facts and delivery receipts.
+
 ### Async child questions
 
 `createDirectSubagentTools` passes the real source `ask_orchestrator` callback

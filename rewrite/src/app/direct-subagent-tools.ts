@@ -2,6 +2,8 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import type { AgentFactoryDeps } from '../../../source/lib/agent-factory.js';
+import { getCatalogModel } from '../../../source/providers/model-catalog/catalog.js';
+import { resolveOutputAllocation } from '../../../source/services/agent-runtime/model-context-policy.js';
 import type { ResolvedSubagentLaunch } from '../../../source/lib/subagent-bridge.js';
 import { adaptLegacyDefinition } from '../../../source/services/agent-runtime/legacy-adapter.js';
 import {
@@ -332,6 +334,15 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
       },
       available: (context: Pick<ToolContext, 'workspace' | 'settings'>) => registry.available(context).map(counted),
     };
+    // Preserve the source child policy: explicit role allocation wins; otherwise
+    // inherit the configured setting with the same catalog default clamp.
+    const maxOutputTokens =
+      definition.maxTokens ??
+      resolveOutputAllocation(
+        getCatalogModel(definition.provider, definition.model),
+        settings.get('agent.maxOutputTokens'),
+        settings.getSource?.('agent.maxOutputTokens') === 'default',
+      );
     const request: NestedRunRequest & { readonly input: string } = Object.freeze({
       mode,
       ...(params.name ? { name: params.name } : {}),
@@ -353,7 +364,7 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
       toolNames: Object.freeze(wrapped.map((tool) => tool.name)),
       model: Object.freeze({ provider: definition.provider, model: definition.model }),
       ...(definition.reasoningEffort !== 'default' ? { reasoning: definition.reasoningEffort as ReasoningEffort } : {}),
-      ...(definition.maxTokens !== undefined ? { maxOutputTokens: definition.maxTokens } : {}),
+      ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
       // Keep source maxTurns; the owning root RunBudget remains the tool-call
       // containment authority rather than inventing a new per-child workload cap.
       budget: Object.freeze({ maxModelCalls: definition.maxTurns, maxToolCalls: Number.MAX_SAFE_INTEGER }),

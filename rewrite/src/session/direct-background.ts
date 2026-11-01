@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { setImmediate } from 'node:timers/promises';
+import { createCodenameRunId } from './codename-run-id.js';
 import type { ModelError } from '../model/index.js';
 import type { InteractionDecision, InteractionRequestId, SubagentMessageResult } from '../tools/index.js';
 import type { AnswerResult } from './direct-types.js';
@@ -223,7 +224,7 @@ export class DirectBackgroundTasks {
   }
 
   #createEntry(request: DirectTaskStart): Entry {
-    const taskId = randomUUID() as DirectTaskId;
+    const taskId = (request.kind === 'subagent' ? createCodenameRunId() : randomUUID()) as DirectTaskId;
     if (this.#entries.has(taskId)) throw new Error('Task ID collision.');
     const startedAt = this.#now();
     const task: DirectTaskDescriptor = structuredClone({

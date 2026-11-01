@@ -12,11 +12,21 @@ export type TuiConnection = DirectConnection | DirectReplayConnection;
 export type BridgeStatus = {
   readonly sessionId: string;
   readonly startup: boolean;
-  readonly attachment: null | { readonly name: string; readonly socketPath: string; readonly discordInputEnabled: boolean };
+  readonly attachment: null | {
+    readonly name: string;
+    readonly socketPath: string;
+    readonly discordInputEnabled: boolean;
+  };
 };
 export interface TuiIntegration {
-  command(connection: TuiConnection, input: string): Promise<{
-    readonly message?: string; readonly exit?: boolean;
+  /** Read the attached session's effective preferences on each render, including live /settings changes. */
+  preferences?(sessionId: string): { readonly historySize: number; readonly pasteThreshold: number | undefined };
+  command(
+    connection: TuiConnection,
+    input: string,
+  ): Promise<{
+    readonly message?: string;
+    readonly exit?: boolean;
     readonly draft?: { readonly text: string; readonly attachments: readonly WireContent[] };
     readonly sessionId?: string;
   }>;

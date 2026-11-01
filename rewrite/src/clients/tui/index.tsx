@@ -6,11 +6,13 @@ import type { TuiConnection } from './integration.js';
 import type {
   WireContent,
   WireDecision,
+  WireEvent,
   WireRewindTarget,
   WireSnapshot,
   WireSubmission,
 } from '../../protocol/direct-wire.js';
 import { useTheme } from '../../../../source/components/theme.js';
+import { DEFAULT_SETTINGS } from '../../../../source/services/settings/settings-schema.js';
 import { useSkin } from '../../../../source/skins/SkinContext.js';
 import type { TuiIntegration } from './integration.js';
 import { useClient } from './use-client.js';
@@ -55,6 +57,8 @@ export function Tui(props: {
   readonly integration: TuiIntegration;
   readonly retainedSnapshot?: WireSnapshot;
   readonly onSnapshot?: (snapshot: WireSnapshot) => void;
+  /** App side effects for new durable events, never initial/repeated snapshots. */
+  readonly onLiveEvent?: (event: WireEvent) => void;
   readonly onExit: () => void;
 }): React.ReactElement {
   // Signal keys stay above the keyed session/editor and every modal input owner.
@@ -96,6 +100,7 @@ function TuiSession({
   integration,
   retainedSnapshot,
   onSnapshot,
+  onLiveEvent,
   onExit,
   interrupt,
   switchSession,
@@ -105,12 +110,14 @@ function TuiSession({
   readonly integration: TuiIntegration;
   readonly retainedSnapshot?: WireSnapshot;
   readonly onSnapshot?: (snapshot: WireSnapshot) => void;
+  readonly onLiveEvent?: (event: WireEvent) => void;
   readonly onExit: () => void;
   readonly interrupt: React.RefObject<() => void>;
   readonly switchSession?: (sessionId: string) => Promise<void>;
   readonly transitionNotice?: string;
 }): React.ReactElement {
-  const { state, error: connectionError } = useClient(connection, retainedSnapshot, onSnapshot);
+  const { state, error: connectionError } = useClient(connection, retainedSnapshot, onSnapshot, onLiveEvent);
+  const preferences = integration.preferences?.(connection.sessionId) ?? DEFAULT_SETTINGS.ui;
   const { columns, rows } = useTerminalSize();
   const [interactionOpen, setInteractionOpen] = useState(false);
   const [taskOpen, setTaskOpen] = useState(false);
@@ -161,6 +168,7 @@ function TuiSession({
     state.messages
       .filter((message) => message.role === 'user')
       .map((message) => ({ text: message.historyText ?? message.text, attachments: message.attachments ?? [] })),
+    preferences.historySize,
   );
   // The remounted editor first reports its empty internal images before syncing props.
   const replaceInput = (text: string, cursor?: number) => {
@@ -586,12 +594,17 @@ function TuiSession({
           cursorOverride={editor.cursorOverride}
           width={Math.max(1, columns - 4)}
           maxHeight={Math.max(1, rows - 8)}
+          pasteThreshold={preferences.pasteThreshold}
           isActive={!busy && !connectionError && !interactionOpen && !taskOpen && !budgetOpen && !rewindTargets}
           images={images}
           onImagesChange={onImagesChange}
           enableImagePaste
           onPasteError={(reason) => setNotice(`Image paste failed: ${reason}`)}
           ignoreInput={(input, key) =>
+            input === '[I' ||
+            input === '[O' ||
+            input === '\x1b[I' ||
+            input === '\x1b[O' ||
             key.pageUp ||
             key.pageDown ||
             (key.ctrl && (key.upArrow || key.downArrow || input === 'g' || input === 'b')) ||

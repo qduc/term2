@@ -1,3 +1,4 @@
+import type { WireEvent, WireSnapshot } from '../../protocol/direct-wire.js';
 import type { DirectConnection, DirectReplayConnection } from '../../host/in-process-direct-types.js';
 
 import type { WireContent } from '../../protocol/direct-wire.js';
@@ -12,11 +13,21 @@ export type TuiConnection = DirectConnection | DirectReplayConnection;
 export type BridgeStatus = {
   readonly sessionId: string;
   readonly startup: boolean;
-  readonly attachment: null | { readonly name: string; readonly socketPath: string; readonly discordInputEnabled: boolean };
+  readonly attachment: null | {
+    readonly name: string;
+    readonly socketPath: string;
+    readonly discordInputEnabled: boolean;
+  };
 };
 export interface TuiIntegration {
-  command(connection: TuiConnection, input: string): Promise<{
-    readonly message?: string; readonly exit?: boolean;
+  /** Read the attached session's effective preferences on each render, including live /settings changes. */
+  preferences?(sessionId: string): { readonly historySize: number; readonly pasteThreshold: number | undefined };
+  command(
+    connection: TuiConnection,
+    input: string,
+  ): Promise<{
+    readonly message?: string;
+    readonly exit?: boolean;
     readonly draft?: { readonly text: string; readonly attachments: readonly WireContent[] };
     readonly sessionId?: string;
   }>;
@@ -28,4 +39,15 @@ export interface TuiIntegration {
   };
   /** Attach a returned direct session ID; do not reuse the previous connection. */
   switchSession?(sessionId: string): Promise<void | { readonly message?: string }>;
+}
+
+/** App-owned TUI callbacks cross the unkeyed shell into the keyed session. */
+export interface TuiProps {
+  readonly connection: TuiConnection;
+  readonly integration: TuiIntegration;
+  readonly retainedSnapshot?: WireSnapshot;
+  readonly onSnapshot?: (snapshot: WireSnapshot) => void;
+  /** New durable events only; snapshot/replay callbacks do not trigger side effects. */
+  readonly onLiveEvent?: (event: WireEvent) => void;
+  readonly onExit: () => void;
 }

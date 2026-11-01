@@ -10,6 +10,14 @@ A pending interaction belonging to the active root turn takes keyboard ownership
 
 Enter steers during an active turn, Alt+Enter submits a follow-up, and idle Enter uses auto delivery. Queue operations use native commands; the queue editor retains original non-primary content, sends replacements only when changed, and never automatically resubmits a late edit. If content is unavailable it cannot recover unknown attachments. `/rewind` restores the Session draft and only resends on explicit request. History uses `envPaths('term2').data/tui-history-next.json` and stores image bytes; question answers are excluded. Concurrent history writers can race.
 
+The direct app supplies `TuiIntegration.preferences(sessionId)` from the attached session's live settings, not launch defaults or another session. The composer passes `ui.pasteThreshold` to the shared `MultilineInput`: collapsing a large paste changes its presentation, not submitted content. Existing `/settings` changes take effect on the next render. Generic clients without that callback use schema defaults.
+
+`ui.historySize` bounds composer recall, not canonical conversation/transcript data. `readHistory` validates the entire file before returning the newest whole entries; `appendHistory` atomically retains the newest configured count including text and attachments. The editor applies the same bound to session fallback history and in-memory navigation. The schema keeps this preference startup-only; `/settings` does not make it live-modifiable. A changed supplied bound resets navigation position without changing the current buffer/cursor; the next successful history append persists the new bound. Older recall entries are then irreversibly removed from this separate file. Malformed files remain untouched and errors stay visible; there is no automatic recovery, retry, new default, or settings migration.
+
+`onLiveEvent` receives newly folded, durable events after the current snapshot/replay cut, never snapshots or duplicate sequence numbers. The direct app uses it for new approval interactions and successfully completed turns through the existing `useTerminalFocusNotifier`; cancelled/failed/interrupted turns are not response-ready notifications. Initial history, session attachment, idle renders and snapshot refreshes are silent. The notifier owns focus tracking and all three notification preference gates. Focus reports are excluded from composer text, without taking keyboard ownership from decisions, menus or signal keys.
+
+The missing preference consumers were latent at the native adapter boundary: retained settings existed, but component defaults, unbounded recall and an absent notifier bypassed them. Settings readback could not catch that category. Keep preferences sourced from the attached session and observe actual paste submission, recall persistence and raw child-PTY notification output when changing this integration. Sibling source consumers (`InputBox`, `HistoryService`, `useTerminalFocusNotifier`) already consume these preferences; native transcript retention and background notices are separate owners, not replacement preference consumers.
+
 Idle rendering must quiesce: wire projections retain identity until the immutable snapshot changes, and the controlled image editor must ignore equal echoes and the initial empty callback on remount. A new ink-prompt version must preserve that remount callback ordering or the draft-restore adapter must change. Verify both a real idle terminal's CPU and image draft restoration; a visible prompt alone cannot detect a render loop.
 
 The app's `switchSession` attaches the successor and returns an optional notice after publication (including a control socket rebind failure). The unkeyed exported `Tui` retains that notice above its keyed session child. `/bridge` uses app-owned socket lifecycle callbacks.
@@ -33,8 +41,8 @@ captured when typing a numbered command. It installs no input listener.
 `interaction-command.ts` validates a numbered `/answer` against that captured list
 and returns the exact request/decision; the session sends it with user provenance.
 
-Queued preference integration must reconcile `bcc30ac1` across these seams: its
-public live-event callback still crosses the unkeyed shell into `useClient`, while
-history-size belongs at the composer hook's `useEditor` call. Paste threshold and
-focus-sequence filtering stay at the session input surface alongside the existing
-inactive-composer guard. That queued feature is not activated by this extraction.
+The shared `TuiProps` contract carries the app's live-event callback through the
+unkeyed shell and keyed session into `useClient`. History-size reaches `useEditor`
+through `useSessionComposer`; paste threshold and focus-sequence filtering stay at
+the session input surface alongside the inactive-composer guard. Terminal preference
+checks do not establish unrelated modal, task, budget or switching workflows.

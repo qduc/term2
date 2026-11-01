@@ -2,11 +2,11 @@ import React, { useRef, useState } from 'react';
 import { randomUUID } from 'node:crypto';
 import { Box, Text, useInput } from 'ink';
 import { MultilineInput, type ImageRef } from 'ink-prompt';
-import type { TuiConnection } from './integration.js';
-import type { WireRewindTarget, WireSnapshot, WireSubmission } from '../../protocol/direct-wire.js';
+import type { TuiProps } from './integration.js';
+import type { WireRewindTarget, WireSubmission } from '../../protocol/direct-wire.js';
 import { useTheme } from '../../../../source/components/theme.js';
 import { useSkin } from '../../../../source/skins/SkinContext.js';
-import type { TuiIntegration } from './integration.js';
+import { DEFAULT_SETTINGS } from '../../../../source/services/settings/settings-schema.js';
 import { useClient } from './use-client.js';
 import { Activity } from './views.js';
 import { InteractionPanel } from './interaction-panel.js';
@@ -40,21 +40,18 @@ export function TuiSession({
   integration,
   retainedSnapshot,
   onSnapshot,
+  onLiveEvent,
   onExit,
   interrupt,
   switchSession,
   transitionNotice,
-}: {
-  readonly connection: TuiConnection;
-  readonly integration: TuiIntegration;
-  readonly retainedSnapshot?: WireSnapshot;
-  readonly onSnapshot?: (snapshot: WireSnapshot) => void;
-  readonly onExit: () => void;
+}: TuiProps & {
   readonly interrupt: React.RefObject<() => void>;
   readonly switchSession?: (sessionId: string) => Promise<void>;
   readonly transitionNotice?: string;
 }): React.ReactElement {
-  const { state, error: connectionError } = useClient(connection, retainedSnapshot, onSnapshot);
+  const { state, error: connectionError } = useClient(connection, retainedSnapshot, onSnapshot, onLiveEvent);
+  const preferences = integration.preferences?.(connection.sessionId) ?? DEFAULT_SETTINGS.ui;
   const { columns, rows } = useTerminalSize();
   const [interactionOpen, setInteractionOpen] = useState(false);
   const [dismissedInteractionId, setDismissedInteractionId] = useState<string | null>(null);
@@ -76,7 +73,7 @@ export function TuiSession({
     restoreDraft,
     answerOwners,
     queueOwners,
-  } = useSessionComposer(state);
+  } = useSessionComposer(state, preferences.historySize);
   const [rewindTargets, setRewindTargets] = useState<readonly WireRewindTarget[] | null>(null);
   // Snapshot-derived ownership has no effect-sized gap in which decision keys
   // can land in the ordinary composer. Background requests keep the Ctrl+G picker.
@@ -463,6 +460,7 @@ export function TuiSession({
           cursorOverride={editor.cursorOverride}
           width={Math.max(1, columns - 4)}
           maxHeight={Math.max(1, rows - 8)}
+          pasteThreshold={preferences.pasteThreshold}
           isActive={composerActive}
           images={images}
           onImagesChange={onImagesChange}
@@ -470,6 +468,7 @@ export function TuiSession({
           onPasteError={(reason) => setNotice(`Image paste failed: ${reason}`)}
           ignoreInput={(input, key) =>
             !composerActive ||
+            ['[I', '[O', '\x1b[I', '\x1b[O'].includes(input) ||
             key.pageUp ||
             key.pageDown ||
             (key.ctrl && (key.upArrow || key.downArrow || input === 'g' || input === 'b')) ||

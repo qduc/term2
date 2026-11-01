@@ -11,44 +11,55 @@ const historyFile = () => path.join(envPaths('term2').data, 'tui-history-next.js
 function validContent(value: unknown): value is WireContent {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const part = value as Record<string, unknown>;
-  return part.type === 'text' ? typeof part.text === 'string'
-    : part.type === 'image' && typeof part.mediaType === 'string' && typeof part.data === 'string'
-      && (part.detail === undefined || typeof part.detail === 'string');
+  return part.type === 'text'
+    ? typeof part.text === 'string'
+    : part.type === 'image' &&
+        typeof part.mediaType === 'string' &&
+        typeof part.data === 'string' &&
+        (part.detail === undefined || typeof part.detail === 'string');
 }
 
-/** Read direct history, preserving malformed files; earlier direct text-only entries remain readable. */
-export function readHistory(): HistoryEntry[] {
+/** Validate the whole file before retaining newest whole entries; corruption must never be hidden by the cap. */
+export function readHistory(limit: number): HistoryEntry[] {
   let text: string;
-  try { text = readFileSync(historyFile(), 'utf8'); }
-  catch (error) {
+  try {
+    text = readFileSync(historyFile(), 'utf8');
+  } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
     throw error;
   }
   const value: unknown = JSON.parse(text);
   if (!Array.isArray(value)) throw new Error('Invalid direct TUI history; original file preserved.');
-  return value.map((entry: unknown) => {
-    if (typeof entry === 'string') return { text: entry, attachments: [] };
-    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Error('Invalid direct TUI history; original file preserved.');
-    const item = entry as Record<string, unknown>;
-    if (typeof item.text !== 'string' || !Array.isArray(item.attachments) || !item.attachments.every(validContent)) {
-      throw new Error('Invalid direct TUI history; original file preserved.');
-    }
-    return { text: item.text, attachments: item.attachments as WireContent[] };
-  });
+  return value
+    .map((entry: unknown) => {
+      if (typeof entry === 'string') return { text: entry, attachments: [] };
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry))
+        throw new Error('Invalid direct TUI history; original file preserved.');
+      const item = entry as Record<string, unknown>;
+      if (typeof item.text !== 'string' || !Array.isArray(item.attachments) || !item.attachments.every(validContent)) {
+        throw new Error('Invalid direct TUI history; original file preserved.');
+      }
+      return { text: item.text, attachments: item.attachments as WireContent[] };
+    })
+    .slice(-limit);
 }
 
-/** Persist text and attachments together using a same-directory atomic replacement. */
-export function appendHistory(entry: HistoryEntry): void {
-  const entries = readHistory();
-  if (JSON.stringify(entries.at(-1)) === JSON.stringify(entry)) return;
-  entries.push(entry);
+/** Bound composer recall only, never conversation data; atomically save newest whole text/attachment entries. */
+export function appendHistory(entry: HistoryEntry, limit: number): void {
+  const entries = readHistory(limit);
+  if (JSON.stringify(entries.at(-1)) !== JSON.stringify(entry)) entries.push(entry);
   const file = historyFile();
   mkdirSync(path.dirname(file), { recursive: true });
   const temporary = `${file}.${randomUUID()}.tmp`;
   try {
-    writeFileSync(temporary, JSON.stringify(entries), { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+    writeFileSync(temporary, JSON.stringify(entries.slice(-limit)), { encoding: 'utf8', mode: 0o600, flag: 'wx' });
     renameSync(temporary, file);
-  } finally {
-    try { unlinkSync(temporary); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+  } catch (error) {
+    try {
+      unlinkSync(temporary);
+    } catch {
+      // Cleanup must not hide the original save failure; a renamed file has no temporary path.
+    }
+    throw error;
   }
 }

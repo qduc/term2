@@ -11,6 +11,8 @@ import { shouldDetectBackground } from '../../../source/theme/resolve-theme.js';
 import { SettingsThemeProvider } from '../../../source/theme/ThemeContext.js';
 import { getInkRenderOptions } from '../../../source/utils/ink-render-options.js';
 import { getProfileLabel } from '../../../source/services/profiles/labels.js';
+import { useTerminalFocusNotifier } from '../../../source/hooks/use-terminal-focus-notifier.js';
+import type { LoggingService } from '../../../source/services/logging/logging-service.js';
 import {
   confirmHomeDirectoryStart,
   HOME_DIRECTORY_START_WARNING,
@@ -52,6 +54,7 @@ function DirectTui({
   bridge,
   restart,
   onExit,
+  logger,
 }: {
   readonly app: DirectApplication;
   readonly root: string;
@@ -61,13 +64,24 @@ function DirectTui({
   readonly bridge: DirectControlBridge;
   readonly restart: (plan: DirectRestartPlan) => void;
   readonly onExit: () => void;
+  readonly logger: LoggingService;
 }): React.ReactElement {
   const [connection, setConnection] = useState(initial);
   // Holds what this client has folded, for the commands that read it.
   const latest = useRef(initial.snapshot);
+  // The notifier already owns terminal focus and all three preference gates.
+  // Never use launch defaults: attached sessions own separate mutable settings.
+  const settings = app.sessionDetails(connection.sessionId).settings;
+  if (!settings) throw new Error('The attached session has no live settings.');
+  const notifier = useTerminalFocusNotifier({ stdout, settingsService: settings, loggingService: logger });
   const integration: TuiIntegration = useMemo(
-    () =>
-      createDirectTuiCommands({
+    () => ({
+      preferences(sessionId) {
+        const current = app.sessionDetails(sessionId).settings;
+        if (!current) throw new Error('The attached session has no live settings.');
+        return { historySize: current.get('ui.historySize'), pasteThreshold: current.get('ui.pasteThreshold') };
+      },
+      ...createDirectTuiCommands({
         app,
         root,
         bridge,
@@ -81,12 +95,19 @@ function DirectTui({
           setConnection(next);
         },
       }),
+    }),
     [app, root, remote, mcp, bridge, restart],
   );
   return (
     <Tui
       connection={connection}
       integration={integration}
+      onLiveEvent={(event) => {
+        if (event.sessionId !== connection.sessionId) return;
+        if (event.type === 'interaction_opened' && event.payload.interaction.kind === 'approval')
+          notifier.approvalNeeded();
+        if (event.type === 'turn_ended' && event.payload.outcome === 'completed') notifier.turnComplete();
+      }}
       onSnapshot={(snapshot) => {
         latest.current = snapshot;
       }}
@@ -175,6 +196,7 @@ async function runTui(
               remote={target.restart}
               mcp={mcp}
               initial={initial}
+              logger={selection.logger}
               bridge={bridge}
               restart={(plan) => {
                 // Node's native exec failure can abort rather than throw. Publish

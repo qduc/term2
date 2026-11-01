@@ -1,8 +1,7 @@
 /** Public direct TUI shell: cross-session notices and terminal interrupt ownership. */
 import React, { useRef, useState } from 'react';
 import { useInput } from 'ink';
-import type { TuiConnection, TuiIntegration } from './integration.js';
-import type { WireSnapshot } from '../../protocol/direct-wire.js';
+import type { TuiProps } from './integration.js';
 import { TuiSession } from './session.js';
 
 export type { TuiIntegration } from './integration.js';
@@ -16,13 +15,7 @@ export { projectSnapshot } from './direct-projection.js';
  * unmounting or replacing the connection unsubscribes without cancelling work.
  * Session mutations go through the direct wire and failures remain visible.
  */
-export function Tui(props: {
-  readonly connection: TuiConnection;
-  readonly integration: TuiIntegration;
-  readonly retainedSnapshot?: WireSnapshot;
-  readonly onSnapshot?: (snapshot: WireSnapshot) => void;
-  readonly onExit: () => void;
-}): React.ReactElement {
+export function Tui(props: TuiProps): React.ReactElement {
   // Signal keys stay above the keyed session/editor and every modal input owner.
   const interrupt = useRef<() => void>(() => {});
   const exitArmedUntil = useRef(0);

@@ -8,7 +8,7 @@ import type { TuiState } from './state.js';
 import { restoreAttachments } from './draft.js';
 import { useEditor } from './editor.js';
 
-export function useSessionComposer(state: TuiState) {
+export function useSessionComposer(state: TuiState, historySize: number) {
   const [images, setImages] = useState<ImageRef[]>([]);
   const ignoreInitialImages = useRef(false);
   const onImagesChange = useCallback((next: ImageRef[]) => {
@@ -48,6 +48,7 @@ export function useSessionComposer(state: TuiState) {
     state.messages
       .filter((message) => message.role === 'user')
       .map((message) => ({ text: message.historyText ?? message.text, attachments: message.attachments ?? [] })),
+    historySize,
   );
   // The remounted editor first reports its empty internal images before syncing props.
   const replaceInput = (text: string, cursor?: number) => {

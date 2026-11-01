@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { randomUUID } from 'node:crypto';
 import type { DirectConnection, DirectReplayConnection } from '../../host/in-process-direct-types.js';
-import type { WireSnapshot } from '../../protocol/direct-wire.js';
+import type { WireEvent, WireSnapshot } from '../../protocol/direct-wire.js';
 import { reduceWireEvent } from '../../protocol/direct-reducer.js';
 import { projectSnapshot } from './direct-projection.js';
 import type { TuiState } from './state.js';
@@ -15,14 +15,17 @@ function initialSnapshot(connection: ClientConnection, retained?: WireSnapshot):
   return retained;
 }
 
-/** Fold a fresh snapshot or a retained cursor state, then ordered catch-up and live events. */
+/** Fold snapshot/catch-up/live state. The optional observer sees new durable non-snapshot events only. */
 export function useClient(
   connection: ClientConnection,
   retained?: WireSnapshot,
   onSnapshot?: (state: WireSnapshot) => void,
+  onLiveEvent?: (event: WireEvent) => void,
 ): { state: TuiState; error: string | null } {
   const callback = useRef(onSnapshot);
   callback.current = onSnapshot;
+  const liveCallback = useRef(onLiveEvent);
+  liveCallback.current = onLiveEvent;
   const [current, setCurrent] = useState(() => ({
     connection,
     wire: initialSnapshot(connection, retained),
@@ -55,9 +58,12 @@ export function useClient(
         await drain();
         for await (const event of connection.events) {
           if (!active) return;
+          // Snapshots and replay at/before the attached cut are not new work.
+          const live = event.type !== 'snapshot' && event.seq !== null && event.seq > (wire.seq ?? -1);
           wire = reduceWireEvent(wire, event);
           setCurrent({ connection, wire, error: null });
           callback.current?.(wire);
+          if (live) liveCallback.current?.(event);
           // Await admission, not completion. Keep one attempt in flight without
           // timers; a busy Session is reconsidered at its next wire boundary.
           await drain();

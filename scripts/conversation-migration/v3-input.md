@@ -31,6 +31,50 @@ sidecar records fail instead of silently degrading. UTF-8 is fatal even in a tai
 Absent deltas have `{ status: 'absent' }`. The paired `.json` is never opened:
 `source.json.status` is `absent` or `ignored-nonauthoritative` (even a symlink).
 
+## Strict persisted structures
+
+`v3-input-validation.mjs` supplements the legacy decoder; it does not change
+runtime loading or replay. The persisted `Item` union in
+`source/contracts/conversation-items.ts` is closed: assistant turns and durable
+journal items accept only reasoning, assistant text, tool calls, tool results and
+explicit provider-opaque items, with their required fields. An unknown normalized
+item type is corruption, not a new provider extension. A provider-opaque item
+requires a string provider and an object item; its inner keys and additive provider
+metadata survive verbatim, even when they resemble unknown normalized variants.
+
+Snapshots on undo, accepted input, retry, rewind, assistant turns and compaction
+validate `StateSnapshot` and `SavedToolExecution` in
+`source/services/logging/conversation-log-events.ts` and
+`source/services/tool-execution-ledger.ts`: provider history is an array of objects,
+response identity is string-or-null, and every ledger entry has its required
+identities, status and start timestamp. `ProviderInputItem` in
+`source/contracts/provider-input.ts` is deliberately open: unknown provider wire
+types, roles, content and extra fields are lawful. Only its application-owned
+metadata shapes (`providerOpaque`, `providerData`, `contextSummary` and personal
+memory context) are checked. Ledger `arguments`, `output` and `historyItems`
+elements retain their declared unknown payload types.
+
+Saved user and command messages on their corresponding events must match their
+required message fields, not merely have an ID and sender. The supplement also
+rejects missing personal-memory fields, invalid undo counts (not positive safe
+integers), missing required settings/tool payloads, incomplete observation facts
+and other owned event structures the decoder checks only partially. The decoder
+remains responsible for its existing settings, reference, usage/cost and event
+checks; replay still decides lifecycle validity. These checks apply to committed
+batch members through the same validation path as ordinary events. They neither
+strip additive fields nor inspect uncommitted batch members.
+
+### Failure lesson
+
+The original reader equated successful legacy decoding and replay with strict
+integrity. That was false: the recovery decoder intentionally accepts unknown
+normalized items, incomplete ledger objects and some unchecked known facts;
+replay can silently drop items or normalize an invalid undo count. The standalone
+importer therefore owns the stricter persisted-structure assertion before replay.
+Verify both refusal of malformed committed ordinary/batched records and exact
+preservation of lawful opaque/provider metadata; rejecting unknown provider inner
+keys would fix the symptom by breaking the explicit compatibility lane.
+
 ## Ownership and consistency
 
 The selected filename must end in `.jsonl` with a nonempty safe basename, and the

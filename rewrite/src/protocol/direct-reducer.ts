@@ -71,12 +71,14 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
     case 'tool_progress': return { ...state, tools: state.tools.map(tool => tool.executionId === event.payload.executionId
       ? { ...tool, progress: (tool.progress ?? '') + event.payload.chunk } : tool) };
     case 'tool_finished': {
+      // Keep the first accepted execution slot even without call/start metadata.
+      const next = { ...state, timeline: timeline(state, [{ kind: 'tool', id: event.payload.executionId }]) };
       const known = state.tools.some(tool => tool.executionId === event.payload.executionId);
-      if (!known) return { ...state,
+      if (!known) return { ...next,
         unmatchedToolResults: [...(state.unmatchedToolResults ?? []).filter(item => item.executionId !== event.payload.executionId), event.payload],
         notices: [...state.notices, { kind: 'tool_result', message: `Tool result ${event.payload.executionId}: ${event.payload.output}` }],
       };
-      return { ...state, tools: state.tools.map(tool => tool.executionId === event.payload.executionId
+      return { ...next, tools: state.tools.map(tool => tool.executionId === event.payload.executionId
         ? { ...tool, status: 'completed', output: event.payload.output, isError: event.payload.isError,
           ...(event.payload.display !== undefined ? { display: event.payload.display } : {}),
           ...(event.payload.content !== undefined ? { content: event.payload.content } : {}) } : tool) };

@@ -55,6 +55,8 @@ function records(value: unknown): readonly Record<string, unknown>[] {
 function parseContext(context: Readonly<Record<string, unknown>>) {
   const messages = records(context.messages);
   const tools = records(context.tools);
+  const results = context.unmatchedToolResults === undefined ? [] : records(context.unmatchedToolResults);
+  for (const result of results) identity(result.executionId);
   for (const message of messages) {
     identity(message.id); text(message.text);
     if (!['user', 'assistant', 'tool'].includes(String(message.role))) throw new Term2ProtocolError('Invalid native message role');
@@ -71,7 +73,7 @@ function parseContext(context: Readonly<Record<string, unknown>>) {
       return { kind: entry.kind, id: identity(entry.id) };
     });
     for (const entry of timeline) {
-      if (!(entry.kind === 'message' ? messages.some(item => item.id === entry.id) : tools.some(item => item.executionId === entry.id)))
+      if (!(entry.kind === 'message' ? messages.some(item => item.id === entry.id) : [...tools, ...results].some(item => item.executionId === entry.id)))
         throw new Term2ProtocolError('Native timeline references missing evidence');
     }
   }

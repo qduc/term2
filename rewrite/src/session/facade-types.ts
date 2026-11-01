@@ -64,6 +64,8 @@ export type DirectToolDisplay = {
   readonly providerOutput?: readonly Readonly<Record<string, unknown>>[];
   readonly display?: unknown;
 };
+/** First accepted display observation, in log order. A tool slot names an actual
+ * execution, including an unnamed result when call/start metadata is absent. */
 export type DirectTimelineEntry = {
   readonly seq: number;
   readonly kind: 'message' | 'tool' | 'reasoning' | 'task';

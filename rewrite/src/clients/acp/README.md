@@ -124,12 +124,17 @@ otherwise remain unnamed output updates. Tool result messages do not duplicate
 execution display. Branch renderers are isolated by supplied branch/agent identity;
 a child snapshot or terminal cannot replace root renderer/foreground state.
 
-Unmatched tool results are retained by execution ID, without a made-up name. Fresh
-replay requires their real position in snapshot.timeline as well. The published
-projection can retain unmatchedToolResults without such timeline entries; this
-specific owner seam still fails explicitly rather than silently dropping output
-or appending it after unrelated messages. Ordinary mixed replay now uses the
-native timeline; it no longer waits on a parallel metadata facade.
+Unmatched tool results are retained by execution ID, without a made-up name. The
+native accepted reducer and public fold now add a `kind:tool` timeline slot at
+the first actual call/start **or result** for that execution. Repeated finish/item
+result evidence keeps that original slot; it does not append output after later
+messages. Native snapshot synchronization preserves this accepted order. ACP's
+existing replay resolves an unnamed slot from `unmatchedToolResults`, sending an
+output update without inventing a start, name, input, timestamp or call ID.
+Fresh attachment still needs the real accepted prefix to recover result content;
+a timeline entry alone cannot supply missing output. Null/incomplete timelines
+continue to fail explicitly rather than guess chronology. No new accepted fact,
+wire event, sequence, journal or ACP extension is involved.
 
 Snapshots use real activeTurnId, drafts, terminal and historical turnResults.
 Observed terminal outcomes, not submit/cancel receipts or queue disappearance,
@@ -155,8 +160,8 @@ rejects unknown variants and does not invent a cursor extension or client seq.
 
 - Coordinator must assemble the actual shared dependency set with this owned
   delta. This worker intentionally did not pull shared owner files into its base.
-- Store/Host list title/updatedAt and unmatched-result timeline position still
-  need real owner data. No old-conversation title or fabricated timestamp/order.
+- Store/Host list title/updatedAt still need real owner data. No old-conversation
+  title or fabricated timestamp/order.
 - A numeric ACP cursor extension requires an agreed retained-state/watermark
   contract if that transport feature is required. Host tail and fresh replay are
   not interchangeable.

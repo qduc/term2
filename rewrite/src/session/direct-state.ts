@@ -101,9 +101,11 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
       else add('message', item.id, fact.turnId, fact.modelStep);
     }
     if (item.type === 'reasoning') add('reasoning', item.id, fact.turnId, fact.modelStep);
-    if (item.type === 'tool_call' && fact.executionId) add('tool', fact.executionId, fact.turnId, fact.modelStep);
+    // A result can be the first accepted display evidence for this execution.
+    if ((item.type === 'tool_call' || item.type === 'tool_result') && fact.executionId)
+      add('tool', fact.executionId, fact.turnId, fact.modelStep);
   }
-  if (fact.type === 'tool_started') add('tool', fact.executionId, fact.turnId);
+  if (fact.type === 'tool_started' || fact.type === 'tool_finished') add('tool', fact.executionId, fact.turnId);
   if (fact.type === 'task_started') add('task', fact.task.taskId, fact.task.parentTurnId);
   state = { ...state, timeline, context: reduceDirectContext(state.context, fact, state.queue.records) };
   if (isDirectTaskFact(fact)) {

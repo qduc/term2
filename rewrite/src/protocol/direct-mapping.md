@@ -39,6 +39,23 @@ known, each tool_finished also carries toolName/input/callId/parentExecutionId s
 a reconnect after its call frame does not need to guess them. Opaque provider items are not
 public transcript messages. Known text/image tool-result parts are normalized.
 
+### Result-only accepted order
+
+Both `reduceDirectFact` and `reduceWireEvent` must retain the first accepted
+message/tool display slot across native snapshot synchronization. For tools that
+slot comes from the first call, start **or result**, keyed by the actual execution
+ID. Later finish/provider-result upserts must not move it after newer messages.
+A result-only slot resolves against `unmatchedToolResults`; it does not establish
+a tool name, input, provider call ID, physical start or timestamp. The accepted
+prefix is still required to recover result content: a timeline reference alone
+cannot reconstruct output absent from native tool descriptors. ACP replay uses
+this slot for unnamed output; browser hydration must accept the real unmatched
+result as reference evidence, without manufacturing a named tool display.
+
+This matters at both reducer boundaries: preserving unmatched output in the
+public fold alone is insufficient if native synchronization then replaces its
+timeline with call/start-only slots. No new event, sequence or journal is needed.
+
 ## Facts currently produced by the M2 Session
 
 | Native fact/update | Public frame |

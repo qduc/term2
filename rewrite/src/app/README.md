@@ -11,6 +11,18 @@ and a concrete `LoggingService`. The app also passes that logger to the source
 `SettingsService`, which configures it; the model registry's narrower
 `ILoggingService` contract alone is not sufficient for app assembly.
 
+The direct CLI's headless, interactive, model-listing and shared ACP/server
+bootstrap paths let `SettingsService` own logger construction, passing
+`loggingServiceOptions` for session context and retrieving the same logger via
+`getLoggingService()`. Settings loading uses a silent bootstrap logger until
+the validated, merged `logging.disableLogging` policy is known. An explicit
+disable option or `DISABLE_LOGGING=true` still disables capture even if the
+stored setting is false. Do not construct and inject an enabled logger before
+settings load: its file transport creates files immediately, and its provider
+traffic store fixes its enabled state at construction. Session runtime bindings
+may reuse the already-resolved logger; canonical conversation persistence is
+separate and remains enabled. This is startup policy, not a runtime toggle.
+
 `createDirectRuntimes` in `direct-application-runtime.ts` builds session-owned
 settings and tool generations. `createDirectConfigSettings` in
 `direct-config-settings.ts` produces a read-only, source-schema-validated settings

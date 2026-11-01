@@ -199,6 +199,24 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
       const [name, ...rest] = input.trim().slice(1).split(/\s+/);
       const argument = rest[0];
       switch (name) {
+        case 'help':
+          return {
+            message: [
+              'Commands',
+              '/help — Show commands and keyboard shortcuts',
+              '/quit, /exit — Exit the application',
+              '/restart [stop] — Reload this executable; stop consents to stopping background work',
+              '/resume [session], /clear, /rollover — Open or start a conversation',
+              '/model <provider>/<model>, /effort <level>, /profile <name> — Configure the session',
+              '/settings, /auto-approve, /sandbox, /usage, /goal, /skills, /handoff, /copy',
+              '/compact, /retry-turn, /retry-tool, /rewind — Context and recovery',
+              '/queue, /steer, /followup, /cancel, /tasks, /answer, /bridge — Work and input',
+              '/command-status <id>, /command-apply <id> — Inspect or apply a command result',
+              'Keyboard shortcuts',
+              'Enter send/steer · Alt+Enter follow-up · ↑/↓ history · PgUp/PgDn scroll',
+              'Ctrl+G approvals · Ctrl+B budget · Ctrl+C clear input/cancel/exit',
+            ].join('\n'),
+          };
         case 'quit':
         case 'exit':
           return { exit: true };

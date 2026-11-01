@@ -141,6 +141,7 @@ async function runTui(
       sessionId === undefined
         ? await app.host.createSession(app.principal, target.grant)
         : await app.host.connect(app.principal, sessionId);
+    if (sessionId !== undefined) stderr.write(`Resumed conversation: ${initial.sessionId}\n`);
     if (request.goal) await app.setGoal(initial.sessionId, request.goal, 'launcher');
 
     // An admitted CLI goal belongs to Session even when this process cannot render Ink.

@@ -144,6 +144,8 @@ export type ShellTaskPort = {
     readonly startedAt: number;
     readonly settled: Promise<ShellTaskState>;
     readonly foreground: Promise<{ readonly kind: 'result'; readonly value: T } | { readonly kind: 'background' }>;
+    /** Async delivery retains this admitted launch's provenance, not the caller's current execution. */
+    notify(key: string, text: string): boolean;
   };
   get(id: string): ShellTaskState | undefined;
   list(): readonly ShellTaskState[];

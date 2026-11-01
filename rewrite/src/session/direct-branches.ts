@@ -182,8 +182,13 @@ export function createDirectBranchDriver(options: {
           : terminal;
       // Accepted physical starts, including scripted leaves, are execution
       // evidence. Provider call names and offered declarations are not usage.
-      const toolsUsed = [...new Set(local.flatMap((fact) => (fact.type === 'tool_started' ? [fact.toolName] : [])))];
-      return { items: produced, outcome, toolsUsed };
+      const counts = new Map<string, number>();
+      for (const fact of local) {
+        if (fact.type !== 'tool_started') continue;
+        counts.set(fact.toolName, (counts.get(fact.toolName) ?? 0) + 1);
+      }
+      const toolUseCounts = [...counts].map(([toolName, count]) => ({ toolName, count }));
+      return { items: produced, outcome, toolsUsed: [...counts.keys()], toolUseCounts };
     },
   };
 }

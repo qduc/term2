@@ -7,6 +7,7 @@ import { DirectRecovery, type DirectRecoveryDecision, type DirectRecoveryFailure
 import { DirectContinuity, selfContained } from './direct-recovery-continuity.js';
 import {
   compactDirectHistory,
+  estimateDirectContext,
   type DirectCompactionResult,
   type DirectCompactionRequest,
 } from './direct-recovery-compaction.js';
@@ -332,7 +333,12 @@ export class TurnModel {
           type: 'compaction_completed',
           compactionId: attempt.compactionId,
           strategy: result.strategy,
-          after: result.estimate,
+          // The accepted replacement can include steering newer than the frozen
+          // compactor proposal. Estimate that actual history, not just the plan.
+          after: estimateDirectContext(
+            { ...request, input: replacement },
+            this.deps.compaction.contextWindow ?? model.catalogContextWindow,
+          ),
           durationMs: performance.now() - attempt.started,
           requests,
         });

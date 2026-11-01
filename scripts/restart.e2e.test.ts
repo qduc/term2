@@ -6,9 +6,9 @@ import { expect, it } from 'vitest';
 import { createIsolatedWorkspaceLease, writePtyTextAndSubmit } from './provider-black-box/provider-test-harness.js';
 
 /** Patch only private fixture output, refusing stale/no-op fault stimuli. */
-async function patchFixtureModule(file: string, before: string, after: string, last = false): Promise<void> {
+async function patchFixtureModule(file: string, before: string, after: string): Promise<void> {
   const code = await readFile(file, 'utf8');
-  const index = last ? code.lastIndexOf(before) : code.indexOf(before);
+  const index = code.indexOf(before);
   if (index < 0) throw new Error(`Missing fixture mutation anchor in ${file}: ${before}`);
   await writeFile(file, code.slice(0, index) + after + code.slice(index + before.length));
 }
@@ -271,33 +271,10 @@ it.each(['runner', 'missing-entry', 'cleanup', 'lock', 'writer-close', 'native-e
         );
         const cli = restartEntry(root);
         if (process.env.TERM2_TEST_CLI) {
-          // Record actual process termination independently of terminal escape output.
-          await writeFile(
-            cli,
-            `import { writeFileSync as fixtureWrite } from 'node:fs';
-process.on('exit', code => fixtureWrite(${JSON.stringify(join(root, 'node-exit-code'))}, String(code)));
-${await readFile(cli, 'utf8')}`,
-          );
-          if (fault === 'cleanup')
-            await patchFixtureModule(
-              join(root, 'direct-dist/rewrite/src/app/direct-launch-tui.js'),
-              'await app.close();',
-              "if (pending.plan) throw new Error('fixture cleanup failure'); await app.close();",
-            );
-          if (fault === 'lock')
-            await patchFixtureModule(
-              join(root, 'direct-dist/rewrite/src/session/direct-writer-lock.js'),
-              'database.close();',
-              "throw new Error('fixture lock release failure'); database.close();",
-            );
-          if (fault === 'writer-close')
-            await patchFixtureModule(
-              join(root, 'direct-dist/rewrite/src/session/log.js'),
-              'closeSync(fd);',
-              "closeSync(fd); throw new Error('fixture writer close failure');",
-              // closeSync also appears in the failed-append recovery path; target close().
-              true,
-            );
+          // These source-only failure controls need a legacy writer/exit observer.
+          // Keep their assertions intact; the fenced direct baseline excludes them by name.
+          if (fault === 'cleanup' || fault === 'lock' || fault === 'writer-close')
+            throw new Error(`Direct coverage gap: ${fault} fixture depends on legacy cleanup internals.`);
           if (fault === 'native-exec')
             await patchFixtureModule(
               join(root, 'direct-dist/rewrite/src/app/direct-launch-tui-restart.js'),

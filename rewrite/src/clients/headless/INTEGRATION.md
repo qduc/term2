@@ -78,10 +78,10 @@ conversation storage.
   `text_delta`, `reasoning_delta`, `tool_call_streaming_delta`, `tool_started`,
   `tool_dispatched`, `retry`, `error` (message and exact kind), `cost_update`,
   `command_message`, `run_budget` and the authoritative `final` from
-  `WireTerminal.finalWindow`. A missing
-  `finalWindow` on an older/recovered terminal is rebuilt read-only from the
-  accepted fact prefix when that turn has a preceding `turn_started`; the final
-  carries `legacyDerived: true` and the stored fact is never rewritten. Without
+  `WireTerminal.finalWindow`. In log version 2, every root terminal window is
+  rebuilt read-only from the accepted fact prefix when that turn has a preceding
+  `turn_started`; this is current-format projection, not `legacyDerived` output.
+  The stored terminal contains no window and is never rewritten. Without
   that prefix the client emits `legacy_final_window_unavailable` and exits 1
   rather than presenting a partial final. Provider history, private items and
   the remaining unavailable families are never synthesized from raw wire events.
@@ -155,10 +155,9 @@ app can map SIGINT/SIGTERM to their signal exit codes rather than ordinary error
   already emitted live are excluded. Legacy cost IDs/tier/unpriced presentation
   and zero-cache omission stay at this projection boundary; coverage limits are
   documented in `protocol/direct-mapping.md` rather than added to the old DTO.
-  An old/recovered terminal with
-  no stored window is projected read-only from the accepted prefix when a
-  preceding `turn_started` exists and marked `legacyDerived`; otherwise the
-  explicit `legacy_final_window_unavailable` path remains. Provider history,
+  Version-2 terminal windows are projected read-only from the accepted prefix
+  when a preceding `turn_started` exists (not marked `legacyDerived`); otherwise
+  the explicit `legacy_final_window_unavailable` path remains. Provider history,
   private/opaque items, approval descriptors and the remaining legacy live
   event families are not projected; this is not complete old `--json` parity.
   Never emit raw wire events as legacy JSON.

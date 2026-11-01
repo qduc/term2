@@ -1,6 +1,7 @@
 /** One logical Session, one writable physical head, and a verified accepted lineage. */
 import { lstatSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { z } from 'zod';
 import type { FactLine, SessionStartedFact } from './facts.js';
 import { createLog, openLog, readFactLines, type ConversationLog } from './log.js';
 import { parseDirectSessionRotation, type DirectSessionRotationFact } from './direct-session-rotation.js';
@@ -58,20 +59,70 @@ export function directLogPath(directory: string, id: string): string {
 }
 
 type Header = { readonly type: 'session_started'; readonly id: string } | DirectSessionRotationFact;
+// Validate the metadata consumed by catalogue/CLI callers before exposing a
+// lineage. Parsing is a check only: readFactLines retains the original fact.
+const startedHeaderSchema = z.object({
+  type: z.literal('session_started'),
+  id: z.string(),
+  workspace: z.string(),
+  model: z.object({ provider: z.string(), model: z.string() }),
+  profile: z.object({ id: z.string(), version: z.string(), digest: z.string() }),
+  appVersion: z.string(),
+});
 
-/** Read only a COMPLETE first line for discovery. Full envelope validation follows
- * after the real predecessor boundary is known, never by inferring/rebasing seq. */
-function firstHeader(path: string): Header | undefined {
-  const bytes = readFileSync(path);
-  const end = bytes.indexOf(0x0a);
-  if (end < 0) return undefined;
-  const raw = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes.subarray(0, end))) as {
-    fact?: { type?: unknown; id?: unknown };
-  };
-  if (raw?.fact?.type === 'session_rotated') return parseDirectSessionRotation(raw.fact);
-  if (raw?.fact?.type === 'session_started' && typeof raw.fact.id === 'string')
-    return { type: 'session_started', id: raw.fact.id };
-  throw new Error(`${path}: physical log must begin with session_started or session_rotated`);
+type Discovery = {
+  readonly headers: ReadonlyMap<string, Header>;
+  readonly children: ReadonlyMap<string, readonly string[]>;
+  readonly errors: ReadonlyMap<string, Error>;
+};
+
+/** Report the physical path, never repair bytes or hide a requested read failure. */
+function reportUnreadable(path: string, error: unknown): void {
+  console.warn(`Skipping unreadable direct log ${path}: ${error instanceof Error ? error.message : String(error)}`);
+}
+
+/** One namespace check and header scan per read/catalogue. Unrelated bad files
+ * cannot deny healthy Sessions; required bad segments still fail closed. */
+function discoverDirectLogs(directory: string): Discovery {
+  const headers = new Map<string, Header>();
+  const children = new Map<string, string[]>();
+  const errors = new Map<string, Error>();
+  // Namespace/authority failures stay global, outside the per-file catch.
+  for (const name of directLogNames(directory).slice().sort()) {
+    const physicalId = name.slice(0, -6);
+    const path = directLogPath(directory, physicalId);
+    try {
+      const bytes = readFileSync(path);
+      const end = bytes.indexOf(0x0a);
+      if (end < 0) continue; // Unaccepted creation/torn-header artifact.
+      const raw = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes.subarray(0, end))) as {
+        fact?: { type?: unknown; id?: unknown; predecessor?: { sessionId?: unknown } };
+      } | null;
+      const fact = raw?.fact;
+      // Retain a readable predecessor link BEFORE validating the rotation. A
+      // malformed related segment must not silently shorten accepted history.
+      const predecessor = fact?.type === 'session_rotated' ? fact.predecessor?.sessionId : undefined;
+      if (typeof predecessor === 'string' && DIRECT_ID.test(predecessor)) {
+        const siblings = children.get(predecessor) ?? [];
+        siblings.push(physicalId);
+        children.set(predecessor, siblings);
+      }
+      let header: Header;
+      if (fact?.type === 'session_rotated') header = parseDirectSessionRotation(fact);
+      else if (fact?.type === 'session_started') {
+        const started = startedHeaderSchema.parse(fact);
+        header = { type: 'session_started', id: started.id };
+      } else throw new Error('physical log must begin with session_started or session_rotated');
+      if ((header.type === 'session_started' ? header.id : header.sessionId) !== physicalId)
+        throw new Error('physical header does not match filename');
+      headers.set(physicalId, header);
+    } catch (cause) {
+      const error = new Error(`${path}: ${cause instanceof Error ? cause.message : String(cause)}`, { cause });
+      errors.set(physicalId, error);
+      reportUnreadable(path, error);
+    }
+  }
+  return { headers, children, errors };
 }
 
 /** Resolve any logical/physical alias to the SAME complete lineage, optionally at
@@ -88,28 +139,26 @@ export function readDirectLogLineage(
   const cut = options.throughSeq;
   if (cut !== undefined && (!Number.isSafeInteger(cut) || cut < 1))
     throw new Error('direct lineage cut must be a positive accepted sequence');
-  const headers = new Map<string, Header>();
-  const children = new Map<string, string[]>();
-  for (const name of directLogNames(directory)) {
-    const physicalId = name.slice(0, -6);
-    const header = firstHeader(join(directory, name));
-    if (!header) continue;
-    if ((header.type === 'session_started' ? header.id : header.sessionId) !== physicalId)
-      throw new Error(`${name}: physical header does not match filename`);
-    headers.set(physicalId, header);
-    if (header.type === 'session_rotated') {
-      const siblings = children.get(header.predecessor.sessionId) ?? [];
-      siblings.push(physicalId);
-      children.set(header.predecessor.sessionId, siblings);
-    }
-  }
+  return readLineage(directory, id, discoverDirectLogs(directory), cut);
+}
+
+/** Reuse one discovery snapshot for catalogue aliases, with full fact validation
+ * at the actual predecessor seq boundary (never infer or rebase sequence). */
+function readLineage(directory: string, id: string, discovery: Discovery, cut?: number): DirectLogLineage {
+  const { headers, children, errors } = discovery;
+  const requireHeader = (physicalId: string): Header => {
+    const error = errors.get(physicalId);
+    if (error) throw error;
+    const header = headers.get(physicalId);
+    if (!header) throw new Error(`direct log ${physicalId} has no accepted first line`);
+    return header;
+  };
   let rootId = id;
   const ancestors = new Set<string>();
   while (true) {
     if (ancestors.has(rootId)) throw new Error('cycle in direct Session log lineage');
     ancestors.add(rootId);
-    const header = headers.get(rootId);
-    if (!header) throw new Error(`direct log ${rootId} has no accepted first line`);
+    const header = requireHeader(rootId);
     if (header.type === 'session_started') break;
     rootId = header.predecessor.sessionId;
   }
@@ -121,7 +170,7 @@ export function readDirectLogLineage(
   while (true) {
     if (visited.has(physicalId)) throw new Error('cycle in direct Session log lineage');
     visited.add(physicalId);
-    const header = headers.get(physicalId)!;
+    const header = requireHeader(physicalId);
     if (header.type === 'session_rotated') {
       if (
         header.logicalSessionId !== rootId ||
@@ -163,17 +212,25 @@ export function readDirectLogLineage(
   };
 }
 
-/** Catalogue each accepted logical lineage once. A file with no complete first
- * fact is an unaccepted creation/torn-header artifact, not another Session. */
+/** Catalogue each accepted logical lineage once, reporting/skipping unreadable
+ * lineages. Empty/torn headers remain unaccepted artifacts, not Sessions.
+ * Explicit opens still reject corrupt targets and required ancestors/successors. */
 export function readDirectLogLineages(directory: string): readonly DirectLogLineage[] {
+  directory = resolve(directory);
+  const discovery = discoverDirectLogs(directory);
   const seen = new Set<string>();
   const result: DirectLogLineage[] = [];
-  for (const name of directLogNames(directory).slice().sort()) {
-    const id = name.slice(0, -6);
-    if (seen.has(id) || !firstHeader(directLogPath(directory, id))) continue;
-    const lineage = readDirectLogLineage(directory, id);
-    for (const segment of lineage.segments) seen.add(segment.sessionId);
-    result.push(lineage);
+  for (const id of discovery.headers.keys()) {
+    if (seen.has(id)) continue;
+    try {
+      const lineage = readLineage(directory, id, discovery);
+      for (const segment of lineage.segments) seen.add(segment.sessionId);
+      result.push(lineage);
+    } catch (error) {
+      // Header errors were already reported by discovery, including bad ancestors.
+      if (![...discovery.errors.values()].includes(error as Error))
+        reportUnreadable(directLogPath(directory, id), error);
+    }
   }
   return result.sort((left, right) => left.logicalSessionId.localeCompare(right.logicalSessionId));
 }

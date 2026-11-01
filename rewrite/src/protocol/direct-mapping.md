@@ -604,6 +604,21 @@ rotation readers/writers supply predecessor envelopes via `LogContinuationOption
 `readDirectLogLineage` and `createDirectRollingLog` own this plumbing. An isolated
 successor file with references cannot be decoded without its predecessor.
 
+Discovery isolation: `readDirectLogLineages` reports unreadable native files with
+physical paths and skips affected lineages; `readDirectLogLineage` still refuses
+an unreadable requested or required segment. Directory namespace violations stay
+global refusals. A readable predecessor link is retained even when its rotation
+header is invalid, so a malformed related successor cannot silently shorten the
+lineage. Completely undecodable headers have no trustworthy association; readers
+do not invent one. Empty/incomplete first lines remain unaccepted creation artifacts.
+
+Isolation failure lesson: catching corruption only during full fact replay misses
+the earlier directory-wide first-header scan. Per-file discovery and per-lineage
+catalogue catches belong in the shared reader, not each list/open caller. The
+filesystem/store/CLI-discovery regression is
+`scripts/native-session-isolation.integration.test.ts`; it checks unrelated healthy
+roots and rotated aliases, strict related failures, diagnostics and unchanged bytes.
+
 `turn_ended` stores only terminal metadata; `recoverDirectFinalWindow` projects
 from the accepted prefix across history replacement and physical rotation.
 `text_delta` and full `history_replaced` snapshots remain literal exceptions.

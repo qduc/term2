@@ -19,6 +19,7 @@ import { numberedInteractionAnswer } from './interaction-command.js';
 import { useSessionComposer } from './session-composer.js';
 import { useTerminalSize } from './terminal.js';
 import { useTranscriptViewport } from './viewport.js';
+import { useHarnessInput } from './harness-input.js';
 import {
   answerBudget,
   answerInteraction,
@@ -95,6 +96,7 @@ export function TuiSession({
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const composerActive = !busy && !connectionError && !interactionActive && !taskOpen && !budgetOpen && !rewindTargets;
+  useHarnessInput(composerActive, Boolean(state.activeTurnId), editor.value);
   const pending = useRef(false);
   interrupt.current = () => {
     if (editor.value.length > 0) replaceInput('');

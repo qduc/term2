@@ -3,8 +3,16 @@ import type { ExecutionId, TurnId } from '../engine/index.js';
 import type { ContentPart, Item, ItemId, ModelRef, ReasoningEffort } from '../model/index.js';
 import type { DirectHistoryFact } from './facts.js';
 
+/** Requested selection only. App resolves defaults/profiles before Session acceptance. */
 export type DirectCommandConfiguration = {
   readonly model?: ModelRef;
+  readonly reasoning?: 'default' | ReasoningEffort;
+  readonly temperature?: number;
+  readonly profileId?: string;
+};
+/** Actual prepared runtime values; intent and accepted profile metadata are separate. */
+export type DirectAcceptedConfiguration = {
+  readonly model: ModelRef;
   readonly reasoning?: ReasoningEffort;
   readonly temperature?: number;
 };
@@ -31,7 +39,7 @@ export type DirectCommandOutcome =
   | { readonly kind: 'retried'; readonly turnId: TurnId }
   | { readonly kind: 'rewound'; readonly draft: { readonly content: readonly ContentPart[] } }
   | { readonly kind: 'compacted' }
-  | { readonly kind: 'configured'; readonly configuration: DirectCommandConfiguration & { readonly model: ModelRef } }
+  | { readonly kind: 'configured'; readonly configuration: DirectAcceptedConfiguration }
   | { readonly kind: 'rolled_over'; readonly sessionId: string }
   | {
       readonly kind: 'rejected';

@@ -11,13 +11,20 @@ import type {
 
 const id = z.string().min(1);
 const model = z.object({ provider: id, model: id }).strict();
-const configuration = z
+const reasoning = z.enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh']);
+const acceptedConfiguration = z
   .object({
-    model: model.optional(),
-    reasoning: z.enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh']).optional(),
+    model,
+    reasoning: reasoning.optional(),
     temperature: z.number().finite().optional(),
   })
   .strict();
+// Only request intent admits default/profile selection. Outcomes retain real
+// effective values; accepted profile metadata lives in configuration_changed.
+const configuration = acceptedConfiguration.partial().extend({
+  reasoning: z.union([z.literal('default'), reasoning]).optional(),
+  profileId: id.optional(),
+});
 const request = z
   .object({
     commandId: id,
@@ -60,7 +67,7 @@ const outcome = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('retried'), turnId: id }).strict(),
   z.object({ kind: z.literal('rewound'), draft: z.object({ content: directContentSchema }).strict() }).strict(),
   z.object({ kind: z.literal('compacted') }).strict(),
-  z.object({ kind: z.literal('configured'), configuration: configuration.extend({ model }) }).strict(),
+  z.object({ kind: z.literal('configured'), configuration: acceptedConfiguration }).strict(),
   z.object({ kind: z.literal('rolled_over'), sessionId: id }).strict(),
   z
     .object({
@@ -185,6 +192,7 @@ function operationKey(operation: DirectCommandRequest['operation']): string {
         operation.configuration.model?.model ?? null,
         operation.configuration.reasoning ?? null,
         operation.configuration.temperature ?? null,
+        operation.configuration.profileId ?? null,
       ]);
     default:
       return operation.kind;

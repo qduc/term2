@@ -3,7 +3,7 @@ import { getProfileMetadata } from '../../../source/services/profiles/active-pro
 import type { ModelRef } from '../model/index.js';
 import { createProviderRegistry } from '../model/provider.js';
 import type { DirectContextCapabilities } from '../session/direct-capabilities.js';
-import type { DirectCommandConfiguration } from '../session/direct-command-types.js';
+import type { DirectAcceptedConfiguration } from '../session/direct-command-types.js';
 import type { DirectConversationRuntime, DirectRuntimeContext } from '../session/direct-store.js';
 import { loadSurface } from './agent-surface.js';
 import { withSessionScope, type SessionScope } from './direct-application-models.js';
@@ -23,7 +23,7 @@ import type { AgentSurface, ProfileSelection, ToolSurfaceOptions } from './tool-
 
 export type DirectConfiguredGeneration = {
   /** Effective values from the real source-built agent, not the user's raw patch. */
-  readonly configuration: DirectCommandConfiguration & { readonly model: ModelRef };
+  readonly configuration: DirectAcceptedConfiguration;
   /** Persist alongside effective values to restore default-effort semantics on reopen. */
   readonly intent: DirectConfigurationIntent;
   readonly profile: DirectConversationRuntime['profile'];

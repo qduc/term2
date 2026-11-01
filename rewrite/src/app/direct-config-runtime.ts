@@ -81,7 +81,11 @@ export async function prepareDirectConfiguration(
     const models = withGenerationGuard(withSessionScope(createProviderRegistry(selection), options.scope), selection);
     // Resolve validates the actual application provider without dispatching a request.
     models.resolve(model);
-    const rebound = options.memoryBinding.rebind(surface, options.capabilities);
+    const rebound = {
+      ...options.memoryBinding.rebind(surface, options.capabilities),
+      nativeToolSlots: surface.runtime.nativeToolSlots,
+      modelRollover: options.surfaceOptions.sessionBrowser === true && surface.runtime.nativeToolSlots.sessions,
+    };
     // Remove prior model-bound verification rather than silently retaining it when disabled/remote.
     const { verification: _previousVerification, verificationEnabled: _previousEnabled, ...stable } = rebound;
     const verification =

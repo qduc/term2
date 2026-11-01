@@ -111,6 +111,7 @@ async function runTui(
     ...(profileExplicit !== undefined ? { profileExplicit } : {}),
     surface: (sessionId) => ({
       interactive: true,
+      sessionBrowser: true,
       ...bridge.outbound(sessionId),
       ...target.surface,
       ...(mcp ? { mcp } : {}),

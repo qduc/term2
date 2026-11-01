@@ -1,3 +1,4 @@
+import { testCliPath } from '../../source/test-helpers/terminal-e2e.js';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -131,6 +132,7 @@ describe('assembled provider CLI black-box', () => {
           join(workspace.root, 'handoff.txt'),
           '--lock',
           join(workspace.root, 'worker.lock'),
+          ...(process.env.TERM2_TEST_CLI ? ['--entry', testCliPath(join(process.cwd(), 'dist/cli.js'))] : []),
           '--',
           '--provider',
           'fixture-provider',

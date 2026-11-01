@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
 import { once } from 'node:events';
-import { spawnTerminal } from './test-helpers/terminal-e2e.js';
+import { testCliPath, spawnTerminal } from './test-helpers/terminal-e2e.js';
 import {
   HARNESS_IDLE_ENV,
   waitForHarnessComposerValue,
@@ -54,7 +54,7 @@ it.each(['unreachable', 'catalog'] as const)(
         'node',
         '--import',
         'tsx',
-        'source/cli.tsx',
+        testCliPath('source/cli.tsx'),
       ],
       { cols: 120, rows: 40 },
     );

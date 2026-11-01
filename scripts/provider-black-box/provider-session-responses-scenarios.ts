@@ -1,3 +1,4 @@
+import { testCliPath } from '../../source/test-helpers/terminal-e2e.js';
 // Each entry file registers one scenario group. Vitest's default file isolation
 // evaluates this module separately for each group: the active fixture resources
 // and afterEach cleanup below are never shared across concurrent files. Cases
@@ -557,7 +558,7 @@ async function startCli(workspace: IsolatedWorkspaceLease): Promise<PtyChildDriv
     // --lite is required: workspace.root is also HOME, and the CLI home-directory
     // start guard blocks interactive non-lite starts when cwd === homedir.
     // Settings app.liteMode is loaded later and does not bypass that guard.
-    args: [join(process.cwd(), 'dist/cli.js'), '--lite'],
+    args: [testCliPath(join(process.cwd(), 'dist/cli.js')), '--lite'],
     cwd: workspace.root,
     cols: 120,
     rows: 40,

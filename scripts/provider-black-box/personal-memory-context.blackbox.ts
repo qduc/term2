@@ -1,3 +1,4 @@
+import { testCliPath } from '../../source/test-helpers/terminal-e2e.js';
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -74,7 +75,7 @@ it.each([
           },
         }),
       );
-      const cli = join(process.cwd(), 'dist/cli.js');
+      const cli = testCliPath(join(process.cwd(), 'dist/cli.js'));
       const launch = { command: process.execPath, args: [cli], cwd: project, cols: 120, rows: 40 };
       child = await workspace.start(launch);
       await child.waitForIdleInput();

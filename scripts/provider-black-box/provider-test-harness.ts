@@ -1,3 +1,4 @@
+import { testCliPath } from '../../source/test-helpers/terminal-e2e.js';
 import {
   usesDirectComposer,
   readDirectComposer,
@@ -467,7 +468,7 @@ function resolveLaunch(options: ChildLaunchOptions): {
   }
   return {
     command: process.execPath,
-    args: [join(cwd, 'dist/cli.js'), ...(options.args ?? [])],
+    args: [testCliPath(join(cwd, 'dist/cli.js')), ...(options.args ?? [])],
     cwd,
     cols: options.cols,
     rows: options.rows,
@@ -840,12 +841,16 @@ async function runCapturedCli(options: {
   let result: ChildExit = { exitCode: null, signal: null };
   let timedOut = false;
   try {
-    child = spawn(process.execPath, [options.cliPath ?? join(options.cwd, 'dist/cli.js'), ...options.args], {
-      cwd: options.cwd,
-      env: options.env,
-      detached: process.platform !== 'win32',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    child = spawn(
+      process.execPath,
+      [options.cliPath ?? testCliPath(join(options.cwd, 'dist/cli.js')), ...options.args],
+      {
+        cwd: options.cwd,
+        env: options.env,
+        detached: process.platform !== 'win32',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
     child.stdout?.pipe(stdout);
     child.stderr?.pipe(stderr);
     const deadlineMs = options.deadlineMs ?? DEFAULT_TIMEOUT_MS;

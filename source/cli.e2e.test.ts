@@ -3,7 +3,7 @@ import { afterEach, expect, it } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnTerminal, type TerminalSession } from './test-helpers/terminal-e2e.js';
+import { testCliPath, spawnTerminal, type TerminalSession } from './test-helpers/terminal-e2e.js';
 import { HARNESS_IDLE_ENV, waitForHarnessIdleGeneration } from './lib/harness-input-idle.js';
 
 // tsx cold-starts the whole app through an on-demand transform; inside CI's
@@ -45,7 +45,7 @@ it.sequential.each(['lite', 'bare'])(
     const idlePath = path.join(tempHome, 'input-idle');
     session = spawnTerminal(
       'node',
-      ['--import', 'tsx', 'source/cli.tsx', ...(profile === 'lite' ? ['--lite'] : ['--profile', 'bare'])],
+      ['--import', 'tsx', testCliPath('source/cli.tsx'), ...(profile === 'lite' ? ['--lite'] : ['--profile', 'bare'])],
       {
         cwd: process.cwd(),
         env: {

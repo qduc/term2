@@ -4,7 +4,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawnTerminal, createTestChildEnv, type TerminalSession } from './test-helpers/terminal-e2e.js';
+import { testCliPath, spawnTerminal, createTestChildEnv, type TerminalSession } from './test-helpers/terminal-e2e.js';
 import {
   HARNESS_IDLE_ENV,
   waitForHarnessComposerValue,
@@ -13,7 +13,7 @@ import {
 import { resolveSettingsDirectory } from './services/settings/settings-path.js';
 
 const projectRoot = fileURLToPath(new URL('..', import.meta.url));
-const builtCli = path.join(projectRoot, 'dist', 'cli.js');
+const builtCli = testCliPath(path.join(projectRoot, 'dist', 'cli.js'));
 const TIMEOUT_MS = 120_000;
 const COLS = 80;
 const ROWS = 24;

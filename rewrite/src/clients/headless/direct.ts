@@ -7,6 +7,7 @@
  * opens storage, imports Session/Engine, or calls the bridge runtime.
  */
 import { randomUUID } from 'node:crypto';
+import { formatGoalClosedByCheck } from '../../../../source/services/conversation/durable-goal.js';
 import type { DirectConnection } from '../../host/in-process-direct-types.js';
 import type {
   WireAdmission,
@@ -545,6 +546,18 @@ export async function runDirectHeadless(
       const event = next.value;
       if (event.sessionId !== sessionId) continue;
 
+      if (event.type === 'goal') {
+        const { goal, source } = event.payload;
+        if (source === 'goal_check' && goal?.status === 'achieved') {
+          io.stderr.write(`${formatGoalClosedByCheck({
+            id: goal.id,
+            outcome: goal.text,
+            status: 'achieved',
+            ...(goal.successCriteria ? { successCriteria: goal.successCriteria } : {}),
+          })}\n`);
+        }
+        continue;
+      }
       if (event.type === 'background_notice_enqueued') {
         const notice = event.payload.notice;
         notices.set(notice.id, notice);

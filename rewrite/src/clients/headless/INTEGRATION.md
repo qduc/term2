@@ -65,6 +65,11 @@ conversation storage.
   Physical `run_code` child calls do not produce root `[tool]` lines.
   Subagent tool lines use the supplied role; if absent they use `[subagent]`,
   never an invented role. Reasoning goes to stderr only with `showReasoning`.
+- Accepted `goal` events carry their actual change `source`. Only an achieved
+  `goal_check` change prints the shared multiline goal/criteria/closure summary
+  on stderr, including in JSON/quiet mode as in the source client. An achieved
+  tool acknowledgement or status alone is not completion evidence; manual goal
+  changes must not be described as model-accepted completion.
 - `quiet` suppresses plain non-error diagnostics (`[tool]`, `[approval
   required]`, `[question]`, retry and notice lines); errors, `Approval
   Rejected` verdicts and reasoning (when enabled) remain. JSON mode is

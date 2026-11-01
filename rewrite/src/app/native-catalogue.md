@@ -14,11 +14,15 @@ document projection used for indexing and snippet reconstruction.
 client binding. The model supplies only query, kind and result count. Both catalogue
 operations filter exact target, normalized root and binding. Unbound local queries
 exclude bound sessions. CLI SSH discovery binds the resolved endpoint identity.
-Runtime search is local-only; SSH runtimes do not receive this local-file capability.
-Session registers the optional Tool only when `nativeToolSlots.sessions` permits it,
-including headless/direct clients. Configured generations retain the capability but
-reapply their new profile's slot gate. The native schema promises search only, not
-the unsupported source browser/open/read operations.
+Runtime search is local-only and requires the client's `sessionBrowser` surface,
+matching source positional-versus-interactive availability. Positional/headless CLI
+runs and SSH runtimes do not receive this local-file capability. A profile's
+`sessions` slot alone does not establish that a client owns a browser. Session
+registers the optional Tool only when `nativeToolSlots.sessions` permits it; search
+precedes the native rollover tool, matching source session-tool ordering. Configured
+generations retain the client-bound capability but reapply their new profile's slot
+gate. The native schema promises search only, not the unsupported source
+browser/open/read operations.
 
 ## Disposable storage
 

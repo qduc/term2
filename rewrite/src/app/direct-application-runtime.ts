@@ -329,7 +329,7 @@ export function createDirectRuntimes(
         // one real guidance/global context here instead of appending a duplicate.
         const capabilities: DirectContextCapabilities = {
           ...sessionMemory,
-          ...(options.conversationsDir && context.workspace.target === 'local'
+          ...(surfaceOptions.sessionBrowser === true && options.conversationsDir && context.workspace.target === 'local'
             ? { sessionSearch: createNativeSearchTool(options.conversationsDir, context.workspace, context.binding) }
             : {}),
           ...(hooks ? { hooks } : {}),

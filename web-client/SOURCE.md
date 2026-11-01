@@ -51,3 +51,126 @@ Prototype scope (create-session, SSE, message send, approval) only:
   the app always renders the term2 session shell.
 - `app/layout.tsx`, `app/page.tsx`, `package.json` — new (Next 16 app shell,
   deps pruned to slice usage).
+
+## Versioned wire consumer migration
+
+The original provenance above describes the salvaged baseline, not today's full
+feature surface. The local M6 browser/BFF source targets explicit agent-wire-v2;
+see [WIRE.md](WIRE.md) for the v1/v2 ledger, exact shared-source dependency,
+configuration receipt/discovery distinction, migration and activation limits.
+This is not evidence that the independently maintained ChatForge consumer has
+migrated, or that the unbuilt 0.2.0 shared source is already installed here.
+
+## Browser module public interface and ownership
+
+This section is the maintained public-interface map for the **browser/BFF
+module**, beyond the version-specific [wire contract](WIRE.md). M6 entries are
+source targets, not activated or verified support. Maintain this section when
+changing exported UI/hook/facade contracts, HTTP entry points, trust/ownership
+boundaries, compatibility or recovery limits; keep WIRE.md aligned when their
+wire semantics change. Tiny internal helpers do not need separate boilerplate
+documents. TypeScript exports establish the exact signatures; the map explains
+who may use them and what they own.
+
+### Entry points and caller responsibilities
+
+| Surface | Public contract / ownership |
+| --- | --- |
+| `components/term2/Term2SessionShell.tsx#Term2SessionShell` | UI entry with `initialSessionId:string|null`, optional `authUserId:string|null`, and `onExit:()=>void`. Owns selection, drafts, sidebar and session/settings presentation. Identity/selection transitions clear the previous draft. `authUserId` is a UI reset signal, not gateway authorization. |
+| `hooks/useTerm2Session.ts#useTerm2Session` | Takes the selected `sessionId:string|null`; returns `UseTerm2SessionResult`. Owns the active hydrate/stream lifecycle, accepted checkpoint, reconnect state, pending message text and interaction/command feedback. Callers use returned actions rather than opening a second stream or mutating the view. Session generation/abort checks prevent stale work installing another selection's state. |
+| `lib/api/term2.ts#term2Client` | Browser HTTP facade, typed parsers and domain errors. Calls local BFF paths, not provider endpoints or the Unix socket directly. Optional `AbortSignal` is propagated; facade requests disable generic automatic HTTP retries. Stream retry ownership belongs to the hook; original configure-command retry belongs to its caller. |
+| `components/term2/Term2SessionConfig.tsx#Term2SessionConfig` | Receives optional session/config/settings plus `onDiscovered`, `onCreateNewSession`, and reauthentication state. Session-keyed UI owns the mounted original configure request/retry handle. `onDiscovered` supplies current discovery only, not an original receipt. |
+| `lib/term2/types.ts#Term2SessionView` | Read model consumed by shell/evidence UI: root turns/status, nullable interaction, accepted checkpoint, separate hydration and native public state, actual branch views, accepted evidence and connection-local live observations. It is not provider history, a billing accumulator or a new persisted session format. |
+
+`UseTerm2SessionResult` exposes workspace/session arrays and pagination cursors,
+workspace selection, `refreshWorkspaces`, `refreshSessions`, `loadNextSessions`,
+`createSession`, `selectSession`, `submit`, `invokeCommand`, `abort`,
+`resolveInteraction`, and explicit `refresh`, plus view/command feedback.
+`submit(text)` returns `Promise<boolean>`; other mutation/control actions expose
+completion through their promise and view/feedback. `createSession` retains its
+existing creation metadata result (`SessionProjection`); that result is **not**
+the new native hydration cut. Only `hydrateSession` supplies the negotiated cut.
+
+### Facade and BFF boundaries
+
+The public facade groups are:
+
+- Workspace/session discovery and creation: `listWorkspaces`, `listSessions`,
+  `createSession`; candidate validation/browse/selection remain separate
+  capability-based workspace controls.
+- Conversation: `hydrateSession`, `openEvents`, `submitMessage`, `abort`,
+  `resolveInteraction` and `commands` (compact/retry-tool/retry-turn). Actual
+  session/turn/request identities are caller/server data, not browser-generated
+  recovery cursors. New message/command intents use real caller-owned keys.
+- Session configuration: `readSessionConfig` (current discovery) and
+  `updateSessionConfig` (stable original `SessionConfigUpdate` returning shared
+  `AgentConfigureResultV2`). Receipt-bearing non-2xx is meaningful result data;
+  unknown delivery is not permission to issue a replacement intent/key.
+- Settings/model/credential/OAuth controls: existing settings projections,
+  revision conflicts and dedicated mutation methods remain app-owned; M6's
+  event schema does not silently version or redefine their DTOs.
+
+`Term2ApiError` carries HTTP status/code/details; `SettingsConflictError` adds the
+current settings revision/projection. `Term2ProtocolError` identifies native
+hydration/stream contract failure and reload requirements. Abort is cancellation,
+not evidence that a remote accepted mutation was undone. A stream protocol error
+or replay gap cannot authorize a v1 fallback or invented successful receipt.
+
+Browser paths under `app/api/agent/` and `app/api/term2/` are Node.js BFF handlers.
+`lib/server/proxy.ts#rpc` maps them to the private gateway API; a browser GET may
+become a purpose-bound POST control RPC. Hydration, SSE and keyed configuration
+explicitly opt into `format=agent-wire-v2`. The BFF validates local input,
+resolves session/workspace binding, uses the configured local owner identity and
+purpose-bound gateway assertions, and forwards native bodies/receipt evidence
+and negotiated headers. It must not synthesize aggregate state, re-key commands,
+rewrite accepted cursors/times, join interactions at another cut or copy a root
+queue into a branch. Mutation request guards remain owned by
+`lib/server/request-guards.ts#assertLocalStateChangingRequest`; this is a local
+single-user boundary, not a port of ChatForge multi-user authorization.
+
+`lib/server/gateway-config.js` owns server-only environment configuration,
+assertion key material and socket transport configuration;
+`lib/server/term2-gateway-client.js` owns gateway transport/assertions and native
+error handling. Keys/secrets do not belong in client-side state. The default
+Unix-socket deployment and unused network reference path are documented in that
+configuration module and the composable web-client plan. This source migration
+does not establish deployment/security acceptance for a new topology.
+
+### Internal ownership and compatibility limits
+
+`lib/term2/hydration.ts` owns browser validation of the separately negotiated
+native snapshot and native-owned transcript/timeline references.
+`event-adapter.ts#applyTerm2Event` owns atomic accepted installation and actual
+branch routing; `native-state.ts` owns browser validation/reduction of observed
+public cost/goals/verification/notices, **not** pricing or native goal policy.
+`sse.ts#consumeSseResponse` owns SSE framing and shared-envelope validation.
+`Term2NativeEvidence` presents exact observations/limitations without equating
+native verification with user-task success or request receipts with extra bills.
+These are cohesive internal seams of this module, not separately versioned
+public packages. Wire versions, same-cut semantics and exact external originals
+are recorded in WIRE.md.
+
+Server/native owners produce accepted facts, snapshots, real identities and
+provider-required history. Shared-wire owners produce versioned schemas/parsers;
+packaging/integration owns both consumer pins/locks/vendor artifacts and gate
+activation. Browser/BFF owns only consumption, local state and presentation.
+No missing implementation owner is identified inside this slice. Provider
+continuation verification and the combined M6 verifier must be allocated by the
+coordinator; this browser handoff does not assign or impersonate those owners.
+
+Option B explicitly makes raw reasoning chunks and intermediate tool progress
+live-only, including after reconnect/crash. The UI drops connection-local
+observations on disconnection/hydration; accepted summaries and final tool
+results are recovery evidence, not raw-stream replay parity. Complete
+provider-required reasoning items/signatures/encrypted metadata and tool
+calls/results remain provider/runtime responsibilities and must not be stripped.
+Actual provider continuation is pending post-M6 verification.
+
+Other limits: no durable browser outbox or retry handle across navigation; no
+browser-owned journal/history synthesis; native fresh-process aggregate
+cost/notice coverage can be incomplete; absent branch capability differs from
+an empty branch list; null branch queue/usage is not fabricated empty/zero.
+The old artifact remains pinned to 0.1.0, so new source imports are not installed
+support. No #65 tests, probes, typechecks, guards, lint, builds, reviews, pack or
+runtime/provider acceptance have run during the implementation freeze. The
+combined gate stays closed; this documentation claims no end-to-end acceptance.

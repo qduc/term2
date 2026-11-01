@@ -2,12 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { term2Client, Term2ApiError } from '../lib/api/term2';
+import { viewFromHydration, type SessionHydration } from '../lib/term2/hydration';
 import { consumeSseResponse } from '../lib/term2/sse';
 import {
-  applyProjectionEvent,
   applyTerm2Event,
+  clearTerm2LiveEvidence,
   emptyTerm2SessionView,
-  viewFromProjection,
 } from '../lib/term2/event-adapter';
 import type {
   InteractionResolveRequest,
@@ -78,20 +78,6 @@ const INTERACTION_CONFLICT_MESSAGES = {
   interaction_not_resolvable: 'This interaction cannot be resolved safely.',
 } as const;
 
-function coherentProjection(value: unknown): value is SessionProjection {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  const projection = value as Record<string, unknown>;
-  return (
-    Number.isSafeInteger(projection.latestSequence) &&
-    Number.isSafeInteger(projection.earliestReplayableSequence) &&
-    Number.isSafeInteger(projection.projectionSequence) &&
-    (projection.latestSequence as number) >= 0 &&
-    (projection.earliestReplayableSequence as number) >= 0 &&
-    (projection.earliestReplayableSequence as number) <= (projection.latestSequence as number) &&
-    (projection.projectionSequence as number) >= (projection.earliestReplayableSequence as number) &&
-    (projection.projectionSequence as number) <= (projection.latestSequence as number)
-  );
-}
 
 export interface UseTerm2SessionResult {
   view: Term2SessionView;
@@ -172,9 +158,16 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
     setSessionCursor(result.nextCursor);
   }, [sessionCursor]);
 
-  const installProjection = useCallback((projection: SessionProjection, expectedGeneration: number) => {
-    if (expectedGeneration !== generationRef.current || projection.id !== sessionIdRef.current) return false;
-    const next = viewFromProjection(projection);
+  const installHydration = useCallback((hydration: SessionHydration, expectedGeneration: number) => {
+    if (expectedGeneration !== generationRef.current || hydration.sessionId !== sessionIdRef.current) return false;
+    const previous = viewRef.current;
+    if (hydration.earliestReplayableSequence === null) throw new Term2ProtocolError('Native atomic replay cut is unavailable');
+    if (previous.sessionId === hydration.sessionId && hydration.seq < previous.lastAppliedSequence)
+      throw new Term2ProtocolError('Native hydration predates the accepted checkpoint');
+    const projected = viewFromHydration(hydration);
+    const next = previous.sessionId === hydration.sessionId ? {
+      ...projected, branches: projected.branches ?? clearTerm2LiveEvidence(previous).branches, nativeChanges: previous.nativeChanges, retiredTurns: previous.retiredTurns,
+    } : projected;
     viewRef.current = next;
     setView(next);
     return true;
@@ -182,10 +175,10 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
 
   const hydrateAndConnect = useCallback(
     async (id: string, generation: number, signal: AbortSignal) => {
-      let projection = await term2Client.getSession(id, signal);
-      if (!installProjection(projection, generation)) return;
+      let hydration = await term2Client.hydrateSession(id, signal);
+      if (!installHydration(hydration, generation)) return;
       let delay = BACKOFF_BASE;
-      let cursor = projection.projectionSequence;
+      let cursor = hydration.seq;
       // A reload that lands on the same cursor replays the same event; stop after a few instead of looping.
       let reloadCursor = -1;
       let reloadsAtCursor = 0;
@@ -203,8 +196,15 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
         try {
           let streamHadActivity = false;
           const response = await term2Client.openEvents(id, cursor, signal);
+          const replayMode = response.data.headers.get('x-term2-replay');
+          if (replayMode !== 'atomic') {
+            await response.data.body?.cancel();
+            patchView(current => ({ ...current, status: 'error', reloadRequired: true, error: 'Atomic replay after the hydration cut is unavailable. Reload requires a new real accepted cut; no live-only fallback was used.' }));
+            return;
+          }
           patchView((current) => ({
             ...current,
+            replayMode,
             status:
               current.pendingInteraction?.state === 'pending'
                 ? 'awaiting_interaction'
@@ -224,78 +224,38 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
               streamHadActivity = true;
               delay = BACKOFF_BASE;
               if (generation !== generationRef.current || sessionIdRef.current !== id) return;
-              const enrichedEvent =
-                event.type === 'user_message_accepted' &&
-                typeof event.payload.clientRequestId === 'string' &&
-                pendingTextRef.current.has(event.payload.clientRequestId)
-                  ? {
-                      ...event,
-                      payload: {
-                        ...event.payload,
-                        text: pendingTextRef.current.get(event.payload.clientRequestId),
-                      },
-                    }
-                  : event;
-              if (event.type === 'user_message_accepted' && typeof event.payload.clientRequestId === 'string')
-                pendingTextRef.current.delete(event.payload.clientRequestId);
+              const enrichedEvent = {
+                ...event,
+                changes: event.changes.map((change) => {
+                  if (change.type !== 'user_message_accepted' || typeof change.payload.clientRequestId !== 'string') return change;
+                  const requestId = change.payload.clientRequestId;
+                  const pendingText = pendingTextRef.current.get(requestId);
+                  return pendingText === undefined ? change : { ...change, payload: { ...change.payload, text: pendingText } };
+                }),
+              } as typeof event;
               const next = applyTerm2Event(viewRef.current, enrichedEvent);
+              for (const change of event.changes) {
+                if (change.type === 'user_message_accepted' && typeof change.payload.clientRequestId === 'string')
+                  pendingTextRef.current.delete(change.payload.clientRequestId);
+              }
               viewRef.current = next;
               setView(next);
               cursor = next.lastAppliedSequence;
+              if (next.reloadRequired) throw new Term2ProtocolError('Accepted history replacement requires projection reload');
             },
           });
           if (signal.aborted) return;
+          patchView(clearTerm2LiveEvidence);
           delay = streamHadActivity ? BACKOFF_BASE : Math.min(MAX_RECONNECT_DELAY, Math.max(BACKOFF_BASE, delay * 2));
           await new Promise<void>((resolve) => {
             retryTimerRef.current = setTimeout(resolve, delay);
           });
         } catch (error) {
           if (signal.aborted) return;
-          if (error instanceof Term2ApiError && error.status === 410 && error.code === 'cursor_compacted') {
-            const details = error.details as
-              | {
-                  reloadRequired?: unknown;
-                  latestSequence?: unknown;
-                  session?: unknown;
-                }
-              | undefined;
-            const sessionDetails =
-              details?.session && typeof details.session === 'object' && !Array.isArray(details.session)
-                ? (details.session as Record<string, unknown>)
-                : undefined;
-            if (
-              !details ||
-              details.reloadRequired !== true ||
-              typeof details.latestSequence !== 'number' ||
-              !Number.isSafeInteger(details.latestSequence) ||
-              details.latestSequence < 0 ||
-              !sessionDetails
-            ) {
-              patchView((current) => ({
-                ...current,
-                status: 'error',
-                reloadRequired: true,
-                error: 'The compacted session cursor is invalid.',
-              }));
-              return;
-            }
-            projection = details.session as SessionProjection;
-            if (!coherentProjection(projection)) {
-              projection = await term2Client.getSession(id, signal);
-              if (!coherentProjection(projection)) {
-                patchView((current) => ({
-                  ...current,
-                  status: 'error',
-                  reloadRequired: true,
-                  error: 'The compacted session projection is incoherent.',
-                }));
-                return;
-              }
-            }
-            if (!installProjection(projection, generation)) return;
-            cursor = projection.projectionSequence;
-            delay = BACKOFF_BASE;
-            continue;
+          patchView(clearTerm2LiveEvidence);
+          if (error instanceof Term2ApiError && error.status === 410) {
+            patchView(current => ({ ...current, status: 'error', reloadRequired: true, error: 'The native replay cut is no longer available. Reload explicitly to hydrate a new current cut; no missing history was reconstructed.' }));
+            return;
           }
           if (error instanceof Term2ApiError && [401, 403, 404].includes(error.status)) {
             patchView((current) => ({ ...current, status: 'error', error: error.message }));
@@ -320,9 +280,9 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
               error: 'The session stream needs to reload.',
             }));
             try {
-              projection = await term2Client.getSession(id, signal);
-              if (!installProjection(projection, generation)) return;
-              cursor = projection.projectionSequence;
+              hydration = await term2Client.hydrateSession(id, signal);
+              if (!installHydration(hydration, generation)) return;
+              cursor = hydration.seq;
               delay = BACKOFF_BASE;
               continue;
             } catch (reloadError) {
@@ -347,7 +307,7 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
         }
       }
     },
-    [installProjection, patchView],
+    [installHydration, patchView],
   );
 
   useEffect(() => {
@@ -493,14 +453,11 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
   }, [patchView]);
 
   const refresh = useCallback(async () => {
-    const id = sessionIdRef.current;
-    if (!id) return;
-    const generation = generationRef.current;
-    const projection = await term2Client.getSession(id);
-    if (installProjection(projection, generation) && selectionControllerRef.current?.signal.aborted) {
-      setConnectionAttempt((attempt) => attempt + 1);
-    }
-  }, [installProjection]);
+    // Tear down the prior stream before installing a new accepted cut. Never
+    // install a second snapshot over a concurrently replaying/live connection.
+    selectionControllerRef.current?.abort();
+    setConnectionAttempt(attempt => attempt + 1);
+  }, []);
 
   const resolveInteraction = useCallback(
     async (request: InteractionResolveRequest) => {

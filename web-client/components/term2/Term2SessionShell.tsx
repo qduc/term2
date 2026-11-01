@@ -26,6 +26,7 @@ import { Term2StatusBanner } from './Term2StatusBanner';
 import { ChatHeader } from '../ChatHeader';
 import { Term2FolderSelector } from './Term2FolderSelector';
 import { Term2SettingsPanel } from './Term2SettingsPanel';
+import { Term2NativeEvidence } from './Term2NativeEvidence';
 import { Term2SessionConfig } from './Term2SessionConfig';
 import { Term2CommandMenu } from './Term2CommandMenu';
 import { isTerm2LocalControlEnabled } from './flags';
@@ -65,6 +66,7 @@ export function Term2SessionShell({
   const [loadingWorkspaces, setLoadingWorkspaces] = useState(false);
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [discoveredConfig, setDiscoveredConfig] = useState<SessionConfigRecord | null>(null);
   const [settings, setSettings] = useState<SettingsProjection | null>(null);
   const [workspaceMetadata, setWorkspaceMetadata] = useState<
     Record<string, { displayName: string; fullPath: string; access?: string }>
@@ -199,6 +201,16 @@ export function Term2SessionShell({
       .catch(() => setSettings(null));
   }, [localControlEnabled]);
 
+  useEffect(() => {
+    setDiscoveredConfig(null);
+    if (!localControlEnabled || !sessionId) return;
+    const controller = new AbortController();
+    void term2Client.readSessionConfig(sessionId, controller.signal).then(config => {
+      if (!controller.signal.aborted) setDiscoveredConfig(config);
+    }).catch(() => {});
+    return () => controller.abort();
+  }, [localControlEnabled, sessionId]);
+
   const chooseWorkspace = (workspaceId: string) => session.setSelectedWorkspaceId(workspaceId);
   const create = async () => {
     if (!session.selectedWorkspaceId) return;
@@ -258,8 +270,8 @@ export function Term2SessionShell({
   const canAbort = session.view.status === 'running' || session.view.status === 'connected';
   const hasStreamingTurn = session.view.turns.some((turn) => turn.status === 'streaming' || turn.status === 'pending');
 
-  const sessionConfig = (settings?.session ?? null) as SessionConfigRecord | null;
-  const totalTokens = session.view.turns.reduce((sum, turn) => sum + (turn.usage?.totalTokens ?? 0), 0);
+  const sessionConfig = discoveredConfig?.sessionId === sessionId ? discoveredConfig : null;
+  const totalTokens = [...(session.view.retiredTurns ?? []), ...session.view.turns].reduce((sum, turn) => sum + (turn.usage?.totalTokens ?? 0), 0);
   const lastTurn = session.view.turns[session.view.turns.length - 1];
   const liveStatus = interactionPending
     ? 'Waiting for your approval'
@@ -460,10 +472,11 @@ export function Term2SessionShell({
           />
           {localControlEnabled && (
             <Term2SessionConfig
-              config={(settings?.session ?? null) as SessionConfigRecord | null}
+              key={sessionId}
+              config={sessionConfig}
+              onDiscovered={setDiscoveredConfig}
               settings={settings}
               sessionId={sessionId}
-              onApplyToFutureTurns={() => void term2Client.readSettings().then(setSettings)}
               onCreateNewSession={() => void create()}
             />
           )}
@@ -584,6 +597,7 @@ export function Term2SessionShell({
                     <span className="t2-shimmer truncate">{liveStatus}</span>
                   </p>
                 )}
+                <Term2NativeEvidence view={session.view} />
                 {session.view.pendingInteraction?.state === 'pending' && (
                   <Term2InteractionPanel
                     key={`${session.view.pendingInteraction.interaction.interactionId}:${session.view.pendingInteraction.interaction.revision}:${session.view.pendingInteraction.interaction.askUser?.currentQuestionIndex ?? 0}`}
@@ -658,7 +672,7 @@ export function Term2SessionShell({
                   <span className="ml-auto hidden items-center gap-3 sm:flex">
                     {totalTokens > 0 && (
                       <span className="tabular-nums" title="Tokens used in this session">
-                        {totalTokens.toLocaleString()} tokens
+                        {totalTokens.toLocaleString()} observed turn tokens
                       </span>
                     )}
                   </span>

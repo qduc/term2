@@ -17,7 +17,7 @@ function parseFrame(lines: string[]): SseFrame | null {
     const field = separator < 0 ? line : line.slice(0, separator);
     const value = separator < 0 ? '' : line.slice(separator + 1).replace(/^ /u, '');
     if (field === 'id') {
-      if (!/^\d+$/u.test(value)) throw new Term2ProtocolError('Malformed SSE sequence');
+      if (id !== null || !/^\d+$/u.test(value)) throw new Term2ProtocolError('Malformed SSE sequence');
       id = Number(value);
       if (!Number.isSafeInteger(id) || id < 1) throw new Term2ProtocolError('Malformed SSE sequence');
     } else if (field === 'event') {
@@ -38,6 +38,19 @@ export function decodeSseText(input: string, carry = ''): { frames: SseFrame[]; 
   return { frames, carry: nextCarry };
 }
 
+/** Framing is tied to the accepted boundary, never to individual changes. */
+function envelopeFromFrame(frame: SseFrame, sessionId: string): AgentEventEnvelope {
+  let value: unknown;
+  try { value = JSON.parse(frame.data); }
+  catch { throw new Term2ProtocolError('Malformed SSE JSON'); }
+  const envelope = parseEventEnvelope(value, sessionId);
+  if (frame.event !== envelope.kind)
+    throw new Term2ProtocolError('SSE event kind mismatch');
+  if (envelope.kind === 'accepted' ? frame.id !== envelope.seq : frame.id !== null)
+    throw new Term2ProtocolError('SSE checkpoint does not match envelope');
+  return envelope;
+}
+
 export async function consumeSseResponse(
   response: Response,
   options: {
@@ -47,6 +60,7 @@ export async function consumeSseResponse(
     onHeartbeat?: () => void;
   },
 ): Promise<void> {
+  if (response.headers.get('x-term2-event-format') !== 'agent-wire-v2') throw new Term2ProtocolError('agent-wire-v2 was not negotiated');
   if (!response.body) throw new Term2ProtocolError('SSE response has no body');
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -62,37 +76,16 @@ export async function consumeSseResponse(
       carry = decoded.carry;
       if (text.includes(':')) options.onHeartbeat?.();
       for (const frame of decoded.frames) {
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(frame.data) as unknown;
-        } catch {
-          throw new Term2ProtocolError('Malformed SSE JSON');
-        }
-        const envelope = parseEventEnvelope(parsed, options.expectedSessionId);
-        if (frame.event !== null && frame.event !== envelope.type)
-          throw new Term2ProtocolError('SSE event type mismatch');
-        if (frame.id !== null && frame.id !== envelope.id)
-          throw new Term2ProtocolError('SSE sequence does not match envelope');
-        options.onFrame(envelope);
+        options.onFrame(envelopeFromFrame(frame, options.expectedSessionId));
       }
     }
     const tail = decoder.decode();
     const decoded = decodeSseText('\n\n', carry + tail);
     for (const frame of decoded.frames) {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(frame.data) as unknown;
-      } catch {
-        throw new Term2ProtocolError('Malformed SSE JSON');
-      }
-      const envelope = parseEventEnvelope(parsed, options.expectedSessionId);
-      if (frame.event !== null && frame.event !== envelope.type)
-        throw new Term2ProtocolError('SSE event type mismatch');
-      if (frame.id !== null && frame.id !== envelope.id)
-        throw new Term2ProtocolError('SSE sequence does not match envelope');
-      options.onFrame(envelope);
+      options.onFrame(envelopeFromFrame(frame, options.expectedSessionId));
     }
   } finally {
+    await reader.cancel().catch(() => {});
     reader.releaseLock?.();
   }
 }

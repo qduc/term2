@@ -67,6 +67,7 @@ import path from 'path';
 import type { ISettingsService, ILoggingService } from './services/service-interfaces.js';
 import { ExecutionContext } from './services/execution-context.js';
 import { buildPromptSpec } from './prompts/prompt-constructor.js';
+import { DIRECT_MEMORY_GUIDANCE_MARKER } from './prompts/memory-prompt-marker.js';
 import { ProfileResolutionError, resolveActiveProfile } from './services/profiles/index.js';
 import { shouldPreferPatchEditingModel } from './lib/tool-selection-policy.js';
 import { SkillsService } from './services/skills/skills-service.js';
@@ -276,6 +277,8 @@ export const getAgentDefinition = (
     proposeGoal?: { appendGoal: (goal: DurableGoal) => void | Promise<void>; hasPriorProposal: () => boolean };
     skillsService?: SkillsService;
     includeMemory?: boolean;
+    /** Describe real native-owned memory in the prompt without offering source tools. */
+    promptMemoryEnabled?: boolean;
     /** Native owners can insert their real leaves at the source assembly slots. */
     onNativeToolSlots?: (slots: {
       beforeMemory: readonly string[];
@@ -441,6 +444,28 @@ export const getAgentDefinition = (
             snapshotGlobalContext: deps.snapshotGlobalMemoryContext,
           },
         );
+  // Session owns the actual memory tools/context. Build a description-only view
+  // from the same source builder so the prompt states real capability without
+  // registering a duplicate tool or taking a second context snapshot.
+  const promptMemoryCapability: ReturnType<MemoryCapabilityBuilder['build']> =
+    deps.includeMemory === false && deps.promptMemoryEnabled === true
+      ? new MemoryCapabilityBuilder(settingsService, {
+          onWarning: (message) => loggingService.warn(message),
+        }).build(
+          { kind: 'main' },
+          {
+            projectPath: executionContext?.getCwd() ?? process.cwd(),
+            includeContext: false,
+            personalContextOptIn: false,
+          },
+        )
+      : memoryCapability;
+  // This description-only view is resolved against Session's actual accepted
+  // snapshot at request planning; it must not assert index presence/absence yet.
+  const promptGuidance =
+    deps.includeMemory === false && deps.promptMemoryEnabled === true
+      ? DIRECT_MEMORY_GUIDANCE_MARKER
+      : promptMemoryCapability.guidance;
   const discordSendEnabled =
     Boolean(deps.discordSend) &&
     !readOnly &&
@@ -458,9 +483,9 @@ export const getAgentDefinition = (
     asyncSubagentControlsEnabled: hasCapability('subagents') && asyncSubagentEnabled,
     backgroundShellEnabled: backgroundTasksEnabled && allowBackgroundShell && Boolean(backgroundShellRegistry),
     sandboxEnabled,
-    memoryEnabled: hasCapability('memory') && memoryContextEnabled && memoryCapability.access !== 'none',
-    memoryGuidance: hasCapability('memory') ? memoryCapability.guidance : '',
-    memoryContext: memoryCapability.context,
+    memoryEnabled: hasCapability('memory') && memoryContextEnabled && promptMemoryCapability.access !== 'none',
+    memoryGuidance: hasCapability('memory') ? promptGuidance : '',
+    memoryContext: promptMemoryCapability.context,
     sessionBrowserEnabled: hasCapability('sessions') && sessionBrowserContextEnabled && Boolean(sessionBrowser),
     executionContext,
     runCodeEnabled: hasCapability('shell'),

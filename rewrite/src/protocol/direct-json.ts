@@ -3,8 +3,10 @@
  * module does not claim the complete legacy ConversationEvent schema.
  */
 import type { CommandMessage } from '../../../source/tools/types.js';
-import type { CommandMessageEvent, CostUpdateEvent, FinalResponseEvent, ReasoningDeltaEvent, RetryEvent, RunBudgetEventNotice, TextDeltaEvent, ToolCallStreamingDeltaEvent, ToolDispatchedEvent, ToolStartedEvent } from '../../../source/services/conversation/conversation-events.js';
-import type { WireBudgetEvidence, WireEvent, WireFinalWindow } from './direct-wire.js';
+import type { ModelRequestCost } from '../../../source/services/cost/model-cost.js';
+import { getModelPricing } from '../../../source/services/cost/pricing.js';
+import type { CommandMessageEvent, CostUpdateEvent, FinalResponseEvent, ReasoningDeltaEvent, RetryEvent, RunBudgetEventNotice, TextDeltaEvent, ToolCallStreamingDeltaEvent, ToolDispatchedEvent, ToolStartedEvent, UsageUpdateEvent } from '../../../source/services/conversation/conversation-events.js';
+import type { WireBudgetEvidence, WireEvent, WireFinalWindow, WireUsage } from './direct-wire.js';
 
 /** Static negative capability for the complete old ConversationEvent schema.
  * The bounded accepted final window is exposed separately on WireTerminal;
@@ -12,12 +14,14 @@ import type { WireBudgetEvidence, WireEvent, WireFinalWindow } from './direct-wi
  */
 export const DIRECT_LEGACY_JSON_FINAL_WINDOW_AVAILABLE = false;
 
-/** Copy the actual text chunk only. Select its owning turn/branch before emitting.
- * fullText is optional in the source DTO and deliberately omitted: a message draft
- * or public transcript is not the complete legacy turn-wide streamed prefix.
- */
-export function legacyTextDelta(event: Extract<WireEvent, { readonly type: 'text_delta' }>): TextDeltaEvent {
-  return { type: 'text_delta', delta: event.payload.delta };
+/** Copy the actual text chunk. fullText is supplied only by a caller that has
+ * observed this message's stream from its first delta; no transcript is treated
+ * as a complete prefix. */
+export function legacyTextDelta(
+  event: Extract<WireEvent, { readonly type: 'text_delta' }>,
+  fullText?: string,
+): TextDeltaEvent {
+  return { type: 'text_delta', delta: event.payload.delta, ...(fullText !== undefined ? { fullText } : {}) };
 }
 
 /** Copy only a real live reasoning chunk, not an accepted summary relabelled as a
@@ -83,35 +87,118 @@ export function legacyRunBudget(evidence: WireBudgetEvidence): RunBudgetEventNot
  * passes command IDs it actually emitted live; those are omitted from final exactly as
  * the old stream did. providerHistory and private provider items are never synthesized. */
 export type LegacyFinalResponse = FinalResponseEvent & {
-  readonly legacyCoverage?: WireFinalWindow['coverage'];
   /** True when a read-only replay rebuilt the window from accepted facts. */
   readonly legacyDerived?: true;
 };
-export function legacyFinalResponse(window: WireFinalWindow, emittedCommandMessageIds: ReadonlySet<string>): LegacyFinalResponse {
+export function legacyFinalResponse(
+  window: WireFinalWindow,
+  emittedCommandMessageIds: ReadonlySet<string>,
+  requestId: (nativeId: string) => string = (nativeId) => nativeId,
+): LegacyFinalResponse {
   const record = window.record;
   const commandMessages = record.commandMessages.filter(message => !emittedCommandMessageIds.has(message.id));
+  // The old final DTO carried provider-facing result items and completed text,
+  // not the durable tool_call admission items. Build a provider result view only
+  // when the accepted window proves no private/unrepresentable provider content
+  // was omitted; otherwise the public output is not the provider representation.
+  type FinalItem = NonNullable<FinalResponseEvent['turnItems']>[number];
+  const turnItems = record.turnItems.flatMap<FinalItem>((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
+    const candidate = item as unknown as Record<string, unknown>;
+    if (candidate['type'] === 'tool_call') return [];
+    if (candidate['type'] !== 'tool_result') return [structuredClone(item) as FinalItem];
+    const callId = candidate['callId'];
+    const toolName = candidate['toolName'];
+    const output = candidate['output'];
+    if (
+      candidate['providerItem'] !== undefined ||
+      window.coverage.items !== 'complete_public_items' ||
+      typeof callId !== 'string' ||
+      typeof toolName !== 'string' ||
+      typeof output !== 'string'
+    )
+      return [structuredClone(item) as FinalItem];
+    return [
+      {
+        ...structuredClone(item),
+        providerItem: { type: 'function_call_result', callId, name: toolName, output },
+      } as FinalItem,
+    ];
+  });
   return {
     type: 'final',
     finalText: record.finalText,
     ...(record.reasoningText !== undefined ? { reasoningText: record.reasoningText } : {}),
     ...(commandMessages.length > 0 ? { commandMessages: commandMessages.map(message => structuredClone(message)) } : {}),
-    ...(record.usage !== undefined ? { usage: { ...record.usage } } : {}),
-    ...(record.costRecords.length > 0 ? { costRecords: record.costRecords.map(cost => structuredClone(cost)) } : {}),
-    ...(record.turnItems.length > 0 ? { turnItems: record.turnItems.map(item => structuredClone(item)) } : {}),
+    ...(record.usage !== undefined ? { usage: legacyUsage(record.usage) } : {}),
+    ...(record.costRecords.length > 0
+      ? { costRecords: record.costRecords.map(cost => legacyCostRecord(cost, requestId(cost.requestId))) }
+      : {}),
+    ...(turnItems.length > 0 ? { turnItems } : {}),
     ...(record.terminalCause !== undefined ? { terminalCause: record.terminalCause } : {}),
-    // Extra provenance fields: old consumers ignore them; they make public-item/private
-    // omissions, accepted-summary/usage limits and replay-derived windows explicit.
-    legacyCoverage: { ...window.coverage },
     ...(window.derivedFromAcceptedFacts ? { legacyDerived: true as const } : {}),
   };
 }
 
-/** Project one actual settled request record verbatim; ancestry remains on the wire
- * envelope. Select the owning root/tree before using this in a per-run legacy sink.
- * Same-request corrections are updates, never another unique billed request.
+/** Project one actual settled request record through the old public representation:
+ * a run-local `req-N` identity, standard tier for an unspecified dispatch, and the
+ * old provider-before-model unpriced reason. The accepted native record remains
+ * untouched on the wire; no price is invented, so only an unpriced reason may be
+ * clarified from the real catalog lookup.
  */
-export function legacyRequestCostUpdate(event: Extract<WireEvent, { readonly type: 'request_cost_recorded' }>): CostUpdateEvent {
-  return { type: 'cost_update', record: structuredClone(event.payload.record) };
+export function legacyRequestCostUpdate(
+  event: Extract<WireEvent, { readonly type: 'request_cost_recorded' }>,
+  requestId: string = event.payload.record.requestId,
+): CostUpdateEvent {
+  return { type: 'cost_update', record: legacyCostRecord(event.payload.record, requestId) };
+}
+
+/** One live usage observation in the old DTO. Zero cache counters were omitted by
+ * the source normalizer; a real zero is not a distinct legacy observation. */
+export function legacyUsageUpdate(usage: UsageUpdateEvent['usage']): UsageUpdateEvent {
+  return { type: 'usage_update', usage: legacyUsage(usage) };
+}
+
+/** Translate the accepted camel-case Usage fact into the old normalized DTO. */
+export function legacyAcceptedUsage(usage: WireUsage): UsageUpdateEvent {
+  return legacyUsageUpdate({
+    prompt_tokens: usage.inputTokens,
+    completion_tokens: usage.outputTokens,
+    ...(usage.cachedInputTokens !== 0 ? { cache_read_tokens: usage.cachedInputTokens } : {}),
+    total_tokens: usage.inputTokens + usage.outputTokens,
+  });
+}
+
+function legacyCostRecord(record: ModelRequestCost, requestId: string): ModelRequestCost {
+  const serviceTier = record.serviceTier === 'unknown' ? 'standard' : record.serviceTier;
+  const { unpricedReason: nativeReason, usage, ...rest } = record;
+  const unpricedReason =
+    nativeReason === 'unknown_model' && record.usdMicros === undefined
+      ? unresolvedReason(record.provider, record.model, serviceTier) ?? nativeReason
+      : nativeReason;
+  return {
+    ...rest,
+    requestId,
+    serviceTier,
+    ...(usage !== undefined ? { usage: legacyUsage(usage) } : {}),
+    ...(unpricedReason !== undefined ? { unpricedReason } : {}),
+  };
+}
+
+function unresolvedReason(
+  provider: string,
+  model: string,
+  serviceTier: ModelRequestCost['serviceTier'],
+): ModelRequestCost['unpricedReason'] | undefined {
+  const lookup = getModelPricing(provider, model, serviceTier);
+  return !lookup.found && lookup.reason === 'unknown_provider' ? 'unknown_provider' : undefined;
+}
+
+function legacyUsage(usage: UsageUpdateEvent['usage']): UsageUpdateEvent['usage'] {
+  const next = { ...usage };
+  if (next.cache_read_tokens === 0) delete next.cache_read_tokens;
+  if (next.cache_creation_tokens === 0) delete next.cache_creation_tokens;
+  return next;
 }
 
 /** Project only complete source-formatted command DTOs retained in accepted tool
@@ -119,7 +206,15 @@ export function legacyRequestCostUpdate(event: Extract<WireEvent, { readonly typ
  * fabricated ID/status. Callers retain turn/branch scope and upsert by message ID;
  * this helper does not construct an authoritative final/turn-item window.
  */
-export function legacyCommandMessages(event: Extract<WireEvent, { readonly type: 'tool_finished' }>): CommandMessageEvent[] {
+export function legacyCommandMessages(
+  event: Extract<WireEvent, { readonly type: 'tool_finished' }>,
+  options: {
+    /** Headless emitted a provider-call-ID view live; the final window retains the
+     * accepted display identity and must still be told it was already delivered. */
+    readonly providerCallId?: boolean;
+    readonly onSourceId?: (id: string) => void;
+  } = {},
+): CommandMessageEvent[] {
   const display = event.payload.display;
   const messages = Array.isArray(display)
     ? display
@@ -127,9 +222,28 @@ export function legacyCommandMessages(event: Extract<WireEvent, { readonly type:
       ? display.messages
       : undefined;
   if (!Array.isArray(messages)) return [];
-  return messages.filter(isCommandMessage).map(message => ({
-    type: 'command_message', message: structuredClone(message),
-  }));
+  return messages.filter(isCommandMessage).map(message => {
+    options.onSourceId?.(message.id);
+    return {
+      type: 'command_message',
+      message: options.providerCallId === true ? legacyCommandMessage(message, event.payload.callId) : structuredClone(message),
+    };
+  });
+}
+
+/** The source display uses its own direct execution call ID; the legacy DTO used
+ * the provider-visible call ID for the same command. Keep the command identity,
+ * and only rewrite the exact `direct:<uuid>` display namespace (never guess a
+ * foreign tool's ID). */
+function legacyCommandMessage(message: CommandMessage, providerCallId: string | undefined): CommandMessage {
+  const copy = structuredClone(message);
+  if (providerCallId === undefined || typeof copy.callId !== 'string' || !copy.callId.startsWith('direct:')) return copy;
+  const prefix = `${copy.callId}-`;
+  return {
+    ...copy,
+    callId: providerCallId,
+    ...(copy.id.startsWith(prefix) ? { id: `${providerCallId}-${copy.id.slice(prefix.length)}` } : {}),
+  };
 }
 
 /** Recognize the existing source DTO, not arbitrary tool output or presentation. */
@@ -147,6 +261,9 @@ function isCommandMessage(value: unknown): value is CommandMessage {
  * stays in the wire envelope; no raw delta or finalized call is reconstructed.
  */
 export function legacyToolCallStreamingDelta(event: Extract<WireEvent, { readonly type: 'tool_call_streaming_delta' }>): ToolCallStreamingDeltaEvent {
-  return { type: 'tool_call_streaming_delta', argumentCharCount: event.payload.argumentCharCount,
-    ...(event.payload.toolName !== undefined ? { toolName: event.payload.toolName } : {}) };
+  return {
+    type: 'tool_call_streaming_delta',
+    ...(event.payload.toolName !== undefined ? { toolName: event.payload.toolName } : {}),
+    argumentCharCount: event.payload.argumentCharCount,
+  };
 }

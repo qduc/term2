@@ -464,12 +464,13 @@ No tests/checks/builds/reviews/runtime evidence collected.
 
 ## Bounded legacy JSON live deltas and accepted terminal window
 
-`direct-json.ts#legacyTextDelta` and `legacyReasoningDelta` copy actual wire
-chunks into their source ConversationEvent DTOs with `type` and `delta` only.
-Both source DTOs make fullText optional. The helpers deliberately omit it:
-message-local drafts are not the legacy turn-wide accumulated stream, and native
-reasoning transients provide no durable complete prefix/block identity. An accepted
-reasoning summary is not emitted as a new reasoning_delta. The original wire
+`direct-json.ts#legacyReasoningDelta` copies an actual live reasoning chunk into
+its source ConversationEvent DTO with `type` and `delta` only; native reasoning
+transients provide no durable complete prefix/block identity, and an accepted
+summary is never emitted as a new reasoning_delta. Headless `--json` supplies
+`legacyTextDelta`'s optional `fullText` only while it has observed that message's
+deltas from the first chunk in the current target turn; the value is the exact
+accumulated native delta text, not a transcript-derived prefix. The original wire
 turn/branch envelope retains ownership; consumers must select the correct scope
 before using these unscoped legacy DTOs. No event, cursor or identity is allocated.
 
@@ -477,12 +478,20 @@ before using these unscoped legacy DTOs. No event, cursor or identity is allocat
 `DirectFinalWindow` (version `public-turn-v1`) for a terminal. `WireTurnResult`
 retains it in the snapshot, and `direct-json.ts#legacyFinalResponse` projects its
 `final` record into the old DTO, filtering only command-message IDs the consumer
-actually emitted live. It preserves actual per-turn usage, ordered public items,
-accepted source command DTOs, root-tree cost records and terminal cause. It does
-not synthesize `providerHistory`, private/opaque items or a live prefix. The
-optional `legacyCoverage` extension exposes the producer's public-item,
-reasoning, usage, command and cost coverage instead of silently claiming full
-legacy parity.
+actually emitted live. It preserves actual per-turn usage, ordered public result
+items, accepted source command DTOs, root-tree cost records and terminal cause.
+The old final omitted durable `tool_call` admission items and carried a
+`providerItem` view of each accepted public tool result; the projection filters
+the former and builds the latter only from the public result's own call/tool/output
+fields, and only when the window's coverage proves no provider/opaque content was
+omitted. It does not synthesize `providerHistory`, private/opaque items or a live
+prefix when the accepted view cannot faithfully represent them. Cost records and
+live cost updates use the old run-local `req-N` view,
+the old standard-tier default for an unspecified dispatch, and only clarify an
+accepted `unknown_model` reason when the real source catalog reports an unknown
+provider; no price or charge is invented. Zero cache counters are omitted from
+legacy usage. Coverage limits remain documented here rather than emitted as an
+extra field that old consumers did not define.
 
 `DIRECT_LEGACY_JSON_FINAL_WINDOW_AVAILABLE` remains false as a declaration about
 the complete legacy ConversationEvent/private-history schema, not the bounded
@@ -500,11 +509,13 @@ source-required `callId`; `retry` only with the source-required toolName,
 maxRetries and a known retryType; and `run_budget` from accepted budget evidence. Transient `error` forwards the
 actual message and known kind; optional source code/finalText/stack are unavailable.
 Missing IDs/metadata make those records unavailable rather than synthesized.
-Provider history, private/opaque items, approval descriptors, `retry_exhausted`,
-`usage_update` (wire usage is cumulative, not the old live observation),
-context-compaction source event semantics, memory-injection and subagent/background
-event families remain unavailable or need a real producer contract. This is not
-complete --json parity.
+Headless also maps a settled request's cost-record usage and a real `usage` fact
+into old `usage_update` records at the request-cost boundary, so live consumers
+see them during intervening work; pending observations are flushed before a
+terminal when no cost settlement follows. Provider history, private/opaque items,
+approval descriptors, `retry_exhausted`, context-compaction source event semantics,
+memory-injection and subagent/background event families remain unavailable or
+need a real producer contract. This is not complete --json parity.
 
 ## Accepted branch hydration at one logical Session cut
 

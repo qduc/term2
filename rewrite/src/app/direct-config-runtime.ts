@@ -11,6 +11,7 @@ import { createNestedAuthorizer } from './direct-application-nested.js';
 import { runPolicy } from './direct-application-policy.js';
 import type { DirectConfigMemoryBinding } from './direct-config-memory.js';
 import { borrowDirectConfigSurfaceOptions } from './direct-config-remote.js';
+import { directMainMemoryEnabled } from './direct-memory.js';
 import {
   createDirectConfigSettings,
   type DirectAppConfiguration,
@@ -74,6 +75,7 @@ export async function prepareDirectConfiguration(
     borrowDirectConfigSurfaceOptions({
       ...options.surfaceOptions,
       includeMemory: false,
+      promptMemoryEnabled: context.workspace.target === 'local' && directMainMemoryEnabled(settings),
       workspace: context.workspace,
     }),
   );

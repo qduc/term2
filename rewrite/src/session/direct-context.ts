@@ -19,6 +19,7 @@ import {
   type DirectGoalState,
 } from './direct-goal.js';
 import { type DirectGoalReminderFact } from './direct-goal-stop.js';
+import { DIRECT_MEMORY_GUIDANCE_MARKER } from '../../../source/prompts/memory-prompt-marker.js';
 import {
   reduceDirectVerification,
   type DirectVerificationFact,
@@ -169,8 +170,14 @@ export function planDirectInstructions(
 ): { readonly instructions: string; readonly requestGoal: DirectGoalState } {
   const goal = { ...state.goal, ...(state.goal.goal ? { goal: { ...state.goal.goal } } : {}) };
   const suffix = memory ? [memory.guidance, memory.globalContext].filter(Boolean).join('\n\n') : '';
+  // Source built a description-only marker because it cannot know this Session's
+  // accepted snapshot. Substitute the one real guidance/context here; do not
+  // append it again or read a second snapshot.
+  const instructions = base.includes(DIRECT_MEMORY_GUIDANCE_MARKER)
+    ? base.replace(DIRECT_MEMORY_GUIDANCE_MARKER, () => suffix)
+    : base + (suffix ? `\n\n${suffix}` : '');
   return {
-    instructions: base + (suffix ? `\n\n${suffix}` : '') + renderDurableGoalContext(goal.goal),
+    instructions: instructions + renderDurableGoalContext(goal.goal),
     requestGoal: goal,
   };
 }

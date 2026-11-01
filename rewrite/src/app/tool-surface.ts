@@ -121,6 +121,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
       baseGraph = [...graph];
     },
     includeMemory: !remote && options.includeMemory !== false,
+    promptMemoryEnabled: !remote && options.promptMemoryEnabled === true,
     projectInstructions: options.projectInstructions,
     withToolInvocation: delegation.withInvocation,
     // Session owns the live goal tool and applicability context.

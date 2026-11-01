@@ -26,6 +26,13 @@ export type DirectSessionMemoryOptions = {
   readonly onWarning?: (message: string) => void;
 };
 
+/** True when this profile/settings would actually grant local memory. The prompt
+ * may describe that capability even though Session owns the tools and context. */
+export function directMainMemoryEnabled(settings: ISettingsService): boolean {
+  return resolveActiveProfile(settings).tools.capabilities.has('memory')
+    && !resolveDisabledCapabilities(settings).has('memory');
+}
+
 /**
  * Spread into the real Session context factory after replay, with source surface
  * memory disabled (`includeMemory:false`). Reuse source role/profile/settings and
@@ -46,8 +53,7 @@ export function createDirectSessionMemory(
   let personalContextOptIn = false;
   if (subject.kind === 'main') {
     const profile = resolveActiveProfile(settings);
-    const enabled = profile.tools.capabilities.has('memory') && !resolveDisabledCapabilities(settings).has('memory');
-    if (!enabled) {
+    if (!directMainMemoryEnabled(settings)) {
       // Keep the human-admission planner present so it can withdraw an earlier
       // personal snapshot when reopening under a memory-disabled profile.
       return { memory: { access: 'none', tools: [], guidance: '', globalContext: '', facts: [] } };

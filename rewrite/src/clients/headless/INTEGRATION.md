@@ -146,9 +146,11 @@ app can map SIGINT/SIGTERM to their signal exit codes rather than ordinary error
   `run_budget`), and the authoritative `final` from `WireTerminal.finalWindow`.
   `session_start` preserves the old profile metadata shape without an added
   capability declaration. The final preserves per-turn public `turnItems`, usage,
-  root-tree costs, ordered items and terminal cause; command messages already
-  emitted live are excluded. Its `legacyCoverage` field records the producer's
-  public-item/summary/usage/command/cost limits. An old/recovered terminal with
+  root-tree costs, ordered result items and terminal cause; command messages
+  already emitted live are excluded. Legacy cost IDs/tier/unpriced presentation
+  and zero-cache omission stay at this projection boundary; coverage limits are
+  documented in `protocol/direct-mapping.md` rather than added to the old DTO.
+  An old/recovered terminal with
   no stored window is projected read-only from the accepted prefix when a
   preceding `turn_started` exists and marked `legacyDerived`; otherwise the
   explicit `legacy_final_window_unavailable` path remains. Provider history,

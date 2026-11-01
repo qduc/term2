@@ -587,6 +587,12 @@ prefix/suffix. Same-line references resolve in recorded order. Missing, forward,
 cross-turn or malformed sources/targets fail the conversation read. Other native
 versions are refused, not interpreted by a legacy fallback.
 
+Hydrated payload validation dispatches through `log-facts.ts#nativeSchemas`, one
+validator per native fact type, with shared shape helpers for compaction and task
+lifecycle facts. Queue, context, command, notification and configuration decoders
+retain their own schemas. Envelope/version/sequence checks stay in `log.ts`; this
+validator split does not strengthen or normalize existing accepted payloads.
+
 This keeps `tool_finished` canonical and complete before a later provider item:
 structured adopted results can become `provider_input`, not `tool_result`, and
 readers still get the original output. Different display framing is retained,

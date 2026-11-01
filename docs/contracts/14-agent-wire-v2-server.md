@@ -54,13 +54,18 @@ are not relabelled; the accepted boundary may be an empty batch.
 
 ### Accepted/live type boundary
 
-The local mirror follows shared final `a4bcebc4`:
+The server source now imports the exact shared exports from `@qduc/agent-wire`
+(source final `a4bcebc4`) rather than defining a local mirror. The pinned 0.1.0
+artifact does not export these v2 names, so compilation and activation wait for
+the packaged 0.2.0 artifact and pin update; this is a source-only alignment, not
+a build claim.
 
-- accepted changes use `AgentWireV2AcceptedChangeType` (the shared
-  `AgentAcceptedChangeTypeV2` equivalent); `error` is not in that allowlist;
-- live changes use `AgentWireV2LiveChangeType` (the shared
-  `AgentLiveChangeTypeV2` equivalent), including `error` and `turn_failed`;
-- the general change union includes both, but envelope kind narrows the batch.
+- accepted changes use shared `AgentAcceptedChangeTypeV2`; `error` is not in
+  that allowlist;
+- live changes use shared `AgentLiveChangeTypeV2`, including `error` and
+  `turn_failed`;
+- the general shared `AgentChangeTypeV2` includes both, but envelope kind
+  narrows the batch.
   `turn_failed` is a normal accepted terminal and also the transient
   synchronized-failure name; kind and absence of a cursor distinguish them.
 - The server rejects an accepted error before constructing the envelope and
@@ -81,13 +86,14 @@ previously dropped and that M6 transcript/task-history parity needs:
   `toolUseCounts`; absent and empty remain distinct. A stop request or child
   terminal is not task completion.
 
-The server source maps these names now. Shared final `a4bcebc4` adds them to
-the accepted allowlist and validates their payloads, exports
+The server source maps these names now and imports the shared final
+`a4bcebc4` allowlists/types directly. Shared adds them to the accepted
+allowlist, validates their payloads, exports
 `AgentAcceptedChangeTypeV2`/`AgentLiveChangeTypeV2`, and rejects accepted
-`error`; the local mirror now follows that split. Browser reduction remains
-external intake. Until that combined intake is complete, the v2 gate stays
-closed and an activation attempt with these names would be invalid, not
-silently downgraded.
+`error`; the server no longer copies that vocabulary. Browser reduction remains
+external intake; the 0.1.0 artifact remains a build/activation dependency. Until
+that combined intake is complete, the v2 gate stays closed and an activation
+attempt with these names would be invalid, not silently downgraded.
 
 `status_changed` is not added by this step: the candidate native producer has
 no accepted `status_changed` fact. Status is current snapshot state and the

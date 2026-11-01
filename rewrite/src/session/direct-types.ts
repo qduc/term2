@@ -64,6 +64,8 @@ export type Conversation = {
     target: string,
     policy: import('./direct-background-check-ins.js').DirectBackgroundCheckInPolicy,
   ): ReturnType<import('./direct-background-check-ins.js').DirectBackgroundCheckIns['configure']>;
+  /** Current accepted root-history/configuration revision; no mutation or receipt allocation. */
+  commandRevision(): string;
   rewindTargets(): readonly import('./direct-command-types.js').DirectRewindTarget[];
   submit(
     request: DirectQueueSubmission,

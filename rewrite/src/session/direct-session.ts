@@ -297,6 +297,7 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
       return Promise.resolve(structuredClone(result));
     },
     rewindTargets: () => conversation.rewindTargets(),
+    commandRevision: () => conversation.commandRevision(),
     command: executeCommand,
     submit,
     submitWithDelivery: submit,

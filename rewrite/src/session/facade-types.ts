@@ -171,6 +171,8 @@ export interface DirectSession {
   snapshotInputPreview(
     request: import('./direct-preview.js').DirectPreviewRequest,
   ): import('./direct-preview.js').DirectPreviewSnapshot;
+  /** Current native mutation revision, not the event position or durable sequence. */
+  commandRevision(): string;
   /** Stable invocation identity and durable outcome; admission is not completion. */
   command(
     request: import('./direct-command-types.js').DirectCommandRequest,

@@ -18,7 +18,15 @@ export type DirectCommandOperation =
   | { readonly kind: 'rewind'; readonly targetId: string }
   | { readonly kind: 'configure'; readonly configuration: DirectCommandConfiguration }
   | { readonly kind: 'rollover'; readonly request?: DirectRolloverRequest };
-export type DirectCommandRequest = { readonly commandId: string; readonly operation: DirectCommandOperation };
+export type DirectCommandRequest = {
+  readonly commandId: string;
+  readonly operation: DirectCommandOperation;
+  /** Check under the sole writer before cancelling or starting any command work.
+   * Absent preserves the operation's existing foreground-settlement policy. */
+  readonly admission?: 'idle';
+  /** Exact native root-history/configuration revision, not a transport cursor. */
+  readonly expectedRevision?: string;
+};
 export type DirectCommandOutcome =
   | { readonly kind: 'retried'; readonly turnId: TurnId }
   | { readonly kind: 'rewound'; readonly draft: { readonly content: readonly ContentPart[] } }

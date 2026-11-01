@@ -944,6 +944,7 @@ function conversation(
     cancelCommand() {
       commandOwner?.abort.abort();
     },
+    commandRevision: revision,
     rewindTargets() {
       if (active || completionHeld || commandOwner || closed || logFailure) return [];
       return listDirectRewindTargets(commandSnapshot());
@@ -974,6 +975,21 @@ function conversation(
           receipt: structuredClone(commandReceipts.find((receipt) => receipt.request.commandId === request.commandId)!),
         };
       };
+      // These optional caller preconditions are checked in this synchronous
+      // admission, not in a host preflight followed by a racy later mutation.
+      // The original keyed receipt was already replayed above; later state
+      // must not turn that same invocation into a different outcome or grant.
+      if (request.expectedRevision !== undefined && request.expectedRevision !== proposal.fact.revision)
+        return Promise.resolve({
+          result: finish({ kind: 'rejected', code: 'stale', message: 'The command revision is no longer current.' }),
+        });
+      if (
+        request.admission === 'idle' &&
+        (active || completionHeld || queueState.active || (!queueState.pause && queueState.pending.length > 0))
+      )
+        return Promise.resolve({
+          result: finish({ kind: 'rejected', code: 'busy', message: 'This command requires an idle Session.' }),
+        });
       const boundaryRollover = completionHeld ? directRolloverAtBoundary(facts, completionHeld) : undefined;
       if (
         boundaryRollover &&

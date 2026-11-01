@@ -1397,7 +1397,16 @@ function conversation(
     abort(expectedTurnId, discardQueue = true) {
       if (closed || logFailure) return { kind: 'not_admitting', reason: logFailure?.message ?? 'session is closed' };
       const target = active?.turnId ?? completionHeld;
-      if (target !== expectedTurnId || active?.cancelled) return { kind: 'no_op' };
+      if (target !== expectedTurnId || active?.cancelled)
+        return {
+          kind: 'no_op',
+          turnId: expectedTurnId,
+          status: facts.some((fact) => fact.type === 'turn_ended' && fact.turnId === expectedTurnId)
+            ? 'terminal_accepted'
+            : target === expectedTurnId && active?.cancelled
+            ? 'cancellation_requested'
+            : 'not_current',
+        };
       const cancelPlan = planDirectQueue(queueState, { kind: 'cancel', turnId: expectedTurnId }, environment());
       const discardPlan = discardQueue
         ? planDirectQueue(cancelPlan.state, { kind: 'discard' }, environment())

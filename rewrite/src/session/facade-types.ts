@@ -73,7 +73,14 @@ export type DirectTimelineEntry = {
 };
 export type DirectAbortResult =
   | { readonly kind: 'aborted'; readonly turnId: TurnId; readonly discardedMessageIds: readonly string[] }
-  | { readonly kind: 'no_op' | 'not_admitting'; readonly reason?: string };
+  | {
+      readonly kind: 'no_op';
+      readonly turnId: TurnId;
+      /** Accepted root terminal is evidence; a cancellation request is not settlement. */
+      readonly status: 'terminal_accepted' | 'cancellation_requested' | 'not_current';
+      readonly reason?: string;
+    }
+  | { readonly kind: 'not_admitting'; readonly reason?: string };
 export type DirectDraft = {
   readonly id: string;
   readonly turnId: TurnId;

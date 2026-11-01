@@ -87,13 +87,14 @@ export function safeNativeCommandResult(result: WireCommandResult): WireCommandR
   if (!('receipt' in result))
     return result.ok ? result : { ...result, message: 'Native command did not complete successfully.' };
   const { receipt } = result;
-  const safeReceipt =
-    receipt.outcome?.kind === 'rejected'
-      ? { ...receipt, outcome: { ...receipt.outcome, message: 'Native command was rejected.' } }
-      : receipt;
-  return result.ok
-    ? { ...result, receipt: safeReceipt }
-    : { ...result, message: 'Native command did not complete successfully.', receipt: safeReceipt };
+  if (receipt.outcome?.kind !== 'rejected') return result;
+  const safeReceipt = { ...receipt, outcome: { ...receipt.outcome, message: 'Native command was rejected.' } };
+  if (result.ok) {
+    // Rejected outcomes cannot satisfy command_finished; only a pending receipt remains.
+    if (result.kind !== 'command_pending') return result;
+    return { ...result, receipt: safeReceipt };
+  }
+  return { ...result, message: 'Native command did not complete successfully.', receipt: safeReceipt };
 }
 function projectNegativeReceipt(receipt: WireCommandReceipt): ServerResult {
   const { outcome } = receipt;

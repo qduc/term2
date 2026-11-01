@@ -21,8 +21,10 @@ export function publicContext(context: DirectContextState): Pick<WireSnapshot, '
   return { goal: context.goal.goal ? publicGoal(context.goal.goal) : null, goalGeneration: context.goal.generation,
     verification: last ? publicVerification(last) : null };
 }
-/** Exactly one public frame for each native context fact; no goal completion before acceptance. */
-export function contextFactEvent(fact: DirectContextFact, state: WireSnapshot, seq: number): WireEvent {
+/** Exactly one public frame for each native context fact this projection owns. Rollover and
+ * rotation are Session boundaries with their own projection paths, not context notices. */
+type ProjectedContextFact = Exclude<DirectContextFact, { type: 'rollover_requested' } | { type: 'session_rotated' }>;
+export function contextFactEvent(fact: ProjectedContextFact, state: WireSnapshot, seq: number): WireEvent {
   const base = { sessionId: state.sessionId, seq, turnId: 'turnId' in fact ? fact.turnId : null };
   switch (fact.type) {
     case 'goal_changed': return { ...base, type: 'goal', payload: { goal: fact.goal ? publicGoal(fact.goal) : null, generation: (state.goalGeneration ?? 0) + 1 } };

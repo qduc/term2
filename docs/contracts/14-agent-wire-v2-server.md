@@ -38,9 +38,14 @@ IDs/timestamps are manufactured. A root change omits `branch`; a child change
 carries only the accepted branch identity. Native queue aggregate ID arrays,
 rotation identity, context-compaction attempt evidence including real
 `turnId`/`compactionId`, history replacement correlation and configure receipts
-are retained. Changes without a shared v2 name (for example aggregate `cost`,
-`request_cost_recorded`, `goal`, generic `notice`, `message`) are not relabelled
-or invented; the accepted boundary may be an empty batch.
+are retained. The server explicitly maps the proposed accepted-only `cost`,
+`request_cost_recorded`, `goal`, `goal_proposed`, `verification`, `notice`,
+`background_notice_enqueued` and `background_notices_delivered` names to their
+exact native payloads; the shared 0.2.0 source must add those names before the
+gate can open. `request_cost_recorded` and aggregate `cost` are not branch
+wrapped; request records retain physical ancestry and are upsert-only, never a
+second charge. Changes without a shared name (for example generic `message` or
+task history) are not relabelled; the accepted boundary may be an empty batch.
 
 Live frames are named `event: live`, have no SSE id or seq/time fields, and carry
 only the shared v2 live change types. They never advance a resume checkpoint and

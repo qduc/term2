@@ -49,6 +49,7 @@ const DIRECT_SOURCE_IMPORTERS = new Set([
   'app/direct-verifier-workspace.ts',
   'app/direct-verifier.ts',
   'app/run.ts',
+  'app/source-tools.ts',
   'app/tool-contract.ts',
   'app/tool-surface.ts',
   'clients/control/discord-send.ts',
@@ -76,7 +77,6 @@ const DIRECT_SOURCE_IMPORTERS = new Set([
   'session/direct-hooks.ts',
   'session/direct-memory.ts',
   'session/direct-queue.ts',
-  'tools/source-tools.ts',
 ]);
 
 // Reused source leaves whose existing source-layer label is above the direct
@@ -119,7 +119,10 @@ const SOURCE_LAYERS = [
   ['shared', 'slash-commands.ts'],
   // This filesystem integration exercises root-agent assembly, not a memory tool implementation.
   ['app', 'services/memory/personal-memory.integration.test.ts'],
+  // Provider picker integration composes Ink, settings and provider policy.
+  ['app', 'providers/provider-presets.integration.test.tsx'],
   ['config', 'env-setup.ts'],
+  ['tools', 'services/plan-mode-interceptor.ts'],
   ['session', 'services/command-message-streaming.ts'],
   ['session', 'services/generation-guard.ts'],
   ['session', 'services/input-surge-approval.ts'],
@@ -164,6 +167,7 @@ const SOURCE_LAYERS = [
   ['config', 'services/settings/'],
   ['config', 'services/profiles/'],
   ['model', 'services/model-service.ts'],
+  ['model', 'services/providers/provider-management-session.ts'],
   ['shared', 'services/service-interfaces.ts'],
   ['model', 'providers/'],
   ['model', 'services/models/'],
@@ -184,6 +188,7 @@ const SOURCE_LAYERS = [
   ['shared', 'gateway/interaction-protocol.ts'],
   ['host', 'gateway/'],
   ...['components/', 'hooks/', 'commands/', 'skins/', 'theme/', 'acp-v2/'].map((name) => ['clients', name]),
+  ['clients', 'context/InputContext.tsx'],
   ['clients', 'app.tsx'],
   ['clients', 'non-interactive.ts'],
   ['clients', 'services/control-socket/'],

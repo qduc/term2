@@ -23,7 +23,7 @@ import type { Workspace } from '../tools/index.js';
 import type { Item, ItemId, ModelRegistry, ReasoningEffort } from '../model/index.js';
 import { createProviderRegistry } from '../model/provider.js';
 import { createDirectSubagentTools } from './direct-subagent-tools.js';
-import { createSourceToolRegistry, executeSourceChild, sourceToolSpec } from '../tools/source-tools.js';
+import { createSourceToolRegistry, executeSourceChild, sourceToolSpec } from './source-tools.js';
 import type { AgentSurface, ProfileSelection, ToolSurfaceOptions } from './tool-contract.js';
 
 type ToolInterceptor = Parameters<Parameters<typeof installPlanModeInterceptor>[0]['addToolInterceptor']>[0];

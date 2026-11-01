@@ -1,4 +1,4 @@
-/** Executable boundary over the final source definitions, not an old agent runtime. */
+/** App composition over source definitions, concrete approval owners and native tool capabilities. */
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { normalizeToolInput } from '../../../source/lib/tool-invoke.js';
@@ -20,7 +20,14 @@ import {
 } from '../../../source/tools/system/run-code/run-code.js';
 import { isZodToolParameterSchema, type AnyToolDefinition } from '../../../source/tools/types.js';
 import type { ToolSpec } from '../model/index.js';
-import type { ApprovalRequirement, InteractionDecision, Tool, ToolContext, ToolRegistry, ToolResult } from './index.js';
+import type {
+  ApprovalRequirement,
+  InteractionDecision,
+  Tool,
+  ToolContext,
+  ToolRegistry,
+  ToolResult,
+} from '../tools/index.js';
 
 const DIRECT_CONTEXT = Symbol('directToolContext');
 type Invocation = { readonly signal: AbortSignal; readonly [DIRECT_CONTEXT]: ToolContext };

@@ -42,7 +42,10 @@ actual surface offers `run_code`; otherwise the leaves remain directly callable.
 tool spec keeps `description` live: `run_code` binds its catalog after initial
 surface assembly, and a copied string silently omits native memory leaves.
 `direct-config-memory.ts` re-adapts the captured leaves on configuration even
-when none is top-level. Bare suppresses inline memory guidance without changing
+when none is top-level. Late source-leaf adaptation retains the raw approval
+policy and interceptors registered by `buildAgentTools`; it must not re-register
+the wrapped `needsApproval` interrupt marker as the authorization predicate.
+Bare suppresses inline memory guidance without changing
 access, personal-context opt-in, snapshots, or the local-only store boundary.
 MCP capture in `direct-mcp-source.ts` reserves the executable `describe` name from the
 run-code runtime, the same owner used by tool assembly.

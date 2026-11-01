@@ -327,12 +327,9 @@ export function createSourceToolRegistry(
     get: (name) => tools.get(name),
     available: () => [...tools.values()],
     adaptTool(definition) {
-      options.policies.register({
-        toolName: definition.name,
-        parameters: definition.canonicalParameters ?? definition.parameters,
-        needsApproval: definition.needsApproval,
-        checkInterceptors: (input) => options.checkInterceptors?.(definition.name, input) ?? Promise.resolve(null),
-      });
+      // buildAgentTools already registered the raw policy and interceptors.
+      // The wrapped predicate is an interrupt marker, not that policy; replacing
+      // the registration with it would make even reads and auto-mode writes ask.
       // Adaptation does not add authority to the fixed base offering. The native
       // request capability owns which of these tools enters its actual registry.
       return adaptTool(definition, options, owners);

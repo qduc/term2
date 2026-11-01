@@ -213,8 +213,12 @@ export class TurnTools {
           ...(plan.approval.detail !== undefined ? { detail: plan.approval.detail } : {}),
           ...(plan.approval.risk !== undefined ? { risk: plan.approval.risk } : {}),
         });
-        if (decision.kind !== 'allow')
-          return errorResult(decision.kind === 'deny' ? decision.reason ?? 'rejected' : 'rejected');
+        if (decision.kind !== 'allow') {
+          const reason = decision.kind === 'deny' ? decision.reason : undefined;
+          return errorResult(
+            reason ? `Tool execution was not approved. User's reason: ${reason}` : 'Tool execution was not approved.',
+          );
+        }
       }
       return await this.#physical(
         execution,

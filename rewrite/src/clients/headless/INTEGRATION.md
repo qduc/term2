@@ -56,12 +56,14 @@ conversation storage.
   message did not stream. A completed turn ends stdout with one newline; a
   failed or cancelled turn leaves partial output unterminated.
 - Plain stderr matches the old headless wording where the wire carries it:
-  `[tool] name: preview` on tool start, `[approval required] tool`,
+  `[tool] name: preview` on a root planned call (before approval or
+  dispatch), `[approval required] tool`,
   `[question] tool summary`, `[retry] ...`, `Approval Rejected: reason`, and
   `error message`. Retry lines use the newly supplied `toolName`,
   `maxRetries`, `retryType` and nested `agentId` when present, with the old
   `service_tier` form; otherwise the explicit fallback includes attempt/delay.
-  Nested tool lines use the supplied role; if absent they use `[subagent]`,
+  Physical `run_code` child calls do not produce root `[tool]` lines.
+  Subagent tool lines use the supplied role; if absent they use `[subagent]`,
   never an invented role. Reasoning goes to stderr only with `showReasoning`.
 - `quiet` suppresses plain non-error diagnostics (`[tool]`, `[approval
   required]`, `[question]`, retry and notice lines); errors, `Approval
@@ -137,8 +139,8 @@ app can map SIGINT/SIGTERM to their signal exit codes rather than ordinary error
   `tool_started`/`tool_dispatched` when the wire call ID is present, `retry`
   when required metadata is present, `cost_update`, `command_message`,
   `run_budget`), and the authoritative `final` from `WireTerminal.finalWindow`.
-  `session_start.legacyJson` declares the exact live families and the
-  unavailable families; the final preserves per-turn public `turnItems`, usage,
+  `session_start` preserves the old profile metadata shape without an added
+  capability declaration. The final preserves per-turn public `turnItems`, usage,
   root-tree costs, ordered items and terminal cause; command messages already
   emitted live are excluded. Its `legacyCoverage` field records the producer's
   public-item/summary/usage/command/cost limits. An old/recovered terminal with

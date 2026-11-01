@@ -106,7 +106,7 @@ export function Term2NativeEvidence({ view, isBranch = false }: { view: Term2Ses
     <PublicStateEvidence view={view} isBranch={isBranch} />
     {view.replayMode === 'unavailable' && <p role="status" className="text-xs">Live stream: replay is unavailable. Activity missed while disconnected cannot be reconstructed by this browser.</p>}
     {retainedTasks.map((card, index) => <Term2SubagentCard key={index} card={card} />)}
-    <p className="my-2 text-xs">Recovery includes accepted reasoning summaries and final tool results, not raw reasoning chunks or intermediate tool progress. Those streams are live-only and may be lost after reconnect/crash; accepted replay is not raw-stream replay parity.</p>
+    <p className="my-2 text-xs">Raw reasoning chunks and intermediate tool-progress updates are visible live but may be unavailable after reconnect or crash. Recovery uses actually accepted reasoning summaries and final tool results, not the original raw stream or an interrupted prefix. This is an explicit raw-stream replay parity exception, not full replay parity.</p>
     {view.nativeChanges?.map((change, index) => <NativeChange key={index} change={change} />)}
     {!!view.liveChanges?.length && <section aria-label="Live-only connection observations"><h3 className="text-xs font-semibold">Live-only reasoning/progress and other transient observations · this connection only</h3>{view.liveChanges.map((change, index) => <NativeChange key={index} change={change} />)}</section>}
     {branches.map(({ identity, view: branch }) => <section key={identity.branchId} aria-label={`Branch ${identity.branchId}`} className="my-3 border-l-2 border-zinc-300 pl-3 dark:border-zinc-700">

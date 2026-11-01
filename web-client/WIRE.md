@@ -18,7 +18,11 @@ or fallback to the old runtime. No external ChatForge uptake is established.
 
 The exact shared originals are `ece5d65393f56503070512251e1ae06d78f9d659`
 (versioned wire) plus `af3d0ffbe68489c3604148948177d0763acaf154` (eight accepted
-evidence names). Both belong to the same still-unreleased **0.2.0**, not 0.2.1.
+evidence names). Shared documentation follow-up `c01d054a253bb2451c2cb8bc9e4bcc6ea37375d6`
+(parent af3d0ff) records option B; `67d3cba8151d83eee851a9eb5638e27e6f193f64`
+(parent c01d054a) persists the maintained-large-module-interface rule in shared
+AGENTS.md. These documentation commits change no API/provider/native history.
+All remain the same still-unreleased **0.2.0**, not 0.2.1.
 The package's `packages/wire/docs/v1.md`, `v2.md`, and `migration-v1-v2.md` define
 the shared contracts. `TERM2_FREEZE_SHA` identifies a historical v1 fixture, not a
 v2 digest. This consumer uses named v2 exports, not unqualified v1 aliases or a
@@ -141,7 +145,15 @@ and original outcome, including unknown/unpriced evidence.
 
 `Term2NativeEvidence` also displays actual progress/reasoning/compaction,
 queue/tasks and command/configuration evidence. Context estimates and request
-references are not billed usage. User-selected **option B** (Discord decision `1566281061087059989`) keeps raw
+references are not billed usage. The shared/server/browser user-facing disclosure is:
+
+> Raw reasoning chunks and intermediate tool-progress updates are visible live
+> but may be unavailable after reconnect or crash. Recovery uses actually
+> accepted reasoning summaries and final tool results, not the original raw
+> stream or an interrupted prefix. This is an explicit raw-stream replay parity
+> exception, not full replay parity.
+
+User-selected **option B** (Discord decision `1566281061087059989`) keeps raw
 reasoning chunks and intermediate tool-progress updates **live-only**, including
 after reconnect/crash. Accepted reasoning summaries and final tool results are
 the recovery surface. This is an explicit **raw-stream replay parity exception**,

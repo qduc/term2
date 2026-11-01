@@ -56,14 +56,26 @@ scenario is the one whose CLI never reached the state it waits for.
 - `scripts/provider-black-box/provider-test-harness.ts` owns child-process,
   stateful PTY, isolated-workspace, restart, and temporary-environment lifecycle.
   Keep it asynchronous; synchronous child execution can deadlock the fake server.
-  Interactive ready/idle waits use `child.waitForIdleInput()`, not a prompt
-  glyph. The shipped CLI publishes an incrementing generation to
+  Source interactive ready/idle waits use `child.waitForIdleInput()`, not a prompt
+  glyph. The source CLI publishes an incrementing generation to
   `TERM2_HARNESS_IDLE_PATH` when the composer owns the keyboard and no turn is
   in flight (`source/lib/harness-input-idle.ts`). Text submission uses
   `writePtyTextAndSubmit()`, which waits for the CLI's companion composer-state
   acknowledgment before sending Enter; fixed sleeps and PTY echo do not prove
   Ink consumed the text. A PTY-stripped `❯` is not a readiness signal, and
   first-run/menu ownership must not count as idle.
+  The explicitly selected native entry has no source sidecars. Its shared
+  `direct-composer.ts` adapter reads only the latest complete synchronized Ink
+  frame. Ordinary readiness requires model/status, possibly separated by ordinary
+  notice/queue/goal rows, an inverse end cursor and the active ordinary footer.
+  The footer must share the editor's `composerActive` condition: an inverse cursor
+  remains visible on an inactive editor. Value waits may instead recognize the
+  active approval panel's single-line Why reason field using its prompt, cursor
+  and panel markers; that field never counts as idle. Tokens are decoded-string
+  offsets, not source revision numbers. Wrapped, multiline and image drafts stay
+  unsupported; do not guess missing wrap-boundary whitespace. At timeout inspect
+  the current full frame: a valid editor rejected by the adapter is different
+  from text that never appeared. Do not hide the latter or lengthen deadlines.
 - `scripts/provider-black-box/provider-capability-matrix.ts` and
   `provider-session-capability-manifest.ts` own the test-side capability rows,
   typed lifecycle ledgers, and aggregate accounting.

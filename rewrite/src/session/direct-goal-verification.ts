@@ -1,5 +1,6 @@
 /** Completion verification uses Session facts, never the old verification database. */
 import { randomUUID } from 'node:crypto';
+import { z } from 'zod';
 import {
   DEFAULT_BUDGETS,
   POLICY_VERSION,
@@ -15,12 +16,23 @@ import { mandatoryVerification } from '../../../source/services/completion-verif
 import type { DirectGoalCheck, DirectGoalState } from './direct-goal.js';
 import type { DirectGoalVerificationVerdict } from './direct-goal-stop.js';
 
+/** Native count limits only; transport/deadline policy remains operation-owned. */
+export const directVerificationLimitsSchema = z.object({
+  maxRepairs: z.number().int().nonnegative(),
+  maxGateAttempts: z.number().int().positive(),
+  maxVerifications: z.number().int().positive(),
+});
+export type DirectVerificationLimits = z.infer<typeof directVerificationLimitsSchema>;
+const defaultLimits = (): DirectVerificationLimits => directVerificationLimitsSchema.parse(DEFAULT_BUDGETS);
+
 export type DirectVerificationFact =
   | {
       readonly type: 'completion_verification_started';
       readonly attemptId: string;
       readonly goalGeneration: number;
       readonly proposal: CompletionProposal;
+      /** First task attempt pins counts; absence on legacy facts means historical defaults. */
+      readonly limits?: DirectVerificationLimits;
     }
   | { readonly type: 'completion_verification_decided'; readonly attemptId: string; readonly decision: GateDecision }
   | {
@@ -38,6 +50,7 @@ export type DirectVerificationAttempt = {
   readonly attemptId: string;
   readonly goalGeneration: number;
   readonly proposal: CompletionProposal;
+  readonly limits?: DirectVerificationLimits;
   readonly decision?: GateDecision;
   readonly report?: VerificationReport;
   readonly outcome?: 'complete' | 'repair' | 'blocked';
@@ -64,10 +77,15 @@ export function reduceDirectVerification(
   const index = attempts.findIndex((attempt) => attempt.attemptId === fact.attemptId);
   if (fact.type === 'completion_verification_started') {
     if (index >= 0) throw new Error('Duplicate completion verification attempt');
-    return [
-      ...attempts,
-      { attemptId: fact.attemptId, goalGeneration: fact.goalGeneration, proposal: proposalSchema.parse(fact.proposal) },
-    ];
+    const proposal = proposalSchema.parse(fact.proposal);
+    const limits = fact.limits ? directVerificationLimitsSchema.parse(fact.limits) : defaultLimits();
+    const previous = attempts.find((attempt) => attempt.proposal.taskId === proposal.taskId);
+    if (previous) {
+      const pinned = previous.limits ?? defaultLimits();
+      if ((['maxRepairs', 'maxGateAttempts', 'maxVerifications'] as const).some((key) => limits[key] !== pinned[key]))
+        throw new Error('Completion verification task budget changed');
+    }
+    return [...attempts, { attemptId: fact.attemptId, goalGeneration: fact.goalGeneration, proposal, limits }];
   }
   if (index < 0) throw new Error('Unknown completion verification attempt');
   const current = attempts[index]!;
@@ -118,21 +136,9 @@ export function createDirectGoalVerifier(deps: {
     facts: readonly DirectVerificationFact[],
   ) => boolean | Promise<boolean>;
   readonly operations: DirectVerificationOperations;
-  readonly limits?: {
-    readonly maxRepairs: number;
-    readonly maxGateAttempts: number;
-    readonly maxVerifications: number;
-  };
+  readonly limits?: DirectVerificationLimits;
 }): (state: DirectGoalState, check: DirectGoalCheck, signal: AbortSignal) => Promise<DirectGoalVerificationVerdict> {
-  const limits = deps.limits ?? DEFAULT_BUDGETS;
-  for (const [key, minimum] of [
-    ['maxRepairs', 0],
-    ['maxGateAttempts', 1],
-    ['maxVerifications', 1],
-  ] as const) {
-    if (!Number.isInteger(limits[key]) || limits[key] < minimum)
-      throw new Error(`Invalid completion verification ${key}`);
-  }
+  const newTaskLimits = directVerificationLimitsSchema.parse(deps.limits ?? DEFAULT_BUDGETS);
   return async (state, check, signal) => {
     const blocked = (reason: string, unavailable = false): DirectGoalVerificationVerdict => ({
       action: 'blocked',
@@ -144,6 +150,9 @@ export function createDirectGoalVerifier(deps: {
     const attempts = deps
       .readAttempts()
       .filter((attempt) => attempt.proposal.taskId === `${deps.sessionId}:${state.goal!.id}`);
+    // Generation/revision/configuration changes are not new tasks. Old facts
+    // without a pin used defaults, even if today's setting has changed.
+    const limits = attempts.length ? attempts[0]!.limits ?? defaultLimits() : newTaskLimits;
     if (attempts.some((attempt) => !attempt.outcome))
       return blocked('An earlier verification is unfinished; explicit recovery is required');
     if (attempts.length >= limits.maxGateAttempts) return blocked('Completion gate attempt budget exhausted');
@@ -168,7 +177,7 @@ export function createDirectGoalVerifier(deps: {
         evidence: check.evidence + (check.criteriaEvidence ? `\n${check.criteriaEvidence}` : ''),
       });
       await accept([
-        { type: 'completion_verification_started', attemptId, goalGeneration: state.generation, proposal },
+        { type: 'completion_verification_started', attemptId, goalGeneration: state.generation, proposal, limits },
       ]);
       started = true;
       let decision: GateDecision = {

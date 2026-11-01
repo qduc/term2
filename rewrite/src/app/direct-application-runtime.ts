@@ -19,6 +19,7 @@ import type { DirectBinding } from '../session/facade-types.js';
 import type { DirectPreparedConfiguration } from '../session/direct-configuration.js';
 import type { DirectRolloverPreparer } from '../session/direct-session-rotation.js';
 import type { DirectVerificationOperations } from '../session/direct-goal-verification.js';
+import { DEFAULT_BUDGETS } from '../../../source/services/completion-verification/contracts.js';
 import type { DirectConversationRuntime, DirectRuntimeContext } from '../session/direct-store.js';
 import { loadSurface } from './agent-surface.js';
 import type { DirectHookRuntime } from './direct-application-hooks.js';
@@ -340,7 +341,22 @@ export function createDirectRuntimes(
             ? { sessionSearch: createNativeSearchTool(options.conversationsDir, context.workspace, context.binding) }
             : {}),
           ...(hooks ? { hooks } : {}),
-          ...(verification ? { verification: { operations: verification } } : {}),
+          ...(verification
+            ? {
+                verification: {
+                  operations: verification,
+                  // Read at the completion boundary for a new task; the native
+                  // started fact owns this value once that task has an attempt.
+                  limits: {
+                    get maxRepairs() {
+                      return settings.get('agent.verificationMaxRepairs');
+                    },
+                    maxGateAttempts: DEFAULT_BUDGETS.maxGateAttempts,
+                    maxVerifications: DEFAULT_BUDGETS.maxVerifications,
+                  },
+                },
+              }
+            : {}),
           verificationEnabled: () => settings.get('agent.completionVerification') !== false,
           backgroundCheckIns: () => ({
             enabled: settings.get('agent.backgroundCheckIn.enabled'),

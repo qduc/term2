@@ -22,6 +22,7 @@ import { type DirectGoalReminderFact } from './direct-goal-stop.js';
 import { DIRECT_MEMORY_GUIDANCE_MARKER } from '../../../source/prompts/memory-prompt-marker.js';
 import {
   reduceDirectVerification,
+  directVerificationLimitsSchema,
   type DirectVerificationFact,
   type DirectVerificationAttempt,
 } from './direct-goal-verification.js';
@@ -93,6 +94,7 @@ const contextFactSchema = z.discriminatedUnion('type', [
     attemptId: identifier,
     goalGeneration: z.number().int().nonnegative(),
     proposal: proposalSchema,
+    limits: directVerificationLimitsSchema.optional(),
   }),
   z.object({ type: z.literal('completion_verification_decided'), attemptId: identifier, decision: decisionSchema }),
   z.object({ type: z.literal('completion_verification_reported'), attemptId: identifier, report: reportSchema }),

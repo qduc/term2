@@ -120,7 +120,7 @@ export function observedModelStream(
   request: ModelRequest,
   provider: string,
   signal: AbortSignal,
-  onDispatched?: (request: StreamedModelTurnRequest) => void,
+  onDispatched?: () => void,
 ) {
   return observeProviderRequestDispatch(
     modelEvents(original, toProviderRequest(request, signal), provider, signal),

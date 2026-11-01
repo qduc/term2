@@ -45,6 +45,11 @@ function canonicalCandidate(
 ): Candidate | null {
   const turnId = event.turnId;
   switch (event.type) {
+    case 'session_rotated':
+      // The logical Session is unchanged, and pinned agent-wire has no rotation/reset event.
+      // Direct SSE retains the actual accepted boundary; do not invent session_created or a
+      // turn terminal. Canonical SSE stays gated: omitting a reset is not pinned reset parity.
+      return null;
     case 'admission':
       return admissionCandidate(event.payload.admission);
     case 'queue_changed':

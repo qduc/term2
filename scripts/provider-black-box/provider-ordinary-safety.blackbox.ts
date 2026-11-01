@@ -68,7 +68,9 @@ it('completes ordinary useful work with fresh safety defaults and keeps a resuma
 });
 
 it('admits input beyond the old universal ceiling when known capacity permits', async () => {
-  const lease = await setup('success');
+  const lease = await setup('success', {
+    modelSelection: { model: 'gpt-5.6-luna', provider: 'fixture-provider' },
+  });
   const result = await lease.runCli({
     cwd: process.cwd(),
     args: [...Array(5).fill('x'.repeat(100000)), '--provider', 'fixture-provider', '--model', 'gpt-5.6-luna'],
@@ -80,7 +82,9 @@ it('admits input beyond the old universal ceiling when known capacity permits', 
 });
 
 it('pauses before dispatch on a known small model with fresh defaults', async () => {
-  const lease = await setup('success');
+  const lease = await setup('success', {
+    modelSelection: { model: 'gpt-4', provider: 'fixture-provider' },
+  });
   const result = await lease.runCli({
     cwd: process.cwd(),
     args: ['x'.repeat(40000), '--provider', 'fixture-provider', '--model', 'gpt-4', '--json'],
@@ -167,7 +171,9 @@ it('retains unknown-model work after structured provider overflow without retryi
 });
 
 it('completes a tiny small-model request with real fresh and reloaded settings', async () => {
-  const lease = await setup('success');
+  const lease = await setup('success', {
+    modelSelection: { model: 'rekaai/reka-edge', provider: 'fixture-provider' },
+  });
   for (let i = 0; i < 2; i++) {
     const result = await lease.runCli({
       cwd: lease.root,

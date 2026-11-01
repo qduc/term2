@@ -6,7 +6,7 @@
 import type { Fact, FactLine } from './facts.js';
 
 type Path = readonly (string | number)[];
-type Source = { readonly seq: number; readonly path: Path; readonly jsonPath?: Path };
+type Source = { readonly seq: number; readonly path: Path; readonly jsonPath?: Path; readonly jsonEscape?: true };
 export type PayloadReference = {
   readonly path: Path;
   readonly source: Source;
@@ -69,7 +69,7 @@ function shared(value: string, base: string): { start: number; length: number; p
   while (prefix < end && value[prefix] === base[prefix]) prefix++;
   let suffix = 0;
   while (suffix < end && value[value.length - suffix - 1] === base[base.length - suffix - 1]) suffix++;
-  let best =
+  const best =
     prefix >= suffix
       ? { start: 0, length: prefix, prefix: '', suffix: value.slice(prefix) }
       : { start: base.length - suffix, length: suffix, prefix: value.slice(0, value.length - suffix), suffix: '' };
@@ -118,7 +118,16 @@ export class LogPayloads {
 
   #add(candidates: Candidate[], source: Source, value: string): void {
     if (value.length < MIN_SHARED) return;
-    candidates.push({ source, value });
+    const add = (source: Source, value: string): void => {
+      if (value.length < MIN_SHARED) return;
+      candidates.push({ source, value });
+      // The same code/body also appears JSON-escaped inside rawArguments or
+      // other provider JSON strings. Keep the earlier literal canonical without
+      // normalizing the later provider string's whitespace or escape spelling.
+      const escaped = JSON.stringify(value).slice(1, -1);
+      if (escaped !== value) candidates.push({ source: { ...source, jsonEscape: true }, value: escaped });
+    };
+    add(source, value);
     // Adopted structured outputs are JSON strings in tool_finished, but plain
     // strings inside the later provider_input. Reference the parsed body rather
     // than storing it again. JSON.parse does not alter the canonical output.
@@ -131,7 +140,7 @@ export class LogPayloads {
       }
       if (parsed === null || typeof parsed !== 'object') return;
       strings(parsed, (text, jsonPath) => {
-        if (text.length >= MIN_SHARED) candidates.push({ source: { ...source, jsonPath }, value: text });
+        add({ ...source, jsonPath }, text);
       });
     }
   }
@@ -185,6 +194,7 @@ export class LogPayloads {
         !source ||
         !path(source.path) ||
         (source.jsonPath !== undefined && !path(source.jsonPath)) ||
+        (source.jsonEscape !== undefined && source.jsonEscape !== true) ||
         !Number.isSafeInteger(source.seq) ||
         source.seq > seq ||
         !Number.isSafeInteger(ref.start) ||
@@ -203,9 +213,11 @@ export class LogPayloads {
         if (typeof body !== 'string') throw new Error('payload JSON source is not a string');
         body = at(JSON.parse(body) as unknown, source.jsonPath);
       }
-      if (typeof body !== 'string' || ref.start + ref.length > body.length || at(fact, ref.path) !== null)
+      if (typeof body !== 'string') throw new Error('invalid payload reference body');
+      const text = source.jsonEscape ? JSON.stringify(body).slice(1, -1) : body;
+      if (ref.start + ref.length > text.length || at(fact, ref.path) !== null)
         throw new Error('invalid payload reference body/target');
-      replace(fact, ref.path, ref.prefix + body.slice(ref.start, ref.start + ref.length) + ref.suffix);
+      replace(fact, ref.path, ref.prefix + text.slice(ref.start, ref.start + ref.length) + ref.suffix);
     }
     return fact;
   }

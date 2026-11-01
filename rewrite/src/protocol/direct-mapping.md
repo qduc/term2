@@ -571,8 +571,9 @@ gate closed until required implementation and authorized verification finish.
 values contain full facts; JSONL envelopes may additionally contain `refs` and
 `null` placeholders in their physical `fact`. `log-payloads.ts` resolves each
 reference from an accepted same-turn `(seq, path)` string, optionally selecting a
-string inside its parsed JSON (`jsonPath`), then applies a UTF-16 slice and literal
-prefix/suffix. Same-line references resolve in recorded order. Missing, forward,
+string inside its parsed JSON (`jsonPath`), optionally JSON-string escaping that
+source (`jsonEscape: true`, without surrounding quotes), then applying a UTF-16
+slice and literal prefix/suffix. Same-line references resolve in recorded order. Missing, forward,
 cross-turn or malformed sources/targets fail the conversation read. Other native
 versions are refused, not interpreted by a legacy fallback.
 
@@ -598,7 +599,11 @@ than a short literal near that boundary; canonical body ownership takes priority
 over per-field byte savings. This is not cross-conversation deduplication.
 The `native-log.single-source` generated property checks real log round-trips,
 result-first reopen, continuation segments, structured results, display variants,
-and unique body storage; it is not a substitute for process-kill/CLI controls.
+tool arguments, reasoning/opaque metadata, and unique body storage. Its oracle
+checks every large semantic string leaf in the generated same-turn facts, plus
+literal reference framing, rather than only tool-result markers. It is not an
+exhaustive generator of all fact schemas or a substitute for process-kill/CLI
+controls.
 
 
 Storage failure lesson: the old terminal snapshot repeated both public items and
@@ -609,3 +614,13 @@ snapshots and shares payloads before consumers project them. Equality-only and
 prefix/suffix-only matching miss structured-output/display framing at both ends;
 the generated property found that case. Its oracle must decode nested JSON once
 before counting string bodies, or escaped structured output gives false failures.
+
+A broader generated control exposed the reverse JSON-encoding case: parsed tool
+input could precede `rawArguments`, so source-side `jsonPath` alone retained both
+copies when quotes/backslashes split every literal matching span. References may
+now select the JSON-escaped form of an earlier string, preserving the original
+provider argument string exactly rather than rebuilding it from parsed input.
+The earlier result-only generator missed argument and metadata leaves; the oracle
+now examines all large semantic leaves in its generated facts. Do not assert a
+framed sentinel must remain one contiguous literal when sharing can legally
+split its framing; round-trip equality is the fidelity check.

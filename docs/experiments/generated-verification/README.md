@@ -40,12 +40,15 @@ or obtain human agreement to defer them. Independently verify high-risk fixes.
 ## Current scope
 
 - `native-log.single-source` (`--target native`): generated identity-specific
-  tool bodies, structured adopted results, distinct display framing, reopen and
-  continuation-segment boundaries through the real JSONL writer/reader. Checks
-  exact hydrated facts, accepted-prefix terminal projection after history edits,
-  result-first recovery, literal body ownership and ignored torn tails. Retained
-  text deltas/full history snapshots are approved storage exceptions. This does
-  not kill a process, exercise real tools or prove provider/CLI rendering.
+  tool bodies and escaped arguments through actual log create/read/reopen and
+  continuation segments, including ordinary/structured provider results, user
+  input echoes, reasoning/opaque metadata, identical/framed/distinct display,
+  terminal reconstruction after history replacement, and torn tails. Checks
+  exact hydrated facts and every large semantic string leaf in generated
+  same-turn facts against physical string leaves (including ref framing).
+  `text_delta`/full `history_replaced` remain approved literal exceptions.
+  This bounded vocabulary is not exhaustive schema coverage or a process-kill/
+  CLI/provider journey; focused controls are still required.
 
 - `history.pair-projection`: structured, unique Responses-style call IDs, JSON
   arguments, arbitrary result text, missing results and an orphan result.

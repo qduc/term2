@@ -147,7 +147,7 @@ export interface PtyChildDriver {
   readIdleGeneration(): number;
   /** Source revision, or raw render offset on the direct CLI (never a synthetic source counter). */
   readComposerRevision(): number;
-  /** Source idle generation or direct rendered-idle frame newer than `after`; not keyboard ownership. */
+  /** Source idle generation or fresh direct idle frame with an empty ordinary composer; not model completion. */
   waitForIdleInput(options?: { after?: number; timeoutMs?: number }): Promise<number>;
   /** Source composer value or a fresh direct exact-value render after input; not a panel handshake. */
   waitForComposerValue(value: string, options?: { afterRevision?: number; timeoutMs?: number }): Promise<void>;
@@ -732,7 +732,7 @@ function createPtyChild(options: {
       if (directComposer)
         return waitForDirectComposer(
           { getOutput: () => output, hasExited: () => exitState !== null },
-          { after, idle: true, timeoutMs: timeoutMs ?? DEFAULT_TIMEOUT_MS },
+          { after, idle: true, value: '', timeoutMs: timeoutMs ?? DEFAULT_TIMEOUT_MS },
         );
       const idlePath = options.env[HARNESS_IDLE_ENV];
       if (!idlePath) {

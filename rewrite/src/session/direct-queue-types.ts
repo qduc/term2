@@ -53,7 +53,13 @@ export type DirectQueueFact =
   | { readonly type: 'queue_edited'; readonly messageId: string; readonly content: readonly ContentPart[] }
   | { readonly type: 'queue_retracted'; readonly messageId: string }
   | { readonly type: 'queue_discarded'; readonly messageIds: readonly string[] }
-  | { readonly type: 'queue_started'; readonly messageId: string; readonly turnId: TurnId }
+  | {
+      readonly type: 'queue_started';
+      readonly messageId: string;
+      readonly turnId: TurnId;
+      /** Only the rotation header's correlated control handoff may bypass FIFO and pause. */
+      readonly rolloverCommandId?: string;
+    }
   | { readonly type: 'queue_steered'; readonly messageIds: readonly string[]; readonly turnId: TurnId }
   | {
       readonly type: 'queue_cancelling';

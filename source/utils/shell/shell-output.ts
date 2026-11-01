@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from 'fs/promises';
 import { randomBytes } from 'crypto';
 import path from 'path';
-import { trimOutput } from '../output/output-trim.js';
+import { getTrimConfig, trimOutput } from '../output/output-trim.js';
 import { SANDBOX_TEMP_DIR } from './temp-dir.js';
 
 export interface FormatShellExecutionOutputParams {
@@ -12,6 +12,8 @@ export interface FormatShellExecutionOutputParams {
   exitCode: number | null;
   timedOut: boolean;
   maxOutputLength?: number;
+  /** Retained data lines per stream; status and omission/artifact notes are extra. */
+  maxOutputLines?: number;
   durationMs?: number;
   /** Effective deadline budget, for the bounded timeout explanation. */
   timeoutMs?: number;
@@ -116,6 +118,29 @@ function buildTerminationNote(params: {
   ].join('\n');
 }
 
+/**
+ * Bound each captured stream without changing execution status. Blank lines count;
+ * a final newline is a delimiter, not another line. Small budgets retain head/tail
+ * data rather than inheriting trimOutput's ten-line minimum. Characters remain
+ * independently bounded, and the formatter spools the original streams on loss.
+ */
+function trimShellOutput(output: string, maxOutputLines: number, maxOutputLength?: number): string {
+  const lines = output === '' ? [] : output.split('\n');
+  if (output.endsWith('\n')) lines.pop();
+  let lineBounded = output;
+  if (lines.length > maxOutputLines) {
+    const keepLines = Math.max(1, Math.floor(maxOutputLines * 0.4));
+    const headCount = Math.min(keepLines, maxOutputLines);
+    const tailCount = Math.min(keepLines, maxOutputLines - headCount);
+    lineBounded = [
+      ...lines.slice(0, headCount),
+      `... [${lines.length - headCount - tailCount} lines trimmed] ...`,
+      ...(tailCount > 0 ? lines.slice(-tailCount) : []),
+    ].join('\n');
+  }
+  return trimOutput(lineBounded, Number.POSITIVE_INFINITY, maxOutputLength);
+}
+
 export async function formatShellExecutionOutput({
   command,
   cwd,
@@ -124,13 +149,14 @@ export async function formatShellExecutionOutput({
   exitCode,
   timedOut,
   maxOutputLength,
+  maxOutputLines = getTrimConfig().maxLines,
   durationMs,
   timeoutMs,
   timeoutSource,
   cancelled,
 }: FormatShellExecutionOutputParams): Promise<FormatShellExecutionOutputResult> {
-  const stdoutTrimmedOutput = trimOutput(stdout, undefined, maxOutputLength);
-  const stderrTrimmedOutput = trimOutput(stderr, undefined, maxOutputLength);
+  const stdoutTrimmedOutput = trimShellOutput(stdout, maxOutputLines, maxOutputLength);
+  const stderrTrimmedOutput = trimShellOutput(stderr, maxOutputLines, maxOutputLength);
   const stdoutTrimmed = stdoutTrimmedOutput.trimEnd();
   const stderrTrimmed = stderrTrimmedOutput.trimEnd();
   const stdoutTruncated = stdoutTrimmedOutput !== stdout;

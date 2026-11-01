@@ -31,6 +31,18 @@ profile changes once wire messages exist. Wire history has no system-message
 role to exclude. `cli.ts` is the process entrypoint: the Discord bridge's numeric
 or numeric-string `process.exitCode` is normalized to the numeric `main` result.
 
+## Interactive startup admission
+
+For a fresh CLI launch with `--goal`, an otherwise admitted interactive start
+must persist its native `session_started` and launcher `goal_changed` facts before
+refusing a missing terminal. `cli.ts` retains its earlier argument, resume and
+home-directory refusals; those are not admitted starts. `runTui` uses the same
+Session creation and `setGoal` path as terminal launches, then checks terminal
+availability before background detection, control sockets or Ink. `launchTui`
+does not open MCP for a non-TTY start. A no-goal CLI terminal refusal still
+creates no conversation. Do not restore an early unconditional terminal return
+in `cli.ts`: it silently loses the user-authored goal.
+
 ## Tools and delegation
 
 `createToolSurface` in `tool-surface.ts` builds the offered tools and matching

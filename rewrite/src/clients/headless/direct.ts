@@ -272,7 +272,7 @@ export async function runDirectHeadless(
       .map((task) => `${task.kind ?? 'task'} ${task.name ?? task.label ?? task.id} [${task.id}] (${task.status})`)
       .join(', ');
     errorText(`${message}${details.length > 0 ? ` Outstanding: ${details}` : ''}`);
-    return result('error', 1);
+    return result(abortedInBackground || options.signal?.aborted ? 'cancelled' : 'error', 1);
   };
 
   // Old --json records are emitted only from exact native/public data. A missing

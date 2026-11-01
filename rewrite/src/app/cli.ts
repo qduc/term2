@@ -76,6 +76,19 @@ function packageVersion(): string {
 }
 
 /**
+ * When the home-directory guard applies, as in the current CLI: non-lite, not a
+ * resume, not SSH, and (without a prompt, or with --auto-approve for a prompt).
+ */
+function homeGuardApplies(options: SessionOptions, hasPrompt: boolean): boolean {
+  return (
+    !options.lite &&
+    options.resumeId === null &&
+    options.ssh === null &&
+    (!hasPrompt || options.autoApprove)
+  );
+}
+
+/**
  * A native resume names a direct conv_ log that must already exist. Only its
  * presence is checked here; nothing is read, so no other conversation is touched.
  */
@@ -327,7 +340,7 @@ async function applyModelOverrides(
 async function runHeadless(prompt: string, options: SessionOptions): Promise<number> {
   const cwd = path.resolve(process.cwd());
   const home = path.resolve(homedir());
-  if (shouldWarnOnHomeDirectoryStart({ cwd, homeDir: home, isNonLiteStart: !options.lite && options.autoApprove })) {
+  if (shouldWarnOnHomeDirectoryStart({ cwd, homeDir: home, isNonLiteStart: homeGuardApplies(options, true) })) {
     stderr.write(`${HOME_DIRECTORY_REFUSAL}\n`);
     return 1;
   }
@@ -482,7 +495,7 @@ async function main(argv: readonly string[]): Promise<number> {
           shouldWarnOnHomeDirectoryStart({
             cwd: path.resolve(process.cwd()),
             homeDir: path.resolve(homedir()),
-            isNonLiteStart: !command.options.lite,
+            isNonLiteStart: homeGuardApplies(command.options, false),
           })
         ) {
           stderr.write(`${HOME_DIRECTORY_START_WARNING.trimEnd()}\nCancelled.\n`);

@@ -2,6 +2,7 @@
  * The unprefixed exports in index.ts still serve the isolated bridge, not this runtime.
  */
 import type { ModelRequestCost } from '../engine/direct-recovery-budget.js';
+import type { DirectFinalWindow } from '../session/direct-final.js';
 
 export const DIRECT_PROTOCOL_VERSION = 1 as const;
 export type JsonValue = null | boolean | number | string | readonly JsonValue[] | { readonly [key: string]: JsonValue };
@@ -104,7 +105,9 @@ export type WireQueueChange =
   | { readonly type: 'queue_settled'; readonly turnId: string; readonly outcome: 'completed' | 'cancelled' | 'failed' | 'interrupted'; readonly preservePendingSteers?: boolean }
   | { readonly type: 'queue_resumed' }
   | { readonly type: 'queue_recovered' };
-export type WireTerminal = { readonly finalText?: string | null; readonly outcome: 'completed' | 'cancelled' | 'failed' | 'interrupted'; readonly error?: WireError; readonly terminalCause?: string; readonly notice?: string };
+/** Exact accepted public terminal evidence from the root audit; no provider history or private items. */
+export type WireFinalWindow = DirectFinalWindow;
+export type WireTerminal = { readonly finalText?: string | null; readonly outcome: 'completed' | 'cancelled' | 'failed' | 'interrupted'; readonly error?: WireError; readonly terminalCause?: string; readonly notice?: string; readonly finalWindow?: WireFinalWindow };
 /** Public budget evidence, copied from accepted native observations, not a cost quote. */
 export type WireAnswerProvenance = { readonly source: 'user' | 'policy' | 'system'; readonly automaticApproval?: boolean };
 export type WireBudgetEvidence =

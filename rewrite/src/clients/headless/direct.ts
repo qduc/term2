@@ -19,6 +19,14 @@ import type {
   WireTask,
 } from '../../protocol/direct-wire.js';
 import { interactionLine, rejectionLine, retryLine, toolStartLine } from './format.js';
+import {
+  legacyCommandMessages,
+  legacyFinalResponse,
+  legacyReasoningDelta,
+  legacyRequestCostUpdate,
+  legacyTextDelta,
+  legacyToolCallStreamingDelta,
+} from '../../protocol/direct-json.js';
 import type {
   DirectHeadlessOptions,
   DirectHeadlessOutcome,
@@ -140,6 +148,7 @@ export async function runDirectHeadless(
   const requestId = options.requestId ?? `req_${randomUUID()}`;
   const reportedErrors = new Set<string>();
   const answered = new Set<string>();
+  const emittedCommandMessageIds = new Set<string>();
   let targetTurnId: string | null = null;
   let lastTurnId: string | null = null;
   let finalText = '';
@@ -154,13 +163,14 @@ export async function runDirectHeadless(
   let cancelSent = false;
   let abortedBeforeStart = false;
 
-  const json = (record: Readonly<Record<string, unknown>>): void => {
+  const json = (record: unknown): void => {
     io.stdout.write(`${JSON.stringify(record)}\n`);
   };
+  if (output === 'json') json({ type: 'session_start', ...(options.profileMetadata ?? {}) });
 
   const errorText = (message: string, code?: string): void => {
     if (output === 'json') {
-      json({ type: 'error', error: message, ...(code === undefined ? {} : { code }) });
+      json({ type: 'error', message, error: message, ...(code === undefined ? {} : { code }) });
       return;
     }
     if (reportedErrors.has(message)) return;
@@ -225,17 +235,10 @@ export async function runDirectHeadless(
     return result('error', 1);
   };
 
-  // The old --json schema is a ConversationEvent read model, not the wire event
-  // stream. Protocol exposes delta-only text/reasoning, live argument, request
-  // cost and source command slices, but its explicit final-window capability is
-  // false and an authoritative final/turn-item window is absent. Do not present
-  // a partial stream as legacy parity.
-  if (output === 'json') {
-    errorText(
-      '--json output requires an authoritative final/turn-item window; the protocol final-window capability is explicitly unavailable, and delta/cost/command slices alone are not the legacy schema.',
-    );
-    return result('error', 1);
-  }
+  // Old --json records are emitted only from exact native/public data. The
+  // authoritative terminal record comes from the accepted final window; if a
+  // terminal has no such window (old/recovered state), fail explicitly instead
+  // of presenting a partial final/stream as legacy parity.
 
   const onAbort = (): void => {
     if (background !== null) {
@@ -589,9 +592,29 @@ export async function runDirectHeadless(
           );
           streamedText += event.payload.delta;
           if (output === 'plain') io.stdout.write(event.payload.delta);
+          else json(legacyTextDelta(event));
           break;
         case 'reasoning_delta':
-          if (forTurn && options.showReasoning === true) io.stderr.write(event.payload.delta);
+          if (!forTurn) break;
+          if (output === 'json') json(legacyReasoningDelta(event));
+          else if (options.showReasoning === true) io.stderr.write(event.payload.delta);
+          break;
+        case 'tool_call_streaming_delta':
+          if (forTurn && output === 'json') json(legacyToolCallStreamingDelta(event));
+          break;
+        case 'request_cost_recorded':
+          if (
+            output === 'json' &&
+            (event.payload.turnId === targetTurnId || event.payload.rootTurnId === targetTurnId)
+          )
+            json(legacyRequestCostUpdate(event));
+          break;
+        case 'tool_finished':
+          if (!forTurn || output !== 'json') break;
+          for (const message of legacyCommandMessages(event)) {
+            emittedCommandMessageIds.add(message.message.id);
+            json(message);
+          }
           break;
         case 'message': {
           if (!forTurn) break;
@@ -627,6 +650,21 @@ export async function runDirectHeadless(
           break;
         case 'turn_ended': {
           if (!forTurn) break;
+          if (output === 'json') {
+            const window = event.payload.finalWindow;
+            if (window === undefined) {
+              json({
+                type: 'error',
+                code: 'legacy_final_window_unavailable',
+                message: 'Accepted terminal has no final window; refusing to emit a partial legacy --json final.',
+                error: 'Accepted terminal has no final window; refusing to emit a partial legacy --json final.',
+              });
+              return result('error', 1);
+            }
+            const finalRecord = legacyFinalResponse(window, emittedCommandMessageIds);
+            json(finalRecord);
+            if (event.payload.outcome === 'completed') completedText = finalRecord.finalText;
+          }
           lastTurnId = targetTurnId;
           if (targetTurnId !== null) endedTurns.add(targetTurnId);
           const outcome = event.payload.outcome;
@@ -680,7 +718,7 @@ export async function runDirectHeadless(
 
 function reportEventError(reported: Set<string>, io: HeadlessIo, message: string, output: 'plain' | 'json'): void {
   if (output === 'json') {
-    io.stdout.write(`${JSON.stringify({ type: 'error', error: message })}\n`);
+    io.stdout.write(`${JSON.stringify({ type: 'error', message, error: message })}\n`);
     return;
   }
   if (reported.has(message)) return;

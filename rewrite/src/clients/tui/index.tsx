@@ -96,6 +96,7 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
   const theme = useTheme();
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const composerActive = !busy && !connectionError && !interactionActive && !taskOpen && !budgetOpen && !rewindTargets;
   const pending = useRef(false);
   const answerOwners = useRef<readonly string[] | null>(null);
   const queueOwners = useRef<readonly string[] | null>(null);
@@ -354,7 +355,7 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
         cursorOverride={editor.cursorOverride}
         width={Math.max(1, columns - 4)}
         maxHeight={Math.max(1, rows - 8)}
-        isActive={!busy && !connectionError && !interactionActive && !taskOpen && !budgetOpen && !rewindTargets}
+        isActive={composerActive}
         images={images}
         onImagesChange={setImages}
         enableImagePaste
@@ -362,6 +363,6 @@ function TuiSession({ connection, integration, retainedSnapshot, onSnapshot, onE
         ignoreInput={(input, key) => key.pageUp || key.pageDown || (key.ctrl && (key.upArrow || key.downArrow || input === 'g' || input === 'b')) || (Boolean(state.activeTurnId) && key.meta && key.return)}
       />
     </InputFrame>
-    <Hints hints={[["Enter", state.activeTurnId ? "steer" : "send"], ["Alt+Enter", "follow-up"], ["↑/↓", "history"], ["PgUp/PgDn", "scroll"], ["Ctrl+G", "approvals"], ["Ctrl+B", "budget"], ["/tasks", "manage tasks"], ["/", "commands"], ["/cancel", "stop"]]} />
+    {composerActive ? <Hints hints={[["Enter", state.activeTurnId ? "steer" : "send"], ["Alt+Enter", "follow-up"], ["↑/↓", "history"], ["PgUp/PgDn", "scroll"], ["Ctrl+G", "approvals"], ["Ctrl+B", "budget"], ["/tasks", "manage tasks"], ["/", "commands"], ["/cancel", "stop"]]} /> : null}
   </Box>;
 }

@@ -19,12 +19,13 @@
 import { closeSync, fsyncSync, ftruncateSync, openSync, readFileSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { LogPayloads } from './log-payloads.js';
 import { isKnownDirectFactType, validateFact } from './log-facts.js';
 import { LOG_FORMAT_VERSION, type Fact, type FactLine } from './facts.js';
 
 export interface ConversationLog {
   readonly path: string;
-  /** Exact serialized entries, returned only after the write and required fsync succeed. */
+  /** Hydrated accepted envelopes, returned only after the write and required fsync succeed. */
   append(facts: readonly Fact[]): readonly FactLine[];
   close(): void;
 }
@@ -52,7 +53,8 @@ function continuationSeq(afterSeq: number | undefined): number {
   return afterSeq;
 }
 
-function parseLog(data: Buffer, path: string, afterSeq = 0): ParsedLog {
+function parseLog(data: Buffer, path: string, afterSeq = 0, prefix: readonly FactLine[] = []): ParsedLog {
+  const payloads = new LogPayloads(prefix);
   if (data.length === 0) return { entries: [], lastSeq: afterSeq, complete: 0 };
 
   const complete = data.lastIndexOf(NEWLINE) + 1;
@@ -116,11 +118,13 @@ function parseLog(data: Buffer, path: string, afterSeq = 0): ParsedLog {
     }
 
     try {
+      payloads.decode(seq, fact as Fact, record['refs']);
       validateFact(fact as Record<string, unknown>, where);
     } catch (error) {
       throw new Error(`${where}: invalid ${type}: ${errorMessage(error)}`, { cause: error });
     }
-    entries.push(entry as FactLine);
+    payloads.accept(seq, fact as Fact);
+    entries.push({ v: LOG_FORMAT_VERSION, seq, at: record['at'], fact: fact as Fact });
     lastSeq = seq;
   }
 
@@ -131,7 +135,14 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function createConversationLog(path: string, fd: number, firstSeq: number, tornFrom?: number): ConversationLog {
+function createConversationLog(
+  path: string,
+  fd: number,
+  firstSeq: number,
+  prefix: readonly FactLine[] = [],
+  tornFrom?: number,
+): ConversationLog {
+  const payloads = new LogPayloads(prefix);
   let sequence = firstSeq;
   let handle: number | null = fd;
   let dead = false;
@@ -152,20 +163,26 @@ function createConversationLog(path: string, fd: number, firstSeq: number, tornF
       const fd = handle;
 
       try {
+        const entries: FactLine[] = [];
         const lines = facts.map((fact) => {
+          // Normalize once, honoring JSON/toJSON just as the old writer did.
+          // Projections must never re-enter the durable vocabulary.
+          const normalized = JSON.parse(JSON.stringify(fact)) as Fact;
+          if (normalized.type === 'turn_ended') delete (normalized as { finalWindow?: unknown }).finalWindow;
+          if (normalized.type === 'branch_event' && normalized.fact.type === 'turn_ended')
+            delete (normalized.fact as { finalWindow?: unknown }).finalWindow;
           const line: FactLine = {
             v: LOG_FORMAT_VERSION,
             seq: sequence,
             at: new Date().toISOString(),
-            fact,
+            fact: normalized,
           };
+          const compact = payloads.encode(sequence, normalized);
+          payloads.accept(sequence, normalized);
           sequence += 1;
-          return `${JSON.stringify(line)}\n`;
+          entries.push(line);
+          return `${JSON.stringify({ ...line, ...compact })}\n`;
         });
-        // Decode the actual bytes once: JSON serialization may omit undefined
-        // fields or invoke provider payload toJSON methods. Observers must receive
-        // the persisted values, not mutable caller objects or regenerated clocks.
-        const entries = lines.map((line) => JSON.parse(line) as FactLine);
         const buffer = Buffer.from(lines.join(''), 'utf8');
         if (pendingTruncate !== undefined) {
           ftruncateSync(fd, pendingTruncate);
@@ -208,25 +225,33 @@ function createConversationLog(path: string, fd: number, firstSeq: number, tornF
 export type LogContinuationOptions = {
   /** Predecessor's last accepted seq. The next line must be this value plus one. Default 0. */
   readonly afterSeq?: number;
+  /** Accepted predecessor envelopes, required when payload references cross rotation. */
+  readonly prefix?: readonly FactLine[];
 };
 
 /** Opens `<dir>/<id>.jsonl` with 'wx'. The directory refusal (D9) happens in app before this. */
 export function createLog(dir: string, id: string, options: LogContinuationOptions = {}): ConversationLog {
   const path = join(dir, `${id}.jsonl`);
-  return createConversationLog(path, openSync(path, 'wx'), continuationSeq(options.afterSeq) + 1);
+  return createConversationLog(path, openSync(path, 'wx'), continuationSeq(options.afterSeq) + 1, options.prefix);
 }
 
 /** Changes no bytes: continues the seq, and leaves a torn final line for the next append to remove. */
 export function openLog(path: string, options: LogContinuationOptions = {}): ConversationLog {
   const data = readFileSync(path);
-  const { lastSeq, complete } = parseLog(data, path, continuationSeq(options.afterSeq));
+  const { lastSeq, complete, entries } = parseLog(data, path, continuationSeq(options.afterSeq), options.prefix);
   // Append mode: after the truncate, writes land at the new end without a position.
-  return createConversationLog(path, openSync(path, 'a'), lastSeq + 1, complete !== data.length ? complete : undefined);
+  return createConversationLog(
+    path,
+    openSync(path, 'a'),
+    lastSeq + 1,
+    [...(options.prefix ?? []), ...entries],
+    complete !== data.length ? complete : undefined,
+  );
 }
 
-/** Pure read of the exact accepted envelopes; ignores only an unterminated final line. */
+/** Pure read of accepted envelopes with payload references hydrated; ignores only a torn final line. */
 export function readFactLines(path: string, options: LogContinuationOptions = {}): readonly FactLine[] {
-  return parseLog(readFileSync(path), path, continuationSeq(options.afterSeq)).entries;
+  return parseLog(readFileSync(path), path, continuationSeq(options.afterSeq), options.prefix).entries;
 }
 
 /** Pure fact projection of the same validated entries; never writes. */

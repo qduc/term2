@@ -495,12 +495,11 @@ extra field that old consumers did not define.
 
 `DIRECT_LEGACY_JSON_FINAL_WINDOW_AVAILABLE` remains false as a declaration about
 the complete legacy ConversationEvent/private-history schema, not the bounded
-terminal window. Headless consumes the final window and exact live slices. If an
-older/recovered terminal has no stored window, `recoverDirectFinalWindow`
-projects one read-only from the accepted fact prefix only when that turn has a
-preceding `turn_started`; the projection carries `derivedFromAcceptedFacts` and
-headless adds `legacyDerived: true`. The original accepted fact is not rewritten
-or migrated. Without the prefix, headless emits
+terminal window. Headless consumes the final window and exact live slices.
+In log version 2, `recoverDirectFinalWindow` projects each root terminal window
+read-only from its accepted fact prefix when a preceding `turn_started` exists.
+This is current-format projection, not `derivedFromAcceptedFacts`/`legacyDerived`
+output, and does not rewrite the terminal. Without the prefix, headless emits
 `legacy_final_window_unavailable` and exits 1 rather than a partial final.
 
 Exact producer-backed live slices now include `tool_started` from `tool_called`
@@ -564,3 +563,43 @@ This native DTO addition does not implement shared-wire artifacts, server/browse
 serialization/parsing, external consumer migration, raw-stream retention or M6
 activation. Those owners must integrate the actual shape and keep the combined
 gate closed until required implementation and authorized verification finish.
+
+
+### Native log version 2: physical payload ownership
+
+`session/log.ts` is the only serialization/hydration boundary. Public `FactLine`
+values contain full facts; JSONL envelopes may additionally contain `refs` and
+`null` placeholders in their physical `fact`. `log-payloads.ts` resolves each
+reference from an accepted same-turn `(seq, path)` string, optionally selecting a
+string inside its parsed JSON (`jsonPath`), then applies a UTF-16 slice and literal
+prefix/suffix. Same-line references resolve in recorded order. Missing, forward,
+cross-turn or malformed sources/targets fail the conversation read. Other native
+versions are refused, not interpreted by a legacy fallback.
+
+This keeps `tool_finished` canonical and complete before a later provider item:
+structured adopted results can become `provider_input`, not `tool_result`, and
+readers still get the original output. Different display framing is retained,
+not inferred from a tool name. Sharing is within the accepted logical lineage;
+rotation readers/writers supply predecessor envelopes via `LogContinuationOptions.prefix`.
+`readDirectLogLineage` and `createDirectRollingLog` own this plumbing. An isolated
+successor file with references cannot be decoded without its predecessor.
+
+`turn_ended` stores only terminal metadata; `recoverDirectFinalWindow` projects
+from the accepted prefix across history replacement and physical rotation.
+`text_delta` and full `history_replaced` snapshots remain literal exceptions.
+Large-string sharing uses at least 200 UTF-16 code units. References may cost more
+than a short literal near that boundary; canonical body ownership takes priority
+over per-field byte savings. This is not cross-conversation deduplication.
+The `native-log.single-source` generated property checks real log round-trips,
+result-first reopen, continuation segments, structured results, display variants,
+and unique body storage; it is not a substitute for process-kill/CLI controls.
+
+
+Storage failure lesson: the old terminal snapshot repeated both public items and
+its derived final record, while tool completion, display and provider items also
+repeated output bodies. Measuring a real tool/resume run exposed the copies even
+though replay itself rendered once. The version-2 boundary removes terminal
+snapshots and shares payloads before consumers project them. Equality-only and
+prefix/suffix-only matching miss structured-output/display framing at both ends;
+the generated property found that case. Its oracle must decode nested JSON once
+before counting string bodies, or escaped structured output gives false failures.

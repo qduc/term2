@@ -26,7 +26,7 @@ import type { ToolResult } from '../tools/index.js';
 import type { DirectBinding, DirectOrigin } from './facade-types.js';
 import type { Item, ModelError, ModelRef, ReasoningEffort, Usage } from '../model/index.js';
 
-export const LOG_FORMAT_VERSION = 1;
+export const LOG_FORMAT_VERSION = 2;
 
 export type SessionStartedFact = {
   readonly type: 'session_started';
@@ -129,7 +129,7 @@ export type DirectTurnFact =
   | {
       readonly type: 'turn_ended';
       readonly turnId: TurnId;
-      /** Accepted root public evidence; absent on old/recovered or nested terminals. */
+      /** Read-side public projection only. Never serialized in the version-2 log. */
       readonly finalWindow?: import('./direct-final.js').DirectFinalWindow;
       readonly outcome: TurnOutcomeName;
       readonly error?: ModelError;

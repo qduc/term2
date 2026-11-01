@@ -30,7 +30,6 @@ import {
 import { parseDirectConfigurationFact, type DirectPreparedConfiguration } from './direct-configuration.js';
 import { directRolloverAtBoundary } from './direct-rollover.js';
 import { parseDirectSessionRotation } from './direct-session-rotation.js';
-import { captureDirectFinalWindow } from './direct-final.js';
 import { captureDirectCommandHistory } from './direct-history-capture.js';
 import { listDirectRewindTargets, planDirectHistoryCommand } from './direct-command-history.js';
 import {
@@ -461,7 +460,7 @@ function conversation(
         // results. Its interrupted terminal is replaced by the actual outcome.
         const repairs = liveReplay().recoveryFacts.filter((fact) => fact.type !== 'turn_ended');
         const ended = terminalFact(turnId, outcome);
-        commit([...repairs, { ...ended, finalWindow: captureDirectFinalWindow([...facts, ...repairs], ended) }]);
+        commit([...repairs, ended]);
       }
       terminal = logFailure ? { kind: 'failed', error: logFailure } : outcome;
     };
@@ -770,7 +769,7 @@ function conversation(
     } catch (error) {
       const failure = modelError(error);
       const ended = terminalFact(turnId, { kind: 'failed', error: failure });
-      commit([{ ...ended, finalWindow: captureDirectFinalWindow(facts, ended) }]);
+      commit([ended]);
       return { turnId, turn: failedTurn(logFailure ?? failure) };
     }
   };
@@ -943,9 +942,11 @@ function conversation(
       // Only accepted closure disproves a question notice. In particular, a
       // recovered interrupted task has no live continuation to answer. Preserve
       // other notices and unknown questions, and keep historical deliveries valid.
-      const closedQuestions = new Set(facts.flatMap((fact) =>
-        fact.type === 'task_question_closed' ? [`question:${fact.taskId}:${fact.messageId}`] : [],
-      ));
+      const closedQuestions = new Set(
+        facts.flatMap((fact) =>
+          fact.type === 'task_question_closed' ? [`question:${fact.taskId}:${fact.messageId}`] : [],
+        ),
+      );
       const notices = pendingDirectNotifications(notifications).filter(
         (notice) => notice.kind !== 'question' || !closedQuestions.has(notice.id),
       );

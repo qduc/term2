@@ -79,8 +79,8 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
 
   // Replayed entries get positions in this runtime's projection order; these
   // are not historical ordinals from the process that originally wrote them.
-  // A historical root terminal without a final window is projected from its
-  // accepted facts, read-only, and marked derived; the log is never migrated.
+  // Every root terminal window is a read-only projection from its accepted
+  // prefix, including audit facts before history replacement/rotation.
   const acceptedFacts: Fact[] = [];
   for (const entry of options.entries) {
     let fact = entry.fact;

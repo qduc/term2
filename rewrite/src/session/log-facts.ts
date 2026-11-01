@@ -9,149 +9,9 @@ import { isDirectContextFactType, parseDirectContextFact } from './direct-contex
 import { isDirectCommandFactType, parseDirectCommandFact } from './direct-command-receipts.js';
 import { isDirectNotificationFactType, parseDirectNotificationFact } from './direct-notifications.js';
 import { parseDirectConfigurationFact } from './direct-configuration.js';
-import { directPublicCommandMessages } from './direct-final.js';
 
 /** Same identity the store requires before it will write session_started.rolloverFrom. */
 const directSessionId = /^conv_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-
-/** Strict public terminal DTO. The original fact is kept; malformed records are rejected, not dropped. */
-function validateFinalWindow(value: unknown, fact: Record<string, unknown>, fail: (field: string) => never): void {
-  const finalWindow = objectRecord(value, fail, 'finalWindow');
-  const keys = ['version', 'turnId', 'items', 'record', 'liveEligibleCommandMessageIds', 'coverage'];
-  if (Object.keys(finalWindow).some((key) => !keys.includes(key)) || keys.some((key) => !(key in finalWindow)))
-    fail('finalWindow');
-  if (finalWindow['version'] !== 'public-turn-v1') fail('finalWindow.version');
-  if (
-    typeof finalWindow['turnId'] !== 'string' ||
-    finalWindow['turnId'] === '' ||
-    finalWindow['turnId'] !== fact['turnId']
-  )
-    fail('finalWindow.turnId');
-  if (!Array.isArray(finalWindow['items'])) fail('finalWindow.items');
-  const items = finalWindow['items'] as unknown[];
-  const publicItems: unknown[] = [];
-  for (const entry of items) {
-    const record = objectRecord(entry, fail, 'finalWindow.items');
-    const entryKeys = Object.keys(record);
-    if (entryKeys.some((key) => !['id', 'modelStep', 'evidence', 'item'].includes(key))) fail('finalWindow.items');
-    if (!('evidence' in record) || !('item' in record)) fail('finalWindow.items');
-    if ('modelStep' in record) {
-      const step = record['modelStep'];
-      if (typeof step !== 'number' || !Number.isSafeInteger(step) || step < 1) fail('finalWindow.items.modelStep');
-    }
-    const item = objectRecord(record['item'], fail, 'finalWindow.items.item');
-    if (record['evidence'] === 'text_delta') {
-      if ('id' in record) fail('finalWindow.items.id');
-      if (item['type'] !== 'assistant_text') fail('finalWindow.items.item');
-    } else if (record['evidence'] === 'item') {
-      if (typeof record['id'] !== 'string' || record['id'] === '') fail('finalWindow.items.id');
-    } else fail('finalWindow.items.evidence');
-    validatePublicItem(item, fail);
-    publicItems.push(record['item']);
-  }
-  const body = objectRecord(finalWindow['record'], fail, 'finalWindow.record');
-  const required = ['type', 'finalText', 'turnItems', 'commandMessages', 'costRecords'];
-  const optional = ['reasoningText', 'usage', 'terminalCause'];
-  if (
-    Object.keys(body).some((key) => !required.includes(key) && !optional.includes(key)) ||
-    required.some((key) => !(key in body))
-  )
-    fail('finalWindow.record');
-  if (body['type'] !== 'final' || typeof body['finalText'] !== 'string') fail('finalWindow.record');
-  if ('reasoningText' in body && typeof body['reasoningText'] !== 'string') fail('finalWindow.record.reasoningText');
-  const cause = 'terminalCause' in fact ? fact['terminalCause'] : undefined;
-  if (('terminalCause' in body ? body['terminalCause'] : undefined) !== cause) fail('finalWindow.record.terminalCause');
-  if (!Array.isArray(body['turnItems']) || body['turnItems'].length !== publicItems.length)
-    fail('finalWindow.record.turnItems');
-  for (let index = 0; index < publicItems.length; index += 1) {
-    if (JSON.stringify(body['turnItems'][index]) !== JSON.stringify(publicItems[index]))
-      fail('finalWindow.record.turnItems');
-  }
-  if ('usage' in body) validateFinalUsage(body['usage'], fail);
-  if (!Array.isArray(body['commandMessages'])) fail('finalWindow.record.commandMessages');
-  const messages = body['commandMessages'] as unknown[];
-  if (directPublicCommandMessages(messages).length !== messages.length) fail('finalWindow.record.commandMessages');
-  const commandIds = new Set<string>();
-  for (const message of messages) {
-    const id = objectRecord(message, fail, 'finalWindow.record.commandMessages')['id'];
-    if (typeof id !== 'string' || id === '' || commandIds.has(id)) fail('finalWindow.record.commandMessages');
-    commandIds.add(id);
-  }
-  if (!Array.isArray(body['costRecords'])) fail('finalWindow.record.costRecords');
-  for (const record of body['costRecords'] as unknown[]) validateRequestCost(record, 'finalWindow.record.costRecords');
-  if (!Array.isArray(finalWindow['liveEligibleCommandMessageIds'])) fail('finalWindow.liveEligibleCommandMessageIds');
-  const seen = new Set<string>();
-  for (const id of finalWindow['liveEligibleCommandMessageIds'] as unknown[]) {
-    if (typeof id !== 'string' || id === '' || seen.has(id) || !commandIds.has(id))
-      fail('finalWindow.liveEligibleCommandMessageIds');
-    seen.add(id);
-  }
-  const coverage = objectRecord(finalWindow['coverage'], fail, 'finalWindow.coverage');
-  const coverageKeys = ['items', 'reasoning', 'usage', 'commands', 'costs'];
-  if (Object.keys(coverage).length !== coverageKeys.length || coverageKeys.some((key) => !(key in coverage)))
-    fail('finalWindow.coverage');
-  if (coverage['items'] !== 'complete_public_items' && coverage['items'] !== 'private_or_unrepresentable_items_omitted')
-    fail('finalWindow.coverage.items');
-  if (coverage['reasoning'] !== 'accepted_summaries') fail('finalWindow.coverage.reasoning');
-  if (coverage['usage'] !== 'accepted_root_observations') fail('finalWindow.coverage.usage');
-  if (coverage['commands'] !== 'source_displays_only') fail('finalWindow.coverage.commands');
-  if (coverage['costs'] !== 'accepted_tree_at_terminal') fail('finalWindow.coverage.costs');
-}
-
-function validateFinalUsage(value: unknown, fail: (field: string) => never): void {
-  const usage = objectRecord(value, fail, 'finalWindow.record.usage');
-  const required = ['prompt_tokens', 'completion_tokens', 'total_tokens'];
-  const optional = ['reasoning_tokens', 'cache_read_tokens'];
-  if (
-    Object.keys(usage).some((key) => !required.includes(key) && !optional.includes(key)) ||
-    required.some((key) => !(key in usage))
-  )
-    fail('finalWindow.record.usage');
-  for (const field of [...required, ...optional]) {
-    if (!(field in usage)) continue;
-    const number = usage[field];
-    if (typeof number !== 'number' || !Number.isFinite(number) || number < 0) fail(`finalWindow.record.usage.${field}`);
-  }
-}
-
-function validatePublicItem(item: Record<string, unknown>, fail: (field: string) => never): void {
-  const exact = (required: readonly string[], optional: readonly string[] = []): void => {
-    const keys = Object.keys(item);
-    if (
-      keys.some((key) => !required.includes(key) && !optional.includes(key)) ||
-      required.some((key) => !(key in item))
-    )
-      fail('finalWindow.items.item');
-  };
-  const text = (field: string): void => {
-    if (typeof item[field] !== 'string' || (field !== 'text' && item[field] === '')) fail('finalWindow.items.item');
-  };
-  switch (item['type']) {
-    case 'assistant_text':
-      exact(['type', 'text']);
-      text('text');
-      break;
-    case 'reasoning':
-      exact(['type', 'text'], ['providerItemId']);
-      text('text');
-      if ('providerItemId' in item) text('providerItemId');
-      break;
-    case 'tool_call':
-      exact(['type', 'callId', 'toolName', 'arguments']);
-      text('callId');
-      text('toolName');
-      break;
-    case 'tool_result':
-      exact(['type', 'callId', 'toolName', 'status', 'output']);
-      text('callId');
-      text('toolName');
-      if (!['completed', 'failed', 'aborted', 'unknown'].includes(item['status'] as string))
-        fail('finalWindow.items.item');
-      break;
-    default:
-      fail('finalWindow.items.item');
-  }
-}
 
 function objectRecord(value: unknown, fail: (field: string) => never, field: string): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) fail(field);
@@ -218,8 +78,8 @@ export function isKnownDirectFactType(type: string): boolean {
   );
 }
 
-/** Validate additive direct facts without changing the v1 envelope or M1 payload rules. */
-export function validateFact(fact: Record<string, unknown>, where: string, scope: 'root' | 'branch' = 'root'): void {
+/** Validate hydrated current-format facts; physical payload references are decoded first. */
+export function validateFact(fact: Record<string, unknown>, where: string): void {
   const type = String(fact['type']);
   if (isDirectQueueFactType(type)) {
     // The parser returns the original fact, so queue_settled.preservePendingSteers survives.
@@ -368,6 +228,7 @@ export function validateFact(fact: Record<string, unknown>, where: string, scope
       break;
     }
     case 'item': {
+      validateHistory([fact['item']], where);
       const item = object(fact['item'], 'item');
       if (item['type'] === 'tool_result' && 'stopAfterExecution' in item) fail('item.stopAfterExecution');
       if ('executionId' in fact) {
@@ -504,7 +365,7 @@ export function validateFact(fact: Record<string, unknown>, where: string, scope
       validateBudgetEvidence(fact['evidence'], where);
       break;
     case 'turn_ended':
-      if (scope === 'branch' && 'finalWindow' in fact) fail('finalWindow');
+      if ('finalWindow' in fact) fail('finalWindow');
       if (!['completed', 'cancelled', 'failed', 'interrupted'].includes(fact['outcome'] as string)) fail('outcome');
       if (
         'terminalCause' in fact &&
@@ -514,7 +375,6 @@ export function validateFact(fact: Record<string, unknown>, where: string, scope
       )
         fail('terminalCause');
       if ('notice' in fact && typeof fact['notice'] !== 'string') fail('notice');
-      if ('finalWindow' in fact) validateFinalWindow(fact['finalWindow'], fact, fail);
       break;
     case 'branch_started':
       optionalText(fact, 'parentTurnId');
@@ -547,7 +407,7 @@ export function validateFact(fact: Record<string, unknown>, where: string, scope
       )
         fail('fact.type');
       if (inner['type'] === 'history_replaced' && !inner['turnId']) fail('fact.turnId');
-      validateFact(inner, `${where}.branch`, 'branch');
+      validateFact(inner, `${where}.branch`);
       break;
     }
     case 'task_started': {

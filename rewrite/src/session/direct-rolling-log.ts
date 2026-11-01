@@ -131,7 +131,7 @@ export function readDirectLogLineage(
         throw new Error(`direct log ${physicalId} does not continue the accepted predecessor boundary`);
     }
     const path = directLogPath(directory, physicalId);
-    const accepted = readFactLines(path, { afterSeq });
+    const accepted = readFactLines(path, { afterSeq, prefix: entries });
     if (!accepted.length) throw new Error(`direct log ${physicalId} has no accepted first line`);
     if (accepted.slice(1).some((line) => line.fact.type === 'session_rotated' || line.fact.type === 'session_started'))
       throw new Error(`direct log ${physicalId} contains an interior physical header`);
@@ -192,8 +192,12 @@ export function createDirectRollingLog(
   const segment = lineage?.segments.at(-1);
   if (segment && lineage!.entries.at(-1)?.seq !== segment.throughSeq)
     throw new Error('cannot acquire a writer from a historical lineage cut');
+  const acceptedEntries = [...(lineage?.entries ?? [])];
   let current = segment
-    ? openLog(segment.path, { afterSeq: segment.afterSeq })
+    ? openLog(segment.path, {
+        afterSeq: segment.afterSeq,
+        prefix: acceptedEntries.filter((entry) => entry.seq <= segment.afterSeq),
+      })
     : createLog(directory, logicalSessionId);
   let head: DirectLogBoundary = {
     sessionId: segment?.sessionId ?? logicalSessionId,
@@ -216,6 +220,7 @@ export function createDirectRollingLog(
           throw new Error('physical rotation must be the first fact of its acceptance batch');
         if (first.type !== 'session_rotated') {
           const accepted = current.append(facts);
+          acceptedEntries.push(...accepted);
           head = { ...head, seq: accepted.at(-1)!.seq };
           return accepted;
         }
@@ -229,8 +234,9 @@ export function createDirectRollingLog(
         )
           throw new Error('rotation does not match the current physical acceptance boundary');
         directLogNames(directory);
-        successor = createLog(directory, rotation.sessionId, { afterSeq: head.seq });
+        successor = createLog(directory, rotation.sessionId, { afterSeq: head.seq, prefix: acceptedEntries });
         const accepted = successor.append(facts);
+        acceptedEntries.push(...accepted);
         const predecessor = current;
         current = successor;
         successor = undefined;

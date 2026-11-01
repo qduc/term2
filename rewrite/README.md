@@ -155,6 +155,11 @@ old engine. It stores native conversation logs in its own directory and does
 not read old conversations. M1 is text-only: a model tool call fails the turn.
 `rewrite/bench/m1-direct.mjs` covers it.
 
+For direct HTTP session configuration, the BFF's `session_update` assertion binds
+only `sessionId`, not `workspaceId`; session lookup is separate, and the gateway
+authorizes the session owner. An empty `{}` POST is read-only discovery, not a
+keyed mutation. Discovery does not activate the v2 hydration or mutation gates.
+
 ```sh
 node rewrite/parity/inventory.mjs
 node rewrite/parity/run.mjs check --cli dist/cli.js          # old CLI: must stay green

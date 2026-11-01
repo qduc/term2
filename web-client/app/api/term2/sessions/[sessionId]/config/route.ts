@@ -44,7 +44,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ ses
     const response = await term2GatewayClient.request({
       userId: LOCAL_OWNER_USER_ID,
       purpose: 'session_update', method: 'POST', rpcPath: rpc.sessionConfig(sessionId),
-      workspaceId: resolved.workspaceId, sessionId, body,
+      // session_update assertions bind only the session; the gateway checks its owner.
+      sessionId, body,
       query: `?format=${TERM2_WIRE_PROTOCOL}`,
       preserveConfigureResult: !discovery,
     });

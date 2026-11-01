@@ -34,9 +34,11 @@ import { runPolicy } from './direct-application-policy.js';
 import { createDirectVerificationOperations } from './direct-verifier.js';
 import { withGenerationGuard } from './run.js';
 import { createAppSettings } from './settings.js';
+import { createNativeSearchTool } from './native-search.js';
 import type { AgentSurface, ProfileSelection, ToolSurfaceOptions } from './tool-contract.js';
 
 export type DirectRuntimeOptions = {
+  readonly conversationsDir?: string;
   readonly selection: ProfileSelection;
   readonly profileExplicit?: boolean;
   readonly canRun: (workspace: DirectRuntimeContext['workspace']) => boolean;
@@ -327,6 +329,9 @@ export function createDirectRuntimes(
         // one real guidance/global context here instead of appending a duplicate.
         const capabilities: DirectContextCapabilities = {
           ...sessionMemory,
+          ...(options.conversationsDir && context.workspace.target === 'local'
+            ? { sessionSearch: createNativeSearchTool(options.conversationsDir, context.workspace, context.binding) }
+            : {}),
           ...(hooks ? { hooks } : {}),
           ...(verification ? { verification: { operations: verification } } : {}),
           verificationEnabled: () => settings.get('agent.completionVerification') !== false,

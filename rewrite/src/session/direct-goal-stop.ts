@@ -44,6 +44,8 @@ function finalCheck(
 ): { check?: DirectGoalCheck; problem: string } {
   let lastCall = -1;
   for (let index = history.length - 1; index >= 0; index--) {
+    // Fresh accepted input (including a background result) needs its own check.
+    if (history[index]!.item.type === 'user_message') return { problem: 'missing_check' };
     if (history[index]!.item.type === 'tool_call') {
       lastCall = index;
       break;
@@ -140,8 +142,6 @@ export function createDirectGoalStopPolicy(deps: {
   readonly commitGoal: DirectGoalWrite;
   readonly commitReminder: (fact: DirectGoalReminderFact) => boolean | Promise<boolean>;
   readonly verificationEnabled: () => boolean;
-  /** Match unattended CLI behavior: verifier unavailable is a visible non-completion notice, not a completed goal. */
-  readonly unattended?: boolean;
   readonly verify?: (
     goal: DirectGoalState,
     check: DirectGoalCheck,
@@ -151,12 +151,8 @@ export function createDirectGoalStopPolicy(deps: {
   return async (input, signal) => {
     const state = deps.readGoal();
     const decision = decideDirectGoalStop(state, input);
-    const blocked = (reason: string, unavailable = false): DirectNormalStop => {
-      if (unavailable && deps.unattended && !signal.aborted)
-        return {
-          action: 'stop',
-          notice: `independent verification not performed: ${reason}. The durable goal remains active.`,
-        };
+    // Bare completion stays blocked when verification is unavailable, even headless.
+    const blocked = (reason: string): DirectNormalStop => {
       return {
         action: 'stop',
         terminalCause: 'completion_verification_blocked',
@@ -175,11 +171,11 @@ export function createDirectGoalStopPolicy(deps: {
         return { action: 'continue', reminder: decision.reminder };
       }
       if (deps.verificationEnabled()) {
-        if (!deps.verify) return blocked('Independent verifier unavailable', true);
+        if (!deps.verify) return blocked('Independent verifier unavailable');
         const verdict = await deps.verify(state, decision.check, signal);
         if (signal.aborted || deps.readGoal().generation !== state.generation)
           return blocked('Goal changed or task cancelled during verification');
-        if (verdict.action === 'blocked') return blocked(verdict.reason, verdict.unavailable);
+        if (verdict.action === 'blocked') return blocked(verdict.reason);
         if (verdict.action === 'repair')
           return {
             action: 'continue',

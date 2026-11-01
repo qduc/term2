@@ -198,7 +198,9 @@ export function captureDirectFinalWindow(
       omitted = true;
   }
   const entries = [...items.values()];
-  const texts = entries.flatMap(({ item }) => (item.type === 'assistant_text' ? [item.text] : []));
+  const texts = entries.filter(({ item }) => item.type === 'assistant_text');
+  // finalText is the last textual response; earlier work remains in items/turnItems.
+  const finalStep = texts.at(-1)?.modelStep;
   const reasoning = entries.flatMap(({ item }) => (item.type === 'reasoning' ? [item.text] : []));
   return {
     version: 'public-turn-v1',
@@ -206,7 +208,11 @@ export function captureDirectFinalWindow(
     items: entries,
     record: {
       type: 'final',
-      finalText: texts.join('\n\n'),
+      finalText: texts
+        .flatMap(({ item, modelStep }) =>
+          modelStep === finalStep && item.type === 'assistant_text' ? [item.text] : [],
+        )
+        .join('\n\n'),
       turnItems: entries.map(({ item }) => item),
       ...(reasoning.length ? { reasoningText: reasoning.join('\n\n') } : {}),
       ...(usage

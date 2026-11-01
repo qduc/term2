@@ -95,6 +95,11 @@ conversation storage.
   `context_compaction_hard_fit`, `provider_context_overflow`, `context_paused`)
   and the accepted terminal causes `goal_check_unresolved` /
   `completion_verification_blocked` return 2 (`context_paused` / `blocked`).
+  Bare verification unavailability is blocked too, never a successful unattended
+  soft skip. Plain verification-blocked output retains the model answer and adds
+  the accepted host notice on stdout; unresolved-goal diagnostics use stderr.
+  JSON retains the accepted terminal cause and the final response text; earlier
+  responses remain in turnItems rather than being concatenated into finalText.
   A pending/opened run-budget check-in returns `budget_paused`/exit 2 with
   truthful terminal wording; headless never grants budget. The app must map `blocked`
   and `budget_paused` to exit 2.

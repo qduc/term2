@@ -699,7 +699,13 @@ export async function runDirectHeadless(
             return failBackground('Background work interrupted; unfinished work was cancelled.');
           }
           if (outcome !== 'cancelled' && terminalCause !== undefined && BLOCKED_TERMINAL_CAUSES.has(terminalCause)) {
-            if (event.payload.notice !== undefined) io.stderr.write(`${event.payload.notice}\n`);
+            if (event.payload.notice !== undefined) {
+              // Verification is part of the answer contract, not just a tool diagnostic.
+              // Keep the accepted model answer and render the host's notice separately.
+              if (output !== 'json' && terminalCause === 'completion_verification_blocked')
+                io.stdout.write(`\n${event.payload.notice}\n`);
+              else io.stderr.write(`${event.payload.notice}\n`);
+            }
             return result('blocked', 2);
           }
           if (outcome === 'completed') {

@@ -219,7 +219,6 @@ export function bindDirectCapabilities(options: {
         commitGoal: (generation, facts) => write(input.turnId, generation, facts),
         commitReminder: (fact) => write(input.turnId, options.read().goal.generation, [fact]),
         verificationEnabled: capabilities.verificationEnabled ?? (() => false),
-        unattended: capabilities.unattended,
         verify,
       });
       const goal = options.read().goal;
@@ -300,6 +299,8 @@ export function directAcceptedGoalWindow(facts: readonly Fact[]): readonly Direc
         stepOffset = Math.max(-1, ...window.map(({ modelStep }) => modelStep)) + 1;
       } else if (fact.type === 'turn_started' && !human) {
         stepOffset = Math.max(-1, ...window.map(({ modelStep }) => modelStep)) + 1;
+        // A delivered result invalidates an earlier check, not the human-window budgets.
+        window.push(...fact.input.map((item) => ({ item, modelStep: stepOffset })));
       } else {
         window = [];
         stepOffset = 0;

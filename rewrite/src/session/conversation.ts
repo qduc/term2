@@ -47,7 +47,7 @@ import type {
 } from './direct-command-types.js';
 import { parseDirectOrigin, isDirectHumanOrigin } from './direct-origin.js';
 import { DirectSubagents } from './direct-subagent.js';
-import { DirectContinuity, type DirectContinuityBinding } from '../engine/direct-recovery-continuity.js';
+import { DirectContinuity, type DirectContinuityBinding, type PreparedDirectRequest } from '../engine/direct-recovery-continuity.js';
 import { directPreviewConfiguration, directPreviewOccurrences } from './direct-preview.js';
 import { DirectRunBudgets } from './direct-run-budget.js';
 import { createDirectBranchDriver } from './direct-branches.js';
@@ -176,6 +176,7 @@ function conversation(
   let closed = false;
   let logFailure: ModelError | null = null;
 
+  const writerFailure = (): ModelError | null => logFailure;
   const poison = (error: unknown): void => {
     if (logFailure) return;
     logFailure = modelError(error);
@@ -381,7 +382,7 @@ function conversation(
           turnId,
         )
       )
-        return { ok: false, status: 'rollover_blocked', error: logFailure?.message ?? 'The handoff was not accepted.' };
+        return { ok: false, status: 'rollover_blocked', error: writerFailure()?.message ?? 'The handoff was not accepted.' };
       completionHeld = turnId;
       return { ok: true, status: 'rollover_requested', rolloverId: commandId };
     },
@@ -1132,9 +1133,9 @@ function conversation(
                   turnId,
                   input,
                   submission,
-                  ...(directPreviewConfiguration({ ...prepared.nextRequest, input })
+                  ...(directPreviewConfiguration(prepared.nextRequest)
                     ? {
-                        requestConfiguration: directPreviewConfiguration({ ...prepared.nextRequest, input }),
+                        requestConfiguration: directPreviewConfiguration(prepared.nextRequest),
                       }
                     : {}),
                 });
@@ -1247,7 +1248,7 @@ function conversation(
               };
             const state = liveReplay();
             const turnId = `turn-${nextTurnId++}` as TurnId;
-            const configuration = directPreviewConfiguration({ ...settings, input: [] });
+            const configuration = directPreviewConfiguration(settings);
             if (
               !commit([
                 {
@@ -1342,7 +1343,7 @@ function conversation(
               }),
             };
           const turnId = `turn-${nextTurnId++}` as TurnId;
-          const configuration = directPreviewConfiguration({ ...settings, input: [] });
+          const configuration = directPreviewConfiguration(settings);
           if (
             !commit([
               plan.fact,
@@ -1445,7 +1446,7 @@ function conversation(
         ...(request.providerOptions !== undefined ? { providerOptions: request.providerOptions } : {}),
       };
       const prepared = capabilities!.previewRequest(canonical);
-      let selected = { request: prepared, chained: false };
+      let selected: Omit<PreparedDirectRequest, 'ticket'> = { request: prepared, chained: false };
       if (continuity) {
         // Engine owns this read-only selector. Never call prepare here: even an
         // unchainable preview must not clear a checkpoint or increment a ticket.

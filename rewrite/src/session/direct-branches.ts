@@ -176,12 +176,13 @@ export function createDirectBranchDriver(options: {
       if (!terminal) throw new Error('Nested engine ended without accepted terminal');
       // Replay materializes canonical partial text as well as complete items.
       const produced = replay(local, { recoverQueue: false }).history.slice(request.items.length);
-      const outcome: NestedRunResult['outcome'] =
-        terminal.kind === 'interrupted' && terminal.terminalCause === 'budget_exhausted'
+      let outcome: NestedRunResult['outcome'];
+      if (terminal.kind === 'interrupted') {
+        const cause = terminal.terminalCause;
+        outcome = cause === 'budget_exhausted'
           ? { kind: 'budget_exhausted' }
-          : terminal.kind === 'interrupted'
-          ? { kind: 'interrupted', terminalCause: terminal.terminalCause }
-          : terminal;
+          : { kind: 'interrupted', ...(cause !== undefined ? { terminalCause: cause } : {}) };
+      } else outcome = terminal;
       // Accepted physical starts, including scripted leaves, are execution
       // evidence. Provider call names and offered declarations are not usage.
       const counts = new Map<string, number>();

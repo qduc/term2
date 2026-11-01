@@ -9,6 +9,8 @@ import { directRolloverFactSchema, type DirectRolloverFact } from './direct-roll
 import { directSessionRotationSchema, type DirectSessionRotationFact } from './direct-session-rotation.js';
 import type { Fact } from './facts.js';
 import type { Item } from '../model/index.js';
+import type { DirectQueueRecord } from './direct-queue-types.js';
+import { isDirectHumanOrigin } from './direct-origin.js';
 import {
   renderDurableGoalContext,
   MAX_GOAL_FIELD_LENGTH,

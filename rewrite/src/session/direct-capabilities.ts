@@ -254,7 +254,7 @@ export function directAcceptedGoalWindow(facts: readonly Fact[]): readonly Direc
   let turnId: TurnId | undefined;
   let stepOffset = 0;
   const partials = new Map<number, { text: string; completed: boolean }>();
-  const admissions = new Map<ItemId, import('./direct-queue-types.js').DirectQueueRecord>();
+  const admissions = new Map<string, import('./direct-queue-types.js').DirectQueueRecord>();
   for (const fact of facts) {
     if (fact.type === 'queue_submitted') admissions.set(fact.record.messageId, fact.record);
     if (fact.type === 'turn_started' || fact.type === 'queue_steered') {

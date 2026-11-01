@@ -158,7 +158,7 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
         // Task/queue/command/goal/notification owners and request-cost accounting survive.
       };
     case 'history_replaced': {
-      const retained = new Set(fact.history.map((item) => item.id));
+      const retained = new Set<string>(fact.history.map((item) => item.id));
       const messages = fact.history.flatMap((item) => {
         const known = state.messages.find((message) => message.id === item.id);
         return known ? [{ ...known, ...messageFor(item)[0] }] : [];

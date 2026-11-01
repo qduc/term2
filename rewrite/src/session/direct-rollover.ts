@@ -30,7 +30,7 @@ export type DirectRolloverRequestOutcome =
 /** Root-only handoff tool. Acceptance is a request, never a claim that the successor already exists. */
 export function createDirectRolloverTool(
   request: (input: DirectRolloverRequest) => DirectRolloverRequestOutcome,
-): Tool<DirectRolloverRequest> {
+): Tool<DirectRolloverRequest> & { readonly parallelSafe: false } {
   return {
     spec: {
       name: 'session_rollover',

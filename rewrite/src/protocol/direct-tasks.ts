@@ -62,6 +62,7 @@ export function publicTask(task: DirectTaskState): WireTask {
     ...(task.role ? { role: task.role } : {}), ...(task.kind === 'subagent' ? { agentId: task.taskId } : {}),
     ...(task.model ? { model: { provider: task.model.provider, model: task.model.model } } : {}),
     mode: task.mode, status: task.status === 'waiting_for_answer' ? 'awaiting_interaction' : task.status,
+    ...(task.pendingQuestion ? { pendingQuestion: structuredClone(task.pendingQuestion) } : {}),
     startedAt: task.startedAt, lastActivityAt: task.lastActivityAt,
     ...(task.completedAt !== undefined ? { completedAt: task.completedAt } : {}),
     ...(result ? { result, ...(result.output !== undefined ? { text: result.output } : {}) } : {}),
@@ -103,6 +104,14 @@ export function taskFactEvent(fact: DirectBackgroundFact, state: WireSnapshot, s
       taskId: fact.taskId, taskOwner: publicTaskOwner(task), requestId: fact.requestId,
       resolution: fact.resolution.kind === 'decision' ? fact.resolution.decision : fact.resolution,
     } };
+  }
+  if (fact.type === 'task_question_opened' || fact.type === 'task_question_closed') {
+    const next: WireTask = { ...task, lastActivityAt: fact.at,
+      pendingQuestion: fact.type === 'task_question_opened' ? fact.question : undefined,
+      status: task.status === 'cancelling' ? 'cancelling' : fact.type === 'task_question_opened' ||
+        state.pendingInteractions.some(request => request.taskId === taskId) ? 'awaiting_interaction' : 'running',
+    };
+    return { ...base, turnId: task.turnId ?? null, type: 'task_changed', payload: { change: fact.type, at: fact.at, task: next } };
   }
   let next: WireTask;
   switch (fact.type) {

@@ -20,6 +20,7 @@ import { DirectBackgroundCheckIns } from './direct-background-check-ins.js';
 import {
   directCheckInNotice,
   directTaskNotice,
+  directQuestionNotice,
   isDirectNotificationFactType,
   pendingDirectNotifications,
   reduceDirectNotifications,
@@ -47,7 +48,11 @@ import type {
 } from './direct-command-types.js';
 import { parseDirectOrigin, isDirectHumanOrigin } from './direct-origin.js';
 import { DirectSubagents } from './direct-subagent.js';
-import { DirectContinuity, type DirectContinuityBinding, type PreparedDirectRequest } from '../engine/direct-recovery-continuity.js';
+import {
+  DirectContinuity,
+  type DirectContinuityBinding,
+  type PreparedDirectRequest,
+} from '../engine/direct-recovery-continuity.js';
 import { directPreviewConfiguration, directPreviewOccurrences } from './direct-preview.js';
 import { DirectRunBudgets } from './direct-run-budget.js';
 import { createDirectBranchDriver } from './direct-branches.js';
@@ -283,7 +288,9 @@ function conversation(
         const notice =
           previous &&
           !closed &&
-          (fact.type === 'task_backgrounded'
+          (fact.type === 'task_question_opened'
+            ? directQuestionNotice(previous, fact.question)
+            : fact.type === 'task_backgrounded'
             ? directTaskNotice(previous, 'background')
             : fact.type === 'task_stop_requested'
             ? directTaskNotice(previous, 'stop')
@@ -291,7 +298,10 @@ function conversation(
             ? directTaskNotice(previous, 'finished', fact.result)
             : undefined);
         if (
-          (closed && (fact.type === 'task_started' || fact.type === 'task_interaction_opened')) ||
+          (closed &&
+            (fact.type === 'task_started' ||
+              fact.type === 'task_interaction_opened' ||
+              fact.type === 'task_question_opened')) ||
           !recover() ||
           !commit([fact, ...(notice ? [{ type: 'background_notice_enqueued' as const, notice }] : [])])
         )
@@ -382,7 +392,11 @@ function conversation(
           turnId,
         )
       )
-        return { ok: false, status: 'rollover_blocked', error: writerFailure()?.message ?? 'The handoff was not accepted.' };
+        return {
+          ok: false,
+          status: 'rollover_blocked',
+          error: writerFailure()?.message ?? 'The handoff was not accepted.',
+        };
       completionHeld = turnId;
       return { ok: true, status: 'rollover_requested', rolloverId: commandId };
     },
@@ -803,6 +817,10 @@ function conversation(
         if (!current || current.result) return current;
         await tasks!.wait(current.taskId, AbortSignal.any([parent.signal, signal]));
         return get(current.taskId);
+      },
+      message(target, message, replyTo) {
+        check();
+        return tasks!.message(target, message, replyTo);
       },
       cancel(target) {
         const task = get(target);

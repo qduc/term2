@@ -35,6 +35,10 @@ export type DirectTaskDescriptor = {
   readonly origin?: DirectOrigin;
   readonly startedAt: number;
 };
+export type DirectOrchestratorQuestion = { readonly messageId: string; readonly question: string };
+export type DirectQuestionResolution =
+  | { readonly kind: 'answered'; readonly answer: string }
+  | { readonly kind: 'cancelled' | 'interrupted' };
 export type DirectTaskState = DirectTaskDescriptor & {
   readonly mode: DirectTaskMode;
   readonly status: DirectTaskStatus;
@@ -42,6 +46,7 @@ export type DirectTaskState = DirectTaskDescriptor & {
   readonly completedAt?: number;
   readonly result?: DirectTaskResult;
   readonly pendingInteractions: readonly DirectTaskInteraction[];
+  readonly pendingQuestion?: DirectOrchestratorQuestion;
 };
 export type DirectTaskInteractionInput = ToolInteractionRequest & {
   /** Preserve the engine's request ID when forwarding an engine-owned pause. */
@@ -59,6 +64,19 @@ export type DirectTaskInteractionResolution =
   | { readonly kind: 'decision'; readonly decision: InteractionDecision }
   | { readonly kind: 'cancelled' | 'interrupted' };
 export type DirectBackgroundFact =
+  | {
+      readonly type: 'task_question_opened';
+      readonly at: number;
+      readonly taskId: DirectTaskId;
+      readonly question: DirectOrchestratorQuestion;
+    }
+  | {
+      readonly type: 'task_question_closed';
+      readonly at: number;
+      readonly taskId: DirectTaskId;
+      readonly messageId: string;
+      readonly resolution: DirectQuestionResolution;
+    }
   | { readonly type: 'task_started'; readonly task: DirectTaskDescriptor; readonly mode: DirectTaskMode }
   | { readonly type: 'task_backgrounded'; readonly taskId: DirectTaskId; readonly at: number }
   | { readonly type: 'task_stop_requested'; readonly taskId: DirectTaskId; readonly at: number }
@@ -106,6 +124,8 @@ export type DirectTaskContext = {
   progress(chunk: string, kind?: DirectBackgroundProgress['kind'], executionId?: ExecutionId): void;
   /** No decision reaches the operation until Session has accepted its closure. */
   interact(request: DirectTaskInteractionInput): Promise<InteractionDecision>;
+  /** Pauses the exact child call until its orchestrator replies or the task stops. */
+  askOrchestrator(question: string): Promise<string>;
 };
 export type DirectTaskHandle<Value> = {
   readonly taskId: DirectTaskId;

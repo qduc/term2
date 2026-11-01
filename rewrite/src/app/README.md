@@ -71,3 +71,22 @@ The compile-time seam matters: changing source callback signatures, schemas, or
 host projection types must be reconciled here, not hidden with casts or invented
 terminal data. A successful typecheck establishes contract compatibility, not
 provider execution, approval/reconnect behavior, or continuation parity.
+
+### Async child questions
+
+`createDirectSubagentTools` passes the real source `ask_orchestrator` callback
+only for background launches; the source factory still excludes mentor and
+reviewer. Foreground/result-only children do not acquire the capability, even
+if later moved to background. The callback reaches the executing child's
+`ToolContext.askOrchestrator`, not a user question or a legacy subagent registry.
+
+`DirectBackgroundTasks` owns one correlated pending question per task. Session
+accepts `task_question_opened` together with a planning notice; its existing
+idle `drainBackgroundNotifications` admits the orchestrator's silent turn.
+The orchestrator must reply before waiting for the child's result. This path
+does not preempt an active root turn. `send_message` with a matching `reply_to`
+accepts the closure before resolving the exact child call. Wrong IDs and
+uncorrelated steering cannot consume it; ordinary steering outside a question
+remains unsupported. Stop, settlement and writer failure reject pending waits;
+process-loss recovery records interruption and never reconstructs a waiter.
+Public task snapshots carry `pendingQuestion` separately from user interactions.

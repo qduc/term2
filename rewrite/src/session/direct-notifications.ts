@@ -6,7 +6,7 @@ import type { DirectBackgroundCheckIn } from './direct-background-check-ins.js';
 
 export type DirectBackgroundNotice = {
   readonly id: string;
-  readonly kind: 'completion' | 'control' | 'check_in';
+  readonly kind: 'completion' | 'control' | 'check_in' | 'question';
   readonly taskIds: readonly DirectTaskId[];
   /** Session-produced planning input, not a human message or an authority grant. */
   readonly text: string;
@@ -34,7 +34,7 @@ const ids = z
   .min(1)
   .refine((values) => new Set(values).size === values.length);
 const noticeSchema = z
-  .object({ id, kind: z.enum(['completion', 'control', 'check_in']), taskIds: ids, text: id })
+  .object({ id, kind: z.enum(['completion', 'control', 'check_in', 'question']), taskIds: ids, text: id })
   .strict();
 const schemas = {
   background_notice_enqueued: z
@@ -105,6 +105,28 @@ export function directTaskNotice(
       task: { id: task.taskId, kind: task.kind, label: task.label, role: task.role, name: task.name },
       ...(result ? { result } : {}),
     }),
+  };
+}
+/** Correlation and instructions are Session planning input, never a user prompt. */
+export function directQuestionNotice(
+  task: DirectTaskState,
+  question: import('./direct-background-types.js').DirectOrchestratorQuestion,
+): DirectBackgroundNotice {
+  return {
+    id: `question:${task.taskId}:${question.messageId}`,
+    kind: 'question',
+    taskIds: [task.taskId],
+    text:
+      planningText({
+        kind: 'subagent_question',
+        runId: task.taskId,
+        name: task.name,
+        role: task.role,
+        ...question,
+      }) +
+      '\nThe child is paused in ask_orchestrator. Decide the answer, investigate, or escalate if needed; ' +
+      'reply with tools.send_message({target: runId, reply_to: messageId, message: yourAnswer}) inside run_code. ' +
+      'Only the matching reply resumes this call; do not wait for its result before replying. Cancel if no answer is possible.',
   };
 }
 export function directCheckInNotice(event: DirectBackgroundCheckIn): DirectBackgroundNotice {

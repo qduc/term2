@@ -168,6 +168,8 @@ export class DirectProjection {
       case 'task_stop_requested':
       case 'task_finished':
       case 'task_interaction_opened':
+      case 'task_question_opened':
+      case 'task_question_closed':
       case 'task_interaction_closed': return [taskFactEvent(fact, this.#state, seq)];
       case 'background_notice_enqueued': return [this.#event('background_notice_enqueued', { notice: structuredClone(fact.notice) }, seq, null)];
       case 'background_notices_delivered': return [this.#event('background_notices_delivered', { clientRequestId: fact.clientRequestId, turnId: fact.turnId, notificationIds: [...fact.notificationIds] }, seq, fact.turnId)];

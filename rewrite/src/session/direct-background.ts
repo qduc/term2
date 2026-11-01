@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type { ModelError } from '../model/index.js';
-import type { InteractionDecision, InteractionRequestId } from '../tools/index.js';
+import type { InteractionDecision, InteractionRequestId, SubagentMessageResult } from '../tools/index.js';
 import type { AnswerResult } from './direct-types.js';
 import { DirectBackgroundInteractions } from './direct-background-interactions.js';
+import { DirectOrchestratorQuestions } from './direct-orchestrator-questions.js';
 import { directTaskAbortError, directTaskError } from './direct-background-types.js';
 import type {
   DirectBackgroundFact,
@@ -48,6 +49,7 @@ export class DirectBackgroundTasks {
   readonly #now: () => number;
   readonly #entries = new Map<DirectTaskId, Entry>();
   readonly #interactions: DirectBackgroundInteractions;
+  readonly #questions: DirectOrchestratorQuestions;
   #failure?: ModelError;
   #closed = false;
 
@@ -60,6 +62,7 @@ export class DirectBackgroundTasks {
     this.#sink = options.sink;
     this.#now = options.now ?? Date.now;
     this.#interactions = new DirectBackgroundInteractions((fact) => this.#accept(fact));
+    this.#questions = new DirectOrchestratorQuestions((fact) => this.#accept(fact), this.#now);
   }
 
   /** Admit before invoking the body. Values/outcomes must be serializable Session data. */
@@ -136,6 +139,16 @@ export class DirectBackgroundTasks {
     return this.#interactions.answer(requestId, decision);
   }
 
+  /** Reply to the exact live child question. No general steering mailbox is invented. */
+  message(target: string, message: string, replyTo?: string): SubagentMessageResult {
+    this.#assertOpen();
+    const entry = this.#resolve(target);
+    if (!entry || entry.outcome || entry.task.kind !== 'subagent') return { ok: false, code: 'not_active', target };
+    if (entry.status === 'cancelling')
+      return { ok: false, code: replyTo ? 'question_not_pending' : 'not_active', target };
+    return this.#questions.answer(entry.task.taskId, target, message, replyTo);
+  }
+
   /** Transfer the same live operation, signal, pending pauses and result; never restart. */
   moveToBackground(target: string): DirectTaskControlResult {
     this.#assertOpen();
@@ -175,6 +188,7 @@ export class DirectBackgroundTasks {
     entry.status = 'cancelling';
     // Close waits explicitly; do not rely on throwing from an AbortSignal listener.
     this.#interactions.cancelTask(entry.task.taskId);
+    this.#questions.cancel(entry.task.taskId);
     entry.controller.abort();
     return { ok: true, task: this.#state(entry) };
   }
@@ -198,6 +212,7 @@ export class DirectBackgroundTasks {
     if (this.#failure) return;
     this.#failure = directTaskError(error);
     this.#interactions.poison(new Error(this.#failure.message));
+    this.#questions.poison(new Error(this.#failure.message));
     for (const entry of this.#entries.values()) {
       if (entry.outcome) continue;
       entry.status = 'cancelling';
@@ -296,6 +311,12 @@ export class DirectBackgroundTasks {
           throw error;
         }
       },
+      askOrchestrator: (question) => {
+        if (entry.controller.signal.aborted) return Promise.reject(directTaskAbortError());
+        if (entry.outcome || this.#failure || entry.task.kind !== 'subagent' || entry.mode !== 'background')
+          return Promise.reject(new Error('Task cannot ask its orchestrator.'));
+        return this.#questions.ask(entry.task.taskId, question);
+      },
       interact: (input) => {
         if (entry.outcome || this.#failure)
           return Promise.reject(new Error('Task is no longer accepting interactions.'));
@@ -324,6 +345,7 @@ export class DirectBackgroundTasks {
     try {
       if (!this.#failure) {
         this.#interactions.cancelTask(entry.task.taskId, 'interrupted');
+        this.#questions.cancel(entry.task.taskId, 'interrupted');
         this.#accept({ type: 'task_finished', taskId: entry.task.taskId, at: completedAt, result });
       }
     } catch (error) {
@@ -340,14 +362,19 @@ export class DirectBackgroundTasks {
 
   #state(entry: Entry): DirectTaskState {
     const pendingInteractions = this.#interactions.pending(entry.task.taskId);
+    const pendingQuestion = this.#questions.pending(entry.task.taskId);
     return structuredClone({
       ...entry.task,
       mode: entry.mode,
-      status: entry.status === 'running' && pendingInteractions.length ? 'waiting_for_answer' : entry.status,
+      status:
+        entry.status === 'running' && (pendingInteractions.length || pendingQuestion)
+          ? 'waiting_for_answer'
+          : entry.status,
       lastActivityAt: entry.lastActivityAt,
       completedAt: entry.completedAt,
       result: entry.outcome,
       pendingInteractions,
+      pendingQuestion,
     });
   }
 

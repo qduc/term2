@@ -376,6 +376,10 @@ function taskCandidate(
   if (task.kind === 'shell') return null;
   if (task.kind !== 'subagent') return missing('canonical task lifecycle requires its accepted task kind');
   switch (change) {
+    case 'task_question_opened':
+    case 'task_question_closed':
+      // Native orchestrator pauses are not user interactions or terminal lifecycle events.
+      return null;
     case 'task_backgrounded':
     case 'task_stop_requested':
       // The frozen vocabulary has no equivalent. Neither change means started or physically done.

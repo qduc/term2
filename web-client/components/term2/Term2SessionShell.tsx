@@ -551,7 +551,7 @@ export function Term2SessionShell({
                       {turn.commands.length > 0 && <Term2ToolGroup commands={turn.commands} />}
                       {(turn.subagents ?? []).length > 0 && (
                         <div className="space-y-2">
-                          {(turn.subagents ?? []).map((card) => (
+                          {(turn.subagents ?? []).filter(card => !session.view.nativeState?.tasks?.some(task => task.id === card.agentId || task.agentId === card.agentId)).map((card) => (
                             <Term2SubagentCard key={card.agentId} card={card} />
                           ))}
                         </div>
@@ -559,7 +559,7 @@ export function Term2SessionShell({
                       {turn.text && <Term2Markdown text={turn.text} />}
                       {turn.status !== 'completed' && turn.status !== 'streaming' && turn.status !== 'pending' && (
                         <p className="inline-flex items-center gap-1.5 rounded-full bg-black/[0.04] px-2.5 py-0.5 text-xs text-zinc-500 dark:bg-white/[0.06] dark:text-zinc-400">
-                          Turn {turn.status}
+                          {turn.transientFailure ? 'Live-only transient failure (not an accepted terminal)' : `Turn ${turn.status}`}
                         </p>
                       )}
                       {turn.error && (

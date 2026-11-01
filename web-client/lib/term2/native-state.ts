@@ -1,13 +1,20 @@
-import { Term2ProtocolError, type AgentChangeV2 } from './types';
+import { Term2ProtocolError, type Term2AcceptedChange } from './types';
 
 type Fields = Readonly<Record<string, unknown>>;
 export type NativeRequestCost = Fields & {
   turnId: string; rootTurnId: string; parentTurnId?: string;
   record: Fields & { requestId: string };
 };
+export type NativeMessage = Fields & {
+  id: string; role: 'user' | 'assistant' | 'tool'; content: readonly unknown[]; text: string;
+  turnId?: string; modelStep?: number; executionId?: string; isError?: boolean; draft?: boolean; replacesDraftId?: string;
+};
+export type NativeMessageEntry = { message: NativeMessage; replacesDraftId?: string };
 /** Observed public state only. Undefined is unavailable, null is an actual clear.
  * Request receipts and aggregate cost are independent; this module never sums them. */
 export interface NativeState {
+  messages?: readonly NativeMessageEntry[];
+  tasks?: readonly Fields[];
   cost?: (Fields & { totalUsd: number; currency: 'USD' }) | null;
   requestCosts?: readonly NativeRequestCost[];
   goal?: Fields | null;
@@ -33,6 +40,30 @@ function ordinal(value: unknown): number { const number = finite(value); return 
 function oneOf(value: unknown, choices: readonly string[]): void { if (!choices.includes(string(value))) fail(); }
 function array<T>(value: unknown, parse: (entry: unknown) => T): readonly T[] { return Array.isArray(value) ? value.map(parse) : fail(); }
 function optionalStrings(value: Fields, keys: readonly string[]): void { for (const key of keys) if (value[key] !== undefined) string(value[key]); }
+function message(value: unknown): NativeMessage {
+  const result = object(value); identity(result.id);
+  oneOf(result.role, ['user', 'assistant', 'tool']); string(result.text);
+  if (!Array.isArray(result.content)) fail();
+  for (const key of ['turnId', 'executionId', 'replacesDraftId']) if (result[key] !== undefined) identity(result[key]);
+  if (result.modelStep !== undefined) ordinal(result.modelStep);
+  for (const key of ['isError', 'draft']) if (result[key] !== undefined && typeof result[key] !== 'boolean') fail();
+  return result as NativeMessage;
+}
+function task(value: unknown): Fields {
+  const result = object(value); identity(result.id);
+  oneOf(result.status, ['running', 'awaiting_interaction', 'cancelling', 'completed', 'cancelled', 'failed', 'interrupted']);
+  return result;
+}
+/** Preserve actual message identity/replacement relation and native array position.
+ * A missing draft does not authorize inventing a draft or another turn identity. */
+function upsertMessage(previous: readonly NativeMessageEntry[], next: NativeMessageEntry): readonly NativeMessageEntry[] {
+  const replaces = next.replacesDraftId ?? next.message.replacesDraftId;
+  let index = replaces === undefined ? -1 : previous.findIndex(entry => entry.message.id === replaces);
+  if (index < 0) index = previous.findIndex(entry => entry.message.id === next.message.id);
+  if (index < 0) return [...previous, next];
+  return previous.flatMap((entry, position) => position === index ? [next]
+    : entry.message.id === next.message.id || entry.message.id === replaces ? [] : [entry]);
+}
 function cost(value: unknown): NonNullable<NativeState['cost']> {
   const result = object(value); finite(result.totalUsd);
   if (result.currency !== 'USD') fail();
@@ -101,6 +132,8 @@ function upsertRequest(previous: readonly NativeRequestCost[], next: NativeReque
  * nulls, zeros or empty arrays to invented values. Also used for branch subsets. */
 export function nativeStateFromSnapshot(snapshot: Fields): NativeState {
   const state: NativeState = {};
+  if (snapshot.messages !== undefined) state.messages = array(snapshot.messages, message).map(message => ({ message }));
+  if (snapshot.tasks !== undefined) state.tasks = array(snapshot.tasks, task);
   if (snapshot.cost !== undefined) state.cost = snapshot.cost === null ? null : cost(snapshot.cost);
   if (snapshot.requestCosts !== undefined) state.requestCosts = array(snapshot.requestCosts, requestCost).reduce<readonly NativeRequestCost[]>((items, item) => upsertRequest(items, item), []);
   if (snapshot.goal !== undefined) state.goal = snapshot.goal === null ? null : goal(snapshot.goal);
@@ -117,10 +150,22 @@ export function nativeStateFromSnapshot(snapshot: Fields): NativeState {
 
 /** Reduce accepted public evidence only; no activity/foreground turn is created
  * for a proposal, a notice, or a silent-turn delivery. Shared v2 owns the allowlist. */
-export function applyNativeState(previous: NativeState | undefined, change: AgentChangeV2): NativeState {
+export function applyNativeState(previous: NativeState | undefined, change: Term2AcceptedChange): NativeState {
   const state = previous ?? {};
   const payload = change.payload;
   switch (change.type) {
+    case 'message': {
+      const next: NativeMessageEntry = { message: message(payload.message),
+        ...(payload.replacesDraftId === undefined ? {} : { replacesDraftId: identity(payload.replacesDraftId) }) };
+      return { ...state, messages: upsertMessage(state.messages ?? [], next) };
+    }
+    case 'task_changed': {
+      oneOf(payload.change, ['task_started', 'task_backgrounded', 'task_stop_requested', 'task_finished']);
+      if (finite(payload.at) < 0) fail();
+      const next = task(payload.task);
+      const tasks = state.tasks ?? [];
+      return { ...state, tasks: tasks.some(item => item.id === next.id) ? tasks.map(item => item.id === next.id ? next : item) : [...tasks, next] };
+    }
     case 'cost': return { ...state, cost: cost(payload) };
     case 'request_cost_recorded': return { ...state, requestCosts: upsertRequest(state.requestCosts ?? [], requestCost(payload)) };
     case 'goal': return { ...state, goal: payload.goal === null ? null : goal(payload.goal), ...(payload.generation === undefined ? {} : { goalGeneration: ordinal(payload.generation) }) };

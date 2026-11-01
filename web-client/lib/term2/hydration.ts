@@ -169,7 +169,7 @@ function contextTurns(context: Pick<SessionHydration['snapshot'], 'messages' | '
   };
   const tool = (entry: Record<string, unknown>) => {
     const item = getTurn(identity(entry.turnId));
-    item.commands.push({ callId: identity(entry.executionId), toolName: text(entry.toolName),
+    item.commands.push({ callId: identity(entry.executionId), toolName: text(entry.toolName), nativeTool: entry,
       status: entry.status === 'started' ? 'running' : entry.status === 'called' ? 'pending' : entry.status === 'completed' ? entry.isError === true ? 'failed' : 'completed' : 'unknown',
       ...(typeof entry.output === 'string' ? { output: entry.output } : {}),
     });

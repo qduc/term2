@@ -22,6 +22,15 @@ evidence names). Shared documentation follow-up `c01d054a253bb2451c2cb8bc9e4bcc6
 (parent af3d0ff) records option B; `67d3cba8151d83eee851a9eb5638e27e6f193f64`
 (parent c01d054a) persists the maintained-large-module-interface rule in shared
 AGENTS.md. These documentation commits change no API/provider/native history.
+Shared accepted-message/task follow-up is ORIGINAL
+`6cad9b2990f6df1c521022fc45ad05a6a8e33a10` (parent 67d3cba); payload types
+remain generic `AgentChangePayloadsV2`, without exported native message/task
+interfaces. Tool/error/live-failure shared ORIGINAL
+`a4bcebc48dc22086c655a601bf4911c64882a8eb` (parent 6cad9b29) is also required.
+Its accepted list/type excludes error; AgentChangeTypeV2/AgentChangeV2 is the
+accepted-or-live union, while each envelope restricts changes using the matching
+accepted/live Extract. Browser consumption narrows by envelope kind and uses
+those exact shared types, without casting or widening accepted admission.
 All remain the same still-unreleased **0.2.0**, not 0.2.1.
 The package's `packages/wire/docs/v1.md`, `v2.md`, and `migration-v1-v2.md` define
 the shared contracts. `TERM2_FREEZE_SHA` identifies a historical v1 fixture, not a
@@ -39,6 +48,13 @@ Application-side dependencies, all based on
 - Native original `838664750acec8a65de2526a7712c743e9d17989`: optional same-cut
   branch snapshots. The browser consumes the native DTO, not a fabricated child
   session or server-side projection fan-out.
+
+Incremental native event delivery additionally requires server originals
+`188b11e89e054595d5c5e0891a45bb4a9407697e` (accepted message/task),
+`1a0506784a07f183b39557b4d6c8fe1ee97fed7f` (accepted call/live error), and
+`d4df461589e5599f4a9569f510bc2e2f75dd64b4` (live synchronized failure),
+in that order on their candidate-based server lineage. They are not browser-base
+ancestors to replay into this isolated tree.
 
 These are delivery identities and required integration inputs, not acceptance
 claims. The browser slice does not modify server/native/shared code, manifests,
@@ -120,12 +136,17 @@ raw event evidence, not a claim of complete producer retention.
 
 ## Accepted public evidence and accounting
 
-The eight new shared names are **accepted only**, not additions to the live
-allowlist. `native-state.ts` validates their public application payloads for the
-browser and reduces them inside the same atomic accepted batch:
+The cost/goal/notice names plus `message`, `task_changed` and `tool_called` are
+**accepted only**, not additions to the live allowlist. `native-state.ts`
+validates/reduces observed message/task/cost/goal/notice state;
+`event-adapter.ts` validates/presents the exact accepted call. All install inside
+the same atomic accepted batch:
 
 | Change | Consumer meaning |
 | --- | --- |
+| `message` | Upsert exact public message ID/role/content/text/optional ownership; replace the named draft in place, no synthetic assistant turn or inferred terminal |
+| `task_changed` | Upsert exact root task descriptor by real task ID; retain change/numeric at as evidence, not a cursor or foreground status |
+| `tool_called` | Pending command from real execution/turn/call identity and input, not a physical start |
 | `cost` | Replace actual `{totalUsd,currency:'USD'}` aggregate state; never increment it |
 | `request_cost_recorded` | Upsert actual `{turnId,rootTurnId,parentTurnId?,record}` by `record.requestId`; immutable physical ancestry, later complete records may enrich/correct |
 | `goal` | Replace nullable native goal, retain optional actual generation |
@@ -134,6 +155,29 @@ browser and reduces them inside the same atomic accepted batch:
 | `notice` | Retain actual `{kind,message}` notice |
 | `background_notice_enqueued` | Retain actual `{notice:{id,kind,taskIds,text}}` |
 | `background_notices_delivered` | Retain `{clientRequestId,turnId,notificationIds}`; actual silent turn, no foreground turn created |
+
+Accepted messages retain both actual replacement fields where supplied, false/
+zero/empty values and optional native identities. The browser stores ordered
+native message entries; replacement retains the named draft's position. Turn
+presentation is recalculated only for affected actual turn IDs. Missing turn
+ownership stays unbound; message content is not provider history. Root rotation
+clears root message context but not branch messages, tasks or accounting.
+
+`task_changed` is root metadata, with no branch wrapper. It replaces the complete
+supplied task descriptor rather than merging absent optionals from an old task.
+Counts are **task.result.toolUseCounts**, not a new top-level field. Unknown
+counts differ from []; task_stop_requested stays native cancelling. A child
+terminal does not complete a task. Current native task descriptors supersede
+legacy task-card presentation with the same actual id/agentId; initial snapshot
+disclosures remain labelled at their hydration cut.
+
+Tool calls retain the exact public `WireTool` (including optional native callId,
+parentExecutionId, input/display/content). The legacy command `callId` slot is
+the actual executionId, matching the server's later tool_started/command_message
+mapping. Pending is labelled not started; only a real tool_started marks running.
+Multiple result messages remain distinct by real message ID. A result without a
+matching observed call/start stays exact unmatched evidence, not a guessed Tool
+card or physical execution. Public descriptor/input is not provider-native history.
 
 Cost and request receipts have no additional branch wrapper. Request payload
 ancestry already owns the physical request. Branch receipt panels select the
@@ -173,6 +217,43 @@ null, and notices as previous native projection notices or an empty array; it
 does not reconstruct historical cost/notices. Actual request receipts are
 retained independently. Browser preservation is not fresh-process parity, and
 the vocabulary does not authorize synthesizing missing producers or history.
+
+## Live errors and transient runtime lifecycle
+
+Native/server `error` is live-only with exact `{error:{kind,message,retryable?,
+retryAfterMs?}}`. Shared source must reject an accepted error even if a common
+change union represents its type. Browser accepted reduction uses the narrowed accepted alias and fails closed on unsupported changes;
+there is no accepted notice/terminal conversion. Actual live errors display in
+connection-local evidence, never advance a checkpoint and disappear on disconnect/
+hydration rather than becoming replayable history.
+
+A real null-seq synchronized turn_ended failure maps to **live `turn_failed`**
+with actual turnId/outcome/reason and optional native finalText/cause. The same
+name in an accepted envelope retains the existing durable meaning; envelope kind
+must not be lost. `presentTerm2SessionView` overlays live failed activity/error
+on the existing actual turn only. It creates no turn/result and does not mutate
+the accepted turn status, accepted transcript or checkpoint. UI labels the
+failure transient/live-only. A later accepted lifecycle supersedes this live
+observation; dropping connection-local evidence removes the overlay. Hydration/
+current accepted state remains recovery authority, not a persisted live terminal.
+The browser does not invent a synchronized snapshot/status_changed event or
+reconstruct a missed live failure after reconnect; refresh obtains a real cut.
+
+`model_response_completed` (accepted audit boundary) and `budget_observed`
+(snapshot evidence not currently consumed by this browser) remain deliberately
+unmapped. Neither becomes cost, notice, status or terminal here. status_changed
+has no current native accepted producer; retry_eligibility has none established.
+These explicit limits are not full incremental parity claims.
+
+### Incremental-publication failure lesson
+
+Hydration showing a current cut did not establish ongoing message/task parity:
+the v2 adapter had fallen through a v1 mapping that dropped those real updates.
+Producer, shared parser and consumer must agree on each selected incremental
+public change. The browser keeps default unsupported-change failure rather than
+silently ignoring a new shared name. Post-freeze verification must exercise
+post-hydration root/branch draft replacement and task/call/lifecycle updates,
+not just initial snapshots. No new guard, journal or permanent unit test is added.
 
 ## Configuration: original receipt versus current discovery
 

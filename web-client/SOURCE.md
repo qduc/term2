@@ -146,7 +146,24 @@ does not establish deployment/security acceptance for a new topology.
 native snapshot and native-owned transcript/timeline references.
 `event-adapter.ts#applyTerm2Event` owns atomic accepted installation and actual
 branch routing; `native-state.ts` owns browser validation/reduction of observed
-public cost/goals/verification/notices, **not** pricing or native goal policy.
+public messages/tasks/cost/goals/verification/notices, **not** pricing or native
+goal/task-running policy. Ordered native message entries retain real IDs and
+replace only named drafts in place; root task descriptors retain nested
+result.toolUseCounts and numeric task time as evidence. Current descriptor state
+supersedes legacy cards with the same actual task identity. Accepted tool_called
+creates a pending command by actual executionId; the original public descriptor
+retains native callId/parent/input. A later physical start uses that same
+execution key. Results lacking an observed call/start remain unmatched evidence,
+not invented tool metadata. Pending tool UI explicitly means not started.
+`event-adapter.ts#presentTerm2SessionView` is a presentation-only overlay for real
+live turn_failed; underlying accepted state/checkpoints are unchanged. Shared
+source `a4bcebc48dc22086c655a601bf4911c64882a8eb` separates accepted
+admission from its general change union; `applyTerm2Event` narrows by kind and
+uses the corresponding accepted/live types without casting. Live error
+alone is not a terminal, and error is not in the accepted allowlist. Both
+transient observations are connection-local and
+removed on disconnect/hydration; later accepted lifecycle supersedes a live
+failure. No provider-native history is built from these public records.
 `sse.ts#consumeSseResponse` owns SSE framing and shared-envelope validation.
 `Term2NativeEvidence` presents exact observations/limitations without equating
 native verification with user-task success or request receipts with extra bills.
@@ -168,7 +185,10 @@ observations on disconnection/hydration; accepted summaries and final tool
 results are recovery evidence, not raw-stream replay parity. Complete
 provider-required reasoning items/signatures/encrypted metadata and tool
 calls/results remain provider/runtime responsibilities and must not be stripped.
-Actual provider continuation is pending post-M6 verification.
+Actual provider continuation is pending post-M6 verification. Live runtime
+failure presentation is not a durable failed turn: the actual null-seq lifecycle
+may settle visible activity, while hydration/current accepted state owns recovery.
+No status_changed, missing terminal or missed transient history is fabricated.
 
 Other limits: no durable browser outbox or retry handle across navigation; no
 browser-owned journal/history synthesis; native fresh-process aggregate

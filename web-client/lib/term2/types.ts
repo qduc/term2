@@ -7,8 +7,10 @@ export const TERM2_CONTRACT_VERSION = 2 as const;
  */
 export const TERM2_FREEZE_SHA = '11b1f3637e6110e73b63d8a199b0e9a9d4001b78c49eec0fbe2a9725e01d2fdc';
 
-import { AGENT_CHANGE_TYPES_V2, parseAgentEventEnvelopeV2, type AgentEventEnvelopeV2, type AgentChangeV2, type AgentBranchV2 } from '@qduc/agent-wire';
+import { AGENT_CHANGE_TYPES_V2, parseAgentEventEnvelopeV2, type AgentEventEnvelopeV2, type AgentChangeV2, type AgentBranchV2, type AgentAcceptedChangeTypeV2, type AgentLiveChangeTypeV2 } from '@qduc/agent-wire';
 export type { AgentChangeV2 } from '@qduc/agent-wire';
+export type Term2AcceptedChange = Extract<AgentChangeV2, { type: AgentAcceptedChangeTypeV2 }>;
+export type Term2LiveChange = Extract<AgentChangeV2, { type: AgentLiveChangeTypeV2 }>;
 export const TERM2_WIRE_PROTOCOL = 'agent-wire-v2' as const;
 
 export const TERM2_EVENT_TYPES = AGENT_CHANGE_TYPES_V2;
@@ -300,6 +302,8 @@ export type Term2ConnectionStatus =
 export interface Term2Command {
   /** Actual accepted command-message identity, when supplied. */
   messageId?: string;
+  /** Exact public accepted call descriptor; callId below is the legacy execution-key slot. */
+  nativeTool?: Readonly<Record<string, unknown>>;
   callId: string;
   toolName: string;
   status: 'pending' | 'running' | 'completed' | 'failed' | 'aborted' | 'unknown';
@@ -338,6 +342,8 @@ export interface Term2TurnView {
   subagents?: Term2SubagentCard[];
   /** Transient turn-level note (retry/compaction); cleared on terminal events. */
   transientStatus?: string;
+  /** Presentation overlay only, never installed as an accepted terminal. */
+  transientFailure?: boolean;
   usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   error?: string;
 }
@@ -359,9 +365,9 @@ export interface Term2SessionView {
   retiredTurns?: Term2TurnView[];
   branches?: Record<string, { identity: AgentBranchV2; view: Term2SessionView }>;
   /** Native evidence retained verbatim, separate from model usage totals. */
-  nativeChanges?: readonly AgentChangeV2[];
+  nativeChanges?: readonly Term2AcceptedChange[];
   /** Connection-local UI observations only; never persisted or replay-checkpointed. */
-  liveChanges?: readonly AgentChangeV2[];
+  liveChanges?: readonly Term2LiveChange[];
 
 }
 

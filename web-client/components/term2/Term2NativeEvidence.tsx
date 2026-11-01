@@ -9,6 +9,9 @@ function NativeChange({ change }: { change: AgentChangeV2 }) {
   const payload: Readonly<Record<string, unknown>> = change.payload;
   return <article className="my-2 rounded border border-zinc-200 p-2 text-xs dark:border-zinc-800">
     <h3 className="font-semibold">{change.type.replaceAll('_', ' ')}</h3>
+    {change.type === 'error' && typeof payload.error === 'object' && payload.error !== null && <div role="alert"><p>Live runtime error: {String((payload.error as Record<string, unknown>).kind)} · {String((payload.error as Record<string, unknown>).message)}</p><p>Connection-local error evidence, not an accepted terminal, notice or replayable history.</p></div>}
+    {change.type === 'turn_failed' && <p>Live-only synchronized failure for actual turn {String(payload.turnId)}. This settles visible activity on this connection only; it does not write an accepted terminal or replay position. Refresh/hydration supplies current accepted state after reconnect.</p>}
+    {change.type === 'command_message' && <p>Exact result/status evidence. A result without a matching accepted call/start remains unmatched; no tool name or physical execution was invented.</p>}
     {change.type === 'reasoning' && typeof payload.text === 'string' && <Term2Markdown text={payload.text} />}
     {change.type === 'reasoning_delta' && typeof payload.delta === 'string' && <Term2Markdown text={payload.delta} />}
     {(change.type === 'tool_progress' || change.type === 'task_progress') && typeof payload.chunk === 'string' && <pre className="whitespace-pre-wrap">{payload.chunk}</pre>}
@@ -46,7 +49,7 @@ function HydrationEvidence({ view }: { view: Term2SessionView }) {
     {arrays('queue').length > 0 && <div><h4>Queue at cut</h4><ul>{arrays('queue').map((entry, index) => <li key={typeof entry.messageId === 'string' ? entry.messageId : index}>{typeof entry.delivery === 'string' ? entry.delivery : ''}: {typeof entry.text === 'string' ? entry.text : ''}</li>)}</ul></div>}
     {arrays('tasks').length > 0 && <div><h4>Native task metadata at cut</h4>{arrays('tasks').map((task, index) => <details key={typeof task.id === 'string' ? task.id : index}><summary>{typeof task.id === 'string' ? task.id : ''} · {typeof task.status === 'string' ? task.status : ''}{typeof task.label === 'string' ? ` · ${task.label}` : ''}</summary><pre className="overflow-auto whitespace-pre-wrap">{JSON.stringify(task, null, 2)}</pre></details>)}</div>}
     {typeof snapshot.reasoning === 'string' && snapshot.reasoning && <details><summary>Root reasoning at cut (native owner in exact fields)</summary><Term2Markdown text={snapshot.reasoning} /></details>}
-    {unbound.map(message => <article key={String(message.id)}><p>Native {String(message.role)} message {String(message.id)} (no guessed turn ownership)</p><Term2Markdown text={String(message.text)} /></article>)}
+    {view.nativeState?.messages === undefined && unbound.map(message => <article key={String(message.id)}><p>Native {String(message.role)} message {String(message.id)} (no guessed turn ownership)</p><Term2Markdown text={String(message.text)} /></article>)}
     {snapshot.timeline === null && snapshot.tools.length > 0 && <div role="alert"><p>Mixed transcript order is unavailable. Messages/tools are shown separately, not in invented chronological order.</p>{snapshot.messages.filter(message => !unbound.includes(message)).map(message => <Term2Markdown key={String(message.id)} text={String(message.text)} />)}<pre className="overflow-auto whitespace-pre-wrap">{JSON.stringify(snapshot.tools, null, 2)}</pre></div>}
     <details><summary>Exact root snapshot: configuration, queue/tasks, goals/verification, request costs, notices, interactions and commands</summary><pre className="overflow-auto whitespace-pre-wrap">{JSON.stringify(hydration, null, 2)}</pre></details>
   </section>;
@@ -60,7 +63,7 @@ function BranchEvidence({ view }: { view: Term2SessionView }) {
     <p>Branch queue unavailable (native queue: null). Branch request-cost records select the same root charges; they are not an additional aggregate.</p>
     {branch.usage === null && <p>Branch usage unobserved.</p>}
     {branch.reasoning === null && <p>No accepted branch reasoning summary observed. Raw reasoning chunks and intermediate tool progress are live-only; interrupted prefixes are not recovered after reconnect/crash.</p>}
-    {branch.messages.filter(message => typeof message.turnId !== 'string' || message.role === 'tool').map(message => <article key={String(message.id)}><p>Native message {String(message.id)} (no guessed ownership)</p><Term2Markdown text={String(message.text)} /></article>)}
+    {view.nativeState?.messages === undefined && branch.messages.filter(message => typeof message.turnId !== 'string' || message.role === 'tool').map(message => <article key={String(message.id)}><p>Native message {String(message.id)} (no guessed ownership)</p><Term2Markdown text={String(message.text)} /></article>)}
     {branch.timeline === null && branch.tools.length > 0 && <p role="alert">Mixed branch transcript ordering is unavailable; exact messages/tools remain in the native fields below.</p>}
     <details><summary>Exact accepted branch fields, nullable evidence and request costs</summary><pre className="overflow-auto whitespace-pre-wrap">{JSON.stringify(branch, null, 2)}</pre></details>
   </section>;
@@ -74,6 +77,20 @@ function PublicStateEvidence({ view, isBranch }: { view: Term2SessionView; isBra
   return <section aria-label="Observed native public state" className="my-3 rounded border border-zinc-200 p-3 text-xs dark:border-zinc-800">
     <h3 className="font-semibold">Observed native public state</h3>
     <p>Hydrated evidence plus later accepted changes. Missing historical evidence is not reconstructed. Explicit nulls, empty arrays and recorded zeros remain distinct from unavailable fields.</p>
+    {state.messages !== undefined && <div>
+      <h4>Accepted native message identities and draft replacements</h4>
+      <p>Actual message IDs/roles/content and optional ownership are retained. A final message replaces its named draft in place; this is public presentation evidence, not provider history.</p>
+      {state.messages.map(entry => <article key={entry.message.id}>
+        {(entry.message.turnId === undefined || entry.message.role === 'tool') && <div><p>{entry.message.role} message {entry.message.id}{entry.message.turnId === undefined ? ' · no supplied turn ownership' : ` · turn ${entry.message.turnId}`}</p><Term2Markdown text={entry.message.text} /></div>}
+        <details><summary>{entry.message.id} · {entry.message.role}{entry.message.draft === undefined ? '' : ` · draft ${String(entry.message.draft)}`}</summary><pre className="overflow-auto whitespace-pre-wrap">{JSON.stringify(entry, null, 2)}</pre></details>
+      </article>)}
+    </div>}
+    {state.tasks !== undefined && <div>
+      <h4>Current observed native task descriptors</h4>
+      <p>Task status comes from the descriptor. A stop request is cancelling, not complete; a child turn ending does not settle the task. Optional input/model/mode/result/tool counts remain exactly as supplied.</p>
+      {state.tasks.length === 0 && <p>No tasks in supplied state.</p>}
+      {state.tasks.map(task => <article key={String(task.id)} className="my-2 rounded border border-zinc-200 p-2 dark:border-zinc-800"><p className="font-semibold">Task {String(task.id)} · {String(task.status)}{typeof task.name === 'string' ? ` · ${task.name}` : ''}{typeof task.label === 'string' ? ` · ${task.label}` : ''}</p><details><summary>Exact task descriptor and result</summary><pre className="overflow-auto whitespace-pre-wrap">{JSON.stringify(task, null, 2)}</pre></details></article>)}
+    </div>}
     {'cost' in state && <p>Aggregate cost: {state.cost === null ? 'unavailable (native null)' : state.cost === undefined ? 'unavailable' : `${state.cost.totalUsd} ${state.cost.currency} (native replacement state)`}. Not added to request receipts.</p>}
     {state.requestCosts !== undefined && <div>
       <h4>Physical request receipts{isBranch ? ' · branch-selected view of root records' : ''}</h4>
@@ -97,7 +114,7 @@ function PublicStateEvidence({ view, isBranch }: { view: Term2SessionView; isBra
  * Positional React keys below are rendering positions only, never wire IDs/cursors. */
 export function Term2NativeEvidence({ view, isBranch = false }: { view: Term2SessionView; isBranch?: boolean }) {
   const branches = Object.values(view.branches ?? {});
-  const retainedTasks = view.retiredTurns?.flatMap(turn => turn.subagents ?? []) ?? [];
+  const retainedTasks = (view.retiredTurns?.flatMap(turn => turn.subagents ?? []) ?? []).filter(card => !view.nativeState?.tasks?.some(task => task.id === card.agentId || task.agentId === card.agentId));
   if (!view.hydration && !view.nativeBranch && !view.rootEvidence && !view.nativeState && !view.nativeChanges?.length && !view.liveChanges?.length && !branches.length && !retainedTasks.length && view.replayMode !== 'unavailable') return null;
   return <section aria-label="Native session evidence" className="mt-4">
     <HydrationEvidence view={view} />
@@ -114,7 +131,7 @@ export function Term2NativeEvidence({ view, isBranch = false }: { view: Term2Ses
       <p className="text-xs">Turn {identity.turnId}{identity.parentTurnId !== undefined ? ` · parent ${identity.parentTurnId}` : ''}{identity.rootTurnId !== undefined ? ` · root ${identity.rootTurnId}` : ''}</p>
       {branch.reloadRequired && <p role="alert">Branch history was replaced. A branch-complete accepted projection is required to reload this context.</p>}
       {!branch.reloadRequired && branch.turns.map(turn => <article key={turn.turnId} className="my-2 text-sm">
-        <p>{turn.status}</p>
+        <p>{turn.transientFailure ? 'Live-only transient failure (not an accepted terminal)' : turn.status}</p>
         {turn.reasoning && <details><summary>Reasoning</summary><Term2Markdown text={turn.reasoning} /></details>}
         {turn.text && <Term2Markdown text={turn.text} />}
         <Term2ToolGroup commands={turn.commands} />

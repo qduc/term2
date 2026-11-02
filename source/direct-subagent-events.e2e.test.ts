@@ -158,11 +158,32 @@ it('a subagent run adds no per-event lines to the transcript', { timeout: TIMEOU
 
   await submit('use a subagent');
   await session.waitForOutput('parent finished', 60_000);
-  // Positive control: the child ran and settled, so its events (turn start, message, response, end) have
-  // all arrived before the absence check below.
-  await session.waitForOutput('✓ run echo sub in the shell then report', 60_000);
+  // Positive control, read from the durable log rather than the screen (a settled task leaves the live
+  // panel): the child task started and finished, so its events had all arrived before the check below.
+  const logged = async () => {
+    const dir = path.join(root, 'conversations');
+    const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter((name) => name.endsWith('.jsonl')) : [];
+    return files.map((name) => fs.readFileSync(path.join(dir, name), 'utf8')).join('\n');
+  };
+  const deadline = Date.now() + 60_000;
+  let log = await logged();
+  const settled = () => {
+    const facts = log.split('\n').flatMap((line) => {
+      try {
+        return [JSON.parse(line).fact as { type: string; taskId?: string; task?: { taskId?: string; kind?: string } }];
+      } catch {
+        return [];
+      }
+    });
+    const child = facts.find((fact) => fact.type === 'task_started' && fact.task?.kind === 'subagent')?.task?.taskId;
+    return child !== undefined && facts.some((fact) => fact.type === 'task_finished' && fact.taskId === child);
+  };
+  while (!settled() && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    log = await logged();
+  }
+  expect(settled(), 'the subagent task started and finished in the log').toBe(true);
   const visible = session.getVisibleOutput();
   expect(visible, visible).toContain('parent finished');
-  expect(visible, visible).toMatch(/✓ run echo sub in the shell then report \[[\w-]+\] · completed/);
   expect(visible, visible).not.toMatch(/subagent: explorer/);
 });

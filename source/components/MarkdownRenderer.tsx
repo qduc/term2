@@ -563,10 +563,33 @@ const TableRenderer = ({ token, style = 'unicode', options = {}, maxWidth }: Tab
 
 // --- Token Renderers ---
 
+/**
+ * A code span is a chip: its text sits on the code background, with one padding column on a side only where an
+ * ordinary space stood. The chip's padding then replaces that space, so the line reads with single spaces
+ * (with or without a visible background) and no stray space lands before punctuation (`hi.` stays `hi.`).
+ */
+function absorbChipSpaces(tokens: any[]): any[] {
+  const plain = (token: any) =>
+    (token?.type === 'text' || token?.type === 'escape') && !token.tokens && typeof token.text === 'string';
+  return tokens.map((token, index) => {
+    if (token.type === 'codespan') {
+      const padLeft = plain(tokens[index - 1]) && tokens[index - 1].text.endsWith(' ');
+      const padRight = plain(tokens[index + 1]) && tokens[index + 1].text.startsWith(' ');
+      return { ...token, padLeft, padRight };
+    }
+    if (!plain(token)) return token;
+    let text: string = token.text;
+    if (tokens[index + 1]?.type === 'codespan' && text.endsWith(' ')) text = text.slice(0, -1);
+    if (tokens[index - 1]?.type === 'codespan' && text.startsWith(' ')) text = text.slice(1);
+    return text === token.text ? token : { ...token, text };
+  });
+}
+
 // recursively render inline content (bold, italic, links, etc.)
-const InlineContent = ({ tokens, options = {} }: { tokens: any[]; options?: MarkdownRenderOptions }) => {
+const InlineContent = ({ tokens: rawTokens, options = {} }: { tokens: any[]; options?: MarkdownRenderOptions }) => {
   const theme = useTheme();
-  if (!tokens) return null;
+  if (!rawTokens) return null;
+  const tokens = absorbChipSpaces(rawTokens);
 
   return (
     <>
@@ -603,7 +626,7 @@ const InlineContent = ({ tokens, options = {} }: { tokens: any[]; options?: Mark
           case 'codespan':
             return (
               <Text key={key} color={theme.warning} backgroundColor={theme.codeBackground} dimColor={options.dimColor}>
-                {token.text}
+                {`${token.padLeft ? ' ' : ''}${token.text}${token.padRight ? ' ' : ''}`}
               </Text>
             );
 

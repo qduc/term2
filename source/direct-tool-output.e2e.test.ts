@@ -156,6 +156,8 @@ it(
     expect(visible, visible).toMatch(/Bare[^\n]*mockprov\/mock-alpha[^\n]*YOLO/);
     expect(visible, visible).not.toContain('isApprovalRejection');
     expect(visible, visible).toContain('Created b.txt and read it back: hi.');
+    // Inline code is a chip: padded on the background where a space stood, none before the full stop.
+    expect(session.getOutput()).toMatch(/m b\.txt \x1b\[/);
     // The edit and the new content stay visible: the header only names the file.
     expect(visible, visible).toContain('+ beta-line');
     expect(visible, visible).toContain('- alpha-line');

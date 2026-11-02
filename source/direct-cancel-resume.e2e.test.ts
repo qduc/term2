@@ -123,12 +123,21 @@ it(
     let idle = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
     await send('first question');
     await session.waitForOutput('PARTIAL-ANSWER', 60_000);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const live = session.getVisibleOutput();
+    const liveFrame = live.slice(live.lastIndexOf('▌ term²'));
+    expect(liveFrame).not.toContain('Stopped');
     // A draft typed during the turn survives: Ctrl+C stops the turn first.
     session.write('half typed');
     await waitForHarnessComposerValue(idlePath, 'half typed', { timeoutMs: 30_000 });
     session.write('\x03');
     await session.waitForOutput('Cancellation requested', 30_000);
     idle = await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
+    await session.waitForOutput('Stopped', 30_000);
+    const stoppedOutput = session.getVisibleOutput();
+    const stoppedFrame = stoppedOutput.slice(stoppedOutput.lastIndexOf('▌ term²'));
+    expect(stoppedFrame).toContain('PARTIAL-ANSWER');
+    expect(stoppedFrame.match(/Stopped/g)).toHaveLength(1);
     // The idle composer still holds the draft; clear it with Ctrl+C (no turn is running now).
     // (A second Ctrl+C inside two seconds exits the app, so let that window pass.)
     await new Promise((resolve) => setTimeout(resolve, 2500));
@@ -155,6 +164,8 @@ it(
     await send('third question');
     await session.waitForOutput('THIRD-REPLY', 30_000);
     screen = session.getVisibleOutput();
+    const resumedFrame = screen.slice(screen.lastIndexOf('▌ term²'));
+    expect(resumedFrame.match(/Stopped/g)).toHaveLength(1);
     expect(screen.lastIndexOf('THIRD-REPLY'), 'a reply after resume shows after the stopped text').toBeGreaterThan(
       screen.lastIndexOf('PARTIAL-ANSWER'),
     );

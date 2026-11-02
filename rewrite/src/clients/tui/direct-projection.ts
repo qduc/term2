@@ -96,7 +96,10 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
   for (const message of snapshot.messages) {
     // The engine finalizes interrupted stream text with this deterministic ID before admitting a steer.
     // Keep the marker in the projection so it survives replay without changing stored message text.
+    const live =
+      snapshot.activeTurnId !== null && (message.turnId === undefined || message.turnId === snapshot.activeTurnId);
     const interrupted =
+      !(message.draft && live) &&
       message.role === 'assistant' &&
       message.turnId !== undefined &&
       message.modelStep !== undefined &&
@@ -104,8 +107,6 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
     const view = { ...messageView(message), ...(interrupted ? { interrupted: true } : {}) };
     // Only the active turn's partial text is a live draft. A cancelled turn's partial reply never gets a final
     // message; it stays where it was said, in the timeline, instead of sinking below every later message.
-    const live =
-      snapshot.activeTurnId !== null && (message.turnId === undefined || message.turnId === snapshot.activeTurnId);
     if (message.draft && message.role === 'assistant' && live && !interrupted) drafts[message.id] = view.text;
     else messages.push(view);
   }

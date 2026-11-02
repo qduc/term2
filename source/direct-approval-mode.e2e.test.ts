@@ -88,7 +88,7 @@ async function runCommand(
   command: string,
   expected: string,
   firstPrompt?: string,
-  exerciseMenu: false | 'complete' | 'prefix-enter' = false,
+  exerciseMenu: false | 'complete' | 'prefix-enter' | 'pick-enter' = false,
 ): Promise<void> {
   root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-tool-rows-e2e-')));
   const home = path.join(root, 'home');
@@ -138,6 +138,16 @@ async function runCommand(
     await submit(firstPrompt);
     await session.waitForOutput('unused', 30_000);
     await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
+  }
+  if (exerciseMenu === 'pick-enter') {
+    // Arrow-picking a command and pressing Enter completes it into the draft; it must not run it.
+    session.write('/us');
+    await waitForHarnessComposerValue(idlePath, '/us', { timeoutMs: 60_000 });
+    session.write('\x1b[B');
+    session.write('\x1b[A');
+    session.write('\r');
+    await waitForHarnessComposerValue(idlePath, '/usage ', { timeoutMs: 60_000 });
+    return;
   }
   if (exerciseMenu === 'prefix-enter') {
     // Enter on an unfinished prefix completes it into the draft; it must not run /clear.
@@ -192,4 +202,8 @@ it('slash menu suggests and completes a command in the terminal', { timeout: TIM
 
 it('Enter on an unfinished slash prefix completes it and does not run the command', { timeout: TIMEOUT_MS }, () =>
   runCommand('/clear', '', 'keep this conversation', 'prefix-enter'),
+);
+
+it('Enter on an arrow-picked command completes it and does not run it', { timeout: TIMEOUT_MS }, () =>
+  runCommand('/usage', '', undefined, 'pick-enter'),
 );

@@ -13,14 +13,13 @@ Run it with:
 pnpm test:provider-black-box
 ```
 
-This command builds `dist/` first, then runs the dedicated configuration in `vitest.provider-black-box.config.ts`. It is intentionally separate from ordinary `pnpm test` because it launches the built CLI in isolated child processes.
+This command builds the legacy `dist/` and direct `rewrite/dist/` CLIs first, then runs the dedicated configuration in `vitest.provider-black-box.config.ts`. It is intentionally separate from ordinary `pnpm test` because it launches the built CLI in isolated child processes.
 
 Global setup primes a disposable Node compile cache with `dist/cli.js --help`
 before starting the workers. Only compiled bytecode is shared: every scenario
 still starts fresh processes and isolated application state. The cache is
 removed on teardown and is disabled for V8 coverage or
-`NODE_DISABLE_COMPILE_CACHE=1`. Direct Vitest invocations still require a prior
-build. Integration launchers similarly share one emitted CLI build prepared by
+`NODE_DISABLE_COMPILE_CACHE=1`. Direct Vitest invocations still require both CLI builds first (`pnpm build` and `node rewrite/scripts/build.mjs`). Native receipt-rollover and retry-notice restart/silent scenarios explicitly run the direct CLI; other scenarios retain their configured legacy or overridden CLI. Integration launchers similarly share one emitted CLI build prepared by
 their global setup; they do not reuse a running application.
 
 Compare timing with a recent run on a similarly loaded host; a fixed healthy
@@ -56,26 +55,14 @@ scenario is the one whose CLI never reached the state it waits for.
 - `scripts/provider-black-box/provider-test-harness.ts` owns child-process,
   stateful PTY, isolated-workspace, restart, and temporary-environment lifecycle.
   Keep it asynchronous; synchronous child execution can deadlock the fake server.
-  Source interactive ready/idle waits use `child.waitForIdleInput()`, not a prompt
-  glyph. The source CLI publishes an incrementing generation to
+  Interactive ready/idle waits use `child.waitForIdleInput()`, not a prompt
+  glyph. Both the legacy and direct CLIs publish an incrementing generation to
   `TERM2_HARNESS_IDLE_PATH` when the composer owns the keyboard and no turn is
   in flight (`source/lib/harness-input-idle.ts`). Text submission uses
   `writePtyTextAndSubmit()`, which waits for the CLI's companion composer-state
   acknowledgment before sending Enter; fixed sleeps and PTY echo do not prove
   Ink consumed the text. A PTY-stripped `❯` is not a readiness signal, and
   first-run/menu ownership must not count as idle.
-  The explicitly selected native entry has no source sidecars. Its shared
-  `direct-composer.ts` adapter reads only the latest complete synchronized Ink
-  frame. Ordinary readiness requires model/status, possibly separated by ordinary
-  notice/queue/goal rows, an inverse end cursor and the active ordinary footer.
-  The footer must share the editor's `composerActive` condition: an inverse cursor
-  remains visible on an inactive editor. Value waits may instead recognize the
-  active approval panel's single-line Why reason field using its prompt, cursor
-  and panel markers; that field never counts as idle. Tokens are decoded-string
-  offsets, not source revision numbers. Wrapped, multiline and image drafts stay
-  unsupported; do not guess missing wrap-boundary whitespace. At timeout inspect
-  the current full frame: a valid editor rejected by the adapter is different
-  from text that never appeared. Do not hide the latter or lengthen deadlines.
 - `scripts/provider-black-box/provider-capability-matrix.ts` and
   `provider-session-capability-manifest.ts` own the test-side capability rows,
   typed lifecycle ledgers, and aggregate accounting.
@@ -96,7 +83,7 @@ scenario is the one whose CLI never reached the state it waits for.
 
 CI uses `scripts/run-ci-lane.mjs` to distribute the complete tier inventories
 across the same four jobs. Each lane schedules its files through isolated Vitest
-projects using the original tier configurations and one two-worker queue.
+projects using the original tier configurations and one three-worker queue.
 Integration CLI launchers and provider suites use the job's freshly built,
 built CLI; standalone integration runs still prepare a private build. E2E
 retains its source and built-entry coverage. Discovery assigns new files automatically.

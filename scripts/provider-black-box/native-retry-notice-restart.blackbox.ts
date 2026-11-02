@@ -1,6 +1,6 @@
 import { createServer, type ServerResponse } from 'node:http';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { createIsolatedWorkspaceLease, exitInteractive, writePtyTextAndSubmit } from './provider-test-harness.js';
 
@@ -49,12 +49,7 @@ it.skipIf(process.platform !== 'linux')(
     });
     let child = await lease.start({
       command: process.execPath,
-      args: [
-        process.env.TERM2_TEST_CLI ? resolve(process.env.TERM2_TEST_CLI) : join(process.cwd(), 'dist/cli.js'),
-        '--lite',
-        '--profile',
-        'plan',
-      ],
+      args: [join(process.cwd(), 'rewrite/dist/rewrite/src/app/cli.js'), '--lite', '--profile', 'plan'],
       env: {
         PATH: `${join(lease.root, 'bin')}:${process.env.PATH ?? ''}`,
         TERM2_DIRECT_CONVERSATIONS_DIR: lease.paths.conversationsDir,
@@ -119,7 +114,7 @@ it.skipIf(process.platform !== 'linux')(
       child = await lease.start({
         command: process.execPath,
         args: [
-          process.env.TERM2_TEST_CLI ? resolve(process.env.TERM2_TEST_CLI) : join(process.cwd(), 'dist/cli.js'),
+          join(process.cwd(), 'rewrite/dist/rewrite/src/app/cli.js'),
           '--lite',
           '--profile',
           'plan',

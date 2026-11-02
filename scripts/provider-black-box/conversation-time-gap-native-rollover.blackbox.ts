@@ -101,7 +101,14 @@ globalThis.Date = class extends RealDate {
         '--control-socket=timing',
         '--discord-input',
       ];
-      child = await workspace.start({ cwd: process.cwd(), args, env, cols: 120, rows: 40 });
+      child = await workspace.start({
+        command: process.execPath,
+        cwd: process.cwd(),
+        args: [join(process.cwd(), 'rewrite/dist/rewrite/src/app/cli.js'), ...args],
+        env,
+        cols: 120,
+        rows: 40,
+      });
       await child.waitForIdleInput();
       let id = 0;
       const send = async (kind: 'human' | 'agent', text: string) => {
@@ -174,7 +181,13 @@ globalThis.Date = class extends RealDate {
       await writeFile(clock, String(-2 * 60 * 60 * 1000));
       child = await workspace.relaunch({
         cwd: process.cwd(),
-        args: [...args, '--resume', successor.name.replace(/\.jsonl$/, '')],
+        command: process.execPath,
+        args: [
+          join(process.cwd(), 'rewrite/dist/rewrite/src/app/cli.js'),
+          ...args,
+          '--resume',
+          successor.name.replace(/\.jsonl$/, ''),
+        ],
         env,
         cols: 120,
         rows: 40,

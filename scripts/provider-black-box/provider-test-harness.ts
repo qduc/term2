@@ -1,9 +1,4 @@
 import { testCliPath } from '../../source/test-helpers/terminal-e2e.js';
-import {
-  usesDirectComposer,
-  readDirectComposer,
-  waitForDirectComposer,
-} from '../../source/test-helpers/direct-composer.js';
 import { appendFileSync, createWriteStream, existsSync, rmSync, unlinkSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -153,11 +148,11 @@ export interface PtyChildDriver {
   waitForState(predicate: (snapshot: ChildSnapshot) => boolean, timeoutMs?: number): Promise<ChildSnapshot>;
   /** Latest composer-idle generation, or 0 before the child has accepted input. */
   readIdleGeneration(): number;
-  /** Source revision, or raw render offset on the direct CLI (never a synthetic source counter). */
+  /** Latest committed composer revision, or 0 before one has been published. */
   readComposerRevision(): number;
-  /** Source idle generation or fresh direct idle frame with an empty ordinary composer; not model completion. */
+  /** Wait for a new committed idle generation; not a model-completion signal. */
   waitForIdleInput(options?: { after?: number; timeoutMs?: number }): Promise<number>;
-  /** Source composer value or a fresh direct exact-value render after input; not a panel handshake. */
+  /** Wait for a fresh committed composer value; not a panel handshake. */
   waitForComposerValue(value: string, options?: { afterRevision?: number; timeoutMs?: number }): Promise<void>;
   waitForExit(timeoutMs?: number): Promise<ChildExit>;
   terminate(options?: { signal?: NodeJS.Signals; graceMs?: number; timeoutMs?: number }): Promise<ChildExit>;
@@ -492,7 +487,6 @@ function createPtyChild(options: {
   rows?: number;
 }): PtyChildDriver {
   const idlePath = options.env[HARNESS_IDLE_ENV];
-  const directComposer = usesDirectComposer(options.args);
   if (idlePath && existsSync(idlePath)) unlinkSync(idlePath);
 
   const terminal = spawn('python3', ['-u', '-c', PYTHON_PTY_BRIDGE, options.command, ...options.args], {
@@ -726,22 +720,15 @@ function createPtyChild(options: {
       waitForState((value) => value.visibleOutput.includes(needle), timeoutMs).then(() => undefined),
     waitForState,
     readIdleGeneration: () => {
-      if (directComposer) return readDirectComposer(output)?.end ?? 0;
       const idlePath = options.env[HARNESS_IDLE_ENV];
       if (!idlePath) return 0;
       return readHarnessIdleGeneration(idlePath);
     },
     readComposerRevision: () => {
-      if (directComposer) return output.length;
       if (!idlePath) return 0;
       return readHarnessComposerState(idlePath)?.revision ?? 0;
     },
     waitForIdleInput: async ({ after = 0, timeoutMs } = {}) => {
-      if (directComposer)
-        return waitForDirectComposer(
-          { getOutput: () => output, hasExited: () => exitState !== null },
-          { after, idle: true, value: '', timeoutMs: timeoutMs ?? DEFAULT_TIMEOUT_MS },
-        );
       const idlePath = options.env[HARNESS_IDLE_ENV];
       if (!idlePath) {
         throw new Error(`${HARNESS_IDLE_ENV} is required to wait for composer idle.`);
@@ -777,13 +764,6 @@ function createPtyChild(options: {
       );
     },
     waitForComposerValue: async (value, { afterRevision, timeoutMs = DEFAULT_WRITE_TIMEOUT_MS } = {}) => {
-      if (directComposer) {
-        await waitForDirectComposer(
-          { getOutput: () => output, hasExited: () => exitState !== null },
-          { value, after: afterRevision ?? 0, timeoutMs },
-        );
-        return;
-      }
       if (!idlePath) {
         throw new Error(`${HARNESS_IDLE_ENV} is required to wait for composer input.`);
       }

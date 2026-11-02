@@ -46,6 +46,11 @@ const plan = tiers.map(([tier, config]) => {
 });
 console.log(JSON.stringify({ lane, maxWorkers, plan }, null, 2));
 if (!listOnly) {
+  if (lane === 'provider-black-box') {
+    const build = spawnSync(process.execPath, ['rewrite/scripts/build.mjs'], { env, stdio: 'inherit' });
+    if (build.status !== 0 || build.error)
+      throw new Error(`Direct CLI build failed: ${build.error?.message ?? build.signal ?? build.status}`);
+  }
   const result = spawnSync(process.execPath, [vitest, 'run', '--config', 'vitest.ci.config.ts', '--reporter=verbose'], {
     env: {
       ...env,

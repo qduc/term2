@@ -1,6 +1,6 @@
 import { createServer, type ServerResponse } from 'node:http';
 import { mkdir, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { createIsolatedWorkspaceLease, writePtyTextAndSubmit } from './provider-test-harness.js';
 
@@ -47,12 +47,7 @@ it.skipIf(process.platform !== 'linux')('replays a silent background turn notice
   });
   const child = await lease.start({
     command: process.execPath,
-    args: [
-      process.env.TERM2_TEST_CLI ? resolve(process.env.TERM2_TEST_CLI) : join(process.cwd(), 'dist/cli.js'),
-      '--lite',
-      '--profile',
-      'pair',
-    ],
+    args: [join(process.cwd(), 'rewrite/dist/rewrite/src/app/cli.js'), '--lite', '--profile', 'pair'],
     env: {
       PATH: `${join(lease.root, 'bin')}:${process.env.PATH ?? ''}`,
       CLIPBOARD_FIXTURE: join(lease.root, 'clipboard.png'),

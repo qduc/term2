@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 
 /**
- * `pnpm test:provider-black-box` entry point: build `dist/`, then run the
+ * `pnpm test:provider-black-box` entry point: build both CLI entries, then run the
  * black-box configuration against the shipped CLI.
  *
  * Two flags exist to keep a broken build from looking like a hang. The suite
@@ -28,6 +28,8 @@ const run = (command, args) =>
   });
 const build = await run('pnpm', ['build']);
 if (build !== 0) process.exit(build);
+const directBuild = await run(process.execPath, ['rewrite/scripts/build.mjs']);
+if (directBuild !== 0) process.exit(directBuild);
 const tests = await run('pnpm', [
   'exec',
   'vitest',

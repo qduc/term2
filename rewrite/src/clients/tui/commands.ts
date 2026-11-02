@@ -226,8 +226,19 @@ function directCommandNotice(result: NativeReceiptResult): string {
 export async function directSlashCommand(connection: TuiConnection, input: string): Promise<string | null> {
   const commandId = randomUUID();
   switch (input.trim()) {
-    case '/compact':
-      return directCommandNotice(await sendNativeCommand(connection, { type: 'compact', commandId }));
+    case '/compact': {
+      const result = await sendNativeCommand(connection, { type: 'compact', commandId });
+      if (result.kind === 'finished' && result.receipt.outcome?.kind === 'compacted') return 'Compaction complete.';
+      if (result.kind === 'rejected' || result.kind === 'error') {
+        const outcome = result.receipt?.outcome;
+        throw new Error(
+          `Compaction failed: ${
+            outcome?.kind === 'rejected' ? outcome.message : result.message.replace(/^[a-z_]+: /, '')
+          }`,
+        );
+      }
+      return receiptNotice(result);
+    }
     case '/retry':
     case '/retry-turn':
       return directCommandNotice(await sendNativeCommand(connection, { type: 'retry', commandId, target: 'turn' }));

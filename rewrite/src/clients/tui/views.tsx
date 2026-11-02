@@ -147,16 +147,31 @@ function StreamingStatus({ state }: { readonly state: TuiState }): React.ReactEl
   );
 }
 
+/** Fold completed compaction receipts without losing the latest definite failure. */
+export function compactFailureMessage(state: TuiState): string | null {
+  const latest = state.commands
+    .filter(
+      (receipt) =>
+        receipt.request.operation.kind === 'compact' &&
+        (receipt.outcome?.kind === 'compacted' || receipt.outcome?.kind === 'rejected'),
+    )
+    .at(-1)?.outcome;
+  return latest?.kind === 'rejected' ? `Compaction failed: ${latest.message}` : null;
+}
+
 /** Keep pending work visible unless its active dialog already presents it. */
 export function Activity({
   state,
   dialogInteractionId,
+  notice,
 }: {
   readonly state: TuiState;
   readonly dialogInteractionId?: string;
+  readonly notice?: string | null;
 }): React.ReactElement {
   const theme = useTheme();
   const { TaskPanel } = useSkin();
+  const compactFailure = compactFailureMessage(state);
   // Only running work belongs in the live region; settled tasks stay in the task manager, and ids stay out of the transcript.
   const liveTasks = state.tasks.filter((task) => task.status === 'running' || task.status === 'awaiting_interaction');
   return (
@@ -176,8 +191,10 @@ export function Activity({
       {state.commands
         .filter(
           (receipt) =>
-            receipt.request.operation.kind !== 'configure' ||
-            (receipt.outcome?.kind !== 'configured' && receipt.outcome?.kind !== 'rejected'),
+            (receipt.request.operation.kind !== 'configure' ||
+              (receipt.outcome?.kind !== 'configured' && receipt.outcome?.kind !== 'rejected')) &&
+            (receipt.request.operation.kind !== 'compact' ||
+              (receipt.outcome?.kind !== 'compacted' && receipt.outcome?.kind !== 'rejected')),
         )
         .map((receipt) => (
           <Text key={receipt.request.commandId}>
@@ -187,6 +204,7 @@ export function Activity({
             {receipt.outcome?.kind === 'interrupted' ? ' · outcome unknown' : ''}
           </Text>
         ))}
+      {compactFailure && compactFailure !== notice ? <Text color={theme.danger}>{compactFailure}</Text> : null}
       {state.budgets.length ? <Text>Pending budget decisions: {state.budgets.length} · Ctrl+B</Text> : null}
       {state.goal ? <Text>Goal: {state.goal}</Text> : null}
       {state.verification ? <Text>Verification: {state.verification}</Text> : null}

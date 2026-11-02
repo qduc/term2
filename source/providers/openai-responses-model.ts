@@ -855,6 +855,9 @@ export class OpenAIResponsesWSModelWithPromptCacheKey extends OpenAIResponsesMod
       this.#sessions.release(socket, { keepAlive });
     };
     try {
+      // Cancelled before dispatch: never hand an aborted turn to the wire (issue 135, as in the Codex
+      // transport). Rejects with the same AbortError shape as the race below, so the catch settles it.
+      if (request.signal?.aborted) await raceWebSocketAbort(Promise.resolve(), request.signal);
       socket.send({
         type: 'response.create',
         ...requestBody(

@@ -3,6 +3,7 @@ import OpenAI from 'openai';
 import { once } from 'node:events';
 import { WebSocket as NodeWebSocket, WebSocketServer } from 'ws';
 import { CodexResponsesTransport, CodexResponsesWSModel } from '../source/providers/codex-responses-model.js';
+import { OpenAIResponsesWSModelWithPromptCacheKey } from '../source/providers/openai-responses-model.js';
 import { readWebSocketDispatch } from '../source/providers/websocket-request-dispatch.js';
 import { CodexProvider } from '../source/providers/codex.provider.js';
 import { RetryingModel } from '../source/providers/retrying-model.js';
@@ -501,6 +502,53 @@ it('does not send an aborted turn over a retained Codex websocket', async () => 
     expect(received).toHaveLength(2);
   } finally {
     transport.close();
+    for (const socket of socketServer.clients) socket.terminate();
+    await new Promise<void>((resolve) => socketServer.close(() => resolve()));
+  }
+});
+
+it('does not send an aborted turn over a retained OpenAI websocket', async () => {
+  const socketServer = new WebSocketServer({ host: '127.0.0.1', port: 0 });
+  await once(socketServer, 'listening');
+  const address = socketServer.address();
+  if (!address || typeof address === 'string') throw new Error('missing local address');
+  const received: any[] = [];
+  socketServer.on('connection', (socket) => {
+    socket.on('message', (message) => {
+      received.push(JSON.parse(message.toString()));
+      socket.send(
+        JSON.stringify({
+          type: 'response.completed',
+          response: {
+            id: `fixture-${received.length}`,
+            status: 'completed',
+            output: [],
+            usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+          },
+        }),
+      );
+    });
+  });
+  const client = new OpenAI({ apiKey: 'fake-token', baseURL: `http://127.0.0.1:${address.port}/v1` });
+  const model = new OpenAIResponsesWSModelWithPromptCacheKey(client, 'fixture-model');
+  const makeRequest = (signal?: AbortSignal): any => ({ input: [], tools: [], signal });
+  const consume = async (stream: AsyncIterable<any>) => {
+    for await (const event of stream) {
+      if (event.type === 'completion') break;
+    }
+  };
+  try {
+    await consume(model.stream(makeRequest()));
+    expect(received).toHaveLength(1);
+    const controller = new AbortController();
+    controller.abort();
+    await expect(consume(model.stream(makeRequest(controller.signal)))).rejects.toMatchObject({ name: 'AbortError' });
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(received).toHaveLength(1);
+    await consume(model.stream(makeRequest()));
+    expect(received).toHaveLength(2);
+  } finally {
+    await model.close();
     for (const socket of socketServer.clients) socket.terminate();
     await new Promise<void>((resolve) => socketServer.close(() => resolve()));
   }

@@ -76,14 +76,10 @@ for (const [cols, rows] of [
       terminal.write('help');
       await waitForHarnessComposerValue(idle, '/help', { timeoutMs: 60_000 });
       terminal.write('\r');
-      await terminal.waitForOutput('Keyboard shortcuts', 30_000);
+      // Help must be emitted in full without keyboard paging, even on a short terminal.
+      await terminal.waitForOutput('/orchestrator —', 30_000);
       expect(terminal.getVisibleOutput()).toContain('Keyboard shortcuts');
       expect(terminal.getVisibleOutput()).toContain('Ctrl+G approvals/tasks');
-      for (let i = 0; i < 12; i++) {
-        terminal.write('\x1b[6~');
-        await new Promise((r) => setTimeout(r, 80));
-      }
-      await terminal.waitForOutput('/orchestrator —', 30_000);
       const table = fs.readFileSync(
         fileURLToPath(new URL('../rewrite/src/clients/tui/slash-commands.ts', import.meta.url)),
         'utf8',
@@ -94,8 +90,7 @@ for (const [cols, rows] of [
       for (const command of ['/plan', '/mentor', '/bare', '/mcp', '/restart', '/quit']) {
         expect(terminal.getVisibleOutput()).toContain(`${command} —`);
       }
-      terminal.write('\x1b[5~');
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      expect(terminal.getVisibleOutput()).not.toMatch(/Lines 1[–-]\d+ of \d+/);
     } finally {
       terminal.dispose();
       fs.rmSync(root, { recursive: true, force: true });

@@ -19,6 +19,8 @@ export type Message = {
   readonly presentation?: Readonly<Record<string, JsonValue>>;
   readonly error?: boolean;
   readonly interrupted?: boolean;
+  /** Client-only immutable help, never accepted from wire or persisted. */
+  readonly localHelp?: true;
   /** Live streaming draft replaced by this finalized assistant message. */
   readonly replacesDraftId?: string;
   readonly historyText?: string;

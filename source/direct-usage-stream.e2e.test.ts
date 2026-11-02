@@ -175,3 +175,45 @@ it('wraps settled transcript rows at terminal width', { timeout: TIMEOUT_MS }, a
   expect(settled).toMatch(/morning sun\s*\r?\n\s*rises\./);
   expect(settled).not.toMatch(/morning sun ris\s*\r?\n\s*es\./);
 });
+
+// While the turn is active, help retains the existing bounded viewer.
+it('keeps paged help available during a still-streaming response', { timeout: TIMEOUT_MS }, async () => {
+  const { idlePath } = await start();
+  const submit = async (text: string) => {
+    session!.write(text);
+    await waitForHarnessComposerValue(idlePath, text, { timeoutMs: 60_000 });
+    session!.write('\r');
+  };
+  await submit('first question');
+  await session!.waitForOutput('STREAM-ANCHOR-SENTINEL', 30_000);
+  const before = session!.getVisibleOutput().length;
+  await submit('/help');
+  for (let i = 0; i < 400 && !session!.getVisibleOutput().slice(before).includes('Keyboard shortcuts'); i++)
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  expect(session!.getVisibleOutput().slice(before)).toContain('Keyboard shortcuts');
+  expect(session!.getVisibleOutput().slice(before)).toMatch(/Lines 1[–-]\d+ of \d+/);
+  for (let i = 0; i < 12; i++) {
+    session!.write('\x1b[6~');
+    await new Promise((resolve) => setTimeout(resolve, 80));
+  }
+  await session!.waitForOutput('/orchestrator —', 30_000);
+  expect(heldResponse?.writableEnded).toBe(false);
+  heldResponse!.end(
+    `data: ${JSON.stringify({
+      id: 'chatcmpl-1',
+      choices: [{ delta: {}, finish_reason: 'stop' }],
+    })}\n\ndata: [DONE]\n\n`,
+  );
+  await until(
+    () =>
+      fs
+        .readdirSync(path.join(root, 'conversations'))
+        .filter((f) => f.endsWith('.jsonl'))
+        .some((f) => fs.readFileSync(path.join(root, 'conversations', f), 'utf8').includes('"type":"turn_ended"')),
+    'the held turn settles after help',
+  );
+  const logs = fs.readdirSync(path.join(root, 'conversations')).filter((f) => f.endsWith('.jsonl'));
+  expect(logs.map((f) => fs.readFileSync(path.join(root, 'conversations', f), 'utf8')).join('')).not.toContain(
+    'Keyboard shortcuts',
+  );
+});

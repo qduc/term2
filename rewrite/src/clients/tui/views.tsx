@@ -44,6 +44,10 @@ export function Transcript({
           ) : null}
         </Box>
       </Box>
+    ) : message.localHelp === true ? (
+      <Box key={`message:${message.id}`} marginTop={1}>
+        <Text color={theme.textSubtle}>{message.text}</Text>
+      </Box>
     ) : message.role === 'assistant' ? (
       <Box key={`message:${message.id}`} flexDirection="column" marginTop={1} paddingLeft={2}>
         <AssistantFrame kind="answer">

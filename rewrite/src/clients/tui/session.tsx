@@ -343,7 +343,7 @@ export function TuiSession({
         if (directNotice !== null) setNotice(directNotice);
         else {
           const result = await integration.command(connection, input);
-          if (result.message) (input.trim() === '/help' ? viewport.setHelp : setNotice)(result.message);
+          if (result.message) viewport.showMessage(result.message, input, setNotice);
           if (result.transcript) viewport.appendCommandOutput(result.transcript);
           if (result.draft) {
             restoreDraft(result.draft);

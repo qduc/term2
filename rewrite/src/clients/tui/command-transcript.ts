@@ -4,13 +4,24 @@ import { useTerminalSize } from './terminal.js';
 import { useTranscriptViewport } from './viewport.js';
 
 /** Local command output belongs in the visible transcript, not provider history. */
-export function useCommandTranscript(state: TuiState): { state: TuiState; append(text: string): void } {
+export function useCommandTranscript(state: TuiState): {
+  state: TuiState;
+  append(text: string, plain?: boolean): void;
+} {
   const [entries, setEntries] = useState<readonly { message: Message; after?: string }[]>([]);
-  const append = (text: string) => {
+  const append = (text: string, plain = false) => {
     const after = state.timeline?.at(-1)?.id;
     setEntries((previous) => [
       ...previous,
-      { message: { id: `local-command-${crypto.randomUUID()}`, role: 'assistant', text }, after },
+      {
+        message: {
+          id: `local-command-${crypto.randomUUID()}`,
+          role: 'assistant',
+          text,
+          ...(plain ? { localHelp: true as const } : {}),
+        },
+        after,
+      },
     ]);
   };
   if (!entries.length) return { state, append };
@@ -55,5 +66,13 @@ export function useCommandTranscriptViewport(
     header,
     historyRevision,
   );
-  return { ...viewport, appendCommandOutput: transcript.append };
+  return {
+    ...viewport,
+    appendCommandOutput: transcript.append,
+    showMessage(message: string, command: string, notice: (value: string) => void): void {
+      if (command.trim() !== '/help') notice(message);
+      else if (state.activeTurnId) viewport.setHelp(message);
+      else transcript.append(message, true);
+    },
+  };
 }

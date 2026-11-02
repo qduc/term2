@@ -35,7 +35,14 @@ export function Transcript({
   const renderMessage = (message: Message) =>
     message.role === 'user' ? (
       <Box key={`message:${message.id}`} marginTop={1}>
-        <UserMessage text={message.text} />
+        <Box flexDirection="column">
+          <UserMessage text={message.text} />
+          {message.attachments?.length ? (
+            <Text color={theme.textSubtle}>
+              [{message.attachments.length} {message.attachments.length === 1 ? 'image' : 'images'} attached]
+            </Text>
+          ) : null}
+        </Box>
       </Box>
     ) : message.role === 'assistant' ? (
       <Box key={`message:${message.id}`} flexDirection="column" marginTop={1} paddingLeft={2}>

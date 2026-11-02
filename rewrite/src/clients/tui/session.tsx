@@ -18,7 +18,7 @@ import { isCtrlG, isShiftTab, usePlanToggle } from './shift-tab.js';
 import { RewindPicker } from './rewind-picker.js';
 import { TaskManager } from './task-manager.js';
 import { BudgetPanel } from './budget-panel.js';
-import { primaryDraft, wireAttachments } from './draft.js';
+import { cleanImageMarkers, primaryDraft, wireAttachments } from './draft.js';
 import { numberedInteractionAnswer } from './interaction-command.js';
 import { useSessionComposer } from './session-composer.js';
 import { useTerminalSize } from './terminal.js';
@@ -153,7 +153,8 @@ export function TuiSession({
     delivery: WireSubmission['delivery'] = state.activeTurnId ? 'steer' : 'auto',
     confirmed = false,
   ): Promise<void> => {
-    if (!input.trim() && !submittedImages.length && !otherParts.length && !editing) return;
+    const clean = cleanImageMarkers(input);
+    if (!clean.trim() && !submittedImages.length && !otherParts.length && !editing) return;
     if (pending.current) {
       // The composer is already empty and a send is in flight: keep this message as the draft instead of losing it.
       replaceInput(editor.value ? `${input}\n${editor.value}` : input);
@@ -197,7 +198,7 @@ export function TuiSession({
           if (!editing.knownParts && parts.length)
             throw new Error('Queued attachments are unavailable; cannot safely replace them.');
           const changed = editing.knownParts && JSON.stringify(parts) !== JSON.stringify(editing.knownParts);
-          await queueAction(connection, 'edit', editing.id, input, changed ? parts : undefined);
+          await queueAction(connection, 'edit', editing.id, clean, changed ? parts : undefined);
           if (await steerRecovery.wasEditInvalidatedAfter(submission.submissionEpoch, editing.id)) return;
           replaceInput(editing.restoreText, editing.restoreCursor);
           setImages(editing.restoreImages);
@@ -230,10 +231,11 @@ export function TuiSession({
         if (!match || (!match[2].trim() && !submittedImages.length))
           throw new Error('Enter a message after /steer or /followup.');
         const parts = wireAttachments(submittedImages, otherParts, originalParts);
-        if (await held(match[2], parts, () => void submit(input, submittedImages, delivery, true))) return;
+        if (await held(cleanImageMarkers(match[2]), parts, () => void submit(input, submittedImages, delivery, true)))
+          return;
         await submitText(
           connection,
-          match[2],
+          cleanImageMarkers(match[2]),
           wireAttachments(submittedImages, otherParts, originalParts),
           match[1] === 'steer' ? 'steer' : 'follow_up',
           match[1] === 'steer' ? state.activeTurnId ?? undefined : undefined,
@@ -244,9 +246,8 @@ export function TuiSession({
       } else if (input.startsWith('!')) {
         const attached = submittedImages.length > 0 || otherParts.length > 0;
         setBangResult(await runBangShell(integration, connection, input, attached, Boolean(state.activeTurnId)));
-      } else if (input.trim() === '/tasks') {
-        setTaskOpen(true);
-      } else if (/^\/rewind(?:\s|$)/.test(input)) {
+      } else if (input.trim() === '/tasks') setTaskOpen(true);
+      else if (/^\/rewind(?:\s|$)/.test(input)) {
         const match = /^\/rewind(?:\s+(last|\d+))?(?:\s+(edit|resend))?$/.exec(input.trim());
         if (!match) throw new Error('Use /rewind [last|number] [edit|resend].');
         const targets = await listRewindTargets(connection);
@@ -298,9 +299,8 @@ export function TuiSession({
         const item = match[2] ? state.queue[Number(match[2]) - 1] : undefined;
         if ((action === 'edit' || action === 'retract' || action === 'clear-images') && !item)
           throw new Error('No queued message at that number.');
-        if (item && queueOwners.current && queueOwners.current[Number(match[2]) - 1] !== item.id) {
+        if (item && queueOwners.current && queueOwners.current[Number(match[2]) - 1] !== item.id)
           throw new Error('The queue changed. Check the list and re-enter your command.');
-        }
         if ((action === 'resume' || action === 'discard') && match[2])
           throw new Error('This operation takes no message number.');
         if (action === 'clear-images') {
@@ -357,8 +357,8 @@ export function TuiSession({
         }
       } else {
         const parts = wireAttachments(submittedImages, otherParts, originalParts);
-        if (await held(input, parts, () => void submit(input, submittedImages, delivery, true))) return;
-        await submitText(connection, input, parts, delivery, state.activeTurnId ?? undefined, submission.requestId);
+        if (await held(clean, parts, () => void submit(input, submittedImages, delivery, true))) return;
+        await submitText(connection, clean, parts, delivery, state.activeTurnId ?? undefined, submission.requestId);
         if (await steerRecovery.wasReturnedAfter(submission.submissionEpoch, submission.requestId)) return;
         clearSubmittedParts(submittedImages, otherParts);
       }
@@ -370,6 +370,7 @@ export function TuiSession({
           ? []
           : wireAttachments(submittedImages, otherParts, originalParts),
         submission.submittedRevision,
+        clean,
       );
       answerOwners.current = null;
       queueOwners.current = null;

@@ -109,3 +109,5 @@ Local command output anchored to a live assistant draft follows the wire message
 The resume picker shows the selected session’s ID, update time, actual message count when available, model, and initial prompt in its responsive preview; the count is from the workspace-scoped session catalogue, not inferred from displayed text.
 
 The throttled transcript frame records whether it was rendered for expanded output. Discard a frame when that mode changes: otherwise collapsing Ctrl+O can briefly repaint stale expanded output into normal flow. Failed settled tool rows are visually bounded in Static; the full underlying output remains in the on-demand viewer.
+
+Pasted images arrive from ink-prompt as editor-only private-use markers plus image refs. Strip only image markers when sending or recording history, not while restoring a rejected draft; preserve image bytes separately. Paste-text blocks are not image markers. User transcript rows show the attachment count.

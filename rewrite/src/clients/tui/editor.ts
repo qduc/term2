@@ -68,9 +68,10 @@ export function useEditor(initialHistory: readonly HistoryEntry[], historySize: 
     remember: boolean,
     attachments: HistoryEntry['attachments'] = [],
     expectedRevision?: number,
+    historyText = submitted,
   ) => {
-    const entry = { text: submitted, attachments };
-    if (remember && (submitted.trim() || attachments.length)) {
+    const entry = { text: historyText, attachments };
+    if (remember && (historyText.trim() || attachments.length)) {
       if (JSON.stringify(history.current.at(-1)) !== JSON.stringify(entry)) {
         history.current = [...history.current, entry].slice(-historySize);
       }

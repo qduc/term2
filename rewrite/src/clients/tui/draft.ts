@@ -56,3 +56,8 @@ export function primaryDraft(content: readonly WireContent[]) {
     attachments: content.filter((_part, index) => index !== primary),
   };
 }
+
+/** ink-prompt image blocks are editor-only; paste-text blocks are already expanded on submit. */
+export function cleanImageMarkers(text: string): string {
+  return text.replace(/\uE000i:[^\uE000\uE001]*\uE001/g, '');
+}

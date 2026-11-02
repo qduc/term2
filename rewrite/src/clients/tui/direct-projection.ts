@@ -11,7 +11,9 @@ const messageView = (message: WireMessage): Message => ({
   role: message.role,
   ...(message.presentation ? { presentation: structuredClone(message.presentation) } : {}),
   text: message.content.length
-    ? message.content.map((part) => (part.type === 'text' ? part.text : `[image: ${part.mediaType}]`)).join('')
+    ? message.content
+        .map((part) => (part.type === 'text' ? part.text : message.role === 'user' ? '' : `[image: ${part.mediaType}]`))
+        .join('')
     : message.text,
   error: message.isError,
   ...(message.replacesDraftId ? { replacesDraftId: message.replacesDraftId } : {}),

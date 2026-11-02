@@ -16,6 +16,7 @@ export const SLASH_COMMAND_TABLE: ReadonlyArray<{ readonly name: string; readonl
   { name: '/retry-turn', description: 'Regenerate the latest turn from its original prompt' },
   { name: '/retry-tool', description: 'Retry the last tool call' },
   { name: '/rewind', description: 'Go back to an earlier message' },
+  { name: '/undo', description: 'Rewind and edit an earlier message (alias for /rewind)' },
   { name: '/usage', description: 'Show token usage for this session' },
   { name: '/copy', description: 'Copy an assistant response (/copy N counts back)' },
   { name: '/skills', description: 'Activate a skill for a request' },

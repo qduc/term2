@@ -256,9 +256,10 @@ export function TuiSession({
         const attached = submittedImages.length > 0 || otherParts.length > 0;
         setBangResult(await runBangShell(integration, connection, input, attached, Boolean(state.activeTurnId)));
       } else if (input.trim() === '/tasks') setTaskOpen(true);
-      else if (/^\/rewind(?:\s|$)/.test(input)) {
-        const match = /^\/rewind(?:\s+(last|\d+))?(?:\s+(edit|resend))?$/.exec(input.trim());
-        if (!match) throw new Error('Use /rewind [last|number] [edit|resend].');
+      else if (/^\/(?:rewind|undo)(?:\s|$)/.test(input)) {
+        const match = /^\/(?:rewind|undo)(?:\s+(last|\d+))?(?:\s+(edit|resend))?$/.exec(input.trim());
+        if (!match)
+          throw new Error(`Use /${input.trim().startsWith('/undo') ? 'undo' : 'rewind'} [last|number] [edit|resend].`);
         const targets = await listRewindTargets(connection);
         if (!targets.length) throw new Error('Nothing to rewind.');
         if (!match[1]) {

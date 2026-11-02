@@ -119,3 +119,5 @@ Pasted images arrive from ink-prompt as editor-only private-use markers plus ima
 `/settings` opens a modal picker: Tab changes categories, typing searches all visible settings (including advanced entries), Enter starts an explicit value edit, and Escape cancels the edit or closes the picker. It receives redacted display values from the app and applies changes through the existing session settings command; secret values are redacted and secret/structured values are not directly edited in the picker. Closing while a change is pending does not cancel it and its eventual result is reported. Explicit `/settings <category>` and `/settings <key> [value]` remain available.
 
 The slash menu uses the active skin’s MenuFrame titled `Commands`. Its visible item window fits short terminals while keeping the selected item reachable by Up/Down; at normal height it still shows up to ten entries.
+
+`/undo` is an alias of `/rewind`: the bare command opens the same target/action picker, while explicit targets use the same receipt-backed edit/resend path. The default action restores the selected prompt into the composer without submitting it.

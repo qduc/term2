@@ -385,3 +385,58 @@ it.skipIf(process.platform !== 'linux')(
     expect(received.join('\n')).toContain('image/png');
   },
 );
+
+// Bare /undo must open the same picker and edit path as /rewind.
+it('undo opens the rewind picker and restores the selected prompt for editing', { timeout: TIMEOUT_MS }, async () => {
+  const { idlePath } = await start([{ text: 'UNDO-FIRST-REPLY' }, { text: 'UNDO-EDITED-REPLY' }]);
+  const idle = readHarnessIdleGeneration(idlePath);
+  session!.write('undo original question');
+  await waitForHarnessComposerValue(idlePath, 'undo original question', { timeoutMs: 60_000 });
+  session!.write('\r');
+  await session!.waitForOutput('UNDO-FIRST-REPLY', 60_000);
+  await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
+  session!.write('/undo');
+  await waitForHarnessComposerValue(idlePath, '/undo', { timeoutMs: 60_000 });
+  session!.write('\r');
+  await session!.waitForOutput('Choose a turn to rewind', 15_000);
+  expect(session!.getVisibleOutput()).not.toContain('/undo is not available');
+  session!.write('\r');
+  await session!.waitForOutput('Edit in composer', 15_000);
+  session!.write('\r');
+  await session!.waitForOutput('Rewind draft restored', 30_000);
+  await waitForHarnessComposerValue(idlePath, 'undo original question', { timeoutMs: 60_000 });
+  expect(received).toHaveLength(1);
+  session!.write(' edited');
+  await waitForHarnessComposerValue(idlePath, 'undo original question edited', { timeoutMs: 60_000 });
+  session!.write('\r');
+  await session!.waitForOutput('UNDO-EDITED-REPLY', 60_000);
+  expect(received).toHaveLength(2);
+  expect(received[1]).toContain('undo original question edited');
+  const facts = fs
+    .readdirSync(path.join(root, 'conversations'))
+    .filter((name) => name.endsWith('.jsonl'))
+    .flatMap((name) =>
+      fs
+        .readFileSync(path.join(root, 'conversations', name), 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line).fact),
+    );
+  expect(facts.some((fact) => fact.type === 'history_replaced' && fact.reason === 'rewind')).toBe(true);
+});
+
+it('undo accepts an explicit last target without auto-sending', { timeout: TIMEOUT_MS }, async () => {
+  const { idlePath } = await start([{ text: 'UNDO-LAST-REPLY' }]);
+  const idle = readHarnessIdleGeneration(idlePath);
+  session!.write('explicit undo target');
+  await waitForHarnessComposerValue(idlePath, 'explicit undo target', { timeoutMs: 60_000 });
+  session!.write('\r');
+  await session!.waitForOutput('UNDO-LAST-REPLY', 60_000);
+  await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
+  session!.write('/undo last');
+  await waitForHarnessComposerValue(idlePath, '/undo last', { timeoutMs: 60_000 });
+  session!.write('\r');
+  await session!.waitForOutput('Rewind draft restored', 30_000);
+  await waitForHarnessComposerValue(idlePath, 'explicit undo target', { timeoutMs: 60_000 });
+  expect(received).toHaveLength(1);
+});

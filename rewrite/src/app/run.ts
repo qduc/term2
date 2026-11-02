@@ -15,7 +15,16 @@ import { getProfileMetadata } from '../../../source/services/profiles/active-pro
 import { renderTurn } from '../clients/headless/index.js';
 import type { HeadlessEvent, HeadlessIo } from '../clients/headless/index.js';
 import type { TurnEvent } from '../engine/index.js';
-import type { Item, ItemId, Model, ModelEvent, ModelRef, ModelRegistry, ModelRequest } from '../model/index.js';
+import type {
+  Item,
+  ItemId,
+  Model,
+  ModelError,
+  ModelEvent,
+  ModelRef,
+  ModelRegistry,
+  ModelRequest,
+} from '../model/index.js';
 import { createProviderRegistry } from '../model/provider.js';
 import { createConversation } from '../session/conversation.js';
 import type { Conversation, Turn } from '../session/conversation.js';
@@ -63,6 +72,7 @@ export function run(request: RunRequest): RunHandle {
       conversation = createConversation({
         log: createLog(conversationsDir, id),
         models: withGenerationGuard(createProviderRegistry(selection), selection),
+        recovery: { maxTransientRetries: selection.settings.get('agent.retryAttempts') },
         meta: {
           id,
           workspace: process.cwd(),
@@ -97,7 +107,7 @@ export function run(request: RunRequest): RunHandle {
     } finally {
       active = false;
       try {
-        conversation?.close();
+        void conversation?.close().catch(() => undefined);
       } catch {
         // The result is already durable or already failed; a close error changes neither.
       }
@@ -140,6 +150,13 @@ function withGenerationGuard(models: ModelRegistry, { settings }: ProfileSelecti
         deadlines.recordActivity();
         if (next.value.type === 'text_delta') guard.observeText(next.value.delta);
         if (next.value.type === 'reasoning_delta') guard.observeReasoning(next.value.delta);
+        // This MAIN entry point remains text-only; reject before the kernel records or executes a tool.
+        if (next.value.type === 'item' && next.value.item.type === 'tool_call')
+          throw {
+            kind: 'provider',
+            message: `model called ${next.value.item.toolName}; tools are not available yet`,
+            retryable: false,
+          } satisfies ModelError;
         yield next.value;
       }
     } finally {

@@ -20,6 +20,7 @@ export type SpawnTerminalOptions = {
 };
 
 export type TerminalSession = {
+  readonly bridgePid: number;
   getOutput: () => string;
   getVisibleOutput: () => string;
   write: (data: string) => void;
@@ -196,6 +197,7 @@ export function spawnTerminal(command: string, args: string[], options: SpawnTer
   const getVisibleOutput = () => stripVTControlCharacters(output);
 
   return {
+    bridgePid: terminal.pid!,
     getOutput: () => output,
     getVisibleOutput,
     write: (data: string) => {

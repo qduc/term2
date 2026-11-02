@@ -98,7 +98,9 @@ export function TuiSession({
   const viewport = useCommandTranscriptViewport(state, headerHeight ?? 0, viewportActive, header, historyRevision);
   const { InputFrame, PromptMarker, LiveDivider } = useSkin();
   const theme = useTheme();
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(() =>
+    state.status === 'interrupted' ? 'Previous turn was interrupted — send a message to continue.' : null,
+  );
   const notifyError = (error: unknown) => setNotice(error instanceof Error ? error.message : String(error));
   const [busy, setBusy] = useState(false);
   const composerActive = !panelOpen && !confirmation.pending && !connError && !interactionActive;

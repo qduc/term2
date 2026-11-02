@@ -61,6 +61,16 @@ async function configure(
   return { message: configured && done ? done : receiptNotice(result) };
 }
 
+/** `2026-11-02 20:22` in the user's own time zone; the log stores UTC. */
+function localMinute(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso.slice(0, 16).replace('T', ' ');
+  const two = (value: number) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())} ${two(date.getHours())}:${two(
+    date.getMinutes(),
+  )}`;
+}
+
 function parseModel(reference: string | undefined): { provider: string; model: string } {
   const separator = reference?.indexOf('/') ?? -1;
   if (!reference || separator <= 0) throw new Error('Use <provider>/<model>.');
@@ -85,7 +95,18 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
       return { sessionId };
     }
     const { sessions } = await host.listSessions(principal);
-    const here = sessions.filter((session) => session.workspace.root === root).map((session) => session.id);
+    const here = sessions
+      .filter((session) => session.workspace.root === root)
+      .sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))
+      .map((session) =>
+        [
+          session.id,
+          session.updatedAt ? localMinute(session.updatedAt) : undefined,
+          session.title ?? '(no messages yet)',
+        ]
+          .filter(Boolean)
+          .join('  '),
+      );
     return { message: here.length ? here.join('\n') : 'No direct sessions in this workspace.' };
   };
 

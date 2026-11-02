@@ -84,13 +84,12 @@ async function startProvider(replies: Reply[]): Promise<string> {
 }
 
 // The effective approval mode is visible without changing it.
-async function runCommand(command: string, expected: string): Promise<void> {
+async function runCommand(command: string, expected: string, firstPrompt?: string): Promise<void> {
   root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-tool-rows-e2e-')));
   const home = path.join(root, 'home');
   const workspace = path.join(root, 'w');
   fs.mkdirSync(home);
   fs.mkdirSync(workspace);
-  const first = `echo hi > ${path.join(workspace, 'b.txt')} && cat ${path.join(workspace, 'b.txt')}`;
   const baseUrl = await startProvider([{ text: 'unused' }]);
   const idlePath = path.join(home, 'input-idle');
   const env = {
@@ -121,7 +120,7 @@ async function runCommand(command: string, expected: string): Promise<void> {
   );
 
   session = spawnTerminal('node', [builtCli], { cwd: workspace, env });
-  await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
+  const idle = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
 
   // Submit only once the composer holds the text; Enter in the same write is taken as pasted input.
   const submit = async (text: string) => {
@@ -130,6 +129,11 @@ async function runCommand(command: string, expected: string): Promise<void> {
     session!.write('\r');
   };
 
+  if (firstPrompt) {
+    await submit(firstPrompt);
+    await session.waitForOutput('unused', 30_000);
+    await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
+  }
   await submit(command);
   await session.waitForOutput(expected, 30_000);
 }
@@ -149,3 +153,9 @@ it('/model without an argument names the current model', { timeout: TIMEOUT_MS }
 it('/model <provider>/<model> confirms the new model by name', { timeout: TIMEOUT_MS }, () =>
   runCommand('/model mockprov/mock-beta', 'Model set to mockprov/mock-beta.'),
 );
+
+it('/resume ls labels each conversation with its time and first prompt', { timeout: TIMEOUT_MS }, async () => {
+  await runCommand('/resume ls', 'conv_', 'tidy the workspace please');
+  const visible = session!.getVisibleOutput();
+  expect(visible).toMatch(/conv_[0-9a-f-]{36} {2}\d{4}-\d\d-\d\d \d\d:\d\d {2}tidy the workspace/);
+});

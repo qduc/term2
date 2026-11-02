@@ -7,7 +7,7 @@ import type { Workspace } from '../tools/index.js';
 import { createConversation, openConversation } from './conversation.js';
 import type { ConversationDeps, TurnRequest } from './direct-types.js';
 import type { DirectBinding, DirectSessionStore } from './facade-types.js';
-import type { FactLine, SessionStartedFact } from './facts.js';
+import type { Fact, FactLine, SessionStartedFact } from './facts.js';
 import { createDirectSession, type DirectLiveSession } from './direct-session.js';
 import type { ConversationLog } from './log.js';
 import {
@@ -59,7 +59,31 @@ export interface DirectLocalStore extends DirectSessionStore {
   open(id: string, binding?: DirectBinding): Promise<DirectLiveSession>;
 }
 
-type Summary = { readonly id: string; readonly workspace: Workspace; readonly model: ModelRef };
+type Summary = {
+  readonly id: string;
+  readonly workspace: Workspace;
+  readonly model: ModelRef;
+  /** The first user message, flattened and shortened, so a list can tell conversations apart. */
+  readonly title?: string;
+  /** When the last accepted fact was written. */
+  readonly updatedAt?: string;
+};
+
+function firstPrompt(facts: readonly Fact[]): string | undefined {
+  for (const fact of facts) {
+    if (fact.type !== 'turn_started') continue;
+    for (const item of fact.input) {
+      if (item.type !== 'user_message') continue;
+      const text = item.content
+        .flatMap((part) => (part.type === 'text' ? [part.text] : []))
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (text) return text.length > 60 ? `${text.slice(0, 59)}…` : text;
+    }
+  }
+  return undefined;
+}
 const DIRECT_ID = /^conv_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 /**
@@ -303,6 +327,8 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
           id,
           workspace,
           model: latestDirectConfiguration(facts)?.configuration.model ?? metadata.model,
+          ...(firstPrompt(facts) ? { title: firstPrompt(facts) } : {}),
+          ...(lineage.entries.length ? { updatedAt: lineage.entries[lineage.entries.length - 1]!.at } : {}),
         });
       }
       return { sessions: summaries.sort((left, right) => left.id.localeCompare(right.id)) };

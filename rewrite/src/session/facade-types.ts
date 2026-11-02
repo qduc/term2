@@ -238,7 +238,15 @@ export interface DirectSessionStore {
   /** Read/replay only; one writable live Session per id per host; never restarts tools. */
   open(id: string, binding?: DirectBinding): Promise<DirectSession>;
   list(cursor?: string): Promise<{
-    readonly sessions: readonly { readonly id: string; readonly workspace: Workspace; readonly model: ModelRef }[];
+    readonly sessions: readonly {
+      readonly id: string;
+      readonly workspace: Workspace;
+      readonly model: ModelRef;
+      /** First user message, shortened; absent before any turn. */
+      readonly title?: string;
+      /** When the last accepted fact was written. */
+      readonly updatedAt?: string;
+    }[];
     readonly cursor?: string;
   }>;
   close(): Promise<void>;

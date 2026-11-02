@@ -150,3 +150,102 @@ it(
     );
   },
 );
+
+it('queued steers run after cancellation while follow-ups stay paused', { timeout: TIMEOUT_MS }, async () => {
+  root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'p4b-steer-')));
+  const home = path.join(root, 'home');
+  const workspace = path.join(root, 'w');
+  fs.mkdirSync(home);
+  fs.mkdirSync(workspace);
+  const baseUrl = await startProvider([
+    { text: 'PARTIAL-ANSWER', hang: true },
+    { text: 'STEER-REPLY-ONE' },
+    { text: 'STEER-REPLY-TWO' },
+    { text: 'FOLLOWUP-REPLY' },
+  ]);
+  const idlePath = path.join(home, 'input-idle');
+  const env = {
+    HOME: home,
+    XDG_CONFIG_HOME: path.join(home, '.config'),
+    XDG_STATE_HOME: path.join(home, '.local', 'state'),
+    XDG_CACHE_HOME: path.join(home, '.cache'),
+    XDG_DATA_HOME: path.join(home, '.local', 'share'),
+    XDG_RUNTIME_DIR: path.join(root, 'runtime'),
+    TERM2_CONFIG_DIR: path.join(home, '.term2'),
+    TERM2_CACHE_DIR: path.join(home, '.cache', 'term2'),
+    TERM2_CONVERSATIONS_DIR: path.join(root, 'conversations'),
+    DISABLE_LOGGING: '1',
+    [HARNESS_IDLE_ENV]: idlePath,
+    CI: 'false',
+  };
+  const settingsDir = resolveSettingsDirectory({ homeDir: home, env: createTestChildEnv(env) });
+  fs.mkdirSync(settingsDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(settingsDir, 'settings.json'),
+    JSON.stringify({
+      agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
+      providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl, apiKey: 'test-key' }],
+      sandbox: { enabled: false },
+    }),
+  );
+  session = spawnTerminal('node', [builtCli], { cwd: workspace, env });
+  await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
+  const send = async (text: string) => {
+    session!.write(text);
+    await waitForHarnessComposerValue(idlePath, text, { timeoutMs: 30_000 });
+    session!.write('\r');
+  };
+  await send('first question');
+  await session.waitForOutput('PARTIAL-ANSWER', 60_000);
+  await send('/followup UNIQUE-FOLLOWUP');
+  await session.waitForOutput('Queued 1 (queued): UNIQUE-FOLLOWUP', 30_000);
+  await send('UNIQUE-QUEUED-STEER');
+  await session.waitForOutput('Queued 1 (steering): UNIQUE-QUEUED-STEER', 30_000);
+  await send('UNIQUE-SECOND-STEER');
+  await session.waitForOutput('Queued 2 (steering): UNIQUE-SECOND-STEER', 30_000);
+  await send('/cancel');
+  await session.waitForOutput('Cancellation requested', 30_000);
+  await session.waitForOutput('STEER-REPLY-TWO', 30_000);
+  await session.waitForOutput('Queue: paused', 30_000);
+  const log = fs.readFileSync(
+    path.join(
+      root,
+      'conversations',
+      fs.readdirSync(path.join(root, 'conversations')).find((name) => name.endsWith('.jsonl'))!,
+    ),
+    'utf8',
+  );
+  const facts = log
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line).fact);
+  const admitted = facts.find((fact) => fact.type === 'queue_submitted' && fact.record?.request?.delivery === 'steer');
+  expect(admitted?.record?.request?.content).toEqual([{ type: 'text', text: 'UNIQUE-QUEUED-STEER' }]);
+  expect(facts.some((fact) => fact.type === 'queue_started' && fact.messageId === admitted.record.messageId)).toBe(
+    true,
+  );
+  expect(
+    facts.some(
+      (fact) => fact.type === 'queue_cancelling' && fact.cancelledMessageIds.includes(admitted.record.messageId),
+    ),
+  ).toBe(false);
+  const followup = facts.find(
+    (fact) =>
+      fact.type === 'queue_submitted' &&
+      fact.record?.content?.some((part: { text?: string }) => part.text === 'UNIQUE-FOLLOWUP'),
+  );
+  const secondSteer = facts.find(
+    (fact) =>
+      fact.type === 'queue_submitted' &&
+      fact.record?.content?.some((part: { text?: string }) => part.text === 'UNIQUE-SECOND-STEER'),
+  );
+  expect(followup).toBeDefined();
+  expect(secondSteer).toBeDefined();
+  expect(facts.filter((fact) => fact.type === 'queue_started').map((fact) => fact.messageId)).toEqual([
+    facts.find((fact) => fact.type === 'queue_started').messageId,
+    admitted.record.messageId,
+    secondSteer.record.messageId,
+  ]);
+  await send('/queue resume');
+  await session.waitForOutput('FOLLOWUP-REPLY', 30_000);
+});

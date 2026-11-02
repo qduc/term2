@@ -130,7 +130,12 @@ export function reduceDirectQueue(state: DirectQueueState, fact: DirectQueueFact
       const next = removePending(state, fact.cancelledMessageIds, 'cancelled');
       return {
         ...next,
-        active: { ...state.active!, phase: 'cancelling', retainedMessageIds: fact.retainedMessageIds },
+        active: {
+          ...state.active!,
+          phase: 'cancelling',
+          retainedMessageIds: fact.retainedMessageIds,
+          preservePendingSteers: fact.preservePendingSteers,
+        },
       };
     }
     case 'queue_settled': {
@@ -141,7 +146,7 @@ export function reduceDirectQueue(state: DirectQueueState, fact: DirectQueueFact
         (record) => record.stage === 'pending_steer' && record.turnId === fact.turnId,
       );
       const next =
-        stopping && !fact.preservePendingSteers
+        stopping && !fact.preservePendingSteers && !state.active!.preservePendingSteers
           ? removePending(
               state,
               abandoned.map((record) => record.messageId),
@@ -149,24 +154,38 @@ export function reduceDirectQueue(state: DirectQueueState, fact: DirectQueueFact
             )
           : state;
       const retained = state.active!.retainedMessageIds ?? next.pending;
-      // A priority handoff does not resume the retained queue, whatever its outcome.
+      // Stop-retained follow-ups stay paused, but accepted steers get their own
+      // turns first. The IDs are folded from facts so replay makes the same choice.
+      const deferred = [
+        ...(state.deferredStopSteers ?? []).filter((id) => next.pending.includes(id)),
+        ...(state.active!.preservePendingSteers ? abandoned.map((record) => record.messageId) : []),
+      ];
+      const stopRetained = next.pending.some((id) => retained.includes(id));
+      const shouldDefer = deferred.length > 0 && (stopRetained || Boolean(state.deferredStopSteers?.length));
       const pause =
         state.pause ??
         (next.pending.length === 0
           ? undefined
           : stopping
-          ? next.pending.some((id) => retained.includes(id))
+          ? shouldDefer
+            ? undefined
+            : stopRetained || state.deferredStopSteers?.length
             ? 'manual'
             : undefined
           : fact.outcome === 'interrupted'
           ? 'recovered_interrupted'
           : fact.outcome === 'failed'
           ? 'failure'
+          : shouldDefer
+          ? undefined
+          : state.deferredStopSteers?.length
+          ? 'manual'
           : undefined);
       return {
         ...next,
         active: undefined,
         pause,
+        deferredStopSteers: shouldDefer ? deferred : undefined,
         records: next.records.map((record) => {
           if (record.turnId !== fact.turnId) return record;
           if (record.stage === 'running' || record.stage === 'steered')
@@ -205,10 +224,14 @@ function removePending(
 ): DirectQueueState {
   const ids = new Set(messageIds);
   const pending = state.pending.filter((id) => !ids.has(id));
+  const deferred = state.deferredStopSteers?.filter((id) => !ids.has(id));
   return {
     ...state,
     pending,
-    pause: pending.length ? state.pause : undefined,
+    pause: !pending.length
+      ? undefined
+      : state.pause ?? (!state.active && state.deferredStopSteers?.length && !deferred?.length ? 'manual' : undefined),
+    deferredStopSteers: deferred,
     active: state.active
       ? {
           ...state.active,

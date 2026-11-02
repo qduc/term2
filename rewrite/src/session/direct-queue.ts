@@ -196,10 +196,11 @@ export function planDirectQueue(
           {
             type: 'queue_cancelling',
             turnId,
-            cancelledMessageIds: pending
-              .filter((record) => record.stage === 'pending_steer')
-              .map((record) => record.messageId),
+            cancelledMessageIds: command.discardPendingSteers
+              ? pending.filter((record) => record.stage === 'pending_steer').map((record) => record.messageId)
+              : [],
             retainedMessageIds: pending.filter((record) => record.stage === 'queued').map((record) => record.messageId),
+            ...(!command.discardPendingSteers ? { preservePendingSteers: true } : {}),
           },
         ],
         { kind: 'accepted' },

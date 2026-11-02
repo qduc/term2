@@ -107,7 +107,9 @@ export class DirectQueueReplay {
         if (this.state.active?.phase !== 'running') throw new Error('replay: duplicate/unowned queue stop');
         sameIds(
           queueFact.cancelledMessageIds,
-          pending.filter((record) => record.stage === 'pending_steer').map((record) => record.messageId),
+          queueFact.preservePendingSteers
+            ? []
+            : pending.filter((record) => record.stage === 'pending_steer').map((record) => record.messageId),
           'cancelled steers',
         );
         sameIds(

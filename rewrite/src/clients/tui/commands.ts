@@ -69,7 +69,10 @@ export async function answerInteraction(
 
 /** Request foreground cancellation without closing the connection. */
 export async function cancelForeground(connection: TuiConnection, expectedTurnId?: string): Promise<string> {
-  const result = await connection.send({ type: 'cancel', ...(expectedTurnId ? { expectedTurnId } : {}) });
+  const result = await connection.send({
+    type: 'cancel',
+    ...(expectedTurnId ? { expectedTurnId, discardQueue: false } : {}),
+  });
   if (!result.ok) throw new WireCommandFailure(result.code, result.message);
   if (result.kind === 'accepted') return 'Cancellation requested.';
   if (result.kind !== 'abort') throw new Error(`Unexpected cancellation response: ${result.kind}`);

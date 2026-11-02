@@ -66,6 +66,7 @@ const schemas = {
     turnId: id,
     cancelledMessageIds: ids,
     retainedMessageIds: ids,
+    preservePendingSteers: z.boolean().optional(),
   }),
   queue_settled: z.object({
     type: z.literal('queue_settled'),

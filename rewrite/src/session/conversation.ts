@@ -354,7 +354,11 @@ function conversation(
             ? 'cancellation_requested'
             : 'not_current',
         };
-      const cancelPlan = planDirectQueue(journal.queueState, { kind: 'cancel', turnId: expectedTurnId }, environment());
+      const cancelPlan = planDirectQueue(
+        journal.queueState,
+        { kind: 'cancel', turnId: expectedTurnId, discardPendingSteers: discardQueue },
+        environment(),
+      );
       const discardPlan = discardQueue
         ? planDirectQueue(cancelPlan.state, { kind: 'discard' }, environment())
         : undefined;

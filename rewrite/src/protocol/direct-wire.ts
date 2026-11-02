@@ -181,6 +181,7 @@ export type WireQueueChange =
       readonly turnId: string;
       readonly cancelledMessageIds: readonly string[];
       readonly retainedMessageIds: readonly string[];
+      readonly preservePendingSteers?: boolean;
     }
   | {
       readonly type: 'queue_settled';

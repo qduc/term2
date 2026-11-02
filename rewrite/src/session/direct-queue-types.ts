@@ -43,8 +43,11 @@ export type DirectQueueState = {
     readonly turnId: TurnId;
     readonly phase: 'running' | 'cancelling';
     readonly retainedMessageIds?: readonly string[];
+    readonly preservePendingSteers?: boolean;
   };
   readonly pause?: DirectQueuePause;
+  /** Saved steers must run before stop-retained follow-ups are manually paused. */
+  readonly deferredStopSteers?: readonly string[];
 };
 
 /** Add this union to Session Fact and its decoder. Only Session appends these facts. */
@@ -66,6 +69,7 @@ export type DirectQueueFact =
       readonly turnId: TurnId;
       readonly cancelledMessageIds: readonly string[];
       readonly retainedMessageIds: readonly string[];
+      readonly preservePendingSteers?: boolean;
     }
   | {
       readonly type: 'queue_settled';
@@ -89,7 +93,7 @@ export type DirectQueueCommand =
   | { readonly kind: 'dispatch' }
   | { readonly kind: 'boundary'; readonly turnId: TurnId }
   /** Foreground stop; a second untargeted stop resumes a retained manual pause. */
-  | { readonly kind: 'cancel'; readonly turnId?: TurnId }
+  | { readonly kind: 'cancel'; readonly turnId?: TurnId; readonly discardPendingSteers?: boolean }
   /** Call only after physical cleanup AND the Session completion barrier. */
   | {
       readonly kind: 'settled';

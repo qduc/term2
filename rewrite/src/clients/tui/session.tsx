@@ -358,7 +358,7 @@ export function TuiSession({
     <Box flexDirection="column">
       {viewport.staticTranscript}
       {viewport.text ? <Text>{viewport.text}</Text> : null}
-      {viewport.total > 0 && (viewport.start > 0 || !viewport.live) ? (
+      {viewport.paged && viewport.total > 0 && (viewport.start > 0 || !viewport.live) ? (
         <Text color={theme.textSubtle}>
           Lines {viewport.start + 1}–{viewport.end} of {viewport.total} · PgUp/PgDn or Ctrl+↑/↓
         </Text>

@@ -158,6 +158,7 @@ export function useTranscriptViewport(
     return {
       staticTranscript,
       redraw,
+      paged: true,
       text: helpLines.slice(start, end).join('\n'),
       start,
       end,
@@ -176,6 +177,7 @@ export function useTranscriptViewport(
   return {
     staticTranscript,
     redraw,
+    paged: expanded,
     text: lines.slice(start, end).join('\n'),
     start,
     end,

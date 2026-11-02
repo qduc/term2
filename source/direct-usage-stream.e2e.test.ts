@@ -176,6 +176,35 @@ it('wraps settled transcript rows at terminal width', { timeout: TIMEOUT_MS }, a
   expect(settled).not.toMatch(/morning sun ris\s*\r?\n\s*es\./);
 });
 
+it(
+  'does not advertise the pager during ordinary streaming, but does in the output viewer',
+  { timeout: TIMEOUT_MS },
+  async () => {
+    const { idlePath } = await start();
+    session!.write('long streaming question');
+    await waitForHarnessComposerValue(idlePath, 'long streaming question', { timeoutMs: 60_000 });
+    session!.write('\r');
+    await session!.waitForOutput('STREAM-ANCHOR-SENTINEL', 30_000);
+    const before = session!.getVisibleOutput().length;
+    heldResponse!.write(
+      `data: ${JSON.stringify({
+        id: 'chatcmpl-1',
+        choices: [{ delta: { content: `\n${Array.from({ length: 60 }, (_, i) => `STREAM-LINE-${i}`).join('\n')}` } }],
+      })}\n\n`,
+    );
+    await session!.waitForOutput('STREAM-LINE-59', 30_000);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(session!.getVisibleOutput().slice(before)).not.toMatch(/Lines \d+[–-]\d+ of \d+ · PgUp/);
+    const viewerStart = session!.getVisibleOutput().length;
+    session!.write('\x0f');
+    await until(
+      () => /Lines \d+[–-]\d+ of \d+ · PgUp/.test(session!.getVisibleOutput().slice(viewerStart)),
+      'output viewer advertises paging',
+    );
+    expect(heldResponse?.writableEnded).toBe(false);
+  },
+);
+
 // While the turn is active, help retains the existing bounded viewer.
 it('keeps paged help available during a still-streaming response', { timeout: TIMEOUT_MS }, async () => {
   const { idlePath } = await start();

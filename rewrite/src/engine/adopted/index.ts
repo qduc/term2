@@ -12,7 +12,6 @@ import type { SteerOutcome } from '../../../../source/services/agent-runtime/app
 import type { AgentStream } from '../../../../source/services/agent-stream.js';
 import type { ApplicationRunEvent } from '../../../../source/contracts/application-stream.js';
 import type { Item, ToolCallId } from '../../model/index.js';
-export { createAdoptedToolContext, createRunNested, type AdoptedNestedBinding } from './nested.js';
 import type { AdoptedEngineDeps } from './dependencies.js';
 import { convertSourceItems } from './conversion.js';
 import type { OriginalToolCatalog } from './tool-catalog.js';

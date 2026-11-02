@@ -324,7 +324,7 @@ it('/auto-approve without an argument reports the current mode', { timeout: TIME
 );
 
 it('/settings clears its submitted command', { timeout: TIMEOUT_MS }, () =>
-  runCommand('/settings', 'shell.autoApproveMode: off (default)', undefined, false, false, ''),
+  runCommand('/settings', 'Settings: models', undefined, false, false, ''),
 );
 
 it.each([
@@ -363,7 +363,7 @@ it('/copy confirms what it copied', { timeout: TIMEOUT_MS }, () =>
 );
 
 it('slash menu suggests and completes a command in the terminal', { timeout: TIMEOUT_MS }, () =>
-  runCommand('/settings', 'shell.autoApproveMode: off (default)', undefined, 'complete'),
+  runCommand('/settings', 'Settings: models', undefined, 'complete'),
 );
 
 it('Enter on an unfinished slash prefix completes it and does not run the command', { timeout: TIMEOUT_MS }, () =>

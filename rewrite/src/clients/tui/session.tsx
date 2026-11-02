@@ -186,6 +186,8 @@ export function TuiSession({
       if (message === null) return false;
       // The composer clears itself on Enter; put the draft back so n/Esc keeps it.
       replaceInput(input);
+      // Enter also cleared the composer's pasted images; put them back with the text.
+      setImages(submittedImages);
       setConfirmation({ message, proceed: retry, at: performance.now() });
       return true;
     };

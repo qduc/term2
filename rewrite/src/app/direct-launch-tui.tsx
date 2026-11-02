@@ -105,13 +105,19 @@ function DirectTui({
           }
           return result;
         },
+        current() {
+          return { provider: latest.current.model.provider, id: latest.current.model.model };
+        },
         async list(sessionId) {
           const current = app.sessionDetails(sessionId).settings;
           if (!current) throw new Error('The attached session has no live settings.');
           const groups = await collectProviderModels({ settingsService: current, loggingService: logger });
-          return groups.flatMap((group) =>
-            group.models.map((model) => ({ provider: group.provider, id: model.id, name: model.name })),
-          );
+          return {
+            models: groups.flatMap((group) =>
+              group.models.map((model) => ({ provider: group.provider, id: model.id, name: model.name })),
+            ),
+            failedProviders: groups.filter((group) => group.error).map((group) => group.provider),
+          };
         },
         toggle(sessionId, model) {
           const current = app.sessionDetails(sessionId).settings;

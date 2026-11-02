@@ -47,7 +47,8 @@ export interface TuiIntegration {
   readonly modelPicker?: {
     favorites(sessionId: string): PickerModel[];
     nicknames(sessionId: string): Readonly<Record<string, readonly string[]>>;
-    list(sessionId: string): Promise<PickerModel[]>;
+    list(sessionId: string): Promise<{ models: PickerModel[]; failedProviders: string[] }>;
+    current(sessionId: string): PickerModel;
     toggle(sessionId: string, model: PickerModel): void;
   };
   planNeedsClear?(connection: TuiConnection): boolean;

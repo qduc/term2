@@ -37,6 +37,11 @@ type Reply = { error?: string; call?: { id: string; command?: string; tool?: str
 async function startProvider(replies: Reply[], withUsage = false): Promise<string> {
   let requests = 0;
   server = http.createServer((req, res) => {
+    if (req.method === 'GET' && req.url?.includes('failure')) {
+      res.writeHead(500);
+      res.end('provider unavailable');
+      return;
+    }
     if (req.method === 'GET') {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ object: 'list', data: [{ id: 'mock-alpha' }, { id: 'mock-beta' }] }));
@@ -229,7 +234,12 @@ async function runCommand(
         favoriteModels: ['mockprov/mock-alpha'],
         modelNicknames: { luna: 'mockprov/mock-alpha' },
       },
-      providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl, apiKey: 'test-key' }],
+      providers: [
+        { name: 'mockprov', type: 'openai-compatible', baseUrl, apiKey: 'test-key' },
+        ...(exerciseMenu === 'model-picker'
+          ? [{ name: 'brokenprov', type: 'openai-compatible', baseUrl: `${baseUrl}/failure`, apiKey: 'test-key' }]
+          : []),
+      ],
       // Sandbox off and GREEN commands: both run without an approval prompt.
       sandbox: { enabled: false },
       shell: { autoApproveMode: 'off' },
@@ -444,6 +454,8 @@ async function runCommand(
   if (exerciseMenu === 'model-picker') {
     await session.waitForOutput('mockprov · aka luna', 30_000);
     expect(session.getVisibleOutput()).toContain('Provider / nickname');
+    expect(session.getVisibleOutput()).toContain('(current)');
+    await session.waitForOutput('Some providers failed: brokenprov', 30_000);
     const beforeClose = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
     session.write('\x1b');
     await waitForHarnessIdleGeneration(idlePath, { after: beforeClose, timeoutMs: 60_000 });

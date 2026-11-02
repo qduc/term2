@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
+import { useTheme } from './presentation/components/theme.js';
 import type { PickerModel, TuiIntegration } from './integration.js';
 import { useInteractionInput, type InteractionInput } from './interaction-input.js';
 
@@ -23,6 +24,9 @@ export function ModelPicker({
   run(text: string): Promise<{ message?: string }>;
   onNotice(text: string | null): void;
 }): React.ReactElement {
+  const theme = useTheme();
+  const current = identity(api.current(sessionId));
+  const [failedProviders, setFailedProviders] = useState<string[]>([]);
   const [favorites, setFavorites] = useState(() => api.favorites(sessionId));
   const nicknames = api.nicknames(sessionId);
   const [models, setModels] = useState<PickerModel[] | null>(null);
@@ -34,7 +38,10 @@ export function ModelPicker({
     let mounted = true;
     api.list(sessionId).then(
       (list) => {
-        if (mounted) setModels(list);
+        if (mounted) {
+          setModels(list.models);
+          setFailedProviders(list.failedProviders);
+        }
       },
       (err) => {
         if (mounted) setError(err instanceof Error ? err.message : String(err));
@@ -100,8 +107,14 @@ export function ModelPicker({
   });
   const start = Math.max(0, index - 5);
   return (
-    <Box flexDirection="column" borderStyle="round" paddingX={1}>
-      <Text bold>Choose a model · {tab === 'favorites' ? '[Favorites]  All' : 'Favorites  [All]'}</Text>
+    <Box flexDirection="column" borderStyle="round" borderColor={theme.border} paddingX={1}>
+      <Text bold>
+        Choose a model ·{' '}
+        <Text color={tab === 'favorites' ? theme.accent : theme.textMuted}>
+          {tab === 'favorites' ? '[Favorites]' : 'Favorites'}
+        </Text>{' '}
+        <Text color={tab === 'all' ? theme.accent : theme.textMuted}>{tab === 'all' ? '[All]' : 'All'}</Text>
+      </Text>
       <Text>Filter: {filter}</Text>
       <Box>
         <Box width={38} flexShrink={1}>
@@ -115,6 +128,7 @@ export function ModelPicker({
             <Text wrap="truncate-end">
               {i + start === index ? '❯' : ' '} {favoriteKeys.has(identity(model)) ? '★' : '☆'} {model.id}
               {model.name && model.name !== model.id ? ` · ${model.name}` : ''}
+              {identity(model) === current && <Text color={theme.success}> (current)</Text>}
             </Text>
           </Box>
           <Box flexShrink={1}>
@@ -128,7 +142,10 @@ export function ModelPicker({
       {!visible.length && (
         <Text>{tab === 'all' && models === null && !error ? 'Loading models…' : 'No matching models.'}</Text>
       )}
-      {error && <Text>{error}</Text>}
+      {failedProviders.length > 0 && (
+        <Text color={theme.warning}>▲ Some providers failed: {failedProviders.join(', ')}</Text>
+      )}
+      {error && <Text color={theme.warning}>{error}</Text>}
       <Text>Tab switch · ↑/↓ select · Ctrl+F favorite · Enter choose · Esc cancel</Text>
     </Box>
   );

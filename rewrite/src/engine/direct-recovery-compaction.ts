@@ -90,7 +90,7 @@ export type DirectCompactionResult =
       readonly replaces: readonly ItemId[];
       readonly before: DirectContextEstimate;
       readonly estimate: DirectContextEstimate;
-      readonly rearmAtEstimatedTokens: number;
+      readonly rearmAtEstimatedTokens?: number;
       readonly usage: readonly Usage[];
       readonly checkpointReceipts: readonly string[];
       readonly disableChaining: true;
@@ -142,9 +142,9 @@ export async function compactDirectHistory(input: DirectCompactionInput): Promis
     ratio: input.settings.compactThreshold,
     rawTrigger: input.settings.compactThresholdTokens,
   });
-  if (policy.softTrigger === undefined) return { kind: 'blocked', reason: 'unknown_threshold', estimate };
+  if (!input.manual && policy.softTrigger === undefined) return { kind: 'blocked', reason: 'unknown_threshold', estimate };
   const measured = Math.max(estimate.renderedInputTokens, input.lastCompletedInputTokens ?? 0);
-  if (!input.manual && measured < policy.softTrigger) return { kind: 'not_needed', estimate };
+  if (!input.manual && policy.softTrigger !== undefined && measured < policy.softTrigger) return { kind: 'not_needed', estimate };
   if (!input.manual && input.rearmAtEstimatedTokens !== undefined && measured < input.rearmAtEstimatedTokens) {
     return { kind: 'deferred', reason: 'hysteresis', estimate };
   }
@@ -160,7 +160,7 @@ export async function compactDirectHistory(input: DirectCompactionInput): Promis
         usage: [] as Usage[],
         checkpointReceipts: input.checkpointReceipts ?? [],
       }
-    : await compactLocally(input, policy.hardInputLimit ?? policy.softTrigger, estimate);
+    : await compactLocally(input, policy.hardInputLimit ?? policy.softTrigger ?? Infinity, estimate);
   input.signal.throwIfAborted();
   if ('kind' in operation) return operation;
   const after = estimateDirectContext({ ...input.request, input: operation.history }, input.contextWindow);
@@ -184,7 +184,9 @@ export async function compactDirectHistory(input: DirectCompactionInput): Promis
     replaces: input.request.input.filter((item) => !retained.has(item.id)).map((item) => item.id),
     before: estimate,
     estimate: after,
-    rearmAtEstimatedTokens: after.renderedInputTokens + Math.max(1_000, Math.ceil(policy.softTrigger * 0.1)),
+    ...(policy.softTrigger === undefined
+      ? {}
+      : { rearmAtEstimatedTokens: after.renderedInputTokens + Math.max(1_000, Math.ceil(policy.softTrigger * 0.1)) }),
     usage: operation.usage,
     checkpointReceipts: operation.checkpointReceipts,
     disableChaining: true,

@@ -47,7 +47,7 @@ export async function prepareDirectManualCompaction(
       type: 'history_replaced',
       reason: 'compaction',
       history: structuredClone(result.history),
-      rearmAtEstimatedTokens: result.rearmAtEstimatedTokens,
+      ...(result.rearmAtEstimatedTokens === undefined ? {} : { rearmAtEstimatedTokens: result.rearmAtEstimatedTokens }),
       checkpointReceipts: structuredClone(result.checkpointReceipts),
     },
   };

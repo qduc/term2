@@ -29,7 +29,25 @@ export type TuiStatusInfo = {
 };
 export type PickerModel = { readonly provider: string; readonly id: string; readonly name?: string };
 
+export type SettingsPickerItem = {
+  readonly key: string;
+  readonly label: string;
+  readonly description: string;
+  readonly current: string;
+  readonly defaultValue: string;
+  readonly editable: boolean;
+  readonly reason?: string;
+};
+export type SettingsPickerCategory = {
+  readonly id: string;
+  readonly label: string;
+  /** Search-only entries stay out of the curated category tabs. */
+  readonly searchOnly?: boolean;
+  readonly items: readonly SettingsPickerItem[];
+};
+
 export interface TuiIntegration {
+  readonly settingsPicker?: { list(sessionId: string): readonly SettingsPickerCategory[] };
   /** Run an explicit user shell command in the selected workspace, without a model turn. */
   shell?(sessionId: string, command: string): Promise<string>;
   readonly resumePicker?: {

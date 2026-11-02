@@ -318,6 +318,7 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
 
   return {
     resumePicker: { list: listResumeSessions },
+    settingsPicker: { list: configuration.picker },
     planNeedsClear: configuration.planNeedsClear,
     async clearAndTogglePlan(connection) {
       const target = configuration.planTarget(connection);

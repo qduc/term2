@@ -8,6 +8,7 @@ import { testCliPath, spawnTerminal, createTestChildEnv, type TerminalSession } 
 import {
   HARNESS_IDLE_ENV,
   waitForHarnessComposerValue,
+  readHarnessIdleGeneration,
   waitForHarnessIdleGeneration,
 } from './lib/harness-input-idle.js';
 import { resolveSettingsDirectory } from './services/settings/settings-path.js';
@@ -42,7 +43,7 @@ async function startProvider(): Promise<string> {
   return `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}/v1`;
 }
 
-async function start(): Promise<{ idlePath: string }> {
+async function start(cols = 80, rows = 24): Promise<{ idlePath: string }> {
   root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-tool-rows-e2e-')));
   const home = path.join(root, 'home');
   const workspace = path.join(root, 'w');
@@ -78,7 +79,7 @@ async function start(): Promise<{ idlePath: string }> {
     }),
   );
 
-  session = spawnTerminal('node', [builtCli], { cwd: workspace, env });
+  session = spawnTerminal('node', [builtCli], { cwd: workspace, env, cols, rows });
   await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
   return { idlePath };
 }
@@ -91,8 +92,12 @@ it('browses bounded settings categories and changes a runtime setting', { timeou
     session!.write('\r');
   };
   await submit('/settings');
-  await session!.waitForOutput('Settings: models', 60_000);
-  expect(session!.getVisibleOutput()).toContain('Change: /settings <key> <value>');
+  await session!.waitForOutput('Settings · [Models]', 60_000);
+  expect(session!.getVisibleOutput()).toContain('Type search');
+  const beforeClose = readHarnessIdleGeneration(idlePath);
+  session!.write('\x1b');
+  await waitForHarnessIdleGeneration(idlePath, { after: beforeClose, timeoutMs: 60_000 });
+  await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 60_000 });
   expect(session!.getVisibleOutput()).not.toContain('agent.runBudget.softHeadroomUsdMicros');
   await submit('/settings providers');
   await session!.waitForOutput('Providers settings (1/', 60_000);
@@ -110,3 +115,66 @@ it('browses bounded settings categories and changes a runtime setting', { timeou
   await submit('/settings tools.web.enabled');
   await session!.waitForOutput('tools.web.enabled: false', 60_000);
 });
+
+it.each([
+  [80, 24],
+  [60, 18],
+])(
+  'browses, searches and edits settings without leaking secrets or keys to composer at %ix%i',
+  { timeout: TIMEOUT_MS },
+  async (cols, rows) => {
+    const { idlePath } = await start(cols, rows);
+    const settingsFile = path.join(root, 'home', '.local', 'state', 'term2-nodejs', 'settings.json');
+    const savedSettings = fs.readFileSync(settingsFile, 'utf8');
+    const submit = async (text: string) => {
+      session!.write(text);
+      await waitForHarnessComposerValue(idlePath, text, { timeoutMs: 60_000 });
+      session!.write('\r');
+    };
+    const fresh = async (action: () => void, needle: string) => {
+      const offset = session!.getVisibleOutput().length;
+      action();
+      for (let i = 0; i < 400; i++) {
+        const text = session!.getVisibleOutput().slice(offset);
+        if (text.includes(needle)) return text;
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      throw new Error(`No new output containing ${needle}: ${session!.getVisibleOutput().slice(-1800)}`);
+    };
+    await submit('/settings');
+    await session!.waitForOutput('Settings · [Models]', 60_000);
+    expect(session!.getVisibleOutput()).toContain('mockprov/mock-alpha');
+    await fresh(() => session!.write('agent.runBudget.softHeadroomUsdMicros'), 'softHeadroomUsdMicros');
+    await fresh(() => session!.write('\t'), '[Providers]');
+    await fresh(() => session!.write('webSearch.tavily.apiKey'), 'Search: webSearch.tavily.apiKey');
+    expect(session!.getVisibleOutput()).toContain('[hidden]');
+    expect(session!.getVisibleOutput()).not.toContain('SECRET_SENTINEL_987');
+    await fresh(() => session!.write('\r'), 'Sensitive: configure outside this editor.');
+    const beforeCloseSecret = readHarnessIdleGeneration(idlePath);
+    session!.write('\x1b');
+    await waitForHarnessIdleGeneration(idlePath, { after: beforeCloseSecret, timeoutMs: 60_000 });
+    await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 60_000 });
+    const reopenOffset = session!.getVisibleOutput().length;
+    await submit('/settings');
+    for (let i = 0; i < 400 && !session!.getVisibleOutput().slice(reopenOffset).includes('Settings · [Models]'); i++)
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(session!.getVisibleOutput().slice(reopenOffset)).toContain('Settings · [Models]');
+    await fresh(() => session!.write('tools.web.enabled'), 'Search: tools.web.enabled');
+    await fresh(() => session!.write('\r'), 'Editing tools.web.enabled:');
+    await fresh(() => session!.write('badvalue'), 'Editing tools.web.enabled: badvalue');
+    const rejected = await fresh(() => session!.write('\r'), "Invalid value for 'tools.web.enabled'");
+    expect(rejected).toContain('Editing tools.web.enabled: badvalue');
+    await fresh(() => session!.write('\x1b'), 'Type search · Tab category');
+    await fresh(() => session!.write('\r'), 'Editing tools.web.enabled:');
+    await fresh(() => session!.write('false'), 'Editing tools.web.enabled: false');
+    await fresh(() => session!.write('\r'), 'Set tools.web.enabled to false');
+    await fresh(() => session!.write('\x1b'), 'Type search · Tab category');
+    const beforeCloseEdit = readHarnessIdleGeneration(idlePath);
+    session!.write('\x1b');
+    await waitForHarnessIdleGeneration(idlePath, { after: beforeCloseEdit, timeoutMs: 60_000 });
+    await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 60_000 });
+    await submit('/settings tools.web.enabled');
+    await session!.waitForOutput('tools.web.enabled: false', 60_000);
+    expect(fs.readFileSync(settingsFile, 'utf8')).toBe(savedSettings);
+  },
+);

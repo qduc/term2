@@ -17,13 +17,14 @@ import {
   profileIdFromLegacyModeSetting,
 } from '../../../source/services/profiles/legacy-adapter.js';
 import { planProfileTransition } from '../../../source/services/profiles/profile-transition.js';
-import { SETTING_KEYS } from '../../../source/services/settings/settings-service.js';
+import { SETTING_KEYS, SENSITIVE_SETTINGS } from '../../../source/services/settings/settings-service.js';
 import {
   CATEGORY_KEYS,
   HIDDEN_SETTINGS,
   SETTINGS_CATEGORIES,
 } from '../../../source/hooks/settings-completion-config.js';
 import { getSettingMetadata } from '../../../source/services/settings/settings-ui-metadata.js';
+import type { SettingsPickerCategory } from '../clients/tui/integration.js';
 import { createSettingsCommand, parseSettingValue } from '../../../source/utils/settings-command.js';
 import { receiptNotice, sendNativeCommand } from '../clients/tui/commands.js';
 import type { TuiConnection, TuiIntegration } from '../clients/tui/integration.js';
@@ -134,6 +135,70 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
   };
 
   return {
+    picker(sessionId: string): readonly SettingsPickerCategory[] {
+      const { settings } = detailsOf(sessionId);
+      const display = (value: unknown, secret: boolean): string => {
+        if (secret) return '[hidden]';
+        if (value === undefined) return 'unset';
+        if (value !== null && typeof value === 'object')
+          return Array.isArray(value) ? `[${value.length} entries]` : '[configured]';
+        return String(value).replace(/\s+/g, ' ');
+      };
+      const sensitive = new Set<string>(Object.values(SENSITIVE_SETTINGS));
+      const itemFor = (key: string) => {
+        if (HIDDEN_SETTINGS.has(key)) return [];
+        const metadata = getSettingMetadata(key);
+        if (!metadata) return [];
+        const secret = metadata.isSecret || sensitive.has(key);
+        const selection = SELECTION_COMMANDS[key];
+        const complex = metadata.type === 'object' || metadata.type === 'array';
+        const reason = secret
+          ? 'Sensitive: configure outside this editor.'
+          : selection
+          ? selection
+          : !settings.isRuntimeModifiable(key)
+          ? 'Requires restart; not changed here.'
+          : complex
+          ? 'Use /settings <key> <value> for structured values.'
+          : undefined;
+        const show = (value: unknown): string => {
+          if (
+            key === SETTING_KEYS.AGENT_MODEL_SELECTION &&
+            value &&
+            typeof value === 'object' &&
+            'provider' in value &&
+            'model' in value
+          )
+            return `${String(value.provider)}/${String(value.model)}`;
+          return display(value, secret);
+        };
+        return [
+          {
+            key,
+            label: metadata.label,
+            description: metadata.description ?? '',
+            current: show(settings.getDynamic(key)),
+            defaultValue: show(settings.getDefault(key)),
+            editable: !reason,
+            ...(reason ? { reason } : {}),
+          },
+        ];
+      };
+      const curated = new Set(SETTINGS_CATEGORIES.flatMap((category) => CATEGORY_KEYS[category.id] ?? []));
+      return [
+        ...SETTINGS_CATEGORIES.map((category) => ({
+          id: category.id,
+          label: category.label,
+          items: (CATEGORY_KEYS[category.id] ?? []).flatMap(itemFor),
+        })),
+        {
+          id: 'advanced',
+          label: 'Advanced',
+          searchOnly: true,
+          items: [...new Set(Object.values(SETTING_KEYS))].filter((key) => !curated.has(key)).flatMap(itemFor),
+        },
+      ];
+    },
     planTarget(connection: TuiConnection): string {
       const { settings } = detailsOf(connection.sessionId);
       return resolveActiveProfile(settings).identity.id === 'builtin:plan' ? BARE_PROFILE_ID : 'builtin:plan';

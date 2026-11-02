@@ -3,12 +3,14 @@ import type { TuiConnection, TuiIntegration } from './integration.js';
 import type { InteractionInput } from './interaction-input.js';
 import { ModelPicker } from './model-picker.js';
 import { ResumePicker } from './resume-picker.js';
+import { SettingsPicker } from './settings-picker.js';
 
-export type PickerKind = 'model' | 'resume';
+export type PickerKind = 'model' | 'resume' | 'settings';
 
 /** The picker a typed command opens, if the app supplied one: `/model` and `/resume` with no argument. */
 export function pickerFor(integration: TuiIntegration, command: string): PickerKind | null {
   if (command === '/resume' && integration.resumePicker) return 'resume';
+  if (command === '/settings' && integration.settingsPicker) return 'settings';
   return command === '/model' && integration.modelPicker ? 'model' : null;
 }
 
@@ -34,6 +36,17 @@ export function PickerHost(props: {
 }): React.ReactElement | null {
   const { kind, integration, connection, inputHandler, close, onNotice, switchSession } = props;
   const failure = (error: unknown) => onNotice(error instanceof Error ? error.message : String(error));
+  if (kind === 'settings' && integration.settingsPicker)
+    return (
+      <SettingsPicker
+        api={integration.settingsPicker}
+        sessionId={connection.sessionId}
+        inputHandler={inputHandler}
+        onClose={close}
+        onNotice={onNotice}
+        run={(text) => integration.command(connection, text)}
+      />
+    );
   if (kind === 'model' && integration.modelPicker)
     return (
       <ModelPicker

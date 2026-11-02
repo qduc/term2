@@ -8,7 +8,7 @@ import { useTheme } from './presentation/components/theme.js';
 import { useSkin } from './presentation/skins/SkinContext.js';
 import { terminalPreferenceDefaults } from '../../host/terminal-preference-defaults.js';
 import { useClient } from './use-client.js';
-import { Activity, LiveNotices } from './views.js';
+import { Activity, LiveNotices, interruptedNotice } from './views.js';
 import { InteractionPanel } from './interaction-panel.js';
 import type { InteractionInputHandler } from './interaction-input.js';
 import { runBangShell } from './bang-shell.js';
@@ -98,9 +98,7 @@ export function TuiSession({
   const viewport = useCommandTranscriptViewport(state, headerHeight ?? 0, viewportActive, header, historyRevision);
   const { InputFrame, PromptMarker, LiveDivider } = useSkin();
   const theme = useTheme();
-  const [notice, setNotice] = useState<string | null>(() =>
-    state.status === 'interrupted' ? 'Previous turn was interrupted — send a message to continue.' : null,
-  );
+  const [notice, setNotice] = useState<string | null>(() => interruptedNotice(state));
   const notifyError = (error: unknown) => setNotice(error instanceof Error ? error.message : String(error));
   const [busy, setBusy] = useState(false);
   const composerActive = !panelOpen && !confirmation.pending && !connError && !interactionActive;

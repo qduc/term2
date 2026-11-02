@@ -239,6 +239,10 @@ export function Activity({
   );
 }
 
+/** Shown when the attached snapshot ended in an unclean interruption (not a user cancel, which settles as idle). */
+export const interruptedNotice = (state: TuiState): string | null =>
+  state.status === 'interrupted' ? 'Previous turn was interrupted — send a message to continue.' : null;
+
 /** The one-off lines above the composer: connection trouble in the danger colour, the rest as plain text. */
 export function LiveNotices({
   connectionError,

@@ -202,7 +202,9 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
     autoApprove(connection: TuiConnection, mode: string | undefined): Promise<CommandResult> {
       if (!mode)
         return Promise.resolve({
-          message: `Choose tool auto-approval: ${APPROVAL_MODES.join(', ')}.`,
+          message: `Tool auto-approval is ${detailsOf(connection.sessionId).settings.get(
+            'shell.autoApproveMode',
+          )}. Choose: ${APPROVAL_MODES.join(', ')}.`,
           draft: { text: '/auto-approve ', attachments: [] },
         });
       if (!APPROVAL_MODES.includes(mode)) throw new Error(`Use /auto-approve ${APPROVAL_MODES.join('|')}.`);

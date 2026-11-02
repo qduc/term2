@@ -319,6 +319,16 @@ export function formatSettingsSummary(settings: SettingsWithSources): string {
       source: settings.shell.maxOutputChars.source,
     },
     {
+      key: SETTING_KEYS.SHELL_AUTO_APPROVE_MODE,
+      value: settings.shell.autoApproveMode.value,
+      source: settings.shell.autoApproveMode.source,
+    },
+    {
+      key: SETTING_KEYS.SANDBOX_ENABLED,
+      value: settings.sandbox.enabled.value,
+      source: settings.sandbox.enabled.source,
+    },
+    {
       key: SETTING_KEYS.UI_HISTORY_SIZE,
       value: settings.ui.historySize.value,
       source: settings.ui.historySize.source,

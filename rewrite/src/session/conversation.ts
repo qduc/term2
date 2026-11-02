@@ -1,7 +1,8 @@
 import { ConversationBackground } from './conversation-background.js';
 import { ConversationCommands } from './conversation-commands.js';
-import { ConversationJournal, modelError } from './conversation-journal.js';
-import { admitConversationTurn, failedTurn, ownConversationTurn, terminalFact } from './conversation-turn.js';
+import { ConversationJournal, modelError, nextConversationTurnId } from './conversation-journal.js';
+import { failedTurn, ownConversationTurn, terminalFact } from './conversation-turn.js';
+import { prepareConversationNotice, completedConversationTurn } from './conversation-notice.js';
 /**
  * The direct conversation owns the engine reader and the durable writer. An
  * engine envelope is accepted only after its fact has committed. Public events
@@ -12,7 +13,7 @@ import { randomUUID } from 'node:crypto';
 import type { TurnId } from '../engine/index.js';
 import { startCompaction, startTurn } from '../engine/index.js';
 import type { Item, ModelError } from '../model/index.js';
-import { ConversationGeneration, withNotice, type PreparedConversationGeneration } from './conversation-generation.js';
+import { ConversationGeneration, type PreparedConversationGeneration } from './conversation-generation.js';
 import { bindDirectCapabilities } from './direct-capabilities.js';
 import type { DirectPreparedConfiguration } from './direct-configuration.js';
 import { type DirectContextFact } from './direct-context.js';
@@ -54,19 +55,7 @@ function conversation(
 ): Conversation {
   let active: (Turn & { readonly turnId: TurnId; readonly cancelled: boolean; stop(): Promise<void> }) | null = null;
   const generation = new ConversationGeneration(deps);
-  let nextTurnId = Math.max(
-    1,
-    ...facts.flatMap((fact) => {
-      const candidates = [
-        'turnId' in fact ? fact.turnId : undefined,
-        fact.type === 'queue_submitted' ? fact.record.admission.turnId : undefined,
-      ];
-      return candidates.flatMap((value) => {
-        const match = value?.match(/^turn-(\d+)$/);
-        return match ? [Number(match[1]) + 1] : [];
-      });
-    }),
-  );
+  let nextTurnId = nextConversationTurnId(facts);
   let queueSettings: Omit<TurnRequest, 'input' | 'submission'> | undefined;
   let completionHeld: TurnId | null = null;
   const runBudgets = new DirectRunBudgets(
@@ -250,27 +239,16 @@ function conversation(
     const snapshot = planned?.accepted
       ? { history: planned.history!, compactionState: planned.compactionState }
       : liveReplay();
-    const { input, notice: requestNotice, submission: _submission, previewMode: _previewMode, ...settings } = request;
-    // Resolve without consuming until durable admission succeeds.
-    const hasProfileInput = !planned?.compaction && input.some((item) => item.type === 'user_message');
-    const notice = generation.notice(requestNotice, false, hasProfileInput);
-    const modelInput = admitConversationTurn(turnId, request, planned, journal, capabilities!, notice);
-    if (hasProfileInput || (planned?.retryNotice && generation.notice(undefined) === planned.retryNotice.text)) {
-      // A resumed retry can deliver the pending startup notice itself. Never
-      // consume a different pending transition on an unrelated retry.
-      generation.notice(undefined, true);
-    }
-    const rawHistory = planned?.history ?? snapshot.history;
-    let modelHistory = rawHistory;
-    if (planned?.retryNotice) {
-      let index = modelHistory.length - 1;
-      while (index >= 0 && modelHistory[index]?.id !== planned.retryNotice.messageId) index--;
-      if (index >= 0) {
-        modelHistory = [...modelHistory];
-        (modelHistory as Item[])[index] = withNotice([modelHistory[index]!], planned.retryNotice.text)[0]!;
-      }
-    }
-    const sentInput = notice ? withNotice(modelInput, notice) : modelInput;
+    const { input, notice: _notice, submission: _submission, previewMode: _previewMode, ...settings } = request;
+    const { notice, modelInput, rawHistory, modelHistory, sentInput } = prepareConversationNotice(
+      turnId,
+      request,
+      planned,
+      snapshot.history,
+      journal,
+      capabilities!,
+      generation,
+    );
     // Old detached branches keep the exact generation that admitted their root.
     const turnDeps = generation.runtime;
     const turnContinuity = generation.continuity;
@@ -301,13 +279,9 @@ function conversation(
         capabilities: capabilities!,
         publishNotice: deps.publishNotice,
         released: () => {
-          const ended = [...journal.facts]
-            .reverse()
-            .find((fact) => fact.type === 'turn_ended' && fact.turnId === turnId);
           if (
             !journal.failure &&
-            ended?.type === 'turn_ended' &&
-            ended.outcome === 'completed' &&
+            completedConversationTurn(journal.facts, turnId) &&
             (notice || planned?.retryNotice)
           ) {
             turnContinuity?.state?.reconcilePrefix([...modelHistory, ...sentInput], [...rawHistory, ...modelInput]);

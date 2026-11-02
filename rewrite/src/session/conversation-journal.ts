@@ -191,3 +191,20 @@ function changesRootHistory(fact: Fact): boolean {
     'memory_personal_snapshot',
   ].includes(fact.type);
 }
+
+/** Find the next unused numeric turn ID, including queued admissions. */
+export function nextConversationTurnId(facts: readonly Fact[]): number {
+  return Math.max(
+    1,
+    ...facts.flatMap((fact) => {
+      const candidates = [
+        'turnId' in fact ? fact.turnId : undefined,
+        fact.type === 'queue_submitted' ? fact.record.admission.turnId : undefined,
+      ];
+      return candidates.flatMap((value) => {
+        const match = value?.match(/^turn-(\d+)$/);
+        return match ? [Number(match[1]) + 1] : [];
+      });
+    }),
+  );
+}

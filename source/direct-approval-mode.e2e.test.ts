@@ -88,7 +88,7 @@ async function runCommand(
   command: string,
   expected: string,
   firstPrompt?: string,
-  exerciseMenu = false,
+  exerciseMenu: false | 'complete' | 'prefix-enter' = false,
 ): Promise<void> {
   root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-tool-rows-e2e-')));
   const home = path.join(root, 'home');
@@ -139,6 +139,14 @@ async function runCommand(
     await session.waitForOutput('unused', 30_000);
     await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
   }
+  if (exerciseMenu === 'prefix-enter') {
+    // Enter on an unfinished prefix completes it into the draft; it must not run /clear.
+    session.write('/cl');
+    await waitForHarnessComposerValue(idlePath, '/cl', { timeoutMs: 60_000 });
+    session.write('\r');
+    await waitForHarnessComposerValue(idlePath, '/clear ', { timeoutMs: 60_000 });
+    return;
+  }
   if (exerciseMenu) {
     session.write('/hel');
     await waitForHarnessComposerValue(idlePath, '/hel', { timeoutMs: 60_000 });
@@ -179,5 +187,9 @@ it('/copy confirms what it copied', { timeout: TIMEOUT_MS }, () =>
 );
 
 it('slash menu suggests and completes a command in the terminal', { timeout: TIMEOUT_MS }, () =>
-  runCommand('/settings', 'shell.autoApproveMode: off (default)', undefined, true),
+  runCommand('/settings', 'shell.autoApproveMode: off (default)', undefined, 'complete'),
+);
+
+it('Enter on an unfinished slash prefix completes it and does not run the command', { timeout: TIMEOUT_MS }, () =>
+  runCommand('/clear', '', 'keep this conversation', 'prefix-enter'),
 );

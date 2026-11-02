@@ -45,32 +45,40 @@ export const SLASH_COMMANDS = [
 export function useSlashMenu(value: string, enabled: boolean, subtleColor: React.ComponentProps<typeof Text>['color']) {
   const [index, setIndex] = useState(0);
   const [dismissed, setDismissed] = useState<string | null>(null);
+  // Enter runs a command only when the user picked it with the arrows; on a typed prefix it completes instead.
+  const [picked, setPicked] = useState(false);
   const matches =
     enabled && /^\/[a-z-]*$/.test(value) && value !== dismissed
       ? SLASH_COMMANDS.filter((command) => command.startsWith(value))
       : [];
   const selected = Math.min(index, matches.length - 1);
+  // A fully typed command is submitted by plain Enter, like any other line.
+  const exact = SLASH_COMMANDS.some((command) => command === value);
   const owns = (key: Key) =>
     matches.length > 0 &&
     !key.ctrl &&
     !key.meta &&
     !key.shift &&
-    (key.upArrow || key.downArrow || key.escape || key.tab || key.return);
+    (key.upArrow || key.downArrow || key.escape || key.tab || (key.return && !exact));
   const handle = (key: Key, accept: (command: string, run: boolean) => void) => {
     if (!owns(key)) return false;
-    if (key.upArrow || key.downArrow) setIndex((selected + (key.upArrow ? matches.length - 1 : 1)) % matches.length);
-    else if (key.escape) setDismissed(value);
+    if (key.upArrow || key.downArrow) {
+      setIndex((selected + (key.upArrow ? matches.length - 1 : 1)) % matches.length);
+      setPicked(true);
+    } else if (key.escape) setDismissed(value);
     else {
       const command = matches[selected];
       setDismissed(command);
       setIndex(0);
-      accept(command, key.return);
+      accept(command, key.return && picked);
+      setPicked(false);
     }
     return true;
   };
   const reset = () => {
     setIndex(0);
     setDismissed(null);
+    setPicked(false);
   };
   const view = matches.length ? (
     <Box flexDirection="column">
@@ -80,7 +88,7 @@ export function useSlashMenu(value: string, enabled: boolean, subtleColor: React
           {command}
         </Text>
       ))}
-      <Text color={subtleColor}>↑/↓ select · Enter run · Tab complete · Esc dismiss</Text>
+      <Text color={subtleColor}>↑/↓ select · Enter run picked · Tab complete · Esc dismiss</Text>
     </Box>
   ) : null;
   return { owns, handle, reset, view };

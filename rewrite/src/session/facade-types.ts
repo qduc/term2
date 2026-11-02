@@ -25,7 +25,12 @@ export type DirectOrigin =
       readonly relayedBy?: string;
     }
   | { readonly kind: 'control'; readonly source?: 'orchestrator'; readonly id?: string }
-  | { readonly kind: 'cli' | 'tui' | 'acp' | 'api'; readonly id?: string };
+  | { readonly kind: 'cli' | 'acp' | 'api'; readonly id?: string }
+  | {
+      readonly kind: 'tui';
+      readonly id?: string;
+      readonly skill?: { readonly name: string; readonly request: string };
+    };
 export type DirectBinding = { readonly client: string; readonly id: string };
 export type DirectSubmission = {
   readonly clientRequestId: string;

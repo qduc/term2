@@ -289,9 +289,9 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
     if (held !== null)
       return {
         message: `${held} Not sent; the request is in the input box.`,
-        draft: { text: injected, attachments: [] },
+        draft: { text: input.trim(), attachments: [] },
       };
-    await submitText(connection, injected);
+    await submitText(connection, injected, [], 'auto', undefined, undefined, { name: skillName, request });
     return {};
   };
 

@@ -80,12 +80,20 @@ async function startProvider(replies: Reply[]): Promise<string> {
   return `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}/v1`;
 }
 
-async function start(replies: Reply[], retryAttempts = 0): Promise<{ idlePath: string }> {
+async function start(replies: Reply[], retryAttempts = 0, withSkill = false): Promise<{ idlePath: string }> {
   root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-tool-rows-e2e-')));
   const home = path.join(root, 'home');
   const workspace = path.join(root, 'w');
   fs.mkdirSync(home);
   fs.mkdirSync(workspace);
+  if (withSkill) {
+    const skill = path.join(workspace, '.agents', 'skills', 'dogfood');
+    fs.mkdirSync(skill, { recursive: true });
+    fs.writeFileSync(
+      path.join(skill, 'SKILL.md'),
+      '---\nname: dogfood\ndescription: scratch\n---\nQUEUE_SKILL_SENTINEL\n',
+    );
+  }
   const baseUrl = await startProvider(replies);
   const idlePath = path.join(home, 'input-idle');
   const env = {
@@ -315,4 +323,46 @@ it('marks an interrupted reply before the steer', { timeout: TIMEOUT_MS }, async
   expect(visible.lastIndexOf('Stopped')).toBeGreaterThan(visible.lastIndexOf('PARTIAL-OLD-REPLY'));
   expect(visible.lastIndexOf('STEER-PROMPT')).toBeGreaterThan(visible.lastIndexOf('Stopped'));
   expect(visible.lastIndexOf('NEW-REPLY')).toBeGreaterThan(visible.lastIndexOf('STEER-PROMPT'));
+});
+
+it('edits a queued skill request without exposing or losing its body', { timeout: TIMEOUT_MS }, async () => {
+  const { idlePath } = await start(
+    [{ text: 'PARTIAL-SKILL-QUEUE', hang: true }, { text: 'SKILL-QUEUE-REPLY' }],
+    0,
+    true,
+  );
+  const send = async (text: string) => {
+    session!.write(text);
+    await waitForHarnessComposerValue(idlePath, text, { timeoutMs: 60_000 });
+    session!.write('\r');
+  };
+  await send('first question');
+  await session!.waitForOutput('PARTIAL-SKILL-QUEUE', 60_000);
+  await send('/skills dogfood queue request');
+  await session!.waitForOutput('Queued 1 (queued): [Skill: dogfood]', 30_000);
+  expect(session!.getVisibleOutput()).not.toContain('QUEUE_SKILL_SENTINEL');
+  await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  await send('/queue edit 1');
+  await waitForHarnessComposerValue(idlePath, 'queue request', { timeoutMs: 30_000 });
+  expect(session!.getVisibleOutput()).not.toContain('QUEUE_SKILL_SENTINEL');
+  session!.write('-EDITED');
+  await waitForHarnessComposerValue(idlePath, 'queue request-EDITED', { timeoutMs: 30_000 });
+  session!.write('\r');
+  await session!.waitForOutput('queue request-EDITED', 30_000);
+  await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
+  await send('/queue edit 1 INLINE-EDIT');
+  await session!.waitForOutput('INLINE-EDIT', 30_000);
+  await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
+  await send('/cancel');
+  await session!.waitForOutput('Queue: paused', 30_000);
+  await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
+  await send('/queue resume');
+  await session!.waitForOutput('SKILL-QUEUE-REPLY', 60_000);
+  const visible = session!.getVisibleOutput();
+  expect(visible).toContain('[Skill: dogfood]');
+  expect(visible).toContain('INLINE-EDIT');
+  expect(visible).not.toContain('QUEUE_SKILL_SENTINEL');
+  expect(received.join('\n')).toContain('QUEUE_SKILL_SENTINEL');
+  expect(received.join('\n')).toContain('INLINE-EDIT');
 });

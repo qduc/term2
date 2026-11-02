@@ -1,10 +1,36 @@
-import type { WireInteraction, WireMessage, WireSnapshot, WireTool, WireUsage } from '../../protocol/direct-wire.js';
+import type {
+  WireInteraction,
+  WireMessage,
+  WireSnapshot,
+  WireSubmissionRecord,
+  WireTool,
+  WireUsage,
+} from '../../protocol/direct-wire.js';
 import { type InteractionView, type Message, type TaskView, type ToolView, type TuiState } from './state.js';
 
 const usageText = (usage: WireUsage): string =>
   `${usage.inputTokens} in / ${usage.outputTokens} out (${usage.cachedInputTokens} cached)`;
 const modelText = (model: { readonly provider: string; readonly model: string }): string =>
   `${model.provider}/${model.model}`;
+/** Derive only from explicit provenance and the exact accepted injected content. */
+function skillPresentation(record: WireSubmissionRecord | undefined) {
+  const skill = record?.origin?.kind === 'tui' ? record.origin.skill : undefined;
+  if (!record || !skill || record.originalContent.length !== 1 || record.content.length !== 1) return undefined;
+  const original = record.originalContent[0];
+  const current = record.content[0];
+  if (original?.type !== 'text' || current?.type !== 'text') return undefined;
+  const suffix = skill.request ? `\n\n${skill.request}` : '';
+  if (suffix && !original.text.endsWith(suffix)) return undefined;
+  const prefix = suffix ? original.text.slice(0, -suffix.length) : original.text;
+  if (current.text !== prefix && !current.text.startsWith(`${prefix}\n\n`)) return undefined;
+  const request = current.text === prefix ? '' : current.text.slice(prefix.length + 2);
+  return {
+    name: skill.name,
+    prefix,
+    request,
+    display: `[Skill: ${skill.name}]${request.trim() ? `\n${request}` : ''}`,
+  };
+}
 const messageView = (message: WireMessage): Message => ({
   id: message.id,
   turnId: message.turnId,
@@ -110,6 +136,11 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
       message.modelStep !== undefined &&
       message.id === `${message.turnId}-model-${message.modelStep}-partial`;
     const view = { ...messageView(message), ...(interrupted ? { interrupted: true } : {}) };
+    const skill = skillPresentation(snapshot.submissions?.find((entry) => entry.messageId === message.id));
+    if (message.role === 'user' && skill) {
+      view.text = skill.display;
+      view.historyText = `/skills ${skill.name}${skill.request ? ` ${skill.request}` : ''}`;
+    }
     // Only the active turn's partial text is a live draft. A cancelled turn's partial reply never gets a final
     // message; it stays where it was said, in the timeline, instead of sinking below every later message.
     if (message.draft && message.role === 'assistant' && live && !interrupted) drafts[message.id] = view.text;
@@ -130,12 +161,16 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
     budgets: snapshot.pendingBudgets ?? [],
     commands: snapshot.commands ?? [],
     interactions: snapshot.pendingInteractions.map(interactionView),
-    queue: snapshot.queue.map((entry) => ({
-      id: entry.messageId,
-      text: entry.text,
-      delivery: entry.delivery,
-      content: entry.content,
-    })),
+    queue: snapshot.queue.map((entry) => {
+      const skill = skillPresentation(snapshot.submissions?.find((item) => item.messageId === entry.messageId));
+      return {
+        id: entry.messageId,
+        text: entry.text,
+        delivery: entry.delivery,
+        content: entry.content,
+        ...(skill ? { displayText: skill.display, skillEdit: { prefix: skill.prefix, request: skill.request } } : {}),
+      };
+    }),
     queueState: snapshot.queueState,
     queuePauseReason: snapshot.queuePauseReason,
     tasks: snapshot.tasks.map(taskView),

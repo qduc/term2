@@ -21,12 +21,14 @@ const TIMEOUT_MS = 120_000;
 let session: TerminalSession | null = null;
 let root = '';
 let server: http.Server | null = null;
+let providerBodies: string[] = [];
 
 afterEach(async () => {
   session?.dispose();
   session = null;
   await new Promise<void>((resolve) => (server ? server.close(() => resolve()) : resolve()));
   server = null;
+  providerBodies = [];
   if (root) fs.rmSync(root, { recursive: true, force: true });
   root = '';
 });
@@ -47,8 +49,12 @@ async function startProvider(replies: Reply[], withUsage = false): Promise<strin
       res.end(JSON.stringify({ object: 'list', data: [{ id: 'mock-alpha' }, { id: 'mock-beta' }] }));
       return;
     }
-    req.resume();
+    let body = '';
+    req.on('data', (chunk) => {
+      body += chunk.toString();
+    });
     req.on('end', () => {
+      providerBodies.push(body);
       const reply = replies[requests++] ?? { text: 'done' };
       if (reply.error) {
         res.writeHead(400, { 'content-type': 'application/json' });
@@ -184,6 +190,7 @@ async function runCommand(
     | 'complete'
     | 'hint-80'
     | 'hint-120'
+    | 'skill-baseline'
     | 'skin-cards'
     | 'slash-picker-tab'
     | 'command-clear-regression'
@@ -204,6 +211,15 @@ async function runCommand(
   const workspace = path.join(root, 'w');
   fs.mkdirSync(home);
   fs.mkdirSync(workspace);
+  if (exerciseMenu === 'skill-baseline') {
+    const skillDir = path.join(workspace, '.agents', 'skills', 'dogfood');
+    fs.mkdirSync(skillDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(skillDir, 'SKILL.md'),
+      '---\nname: dogfood\ndescription: scratch dogfood skill\n---\nDOGFOOD_SKILL_SENTINEL\n',
+    );
+  }
+
   const baseUrl = await startProvider([providerError ? { error: providerError } : { text: 'unused' }], withUsage);
   const idlePath = path.join(home, 'input-idle');
   const env = {
@@ -461,6 +477,28 @@ async function runCommand(
   await session.waitForOutput(expected, 30_000);
   for (const forbidden of forbiddenOutput) expect(session.getVisibleOutput()).not.toContain(forbidden);
   if (expectedDraft !== undefined) await waitForHarnessComposerValue(idlePath, expectedDraft, { timeoutMs: 60_000 });
+  if (exerciseMenu === 'skill-baseline') {
+    expect(session.getVisibleOutput()).not.toContain('DOGFOOD_SKILL_SENTINEL');
+    expect(session.getVisibleOutput()).toContain('[Skill: dogfood]');
+    expect(session.getVisibleOutput()).toContain('SKILL-CHECK');
+    expect(session.getVisibleOutput()).toContain('SECOND-LINE');
+    expect(providerBodies.join('\n')).toContain('DOGFOOD_SKILL_SENTINEL');
+    const directory = path.join(root, 'conversations');
+    const file = fs.readdirSync(directory).find((name) => name.endsWith('.jsonl'))!;
+    expect(fs.readFileSync(path.join(directory, file), 'utf8')).toContain('DOGFOOD_SKILL_SENTINEL');
+    await submit('/quit');
+    await session.waitForExit(30_000);
+    session.dispose();
+    fs.rmSync(idlePath, { force: true });
+    session = spawnTerminal('node', [builtCli, '--resume', file.slice(0, -6)], { cwd: workspace, env });
+    await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
+    await session.waitForOutput('[Skill: dogfood]', 30_000);
+    expect(session.getVisibleOutput()).toContain('SECOND-LINE');
+    expect(session.getVisibleOutput()).not.toContain('DOGFOOD_SKILL_SENTINEL');
+    const literal = '<system-notice>literal evidence</system-notice>';
+    await submit(literal);
+    await session.waitForOutput(literal, 30_000);
+  }
   if (exerciseMenu === 'model-picker') {
     await session.waitForOutput('mockprov · aka luna', 30_000);
     expect(session.getVisibleOutput()).toContain('Provider / nickname');
@@ -691,4 +729,8 @@ it('keeps all composer hints at 120 columns', { timeout: TIMEOUT_MS }, () => run
 
 it('uses the configured cards skin for the direct composer', { timeout: TIMEOUT_MS }, () =>
   runCommand('', '', undefined, 'skin-cards'),
+);
+
+it('displays the skill request without injected instructions', { timeout: TIMEOUT_MS }, () =>
+  runCommand('/skills dogfood SKILL-CHECK\nSECOND-LINE', 'unused', undefined, 'skill-baseline'),
 );

@@ -13,6 +13,8 @@ import { InteractionPanel } from './interaction-panel.js';
 import type { InteractionInputHandler } from './interaction-input.js';
 import { runBangShell } from './bang-shell.js';
 import { useInterrupt } from './interrupt.js';
+import { runQueueCommand } from './queue-command.js';
+import { withSkillPrefix } from './skill-edit.js';
 import { PickerHost, pickerFor, openPickerFor, type PickerKind } from './picker-host.js';
 import { isCtrlG, isShiftTab, usePlanToggle } from './shift-tab.js';
 import { RewindPicker } from './rewind-picker.js';
@@ -87,6 +89,7 @@ export function TuiSession({
     replaceInput,
     changeInput,
     restoreDraft,
+    startQueueEdit,
     answerOwners,
     queueOwners,
   } = useSessionComposer(state, preferences.historySize, setNotice);
@@ -198,7 +201,13 @@ export function TuiSession({
           if (!editing.knownParts && parts.length)
             throw new Error('Queued attachments are unavailable; cannot safely replace them.');
           const changed = editing.knownParts && JSON.stringify(parts) !== JSON.stringify(editing.knownParts);
-          await queueAction(connection, 'edit', editing.id, clean, changed ? parts : undefined);
+          await queueAction(
+            connection,
+            'edit',
+            editing.id,
+            withSkillPrefix(editing.skillPrefix, clean),
+            changed ? parts : undefined,
+          );
           if (await steerRecovery.wasEditInvalidatedAfter(submission.submissionEpoch, editing.id)) return;
           replaceInput(editing.restoreText, editing.restoreCursor);
           setImages(editing.restoreImages);
@@ -290,50 +299,7 @@ export function TuiSession({
           return;
         }
       } else if (/^\/queue(?:\s|$)/.test(input)) {
-        const match = /^\/queue\s+(resume|discard|retract|edit|clear-images)(?:\s+(\d+))?(?:\s+([\s\S]*))?$/.exec(
-          input.trim(),
-        );
-        if (!match)
-          throw new Error('Use /queue resume|discard|retract <number>|edit <number> [text]|clear-images <number>.');
-        const action = match[1] as 'resume' | 'discard' | 'retract' | 'edit' | 'clear-images';
-        const item = match[2] ? state.queue[Number(match[2]) - 1] : undefined;
-        if ((action === 'edit' || action === 'retract' || action === 'clear-images') && !item)
-          throw new Error('No queued message at that number.');
-        if (item && queueOwners.current && queueOwners.current[Number(match[2]) - 1] !== item.id)
-          throw new Error('The queue changed. Check the list and re-enter your command.');
-        if ((action === 'resume' || action === 'discard') && match[2])
-          throw new Error('This operation takes no message number.');
-        if (action === 'clear-images') {
-          if (!item || match[3] !== undefined) throw new Error('Use /queue clear-images <number>.');
-          if (!item.content) throw new Error('Queued content is unavailable; cannot safely clear images.');
-          const primary = item.content.findIndex((part) => part.type === 'text');
-          await queueAction(
-            connection,
-            'edit',
-            item.id,
-            item.text,
-            item.content.filter((part, index) => index !== primary && part.type !== 'image'),
-          );
-        } else if (action === 'edit' && item && match[3] === undefined) {
-          const primary = item.content?.findIndex((part) => part.type === 'text') ?? -1;
-          const parts = item.content?.filter((_part, index) => index !== primary);
-          setEditing({
-            id: item.id,
-            restoreText: '',
-            restoreCursor: 0,
-            restoreImages: images,
-            restoreOther: otherParts,
-            restoreOriginal: originalParts,
-            knownParts: parts,
-          });
-          restoreDraft({ text: item.text, attachments: parts ?? [] });
-          setNotice(
-            parts
-              ? 'Editing queued input and attachments. /queue cancel restores your draft.'
-              : 'Editing queued text; attachment content is unavailable. /queue cancel restores your draft.',
-          );
-          return;
-        } else await queueAction(connection, action, item?.id, match[3]);
+        if (await runQueueCommand(connection, input, state.queue, queueOwners.current, startQueueEdit)) return;
       } else if (input.trim() === '/cancel') {
         setNotice(await cancelInput(connection, state.activeTurnId ?? undefined, input, submission.submittedRevision));
         return;

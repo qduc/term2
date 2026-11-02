@@ -113,7 +113,8 @@ export type WireToolResult = {
   readonly content?: readonly WireContent[];
 };
 export type WireOrigin =
-  | { readonly kind: 'cli' | 'tui' | 'acp' | 'api'; readonly id?: string }
+  | { readonly kind: 'cli' | 'acp' | 'api'; readonly id?: string }
+  | { readonly kind: 'tui'; readonly id?: string; readonly skill?: { readonly name: string; readonly request: string } }
   | { readonly kind: 'control'; readonly id?: string; readonly source?: 'orchestrator' }
   | {
       readonly kind: 'discord';

@@ -17,6 +17,8 @@ export function parseDirectOrigin(raw: unknown): DirectOrigin {
       ? ['kind', 'source', 'sender', 'discordMessageId', 'relayedBy']
       : kind === 'control'
       ? ['kind', 'id', 'source']
+      : kind === 'tui'
+      ? ['kind', 'id', 'skill']
       : ['kind', 'id'];
   if (Object.keys(value).some((key) => !allowed.includes(key))) throw new Error('Unknown direct origin field');
   if (kind === 'discord') {
@@ -37,6 +39,23 @@ export function parseDirectOrigin(raw: unknown): DirectOrigin {
       ...(value.source ? { source: 'orchestrator' } : {}),
     };
   }
+  if (kind === 'tui' && value.skill !== undefined) {
+    const skill = value.skill;
+    if (!skill || typeof skill !== 'object' || Array.isArray(skill)) throw new Error('Invalid skill provenance');
+    const s = skill as Record<string, unknown>;
+    if (
+      Object.keys(s).some((key) => key !== 'name' && key !== 'request') ||
+      typeof s.name !== 'string' ||
+      !s.name.trim() ||
+      typeof s.request !== 'string'
+    )
+      throw new Error('Invalid skill provenance');
+    return {
+      kind,
+      ...(value.id === undefined ? {} : { id: identifier('id')! }),
+      skill: { name: s.name, request: s.request },
+    };
+  }
   if (kind === 'cli' || kind === 'tui' || kind === 'acp' || kind === 'api')
     return { kind, ...(value.id === undefined ? {} : { id: identifier('id')! }) };
   throw new Error('Invalid direct origin kind');
@@ -48,7 +67,12 @@ export function directOriginKey(origin?: DirectOrigin): readonly unknown[] | nul
   const value = parseDirectOrigin(origin);
   if (value.kind === 'discord')
     return [value.kind, value.source, value.sender, value.discordMessageId ?? null, value.relayedBy ?? null];
-  return [value.kind, value.id ?? null, value.kind === 'control' ? value.source ?? null : null];
+  return [
+    value.kind,
+    value.id ?? null,
+    value.kind === 'control' ? value.source ?? null : null,
+    ...(value.kind === 'tui' && value.skill ? [value.skill.name, value.skill.request] : []),
+  ];
 }
 
 /** Automatic control/agent/reaction input never opens a fresh human decision window. */

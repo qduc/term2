@@ -28,6 +28,7 @@ export async function submitText(
   delivery: WireSubmission['delivery'] = 'auto',
   expectedSteerTurnId?: string,
   requestId = randomUUID(),
+  skill?: { readonly name: string; readonly request: string },
 ): Promise<void> {
   const result = await connection.send({
     type: 'submit',
@@ -36,7 +37,7 @@ export async function submitText(
     delivery,
     ...(expectedSteerTurnId && delivery === 'steer' ? { expectedSteerTurnId } : {}),
     ...(attachments.length ? { attachments } : {}),
-    origin: { kind: 'tui' },
+    origin: { kind: 'tui', ...(skill ? { skill } : {}) },
   });
   if (!result.ok) throw new Error(`${result.code}: ${result.message}`);
   if (result.kind !== 'admitted') throw new Error(`Unexpected submit response: ${result.kind}`);

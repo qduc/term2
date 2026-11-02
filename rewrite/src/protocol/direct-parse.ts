@@ -143,6 +143,16 @@ export function parseWireOrigin(raw: unknown): WireOrigin {
         : {}),
     };
   }
+  if (value.kind === 'tui' && value.skill !== undefined) {
+    fields(value, ['kind', 'id', 'skill']);
+    const skill = object(value.skill);
+    fields(skill, ['name', 'request']);
+    return {
+      kind: 'tui',
+      ...(value.id !== undefined ? { id: id(value.id, 'origin id') } : {}),
+      skill: { name: id(skill.name, 'skill name'), request: text(skill.request, 'skill request') },
+    };
+  }
   fields(value, ['kind', 'id']);
   return {
     kind: choice(value.kind, ['cli', 'tui', 'acp', 'api'], 'origin'),

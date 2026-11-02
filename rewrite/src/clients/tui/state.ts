@@ -59,6 +59,8 @@ export type InteractionView = {
 export type QueueItem = {
   readonly id: string;
   readonly text: string;
+  readonly displayText?: string;
+  readonly skillEdit?: { readonly prefix: string; readonly request: string };
   readonly delivery: string;
   readonly content?: readonly WireContent[];
 };

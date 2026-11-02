@@ -229,7 +229,7 @@ export function Activity({
       ) : null}
       {state.queue.map((item, index) => (
         <Text key={item.id}>
-          Queued {index + 1} ({item.delivery}): {item.text}
+          Queued {index + 1} ({item.delivery}): {item.displayText ?? item.text}
         </Text>
       ))}
       {state.interactions.map((interaction, index) =>

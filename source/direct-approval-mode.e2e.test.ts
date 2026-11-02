@@ -177,6 +177,7 @@ async function runCommand(
   exerciseMenu:
     | false
     | 'complete'
+    | 'slash-picker-tab'
     | 'command-clear-regression'
     | 'prefix-enter'
     | 'pick-enter'
@@ -304,6 +305,26 @@ async function runCommand(
     await submit('another question');
     await session.waitForOutput('done', 30_000);
     await waitForHarnessIdleGeneration(idlePath, { after: before, timeoutMs: 60_000 });
+  }
+  if (exerciseMenu === 'slash-picker-tab') {
+    session.write('/');
+    await waitForHarnessComposerValue(idlePath, '/', { timeoutMs: 60_000 });
+    await session.waitForOutput('Tab complete/open', 30_000);
+    expect(session.getVisibleOutput()).toContain('╭');
+    expect(session.getVisibleOutput()).toContain('Start a new conversation');
+    session.write('model');
+    await waitForHarnessComposerValue(idlePath, '/model', { timeoutMs: 60_000 });
+    session.write('\t');
+    await session.waitForOutput('Choose a model', 30_000);
+    const beforeClose = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
+    session.write('\x1b');
+    await waitForHarnessIdleGeneration(idlePath, { after: beforeClose, timeoutMs: 60_000 });
+    await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 60_000 });
+    session.write('/resume');
+    await waitForHarnessComposerValue(idlePath, '/resume', { timeoutMs: 60_000 });
+    session.write('\t');
+    await session.waitForOutput('Resume Conversation', 30_000);
+    return;
   }
   if (exerciseMenu === 'approval-shortcut-history') {
     session.write('draft stays');
@@ -613,4 +634,8 @@ it(
   'accepted commands clear, rejected commands remain, and Escape clears completed slash input',
   { timeout: TIMEOUT_MS },
   () => runCommand('', '', undefined, 'command-clear-regression'),
+);
+
+it('Tab opens the slash model picker and Escape returns to the composer', { timeout: TIMEOUT_MS }, () =>
+  runCommand('', '', undefined, 'slash-picker-tab'),
 );

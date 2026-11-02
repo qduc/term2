@@ -12,7 +12,7 @@ import { Activity, LiveNotices } from './views.js';
 import { InteractionPanel } from './interaction-panel.js';
 import type { InteractionInputHandler } from './interaction-input.js';
 import { runBangShell } from './bang-shell.js';
-import { PickerHost, pickerFor, type PickerKind } from './picker-host.js';
+import { PickerHost, pickerFor, openPickerFor, type PickerKind } from './picker-host.js';
 import { isCtrlG, isShiftTab, usePlanToggle } from './shift-tab.js';
 import { RewindPicker } from './rewind-picker.js';
 import { TaskManager } from './task-manager.js';
@@ -127,7 +127,7 @@ export function TuiSession({
     if (interactionActive) return void interactionInput.current?.(input, key);
     if (taskOpen || budgetOpen || rewindTargets) return;
     if (composerActive && isShiftTab(input, key)) return togglePlan();
-    if (slash.handle(key, replaceInput)) return;
+    if (slash.handle(key, replaceInput, openPickerFor(integration, setPicker))) return;
     if (composerActive && key.escape && viewport.expanded) return viewport.collapse();
     if (isCtrlG(input, key) && !busy) (state.interactions.length ? setInteractionOpen : setTaskOpen)(true);
     if (key.ctrl && input === 'b' && state.budgets.length && !busy) setBudgetOpen(true);

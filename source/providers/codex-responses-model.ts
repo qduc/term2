@@ -254,6 +254,9 @@ export class CodexResponsesTransport {
         // record what the socket actually was, and `unknown` when it cannot be
         // observed at all.
         const dispatchRequestEvent = () => {
+          // Cancellation can happen while acquiring the socket or before a
+          // connecting socket opens. Never hand an aborted turn to the wire.
+          if (request.signal?.aborted) return;
           const readyState = (socket as any).socket?.readyState;
           socket.send(requestEvent);
           notifyProviderRequestDispatched();

@@ -98,6 +98,7 @@ async function runCommand(
   exerciseMenu: false | 'complete' | 'prefix-enter' | 'pick-enter' | 'model-picker' | 'approval-shortcut' = false,
   withUsage = false,
   expectedDraft?: string,
+  forbiddenOutput: readonly string[] = [],
 ): Promise<void> {
   root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-tool-rows-e2e-')));
   const home = path.join(root, 'home');
@@ -199,6 +200,7 @@ async function runCommand(
   }
   await submit(command);
   await session.waitForOutput(expected, 30_000);
+  for (const forbidden of forbiddenOutput) expect(session.getVisibleOutput()).not.toContain(forbidden);
   if (expectedDraft !== undefined) await waitForHarnessComposerValue(idlePath, expectedDraft, { timeoutMs: 60_000 });
   if (exerciseMenu === 'model-picker') {
     await session.waitForOutput('mockprov/mock-alpha', 30_000);
@@ -295,3 +297,33 @@ it('/providers lists the configured active provider', { timeout: TIMEOUT_MS }, (
 );
 
 it('/retry aliases retry-turn', { timeout: TIMEOUT_MS }, () => runCommand('/retry', 'No retained'));
+
+it('invalid effort reports valid values without protocol internals', { timeout: TIMEOUT_MS }, () =>
+  runCommand(
+    '/effort ultra',
+    "Unknown effort 'ultra'. Use: default, none, minimal, low, medium, high, xhigh.",
+    undefined,
+    false,
+    false,
+    undefined,
+    ['invalid_command', 'Command '],
+  ),
+);
+
+it('rejected model shows one human error without receipt internals', { timeout: TIMEOUT_MS }, () =>
+  runCommand(
+    '/model bogus/does-not-exist',
+    "Provider 'bogus' does not expose an application",
+    undefined,
+    false,
+    false,
+    undefined,
+    ['command_rejected', '· configure · rejected'],
+  ),
+);
+
+it('successful configure does not leave a receipt in the activity view', { timeout: TIMEOUT_MS }, () =>
+  runCommand('/model mockprov/mock-beta', 'Model set to mockprov/mock-beta.', undefined, false, false, undefined, [
+    '· configure · configured',
+  ]),
+);

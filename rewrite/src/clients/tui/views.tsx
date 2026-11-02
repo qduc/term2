@@ -127,13 +127,20 @@ export function Activity({
           {state.queuePauseReason ? ` · ${state.queuePauseReason}` : ''}
         </Text>
       ) : null}
-      {state.commands.map((receipt) => (
-        <Text key={receipt.request.commandId}>
-          Command {receipt.request.commandId} · {receipt.request.operation.kind} · {receipt.outcome?.kind ?? 'pending'}
-          {receipt.outcome?.kind === 'rejected' ? `: ${receipt.outcome.message}` : ''}
-          {receipt.outcome?.kind === 'interrupted' ? ' · outcome unknown' : ''}
-        </Text>
-      ))}
+      {state.commands
+        .filter(
+          (receipt) =>
+            receipt.request.operation.kind !== 'configure' ||
+            (receipt.outcome?.kind !== 'configured' && receipt.outcome?.kind !== 'rejected'),
+        )
+        .map((receipt) => (
+          <Text key={receipt.request.commandId}>
+            Command {receipt.request.commandId} · {receipt.request.operation.kind} ·{' '}
+            {receipt.outcome?.kind ?? 'pending'}
+            {receipt.outcome?.kind === 'rejected' ? `: ${receipt.outcome.message}` : ''}
+            {receipt.outcome?.kind === 'interrupted' ? ' · outcome unknown' : ''}
+          </Text>
+        ))}
       {state.budgets.length ? <Text>Pending budget decisions: {state.budgets.length} · Ctrl+B</Text> : null}
       {state.goal ? <Text>Goal: {state.goal}</Text> : null}
       {state.verification ? <Text>Verification: {state.verification}</Text> : null}

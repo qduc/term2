@@ -61,7 +61,12 @@ async function configure(
   const command = { type: 'configure', commandId: randomUUID(), configuration } as const;
   const result = await sendNativeCommand(connection, command);
   const configured = result.kind === 'finished' && result.receipt.outcome?.kind === 'configured';
-  return { message: configured && done ? done : receiptNotice(result) };
+  if (configured && done) return { message: done };
+  if (result.kind === 'rejected' || result.kind === 'error') {
+    const outcome = result.receipt?.outcome;
+    return { message: outcome?.kind === 'rejected' ? outcome.message : result.message.replace(/^[a-z_]+: /, '') };
+  }
+  return { message: receiptNotice(result) };
 }
 
 /** `2026-11-02 20:22` in the user's own time zone; the log stores UTC. */
@@ -132,6 +137,8 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
         message: 'Enter an effort after /effort in the input: default, none, minimal, low, medium, high, xhigh.',
         draft: { text: '/effort ', attachments: [] },
       };
+    if (!['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'].includes(value))
+      return { message: `Unknown effort '${value}'. Use: default, none, minimal, low, medium, high, xhigh.` };
     return configure(
       connection,
       { reasoning: value as NonNullable<Configuration['reasoning']> },

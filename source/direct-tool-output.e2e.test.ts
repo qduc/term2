@@ -335,3 +335,68 @@ it(
     expect((await session.waitForExit(30_000)).exitCode).toBe(0);
   },
 );
+
+it('collapses failed shell probes and expands their details', { timeout: TIMEOUT_MS }, async () => {
+  root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-failed-probes-')));
+  const home = path.join(root, 'home');
+  const workspace = path.join(root, 'workspace');
+  fs.mkdirSync(home);
+  fs.mkdirSync(workspace);
+  fs.mkdirSync(path.join(root, 'runtime'), { mode: 0o700 });
+  const baseUrl = await startProvider([
+    {
+      call: {
+        id: 'fail1',
+        args: { command: "printf 'fatal: probe-one\\n' >&2; exit 128", description: 'First probe' },
+      },
+    },
+    {
+      call: {
+        id: 'fail2',
+        args: { command: "printf 'error: probe-two\\n' >&2; exit 127", description: 'Second probe' },
+      },
+    },
+    { text: 'PROBES-FINISHED' },
+  ]);
+  const idlePath = path.join(home, 'input-idle');
+  const env = {
+    HOME: home,
+    XDG_CONFIG_HOME: path.join(home, '.config'),
+    XDG_STATE_HOME: path.join(home, '.local', 'state'),
+    XDG_CACHE_HOME: path.join(home, '.cache'),
+    XDG_DATA_HOME: path.join(home, '.local', 'share'),
+    XDG_RUNTIME_DIR: path.join(root, 'runtime'),
+    TERM2_CONFIG_DIR: path.join(home, '.term2'),
+    TERM2_CACHE_DIR: path.join(home, '.cache', 'term2'),
+    TERM2_CONVERSATIONS_DIR: path.join(root, 'conversations'),
+    DISABLE_LOGGING: '1',
+    [HARNESS_IDLE_ENV]: idlePath,
+    CI: 'false',
+  };
+  const settingsDir = resolveSettingsDirectory({ homeDir: home, env: createTestChildEnv(env) });
+  fs.mkdirSync(settingsDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(settingsDir, 'settings.json'),
+    JSON.stringify({
+      agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
+      providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl, apiKey: 'test-key' }],
+      sandbox: { enabled: false },
+      shell: { autoApproveMode: 'always' },
+    }),
+  );
+  session = spawnTerminal('node', [builtCli], { cwd: workspace, env, cols: 160, rows: 50 });
+  await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
+  session.write('run probes');
+  await waitForHarnessComposerValue(idlePath, 'run probes', { timeoutMs: 60_000 });
+  session.write('\r');
+  await session.waitForOutput('PROBES-FINISHED', 60_000);
+  await session.waitForOutput('2 commands failed · Ctrl+O for details', 30_000);
+  const beforeExpand = session.getVisibleOutput().length;
+  session.write('\x0f');
+  await expect
+    .poll(() => session!.getVisibleOutput().slice(beforeExpand), { timeout: 30_000 })
+    .toContain('fatal: probe-one');
+  await expect
+    .poll(() => session!.getVisibleOutput().slice(beforeExpand), { timeout: 30_000 })
+    .toContain('error: probe-two');
+});

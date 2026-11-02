@@ -3,6 +3,7 @@ import { Box, Static, Text } from 'ink';
 import { reportsFailure } from './tool-view.js';
 import type { Message, ToolView, TuiState } from './state.js';
 import { Transcript } from './views.js';
+import { failedShellGroups, FailedShellSummary } from './failed-shell-summary.js';
 
 type Row = {
   readonly key: string;
@@ -89,11 +90,20 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
   }, [state, rows]);
   // Key the wrapper, not Static itself: Ink's old-node cleanup otherwise clears
   // the newly registered Static root during the same replacement commit.
+  const failures = failedShellGroups(rows.flatMap((row) => (row.tool ? [row.tool] : [])));
   const staticTranscript = (
     <Box key={epoch}>
       <Static style={{ width: columns }} items={header ? [{ key: 'header', header }, ...rows] : [...rows]}>
         {(row) => {
           if (row.header) return <Box key={row.key}>{row.header}</Box>;
+          const count = row.tool ? failures.get(row.tool.id) : undefined;
+          if (count === 0) return <Box key={row.key} />;
+          if (count !== undefined)
+            return (
+              <Box key={row.key} marginTop={1} paddingLeft={2}>
+                <FailedShellSummary count={count} />
+              </Box>
+            );
           const entry = row.message
             ? { kind: 'message' as const, id: row.message.id }
             : { kind: 'tool' as const, id: row.tool!.id };

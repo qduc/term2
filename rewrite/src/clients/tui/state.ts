@@ -17,6 +17,7 @@ export type Message = {
   readonly text: string;
   readonly presentation?: Readonly<Record<string, JsonValue>>;
   readonly error?: boolean;
+  readonly interrupted?: boolean;
   readonly historyText?: string;
   readonly attachments?: readonly WireContent[];
 };

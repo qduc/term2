@@ -225,3 +225,18 @@ it('a second message sent while the first is still being sent is kept, not lost'
   const kept = logged.includes('steer bravo') || (composer(idlePath) ?? '').includes('steer bravo');
   expect(kept, 'the second steer is in the log or the draft').toBe(true);
 });
+
+it('marks an interrupted reply before the steer', { timeout: TIMEOUT_MS }, async () => {
+  const { idlePath } = await start([{ text: 'PARTIAL-OLD-REPLY', hang: true }, { text: 'NEW-REPLY' }]);
+  session!.write('first question');
+  await waitForHarnessComposerValue(idlePath, 'first question', { timeoutMs: 60_000 });
+  session!.write('\r');
+  await session!.waitForOutput('PARTIAL-OLD-REPLY', 60_000);
+  session!.write('STEER-PROMPT\r');
+  await session!.waitForOutput('NEW-REPLY', 30_000);
+  const visible = session!.getVisibleOutput();
+  expect(visible.lastIndexOf('PARTIAL-OLD-REPLY')).toBeGreaterThanOrEqual(0);
+  expect(visible.lastIndexOf('Stopped')).toBeGreaterThan(visible.lastIndexOf('PARTIAL-OLD-REPLY'));
+  expect(visible.lastIndexOf('STEER-PROMPT')).toBeGreaterThan(visible.lastIndexOf('Stopped'));
+  expect(visible.lastIndexOf('NEW-REPLY')).toBeGreaterThan(visible.lastIndexOf('STEER-PROMPT'));
+});

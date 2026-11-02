@@ -41,6 +41,7 @@ export function Transcript({
       <Box key={`message:${message.id}`} marginTop={1} paddingLeft={2}>
         <AssistantFrame kind="answer">
           <MarkdownRenderer maxWidth={width}>{message.text}</MarkdownRenderer>
+          {message.interrupted ? <Text color={theme.textSubtle}>Stopped</Text> : null}
         </AssistantFrame>
       </Box>
     ) : (

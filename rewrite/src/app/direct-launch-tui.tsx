@@ -15,6 +15,8 @@ import { shouldDetectBackground } from '../../../source/theme/resolve-theme.js';
 import { SettingsThemeProvider } from '../../../source/theme/ThemeContext.js';
 import { getInkRenderOptions } from '../../../source/utils/ink-render-options.js';
 import { getProfileLabel } from '../../../source/services/profiles/labels.js';
+import { quoteShellArg } from '../../../source/services/ssh-service.js';
+import type { WireSnapshot } from '../protocol/direct-wire.js';
 import { useTerminalFocusNotifier } from '../../../source/hooks/use-terminal-focus-notifier.js';
 import type { LoggingService } from '../../../source/services/logging/logging-service.js';
 import {
@@ -67,7 +69,7 @@ function DirectTui({
   readonly initial: DirectConnection;
   readonly bridge: DirectControlBridge;
   readonly restart: (plan: DirectRestartPlan) => void;
-  readonly onExit: () => void;
+  readonly onExit: (snapshot: WireSnapshot) => void;
   readonly logger: LoggingService;
 }): React.ReactElement {
   const [connection, setConnection] = useState(initial);
@@ -150,7 +152,7 @@ function DirectTui({
       onSnapshot={(snapshot) => {
         latest.current = snapshot;
       }}
-      onExit={onExit}
+      onExit={() => onExit(latest.current)}
     />
   );
 }
@@ -225,6 +227,7 @@ async function runTui(
     if (controlSocket) stderr.write(`${await bridge.attachAtStartup(initial.sessionId, controlSocket)}\n`);
     if (exitCode !== 0) return exitCode;
 
+    let exitedSnapshot: WireSnapshot | undefined;
     const instance = render(
       (
         <SettingsThemeProvider settingsService={settings} detectedBackground={detectedBackground}>
@@ -243,7 +246,10 @@ async function runTui(
                 stderr.write(`Restart recovery command: ${plan.manualCommand}\n`);
                 pending.plan = plan;
               }}
-              onExit={() => instance.unmount()}
+              onExit={(snapshot) => {
+                exitedSnapshot = snapshot;
+                instance.unmount();
+              }}
             />
           </SettingsSkinProvider>
         </SettingsThemeProvider>
@@ -252,6 +258,20 @@ async function runTui(
     );
     unmount = () => instance.unmount();
     await instance.waitUntilExit();
+    if (!pending.plan && exitCode === 0 && exitedSnapshot?.messages.some((message) => message.role !== 'system')) {
+      const args = ['term2-next'];
+      if (target.restart) {
+        args.push(
+          '--ssh',
+          quoteShellArg(target.restart.target),
+          '--remote-dir',
+          quoteShellArg(target.restart.directory),
+        );
+        if (target.restart.port && target.restart.port !== 22) args.push('--ssh-port', String(target.restart.port));
+      }
+      args.push('--resume', quoteShellArg(exitedSnapshot.sessionId));
+      stdout.write(`\nSession: ${exitedSnapshot.sessionId}\nTo resume this conversation: ${args.join(' ')}\n`);
+    }
     return exitCode;
   } finally {
     process.removeListener('SIGINT', onSignal);

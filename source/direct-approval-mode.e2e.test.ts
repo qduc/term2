@@ -159,7 +159,8 @@ async function runCommand(
     | 'pick-enter'
     | 'model-picker'
     | 'approval-shortcut'
-    | 'approval-shortcut-history' = false,
+    | 'approval-shortcut-history'
+    | 'quit-hint' = false,
   withUsage = false,
   expectedDraft?: string,
   forbiddenOutput: readonly string[] = [],
@@ -242,6 +243,14 @@ async function runCommand(
         'off',
       );
     }
+    return;
+  }
+  if (exerciseMenu === 'quit-hint') {
+    await submit('/quit');
+    const exit = await session.waitForExit(30_000);
+    expect(exit.exitCode).toBe(0);
+    const output = session.getVisibleOutput();
+    expect(output).toMatch(/To resume this conversation: term2-next --resume ['\"]?conv_[0-9a-f-]{36}/);
     return;
   }
   if (exerciseMenu === 'pick-enter') {
@@ -407,4 +416,8 @@ it('successful configure does not leave a receipt in the activity view', { timeo
   runCommand('/model mockprov/mock-beta', 'Model set to mockprov/mock-beta.', undefined, false, false, undefined, [
     '· configure · configured',
   ]),
+);
+
+it('quitting a conversation prints a usable resume hint', { timeout: TIMEOUT_MS }, () =>
+  runCommand('', '', 'hello', 'quit-hint'),
 );

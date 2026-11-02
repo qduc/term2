@@ -195,7 +195,7 @@ function inputParts(name: string, input: JsonValue | undefined): string[] {
 }
 
 /** True when a legacy command message in `display` marks the call unsuccessful. */
-function reportsFailure(display: JsonValue | undefined): boolean {
+export function reportsFailure(display: JsonValue | undefined): boolean {
   const messages = Array.isArray(display)
     ? display
     : isRecord(display) && Array.isArray(display.messages)

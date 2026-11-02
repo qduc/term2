@@ -1,20 +1,78 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { renderToString, useInput, Text } from 'ink';
+import { renderToString, useInput, useStdout, Text } from 'ink';
 import { ThemeProvider, useTheme } from './presentation/components/theme.js';
 import { SkinProvider, useSkin } from './presentation/skins/SkinContext.js';
 import type { TuiState } from './state.js';
 import { Transcript } from './views.js';
+import { useNativeTranscript } from './native-transcript.js';
+import { clearTerminalForRedraw, clearVisibleForResize } from './terminal.js';
 
 /** Minimum spacing between transcript renders (about 8 frames a second). */
 const RENDER_INTERVAL_MS = 120;
 
 /** Render the skin and markdown at the terminal width, then scroll by visible rows. */
-export function useTranscriptViewport(state: TuiState, columns: number, rows: number, active: boolean) {
+export function useTranscriptViewport(
+  state: TuiState,
+  columns: number,
+  rows: number,
+  active: boolean,
+  header?: React.ReactNode,
+  historyRevision = 0,
+) {
+  const { stdout } = useStdout();
+  const [epoch, setEpoch] = useState(0);
+  const redraw = () => {
+    clearTerminalForRedraw(stdout);
+    setEpoch((current) => current + 1);
+  };
+  const { staticTranscript, tail } = useNativeTranscript(state, columns, epoch, header);
+  const previousHistoryRevision = useRef(historyRevision);
+  useEffect(() => {
+    if (previousHistoryRevision.current === historyRevision) return;
+    previousHistoryRevision.current = historyRevision;
+    clearTerminalForRedraw(stdout);
+    setEpoch((current) => current + 1);
+  }, [historyRevision, stdout]);
+  const activeTurn = useRef(state.activeTurnId);
+  activeTurn.current = state.activeTurnId;
+  const pendingResize = useRef(false);
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const resize = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (activeTurn.current) {
+          pendingResize.current = true;
+          return;
+        }
+        clearVisibleForResize(stdout);
+        setEpoch((current) => current + 1);
+      }, 300);
+    };
+    stdout.on('resize', resize);
+    return () => {
+      stdout.off('resize', resize);
+      if (timer) clearTimeout(timer);
+    };
+  }, [stdout]);
+  useEffect(() => {
+    if (state.activeTurnId || !pendingResize.current) return;
+    pendingResize.current = false;
+    clearVisibleForResize(stdout);
+    setEpoch((current) => current + 1);
+  }, [state.activeTurnId, stdout]);
   // A `/help` text takes over the viewport (scrollable) until the next command clears it.
   const [help, setHelp] = useState<string | null>(null);
   const theme = useTheme();
   const skin = useSkin();
-  const [lines, setLines] = useState<string[]>([]);
+  const [expanded, setExpanded] = useState(false);
+  const [frame, setFrame] = useState<{ lines: string[]; activeTurnId: string | null; expanded: boolean }>({
+    lines: [],
+    activeTurnId: null,
+    expanded: false,
+  });
+  // Never print a throttled active-turn frame after its turn has settled.
+  const lines = frame.expanded !== expanded || (!state.activeTurnId && frame.activeTurnId) ? [] : frame.lines;
   const [offset, setOffset] = useState(0);
   const [helpOffset, setHelpOffset] = useState(0);
   const [helpLines, setHelpLines] = useState<string[]>([]);
@@ -26,8 +84,7 @@ export function useTranscriptViewport(state: TuiState, columns: number, rows: nu
     }, 0);
     return () => clearTimeout(pending);
   }, [help, columns]);
-  // Ctrl+O shows every tool's output; running, uncertain and question rows remain live.
-  const [expanded, setExpanded] = useState(false);
+  // Ctrl+O shows every tool's output; by default only failures and edits are open.
   const height = Math.max(1, rows - 9);
   const lastRender = useRef(0);
   useEffect(() => {
@@ -38,22 +95,28 @@ export function useTranscriptViewport(state: TuiState, columns: number, rows: nu
     // outside React's effect/commit stack or it can free a still-pending Yoga root.
     const pending = setTimeout(() => {
       lastRender.current = performance.now();
+      const shown = expanded ? state : tail;
       const rendered = renderToString(
         <ThemeProvider theme={theme}>
           <SkinProvider skin={skin}>
-            <Transcript state={state} messages={state.messages} columns={columns} live expanded={expanded} />
+            <Transcript state={shown} messages={shown.messages} columns={columns} live expanded={expanded} />
           </SkinProvider>
         </ThemeProvider>,
         { columns: Math.max(1, columns) },
       );
       const next = rendered ? rendered.split('\n') : [];
       // An identical frame must not re-render the whole session.
-      setLines((previous) =>
-        previous.length === next.length && previous.every((line, index) => line === next[index]) ? previous : next,
+      setFrame((previous) =>
+        previous.expanded === expanded &&
+        previous.activeTurnId === shown.activeTurnId &&
+        previous.lines.length === next.length &&
+        previous.lines.every((line, index) => line === next[index])
+          ? previous
+          : { lines: next, activeTurnId: shown.activeTurnId, expanded },
       );
     }, wait);
     return () => clearTimeout(pending);
-  }, [state, columns, theme, skin, expanded]);
+  }, [state, tail, columns, theme, skin, expanded]);
   const maxOffset = Math.max(0, lines.length - height);
   const visibleOffset = Math.min(offset, maxOffset);
   useInput(
@@ -66,8 +129,10 @@ export function useTranscriptViewport(state: TuiState, columns: number, rows: nu
             Math.min(Math.max(0, helpLines.length - height), current + (key.pageUp || key.upArrow ? -delta : delta)),
           ),
         );
-      } else if (key.ctrl && input === 'o') setExpanded((current) => !current);
-      else if (key.pageUp || (key.ctrl && key.upArrow)) {
+      } else if (key.ctrl && input === 'o') {
+        setOffset(0);
+        setExpanded((current) => !current);
+      } else if (key.pageUp || (key.ctrl && key.upArrow)) {
         setOffset((current) => Math.min(maxOffset, current + (key.pageUp ? height : 1)));
       } else if (key.pageDown || (key.ctrl && key.downArrow)) {
         setOffset((current) => Math.max(0, current - (key.pageDown ? height : 1)));
@@ -79,6 +144,8 @@ export function useTranscriptViewport(state: TuiState, columns: number, rows: nu
     const start = Math.min(helpOffset, Math.max(0, helpLines.length - height));
     const end = Math.min(helpLines.length, start + height);
     return {
+      staticTranscript,
+      redraw,
       text: helpLines.slice(start, end).join('\n'),
       start,
       end,
@@ -86,12 +153,17 @@ export function useTranscriptViewport(state: TuiState, columns: number, rows: nu
       live: end === helpLines.length,
       setHelp,
       expanded,
-      collapse: () => setExpanded(false),
+      collapse: () => {
+        setOffset(0);
+        setExpanded(false);
+      },
     };
   }
   const end = Math.max(0, lines.length - visibleOffset);
   const start = Math.max(0, end - height);
   return {
+    staticTranscript,
+    redraw,
     text: lines.slice(start, end).join('\n'),
     start,
     end,
@@ -99,6 +171,9 @@ export function useTranscriptViewport(state: TuiState, columns: number, rows: nu
     live: visibleOffset === 0,
     setHelp,
     expanded,
-    collapse: () => setExpanded(false),
+    collapse: () => {
+      setOffset(0);
+      setExpanded(false);
+    },
   };
 }

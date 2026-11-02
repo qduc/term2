@@ -44,6 +44,7 @@ import {
 } from './commands.js';
 export function TuiSession({
   connection,
+  header,
   headerHeight,
   integration,
   retainedSnapshot,
@@ -58,7 +59,7 @@ export function TuiSession({
   readonly switchSession?: (sessionId: string) => Promise<void>;
   readonly transitionNotice?: string;
 }): React.ReactElement {
-  const { state, error: connectionError } = useClient(connection, retainedSnapshot, onSnapshot, onLiveEvent);
+  const { state, error: connError, historyRevision } = useClient(connection, retainedSnapshot, onSnapshot, onLiveEvent);
   const preferences = integration.preferences?.(connection.sessionId) ?? terminalPreferenceDefaults();
   const { columns, rows } = useTerminalSize();
   const [interactionOpen, setInteractionOpen] = useState(false);
@@ -94,13 +95,13 @@ export function TuiSession({
   const confirmation = useSendConfirmation(interactionActive);
   const interactionInput = useRef<InteractionInputHandler | null>(null);
   const viewportActive = !interactionActive && !panelOpen && !confirmation.pending;
-  const viewport = useCommandTranscriptViewport(state, columns, rows - (headerHeight ?? 0), viewportActive);
+  const viewport = useCommandTranscriptViewport(state, headerHeight ?? 0, viewportActive, header, historyRevision);
   const { InputFrame, PromptMarker, LiveDivider } = useSkin();
   const theme = useTheme();
   const [notice, setNotice] = useState<string | null>(null);
   const notifyError = (error: unknown) => setNotice(error instanceof Error ? error.message : String(error));
   const [busy, setBusy] = useState(false);
-  const composerActive = !panelOpen && !confirmation.pending && !connectionError && !interactionActive;
+  const composerActive = !panelOpen && !confirmation.pending && !connError && !interactionActive;
   const slash = useComposerMenu(editor.value, composerActive && !editing, theme.textSubtle);
   useHarnessInput(composerActive && !busy, Boolean(state.activeTurnId), editor.value);
   const pending = useRef(false);
@@ -392,6 +393,7 @@ export function TuiSession({
   };
   return (
     <Box flexDirection="column">
+      {viewport.staticTranscript}
       {viewport.text ? <Text>{viewport.text}</Text> : null}
       {viewport.total > 0 && (viewport.start > 0 || !viewport.live) ? (
         <Text color={theme.textSubtle}>
@@ -457,7 +459,7 @@ export function TuiSession({
           onAnswer={(id, decision) => answerInteraction(connection, id, decision)}
         />
       ) : null}
-      <LiveNotices connectionError={connectionError} transitionNotice={transitionNotice} />
+      <LiveNotices connectionError={connError} transitionNotice={transitionNotice} />
       {confirmation.prompt}
       <LiveNotices notice={notice} historyError={editor.historyError} />
       {slash.view}

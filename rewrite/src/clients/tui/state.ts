@@ -13,6 +13,7 @@ import type {
 /** Client display state. This is a view model, not a wire or persistence format. */
 export type Message = {
   readonly id: string;
+  readonly turnId?: string;
   readonly role: 'user' | 'assistant' | 'tool' | 'system';
   readonly text: string;
   readonly presentation?: Readonly<Record<string, JsonValue>>;
@@ -25,6 +26,7 @@ export type Message = {
 };
 
 export type ToolView = {
+  readonly turnId: string;
   /** Execution occurrence identity, not a provider call ID. */
   readonly id: string;
   readonly name: string;

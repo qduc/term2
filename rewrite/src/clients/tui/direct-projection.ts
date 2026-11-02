@@ -7,6 +7,7 @@ const modelText = (model: { readonly provider: string; readonly model: string })
   `${model.provider}/${model.model}`;
 const messageView = (message: WireMessage): Message => ({
   id: message.id,
+  turnId: message.turnId,
   role: message.role,
   ...(message.presentation ? { presentation: structuredClone(message.presentation) } : {}),
   text: message.content.length
@@ -27,6 +28,7 @@ const messageView = (message: WireMessage): Message => ({
 });
 const toolView = (tool: WireTool): ToolView => ({
   id: tool.executionId,
+  turnId: tool.turnId,
   name: tool.toolName,
   status:
     tool.status === 'called'

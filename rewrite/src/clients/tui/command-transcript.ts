@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { Message, TuiState } from './state.js';
+import { useTerminalSize } from './terminal.js';
 import { useTranscriptViewport } from './viewport.js';
 
 /** Local command output belongs in the visible transcript, not provider history. */
@@ -37,7 +38,22 @@ export function useCommandTranscript(state: TuiState): { state: TuiState; append
   };
 }
 
-export function useCommandTranscriptViewport(state: TuiState, columns: number, rows: number, active: boolean) {
+export function useCommandTranscriptViewport(
+  state: TuiState,
+  headerHeight: number,
+  active: boolean,
+  header?: ReactNode,
+  historyRevision?: number,
+) {
+  const { columns, rows } = useTerminalSize();
   const transcript = useCommandTranscript(state);
-  return { ...useTranscriptViewport(transcript.state, columns, rows, active), appendCommandOutput: transcript.append };
+  const viewport = useTranscriptViewport(
+    transcript.state,
+    columns,
+    rows - headerHeight,
+    active,
+    header,
+    historyRevision,
+  );
+  return { ...viewport, appendCommandOutput: transcript.append };
 }

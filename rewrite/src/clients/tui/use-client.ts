@@ -21,7 +21,7 @@ export function useClient(
   retained?: WireSnapshot,
   onSnapshot?: (state: WireSnapshot) => void,
   onLiveEvent?: (event: WireEvent) => void,
-): { state: TuiState; error: string | null } {
+): { state: TuiState; error: string | null; historyRevision: number } {
   const callback = useRef(onSnapshot);
   callback.current = onSnapshot;
   const liveCallback = useRef(onLiveEvent);
@@ -30,15 +30,18 @@ export function useClient(
     connection,
     wire: initialSnapshot(connection, retained),
     error: null as string | null,
+    historyRevision: 0,
   }));
   const visible =
     current.connection === connection
       ? current
-      : { connection, wire: initialSnapshot(connection, retained), error: null };
+      : { connection, wire: initialSnapshot(connection, retained), error: null, historyRevision: 0 };
   useEffect(() => {
     let active = true;
     let wire = initialSnapshot(connection, retained);
-    setCurrent({ connection, wire, error: null });
+    let historyRevision = 0;
+    let awaitingReplacement = false;
+    setCurrent({ connection, wire, error: null, historyRevision });
     callback.current?.(wire);
     void (async () => {
       try {
@@ -60,8 +63,13 @@ export function useClient(
           if (!active) return;
           // Snapshots and replay at/before the attached cut are not new work.
           const live = event.type !== 'snapshot' && event.seq !== null && event.seq > (wire.seq ?? -1);
+          if (event.type === 'history_replaced' && !event.payload.retainTranscript) awaitingReplacement = true;
           wire = reduceWireEvent(wire, event);
-          setCurrent({ connection, wire, error: null });
+          if (event.type === 'snapshot' && awaitingReplacement) {
+            historyRevision++;
+            awaitingReplacement = false;
+          }
+          setCurrent({ connection, wire, error: null, historyRevision });
           callback.current?.(wire);
           if (live) liveCallback.current?.(event);
           // Await admission, not completion. Keep one attempt in flight without
@@ -89,5 +97,5 @@ export function useClient(
   // Viewport measurements update local React state. Keep their unchanged wire
   // input stable so those updates do not schedule another transcript render.
   const state = useMemo(() => projectSnapshot(visible.wire), [visible.wire]);
-  return { state, error: visible.error };
+  return { state, error: visible.error, historyRevision: visible.historyRevision };
 }

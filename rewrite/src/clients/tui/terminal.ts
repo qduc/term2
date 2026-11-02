@@ -10,7 +10,20 @@ export function useTerminalSize(): { columns: number; rows: number } {
     const onResize = () => setSize(measure());
     onResize();
     stdout.on('resize', onResize);
-    return () => { stdout.off('resize', onResize); };
+    return () => {
+      stdout.off('resize', onResize);
+    };
   }, [stdout]);
   return size;
+}
+
+/** Match the legacy CLI's clear-and-redraw policy without importing its app layer. */
+export const TERMINAL_REDRAW_CLEAR = '\u001B[2J\u001B[3J\u001B[H';
+export function clearTerminalForRedraw(stdout: { write: (text: string) => unknown }): void {
+  stdout.write(TERMINAL_REDRAW_CLEAR);
+}
+
+/** Resize clears only the visible screen, leaving terminal scrollback intact. */
+export function clearVisibleForResize(stdout: { write: (text: string) => unknown }): void {
+  stdout.write('\u001B[2J\u001B[H');
 }

@@ -10,6 +10,7 @@ import {
   waitForHarnessComposerValue,
   waitForHarnessIdleGeneration,
   readHarnessComposerState,
+  readHarnessIdleGeneration,
 } from './lib/harness-input-idle.js';
 import { resolveSettingsDirectory } from './services/settings/settings-path.js';
 
@@ -173,6 +174,78 @@ it(
     expect(received[2]).toContain('RECOVERED-PARTIAL');
   },
 );
+
+it('retry redraw restores older static history while the new response streams', { timeout: TIMEOUT_MS }, async () => {
+  const { idlePath } = await start([
+    { text: `HISTORY-PREFIX-MARKER\n${Array.from({ length: 70 }, (_, i) => `old-line-${i}`).join('\n')}` },
+    { fail: true },
+    { text: 'RETRY-STREAMING', hang: true },
+  ]);
+  let idle = readHarnessIdleGeneration(idlePath);
+  session!.write('earlier question');
+  await waitForHarnessComposerValue(idlePath, 'earlier question', { timeoutMs: 60_000 });
+  session!.write('\r');
+  await session!.waitForOutput('HISTORY-PREFIX-MARKER', 60_000);
+  idle = await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
+  session!.write('question to retry');
+  await waitForHarnessComposerValue(idlePath, 'question to retry', { timeoutMs: 60_000 });
+  session!.write('\r');
+  await session!.waitForOutput('retryable failure', 60_000);
+  await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
+  const before = session!.getOutput().length;
+  session!.write('/retry-turn');
+  await waitForHarnessComposerValue(idlePath, '/retry-turn', { timeoutMs: 30_000 });
+  session!.write('\r');
+  await session!.waitForOutput('RETRY-STREAMING', 60_000);
+  const redraw = '\u001b[2J\u001b[3J\u001b[H';
+  await until(() => session!.getOutput().slice(before).includes(redraw), 'retry redraw');
+  const afterClear = session!.getOutput().slice(session!.getOutput().lastIndexOf(redraw));
+  expect(afterClear).toContain('HISTORY-PREFIX-MARKER');
+});
+
+it('retry redraws after authoritative history replacement', { timeout: TIMEOUT_MS }, async () => {
+  const { idlePath } = await start([{ fail: true }, { text: 'RETRY-REPLY' }]);
+  const idle = readHarnessIdleGeneration(idlePath);
+  session!.write('question to retry');
+  await waitForHarnessComposerValue(idlePath, 'question to retry', { timeoutMs: 60_000 });
+  session!.write('\r');
+  await session!.waitForOutput('retryable failure', 60_000);
+  await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
+  const before = session!.getOutput().length;
+  session!.write('/retry-turn');
+  await waitForHarnessComposerValue(idlePath, '/retry-turn', { timeoutMs: 30_000 });
+  session!.write('\r');
+  await session!.waitForOutput('Conversation history restored to retry', 60_000);
+  await until(() => received.length >= 2, 'retry dispatches a second model request');
+  await session!.waitForOutput('RETRY-REPLY', 15_000);
+  expect(session!.getOutput().slice(before)).toContain('\u001b[2J\u001b[3J\u001b[H');
+});
+
+it('rewind and clear redraw the terminal after successful history replacement', { timeout: TIMEOUT_MS }, async () => {
+  const { idlePath } = await start([{ text: 'REWIND-REPLY' }]);
+  const idle = readHarnessIdleGeneration(idlePath);
+  session!.write('question to rewind');
+  await waitForHarnessComposerValue(idlePath, 'question to rewind', { timeoutMs: 60_000 });
+  session!.write('\r');
+  await session!.waitForOutput('REWIND-REPLY', 60_000);
+  await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
+
+  const erase = '\u001b[2J\u001b[3J\u001b[H';
+  const beforeRewind = session!.getOutput().length;
+  session!.write('/rewind last');
+  await waitForHarnessComposerValue(idlePath, '/rewind last', { timeoutMs: 30_000 });
+  session!.write('\r');
+  await waitForHarnessComposerValue(idlePath, 'question to rewind', { timeoutMs: 30_000 });
+  expect(session!.getOutput().slice(beforeRewind)).toContain(erase);
+
+  session!.write('\x03');
+  await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
+  const beforeClear = session!.getOutput().length;
+  session!.write('/clear');
+  await waitForHarnessComposerValue(idlePath, '/clear', { timeoutMs: 30_000 });
+  session!.write('\r');
+  await until(() => session!.getOutput().slice(beforeClear).includes(erase), 'clear redraws the terminal');
+});
 
 it('a bracketed paste keeps its Enter as a newline and does not submit', { timeout: TIMEOUT_MS }, async () => {
   const { idlePath } = await start([{ text: 'done' }]);

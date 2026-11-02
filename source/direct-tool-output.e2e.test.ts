@@ -232,10 +232,13 @@ it(
     const status = JSON.parse(await control(['status', 'coord', '--json'], env, workspace));
     expect(status.phase).toBe('idle');
     const visible = session.getVisibleOutput();
-    // The PTY helper retains previous redraws; inspect the latest frame, not scrollback.
-    const currentFrame = visible.slice(visible.lastIndexOf('▌ term²'));
-    expect(currentFrame).toContain('first turn done');
-    expect(currentFrame).not.toContain('Locating the unique workspace fixture');
+    // Static content is not repeated in every frame, and this helper returns
+    // accumulated PTY bytes rather than a terminal screen. Check that settled
+    // reasoning is not emitted again after the last answer, not screen contents.
+    expect(visible).toContain('first turn done');
+    expect(visible.slice(visible.lastIndexOf('first turn done'))).not.toContain(
+      'Locating the unique workspace fixture',
+    );
     // The bar under the composer names the profile, model and approval mode (this run is YOLO).
     expect(visible, visible).toMatch(/Bare[^\n]*mockprov\/mock-alpha[^\n]*YOLO/);
     expect(visible, visible).not.toContain('isApprovalRejection');
@@ -301,7 +304,7 @@ it(
     session.write('\x1b');
     await new Promise((resolve) => setTimeout(resolve, 600));
     const afterEscape = session.getVisibleOutput().slice(beforeEscape);
-    expect(afterEscape).toContain('Write and read the file');
+    expect(afterEscape).toContain('output-draft');
     expect(afterEscape).not.toMatch(/Runtime: \d+ms\s+hi\b/);
     await waitForHarnessComposerValue(idlePath, 'output-draft', { timeoutMs: 30_000 });
     // The task panel owns its Escape and returns the same draft to the editor.

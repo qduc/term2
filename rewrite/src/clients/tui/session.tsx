@@ -399,7 +399,7 @@ export function TuiSession({
           Lines {viewport.start + 1}–{viewport.end} of {viewport.total} · PgUp/PgDn or Ctrl+↑/↓
         </Text>
       ) : null}
-      <Activity state={state} />
+      <Activity state={state} dialogInteractionId={foregroundInteraction?.id} />
       {modelOpen && integration.modelPicker ? (
         <ModelPicker
           api={integration.modelPicker}

@@ -102,8 +102,14 @@ export function Transcript({
   );
 }
 
-/** Keep pending work and every independently owned interaction visible. */
-export function Activity({ state }: { readonly state: TuiState }): React.ReactElement {
+/** Keep pending work visible unless its active dialog already presents it. */
+export function Activity({
+  state,
+  dialogInteractionId,
+}: {
+  readonly state: TuiState;
+  readonly dialogInteractionId?: string;
+}): React.ReactElement {
   const theme = useTheme();
   const { TaskPanel } = useSkin();
   // Only running work belongs in the live region; settled tasks stay in the task manager, and ids stay out of the transcript.
@@ -148,24 +154,26 @@ export function Activity({ state }: { readonly state: TuiState }): React.ReactEl
           Queued {index + 1} ({item.delivery}): {item.text}
         </Text>
       ))}
-      {state.interactions.map((interaction, index) => (
-        <Box key={interaction.id} flexDirection="column">
-          <Text bold>
-            {index + 1}. {interaction.kind === 'approval' ? 'Approval' : 'Question'}
-            {interaction.owner ? ` · ${interaction.owner}` : ''}: {interaction.title}
-          </Text>
-          {interaction.detail ? <Text>{interaction.detail}</Text> : null}
-          {interaction.choices.map((choice, choiceIndex) => (
-            <Text key={choice.id}>
-              {' '}
-              {choiceIndex + 1}. {choice.label}
+      {state.interactions.map((interaction, index) =>
+        interaction.id === dialogInteractionId ? null : (
+          <Box key={interaction.id} flexDirection="column">
+            <Text bold>
+              {index + 1}. {interaction.kind === 'approval' ? 'Approval' : 'Question'}
+              {interaction.owner ? ` · ${interaction.owner}` : ''}: {interaction.title}
             </Text>
-          ))}
-          <Text color={theme.textSubtle}>
-            /answer {index + 1} &lt;choice number&gt;{interaction.acceptsText ? ' [text]' : ''}
-          </Text>
-        </Box>
-      ))}
+            {interaction.detail ? <Text>{interaction.detail}</Text> : null}
+            {interaction.choices.map((choice, choiceIndex) => (
+              <Text key={choice.id}>
+                {' '}
+                {choiceIndex + 1}. {choice.label}
+              </Text>
+            ))}
+            <Text color={theme.textSubtle}>
+              /answer {index + 1} &lt;choice number&gt;{interaction.acceptsText ? ' [text]' : ''}
+            </Text>
+          </Box>
+        ),
+      )}
       {state.unmatchedTools.map((tool, index) => (
         <Box key={`${tool.executionId}:${index}`} flexDirection="column">
           <Text>

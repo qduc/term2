@@ -138,3 +138,40 @@ it('keeps live usage after the finalized response when its draft is replaced', {
   expect(output).toContain('Token usage: 0 input');
   expect(output.lastIndexOf('Token usage: 0 input')).toBeGreaterThan(output.lastIndexOf('STREAM-ANCHOR-SENTINEL'));
 });
+
+it('wraps settled transcript rows at terminal width', { timeout: TIMEOUT_MS }, async () => {
+  const { idlePath } = await start();
+  const prompt = `PROMPT-START ${'alpha beta gamma delta epsilon zeta '.repeat(8)}PROMPT-END`;
+  session!.write(prompt);
+  await waitForHarnessComposerValue(idlePath, prompt, { timeoutMs: 60_000 });
+  session!.write('\r');
+  await session!.waitForOutput('STREAM-ANCHOR-SENTINEL', 30_000);
+  heldResponse!.write(
+    `data: ${JSON.stringify({
+      id: 'chatcmpl-1',
+      choices: [
+        { delta: { content: '\nLine 00 bright harbor waves surround the old bell tower as the morning sun rises.' } },
+      ],
+    })}\n\n`,
+  );
+  heldResponse!.end(
+    `data: ${JSON.stringify({
+      id: 'chatcmpl-1',
+      choices: [{ delta: {}, finish_reason: 'stop' }],
+    })}\n\ndata: [DONE]\n\n`,
+  );
+  await until(
+    () =>
+      fs
+        .readdirSync(path.join(root, 'conversations'))
+        .filter((f) => f.endsWith('.jsonl'))
+        .some((f) => fs.readFileSync(path.join(root, 'conversations', f), 'utf8').includes('"type":"turn_ended"')),
+    'turn settled',
+  );
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  const output = session!.getVisibleOutput();
+  const settled = output.slice(output.lastIndexOf('PROMPT-START'));
+  expect(settled).toContain('PROMPT-END');
+  expect(settled).toMatch(/morning sun\s*\r?\n\s*rises\./);
+  expect(settled).not.toMatch(/morning sun ris\s*\r?\n\s*es\./);
+});

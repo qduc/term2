@@ -91,7 +91,7 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
   // the newly registered Static root during the same replacement commit.
   const staticTranscript = (
     <Box key={epoch}>
-      <Static items={header ? [{ key: 'header', header }, ...rows] : [...rows]}>
+      <Static style={{ width: columns }} items={header ? [{ key: 'header', header }, ...rows] : [...rows]}>
         {(row) => {
           if (row.header) return <Box key={row.key}>{row.header}</Box>;
           const entry = row.message

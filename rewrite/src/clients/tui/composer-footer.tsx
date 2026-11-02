@@ -1,11 +1,26 @@
 import React from 'react';
-import { formatContextUsage } from '../../../../source/utils/ai/token-usage.js';
-import { formatTokensPerSecond } from '../../../../source/utils/streaming/streaming-speed-tracker.js';
+import { formatTokensPerSecond } from './streaming-speed-tracker.js';
 import { useSkin } from '../../../../source/skins/SkinContext.js';
 import type { StatusSegmentView, StatusView } from '../../../../source/skins/types.js';
 import type { TuiIntegration } from './integration.js';
 import type { TuiState } from './state.js';
 import { ComposerHints } from './slash-menu.js';
+
+function formatCompactTokens(tokens: number): string {
+  return tokens >= 1_000_000 ? `${(tokens / 1_000_000).toFixed(1)}M` : `${Math.round(tokens / 1_000)}k`;
+}
+
+/**
+ * Compact context gauge, e.g. "100k/1.0M": tokens used in the current context
+ * (the last request's prompt tokens) over the model's context window.
+ * When the context window is unknown, returns only the used token gauge (e.g. "100k").
+ */
+export function formatContextUsage(usedTokens: number, contextWindow?: number): string {
+  if (contextWindow == null) {
+    return formatCompactTokens(usedTokens);
+  }
+  return `${formatCompactTokens(usedTokens)}/${formatCompactTokens(contextWindow)}`;
+}
 
 const APPROVAL_LABEL = { off: '', advisory: 'Advisory', auto: 'Auto', always: 'YOLO' } as const;
 

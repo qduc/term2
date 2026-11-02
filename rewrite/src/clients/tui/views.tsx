@@ -1,8 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import {
-  StreamingSpeedTracker,
-  formatTokensPerSecond,
-} from '../../../../source/utils/streaming/streaming-speed-tracker.js';
+import { StreamingSpeedTracker, formatTokensPerSecond } from './streaming-speed-tracker.js';
 import { Box, Text } from 'ink';
 import { useTheme } from '../../../../source/components/theme.js';
 import MarkdownRenderer from '../../../../source/components/MarkdownRenderer.js';

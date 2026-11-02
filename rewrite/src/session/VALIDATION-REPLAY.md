@@ -15,3 +15,10 @@ append order rather than writing or dispatching them: root tool settlement,
 interaction/budget closure, then interrupted terminal; branch recovery remains
 wrapped in its recorded branch identity. Missing results remain outcome-unknown,
 never evidence that an effect did not occur.
+
+Personal-memory snapshots must materialize before their associated unchanged
+human item, just as `planDirectHumanContext` does during live admission. Match
+by admission ID whether the snapshot fact or human slot arrives first, and attach
+only once. Inserting after the human instead preserves the text but changes the
+provider prefix on reopen; the original personal-memory black-box cases compare
+the live prefix with actual resumed requests to detect this drift.

@@ -126,7 +126,9 @@ function replayProjection(
     if (!fact || !anchor || deliveredSnapshots.has(admissionId)) return;
     const position = slots.indexOf(anchor);
     if (position < 0) return; // An authoritative history replacement already removed this old admission.
-    slots.splice(position + 1, 0, { item: directPersonalMemoryItem(fact) });
+    // Match live humanPlan: application data precedes its unchanged human item,
+    // including that item's timing metadata. Reordering it on reopen changes the provider prefix.
+    slots.splice(position, 0, { item: directPersonalMemoryItem(fact) });
     deliveredSnapshots.add(admissionId);
   };
   const appendHuman = (item: Item): Slot => {

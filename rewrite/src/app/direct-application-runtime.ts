@@ -279,7 +279,21 @@ export function createDirectRuntimes(
           await generation.dispose();
           throw error;
         }
-        const { configuration: effective, intent, profile: nextProfile, request, capabilities, dispose } = generation;
+        const { intent, profile: nextProfile, capabilities, dispose } = generation;
+        const saved = installed.context.configuration?.configuration;
+        const sameModel =
+          saved &&
+          saved.model.provider === generation.configuration.model.provider &&
+          saved.model.model === generation.configuration.model.model;
+        // A graph-only refresh must retain the accepted request, even when model
+        // discovery is cold or the saved temperature was deliberately absent.
+        const preserve = sameModel && configuration.profileId === undefined;
+        const effective = {
+          ...generation.configuration,
+          ...(preserve && configuration.reasoning === undefined ? { reasoning: saved.reasoning } : {}),
+          ...(preserve && configuration.temperature === undefined ? { temperature: saved.temperature } : {}),
+        };
+        const request = { ...generation.request, reasoning: effective.reasoning, temperature: effective.temperature };
         return {
           configuration: effective,
           intent,
@@ -295,7 +309,11 @@ export function createDirectRuntimes(
           // before the command's result can reach anyone.
           install() {
             installed = {
-              context: { ...installed.context, model: effective.model },
+              context: {
+                ...installed.context,
+                model: effective.model,
+                configuration: { configuration: effective, intent, profile: nextProfile },
+              },
               settings: generation.settings,
               bound: { port: bound.port, capabilities },
             };
@@ -385,6 +403,14 @@ export function createDirectRuntimes(
         },
         request: {
           ...request,
+          // Discovery can be cold on resume. The accepted effective request is
+          // authoritative; keep the saved intent in settings for later changes.
+          ...(context.configuration
+            ? {
+                reasoning: context.configuration.configuration.reasoning,
+                temperature: context.configuration.configuration.temperature,
+              }
+            : {}),
           ...(notice ? { notice } : {}),
           previewMode: readDirectInputPreviewConfiguration(settings, context.model).mode,
         },

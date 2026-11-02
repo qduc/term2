@@ -100,7 +100,12 @@ follow-up-prompt check, so missing
 and foreign-project references report their real diagnostic. Profile/model labels
 use the latest accepted configuration where present. Goal/profile restoration is
 still Session/runtime-owned: discovery neither rewrites facts nor substitutes
-launcher defaults. No native log-format changes, legacy log reads, or migration
+launcher defaults. A resumed generation restores accepted effective reasoning and
+temperature independently of selection intent; same-model graph refreshes and
+rollovers retain those effective values, including an absent temperature. A
+model, profile, or explicit setting change can resolve a new effective request.
+This matters when model discovery is cold: recalculating from local settings can
+otherwise silently change a resumed request. No native log-format changes, legacy log reads, or migration
 fallback are part of this boundary. A raw exact UUID normalizes to `conv_<uuid>`,
 the standalone migrator's deterministic ID; it succeeds only when that native log
 exists and matches the current workspace. Partial, uppercase and otherwise

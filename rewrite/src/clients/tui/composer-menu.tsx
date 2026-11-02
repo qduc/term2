@@ -9,12 +9,11 @@ import { usePathMenu } from './path-menu.js';
  */
 export function useComposerMenu(
   value: string,
-  cursor: number,
   enabled: boolean,
   subtleColor: React.ComponentProps<typeof import('ink').Text>['color'],
 ) {
   const slash = useSlashMenu(value, enabled, subtleColor);
-  const path = usePathMenu(value, cursor, enabled, subtleColor);
+  const path = usePathMenu(value, enabled, subtleColor);
   return {
     owns: (key: Key) => slash.owns(key) || path.owns(key),
     /** Completing a command or path replaces the draft with `text`, cursor after the inserted piece. */

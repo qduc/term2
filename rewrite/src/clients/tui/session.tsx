@@ -102,7 +102,7 @@ export function TuiSession({
   // Typing stays open while a send is in flight (overlapping sends queue behind it); only the harness idle flag waits.
   const composerActive =
     !confirmation.pending && !connectionError && !interactionActive && !taskOpen && !budgetOpen && !rewindTargets;
-  const slash = useComposerMenu(editor.value, editor.cursor.current, composerActive && !editing, theme.textSubtle);
+  const slash = useComposerMenu(editor.value, composerActive && !editing, theme.textSubtle);
   useHarnessInput(composerActive && !busy, Boolean(state.activeTurnId), editor.value);
   const pending = useRef(false);
   const composerFilter = useComposerFilter({

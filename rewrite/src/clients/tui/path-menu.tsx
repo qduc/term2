@@ -3,30 +3,17 @@ import type { Key } from 'ink';
 import { listWorkspacePaths, type WorkspacePath } from './workspace-paths.js';
 import { Box, Text } from 'ink';
 
-/** Rows of paths shown at once; the frame (border + footer) keeps the whole menu inside the viewport's reserve. */
+/** Rows of paths shown at once. The menu (rows, status lines and hint) is up to 7 lines; like the slash menu it is not part of the transcript viewport's reserve. */
 const VISIBLE = 5;
 
-/** Subsequence match, ranked: basename prefix, basename substring, path substring, then any subsequence. */
+/** Substring match, ranked: basename prefix, basename substring, then path substring. No looser matching: a draft that ends in an ordinary `@word` should find nothing, so Enter still sends it. */
 function rank(entries: readonly WorkspacePath[], query: string, limit: number): WorkspacePath[] {
   const needle = query.trim().toLowerCase();
   if (!needle) return entries.slice(0, limit);
-  const subsequence = (text: string) => {
-    let at = 0;
-    for (const char of text) if (char === needle[at] && ++at === needle.length) return true;
-    return false;
-  };
   const scored = entries.flatMap((entry) => {
     const lower = entry.path.toLowerCase();
     const base = lower.slice(lower.replace(/\/$/, '').lastIndexOf('/') + 1);
-    const score = base.startsWith(needle)
-      ? 0
-      : base.includes(needle)
-      ? 1
-      : lower.includes(needle)
-      ? 2
-      : subsequence(lower)
-      ? 3
-      : -1;
+    const score = base.startsWith(needle) ? 0 : base.includes(needle) ? 1 : lower.includes(needle) ? 2 : -1;
     return score < 0 ? [] : [{ entry, score }];
   });
   return scored
@@ -37,10 +24,13 @@ function rank(entries: readonly WorkspacePath[], query: string, limit: number): 
 
 /** The text that replaces `@query`: directories end with `/`, and Enter adds a space. */
 function insertion(value: string, start: number, cursor: number, entry: WorkspacePath, space: boolean) {
-  const shown = entry.type === 'directory' ? `${entry.path}/` : entry.path;
+  // A directory keeps its `@` and ends with `/`, so the menu stays open to continue inside it.
+  const directory = entry.type === 'directory';
+  const shown = directory ? `@${entry.path}/` : entry.path;
+  const padding = space && !directory ? ' ' : '';
   const before = value.slice(0, start);
-  const text = `${before}${shown}${space ? ' ' : ''}${value.slice(Math.min(cursor, value.length))}`;
-  return { text, cursor: before.length + shown.length + (space ? 1 : 0) };
+  const text = `${before}${shown}${padding}${value.slice(Math.min(cursor, value.length))}`;
+  return { text, cursor: before.length + shown.length + padding.length };
 }
 
 /** `@` before the cursor, at the start of the text or after whitespace, with the query typed so far. */
@@ -53,12 +43,7 @@ export function findPathTrigger(value: string, cursor: number): { start: number;
  * `@` file-path completion for the composer. Enter and Tab insert the selected path (Enter adds a space,
  * Tab does not), arrows select, Escape dismisses. Same contract as the slash menu so the session treats them alike.
  */
-export function usePathMenu(
-  value: string,
-  cursor: number,
-  enabled: boolean,
-  subtle: React.ComponentProps<typeof Text>['color'],
-) {
+export function usePathMenu(value: string, enabled: boolean, subtle: React.ComponentProps<typeof Text>['color']) {
   // The app starts in the workspace; paths are relative to it.
   const root = process.cwd();
   const [entries, setEntries] = useState<WorkspacePath[] | null>(null);
@@ -66,10 +51,12 @@ export function usePathMenu(
   const [truncated, setTruncated] = useState(false);
   const [index, setIndex] = useState(0);
   const [dismissed, setDismissed] = useState<string | null>(null);
+  // The cursor position is not tracked in render state, so the menu works on the end of the draft.
+  const cursor = value.length;
   const trigger = enabled ? findPathTrigger(value, cursor) : null;
   const open = trigger !== null && value !== dismissed;
   useEffect(() => {
-    if (!open || entries !== null) return;
+    if (!open) return;
     let cancelled = false;
     listWorkspacePaths(root).then(
       (loaded) => !cancelled && (setEntries(loaded.entries), setTruncated(loaded.truncated)),
@@ -78,7 +65,7 @@ export function usePathMenu(
     return () => {
       cancelled = true;
     };
-  }, [open, entries, root]);
+  }, [open, root]);
   const matches = open && entries ? rank(entries, trigger!.query, 50) : [];
   const selected = Math.min(index, Math.max(0, matches.length - 1));
   const owns = (key: Key) =>

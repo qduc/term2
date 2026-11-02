@@ -63,7 +63,7 @@ async function startProvider(replies: Reply[]): Promise<string> {
 }
 
 async function start(replies: Reply[]): Promise<{ idlePath: string }> {
-  root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-tool-rows-e2e-')));
+  root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-path-completion-e2e-')));
   const home = path.join(root, 'home');
   const workspace = path.join(root, 'w');
   fs.mkdirSync(home);
@@ -136,13 +136,40 @@ it(
   },
 );
 
+it('a directory keeps the menu open to continue inside it', { timeout: TIMEOUT_MS }, async () => {
+  const { idlePath } = await start([{ text: 'done' }]);
+  session!.write('@sr');
+  await waitForHarnessComposerValue(idlePath, '@sr', { timeoutMs: 60_000 });
+  await session!.waitForOutput('src/', 30_000);
+  session!.write('\t');
+  await until(() => composer(idlePath) === '@src/', 'the directory kept its @ and gained a slash');
+  await session!.waitForOutput('src/alpha.ts', 30_000);
+  session!.write('\r');
+  await until(() => composer(idlePath) === 'src/alpha.ts ', 'the file replaced the @query');
+});
+
 it('Escape dismisses the path menu and Enter then sends the text as typed', { timeout: TIMEOUT_MS }, async () => {
   const { idlePath } = await start([{ text: 'REPLY-DONE' }]);
-  session!.write('see @zzz-no-such');
-  await waitForHarnessComposerValue(idlePath, 'see @zzz-no-such', { timeoutMs: 60_000 });
-  await session!.waitForOutput('No matches', 30_000);
+  session!.write('see @alp');
+  await waitForHarnessComposerValue(idlePath, 'see @alp', { timeoutMs: 60_000 });
+  await session!.waitForOutput('src/alpha.ts', 30_000);
   session!.write('\x1b');
   await new Promise((resolve) => setTimeout(resolve, 500));
   session!.write('\r');
   await session!.waitForOutput('REPLY-DONE', 30_000);
+  const logged = fs
+    .readdirSync(path.join(root, 'conversations'))
+    .filter((name) => name.endsWith('.jsonl'))
+    .map((name) => fs.readFileSync(path.join(root, 'conversations', name), 'utf8'))
+    .join('\n');
+  expect(logged, 'the text was sent as typed, not replaced by a path').toContain('see @alp');
+});
+
+it('a draft ending in an ordinary @word is sent, not completed', { timeout: TIMEOUT_MS }, async () => {
+  await start([{ text: 'REPLY-DONE' }]).then(async ({ idlePath }) => {
+    session!.write('thanks @claude');
+    await waitForHarnessComposerValue(idlePath, 'thanks @claude', { timeoutMs: 60_000 });
+    session!.write('\r');
+    await session!.waitForOutput('REPLY-DONE', 30_000);
+  });
 });

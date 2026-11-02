@@ -14,6 +14,7 @@ import { composeHandoffMessage } from '../../../source/services/handoff/handoff-
 import { formatMcpStatus } from '../../../source/services/mcp/mcp-status.js';
 import type { DirectMcp } from './direct-mcp.js';
 import { injectSkillIntoTurn } from '../../../source/types/user-turn.js';
+import { formatSessionTokenUsage } from '../../../source/utils/ai/token-usage.js';
 import { helpText } from '../clients/tui/slash-commands.js';
 import { copyToClipboard } from '../../../source/utils/clipboard.js';
 import { isControlSocketName } from '../clients/control/index.js';
@@ -192,8 +193,14 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
   };
 
   const usage = (): CommandResult => {
-    const { inputTokens, outputTokens, cachedInputTokens } = latest().usage;
-    return { message: `Input ${inputTokens}, cached ${cachedInputTokens}, output ${outputTokens} tokens.` };
+    const snapshot = latest();
+    const { inputTokens, outputTokens, cachedInputTokens } = snapshot.usage;
+    const total = formatSessionTokenUsage({
+      prompt_tokens: inputTokens,
+      completion_tokens: outputTokens,
+      cache_read_tokens: cachedInputTokens,
+    });
+    return { message: total };
   };
 
   /** A skill always belongs to a request, so naming one alone hands the line back to finish. */

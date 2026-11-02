@@ -34,7 +34,7 @@ afterEach(async () => {
 type Reply = { call?: { id: string; command?: string; tool?: string; args?: object }; text?: string };
 
 /** One SSE reply per chat request, in order: a single shell call or plain text. */
-async function startProvider(replies: Reply[]): Promise<string> {
+async function startProvider(replies: Reply[], withUsage = false): Promise<string> {
   let requests = 0;
   server = http.createServer((req, res) => {
     if (req.method === 'GET') {
@@ -46,7 +46,7 @@ async function startProvider(replies: Reply[]): Promise<string> {
     req.on('end', () => {
       const reply = replies[requests++] ?? { text: 'done' };
       const id = `chatcmpl-${requests}`;
-      const frames = reply.call
+      const frames: unknown[] = reply.call
         ? [
             {
               id,
@@ -74,6 +74,13 @@ async function startProvider(replies: Reply[]): Promise<string> {
             { id, choices: [{ delta: { role: 'assistant', content: reply.text } }] },
             { id, choices: [{ delta: {}, finish_reason: 'stop' }] },
           ];
+      if (withUsage) {
+        frames.push({
+          id,
+          choices: [],
+          usage: { prompt_tokens: 78021, completion_tokens: 731, prompt_tokens_details: { cached_tokens: 42112 } },
+        });
+      }
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       res.end([...frames.map((frame) => `data: ${JSON.stringify(frame)}\n`), 'data: [DONE]', ''].join('\n'));
     });
@@ -89,13 +96,14 @@ async function runCommand(
   expected: string,
   firstPrompt?: string,
   exerciseMenu: false | 'complete' | 'prefix-enter' | 'pick-enter' = false,
+  withUsage = false,
 ): Promise<void> {
   root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-tool-rows-e2e-')));
   const home = path.join(root, 'home');
   const workspace = path.join(root, 'w');
   fs.mkdirSync(home);
   fs.mkdirSync(workspace);
-  const baseUrl = await startProvider([{ text: 'unused' }]);
+  const baseUrl = await startProvider([{ text: 'unused' }], withUsage);
   const idlePath = path.join(home, 'input-idle');
   const env = {
     HOME: home,
@@ -194,6 +202,11 @@ it('/resume ls labels each conversation with its time and first prompt', { timeo
   await runCommand('/resume ls', 'conv_', 'tidy the workspace please');
   const visible = session!.getVisibleOutput();
   expect(visible).toMatch(/conv_[0-9a-f-]{36} {2}\d{4}-\d\d-\d\d \d\d:\d\d {2}tidy the workspace/);
+});
+
+it('/usage agrees with the cached share in the status bar', { timeout: TIMEOUT_MS }, async () => {
+  await runCommand('/usage', 'Token usage: 78,021 input (42,112 cached), 731 output', 'hello', false, true);
+  expect(session!.getVisibleOutput()).toContain('54% cached');
 });
 
 it('/copy confirms what it copied', { timeout: TIMEOUT_MS }, () =>

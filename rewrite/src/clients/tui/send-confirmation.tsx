@@ -1,4 +1,4 @@
-import React, { useState, type ReactElement } from 'react';
+import React, { useEffect, useRef, useState, type ReactElement } from 'react';
 import { Text, type Key } from 'ink';
 
 /**
@@ -14,17 +14,25 @@ export function useSendConfirmation(interactionActive: boolean): {
   handleKey(input: string, key: Key): boolean;
   readonly prompt: ReactElement | null;
 } {
-  const [held, setHeld] = useState<{ message: string; proceed: () => void; at: number } | null>(null);
+  const [held, setHeld] = useState<{ message: string; proceed: () => void } | null>(null);
   const owned = held !== null && !interactionActive;
+  // Restart the handoff window whenever this prompt regains the keys from an approval panel.
+  const handoffAt = useRef(0);
+  useEffect(() => {
+    if (!interactionActive) handoffAt.current = performance.now();
+  }, [interactionActive]);
   return {
     pending: held !== null,
-    hold: (message, proceed) => setHeld({ message, proceed, at: performance.now() }),
+    hold: (message, proceed) => {
+      handoffAt.current = performance.now();
+      setHeld({ message, proceed });
+    },
     clear: () => setHeld(null),
     handleKey(input, key) {
       if (!held || !owned) return false;
       // Only a deliberate, lone keypress counts: not the Enter that raised this, a paste, or typeahead.
-      if (performance.now() - held.at < 20) return true;
-      if (input === 'y') {
+      if (performance.now() - handoffAt.current < 20) return true;
+      if (input === 'y' && !key.ctrl && !key.meta) {
         setHeld(null);
         held.proceed();
       } else if (input === 'n' || key.escape) setHeld(null);

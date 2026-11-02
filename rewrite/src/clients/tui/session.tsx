@@ -177,15 +177,19 @@ export function TuiSession({
     pending.current = true;
     setBusy(true);
     setNotice(null);
-    // Returns true when the draft was held for confirmation instead of sent.
+    // True when the draft was held for confirmation instead of sent.
     const held = async (text: string, attachments: readonly WireContent[], retry: () => void): Promise<boolean> => {
       if (confirmed) return false;
-      const message = await previewConfirmation(connection, text, attachments);
+      // Enter cleared the composer (text, images): restore the draft whenever nothing was sent.
+      const keepDraft = () => {
+        replaceInput(input);
+        setImages(submittedImages);
+      };
+      const message = await previewConfirmation(connection, text, attachments).catch(
+        (e) => (keepDraft(), Promise.reject(e)),
+      );
       if (message === null) return false;
-      // The composer clears itself on Enter; put the draft back so n/Esc keeps it.
-      replaceInput(input);
-      // Enter also cleared the composer's pasted images; put them back with the text.
-      setImages(submittedImages);
+      keepDraft();
       confirmation.hold(message, retry);
       return true;
     };

@@ -23,7 +23,8 @@ import { useHarnessInput } from './harness-input.js';
 import { replaceSession } from './replace-session.js';
 import { runBridgeCommand } from './bridge-command.js';
 import { useSendConfirmation } from './send-confirmation.js';
-import { useSlashMenu, ComposerHints } from './slash-menu.js';
+import { useSlashMenu } from './slash-menu.js';
+import { ComposerFooter } from './composer-footer.js';
 import {
   answerBudget,
   answerInteraction,
@@ -80,8 +81,7 @@ export function TuiSession({
     queueOwners,
   } = useSessionComposer(state, preferences.historySize);
   const [rewindTargets, setRewindTargets] = useState<readonly WireRewindTarget[] | null>(null);
-  // Snapshot-derived ownership has no effect-sized gap in which decision keys
-  // can land in the ordinary composer. Background requests keep the Ctrl+G picker.
+  // Snapshot-derived ownership leaves no gap for decision keys to land in the composer; Ctrl+G picks background requests.
   const rootInteraction = state.interactions.find((item) => item.turnId === state.activeTurnId && !item.taskId);
   const foregroundInteraction =
     !interactionOpen && !taskOpen && !budgetOpen && !rewindTargets && rootInteraction?.id !== dismissedInteractionId
@@ -96,7 +96,7 @@ export function TuiSession({
     rows,
     !interactionActive && !taskOpen && !budgetOpen && !rewindTargets,
   );
-  const { InputFrame, PromptMarker, Hints } = useSkin();
+  const { InputFrame, PromptMarker } = useSkin();
   const theme = useTheme();
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -494,7 +494,7 @@ export function TuiSession({
           }
         />
       </InputFrame>
-      {composerActive ? <ComposerHints activeTurn={Boolean(state.activeTurnId)} Hints={Hints} /> : null}
+      <ComposerFooter integration={integration} state={state} active={composerActive} columns={columns} />
     </Box>
   );
 }

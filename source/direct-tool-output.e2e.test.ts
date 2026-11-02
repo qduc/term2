@@ -132,6 +132,7 @@ it(
         providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl, apiKey: 'test-key' }],
         // Sandbox off and GREEN commands: both run without an approval prompt.
         sandbox: { enabled: false },
+        shell: { autoApproveMode: 'always' },
       }),
     );
 
@@ -150,6 +151,8 @@ it(
     idle = await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
 
     const visible = session.getVisibleOutput();
+    // The bar under the composer names the profile, model and approval mode (this run is YOLO).
+    expect(visible, visible).toMatch(/Bare[^\n]*mockprov\/mock-alpha[^\n]*YOLO/);
     expect(visible, visible).not.toContain('isApprovalRejection');
     expect(visible, visible).toContain('Created b.txt and read it back: hi.');
     // The edit and the new content stay visible: the header only names the file.

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { homedir } from 'node:os';
 import { stderr, stdin, stdout } from 'node:process';
 import { createInterface } from 'node:readline/promises';
+import { resolveActiveProfile } from '../../../source/services/profiles/active-profile.js';
 import React, { useMemo, useRef, useState, type ReactNode } from 'react';
 import { render } from 'ink';
 import { SettingsSkinProvider } from '../../../source/skins/SkinContext.js';
@@ -80,6 +81,16 @@ function DirectTui({
         const current = app.sessionDetails(sessionId).settings;
         if (!current) throw new Error('The attached session has no live settings.');
         return { historySize: current.get('ui.historySize'), pasteThreshold: current.get('ui.pasteThreshold') };
+      },
+      status(sessionId) {
+        const current = app.sessionDetails(sessionId).settings;
+        if (!current) throw new Error('The attached session has no live settings.');
+        const profile = getProfileLabel(resolveActiveProfile(current).identity.id);
+        return {
+          profile: profile.charAt(0).toUpperCase() + profile.slice(1),
+          effort: current.get('agent.reasoningEffort'),
+          approval: current.get('shell.autoApproveMode'),
+        };
       },
       ...createDirectTuiCommands({
         app,

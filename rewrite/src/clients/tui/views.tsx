@@ -93,11 +93,11 @@ export function Activity({ state }: { readonly state: TuiState }): React.ReactEl
   const liveTasks = state.tasks.filter((task) => task.status === 'running' || task.status === 'awaiting_interaction');
   return (
     <Box flexDirection="column">
-      <Text color={theme.textSubtle}>
-        {state.model} · {state.status}
-        {state.usage ? ` · ${state.usage}` : ''}
-        {state.cost ? ` · ${state.cost}` : ''}
-      </Text>
+      {state.status !== 'idle' || state.cost ? (
+        <Text color={theme.textSubtle}>
+          {[state.status !== 'idle' ? state.status : '', state.cost].filter(Boolean).join(' · ')}
+        </Text>
+      ) : null}
       {state.queueState !== 'idle' ? (
         <Text>
           Queue: {state.queueState}

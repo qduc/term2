@@ -129,6 +129,11 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
       ...(snapshot.terminal?.notice ? [snapshot.terminal.notice] : []),
     ],
     usage: usageText(snapshot.usage),
+    usageTotals: {
+      inputTokens: snapshot.usage.inputTokens,
+      outputTokens: snapshot.usage.outputTokens,
+      cachedInputTokens: snapshot.usage.cachedInputTokens,
+    },
     cost: snapshot.cost ? `${snapshot.cost.currency} ${snapshot.cost.totalUsd.toFixed(4)}` : undefined,
     goal: snapshot.goal ? `${snapshot.goal.status}: ${snapshot.goal.text}` : undefined,
     verification: snapshot.verification

@@ -19,9 +19,17 @@ export type BridgeStatus = {
     readonly discordInputEnabled: boolean;
   };
 };
+export type TuiStatusInfo = {
+  /** Display name of the active profile, e.g. `Bare`. */
+  readonly profile: string;
+  readonly effort: string | undefined;
+  readonly approval: 'off' | 'advisory' | 'auto' | 'always';
+};
 export interface TuiIntegration {
   /** Read the attached session's effective preferences on each render, including live /settings changes. */
   preferences?(sessionId: string): { readonly historySize: number; readonly pasteThreshold: number | undefined };
+  /** What the attached session's status bar shows, read on each render so live /settings changes appear. */
+  status?(sessionId: string): TuiStatusInfo;
   command(
     connection: TuiConnection,
     input: string,

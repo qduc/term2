@@ -1,4 +1,14 @@
-import type { JsonValue, WireBudgetRequest, WireContent, WireCommandReceipt, WireGrant, WireQuestion, WireSnapshot, WireTask, WireToolResult } from '../../protocol/direct-wire.js';
+import type {
+  JsonValue,
+  WireBudgetRequest,
+  WireContent,
+  WireCommandReceipt,
+  WireGrant,
+  WireQuestion,
+  WireSnapshot,
+  WireTask,
+  WireToolResult,
+} from '../../protocol/direct-wire.js';
 
 /** Client display state. This is a view model, not a wire or persistence format. */
 export type Message = {
@@ -39,8 +49,22 @@ export type InteractionView = {
   readonly supportedGrants?: readonly WireGrant[];
 };
 
-export type QueueItem = { readonly id: string; readonly text: string; readonly delivery: string; readonly content?: readonly WireContent[] };
-export type TaskView = { readonly id: string; readonly label: string; readonly status: string; readonly detail?: string; readonly turnId?: string; readonly agentId?: string; readonly role?: string; readonly wire?: WireTask };
+export type QueueItem = {
+  readonly id: string;
+  readonly text: string;
+  readonly delivery: string;
+  readonly content?: readonly WireContent[];
+};
+export type TaskView = {
+  readonly id: string;
+  readonly label: string;
+  readonly status: string;
+  readonly detail?: string;
+  readonly turnId?: string;
+  readonly agentId?: string;
+  readonly role?: string;
+  readonly wire?: WireTask;
+};
 
 export type TuiState = {
   readonly sessionId: string;
@@ -63,6 +87,12 @@ export type TuiState = {
   readonly tasks: readonly TaskView[];
   readonly notices: readonly string[];
   readonly usage?: string;
+  /** Session totals behind `usage`, for the status bar. */
+  readonly usageTotals?: {
+    readonly inputTokens: number;
+    readonly outputTokens: number;
+    readonly cachedInputTokens: number;
+  };
   readonly cost?: string;
   readonly goal?: string;
   readonly verification?: string;
@@ -89,7 +119,7 @@ export type ViewUpdate =
 function upsert<T extends { readonly id: string }>(items: readonly T[], item: T): readonly T[] {
   const index = items.findIndex((current) => current.id === item.id);
   if (index < 0) return [...items, item];
-  return items.map((current, position) => position === index ? item : current);
+  return items.map((current, position) => (position === index ? item : current));
 }
 
 function without(record: Readonly<Record<string, string>>, id: string): Readonly<Record<string, string>> {
@@ -114,15 +144,25 @@ export function updateView(state: TuiState, update: ViewUpdate): TuiState {
     }
     case 'clear_draft':
       return { ...state, drafts: without(state.drafts, update.id), reasoning: without(state.reasoning, update.id) };
-    case 'tool': return { ...state, tools: upsert(state.tools, update.tool) };
-    case 'interaction': return { ...state, interactions: upsert(state.interactions, update.interaction) };
-    case 'interaction_resolved': return { ...state, interactions: state.interactions.filter(item => item.id !== update.id) };
-    case 'queue': return { ...state, queue: update.queue };
-    case 'tasks': return { ...state, tasks: update.tasks };
-    case 'status': return { ...state, status: update.status };
-    case 'model': return { ...state, model: update.model };
-    case 'usage': return { ...state, usage: update.usage };
-    case 'retry': return { ...state, canRetry: update.canRetry };
-    case 'notice': return { ...state, notices: [...state.notices, update.notice] };
+    case 'tool':
+      return { ...state, tools: upsert(state.tools, update.tool) };
+    case 'interaction':
+      return { ...state, interactions: upsert(state.interactions, update.interaction) };
+    case 'interaction_resolved':
+      return { ...state, interactions: state.interactions.filter((item) => item.id !== update.id) };
+    case 'queue':
+      return { ...state, queue: update.queue };
+    case 'tasks':
+      return { ...state, tasks: update.tasks };
+    case 'status':
+      return { ...state, status: update.status };
+    case 'model':
+      return { ...state, model: update.model };
+    case 'usage':
+      return { ...state, usage: update.usage };
+    case 'retry':
+      return { ...state, canRetry: update.canRetry };
+    case 'notice':
+      return { ...state, notices: [...state.notices, update.notice] };
   }
 }

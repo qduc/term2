@@ -68,20 +68,27 @@ export async function answerInteraction(
 }
 
 /** Request foreground cancellation without closing the connection. */
-export async function cancelForeground(connection: TuiConnection, expectedTurnId?: string): Promise<string> {
+/** `quiet` (Ctrl+C) drops the ordinary success notice; refusals and anything else still show. */
+export async function cancelForeground(
+  connection: TuiConnection,
+  expectedTurnId?: string,
+  quiet = false,
+): Promise<string> {
   const result = await connection.send({
     type: 'cancel',
     ...(expectedTurnId ? { expectedTurnId, discardQueue: false } : {}),
   });
   if (!result.ok) throw new WireCommandFailure(result.code, result.message);
-  if (result.kind === 'accepted') return 'Cancellation requested.';
+  if (result.kind === 'accepted') return quiet ? '' : 'Cancellation requested.';
   if (result.kind !== 'abort') throw new Error(`Unexpected cancellation response: ${result.kind}`);
   if (result.result.kind === 'aborted')
-    return `Cancellation requested for ${result.result.turnId}; cleanup may still be running.${
-      result.result.discardedMessageIds.length
-        ? ` Discarded queued messages: ${result.result.discardedMessageIds.join(', ')}.`
-        : ''
-    }`;
+    return quiet
+      ? ''
+      : `Cancellation requested for ${result.result.turnId}; cleanup may still be running.${
+          result.result.discardedMessageIds.length
+            ? ` Discarded queued messages: ${result.result.discardedMessageIds.join(', ')}.`
+            : ''
+        }`;
   return `Cancellation ${result.result.kind.replace('_', ' ')}${
     result.result.reason ? `: ${result.result.reason}` : '.'
   }`;

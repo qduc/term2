@@ -118,9 +118,7 @@ export function TuiSession({
     // Stopping a running turn comes first and keeps the draft; with nothing running, Ctrl+C clears the draft.
     if (confirmation.pending) confirmation.clear();
     else if (state.activeTurnId || (state.interactions.length && editor.value.length === 0))
-      void cancelForeground(connection, state.activeTurnId ?? undefined).then((s) => {
-        setNotice(s.startsWith('Cancellation requested') ? '' : s);
-      }, notifyError);
+      void cancelForeground(connection, state.activeTurnId ?? undefined, true).then(setNotice, notifyError);
     else if (editor.value.length > 0) replaceInput('');
     else setNotice('Press Ctrl+C again to exit');
   };

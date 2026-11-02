@@ -14,6 +14,7 @@ import { composeHandoffMessage } from '../../../source/services/handoff/handoff-
 import { formatMcpStatus } from '../../../source/services/mcp/mcp-status.js';
 import type { DirectMcp } from './direct-mcp.js';
 import { injectSkillIntoTurn } from '../../../source/types/user-turn.js';
+import { helpText } from '../clients/tui/slash-commands.js';
 import { copyToClipboard } from '../../../source/utils/clipboard.js';
 import { isControlSocketName } from '../clients/control/index.js';
 import type { DirectConnection } from '../host/in-process-direct-types.js';
@@ -262,23 +263,7 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
       const argument = rest[0];
       switch (name) {
         case 'help':
-          return {
-            message: [
-              'Commands',
-              '/help — Show commands and keyboard shortcuts',
-              '/quit, /exit — Exit the application',
-              '/restart [stop] — Reload this executable; stop consents to stopping background work',
-              '/resume [ls|session], /clear, /rollover — List, open or start a conversation',
-              '/model [<provider>/<model>], /effort [<level>], /profile [<name>] — Configure the session; omit the argument to finish it in the composer',
-              '/settings, /auto-approve, /sandbox, /usage, /goal, /skills, /handoff, /copy',
-              '/compact, /retry-turn, /retry-tool, /rewind — Context and recovery',
-              '/queue, /steer, /followup, /cancel, /tasks, /answer, /bridge — Work and input',
-              '/command-status <id>, /command-apply <id> — Inspect or apply a command result',
-              'Keyboard shortcuts',
-              'Enter send/steer · Alt+Enter follow-up · ↑/↓ history · PgUp/PgDn scroll',
-              'Ctrl+G approvals · Ctrl+B budget · Ctrl+C clear input/cancel/exit',
-            ].join('\n'),
-          };
+          return { message: helpText() };
         case 'quit':
         case 'exit':
           return { exit: true };

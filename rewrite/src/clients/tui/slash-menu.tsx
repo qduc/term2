@@ -1,45 +1,9 @@
 import React, { useState } from 'react';
 import { Box, Text, type Key } from 'ink';
-/** Commands accepted by the direct TUI and its app integration. */
-export const SLASH_COMMANDS = [
-  '/help',
-  '/model',
-  '/effort',
-  '/profile',
-  '/settings',
-  '/auto-approve',
-  '/sandbox',
-  '/resume',
-  '/clear',
-  '/rollover',
-  '/compact',
-  '/retry-turn',
-  '/retry-tool',
-  '/rewind',
-  '/usage',
-  '/copy',
-  '/skills',
-  '/goal',
-  '/handoff',
-  '/tasks',
-  '/queue',
-  '/steer',
-  '/followup',
-  '/cancel',
-  '/answer',
-  '/bridge',
-  '/restart',
-  '/quit',
-  '/exit',
-  '/command-status',
-  '/command-apply',
-  '/mcp',
-  '/mcp-login',
-  '/plan',
-  '/bare',
-  '/mentor',
-  '/orchestrator',
-] as const;
+import { SLASH_COMMAND_TABLE, SLASH_COMMANDS } from './slash-commands.js';
+
+const NAME_WIDTH = Math.max(...SLASH_COMMANDS.map((name) => name.length));
+const DESCRIPTIONS = new Map(SLASH_COMMAND_TABLE.map((command) => [command.name, command.description]));
 
 /** Menu key handling stays in the composer input path, not a second Ink listener. */
 export function useSlashMenu(value: string, enabled: boolean, subtleColor: React.ComponentProps<typeof Text>['color']) {
@@ -79,9 +43,10 @@ export function useSlashMenu(value: string, enabled: boolean, subtleColor: React
   const view = matches.length ? (
     <Box flexDirection="column">
       {matches.slice(Math.max(0, selected - 4), Math.max(0, selected - 4) + 8).map((command) => (
-        <Text key={command}>
+        <Text key={command} wrap="truncate-end">
           {command === matches[selected] ? '› ' : '  '}
-          {command}
+          {command.padEnd(NAME_WIDTH)}
+          <Text color={subtleColor}> {DESCRIPTIONS.get(command)}</Text>
         </Text>
       ))}
       <Text color={subtleColor}>↑/↓ select · Enter/Tab complete · Esc dismiss</Text>

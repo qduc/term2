@@ -163,6 +163,8 @@ async function runCommand(
     session.write('/hel');
     await waitForHarnessComposerValue(idlePath, '/hel', { timeoutMs: 60_000 });
     await session.waitForOutput('/help', 30_000);
+    // The menu says what each command does, from the same table /help prints.
+    await session.waitForOutput('Show commands and keyboard shortcuts', 30_000);
     session.write('\t');
     await waitForHarnessComposerValue(idlePath, '/help ', { timeoutMs: 60_000 });
     session.write('\r');

@@ -116,6 +116,8 @@ it(
     const failureFrame = session.getVisibleOutput().slice(session.getVisibleOutput().lastIndexOf('▌ term²'));
     expect(failureFrame).toContain('Compaction failed:');
     expect(failureFrame).not.toContain('· compact · rejected');
+    // The failure notice can render before the compact command releases input ownership.
+    idle = await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
     await new Promise((resolve) => setTimeout(resolve, 2100));
     await send('first');

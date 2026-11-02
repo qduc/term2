@@ -134,7 +134,9 @@ export function isSessionUpdateBody(body: unknown): body is SessionUpdateBody {
   if (
     Object.keys(value).some(
       (key) =>
-        !['clientRequestId', 'expectedRevision', 'admission', 'modelSelection', 'reasoningEffort', 'mode'].includes(key),
+        !['clientRequestId', 'expectedRevision', 'admission', 'modelSelection', 'reasoningEffort', 'mode'].includes(
+          key,
+        ),
     ) ||
     typeof value.clientRequestId !== 'string' ||
     value.clientRequestId.length === 0 ||
@@ -206,7 +208,9 @@ export function isCommandBody(body: unknown): body is CommandBody {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
   const value = body as Record<string, unknown>;
   return (
-    Object.keys(value).every((key) => ['commandId', 'clientRequestId', 'admission', 'expectedRevision'].includes(key)) &&
+    Object.keys(value).every((key) =>
+      ['commandId', 'clientRequestId', 'admission', 'expectedRevision'].includes(key),
+    ) &&
     (value.admission === undefined || value.admission === 'idle') &&
     (value.expectedRevision === undefined ||
       (typeof value.expectedRevision === 'string' && value.expectedRevision.length > 0)) &&

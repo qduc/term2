@@ -194,7 +194,7 @@ async function withSession(
     if (route.purpose === 'events_connect') {
       const result =
         input.url.searchParams.get('format') === 'agent-wire-v2'
-          ? agentWireV2EventStream(connection, event => encodeAgentWireV2(event, interactions))
+          ? agentWireV2EventStream(connection, (event) => encodeAgentWireV2(event, interactions))
           : directEventStream(connection);
       transferred = true;
       return result;

@@ -339,10 +339,7 @@ async function configureSession(
   } catch (error) {
     // Validation failures are safe400s; ownership/authority failures retain their
     // existing host error mapping instead of being mislabeled as invalid input.
-    if (
-      error instanceof Error &&
-      (error.name === 'ZodError' || ('code' in error && error.code === 'invalid_command'))
-    )
+    if (error instanceof Error && (error.name === 'ZodError' || ('code' in error && error.code === 'invalid_command')))
       return invalid('session config is invalid');
     throw error;
   }

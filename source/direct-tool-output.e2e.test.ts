@@ -96,7 +96,7 @@ it(
     const first = `echo hi > ${path.join(workspace, 'b.txt')} && cat ${path.join(workspace, 'b.txt')}`;
     const file = path.join(workspace, 'c.txt');
     const baseUrl = await startProvider([
-      { call: { id: 'call_0', command: first } },
+      { call: { id: 'call_f', command: 'exit 3' } },
       { call: { id: 'call_1', tool: 'create_file', args: { path: file, content: 'alpha-line\nbeta-line' } } },
       {
         call: {
@@ -105,6 +105,7 @@ it(
           args: { path: file, replacements: [{ search_content: 'alpha-line', replace_content: 'gamma-line' }] },
         },
       },
+      { call: { id: 'call_0', command: first } },
       { text: 'Created `b.txt` and read it back: `hi`. first turn done' },
     ]);
     const idlePath = path.join(home, 'input-idle');
@@ -163,9 +164,13 @@ it(
     expect(visible, visible).not.toContain('search_replace "');
     // Collapsed by default: one row with the runtime, and no output until expanded with Ctrl+O.
     expect(visible, visible).toMatch(/\(\d+ms\)/);
-    expect(visible, visible).not.toContain('Runtime:');
+    expect(visible, visible).not.toMatch(/Runtime: \d+ms\s+hi\b/);
+    // A failed command is not collapsed: its exit status stays visible without expanding.
+    expect(visible, visible).toContain('exit 3');
     session.write('\x0f');
-    await session.waitForOutput('Runtime:', 30_000);
+    for (let i = 0; i < 40 && !/Runtime: \d+ms\s+hi\b/.test(session.getVisibleOutput()); i++)
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(session.getVisibleOutput()).toMatch(/Runtime: \d+ms\s+hi\b/);
     // Quit the way a user does, so the app finishes its writes before the test removes its directories.
     session.write('\x03');
     await session.waitForOutput('Press Ctrl+C again to exit', 30_000);

@@ -114,7 +114,7 @@ export function TuiSession({
   interrupt.current = () => {
     // Stopping a running turn comes first and keeps the draft; with nothing running, Ctrl+C clears the draft.
     if (confirmation.pending) confirmation.clear();
-    else if (state.activeTurnId || state.interactions.length) {
+    else if (state.activeTurnId || (state.interactions.length && editor.value.length === 0)) {
       void cancelForeground(connection, state.activeTurnId ?? undefined).then(setNotice, (error) => {
         setNotice(error instanceof Error ? error.message : String(error));
       });

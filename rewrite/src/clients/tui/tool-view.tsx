@@ -9,11 +9,12 @@ import type { JsonValue } from '../../protocol/direct-wire.js';
 /** The tools whose edit is the point of the row: the old terminal printed these as diffs, so they stay open. */
 const EDIT_TOOLS = new Set(['search_replace', 'create_file']);
 
-/** `Runtime: 63ms` is how shell results report their duration; no other tool reports one on the wire. */
+/** `Runtime: 63ms` is how shell results report their duration; no other tool reports one on the wire. The last match wins. */
 function runtimeOf(...texts: readonly string[]): string | undefined {
   for (const text of texts) {
-    const match = /Runtime:\s*(\d+(?:\.\d+)?\s*(?:ms|s|m|h))/.exec(text);
-    if (match) return match[1]!.replace(/\s+/g, '');
+    const matches = [...text.matchAll(/^Runtime:\s*(\d+(?:\.\d+)?\s*(?:ms|s|m|h))\s*$/gm)];
+    const last = matches[matches.length - 1];
+    if (last) return last[1]!.replace(/\s+/g, '');
   }
   return undefined;
 }
@@ -37,18 +38,21 @@ export function ToolCall({
   const contentText = (tool.content ?? []).flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n');
   const extraText = contentText && contentText !== detail ? contentText : '';
   const images = (tool.content ?? []).flatMap((part) => (part.type === 'image' ? [part.mediaType] : []));
-  const fresh = (part: string) => !detail.includes(part) && !extraText.includes(part);
-  const open = expanded || tool.status === 'failed' || Boolean(tool.outcomeUnknown);
+  // A source tool can report a failure (non-zero exit, timeout) with isError false; its command message says so.
+  const status = tool.status === 'completed' && reportsFailure(tool.display) ? 'failed' : tool.status;
+  const open = expanded || status !== 'completed' || Boolean(tool.outcomeUnknown) || tool.name === 'ask_user';
+  // Text that is hidden cannot stand in for the lines that are shown.
+  const fresh = (part: string) => !open || (!detail.includes(part) && !extraText.includes(part));
   const inputText = inputParts(tool.name, tool.input).filter(fresh);
   const displayText = displayParts(tool.display, args, tool.name).filter(fresh);
-  const runtime = runtimeOf(detail, ...displayText);
+  const runtime = tool.name === 'shell' ? runtimeOf(detail) : undefined;
   // Edit input is always shown; everything else only when open.
   const display = [...(open || EDIT_TOOLS.has(tool.name) ? inputText : []), ...(open ? displayText : [])].join('\n');
   const showDetail = open;
   return (
-    <ToolFrame status={tool.status} display="standard" toolName={tool.name}>
+    <ToolFrame status={status} display="standard" toolName={tool.name}>
       <ToolHeader
-        status={tool.status}
+        status={status}
         display="standard"
         toolName={tool.name}
         nested={Boolean(tool.parent)}
@@ -139,4 +143,14 @@ function inputParts(name: string, input: JsonValue | undefined): string[] {
     lines = [...lines.slice(0, MAX_INPUT_LINES), `… ${lines.length - MAX_INPUT_LINES} more lines`];
   }
   return lines.length ? [lines.join('\n')] : [];
+}
+
+/** True when a legacy command message in `display` marks the call unsuccessful. */
+function reportsFailure(display: JsonValue | undefined): boolean {
+  const messages = Array.isArray(display)
+    ? display
+    : isRecord(display) && Array.isArray(display.messages)
+    ? display.messages
+    : [];
+  return messages.some((message) => isRecord(message) && message.success === false);
 }

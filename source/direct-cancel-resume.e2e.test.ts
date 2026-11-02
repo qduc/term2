@@ -32,7 +32,7 @@ afterEach(async () => {
   root = '';
 });
 
-type Reply = { text?: string; hang?: boolean };
+type Reply = { text?: string; hang?: boolean; partialTool?: boolean };
 
 /** One SSE reply per chat request, in order: a single shell call or plain text. */
 async function startProvider(replies: Reply[]): Promise<string> {
@@ -48,6 +48,16 @@ async function startProvider(replies: Reply[]): Promise<string> {
       const reply = replies[requests++] ?? { text: 'done' };
       const id = `chatcmpl-${requests}`;
       const frames: object[] = [{ id, choices: [{ delta: { role: 'assistant', content: reply.text } }] }];
+      // Tool-call output already seen: a steer waits for the normal boundary instead of interrupting the stream.
+      if (reply.partialTool) {
+        const call = {
+          index: 0,
+          id: 'call_p',
+          type: 'function',
+          function: { name: 'shell', arguments: '{"command":"sl' },
+        };
+        frames.push({ id, choices: [{ delta: { tool_calls: [call] } }] });
+      }
       if (!reply.hang) frames.push({ id, choices: [{ delta: {}, finish_reason: 'stop' }] });
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       const body = frames.map((frame) => `data: ${JSON.stringify(frame)}\n`).join('\n');
@@ -158,7 +168,7 @@ it('queued steers run after cancellation while follow-ups stay paused', { timeou
   fs.mkdirSync(home);
   fs.mkdirSync(workspace);
   const baseUrl = await startProvider([
-    { text: 'PARTIAL-ANSWER', hang: true },
+    { text: 'PARTIAL-ANSWER', hang: true, partialTool: true },
     { text: 'STEER-REPLY-ONE' },
     { text: 'STEER-REPLY-TWO' },
     { text: 'FOLLOWUP-REPLY' },

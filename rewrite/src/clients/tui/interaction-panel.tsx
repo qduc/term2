@@ -33,6 +33,11 @@ export function InteractionPanel({
   const pending = useRef(false);
   const questionInput = useRef<InteractionInputHandler | null>(null);
   const request = interactions.find((item) => item.id === requestId);
+  // Queued y/Enter in the race probe arrived within 1 ms of the first frame;
+  // 20 ms covers that handoff and is below the 102 ms deliberate-key control.
+  const opened = useRef({ id: request?.id, at: performance.now() });
+  if (opened.current.id !== request?.id) opened.current = { id: request?.id, at: performance.now() };
+  const inputDuringHandoff = () => performance.now() - opened.current.at < 20;
   const options = request
     ? request.kind === 'approval'
       ? [
@@ -96,6 +101,7 @@ export function InteractionPanel({
         return;
       }
       if (input.toLowerCase() === 'y') {
+        if (inputDuringHandoff()) return;
         void send({ kind: 'allow' });
         return;
       }
@@ -122,6 +128,7 @@ export function InteractionPanel({
       return;
     }
     if (request.kind === 'approval') {
+      if ((index === 0 || index >= 3) && inputDuringHandoff()) return;
       if (index === 0) void send({ kind: 'allow' }).catch(() => {});
       else if (index === 1) {
         setEntry('reason');

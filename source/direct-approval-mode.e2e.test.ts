@@ -141,3 +141,11 @@ it('/auto-approve without an argument reports the current mode', { timeout: TIME
 it('/settings lists the approval mode', { timeout: TIMEOUT_MS }, () =>
   runCommand('/settings', 'shell.autoApproveMode: off (default)'),
 );
+
+it('/model without an argument names the current model', { timeout: TIMEOUT_MS }, async () => {
+  await runCommand('/model', 'Current model: mockprov/mock-alpha.');
+});
+
+it('/model <provider>/<model> confirms the new model by name', { timeout: TIMEOUT_MS }, () =>
+  runCommand('/model mockprov/mock-beta', 'Model set to mockprov/mock-beta.'),
+);

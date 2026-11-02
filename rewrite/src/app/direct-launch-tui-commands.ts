@@ -49,9 +49,16 @@ type Configuration = Extract<WireCommand, { type: 'configure' }>['configuration'
  * One typed command, one id, sent once. The notice names the id, because a pending
  * or lost reply is read back with `/command-status`, never by sending it again.
  */
-async function configure(connection: TuiConnection, configuration: Configuration): Promise<CommandResult> {
+async function configure(
+  connection: TuiConnection,
+  configuration: Configuration,
+  /** What a completed change says, so the user sees the new value rather than a command id. */
+  done?: string,
+): Promise<CommandResult> {
   const command = { type: 'configure', commandId: randomUUID(), configuration } as const;
-  return { message: receiptNotice(await sendNativeCommand(connection, command)) };
+  const result = await sendNativeCommand(connection, command);
+  const configured = result.kind === 'finished' && result.receipt.outcome?.kind === 'configured';
+  return { message: configured && done ? done : receiptNotice(result) };
 }
 
 function parseModel(reference: string | undefined): { provider: string; model: string } {
@@ -83,12 +90,16 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
   };
 
   const model = async (connection: TuiConnection, reference: string | undefined): Promise<CommandResult> => {
-    if (!reference)
+    if (!reference) {
+      const current = app.sessionDetails(connection.sessionId).settings?.get('agent.modelSelection');
       return {
-        message: 'Choose a model: enter <provider>/<model>.',
+        message: `${
+          current ? `Current model: ${current.provider}/${current.model}. ` : ''
+        }Choose a model: enter <provider>/<model>.`,
         draft: { text: '/model ', attachments: [] },
       };
-    return configure(connection, { model: parseModel(reference) });
+    }
+    return configure(connection, { model: parseModel(reference) }, `Model set to ${reference}.`);
   };
 
   const effort = async (connection: TuiConnection, value: string | undefined): Promise<CommandResult> => {
@@ -97,7 +108,11 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
         message: 'Choose reasoning effort: default, none, minimal, low, medium, high, xhigh.',
         draft: { text: '/effort ', attachments: [] },
       };
-    return configure(connection, { reasoning: value as NonNullable<Configuration['reasoning']> });
+    return configure(
+      connection,
+      { reasoning: value as NonNullable<Configuration['reasoning']> },
+      `Reasoning effort set to ${value}.`,
+    );
   };
 
   /** `/goal`, with the same arguments as today. A failed update is a message, not an error. */

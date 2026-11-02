@@ -52,7 +52,8 @@ function commandText(input: unknown): string {
 }
 
 /** Settle snapshot/live interactions through the same policy. False means the
- * answer failed and a best-effort cancel was sent; the driver owns its outcome.
+ * answer failed; non-stale failures request best-effort cancellation of the
+ * interaction owner. The driver owns its outcome.
  */
 export function createHeadlessAnswerer(
   connection: DirectConnection,
@@ -68,6 +69,15 @@ export function createHeadlessAnswerer(
     if (options.decideApproval) return await options.decideApproval(interaction);
     return decideHeadlessApproval(interaction, autoApprove);
   };
+  const cancelInteractionOwner = (interaction: WireInteraction): void => {
+    void connection
+      .send(
+        interaction.taskId !== undefined
+          ? { type: 'task_control', taskId: interaction.taskId, action: 'cancel' }
+          : { type: 'cancel', expectedTurnId: interaction.turnId },
+      )
+      .catch(() => undefined);
+  };
 
   const answer = async (interaction: WireInteraction): Promise<boolean> => {
     if (answered.has(interaction.requestId)) return true;
@@ -78,7 +88,7 @@ export function createHeadlessAnswerer(
       decided = await decide(interaction);
     } catch (error) {
       errorText(error instanceof Error ? error.message : String(error));
-      void connection.send({ type: 'cancel' }).catch(() => undefined);
+      cancelInteractionOwner(interaction);
       return false;
     }
     if (decided.reportRejection === true && decided.decision.kind === 'deny') {
@@ -90,7 +100,8 @@ export function createHeadlessAnswerer(
     // That stale answer is expected: keep the ordered stream and let the real
     // terminal (cancelled) decide, rather than reporting a failure.
     if (options.signal?.aborted && answerFailure.code === 'stale_interaction') return true;
-    void connection.send({ type: 'cancel' }).catch(() => undefined);
+    // A stale request no longer owns work to cancel; a newer turn may be active.
+    if (answerFailure.code !== 'stale_interaction') cancelInteractionOwner(interaction);
     return false;
   };
 

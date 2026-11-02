@@ -20,16 +20,50 @@ import { planProfileTransition } from '../../../source/services/profiles/profile
 import { ProfileResolutionError } from '../../../source/services/profiles/types.js';
 import { SETTING_KEYS } from '../../../source/services/settings/settings-service.js';
 import {
-  createSettingsCommand,
-  formatSettingsSummary,
-  parseSettingValue,
-} from '../../../source/utils/settings-command.js';
+  CATEGORY_KEYS,
+  HIDDEN_SETTINGS,
+  SETTINGS_CATEGORIES,
+} from '../../../source/hooks/settings-completion-config.js';
+import { getSettingMetadata } from '../../../source/services/settings/settings-ui-metadata.js';
+import { createSettingsCommand, parseSettingValue } from '../../../source/utils/settings-command.js';
 import { receiptNotice, sendNativeCommand } from '../clients/tui/commands.js';
 import type { TuiConnection, TuiIntegration } from '../clients/tui/integration.js';
 import type { WireSnapshot } from '../protocol/direct-wire.js';
 import type { DirectApplication } from './direct-application.js';
 
 type CommandResult = Awaited<ReturnType<TuiIntegration['command']>>;
+
+/** Compact pages avoid overflowing the unscrollable command-notice region. */
+function settingsBrowse(
+  category: string | undefined,
+  pageText: string | undefined,
+  read: (key: string) => unknown,
+): string {
+  if (!category) {
+    return [
+      'Settings: models · providers · context · safety · tools · ui · hooks',
+      'Browse: /settings <category> [page]   Read: /settings <key>',
+      'Change: /settings <key> <value>   Reset: /settings reset <key>',
+      'Changes apply to this session; settings requiring restart are not changed here.',
+    ].join('\n');
+  }
+  const group = SETTINGS_CATEGORIES.find((entry) => entry.id === category)!;
+  const keys = (CATEGORY_KEYS[category] ?? []).filter((key) => !HIDDEN_SETTINGS.has(key));
+  const pages = Math.max(1, Math.ceil(keys.length / 3));
+  const page = pageText === undefined ? 1 : Number(pageText);
+  if (!Number.isInteger(page) || page < 1 || page > pages) return `Use /settings ${category} <page> (1–${pages}).`;
+  const rows = keys.slice((page - 1) * 3, page * 3).map((key) => {
+    const metadata = getSettingMetadata(key);
+    const raw = metadata?.isSecret ? '[hidden]' : JSON.stringify(read(key)) ?? 'unset';
+    const value = raw.length > 64 ? `${raw.slice(0, 61)}...` : raw;
+    return `${key}: ${value}\n  ${metadata?.description ?? metadata?.label ?? key}`;
+  });
+  return [
+    `${group.label} settings (${page}/${pages}) · /settings ${category} <page>`,
+    ...rows,
+    'Read: /settings <key>  ·  Change: /settings <key> <value>',
+  ].join('\n');
+}
 
 const APPROVAL_MODES = ['off', 'advisory', 'auto', 'always'];
 const PROFILE_KEY = 'app.activeProfileId';
@@ -123,7 +157,11 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
     async settings(connection: TuiConnection, args: string): Promise<CommandResult> {
       const { settings } = detailsOf(connection.sessionId);
       const [first, ...rest] = args.split(/\s+/).filter(Boolean);
-      if (!first) return { message: formatSettingsSummary(settings.getAll()) };
+      if (!first) return { message: settingsBrowse(undefined, undefined, (key) => settings.getDynamic(key)) };
+      if (SETTINGS_CATEGORIES.some((category) => category.id === first)) {
+        if (rest.length > 1) return { message: `Use /settings ${first} [page].` };
+        return { message: settingsBrowse(first, rest[0], (key) => settings.getDynamic(key)) };
+      }
       const isReset = first === 'reset';
       const key = isReset ? rest[0] : first;
       if (!key) throw new Error('Use /settings reset <key>.');

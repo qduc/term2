@@ -267,3 +267,5 @@ This preserves historical bench coverage without keeping an app compatibility
 facade or routing native startup through the old engine.
 
 The direct CLI supports the standalone `control` client and `--control-socket=<name>` interactive startup. Both use the private `XDG_RUNTIME_DIR` advertisement and the same socket protocol; the help must not mark control as unavailable. A socket is opt-in, not started by a normal launch.
+
+The direct `/settings` command presents a category index and three-item category pages (`/settings <category> [page]`) with descriptions and redacted secret values instead of dumping all settings into the unscrollable notice. Existing `/settings <key> [value]` and reset routes remain the editing interface and retain their session/restart restrictions.

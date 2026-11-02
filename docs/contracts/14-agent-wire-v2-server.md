@@ -1,11 +1,40 @@
 # Contract 14 — agent-wire v2 server transport (gated)
 
 **Status:** source implementation for the M6 versioned-wire migration; **not
-active** and not a consumer-acceptance claim. The shared `@qduc/agent-wire`
-artifact is still the pinned 0.1.0 package, which has no v2 parser. Canonical
-SSE/configuration gates remain closed until the shared v2 artifact, browser/BFF
-migration and this server path are combined. All verification is deferred under
-the evidence-driven-development freeze.
+active** and not a consumer-acceptance claim. Root and web manifests now pin the
+vendored `@qduc/agent-wire` 0.2.1 artifact and the browser/BFF request v2, but
+`AGENT_WIRE_V2_RUNTIME_AVAILABLE` remains false pending combined-path proof.
+The historical artifact/intake prerequisites below are not current build results.
+
+## Direct-host old-client refusal (first #80 slice)
+
+The direct build accepts two bounded compatibility exceptions, not unchanged
+v1 parity: explicit v2 atomic events and keyed/revisioned configuration receipts
+(including native pending responses). No v1 shim or event journal is supplied.
+
+`createDirectServerHandler` refuses unqualified events with HTTP 400
+`protocol_upgrade_required`, `retryable:false` and
+`details.requiredFormat:'agent-wire-v2'` before opening SSE or connecting to the
+host. The generic message tells clients to upgrade browser/BFF together. Transport
+assertion authentication and route/purpose/session binding precede that refusal;
+native session ownership is not queried, and the response discloses no session
+existence, owner or configuration.
+
+`configureSession` runs after the existing host connection/ownership check. A
+selection patch missing `clientRequestId` or `expectedRevision` receives the same
+nonretryable 400 code, naming both required fields and the explicit v2 format,
+before preparation or command dispatch. Clients must not invent keys, rebase or
+retry the old patch. Empty `{}` discovery remains separate. Recognized formats
+are absent, `direct` and `agent-wire-v2`; unknown config formats now reject with
+400 validation error, including discovery. Invalid/conflicting format headers
+still reject. Existing valid keyed requests and native receipt projection are
+unchanged; explicit v2 mutation/SSE still receive the honest unavailable response
+while the capability gate is false.
+
+The BFF recognizes this refusal code and supplies its own fixed actionable
+message, without forwarding arbitrary upstream messages or details. This slice
+does not prove browser/native runtime compatibility or all 21 route purposes;
+the old gateway/default CLI contract in Contract 13 is unchanged.
 
 ## Versions and negotiation
 
@@ -54,11 +83,12 @@ are not relabelled; the accepted boundary may be an empty batch.
 
 ### Accepted/live type boundary
 
-The server source now imports the exact shared exports from `@qduc/agent-wire`
-(source final `a4bcebc4`) rather than defining a local mirror. The pinned 0.1.0
-artifact does not export these v2 names, so compilation and activation wait for
-the packaged 0.2.0 artifact and pin update; this is a source-only alignment, not
-a build claim.
+The server source imports the shared exports from `@qduc/agent-wire` rather
+than defining a local mirror. The earlier source-only alignment required 0.2.0;
+the root and web consumers now pin the locally packaged 0.2.1 artifact, whose
+queue-submission validator follows the flattened public projection. Package
+installation and captured-frame parsing do not by themselves prove the combined
+browser/native path or authorize activation.
 
 - accepted changes use shared `AgentAcceptedChangeTypeV2`; `error` is not in
   that allowlist;
@@ -177,11 +207,10 @@ is not the original mutation result.
 ## Migration and limits
 
 The shared package source/docs own the v1/v2 schema and local artifact route.
-This server file is source-only; it does not build, pack, publish, edit the
-vendored tarball, migrate browser/BFF code, or activate the gate. The next
-combined migration must update both consumer pins plus the browser parser,
-atomic reducer, sparse cursor, hydration/replay and BFF config handling, then
-provide independent verification. Until then no v2 runtime support, replay
+The 0.2.1 artifact is locally vendored and installed in both consumers; it has
+not been published. The gate remains closed until the combined browser parser,
+atomic reducer, sparse cursor, hydration/replay and BFF configuration paths have
+independent verification. Until then no v2 runtime support, replay
 parity, fresh branch history, aggregate cost reconstruction, complete M6
 transcript/task-history/tool-call delivery, model-response/budget-observation
 delivery or M6 completion is claimed.

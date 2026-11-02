@@ -287,8 +287,9 @@ async function configureSession(
   dependencies: ServerHostDependencies,
 ): Promise<ServerResult> {
   const { connection, body, principal } = input;
-  if (!validate.isSessionUpdateBody(body)) return invalid('session config is invalid');
   const format = input.url.searchParams.get('format');
+  if (format !== null && format !== 'direct' && format !== 'agent-wire-v2')
+    return invalid('session config format is invalid');
   const rawFormat = input.request.headers['x-term2-event-format'];
   if (rawFormat !== undefined && typeof rawFormat !== 'string')
     return invalid('session config format header is invalid');
@@ -296,6 +297,15 @@ async function configureSession(
     return invalid('session config format header is invalid');
   if (rawFormat === 'agent-wire-v2' && format !== 'agent-wire-v2')
     return publicError(400, 'protocol_conflict', 'session config negotiation does not match');
+  if (validate.requiresSessionUpdateKeys(body))
+    return publicError(
+      400,
+      'protocol_upgrade_required',
+      'Upgrade the browser and BFF together and use format=agent-wire-v2 with clientRequestId and the original expectedRevision for every config mutation; do not auto-key, rebase or retry the old patch',
+      false,
+      { requiredFormat: 'agent-wire-v2', requiredFields: ['clientRequestId', 'expectedRevision'] },
+    );
+  if (!validate.isSessionUpdateBody(body)) return invalid('session config is invalid');
   const v2 = format === 'agent-wire-v2';
   const presentation = dependencies.presentation;
   if (!presentation?.configuration)

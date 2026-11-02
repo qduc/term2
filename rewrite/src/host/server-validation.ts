@@ -112,6 +112,21 @@ export function isOAuthSelectBody(body: unknown): body is { accountId: string } 
   );
 }
 
+/** Recognizes a selection patch missing admission identity; never supplies keys or accepts it for dispatch. */
+export function requiresSessionUpdateKeys(body: unknown): boolean {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
+  const value = body as Record<string, unknown>;
+  const keys = Object.keys(value);
+  return (
+    keys.every((key) =>
+      ['clientRequestId', 'expectedRevision', 'admission', 'modelSelection', 'reasoningEffort', 'mode'].includes(key),
+    ) &&
+    keys.some((key) => ['modelSelection', 'reasoningEffort', 'mode'].includes(key)) &&
+    (!Object.prototype.hasOwnProperty.call(value, 'clientRequestId') ||
+      !Object.prototype.hasOwnProperty.call(value, 'expectedRevision'))
+  );
+}
+
 export function isSessionUpdateBody(body: unknown): body is SessionUpdateBody {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
   const value = body as Record<string, unknown>;

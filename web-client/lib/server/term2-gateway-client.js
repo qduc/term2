@@ -35,6 +35,7 @@ const OPAQUE_ID = /^[A-Za-z0-9_-]{1,256}$/u;
 const INTERNAL_PREFIX = '/private/agent/v1/';
 const SAFE_ERROR_CODES = new Set([
   'gateway_unavailable',
+  'protocol_upgrade_required',
   'agent_wire_v2_unavailable',
   'hydration_unavailable',
   'not_found',
@@ -85,6 +86,8 @@ const SAFE_ERROR_CODES = new Set([
 
 const SAFE_ERROR_MESSAGES = Object.freeze({
   gateway_unavailable: 'Agent gateway unavailable',
+  protocol_upgrade_required:
+    'Upgrade the browser and BFF together and use format=agent-wire-v2; config mutations require clientRequestId and the original expectedRevision. Do not auto-key, rebase or retry the old request',
   agent_wire_v2_unavailable: 'agent-wire-v2 is gated until the shared artifact and consumer migration are combined',
   hydration_unavailable: 'Native accepted hydration is unavailable',
   not_found: 'Resource not found',

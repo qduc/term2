@@ -112,7 +112,7 @@
   "devDependencies": {
     "@eslint/js": "^9.39.4",
     "@modelcontextprotocol/server": "2.0.0",
-    "@qduc/agent-wire": "file:vendor/qduc-agent-wire-0.2.0.tgz",
+    "@qduc/agent-wire": "file:vendor/qduc-agent-wire-0.2.1.tgz",
     "@types/better-sqlite3": "^9.6.0",
     "@types/env-paths": "^1.0.2",
     "@types/node": "^24.10.1",

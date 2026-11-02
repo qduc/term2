@@ -178,11 +178,11 @@ async function withSession(
     fromSeq = cursor.value ?? undefined;
     if (format === null)
       return publicError(
-        503,
-        'event_envelope_unavailable',
-        'gateway-compatible event envelopes require supported task, compaction, queue, rotation and replay mappings',
-        true,
-        { reloadRequired: true },
+        400,
+        'protocol_upgrade_required',
+        'Upgrade the browser and BFF together and request events with format=agent-wire-v2; unqualified events are not supported',
+        false,
+        { requiredFormat: 'agent-wire-v2' },
       );
   }
   const connection =

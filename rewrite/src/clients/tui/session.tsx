@@ -100,6 +100,7 @@ export function TuiSession({
   const slash = useComposerMenu(editor.value, composerActive && !editing, theme.textSubtle);
   useHarnessInput(composerActive && !busy, Boolean(state.activeTurnId), editor.value);
   const pending = useRef(false);
+  const approvalPending = useRef(false);
   const composerFilter = useComposerFilter({
     composerActive,
     slash,
@@ -125,6 +126,21 @@ export function TuiSession({
       return;
     }
     if (taskOpen || budgetOpen || rewindTargets) return;
+    if (composerActive && ((key.shift && key.tab) || input === '\x1b[Z')) {
+      if (!approvalPending.current) {
+        approvalPending.current = true;
+        void integration
+          .command(connection, '/auto-approve next')
+          .then(
+            (result) => setNotice(result.message ?? 'Approval mode changed.'),
+            (error: unknown) => setNotice(error instanceof Error ? error.message : String(error)),
+          )
+          .finally(() => {
+            approvalPending.current = false;
+          });
+      }
+      return;
+    }
     if (slash.handle(key, replaceInput)) return;
     if (((key.ctrl && input === 'g') || input === '\x07') && !busy)
       (state.interactions.length ? setInteractionOpen : setTaskOpen)(true);

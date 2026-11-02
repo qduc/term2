@@ -74,6 +74,7 @@ export function ComposerHints({
             ]
           : [
               ['/', 'commands'],
+              ['Shift+Tab', 'approval mode'],
               ['↑/↓', 'history'],
               ['Ctrl+O', 'tool output'],
               ['Ctrl+G', 'tasks'],

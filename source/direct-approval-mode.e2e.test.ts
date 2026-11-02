@@ -95,7 +95,7 @@ async function runCommand(
   command: string,
   expected: string,
   firstPrompt?: string,
-  exerciseMenu: false | 'complete' | 'prefix-enter' | 'pick-enter' | 'model-picker' = false,
+  exerciseMenu: false | 'complete' | 'prefix-enter' | 'pick-enter' | 'model-picker' | 'approval-shortcut' = false,
   withUsage = false,
   expectedDraft?: string,
 ): Promise<void> {
@@ -151,6 +151,16 @@ async function runCommand(
     session!.write('\r');
   };
 
+  if (exerciseMenu === 'approval-shortcut') {
+    session.write('draft stays');
+    await waitForHarnessComposerValue(idlePath, 'draft stays', { timeoutMs: 60_000 });
+    for (const mode of ['advisory', 'auto', 'always', 'off']) {
+      session.write('\x1b[Z');
+      await session.waitForOutput(`Tool auto-approval set to ${mode}.`, 30_000);
+      await waitForHarnessComposerValue(idlePath, 'draft stays', { timeoutMs: 60_000 });
+    }
+    return;
+  }
   if (firstPrompt) {
     await submit(firstPrompt);
     await session.waitForOutput('unused', 30_000);
@@ -274,4 +284,8 @@ it('Enter on an unfinished slash prefix completes it and does not run the comman
 
 it('Enter on an arrow-picked command completes it and does not run it', { timeout: TIMEOUT_MS }, () =>
   runCommand('/usage', '', undefined, 'pick-enter'),
+);
+
+it('Shift+Tab cycles approval modes without changing the draft', { timeout: TIMEOUT_MS }, () =>
+  runCommand('', '', undefined, 'approval-shortcut'),
 );

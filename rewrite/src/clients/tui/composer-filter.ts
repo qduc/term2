@@ -37,7 +37,7 @@ export function useComposerFilter({ composerActive, slash, turnActive, draft, su
     return () => void stdin.off('data', onData);
   }, [stdin]);
   return (input: string, key: Key): boolean => {
-    if (!composerActive || slash.owns(key)) return true;
+    if (!composerActive || (key.shift && key.tab) || input === '\x1b[Z' || slash.owns(key)) return true;
     if (['[I', '[O', '\x1b[I', '\x1b[O'].includes(input) || key.pageUp || key.pageDown) return true;
     if (key.ctrl && (key.upArrow || key.downArrow || ['g', 'b', 'o'].includes(input))) return true;
     if (turnActive && key.meta && key.return) return true;

@@ -207,9 +207,10 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
           )}. Enter a mode after /auto-approve in the input: ${APPROVAL_MODES.join(', ')}.`,
           draft: { text: '/auto-approve ', attachments: [] },
         });
-      if (!APPROVAL_MODES.includes(mode)) throw new Error(`Use /auto-approve ${APPROVAL_MODES.join('|')}.`);
       const { settings } = detailsOf(connection.sessionId);
       const previous = settings.get('shell.autoApproveMode');
+      if (mode === 'next') mode = APPROVAL_MODES[(APPROVAL_MODES.indexOf(previous) + 1) % APPROVAL_MODES.length];
+      if (!APPROVAL_MODES.includes(mode)) throw new Error(`Use /auto-approve ${APPROVAL_MODES.join('|')}.`);
       return write(
         connection,
         () => settings.set('shell.autoApproveMode', mode as never, { persist: false }),

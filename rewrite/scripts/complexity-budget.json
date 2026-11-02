@@ -7,7 +7,7 @@
       "reason": "Compact command wiring and the compacting interlock share the foreground command object; compact itself lives in compact-command.ts."
     },
     "rewrite/src/engine/adopted/index.ts": {
-      "lines": 886,
+      "lines": 884,
       "reason": "Post-preparation refresh of the private TurnInput copy is owned by the same engine that validates it; not yet reviewed for a job seam."
     },
     "rewrite/src/session/local-store.ts": {

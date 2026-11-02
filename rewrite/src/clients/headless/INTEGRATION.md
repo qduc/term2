@@ -96,7 +96,7 @@ conversation storage.
   deliberately does not promise a resumable budget review. A real Session park
   is required before the old review wording can return.
 - Exit codes: completed 0; failed, interrupted, cancelled or a command/stream
-  error 1; resumable context failures (`request_input_limit`,
+  error 1; native `context_overflow` and resumable context failures (`request_input_limit`,
   `context_compaction_hard_fit`, `provider_context_overflow`, `context_paused`)
   and the accepted terminal causes `goal_check_unresolved` /
   `completion_verification_blocked` return 2 (`context_paused` / `blocked`).

@@ -74,7 +74,7 @@ export function toModelFailure(error: unknown, signal?: AbortSignal, scope?: Fai
       ? error.kind
       : status === 429
       ? 'rate_limit'
-      : (status === 400 || status === 413) && /context[ _](length|window)|too many tokens/i.test(message)
+      : isProviderContextOverflow(error)
       ? 'context_overflow'
       : [400, 404, 413, 422].includes(status ?? 0)
       ? 'invalid_request'
@@ -88,7 +88,7 @@ export function toModelFailure(error: unknown, signal?: AbortSignal, scope?: Fai
     (isModelError(error) ? error.retryable : upstream.retryable || isNetworkProtocolError(error));
   const portable: ModelError = {
     kind,
-    message,
+    message: kind === 'context_overflow' ? `provider_context_overflow: ${message}` : message,
     retryable,
     ...(upstream.retryAfterMs !== undefined
       ? { retryAfterMs: upstream.retryAfterMs }
@@ -96,7 +96,8 @@ export function toModelFailure(error: unknown, signal?: AbortSignal, scope?: Fai
       ? { retryAfterMs: error.retryAfterMs }
       : {}),
   };
-  if (exhausted || kind === 'cancelled' || kind === 'authentication') return new ModelFailure(portable, error);
+  if (exhausted || kind === 'cancelled' || kind === 'authentication' || kind === 'context_overflow')
+    return new ModelFailure(portable, error);
   const typed = typedDispatchFailure(error);
   const evidence = recoveryEvidence(error, typed, scope, status);
   return new ModelFailure(portable, typed ?? error, evidence);
@@ -178,4 +179,37 @@ function isModelError(error: unknown): error is ModelError {
     typeof value.message === 'string' &&
     typeof value.retryable === 'boolean'
   );
+}
+
+/** Native provider-boundary classification; do not depend on legacy engine admission. */
+function isProviderContextOverflow(error: unknown): boolean {
+  const seen = new Set<unknown>();
+  let current = error;
+  while (current && typeof current === 'object' && !seen.has(current)) {
+    seen.add(current);
+    const value = current as { code?: unknown; error?: { code?: unknown }; responseBody?: unknown; cause?: unknown };
+    let body: { code?: unknown; error?: { code?: unknown } } | undefined;
+    if (typeof value.responseBody === 'string' && value.responseBody.length < 100000) {
+      try {
+        body = JSON.parse(value.responseBody) ?? undefined;
+      } catch {
+        // A non-JSON body is not structured capacity evidence.
+      }
+    }
+    if (
+      [value.code, value.error?.code, body?.code, body?.error?.code].some((code) =>
+        [
+          'provider_context_overflow',
+          'context_length_exceeded',
+          'context_window_exceeded',
+          'max_context_length_exceeded',
+          'prompt_too_long',
+          'input_too_long',
+        ].includes(code as string),
+      )
+    )
+      return true;
+    current = value.cause;
+  }
+  return false;
 }

@@ -58,3 +58,23 @@ scheduling—do not replace dispatch with a timer or response observation.
 `tool_result` item construction. It does not publish facts, mutate history or
 choose a stop. `TurnTools` retains physical admission, selected-start policy,
 execution capabilities, child cleanup, ordered settlement and stop selection.
+
+## Model request input admission
+
+`TurnModel` checks the final full root envelope after optional compaction and
+before continuity delta slicing, and checks the final auxiliary summary envelope
+including its instructions. `enforceDirectInputLimit` uses the existing context
+estimate and model-context policy: an explicit `maxRequestInputTokens` applies
+even when compaction is disabled or has no cold turn. Capacity-based admission
+uses verified catalog capacity, not the adapter's fallback context size.
+A refusal uses the existing nonretryable `context_overflow` error; its diagnostic
+identifies local `request_input_limit`. It does not dispatch, truncate history or
+add a new persisted error kind. Structured capacity evidence reaching the native provider boundary retains
+that same kind, with a `provider_context_overflow` diagnostic and no recovery
+evidence authorizing retries. An adapter that discards structured error fields
+upstream is not covered by that classification. Headless presents either as a
+retained-work pause.
+
+Compaction scheduling is not admission: disabled compaction and histories with no
+complete cold turn must still pass the final-envelope guard. The same rule applies
+to root requests before continuity slicing and to auxiliary summary envelopes.

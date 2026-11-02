@@ -21,6 +21,7 @@ import {
 import type { DirectHeadlessOptions, HeadlessIo } from './types.js';
 
 const RECOVERABLE_ERROR_KINDS = new Set([
+  'context_overflow',
   'request_input_limit',
   'context_compaction_hard_fit',
   'provider_context_overflow',

@@ -5,6 +5,7 @@ import { DirectRecovery, type DirectRecoveryDecision, type DirectRecoveryFailure
 import { DirectContinuity, selfContained } from './direct-recovery-continuity.js';
 import { hasCompleteDirectToolPairs } from './direct-recovery-history.js';
 import { CompactionWrapUp, TurnCompaction } from './turn-model-compaction.js';
+import { enforceDirectInputLimit } from './direct-recovery-compaction.js';
 import { NativeBudgetExhausted, type TurnBudgetControl } from './turn-budget.js';
 import { TurnEvents, cancelled } from './turn-events.js';
 import { TurnTools, type RootCall } from './turn-tools.js';
@@ -162,6 +163,7 @@ export class TurnModel {
       ...(this.#standardTier ? { useStandardServiceTier: true } : {}),
       ...(this.#downgraded ? { downgradeTransport: true } : {}),
     };
+    this.#admit(request);
     // Retry budget is live state, not part of the cloneable continuity envelope.
     const prepared = this.deps.continuity
       ? this.#continuity.prepare(request, this.deps.continuity.binding, this.#mainRequests === 0)
@@ -173,6 +175,14 @@ export class TurnModel {
     this.budget.dispatched(action === 'wrap_up');
     ++this.#mainRequests;
     return { request, modelStep, ...(prepared ? { ticket: prepared.ticket } : {}) };
+  }
+
+  #admit(request: ModelRequest): void {
+    enforceDirectInputLimit(request, {
+      maxRequestInputTokens: this.deps.compaction?.maxRequestInputTokens,
+      contextWindow:
+        this.deps.compaction?.contextWindow ?? this.deps.models.resolve(request.model).catalogContextWindow,
+    });
   }
 
   async #request(
@@ -250,18 +260,17 @@ export class TurnModel {
     });
     if (this.signal.aborted) throw cancelled();
     // Summary/native compaction is not a root goal/tool execution context.
-    return {
-      request: this.#withRecovery(
-        selfContained({
-          ...(surface?.request ?? canonical),
-          tools: [],
-          instructions: `${
-            (surface?.request ?? canonical).instructions
-          }\nThis is internal context compaction, not a root response. Output only the requested summary; do not call tools or adjudicate the durable goal.`,
-        }),
-      ),
-      modelStep,
-    };
+    const prepared = this.#withRecovery(
+      selfContained({
+        ...(surface?.request ?? canonical),
+        tools: [],
+        instructions: `${
+          (surface?.request ?? canonical).instructions
+        }\nThis is internal context compaction, not a root response. Output only the requested summary; do not call tools or adjudicate the durable goal.`,
+      }),
+    );
+    this.#admit(prepared);
+    return { request: prepared, modelStep };
   }
 
   async #stream(request: ModelRequest, history: Item[], modelStep: number): Promise<{ calls: RootCall[]; done: Done }> {

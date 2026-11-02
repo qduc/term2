@@ -163,6 +163,9 @@ async function exercise(mode: 'slash' | 'ctrl-c' | 'steer-slash' | 'pending-stee
     await session.waitForOutput(
       mode.startsWith('pending-steer-')
         ? 'Cancelled. Your queued message is back in the input.'
+        : mode === 'ctrl-c'
+        ? // Ctrl+C no longer prints the ordinary success notice; the Stopped marker is its first visible signal.
+          'Stopped'
         : 'Cancellation requested',
       5_000,
     );

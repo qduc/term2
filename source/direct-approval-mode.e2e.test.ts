@@ -97,6 +97,7 @@ async function runCommand(
   firstPrompt?: string,
   exerciseMenu: false | 'complete' | 'prefix-enter' | 'pick-enter' | 'model-picker' = false,
   withUsage = false,
+  expectedDraft?: string,
 ): Promise<void> {
   root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-tool-rows-e2e-')));
   const home = path.join(root, 'home');
@@ -184,6 +185,7 @@ async function runCommand(
   }
   await submit(command);
   await session.waitForOutput(expected, 30_000);
+  if (expectedDraft !== undefined) await waitForHarnessComposerValue(idlePath, expectedDraft, { timeoutMs: 60_000 });
   if (exerciseMenu === 'model-picker') {
     await session.waitForOutput('mockprov/mock-alpha', 30_000);
     const beforeClose = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
@@ -219,8 +221,16 @@ it('/auto-approve without an argument reports the current mode', { timeout: TIME
   runCommand('/auto-approve', 'Tool auto-approval is off.'),
 );
 
-it('/settings lists the approval mode', { timeout: TIMEOUT_MS }, () =>
-  runCommand('/settings', 'shell.autoApproveMode: off (default)'),
+it('/settings clears its submitted command', { timeout: TIMEOUT_MS }, () =>
+  runCommand('/settings', 'shell.autoApproveMode: off (default)', undefined, false, false, ''),
+);
+
+it.each([
+  ['/profile', 'Enter a name or full profile ID after /profile', '/profile '],
+  ['/effort', 'Enter an effort after /effort in the input', '/effort '],
+  ['/auto-approve', 'Enter a mode after /auto-approve in the input', '/auto-approve '],
+])('%s explains its retained argument-entry draft', { timeout: TIMEOUT_MS }, (command, notice, draft) =>
+  runCommand(command, notice, undefined, false, false, draft),
 );
 
 it(

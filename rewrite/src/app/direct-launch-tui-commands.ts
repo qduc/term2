@@ -128,7 +128,7 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
   const effort = async (connection: TuiConnection, value: string | undefined): Promise<CommandResult> => {
     if (!value)
       return {
-        message: 'Choose reasoning effort: default, none, minimal, low, medium, high, xhigh.',
+        message: 'Enter an effort after /effort in the input: default, none, minimal, low, medium, high, xhigh.',
         draft: { text: '/effort ', attachments: [] },
       };
     return configure(

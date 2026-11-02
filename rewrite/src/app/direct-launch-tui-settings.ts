@@ -114,7 +114,7 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
     profile(connection: TuiConnection, id: string | undefined): Promise<CommandResult> {
       if (!id)
         return Promise.resolve({
-          message: 'Choose a profile: enter its name or full profile ID.',
+          message: 'Enter a name or full profile ID after /profile in the input.',
           draft: { text: '/profile ', attachments: [] },
         });
       return switchProfile(connection, id.includes(':') ? id : `builtin:${id}`, `/profile ${id}`);
@@ -204,7 +204,7 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
         return Promise.resolve({
           message: `Tool auto-approval is ${detailsOf(connection.sessionId).settings.get(
             'shell.autoApproveMode',
-          )}. Choose: ${APPROVAL_MODES.join(', ')}.`,
+          )}. Enter a mode after /auto-approve in the input: ${APPROVAL_MODES.join(', ')}.`,
           draft: { text: '/auto-approve ', attachments: [] },
         });
       if (!APPROVAL_MODES.includes(mode)) throw new Error(`Use /auto-approve ${APPROVAL_MODES.join('|')}.`);

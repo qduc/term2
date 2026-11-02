@@ -131,13 +131,14 @@ it(
     session.write('half typed');
     await waitForHarnessComposerValue(idlePath, 'half typed', { timeoutMs: 30_000 });
     session.write('\x03');
-    await session.waitForOutput('Cancellation requested', 30_000);
     idle = await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
     await session.waitForOutput('Stopped', 30_000);
     const stoppedOutput = session.getVisibleOutput();
     const stoppedFrame = stoppedOutput.slice(stoppedOutput.lastIndexOf('▌ term²'));
     expect(stoppedFrame).toContain('PARTIAL-ANSWER');
     expect(stoppedFrame.match(/Stopped/g)).toHaveLength(1);
+    expect(stoppedFrame).not.toContain('Cancellation requested');
+    expect(stoppedFrame).toMatch(/^ {0,8}Stopped\s*$/m);
     // The idle composer still holds the draft; clear it with Ctrl+C (no turn is running now).
     // (A second Ctrl+C inside two seconds exits the app, so let that window pass.)
     await new Promise((resolve) => setTimeout(resolve, 2500));

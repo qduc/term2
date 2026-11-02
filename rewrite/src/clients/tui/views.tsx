@@ -38,11 +38,11 @@ export function Transcript({
         <UserMessage text={message.text} />
       </Box>
     ) : message.role === 'assistant' ? (
-      <Box key={`message:${message.id}`} marginTop={1} paddingLeft={2}>
+      <Box key={`message:${message.id}`} flexDirection="column" marginTop={1} paddingLeft={2}>
         <AssistantFrame kind="answer">
           <MarkdownRenderer maxWidth={width}>{message.text}</MarkdownRenderer>
-          {message.interrupted ? <Text color={theme.textSubtle}>Stopped</Text> : null}
         </AssistantFrame>
+        {message.interrupted ? <Text color={theme.textSubtle}>Stopped</Text> : null}
       </Box>
     ) : (
       <Box key={`message:${message.id}`} marginTop={1}>

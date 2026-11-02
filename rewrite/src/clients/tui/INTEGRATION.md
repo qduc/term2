@@ -52,3 +52,12 @@ unkeyed shell and keyed session into `useClient`. History-size reaches `useEdito
 through `useSessionComposer`; paste threshold and focus-sequence filtering stay at
 the session input surface alongside the inactive-composer guard. Terminal preference
 checks do not establish unrelated modal, task, budget or switching workflows.
+
+Native TUI helpers must stay within the native dependency boundary. The task menu
+previously imported the source CLI's terminal-width helper: runtime checks passed,
+but the existing layer guard rejected the integrated candidate, as with the idle
+hook. Task-row width/truncation now lives privately with its native consumer,
+retaining the same conservative ASCII/non-ASCII cell accounting. Run
+`node rewrite/scripts/check-layers.mjs` on the exact branch before calling it ready
+and immediately before each pick; typechecks and runtime checks do not establish
+this boundary. Do not add an adopted directory or widen the allowlist for helpers.

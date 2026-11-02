@@ -191,6 +191,7 @@ export function Activity({
       {state.commands
         .filter(
           (receipt) =>
+            receipt.outcome?.kind !== 'retried' &&
             (receipt.request.operation.kind !== 'configure' ||
               (receipt.outcome?.kind !== 'configured' && receipt.outcome?.kind !== 'rejected')) &&
             (receipt.request.operation.kind !== 'compact' ||

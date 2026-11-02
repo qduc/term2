@@ -197,6 +197,9 @@ it('retry redraw restores older static history while the new response streams', 
   await waitForHarnessComposerValue(idlePath, '/retry-turn', { timeoutMs: 30_000 });
   session!.write('\r');
   await session!.waitForOutput('RETRY-STREAMING', 60_000);
+  const retryOutput = session!.getVisibleOutput();
+  expect(retryOutput).not.toMatch(/Command [0-9a-f-]+ finished: retried/);
+  expect(retryOutput).not.toMatch(/Command [0-9a-f-]+ · retry · retried/);
   const redraw = '\u001b[2J\u001b[3J\u001b[H';
   await until(() => session!.getOutput().slice(before).includes(redraw), 'retry redraw');
   const afterClear = session!.getOutput().slice(session!.getOutput().lastIndexOf(redraw));

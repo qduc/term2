@@ -219,6 +219,7 @@ export function receiptNotice(result: NativeReceiptResult): string {
 
 function directCommandNotice(result: NativeReceiptResult): string {
   if (result.kind === 'rejected' || result.kind === 'error') throw new Error(receiptNotice(result));
+  if (result.kind === 'finished' && result.receipt.outcome?.kind === 'retried') return 'Retrying.';
   return receiptNotice(result);
 }
 

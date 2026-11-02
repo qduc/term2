@@ -52,6 +52,24 @@ engine acceptance token.
    boundary policy has released it. Child/background completion releases its
    parent through the engine boundary, not by bypassing the journal.
 
+## Shutdown failure ownership
+
+`createDirectSession.close` retains the semantic drain error but still awaits
+`Conversation.close` before runtime disposal and store-registration release.
+The Conversation attempts its owned command and both foreground/task stops,
+waiting for both stop promises to settle before capability and log cleanup.
+One failed cleanup must not skip the remaining applicable cleanup. A single
+failure is rethrown unchanged; multiple failures are reported in an
+`AggregateError` with the earlier failure first. A rejected shutdown reports a
+failure, not proof that a failed physical stop succeeded.
+
+Automatic-memory finalization can reject after the model has physically drained
+and `turn_ended` is durable. Previously that semantic rejection bypassed the
+Conversation shutdown entirely, retaining the store registration and writer
+lock. Conversely, merely clearing the facade's active turn on stream rejection
+would release authority without physical proof. Keep physical shutdown with its
+Conversation owner; a fail-fast sibling wait is not that barrier either.
+
 ## Focused verification boundary
 
 Use an isolated persisted session with a local `ConversationLog` to exercise

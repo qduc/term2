@@ -232,11 +232,10 @@ export async function directSlashCommand(connection: TuiConnection, input: strin
       if (result.kind === 'finished' && result.receipt.outcome?.kind === 'compacted') return 'Compaction complete.';
       if (result.kind === 'rejected' || result.kind === 'error') {
         const outcome = result.receipt?.outcome;
-        throw new Error(
-          `Compaction failed: ${
-            outcome?.kind === 'rejected' ? outcome.message : result.message.replace(/^[a-z_]+: /, '')
-          }`,
-        );
+        const message = outcome?.kind === 'rejected' ? outcome.message : result.message.replace(/^[a-z_]+: /, '');
+        return message === 'Compaction did not replace history: no_complete_cold_turn.'
+          ? 'Nothing to compact yet.'
+          : `Compaction failed: ${message}`;
       }
       return receiptNotice(result);
     }

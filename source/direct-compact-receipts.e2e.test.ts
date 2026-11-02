@@ -116,8 +116,6 @@ it(
     const failureFrame = session.getVisibleOutput().slice(session.getVisibleOutput().lastIndexOf('▌ term²'));
     expect(failureFrame).toContain('Compaction failed:');
     expect(failureFrame).not.toContain('· compact · rejected');
-    await waitForHarnessComposerValue(idlePath, '/compact', { timeoutMs: 30_000 });
-    session.write('\x03');
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
     await new Promise((resolve) => setTimeout(resolve, 2100));
     await send('first');
@@ -126,6 +124,10 @@ it(
     await send('second');
     await session.waitForOutput('NORMAL_REPLY_2', 60_000);
     idle = await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
+    await send('/compact');
+    await session.waitForOutput('Nothing to compact yet.', 30_000);
+    await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
+    await new Promise((resolve) => setTimeout(resolve, 2100));
     await send('third');
     await session.waitForOutput('NORMAL_REPLY_3', 60_000);
     idle = await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });

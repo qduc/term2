@@ -26,7 +26,7 @@ export function useTranscriptViewport(state: TuiState, columns: number, rows: nu
     }, 0);
     return () => clearTimeout(pending);
   }, [help, columns]);
-  // Ctrl+O shows every tool's output; by default only failures and edits are open.
+  // Ctrl+O shows every tool's output; running, uncertain and question rows remain live.
   const [expanded, setExpanded] = useState(false);
   const height = Math.max(1, rows - 9);
   const lastRender = useRef(0);

@@ -21,7 +21,7 @@ function runtimeOf(...texts: readonly string[]): string | undefined {
 
 /**
  * One row per tool call, like the old terminal: `✓ <what it did> (63ms)`. Output, scripts and nested-run
- * details stay behind expand (Ctrl+O) unless the call failed or its outcome is unknown; edit input always shows.
+ * details stay behind expand (Ctrl+O) for settled calls; unknown outcomes, live calls and questions stay open.
  */
 export function ToolCall({
   tool,
@@ -45,47 +45,57 @@ export function ToolCall({
   const images = (tool.content ?? []).flatMap((part) => (part.type === 'image' ? [part.mediaType] : []));
   // A source tool can report a failure (non-zero exit, timeout) with isError false; its command message says so.
   const status = tool.status === 'completed' && reportsFailure(tool.display) ? 'failed' : tool.status;
-  const open = expanded || status !== 'completed' || Boolean(tool.outcomeUnknown) || tool.name === 'ask_user';
+  const open =
+    expanded ||
+    status === 'pending' ||
+    status === 'running' ||
+    Boolean(tool.outcomeUnknown) ||
+    tool.name === 'ask_user';
   // Text that is hidden cannot stand in for the lines that are shown.
   const fresh = (part: string) => !open || (!detail.includes(part) && !extraText.includes(part));
   const inputText =
     tool.name === 'shell' ? inputParts(tool.name, tool.input) : inputParts(tool.name, tool.input).filter(fresh);
   const displayText = displayParts(tool.display, args, tool.name).filter(fresh);
   const runtime = tool.name === 'shell' ? runtimeOf(detail) : undefined;
-  // Edit input is always shown; everything else only when open.
-  const display = [...(open || EDIT_TOOLS.has(tool.name) ? inputText : []), ...(open ? displayText : [])].join('\n');
+  // Successful edits keep their diff visible; failed calls remain one summary row.
+  const showEdit = EDIT_TOOLS.has(tool.name) && status !== 'failed' && status !== 'rejected';
+  const display = [...(open || showEdit ? inputText : []), ...(open ? displayText : [])].join('\n');
   const showDetail = open;
   return (
     <ToolFrame status={status} display="standard" toolName={tool.name}>
-      <ToolHeader
-        status={status}
-        display="standard"
-        toolName={tool.name}
-        nested={Boolean(tool.parent)}
-        action={<Text>{args || tool.name}</Text>}
-        meta={
-          tool.outcomeUnknown ? (
-            <Text color={theme.warning}>outcome unknown</Text>
-          ) : runtime ? (
-            <Text color={theme.textSubtle}> ({runtime})</Text>
-          ) : undefined
-        }
-      />
-      {open && tool.parent ? <Text color={theme.textSubtle}>Parent execution: {tool.parent}</Text> : null}
-      {(showDetail && (detail || extraText || images.length)) || display ? (
-        <ToolSection variant="indent">
-          <Box flexDirection="column">
-            {showDetail && detail ? <Text>{detail}</Text> : null}
-            {showDetail && extraText ? <Text>{extraText}</Text> : null}
-            {(showDetail ? images : []).map((mediaType, index) => (
-              <Text key={index} color={theme.textSubtle}>
-                [image: {mediaType}]
-              </Text>
-            ))}
-            {display ? <Text color={theme.textSubtle}>{display}</Text> : null}
-          </Box>
-        </ToolSection>
-      ) : null}
+      <Box flexDirection="column" width="100%">
+        <Box height={!open && (status === 'failed' || status === 'rejected') ? 1 : undefined} overflow="hidden">
+          <ToolHeader
+            status={status}
+            display="standard"
+            toolName={tool.name}
+            nested={Boolean(tool.parent)}
+            action={<Text>{args || tool.name}</Text>}
+            meta={
+              tool.outcomeUnknown ? (
+                <Text color={theme.warning}>outcome unknown</Text>
+              ) : runtime ? (
+                <Text color={theme.textSubtle}> ({runtime})</Text>
+              ) : undefined
+            }
+          />
+        </Box>
+        {open && tool.parent ? <Text color={theme.textSubtle}>Parent execution: {tool.parent}</Text> : null}
+        {(showDetail && (detail || extraText || images.length)) || display ? (
+          <ToolSection variant="indent">
+            <Box flexDirection="column">
+              {showDetail && detail ? <Text>{detail}</Text> : null}
+              {showDetail && extraText ? <Text>{extraText}</Text> : null}
+              {(showDetail ? images : []).map((mediaType, index) => (
+                <Text key={index} color={theme.textSubtle}>
+                  [image: {mediaType}]
+                </Text>
+              ))}
+              {display ? <Text color={theme.textSubtle}>{display}</Text> : null}
+            </Box>
+          </ToolSection>
+        ) : null}
+      </Box>
     </ToolFrame>
   );
 }

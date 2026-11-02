@@ -137,9 +137,16 @@ it(
     fs.mkdirSync(home);
     fs.mkdirSync(workspace);
     const first = 'echo hi > b.txt && cat b.txt';
+    const failedDescription = `Check failure summary ${'H'.repeat(90)}`;
+    const failureOutput = `FAIL_SENTINEL_${'Z'.repeat(130)}`;
     const file = path.join(workspace, 'c.txt');
     const baseUrl = await startProvider([
-      { call: { id: 'call_f', command: 'exit 3' } },
+      {
+        call: {
+          id: 'call_f',
+          args: { command: `printf '%s\\n' '${failureOutput}'; exit 128`, description: failedDescription },
+        },
+      },
       { call: { id: 'call_1', tool: 'create_file', args: { path: file, content: 'alpha-line\nbeta-line' } } },
       {
         call: {
@@ -246,10 +253,13 @@ it(
     // The bullet supplies its own separator; do not add a second column.
     expect(raw).toMatch(/•\x1b\[39m \x1b\[40m\x1b\[93mLISTCHIP /);
 
-    // The edit and the new content stay visible: the header only names the file.
-    expect(visible, visible).toContain('+ beta-line');
-    expect(visible, visible).toContain('- alpha-line');
-    expect(visible, visible).toContain('+ gamma-line');
+    // The current frame collapses the known failed call, even though earlier live frames may contain its input.
+    const settledFrame = visible.slice(visible.lastIndexOf('▌ term²'));
+    const summaryLines = settledFrame.split('\n');
+    const summaryIndex = summaryLines.findIndex((line) => line.includes('✗ Check failure summary'));
+    expect(summaryIndex).toBeGreaterThanOrEqual(0);
+    expect(summaryLines[summaryIndex + 1]?.trim() ?? '').not.toMatch(/^H/);
+    expect(settledFrame).not.toContain(failureOutput);
     // The first edit appears once, not again as a repeated command line.
     expect(visible, visible).not.toContain('search_replace "');
     // Collapsed by default: one row with the runtime, and no output until expanded with Ctrl+O.
@@ -261,15 +271,24 @@ it(
       visible.lastIndexOf('Created b.txt'),
     );
     expect(collapsedRow, visible).not.toContain(first);
-    expect(visible, visible).toContain('Shell command');
-    // A failed command is not collapsed: its exit status stays visible without expanding.
-    expect(visible, visible).toContain('exit 3');
+    // Failure details are available on demand, not dumped beside the summary.
     session.write('\x0f');
     for (let i = 0; i < 40 && !/Runtime: \d+ms\s+hi\b/.test(session.getVisibleOutput()); i++)
       await new Promise((resolve) => setTimeout(resolve, 250));
     expect(session.getVisibleOutput()).toMatch(/Runtime: \d+ms\s+hi\b/);
     const expanded = session.getVisibleOutput();
     expect(expanded.slice(expanded.lastIndexOf('✓ Write and read the file'))).toContain(first);
+    const expandedFrame = expanded.slice(expanded.lastIndexOf('▌ term²'));
+    const failureLine = expandedFrame.split('\n').find((line) => line.trimStart().startsWith('FAIL_SENTINEL_'));
+    expect(failureLine).toBeDefined();
+    expect(failureLine!.trim()).toBe(failureOutput);
+    expect(failureLine!.length - failureLine!.trimStart().length).toBeLessThanOrEqual(8);
+    expect(expandedFrame).toContain('exit 128');
+    // Expansion reveals more of the long summary as well as the full output.
+    expect(expandedFrame).toContain(failedDescription.slice(0, 60));
+    expect(expandedFrame).toContain('+ beta-line');
+    expect(expandedFrame).toContain('- alpha-line');
+    expect(expandedFrame).toContain('+ gamma-line');
     // Collapse expanded output with Escape without clearing the current draft.
     session.write('output-draft');
     await waitForHarnessComposerValue(idlePath, 'output-draft', { timeoutMs: 30_000 });

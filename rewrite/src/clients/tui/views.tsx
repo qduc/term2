@@ -23,20 +23,24 @@ export function Transcript({
 }): React.ReactElement {
   const { UserMessage, AssistantFrame, assistantGutter } = useSkin();
   const theme = useTheme();
-  const width = Math.max(1, columns - assistantGutter);
+  const width = Math.max(1, columns - 2 - assistantGutter);
   const messageById = new Map(messages.map((message) => [message.id, message]));
   const toolById = new Map((live ? state.tools : []).map((tool) => [tool.id, tool]));
   const usedMessages = new Set<string>();
   const usedTools = new Set<string>();
   const renderMessage = (message: Message) =>
     message.role === 'user' ? (
-      <UserMessage key={`message:${message.id}`} text={message.text} />
+      <Box key={`message:${message.id}`} marginTop={1}>
+        <UserMessage text={message.text} />
+      </Box>
     ) : message.role === 'assistant' ? (
-      <AssistantFrame key={`message:${message.id}`} kind="answer">
-        <MarkdownRenderer maxWidth={width}>{message.text}</MarkdownRenderer>
-      </AssistantFrame>
+      <Box key={`message:${message.id}`} marginTop={1} paddingLeft={2}>
+        <AssistantFrame kind="answer">
+          <MarkdownRenderer maxWidth={width}>{message.text}</MarkdownRenderer>
+        </AssistantFrame>
+      </Box>
     ) : (
-      <Box key={`message:${message.id}`}>
+      <Box key={`message:${message.id}`} marginTop={1}>
         <Text color={message.error ? theme.danger : theme.textSubtle}>
           {message.role}: {message.text}
         </Text>
@@ -53,12 +57,16 @@ export function Transcript({
       const tool = toolById.get(item.id);
       if (!tool || usedTools.has(item.id)) return [];
       usedTools.add(item.id);
-      return [<ToolCall key={`tool:${tool.id}`} tool={tool} expanded={expanded} />];
+      return [
+        <Box key={`tool:${tool.id}`} marginTop={1} paddingLeft={2}>
+          <ToolCall tool={tool} expanded={expanded} />
+        </Box>,
+      ];
     }) ?? [];
   const remainingMessages = messages.filter((message) => !usedMessages.has(message.id));
   const remainingTools = live ? state.tools.filter((tool) => !usedTools.has(tool.id)) : [];
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" paddingBottom={1}>
       {ordered}
       {state.timeline && (remainingMessages.length || remainingTools.length) ? (
         <Text color={theme.textSubtle}>Additional items (order unavailable)</Text>
@@ -66,23 +74,29 @@ export function Transcript({
       {remainingMessages.map(renderMessage)}
       {live &&
         Object.entries(state.reasoning).map(([id, text]) => (
-          <AssistantFrame key={`reasoning:${id}`} kind="reasoning">
-            <MarkdownRenderer defaultColor={theme.reasoning} maxWidth={width}>
-              {text}
-            </MarkdownRenderer>
-          </AssistantFrame>
+          <Box key={`reasoning:${id}`} marginTop={1} paddingLeft={2}>
+            <AssistantFrame kind="reasoning">
+              <MarkdownRenderer defaultColor={theme.reasoning} maxWidth={width}>
+                {text}
+              </MarkdownRenderer>
+            </AssistantFrame>
+          </Box>
         ))}
       {live &&
         Object.entries(state.drafts).map(([id, text]) => (
-          <AssistantFrame key={`draft:${id}`} kind="answer">
-            <MarkdownRenderer maxWidth={width}>{text}</MarkdownRenderer>
-          </AssistantFrame>
+          <Box key={`draft:${id}`} marginTop={1} paddingLeft={2}>
+            <AssistantFrame kind="answer">
+              <MarkdownRenderer maxWidth={width}>{text}</MarkdownRenderer>
+            </AssistantFrame>
+          </Box>
         ))}
       {!state.timeline && remainingTools.length ? (
         <Text color={theme.textSubtle}>Tool executions (transcript order unavailable)</Text>
       ) : null}
       {remainingTools.map((tool) => (
-        <ToolCall key={`tool:${tool.id}`} tool={tool} expanded={expanded} />
+        <Box key={`tool:${tool.id}`} marginTop={1} paddingLeft={2}>
+          <ToolCall tool={tool} expanded={expanded} />
+        </Box>
       ))}
     </Box>
   );

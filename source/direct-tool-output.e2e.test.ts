@@ -92,7 +92,15 @@ async function startProvider(replies: Reply[]): Promise<string> {
         res.end([...frames.map((frame) => `data: ${JSON.stringify(frame)}\n`), 'data: [DONE]', ''].join('\n'));
       if (reply.reasoning) {
         res.write(`data: ${JSON.stringify({ id, choices: [{ delta: { reasoning_content: reply.reasoning } }] })}\n\n`);
-        finishReasoning = finish;
+        setTimeout(() => {
+          res.write(
+            `data: ${JSON.stringify({
+              id,
+              choices: [{ delta: { reasoning_content: ' with more streamed detail' } }],
+            })}\n\n`,
+          );
+          finishReasoning = finish;
+        }, 1200);
       } else finish();
     });
   });
@@ -193,6 +201,12 @@ it(
     await submit('tidy the workspace');
     await session.waitForOutput('Locating the unique workspace fixture', 60_000);
     expect(session.getVisibleOutput()).toContain('Locating the unique workspace fixture');
+    await session.waitForOutput('with more streamed detail', 30_000);
+    await session.waitForOutput('tok/s', 30_000);
+    const liveFrame = session.getVisibleOutput().slice(session.getVisibleOutput().lastIndexOf('▌ term²'));
+    expect(liveFrame).toMatch(/Generating · \d+s/);
+    expect(liveFrame).toContain('tok/s');
+    expect(liveFrame).not.toContain('Queue: running');
     finishReasoning!();
     finishReasoning = undefined;
     await session.waitForOutput('first turn done', 60_000);

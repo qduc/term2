@@ -1,4 +1,8 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  StreamingSpeedTracker,
+  formatTokensPerSecond,
+} from '../../../../source/utils/streaming/streaming-speed-tracker.js';
 import { Box, Text } from 'ink';
 import { useTheme } from '../../../../source/components/theme.js';
 import MarkdownRenderer from '../../../../source/components/MarkdownRenderer.js';
@@ -102,6 +106,39 @@ export function Transcript({
   );
 }
 
+/** Estimate throughput from displayed stream deltas; reset when a model step changes. */
+function StreamingStatus({ state }: { readonly state: TuiState }): React.ReactElement {
+  const theme = useTheme();
+  const start = useRef(Date.now());
+  const tracker = useRef(new StreamingSpeedTracker());
+  const previous = useRef('');
+  const [now, setNow] = useState(Date.now());
+  const text = [...Object.values(state.reasoning), ...Object.values(state.drafts)].join('');
+  const toolRunning = state.tools.some((tool) => tool.status === 'running' || tool.status === 'pending');
+  useEffect(() => {
+    if (toolRunning || !text.startsWith(previous.current)) {
+      tracker.current.reset();
+      previous.current = '';
+    }
+    if (!toolRunning && text.length > previous.current.length) {
+      tracker.current.recordDelta(text.slice(previous.current.length));
+      previous.current = text;
+    }
+  }, [text, toolRunning]);
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  const rate = toolRunning ? null : tracker.current.getLiveTps(now);
+  const elapsed = Math.max(0, Math.floor((now - start.current) / 1000));
+  return (
+    <Text color={theme.textSubtle}>
+      {toolRunning ? 'Running tools' : 'Generating'} · {elapsed}s
+      {rate && rate > 0 ? ` (${formatTokensPerSecond(rate, true)})` : ''}
+    </Text>
+  );
+}
+
 /** Keep pending work visible unless its active dialog already presents it. */
 export function Activity({
   state,
@@ -116,12 +153,13 @@ export function Activity({
   const liveTasks = state.tasks.filter((task) => task.status === 'running' || task.status === 'awaiting_interaction');
   return (
     <Box flexDirection="column">
-      {state.status !== 'idle' || state.cost ? (
+      {state.activeTurnId ? <StreamingStatus key={state.activeTurnId} state={state} /> : null}
+      {(!state.activeTurnId && state.status !== 'idle') || state.cost ? (
         <Text color={theme.textSubtle}>
-          {[state.status !== 'idle' ? state.status : '', state.cost].filter(Boolean).join(' · ')}
+          {[!state.activeTurnId && state.status !== 'idle' ? state.status : '', state.cost].filter(Boolean).join(' · ')}
         </Text>
       ) : null}
-      {state.queueState !== 'idle' ? (
+      {state.queueState !== 'idle' && (state.queueState !== 'running' || state.queue.length > 0) ? (
         <Text>
           Queue: {state.queueState}
           {state.queuePauseReason ? ` · ${state.queuePauseReason}` : ''}

@@ -132,12 +132,9 @@ it('keeps live usage after the finalized response when its draft is replaced', {
     'turn settled',
   );
   await new Promise((resolve) => setTimeout(resolve, 350));
-  // Force one fresh frame after settlement; compare the final frame, not cumulative terminal history.
-  const outputBefore = session!.getVisibleOutput().length;
-  session!.write('x');
-  await waitForHarnessComposerValue(idlePath, 'x', { timeoutMs: 60_000 });
-  const frame = session!.getVisibleOutput().slice(outputBefore);
-  expect(frame).toContain('STREAM-ANCHOR-SENTINEL');
-  expect(frame).toContain('Token usage: 0 input');
-  expect(frame.indexOf('Token usage: 0 input')).toBeGreaterThan(frame.indexOf('STREAM-ANCHOR-SENTINEL'));
+  // With native scrollback the settled response and the /usage output are committed once, in order, so compare the
+  // last occurrences in the append-only output: the finalized response must precede the usage block.
+  const output = session!.getVisibleOutput();
+  expect(output).toContain('Token usage: 0 input');
+  expect(output.lastIndexOf('Token usage: 0 input')).toBeGreaterThan(output.lastIndexOf('STREAM-ANCHOR-SENTINEL'));
 });

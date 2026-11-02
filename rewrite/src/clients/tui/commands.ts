@@ -19,6 +19,19 @@ export async function submitText(connection: TuiConnection, text: string, attach
   if (admission.kind === 'rejected') throw new Error(admission.reason);
 }
 
+/**
+ * Ask the session whether this exact draft needs human confirmation (input surge or
+ * large uncached input). Returns the notice to show, or null when it may be sent.
+ * A preview failure throws: an unavailable preview is never an allow decision.
+ */
+export async function previewConfirmation(connection: TuiConnection, text: string, attachments: readonly WireContent[] = []): Promise<string | null> {
+  const result = await connection.send({ type: 'preview', text, ...(attachments.length ? { attachments } : {}) });
+  if (!result.ok) throw new Error(`${result.code}: ${result.message}`);
+  if (result.kind !== 'preview') throw new Error(`Unexpected preview response: ${result.kind}`);
+  if (!result.requiresConfirmation) return null;
+  return result.notices.map((notice) => notice.message).join(' ') || 'Confirmation required before sending.';
+}
+
 /** Resolve exactly the identified pending request through the direct protocol. */
 export async function answerInteraction(connection: TuiConnection, requestId: string, decision: WireDecision): Promise<void> {
   requireAccepted(await connection.send({ type: 'answer', requestId, decision, provenance: { source: 'user' } }));

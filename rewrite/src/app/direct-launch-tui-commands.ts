@@ -17,7 +17,7 @@ import { injectSkillIntoTurn } from '../../../source/types/user-turn.js';
 import { copyToClipboard } from '../../../source/utils/clipboard.js';
 import { isControlSocketName } from '../clients/control/index.js';
 import type { DirectConnection } from '../host/in-process-direct-types.js';
-import { receiptNotice, sendNativeCommand, submitText } from '../clients/tui/commands.js';
+import { previewConfirmation, receiptNotice, sendNativeCommand, submitText } from '../clients/tui/commands.js';
 import type { BridgeStatus, TuiConnection, TuiIntegration } from '../clients/tui/integration.js';
 import type { WireCommand, WireSnapshot } from '../protocol/direct-wire.js';
 import type { DirectApplication } from './direct-application.js';
@@ -178,7 +178,11 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
     }
     const { name: skillName, description, body } = skill;
     const turn = { text: request, skill: { name: skillName, description, body } };
-    await submitText(connection, injectSkillIntoTurn(turn).text);
+    const injected = injectSkillIntoTurn(turn).text;
+    // Hand the expanded request back as an ordinary draft; Enter then confirms like any other send.
+    const held = await previewConfirmation(connection, injected);
+    if (held !== null) return { message: `${held} Not sent; the request is in the input box.`, draft: { text: injected, attachments: [] } };
+    await submitText(connection, injected);
     return {};
   };
 

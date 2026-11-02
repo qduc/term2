@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { Box, Text, useInput } from 'ink';
 import { MultilineInput, type ImageRef } from 'ink-prompt';
 import type { TuiProps } from './integration.js';
-import type { WireRewindTarget, WireSubmission } from '../../protocol/direct-wire.js';
+import type { WireContent, WireRewindTarget, WireSubmission } from '../../protocol/direct-wire.js';
 import { useTheme } from '../../../../source/components/theme.js';
 import { useSkin } from '../../../../source/skins/SkinContext.js';
 import { terminalPreferenceDefaults } from '../../host/terminal-preference-defaults.js';
@@ -33,6 +33,7 @@ import {
   resetSession,
   sendNativeCommand,
   submitText,
+  previewConfirmation,
   WireCommandFailure,
 } from './commands.js';
 
@@ -58,6 +59,8 @@ export function TuiSession({
   const [dismissedInteractionId, setDismissedInteractionId] = useState<string | null>(null);
   const [taskOpen, setTaskOpen] = useState(false);
   const [budgetOpen, setBudgetOpen] = useState(false);
+  // A draft the session said needs confirmation. It stays in the composer, frozen, until y/n.
+  const [confirmation, setConfirmation] = useState<{ message: string; proceed: () => void; at: number } | null>(null);
   const {
     images,
     setImages,
@@ -95,11 +98,13 @@ export function TuiSession({
   const theme = useTheme();
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const composerActive = !busy && !connectionError && !interactionActive && !taskOpen && !budgetOpen && !rewindTargets;
+  const composerActive =
+    !busy && !confirmation && !connectionError && !interactionActive && !taskOpen && !budgetOpen && !rewindTargets;
   useHarnessInput(composerActive, Boolean(state.activeTurnId), editor.value);
   const pending = useRef(false);
   interrupt.current = () => {
-    if (editor.value.length > 0) replaceInput('');
+    if (confirmation) setConfirmation(null);
+    else if (editor.value.length > 0) replaceInput('');
     else if (state.activeTurnId || state.interactions.length) {
       void cancelForeground(connection, state.activeTurnId ?? undefined).then(setNotice, (error) => {
         setNotice(error instanceof Error ? error.message : String(error));
@@ -107,6 +112,16 @@ export function TuiSession({
     } else setNotice('Press Ctrl+C again to exit');
   };
   useInput((input, key) => {
+    if (confirmation && !interactionActive) {
+      // Only a deliberate, lone keypress counts: not the Enter that raised this, a paste, or typeahead.
+      if (performance.now() - confirmation.at < 20) return;
+      if (input === 'y') {
+        const { proceed } = confirmation;
+        setConfirmation(null);
+        proceed();
+      } else if (input === 'n' || key.escape) setConfirmation(null);
+      return;
+    }
     if (interactionActive) {
       interactionInput.current?.(input, key);
       return;
@@ -135,6 +150,11 @@ export function TuiSession({
       const draft = primaryDraft(content);
       restoreDraft(draft);
       if (disposition === 'resend') {
+        const message = await previewConfirmation(connection, draft.text, draft.attachments);
+        if (message !== null) {
+          setNotice(`${message} Draft restored, not sent; press Enter to review and confirm.`);
+          return;
+        }
         await submitText(connection, draft.text, draft.attachments, 'auto');
         editor.change('');
         setImages([]);
@@ -153,11 +173,22 @@ export function TuiSession({
     input: string,
     submittedImages: ImageRef[] = images,
     delivery: WireSubmission['delivery'] = state.activeTurnId ? 'steer' : 'auto',
+    confirmed = false,
   ): Promise<void> => {
     if ((!input.trim() && !submittedImages.length && !otherParts.length && !editing) || pending.current) return;
     pending.current = true;
     setBusy(true);
     setNotice(null);
+    // Returns true when the draft was held for confirmation instead of sent.
+    const held = async (text: string, attachments: readonly WireContent[], retry: () => void): Promise<boolean> => {
+      if (confirmed) return false;
+      const message = await previewConfirmation(connection, text, attachments);
+      if (message === null) return false;
+      // The composer clears itself on Enter; put the draft back so n/Esc keeps it.
+      replaceInput(input);
+      setConfirmation({ message, proceed: retry, at: performance.now() });
+      return true;
+    };
     try {
       if (editing) {
         if (input.trim() === '/queue cancel') {
@@ -203,6 +234,8 @@ export function TuiSession({
         const match = /^\/(steer|followup)\s+([\s\S]*)$/.exec(input);
         if (!match || (!match[2].trim() && !submittedImages.length))
           throw new Error('Enter a message after /steer or /followup.');
+        const parts = wireAttachments(submittedImages, otherParts, originalParts);
+        if (await held(match[2], parts, () => void submit(input, submittedImages, delivery, true))) return;
         await submitText(
           connection,
           match[2],
@@ -360,7 +393,9 @@ export function TuiSession({
           if (result.exit) onExit();
         }
       } else {
-        await submitText(connection, input, wireAttachments(submittedImages, otherParts, originalParts), delivery);
+        const parts = wireAttachments(submittedImages, otherParts, originalParts);
+        if (await held(input, parts, () => void submit(input, submittedImages, delivery, true))) return;
+        await submitText(connection, input, parts, delivery);
         setImages([]);
         setOtherParts([]);
         setOriginalParts([]);
@@ -441,6 +476,9 @@ export function TuiSession({
       ) : null}
       {connectionError ? <Text color={theme.danger}>{connectionError}</Text> : null}
       {transitionNotice ? <Text>{transitionNotice}</Text> : null}
+      {confirmation && !interactionActive ? (
+        <Text>{confirmation.message} Press y to send, n or Esc to keep editing.</Text>
+      ) : null}
       {notice ? <Text>{notice}</Text> : null}
       {editor.historyError ? <Text>{editor.historyError}</Text> : null}
       <InputFrame>

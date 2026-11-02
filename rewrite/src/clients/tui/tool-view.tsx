@@ -61,7 +61,7 @@ export function ToolCall({
           tool.outcomeUnknown ? (
             <Text color={theme.warning}>outcome unknown</Text>
           ) : runtime ? (
-            <Text color={theme.textSubtle}>({runtime})</Text>
+            <Text color={theme.textSubtle}> ({runtime})</Text>
           ) : undefined
         }
       />

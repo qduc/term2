@@ -163,7 +163,7 @@ it(
     // The first edit appears once, not again as a repeated command line.
     expect(visible, visible).not.toContain('search_replace "');
     // Collapsed by default: one row with the runtime, and no output until expanded with Ctrl+O.
-    expect(visible, visible).toMatch(/\(\d+ms\)/);
+    expect(visible, visible).toMatch(/\S \(\d+ms\)/);
     expect(visible, visible).not.toMatch(/Runtime: \d+ms\s+hi\b/);
     // A failed command is not collapsed: its exit status stays visible without expanding.
     expect(visible, visible).toContain('exit 3');

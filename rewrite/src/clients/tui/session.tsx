@@ -116,7 +116,7 @@ export function TuiSession({
     composerActive,
     slash,
     turnActive: Boolean(state.activeTurnId),
-    value: editor.value,
+    draft: { value: editor.value, clear: () => replaceInput('') },
     submit: (text) => void submit(text, images),
   });
   interrupt.current = () => {

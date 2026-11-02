@@ -8,7 +8,8 @@ type FilterOptions = {
   readonly composerActive: boolean;
   readonly slash: { readonly owns: (key: Key) => boolean };
   readonly turnActive: boolean;
-  readonly value: string;
+  /** The draft before this chunk, and how to empty it: the sent text is never inserted, so the draft would stay. */
+  readonly draft: { readonly value: string; readonly clear: () => void };
   /** Send the whole draft as if Enter had been pressed after typing it. */
   readonly submit: (text: string) => void;
 };
@@ -20,7 +21,7 @@ type FilterOptions = {
  * trailing `\r` is submitted instead. A bracketed paste keeps its `\r` as a newline, and a chunk holding
  * several lines (an unbracketed paste) keeps today's behaviour; neither auto-submits.
  */
-export function useComposerFilter({ composerActive, slash, turnActive, value, submit }: FilterOptions) {
+export function useComposerFilter({ composerActive, slash, turnActive, draft, submit }: FilterOptions) {
   const { stdin } = useStdin();
   // Ink strips the paste markers before the key handler runs, so track them on the raw stream.
   const pasting = useRef(false);
@@ -42,7 +43,8 @@ export function useComposerFilter({ composerActive, slash, turnActive, value, su
     if (turnActive && key.meta && key.return) return true;
     const line = !pasting.current ? /^([^\r\n]+)\r$/.exec(input) : null;
     if (!line) return false;
-    submit(value + line[1]);
+    draft.clear();
+    submit(draft.value + line[1]);
     return true;
   };
 }

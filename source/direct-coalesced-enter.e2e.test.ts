@@ -119,6 +119,11 @@ it('text and Enter in one write submit while a turn is streaming', { timeout: TI
   // The draft state is published after the commit, so give it time before reading it.
   await new Promise((resolve) => setTimeout(resolve, 3000));
   expect(composer(idlePath), 'the coalesced text+Enter was submitted and cleared the draft').toBe('');
+  // The steer reached the durable log, so it was sent rather than dropped.
+  const logs = fs.readdirSync(path.join(root, 'conversations')).filter((name) => name.endsWith('.jsonl'));
+  expect(logs.map((name) => fs.readFileSync(path.join(root, 'conversations', name), 'utf8')).join('\n')).toContain(
+    'steer now',
+  );
 });
 
 it('a bracketed paste keeps its Enter as a newline and does not submit', { timeout: TIMEOUT_MS }, async () => {
@@ -132,3 +137,21 @@ it('a chunk with several lines (unbracketed paste) is not auto-submitted', { tim
   session!.write('one\rtwo\r');
   await until(() => composer(idlePath) === 'one\ntwo\n', 'the lines stay in the draft');
 });
+
+it(
+  'text and Enter in one write after an existing draft send both and leave nothing behind',
+  { timeout: TIMEOUT_MS },
+  async () => {
+    const { idlePath } = await start([{ text: 'REPLY-TO-ABCDEF' }]);
+    session!.write('abc');
+    await waitForHarnessComposerValue(idlePath, 'abc', { timeoutMs: 60_000 });
+    session!.write('def\r');
+    await session!.waitForOutput('REPLY-TO-ABCDEF', 30_000);
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    expect(composer(idlePath), 'the old draft text was cleared with the send').toBe('');
+    const logs = fs.readdirSync(path.join(root, 'conversations')).filter((name) => name.endsWith('.jsonl'));
+    expect(logs.map((name) => fs.readFileSync(path.join(root, 'conversations', name), 'utf8')).join('\n')).toContain(
+      'abcdef',
+    );
+  },
+);

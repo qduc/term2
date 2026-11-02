@@ -21,11 +21,11 @@ export function useTranscriptViewport(state: TuiState, columns: number, rows: nu
   useEffect(() => {
     // Streaming changes the state many times a second. Rendering the whole transcript for each change burned
     // 60-85% of a core, so renders are spaced RENDER_INTERVAL_MS apart; the last state always gets its render.
-    const wait = Math.max(0, lastRender.current + RENDER_INTERVAL_MS - Date.now());
+    const wait = Math.max(0, lastRender.current + RENDER_INTERVAL_MS - performance.now());
     // Ink shares its reconciler with the live root. renderToString must finish
     // outside React's effect/commit stack or it can free a still-pending Yoga root.
     const pending = setTimeout(() => {
-      lastRender.current = Date.now();
+      lastRender.current = performance.now();
       const rendered = renderToString(
         <ThemeProvider theme={theme}>
           <SkinProvider skin={skin}>

@@ -77,6 +77,7 @@ export function ResumePicker({
               <Text bold>Preview</Text>
               <Text wrap="truncate">ID: {current.id}</Text>
               <Text>Updated: {current.updatedAt ? new Date(current.updatedAt).toLocaleString() : 'unknown'}</Text>
+              {current.messageCount !== undefined ? <Text>Messages: {current.messageCount}</Text> : null}
               {current.model ? <Text wrap="truncate">Model: {current.model}</Text> : null}
               <Text wrap="truncate">
                 Initial Prompt: {current.firstUserMessage || current.title || '(no messages yet)'}

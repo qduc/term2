@@ -71,69 +71,75 @@ async function startProvider(replies: Reply[]): Promise<string> {
   return `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}/v1`;
 }
 
-it('opens a resume picker with a preview and switches to the selected session', { timeout: TIMEOUT_MS }, async () => {
-  root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-resume-picker-')));
-  const home = path.join(root, 'home');
-  const workspace = path.join(root, 'w');
-  fs.mkdirSync(home);
-  fs.mkdirSync(workspace);
-  const baseUrl = await startProvider([{ text: 'PREVIOUS-ANSWER' }]);
-  const idlePath = path.join(home, 'idle');
-  const env = {
-    HOME: home,
-    XDG_CONFIG_HOME: path.join(home, '.config'),
-    XDG_STATE_HOME: path.join(home, '.local', 'state'),
-    XDG_CACHE_HOME: path.join(home, '.cache'),
-    XDG_DATA_HOME: path.join(home, '.local', 'share'),
-    XDG_RUNTIME_DIR: path.join(root, 'runtime'),
-    TERM2_CONFIG_DIR: path.join(home, '.term2'),
-    TERM2_CACHE_DIR: path.join(home, '.cache', 'term2'),
-    TERM2_CONVERSATIONS_DIR: path.join(root, 'conversations'),
-    DISABLE_LOGGING: '1',
-    [HARNESS_IDLE_ENV]: idlePath,
-    CI: 'false',
-  };
-  const settingsDir = resolveSettingsDirectory({ homeDir: home, env: createTestChildEnv(env) });
-  fs.mkdirSync(settingsDir, { recursive: true });
-  fs.writeFileSync(
-    path.join(settingsDir, 'settings.json'),
-    JSON.stringify({
-      agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
-      providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl, apiKey: 'test-key' }],
-      sandbox: { enabled: false },
-    }),
-  );
-  const start = () => spawnTerminal('node', [builtCli], { cwd: workspace, env, cols: 160, rows: 40 });
-  const send = async (text: string) => {
-    session!.write(text);
-    await waitForHarnessComposerValue(idlePath, text, { timeoutMs: 60_000 });
-    session!.write('\r');
-  };
-  session = start();
-  const idle = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
-  await send('previous unique prompt');
-  await session.waitForOutput('PREVIOUS-ANSWER', 30_000);
-  await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
-  session.write('\x03');
-  await session.waitForOutput('Press Ctrl+C again to exit', 30_000);
-  session.write('\x03');
-  await session.waitForExit(30_000);
-  fs.rmSync(idlePath, { force: true });
-  session = start();
-  await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
-  await send('/resume ');
-  await session.waitForOutput('Resume Conversation', 30_000);
-  session.write('\x1b[B');
-  await session.waitForOutput('Initial Prompt: previous unique prompt', 30_000);
-  const frame = session.getVisibleOutput().slice(session.getVisibleOutput().lastIndexOf('▌ term²'));
-  expect(frame).toMatch(/previous unique prompt.*seconds ago.*2 msgs/);
-  expect(frame).toContain('Preview');
-  expect(frame).toContain('Model: mockprov/mock-alpha');
-  expect(frame).toContain('Updated:');
-  const offset = session.getVisibleOutput().length;
-  session.write('\r');
-  const started = Date.now();
-  while (Date.now() - started < 30_000 && !session.getVisibleOutput().slice(offset).includes('PREVIOUS-ANSWER'))
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  expect(session.getVisibleOutput().slice(offset)).toContain('PREVIOUS-ANSWER');
-});
+it.each([160, 60])(
+  'opens a resume picker with a preview and switches to the selected session at %i columns',
+  { timeout: TIMEOUT_MS },
+  async (columns) => {
+    root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-resume-picker-')));
+    const home = path.join(root, 'home');
+    const workspace = path.join(root, 'w');
+    fs.mkdirSync(home);
+    fs.mkdirSync(workspace);
+    const baseUrl = await startProvider([{ text: 'PREVIOUS-ANSWER' }]);
+    const idlePath = path.join(home, 'idle');
+    const env = {
+      HOME: home,
+      XDG_CONFIG_HOME: path.join(home, '.config'),
+      XDG_STATE_HOME: path.join(home, '.local', 'state'),
+      XDG_CACHE_HOME: path.join(home, '.cache'),
+      XDG_DATA_HOME: path.join(home, '.local', 'share'),
+      XDG_RUNTIME_DIR: path.join(root, 'runtime'),
+      TERM2_CONFIG_DIR: path.join(home, '.term2'),
+      TERM2_CACHE_DIR: path.join(home, '.cache', 'term2'),
+      TERM2_CONVERSATIONS_DIR: path.join(root, 'conversations'),
+      DISABLE_LOGGING: '1',
+      [HARNESS_IDLE_ENV]: idlePath,
+      CI: 'false',
+    };
+    const settingsDir = resolveSettingsDirectory({ homeDir: home, env: createTestChildEnv(env) });
+    fs.mkdirSync(settingsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(settingsDir, 'settings.json'),
+      JSON.stringify({
+        agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
+        providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl, apiKey: 'test-key' }],
+        sandbox: { enabled: false },
+      }),
+    );
+    const start = () => spawnTerminal('node', [builtCli], { cwd: workspace, env, cols: columns, rows: 40 });
+    const send = async (text: string) => {
+      session!.write(text);
+      await waitForHarnessComposerValue(idlePath, text, { timeoutMs: 60_000 });
+      session!.write('\r');
+    };
+    session = start();
+    const idle = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
+    await send('previous unique prompt');
+    await session.waitForOutput('PREVIOUS-ANSWER', 30_000);
+    await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
+    session.write('\x03');
+    await session.waitForOutput('Press Ctrl+C again to exit', 30_000);
+    session.write('\x03');
+    await session.waitForExit(30_000);
+    fs.rmSync(idlePath, { force: true });
+    session = start();
+    await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
+    await send('/resume ');
+    await session.waitForOutput('Resume Conversation', 30_000);
+    session.write('\x1b[B');
+    await session.waitForOutput('Initial Prompt: previous unique prompt', 30_000);
+    const frame = session.getVisibleOutput().slice(session.getVisibleOutput().lastIndexOf('▌ term²'));
+    expect(frame).toMatch(/previous unique prompt.*seconds ago.*2 msgs/);
+    expect(frame).toContain('Preview');
+    expect(frame).toContain('Messages: 2');
+    expect(frame).toContain('ID: conv_');
+    expect(frame).toContain('Model: mockprov/mock-alpha');
+    expect(frame).toContain('Updated:');
+    const offset = session.getVisibleOutput().length;
+    session.write('\r');
+    const started = Date.now();
+    while (Date.now() - started < 30_000 && !session.getVisibleOutput().slice(offset).includes('PREVIOUS-ANSWER'))
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(session.getVisibleOutput().slice(offset)).toContain('PREVIOUS-ANSWER');
+  },
+);

@@ -105,3 +105,5 @@ When tool output is expanded with Ctrl+O, Escape collapses it without changing t
 The direct model picker displays model IDs separately from a provider column and shows configured nicknames for each provider/model pair. Nickname filtering reads the attached session settings; selection still uses the actual provider/model ID, and the picker does not edit nicknames.
 
 Local command output anchored to a live assistant draft follows the wire message that explicitly replaces that draft; a missing anchor falls back to the current transcript end, never its beginning. `/usage` during a live turn reports the usage accepted so far, not projected future usage.
+
+The resume picker shows the selected session’s ID, update time, actual message count when available, model, and initial prompt in its responsive preview; the count is from the workspace-scoped session catalogue, not inferred from displayed text.

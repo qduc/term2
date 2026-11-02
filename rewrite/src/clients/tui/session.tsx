@@ -91,19 +91,11 @@ export function TuiSession({
   const interactionActive = interactionOpen || Boolean(foregroundInteraction);
   const confirmation = useSendConfirmation(interactionActive);
   const interactionInput = useRef<InteractionInputHandler | null>(null);
-  const [help, setHelp] = useState<string | null>(null);
-  const viewport = useTranscriptViewport(
-    state,
-    columns,
-    rows - (headerHeight ?? 0),
-    !interactionActive && !panelOpen,
-    help,
-  );
+  const viewport = useTranscriptViewport(state, columns, rows - (headerHeight ?? 0), !interactionActive && !panelOpen);
   const { InputFrame, PromptMarker, LiveDivider } = useSkin();
   const theme = useTheme();
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  // Typing stays open while a send is in flight (overlapping sends queue behind it); only the harness idle flag waits.
   const composerActive = !panelOpen && !confirmation.pending && !connectionError && !interactionActive;
   const slash = useComposerMenu(editor.value, composerActive && !editing, theme.textSubtle);
   useHarnessInput(composerActive && !busy, Boolean(state.activeTurnId), editor.value);
@@ -191,7 +183,7 @@ export function TuiSession({
     pending.current = true;
     setBusy(true);
     setNotice(null);
-    setHelp(null);
+    viewport.setHelp(null);
     // True when the draft was held for confirmation instead of sent.
     const held = async (text: string, attachments: readonly WireContent[], retry: () => void): Promise<boolean> => {
       if (confirmed) return false;
@@ -362,10 +354,7 @@ export function TuiSession({
         if (directNotice !== null) setNotice(directNotice);
         else {
           const result = await integration.command(connection, input);
-          if (result.message) {
-            if (input.trim() === '/help') setHelp(result.message);
-            else setNotice(result.message);
-          }
+          if (result.message) (input.trim() === '/help' ? viewport.setHelp : setNotice)(result.message);
           if (result.draft) {
             restoreDraft(result.draft);
             return;

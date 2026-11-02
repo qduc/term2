@@ -9,13 +9,9 @@ import { Transcript } from './views.js';
 const RENDER_INTERVAL_MS = 120;
 
 /** Render the skin and markdown at the terminal width, then scroll by visible rows. */
-export function useTranscriptViewport(
-  state: TuiState,
-  columns: number,
-  rows: number,
-  active: boolean,
-  help: string | null,
-) {
+export function useTranscriptViewport(state: TuiState, columns: number, rows: number, active: boolean) {
+  // A `/help` text takes over the viewport (scrollable) until the next command clears it.
+  const [help, setHelp] = useState<string | null>(null);
   const theme = useTheme();
   const skin = useSkin();
   const [lines, setLines] = useState<string[]>([]);
@@ -88,9 +84,17 @@ export function useTranscriptViewport(
       end,
       total: helpLines.length,
       live: end === helpLines.length,
+      setHelp,
     };
   }
   const end = Math.max(0, lines.length - visibleOffset);
   const start = Math.max(0, end - height);
-  return { text: lines.slice(start, end).join('\n'), start, end, total: lines.length, live: visibleOffset === 0 };
+  return {
+    text: lines.slice(start, end).join('\n'),
+    start,
+    end,
+    total: lines.length,
+    live: visibleOffset === 0,
+    setHelp,
+  };
 }

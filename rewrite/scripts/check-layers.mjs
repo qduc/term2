@@ -59,6 +59,7 @@ const DIRECT_SOURCE_IMPORTERS = new Set([
   'clients/control/discord.ts',
   'clients/control/transport-primitives.ts',
   'clients/control/transport.ts',
+  'clients/tui/composer-footer.tsx',
   'clients/tui/session.tsx',
   'clients/tui/tool-view.tsx',
   'clients/tui/viewport.tsx',

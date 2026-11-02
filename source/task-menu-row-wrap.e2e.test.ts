@@ -205,11 +205,7 @@ it(
 
     await submit('start first background shell');
     await session.waitForOutput('Allow once', 60_000);
-    expect(session.getVisibleOutput()).not.toContain('/answer 1 <choice number>');
-    // Dismissing the dialog must restore the numbered text fallback.
-    session.write('\x07');
-    await session.waitForOutput('/answer 1 <choice number>', 30_000);
-    await submit('/answer 1 1');
+    session.write('\r');
     await session.waitForOutput('first shell started', 30_000);
     idle = await waitForHarnessIdleGeneration(idlePath, { after: idle });
 

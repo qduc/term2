@@ -90,6 +90,63 @@ async function startProvider(replies: Reply[], withUsage = false): Promise<strin
   return `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}/v1`;
 }
 
+it('dismisses a foreground approval to its numbered answer fallback', { timeout: TIMEOUT_MS }, async () => {
+  root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-approval-fallback-e2e-')));
+  const home = path.join(root, 'home');
+  const workspace = path.join(root, 'workspace');
+  fs.mkdirSync(home);
+  fs.mkdirSync(workspace);
+  const marker = path.join(workspace, 'approved');
+  const baseUrl = await startProvider([
+    {
+      call: {
+        id: 'approval-call',
+        command: `while [ ! -e '${home}' ]; do sleep 0.05; done; printf approved > '${marker}'`,
+      },
+    },
+    { text: 'APPROVAL_FINISHED' },
+  ]);
+  const idlePath = path.join(home, 'input-idle');
+  const env = {
+    HOME: home,
+    XDG_CONFIG_HOME: path.join(home, '.config'),
+    XDG_DATA_HOME: path.join(home, '.local', 'share'),
+    XDG_STATE_HOME: path.join(home, '.local', 'state'),
+    XDG_CACHE_HOME: path.join(home, '.cache'),
+    TERM2_CONFIG_DIR: path.join(home, '.term2'),
+    TERM2_CACHE_DIR: path.join(home, '.cache', 'term2'),
+    TERM2_CONVERSATIONS_DIR: path.join(root, 'conversations'),
+    DISABLE_LOGGING: '1',
+    [HARNESS_IDLE_ENV]: idlePath,
+    CI: 'false',
+  };
+  const settingsDir = resolveSettingsDirectory({ homeDir: home, env: createTestChildEnv(env) });
+  fs.mkdirSync(settingsDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(settingsDir, 'settings.json'),
+    JSON.stringify({
+      agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
+      providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl, apiKey: 'test-key' }],
+      sandbox: { enabled: false },
+    }),
+  );
+  session = spawnTerminal('node', [builtCli], { cwd: workspace, env, cols: 100, rows: 30 });
+  await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
+  const submit = async (text: string) => {
+    session!.write(text);
+    await waitForHarnessComposerValue(idlePath, text, { timeoutMs: 60_000 });
+    session!.write('\r');
+  };
+  await submit('request approval');
+  await session.waitForOutput('Allow once', 60_000);
+  expect(session.getVisibleOutput()).not.toContain('/answer 1 <choice number>');
+  session.write('\x07');
+  await session.waitForOutput('/answer 1 <choice number>', 30_000);
+  await submit('/answer 1 1');
+  await session.waitForOutput('APPROVAL_FINISHED', 30_000);
+  expect(fs.readFileSync(marker, 'utf8')).toBe('approved');
+});
+
 // The effective approval mode is visible without changing it.
 async function runCommand(
   command: string,

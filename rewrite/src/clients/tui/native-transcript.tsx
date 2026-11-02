@@ -120,5 +120,5 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
       </Static>
     </Box>
   );
-  return { staticTranscript, tail };
+  return { staticTranscript, tail, committed: rows };
 }

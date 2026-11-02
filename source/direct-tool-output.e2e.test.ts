@@ -217,6 +217,7 @@ it(
     expect(liveFrame).toMatch(/Generating · \d+s/);
     expect(liveFrame).toContain('tok/s');
     expect(liveFrame).not.toContain('Queue: running');
+    const beforeSettled = session.getVisibleOutput().length;
     finishReasoning!();
     finishReasoning = undefined;
     await session.waitForOutput('first turn done', 60_000);
@@ -260,7 +261,7 @@ it(
     expect(raw).toMatch(/•\x1b\[39m \x1b\[40m\x1b\[93mLISTCHIP /);
 
     // The current frame collapses the known failed call, even though earlier live frames may contain its input.
-    const settledFrame = visible.slice(visible.lastIndexOf('▌ term²'));
+    const settledFrame = visible.slice(beforeSettled);
     const summaryLines = settledFrame.split('\n');
     const summaryIndex = summaryLines.findIndex((line) => line.includes('✗') && line.includes('exit 128'));
     expect(summaryIndex).toBeGreaterThanOrEqual(0);
@@ -280,13 +281,14 @@ it(
     );
     expect(collapsedRow, visible).not.toContain(first);
     // Failure details are available on demand, not dumped beside the summary.
+    const beforeExpanded = session.getVisibleOutput().length;
     session.write('\x0f');
     for (let i = 0; i < 40 && !/Runtime: \d+ms\s+hi\b/.test(session.getVisibleOutput()); i++)
       await new Promise((resolve) => setTimeout(resolve, 250));
     expect(session.getVisibleOutput()).toMatch(/Runtime: \d+ms\s+hi\b/);
     const expanded = session.getVisibleOutput();
     expect(expanded.slice(expanded.lastIndexOf('✓ Write and read the file'))).toContain(first);
-    const expandedFrame = expanded.slice(expanded.lastIndexOf('▌ term²'));
+    const expandedFrame = expanded.slice(beforeExpanded);
     const failureLine = expandedFrame.split('\n').find((line) => line.trimStart().startsWith('FAIL_SENTINEL_'));
     expect(failureLine).toBeDefined();
     expect(failureLine!.trim()).toBe(failureOutput);

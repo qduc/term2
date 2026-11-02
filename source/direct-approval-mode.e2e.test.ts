@@ -364,18 +364,19 @@ async function runCommand(
     session.write('\x1b[Z');
     await session.waitForOutput('Clear session and switch mode?', 30_000);
     await new Promise((resolve) => setTimeout(resolve, 100));
+    let frameOffset = session.getVisibleOutput().length;
     session.write('n');
-    const lastFrame = () => {
-      const visible = session!.getVisibleOutput();
-      return visible.slice(visible.lastIndexOf('▌ term²'));
-    };
+    const lastFrame = () => session!.getVisibleOutput().slice(frameOffset);
     const waitFrame = async (predicate: () => boolean) => {
       const deadline = Date.now() + 10_000;
       while (!predicate() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 25));
       expect(predicate()).toBe(true);
     };
-    await waitFrame(() => !lastFrame().includes('Clear session and switch mode?'));
+    await waitFrame(
+      () => lastFrame().includes('draft stays') && !lastFrame().includes('Clear session and switch mode?'),
+    );
     await waitForHarnessComposerValue(idlePath, 'draft stays', { timeoutMs: 5_000 });
+    frameOffset = session.getVisibleOutput().length;
     session.write('\x1b[Z');
     await waitFrame(() => lastFrame().includes('Clear session and switch mode?'));
     await new Promise((resolve) => setTimeout(resolve, 100));
@@ -387,7 +388,7 @@ async function runCommand(
     const after = session.getVisibleOutput().slice(offset);
     expect(after).toContain('PLAN');
     // The PTY retains previous redraws; only the latest banner-delimited frame is current.
-    const currentFrame = after.slice(after.lastIndexOf('▌ term²'));
+    const currentFrame = after;
     expect(currentFrame).toContain('PLAN');
     expect(currentFrame).not.toContain('hello');
     expect(JSON.parse(fs.readFileSync(path.join(settingsDir, 'settings.json'), 'utf8')).shell.autoApproveMode).toBe(

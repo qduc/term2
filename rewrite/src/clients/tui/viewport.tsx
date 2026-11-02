@@ -25,7 +25,7 @@ export function useTranscriptViewport(
     clearTerminalForRedraw(stdout);
     setEpoch((current) => current + 1);
   };
-  const { staticTranscript, tail } = useNativeTranscript(state, columns, epoch, header);
+  const { staticTranscript, tail, committed } = useNativeTranscript(state, columns, epoch, header);
   const previousHistoryRevision = useRef(historyRevision);
   useEffect(() => {
     if (previousHistoryRevision.current === historyRevision) return;
@@ -66,13 +66,24 @@ export function useTranscriptViewport(
   const theme = useTheme();
   const skin = useSkin();
   const [expanded, setExpanded] = useState(false);
-  const [frame, setFrame] = useState<{ lines: string[]; activeTurnId: string | null; expanded: boolean }>({
+  const [frame, setFrame] = useState<{
+    lines: string[];
+    activeTurnId: string | null;
+    expanded: boolean;
+    committed: readonly unknown[] | null;
+  }>({
     lines: [],
     activeTurnId: null,
     expanded: false,
+    committed: null,
   });
   // Never print a throttled active-turn frame after its turn has settled.
-  const lines = frame.expanded !== expanded || (!state.activeTurnId && frame.activeTurnId) ? [] : frame.lines;
+  const lines =
+    frame.expanded !== expanded ||
+    (!expanded && frame.committed !== committed) ||
+    (!state.activeTurnId && frame.activeTurnId)
+      ? []
+      : frame.lines;
   const [offset, setOffset] = useState(0);
   const [helpOffset, setHelpOffset] = useState(0);
   const [helpLines, setHelpLines] = useState<string[]>([]);
@@ -108,15 +119,16 @@ export function useTranscriptViewport(
       // An identical frame must not re-render the whole session.
       setFrame((previous) =>
         previous.expanded === expanded &&
+        previous.committed === committed &&
         previous.activeTurnId === shown.activeTurnId &&
         previous.lines.length === next.length &&
         previous.lines.every((line, index) => line === next[index])
           ? previous
-          : { lines: next, activeTurnId: shown.activeTurnId, expanded },
+          : { lines: next, activeTurnId: shown.activeTurnId, expanded, committed },
       );
     }, wait);
     return () => clearTimeout(pending);
-  }, [state, tail, columns, theme, skin, expanded]);
+  }, [state, tail, columns, theme, skin, expanded, committed]);
   const maxOffset = Math.max(0, lines.length - height);
   const visibleOffset = Math.min(offset, maxOffset);
   useInput(

@@ -256,6 +256,28 @@ it(
     expect(session.getVisibleOutput()).toMatch(/Runtime: \d+ms\s+hi\b/);
     const expanded = session.getVisibleOutput();
     expect(expanded.slice(expanded.lastIndexOf('✓ Write and read the file'))).toContain(first);
+    // Collapse expanded output with Escape without clearing the current draft.
+    session.write('output-draft');
+    await waitForHarnessComposerValue(idlePath, 'output-draft', { timeoutMs: 30_000 });
+    const beforeEscape = session.getVisibleOutput().length;
+    session.write('\x1b');
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    const afterEscape = session.getVisibleOutput().slice(beforeEscape);
+    expect(afterEscape).toContain('Write and read the file');
+    expect(afterEscape).not.toMatch(/Runtime: \d+ms\s+hi\b/);
+    await waitForHarnessComposerValue(idlePath, 'output-draft', { timeoutMs: 30_000 });
+    // The task panel owns its Escape and returns the same draft to the editor.
+    session.write('\x07');
+    await session.waitForOutput('Manage background tasks', 30_000);
+    session.write('\x1b');
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    session.write('-after');
+    await waitForHarnessComposerValue(idlePath, 'output-draft-after', { timeoutMs: 30_000 });
+    session.write('\x03');
+    await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
+    // Keep the next test-exit Ctrl+C outside the root's double-interrupt window.
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+
     const receipt = JSON.parse(
       await control(['submit', 'coord', '--id', 'control-test', '--json'], env, workspace, 'a control message'),
     );

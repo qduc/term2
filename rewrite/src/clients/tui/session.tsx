@@ -91,7 +91,8 @@ export function TuiSession({
   const interactionActive = interactionOpen || Boolean(foregroundInteraction);
   const confirmation = useSendConfirmation(interactionActive);
   const interactionInput = useRef<InteractionInputHandler | null>(null);
-  const viewport = useTranscriptViewport(state, columns, rows - (headerHeight ?? 0), !interactionActive && !panelOpen);
+  const viewportActive = !interactionActive && !panelOpen && !confirmation.pending;
+  const viewport = useTranscriptViewport(state, columns, rows - (headerHeight ?? 0), viewportActive);
   const { InputFrame, PromptMarker, LiveDivider } = useSkin();
   const theme = useTheme();
   const [notice, setNotice] = useState<string | null>(null);
@@ -105,6 +106,7 @@ export function TuiSession({
     composerActive,
     slash,
     turnActive: Boolean(state.activeTurnId),
+    outputExpanded: viewport.expanded,
     draft: { value: editor.value, clear: () => replaceInput('') },
     submit: (text) => void submit(text, images),
   });
@@ -125,13 +127,13 @@ export function TuiSession({
     if (taskOpen || budgetOpen || rewindTargets) return;
     if (composerActive && isShiftTab(input, key)) return togglePlan();
     if (slash.handle(key, replaceInput)) return;
+    if (composerActive && key.escape && viewport.expanded) return viewport.collapse();
     if (((key.ctrl && input === 'g') || input === '\x07') && !busy)
       (state.interactions.length ? setInteractionOpen : setTaskOpen)(true);
     if (key.ctrl && input === 'b' && state.budgets.length && !busy) setBudgetOpen(true);
     if (key.meta && key.return && state.activeTurnId && !busy && !editing)
       void submit(editor.value, images, 'follow_up');
   });
-
   const executeRewind = async (targetId: string, disposition: 'edit' | 'resend') => {
     if (pending.current) return;
     pending.current = true;
@@ -166,7 +168,6 @@ export function TuiSession({
       setBusy(false);
     }
   };
-
   const submit = async (
     input: string,
     submittedImages: ImageRef[] = images,
@@ -390,7 +391,6 @@ export function TuiSession({
       setBusy(false);
     }
   };
-
   return (
     <Box flexDirection="column">
       {viewport.text ? <Text>{viewport.text}</Text> : null}

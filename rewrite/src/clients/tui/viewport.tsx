@@ -85,6 +85,8 @@ export function useTranscriptViewport(state: TuiState, columns: number, rows: nu
       total: helpLines.length,
       live: end === helpLines.length,
       setHelp,
+      expanded,
+      collapse: () => setExpanded(false),
     };
   }
   const end = Math.max(0, lines.length - visibleOffset);
@@ -96,5 +98,7 @@ export function useTranscriptViewport(state: TuiState, columns: number, rows: nu
     total: lines.length,
     live: visibleOffset === 0,
     setHelp,
+    expanded,
+    collapse: () => setExpanded(false),
   };
 }

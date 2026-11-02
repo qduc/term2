@@ -99,3 +99,5 @@ The TUI's foreground cancel requests queue retention: pending steers are preserv
 Anything called from a render must be cheap. `app.sessionDetails()` reads and parses the whole conversation log, so it is not allowed on the render path (it burned about one core in long sessions); render code uses `app.liveSettings(sessionId)`, which reads the log once per session. The transcript viewport also renders at most about eight times a second and skips the state update when the frame is unchanged. Measured with a pty probe on a streamed reply: 73.5 to 49 CPU ticks/s on an unoptimised test build (React development mode inflates both).
 
 Transcript blocks in the direct viewport are separated by a blank row; assistant text and tool blocks have a two-column outer gutter, with markdown width reduced accordingly. The same message layout applies to replay and streaming drafts.
+
+When tool output is expanded with Ctrl+O, Escape collapses it without changing the composer draft. An active approval, task/model/budget/rewind panel, confirmation or composer menu owns Escape first; the task panel also closes on Escape. Ctrl+O still toggles expansion.

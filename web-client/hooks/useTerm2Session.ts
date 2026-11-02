@@ -26,6 +26,11 @@ const MAX_RECONNECT_DELAY = 10_000;
 const MAX_PROTOCOL_RELOADS = 2;
 const BACKOFF_BASE = 500;
 
+// Messages need a live session stream to observe their accepted outcome.
+export function canSubmitSessionMessage(status: Term2ConnectionStatus): boolean {
+  return status === 'connected' || status === 'running' || status === 'interrupted';
+}
+
 const COMMAND_ERROR_MESSAGES: Record<string, string> = {
   session_busy: 'The session is busy; wait for the current turn to finish.',
   session_not_admitting: 'The session is not accepting commands right now.',
@@ -379,12 +384,15 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
     if (
       !id ||
       !text.trim() ||
+      viewRef.current.sessionId !== id ||
+      !canSubmitSessionMessage(viewRef.current.status) ||
       viewRef.current.pendingInteraction?.state === 'pending' ||
       admittingSessionIdsRef.current.has(id)
     ) {
       return false;
     }
     const generation = generationRef.current;
+    const sequenceAtSubmit = viewRef.current.lastAppliedSequence;
     const clientRequestId = crypto.randomUUID();
     admittingSessionIdsRef.current.add(id);
     pendingTextRef.current.set(clientRequestId, text);
@@ -394,7 +402,11 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
         pendingTextRef.current.delete(clientRequestId);
         return false;
       }
-      patchView((current) => ({ ...current, status: 'running', error: null }));
+      patchView((current) =>
+        canSubmitSessionMessage(current.status) && current.lastAppliedSequence === sequenceAtSubmit
+          ? { ...current, status: 'running', error: null }
+          : current,
+      );
       return true;
     } catch (error) {
       pendingTextRef.current.delete(clientRequestId);

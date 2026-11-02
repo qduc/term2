@@ -15,7 +15,7 @@ import {
   Plus,
   Square,
 } from 'lucide-react';
-import { useTerm2Session } from '../../hooks/useTerm2Session';
+import { canSubmitSessionMessage, useTerm2Session } from '../../hooks/useTerm2Session';
 import { Term2InteractionPanel } from './Term2InteractionPanel';
 import { Term2ToolGroup } from './Term2ToolGroup';
 import { Term2Markdown } from './Term2Markdown';
@@ -250,7 +250,7 @@ export function Term2SessionShell({
   };
   const interactionPending = session.view.status === 'awaiting_interaction';
   const aborting = session.view.status === 'aborting';
-  const composerDisabled = !sessionId || interactionPending || aborting;
+  const composerDisabled = !sessionId || session.view.sessionId !== sessionId || !canSubmitSessionMessage(session.view.status) || interactionPending || aborting;
   // Session commands are refused while a turn is running or an interaction is
   // pending, and while the session has no live stream to deliver a retry turn.
   const commandDisabled =

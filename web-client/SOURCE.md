@@ -90,6 +90,9 @@ who may use them and what they own.
 workspace selection, `refreshWorkspaces`, `refreshSessions`, `loadNextSessions`,
 `createSession`, `selectSession`, `submit`, `invokeCommand`, `abort`,
 `resolveInteraction`, and explicit `refresh`, plus view/command feedback.
+Message submission is disabled until the selected session is connected, running or interrupted;
+a hydration or stream error must remain visible rather than being replaced by a
+late submission acknowledgement. Reload retries the session connection.
 `submit(text)` returns `Promise<boolean>`; other mutation/control actions expose
 completion through their promise and view/feedback. `createSession` retains its
 existing creation metadata result (`SessionProjection`); that result is **not**

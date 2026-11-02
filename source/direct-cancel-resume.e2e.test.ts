@@ -174,6 +174,71 @@ it(
   },
 );
 
+it('/cancel stops a streaming answer without a turn-id cleanup notice', { timeout: TIMEOUT_MS }, async () => {
+  root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-tool-rows-e2e-')));
+  const home = path.join(root, 'home');
+  const workspace = path.join(root, 'w');
+  fs.mkdirSync(home);
+  fs.mkdirSync(workspace);
+  const baseUrl = await startProvider([
+    { text: 'PARTIAL-ANSWER', hang: true },
+    { text: 'SECOND-REPLY' },
+    { text: 'THIRD-REPLY' },
+  ]);
+  const idlePath = path.join(home, 'input-idle');
+  const env = {
+    HOME: home,
+    XDG_CONFIG_HOME: path.join(home, '.config'),
+    XDG_STATE_HOME: path.join(home, '.local', 'state'),
+    XDG_CACHE_HOME: path.join(home, '.cache'),
+    XDG_DATA_HOME: path.join(home, '.local', 'share'),
+    XDG_RUNTIME_DIR: path.join(root, 'runtime'),
+    TERM2_CONFIG_DIR: path.join(home, '.term2'),
+    TERM2_CACHE_DIR: path.join(home, '.cache', 'term2'),
+    TERM2_CONVERSATIONS_DIR: path.join(root, 'conversations'),
+    DISABLE_LOGGING: '1',
+    [HARNESS_IDLE_ENV]: idlePath,
+    // Ink suppresses dynamic terminal updates in CI mode; this test needs an interactive TUI.
+    CI: 'false',
+  };
+  const settingsDir = resolveSettingsDirectory({ homeDir: home, env: createTestChildEnv(env) });
+  fs.mkdirSync(settingsDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(settingsDir, 'settings.json'),
+    JSON.stringify({
+      agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
+      providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl, apiKey: 'test-key' }],
+      // Sandbox off and GREEN commands: both run without an approval prompt.
+      sandbox: { enabled: false },
+    }),
+  );
+
+  const send = async (text: string) => {
+    session!.write(text);
+    await waitForHarnessComposerValue(idlePath, text, { timeoutMs: 60_000 });
+    session!.write('\r');
+  };
+  const startCli = (args: string[]) => spawnTerminal('node', [builtCli, ...args], { cwd: workspace, env });
+  session = startCli([]);
+  const idle = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
+  await send('first question');
+  await session.waitForOutput('PARTIAL-ANSWER', 60_000);
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  const live = session.getVisibleOutput();
+  const liveFrame = live.slice(live.lastIndexOf('▌ term²'));
+  expect(liveFrame).not.toContain('Stopped');
+  await send('/cancel');
+  await session.waitForOutput('Stopped', 30_000);
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 30_000 });
+  const output = session.getVisibleOutput();
+  const frame = output.slice(output.lastIndexOf('▌ term²'));
+  expect(frame).toContain('PARTIAL-ANSWER');
+  expect(frame.match(/Stopped/g)).toHaveLength(1);
+  expect(frame).not.toContain('Cancellation requested');
+  expect(frame).not.toContain('cleanup may still be running');
+});
+
 it.each(['slash', 'ctrl-c', 'editing', 'only-steers'] as const)(
   'cancel %s restores queued steers and keeps follow-ups paused',
   { timeout: TIMEOUT_MS },

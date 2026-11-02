@@ -23,7 +23,7 @@ import { useHarnessInput } from './harness-input.js';
 import { replaceSession } from './replace-session.js';
 import { runBridgeCommand } from './bridge-command.js';
 import { useSendConfirmation } from './send-confirmation.js';
-import { ComposerFooter, useComposerFilter, useSlashMenu } from './composer-parts.js';
+import { ComposerFooter, useComposerFilter, useComposerMenu } from './composer-parts.js';
 import {
   answerBudget,
   answerInteraction,
@@ -102,7 +102,7 @@ export function TuiSession({
   // Typing stays open while a send is in flight (overlapping sends queue behind it); only the harness idle flag waits.
   const composerActive =
     !confirmation.pending && !connectionError && !interactionActive && !taskOpen && !budgetOpen && !rewindTargets;
-  const slash = useSlashMenu(editor.value, composerActive && !editing, theme.textSubtle);
+  const slash = useComposerMenu(editor.value, editor.cursor.current, composerActive && !editing, theme.textSubtle);
   useHarnessInput(composerActive && !busy, Boolean(state.activeTurnId), editor.value);
   const pending = useRef(false);
   const composerFilter = useComposerFilter({
@@ -129,13 +129,7 @@ export function TuiSession({
       return;
     }
     if (taskOpen || budgetOpen || rewindTargets) return;
-    if (
-      slash.handle(key, (command, run) => {
-        replaceInput(run ? command : command + ' ');
-        if (run) void submit(command, images);
-      })
-    )
-      return;
+    if (slash.handle(key, replaceInput)) return;
     if (((key.ctrl && input === 'g') || input === '\x07') && !busy)
       (state.interactions.length ? setInteractionOpen : setTaskOpen)(true);
     if (key.ctrl && input === 'b' && state.budgets.length && !busy) setBudgetOpen(true);

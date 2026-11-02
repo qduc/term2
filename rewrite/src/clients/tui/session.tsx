@@ -23,9 +23,7 @@ import { useHarnessInput } from './harness-input.js';
 import { replaceSession } from './replace-session.js';
 import { runBridgeCommand } from './bridge-command.js';
 import { useSendConfirmation } from './send-confirmation.js';
-import { useSlashMenu } from './slash-menu.js';
-import { useComposerFilter } from './composer-filter.js';
-import { ComposerFooter } from './composer-footer.js';
+import { ComposerFooter, useComposerFilter, useSlashMenu, useSubmitGate } from './composer-parts.js';
 import {
   answerBudget,
   answerInteraction,
@@ -101,17 +99,12 @@ export function TuiSession({
   const theme = useTheme();
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Typing stays open while a send is in flight (overlapping sends queue behind it); only the harness idle flag waits.
   const composerActive =
-    !busy &&
-    !confirmation.pending &&
-    !connectionError &&
-    !interactionActive &&
-    !taskOpen &&
-    !budgetOpen &&
-    !rewindTargets;
+    !confirmation.pending && !connectionError && !interactionActive && !taskOpen && !budgetOpen && !rewindTargets;
   const slash = useSlashMenu(editor.value, composerActive && !editing, theme.textSubtle);
-  useHarnessInput(composerActive, Boolean(state.activeTurnId), editor.value);
-  const pending = useRef(false);
+  useHarnessInput(composerActive && !busy, Boolean(state.activeTurnId), editor.value);
+  const pending = useSubmitGate();
   const composerFilter = useComposerFilter({
     composerActive,
     slash,
@@ -191,7 +184,9 @@ export function TuiSession({
     delivery: WireSubmission['delivery'] = state.activeTurnId ? 'steer' : 'auto',
     confirmed = false,
   ): Promise<void> => {
-    if ((!input.trim() && !submittedImages.length && !otherParts.length && !editing) || pending.current) return;
+    if (!input.trim() && !submittedImages.length && !otherParts.length && !editing) return;
+    // The composer is already empty: a send that overlaps another waits its turn rather than being lost.
+    if (pending.current) return pending.defer(() => void submit(input, submittedImages, delivery, confirmed));
     pending.current = true;
     setBusy(true);
     setNotice(null);

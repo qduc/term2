@@ -155,3 +155,23 @@ it(
     );
   },
 );
+
+it('a second message sent while the first is still being sent is not lost', { timeout: TIMEOUT_MS }, async () => {
+  const { idlePath } = await start([{ text: 'STREAMING-TEXT', hang: true }, { text: 'done' }]);
+  session!.write('first question');
+  await waitForHarnessComposerValue(idlePath, 'first question', { timeoutMs: 60_000 });
+  session!.write('\r');
+  await session!.waitForOutput('STREAMING-TEXT', 60_000);
+  // Two messages a few milliseconds apart: the second arrives while the first send is in flight.
+  session!.write('steer alpha\r');
+  await new Promise((resolve) => setTimeout(resolve, 15));
+  session!.write('steer bravo\r');
+  await new Promise((resolve) => setTimeout(resolve, 3000));
+  const logged = fs
+    .readdirSync(path.join(root, 'conversations'))
+    .filter((name) => name.endsWith('.jsonl'))
+    .map((name) => fs.readFileSync(path.join(root, 'conversations', name), 'utf8'))
+    .join('\n');
+  expect(logged, 'the first steer reached the log').toContain('steer alpha');
+  expect(logged, 'the second steer reached the log').toContain('steer bravo');
+});

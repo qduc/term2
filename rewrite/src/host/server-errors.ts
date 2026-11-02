@@ -78,6 +78,31 @@ export function mapServerError(error: unknown): ServerResult {
       return publicError(503, 'model_catalog_unavailable', 'model catalog unavailable', true);
     if (code === 'model_unavailable') return publicError(422, 'validation_error', 'model is unavailable');
     if (code === 'workspace_grant_not_persisted' || code === 'configuration_invalid') return unavailable('gateway');
+    if (code === 'workspace_grant_mismatch' && surface === 'authority') {
+      const details = error && typeof error === 'object' && 'details' in error ? error.details : undefined;
+      const existingAccess =
+        details && typeof details === 'object' && 'existingAccess' in details ? details.existingAccess : undefined;
+      const grantStorage =
+        details && typeof details === 'object' && 'grantStorage' in details ? details.grantStorage : undefined;
+      if (
+        (existingAccess === 'read' || existingAccess === 'read_write') &&
+        (grantStorage === 'persisted' || grantStorage === 'static' || grantStorage === 'memory')
+      ) {
+        const change =
+          grantStorage === 'persisted'
+            ? 'To change access, the operator must stop the server, back up direct-workspace-grants.json in its effective state directory, remove only this root’s grant record, restart, and select the root again. Old sessions will no longer be accessible through that grant.'
+            : grantStorage === 'static'
+            ? 'This is a startup-supplied grant, not an editable persisted grant. Ask the operator to review the startup configuration; deleting persisted records cannot change it.'
+            : 'This grant is in memory only. The operator must restart the host and select the root again; old sessions will lose their grant.';
+        return publicError(
+          403,
+          'workspace_forbidden',
+          `This root is already granted with ${existingAccess} access. Select that access to reuse it. ${change} See docs/contracts/14-agent-wire-v2-server.md, “Same-root access conflict”.`,
+          false,
+          { existingAccess, grantStorage },
+        );
+      }
+    }
     if (
       surface === 'candidate' &&
       code !== 'candidate_not_found' &&

@@ -145,7 +145,8 @@ export class Term2GatewayError extends Error {
   ) {
     const normalizedCode = code === 'settings_forbidden' ? 'settings_not_allowed' : code;
     const safeCode = SAFE_ERROR_CODES.has(normalizedCode) ? normalizedCode : 'gateway_unavailable';
-    super(SAFE_ERROR_MESSAGES[safeCode]);
+    const conflict = safeCode === 'workspace_forbidden' ? workspaceConflictDetails(details) : undefined;
+    super(conflict ? workspaceConflictMessage(conflict) : SAFE_ERROR_MESSAGES[safeCode]);
     this.name = 'Term2GatewayError';
     this.code = safeCode;
     this.statusCode =
@@ -154,6 +155,28 @@ export class Term2GatewayError extends Error {
     this.requestId = requestId;
     this.details = details;
   }
+}
+
+// Only owner-authorized selection conflicts carry these two bounded values.
+// Never forward upstream messages, paths, owner IDs or arbitrary details.
+function workspaceConflictDetails(details) {
+  if (
+    (details?.existingAccess === 'read' || details?.existingAccess === 'read_write') &&
+    ['persisted', 'static', 'memory'].includes(details?.grantStorage)
+  ) {
+    return { existingAccess: details.existingAccess, grantStorage: details.grantStorage };
+  }
+  return undefined;
+}
+
+function workspaceConflictMessage({ existingAccess, grantStorage }) {
+  const change =
+    grantStorage === 'persisted'
+      ? 'To change access, the operator must stop the server, back up direct-workspace-grants.json in its effective state directory, remove only this root’s grant record, restart, and select the root again. Old sessions will no longer be accessible through that grant.'
+      : grantStorage === 'static'
+        ? 'This is a startup-supplied grant, not an editable persisted grant. Ask the operator to review the startup configuration; deleting persisted records cannot change it.'
+        : 'This grant is in memory only. The operator must restart the host and select the root again; old sessions will lose their grant.';
+  return `This root is already granted with ${existingAccess} access. Select that access to reuse it. ${change} See docs/contracts/14-agent-wire-v2-server.md, “Same-root access conflict”.`;
 }
 
 function assertPurpose(purpose) {
@@ -297,7 +320,9 @@ function normalizeGatewayError(statusCode, body, requestId) {
     details:
       hasSafeCode && code === 'settings_conflict' && source?.details && typeof source.details === 'object'
         ? source.details
-        : undefined,
+        : code === 'workspace_forbidden'
+          ? workspaceConflictDetails(source?.details)
+          : undefined,
   });
 }
 

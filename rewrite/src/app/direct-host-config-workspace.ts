@@ -105,11 +105,14 @@ export class DirectWorkspaceAuthority {
     this.#assertSelectable(taken.canonicalRoot, access);
     const existing = this.#byRoot(taken.canonicalRoot);
     if (existing) {
-      if (existing.ownerUserId !== owner || existing.access !== access) {
-        throw new DirectHostConfigError(
-          existing.ownerUserId !== owner ? 'workspace_owner_mismatch' : 'workspace_grant_mismatch',
-          'authority',
-        );
+      if (existing.ownerUserId !== owner) {
+        throw new DirectHostConfigError('workspace_owner_mismatch', 'authority');
+      }
+      if (existing.access !== access) {
+        throw new DirectHostConfigError('workspace_grant_mismatch', 'authority', {
+          existingAccess: existing.access,
+          grantStorage: existing.dynamic ? (this.#stateDirectory ? 'persisted' : 'memory') : 'static',
+        });
       }
       this.#candidates.expire(candidateId);
       return selection(existing);

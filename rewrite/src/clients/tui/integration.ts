@@ -47,6 +47,8 @@ export interface TuiIntegration {
     list(sessionId: string): Promise<PickerModel[]>;
     toggle(sessionId: string, model: PickerModel): void;
   };
+  planNeedsClear?(connection: TuiConnection): boolean;
+  clearAndTogglePlan?(connection: TuiConnection): Promise<{ message?: string }>;
   /** Read the attached session's effective preferences on each render, including live /settings changes. */
   preferences?(sessionId: string): { readonly historySize: number; readonly pasteThreshold: number | undefined };
   /** What the attached session's status bar shows, read on each render so live /settings changes appear. */

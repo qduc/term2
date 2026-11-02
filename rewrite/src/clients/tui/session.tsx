@@ -101,7 +101,7 @@ export function TuiSession({
   const slash = useComposerMenu(editor.value, composerActive && !editing, theme.textSubtle);
   useHarnessInput(composerActive && !busy, Boolean(state.activeTurnId), editor.value);
   const pending = useRef(false);
-  const togglePlan = usePlanToggle(setNotice, () => integration.command(connection, '/plan'));
+  const togglePlan = usePlanToggle(integration, connection, confirmation, Boolean(state.activeTurnId), setNotice);
   const composerFilter = useComposerFilter({
     composerActive,
     slash,

@@ -8,13 +8,13 @@ import { Text, type Key } from 'ink';
  */
 export function useSendConfirmation(interactionActive: boolean): {
   readonly pending: boolean;
-  hold(message: string, proceed: () => void): void;
+  hold(message: string, proceed: () => void, hint?: string): void;
   clear(): void;
   /** True when the key was consumed. */
   handleKey(input: string, key: Key): boolean;
   readonly prompt: ReactElement | null;
 } {
-  const [held, setHeld] = useState<{ message: string; proceed: () => void } | null>(null);
+  const [held, setHeld] = useState<{ message: string; proceed: () => void; hint?: string } | null>(null);
   const owned = held !== null && !interactionActive;
   // Restart the handoff window whenever this prompt regains the keys from an approval panel.
   const handoffAt = useRef(0);
@@ -23,9 +23,9 @@ export function useSendConfirmation(interactionActive: boolean): {
   }, [interactionActive]);
   return {
     pending: held !== null,
-    hold: (message, proceed) => {
+    hold: (message, proceed, hint) => {
       handoffAt.current = performance.now();
-      setHeld({ message, proceed });
+      setHeld({ message, proceed, hint });
     },
     clear: () => setHeld(null),
     handleKey(input, key) {
@@ -38,6 +38,11 @@ export function useSendConfirmation(interactionActive: boolean): {
       } else if (input === 'n' || key.escape) setHeld(null);
       return true;
     },
-    prompt: held && owned ? <Text>{held.message} Press y to send, n or Esc to keep editing.</Text> : null,
+    prompt:
+      held && owned ? (
+        <Text>
+          {held.message} {held.hint ?? 'Press y to send, n or Esc to keep editing.'}
+        </Text>
+      ) : null,
   };
 }

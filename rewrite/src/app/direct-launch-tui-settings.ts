@@ -103,7 +103,8 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
     const { settings } = detailsOf(connection.sessionId);
     const plan = planProfileTransition(settings, targetId);
     if (plan.class === 'noop') return { message: `${plan.targetId} is already active.` };
-    if (plan.class === 'structural' && latest().messages.length > 0) {
+    const snapshot = latest().sessionId === connection.sessionId ? latest() : connection.snapshot;
+    if (plan.class === 'structural' && (!snapshot || snapshot.messages.length > 0)) {
       throw new Error(
         `Cannot switch modes mid-session (tool/context mismatch). Use \`/clear\` first, then \`${retry}\`.`,
       );
@@ -133,6 +134,15 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
   };
 
   return {
+    planTarget(connection: TuiConnection): string {
+      const { settings } = detailsOf(connection.sessionId);
+      return resolveActiveProfile(settings).identity.id === 'builtin:plan' ? BARE_PROFILE_ID : 'builtin:plan';
+    },
+    planNeedsClear(connection: TuiConnection): boolean {
+      const { settings } = detailsOf(connection.sessionId);
+      const target = resolveActiveProfile(settings).identity.id === 'builtin:plan' ? BARE_PROFILE_ID : 'builtin:plan';
+      return latest().messages.length > 0 && planProfileTransition(settings, target).class === 'structural';
+    },
     /** `/plan`, `/bare`, `/mentor` and `/orchestrator`. A mode that is on turns back to Bare. */
     toggle(connection: TuiConnection, mode: string): Promise<CommandResult> {
       const { settings } = detailsOf(connection.sessionId);

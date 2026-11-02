@@ -1,4 +1,5 @@
 import { formatModelUsageBreakdown, summarizeModelUsage } from '../../../source/services/cost/model-cost.js';
+import { resetSession } from '../clients/tui/commands.js';
 import { loadProviderItems } from '../../../source/providers/provider-service.js';
 /**
  * The slash commands no wire command covers by itself. Each one is either a real
@@ -317,6 +318,31 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
 
   return {
     resumePicker: { list: listResumeSessions },
+    planNeedsClear: configuration.planNeedsClear,
+    async clearAndTogglePlan(connection) {
+      const target = configuration.planTarget(connection);
+      const id = await resetSession(connection);
+      try {
+        const next = await host.connect(principal, id);
+        const result = await configuration.profile(next, target);
+        if (
+          result.message !== `Switched to ${target} for this session.` &&
+          result.message !== `${target} is already active.`
+        ) {
+          next.close();
+          throw new Error(result.message ?? 'Mode configuration did not finish.');
+        }
+        await bridge.rebind(id);
+        publish(next);
+        return { message: result.message };
+      } catch (error) {
+        throw new Error(
+          `Session ${id} was created but mode switching failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    },
     async command(connection, input) {
       const [name, ...rest] = input.trim().slice(1).split(/\s+/);
       const argument = rest[0];

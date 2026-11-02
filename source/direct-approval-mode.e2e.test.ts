@@ -291,8 +291,37 @@ async function runCommand(
     await waitForHarnessIdleGeneration(idlePath, { after: before, timeoutMs: 60_000 });
   }
   if (exerciseMenu === 'approval-shortcut-history') {
+    session.write('draft stays');
+    await waitForHarnessComposerValue(idlePath, 'draft stays', { timeoutMs: 60_000 });
     session.write('\x1b[Z');
-    await session.waitForOutput('Cannot switch modes mid-session', 30_000);
+    await session.waitForOutput('Clear session and switch mode?', 30_000);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    session.write('n');
+    const lastFrame = () => {
+      const visible = session!.getVisibleOutput();
+      return visible.slice(visible.lastIndexOf('▌ term²'));
+    };
+    const waitFrame = async (predicate: () => boolean) => {
+      const deadline = Date.now() + 10_000;
+      while (!predicate() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 25));
+      expect(predicate()).toBe(true);
+    };
+    await waitFrame(() => !lastFrame().includes('Clear session and switch mode?'));
+    await waitForHarnessComposerValue(idlePath, 'draft stays', { timeoutMs: 5_000 });
+    session.write('\x1b[Z');
+    await waitFrame(() => lastFrame().includes('Clear session and switch mode?'));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const offset = session.getVisibleOutput().length;
+    session.write('y');
+    const started = Date.now();
+    while (Date.now() - started < 30_000 && !session.getVisibleOutput().slice(offset).includes('PLAN'))
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    const after = session.getVisibleOutput().slice(offset);
+    expect(after).toContain('PLAN');
+    // The PTY retains previous redraws; only the latest banner-delimited frame is current.
+    const currentFrame = after.slice(after.lastIndexOf('▌ term²'));
+    expect(currentFrame).toContain('PLAN');
+    expect(currentFrame).not.toContain('hello');
     expect(JSON.parse(fs.readFileSync(path.join(settingsDir, 'settings.json'), 'utf8')).shell.autoApproveMode).toBe(
       'off',
     );
@@ -463,7 +492,7 @@ it('Enter on an arrow-picked command completes it and does not run it', { timeou
   runCommand('/usage', '', undefined, 'pick-enter'),
 );
 
-it('Shift+Tab refuses a structural mode change with history without changing approval', async () => {
+it('Shift+Tab confirms a clear before changing mode with history', async () => {
   await runCommand('', '', 'hello', 'approval-shortcut-history');
 }, 120_000);
 

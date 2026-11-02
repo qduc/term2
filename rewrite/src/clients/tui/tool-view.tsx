@@ -4,6 +4,7 @@ import { formatToolArgs } from '../../../../source/components/message/command-me
 import { useSkin } from '../../../../source/skins/SkinContext.js';
 import { useTheme } from '../../../../source/components/theme.js';
 import type { ToolView } from './state.js';
+import type { JsonValue } from '../../protocol/direct-wire.js';
 
 /** Render only the public tool occurrence and result supplied by the direct wire. */
 export function ToolCall({ tool }: { readonly tool: ToolView }): React.ReactElement {
@@ -12,20 +13,61 @@ export function ToolCall({ tool }: { readonly tool: ToolView }): React.ReactElem
   // Question text belongs to its interactive page, not an all-pages tool summary.
   const args = tool.name === 'ask_user' ? '' : formatToolArgs(tool.name, tool.input, 'concise');
   const detail = tool.detail ?? '';
-  const contentText = (tool.content ?? []).flatMap(part => part.type === 'text' ? [part.text] : []).join('\n');
+  const contentText = (tool.content ?? []).flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n');
   const extraText = contentText && contentText !== detail ? contentText : '';
-  const images = (tool.content ?? []).flatMap(part => part.type === 'image' ? [part.mediaType] : []);
-  const display = tool.display === undefined || tool.display === null ? '' : JSON.stringify(tool.display, null, 2);
-  return <ToolFrame status={tool.status} display="standard" toolName={tool.name}>
-    <ToolHeader status={tool.status} display="standard" toolName={tool.name} nested={Boolean(tool.parent)}
-      action={<Text>{args || tool.name}</Text>}
-      meta={tool.outcomeUnknown ? <Text color={theme.warning}>outcome unknown</Text> : undefined} />
-    {tool.parent ? <Text color={theme.textSubtle}>Parent execution: {tool.parent}</Text> : null}
-    {detail || extraText || display || images.length ? <ToolSection variant="indent"><Box flexDirection="column">
-      {detail ? <Text>{detail}</Text> : null}
-      {extraText ? <Text>{extraText}</Text> : null}
-      {images.map((mediaType, index) => <Text key={index} color={theme.textSubtle}>[image: {mediaType}]</Text>)}
-      {display ? <Text color={theme.textSubtle}>{display}</Text> : null}
-    </Box></ToolSection> : null}
-  </ToolFrame>;
+  const images = (tool.content ?? []).flatMap((part) => (part.type === 'image' ? [part.mediaType] : []));
+  const shown = displayText(tool.display);
+  const display = shown && !detail.includes(shown) && !extraText.includes(shown) ? shown : '';
+  return (
+    <ToolFrame status={tool.status} display="standard" toolName={tool.name}>
+      <ToolHeader
+        status={tool.status}
+        display="standard"
+        toolName={tool.name}
+        nested={Boolean(tool.parent)}
+        action={<Text>{args || tool.name}</Text>}
+        meta={tool.outcomeUnknown ? <Text color={theme.warning}>outcome unknown</Text> : undefined}
+      />
+      {tool.parent ? <Text color={theme.textSubtle}>Parent execution: {tool.parent}</Text> : null}
+      {detail || extraText || display || images.length ? (
+        <ToolSection variant="indent">
+          <Box flexDirection="column">
+            {detail ? <Text>{detail}</Text> : null}
+            {extraText ? <Text>{extraText}</Text> : null}
+            {images.map((mediaType, index) => (
+              <Text key={index} color={theme.textSubtle}>
+                [image: {mediaType}]
+              </Text>
+            ))}
+            {display ? <Text color={theme.textSubtle}>{display}</Text> : null}
+          </Box>
+        </ToolSection>
+      ) : null}
+    </ToolFrame>
+  );
+}
+
+/**
+ * Source tools publish legacy command messages as `display`: an array, or `{messages, approvalPresentation}`.
+ * The header already shows the command, so only each message's output is shown. Unknown shapes stay visible as JSON.
+ */
+function displayText(display: JsonValue | undefined): string {
+  if (display === undefined || display === null) return '';
+  const messages = Array.isArray(display)
+    ? display
+    : isRecord(display) && Array.isArray(display.messages)
+    ? display.messages
+    : undefined;
+  if (messages?.every((message) => isRecord(message) && message.sender === 'command')) {
+    return messages
+      .flatMap((message) =>
+        isRecord(message) && typeof message.output === 'string' && message.output ? [message.output] : [],
+      )
+      .join('\n');
+  }
+  return JSON.stringify(display, null, 2);
+}
+
+function isRecord(value: unknown): value is Record<string, JsonValue> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

@@ -93,6 +93,10 @@ workspace selection, `refreshWorkspaces`, `refreshSessions`, `loadNextSessions`,
 Message submission is disabled until the selected session is connected, running or interrupted;
 a hydration or stream error must remain visible rather than being replaced by a
 late submission acknowledgement. Reload retries the session connection.
+A failed message POST also sets the session to error, even if its stream was
+healthy: the composer retains the draft text but is disabled. The error
+banner offers Reload to reconnect before retrying; a rejected-submit recovery
+journey has not yet been verified in a browser.
 `submit(text)` returns `Promise<boolean>`; other mutation/control actions expose
 completion through their promise and view/feedback. `createSession` retains its
 existing creation metadata result (`SessionProjection`); that result is **not**

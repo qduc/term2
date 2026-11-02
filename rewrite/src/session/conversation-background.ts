@@ -68,6 +68,8 @@ export class ConversationBackground {
             !this.journal.commit([fact, ...(notice ? [{ type: 'background_notice_enqueued' as const, notice }] : [])])
           )
             throw new Error(this.journal.failure?.message ?? 'Session is closed');
+          // The accepted projection already includes this wait/transfer; live task state may lag the sink.
+          this.runBudgets.taskWaits(this.journal.taskStates);
         },
         publish: (event) => this.deps.publishTask?.(event),
         failed: this.journal.poison,

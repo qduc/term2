@@ -112,9 +112,10 @@ it(
       session!.write('\r');
     };
     await send('/compact');
-    await session.waitForOutput('Compaction failed:', 30_000);
+    await session.waitForOutput('Nothing to compact yet.', 30_000);
     const failureFrame = session.getVisibleOutput().slice(session.getVisibleOutput().lastIndexOf('▌ term²'));
-    expect(failureFrame).toContain('Compaction failed:');
+    expect(failureFrame).toContain('Nothing to compact yet.');
+    expect(failureFrame).not.toContain('no_complete_cold_turn');
     expect(failureFrame).not.toContain('· compact · rejected');
     // The failure notice can render before the compact command releases input ownership.
     idle = await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
@@ -126,6 +127,7 @@ it(
     await send('second');
     await session.waitForOutput('NORMAL_REPLY_2', 60_000);
     idle = await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
+    const beforeShortCompact = session.getVisibleOutput().length;
     await send('/compact');
     await session.waitForOutput('Nothing to compact yet.', 30_000);
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
@@ -133,6 +135,7 @@ it(
     await send('third');
     await session.waitForOutput('NORMAL_REPLY_3', 60_000);
     idle = await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
+    expect(session.getVisibleOutput().slice(beforeShortCompact)).not.toContain('no_complete_cold_turn');
     await send('/compact');
     await session.waitForOutput('· compact · pending', 30_000);
     for (let i = 0; i < 100 && !releaseSummary; i++) await new Promise((resolve) => setTimeout(resolve, 25));

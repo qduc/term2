@@ -160,7 +160,9 @@ export function compactFailureMessage(state: TuiState): string | null {
         (receipt.outcome?.kind === 'compacted' || receipt.outcome?.kind === 'rejected'),
     )
     .at(-1)?.outcome;
-  return latest?.kind === 'rejected' ? `Compaction failed: ${latest.message}` : null;
+  return latest?.kind === 'rejected' && latest.message !== 'Compaction did not replace history: no_complete_cold_turn.'
+    ? `Compaction failed: ${latest.message}`
+    : null;
 }
 
 /** Keep pending work visible unless its active dialog already presents it. */

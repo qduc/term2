@@ -180,7 +180,16 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
     const turn = { text: request, skill: { name: skillName, description, body } };
     const injected = injectSkillIntoTurn(turn).text;
     // Hand the expanded request back as an ordinary draft; Enter then confirms like any other send.
-    const held = await previewConfirmation(connection, injected);
+    // Enter already cleared the typed line: if the preview itself fails, hand it back instead of losing it.
+    let held: string | null;
+    try {
+      held = await previewConfirmation(connection, injected);
+    } catch (error) {
+      return {
+        message: error instanceof Error ? error.message : String(error),
+        draft: { text: input.trim(), attachments: [] },
+      };
+    }
     if (held !== null)
       return {
         message: `${held} Not sent; the request is in the input box.`,

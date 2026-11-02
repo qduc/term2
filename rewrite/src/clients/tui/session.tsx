@@ -20,6 +20,9 @@ import { useSessionComposer } from './session-composer.js';
 import { useTerminalSize } from './terminal.js';
 import { useTranscriptViewport } from './viewport.js';
 import { useHarnessInput } from './harness-input.js';
+import { replaceSession } from './replace-session.js';
+import { runBridgeCommand } from './bridge-command.js';
+import { useSendConfirmation } from './send-confirmation.js';
 import {
   answerBudget,
   answerInteraction,
@@ -30,7 +33,6 @@ import {
   listRewindTargets,
   queueAction,
   receiptNotice,
-  resetSession,
   sendNativeCommand,
   submitText,
   previewConfirmation,
@@ -59,8 +61,6 @@ export function TuiSession({
   const [dismissedInteractionId, setDismissedInteractionId] = useState<string | null>(null);
   const [taskOpen, setTaskOpen] = useState(false);
   const [budgetOpen, setBudgetOpen] = useState(false);
-  // A draft the session said needs confirmation. It stays in the composer, frozen, until y/n.
-  const [confirmation, setConfirmation] = useState<{ message: string; proceed: () => void; at: number } | null>(null);
   const {
     images,
     setImages,
@@ -87,6 +87,7 @@ export function TuiSession({
       ? rootInteraction
       : undefined;
   const interactionActive = interactionOpen || Boolean(foregroundInteraction);
+  const confirmation = useSendConfirmation(interactionActive);
   const interactionInput = useRef<InteractionInputHandler | null>(null);
   const viewport = useTranscriptViewport(
     state,
@@ -99,11 +100,17 @@ export function TuiSession({
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const composerActive =
-    !busy && !confirmation && !connectionError && !interactionActive && !taskOpen && !budgetOpen && !rewindTargets;
+    !busy &&
+    !confirmation.pending &&
+    !connectionError &&
+    !interactionActive &&
+    !taskOpen &&
+    !budgetOpen &&
+    !rewindTargets;
   useHarnessInput(composerActive, Boolean(state.activeTurnId), editor.value);
   const pending = useRef(false);
   interrupt.current = () => {
-    if (confirmation) setConfirmation(null);
+    if (confirmation.pending) confirmation.clear();
     else if (editor.value.length > 0) replaceInput('');
     else if (state.activeTurnId || state.interactions.length) {
       void cancelForeground(connection, state.activeTurnId ?? undefined).then(setNotice, (error) => {
@@ -112,16 +119,7 @@ export function TuiSession({
     } else setNotice('Press Ctrl+C again to exit');
   };
   useInput((input, key) => {
-    if (confirmation && !interactionActive) {
-      // Only a deliberate, lone keypress counts: not the Enter that raised this, a paste, or typeahead.
-      if (performance.now() - confirmation.at < 20) return;
-      if (input === 'y') {
-        const { proceed } = confirmation;
-        setConfirmation(null);
-        proceed();
-      } else if (input === 'n' || key.escape) setConfirmation(null);
-      return;
-    }
+    if (confirmation.handleKey(input, key)) return;
     if (interactionActive) {
       interactionInput.current?.(input, key);
       return;
@@ -188,7 +186,7 @@ export function TuiSession({
       replaceInput(input);
       // Enter also cleared the composer's pasted images; put them back with the text.
       setImages(submittedImages);
-      setConfirmation({ message, proceed: retry, at: performance.now() });
+      confirmation.hold(message, retry);
       return true;
     };
     try {
@@ -265,31 +263,7 @@ export function TuiSession({
           return;
         }
       } else if (/^\/bridge(?:\s|$)/.test(input)) {
-        const tokens = input.trim().split(/\s+/).slice(1);
-        const action = tokens[0] ?? 'status';
-        if (!integration.bridge) throw new Error('Runtime session attachment is unavailable in this app.');
-        if (!['status', 'connect', 'disconnect'].includes(action) || tokens.length > (action === 'connect' ? 2 : 1))
-          throw new Error('Usage: /bridge [status|connect [name]|disconnect]');
-        const name = tokens[1] ?? 'coord';
-        if (action === 'connect' && !/^[a-zA-Z0-9_-]{1,64}$/.test(name))
-          throw new Error('Invalid bridge socket name. Use 1–64 letters, digits, _ or -.');
-        const status =
-          action === 'connect'
-            ? await integration.bridge.connect(name)
-            : action === 'disconnect'
-            ? await integration.bridge.disconnect()
-            : await integration.bridge.status();
-        setNotice(
-          status.attachment
-            ? `Session attached: ${status.attachment.name}; local control socket ${
-                status.attachment.socketPath
-              }; Discord input ${
-                status.attachment.discordInputEnabled ? 'enabled' : 'disabled'
-              } (Discord connectivity not verified); session ${status.sessionId}${
-                status.startup ? '; startup socket' : ''
-              }.`
-            : `Session not attached; session ${status.sessionId}. To enable remote input, use /bridge connect [name].`,
-        );
+        setNotice(await runBridgeCommand(integration, input));
       } else if (/^\/command-(status|apply)(?:\s|$)/.test(input)) {
         const match = /^\/command-(status|apply)\s+(\S+)$/.exec(input.trim());
         if (!match) throw new Error('Use /command-status <id> or /command-apply <id>.');
@@ -309,26 +283,11 @@ export function TuiSession({
           } else setNotice(receiptNotice(result));
         }
       } else if (input.trim() === '/clear' || input.trim() === '/rollover') {
-        if (!switchSession) throw new Error('Session switching is unavailable in this app.');
-        let sessionId: string;
-        if (input.trim() === '/clear') sessionId = await resetSession(connection);
-        else {
-          const result = await sendNativeCommand(connection, { type: 'rollover', commandId: randomUUID() });
-          if (result.kind !== 'finished' || result.receipt.outcome?.kind !== 'rolled_over') {
-            setNotice(receiptNotice(result));
-            editor.accepted(input, true, []);
-            return;
-          }
-          sessionId = result.receipt.outcome.sessionId;
-        }
-        try {
-          await switchSession(sessionId);
-        } catch (error) {
-          throw new Error(
-            `Session ${sessionId} was created; switching reported: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
-          );
+        const failure = await replaceSession(connection, input.trim() as '/clear' | '/rollover', switchSession);
+        if (failure !== null) {
+          setNotice(failure);
+          editor.accepted(input, true, []);
+          return;
         }
       } else if (/^\/queue(?:\s|$)/.test(input)) {
         const match = /^\/queue\s+(resume|discard|retract|edit|clear-images)(?:\s+(\d+))?(?:\s+([\s\S]*))?$/.exec(
@@ -478,9 +437,7 @@ export function TuiSession({
       ) : null}
       {connectionError ? <Text color={theme.danger}>{connectionError}</Text> : null}
       {transitionNotice ? <Text>{transitionNotice}</Text> : null}
-      {confirmation && !interactionActive ? (
-        <Text>{confirmation.message} Press y to send, n or Esc to keep editing.</Text>
-      ) : null}
+      {confirmation.prompt}
       {notice ? <Text>{notice}</Text> : null}
       {editor.historyError ? <Text>{editor.historyError}</Text> : null}
       <InputFrame>

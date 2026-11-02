@@ -101,7 +101,6 @@
   "components/layout/Banner.tsx -> providers/index.ts (clients -> model)",
   "components/layout/Banner.tsx -> services/agent-runtime/model-resolver.ts (clients -> engine)",
   "components/layout/Banner.tsx -> services/profiles/labels.ts (clients -> config)",
-  "components/layout/Banner.tsx -> services/settings/settings-service.ts (clients -> config)",
   "components/layout/BottomArea.tsx -> providers/grok-credit-usage.ts (clients -> model)",
   "components/layout/BottomArea.tsx -> providers/opencode-go-usage.ts (clients -> model)",
   "components/layout/BottomArea.tsx -> services/agent-runtime/run-budget.ts (clients -> engine)",

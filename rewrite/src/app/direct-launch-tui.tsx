@@ -8,6 +8,7 @@ import { getFavoriteModelInfos, toggleFavoriteModel } from '../../../source/serv
 import { resolveActiveProfile } from '../../../source/services/profiles/active-profile.js';
 import React, { useMemo, useRef, useState, type ReactNode } from 'react';
 import { render } from 'ink';
+import Banner from '../../../source/components/layout/Banner.js';
 import { SettingsSkinProvider } from '../../../source/skins/SkinContext.js';
 import { detectTerminalBackground } from '../../../source/theme/detect-terminal-background.js';
 import { shouldDetectBackground } from '../../../source/theme/resolve-theme.js';
@@ -70,6 +71,7 @@ function DirectTui({
   readonly logger: LoggingService;
 }): React.ReactElement {
   const [connection, setConnection] = useState(initial);
+  const [headerHeight, setHeaderHeight] = useState(4);
   // Holds what this client has folded, for the commands that read it.
   const latest = useRef(initial.snapshot);
   // The notifier already owns terminal focus and all three preference gates.
@@ -134,6 +136,10 @@ function DirectTui({
   return (
     <Tui
       connection={connection}
+      header={
+        <Banner key={`header:${connection.sessionId}`} settingsService={settings} onHeightChange={setHeaderHeight} />
+      }
+      headerHeight={headerHeight}
       integration={integration}
       onLiveEvent={(event) => {
         if (event.sessionId !== connection.sessionId) return;

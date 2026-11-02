@@ -40,9 +40,9 @@ import {
   previewConfirmation,
   WireCommandFailure,
 } from './commands.js';
-
 export function TuiSession({
   connection,
+  headerHeight,
   integration,
   retainedSnapshot,
   onSnapshot,
@@ -90,7 +90,7 @@ export function TuiSession({
   const interactionActive = interactionOpen || Boolean(foregroundInteraction);
   const confirmation = useSendConfirmation(interactionActive);
   const interactionInput = useRef<InteractionInputHandler | null>(null);
-  const viewport = useTranscriptViewport(state, columns, rows, !interactionActive && !panelOpen);
+  const viewport = useTranscriptViewport(state, columns, rows - (headerHeight ?? 0), !interactionActive && !panelOpen);
   const { InputFrame, PromptMarker, LiveDivider } = useSkin();
   const theme = useTheme();
   const [notice, setNotice] = useState<string | null>(null);

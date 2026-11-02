@@ -1,6 +1,6 @@
 /** Public direct TUI shell: cross-session notices and terminal interrupt ownership. */
 import React, { useRef, useState } from 'react';
-import { useInput } from 'ink';
+import { Box, useInput } from 'ink';
 import type { TuiProps } from './integration.js';
 import { TuiSession } from './session.js';
 
@@ -40,12 +40,15 @@ export function Tui(props: TuiProps): React.ReactElement {
       }
     : undefined;
   return (
-    <TuiSession
-      key={props.connection.sessionId}
-      {...props}
-      interrupt={interrupt}
-      switchSession={switchSession}
-      transitionNotice={transition?.sessionId === props.connection.sessionId ? transition.message : undefined}
-    />
+    <Box flexDirection="column">
+      {props.header}
+      <TuiSession
+        key={props.connection.sessionId}
+        {...props}
+        interrupt={interrupt}
+        switchSession={switchSession}
+        transitionNotice={transition?.sessionId === props.connection.sessionId ? transition.message : undefined}
+      />
+    </Box>
   );
 }

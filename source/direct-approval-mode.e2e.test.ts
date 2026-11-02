@@ -139,6 +139,10 @@ async function runCommand(
 
   session = spawnTerminal('node', [builtCli], { cwd: workspace, env });
   const idle = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
+  await session.waitForOutput('term²', 30_000);
+  await session.waitForOutput('BARE', 30_000);
+  await session.waitForOutput('mockprov', 30_000);
+  await session.waitForOutput('mock-alpha', 30_000);
 
   // Submit only once the composer holds the text; Enter in the same write is taken as pasted input.
   const submit = async (text: string) => {

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { WireEvent, WireSnapshot } from '../../protocol/direct-wire.js';
 import type { DirectConnection, DirectReplayConnection } from '../../host/in-process-direct-types.js';
 
@@ -59,6 +60,8 @@ export interface TuiIntegration {
 /** App-owned TUI callbacks cross the unkeyed shell into the keyed session. */
 export interface TuiProps {
   readonly connection: TuiConnection;
+  readonly header?: ReactNode;
+  readonly headerHeight?: number;
   readonly integration: TuiIntegration;
   readonly retainedSnapshot?: WireSnapshot;
   readonly onSnapshot?: (snapshot: WireSnapshot) => void;

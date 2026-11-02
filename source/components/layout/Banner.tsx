@@ -1,10 +1,12 @@
 import { toTierModelPoolEntries } from '../../services/agent-runtime/model-resolver.js';
 import { getProfileLabel } from '../../services/profiles/labels.js';
-import React, { FC } from 'react';
+import React, { FC, useEffect, useRef } from 'react';
+import { Box, measureElement, type DOMElement } from 'ink';
+import { useTerminalColumns } from '../../hooks/use-terminal-columns.js';
 import { createRequire } from 'node:module';
 import { useSetting } from '../../hooks/use-setting.js';
 import { getProvider } from '../../providers/index.js';
-import type { SettingsService } from '../../services/settings/settings-service.js';
+import type { ISettingsService } from '../../services/service-interfaces.js';
 import type { ModeBadge } from '../theme.js';
 import { useSkin } from '../../skins/SkinContext.js';
 
@@ -25,16 +27,33 @@ export const resolveDisplayVersion = (load: (specifier: string) => unknown = req
   } catch {
     // No generated build identity on disk.
   }
-  return (load('../../../package.json') as { version: string }).version;
+  // The direct build emits this file below rewrite/dist/source, two levels deeper.
+  for (const specifier of ['../../../package.json', '../../../../../package.json']) {
+    try {
+      const manifest = load(specifier) as { version?: string };
+      if (manifest.version) return manifest.version;
+    } catch {
+      // Try the next build layout.
+    }
+  }
+  return 'unknown';
 };
 
 const version = resolveDisplayVersion();
 
 interface BannerProps {
-  settingsService: SettingsService;
+  settingsService: ISettingsService;
+  onHeightChange?: (height: number) => void;
 }
 
-const Banner: FC<BannerProps> = ({ settingsService }) => {
+const Banner: FC<BannerProps> = ({ settingsService, onHeightChange }) => {
+  const container = useRef<DOMElement>(null);
+  // Ink recomputes Yoga on resize without rerendering React. The width hook makes
+  // the measurement run again after a wrap or a skin's responsive layout changes.
+  useTerminalColumns();
+  useEffect(() => {
+    if (container.current && onHeightChange) onHeightChange(measureElement(container.current).height);
+  });
   const { Banner: SkinBanner } = useSkin();
   const activeProfileId = useSetting(settingsService, 'app.activeProfileId') ?? 'builtin:bare';
   const selection = useSetting(settingsService, 'agent.modelSelection');
@@ -54,7 +73,7 @@ const Banner: FC<BannerProps> = ({ settingsService }) => {
   const mentor = activeProfileId === 'builtin:mentor';
   const baseMode = (mentor ? 'STANDARD' : getProfileLabel(activeProfileId).toUpperCase()) as ModeBadge;
 
-  return (
+  const banner = (
     <SkinBanner
       version={version}
       mode={baseMode}
@@ -65,6 +84,13 @@ const Banner: FC<BannerProps> = ({ settingsService }) => {
       mentorModel={mentorModel}
       mentorReasoningEffort={mentorReasoningEffort}
     />
+  );
+  return onHeightChange ? (
+    <Box ref={container} flexDirection="column">
+      {banner}
+    </Box>
+  ) : (
+    banner
   );
 };
 

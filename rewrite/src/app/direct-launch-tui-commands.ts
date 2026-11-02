@@ -137,18 +137,18 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
     const selected = parseModel(reference);
     const catalog = await options.modelCatalog(connection.sessionId, selected.provider);
     if (catalog.error || catalog.models.length === 0) {
-      return {
-        message: `Cannot validate ${reference}: ${
+      throw new Error(
+        `Cannot validate ${reference}: ${
           catalog.error || 'provider model catalog is unavailable or empty'
         }. Current model unchanged.`,
-      };
+      );
     }
     if (!catalog.models.some((model) => model.id === selected.model)) {
-      return {
-        message: `Unknown model ${reference}. Current model unchanged. Available models: ${catalog.models
+      throw new Error(
+        `Unknown model ${reference}. Current model unchanged. Available models: ${catalog.models
           .map((model) => `${selected.provider}/${model.id}`)
           .join(', ')}.`,
-      };
+      );
     }
     return configure(connection, { model: selected }, `Model set to ${reference}.`);
   };

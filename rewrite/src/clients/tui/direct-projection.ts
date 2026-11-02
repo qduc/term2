@@ -122,7 +122,10 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
     queuePauseReason: snapshot.queuePauseReason,
     tasks: snapshot.tasks.map(taskView),
     notices: [
-      ...snapshot.notices.map((notice) => `${notice.kind}: ${notice.message}`),
+      // A history edit already reads as a sentence; the raw kind label is internal.
+      ...snapshot.notices.map((notice) =>
+        notice.kind === 'history_replaced' ? notice.message : `${notice.kind}: ${notice.message}`,
+      ),
       ...(snapshot.terminal?.notice ? [snapshot.terminal.notice] : []),
     ],
     usage: usageText(snapshot.usage),

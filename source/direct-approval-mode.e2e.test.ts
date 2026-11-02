@@ -159,3 +159,7 @@ it('/resume ls labels each conversation with its time and first prompt', { timeo
   const visible = session!.getVisibleOutput();
   expect(visible).toMatch(/conv_[0-9a-f-]{36} {2}\d{4}-\d\d-\d\d \d\d:\d\d {2}tidy the workspace/);
 });
+
+it('/copy confirms what it copied', { timeout: TIMEOUT_MS }, () =>
+  runCommand('/copy', 'Copied to clipboard.', 'say something'),
+);

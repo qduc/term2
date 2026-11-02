@@ -5,6 +5,21 @@ import { nestedPresentation, replace } from './direct-reducer-nested.js';
 import { completedFinalText } from './direct-turn-results.js';
 import type { WireCommandReceipt, WireEvent, WireMessage, WireSnapshot } from './direct-wire.js';
 
+/** What the user reads for a provider-history edit; the reason names the operation that caused it. */
+function historyReplacedMessage(reason: string): string {
+  switch (reason) {
+    case 'compaction':
+      return 'Conversation compacted: earlier messages were replaced by a summary.';
+    case 'rewind':
+      return 'Conversation rewound to the chosen point.';
+    case 'retry_turn':
+    case 'retry_tool':
+      return 'Conversation history restored to retry.';
+    default:
+      return `Conversation history replaced (${reason}).`;
+  }
+}
+
 function timeline(
   state: WireSnapshot,
   entries: NonNullable<WireSnapshot['timeline']>,
@@ -304,7 +319,7 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
         ...state,
         notices: [
           ...state.notices,
-          { kind: 'history_replaced', message: `Provider history replaced: ${event.payload.reason}` },
+          { kind: 'history_replaced', message: historyReplacedMessage(event.payload.reason) },
         ],
       };
     // An accepted response boundary is not an aggregate settled cost or a terminal.

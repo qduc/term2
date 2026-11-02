@@ -24,10 +24,13 @@ let session: TerminalSession | null = null;
 let root = '';
 let server: http.Server | null = null;
 let providerRequests: string[] = [];
+let finishReasoning: (() => void) | undefined;
 
 afterEach(async () => {
   session?.dispose();
   session = null;
+  finishReasoning?.();
+  finishReasoning = undefined;
   await new Promise<void>((resolve) => (server ? server.close(() => resolve()) : resolve()));
   server = null;
   if (root) fs.rmSync(root, { recursive: true, force: true });
@@ -35,7 +38,11 @@ afterEach(async () => {
   providerRequests = [];
 });
 
-type Reply = { call?: { id: string; command?: string; tool?: string; args?: object }; text?: string };
+type Reply = {
+  call?: { id: string; command?: string; tool?: string; args?: object };
+  text?: string;
+  reasoning?: string;
+};
 
 /** One SSE reply per chat request, in order: a single shell call or plain text. */
 async function startProvider(replies: Reply[]): Promise<string> {
@@ -81,7 +88,12 @@ async function startProvider(replies: Reply[]): Promise<string> {
             { id, choices: [{ delta: {}, finish_reason: 'stop' }] },
           ];
       res.writeHead(200, { 'content-type': 'text/event-stream' });
-      res.end([...frames.map((frame) => `data: ${JSON.stringify(frame)}\n`), 'data: [DONE]', ''].join('\n'));
+      const finish = () =>
+        res.end([...frames.map((frame) => `data: ${JSON.stringify(frame)}\n`), 'data: [DONE]', ''].join('\n'));
+      if (reply.reasoning) {
+        res.write(`data: ${JSON.stringify({ id, choices: [{ delta: { reasoning_content: reply.reasoning } }] })}\n\n`);
+        finishReasoning = finish;
+      } else finish();
     });
   });
   await new Promise<void>((resolve) => server!.listen(0, '127.0.0.1', resolve));
@@ -129,7 +141,10 @@ it(
         },
       },
       { call: { id: 'call_0', args: { command: first, description: 'Write and read the file' } } },
-      { text: 'Created `b.txt` and read it back: `hi`. Flags: `--foo` `--bar` first turn done' },
+      {
+        reasoning: 'Locating the unique workspace fixture',
+        text: 'Created `b.txt` and read it back: `hi`. Flags: `--foo` `--bar` first turn done',
+      },
     ]);
     const idlePath = path.join(home, 'input-idle');
     const env = {
@@ -171,6 +186,10 @@ it(
     };
 
     await submit('tidy the workspace');
+    await session.waitForOutput('Locating the unique workspace fixture', 60_000);
+    expect(session.getVisibleOutput()).toContain('Locating the unique workspace fixture');
+    finishReasoning!();
+    finishReasoning = undefined;
     await session.waitForOutput('first turn done', 60_000);
     idle = await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
 
@@ -184,6 +203,10 @@ it(
     const status = JSON.parse(await control(['status', 'coord', '--json'], env, workspace));
     expect(status.phase).toBe('idle');
     const visible = session.getVisibleOutput();
+    // The PTY helper retains previous redraws; inspect the latest frame, not scrollback.
+    const currentFrame = visible.slice(visible.lastIndexOf('▌ term²'));
+    expect(currentFrame).toContain('first turn done');
+    expect(currentFrame).not.toContain('Locating the unique workspace fixture');
     // The bar under the composer names the profile, model and approval mode (this run is YOLO).
     expect(visible, visible).toMatch(/Bare[^\n]*mockprov\/mock-alpha[^\n]*YOLO/);
     expect(visible, visible).not.toContain('isApprovalRejection');

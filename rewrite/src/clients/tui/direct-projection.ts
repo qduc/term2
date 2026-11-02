@@ -110,7 +110,8 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
     messages,
     timeline: snapshot.timeline,
     drafts,
-    reasoning: snapshot.reasoning ? { [snapshot.activeTurnId ?? 'snapshot']: snapshot.reasoning } : {},
+    // Reasoning is live turn activity, not a settled transcript message.
+    reasoning: snapshot.activeTurnId && snapshot.reasoning ? { [snapshot.activeTurnId]: snapshot.reasoning } : {},
     tools: snapshot.tools.map(toolView),
     unmatchedTools: snapshot.unmatchedToolResults ?? [],
     budgets: snapshot.pendingBudgets ?? [],

@@ -161,7 +161,11 @@ it(
     expect(visible, visible).toContain('+ gamma-line');
     // The first edit appears once, not again as a repeated command line.
     expect(visible, visible).not.toContain('search_replace "');
-    expect(visible, visible).not.toMatch(/Runtime: \d+ms\s+hi\s+Runtime: \d+ms/);
+    // Collapsed by default: one row with the runtime, and no output until expanded with Ctrl+O.
+    expect(visible, visible).toMatch(/\(\d+ms\)/);
+    expect(visible, visible).not.toContain('Runtime:');
+    session.write('\x0f');
+    await session.waitForOutput('Runtime:', 30_000);
     // Quit the way a user does, so the app finishes its writes before the test removes its directories.
     session.write('\x03');
     await session.waitForOutput('Press Ctrl+C again to exit', 30_000);

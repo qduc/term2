@@ -12,11 +12,14 @@ export function Transcript({
   messages,
   columns,
   live,
+  expanded = false,
 }: {
   readonly state: TuiState;
   readonly messages: readonly Message[];
   readonly columns: number;
   readonly live: boolean;
+  /** Show every tool's output, not only failures. */
+  readonly expanded?: boolean;
 }): React.ReactElement {
   const { UserMessage, AssistantFrame, assistantGutter } = useSkin();
   const theme = useTheme();
@@ -50,7 +53,7 @@ export function Transcript({
       const tool = toolById.get(item.id);
       if (!tool || usedTools.has(item.id)) return [];
       usedTools.add(item.id);
-      return [<ToolCall key={`tool:${tool.id}`} tool={tool} />];
+      return [<ToolCall key={`tool:${tool.id}`} tool={tool} expanded={expanded} />];
     }) ?? [];
   const remainingMessages = messages.filter((message) => !usedMessages.has(message.id));
   const remainingTools = live ? state.tools.filter((tool) => !usedTools.has(tool.id)) : [];
@@ -79,7 +82,7 @@ export function Transcript({
         <Text color={theme.textSubtle}>Tool executions (transcript order unavailable)</Text>
       ) : null}
       {remainingTools.map((tool) => (
-        <ToolCall key={`tool:${tool.id}`} tool={tool} />
+        <ToolCall key={`tool:${tool.id}`} tool={tool} expanded={expanded} />
       ))}
     </Box>
   );

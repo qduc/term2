@@ -110,6 +110,7 @@ export function ComposerHints({
           : [
               ['/', 'commands'],
               ['↑/↓', 'history'],
+              ['Ctrl+O', 'tool output'],
               ['Ctrl+G', 'tasks'],
             ]
       }

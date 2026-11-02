@@ -488,7 +488,7 @@ export function TuiSession({
             ['[I', '[O', '\x1b[I', '\x1b[O'].includes(input) ||
             key.pageUp ||
             key.pageDown ||
-            (key.ctrl && (key.upArrow || key.downArrow || input === 'g' || input === 'b')) ||
+            (key.ctrl && (key.upArrow || key.downArrow || input === 'g' || input === 'b' || input === 'o')) ||
             (Boolean(state.activeTurnId) && key.meta && key.return)
           }
         />

@@ -6,8 +6,29 @@ import { useTheme } from '../../../../source/components/theme.js';
 import type { ToolView } from './state.js';
 import type { JsonValue } from '../../protocol/direct-wire.js';
 
-/** Render only the public tool occurrence and result supplied by the direct wire. */
-export function ToolCall({ tool }: { readonly tool: ToolView }): React.ReactElement {
+/** The tools whose edit is the point of the row: the old terminal printed these as diffs, so they stay open. */
+const EDIT_TOOLS = new Set(['search_replace', 'create_file']);
+
+/** `Runtime: 63ms` is how shell results report their duration; no other tool reports one on the wire. */
+function runtimeOf(...texts: readonly string[]): string | undefined {
+  for (const text of texts) {
+    const match = /Runtime:\s*(\d+(?:\.\d+)?\s*(?:ms|s|m|h))/.exec(text);
+    if (match) return match[1]!.replace(/\s+/g, '');
+  }
+  return undefined;
+}
+
+/**
+ * One row per tool call, like the old terminal: `✓ <what it did> (63ms)`. Output, scripts and nested-run
+ * details stay behind expand (Ctrl+O) unless the call failed or its outcome is unknown; edit input always shows.
+ */
+export function ToolCall({
+  tool,
+  expanded = false,
+}: {
+  readonly tool: ToolView;
+  readonly expanded?: boolean;
+}): React.ReactElement {
   const { ToolFrame, ToolHeader, ToolSection } = useSkin();
   const theme = useTheme();
   // Question text belongs to its interactive page, not an all-pages tool summary.
@@ -16,9 +37,14 @@ export function ToolCall({ tool }: { readonly tool: ToolView }): React.ReactElem
   const contentText = (tool.content ?? []).flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n');
   const extraText = contentText && contentText !== detail ? contentText : '';
   const images = (tool.content ?? []).flatMap((part) => (part.type === 'image' ? [part.mediaType] : []));
-  const display = [...inputParts(tool.name, tool.input), ...displayParts(tool.display, args, tool.name)]
-    .filter((part) => !detail.includes(part) && !extraText.includes(part))
-    .join('\n');
+  const fresh = (part: string) => !detail.includes(part) && !extraText.includes(part);
+  const open = expanded || tool.status === 'failed' || Boolean(tool.outcomeUnknown);
+  const inputText = inputParts(tool.name, tool.input).filter(fresh);
+  const displayText = displayParts(tool.display, args, tool.name).filter(fresh);
+  const runtime = runtimeOf(detail, ...displayText);
+  // Edit input is always shown; everything else only when open.
+  const display = [...(open || EDIT_TOOLS.has(tool.name) ? inputText : []), ...(open ? displayText : [])].join('\n');
+  const showDetail = open;
   return (
     <ToolFrame status={tool.status} display="standard" toolName={tool.name}>
       <ToolHeader
@@ -27,15 +53,21 @@ export function ToolCall({ tool }: { readonly tool: ToolView }): React.ReactElem
         toolName={tool.name}
         nested={Boolean(tool.parent)}
         action={<Text>{args || tool.name}</Text>}
-        meta={tool.outcomeUnknown ? <Text color={theme.warning}>outcome unknown</Text> : undefined}
+        meta={
+          tool.outcomeUnknown ? (
+            <Text color={theme.warning}>outcome unknown</Text>
+          ) : runtime ? (
+            <Text color={theme.textSubtle}>({runtime})</Text>
+          ) : undefined
+        }
       />
-      {tool.parent ? <Text color={theme.textSubtle}>Parent execution: {tool.parent}</Text> : null}
-      {detail || extraText || display || images.length ? (
+      {open && tool.parent ? <Text color={theme.textSubtle}>Parent execution: {tool.parent}</Text> : null}
+      {(showDetail && (detail || extraText || images.length)) || display ? (
         <ToolSection variant="indent">
           <Box flexDirection="column">
-            {detail ? <Text>{detail}</Text> : null}
-            {extraText ? <Text>{extraText}</Text> : null}
-            {images.map((mediaType, index) => (
+            {showDetail && detail ? <Text>{detail}</Text> : null}
+            {showDetail && extraText ? <Text>{extraText}</Text> : null}
+            {(showDetail ? images : []).map((mediaType, index) => (
               <Text key={index} color={theme.textSubtle}>
                 [image: {mediaType}]
               </Text>

@@ -121,6 +121,8 @@ export type DirectSessionState = {
   readonly pendingInteractions: readonly InteractionRequest[];
   readonly admissions: readonly DirectAdmission[];
   readonly usage: Usage;
+  readonly lastUsage?: Usage;
+  readonly lastSpeed?: { readonly tps: number; readonly approximate: boolean };
   readonly commands: import('./direct-command-types.js').DirectCommandReceipts;
   readonly notifications: import('./direct-notifications.js').DirectNotificationState;
   readonly requestCosts: readonly import('./facts.js').DirectRequestCostFact[];

@@ -161,7 +161,11 @@ export type ModelEvent =
     }
   /** A complete item the model produced; the engine appends these to history. */
   | { readonly type: 'item'; readonly item: Item }
-  | { readonly type: 'usage'; readonly usage: Usage }
+  | {
+      readonly type: 'usage';
+      readonly usage: Usage;
+      readonly speed?: { readonly tps: number; readonly approximate: boolean };
+    }
   | { readonly type: 'retrying'; readonly attempt: number; readonly delayMs: number; readonly error: ModelError }
   | {
       readonly type: 'done';

@@ -206,7 +206,12 @@ export type TurnEvent =
   | { readonly type: 'text_delta'; readonly delta: string; readonly modelStep?: number }
   | { readonly type: 'reasoning_delta'; readonly delta: string }
   | { readonly type: 'item'; readonly item: Item; readonly executionId?: ExecutionId; readonly modelStep?: number }
-  | { readonly type: 'usage'; readonly usage: Usage; readonly modelStep?: number }
+  | {
+      readonly type: 'usage';
+      readonly usage: Usage;
+      readonly modelStep?: number;
+      readonly speed?: { readonly tps: number; readonly approximate: boolean };
+    }
   | {
       readonly type: 'tool_called';
       readonly executionId: ExecutionId;

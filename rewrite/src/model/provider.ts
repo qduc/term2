@@ -33,6 +33,7 @@ import type {
 } from '../../../source/services/service-interfaces.js';
 import type { ProviderDefinition } from '../../../source/providers/registry.js';
 import { getProvider } from '../../../source/providers/index.js';
+import { StreamingSpeedTracker } from '../../../source/utils/streaming/streaming-speed-tracker.js';
 import { getModelContextWindow } from '../../../source/providers/model-catalog/catalog.js';
 import { MODEL_CATALOG } from '../../../source/providers/model-catalog/catalog.generated.js';
 import { ModelFailure, toModelFailure } from './failure.js';
@@ -343,13 +344,19 @@ async function* modelEvents(
 ): AsyncIterable<ModelEvent> {
   const streamedToolCalls = new Map<string, Extract<StreamedModelTurnEvent, { type: 'tool_call' }>>();
   let completed = false;
+  const speed = new StreamingSpeedTracker();
+  speed.reset();
+  let streamedReasoning = false;
   for await (const event of turn.stream(request)) {
     signal.throwIfAborted();
     switch (event.type) {
       case 'text_delta':
+        speed.recordDelta(event.text);
         yield { type: 'text_delta', delta: event.text, ...(event.partId ? { partId: event.partId } : {}) };
         break;
       case 'reasoning_delta':
+        if (event.text) streamedReasoning = true;
+        speed.recordDelta(event.text);
         yield {
           type: 'reasoning_delta',
           delta: event.text,
@@ -373,7 +380,19 @@ async function* modelEvents(
         break;
       case 'completion': {
         completed = true;
-        if (event.usage) yield { type: 'usage', usage: toUsage(event.usage) };
+        if (event.usage) {
+          const measured = speed.getSettledTps({
+            completionTokens: event.usage.outputTokens,
+            reasoningTokens: streamedReasoning ? undefined : event.usage.reasoningTokens,
+          });
+          yield {
+            type: 'usage',
+            usage: toUsage(event.usage),
+            ...(measured && measured.decodeWindowMs == null
+              ? { speed: { tps: measured.tps, approximate: measured.approximate } }
+              : {}),
+          };
+        }
         const completedToolCalls = new Set<string>();
         for (const output of event.output) {
           if (output.type === 'tool_call') {

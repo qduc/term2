@@ -85,11 +85,26 @@ async function startProvider(replies: Reply[], withUsage = false): Promise<strin
         frames.push({
           id,
           choices: [],
-          usage: { prompt_tokens: 78021, completion_tokens: 731, prompt_tokens_details: { cached_tokens: 42112 } },
+          usage: {
+            prompt_tokens: requests === 1 ? 78021 : 12345,
+            completion_tokens: 731,
+            prompt_tokens_details: { cached_tokens: requests === 1 ? 42112 : 0 },
+          },
         });
       }
       res.writeHead(200, { 'content-type': 'text/event-stream' });
-      res.end([...frames.map((frame) => `data: ${JSON.stringify(frame)}\n`), 'data: [DONE]', ''].join('\n'));
+      if (withUsage && !reply.call) {
+        res.write(`data: ${JSON.stringify(frames[0])}\n\n`);
+        setTimeout(
+          () =>
+            res.end(
+              [...frames.slice(1).map((frame) => `data: ${JSON.stringify(frame)}\n`), 'data: [DONE]', ''].join('\n'),
+            ),
+          1700,
+        );
+      } else {
+        res.end([...frames.map((frame) => `data: ${JSON.stringify(frame)}\n`), 'data: [DONE]', ''].join('\n'));
+      }
     });
   });
   await new Promise<void>((resolve) => server!.listen(0, '127.0.0.1', resolve));
@@ -458,6 +473,8 @@ it('/resume ls labels each conversation with its time and first prompt', { timeo
 it('/usage agrees with the cached share in the status bar', { timeout: TIMEOUT_MS }, async () => {
   await runCommand('/usage', 'Token usage: 78,021 input (42,112 cached), 731 output', 'hello', false, true);
   expect(session!.getVisibleOutput()).toContain('54% cached');
+  expect(session!.getVisibleOutput()).toContain('Ctx last 78k');
+  expect(session!.getVisibleOutput()).toMatch(/\d+(?:\.\d+)?t\/s/);
   session!.write('/auto-approve');
   await waitForHarnessComposerValue(path.join(root, 'home', 'input-idle'), '/auto-approve', { timeoutMs: 60_000 });
   session!.write('\r');
@@ -474,6 +491,41 @@ it('/usage separates actual model request usage', { timeout: TIMEOUT_MS }, async
   const visible = session!.getVisibleOutput();
   expect(visible).toContain('mockprov/mock-alpha:');
   expect(visible).toContain('mockprov/mock-beta:');
+});
+
+it('last-request context survives resume without becoming cumulative usage', { timeout: TIMEOUT_MS }, async () => {
+  await runCommand('/usage', 'Token usage: 78,021 input', 'hello', false, true);
+  const home = path.join(root, 'home');
+  const idlePath = path.join(home, 'input-idle');
+  session!.write('second request');
+  await waitForHarnessComposerValue(idlePath, 'second request', { timeoutMs: 60_000 });
+  session!.write('\r');
+  await session!.waitForOutput('done', 30_000);
+  await session!.waitForOutput('Ctx last 12k', 30_000);
+  session!.write('/quit');
+  await waitForHarnessComposerValue(idlePath, '/quit', { timeoutMs: 60_000 });
+  session!.write('\r');
+  expect((await session!.waitForExit(30_000)).exitCode).toBe(0);
+  const conversation = fs.readdirSync(path.join(root, 'conversations')).find((name) => name.endsWith('.jsonl'))!;
+  const env = {
+    HOME: home,
+    XDG_CONFIG_HOME: path.join(home, '.config'),
+    XDG_STATE_HOME: path.join(home, '.local', 'state'),
+    XDG_CACHE_HOME: path.join(home, '.cache'),
+    XDG_DATA_HOME: path.join(home, '.local', 'share'),
+    TERM2_CONFIG_DIR: path.join(home, '.term2'),
+    TERM2_CACHE_DIR: path.join(home, '.cache', 'term2'),
+    TERM2_CONVERSATIONS_DIR: path.join(root, 'conversations'),
+    DISABLE_LOGGING: '1',
+    [HARNESS_IDLE_ENV]: idlePath,
+    CI: 'false',
+  };
+  session = spawnTerminal('node', [builtCli, '--resume', conversation.slice(0, -6)], {
+    cwd: path.join(root, 'w'),
+    env,
+  });
+  await session.waitForOutput('Ctx last 12k', 30_000);
+  expect(session.getVisibleOutput()).not.toContain('Ctx last 90k');
 });
 
 it('/copy confirms what it copied', { timeout: TIMEOUT_MS }, () =>

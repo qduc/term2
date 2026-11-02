@@ -371,7 +371,12 @@ export class TurnModel {
           }
           case 'usage':
             usage = event.usage;
-            await this.events.publish({ type: 'usage', usage, modelStep });
+            await this.events.publish({
+              type: 'usage',
+              usage,
+              modelStep,
+              ...(event.speed ? { speed: event.speed } : {}),
+            });
             this.#requestHasOutput = true;
             break;
           case 'done':

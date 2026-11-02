@@ -130,7 +130,13 @@ export type DirectTurnFact =
       readonly resolutionSource?: 'user' | 'policy' | 'system';
       readonly automaticApproval?: boolean;
     }
-  | { readonly type: 'usage'; readonly turnId: TurnId; readonly usage: Usage; readonly modelStep?: number }
+  | {
+      readonly type: 'usage';
+      readonly turnId: TurnId;
+      readonly usage: Usage;
+      readonly modelStep?: number;
+      readonly speed?: { readonly tps: number; readonly approximate: boolean };
+    }
   | {
       readonly type: 'turn_ended';
       readonly turnId: TurnId;

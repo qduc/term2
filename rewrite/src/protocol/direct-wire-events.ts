@@ -68,6 +68,8 @@ export type WireSnapshot = {
   readonly admissions: readonly WireAdmission[];
   readonly submissions?: readonly WireSubmissionRecord[];
   readonly usage: WireUsage;
+  readonly lastUsage?: WireUsage;
+  readonly lastSpeed?: { readonly tps: number; readonly approximate: boolean };
   readonly reasoning: string;
   readonly reasoningIdentity?: {
     readonly messageId: string;
@@ -197,7 +199,7 @@ export type WireEventPayloads = {
     readonly costUsd?: number | string;
   };
   admission: { readonly admission: WireAdmission };
-  usage: { readonly usage: WireUsage };
+  usage: { readonly usage: WireUsage; readonly speed?: { readonly tps: number; readonly approximate: boolean } };
   status_changed: { readonly status: WireStatus };
   turn_ended: WireTerminal;
   retrying: {

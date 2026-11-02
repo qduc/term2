@@ -168,6 +168,8 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
         drafts: [],
         reasoning: '',
         usage: { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 },
+        lastUsage: undefined,
+        lastSpeed: undefined,
         terminal: null,
         runtimeError: null,
         timeline: [],
@@ -184,6 +186,8 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
       const messageIds = new Set(messages.map((message) => message.id));
       return {
         ...state,
+        lastUsage: undefined,
+        lastSpeed: undefined,
         messages,
         drafts: state.drafts.filter((draft) => retained.has(draft.id)),
         timeline: state.timeline.filter((entry) => entry.kind !== 'message' || messageIds.has(entry.id)),
@@ -203,7 +207,13 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
       };
     case 'configuration_changed': {
       const { type: _type, ...configuration } = fact;
-      return { ...state, configuration: structuredClone(configuration), model: fact.configuration.model };
+      return {
+        ...state,
+        configuration: structuredClone(configuration),
+        model: fact.configuration.model,
+        lastUsage: undefined,
+        lastSpeed: undefined,
+      };
     }
     case 'session_started':
       return { ...state, model: fact.model };
@@ -344,7 +354,7 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
       };
     }
     case 'usage':
-      return { ...state, usage: addUsage(state.usage, fact.usage) };
+      return { ...state, usage: addUsage(state.usage, fact.usage), lastUsage: fact.usage, lastSpeed: fact.speed };
     case 'turn_ended':
       return {
         ...state,

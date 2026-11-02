@@ -23,6 +23,7 @@ export type BridgeStatus = {
 export type TuiStatusInfo = {
   /** Display name of the active profile, e.g. `Bare`. */
   readonly profile: string;
+  readonly contextWindow?: number;
   readonly effort: string | undefined;
   readonly approval: 'off' | 'advisory' | 'auto' | 'always';
 };

@@ -356,6 +356,7 @@ export function factFor(
         type: 'usage',
         turnId,
         usage: event.usage,
+        ...(event.speed ? { speed: event.speed } : {}),
         ...(event.modelStep !== undefined ? { modelStep: event.modelStep } : {}),
       };
     case 'tool_start_requested':

@@ -1,4 +1,6 @@
 import React from 'react';
+import { formatContextUsage } from '../../../../source/utils/ai/token-usage.js';
+import { formatTokensPerSecond } from '../../../../source/utils/streaming/streaming-speed-tracker.js';
 import { useSkin } from '../../../../source/skins/SkinContext.js';
 import type { StatusSegmentView, StatusView } from '../../../../source/skins/types.js';
 import type { TuiIntegration } from './integration.js';
@@ -22,6 +24,8 @@ export function directStatusView(
   const totals = state.usageTotals;
   const cached =
     totals && totals.inputTokens > 0 ? Math.round((totals.cachedInputTokens / totals.inputTokens) * 100) : undefined;
+  const used = state.contextUsedTokens;
+  const window = info.contextWindow;
   const config: StatusSegmentView[] = [
     { id: 'mode', text: info.profile, tone: 'accent', bold: true, separator: 'group' },
     { id: 'provider-model', text: state.model, tone: 'accent', separator: 'group' },
@@ -50,8 +54,22 @@ export function directStatusView(
       tier: 4,
     },
     {
+      id: 'speed',
+      text: state.speed ? formatTokensPerSecond(state.speed.tps, state.speed.approximate).replace(' tok/s', 't/s') : '',
+      tone: 'textSubtle',
+      separator: 'metric',
+      tier: 0,
+    },
+    {
       id: 'cache',
       text: cached === undefined ? '' : `${cached}% cached`,
+      tone: 'textSubtle',
+      separator: 'metric',
+      tier: 1,
+    },
+    {
+      id: 'context',
+      text: used === undefined ? '' : `Ctx last ${formatContextUsage(used, window)}`,
       tone: 'textSubtle',
       separator: 'metric',
       tier: 1,

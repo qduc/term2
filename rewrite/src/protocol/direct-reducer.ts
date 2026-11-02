@@ -286,6 +286,8 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
         reasoning: '',
         reasoningIdentity: null,
         usage: { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 },
+        lastUsage: undefined,
+        lastSpeed: undefined,
         terminal: null,
         timeline: [],
         turnResults: [],
@@ -317,6 +319,7 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
     case 'history_replaced':
       return {
         ...state,
+        ...(event.payload.retainTranscript ? {} : { lastUsage: undefined, lastSpeed: undefined }),
         notices: [
           ...state.notices,
           { kind: 'history_replaced', message: historyReplacedMessage(event.payload.reason) },
@@ -336,6 +339,8 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
     case 'usage':
       return {
         ...state,
+        lastUsage: event.payload.usage,
+        lastSpeed: event.payload.speed,
         usage: {
           inputTokens: state.usage.inputTokens + event.payload.usage.inputTokens,
           outputTokens: state.usage.outputTokens + event.payload.usage.outputTokens,
@@ -384,6 +389,8 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
       return {
         ...state,
         model: event.payload.model ?? state.model,
+        lastUsage: undefined,
+        lastSpeed: undefined,
         configuration: { ...state.configuration, ...event.payload },
       };
     case 'queue_changed':

@@ -473,13 +473,27 @@ function conversation(
       closed = true;
       background!.stopCheckIns();
       commands.owner?.abort.abort();
+      const failures: unknown[] = [];
+      await commands.owner?.done?.catch((error) => failures.push(error));
+      // A rejected owner must not skip siblings or release the writer while
+      // another physical stop is still pending.
+      const stopped = await Promise.allSettled([
+        Promise.resolve().then(() => active?.stop()),
+        Promise.resolve().then(() => tasks!.close()),
+      ]);
+      for (const result of stopped) if (result.status === 'rejected') failures.push(result.reason);
       try {
-        await commands.owner?.done;
-        await Promise.all([active?.stop(), tasks!.close()]);
         await capabilities!.close(!!journal.failure);
-      } finally {
-        deps.log.close();
+      } catch (error) {
+        failures.push(error);
       }
+      try {
+        deps.log.close();
+      } catch (error) {
+        failures.push(error);
+      }
+      if (failures.length > 1) throw new AggregateError(failures, 'direct Conversation shutdown and cleanup failed');
+      if (failures.length) throw failures[0];
     },
   };
 }

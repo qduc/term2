@@ -371,16 +371,34 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
         }
         if (!stoppingBudget) active?.turn.cancel();
         if (commands.size) await Promise.allSettled([...commands]);
-        if (active) await active.done;
+        const failures: unknown[] = [];
+        try {
+          if (active) await active.done;
+        } catch (error) {
+          failures.push(error);
+        }
+        // Semantic finalization can fail after the engine drains. Only the
+        // Conversation owns proof that all physical work has stopped.
         try {
           await conversation.close();
-        } finally {
-          await options.dispose?.();
-          state = { ...state, status: 'closed', pendingInteractions: [], activeTurnId: null };
-          publishState();
-          queueMicrotask(() => subscribers.clear());
-          options.released?.();
+        } catch (error) {
+          failures.push(error);
         }
+        try {
+          await options.dispose?.();
+        } catch (error) {
+          failures.push(error);
+        }
+        state = { ...state, status: 'closed', pendingInteractions: [], activeTurnId: null };
+        publishState();
+        queueMicrotask(() => subscribers.clear());
+        try {
+          options.released?.();
+        } catch (error) {
+          failures.push(error);
+        }
+        if (failures.length > 1) throw new AggregateError(failures, 'direct Session shutdown and cleanup failed');
+        if (failures.length) throw failures[0];
       })();
       return closingPromise;
     },

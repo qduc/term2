@@ -180,6 +180,7 @@ export async function directSlashCommand(connection: TuiConnection, input: strin
   switch (input.trim()) {
     case '/compact':
       return receiptNotice(await sendNativeCommand(connection, { type: 'compact', commandId }));
+    case '/retry':
     case '/retry-turn':
       return receiptNotice(await sendNativeCommand(connection, { type: 'retry', commandId, target: 'turn' }));
     case '/retry-tool':

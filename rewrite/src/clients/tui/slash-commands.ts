@@ -1,6 +1,7 @@
 /** Commands accepted by the direct TUI and its app integration, with the line the menu and `/help` both show. */
 export const SLASH_COMMAND_TABLE: ReadonlyArray<{ readonly name: string; readonly description: string }> = [
   { name: '/help', description: 'Show commands and keyboard shortcuts' },
+  { name: '/providers', description: 'List configured providers and their status' },
   { name: '/model', description: 'Choose or set the model (/model <provider>/<model>)' },
   { name: '/effort', description: 'Set the reasoning effort' },
   { name: '/profile', description: 'Switch the active profile' },
@@ -11,6 +12,7 @@ export const SLASH_COMMAND_TABLE: ReadonlyArray<{ readonly name: string; readonl
   { name: '/clear', description: 'Start a new conversation' },
   { name: '/rollover', description: 'Continue in a fresh conversation seeded from this one' },
   { name: '/compact', description: 'Compact older turns into a summary' },
+  { name: '/retry', description: 'Regenerate the latest turn (alias for /retry-turn)' },
   { name: '/retry-turn', description: 'Regenerate the latest turn from its original prompt' },
   { name: '/retry-tool', description: 'Retry the last tool call' },
   { name: '/rewind', description: 'Go back to an earlier message' },

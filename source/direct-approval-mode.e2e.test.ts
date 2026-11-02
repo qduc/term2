@@ -289,3 +289,9 @@ it('Enter on an arrow-picked command completes it and does not run it', { timeou
 it('Shift+Tab cycles approval modes without changing the draft', { timeout: TIMEOUT_MS }, () =>
   runCommand('', '', undefined, 'approval-shortcut'),
 );
+
+it('/providers lists the configured active provider', { timeout: TIMEOUT_MS }, () =>
+  runCommand('/providers', 'mockprov (mockprov) — configured · active'),
+);
+
+it('/retry aliases retry-turn', { timeout: TIMEOUT_MS }, () => runCommand('/retry', 'No retained'));

@@ -1,3 +1,4 @@
+import { loadProviderItems } from '../../../source/providers/provider-service.js';
 /**
  * The slash commands no wire command covers by itself. Each one is either a real
  * host or wire operation here, or it fails visibly. The TUI sends `/compact`, `/retry-*`,
@@ -284,6 +285,28 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
           return copy(argument);
         case 'usage':
           return usage();
+        case 'providers': {
+          const settings = app.sessionDetails(connection.sessionId).settings;
+          if (!settings) throw new Error('The attached session has no live settings.');
+          const providers = loadProviderItems(settings);
+          return {
+            message: providers.length
+              ? [
+                  'Configured providers:',
+                  ...providers.map(
+                    (provider) =>
+                      `${provider.label} (${provider.id}) — ${
+                        provider.isDisabled
+                          ? 'disabled'
+                          : provider.hasCredentials
+                          ? 'configured'
+                          : 'missing credentials'
+                      }${provider.isActive ? ' · active' : ''}`,
+                  ),
+                ].join('\n')
+              : 'No configured providers.',
+          };
+        }
         case 'sandbox':
           return configuration.sandbox(connection);
         case 'auto-approve':

@@ -397,6 +397,12 @@ function idValue(value: unknown): string {
   if (typeof value !== 'string' || !ID_PATTERN.test(value)) throw new Term2ProtocolError('Invalid term2 identity');
   return value;
 }
+// Native interaction request IDs include colon-delimited turn/sequence components.
+function interactionIdValue(value: unknown): string {
+  if (typeof value !== 'string' || !/^[A-Za-z0-9_:-]{1,256}$/.test(value))
+    throw new Term2ProtocolError('Invalid term2 identity');
+  return value;
+}
 function choiceIdValue(value: unknown): string {
   if (
     typeof value !== 'string' ||
@@ -586,7 +592,7 @@ export function parsePendingInteraction(value: unknown): PendingInteraction {
   const choices = Array.isArray(input.choices) ? input.choices : [];
   const result: PendingInteraction = {
     version: 1,
-    interactionId: idValue(input.interactionId),
+    interactionId: interactionIdValue(input.interactionId),
     kind: input.kind as InteractionKind,
     variant: input.variant as InteractionVariant,
     descriptor: {

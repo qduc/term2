@@ -192,6 +192,16 @@ additional charges; root queue is never copied. Raw reasoning/progress are not
 reconstructed. See `m6-v2-hydration-interface.md` for the exact client sequence
 and gaps.
 
+## Interaction identity
+
+Native interaction request IDs can contain colon-delimited turn and sequence
+components (for example, `turn-1:question:1`). The browser projection, BFF
+interaction route and private host interaction route accept letters, digits,
+underscore, hyphen and colon, up to 256 characters. Session IDs keep their
+separate, narrower validation. A browser happy-path test alone does not cover
+this boundary: exercise both a real approval and a real rejection through the
+native interaction route when changing it.
+
 ## Configure receipts
 
 `POST /sessions/:id/config?format=agent-wire-v2` keeps the established HTTP

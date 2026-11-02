@@ -32,7 +32,7 @@ export function matchPrivateRoute(method: string, pathname: string): PrivateRout
   if (method === 'POST' && pathname === '/private/agent/v1/sessions') return { purpose: 'session_create' };
   if (method === 'GET' && pathname === '/private/agent/v1/sessions') return { purpose: 'session_list' };
   const match = pathname.match(
-    /^\/private\/agent\/v1\/sessions\/([A-Za-z0-9_-]{1,256})(?:\/(messages|abort|events|config|commands|interactions\/([A-Za-z0-9_-]{1,256})))?$/,
+    /^\/private\/agent\/v1\/sessions\/([A-Za-z0-9_-]{1,256})(?:\/(messages|abort|events|config|commands|interactions\/([A-Za-z0-9_:-]{1,256})))?$/,
   );
   if (!match) return null;
   const sessionId = match[1]!;

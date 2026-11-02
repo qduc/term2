@@ -29,7 +29,8 @@ function text(value: unknown, name: string): string {
 }
 
 export function validateInteractionBody(body: Record<string, unknown>, interactionId: unknown) {
-  opaqueId(interactionId, 'interaction ID');
+  if (typeof interactionId !== 'string' || !/^[A-Za-z0-9_:-]{1,256}$/u.test(interactionId))
+    throw new RequestValidationError('Invalid interaction ID');
   const allowedKeys = ['revision', 'answer', 'rejectionReason', 'approvalAnswer'] as const;
   if (Object.keys(body).some((key) => !allowedKeys.includes(key as (typeof allowedKeys)[number]))) {
     throw new RequestValidationError('Invalid interaction request');

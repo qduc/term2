@@ -23,7 +23,7 @@ import { useHarnessInput } from './harness-input.js';
 import { replaceSession } from './replace-session.js';
 import { runBridgeCommand } from './bridge-command.js';
 import { useSendConfirmation } from './send-confirmation.js';
-import { ComposerFooter, useComposerFilter, useSlashMenu, useSubmitGate } from './composer-parts.js';
+import { ComposerFooter, useComposerFilter, useSlashMenu } from './composer-parts.js';
 import {
   answerBudget,
   answerInteraction,
@@ -104,7 +104,7 @@ export function TuiSession({
     !confirmation.pending && !connectionError && !interactionActive && !taskOpen && !budgetOpen && !rewindTargets;
   const slash = useSlashMenu(editor.value, composerActive && !editing, theme.textSubtle);
   useHarnessInput(composerActive && !busy, Boolean(state.activeTurnId), editor.value);
-  const pending = useSubmitGate();
+  const pending = useRef(false);
   const composerFilter = useComposerFilter({
     composerActive,
     slash,
@@ -185,8 +185,12 @@ export function TuiSession({
     confirmed = false,
   ): Promise<void> => {
     if (!input.trim() && !submittedImages.length && !otherParts.length && !editing) return;
-    // The composer is already empty: a send that overlaps another waits its turn rather than being lost.
-    if (pending.current) return pending.defer(() => void submit(input, submittedImages, delivery, confirmed));
+    if (pending.current) {
+      // The composer is already empty and a send is in flight: keep this message as the draft instead of losing it.
+      replaceInput(editor.value ? `${input}\n${editor.value}` : input);
+      setImages(submittedImages);
+      return setNotice('Still sending the previous message. Press Enter again to send this one.');
+    }
     pending.current = true;
     setBusy(true);
     setNotice(null);

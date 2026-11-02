@@ -2,4 +2,3 @@
 export { useSlashMenu } from './slash-menu.js';
 export { ComposerFooter } from './composer-footer.js';
 export { useComposerFilter } from './composer-filter.js';
-export { useSubmitGate } from './submit-gate.js';

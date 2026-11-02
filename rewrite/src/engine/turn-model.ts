@@ -11,6 +11,8 @@ import { TurnEvents, cancelled } from './turn-events.js';
 import { TurnTools, type RootCall } from './turn-tools.js';
 
 type Done = Extract<ModelEvent, { type: 'done' }>;
+class SteeringInterrupt extends Error {}
+
 type Retry = Extract<DirectRecoveryDecision, { kind: 'retry' }>;
 
 export class TurnModel {
@@ -20,6 +22,7 @@ export class TurnModel {
   #mainRequests = 0;
   #hasOutput = false;
   #requestHasOutput = false;
+  #interruptTextStream?: () => void;
   readonly #compaction: TurnCompaction;
   #standardTier = false;
   #downgraded = false;
@@ -78,6 +81,13 @@ export class TurnModel {
       } catch (error) {
         this.#continuity.clear();
         if (this.signal.aborted) throw cancelled();
+        if (error instanceof SteeringInterrupt) {
+          // A recovery dispatch has already spent its reservation. The steered
+          // continuation needs its own physical claim, not a reused ticket.
+          if (retry && !this.#recovery.budget.claimPhysicalAttempt())
+            throw new Error('Recovery budget exhausted before steered continuation.');
+          continue;
+        }
         const pairs = hasCompleteDirectToolPairs(history);
         const decision = this.#recovery?.recover({
           failure: recoveryFailure(error),
@@ -135,6 +145,11 @@ export class TurnModel {
         await delay(decision.delayMs, this.signal);
       }
     }
+  }
+
+  /** Request interruption only while a text-only response is actively streaming. */
+  steer(): void {
+    this.#interruptTextStream?.();
   }
 
   /** Only cancelled/failed/interrupted runs retire an accepted checkpoint. */
@@ -282,15 +297,35 @@ export class TurnModel {
     let done: Done | undefined;
     let usage: Usage | undefined;
     let outcome: 'completed' | 'failed' | 'cancelled' = 'failed';
+    const requestController = new AbortController();
+    let interrupted = false;
+    let hasToolOutput = false;
+    let acceptingText = false;
+    let acceptanceFailed = false;
+    this.#interruptTextStream = () => {
+      if ((!text && !acceptingText) || hasToolOutput || done || interrupted) return;
+      interrupted = true;
+      requestController.abort();
+    };
     try {
-      for await (const event of this.deps.models.resolve(request.model).stream(request, this.signal, () => {
-        this.deps.onTurnBoundary?.({ turnId: this.spec.turnId, kind: 'request_dispatched' });
-      })) {
+      for await (const event of this.deps.models
+        .resolve(request.model)
+        .stream(request, AbortSignal.any([this.signal, requestController.signal]), () => {
+          this.deps.onTurnBoundary?.({ turnId: this.spec.turnId, kind: 'request_dispatched' });
+        })) {
         if (this.signal.aborted) throw cancelled();
         if (done) throw new Error('Model emitted events after its terminal response');
         switch (event.type) {
           case 'text_delta':
-            await this.events.publish({ type: 'text_delta', delta: event.delta, modelStep });
+            acceptingText = true;
+            try {
+              await this.events.publish({ type: 'text_delta', delta: event.delta, modelStep });
+            } catch (error) {
+              acceptanceFailed = true;
+              throw error;
+            } finally {
+              acceptingText = false;
+            }
             if (!text) textPosition = items.length;
             text += event.delta;
             this.#hasOutput = true;
@@ -302,6 +337,7 @@ export class TurnModel {
             this.#requestHasOutput = true;
             break;
           case 'tool_call_streaming_delta':
+            hasToolOutput = true;
             await this.events.publish({ ...event, turnId: this.spec.turnId, modelStep });
             // Progress already shown to the caller is physical output evidence,
             // even though it is not a completed/admitted tool or history item.
@@ -309,6 +345,7 @@ export class TurnModel {
             this.#requestHasOutput = true;
             break;
           case 'item': {
+            if (event.item.type === 'tool_call') hasToolOutput = true;
             const call = event.item.type === 'tool_call' ? this.tools.root(event.item, modelStep) : undefined;
             await this.events.publish({
               type: 'item',
@@ -346,11 +383,33 @@ export class TurnModel {
         }
       }
       if (this.signal.aborted) throw cancelled();
+      if (interrupted) throw new SteeringInterrupt();
       if (!done) throw new Error('Model stream ended before the response completed.');
       outcome = 'completed';
       this.#compaction.recordInputTokens(usage?.inputTokens);
       return { calls, done };
+    } catch (error) {
+      if (interrupted && !this.signal.aborted && !acceptanceFailed) {
+        // Finalize the already accepted text before admitting the steer. Otherwise
+        // the TUI keeps an old draft live below the new user message, and replay
+        // cannot distinguish this partial from an active stream.
+        if (text) {
+          const partial: Item = {
+            type: 'assistant_message',
+            id: `${this.spec.turnId}-model-${modelStep}-partial` as ItemId,
+            content: [{ type: 'text', text }],
+          };
+          await this.events.publish({ type: 'item', item: partial, modelStep });
+          // Replay appends an accepted assistant item at its fact position.
+          // Match that ordering for intervening reasoning/provider items.
+          items.push(partial);
+          text = '';
+        }
+        throw new SteeringInterrupt();
+      }
+      throw error;
     } finally {
+      this.#interruptTextStream = undefined;
       if (text)
         items.splice(textPosition, 0, {
           type: 'assistant_message',
@@ -365,7 +424,7 @@ export class TurnModel {
         serviceTier: request.useStandardServiceTier ? 'standard' : undefined,
         usage,
         costUsd: done?.costUsd,
-        outcome: this.signal.aborted ? 'cancelled' : outcome,
+        outcome: this.signal.aborted || interrupted ? 'cancelled' : outcome,
       });
     }
   }

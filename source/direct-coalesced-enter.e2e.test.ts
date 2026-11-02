@@ -22,6 +22,8 @@ const TIMEOUT_MS = 120_000;
 let session: TerminalSession | null = null;
 let root = '';
 let server: http.Server | null = null;
+let received: string[] = [];
+let closedHanging = false;
 
 afterEach(async () => {
   session?.dispose();
@@ -31,9 +33,11 @@ afterEach(async () => {
   server = null;
   if (root) fs.rmSync(root, { recursive: true, force: true });
   root = '';
+  received = [];
+  closedHanging = false;
 });
 
-type Reply = { text?: string; hang?: boolean };
+type Reply = { text?: string; hang?: boolean; fail?: boolean };
 
 /** One SSE reply per chat request, in order: a single shell call or plain text. */
 async function startProvider(replies: Reply[]): Promise<string> {
@@ -44,17 +48,30 @@ async function startProvider(replies: Reply[]): Promise<string> {
       res.end(JSON.stringify({ object: 'list', data: [{ id: 'mock-alpha' }] }));
       return;
     }
-    req.resume();
+    let body = '';
+    req.on('data', (chunk) => {
+      body += chunk;
+    });
     req.on('end', () => {
+      received.push(body);
       const reply = replies[requests++] ?? { text: 'done' };
+      if (reply.fail) {
+        res.writeHead(503, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: { message: 'retryable failure' } }));
+        return;
+      }
       const id = `chatcmpl-${requests}`;
       const frames: object[] = [{ id, choices: [{ delta: { role: 'assistant', content: reply.text } }] }];
       if (!reply.hang) frames.push({ id, choices: [{ delta: {}, finish_reason: 'stop' }] });
       res.writeHead(200, { 'content-type': 'text/event-stream' });
-      const body = frames.map((frame) => `data: ${JSON.stringify(frame)}\n`).join('\n');
+      const wire = frames.map((frame) => `data: ${JSON.stringify(frame)}\n`).join('\n');
       // A hanging reply streams its text and then never finishes, like a long answer being cut short.
-      if (reply.hang) res.write(`${body}\n`);
-      else res.end(`${body}\ndata: [DONE]\n\n`);
+      if (reply.hang) {
+        res.on('close', () => {
+          closedHanging = true;
+        });
+        res.write(`${wire}\n`);
+      } else res.end(`${wire}\ndata: [DONE]\n\n`);
     });
   });
   await new Promise<void>((resolve) => server!.listen(0, '127.0.0.1', resolve));
@@ -62,7 +79,7 @@ async function startProvider(replies: Reply[]): Promise<string> {
   return `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}/v1`;
 }
 
-async function start(replies: Reply[]): Promise<{ idlePath: string }> {
+async function start(replies: Reply[], retryAttempts = 0): Promise<{ idlePath: string }> {
   root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-tool-rows-e2e-')));
   const home = path.join(root, 'home');
   const workspace = path.join(root, 'w');
@@ -90,7 +107,7 @@ async function start(replies: Reply[]): Promise<{ idlePath: string }> {
   fs.writeFileSync(
     path.join(settingsDir, 'settings.json'),
     JSON.stringify({
-      agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
+      agent: { retryAttempts, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
       providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl, apiKey: 'test-key' }],
       // Sandbox off and GREEN commands: both run without an approval prompt.
       sandbox: { enabled: false },
@@ -109,22 +126,53 @@ async function until(check: () => boolean, what: string): Promise<void> {
 }
 
 it('text and Enter in one write submit while a turn is streaming', { timeout: TIMEOUT_MS }, async () => {
-  const { idlePath } = await start([{ text: 'STREAMING-TEXT', hang: true }, { text: 'done' }]);
+  const { idlePath } = await start([{ text: 'STREAMING-TEXT', hang: true }, { text: 'STEERED-REPLY' }]);
   session!.write('first question');
   await waitForHarnessComposerValue(idlePath, 'first question', { timeoutMs: 60_000 });
   session!.write('\r');
   await session!.waitForOutput('STREAMING-TEXT', 60_000);
   // A sender that writes text and CR together while the stream renders: the draft must be sent, not kept.
   session!.write('steer now\r');
-  // The draft state is published after the commit, so give it time before reading it.
-  await new Promise((resolve) => setTimeout(resolve, 3000));
+  await session!.waitForOutput('STEERED-REPLY', 30_000);
+  await until(() => received.length >= 2 && closedHanging, 'steer aborts the hanging response and dispatches another');
+  expect(received[1]).toContain('steer now');
+  expect(received[1]).toContain('STREAMING-TEXT');
+  // The draft state is published after the commit.
+  await until(() => composer(idlePath) === '', 'submitted steer clears the draft');
   expect(composer(idlePath), 'the coalesced text+Enter was submitted and cleared the draft').toBe('');
   // The steer reached the durable log, so it was sent rather than dropped.
   const logs = fs.readdirSync(path.join(root, 'conversations')).filter((name) => name.endsWith('.jsonl'));
-  expect(logs.map((name) => fs.readFileSync(path.join(root, 'conversations', name), 'utf8')).join('\n')).toContain(
-    'steer now',
-  );
+  const log = logs.map((name) => fs.readFileSync(path.join(root, 'conversations', name), 'utf8')).join('\n');
+  expect(log).toContain('steer now');
+  const facts = log
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line).fact);
+  const partial = facts.findIndex((fact) => fact.type === 'item' && fact.item?.id?.endsWith('-partial'));
+  const steer = facts.findIndex((fact) => fact.type === 'queue_steered');
+  expect(partial, 'the interrupted text is finalized').toBeGreaterThanOrEqual(0);
+  expect(steer, 'the steer is admitted after the partial is finalized').toBeGreaterThan(partial);
 });
+
+it(
+  'a steer interrupts a retry response and the continued request reaches the provider',
+  { timeout: TIMEOUT_MS },
+  async () => {
+    const { idlePath } = await start(
+      [{ fail: true }, { text: 'RECOVERED-PARTIAL', hang: true }, { text: 'AFTER-RECOVERY-STEER' }],
+      1,
+    );
+    session!.write('retry question');
+    await waitForHarnessComposerValue(idlePath, 'retry question', { timeoutMs: 60_000 });
+    session!.write('\r');
+    await session!.waitForOutput('RECOVERED-PARTIAL', 60_000);
+    session!.write('recovery steer\r');
+    await session!.waitForOutput('AFTER-RECOVERY-STEER', 30_000);
+    await until(() => received.length >= 3 && closedHanging, 'the recovery stream closes and the steer dispatches');
+    expect(received[2]).toContain('recovery steer');
+    expect(received[2]).toContain('RECOVERED-PARTIAL');
+  },
+);
 
 it('a bracketed paste keeps its Enter as a newline and does not submit', { timeout: TIMEOUT_MS }, async () => {
   const { idlePath } = await start([{ text: 'done' }]);

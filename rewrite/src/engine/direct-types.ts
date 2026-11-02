@@ -233,5 +233,7 @@ export type TurnHandle = {
   accept(token: number): void;
   answer(requestId: InteractionRequestId, decision: InteractionDecision): void;
   answerBudget(requestId: InteractionRequestId, decision: BudgetDecision): void;
+  /** Wake an in-flight text response after Session durably admits a steer. */
+  steer(): void;
   cancel(): void;
 };

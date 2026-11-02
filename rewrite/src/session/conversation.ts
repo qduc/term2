@@ -1,7 +1,7 @@
 import { ConversationBackground } from './conversation-background.js';
 import { ConversationCommands } from './conversation-commands.js';
 import { ConversationJournal, modelError, nextConversationTurnId } from './conversation-journal.js';
-import { failedTurn, ownConversationTurn, terminalFact } from './conversation-turn.js';
+import { failedTurn, ownConversationTurn, terminalFact, type OwnedConversationTurn } from './conversation-turn.js';
 import { prepareConversationNotice, completedConversationTurn } from './conversation-notice.js';
 /**
  * The direct conversation owns the engine reader and the durable writer. An
@@ -23,7 +23,7 @@ import type { DirectQueueEffect } from './direct-queue-types.js';
 import { planDirectQueue, submitDirectQueue } from './direct-queue.js';
 import { directRolloverAtBoundary } from './direct-rollover.js';
 import { DirectRunBudgets } from './direct-run-budget.js';
-import type { Conversation, ConversationDeps, StartedConversationTurn, Turn, TurnRequest } from './direct-types.js';
+import type { Conversation, ConversationDeps, StartedConversationTurn, TurnRequest } from './direct-types.js';
 import type { Fact, FactLine, SessionStartedFact } from './facts.js';
 import { replay } from './replay.js';
 
@@ -53,7 +53,7 @@ function conversation(
   facts: Fact[],
   newEntries: readonly FactLine[] = [],
 ): Conversation {
-  let active: (Turn & { readonly turnId: TurnId; readonly cancelled: boolean; stop(): Promise<void> }) | null = null;
+  let active: OwnedConversationTurn | null = null;
   const generation = new ConversationGeneration(deps);
   let nextTurnId = nextConversationTurnId(facts);
   let queueSettings: Omit<TurnRequest, 'input' | 'submission'> | undefined;
@@ -207,7 +207,6 @@ function conversation(
     if (!commit(plan.facts)) throw new Error(journal.failure!.message);
     return input;
   };
-
   const start = (
     request: TurnRequest,
     planned?: {
@@ -437,6 +436,7 @@ function conversation(
         return {
           admission: { kind: 'rejected', clientRequestId: request.clientRequestId, reason: journal.failure!.message },
         };
+      if (plan.result.kind === 'steering') active?.steer();
       return { admission: plan.result };
     },
     queue(command) {

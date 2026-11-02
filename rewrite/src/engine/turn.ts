@@ -61,6 +61,7 @@ function createTurn(spec: TurnSpec, deps: TurnDeps, operation: 'conversation' | 
     accept: (token) => channel.accept(token),
     answer: (id, decision) => tools.answer(id, decision),
     answerBudget: (id, decision) => budget.answer(id, decision),
+    steer: () => model.steer(),
     cancel,
   };
 }

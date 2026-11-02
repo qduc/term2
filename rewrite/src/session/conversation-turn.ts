@@ -63,6 +63,13 @@ export function admitConversationTurn(
   return human.modelInput;
 }
 
+export type OwnedConversationTurn = Turn & {
+  readonly turnId: TurnId;
+  readonly cancelled: boolean;
+  stop(): Promise<void>;
+  steer(): void;
+};
+
 /** Owns the handle until cleanup settles, including when its consumer returns early. */
 export function ownConversationTurn(
   turnId: TurnId,
@@ -73,7 +80,7 @@ export function ownConversationTurn(
     readonly publishNotice: ConversationDeps['publishNotice'];
     released(): void;
   },
-): Turn & { readonly turnId: TurnId; readonly cancelled: boolean; stop(): Promise<void> } {
+): OwnedConversationTurn {
   const requests = new Map<InteractionRequestId, InteractionRequest>();
   const budgets = new Map<InteractionRequestId, Extract<TurnEvent, { type: 'budget_required' }>>();
   const engine = handle.events[Symbol.asyncIterator]();
@@ -225,6 +232,7 @@ export function ownConversationTurn(
       },
     },
     turnId,
+    steer: () => handle.steer(),
     get cancelled() {
       return cancelled;
     },

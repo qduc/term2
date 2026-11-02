@@ -106,7 +106,7 @@ it(
         },
       },
       { call: { id: 'call_0', command: first } },
-      { text: 'Created `b.txt` and read it back: `hi`. first turn done' },
+      { text: 'Created `b.txt` and read it back: `hi`. Flags: `--foo` `--bar` first turn done' },
     ]);
     const idlePath = path.join(home, 'input-idle');
     const env = {
@@ -158,6 +158,8 @@ it(
     expect(visible, visible).toContain('Created b.txt and read it back: hi.');
     // Inline code is a chip: padded on the background where a space stood, none before the full stop.
     expect(session.getOutput()).toMatch(/m b\.txt \x1b\[/);
+    // Two chips with one space between them stay two chips with one padding column between them.
+    expect(visible, visible).toContain('Flags: --foo --bar first turn done');
     // The edit and the new content stay visible: the header only names the file.
     expect(visible, visible).toContain('+ beta-line');
     expect(visible, visible).toContain('- alpha-line');

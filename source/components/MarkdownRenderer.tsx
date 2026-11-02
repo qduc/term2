@@ -573,7 +573,9 @@ function absorbChipSpaces(tokens: any[]): any[] {
     (token?.type === 'text' || token?.type === 'escape') && !token.tokens && typeof token.text === 'string';
   return tokens.map((token, index) => {
     if (token.type === 'codespan') {
-      const padLeft = plain(tokens[index - 1]) && tokens[index - 1].text.endsWith(' ');
+      // One space between two chips is padded by the first chip only, so the pair does not fuse into one blob.
+      const sharedSpace = tokens[index - 2]?.type === 'codespan' && tokens[index - 1]?.text === ' ';
+      const padLeft = plain(tokens[index - 1]) && tokens[index - 1].text.endsWith(' ') && !sharedSpace;
       const padRight = plain(tokens[index + 1]) && tokens[index + 1].text.startsWith(' ');
       return { ...token, padLeft, padRight };
     }

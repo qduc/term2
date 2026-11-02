@@ -43,13 +43,13 @@ export const SLASH_COMMAND_TABLE: ReadonlyArray<{ readonly name: string; readonl
 
 export const SLASH_COMMANDS: readonly string[] = SLASH_COMMAND_TABLE.map((command) => command.name);
 
-/** The text `/help` prints: every command with its description, then the keyboard shortcuts. */
+/** The text `/help` prints: keyboard shortcuts first, then every command with its description. */
 export function helpText(): string {
   return [
-    'Commands',
-    ...SLASH_COMMAND_TABLE.map((command) => `${command.name} — ${command.description}`),
     'Keyboard shortcuts',
     'Enter send/steer · Alt+Enter follow-up · ↑/↓ history · PgUp/PgDn scroll · Ctrl+O tool output',
     'Ctrl+G approvals/tasks · Ctrl+B budget · Ctrl+C stop turn / clear input / exit',
+    'Commands',
+    ...SLASH_COMMAND_TABLE.map((command) => `${command.name} — ${command.description}`),
   ].join('\n');
 }

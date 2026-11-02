@@ -58,12 +58,14 @@ for (const [cols, rows] of [
       terminal.write('/help');
       await waitForHarnessComposerValue(idle, '/help', { timeoutMs: 60_000 });
       terminal.write('\r');
-      await terminal.waitForOutput('/help —', 30_000);
+      await terminal.waitForOutput('Keyboard shortcuts', 30_000);
+      expect(terminal.getVisibleOutput()).toContain('Keyboard shortcuts');
+      expect(terminal.getVisibleOutput()).toContain('Ctrl+G approvals/tasks');
       for (let i = 0; i < 12; i++) {
         terminal.write('\x1b[6~');
         await new Promise((r) => setTimeout(r, 80));
       }
-      await terminal.waitForOutput('Ctrl+G approvals/tasks', 30_000);
+      await terminal.waitForOutput('/orchestrator —', 30_000);
       const table = fs.readFileSync(
         fileURLToPath(new URL('../rewrite/src/clients/tui/slash-commands.ts', import.meta.url)),
         'utf8',
@@ -71,6 +73,9 @@ for (const [cols, rows] of [
       const commands = [...table.matchAll(/name: '([^']+)'/g)].map((match) => match[1]!);
       expect(commands.length).toBeGreaterThan(20);
       for (const command of commands) expect(terminal.getOutput()).toContain(command);
+      for (const command of ['/plan', '/mentor', '/bare', '/mcp', '/restart', '/quit']) {
+        expect(terminal.getVisibleOutput()).toContain(`${command} —`);
+      }
       terminal.write('\x1b[5~');
       await new Promise((resolve) => setTimeout(resolve, 200));
     } finally {

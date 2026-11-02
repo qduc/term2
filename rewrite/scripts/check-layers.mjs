@@ -62,6 +62,7 @@ const DIRECT_SOURCE_IMPORTERS = new Set([
   'clients/tui/composer-footer.tsx',
   'clients/tui/resume-picker.tsx',
   'clients/tui/session.tsx',
+  'clients/tui/slash-menu.tsx',
   'clients/tui/tool-view.tsx',
   'clients/tui/viewport.tsx',
   'clients/tui/views.tsx',

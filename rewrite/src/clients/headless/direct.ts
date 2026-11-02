@@ -256,7 +256,9 @@ export async function runDirectHeadless(
       const phase = background;
       if (phase === null || targetTurnId !== null) return null;
       if (abortedInBackground || options.signal?.aborted) {
-        return failBackground('Background work interrupted; cancellation was requested but task settlement is not confirmed.');
+        return failBackground(
+          'Background work interrupted; cancellation was requested but task settlement is not confirmed.',
+        );
       }
       const now = Date.now();
       const pending = pendingNotices();
@@ -306,7 +308,9 @@ export async function runDirectHeadless(
     let ready: IteratorResult<WireEvent> | null = null;
     for (;;) {
       if (background !== null && (abortedInBackground || options.signal?.aborted)) {
-        return failBackground('Background work interrupted; cancellation was requested but task settlement is not confirmed.');
+        return failBackground(
+          'Background work interrupted; cancellation was requested but task settlement is not confirmed.',
+        );
       }
       if (background !== null && targetTurnId === null) {
         const driven = await driveBackground();
@@ -319,7 +323,9 @@ export async function runDirectHeadless(
             continue;
           }
           if (waited.kind === 'wake') {
-            return failBackground('Background work interrupted; cancellation was requested but task settlement is not confirmed.');
+            return failBackground(
+              'Background work interrupted; cancellation was requested but task settlement is not confirmed.',
+            );
           }
           ready = waited.value;
         } else {
@@ -341,7 +347,9 @@ export async function runDirectHeadless(
             );
           }
           if (waited.kind === 'wake') {
-            return failBackground('Background work interrupted; cancellation was requested but task settlement is not confirmed.');
+            return failBackground(
+              'Background work interrupted; cancellation was requested but task settlement is not confirmed.',
+            );
           }
           ready = waited.value;
         } else {
@@ -353,7 +361,9 @@ export async function runDirectHeadless(
       ready = null;
       if (next.done) {
         if (abortedInBackground || options.signal?.aborted) {
-          return failBackground('Background work interrupted; cancellation was requested but task settlement is not confirmed.');
+          return failBackground(
+            'Background work interrupted; cancellation was requested but task settlement is not confirmed.',
+          );
         }
         if (background !== null) {
           if (pendingNotices().length === 0 && activeTasks().length === 0 && expectedCompletion.size === 0)
@@ -437,7 +447,9 @@ export async function runDirectHeadless(
         const outcome = event.payload.outcome;
         const terminalCause = event.payload.terminalCause;
         if (background !== null && (abortedInBackground || options.signal?.aborted)) {
-          return failBackground('Background work interrupted; cancellation was requested but task settlement is not confirmed.');
+          return failBackground(
+            'Background work interrupted; cancellation was requested but task settlement is not confirmed.',
+          );
         }
         if (outcome !== 'cancelled' && terminalCause !== undefined && BLOCKED_TERMINAL_CAUSES.has(terminalCause)) {
           presentation.blockedNotice(event.payload.notice, terminalCause);

@@ -1,8 +1,8 @@
+import { rotationConfiguration, branchSnapshots, projectItem } from './direct-projection-parts.js';
 /** One translation from accepted direct Session updates to wire events.
  * Session alone commits/answers; this class only maintains the public read model.
  */
 import type { DirectSessionState, DirectSessionUpdate } from '../session/facade-types.js';
-import type { DirectSessionRotationFact } from '../session/direct-session-rotation.js';
 import { directDraftId, initialDirectState } from '../session/direct-state.js';
 import { contextFactEvent } from './direct-context.js';
 import type { DirectQueueState } from '../session/direct-queue-types.js';
@@ -16,15 +16,7 @@ import { completedFinalText } from './direct-turn-results.js';
 import { publicQueue, publicQueueChange } from './direct-queue.js';
 import { taskFactEvent } from './direct-tasks.js';
 import type { Fact } from '../session/facts.js';
-import type {
-  WireBranchSnapshot,
-  WireConfiguration,
-  WireEvent,
-  WireEventPayloads,
-  WireEventType,
-  WireModel,
-  WireSnapshot,
-} from './direct-wire.js';
+import type { WireEvent, WireEventPayloads, WireEventType, WireSnapshot } from './direct-wire.js';
 import {
   contentText,
   publicContent,
@@ -36,15 +28,6 @@ import {
 } from './direct-public.js';
 import { runtimeDirectError, snapshotDirectState } from './direct-state.js';
 import { reduceWireEvent } from './direct-reducer.js';
-
-/** Public configuration copied from the accepted rotation header; never intent/profile. */
-function rotationConfiguration(fact: DirectSessionRotationFact): WireConfiguration & { readonly model: WireModel } {
-  return {
-    model: { provider: fact.configuration.model.provider, model: fact.configuration.model.model },
-    ...(fact.configuration.reasoning !== undefined ? { reasoning: fact.configuration.reasoning } : {}),
-    ...(fact.configuration.temperature !== undefined ? { temperature: fact.configuration.temperature } : {}),
-  };
-}
 
 /** The published native update vocabulary, including original accepted timestamps. */
 export type DirectProtocolUpdate = DirectSessionUpdate;
@@ -79,37 +62,7 @@ export class DirectProjection {
   }
   /** One public root/branch cut; no log read or second clock is introduced. */
   get snapshot(): WireSnapshot {
-    return { ...this.#state, branches: this.#branchSnapshots(this.#state) };
-  }
-
-  #branchSnapshots(root: WireSnapshot): readonly WireBranchSnapshot[] {
-    return [...this.#branches].map(([branchId, branch]) => {
-      const child = branch.projection.snapshot;
-      return {
-        branchId,
-        taskId: branch.taskId,
-        turnId: branch.turnId,
-        ...(branch.parentTurnId !== undefined ? { parentTurnId: branch.parentTurnId } : {}),
-        ...(branch.rootTurnId !== undefined ? { rootTurnId: branch.rootTurnId } : {}),
-        acceptedSeq: branch.acceptedSeq,
-        messages: child.messages,
-        tools: child.tools,
-        unmatchedToolResults: child.unmatchedToolResults ?? [],
-        timeline: child.timeline,
-        pendingInteractions: root.pendingInteractions.filter(
-          (request) => request.taskId === branch.taskId && request.turnId === branch.turnId,
-        ),
-        pendingBudgets: child.pendingBudgets ?? [],
-        turnResults: child.turnResults ?? [],
-        usage: branch.hasAcceptedUsage ? child.usage : null,
-        reasoning: child.reasoningIdentity ? child.reasoning : null,
-        reasoningIdentity: child.reasoningIdentity ?? null,
-        terminal: child.terminal,
-        notices: child.notices,
-        requestCosts: (root.requestCosts ?? []).filter((cost) => cost.turnId === branch.turnId),
-        queue: null,
-      };
-    });
+    return { ...this.#state, branches: branchSnapshots(this.#branches, this.#state) };
   }
 
   /** Updates arrive once in Session publication order; never called from a tool body. */
@@ -170,7 +123,12 @@ export class DirectProjection {
       ...(freshError && this.#state.activeTurnId
         ? [this.#event('turn_ended', { outcome: 'failed', error }, null, this.#state.activeTurnId)]
         : []),
-      this.#event('snapshot', { snapshot: { ...snapshot, branches: this.#branchSnapshots(snapshot) } }, null, null),
+      this.#event(
+        'snapshot',
+        { snapshot: { ...snapshot, branches: branchSnapshots(this.#branches, snapshot) } },
+        null,
+        null,
+      ),
     ];
 
     for (const event of events) this.#state = reduceWireEvent(this.#state, event);
@@ -417,7 +375,7 @@ export class DirectProjection {
         ];
       }
       case 'item':
-        return this.#item(fact, seq);
+        return projectItem(fact, seq, this.#event.bind(this), this.#toolIdentity.bind(this));
       case 'tool_started':
         return [
           this.#event(
@@ -531,61 +489,5 @@ export class DirectProjection {
       ),
       occurredAt: at,
     }));
-  }
-  #item(fact: Extract<Fact, { type: 'item' }>, seq: number): readonly WireEvent[] {
-    if (fact.display === false) return [];
-    const { item, executionId, turnId } = fact;
-    if (item.type === 'tool_call') {
-      if (!executionId) throw new Error('Tool call fact has no execution identity');
-      return [
-        this.#event(
-          'tool_called',
-          {
-            tool: {
-              executionId,
-              turnId,
-              callId: item.callId,
-              toolName: item.toolName,
-              input: publicJson(item.input),
-              status: 'called',
-            },
-          },
-          seq,
-          turnId,
-        ),
-      ];
-    }
-    if (item.type === 'tool_result') {
-      if (!executionId) throw new Error('Tool result fact has no execution identity');
-      // The provider-facing result is a separate accepted fact. Upsert by occurrence
-      // instead of suppressing it using current capture state during historical replay.
-      return [
-        this.#event(
-          'tool_finished',
-          {
-            executionId,
-            ...this.#toolIdentity(executionId),
-            output: item.output,
-            isError: item.isError,
-            ...(item.providerOutput ? { content: publicToolContent(item.providerOutput) } : {}),
-          },
-          seq,
-          turnId,
-        ),
-      ];
-    }
-    if (item.type === 'reasoning')
-      return [
-        this.#event(
-          'reasoning',
-          { text: item.summary, messageId: item.id, modelStep: fact.modelStep ?? null },
-          seq,
-          turnId,
-        ),
-      ];
-    const message = publicMessage(item, turnId, fact.modelStep, executionId);
-    if (!message) return [];
-    if (item.type !== 'assistant_message') return [this.#event('message', { message }, seq, turnId)];
-    return [this.#event('message', { message, replacesDraftId: directDraftId(turnId, fact.modelStep) }, seq, turnId)];
   }
 }

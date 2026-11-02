@@ -86,6 +86,8 @@ export type DirectApplication = {
   goal(sessionId: string): Promise<DurableGoal | undefined>;
   /** Pass a snapshot's `seq` to read that cut rather than the log's current end. */
   sessionDetails(sessionId: string, seq?: number | null): DirectSessionDetails;
+  /** The live settings of a session without reading its log each time; for code that runs on every render. */
+  liveSettings(sessionId: string): DirectSessionDetails['settings'];
   /** Save only an applied interactive approval preference, never session model/profile overrides. */
   saveApprovalPreference(sessionId: string, key: 'shell.autoApproveMode' | 'sandbox.enabled'): DurableWriteResult;
   /** The skills under a local workspace root, read fresh so a new one shows up without a restart. */
@@ -98,6 +100,7 @@ export type DirectApplication = {
 export async function createDirectApplication(options: DirectApplicationOptions): Promise<DirectApplication> {
   const { selection, sessionBinding } = options;
   const hooks = options.hooks ? await startDirectHooks(options.hooks, selection) : null;
+  const logicalIds = new Map<string, string>();
   const runtimes = createDirectRuntimes(
     {
       ...options,
@@ -200,6 +203,15 @@ export async function createDirectApplication(options: DirectApplicationOptions)
       } finally {
         capture.unsubscribe();
       }
+    },
+    liveSettings(sessionId) {
+      // A session's logical id never changes, so the log is read once rather than on every render.
+      let logicalId = logicalIds.get(sessionId);
+      if (logicalId === undefined) {
+        logicalId = readDirectLogLineage(options.conversationsDir, sessionId, {}).logicalSessionId;
+        logicalIds.set(sessionId, logicalId);
+      }
+      return runtimes.get(logicalId)?.settings ?? null;
     },
     sessionDetails(sessionId, seq) {
       const lineage = readDirectLogLineage(

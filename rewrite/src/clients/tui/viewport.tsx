@@ -1,9 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { renderToString, useInput } from 'ink';
 import { ThemeProvider, useTheme } from '../../../../source/components/theme.js';
 import { SkinProvider, useSkin } from '../../../../source/skins/SkinContext.js';
 import type { TuiState } from './state.js';
 import { Transcript } from './views.js';
+
+/** Minimum spacing between transcript renders (about 8 frames a second). */
+const RENDER_INTERVAL_MS = 120;
 
 /** Render the skin and markdown at the terminal width, then scroll by visible rows. */
 export function useTranscriptViewport(state: TuiState, columns: number, rows: number, active: boolean) {
@@ -14,10 +17,15 @@ export function useTranscriptViewport(state: TuiState, columns: number, rows: nu
   // Ctrl+O shows every tool's output; by default only failures and edits are open.
   const [expanded, setExpanded] = useState(false);
   const height = Math.max(1, rows - 9);
+  const lastRender = useRef(0);
   useEffect(() => {
+    // Streaming changes the state many times a second. Rendering the whole transcript for each change burned
+    // 60-85% of a core, so renders are spaced RENDER_INTERVAL_MS apart; the last state always gets its render.
+    const wait = Math.max(0, lastRender.current + RENDER_INTERVAL_MS - Date.now());
     // Ink shares its reconciler with the live root. renderToString must finish
     // outside React's effect/commit stack or it can free a still-pending Yoga root.
-    const pending = setImmediate(() => {
+    const pending = setTimeout(() => {
+      lastRender.current = Date.now();
       const rendered = renderToString(
         <ThemeProvider theme={theme}>
           <SkinProvider skin={skin}>
@@ -26,9 +34,13 @@ export function useTranscriptViewport(state: TuiState, columns: number, rows: nu
         </ThemeProvider>,
         { columns: Math.max(1, columns) },
       );
-      setLines(rendered ? rendered.split('\n') : []);
-    });
-    return () => clearImmediate(pending);
+      const next = rendered ? rendered.split('\n') : [];
+      // An identical frame must not re-render the whole session.
+      setLines((previous) =>
+        previous.length === next.length && previous.every((line, index) => line === next[index]) ? previous : next,
+      );
+    }, wait);
+    return () => clearTimeout(pending);
   }, [state, columns, theme, skin, expanded]);
   const maxOffset = Math.max(0, lines.length - height);
   const visibleOffset = Math.min(offset, maxOffset);

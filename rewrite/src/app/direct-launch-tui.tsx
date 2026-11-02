@@ -72,18 +72,18 @@ function DirectTui({
   const latest = useRef(initial.snapshot);
   // The notifier already owns terminal focus and all three preference gates.
   // Never use launch defaults: attached sessions own separate mutable settings.
-  const settings = app.sessionDetails(connection.sessionId).settings;
+  const settings = app.liveSettings(connection.sessionId);
   if (!settings) throw new Error('The attached session has no live settings.');
   const notifier = useTerminalFocusNotifier({ stdout, settingsService: settings, loggingService: logger });
   const integration: TuiIntegration = useMemo(
     () => ({
       preferences(sessionId) {
-        const current = app.sessionDetails(sessionId).settings;
+        const current = app.liveSettings(sessionId);
         if (!current) throw new Error('The attached session has no live settings.');
         return { historySize: current.get('ui.historySize'), pasteThreshold: current.get('ui.pasteThreshold') };
       },
       status(sessionId) {
-        const current = app.sessionDetails(sessionId).settings;
+        const current = app.liveSettings(sessionId);
         if (!current) throw new Error('The attached session has no live settings.');
         const profile = getProfileLabel(resolveActiveProfile(current).identity.id);
         return {

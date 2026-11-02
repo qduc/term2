@@ -8,7 +8,7 @@ import { useTheme } from './presentation/components/theme.js';
 import { useSkin } from './presentation/skins/SkinContext.js';
 import { terminalPreferenceDefaults } from '../../host/terminal-preference-defaults.js';
 import { useClient } from './use-client.js';
-import { Activity, LiveNotices, interruptedNotice } from './views.js';
+import { Activity, BangResult, LiveNotices, interruptedNotice } from './views.js';
 import { InteractionPanel } from './interaction-panel.js';
 import type { InteractionInputHandler } from './interaction-input.js';
 import { runBangShell } from './bang-shell.js';
@@ -62,6 +62,7 @@ export function TuiSession({
   const { state, error: connError, historyRevision } = useClient(connection, retainedSnapshot, onSnapshot, onLiveEvent);
   const preferences = integration.preferences?.(connection.sessionId) ?? terminalPreferenceDefaults();
   const { columns, rows } = useTerminalSize();
+  const [bangResult, setBangResult] = useState<string | null>(null);
   const [interactionOpen, setInteractionOpen] = useState(false);
   const [dismissedInteractionId, setDismissedInteractionId] = useState<string | null>(null);
   const [picker, setPicker] = useState<PickerKind | null>(null);
@@ -163,6 +164,7 @@ export function TuiSession({
     const submission = steerRecovery.beginSubmission(input, submittedImages, otherParts);
     setBusy(true);
     setNotice(null);
+    setBangResult(null);
     viewport.setHelp(null);
     // True when the draft was held for confirmation instead of sent.
     const held = async (text: string, attachments: readonly WireContent[], retry: () => void): Promise<boolean> => {
@@ -241,7 +243,7 @@ export function TuiSession({
         clearSubmittedParts(submittedImages, otherParts);
       } else if (input.startsWith('!')) {
         const attached = submittedImages.length > 0 || otherParts.length > 0;
-        setNotice(await runBangShell(integration, connection, input, attached, Boolean(state.activeTurnId)));
+        setBangResult(await runBangShell(integration, connection, input, attached, Boolean(state.activeTurnId)));
       } else if (input.trim() === '/tasks') {
         setTaskOpen(true);
       } else if (/^\/rewind(?:\s|$)/.test(input)) {
@@ -456,6 +458,7 @@ export function TuiSession({
       <LiveNotices connectionError={connError} transitionNotice={transitionNotice} />
       {confirmation.prompt}
       <LiveNotices notice={notice} historyError={editor.historyError} />
+      {bangResult ? <BangResult result={bangResult} expanded={viewport.expanded} /> : null}
       {slash.view}
       <LiveDivider />
       <InputFrame>

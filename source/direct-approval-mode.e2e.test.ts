@@ -363,9 +363,12 @@ async function runCommand(
     await waitForHarnessComposerValue(idlePath, 'draft stays', { timeoutMs: 60_000 });
     session.write('\x1b[Z');
     await session.waitForOutput('Clear session and switch mode?', 30_000);
+    await session.waitForOutput('Switching modes requires clearing the current session.', 30_000);
+    await session.waitForOutput('› No', 30_000);
     await new Promise((resolve) => setTimeout(resolve, 100));
     let frameOffset = session.getVisibleOutput().length;
-    session.write('n');
+    // The default answer is No: Enter cancels the clear.
+    session.write('\r');
     const lastFrame = () => session!.getVisibleOutput().slice(frameOffset);
     const waitFrame = async (predicate: () => boolean) => {
       const deadline = Date.now() + 10_000;
@@ -380,8 +383,14 @@ async function runCommand(
     session.write('\x1b[Z');
     await waitFrame(() => lastFrame().includes('Clear session and switch mode?'));
     await new Promise((resolve) => setTimeout(resolve, 100));
+    const selectedOffset = session.getVisibleOutput().length;
+    session.write('\x1b[A');
+    const selectedAt = Date.now();
+    while (Date.now() - selectedAt < 10_000 && !session.getVisibleOutput().slice(selectedOffset).includes('› Yes'))
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(session.getVisibleOutput().slice(selectedOffset)).toContain('› Yes');
     const offset = session.getVisibleOutput().length;
-    session.write('y');
+    session.write('\r');
     const started = Date.now();
     while (Date.now() - started < 30_000 && !session.getVisibleOutput().slice(offset).includes('PLAN'))
       await new Promise((resolve) => setTimeout(resolve, 25));

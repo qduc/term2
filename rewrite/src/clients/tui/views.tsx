@@ -263,3 +263,21 @@ export function LiveNotices({
     </>
   );
 }
+
+/** Explicit shell output keeps the compact themed status visible; Ctrl+O reveals details. */
+export function BangResult({
+  result,
+  expanded,
+}: {
+  readonly result: string;
+  readonly expanded: boolean;
+}): React.ReactElement {
+  const theme = useTheme();
+  const [header = '', ...detail] = result.split('\n');
+  return (
+    <Box flexDirection="column">
+      <Text color={header.startsWith('✓') ? theme.success : theme.danger}>{header}</Text>
+      {expanded && detail.length ? <Text>{detail.join('\n')}</Text> : null}
+    </Box>
+  );
+}

@@ -112,6 +112,8 @@ it('runs bang input locally rather than sending it to the model', { timeout: TIM
   session.write('!pwd ');
   await waitForHarnessComposerValue(idlePath, '!pwd ', { timeoutMs: 60_000 });
   session.write('\r');
+  await session.waitForOutput('✓ pwd', 30_000);
+  session.write('\x0f');
   await session.waitForOutput(workspace, 30_000);
   expect(session.getVisibleOutput()).toContain('✓ pwd');
   expect(session.getVisibleOutput()).not.toContain('MODEL-WAS-CALLED');

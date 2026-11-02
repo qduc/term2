@@ -214,7 +214,7 @@ export interface SessionConfigRecord {
   providerId: string;
   modelId: string;
   reasoningEffort: string;
-  mode: 'standard' | 'lite' | 'plan' | 'mentor' | 'orchestrator';
+  mode: 'standard' | 'bare' | 'pair' | 'lite' | 'plan' | 'mentor' | 'orchestrator';
   defaultsRevision: string | number;
   toolPolicy?: { allowWrite: boolean; autoApprove: boolean; allowUnsandboxed: boolean; sshEnabled: boolean } | {
     sandbox?: 'enabled' | 'disabled';
@@ -747,7 +747,7 @@ export function parseProjection(value: unknown): SessionProjection {
       'toolPolicy',
       'sessionId',
     ]);
-    if (!['standard', 'lite', 'plan', 'mentor', 'orchestrator'].includes(String(config.mode)))
+    if (!['standard', 'bare', 'pair', 'lite', 'plan', 'mentor', 'orchestrator'].includes(String(config.mode)))
       throw new Term2ProtocolError('Invalid session config');
     projection.sessionConfig = {
       configRevision: stringValue(config.configRevision, 256),

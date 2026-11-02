@@ -214,6 +214,13 @@ revision, optional replayed provenance and the established safe diagnostic
 redaction. Empty `{}` remains the separate current-state discovery response; it
 is not the original mutation result.
 
+Direct discovery reports native profile labels, including `bare` and `pair`;
+these are not the older gateway's mode enum. The browser must accept both or
+it silently loses the configuration controls after a successful discovery.
+The direct mutation path accepts `bare` but not `pair`, so the browser displays
+a current `pair` profile without offering it as a new selection. Exercise actual
+discovery as well as configuration receipts when changing this boundary.
+
 ## Migration and limits
 
 The shared package source/docs own the v1/v2 schema and local artifact route.

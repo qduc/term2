@@ -38,7 +38,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ ses
           throw new LocalValidationError('Invalid model selection');
       }
       if ((body.reasoningEffort !== undefined && (typeof body.reasoningEffort !== 'string' || !['default','none','minimal','low','medium','high','xhigh'].includes(body.reasoningEffort))) ||
-          (body.mode !== undefined && (typeof body.mode !== 'string' || !['standard','lite','plan','mentor','orchestrator'].includes(body.mode))))
+          (body.mode !== undefined && (typeof body.mode !== 'string' || !['standard','bare','lite','plan','mentor','orchestrator'].includes(body.mode))))
         throw new LocalValidationError('Invalid session selection');
     }
     const response = await term2GatewayClient.request({

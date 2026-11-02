@@ -466,7 +466,7 @@ function validateSessionConfig(value: unknown): SessionConfigRecord {
     'toolPolicy',
     'sessionId',
   ]);
-  if (!['standard', 'lite', 'plan', 'mentor', 'orchestrator'].includes(String(input.mode)))
+  if (!['standard', 'bare', 'pair', 'lite', 'plan', 'mentor', 'orchestrator'].includes(String(input.mode)))
     throw new Term2ApiError(503, 'Invalid agent response');
   return {
     configRevision: text(input.configRevision, 256),

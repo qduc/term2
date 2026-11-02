@@ -487,7 +487,7 @@ it('/usage agrees with the cached share in the status bar', { timeout: TIMEOUT_M
 });
 
 it('/usage separates actual model request usage', { timeout: TIMEOUT_MS }, async () => {
-  await runCommand('/usage', 'Token usage: 156,042 input', 'hello', false, true, undefined, [], undefined, true);
+  await runCommand('/usage', 'Token usage: 90,366 input', 'hello', false, true, undefined, [], undefined, true);
   const visible = session!.getVisibleOutput();
   expect(visible).toContain('mockprov/mock-alpha:');
   expect(visible).toContain('mockprov/mock-beta:');

@@ -93,7 +93,7 @@ it(
     const workspace = path.join(root, 'w');
     fs.mkdirSync(home);
     fs.mkdirSync(workspace);
-    const first = `echo hi > ${path.join(workspace, 'b.txt')} && cat ${path.join(workspace, 'b.txt')}`;
+    const first = 'echo hi > b.txt && cat b.txt';
     const file = path.join(workspace, 'c.txt');
     const baseUrl = await startProvider([
       { call: { id: 'call_f', command: 'exit 3' } },
@@ -105,7 +105,7 @@ it(
           args: { path: file, replacements: [{ search_content: 'alpha-line', replace_content: 'gamma-line' }] },
         },
       },
-      { call: { id: 'call_0', command: first } },
+      { call: { id: 'call_0', args: { command: first, description: 'Write and read the file' } } },
       { text: 'Created `b.txt` and read it back: `hi`. Flags: `--foo` `--bar` first turn done' },
     ]);
     const idlePath = path.join(home, 'input-idle');
@@ -169,12 +169,21 @@ it(
     // Collapsed by default: one row with the runtime, and no output until expanded with Ctrl+O.
     expect(visible, visible).toMatch(/\S \(\d+ms\)/);
     expect(visible, visible).not.toMatch(/Runtime: \d+ms\s+hi\b/);
+    expect(visible, visible).toContain('Write and read the file');
+    const collapsedRow = visible.slice(
+      visible.lastIndexOf('✓ Write and read the file'),
+      visible.lastIndexOf('Created b.txt'),
+    );
+    expect(collapsedRow, visible).not.toContain(first);
+    expect(visible, visible).toContain('Shell command');
     // A failed command is not collapsed: its exit status stays visible without expanding.
     expect(visible, visible).toContain('exit 3');
     session.write('\x0f');
     for (let i = 0; i < 40 && !/Runtime: \d+ms\s+hi\b/.test(session.getVisibleOutput()); i++)
       await new Promise((resolve) => setTimeout(resolve, 250));
     expect(session.getVisibleOutput()).toMatch(/Runtime: \d+ms\s+hi\b/);
+    const expanded = session.getVisibleOutput();
+    expect(expanded.slice(expanded.lastIndexOf('✓ Write and read the file'))).toContain(first);
     // Quit the way a user does, so the app finishes its writes before the test removes its directories.
     session.write('\x03');
     await session.waitForOutput('Press Ctrl+C again to exit', 30_000);

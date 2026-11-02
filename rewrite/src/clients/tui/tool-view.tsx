@@ -33,7 +33,12 @@ export function ToolCall({
   const { ToolFrame, ToolHeader, ToolSection } = useSkin();
   const theme = useTheme();
   // Question text belongs to its interactive page, not an all-pages tool summary.
-  const args = tool.name === 'ask_user' ? '' : formatToolArgs(tool.name, tool.input, 'concise');
+  const args =
+    tool.name === 'ask_user'
+      ? ''
+      : tool.name === 'shell'
+      ? shellTitle(tool.input)
+      : formatToolArgs(tool.name, tool.input, 'concise');
   const detail = tool.detail ?? '';
   const contentText = (tool.content ?? []).flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n');
   const extraText = contentText && contentText !== detail ? contentText : '';
@@ -43,7 +48,8 @@ export function ToolCall({
   const open = expanded || status !== 'completed' || Boolean(tool.outcomeUnknown) || tool.name === 'ask_user';
   // Text that is hidden cannot stand in for the lines that are shown.
   const fresh = (part: string) => !open || (!detail.includes(part) && !extraText.includes(part));
-  const inputText = inputParts(tool.name, tool.input).filter(fresh);
+  const inputText =
+    tool.name === 'shell' ? inputParts(tool.name, tool.input) : inputParts(tool.name, tool.input).filter(fresh);
   const displayText = displayParts(tool.display, args, tool.name).filter(fresh);
   const runtime = tool.name === 'shell' ? runtimeOf(detail) : undefined;
   // Edit input is always shown; everything else only when open.
@@ -84,9 +90,16 @@ export function ToolCall({
   );
 }
 
+/** Prefer the model's intent, never the raw command, in the collapsed shell row. */
+function shellTitle(input: JsonValue | undefined): string {
+  const description = isRecord(input) && typeof input.description === 'string' ? input.description : '';
+  const singleLine = description.replace(/\s+/g, ' ').trim();
+  return singleLine ? (singleLine.length > 100 ? `${singleLine.slice(0, 97)}...` : singleLine) : 'Shell command';
+}
+
 /**
  * Source tools publish legacy command messages as `display`: an array, or `{messages, approvalPresentation}`.
- * The header already shows the command, so only each message's output is shown. Unknown shapes stay visible as JSON.
+ * Include command and output when not already represented by the header or input. Unknown shapes stay visible as JSON.
  */
 function displayParts(display: JsonValue | undefined, header: string, toolName: string): string[] {
   if (display === undefined || display === null) return [];
@@ -113,7 +126,7 @@ function isRecord(value: unknown): value is Record<string, JsonValue> {
 }
 
 const MAX_INPUT_LINES = 40;
-const INPUT_RENDERED = new Set(['search_replace', 'create_file', 'run_code']);
+const INPUT_RENDERED = new Set(['shell', 'search_replace', 'create_file', 'run_code']);
 
 /**
  * What the model asked a tool to do, where the concise header only summarises it: edit text, new file content,
@@ -129,7 +142,15 @@ function inputParts(name: string, input: JsonValue | undefined): string[] {
           .map((line) => `${prefix}${line}`)
       : [];
   let lines: string[] = [];
-  if (name === 'search_replace') {
+  if (name === 'shell') {
+    const command = input.command ?? input.commands;
+    lines =
+      typeof command === 'string'
+        ? mark('', command)
+        : Array.isArray(command)
+        ? command.flatMap((part) => mark('', part))
+        : [];
+  } else if (name === 'search_replace') {
     const edits = Array.isArray(input.replacements) ? input.replacements : [input];
     lines = edits.flatMap((edit) =>
       isRecord(edit) ? [...mark('- ', edit.search_content), ...mark('+ ', edit.replace_content)] : [],
@@ -139,7 +160,7 @@ function inputParts(name: string, input: JsonValue | undefined): string[] {
   else if (name === 'run_subagent' || name === 'run_subagent_async') {
     lines = typeof input.task === 'string' && input.task.length > 40 ? mark('', input.task) : [];
   }
-  if (lines.length > MAX_INPUT_LINES) {
+  if (name !== 'shell' && lines.length > MAX_INPUT_LINES) {
     lines = [...lines.slice(0, MAX_INPUT_LINES), `… ${lines.length - MAX_INPUT_LINES} more lines`];
   }
   return lines.length ? [lines.join('\n')] : [];

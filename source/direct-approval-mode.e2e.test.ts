@@ -216,6 +216,17 @@ async function runCommand(
 
   session = spawnTerminal('node', [builtCli], { cwd: workspace, env });
   const idle = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
+  const identity = JSON.parse(
+    fs.readFileSync(path.resolve(path.dirname(builtCli), '../../../build-info.json'), 'utf8'),
+  ) as {
+    version: string;
+    commit: string | null;
+    release: boolean;
+  };
+  const manifest = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8')) as { version: string };
+  if (identity.commit && !identity.release)
+    expect(identity.version).toBe(`${manifest.version}-dev+${identity.commit.slice(0, 7)}`);
+  await session.waitForOutput(`v${identity.version}`, 30_000);
   await session.waitForOutput('term²', 30_000);
   await session.waitForOutput('BARE', 30_000);
   await session.waitForOutput('mockprov', 30_000);

@@ -19,13 +19,14 @@ const require = createRequire(import.meta.url);
  * The loader is injectable so the fallback rule is testable without a build.
  */
 export const resolveDisplayVersion = (load: (specifier: string) => unknown = require): string => {
-  try {
-    const buildInfo = load('../../../dist/build-info.json') as { version?: string };
-    if (buildInfo.version) {
-      return buildInfo.version;
+  // The direct and legacy builds place this module at different depths.
+  for (const specifier of ['../../../build-info.json', '../../../dist/build-info.json']) {
+    try {
+      const buildInfo = load(specifier) as { version?: string };
+      if (buildInfo.version) return buildInfo.version;
+    } catch {
+      // No generated build identity in this layout.
     }
-  } catch {
-    // No generated build identity on disk.
   }
   // The direct build emits this file below rewrite/dist/source, two levels deeper.
   for (const specifier of ['../../../package.json', '../../../../../package.json']) {

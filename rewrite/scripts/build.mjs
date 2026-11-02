@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildInputs, writeBuildReceipt } from '../../scripts/build-provenance.mjs';
+import { writeBuildInfo } from '../../scripts/write-build-info.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const inputs = buildInputs(repo, 'direct');
@@ -26,4 +27,12 @@ fs.copyFileSync(
   path.join(emittedSource, 'providers/provider-presets.json'),
 );
 
+await writeBuildInfo({
+  root: repo,
+  dist: path.join(repo, 'rewrite/dist'),
+  runGit(args) {
+    const result = spawnSync('git', args, { cwd: repo, encoding: 'utf8' });
+    return result.status === 0 ? result.stdout.trim() : null;
+  },
+});
 writeBuildReceipt(repo, 'direct', inputs);

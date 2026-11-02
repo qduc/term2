@@ -262,8 +262,16 @@ const BlockRenderer = ({
 
     case 'code':
       if (!token.text || !token.text.trim()) return null;
+      // Match the old terminal's right-hand message gutter; ending a border in
+      // the terminal's last column can trigger host-dependent autowrap.
       return (
-        <Box borderStyle="round" borderColor={theme.textSubtle} paddingX={1} flexDirection="column" width={maxWidth}>
+        <Box
+          borderStyle="round"
+          borderColor={theme.textSubtle}
+          paddingX={1}
+          flexDirection="column"
+          width={maxWidth === undefined ? undefined : Math.max(1, maxWidth - 2)}
+        >
           <Text color={theme.warning} dimColor={options.dimColor}>
             {token.text}
           </Text>

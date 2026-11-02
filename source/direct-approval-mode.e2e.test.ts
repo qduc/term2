@@ -282,7 +282,7 @@ async function runCommand(
     session.write('\t');
     await waitForHarnessComposerValue(idlePath, '/help ', { timeoutMs: 60_000 });
     session.write('\r');
-    await session.waitForOutput('Keyboard shortcuts', 30_000);
+    await session.waitForOutput('/help —', 30_000);
   }
   await submit(command);
   await session.waitForOutput(expected, 30_000);

@@ -244,6 +244,8 @@ The shared reducer retains retry/compaction notices and scoped subagent
 presentation rather than dropping them. Legacy retrying/compacted DTOs still
 need corresponding native producers; real branch/history facts now have direct
 mappings. Notice retention is not runtime evidence that these paths occurred.
+A scoped subagent event updates that agent's task (text, progress); only a nested `error` also adds a
+transcript notice. Adding a notice per event printed one line per delta, usage and turn marker.
 
 ## Commands / external gaps
 

@@ -45,10 +45,18 @@ const DEFAULT_TERMINATE_GRACE_MS = 500;
 const DEFAULT_TERMINATE_TIMEOUT_MS = 2_000;
 const ROOT_REMOVAL_MAX_RETRIES = 5;
 const ROOT_REMOVAL_RETRY_DELAY_MS = 50;
+// COLUMNS/LINES do not size a newly allocated PTY. Set the real slave dimensions
+// before exec so Ink and clients reading stdout.columns see the requested size.
+const PYTHON_PTY_CHILD = [
+  'import fcntl, os, struct, sys, termios',
+  "size = struct.pack('HHHH', int(os.environ.get('LINES') or 24), int(os.environ.get('COLUMNS') or 80), 0, 0)",
+  'fcntl.ioctl(0, termios.TIOCSWINSZ, size)',
+  'os.execvp(sys.argv[1], sys.argv[1:])',
+].join('; ');
 const PYTHON_PTY_BRIDGE = [
   'import pty',
   'import sys',
-  'status = pty.spawn(sys.argv[1:])',
+  `status = pty.spawn([sys.executable, '-c', ${JSON.stringify(PYTHON_PTY_CHILD)}, *sys.argv[1:]])`,
   'print("ACTUAL_CHILD_WAIT_STATUS=" + str(status), file=sys.stderr, flush=True)',
   'sys.exit(status)',
 ].join('; ');

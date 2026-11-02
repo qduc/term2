@@ -181,7 +181,11 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
     const injected = injectSkillIntoTurn(turn).text;
     // Hand the expanded request back as an ordinary draft; Enter then confirms like any other send.
     const held = await previewConfirmation(connection, injected);
-    if (held !== null) return { message: `${held} Not sent; the request is in the input box.`, draft: { text: injected, attachments: [] } };
+    if (held !== null)
+      return {
+        message: `${held} Not sent; the request is in the input box.`,
+        draft: { text: injected, attachments: [] },
+      };
     await submitText(connection, injected);
     return {};
   };

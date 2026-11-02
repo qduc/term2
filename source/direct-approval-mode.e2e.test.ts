@@ -177,6 +177,8 @@ async function runCommand(
   exerciseMenu:
     | false
     | 'complete'
+    | 'hint-80'
+    | 'hint-120'
     | 'slash-picker-tab'
     | 'command-clear-regression'
     | 'prefix-enter'
@@ -232,8 +234,18 @@ async function runCommand(
     }),
   );
 
-  session = spawnTerminal('node', [builtCli], { cwd: workspace, env });
+  session = spawnTerminal('node', [builtCli], { cwd: workspace, env, cols: exerciseMenu === 'hint-120' ? 120 : 80 });
   const idle = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
+  if (exerciseMenu === 'hint-80' || exerciseMenu === 'hint-120') {
+    const lines = session.getVisibleOutput().split('\n');
+    const hint = lines.find((row) => row.startsWith('/ commands'));
+    expect(hint).toContain('↑/↓ history');
+    expect(lines.some((row) => row.startsWith(' output │'))).toBe(false);
+    if (exerciseMenu === 'hint-120') expect(hint).toContain('Ctrl+G tasks');
+    else expect(hint).not.toContain('Ctrl+O tool');
+    return;
+  }
+
   const identity = JSON.parse(
     fs.readFileSync(path.resolve(path.dirname(builtCli), '../../../build-info.json'), 'utf8'),
   ) as {
@@ -639,3 +651,8 @@ it(
 it('Tab opens the slash model picker and Escape returns to the composer', { timeout: TIMEOUT_MS }, () =>
   runCommand('', '', undefined, 'slash-picker-tab'),
 );
+
+it('keeps composer hints on one row at 80 columns', { timeout: TIMEOUT_MS }, () =>
+  runCommand('', '', undefined, 'hint-80'),
+);
+it('keeps all composer hints at 120 columns', { timeout: TIMEOUT_MS }, () => runCommand('', '', undefined, 'hint-120'));

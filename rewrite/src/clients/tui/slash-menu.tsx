@@ -69,30 +69,34 @@ export function useSlashMenu(value: string, enabled: boolean, subtleColor: React
 /** Composer shortcuts are shown only when the composer owns input. */
 export function ComposerHints({
   activeTurn,
+  columns,
   Hints,
 }: {
   readonly activeTurn: boolean;
+  readonly columns: number;
   readonly Hints: React.ComponentType<{ hints: ReadonlyArray<readonly [string, string]> }>;
 }): React.ReactElement {
-  return (
-    <Hints
-      hints={
-        activeTurn
-          ? [
-              ['Enter', 'steer'],
-              ['Alt+Enter', 'follow-up'],
-              ['/cancel', 'stop'],
-            ]
-          : [
-              ['/', 'commands'],
-              ['@', 'paths'],
-              ['!', 'shell'],
-              ['Shift+Tab', 'plan mode'],
-              ['↑/↓', 'history'],
-              ['Ctrl+O', 'tool output'],
-              ['Ctrl+G', 'tasks'],
-            ]
-      }
-    />
-  );
+  const hints: ReadonlyArray<readonly [string, string]> = activeTurn
+    ? [
+        ['Enter', 'steer'],
+        ['Alt+Enter', 'follow-up'],
+        ['/cancel', 'stop'],
+      ]
+    : [
+        ['/', 'commands'],
+        ['@', 'paths'],
+        ['!', 'shell'],
+        ['Shift+Tab', 'plan mode'],
+        ['↑/↓', 'history'],
+        ['Ctrl+O', 'tool output'],
+        ['Ctrl+G', 'tasks'],
+      ];
+  let width = 0;
+  const visible = hints.filter(([key, action]) => {
+    const needed = key.length + 1 + action.length + (width ? 3 : 0);
+    if (width + needed > columns) return false;
+    width += needed;
+    return true;
+  });
+  return <Hints hints={visible} />;
 }

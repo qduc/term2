@@ -107,7 +107,7 @@ export function ComposerFooter({
   const info = integration.status?.(state.sessionId);
   return (
     <>
-      {active ? <ComposerHints activeTurn={Boolean(state.activeTurnId)} Hints={Hints} /> : null}
+      {active ? <ComposerHints activeTurn={Boolean(state.activeTurnId)} columns={columns} Hints={Hints} /> : null}
       {info ? <StatusBar {...directStatusView(state, info, columns)} /> : null}
     </>
   );

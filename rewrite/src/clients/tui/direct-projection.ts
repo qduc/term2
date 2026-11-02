@@ -15,10 +15,12 @@ const modelText = (model: { readonly provider: string; readonly model: string })
 /** Derive only from explicit provenance and the exact accepted injected content. */
 function skillPresentation(record: WireSubmissionRecord | undefined) {
   const skill = record?.origin?.kind === 'tui' ? record.origin.skill : undefined;
-  if (!record || !skill || record.originalContent.length !== 1 || record.content.length !== 1) return undefined;
-  const original = record.originalContent[0];
-  const current = record.content[0];
-  if (original?.type !== 'text' || current?.type !== 'text') return undefined;
+  if (!record || !skill) return undefined;
+  const originalTexts = record.originalContent.filter((part) => part.type === 'text');
+  const currentTexts = record.content.filter((part) => part.type === 'text');
+  if (originalTexts.length !== 1 || currentTexts.length !== 1) return undefined;
+  const original = originalTexts[0]!;
+  const current = currentTexts[0]!;
   const suffix = skill.request ? `\n\n${skill.request}` : '';
   if (suffix && !original.text.endsWith(suffix)) return undefined;
   const prefix = suffix ? original.text.slice(0, -suffix.length) : original.text;

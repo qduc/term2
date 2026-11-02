@@ -335,6 +335,7 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
       if (closing || fault) return { kind: 'stale' };
       return conversation.answer(requestId, structuredClone(decision), provenance);
     },
+    requestTaskStop: (taskId) => conversation.tasks.requestStop(taskId),
     cancel(target?: DirectCancelTarget) {
       if (target?.kind === 'task') {
         conversation.tasks.requestStop(target.id);

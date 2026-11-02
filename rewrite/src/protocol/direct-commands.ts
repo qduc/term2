@@ -79,7 +79,9 @@ async function dispatch(
       }
       if (command.target?.kind === 'task')
         return taskResult(
-          await requireOperation(operations.controlTask, 'task cancel').call(operations, command.target.id, 'cancel'),
+          operations.controlTask
+            ? await operations.controlTask(command.target.id, 'cancel')
+            : session.requestTaskStop(command.target.id),
         );
       session.cancel(command.target);
       return accepted;
@@ -114,7 +116,13 @@ async function dispatch(
       return queueResult(await session.discardQueue());
     case 'task_control':
       return taskResult(
-        await requireOperation(operations.controlTask, 'task_control').call(operations, command.taskId, command.action),
+        command.action === 'cancel' && !operations.controlTask
+          ? session.requestTaskStop(command.taskId)
+          : await requireOperation(operations.controlTask, 'task_control').call(
+              operations,
+              command.taskId,
+              command.action,
+            ),
       );
     case 'list_rewind_targets':
       return {

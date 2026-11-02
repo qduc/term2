@@ -98,23 +98,26 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
 
   const configuration = createDirectTuiSettings(app, latest);
 
+  const listResumeSessions = async () => {
+    const sessions: Array<{ id: string; title?: string; updatedAt?: string }> = [];
+    let cursor: string | undefined;
+    do {
+      const page = await host.listSessions(principal, cursor);
+      sessions.push(...page.sessions.filter((session) => session.workspace.root === root));
+      cursor = page.cursor;
+    } while (cursor);
+    return sessions.sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''));
+  };
+
   const resume = async (sessionId: string | undefined): Promise<CommandResult> => {
     if (sessionId && sessionId !== 'ls') {
       return { sessionId };
     }
-    const { sessions } = await host.listSessions(principal);
-    const here = sessions
-      .filter((session) => session.workspace.root === root)
-      .sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))
-      .map((session) =>
-        [
-          session.id,
-          session.updatedAt ? localMinute(session.updatedAt) : undefined,
-          session.title ?? '(no messages yet)',
-        ]
-          .filter(Boolean)
-          .join('  '),
-      );
+    const here = (await listResumeSessions()).map((session) =>
+      [session.id, session.updatedAt ? localMinute(session.updatedAt) : undefined, session.title ?? '(no messages yet)']
+        .filter(Boolean)
+        .join('  '),
+    );
     return { message: here.length ? here.join('\n') : 'No direct sessions in this workspace.' };
   };
 
@@ -273,6 +276,7 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
   };
 
   return {
+    resumePicker: { list: listResumeSessions },
     async command(connection, input) {
       const [name, ...rest] = input.trim().slice(1).split(/\s+/);
       const argument = rest[0];

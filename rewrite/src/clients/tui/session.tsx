@@ -12,6 +12,7 @@ import { Activity, LiveNotices } from './views.js';
 import { InteractionPanel } from './interaction-panel.js';
 import type { InteractionInputHandler } from './interaction-input.js';
 import { ModelPicker } from './model-picker.js';
+import { ResumePicker } from './resume-picker.js';
 import { isShiftTab, usePlanToggle } from './shift-tab.js';
 import { RewindPicker } from './rewind-picker.js';
 import { TaskManager } from './task-manager.js';
@@ -63,6 +64,7 @@ export function TuiSession({
   const [interactionOpen, setInteractionOpen] = useState(false);
   const [dismissedInteractionId, setDismissedInteractionId] = useState<string | null>(null);
   const [modelOpen, setModelOpen] = useState(false);
+  const [resumeOpen, setResumeOpen] = useState(false);
   const [taskOpen, setTaskOpen] = useState(false);
   const [budgetOpen, setBudgetOpen] = useState(false);
   const {
@@ -85,7 +87,7 @@ export function TuiSession({
   const [rewindTargets, setRewindTargets] = useState<readonly WireRewindTarget[] | null>(null);
   // Snapshot-derived ownership leaves no gap for decision keys to land in the composer; Ctrl+G picks background requests.
   const rootInteraction = state.interactions.find((item) => item.turnId === state.activeTurnId && !item.taskId);
-  const panelOpen = modelOpen || taskOpen || budgetOpen || Boolean(rewindTargets);
+  const panelOpen = modelOpen || resumeOpen || taskOpen || budgetOpen || Boolean(rewindTargets);
   const foregroundInteraction =
     !interactionOpen && !panelOpen && rootInteraction?.id !== dismissedInteractionId ? rootInteraction : undefined;
   const interactionActive = interactionOpen || Boolean(foregroundInteraction);
@@ -121,7 +123,7 @@ export function TuiSession({
     else setNotice('Press Ctrl+C again to exit');
   };
   useInput((input, key) => {
-    if (modelOpen) return void interactionInput.current?.(input, key);
+    if (modelOpen || resumeOpen) return void interactionInput.current?.(input, key);
     if (confirmation.handleKey(input, key)) return;
     if (interactionActive) return void interactionInput.current?.(input, key);
     if (taskOpen || budgetOpen || rewindTargets) return;
@@ -349,7 +351,8 @@ export function TuiSession({
         } else await queueAction(connection, action, item?.id, match[3]);
       } else if (input.trim() === '/cancel') {
         setNotice(await cancelForeground(connection, state.activeTurnId ?? undefined));
-      } else if (input.trim() === '/model' && integration.modelPicker) setModelOpen(true);
+      } else if (input.trim() === '/resume' && integration.resumePicker) setResumeOpen(true);
+      else if (input.trim() === '/model' && integration.modelPicker) setModelOpen(true);
       else if (input.startsWith('/')) {
         const directNotice = await directSlashCommand(connection, input);
         if (directNotice !== null) setNotice(directNotice);
@@ -400,6 +403,18 @@ export function TuiSession({
         </Text>
       ) : null}
       <Activity state={state} dialogInteractionId={foregroundInteraction?.id} />
+      {resumeOpen && integration.resumePicker ? (
+        <ResumePicker
+          api={integration.resumePicker}
+          inputHandler={interactionInput}
+          onClose={() => setResumeOpen(false)}
+          onSelect={(id) => {
+            setResumeOpen(false);
+            if (!switchSession) return setNotice('Session switching is unavailable.');
+            void switchSession(id).catch((error) => setNotice(error instanceof Error ? error.message : String(error)));
+          }}
+        />
+      ) : null}
       {modelOpen && integration.modelPicker ? (
         <ModelPicker
           api={integration.modelPicker}

@@ -1,0 +1,48 @@
+import { useEffect, useRef } from 'react';
+import { useStdin, type Key } from 'ink';
+
+const PASTE_START = '\x1b[200~';
+const PASTE_END = '\x1b[201~';
+
+type FilterOptions = {
+  readonly composerActive: boolean;
+  readonly slash: { readonly owns: (key: Key) => boolean };
+  readonly turnActive: boolean;
+  readonly value: string;
+  /** Send the whole draft as if Enter had been pressed after typing it. */
+  readonly submit: (text: string) => void;
+};
+
+/**
+ * Which keys the composer's editor must not see. Also repairs coalesced input: while a turn streams, a
+ * sender's text and its Enter can reach the terminal in one chunk (`text\r`). The editor takes `\r` inside
+ * a longer chunk as a newline, so the message would sit unsent in the draft. A single line of text with one
+ * trailing `\r` is submitted instead. A bracketed paste keeps its `\r` as a newline, and a chunk holding
+ * several lines (an unbracketed paste) keeps today's behaviour; neither auto-submits.
+ */
+export function useComposerFilter({ composerActive, slash, turnActive, value, submit }: FilterOptions) {
+  const { stdin } = useStdin();
+  // Ink strips the paste markers before the key handler runs, so track them on the raw stream.
+  const pasting = useRef(false);
+  useEffect(() => {
+    if (!stdin) return;
+    const onData = (data: Buffer | string) => {
+      const chunk = data.toString();
+      if (chunk.includes(PASTE_START)) pasting.current = true;
+      // The chunk that ends a paste is still part of the paste; clear after the key handler has seen it.
+      if (chunk.includes(PASTE_END)) setTimeout(() => (pasting.current = false), 50);
+    };
+    stdin.on('data', onData);
+    return () => void stdin.off('data', onData);
+  }, [stdin]);
+  return (input: string, key: Key): boolean => {
+    if (!composerActive || slash.owns(key)) return true;
+    if (['[I', '[O', '\x1b[I', '\x1b[O'].includes(input) || key.pageUp || key.pageDown) return true;
+    if (key.ctrl && (key.upArrow || key.downArrow || ['g', 'b', 'o'].includes(input))) return true;
+    if (turnActive && key.meta && key.return) return true;
+    const line = !pasting.current ? /^([^\r\n]+)\r$/.exec(input) : null;
+    if (!line) return false;
+    submit(value + line[1]);
+    return true;
+  };
+}

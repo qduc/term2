@@ -24,6 +24,7 @@ import { replaceSession } from './replace-session.js';
 import { runBridgeCommand } from './bridge-command.js';
 import { useSendConfirmation } from './send-confirmation.js';
 import { useSlashMenu } from './slash-menu.js';
+import { useComposerFilter } from './composer-filter.js';
 import { ComposerFooter } from './composer-footer.js';
 import {
   answerBudget,
@@ -111,6 +112,13 @@ export function TuiSession({
   const slash = useSlashMenu(editor.value, composerActive && !editing, theme.textSubtle);
   useHarnessInput(composerActive, Boolean(state.activeTurnId), editor.value);
   const pending = useRef(false);
+  const composerFilter = useComposerFilter({
+    composerActive,
+    slash,
+    turnActive: Boolean(state.activeTurnId),
+    value: editor.value,
+    submit: (text) => void submit(text, images),
+  });
   interrupt.current = () => {
     // Stopping a running turn comes first and keeps the draft; with nothing running, Ctrl+C clears the draft.
     if (confirmation.pending) confirmation.clear();
@@ -483,15 +491,7 @@ export function TuiSession({
           onImagesChange={onImagesChange}
           enableImagePaste
           onPasteError={(reason) => setNotice(`Image paste failed: ${reason}`)}
-          ignoreInput={(input, key) =>
-            !composerActive ||
-            slash.owns(key) ||
-            ['[I', '[O', '\x1b[I', '\x1b[O'].includes(input) ||
-            key.pageUp ||
-            key.pageDown ||
-            (key.ctrl && (key.upArrow || key.downArrow || input === 'g' || input === 'b' || input === 'o')) ||
-            (Boolean(state.activeTurnId) && key.meta && key.return)
-          }
+          ignoreInput={composerFilter}
         />
       </InputFrame>
       <ComposerFooter integration={integration} state={state} active={composerActive} columns={columns} />

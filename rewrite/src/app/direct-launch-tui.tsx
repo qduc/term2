@@ -3,6 +3,8 @@ import fs from 'node:fs';
 import { homedir } from 'node:os';
 import { stderr, stdin, stdout } from 'node:process';
 import { createInterface } from 'node:readline/promises';
+import { collectProviderModels } from '../../../source/services/models/model-listing.js';
+import { getFavoriteModelInfos, toggleFavoriteModel } from '../../../source/services/models/model-favorites.js';
 import { resolveActiveProfile } from '../../../source/services/profiles/active-profile.js';
 import React, { useMemo, useRef, useState, type ReactNode } from 'react';
 import { render } from 'ink';
@@ -77,6 +79,26 @@ function DirectTui({
   const notifier = useTerminalFocusNotifier({ stdout, settingsService: settings, loggingService: logger });
   const integration: TuiIntegration = useMemo(
     () => ({
+      modelPicker: {
+        favorites(sessionId) {
+          const current = app.sessionDetails(sessionId).settings;
+          if (!current) throw new Error('The attached session has no live settings.');
+          return getFavoriteModelInfos(current).map((model) => ({ provider: model.provider!, id: model.id }));
+        },
+        async list(sessionId) {
+          const current = app.sessionDetails(sessionId).settings;
+          if (!current) throw new Error('The attached session has no live settings.');
+          const groups = await collectProviderModels({ settingsService: current, loggingService: logger });
+          return groups.flatMap((group) =>
+            group.models.map((model) => ({ provider: group.provider, id: model.id, name: model.name })),
+          );
+        },
+        toggle(sessionId, model) {
+          const current = app.sessionDetails(sessionId).settings;
+          if (!current) throw new Error('The attached session has no live settings.');
+          toggleFavoriteModel(current, model.provider, model.id);
+        },
+      },
       preferences(sessionId) {
         const current = app.liveSettings(sessionId);
         if (!current) throw new Error('The attached session has no live settings.');
@@ -107,7 +129,7 @@ function DirectTui({
         },
       }),
     }),
-    [app, root, remote, mcp, bridge, restart],
+    [app, root, remote, mcp, bridge, restart, logger],
   );
   return (
     <Tui

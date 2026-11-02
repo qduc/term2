@@ -11,6 +11,7 @@ import { useClient } from './use-client.js';
 import { Activity, LiveNotices } from './views.js';
 import { InteractionPanel } from './interaction-panel.js';
 import type { InteractionInputHandler } from './interaction-input.js';
+import { ModelPicker } from './model-picker.js';
 import { RewindPicker } from './rewind-picker.js';
 import { TaskManager } from './task-manager.js';
 import { BudgetPanel } from './budget-panel.js';
@@ -60,6 +61,7 @@ export function TuiSession({
   const { columns, rows } = useTerminalSize();
   const [interactionOpen, setInteractionOpen] = useState(false);
   const [dismissedInteractionId, setDismissedInteractionId] = useState<string | null>(null);
+  const [modelOpen, setModelOpen] = useState(false);
   const [taskOpen, setTaskOpen] = useState(false);
   const [budgetOpen, setBudgetOpen] = useState(false);
   const {
@@ -82,26 +84,19 @@ export function TuiSession({
   const [rewindTargets, setRewindTargets] = useState<readonly WireRewindTarget[] | null>(null);
   // Snapshot-derived ownership leaves no gap for decision keys to land in the composer; Ctrl+G picks background requests.
   const rootInteraction = state.interactions.find((item) => item.turnId === state.activeTurnId && !item.taskId);
+  const panelOpen = modelOpen || taskOpen || budgetOpen || Boolean(rewindTargets);
   const foregroundInteraction =
-    !interactionOpen && !taskOpen && !budgetOpen && !rewindTargets && rootInteraction?.id !== dismissedInteractionId
-      ? rootInteraction
-      : undefined;
+    !interactionOpen && !panelOpen && rootInteraction?.id !== dismissedInteractionId ? rootInteraction : undefined;
   const interactionActive = interactionOpen || Boolean(foregroundInteraction);
   const confirmation = useSendConfirmation(interactionActive);
   const interactionInput = useRef<InteractionInputHandler | null>(null);
-  const viewport = useTranscriptViewport(
-    state,
-    columns,
-    rows,
-    !interactionActive && !taskOpen && !budgetOpen && !rewindTargets,
-  );
+  const viewport = useTranscriptViewport(state, columns, rows, !interactionActive && !panelOpen);
   const { InputFrame, PromptMarker, LiveDivider } = useSkin();
   const theme = useTheme();
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // Typing stays open while a send is in flight (overlapping sends queue behind it); only the harness idle flag waits.
-  const composerActive =
-    !confirmation.pending && !connectionError && !interactionActive && !taskOpen && !budgetOpen && !rewindTargets;
+  const composerActive = !panelOpen && !confirmation.pending && !connectionError && !interactionActive;
   const slash = useComposerMenu(editor.value, composerActive && !editing, theme.textSubtle);
   useHarnessInput(composerActive && !busy, Boolean(state.activeTurnId), editor.value);
   const pending = useRef(false);
@@ -123,6 +118,7 @@ export function TuiSession({
     else setNotice('Press Ctrl+C again to exit');
   };
   useInput((input, key) => {
+    if (modelOpen) return void interactionInput.current?.(input, key);
     if (confirmation.handleKey(input, key)) return;
     if (interactionActive) {
       interactionInput.current?.(input, key);
@@ -352,7 +348,8 @@ export function TuiSession({
         } else await queueAction(connection, action, item?.id, match[3]);
       } else if (input.trim() === '/cancel') {
         setNotice(await cancelForeground(connection, state.activeTurnId ?? undefined));
-      } else if (input.startsWith('/')) {
+      } else if (input.trim() === '/model' && integration.modelPicker) setModelOpen(true);
+      else if (input.startsWith('/')) {
         const directNotice = await directSlashCommand(connection, input);
         if (directNotice !== null) setNotice(directNotice);
         else {
@@ -403,6 +400,16 @@ export function TuiSession({
         </Text>
       ) : null}
       <Activity state={state} />
+      {modelOpen && integration.modelPicker ? (
+        <ModelPicker
+          api={integration.modelPicker}
+          sessionId={connection.sessionId}
+          inputHandler={interactionInput}
+          onClose={() => setModelOpen(false)}
+          run={(text) => integration.command(connection, text)}
+          onNotice={setNotice}
+        />
+      ) : null}
       {budgetOpen ? (
         <BudgetPanel
           requests={state.budgets}

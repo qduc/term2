@@ -95,7 +95,7 @@ async function runCommand(
   command: string,
   expected: string,
   firstPrompt?: string,
-  exerciseMenu: false | 'complete' | 'prefix-enter' | 'pick-enter' = false,
+  exerciseMenu: false | 'complete' | 'prefix-enter' | 'pick-enter' | 'model-picker' = false,
   withUsage = false,
 ): Promise<void> {
   root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-tool-rows-e2e-')));
@@ -125,7 +125,11 @@ async function runCommand(
   fs.writeFileSync(
     path.join(settingsDir, 'settings.json'),
     JSON.stringify({
-      agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
+      agent: {
+        retryAttempts: 0,
+        modelSelection: { model: 'mock-alpha', provider: 'mockprov' },
+        favoriteModels: ['mockprov/mock-alpha'],
+      },
       providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl, apiKey: 'test-key' }],
       // Sandbox off and GREEN commands: both run without an approval prompt.
       sandbox: { enabled: false },
@@ -167,7 +171,7 @@ async function runCommand(
     expect(session.getVisibleOutput()).toContain('keep this conversation');
     return;
   }
-  if (exerciseMenu) {
+  if (exerciseMenu === 'complete') {
     session.write('/hel');
     await waitForHarnessComposerValue(idlePath, '/hel', { timeoutMs: 60_000 });
     await session.waitForOutput('/help', 30_000);
@@ -180,6 +184,35 @@ async function runCommand(
   }
   await submit(command);
   await session.waitForOutput(expected, 30_000);
+  if (exerciseMenu === 'model-picker') {
+    await session.waitForOutput('mockprov/mock-alpha', 30_000);
+    const beforeClose = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
+    session.write('\x1b');
+    await waitForHarnessIdleGeneration(idlePath, { after: beforeClose, timeoutMs: 60_000 });
+    await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 60_000 });
+    await submit('/model ');
+    await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 60_000 });
+    await session.waitForOutput('Choose a model', 30_000);
+    const step = async (keys: string, expected: string) => {
+      const offset = session!.getVisibleOutput().length;
+      session!.write(keys);
+      const started = Date.now();
+      while (Date.now() - started < 30_000) {
+        if (session!.getVisibleOutput().slice(offset).includes(expected)) return;
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      throw new Error(`No new terminal output containing ${expected}: ${session!.getVisibleOutput().slice(-1200)}`);
+    };
+    await step('mock-alpha', 'Filter: mock-alpha');
+    await step('\x06', 'No matching models.'); // Ctrl+F removes the favorite.
+    await step('\t', '[All]');
+    await session.waitForOutput('☆ mockprov/mock-alpha', 60_000);
+    await step('\x06', '★ mockprov/mock-alpha'); // Re-add it on All.
+    await step('\r', 'Model set to mockprov/mock-alpha.');
+    await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 60_000 });
+    const settings = JSON.parse(fs.readFileSync(path.join(settingsDir, 'settings.json'), 'utf8'));
+    expect(settings.agent.favoriteModels).toContain('mockprov/mock-alpha');
+  }
 }
 
 it('/auto-approve without an argument reports the current mode', { timeout: TIMEOUT_MS }, () =>
@@ -190,9 +223,13 @@ it('/settings lists the approval mode', { timeout: TIMEOUT_MS }, () =>
   runCommand('/settings', 'shell.autoApproveMode: off (default)'),
 );
 
-it('/model without an argument names the current model', { timeout: TIMEOUT_MS }, async () => {
-  await runCommand('/model', 'Current model: mockprov/mock-alpha.');
-});
+it(
+  '/model picker filters, toggles favorites, selects a model and clears the composer',
+  { timeout: TIMEOUT_MS },
+  async () => {
+    await runCommand('/model', 'Choose a model', undefined, 'model-picker');
+  },
+);
 
 it('/model <provider>/<model> confirms the new model by name', { timeout: TIMEOUT_MS }, () =>
   runCommand('/model mockprov/mock-beta', 'Model set to mockprov/mock-beta.'),

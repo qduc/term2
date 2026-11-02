@@ -25,7 +25,14 @@ export type TuiStatusInfo = {
   readonly effort: string | undefined;
   readonly approval: 'off' | 'advisory' | 'auto' | 'always';
 };
+export type PickerModel = { readonly provider: string; readonly id: string; readonly name?: string };
+
 export interface TuiIntegration {
+  readonly modelPicker?: {
+    favorites(sessionId: string): PickerModel[];
+    list(sessionId: string): Promise<PickerModel[]>;
+    toggle(sessionId: string, model: PickerModel): void;
+  };
   /** Read the attached session's effective preferences on each render, including live /settings changes. */
   preferences?(sessionId: string): { readonly historySize: number; readonly pasteThreshold: number | undefined };
   /** What the attached session's status bar shows, read on each render so live /settings changes appear. */

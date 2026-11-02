@@ -22,3 +22,11 @@ by admission ID whether the snapshot fact or human slot arrives first, and attac
 only once. Inserting after the human instead preserves the text but changes the
 provider prefix on reopen; the original personal-memory black-box cases compare
 the live prefix with actual resumed requests to detect this drift.
+
+`captureDirectCommandHistory` depends on this ordering: a personal snapshot is
+preceding context, not the admission's trailing retry boundary. With no following
+summary/provider input, that boundary stays on the human item. Pointing it at the
+preceding snapshot makes `admissionBoundaries` reject rewind/retry commands live
+and after reopen. Retry-turn keeps the snapshot and human together; rewind removes
+the human but retains the preceding snapshot, consistent with the retained memory
+comparison state so the next unchanged admission does not lose context.

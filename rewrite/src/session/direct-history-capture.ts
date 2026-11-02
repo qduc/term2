@@ -4,7 +4,6 @@ import type { Fact } from './facts.js';
 import type { DirectCommandSnapshot } from './direct-command-types.js';
 import { createDirectQueueState, reduceDirectQueue, directQueueSteeredInput } from './direct-queue.js';
 import { isDirectQueueFact } from './facts.js';
-import { directPersonalMemoryItem } from './direct-memory.js';
 
 /** Capture retained raw admissions/context and root execution identity after physical drain. */
 export function captureDirectCommandHistory(input: {
@@ -15,10 +14,9 @@ export function captureDirectCommandHistory(input: {
   readonly executionsSettled: boolean;
 }): DirectCommandSnapshot {
   const admissions = new Map<ItemId, { messageId: ItemId; retryThroughId: ItemId }>();
-  const personal = new Map<string, ItemId>();
   const toolResults: DirectCommandSnapshot['toolResults'][number][] = [];
   let queue = createDirectQueueState();
-  const admit = (items: readonly Item[], admissionId?: string): void => {
+  const admit = (items: readonly Item[]): void => {
     for (const [index, item] of items.entries()) {
       if (item.type !== 'user_message') continue;
       let through = item.id;
@@ -27,14 +25,11 @@ export function captureDirectCommandHistory(input: {
         if (next.type !== 'summary' && next.type !== 'provider_input') break;
         through = next.id;
       }
-      if (through === item.id) through = personal.get(admissionId ?? item.id) ?? through;
       admissions.set(item.id, { messageId: item.id, retryThroughId: through });
     }
   };
   for (const fact of input.facts) {
-    if (fact.type === 'memory_personal_snapshot') personal.set(fact.admissionId, directPersonalMemoryItem(fact).id);
-    if (fact.type === 'turn_started' && !fact.retryContext && !fact.silent)
-      admit(fact.input, fact.submission?.messageId ?? fact.turnId);
+    if (fact.type === 'turn_started' && !fact.retryContext && !fact.silent) admit(fact.input);
     if (fact.type === 'queue_steered') admit(directQueueSteeredInput(queue, fact));
     if (isDirectQueueFact(fact)) queue = reduceDirectQueue(queue, fact);
     if (fact.type === 'item' && fact.item.type === 'tool_result' && fact.executionId)

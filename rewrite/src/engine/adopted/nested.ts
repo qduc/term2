@@ -14,11 +14,10 @@ import type { ContinuationHandle } from '../../../../source/contracts/continuati
 import type { ProviderInput, ProviderInputItem } from '../../../../source/contracts/provider-input.js';
 import type { StreamedModelTurn } from '../../../../source/contracts/streamed-model-turn.js';
 import { isCancellationError } from '../../../../source/lib/harness-invariant-error.js';
-import { adoptedModelConversion } from '../../model/adopted/index.js';
-import { convertSourceItems } from './conversion.js';
+import { convertSourceItems, itemToInput } from './conversion.js';
 import type { Item, ToolCallId } from '../../model/index.js';
 import type { NestedRunRequest, ToolContext } from '../../tools/index.js';
-import type { AdoptedModelRegistry } from '../../model/adopted/index.js';
+import type { SourceModelTransports } from './provider-transports.js';
 import type { AgentId, EngineEvent } from '../index.js';
 
 /** Live source capabilities for one nested invocation; none are checkpoint data. */
@@ -28,7 +27,7 @@ export interface AdoptedNestedBinding {
   readonly isCurrent: () => boolean;
   readonly agentId: AgentId;
   readonly role: string;
-  readonly models: Pick<AdoptedModelRegistry, 'hasUnsettledReads' | 'trackDetachedRead'>;
+  readonly models: Pick<SourceModelTransports, 'hasUnsettledReads' | 'trackDetachedRead'>;
   prepare(
     request: NestedRunRequest,
     parent: ToolInvocationContext,
@@ -92,10 +91,7 @@ export function createRunNested(binding: AdoptedNestedBinding): ToolContext['run
         prepared.agent.tools.map((tool) => tool.name),
         request.toolNames,
       ) ||
-      !isDeepStrictEqual(
-        normalizeApplicationInput(prepared.input),
-        request.items.map(adoptedModelConversion.itemToInput),
-      )
+      !isDeepStrictEqual(normalizeApplicationInput(prepared.input), request.items.map(itemToInput))
     ) {
       throw new Error('Nested request does not match its live source binding');
     }

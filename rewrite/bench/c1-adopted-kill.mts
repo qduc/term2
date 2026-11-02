@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { LocalSessionStore } from '../src/session/local-store.ts';
 import { createBenchSettings } from './source-app.mjs';
-import { createAdoptedModelRegistry } from '../src/model/adopted/index.ts';
+import { createSourceModelTransports } from '../src/engine/adopted/provider-transports.ts';
 import { createBenchEngine } from './source-app.mjs';
 import { createProviderRegistry } from '../../source/providers/registry.ts';
 import { SessionContextService } from '../../source/services/session/session-context-service.ts';
@@ -75,7 +75,7 @@ const { service: host, source } = createBenchSettings({
   cli: { agent: { modelSelection: { provider: 'openai', model: 'fixture' } } as any },
 });
 const pair = source.forSessionBinding({ readable: Object.keys(host.getAll()) as any, writable: [] });
-const models = createAdoptedModelRegistry({
+const models = createSourceModelTransports({
   settingsService: pair.service,
   loggingService: logger,
   sessionContextService: context,

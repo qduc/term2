@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import { forkLegacySettingsBinding } from '../../engine/adopted/settings.js';
-import { forkAdoptedModelRegistry, type AdoptedModelRegistry } from '../../model/adopted/index.js';
+import { forkSourceModelTransports, type SourceModelTransports } from '../../engine/adopted/provider-transports.js';
 import { projectRuntimeSettings } from './settings.js';
 import {
   isReasoningSetting,
@@ -24,7 +24,7 @@ import type { TurnPrompt } from './turn-prompt.js';
 
 /** Source-agent construction is supplied by the caller, never imported upward from app. */
 export type LegacyEngineOptions = {
-  readonly models: AdoptedModelRegistry;
+  readonly models: SourceModelTransports;
   readonly settings: SettingsReader;
   readonly clientOptions: Parameters<typeof createAdoptedEngine>[0]['clientOptions'];
   readonly bindSessionClient?: (client: AgentClient) => void;
@@ -60,7 +60,7 @@ export function createLegacySessionHandleFactory(options: {
     let assembly: LegacyEngineAssembly | undefined;
     let cancelBackground: (() => void) | undefined;
     let ownedClient: AgentClient | undefined;
-    let graphModels: AdoptedModelRegistry | undefined;
+    let graphModels: SourceModelTransports | undefined;
     let grantHumanRunBudgetExtension: (() => { granted: boolean; extensionsGranted: number }) | undefined;
     const scopedChildren = new InvalidatableShellChildRegistry();
     let clientForNetwork: import('../../../../source/lib/agent-client.js').AgentClient | undefined;
@@ -109,7 +109,7 @@ export function createLegacySessionHandleFactory(options: {
         ...(isTemperatureSetting(temp) ? { temperature: temp } : {}),
       });
       const binding = forkLegacySettingsBinding(engineOptions.settings, hostSettings, initial.snapshot);
-      graphModels = forkAdoptedModelRegistry(engineOptions.models, binding.service);
+      graphModels = forkSourceModelTransports(engineOptions.models, binding.service);
       assembly = synchronous(
         options.assembleEngine({
           ...engineOptions,

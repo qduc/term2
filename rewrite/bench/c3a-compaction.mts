@@ -18,7 +18,7 @@ import { LoggingService } from '../../source/services/logging/logging-service.ts
 import { SessionContextService } from '../../source/services/session/session-context-service.ts';
 import { createLegacySessionHandleFactory } from '../src/session/adopted/session-handle.js';
 import { createBenchSettings } from './source-app.mjs';
-import { createAdoptedModelRegistry } from '../src/model/adopted/index.ts';
+import { createSourceModelTransports } from '../src/engine/adopted/provider-transports.ts';
 import { CanonicalSessionLog, loadCanonicalConversation } from '../src/session/adopted/conversation-log.ts';
 import { createNetworkAuthority } from '../src/session/adopted/network-authority.ts';
 import { projectNetworkFacts } from '../src/session/adopted/network.ts';
@@ -118,7 +118,7 @@ function makeHarness(options: {
   const context = new SessionContextService();
   const executionContext = new ExecutionContext();
   executionContext.enterWorkspace(workspace);
-  const models = createAdoptedModelRegistry({
+  const models = createSourceModelTransports({
     settingsService: pair.service,
     loggingService: logger,
     sessionContextService: context,

@@ -21,7 +21,7 @@ import path from 'node:path';
 import http from 'node:http';
 import { once } from 'node:events';
 import { createBenchSettings } from './source-app.mjs';
-import { createAdoptedModelRegistry } from '../src/model/adopted/index.ts';
+import { createSourceModelTransports } from '../src/engine/adopted/provider-transports.ts';
 import { createProviderRegistry } from '../../source/providers/registry.ts';
 import { SessionContextService } from '../../source/services/session/session-context-service.ts';
 import { LoggingService } from '../../source/services/logging/logging-service.ts';
@@ -116,7 +116,7 @@ const logger = new LoggingService({ disableLogging: true });
 const context = new SessionContextService();
 const executionContext = new ExecutionContext();
 executionContext.enterWorkspace(workspace);
-const models = createAdoptedModelRegistry({
+const models = createSourceModelTransports({
   settingsService: pair.service,
   loggingService: logger,
   sessionContextService: context,

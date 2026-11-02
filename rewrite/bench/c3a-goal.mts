@@ -9,7 +9,7 @@ import { LocalSessionStore } from '../src/session/local-store.ts';
 import { CanonicalSessionLog, loadCanonicalConversation } from '../src/session/adopted/conversation-log.ts';
 import { createLegacySessionHandleFactory } from '../src/session/adopted/session-handle.js';
 import { createBenchSettings } from './source-app.mjs';
-import { createAdoptedModelRegistry } from '../src/model/adopted/index.ts';
+import { createSourceModelTransports } from '../src/engine/adopted/provider-transports.ts';
 import { createProviderRegistry } from '../../source/providers/registry.ts';
 import { SessionContextService } from '../../source/services/session/session-context-service.ts';
 import { LoggingService } from '../../source/services/logging/logging-service.ts';
@@ -85,7 +85,7 @@ const pair = source.forSessionBinding(
   new Map([['shell.autoApproveMode', 'off']]) as any,
 );
 const logger = new LoggingService({ disableLogging: true });
-const models = createAdoptedModelRegistry({
+const models = createSourceModelTransports({
   settingsService: pair.service,
   loggingService: logger,
   sessionContextService: new SessionContextService(),

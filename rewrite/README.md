@@ -95,9 +95,12 @@ described under the layer guard below, and starts at `src/app/cli.ts`.
 3. The session (`session/local-store.ts`, with the turn driver in
    `session/adopted/foreground.ts`) appends the admission facts, then calls
    `Engine.start`.
-4. In production the engine is `engine/adopted/`. It runs the old CLI's
+4. The retained historical engine in `engine/adopted/` runs the old CLI's
    `AgentClient` and run loop from `source/`, which call the provider through
-   `model/adopted/`.
+   `engine/adopted/provider-transports.ts`. The pool retains source transport
+   ownership, helper references and deferred close across detached reads; scoped
+   settings forks have independent lifetime and discovery. Its historical history
+   conversion stays in `engine/adopted/conversion.ts`.
 5. Each fact the session appends, and each live engine event, reaches
    subscribers as a `SessionUpdate`. The in-process host passes every update
    through `Projection.toWire` (`protocol/projection.ts`) before the client

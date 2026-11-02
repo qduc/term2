@@ -267,7 +267,7 @@ export function createAdoptedEngine(options: {
       hasUnsettledReads: () => deps.models.hasUnsettledReads(),
       trackDetachedRead: (operation) => deps.models.trackDetachedRead(operation),
       providerDefinition: (providerId) => deps.models.providerDefinition(providerId),
-      scopedModel: (ref, modelDeps) => deps.models.createScoped(ref, modelDeps).original,
+      scopedModel: (ref, modelDeps) => deps.models.createScoped(ref, modelDeps),
       acquireHelper: (ref, modelDeps) => deps.models.acquireHelper(ref, modelDeps),
       fetchModels: (providerId, modelDeps) => deps.models.fetchScopedModels(providerId, modelDeps),
       modelDefaultReasoningLevel: (providerId, modelId, settings) =>
@@ -287,8 +287,8 @@ export function createAdoptedEngine(options: {
     },
     adoptedProviderBinding: {
       provider: (providerId) => deps.models.providerDefinition(providerId),
-      model: (provider, model) => deps.models.original({ provider, model }).original,
-      independentModel: (provider, model) => deps.models.createIndependent({ provider, model }).original,
+      model: (provider, model) => deps.models.original({ provider, model }),
+      independentModel: (provider, model) => deps.models.createIndependent({ provider, model }),
     },
     driverFactory: (dependencies) => {
       if (deps.models.hasUnsettledReads()) throw new Error('A prior adopted model read has not settled');

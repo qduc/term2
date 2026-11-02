@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import fc from 'fast-check';
 import { createLog, openLog, readFactLines } from '../../rewrite/src/session/log.ts';
 import { captureDirectFinalWindow, recoverDirectFinalWindow } from '../../rewrite/src/session/direct-final.ts';
-import { adoptedModelConversion } from '../../rewrite/src/model/adopted/index.ts';
+import { inputToItem } from '../../rewrite/src/engine/adopted/conversion.ts';
 
 // Decode embedded provider JSON once, while also inspecting literal ref framing.
 function storedStrings(value, out = []) {
@@ -61,7 +61,7 @@ export const nativeLogProperties = [
             `BEGIN_ARGUMENT_${n}_` + argumentUnit.repeat(Math.ceil(u.size / argumentUnit.length)) + '_END';
           sentinels.push(body, argument);
           const input = { code: argument };
-          const call = adoptedModelConversion.inputToItem(
+          const call = inputToItem(
             { type: 'tool_call', id: callId, name: 'probe', arguments: JSON.stringify(input) },
             'mock',
           );
@@ -142,7 +142,7 @@ export const nativeLogProperties = [
             paths.push(writer.path);
           }
           const item = u.structured
-            ? adoptedModelConversion.inputToItem({ type: 'tool_result', id: callId, output: sourceOutput }, 'mock')
+            ? inputToItem({ type: 'tool_result', id: callId, output: sourceOutput }, 'mock')
             : { type: 'tool_result', id: `result-${n}`, callId, output, isError: false };
           assert.equal(item.type, u.structured ? 'provider_input' : 'tool_result');
           accept([{ type: 'item', turnId, ...(u.structured ? {} : { executionId }), item }]);

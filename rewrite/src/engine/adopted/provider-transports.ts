@@ -9,48 +9,90 @@ import type { ProviderRequestCapture } from '../../../../source/providers/provid
 import type { ProviderRetryInfo } from '../../../../source/providers/retrying-model.js';
 import { waitForAbortableRead } from '../../../../source/contracts/abort-aware-wait.js';
 import { createProviderRegistry, getProvider } from '../../../../source/providers/index.js';
-import { getModelContextWindow } from '../../../../source/providers/model-catalog/catalog.js';
-import { MODEL_CATALOG } from '../../../../source/providers/model-catalog/catalog.generated.js';
 import {
   fetchModels as sourceFetchModels,
   getModelDefaultReasoningLevel,
   getProviderDefaultReasoningLevel,
-  type ModelInfo,
   type ScopedModelDiscovery,
 } from '../../../../source/services/model-service.js';
-import type { AdoptedModelBinding, AdoptedModelRegistry, AdoptedModelRegistryOptions } from './index.js';
-import { toModelError } from './conversion.js';
-import { observedModelStream } from './stream.js';
+import type { StreamedModelTurn } from '../../../../source/contracts/streamed-model-turn.js';
+import type { ModelRef } from '../../model/index.js';
 
-const DEFAULT_CONTEXT_WINDOW = 128_000;
-const registryOptions = new WeakMap<AdoptedModelRegistry, AdoptedModelRegistryOptions>();
-
-export function forkAdoptedModelRegistry(
-  registry: AdoptedModelRegistry,
-  settingsService: ISettingsService,
-): AdoptedModelRegistry {
-  const options = registryOptions.get(registry);
-  if (!options) throw new Error('Expected adopted model registry');
-  return createAdoptedModelRegistry({ ...options, settingsService });
+export interface SourceModelTransports {
+  waitForReadSettlement(signal: AbortSignal): Promise<void>;
+  readonly settingsService: ISettingsService;
+  hasUnsettledReads(): boolean;
+  trackDetachedRead(operation: Promise<unknown>): void;
+  original(ref: ModelRef): StreamedModelTurn | Promise<StreamedModelTurn>;
+  createIndependent(ref: ModelRef): StreamedModelTurn | Promise<StreamedModelTurn>;
+  acquireHelper(
+    ref: ModelRef,
+    deps: {
+      readonly settingsService: ISettingsService;
+      readonly loggingService: ILoggingService;
+      readonly sessionContextService?: ISessionContextService;
+    },
+  ): { readonly original: StreamedModelTurn | Promise<StreamedModelTurn>; release(): Promise<void> };
+  providerDefinition(providerId: string): ProviderDefinition;
+  fetchScopedModels(
+    providerId: string,
+    deps: {
+      readonly settingsService: ISettingsService;
+      readonly loggingService: ILoggingService;
+      readonly signal?: AbortSignal;
+    },
+  ): Promise<readonly import('../../../../source/services/model-service.js').ModelInfo[]>;
+  modelDefaultReasoningLevel(
+    providerId: string,
+    modelId: string,
+    settingsService?: ISettingsService,
+  ): string | undefined;
+  providerDefaultReasoningLevel(providerId: string): string | undefined;
+  createScoped(
+    ref: ModelRef,
+    deps: {
+      readonly settingsService: ISettingsService;
+      readonly loggingService: ILoggingService;
+      readonly sessionContextService?: ISessionContextService;
+    },
+  ): StreamedModelTurn | Promise<StreamedModelTurn>;
+  dispose(): Promise<void>;
 }
 
-export function createAdoptedModelRegistry(options: AdoptedModelRegistryOptions): AdoptedModelRegistry {
+export interface SourceModelTransportsOptions {
+  readonly settingsService: ISettingsService;
+  readonly loggingService: ILoggingService;
+  readonly sessionContextService?: ISessionContextService;
+  readonly retryAttempts?: number;
+  readonly requestCapture?: ProviderRequestCapture;
+  readonly contextCompactionSessionState?: ContextCompactionSessionState;
+  readonly providerRegistry?: ProviderRegistry;
+  readonly ownership?: 'owned' | 'borrowed';
+  readonly onRetry?: (info?: ProviderRetryInfo) => void;
+}
+
+const registryOptions = new WeakMap<SourceModelTransports, SourceModelTransportsOptions>();
+
+/** Fork the source transport pool with independent lifetime and settings-scoped discovery. */
+export function forkSourceModelTransports(
+  registry: SourceModelTransports,
+  settingsService: ISettingsService,
+): SourceModelTransports {
+  const options = registryOptions.get(registry);
+  if (!options) throw new Error('Expected adopted model registry');
+  return createSourceModelTransports({ ...options, settingsService });
+}
+
+/** Own source transport identities and their deferred disposal for a historical engine graph. */
+export function createSourceModelTransports(options: SourceModelTransportsOptions): SourceModelTransports {
   const providerRegistry = options.providerRegistry ?? createProviderRegistry();
   const compactionState = options.contextCompactionSessionState ?? { disabled: false };
   const ownership = options.ownership ?? 'owned';
-  const bindings = new Map<string, AdoptedModelBinding>();
-  const workerIdentities = new Map<
-    import('../../../../source/contracts/streamed-model-turn.js').StreamedModelTurn,
-    { owned: boolean; borrowed: boolean }
-  >();
-  const helperIdentities = new Map<
-    import('../../../../source/contracts/streamed-model-turn.js').StreamedModelTurn,
-    number
-  >();
+  const bindings = new Map<string, StreamedModelTurn | Promise<StreamedModelTurn>>();
+  const workerIdentities = new Map<StreamedModelTurn, { owned: boolean; borrowed: boolean }>();
+  const helperIdentities = new Map<StreamedModelTurn, number>();
   const pendingIdentities = new Set<Promise<unknown>>();
-  const closedIdentities = new WeakSet<
-    import('../../../../source/contracts/streamed-model-turn.js').StreamedModelTurn
-  >();
+  const closedIdentities = new WeakSet<StreamedModelTurn>();
   const pendingCloses = new Set<Promise<unknown>>();
   const unsettledReads = new Set<Promise<unknown>>();
   const discoveryContexts = new WeakMap<ISettingsService, ScopedModelDiscovery>();
@@ -59,12 +101,12 @@ export function createAdoptedModelRegistry(options: AdoptedModelRegistryOptions)
   const assertActive = () => {
     if (disposalRequested) throw new Error('Model registry is disposed');
   };
-  const closeOnce = (model: import('../../../../source/contracts/streamed-model-turn.js').StreamedModelTurn) => {
+  const closeOnce = (model: StreamedModelTurn) => {
     if (closedIdentities.has(model)) return;
     closedIdentities.add(model);
     const closing = Promise.resolve().then(() =>
       (
-        model as import('../../../../source/contracts/streamed-model-turn.js').StreamedModelTurn & {
+        model as StreamedModelTurn & {
           close?: () => unknown;
         }
       ).close?.(),
@@ -110,14 +152,14 @@ export function createAdoptedModelRegistry(options: AdoptedModelRegistryOptions)
     return context;
   };
   const makeBinding = (
-    ref: import('../index.js').ModelRef,
+    ref: ModelRef,
     independent: boolean,
     scoped?: {
       readonly settingsService: ISettingsService;
       readonly loggingService: ILoggingService;
       readonly sessionContextService?: ISessionContextService;
     },
-  ): AdoptedModelBinding => {
+  ): StreamedModelTurn | Promise<StreamedModelTurn> => {
     assertActive();
     const provider = getProvider(ref.provider, providerRegistry);
     if (!provider?.createStreamedModel)
@@ -137,54 +179,34 @@ export function createAdoptedModelRegistry(options: AdoptedModelRegistryOptions)
             contextCompactionSessionState: compactionState,
           }),
     });
-    const assertOpen = (model: import('../../../../source/contracts/streamed-model-turn.js').StreamedModelTurn) => {
+    const assertOpen = (model: StreamedModelTurn) => {
       if (closedIdentities.has(model)) throw new Error('Provider returned a released model transport');
       return model;
     };
     const original = created instanceof Promise ? created.then(assertOpen) : assertOpen(created);
-    const model: import('../index.js').Model = {
-      ref,
-      contextWindow: getModelContextWindow(ref.provider, ref.model) ?? DEFAULT_CONTEXT_WINDOW,
-      async *stream(request, signal, onDispatched) {
-        try {
-          const streamed = await original;
-          yield* observedModelStream(streamed, request, ref.provider, signal, onDispatched);
-        } catch (error) {
-          throw toModelError(error, signal);
-        }
-      },
-    };
-    return {
-      model,
-      original,
-      provider,
-      providerId: ref.provider,
-      supportsConversationChaining: provider.capabilities?.supportsConversationChaining ?? false,
-      supportsContextCompaction: provider.capabilities?.supportsContextCompaction === true,
-      ownership: scoped ? 'borrowed' : independent ? 'owned' : ownership,
-    };
+    return original;
   };
-  const bindingFor = (ref: import('../index.js').ModelRef) => {
+  const bindingFor = (ref: ModelRef) => {
     assertActive();
     const key = `${ref.provider}\u0000${ref.model}`;
     const existing = bindings.get(key);
     if (existing) return existing;
     const binding = makeBinding(ref, false);
     bindings.set(key, binding);
-    trackIdentity(Promise.resolve(binding.original), (model) => {
+    trackIdentity(Promise.resolve(binding), (model) => {
       const previous = workerIdentities.get(model) ?? { owned: false, borrowed: false };
       workerIdentities.set(model, {
-        owned: previous.owned || binding.ownership === 'owned',
-        borrowed: previous.borrowed || binding.ownership === 'borrowed',
+        owned: previous.owned || ownership === 'owned',
+        borrowed: previous.borrowed || ownership === 'borrowed',
       });
     });
-    if (binding.original instanceof Promise)
-      void binding.original.catch(() => {
+    if (binding instanceof Promise)
+      void binding.catch(() => {
         if (bindings.get(key) === binding) bindings.delete(key);
       });
     return binding;
   };
-  const registry: AdoptedModelRegistry = {
+  const registry: SourceModelTransports = {
     settingsService: options.settingsService,
     async waitForReadSettlement(signal) {
       assertActive();
@@ -214,21 +236,20 @@ export function createAdoptedModelRegistry(options: AdoptedModelRegistryOptions)
         },
       );
     },
-    resolve: (ref) => bindingFor(ref).model,
     original: bindingFor,
     createIndependent: (ref) => makeBinding(ref, true),
     acquireHelper(ref, deps) {
       const binding = makeBinding(ref, true, deps);
-      const operation = Promise.resolve(binding.original);
+      const operation = Promise.resolve(binding);
       let released = false;
-      let model: import('../../../../source/contracts/streamed-model-turn.js').StreamedModelTurn | undefined;
+      let model: StreamedModelTurn | undefined;
       trackIdentity(operation, (resolved) => {
         model = resolved;
         if (!released) helperIdentities.set(resolved, (helperIdentities.get(resolved) ?? 0) + 1);
         else if (!helperIdentities.has(resolved)) helperIdentities.set(resolved, 0);
       });
       return {
-        original: binding.original,
+        original: binding,
         async release() {
           if (released) return;
           released = true;
@@ -240,33 +261,19 @@ export function createAdoptedModelRegistry(options: AdoptedModelRegistryOptions)
     },
     createScoped: (ref, deps) => {
       const binding = makeBinding(ref, true, deps);
-      trackIdentity(Promise.resolve(binding.original), (model) => {
+      trackIdentity(Promise.resolve(binding), (model) => {
         const previous = workerIdentities.get(model) ?? { owned: false, borrowed: false };
         workerIdentities.set(model, { ...previous, borrowed: true });
       });
       return binding;
     },
     providerDefinition,
-    fetchModels: (providerId, signal) =>
-      sourceFetchModels(
-        {
-          settingsService: options.settingsService,
-          loggingService: options.loggingService,
-          signal,
-          discovery: discoveryFor(options.settingsService),
-        },
-        providerId,
-      ),
     fetchScopedModels: (providerId, deps) =>
       sourceFetchModels({ ...deps, discovery: discoveryFor(deps.settingsService) }, providerId),
     modelDefaultReasoningLevel: (providerId, modelId, settings = options.settingsService) =>
       getModelDefaultReasoningLevel(providerId, modelId, discoveryFor(settings)),
     providerDefaultReasoningLevel: (providerId) =>
       getProviderDefaultReasoningLevel(providerId, discoveryFor(options.settingsService)),
-    list: () =>
-      Object.entries(MODEL_CATALOG as Record<string, Record<string, unknown>>).flatMap(([provider, models]) =>
-        providerRegistry.getProvider(provider) ? Object.keys(models).map((model) => ({ provider, model })) : [],
-      ),
     async dispose() {
       disposalRequested = true;
       disposalController.abort();

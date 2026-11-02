@@ -236,8 +236,30 @@ export default function register(term2) { for (const type of ['session.start', '
       await child.waitForComposerValue('', { afterRevision: beforeHelpRevision, timeoutMs: 5000 });
       expect(await identity()).toEqual(before);
       expect(await activeLeaf()).toBe(latest);
-      expect(await readFile(join(workspace.paths.conversationsDir, `${latest}.jsonl`), 'utf8')).toContain(latest);
-      expect(await readFile(join(workspace.paths.conversationsDir, `${latest}.jsonl`), 'utf8')).toBe(emptyLeaf);
+      const afterRestart = await readFile(join(workspace.paths.conversationsDir, `${latest}.jsonl`), 'utf8');
+      expect(afterRestart).toContain(latest);
+      if (process.env.TERM2_TEST_CLI) {
+        // Native resumes the empty leaf without appending a fact.
+        expect(afterRestart).toBe(emptyLeaf);
+      } else {
+        // The legacy CLI has always appended session_init on resume. Preserve the
+        // prefix and require only a matching initialization, never a user turn.
+        const beforeLines = emptyLeaf
+          .trim()
+          .split('\n')
+          .map((line) => JSON.parse(line));
+        const afterLines = afterRestart
+          .trim()
+          .split('\n')
+          .map((line) => JSON.parse(line));
+        expect(beforeLines).toHaveLength(1);
+        expect(beforeLines[0].event.type).toBe('session_init');
+        expect(afterLines).toHaveLength(2);
+        expect(afterLines[0]).toEqual(beforeLines[0]);
+        expect(afterLines[1].event).toEqual(beforeLines[0].event);
+        expect(afterLines[1].seq).toBe(beforeLines[0].seq + 1);
+        expect(afterLines[1].eventId).not.toBe(beforeLines[0].eventId);
+      }
       expect(requests).toHaveLength(2);
       await writePtyTextAndSubmit(child, '/quit');
       expect((await child.waitForExit()).exitCode).toBe(0);

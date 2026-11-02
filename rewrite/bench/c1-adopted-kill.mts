@@ -6,9 +6,9 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { LocalSessionStore } from '../src/session/local-store.ts';
-import { createLegacyAppSettings } from '../src/app/adopted/settings.ts';
+import { createBenchSettings } from './source-app.mjs';
 import { createAdoptedModelRegistry } from '../src/model/adopted/index.ts';
-import { createAppAdoptedEngine } from '../src/app/adopted/engine.ts';
+import { createBenchEngine } from './source-app.mjs';
 import { createProviderRegistry } from '../../source/providers/registry.ts';
 import { SessionContextService } from '../../source/services/session/session-context-service.ts';
 import { LoggingService } from '../../source/services/logging/logging-service.ts';
@@ -69,7 +69,7 @@ providers.upsertProvider({
     throw new Error('unexpected provider dispatch');
   },
 });
-const { service: host, source } = createLegacyAppSettings({
+const { service: host, source } = createBenchSettings({
   disableLogging: true,
   disableFilePersistence: true,
   cli: { agent: { modelSelection: { provider: 'openai', model: 'fixture' } } as any },
@@ -82,7 +82,7 @@ const models = createAdoptedModelRegistry({
   providerRegistry: providers,
   ownership: 'borrowed',
 });
-const { engine } = createAppAdoptedEngine({
+const { engine } = createBenchEngine({
   models,
   settings: pair.settings,
   clientOptions: {

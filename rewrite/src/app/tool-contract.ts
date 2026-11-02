@@ -1,4 +1,6 @@
 /** Shared assembly result owned by the direct app, implemented in tool-surface.ts. */
+import path from 'node:path';
+import { ExecutionContext } from '../../../source/services/execution-context.js';
 import type { InteractionDecision, InteractionRequest, ToolContextSeed } from '../engine/index.js';
 import type { Item, ReasoningEffort, ToolSpec } from '../model/index.js';
 import type { DirectRemoteWorkspace } from './direct-remote.js';
@@ -80,3 +82,34 @@ export type AgentSurface = {
   /** Headless policy only; caller commits its decision through Session's Turn.answer. */
   decideInteraction(request: InteractionRequest, history: readonly Item[]): Promise<InteractionDecision>;
 };
+
+/** Native home/lease shared by configured surfaces; never publishes the frozen CLI global root. */
+export class LocalExecutionContext extends ExecutionContext {
+  private lease?: string;
+
+  constructor(private readonly home: string) {
+    super();
+    if (!path.isAbsolute(home)) throw new Error(`Workspace home must be absolute: ${home}`);
+  }
+
+  override getCwd(): string {
+    return this.lease ?? this.home;
+  }
+
+  override getHomeWorkspace(): string {
+    return this.home;
+  }
+
+  override getActiveWorkspace(): string | undefined {
+    return this.lease;
+  }
+
+  override enterWorkspace(root: string): void {
+    if (!path.isAbsolute(root)) throw new Error(`Active workspace must be an absolute path, received: ${root}`);
+    this.lease = root;
+  }
+
+  override exitWorkspace(): void {
+    this.lease = undefined;
+  }
+}

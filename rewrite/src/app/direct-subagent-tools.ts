@@ -11,7 +11,7 @@ import {
 } from '../../../source/services/agent-runtime/permission-boundary.js';
 import { ToolApprovalPolicyRegistry } from '../../../source/services/approval/tool-approval-policy-registry.js';
 import type { ExecutionContext } from '../../../source/services/execution-context.js';
-import { LocalExecutionContext } from './adopted/local-execution-context.js';
+import { LocalExecutionContext } from './tool-contract.js';
 import { resolveActiveEnforcement } from '../../../source/services/profiles/active-profile.js';
 import type { SessionAccessState } from '../../../source/services/session/session-access-state.js';
 import { SubagentPoolEntrySchema } from '../../../source/services/settings/settings-schema.js';

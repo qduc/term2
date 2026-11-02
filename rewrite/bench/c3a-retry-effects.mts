@@ -1,3 +1,4 @@
+import { createBenchEngine } from './source-app.mjs';
 import assert from 'node:assert/strict';
 import { SessionLifecycle } from '../../source/services/session/session-lifecycle.ts';
 const operations = { turn: 0, tool: 0 };
@@ -20,9 +21,9 @@ import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
 import { once } from 'node:events';
-import { createLegacyAppSettings } from '../src/app/adopted/settings.ts';
+import { createBenchSettings } from './source-app.mjs';
 import { createAdoptedModelRegistry } from '../src/model/adopted/index.ts';
-import { createAppAdoptedSessionHandleFactory } from '../src/app/adopted/session.ts';
+import { createLegacySessionHandleFactory } from '../src/session/adopted/session-handle.js';
 import { CanonicalSessionLog, loadCanonicalConversation } from '../src/session/adopted/conversation-log.ts';
 import { createProviderRegistry } from '../../source/providers/registry.ts';
 import { SessionContextService } from '../../source/services/session/session-context-service.ts';
@@ -106,7 +107,7 @@ const provider: any = {
 };
 const providers = createProviderRegistry();
 providers.upsertProvider(provider);
-const { service: host, source } = createLegacyAppSettings({
+const { service: host, source } = createBenchSettings({
   disableLogging: true,
   disableFilePersistence: true,
   cli: {
@@ -145,7 +146,8 @@ const store = new LocalSessionStore({
   logger,
   defaultWorkspace: workspaceConfig,
   defaultModel: modelRef,
-  adoptedHandleFactory: createAppAdoptedSessionHandleFactory({
+  adoptedHandleFactory: createLegacySessionHandleFactory({
+    assembleEngine: createBenchEngine,
     engine: () => ({
       models,
       settings: pair.settings,

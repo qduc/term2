@@ -1,3 +1,4 @@
+import { createBenchEngine } from './source-app.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -15,8 +16,8 @@ import { ExecutionContext } from '../../source/services/execution-context.ts';
 import { sanitizeLogFact } from '../../source/services/logging/conversation-log-writer.ts';
 import { LoggingService } from '../../source/services/logging/logging-service.ts';
 import { SessionContextService } from '../../source/services/session/session-context-service.ts';
-import { createAppAdoptedSessionHandleFactory } from '../src/app/adopted/session.ts';
-import { createLegacyAppSettings } from '../src/app/adopted/settings.ts';
+import { createLegacySessionHandleFactory } from '../src/session/adopted/session-handle.js';
+import { createBenchSettings } from './source-app.mjs';
 import { createAdoptedModelRegistry } from '../src/model/adopted/index.ts';
 import { CanonicalSessionLog, loadCanonicalConversation } from '../src/session/adopted/conversation-log.ts';
 import { createNetworkAuthority } from '../src/session/adopted/network-authority.ts';
@@ -93,7 +94,7 @@ function makeHarness(options: {
     } as any);
   }
 
-  const { service: host, source } = createLegacyAppSettings({
+  const { service: host, source } = createBenchSettings({
     disableLogging: true,
     disableFilePersistence: true,
     cli: {
@@ -135,7 +136,8 @@ function makeHarness(options: {
       defaultWorkspace: workspaceConfig,
       defaultModel: modelRef,
       fileSystem,
-      adoptedHandleFactory: createAppAdoptedSessionHandleFactory({
+      adoptedHandleFactory: createLegacySessionHandleFactory({
+        assembleEngine: createBenchEngine,
         onSourceEvent: sourceEventSink ?? options.onSourceEvent,
         engine: () => ({
           models,

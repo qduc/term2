@@ -1,3 +1,4 @@
+import { createBenchEngine } from './source-app.mjs';
 // Controlled runner boundary: verifies actual Session ownership, not sandbox enforcement.
 import { ScopedSandboxRunner } from '../../source/utils/shell/sandbox/scoped-sandbox-runner.js';
 let capturedScope: any;
@@ -19,11 +20,11 @@ ScopedSandboxRunner.prototype.cleanupAfterCommand = async function () {
 };
 import assert from 'node:assert/strict';
 import { LocalSessionStore } from '../src/session/local-store.js';
-import { createAppAdoptedSessionHandleFactory } from '../src/app/adopted/session.js';
+import { createLegacySessionHandleFactory } from '../src/session/adopted/session-handle.js';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createLegacyAppSettings } from '../src/app/adopted/settings.js';
+import { createBenchSettings } from './source-app.mjs';
 import { createAdoptedModelRegistry } from '../src/model/adopted/index.js';
 import { createProviderRegistry } from '../../source/providers/registry.js';
 import { SessionContextService } from '../../source/services/session/session-context-service.js';
@@ -65,7 +66,7 @@ const provider: any = {
 };
 const providers = createProviderRegistry();
 providers.upsertProvider(provider);
-const { service: host, source } = createLegacyAppSettings({
+const { service: host, source } = createBenchSettings({
   disableLogging: true,
   disableFilePersistence: true,
   cli: {
@@ -104,7 +105,8 @@ const store = new LocalSessionStore({
   driverFactory: () => {
     throw new Error('combined handle expected');
   },
-  adoptedHandleFactory: createAppAdoptedSessionHandleFactory({
+  adoptedHandleFactory: createLegacySessionHandleFactory({
+    assembleEngine: createBenchEngine,
     engine: () => {
       const ownership = (graphOwnership = new ToolOwnershipRegistry());
       const sessionContext = (graphContext = new SessionContextService());

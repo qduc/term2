@@ -30,3 +30,15 @@ preceding snapshot makes `admissionBoundaries` reject rewind/retry commands live
 and after reopen. Retry-turn keeps the snapshot and human together; rewind removes
 the human but retains the preceding snapshot, consistent with the retained memory
 comparison state so the next unchanged admission does not lose context.
+
+## Historical source-session handle
+
+`adopted/session-handle.ts#createLegacySessionHandleFactory` composes the historical
+source-backed handle admitted by `LocalSessionStore`. It owns canonical restore,
+paired settings/model forks, source runtime binding, foreground/network/goal
+authorities and shutdown ordering. The `assembleEngine` callback is supplied by
+the caller through `LegacyEngineOptions` / `LegacyEngineAssembly`; Session never
+imports application-agent construction. Engine options, runtime options and
+assembly are synchronous, and the bound client must exist before construction
+returns. Failure preserves the original construction error while attempting
+owned cleanup. This boundary does not assemble native direct Sessions.

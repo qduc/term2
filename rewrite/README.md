@@ -13,8 +13,9 @@ the layers listed after its name, so dependencies always point down.
 
 Most layers also have an `adopted/` folder. Code there wraps the existing
 `source/` implementation behind the layer's interface, which is how the port
-reuses the old CLI while the layers are filled in. `app/adopted/` wires those
-pieces together for production.
+reuses source implementations while the layers are filled in. Native `app/`
+composes production directly; historical source-agent assembly is bench-only,
+and Session owns the remaining historical handle lifetime.
 
 | Layer       | Job                                                         | May depend on                  |
 | ----------- | ----------------------------------------------------------- | ------------------------------ |

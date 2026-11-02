@@ -123,7 +123,8 @@ export class TurnBudgetControl {
     }
     const observations = [
       ...this.#observations.splice(0),
-      ...this.state.evaluate({ turns: this.#turns, costRecords: [...costs.values()] }),
+      // Count the request about to be dispatched, as the legacy loop did: a backstop of N admits N requests, not N + 1.
+      ...this.state.evaluate({ turns: this.#turns + 1, costRecords: [...costs.values()] }),
     ];
     const stall = this.state.takeStallEvidence();
     if (

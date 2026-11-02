@@ -112,13 +112,14 @@ export function TuiSession({
   useHarnessInput(composerActive, Boolean(state.activeTurnId), editor.value);
   const pending = useRef(false);
   interrupt.current = () => {
+    // Stopping a running turn comes first and keeps the draft; with nothing running, Ctrl+C clears the draft.
     if (confirmation.pending) confirmation.clear();
-    else if (editor.value.length > 0) replaceInput('');
     else if (state.activeTurnId || state.interactions.length) {
       void cancelForeground(connection, state.activeTurnId ?? undefined).then(setNotice, (error) => {
         setNotice(error instanceof Error ? error.message : String(error));
       });
-    } else setNotice('Press Ctrl+C again to exit');
+    } else if (editor.value.length > 0) replaceInput('');
+    else setNotice('Press Ctrl+C again to exit');
   };
   useInput((input, key) => {
     if (confirmation.handleKey(input, key)) return;

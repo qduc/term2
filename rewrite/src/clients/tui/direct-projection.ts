@@ -95,7 +95,11 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
   const messages: Message[] = [];
   for (const message of snapshot.messages) {
     const view = messageView(message);
-    if (message.draft && message.role === 'assistant') drafts[message.id] = view.text;
+    // Only the active turn's partial text is a live draft. A cancelled turn's partial reply never gets a final
+    // message; it stays where it was said, in the timeline, instead of sinking below every later message.
+    const live =
+      snapshot.activeTurnId !== null && (message.turnId === undefined || message.turnId === snapshot.activeTurnId);
+    if (message.draft && message.role === 'assistant' && live) drafts[message.id] = view.text;
     else messages.push(view);
   }
   return {

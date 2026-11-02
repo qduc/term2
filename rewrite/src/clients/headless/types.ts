@@ -39,7 +39,7 @@ export type HeadlessApprovalDecider = (interaction: WireInteraction) => Headless
 
 export type DirectHeadlessOptions = {
   readonly prompt: string;
-  /** `plain` streams answer text; `json` is gated until the protocol read model exists. */
+  /** `plain` streams answer text; `json` emits the supported legacy-shaped records. */
   readonly output?: HeadlessOutput;
   /** The old `--auto-approve`: tool approvals only, never questions or run check-ins. */
   readonly autoApprove?: boolean;

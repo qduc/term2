@@ -1,6 +1,6 @@
 /** Server-owned agent-wire v2 envelope adaptation. This source imports the exact
- * shared v2 exports; the pinned 0.1.0 artifact does not contain them yet, so
- * compilation/activation waits for the packaged 0.2.0 artifact and pin update.
+ * shared v2 exports from the pinned 0.2.1 artifact, which provides them and is what compiles here.
+ * Runtime activation is still gated off by AGENT_WIRE_V2_RUNTIME_AVAILABLE below.
  * One accepted envelope is one real FactLine boundary and one SSE cursor.
  */
 import type {
@@ -29,15 +29,11 @@ import type {
   WireModel,
 } from '../protocol/direct-wire.js';
 import type { ServerInteractions } from './server-interactions.js';
-import {
-  canonicalCandidate,
-  canonicalCommandMessageCandidates,
-  type CanonicalEventContext,
-} from './server-events.js';
+import { canonicalCandidate, canonicalCommandMessageCandidates, type CanonicalEventContext } from './server-events.js';
 import { ServerHttpError } from './server-errors.js';
 
-/** Explicit v2 negotiation is implemented, but activation waits for the shared artifact and
- * browser/BFF migration. Do not flip this to claim support from the pinned v1 package. */
+/** Explicit v2 negotiation is implemented against the pinned 0.2.1 artifact, but activation
+ * (this flag) waits for the browser/BFF migration. Do not flip it to claim support before then. */
 export const AGENT_WIRE_V2_RUNTIME_AVAILABLE: boolean = false;
 
 /** Public aliases to the exact shared v2 exports. No local vocabulary copy. */
@@ -67,9 +63,19 @@ const ACCEPTED_CHANGE_TYPES = new Set<string>(AGENT_CHANGE_TYPES_V2);
 const LIVE_CHANGE_TYPES = new Set<string>(AGENT_LIVE_CHANGE_TYPES_V2);
 
 type ConfigureNonReceiptCode =
-  | 'invalid_command' | 'unavailable' | 'stale_interaction' | 'request_conflict' | 'rejected'
-  | 'closed' | 'not_found' | 'forbidden' | 'storage_failure' | 'too_late'
-  | 'internal_error' | 'replay_unavailable' | 'not_admitting';
+  | 'invalid_command'
+  | 'unavailable'
+  | 'stale_interaction'
+  | 'request_conflict'
+  | 'rejected'
+  | 'closed'
+  | 'not_found'
+  | 'forbidden'
+  | 'storage_failure'
+  | 'too_late'
+  | 'internal_error'
+  | 'replay_unavailable'
+  | 'not_admitting';
 
 /** Project one public event. Accepted boundaries always carry their original seq/at; live-only
  * events never acquire a synthetic cursor. Non-public snapshot/state updates do not emit frames. */
@@ -112,10 +118,7 @@ function isAcceptedChange(change: AgentWireV2ChangeDraft): change is AgentWireV2
 
 /** Convert a native configure result into the exact shared v2 response shape. The conversion
  * fails closed rather than fabricating a receipt or accepting a different native outcome. */
-export function encodeAgentConfigureResultV2(
-  sessionId: string,
-  result: WireCommandResult,
-): AgentConfigureResultV2 {
+export function encodeAgentConfigureResultV2(sessionId: string, result: WireCommandResult): AgentConfigureResultV2 {
   if (!sessionId) return unavailable('configure result has no session identity');
   return { schemaVersion: 2, sessionId, result: configureResult(result) };
 }
@@ -132,7 +135,7 @@ function changesFor(
   if (exact) return [exact];
   if (event.type === 'tool_finished') {
     const candidates = canonicalCommandMessageCandidates(event);
-    if (candidates.length) return candidates.map(candidate => change(candidate, branch));
+    if (candidates.length) return candidates.map((candidate) => change(candidate, branch));
   }
   const candidate = canonicalCandidate(event, interactions, context);
   return candidate ? [change(candidate, branch)] : [];
@@ -144,8 +147,7 @@ function subagentChanges(
   context: CanonicalEventContext,
 ): AgentWireV2ChangeDraft[] {
   const { branchId, turnId, agentId, parentTurnId, rootTurnId } = event.payload;
-  if (!branchId || !turnId)
-    return unavailable('branch v2 change requires accepted branch and turn identity');
+  if (!branchId || !turnId) return unavailable('branch v2 change requires accepted branch and turn identity');
   const branch: AgentWireV2Branch = {
     branchId,
     taskId: agentId,
@@ -167,28 +169,40 @@ function exactChange(event: WireEvent, branch?: AgentWireV2Branch): AgentWireV2C
       if (branch) return unavailable('rotation cannot be branch-scoped');
       return change({ type: 'session_rotated', payload: event.payload });
     case 'compaction_started':
-      return change({
-        type: 'context_compaction_started',
-        payload: { turnId: scopedTurn(event, branch), ...event.payload },
-      }, branch);
+      return change(
+        {
+          type: 'context_compaction_started',
+          payload: { turnId: scopedTurn(event, branch), ...event.payload },
+        },
+        branch,
+      );
     case 'compaction_completed':
-      return change({
-        type: 'context_compaction_completed',
-        payload: { turnId: scopedTurn(event, branch), ...event.payload },
-      }, branch);
+      return change(
+        {
+          type: 'context_compaction_completed',
+          payload: { turnId: scopedTurn(event, branch), ...event.payload },
+        },
+        branch,
+      );
     case 'compaction_failed':
-      return change({
-        type: 'context_compaction_failed',
-        payload: { turnId: scopedTurn(event, branch), ...event.payload },
-      }, branch);
+      return change(
+        {
+          type: 'context_compaction_failed',
+          payload: { turnId: scopedTurn(event, branch), ...event.payload },
+        },
+        branch,
+      );
     case 'history_replaced': {
       const turnId = scopedTurnIfPresent(event, branch);
       if (event.payload.compactionId !== undefined && turnId === undefined)
         return unavailable('compaction history replacement requires its accepted turn identity');
-      return change({
-        type: 'history_replaced',
-        payload: { ...(turnId ? { turnId } : {}), ...event.payload },
-      }, branch);
+      return change(
+        {
+          type: 'history_replaced',
+          payload: { ...(turnId ? { turnId } : {}), ...event.payload },
+        },
+        branch,
+      );
     }
     case 'configuration':
       return change({ type: 'configuration', payload: event.payload }, branch);
@@ -247,7 +261,10 @@ function exactChange(event: WireEvent, branch?: AgentWireV2Branch): AgentWireV2C
   }
 }
 
-function change(candidate: { readonly type: AgentWireV2ChangeType; readonly payload: unknown }, branch?: AgentWireV2Branch): AgentWireV2ChangeDraft {
+function change(
+  candidate: { readonly type: AgentWireV2ChangeType; readonly payload: unknown },
+  branch?: AgentWireV2Branch,
+): AgentWireV2ChangeDraft {
   return {
     type: candidate.type,
     payload: candidate.payload,
@@ -262,8 +279,7 @@ function requiredTurn(event: WireEvent): string {
 
 function scopedTurn(event: WireEvent, branch?: AgentWireV2Branch): string {
   const turnId = requiredTurn(event);
-  if (branch && branch.turnId !== turnId)
-    return unavailable('lifecycle turn does not match its accepted branch scope');
+  if (branch && branch.turnId !== turnId) return unavailable('lifecycle turn does not match its accepted branch scope');
   return turnId;
 }
 
@@ -277,8 +293,7 @@ function scopedTurnIfPresent(event: WireEvent, branch?: AgentWireV2Branch): stri
 function configureResult(result: WireCommandResult): AgentConfigureCommandResultV2 {
   if (result.ok) {
     if (result.kind === 'command_pending') {
-      if (result.receipt.outcome !== undefined)
-        return unavailable('pending configure result must not have an outcome');
+      if (result.receipt.outcome !== undefined) return unavailable('pending configure result must not have an outcome');
       return {
         ok: true,
         kind: 'command_pending',
@@ -293,7 +308,10 @@ function configureResult(result: WireCommandResult): AgentConfigureCommandResult
         ok: true,
         kind: 'command_finished',
         ...(typeof result.replayed === 'boolean' ? { replayed: result.replayed } : {}),
-        receipt: { ...configureReceiptBase(result.receipt), outcome: configuredOutcome(result.receipt.outcome.configuration) },
+        receipt: {
+          ...configureReceiptBase(result.receipt),
+          outcome: configuredOutcome(result.receipt.outcome.configuration),
+        },
       };
     }
     return unavailable('configure result is not a native command receipt');
@@ -310,9 +328,14 @@ function configureResult(result: WireCommandResult): AgentConfigureCommandResult
         ...(typeof result.replayed === 'boolean' ? { replayed: result.replayed } : {}),
         commandId: result.commandId,
         message: result.message,
-        receipt: { ...configureReceiptBase(result.receipt), outcome: {
-          kind: 'rejected', code: result.receipt.outcome.code, message: result.receipt.outcome.message,
-        } },
+        receipt: {
+          ...configureReceiptBase(result.receipt),
+          outcome: {
+            kind: 'rejected',
+            code: result.receipt.outcome.code,
+            message: result.receipt.outcome.message,
+          },
+        },
       };
     }
     if (result.receipt.outcome?.kind !== 'interrupted')
@@ -323,7 +346,10 @@ function configureResult(result: WireCommandResult): AgentConfigureCommandResult
       ...(typeof result.replayed === 'boolean' ? { replayed: result.replayed } : {}),
       commandId: result.commandId,
       message: result.message,
-      receipt: { ...configureReceiptBase(result.receipt), outcome: { kind: 'interrupted', reason: result.receipt.outcome.reason } },
+      receipt: {
+        ...configureReceiptBase(result.receipt),
+        outcome: { kind: 'interrupted', reason: result.receipt.outcome.reason },
+      },
     };
   }
   if (!isConfigureNonReceiptCode(result.code))
@@ -347,8 +373,7 @@ function configureSelection(configuration: WireConfigureRequest): AgentConfigure
 }
 function configureReceiptBase(receipt: WireCommandReceipt): Omit<AgentConfigureReceiptV2, 'outcome'> {
   const request = receipt.request;
-  if (request.operation.kind !== 'configure')
-    return unavailable('configure receipt has a different native operation');
+  if (request.operation.kind !== 'configure') return unavailable('configure receipt has a different native operation');
   return {
     request: {
       commandId: request.commandId,
@@ -360,17 +385,32 @@ function configureReceiptBase(receipt: WireCommandReceipt): Omit<AgentConfigureR
   };
 }
 
-function configuredOutcome(configuration: WireConfiguration & { readonly model: WireModel }): Extract<AgentConfigureOutcomeV2, { kind: 'configured' }> {
-  return { kind: 'configured', configuration: {
-    model: { ...configuration.model },
-    ...(configuration.reasoning !== undefined ? { reasoning: configuration.reasoning } : {}),
-    ...(configuration.temperature !== undefined ? { temperature: configuration.temperature } : {}),
-  } };
+function configuredOutcome(
+  configuration: WireConfiguration & { readonly model: WireModel },
+): Extract<AgentConfigureOutcomeV2, { kind: 'configured' }> {
+  return {
+    kind: 'configured',
+    configuration: {
+      model: { ...configuration.model },
+      ...(configuration.reasoning !== undefined ? { reasoning: configuration.reasoning } : {}),
+      ...(configuration.temperature !== undefined ? { temperature: configuration.temperature } : {}),
+    },
+  };
 }
 
 const NON_RECEIPT_CODES = new Set([
-  'invalid_command', 'unavailable', 'stale_interaction', 'request_conflict', 'rejected', 'closed',
-  'not_found', 'forbidden', 'storage_failure', 'too_late', 'internal_error', 'replay_unavailable',
+  'invalid_command',
+  'unavailable',
+  'stale_interaction',
+  'request_conflict',
+  'rejected',
+  'closed',
+  'not_found',
+  'forbidden',
+  'storage_failure',
+  'too_late',
+  'internal_error',
+  'replay_unavailable',
   'not_admitting',
 ]);
 function isConfigureNonReceiptCode(value: string): value is ConfigureNonReceiptCode {

@@ -68,7 +68,7 @@ async function configure(
   if (configured && done) return { message: done };
   if (result.kind === 'rejected' || result.kind === 'error') {
     const outcome = result.receipt?.outcome;
-    return { message: outcome?.kind === 'rejected' ? outcome.message : result.message.replace(/^[a-z_]+: /, '') };
+    throw new Error(outcome?.kind === 'rejected' ? outcome.message : result.message.replace(/^[a-z_]+: /, ''));
   }
   return { message: receiptNotice(result) };
 }
@@ -132,7 +132,6 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
         message: `${
           current ? `Current model: ${current.provider}/${current.model}. ` : ''
         }Choose a model: enter <provider>/<model>.`,
-        draft: { text: '/model ', attachments: [] },
       };
     }
     const selected = parseModel(reference);
@@ -157,11 +156,10 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
   const effort = async (connection: TuiConnection, value: string | undefined): Promise<CommandResult> => {
     if (!value)
       return {
-        message: 'Enter an effort after /effort in the input: default, none, minimal, low, medium, high, xhigh.',
-        draft: { text: '/effort ', attachments: [] },
+        message: 'Use /effort default|none|minimal|low|medium|high|xhigh.',
       };
     if (!['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'].includes(value))
-      return { message: `Unknown effort '${value}'. Use: default, none, minimal, low, medium, high, xhigh.` };
+      throw new Error(`Unknown effort '${value}'. Use: default, none, minimal, low, medium, high, xhigh.`);
     return configure(
       connection,
       { reasoning: value as NonNullable<Configuration['reasoning']> },

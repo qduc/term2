@@ -162,6 +162,7 @@ async function runCommand(
   exerciseMenu:
     | false
     | 'complete'
+    | 'command-clear-regression'
     | 'prefix-enter'
     | 'pick-enter'
     | 'model-picker'
@@ -243,6 +244,42 @@ async function runCommand(
     await submit(firstPrompt);
     await session.waitForOutput(providerError ?? 'unused', 30_000);
     await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
+  }
+  if (exerciseMenu === 'command-clear-regression') {
+    await submit('/help');
+    await session.waitForOutput('/help —', 30_000);
+    await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 5_000 });
+    await submit('/rewind nonsense');
+    await session.waitForOutput('Use /rewind', 30_000);
+    await waitForHarnessComposerValue(idlePath, '/rewind nonsense', { timeoutMs: 5_000 });
+    await new Promise((resolve) => setTimeout(resolve, 2_100));
+    session.write('\x03');
+    await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 5_000 });
+    await submit('/queue nonsense');
+    await session.waitForOutput('Use /queue', 30_000);
+    await waitForHarnessComposerValue(idlePath, '/queue nonsense', { timeoutMs: 5_000 });
+    await new Promise((resolve) => setTimeout(resolve, 2_100));
+    session.write('\x03');
+    await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 5_000 });
+    await submit('/effort bogus');
+    await session.waitForOutput('Unknown effort', 30_000);
+    await waitForHarnessComposerValue(idlePath, '/effort bogus', { timeoutMs: 5_000 });
+    await new Promise((resolve) => setTimeout(resolve, 2_100));
+    session.write('\x03');
+    await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 5_000 });
+    await submit('/not-a-real-command');
+    await session.waitForOutput('/not-a-real-command is not available', 30_000);
+    await waitForHarnessComposerValue(idlePath, '/not-a-real-command', { timeoutMs: 5_000 });
+    await new Promise((resolve) => setTimeout(resolve, 2_100));
+    session.write('\x03');
+    await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 5_000 });
+    session.write('/hel');
+    await waitForHarnessComposerValue(idlePath, '/hel', { timeoutMs: 5_000 });
+    session.write('\t');
+    await waitForHarnessComposerValue(idlePath, '/help ', { timeoutMs: 5_000 });
+    session.write('\x1b');
+    await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 5_000 });
+    return;
   }
   if (exerciseMenu === 'approval-shortcut-history') {
     session.write('\x1b[Z');
@@ -355,10 +392,10 @@ it('/settings clears its submitted command', { timeout: TIMEOUT_MS }, () =>
 );
 
 it.each([
-  ['/profile', 'Enter a name or full profile ID after /profile', '/profile '],
-  ['/effort', 'Enter an effort after /effort in the input', '/effort '],
-  ['/auto-approve', 'Enter a mode after /auto-approve in the input', '/auto-approve '],
-])('%s explains its retained argument-entry draft', { timeout: TIMEOUT_MS }, (command, notice, draft) =>
+  ['/profile', 'Use /profile', ''],
+  ['/effort', 'Use /effort', ''],
+  ['/auto-approve', 'Use /auto-approve', ''],
+])('%s explains its arguments and clears the composer', { timeout: TIMEOUT_MS }, (command, notice, draft) =>
   runCommand(command, notice, undefined, false, false, draft),
 );
 
@@ -428,10 +465,15 @@ it('invalid effort reports valid values without protocol internals', { timeout: 
 );
 
 it('rejected model shows one human error without receipt internals', { timeout: TIMEOUT_MS }, () =>
-  runCommand('/model bogus/does-not-exist', "Provider 'bogus' is not registered", undefined, false, false, undefined, [
-    'command_rejected',
-    '· configure · rejected',
-  ]),
+  runCommand(
+    '/model bogus/does-not-exist',
+    "Provider 'bogus' is not registered",
+    undefined,
+    false,
+    false,
+    '/model bogus/does-not-exist',
+    ['command_rejected', '· configure · rejected'],
+  ),
 );
 
 it('successful configure does not leave a receipt in the activity view', { timeout: TIMEOUT_MS }, () =>
@@ -459,4 +501,10 @@ it('shows a structured provider error as a message', { timeout: TIMEOUT_MS }, ()
     ['model_not_found'],
     'The selected model is not supported.',
   ),
+);
+
+it(
+  'accepted commands clear, rejected commands remain, and Escape clears completed slash input',
+  { timeout: TIMEOUT_MS },
+  () => runCommand('', '', undefined, 'command-clear-regression'),
 );

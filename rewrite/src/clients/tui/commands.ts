@@ -174,17 +174,22 @@ export function receiptNotice(result: NativeReceiptResult): string {
   }`;
 }
 
+function directCommandNotice(result: NativeReceiptResult): string {
+  if (result.kind === 'rejected' || result.kind === 'error') throw new Error(receiptNotice(result));
+  return receiptNotice(result);
+}
+
 /** Handle direct slash operations without treating a pending receipt as success. */
 export async function directSlashCommand(connection: TuiConnection, input: string): Promise<string | null> {
   const commandId = randomUUID();
   switch (input.trim()) {
     case '/compact':
-      return receiptNotice(await sendNativeCommand(connection, { type: 'compact', commandId }));
+      return directCommandNotice(await sendNativeCommand(connection, { type: 'compact', commandId }));
     case '/retry':
     case '/retry-turn':
-      return receiptNotice(await sendNativeCommand(connection, { type: 'retry', commandId, target: 'turn' }));
+      return directCommandNotice(await sendNativeCommand(connection, { type: 'retry', commandId, target: 'turn' }));
     case '/retry-tool':
-      return receiptNotice(await sendNativeCommand(connection, { type: 'retry', commandId, target: 'tool' }));
+      return directCommandNotice(await sendNativeCommand(connection, { type: 'retry', commandId, target: 'tool' }));
     default:
       return null;
   }

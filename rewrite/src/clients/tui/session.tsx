@@ -141,10 +141,8 @@ export function TuiSession({
     setRewindTargets(null);
     try {
       const result = await sendNativeCommand(connection, { type: 'rewind', commandId: randomUUID(), targetId });
-      if (result.kind !== 'finished' || result.receipt.outcome?.kind !== 'rewound') {
-        setNotice(receiptNotice(result));
-        return;
-      }
+      if (result.kind !== 'finished' || result.receipt.outcome?.kind !== 'rewound')
+        return setNotice(receiptNotice(result));
       const content = result.receipt.outcome.draft.content;
       const draft = primaryDraft(content);
       restoreDraft(draft);
@@ -384,6 +382,7 @@ export function TuiSession({
       answerOwners.current = null;
       queueOwners.current = null;
     } catch (error) {
+      if (input.startsWith('/')) await editor.restoreRejected(input);
       setNotice(error instanceof Error ? error.message : String(error));
     } finally {
       pending.current = false;

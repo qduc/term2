@@ -17,7 +17,6 @@ import {
   profileIdFromLegacyModeSetting,
 } from '../../../source/services/profiles/legacy-adapter.js';
 import { planProfileTransition } from '../../../source/services/profiles/profile-transition.js';
-import { ProfileResolutionError } from '../../../source/services/profiles/types.js';
 import { SETTING_KEYS } from '../../../source/services/settings/settings-service.js';
 import {
   CATEGORY_KEYS,
@@ -93,24 +92,21 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
       return applied ? applied() : { message: done };
     // Refused outright, so it must not arrive with some later rebuild. Anything less
     // certain stays written: the Session may well have installed it.
-    if (result.kind === 'rejected' || result.kind === 'error') undo();
+    if (result.kind === 'rejected' || result.kind === 'error') {
+      undo();
+      throw new Error(receiptNotice(result));
+    }
     return { message: receiptNotice(result) };
   };
 
   const switchProfile = async (connection: TuiConnection, targetId: string, retry: string): Promise<CommandResult> => {
     const { settings } = detailsOf(connection.sessionId);
-    let plan: ReturnType<typeof planProfileTransition>;
-    try {
-      plan = planProfileTransition(settings, targetId);
-    } catch (error) {
-      if (error instanceof ProfileResolutionError) return { message: error.message };
-      throw error;
-    }
+    const plan = planProfileTransition(settings, targetId);
     if (plan.class === 'noop') return { message: `${plan.targetId} is already active.` };
     if (plan.class === 'structural' && latest().messages.length > 0) {
-      return {
-        message: `Cannot switch modes mid-session (tool/context mismatch). Use \`/clear\` first, then \`${retry}\`.`,
-      };
+      throw new Error(
+        `Cannot switch modes mid-session (tool/context mismatch). Use \`/clear\` first, then \`${retry}\`.`,
+      );
     }
     const previous = settings.get(PROFILE_KEY);
     settings.set(PROFILE_KEY, plan.targetId, { persist: false });
@@ -148,8 +144,7 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
     profile(connection: TuiConnection, id: string | undefined): Promise<CommandResult> {
       if (!id)
         return Promise.resolve({
-          message: 'Enter a name or full profile ID after /profile in the input.',
-          draft: { text: '/profile ', attachments: [] },
+          message: 'Use /profile <name or full profile ID>.',
         });
       return switchProfile(connection, id.includes(':') ? id : `builtin:${id}`, `/profile ${id}`);
     },
@@ -242,8 +237,7 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
         return Promise.resolve({
           message: `Tool auto-approval is ${detailsOf(connection.sessionId).settings.get(
             'shell.autoApproveMode',
-          )}. Enter a mode after /auto-approve in the input: ${APPROVAL_MODES.join(', ')}.`,
-          draft: { text: '/auto-approve ', attachments: [] },
+          )}. Use /auto-approve <mode>: ${APPROVAL_MODES.join(', ')}.`,
         });
       const { settings } = detailsOf(connection.sessionId);
       const previous = settings.get('shell.autoApproveMode');

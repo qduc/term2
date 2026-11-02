@@ -18,7 +18,8 @@ export function useComposerMenu(
     owns: (key: Key) => slash.owns(key) || path.owns(key),
     /** Completing a command or path replaces the draft with `text`, cursor after the inserted piece. */
     handle(key: Key, apply: (text: string, cursor: number) => void): boolean {
-      if (slash.owns(key)) return slash.handle(key, (command) => apply(`${command} `, command.length + 1));
+      if (slash.owns(key))
+        return slash.handle(key, (command) => apply(command ? `${command} ` : '', command ? command.length + 1 : 0));
       return path.handle(key, apply);
     },
     reset() {

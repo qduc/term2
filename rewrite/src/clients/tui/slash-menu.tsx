@@ -16,8 +16,10 @@ export function useSlashMenu(value: string, enabled: boolean, subtleColor: React
   const selected = Math.min(index, matches.length - 1);
   // A fully typed command is submitted by plain Enter, like any other line.
   const exact = SLASH_COMMANDS.some((command) => command === value);
+  // An exact command plus its completion space is still a dismissible trigger.
+  const completed = enabled && SLASH_COMMANDS.some((command) => value === `${command} `);
   const owns = (key: Key) =>
-    matches.length > 0 &&
+    (matches.length > 0 || (completed && key.escape)) &&
     !key.ctrl &&
     !key.meta &&
     !key.shift &&
@@ -26,8 +28,10 @@ export function useSlashMenu(value: string, enabled: boolean, subtleColor: React
     if (!owns(key)) return false;
     if (key.upArrow || key.downArrow) {
       setIndex((selected + (key.upArrow ? matches.length - 1 : 1)) % matches.length);
-    } else if (key.escape) setDismissed(value);
-    else {
+    } else if (key.escape) {
+      setDismissed(value);
+      accept('', false);
+    } else {
       const command = matches[selected];
       setDismissed(command);
       setIndex(0);

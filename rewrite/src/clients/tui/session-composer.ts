@@ -81,6 +81,12 @@ export function useSessionComposer(state: TuiState, historySize: number) {
     setOtherParts(restored.other);
     setOriginalParts(draft.attachments);
   };
+  const restoreRejected = async (submitted: string) => {
+    // MultilineInput clears its local text immediately after calling onSubmit.
+    await Promise.resolve();
+    const current = editor.current();
+    replaceInput(!current || current === submitted ? submitted : `${submitted}\n${current}`);
+  };
   return {
     images,
     setImages,
@@ -91,7 +97,7 @@ export function useSessionComposer(state: TuiState, historySize: number) {
     setOriginalParts,
     editing,
     setEditing,
-    editor,
+    editor: { ...editor, restoreRejected },
     replaceInput,
     changeInput,
     restoreDraft,

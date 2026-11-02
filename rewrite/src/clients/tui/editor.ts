@@ -78,5 +78,17 @@ export function useEditor(initialHistory: readonly HistoryEntry[], historySize: 
     draft.current = { text: '', attachments: [], cursor: 0 };
     if (valueRef.current === submitted) change('');
   };
-  return { value, change, replace, navigate, accepted, inputKey, historyError, cursorChanged, cursorOverride, cursor };
+  return {
+    value,
+    current: () => valueRef.current,
+    change,
+    replace,
+    navigate,
+    accepted,
+    inputKey,
+    historyError,
+    cursorChanged,
+    cursorOverride,
+    cursor,
+  };
 }

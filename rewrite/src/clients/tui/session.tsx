@@ -23,6 +23,7 @@ import { useHarnessInput } from './harness-input.js';
 import { replaceSession } from './replace-session.js';
 import { runBridgeCommand } from './bridge-command.js';
 import { useSendConfirmation } from './send-confirmation.js';
+import { useSlashMenu, ComposerHints } from './slash-menu.js';
 import {
   answerBudget,
   answerInteraction,
@@ -107,6 +108,7 @@ export function TuiSession({
     !taskOpen &&
     !budgetOpen &&
     !rewindTargets;
+  const slash = useSlashMenu(editor.value, composerActive && !editing, theme.textSubtle);
   useHarnessInput(composerActive, Boolean(state.activeTurnId), editor.value);
   const pending = useRef(false);
   interrupt.current = () => {
@@ -125,6 +127,13 @@ export function TuiSession({
       return;
     }
     if (taskOpen || budgetOpen || rewindTargets) return;
+    if (
+      slash.handle(key, (command, run) => {
+        replaceInput(run ? command : command + ' ');
+        if (run) void submit(command, images);
+      })
+    )
+      return;
     if (((key.ctrl && input === 'g') || input === '\x07') && !busy)
       (state.interactions.length ? setInteractionOpen : setTaskOpen)(true);
     if (key.ctrl && input === 'b' && state.budgets.length && !busy) setBudgetOpen(true);
@@ -444,12 +453,16 @@ export function TuiSession({
       {confirmation.prompt}
       {notice ? <Text>{notice}</Text> : null}
       {editor.historyError ? <Text>{editor.historyError}</Text> : null}
+      {slash.view}
       <InputFrame>
         <PromptMarker mode="input" />
         <MultilineInput
           key={editor.inputKey}
           value={editor.value}
-          onChange={changeInput}
+          onChange={(value) => {
+            slash.reset();
+            changeInput(value);
+          }}
           onSubmit={(value, submittedImages) => {
             void submit(value, submittedImages);
           }}
@@ -472,6 +485,7 @@ export function TuiSession({
           onPasteError={(reason) => setNotice(`Image paste failed: ${reason}`)}
           ignoreInput={(input, key) =>
             !composerActive ||
+            slash.owns(key) ||
             ['[I', '[O', '\x1b[I', '\x1b[O'].includes(input) ||
             key.pageUp ||
             key.pageDown ||
@@ -480,21 +494,7 @@ export function TuiSession({
           }
         />
       </InputFrame>
-      {composerActive ? (
-        <Hints
-          hints={[
-            ['Enter', state.activeTurnId ? 'steer' : 'send'],
-            ['Alt+Enter', 'follow-up'],
-            ['↑/↓', 'history'],
-            ['PgUp/PgDn', 'scroll'],
-            ['Ctrl+G', 'approvals/tasks'],
-            ['Ctrl+B', 'budget'],
-            ['/tasks', 'manage tasks'],
-            ['/', 'commands'],
-            ['/cancel', 'stop'],
-          ]}
-        />
-      ) : null}
+      {composerActive ? <ComposerHints activeTurn={Boolean(state.activeTurnId)} Hints={Hints} /> : null}
     </Box>
   );
 }

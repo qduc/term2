@@ -84,7 +84,12 @@ async function startProvider(replies: Reply[]): Promise<string> {
 }
 
 // The effective approval mode is visible without changing it.
-async function runCommand(command: string, expected: string, firstPrompt?: string): Promise<void> {
+async function runCommand(
+  command: string,
+  expected: string,
+  firstPrompt?: string,
+  exerciseMenu = false,
+): Promise<void> {
   root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-tool-rows-e2e-')));
   const home = path.join(root, 'home');
   const workspace = path.join(root, 'w');
@@ -134,6 +139,15 @@ async function runCommand(command: string, expected: string, firstPrompt?: strin
     await session.waitForOutput('unused', 30_000);
     await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
   }
+  if (exerciseMenu) {
+    session.write('/hel');
+    await waitForHarnessComposerValue(idlePath, '/hel', { timeoutMs: 60_000 });
+    await session.waitForOutput('/help', 30_000);
+    session.write('\t');
+    await waitForHarnessComposerValue(idlePath, '/help ', { timeoutMs: 60_000 });
+    session.write('\r');
+    await session.waitForOutput('Keyboard shortcuts', 30_000);
+  }
   await submit(command);
   await session.waitForOutput(expected, 30_000);
 }
@@ -162,4 +176,8 @@ it('/resume ls labels each conversation with its time and first prompt', { timeo
 
 it('/copy confirms what it copied', { timeout: TIMEOUT_MS }, () =>
   runCommand('/copy', 'Copied to clipboard.', 'say something'),
+);
+
+it('slash menu suggests and completes a command in the terminal', { timeout: TIMEOUT_MS }, () =>
+  runCommand('/settings', 'shell.autoApproveMode: off (default)', undefined, true),
 );

@@ -155,6 +155,8 @@ async function runCommand(
     await waitForHarnessComposerValue(idlePath, '/cl', { timeoutMs: 60_000 });
     session.write('\r');
     await waitForHarnessComposerValue(idlePath, '/clear ', { timeoutMs: 60_000 });
+    // The conversation is intact: the earlier prompt is still on screen and the app is still running.
+    expect(session.getVisibleOutput()).toContain('keep this conversation');
     return;
   }
   if (exerciseMenu) {

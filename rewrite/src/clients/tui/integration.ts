@@ -32,6 +32,7 @@ export interface TuiIntegration {
   readonly resumePicker?: { list(): Promise<readonly { id: string; title?: string; updatedAt?: string }[]> };
   readonly modelPicker?: {
     favorites(sessionId: string): PickerModel[];
+    nicknames(sessionId: string): Readonly<Record<string, readonly string[]>>;
     list(sessionId: string): Promise<PickerModel[]>;
     toggle(sessionId: string, model: PickerModel): void;
   };

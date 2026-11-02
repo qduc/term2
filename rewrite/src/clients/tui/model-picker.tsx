@@ -24,6 +24,7 @@ export function ModelPicker({
   onNotice(text: string | null): void;
 }): React.ReactElement {
   const [favorites, setFavorites] = useState(() => api.favorites(sessionId));
+  const nicknames = api.nicknames(sessionId);
   const [models, setModels] = useState<PickerModel[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<'favorites' | 'all'>('favorites');
@@ -45,7 +46,9 @@ export function ModelPicker({
   }, [api, sessionId]);
   const favoriteKeys = new Set(favorites.map(identity));
   const visible = (tab === 'favorites' ? favorites : models ?? []).filter((model) =>
-    `${identity(model)} ${model.name ?? ''}`.toLowerCase().includes(filter.toLowerCase()),
+    `${identity(model)} ${model.name ?? ''} ${(nicknames[identity(model)] ?? []).join(' ')}`
+      .toLowerCase()
+      .includes(filter.toLowerCase()),
   );
   const index = Math.min(selected, Math.max(0, visible.length - 1));
   useInteractionInput(inputHandler, (input, key) => {
@@ -100,11 +103,27 @@ export function ModelPicker({
     <Box flexDirection="column" borderStyle="round" paddingX={1}>
       <Text bold>Choose a model · {tab === 'favorites' ? '[Favorites]  All' : 'Favorites  [All]'}</Text>
       <Text>Filter: {filter}</Text>
+      <Box>
+        <Box width={38} flexShrink={1}>
+          <Text> Model</Text>
+        </Box>
+        <Text>Provider / nickname</Text>
+      </Box>
       {visible.slice(start, start + 10).map((model, i) => (
-        <Text key={identity(model)}>
-          {i + start === index ? '❯' : ' '} {favoriteKeys.has(identity(model)) ? '★' : '☆'} {identity(model)}
-          {model.name && model.name !== model.id ? ` · ${model.name}` : ''}
-        </Text>
+        <Box key={identity(model)}>
+          <Box width={38} flexShrink={1}>
+            <Text wrap="truncate-end">
+              {i + start === index ? '❯' : ' '} {favoriteKeys.has(identity(model)) ? '★' : '☆'} {model.id}
+              {model.name && model.name !== model.id ? ` · ${model.name}` : ''}
+            </Text>
+          </Box>
+          <Box flexShrink={1}>
+            <Text wrap="truncate-end">
+              {model.provider}
+              {nicknames[identity(model)]?.length ? ` · aka ${nicknames[identity(model)]!.join(', ')}` : ''}
+            </Text>
+          </Box>
+        </Box>
       ))}
       {!visible.length && (
         <Text>{tab === 'all' && models === null && !error ? 'Loading models…' : 'No matching models.'}</Text>

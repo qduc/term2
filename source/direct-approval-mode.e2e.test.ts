@@ -197,6 +197,7 @@ async function runCommand(
         retryAttempts: 0,
         modelSelection: { model: 'mock-alpha', provider: 'mockprov' },
         favoriteModels: ['mockprov/mock-alpha'],
+        modelNicknames: { luna: 'mockprov/mock-alpha' },
       },
       providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl, apiKey: 'test-key' }],
       // Sandbox off and GREEN commands: both run without an approval prompt.
@@ -289,7 +290,8 @@ async function runCommand(
   for (const forbidden of forbiddenOutput) expect(session.getVisibleOutput()).not.toContain(forbidden);
   if (expectedDraft !== undefined) await waitForHarnessComposerValue(idlePath, expectedDraft, { timeoutMs: 60_000 });
   if (exerciseMenu === 'model-picker') {
-    await session.waitForOutput('mockprov/mock-alpha', 30_000);
+    await session.waitForOutput('mockprov · aka luna', 30_000);
+    expect(session.getVisibleOutput()).toContain('Provider / nickname');
     const beforeClose = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
     session.write('\x1b');
     await waitForHarnessIdleGeneration(idlePath, { after: beforeClose, timeoutMs: 60_000 });
@@ -307,11 +309,17 @@ async function runCommand(
       }
       throw new Error(`No new terminal output containing ${expected}: ${session!.getVisibleOutput().slice(-1200)}`);
     };
+    await step('luna', 'Filter: luna');
+    expect(session.getVisibleOutput().slice(-1200)).toContain('mockprov · aka luna');
+    await step('\x7f', 'Filter: lun');
+    await step('\x7f', 'Filter: lu');
+    await step('\x7f', 'Filter: l');
+    await step('\x7f', 'Filter: ');
     await step('mock-alpha', 'Filter: mock-alpha');
     await step('\x06', 'No matching models.'); // Ctrl+F removes the favorite.
     await step('\t', '[All]');
-    await session.waitForOutput('☆ mockprov/mock-alpha', 60_000);
-    await step('\x06', '★ mockprov/mock-alpha'); // Re-add it on All.
+    await session.waitForOutput('☆ mock-alpha', 60_000);
+    await step('\x06', '★ mock-alpha'); // Re-add it on All.
     await step('\r', 'Model set to mockprov/mock-alpha.');
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 60_000 });
     const settings = JSON.parse(fs.readFileSync(path.join(settingsDir, 'settings.json'), 'utf8'));

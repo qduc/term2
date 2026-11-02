@@ -5,6 +5,7 @@ import { stderr, stdin, stdout } from 'node:process';
 import { createInterface } from 'node:readline/promises';
 import { collectProviderModels } from '../../../source/services/models/model-listing.js';
 import { getFavoriteModelInfos, toggleFavoriteModel } from '../../../source/services/models/model-favorites.js';
+import { getNicknameEntries } from '../../../source/services/models/model-nicknames.js';
 import { resolveActiveProfile } from '../../../source/services/profiles/active-profile.js';
 import React, { useMemo, useRef, useState, type ReactNode } from 'react';
 import { render } from 'ink';
@@ -88,6 +89,16 @@ function DirectTui({
           const current = app.sessionDetails(sessionId).settings;
           if (!current) throw new Error('The attached session has no live settings.');
           return getFavoriteModelInfos(current).map((model) => ({ provider: model.provider!, id: model.id }));
+        },
+        nicknames(sessionId) {
+          const current = app.sessionDetails(sessionId).settings;
+          if (!current) throw new Error('The attached session has no live settings.');
+          const result: Record<string, string[]> = {};
+          for (const entry of getNicknameEntries(current)) {
+            const key = `${entry.provider}/${entry.modelId}`;
+            (result[key] ??= []).push(entry.nickname);
+          }
+          return result;
         },
         async list(sessionId) {
           const current = app.sessionDetails(sessionId).settings;

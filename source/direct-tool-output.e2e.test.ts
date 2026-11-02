@@ -143,7 +143,7 @@ it(
       { call: { id: 'call_0', args: { command: first, description: 'Write and read the file' } } },
       {
         reasoning: 'Locating the unique workspace fixture',
-        text: 'Created `b.txt` and read it back: `hi`. Flags: `--foo` `--bar` first turn done',
+        text: 'Created `b.txt` and read it back: `hi`. Flags: `--foo` `--bar` first turn done. Bold **`BOLDCHIP`** here. End **`ENDCHIP`**. List: **`ONECHIP`** `TWOCHIP` end. Italic *`ITALICCHIP`* end.\n\n- `LISTCHIP` starts here.',
       },
     ]);
     const idlePath = path.join(home, 'input-idle');
@@ -175,7 +175,12 @@ it(
       }),
     );
 
-    session = spawnTerminal('node', [builtCli, '--control-socket=coord'], { cwd: workspace, env });
+    session = spawnTerminal('node', [builtCli, '--control-socket=coord'], {
+      cwd: workspace,
+      env,
+      cols: 160,
+      rows: 40,
+    });
     let idle = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
 
     // Submit only once the composer holds the text; Enter in the same write is taken as pasted input.
@@ -215,6 +220,18 @@ it(
     expect(session.getOutput()).toMatch(/m b\.txt \x1b\[/);
     // Two chips with one space between them stay two chips with one padding column between them.
     expect(visible, visible).toContain('Flags: --foo --bar first turn done');
+    expect(visible, visible).toMatch(/Bold\s+BOLDCHIP here\. End ENDCHIP\./);
+    expect(visible, visible).toContain('List: ONECHIP TWOCHIP end.');
+    expect(visible, visible).toContain('• LISTCHIP starts here.');
+    const raw = session.getOutput();
+    // The spaces on either side of bold code carry its background; punctuation does not.
+    expect(raw).toMatch(/\x1b\[40m\x1b\[93m BOLDCHIP \x1b/);
+    expect(raw).toMatch(/\x1b\[40m\x1b\[93m ENDCHIP\x1b/);
+    expect(raw).toMatch(/\x1b\[40m\x1b\[93m ONECHIP \x1b\[22mTWOCHIP /);
+    expect(raw).toMatch(/\x1b\[40m\x1b\[93m ITALICCHIP \x1b/);
+    // The bullet supplies its own separator; do not add a second column.
+    expect(raw).toMatch(/•\x1b\[39m \x1b\[40m\x1b\[93mLISTCHIP /);
+
     // The edit and the new content stay visible: the header only names the file.
     expect(visible, visible).toContain('+ beta-line');
     expect(visible, visible).toContain('- alpha-line');

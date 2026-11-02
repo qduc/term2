@@ -571,18 +571,38 @@ const TableRenderer = ({ token, style = 'unicode', options = {}, maxWidth }: Tab
 function absorbChipSpaces(tokens: any[]): any[] {
   const plain = (token: any) =>
     (token?.type === 'text' || token?.type === 'escape') && !token.tokens && typeof token.text === 'string';
+  // Formatting wrappers are transparent at their edges: **`code`** borrows a
+  // neighboring space just like `code`, but prose inside the wrapper does not.
+  const edgeChip = (token: any, side: 'left' | 'right'): boolean => {
+    if (token?.type === 'codespan') return true;
+    if (!['strong', 'em', 'text'].includes(token?.type) || !token.tokens?.length) return false;
+    return edgeChip(token.tokens[side === 'left' ? 0 : token.tokens.length - 1], side);
+  };
+  const padEdge = (token: any, side: 'left' | 'right'): any => {
+    if (token.type === 'codespan') return { ...token, [side === 'left' ? 'padLeft' : 'padRight']: true };
+    const index = side === 'left' ? 0 : token.tokens.length - 1;
+    return {
+      ...token,
+      tokens: token.tokens.map((child: any, i: number) => (i === index ? padEdge(child, side) : child)),
+    };
+  };
   return tokens.map((token, index) => {
-    if (token.type === 'codespan') {
-      // One space between two chips is padded by the first chip only, so the pair does not fuse into one blob.
-      const sharedSpace = tokens[index - 2]?.type === 'codespan' && tokens[index - 1]?.text === ' ';
-      const padLeft = plain(tokens[index - 1]) && tokens[index - 1].text.endsWith(' ') && !sharedSpace;
-      const padRight = plain(tokens[index + 1]) && tokens[index + 1].text.startsWith(' ');
-      return { ...token, padLeft, padRight };
+    const left = edgeChip(token, 'left');
+    const right = edgeChip(token, 'right');
+    if (left || right) {
+      // A single space between chips belongs to the first, even across formatting.
+      const sharedSpace = edgeChip(tokens[index - 2], 'right') && tokens[index - 1]?.text === ' ';
+      const padLeft = left && plain(tokens[index - 1]) && tokens[index - 1].text.endsWith(' ') && !sharedSpace;
+      const padRight = right && plain(tokens[index + 1]) && tokens[index + 1].text.startsWith(' ');
+      let result = token;
+      if (padLeft) result = padEdge(result, 'left');
+      if (padRight) result = padEdge(result, 'right');
+      return result;
     }
     if (!plain(token)) return token;
     let text: string = token.text;
-    if (tokens[index + 1]?.type === 'codespan' && text.endsWith(' ')) text = text.slice(0, -1);
-    if (tokens[index - 1]?.type === 'codespan' && text.startsWith(' ')) text = text.slice(1);
+    if (edgeChip(tokens[index + 1], 'left') && text.endsWith(' ')) text = text.slice(0, -1);
+    if (edgeChip(tokens[index - 1], 'right') && text.startsWith(' ')) text = text.slice(1);
     return text === token.text ? token : { ...token, text };
   });
 }

@@ -45,8 +45,6 @@ export const SLASH_COMMANDS = [
 export function useSlashMenu(value: string, enabled: boolean, subtleColor: React.ComponentProps<typeof Text>['color']) {
   const [index, setIndex] = useState(0);
   const [dismissed, setDismissed] = useState<string | null>(null);
-  // Enter runs a command only when the user picked it with the arrows; on a typed prefix it completes instead.
-  const [picked, setPicked] = useState(false);
   const matches =
     enabled && /^\/[a-z-]*$/.test(value) && value !== dismissed
       ? SLASH_COMMANDS.filter((command) => command.startsWith(value))
@@ -64,21 +62,19 @@ export function useSlashMenu(value: string, enabled: boolean, subtleColor: React
     if (!owns(key)) return false;
     if (key.upArrow || key.downArrow) {
       setIndex((selected + (key.upArrow ? matches.length - 1 : 1)) % matches.length);
-      setPicked(true);
     } else if (key.escape) setDismissed(value);
     else {
       const command = matches[selected];
       setDismissed(command);
       setIndex(0);
-      accept(command, key.return && picked);
-      setPicked(false);
+      // Enter never runs a menu pick: it completes into the draft like Tab, and only a fully typed command runs.
+      accept(command, false);
     }
     return true;
   };
   const reset = () => {
     setIndex(0);
     setDismissed(null);
-    setPicked(false);
   };
   const view = matches.length ? (
     <Box flexDirection="column">
@@ -88,7 +84,7 @@ export function useSlashMenu(value: string, enabled: boolean, subtleColor: React
           {command}
         </Text>
       ))}
-      <Text color={subtleColor}>↑/↓ select · Enter run picked · Tab complete · Esc dismiss</Text>
+      <Text color={subtleColor}>↑/↓ select · Enter/Tab complete · Esc dismiss</Text>
     </Box>
   ) : null;
   return { owns, handle, reset, view };

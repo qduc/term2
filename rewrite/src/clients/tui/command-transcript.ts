@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import type { Message, TuiState } from './state.js';
 import { useTerminalSize } from './terminal.js';
 import { useTranscriptViewport } from './viewport.js';
+import { helpForScrollback } from './slash-commands.js';
 
 /** Local command output belongs in the visible transcript, not provider history. */
 export function useCommandTranscript(state: TuiState): {
@@ -72,7 +73,7 @@ export function useCommandTranscriptViewport(
     showMessage(message: string, command: string, notice: (value: string) => void): void {
       if (command.trim() !== '/help') notice(message);
       else if (state.activeTurnId) viewport.setHelp(message);
-      else transcript.append(message, true);
+      else transcript.append(helpForScrollback(message), true);
     },
   };
 }

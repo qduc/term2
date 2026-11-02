@@ -43,13 +43,24 @@ export const SLASH_COMMAND_TABLE: ReadonlyArray<{ readonly name: string; readonl
 
 export const SLASH_COMMANDS: readonly string[] = SLASH_COMMAND_TABLE.map((command) => command.name);
 
-/** The text `/help` prints: keyboard shortcuts first, then every command with its description. */
+const HELP_SHORTCUTS = [
+  'Keyboard shortcuts',
+  'Enter send/steer · Alt+Enter follow-up · ↑/↓ history · PgUp/PgDn scroll · Ctrl+O tool output',
+  'Ctrl+G approvals/tasks · Ctrl+B budget · Ctrl+C stop turn / clear input / exit',
+  'Shift+Tab plan mode',
+] as const;
+
+/** The active-turn pager begins with shortcuts; idle scrollback moves them to the end. */
 export function helpText(): string {
   return [
-    'Keyboard shortcuts',
-    'Enter send/steer · Alt+Enter follow-up · ↑/↓ history · PgUp/PgDn scroll · Ctrl+O tool output',
-    'Ctrl+G approvals/tasks · Ctrl+B budget · Ctrl+C stop turn / clear input / exit',
+    ...HELP_SHORTCUTS,
     'Commands',
     ...SLASH_COMMAND_TABLE.map((command) => `${command.name} — ${command.description}`),
   ].join('\n');
+}
+
+/** Preserve the supplied help text while placing its known shortcut block at the visible end. */
+export function helpForScrollback(text: string): string {
+  const prefix = `${HELP_SHORTCUTS.join('\n')}\n`;
+  return text.startsWith(prefix) ? `${text.slice(prefix.length)}\n${HELP_SHORTCUTS.join('\n')}` : text;
 }

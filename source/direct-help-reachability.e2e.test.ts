@@ -78,8 +78,13 @@ for (const [cols, rows] of [
       terminal.write('\r');
       // Help must be emitted in full without keyboard paging, even on a short terminal.
       await terminal.waitForOutput('/orchestrator —', 30_000);
+      await terminal.waitForOutput('Keyboard shortcuts', 30_000);
       expect(terminal.getVisibleOutput()).toContain('Keyboard shortcuts');
       expect(terminal.getVisibleOutput()).toContain('Ctrl+G approvals/tasks');
+      const helpOutput = terminal.getVisibleOutput();
+      const shortcutsAt = helpOutput.lastIndexOf('Keyboard shortcuts');
+      expect(shortcutsAt).toBeGreaterThan(helpOutput.lastIndexOf('/orchestrator —'));
+      expect(helpOutput.slice(shortcutsAt)).toContain('Shift+Tab plan mode');
       const table = fs.readFileSync(
         fileURLToPath(new URL('../rewrite/src/clients/tui/slash-commands.ts', import.meta.url)),
         'utf8',

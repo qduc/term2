@@ -1,5 +1,5 @@
 {
-  "maxSourceEdges": 522,
+  "maxSourceEdges": 521,
   "maxLines": 500,
   "fileCeilings": {
     "rewrite/src/session/adopted/foreground.ts": {

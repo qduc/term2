@@ -85,7 +85,7 @@ async function startProvider(replies: Reply[]): Promise<string> {
 
 // A subagent's deltas, usage and turn markers update its task row; they are not transcript lines.
 it('a subagent run adds no per-event lines to the transcript', { timeout: TIMEOUT_MS }, async () => {
-  root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-tool-rows-e2e-')));
+  root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-subagent-events-e2e-')));
   const home = path.join(root, 'home');
   const workspace = path.join(root, 'w');
   fs.mkdirSync(home);
@@ -99,7 +99,6 @@ it('a subagent run adds no per-event lines to the transcript', { timeout: TIMEOU
   g('add', '.');
   g('commit', '-qm', 'i');
   g('worktree', 'add', '-q', path.join(root, 'wt'));
-  const first = `echo hi > ${path.join(workspace, 'b.txt')} && cat ${path.join(workspace, 'b.txt')}`;
   const baseUrl = await startProvider([
     {
       call: {
@@ -151,7 +150,7 @@ it('a subagent run adds no per-event lines to the transcript', { timeout: TIMEOU
   };
 
   await submit('use a subagent');
-  await new Promise((r) => setTimeout(r, 12000));
+  await session.waitForOutput('parent finished', 60_000);
   const visible = session.getVisibleOutput();
   expect(visible, visible).toContain('parent finished');
   expect(visible, visible).not.toMatch(/subagent: explorer/);

@@ -169,7 +169,7 @@ partial-question checkpoints or command receipts are already compatible.
 | retry, subagent_retry | retrying DTO supports tool/max/type/Retry-After/agent; producer missing |
 | retry_exhausted | needs actual retry-eligibility/error producer; not fabricated |
 | subagent_started, subagent_completed, subagent_interrupted | native M4 task_changed mapper; Session/driver wiring pending |
-| subagent_tool_started, subagent_text_turn, subagent_command_message | scoped subagent presentation DTO / task progress; rich driver observations pending |
+| subagent_tool_started, subagent_text_turn, subagent_command_message | scoped subagent presentation DTO; text and tool output update task text/progress, tool markers change nothing; rich driver observations pending |
 | subagent_approval_required, subagent_question | task-scoped interaction mapper; real task answer routing pending |
 | context_compaction_started, context_compaction_completed, context_compaction_failed | Accepted `compaction_started/completed/failed` facts now map one-for-one to precise direct wire events; the existing `compacted` replaced/summary notice remains a separate presentation projection. Pinned consumer encoding is server-owned. |
 | final, error | actual message + turn_ended/error; error is not an inferred successful answer |
@@ -240,12 +240,14 @@ Local editor/navigation/reset actions are intentionally not wire commands.
 | reset_transient | local UI reset; no Session cancellation implied |
 | reset_all | local replacement only after authorized actual session switch |
 
-The shared reducer retains retry/compaction notices and scoped subagent
-presentation rather than dropping them. Legacy retrying/compacted DTOs still
+The shared reducer retains retry/compaction notices; scoped subagent events update their task and add a
+notice only for a nested error. Legacy retrying/compacted DTOs still
 need corresponding native producers; real branch/history facts now have direct
 mappings. Notice retention is not runtime evidence that these paths occurred.
 A scoped subagent event updates that agent's task (text, progress); only a nested `error` also adds a
-transcript notice (`direct-reducer-nested.ts`, split from the reducer for its size limit). Adding a notice per event printed one line per delta, usage and turn marker.
+transcript notice (`direct-reducer-nested.ts`, split from the reducer for its size limit). Notices for every
+other nested event (turn start/end, message, response markers, tool markers) printed one transcript line each.
+The nested tool name is therefore not shown by the TUI; `snapshot.branches[].tools` still carries it.
 
 ## Commands / external gaps
 

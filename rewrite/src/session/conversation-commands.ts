@@ -350,6 +350,25 @@ export class ConversationCommands {
           };
         const turnId = this.admission.newTurnId();
         const configuration = directPreviewConfiguration(settings);
+        // A retained input owns its notice, including silent background turns.
+        const target = [...plan.fact.history].reverse().find((item) => item.type === 'user_message');
+        const noticeOwner =
+          target &&
+          [...this.journal.facts]
+            .reverse()
+            .find(
+              (fact) =>
+                fact.type === 'turn_started' &&
+                !fact.retryContext &&
+                fact.input.find((item) => item.type === 'user_message')?.id === target.id,
+            );
+        const text =
+          noticeOwner?.type === 'turn_started' &&
+          configuration &&
+          noticeOwner.requestConfiguration?.mode === configuration.mode
+            ? noticeOwner.requestNotice
+            : undefined;
+        const retryNotice = target && text ? { messageId: target.id, text } : undefined;
         if (
           !this.journal.commit([
             plan.fact,
@@ -358,6 +377,7 @@ export class ConversationCommands {
               turnId,
               input: [],
               retryContext: { sourceTurnId: source.turnId, throughItemId: through.id },
+              ...(retryNotice ? { requestNotice: retryNotice.text } : {}),
               ...(configuration ? { requestConfiguration: configuration } : {}),
             },
             planDirectCommandFinish(this.journal.commandReceipts, request.commandId, { kind: 'retried', turnId }),
@@ -367,7 +387,7 @@ export class ConversationCommands {
         this.generation.continuity?.state?.clear();
         const started = this.admission.start(
           { ...settings, input: [] },
-          { turnId, facts: [], accepted: true, history: plan.fact.history },
+          { turnId, facts: [], accepted: true, history: plan.fact.history, ...(retryNotice ? { retryNotice } : {}) },
         );
         return {
           result: {

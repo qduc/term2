@@ -2,8 +2,8 @@
  * The durable vocabulary of a conversation log. Native facts, not source
  * LogEvents; nothing here goes through `SessionFact`, the reducer or the store.
  *
- * The profile notice is deliberately not a fact: `input` is the user's own
- * input, and history replays exactly that.
+ * Request notices are stored separately from `input`, which remains the user's
+ * own content and is replayed without decorations.
  */
 
 import type {
@@ -83,6 +83,8 @@ export type DirectTurnFact =
       /** Actual command-owned auxiliary invocation, not a human or background-notice admission. */
       readonly maintenance?: { readonly kind: 'compaction'; readonly commandId: string };
       readonly requestConfiguration?: import('./direct-preview.js').DirectPreviewConfiguration;
+      /** Resolved request-only notice for retry; input remains the user's raw content. */
+      readonly requestNotice?: string;
       /** Native background planning input is durable provider context, never a displayed human admission. */
       readonly silent?: true;
       /** A command continuation reuses retained human context; it is not a new admission. */

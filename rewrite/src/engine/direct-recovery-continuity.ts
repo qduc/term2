@@ -117,6 +117,17 @@ export class DirectContinuity {
     }
   }
 
+  /** Reconcile known request-only decorations after the accepted turn is durably committed. */
+  reconcilePrefix(sent: readonly Item[], durable: readonly Item[]): void {
+    const checkpoint = this.#checkpoint;
+    if (!checkpoint || sent.length !== durable.length || !hasPrefix(checkpoint.history, sent)) return;
+    if (sent.some((item, index) => item.id !== durable[index]?.id || item.type !== durable[index]?.type)) return;
+    this.#checkpoint = {
+      ...checkpoint,
+      history: [...structuredClone(durable), ...checkpoint.history.slice(sent.length)],
+    };
+  }
+
   /** Retry, rewind, compaction, rollover, model/endpoint change and cancellation retire the checkpoint. */
   clear(): void {
     this.#checkpoint = undefined;

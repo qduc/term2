@@ -228,6 +228,7 @@ function conversation(
       readonly accepted?: true;
       readonly silent?: true;
       readonly compaction?: true;
+      readonly retryNotice?: { readonly messageId: Item['id']; readonly text: string };
       readonly compactionState?: import('../engine/direct-types.js').TurnCompactionState;
       readonly history?: readonly Item[];
     },
@@ -249,13 +250,27 @@ function conversation(
     const snapshot = planned?.accepted
       ? { history: planned.history!, compactionState: planned.compactionState }
       : liveReplay();
-    const modelInput = admitConversationTurn(turnId, request, planned, journal, capabilities!);
     const { input, notice: requestNotice, submission: _submission, previewMode: _previewMode, ...settings } = request;
-    // Rejected admission, read-only preview, maintenance and empty retry input
-    // cannot consume a pending profile transition. Like source pendingModeNotice,
-    // this queue belongs to the live Session, not a second durable journal.
+    // Resolve without consuming until durable admission succeeds.
     const hasProfileInput = !planned?.compaction && input.some((item) => item.type === 'user_message');
-    const notice = generation.notice(requestNotice, hasProfileInput, hasProfileInput);
+    const notice = generation.notice(requestNotice, false, hasProfileInput);
+    const modelInput = admitConversationTurn(turnId, request, planned, journal, capabilities!, notice);
+    if (hasProfileInput || (planned?.retryNotice && generation.notice(undefined) === planned.retryNotice.text)) {
+      // A resumed retry can deliver the pending startup notice itself. Never
+      // consume a different pending transition on an unrelated retry.
+      generation.notice(undefined, true);
+    }
+    const rawHistory = planned?.history ?? snapshot.history;
+    let modelHistory = rawHistory;
+    if (planned?.retryNotice) {
+      let index = modelHistory.length - 1;
+      while (index >= 0 && modelHistory[index]?.id !== planned.retryNotice.messageId) index--;
+      if (index >= 0) {
+        modelHistory = [...modelHistory];
+        (modelHistory as Item[])[index] = withNotice([modelHistory[index]!], planned.retryNotice.text)[0]!;
+      }
+    }
+    const sentInput = notice ? withNotice(modelInput, notice) : modelInput;
     // Old detached branches keep the exact generation that admitted their root.
     const turnDeps = generation.runtime;
     const turnContinuity = generation.continuity;
@@ -265,9 +280,9 @@ function conversation(
         {
           ...settings,
           turnId,
-          history: planned?.history ?? snapshot.history,
+          history: modelHistory,
           ...(snapshot.compactionState ? { compactionState: snapshot.compactionState } : {}),
-          newItems: notice ? withNotice(modelInput, notice) : modelInput,
+          newItems: sentInput,
         },
         {
           ...turnDeps,
@@ -286,6 +301,17 @@ function conversation(
         capabilities: capabilities!,
         publishNotice: deps.publishNotice,
         released: () => {
+          const ended = [...journal.facts]
+            .reverse()
+            .find((fact) => fact.type === 'turn_ended' && fact.turnId === turnId);
+          if (
+            !journal.failure &&
+            ended?.type === 'turn_ended' &&
+            ended.outcome === 'completed' &&
+            (notice || planned?.retryNotice)
+          ) {
+            turnContinuity?.state?.reconcilePrefix([...modelHistory, ...sentInput], [...rawHistory, ...modelInput]);
+          }
           if (active?.turnId === turnId) active = null;
         },
       });
@@ -334,7 +360,7 @@ function conversation(
     id,
     tasks,
     configureTaskCheckIn,
-    currentRequest: (fallback) => generation.request ?? fallback,
+    currentRequest: (fallback) => generation.currentRequest(fallback),
     drainBackgroundNotifications: background.drain,
     cancelCommand: commands.cancel,
     commandRevision: commands.revision,

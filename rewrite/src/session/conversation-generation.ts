@@ -103,6 +103,14 @@ export class ConversationGeneration {
       ? { ...deps.continuity, state: deps.continuity.state ?? new DirectContinuity() }
       : undefined;
   }
+  currentRequest(fallback: Omit<TurnRequest, 'input' | 'submission'>): Omit<TurnRequest, 'input' | 'submission'> {
+    if (!this.request) {
+      const { notice, ...request } = fallback;
+      this.request = request;
+      if (notice) this.profileNotice = [this.profileNotice, notice].filter(Boolean).join('\n\n');
+    }
+    return this.request;
+  }
   prepare(candidate: DirectPreparedConfiguration): PreparedConversationGeneration {
     return prepareConversationGeneration(this.deps, this.runtime, this.supplied, candidate);
   }

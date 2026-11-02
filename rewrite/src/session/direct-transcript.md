@@ -38,3 +38,15 @@ presentation strings. No reference kind or exclusion is added. Correlated
 observations and hidden provider facts can share one physical body; observations
 without turn correlation remain literal. Existing malformed, future and
 cross-turn references still fail decoding before schema validation.
+
+Native `turn_started.requestNotice` stores the resolved request-only notice separately
+from raw input. Retry may attach it to the latest retained user-shaped input only
+when the recorded and current modes match; this includes silent background turns.
+It is not a display message. Persistence means the notice is retained in the
+conversation log, even though it is absent from the user's input and transcript.
+
+The initial runtime notice is queued once rather than copied into each turn's
+fallback request. A retry consumes an identical pending notice; if a saved notice
+also contains different request-specific text, that equality check can leave the
+profile notice pending for the next input. The raw-input/notice split is necessary:
+reconstructing only raw history on retry previously lost the original mode notice.

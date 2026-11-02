@@ -16,3 +16,9 @@ policy. `TurnToolInteractions` owns only execution-scoped interaction publicatio
 durable readiness and matching answer waits. It cannot select or start work; that
 policy remains in `TurnTools`, preserving selected-stop matching and ordered result
 publication.
+
+After a decorated request commits successfully, Session may reconcile a continuity
+checkpoint to its raw durable input. `DirectContinuity.reconcilePrefix` only replaces
+an exact sent prefix with the corresponding same-length, same-ID/type durable prefix;
+otherwise it leaves the checkpoint unchanged. This preserves strict prefix matching
+for subsequent response chaining without recording request-only decoration in history.

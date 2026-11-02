@@ -21,6 +21,7 @@ export type CommandAdmission = {
       readonly accepted?: true;
       readonly silent?: true;
       readonly compaction?: true;
+      readonly retryNotice?: { readonly messageId: Item['id']; readonly text: string };
       readonly compactionState?: TurnCompactionState;
       readonly history?: readonly Item[];
     },

@@ -31,7 +31,7 @@ afterEach(async () => {
   root = '';
 });
 
-type Reply = { call?: { id: string; command?: string; tool?: string; args?: object }; text?: string };
+type Reply = { error?: string; call?: { id: string; command?: string; tool?: string; args?: object }; text?: string };
 
 /** One SSE reply per chat request, in order: a single shell call or plain text. */
 async function startProvider(replies: Reply[], withUsage = false): Promise<string> {
@@ -39,12 +39,19 @@ async function startProvider(replies: Reply[], withUsage = false): Promise<strin
   server = http.createServer((req, res) => {
     if (req.method === 'GET') {
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ object: 'list', data: [{ id: 'mock-alpha' }] }));
+      res.end(JSON.stringify({ object: 'list', data: [{ id: 'mock-alpha' }, { id: 'mock-beta' }] }));
       return;
     }
     req.resume();
     req.on('end', () => {
       const reply = replies[requests++] ?? { text: 'done' };
+      if (reply.error) {
+        res.writeHead(400, { 'content-type': 'application/json' });
+        res.end(
+          JSON.stringify({ type: 'error', status: 400, error: { message: reply.error, code: 'model_not_found' } }),
+        );
+        return;
+      }
       const id = `chatcmpl-${requests}`;
       const frames: unknown[] = reply.call
         ? [
@@ -164,13 +171,14 @@ async function runCommand(
   withUsage = false,
   expectedDraft?: string,
   forbiddenOutput: readonly string[] = [],
+  providerError?: string,
 ): Promise<void> {
   root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-tool-rows-e2e-')));
   const home = path.join(root, 'home');
   const workspace = path.join(root, 'w');
   fs.mkdirSync(home);
   fs.mkdirSync(workspace);
-  const baseUrl = await startProvider([{ text: 'unused' }], withUsage);
+  const baseUrl = await startProvider([providerError ? { error: providerError } : { text: 'unused' }], withUsage);
   const idlePath = path.join(home, 'input-idle');
   const env = {
     HOME: home,
@@ -222,7 +230,7 @@ async function runCommand(
 
   if (firstPrompt) {
     await submit(firstPrompt);
-    await session.waitForOutput('unused', 30_000);
+    await session.waitForOutput(providerError ?? 'unused', 30_000);
     await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
   }
   if (exerciseMenu === 'approval-shortcut-history') {
@@ -409,15 +417,10 @@ it('invalid effort reports valid values without protocol internals', { timeout: 
 );
 
 it('rejected model shows one human error without receipt internals', { timeout: TIMEOUT_MS }, () =>
-  runCommand(
-    '/model bogus/does-not-exist',
-    "Provider 'bogus' does not expose an application",
-    undefined,
-    false,
-    false,
-    undefined,
-    ['command_rejected', '· configure · rejected'],
-  ),
+  runCommand('/model bogus/does-not-exist', "Provider 'bogus' is not registered", undefined, false, false, undefined, [
+    'command_rejected',
+    '· configure · rejected',
+  ]),
 );
 
 it('successful configure does not leave a receipt in the activity view', { timeout: TIMEOUT_MS }, () =>
@@ -428,4 +431,21 @@ it('successful configure does not leave a receipt in the activity view', { timeo
 
 it('quitting a conversation prints a usable resume hint', { timeout: TIMEOUT_MS }, () =>
   runCommand('', '', 'hello', 'quit-hint'),
+);
+
+it('rejects an unknown typed model', { timeout: TIMEOUT_MS }, () =>
+  runCommand('/model mockprov/made-up-model', 'Unknown model mockprov/made-up-model. Current model unchanged.'),
+);
+
+it('shows a structured provider error as a message', { timeout: TIMEOUT_MS }, () =>
+  runCommand(
+    '/usage',
+    'Token usage:',
+    'hello',
+    false,
+    false,
+    undefined,
+    ['model_not_found'],
+    'The selected model is not supported.',
+  ),
 );

@@ -131,6 +131,12 @@ function DirectTui({
       },
       ...createDirectTuiCommands({
         app,
+        async modelCatalog(sessionId, provider) {
+          const settingsService = app.sessionDetails(sessionId).settings;
+          if (!settingsService) return { models: [], error: 'session settings unavailable' };
+          const [group] = await collectProviderModels({ settingsService, loggingService: logger }, [provider]);
+          return group ?? { models: [], error: 'provider catalog unavailable' };
+        },
         root,
         bridge,
         remote,

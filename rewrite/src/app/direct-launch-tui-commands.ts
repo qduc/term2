@@ -33,6 +33,10 @@ type CommandResult = Awaited<ReturnType<TuiIntegration['command']>>;
 
 export type DirectTuiCommandOptions = {
   readonly app: DirectApplication;
+  readonly modelCatalog: (
+    sessionId: string,
+    provider: string,
+  ) => Promise<{ models: readonly { id: string }[]; error?: string }>;
   readonly root: string;
   readonly mcp?: DirectMcp;
   readonly onMcpAuthorizationUrl?: (url: string) => void;
@@ -81,7 +85,7 @@ function localMinute(iso: string): string {
 
 function parseModel(reference: string | undefined): { provider: string; model: string } {
   const separator = reference?.indexOf('/') ?? -1;
-  if (!reference || separator <= 0) throw new Error('Use <provider>/<model>.');
+  if (!reference || separator <= 0 || separator === reference.length - 1) throw new Error('Use <provider>/<model>.');
   return { provider: reference.slice(0, separator), model: reference.slice(separator + 1) };
 }
 
@@ -131,7 +135,23 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
         draft: { text: '/model ', attachments: [] },
       };
     }
-    return configure(connection, { model: parseModel(reference) }, `Model set to ${reference}.`);
+    const selected = parseModel(reference);
+    const catalog = await options.modelCatalog(connection.sessionId, selected.provider);
+    if (catalog.error || catalog.models.length === 0) {
+      return {
+        message: `Cannot validate ${reference}: ${
+          catalog.error || 'provider model catalog is unavailable or empty'
+        }. Current model unchanged.`,
+      };
+    }
+    if (!catalog.models.some((model) => model.id === selected.model)) {
+      return {
+        message: `Unknown model ${reference}. Current model unchanged. Available models: ${catalog.models
+          .map((model) => `${selected.provider}/${model.id}`)
+          .join(', ')}.`,
+      };
+    }
+    return configure(connection, { model: selected }, `Model set to ${reference}.`);
   };
 
   const effort = async (connection: TuiConnection, value: string | undefined): Promise<CommandResult> => {

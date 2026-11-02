@@ -63,7 +63,18 @@ export function toModelFailure(error: unknown, signal?: AbortSignal, scope?: Fai
   if (error instanceof ModelFailure && !signal?.aborted) return error;
   const upstream = classifyUpstreamRetryableError(error);
   const status = upstream.status ?? statusOf(error);
-  const message = isModelError(error) ? error.message : describeError(error);
+  const rawMessage = isModelError(error) ? error.message : describeError(error);
+  let message = rawMessage;
+  try {
+    const parsed: unknown = JSON.parse(rawMessage);
+    if (parsed && typeof parsed === 'object' && 'error' in parsed) {
+      const detail = parsed.error;
+      if (detail && typeof detail === 'object' && 'message' in detail && typeof detail.message === 'string')
+        message = detail.message;
+    }
+  } catch {
+    // Non-JSON provider errors are already human-readable.
+  }
   const reauthentication = findReauthenticationRequiredError(error);
   const kind: ModelError['kind'] =
     signal?.aborted || isAbortLikeError(error)

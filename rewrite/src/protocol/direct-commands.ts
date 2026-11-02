@@ -50,7 +50,7 @@ async function dispatch(session: DirectSession, command: WireCommand, operations
       if (command.expectedTurnId !== undefined) {
         return { ok: true, kind: 'abort', result: session.abort(command.expectedTurnId as TurnId, command.discardQueue) };
       }
-      if (command.target?.kind === 'task') return taskResult(await requireOperation(operations.controlTask, 'task cancel').call(operations, command.target.id, 'cancel'));
+      if (command.target?.kind === 'task') return taskResult(operations.controlTask ? await operations.controlTask(command.target.id, 'cancel') : session.requestTaskStop(command.target.id));
       session.cancel(command.target); return accepted;
     case 'retry': case 'compact': case 'configure': case 'rewind': case 'rollover':
       return publicCommandResult(command.commandId, await session.command(nativeCommandRequest(command)));
@@ -66,7 +66,7 @@ async function dispatch(session: DirectSession, command: WireCommand, operations
     case 'queue_retract': return queueResult(await session.retractQueue(command.messageId));
     case 'queue_resume': return queueResult(await session.resumeQueue());
     case 'queue_discard': return queueResult(await session.discardQueue());
-    case 'task_control': return taskResult(await requireOperation(operations.controlTask, 'task_control').call(operations, command.taskId, command.action));
+    case 'task_control': return taskResult(command.action === 'cancel' && !operations.controlTask ? session.requestTaskStop(command.taskId) : await requireOperation(operations.controlTask, 'task_control').call(operations, command.taskId, command.action));
     case 'list_rewind_targets': return { ok: true, kind: 'rewind_targets', targets: session.rewindTargets().map(({ id, label }) => ({ id, label })) };
     case 'reset': return { ok: true, kind: 'session_changed', ...await requireOperation(operations.reset, 'reset').call(operations) };
     case 'preview': return { ok: true, kind: 'preview', ...await requireOperation(operations.preview, 'preview').call(operations, { text: command.text, ...(command.attachments !== undefined ? { attachments: command.attachments } : {}) }) };

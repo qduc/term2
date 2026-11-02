@@ -6,7 +6,7 @@ import type { InteractionDecision, InteractionRequest, InteractionRequestId, Tur
 import type { ContentPart, ModelError, ModelRef, Usage } from '../model/index.js';
 import type { ExecutionId, Workspace } from '../tools/index.js';
 import type { DirectContextState } from './direct-context.js';
-import type { DirectTaskState, DirectBackgroundProgress } from './direct-background-types.js';
+import type { DirectTaskState, DirectBackgroundProgress, DirectTaskControlResult } from './direct-background-types.js';
 import type {
   DirectQueueState,
   DirectQueueEdit,
@@ -222,6 +222,8 @@ export interface DirectSession {
     source?: 'user' | 'launcher',
   ): boolean;
   answer(requestId: InteractionRequestId, decision: InteractionDecision, provenance?: AnswerProvenance): AnswerResult;
+  /** Request task stop; acceptance does not mean cleanup has settled. */
+  requestTaskStop(taskId: string): DirectTaskControlResult;
   /** Cancels the selected run, not this Session/connection; cleanup retains admission ownership. */
   cancel(target?: DirectCancelTarget): void;
   /** Listener receives updates strictly after the returned position, in publication order. */

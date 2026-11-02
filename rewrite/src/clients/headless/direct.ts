@@ -256,7 +256,7 @@ export async function runDirectHeadless(
       const phase = background;
       if (phase === null || targetTurnId !== null) return null;
       if (abortedInBackground || options.signal?.aborted) {
-        return failBackground('Background work interrupted; unfinished work was cancelled.');
+        return failBackground('Background work interrupted; cancellation was requested but task settlement is not confirmed.');
       }
       const now = Date.now();
       const pending = pendingNotices();
@@ -264,7 +264,7 @@ export async function runDirectHeadless(
       if (pending.length === 0 && active.length === 0 && expectedCompletion.size === 0) return finish();
       if (now >= phase.deadline) {
         return failBackground(
-          `Background work did not finish within ${backgroundWaitTimeoutMs}ms; unfinished work was cancelled.`,
+          `Background work did not finish within ${backgroundWaitTimeoutMs}ms; cancellation was requested but task settlement is not confirmed.`,
         );
       }
       if (pending.length > 0 && now >= phase.nextDrainAt) {
@@ -306,7 +306,7 @@ export async function runDirectHeadless(
     let ready: IteratorResult<WireEvent> | null = null;
     for (;;) {
       if (background !== null && (abortedInBackground || options.signal?.aborted)) {
-        return failBackground('Background work interrupted; unfinished work was cancelled.');
+        return failBackground('Background work interrupted; cancellation was requested but task settlement is not confirmed.');
       }
       if (background !== null && targetTurnId === null) {
         const driven = await driveBackground();
@@ -319,7 +319,7 @@ export async function runDirectHeadless(
             continue;
           }
           if (waited.kind === 'wake') {
-            return failBackground('Background work interrupted; unfinished work was cancelled.');
+            return failBackground('Background work interrupted; cancellation was requested but task settlement is not confirmed.');
           }
           ready = waited.value;
         } else {
@@ -331,17 +331,17 @@ export async function runDirectHeadless(
           const remaining = background.deadline - Date.now();
           if (remaining <= 0) {
             return failBackground(
-              `Background work did not finish within ${backgroundWaitTimeoutMs}ms; unfinished work was cancelled.`,
+              `Background work did not finish within ${backgroundWaitTimeoutMs}ms; cancellation was requested but task settlement is not confirmed.`,
             );
           }
           const waited = await waitEvent(remaining);
           if (waited.kind === 'timeout') {
             return failBackground(
-              `Background work did not finish within ${backgroundWaitTimeoutMs}ms; unfinished work was cancelled.`,
+              `Background work did not finish within ${backgroundWaitTimeoutMs}ms; cancellation was requested but task settlement is not confirmed.`,
             );
           }
           if (waited.kind === 'wake') {
-            return failBackground('Background work interrupted; unfinished work was cancelled.');
+            return failBackground('Background work interrupted; cancellation was requested but task settlement is not confirmed.');
           }
           ready = waited.value;
         } else {
@@ -353,7 +353,7 @@ export async function runDirectHeadless(
       ready = null;
       if (next.done) {
         if (abortedInBackground || options.signal?.aborted) {
-          return failBackground('Background work interrupted; unfinished work was cancelled.');
+          return failBackground('Background work interrupted; cancellation was requested but task settlement is not confirmed.');
         }
         if (background !== null) {
           if (pendingNotices().length === 0 && activeTasks().length === 0 && expectedCompletion.size === 0)
@@ -437,7 +437,7 @@ export async function runDirectHeadless(
         const outcome = event.payload.outcome;
         const terminalCause = event.payload.terminalCause;
         if (background !== null && (abortedInBackground || options.signal?.aborted)) {
-          return failBackground('Background work interrupted; unfinished work was cancelled.');
+          return failBackground('Background work interrupted; cancellation was requested but task settlement is not confirmed.');
         }
         if (outcome !== 'cancelled' && terminalCause !== undefined && BLOCKED_TERMINAL_CAUSES.has(terminalCause)) {
           presentation.blockedNotice(event.payload.notice, terminalCause);

@@ -200,7 +200,7 @@ app can map SIGINT/SIGTERM to their signal exit codes rather than ordinary error
   notice or active task remains. The total wait is bounded by
   `backgroundWaitTimeoutMs` (old `agent.backgroundWaitTimeoutMs`, default one
   hour). Timeout/signal cancel the active silent turn and active tasks through
-  `cancel`/`task_control`, then exit 1 with the outstanding IDs. It never
+  `cancel`/`task_control`, then exit 1 with the outstanding IDs; requests and task settlement are not confirmed. It never
   synthesizes notice text, delivery identity or completion.
 - **Generation guards:** the old app wrapped provider streams in
   `GenerationGuard`; deadline/idle caps remain app/model policy, not client

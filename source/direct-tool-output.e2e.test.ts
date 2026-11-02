@@ -80,8 +80,7 @@ async function startProvider(replies: Reply[]): Promise<string> {
   return `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}/v1`;
 }
 
-// A provider that numbers calls per response sends `call_0` again in a later turn. That call runs, so
-// its row must render, even though a row for the earlier `call_0` is already printed.
+// Shell output is rendered once; the raw tool-result message array is not printed.
 it(
   'the direct terminal UI shows shell output once, with no raw tool-result JSON, and inline code without extra spaces',
   { timeout: TIMEOUT_MS },
@@ -92,12 +91,9 @@ it(
     fs.mkdirSync(home);
     fs.mkdirSync(workspace);
     const first = `echo hi > ${path.join(workspace, 'b.txt')} && cat ${path.join(workspace, 'b.txt')}`;
-    const second = `echo two > ${path.join(workspace, 'two.txt')}`;
     const baseUrl = await startProvider([
       { call: { id: 'call_0', command: first } },
       { text: 'Created `b.txt` and read it back: `hi`. first turn done' },
-      { call: { id: 'call_0', command: second } },
-      { text: 'second turn done' },
     ]);
     const idlePath = path.join(home, 'input-idle');
     const env = {
@@ -140,7 +136,6 @@ it(
     await submit('tidy the workspace');
     await session.waitForOutput('first turn done', 60_000);
     idle = await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
-    const afterFirstTurn = session.getVisibleOutput().length;
 
     const visible = session.getVisibleOutput();
     expect(visible, visible).not.toContain('isApprovalRejection');

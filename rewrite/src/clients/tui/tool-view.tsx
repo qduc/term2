@@ -16,8 +16,9 @@ export function ToolCall({ tool }: { readonly tool: ToolView }): React.ReactElem
   const contentText = (tool.content ?? []).flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n');
   const extraText = contentText && contentText !== detail ? contentText : '';
   const images = (tool.content ?? []).flatMap((part) => (part.type === 'image' ? [part.mediaType] : []));
-  const shown = displayText(tool.display);
-  const display = shown && !detail.includes(shown) && !extraText.includes(shown) ? shown : '';
+  const display = displayParts(tool.display, args)
+    .filter((part) => !detail.includes(part) && !extraText.includes(part))
+    .join('\n');
   return (
     <ToolFrame status={tool.status} display="standard" toolName={tool.name}>
       <ToolHeader
@@ -51,21 +52,22 @@ export function ToolCall({ tool }: { readonly tool: ToolView }): React.ReactElem
  * Source tools publish legacy command messages as `display`: an array, or `{messages, approvalPresentation}`.
  * The header already shows the command, so only each message's output is shown. Unknown shapes stay visible as JSON.
  */
-function displayText(display: JsonValue | undefined): string {
-  if (display === undefined || display === null) return '';
+function displayParts(display: JsonValue | undefined, header: string): string[] {
+  if (display === undefined || display === null) return [];
   const messages = Array.isArray(display)
     ? display
     : isRecord(display) && Array.isArray(display.messages)
     ? display.messages
     : undefined;
   if (messages?.every((message) => isRecord(message) && message.sender === 'command')) {
-    return messages
-      .flatMap((message) =>
-        isRecord(message) && typeof message.output === 'string' && message.output ? [message.output] : [],
-      )
-      .join('\n');
+    // The concise header truncates long commands and edits; keep the full command when it says more.
+    return messages.flatMap((message) =>
+      [isRecord(message) ? message.command : '', isRecord(message) ? message.output : ''].flatMap((part, index) =>
+        typeof part === 'string' && part && !(index === 0 && header.includes(part)) ? [part] : [],
+      ),
+    );
   }
-  return JSON.stringify(display, null, 2);
+  return [JSON.stringify(display, null, 2)];
 }
 
 function isRecord(value: unknown): value is Record<string, JsonValue> {

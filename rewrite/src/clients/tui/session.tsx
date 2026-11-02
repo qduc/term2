@@ -11,6 +11,7 @@ import { useClient } from './use-client.js';
 import { Activity, LiveNotices } from './views.js';
 import { InteractionPanel } from './interaction-panel.js';
 import type { InteractionInputHandler } from './interaction-input.js';
+import { runBangShell } from './bang-shell.js';
 import { PickerHost, pickerFor, type PickerKind } from './picker-host.js';
 import { isCtrlG, isShiftTab, usePlanToggle } from './shift-tab.js';
 import { RewindPicker } from './rewind-picker.js';
@@ -68,6 +69,7 @@ export function TuiSession({
   const {
     images,
     setImages,
+    clearParts,
     onImagesChange,
     otherParts,
     setOtherParts,
@@ -96,6 +98,7 @@ export function TuiSession({
   const { InputFrame, PromptMarker, LiveDivider } = useSkin();
   const theme = useTheme();
   const [notice, setNotice] = useState<string | null>(null);
+  const notifyError = (error: unknown) => setNotice(error instanceof Error ? error.message : String(error));
   const [busy, setBusy] = useState(false);
   const composerActive = !panelOpen && !confirmation.pending && !connectionError && !interactionActive;
   const slash = useComposerMenu(editor.value, composerActive && !editing, theme.textSubtle);
@@ -113,11 +116,9 @@ export function TuiSession({
   interrupt.current = () => {
     // Stopping a running turn comes first and keeps the draft; with nothing running, Ctrl+C clears the draft.
     if (confirmation.pending) confirmation.clear();
-    else if (state.activeTurnId || (state.interactions.length && editor.value.length === 0)) {
-      void cancelForeground(connection, state.activeTurnId ?? undefined).then(setNotice, (error) => {
-        setNotice(error instanceof Error ? error.message : String(error));
-      });
-    } else if (editor.value.length > 0) replaceInput('');
+    else if (state.activeTurnId || (state.interactions.length && editor.value.length === 0))
+      void cancelForeground(connection, state.activeTurnId ?? undefined).then(setNotice, notifyError);
+    else if (editor.value.length > 0) replaceInput('');
     else setNotice('Press Ctrl+C again to exit');
   };
   useInput((input, key) => {
@@ -154,12 +155,10 @@ export function TuiSession({
         }
         await submitText(connection, draft.text, draft.attachments, 'auto');
         editor.change('');
-        setImages([]);
-        setOtherParts([]);
-        setOriginalParts([]);
+        clearParts();
       }
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : String(error));
+      notifyError(error);
     } finally {
       pending.current = false;
       setBusy(false);
@@ -251,9 +250,10 @@ export function TuiSession({
           wireAttachments(submittedImages, otherParts, originalParts),
           match[1] === 'steer' ? 'steer' : 'follow_up',
         );
-        setImages([]);
-        setOtherParts([]);
-        setOriginalParts([]);
+        clearParts();
+      } else if (input.startsWith('!')) {
+        const attached = submittedImages.length > 0 || otherParts.length > 0;
+        setNotice(await runBangShell(integration, connection, input, attached, Boolean(state.activeTurnId)));
       } else if (input.trim() === '/tasks') {
         setTaskOpen(true);
       } else if (/^\/rewind(?:\s|$)/.test(input)) {
@@ -368,9 +368,7 @@ export function TuiSession({
         const parts = wireAttachments(submittedImages, otherParts, originalParts);
         if (await held(input, parts, () => void submit(input, submittedImages, delivery, true))) return;
         await submitText(connection, input, parts, delivery);
-        setImages([]);
-        setOtherParts([]);
-        setOriginalParts([]);
+        clearParts();
       }
       // Do not add interaction answers to recallable input history.
       editor.accepted(
@@ -383,8 +381,8 @@ export function TuiSession({
       answerOwners.current = null;
       queueOwners.current = null;
     } catch (error) {
-      if (input.startsWith('/')) await editor.restoreRejected(input);
-      setNotice(error instanceof Error ? error.message : String(error));
+      if (input.startsWith('/') || input.startsWith('!')) await editor.restoreRejected(input);
+      notifyError(error);
     } finally {
       pending.current = false;
       setBusy(false);

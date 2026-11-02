@@ -29,6 +29,8 @@ export type TuiStatusInfo = {
 export type PickerModel = { readonly provider: string; readonly id: string; readonly name?: string };
 
 export interface TuiIntegration {
+  /** Run an explicit user shell command in the selected workspace, without a model turn. */
+  shell?(sessionId: string, command: string): Promise<string>;
   readonly resumePicker?: {
     list(): Promise<
       readonly {

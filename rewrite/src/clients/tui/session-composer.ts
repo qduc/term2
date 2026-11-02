@@ -87,9 +87,15 @@ export function useSessionComposer(state: TuiState, historySize: number) {
     const current = editor.current();
     replaceInput(!current || current === submitted ? submitted : `${submitted}\n${current}`);
   };
+  const clearParts = () => {
+    setImages([]);
+    setOtherParts([]);
+    setOriginalParts([]);
+  };
   return {
     images,
     setImages,
+    clearParts,
     onImagesChange,
     otherParts,
     setOtherParts,

@@ -1,3 +1,5 @@
+import { executeShellCommand } from '../../../source/utils/shell/execute-shell.js';
+import { formatShellExecutionOutput } from '../../../source/utils/shell/shell-output.js';
 /** The interactive terminal client on the direct host. The app owns the connection and replaces it across sessions. */
 import fs from 'node:fs';
 import { homedir } from 'node:os';
@@ -113,6 +115,31 @@ function DirectTui({
           if (!current) throw new Error('The attached session has no live settings.');
           toggleFavoriteModel(current, model.provider, model.id);
         },
+      },
+      async shell(sessionId, command) {
+        if (remote) throw new Error('Direct shell commands are not available in SSH workspaces.');
+        const settings = app.liveSettings(sessionId);
+        if (!settings) throw new Error('The attached session has no live settings.');
+        const startedAt = Date.now();
+        const result = await executeShellCommand(command, {
+          cwd: root,
+          timeout: settings.get('shell.timeout') ?? undefined,
+          maxBuffer: 1024 * 1024,
+        });
+        const formatted = await formatShellExecutionOutput({
+          command,
+          cwd: root,
+          stdout: result.stdout,
+          stderr: result.stderr,
+          exitCode: result.exitCode,
+          timedOut: result.timedOut,
+          maxOutputLength: settings.get('shell.maxOutputChars') ?? undefined,
+          maxOutputLines: settings.get('shell.maxOutputLines') ?? undefined,
+          durationMs: Date.now() - startedAt,
+        });
+        return `${result.exitCode === 0 && !result.timedOut ? '✓' : '✗'} ${command} (${Date.now() - startedAt}ms)\n${
+          formatted.text
+        }`;
       },
       preferences(sessionId) {
         const current = app.liveSettings(sessionId);

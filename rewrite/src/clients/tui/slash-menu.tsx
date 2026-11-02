@@ -78,6 +78,8 @@ export function ComposerHints({
             ]
           : [
               ['/', 'commands'],
+              ['@', 'paths'],
+              ['!', 'shell'],
               ['Shift+Tab', 'plan mode'],
               ['↑/↓', 'history'],
               ['Ctrl+O', 'tool output'],

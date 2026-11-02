@@ -118,7 +118,7 @@ export function TuiSession({
     slash,
     turnActive: Boolean(state.activeTurnId),
     outputExpanded: viewport.expanded,
-    draft: { value: editor.value, clear: () => replaceInput('') },
+    draft: { value: editor.value, cursor: editor.cursor, replace: replaceInput },
     submit: (text) => void submit(text, images),
   });
   useInterrupt({ interrupt, connection, confirmation, state, editor, replaceInput, cancelInput, setNotice });

@@ -36,6 +36,10 @@ A supplied terminal notice is rendered alongside accepted Session notices, inclu
 
 This interface note is not a verification certificate. Integration verification must cover snapshot/replay, input ownership and terminal rendering (including automatic foreground versus explicit background decisions), attachments and late queue edits, task and budget decisions, switching/rebind notices, and actual application integration. Module presence or an accepted wire receipt alone is not proof that the keyboard workflow reaches the next provider/tool output.
 
+Ctrl+U belongs to the active composer and deletes from the current line's start
+to the cursor, preserving later text and other lines. Use the editor's
+cursor-aware replacement rather than clearing the entire draft.
+
 ## Internal ownership
 
 `index.tsx` retains the unkeyed terminal interrupt gesture and cross-session notices;

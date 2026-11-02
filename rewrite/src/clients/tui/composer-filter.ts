@@ -11,7 +11,11 @@ type FilterOptions = {
   readonly turnActive: boolean;
   readonly outputExpanded: boolean;
   /** The draft before this chunk, and how to empty it: the sent text is never inserted, so the draft would stay. */
-  readonly draft: { readonly value: string; readonly clear: () => void };
+  readonly draft: {
+    readonly value: string;
+    readonly cursor: { readonly current: number };
+    readonly replace: (text: string, cursor?: number) => void;
+  };
   /** Send the whole draft as if Enter had been pressed after typing it. */
   readonly submit: (text: string) => void;
 };
@@ -40,13 +44,19 @@ export function useComposerFilter({ composerActive, slash, turnActive, outputExp
   }, [stdin]);
   return (input: string, key: Key): boolean => {
     if (!composerActive || isShiftTab(input, key) || slash.owns(key)) return true;
+    if (!pasting.current && key.ctrl && input === 'u') {
+      const cursor = draft.cursor.current;
+      const start = cursor === 0 ? 0 : draft.value.lastIndexOf('\n', cursor - 1) + 1;
+      draft.replace(draft.value.slice(0, start) + draft.value.slice(cursor), start);
+      return true;
+    }
     if (outputExpanded && key.escape) return true;
     if (['[I', '[O', '\x1b[I', '\x1b[O'].includes(input) || key.pageUp || key.pageDown) return true;
     if (key.ctrl && (key.upArrow || key.downArrow || ['g', 'b', 'o'].includes(input))) return true;
     if (turnActive && key.meta && key.return) return true;
     const line = !pasting.current ? /^([^\r\n]+)\r$/.exec(input) : null;
     if (!line) return false;
-    draft.clear();
+    draft.replace('');
     submit(draft.value + line[1]);
     return true;
   };

@@ -192,6 +192,7 @@ async function runCommand(
     | 'hint-120'
     | 'skill-baseline'
     | 'skin-cards'
+    | 'ctrl-u'
     | 'slash-picker-tab'
     | 'command-clear-regression'
     | 'prefix-enter'
@@ -353,6 +354,40 @@ async function runCommand(
     await waitForHarnessIdleGeneration(idlePath, { after: before, timeoutMs: 60_000 });
     // Streamed text is not turn completion; wait for the second request's measured usage.
     await session.waitForOutput('Ctx last 12k', 30_000);
+  }
+  if (exerciseMenu === 'ctrl-u') {
+    session.write('abcXYZ');
+    await waitForHarnessComposerValue(idlePath, 'abcXYZ', { timeoutMs: 10_000 });
+    for (let i = 0; i < 3; i++) {
+      session.write('\x1b[D');
+      await new Promise((resolve) => setTimeout(resolve, 80));
+    }
+    session.write('\x15');
+    await waitForHarnessComposerValue(idlePath, 'XYZ', { timeoutMs: 5_000 });
+    session.write('Q');
+    await waitForHarnessComposerValue(idlePath, 'QXYZ', { timeoutMs: 5_000 });
+    session.write('\x15');
+    await waitForHarnessComposerValue(idlePath, 'XYZ', { timeoutMs: 5_000 });
+    session.write('\x05');
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    session.write('\x15');
+    await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 5_000 });
+    session.write('first\nsecondXYZ');
+    await waitForHarnessComposerValue(idlePath, 'first\nsecondXYZ', { timeoutMs: 5_000 });
+    for (let i = 0; i < 3; i++) {
+      session.write('\x1b[D');
+      await new Promise((resolve) => setTimeout(resolve, 80));
+    }
+    session.write('\x15');
+    await waitForHarnessComposerValue(idlePath, 'first\nXYZ', { timeoutMs: 5_000 });
+    // At buffer offset zero, Ctrl+U is a no-op.
+    session.write('\x1b\\');
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    session.write('\x15');
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    session.write('Z');
+    await waitForHarnessComposerValue(idlePath, 'Zfirst\nXYZ', { timeoutMs: 5_000 });
+    return;
   }
   if (exerciseMenu === 'slash-picker-tab') {
     session.write('/');
@@ -733,4 +768,8 @@ it('uses the configured cards skin for the direct composer', { timeout: TIMEOUT_
 
 it('displays the skill request without injected instructions', { timeout: TIMEOUT_MS }, () =>
   runCommand('/skills dogfood SKILL-CHECK\nSECOND-LINE', 'unused', undefined, 'skill-baseline'),
+);
+
+it('Ctrl+U deletes only the current line before the cursor', { timeout: TIMEOUT_MS }, () =>
+  runCommand('', '', undefined, 'ctrl-u'),
 );

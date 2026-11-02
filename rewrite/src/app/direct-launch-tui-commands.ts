@@ -103,11 +103,29 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
   const configuration = createDirectTuiSettings(app, latest);
 
   const listResumeSessions = async () => {
-    const sessions: Array<{ id: string; title?: string; updatedAt?: string }> = [];
+    const sessions: Array<{
+      id: string;
+      title?: string;
+      updatedAt?: string;
+      firstUserMessage?: string;
+      messageCount?: number;
+      model?: string;
+    }> = [];
     let cursor: string | undefined;
     do {
       const page = await host.listSessions(principal, cursor);
-      sessions.push(...page.sessions.filter((session) => session.workspace.root === root));
+      sessions.push(
+        ...page.sessions
+          .filter((session) => session.workspace.root === root)
+          .map((session) => ({
+            id: session.id,
+            title: session.title,
+            updatedAt: session.updatedAt,
+            firstUserMessage: session.title,
+            messageCount: session.messageCount,
+            model: `${session.model.provider}/${session.model.model}`,
+          })),
+      );
       cursor = page.cursor;
     } while (cursor);
     return sessions.sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''));

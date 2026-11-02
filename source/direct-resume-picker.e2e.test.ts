@@ -103,7 +103,7 @@ it('opens a resume picker with a preview and switches to the selected session', 
       sandbox: { enabled: false },
     }),
   );
-  const start = () => spawnTerminal('node', [builtCli], { cwd: workspace, env });
+  const start = () => spawnTerminal('node', [builtCli], { cwd: workspace, env, cols: 160, rows: 40 });
   const send = async (text: string) => {
     session!.write(text);
     await waitForHarnessComposerValue(idlePath, text, { timeoutMs: 60_000 });
@@ -122,9 +122,14 @@ it('opens a resume picker with a preview and switches to the selected session', 
   session = start();
   await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
   await send('/resume ');
-  await session.waitForOutput('Resume a conversation', 30_000);
+  await session.waitForOutput('Resume Conversation', 30_000);
   session.write('\x1b[B');
-  await session.waitForOutput('Preview: previous unique prompt', 30_000);
+  await session.waitForOutput('Initial Prompt: previous unique prompt', 30_000);
+  const frame = session.getVisibleOutput().slice(session.getVisibleOutput().lastIndexOf('▌ term²'));
+  expect(frame).toMatch(/previous unique prompt.*seconds ago.*2 msgs/);
+  expect(frame).toContain('Preview');
+  expect(frame).toContain('Model: mockprov/mock-alpha');
+  expect(frame).toContain('Updated:');
   const offset = session.getVisibleOutput().length;
   session.write('\r');
   const started = Date.now();

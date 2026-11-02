@@ -18,6 +18,7 @@ import {
   type DirectLogLineage,
 } from './direct-rolling-log.js';
 import { replay } from './replay.js';
+import { initialDirectState, reduceDirectFact } from './direct-state.js';
 import { acquireDirectWriterLock } from './direct-writer-lock.js';
 import { latestDirectConfiguration, type DirectConfigurationState } from './direct-configuration.js';
 
@@ -67,6 +68,7 @@ type Summary = {
   readonly title?: string;
   /** When the last accepted fact was written. */
   readonly updatedAt?: string;
+  readonly messageCount?: number;
 };
 
 function firstPrompt(facts: readonly Fact[]): string | undefined {
@@ -326,6 +328,10 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
         summaries.push({
           id,
           workspace,
+          messageCount: facts.reduce(
+            (state, fact) => reduceDirectFact(state, fact),
+            initialDirectState(id, workspace, metadata.model),
+          ).messages.length,
           model: latestDirectConfiguration(facts)?.configuration.model ?? metadata.model,
           ...(firstPrompt(facts) ? { title: firstPrompt(facts) } : {}),
           ...(lineage.entries.length ? { updatedAt: lineage.entries[lineage.entries.length - 1]!.at } : {}),

@@ -246,6 +246,7 @@ export interface DirectSessionStore {
       readonly title?: string;
       /** When the last accepted fact was written. */
       readonly updatedAt?: string;
+      readonly messageCount?: number;
     }[];
     readonly cursor?: string;
   }>;

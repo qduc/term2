@@ -29,7 +29,18 @@ export type TuiStatusInfo = {
 export type PickerModel = { readonly provider: string; readonly id: string; readonly name?: string };
 
 export interface TuiIntegration {
-  readonly resumePicker?: { list(): Promise<readonly { id: string; title?: string; updatedAt?: string }[]> };
+  readonly resumePicker?: {
+    list(): Promise<
+      readonly {
+        id: string;
+        title?: string;
+        updatedAt?: string;
+        firstUserMessage?: string;
+        messageCount?: number;
+        model?: string;
+      }[]
+    >;
+  };
   readonly modelPicker?: {
     favorites(sessionId: string): PickerModel[];
     nicknames(sessionId: string): Readonly<Record<string, readonly string[]>>;

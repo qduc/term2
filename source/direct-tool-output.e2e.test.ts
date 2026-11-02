@@ -1,5 +1,7 @@
 import { afterEach, expect, it } from 'vitest';
 import fs from 'node:fs';
+import { execFile, spawn } from 'node:child_process';
+import { promisify } from 'node:util';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
@@ -21,6 +23,7 @@ const TIMEOUT_MS = 120_000;
 let session: TerminalSession | null = null;
 let root = '';
 let server: http.Server | null = null;
+let providerRequests: string[] = [];
 
 afterEach(async () => {
   session?.dispose();
@@ -29,6 +32,7 @@ afterEach(async () => {
   server = null;
   if (root) fs.rmSync(root, { recursive: true, force: true });
   root = '';
+  providerRequests = [];
 });
 
 type Reply = { call?: { id: string; command?: string; tool?: string; args?: object }; text?: string };
@@ -42,9 +46,11 @@ async function startProvider(replies: Reply[]): Promise<string> {
       res.end(JSON.stringify({ object: 'list', data: [{ id: 'mock-alpha' }] }));
       return;
     }
-    req.resume();
+    let body = '';
+    req.on('data', (chunk) => (body += chunk.toString()));
     req.on('end', () => {
-      const reply = replies[requests++] ?? { text: 'done' };
+      providerRequests.push(body);
+      const reply = replies[requests++] ?? { text: 'control reply sentinel' };
       const id = `chatcmpl-${requests}`;
       const frames = reply.call
         ? [
@@ -83,6 +89,22 @@ async function startProvider(replies: Reply[]): Promise<string> {
   return `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}/v1`;
 }
 
+/** Exercise the built standalone control client against the running TUI, not an in-process port. */
+async function control(args: string[], env: NodeJS.ProcessEnv, cwd: string, input = '') {
+  const child = spawn('node', [builtCli, 'control', ...args], { cwd, env: createTestChildEnv(env) });
+  let stdout = '';
+  let stderr = '';
+  child.stdout.on('data', (chunk) => (stdout += chunk.toString()));
+  child.stderr.on('data', (chunk) => (stderr += chunk.toString()));
+  child.stdin.end(input);
+  const code = await new Promise<number | null>((resolve, reject) => {
+    child.once('error', reject);
+    child.once('close', resolve);
+  });
+  expect(code, stderr).toBe(0);
+  return stdout;
+}
+
 // Shell output is rendered once; the raw tool-result message array is not printed.
 it(
   'the direct terminal UI shows shell output once, with no raw tool-result JSON, and inline code without extra spaces',
@@ -91,6 +113,7 @@ it(
     root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-tool-rows-e2e-')));
     const home = path.join(root, 'home');
     const workspace = path.join(root, 'w');
+    fs.mkdirSync(path.join(root, 'runtime'), { mode: 0o700 });
     fs.mkdirSync(home);
     fs.mkdirSync(workspace);
     const first = 'echo hi > b.txt && cat b.txt';
@@ -137,7 +160,7 @@ it(
       }),
     );
 
-    session = spawnTerminal('node', [builtCli], { cwd: workspace, env });
+    session = spawnTerminal('node', [builtCli, '--control-socket=coord'], { cwd: workspace, env });
     let idle = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
 
     // Submit only once the composer holds the text; Enter in the same write is taken as pasted input.
@@ -151,6 +174,15 @@ it(
     await session.waitForOutput('first turn done', 60_000);
     idle = await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
 
+    const help = await promisify(execFile)('node', [builtCli, '--help'], {
+      cwd: workspace,
+      env: createTestChildEnv(env),
+    });
+    expect(help.stdout).toMatch(/term2 control list[^\n]*\|\n/);
+    const listing = await control(['list'], env, workspace);
+    expect(JSON.parse(listing.trim()).name).toBe('coord');
+    const status = JSON.parse(await control(['status', 'coord', '--json'], env, workspace));
+    expect(status.phase).toBe('idle');
     const visible = session.getVisibleOutput();
     // The bar under the composer names the profile, model and approval mode (this run is YOLO).
     expect(visible, visible).toMatch(/Bare[^\n]*mockprov\/mock-alpha[^\n]*YOLO/);
@@ -184,6 +216,13 @@ it(
     expect(session.getVisibleOutput()).toMatch(/Runtime: \d+ms\s+hi\b/);
     const expanded = session.getVisibleOutput();
     expect(expanded.slice(expanded.lastIndexOf('✓ Write and read the file'))).toContain(first);
+    const receipt = JSON.parse(
+      await control(['submit', 'coord', '--id', 'control-test', '--json'], env, workspace, 'a control message'),
+    );
+    expect(receipt.delivery).toBe('started');
+    expect(receipt.messageId).toBeTruthy();
+    await session.waitForOutput('control reply sentinel', 60_000);
+    expect(providerRequests.some((body) => body.includes('a control message'))).toBe(true);
     // Quit the way a user does, so the app finishes its writes before the test removes its directories.
     session.write('\x03');
     await session.waitForOutput('Press Ctrl+C again to exit', 30_000);

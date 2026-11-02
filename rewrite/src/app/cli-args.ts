@@ -187,7 +187,7 @@ Subcommands:
         Run the local web gateway until SIGINT/SIGTERM.
   term2 acp [--provider <provider>] [--model <model>] [--effort <effort>] *
         Serve the Agent Client Protocol v2 over stdio. Stdout carries protocol traffic only.
-  term2 control list [--status] | status <name> [--json] | get <name> <topic> [--json] | *
+  term2 control list [--status] | status <name> [--json] | get <name> <topic> [--json] |
       submit|steer <name> --id <id> | interrupt <name> | wait-turn <name> --message-id <id>
         Talk to a live control socket.
   term2 discord [config.json] | --save-token [config.json] | --help *

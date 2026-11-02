@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Text, type Key } from 'ink';
-import { useSkin } from '../../../../source/skins/SkinContext.js';
+import { useSkin } from './presentation/skins/SkinContext.js';
 import { SLASH_COMMAND_TABLE, SLASH_COMMANDS } from './slash-commands.js';
 
 const NAME_WIDTH = Math.max(...SLASH_COMMANDS.map((name) => name.length));

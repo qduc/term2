@@ -1,8 +1,8 @@
 import React from 'react';
 import { Box, Text } from 'ink';
-import { formatToolArgs } from '../../../../source/components/message/command-message-helpers.js';
-import { useSkin } from '../../../../source/skins/SkinContext.js';
-import { useTheme } from '../../../../source/components/theme.js';
+import { formatToolArgs } from './presentation/components/message/command-message-helpers.js';
+import { useSkin } from './presentation/skins/SkinContext.js';
+import { useTheme } from './presentation/components/theme.js';
 import type { ToolView } from './state.js';
 import type { JsonValue } from '../../protocol/direct-wire.js';
 

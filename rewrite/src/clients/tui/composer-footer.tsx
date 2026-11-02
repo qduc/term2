@@ -1,7 +1,7 @@
 import React from 'react';
-import { formatTokensPerSecond } from './streaming-speed-tracker.js';
-import { useSkin } from '../../../../source/skins/SkinContext.js';
-import type { StatusSegmentView, StatusView } from '../../../../source/skins/types.js';
+import { formatTokensPerSecond } from './presentation/utils/streaming/streaming-speed-tracker.js';
+import { useSkin } from './presentation/skins/SkinContext.js';
+import type { StatusSegmentView, StatusView } from './presentation/skins/types.js';
 import type { TuiIntegration } from './integration.js';
 import type { TuiState } from './state.js';
 import { ComposerHints } from './slash-menu.js';

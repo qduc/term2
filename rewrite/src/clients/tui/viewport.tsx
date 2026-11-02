@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { renderToString, useInput, Text } from 'ink';
-import { ThemeProvider, useTheme } from '../../../../source/components/theme.js';
-import { SkinProvider, useSkin } from '../../../../source/skins/SkinContext.js';
+import { ThemeProvider, useTheme } from './presentation/components/theme.js';
+import { SkinProvider, useSkin } from './presentation/skins/SkinContext.js';
 import type { TuiState } from './state.js';
 import { Transcript } from './views.js';
 

@@ -179,6 +179,7 @@ async function runCommand(
     | 'complete'
     | 'hint-80'
     | 'hint-120'
+    | 'skin-cards'
     | 'slash-picker-tab'
     | 'command-clear-regression'
     | 'prefix-enter'
@@ -221,6 +222,7 @@ async function runCommand(
   fs.writeFileSync(
     path.join(settingsDir, 'settings.json'),
     JSON.stringify({
+      ui: { skin: exerciseMenu === 'skin-cards' ? 'cards' : 'classic' },
       agent: {
         retryAttempts: 0,
         modelSelection: { model: 'mock-alpha', provider: 'mockprov' },
@@ -246,6 +248,12 @@ async function runCommand(
     return;
   }
 
+  if (exerciseMenu === 'skin-cards') {
+    const visible = session.getVisibleOutput();
+    expect(visible).toContain('╭');
+    expect(visible).toContain('│ ❯');
+    return;
+  }
   const identity = JSON.parse(
     fs.readFileSync(path.resolve(path.dirname(builtCli), '../../../build-info.json'), 'utf8'),
   ) as {
@@ -656,3 +664,7 @@ it('keeps composer hints on one row at 80 columns', { timeout: TIMEOUT_MS }, () 
   runCommand('', '', undefined, 'hint-80'),
 );
 it('keeps all composer hints at 120 columns', { timeout: TIMEOUT_MS }, () => runCommand('', '', undefined, 'hint-120'));
+
+it('uses the configured cards skin for the direct composer', { timeout: TIMEOUT_MS }, () =>
+  runCommand('', '', undefined, 'skin-cards'),
+);

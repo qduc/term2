@@ -12,10 +12,13 @@ import { resolveActiveProfile } from '../../../source/services/profiles/active-p
 import React, { useMemo, useRef, useState, type ReactNode } from 'react';
 import { render } from 'ink';
 import Banner from '../../../source/components/layout/Banner.js';
-import { SettingsSkinProvider } from '../../../source/skins/SkinContext.js';
+import { SettingsSkinProvider, useSkin as useSourceSkin } from '../../../source/skins/SkinContext.js';
+import { SkinProvider as DirectSkinProvider } from '../clients/tui/presentation/skins/SkinContext.js';
+import { getSkin as getDirectSkin } from '../clients/tui/presentation/skins/registry.js';
+import { ThemeProvider as DirectThemeProvider } from '../clients/tui/presentation/theme/ThemeContext.js';
 import { detectTerminalBackground } from '../../../source/theme/detect-terminal-background.js';
 import { shouldDetectBackground } from '../../../source/theme/resolve-theme.js';
-import { SettingsThemeProvider } from '../../../source/theme/ThemeContext.js';
+import { SettingsThemeProvider, useTheme as useSourceTheme } from '../../../source/theme/ThemeContext.js';
 import { getInkRenderOptions } from '../../../source/utils/ink-render-options.js';
 import { getProfileLabel } from '../../../source/services/profiles/labels.js';
 import { quoteShellArg } from '../../../source/services/ssh-service.js';
@@ -180,25 +183,35 @@ function DirectTui({
     }),
     [app, root, remote, mcp, bridge, restart, logger],
   );
+  const skin = useSourceSkin();
+  const theme = useSourceTheme();
   return (
-    <Tui
-      connection={connection}
-      header={
-        <Banner key={`header:${connection.sessionId}`} settingsService={settings} onHeightChange={setHeaderHeight} />
-      }
-      headerHeight={headerHeight}
-      integration={integration}
-      onLiveEvent={(event) => {
-        if (event.sessionId !== connection.sessionId) return;
-        if (event.type === 'interaction_opened' && event.payload.interaction.kind === 'approval')
-          notifier.approvalNeeded();
-        if (event.type === 'turn_ended' && event.payload.outcome === 'completed') notifier.turnComplete();
-      }}
-      onSnapshot={(snapshot) => {
-        latest.current = snapshot;
-      }}
-      onExit={() => onExit(latest.current)}
-    />
+    <DirectThemeProvider theme={theme}>
+      <DirectSkinProvider skin={getDirectSkin(skin.name)}>
+        <Tui
+          connection={connection}
+          header={
+            <Banner
+              key={`header:${connection.sessionId}`}
+              settingsService={settings}
+              onHeightChange={setHeaderHeight}
+            />
+          }
+          headerHeight={headerHeight}
+          integration={integration}
+          onLiveEvent={(event) => {
+            if (event.sessionId !== connection.sessionId) return;
+            if (event.type === 'interaction_opened' && event.payload.interaction.kind === 'approval')
+              notifier.approvalNeeded();
+            if (event.type === 'turn_ended' && event.payload.outcome === 'completed') notifier.turnComplete();
+          }}
+          onSnapshot={(snapshot) => {
+            latest.current = snapshot;
+          }}
+          onExit={() => onExit(latest.current)}
+        />
+      </DirectSkinProvider>
+    </DirectThemeProvider>
   );
 }
 

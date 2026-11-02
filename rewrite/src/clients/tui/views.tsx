@@ -1,9 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { StreamingSpeedTracker, formatTokensPerSecond } from './streaming-speed-tracker.js';
+import {
+  StreamingSpeedTracker,
+  formatTokensPerSecond,
+} from './presentation/utils/streaming/streaming-speed-tracker.js';
 import { Box, Text } from 'ink';
-import { useTheme } from '../../../../source/components/theme.js';
-import MarkdownRenderer from '../../../../source/components/MarkdownRenderer.js';
-import { useSkin } from '../../../../source/skins/SkinContext.js';
+import { useTheme } from './presentation/components/theme.js';
+import MarkdownRenderer from './presentation/components/MarkdownRenderer.js';
+import { useSkin } from './presentation/skins/SkinContext.js';
 import type { Message, TuiState } from './state.js';
 import { ToolCall } from './tool-view.js';
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Box, Text, useStdout } from 'ink';
-import { useTheme } from '../../../../source/components/theme.js';
+import { useTheme } from './presentation/components/theme.js';
 import type { TuiIntegration } from './integration.js';
 import { useInteractionInput, type InteractionInput } from './interaction-input.js';
 

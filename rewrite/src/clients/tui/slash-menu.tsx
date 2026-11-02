@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Text, type Key } from 'ink';
+import { useTerminalSize } from './terminal.js';
 import { useSkin } from './presentation/skins/SkinContext.js';
 import { SLASH_COMMAND_TABLE, SLASH_COMMANDS } from './slash-commands.js';
 
@@ -9,6 +10,7 @@ const DESCRIPTIONS = new Map(SLASH_COMMAND_TABLE.map((command) => [command.name,
 /** Menu key handling stays in the composer input path, not a second Ink listener. */
 export function useSlashMenu(value: string, enabled: boolean, subtleColor: React.ComponentProps<typeof Text>['color']) {
   const { MenuFrame } = useSkin();
+  const { rows } = useTerminalSize();
   const [index, setIndex] = useState(0);
   const [dismissed, setDismissed] = useState<string | null>(null);
   const matches =
@@ -46,15 +48,21 @@ export function useSlashMenu(value: string, enabled: boolean, subtleColor: React
     setIndex(0);
     setDismissed(null);
   };
-  const start = Math.min(Math.max(0, selected - 5), Math.max(0, matches.length - 10));
+  // Leave room for the frame, title, wrapped hints and composer on short terminals.
+  const visibleRows = Math.max(1, Math.min(10, rows - 12));
+  const start = Math.min(
+    Math.max(0, selected - Math.floor(visibleRows / 2)),
+    Math.max(0, matches.length - visibleRows),
+  );
   const view = matches.length ? (
     <MenuFrame
+      title="Commands"
       hasItems
       borderColor={undefined}
       footer="↑/↓ select · Enter complete · Tab complete/open · Esc dismiss"
       footerPlacement="inside"
     >
-      {matches.slice(start, start + 10).map((command) => (
+      {matches.slice(start, start + visibleRows).map((command) => (
         <Text key={command} wrap="truncate-end">
           {command === matches[selected] ? '› ' : '  '}
           {command.padEnd(NAME_WIDTH)}

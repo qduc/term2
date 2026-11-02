@@ -55,7 +55,25 @@ for (const [cols, rows] of [
     try {
       await terminal.waitForOutput('term²', 10_000);
       await waitForHarnessIdleGeneration(idle, { timeoutMs: 60_000 });
-      terminal.write('/help');
+      // Open the broad menu at this terminal size and inspect only its fresh render.
+      const menuOffset = terminal.getVisibleOutput().length;
+      terminal.write('/');
+      await waitForHarnessComposerValue(idle, '/', { timeoutMs: 60_000 });
+      await terminal.waitForOutput('Commands', 30_000);
+      const menu = terminal.getVisibleOutput().slice(menuOffset);
+      expect(menu).toContain('╭');
+      expect(menu).toContain('Commands');
+      expect(menu).toContain('╰');
+      expect(menu).toContain('› /help');
+      const menuLines = menu.slice(menu.lastIndexOf('╭'), menu.lastIndexOf('╰')).split('\n');
+      expect(menuLines.filter((line) => /[› ] \/[a-z-]+\s/.test(line)).length).toBe(Math.min(10, rows - 12));
+      // Navigate past the first short-screen window; the selected command must remain visible.
+      for (let i = 0; i < 8; i++) {
+        terminal.write('\x1b[B');
+        await new Promise((resolve) => setTimeout(resolve, 80));
+      }
+      await terminal.waitForOutput('› /resume', 30_000);
+      terminal.write('help');
       await waitForHarnessComposerValue(idle, '/help', { timeoutMs: 60_000 });
       terminal.write('\r');
       await terminal.waitForOutput('Keyboard shortcuts', 30_000);

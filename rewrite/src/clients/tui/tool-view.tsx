@@ -61,6 +61,7 @@ export function ToolCall({
   const showEdit = EDIT_TOOLS.has(tool.name) && status !== 'failed' && status !== 'rejected';
   const display = [...(open || showEdit ? inputText : []), ...(open ? displayText : [])].join('\n');
   const showDetail = open;
+  const reason = !open && tool.name === 'shell' && status === 'failed' ? shellFailureReason(detail) : '';
   return (
     <ToolFrame status={status} display="standard" toolName={tool.name}>
       <Box flexDirection="column" width="100%">
@@ -70,7 +71,12 @@ export function ToolCall({
             display="standard"
             toolName={tool.name}
             nested={Boolean(tool.parent)}
-            action={<Text>{args || tool.name}</Text>}
+            action={
+              <Text>
+                {reason ? `${reason} · ` : ''}
+                {args || tool.name}
+              </Text>
+            }
             meta={
               tool.outcomeUnknown ? (
                 <Text color={theme.warning}>outcome unknown</Text>
@@ -98,6 +104,18 @@ export function ToolCall({
       </Box>
     </ToolFrame>
   );
+}
+
+/** Show the shell status and an explicitly labelled fatal/error line, not arbitrary hidden output. */
+function shellFailureReason(detail: string): string {
+  const status = /^(exit \d+|timeout|cancelled)\s*$/m.exec(detail)?.[1];
+  if (!status) return '';
+  const diagnostic = /^(?:fatal|error):[^\r\n]*/im
+    .exec(detail)?.[0]
+    ?.replace(/[\x00-\x1f\x7f]/g, '')
+    .trim();
+  const short = diagnostic && diagnostic.length > 44 ? `${diagnostic.slice(0, 43)}…` : diagnostic;
+  return short ? `${status}: ${short}` : status;
 }
 
 /** Prefer the model's intent, never the raw command, in the collapsed shell row. */

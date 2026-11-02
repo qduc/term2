@@ -144,7 +144,10 @@ it(
       {
         call: {
           id: 'call_f',
-          args: { command: `printf '%s\\n' '${failureOutput}'; exit 128`, description: failedDescription },
+          args: {
+            command: `printf '%s\\n' '${failureOutput}'; printf '%s\\n' 'fatal: not a git repository' >&2; exit 128`,
+            description: failedDescription,
+          },
         },
       },
       { call: { id: 'call_1', tool: 'create_file', args: { path: file, content: 'alpha-line\nbeta-line' } } },
@@ -194,7 +197,7 @@ it(
       cwd: workspace,
       env,
       cols: 160,
-      rows: 40,
+      rows: 50,
     });
     let idle = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
 
@@ -256,8 +259,10 @@ it(
     // The current frame collapses the known failed call, even though earlier live frames may contain its input.
     const settledFrame = visible.slice(visible.lastIndexOf('▌ term²'));
     const summaryLines = settledFrame.split('\n');
-    const summaryIndex = summaryLines.findIndex((line) => line.includes('✗ Check failure summary'));
+    const summaryIndex = summaryLines.findIndex((line) => line.includes('✗') && line.includes('exit 128'));
     expect(summaryIndex).toBeGreaterThanOrEqual(0);
+    expect(summaryLines[summaryIndex]).toContain('exit 128');
+    expect(summaryLines[summaryIndex]).toContain('fatal: not a git repository');
     expect(summaryLines[summaryIndex + 1]?.trim() ?? '').not.toMatch(/^H/);
     expect(settledFrame).not.toContain(failureOutput);
     // The first edit appears once, not again as a repeated command line.

@@ -156,7 +156,11 @@ export class AssertionVerifier {
     if (claims.exp <= claims.iat || claims.exp - claims.iat > MAX_ASSERTION_LIFETIME_SECONDS) {
       throw new GatewayAssertionError('invalid_claims');
     }
-    if (!this.#ledger.record({ ...claims, sessionId: claims.sessionId }, Math.floor(now))) {
+    // The ledger purges entries once their `exp` passes, but this verifier still accepts a token until
+    // exp + skew. Record the retention horizon (rounded up, so fractional skew is never cut short) so a
+    // consumed jti stays recorded for as long as it could still be accepted. Callers get the original claims.
+    const retainUntil = Math.ceil(claims.exp + this.#clockSkew);
+    if (!this.#ledger.record({ ...claims, sessionId: claims.sessionId, exp: retainUntil }, Math.floor(now))) {
       throw new GatewayAssertionError('replay');
     }
     return claims;

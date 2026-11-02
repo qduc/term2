@@ -1,6 +1,6 @@
 /** Server-owned agent-wire v2 envelope adaptation. This source imports the exact
- * shared v2 exports; the pinned 0.1.0 artifact does not contain them yet, so
- * compilation/activation waits for the packaged 0.2.0 artifact and pin update.
+ * shared v2 exports from the pinned 0.2.0 artifact, which provides them and is what compiles here.
+ * Runtime activation is still gated off by AGENT_WIRE_V2_RUNTIME_AVAILABLE below.
  * One accepted envelope is one real FactLine boundary and one SSE cursor.
  */
 import type {
@@ -32,8 +32,8 @@ import type { ServerInteractions } from './server-interactions.js';
 import { canonicalCandidate, canonicalCommandMessageCandidates, type CanonicalEventContext } from './server-events.js';
 import { ServerHttpError } from './server-errors.js';
 
-/** Explicit v2 negotiation is implemented, but activation waits for the shared artifact and
- * browser/BFF migration. Do not flip this to claim support from the pinned v1 package. */
+/** Explicit v2 negotiation is implemented against the pinned 0.2.0 artifact, but activation
+ * (this flag) waits for the browser/BFF migration. Do not flip it to claim support before then. */
 export const AGENT_WIRE_V2_RUNTIME_AVAILABLE: boolean = false;
 
 /** Public aliases to the exact shared v2 exports. No local vocabulary copy. */

@@ -142,9 +142,11 @@ export async function compactDirectHistory(input: DirectCompactionInput): Promis
     ratio: input.settings.compactThreshold,
     rawTrigger: input.settings.compactThresholdTokens,
   });
-  if (!input.manual && policy.softTrigger === undefined) return { kind: 'blocked', reason: 'unknown_threshold', estimate };
+  if (!input.manual && policy.softTrigger === undefined)
+    return { kind: 'blocked', reason: 'unknown_threshold', estimate };
   const measured = Math.max(estimate.renderedInputTokens, input.lastCompletedInputTokens ?? 0);
-  if (!input.manual && policy.softTrigger !== undefined && measured < policy.softTrigger) return { kind: 'not_needed', estimate };
+  if (!input.manual && policy.softTrigger !== undefined && measured < policy.softTrigger)
+    return { kind: 'not_needed', estimate };
   if (!input.manual && input.rearmAtEstimatedTokens !== undefined && measured < input.rearmAtEstimatedTokens) {
     return { kind: 'deferred', reason: 'hysteresis', estimate };
   }

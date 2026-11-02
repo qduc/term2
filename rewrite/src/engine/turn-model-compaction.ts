@@ -128,12 +128,16 @@ export class TurnCompaction {
         history: replacement,
         reason: 'compaction',
         ...(attempt ? { compactionId: attempt.compactionId } : {}),
-        ...(result.rearmAtEstimatedTokens === undefined ? {} : { rearmAtEstimatedTokens: result.rearmAtEstimatedTokens }),
+        ...(result.rearmAtEstimatedTokens === undefined
+          ? {}
+          : { rearmAtEstimatedTokens: result.rearmAtEstimatedTokens }),
         checkpointReceipts: result.checkpointReceipts,
       });
       history.splice(0, history.length, ...replacement);
       this.#state = {
-        ...(result.rearmAtEstimatedTokens === undefined ? {} : { rearmAtEstimatedTokens: result.rearmAtEstimatedTokens }),
+        ...(result.rearmAtEstimatedTokens === undefined
+          ? {}
+          : { rearmAtEstimatedTokens: result.rearmAtEstimatedTokens }),
         checkpointReceipts: result.checkpointReceipts,
       };
       this.#lastInputTokens = undefined;

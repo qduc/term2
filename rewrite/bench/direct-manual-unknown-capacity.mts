@@ -15,11 +15,17 @@ const model = {
 };
 const history = Array.from({ length: 3 }, (_, i) => [
   { type: 'user_message' as const, id: `u${i}`, content: [{ type: 'text' as const, text: `request ${i}` }] },
-  { type: 'assistant_message' as const, id: `a${i}`, content: [{ type: 'text' as const, text: 'long result '.repeat(500) }] },
+  {
+    type: 'assistant_message' as const,
+    id: `a${i}`,
+    content: [{ type: 'text' as const, text: 'long result '.repeat(500) }],
+  },
 ]).flat();
 const request = { model: ref, instructions: 'help', input: history, tools: [] };
 const input = {
-  model, request, settings: { enabled: true, mode: 'local' as const, compactThreshold: 0.8, compactThresholdTokens: null },
+  model,
+  request,
+  settings: { enabled: true, mode: 'local' as const, compactThreshold: 0.8, compactThresholdTokens: null },
   signal: new AbortController().signal,
 };
 const automatic = await compactDirectHistory({ ...input, manual: false });
@@ -33,10 +39,12 @@ assert.equal(plan.fact.type, 'history_replaced');
 assert.equal('rearmAtEstimatedTokens' in plan.fact, false);
 assert.ok(calls > 0);
 assert.ok(plan.result.estimate.renderedInputTokens < plan.result.before.renderedInputTokens);
-const constrained = await prepareDirectManualCompaction(
-  { executionsSettled: true, history, revision: 'r1' } as any,
-  { ...input, maxRequestInputTokens: 1 },
-);
+const constrained = await prepareDirectManualCompaction({ executionsSettled: true, history, revision: 'r1' } as any, {
+  ...input,
+  maxRequestInputTokens: 1,
+});
 assert.equal(constrained.kind, 'not_compacted');
 assert.equal(constrained.kind === 'not_compacted' && constrained.result.kind, 'blocked');
-console.log('PASS: manual unknown capacity replaces history; automatic remains blocked; explicit ceiling remains enforced');
+console.log(
+  'PASS: manual unknown capacity replaces history; automatic remains blocked; explicit ceiling remains enforced',
+);

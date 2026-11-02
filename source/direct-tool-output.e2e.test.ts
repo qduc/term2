@@ -156,6 +156,8 @@ it(
     expect(visible, visible).toContain('+ beta-line');
     expect(visible, visible).toContain('- alpha-line');
     expect(visible, visible).toContain('+ gamma-line');
+    // The first edit appears once, not again as a repeated command line.
+    expect(visible, visible).not.toContain('search_replace "');
     expect(visible, visible).not.toMatch(/Runtime: \d+ms\s+hi\s+Runtime: \d+ms/);
     // Quit the way a user does, so the app finishes its writes before the test removes its directories.
     session.write('\x03');

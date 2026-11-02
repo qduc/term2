@@ -16,7 +16,7 @@ export function ToolCall({ tool }: { readonly tool: ToolView }): React.ReactElem
   const contentText = (tool.content ?? []).flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n');
   const extraText = contentText && contentText !== detail ? contentText : '';
   const images = (tool.content ?? []).flatMap((part) => (part.type === 'image' ? [part.mediaType] : []));
-  const display = [...inputParts(tool.name, tool.input), ...displayParts(tool.display, args)]
+  const display = [...inputParts(tool.name, tool.input), ...displayParts(tool.display, args, tool.name)]
     .filter((part) => !detail.includes(part) && !extraText.includes(part))
     .join('\n');
   return (
@@ -52,7 +52,7 @@ export function ToolCall({ tool }: { readonly tool: ToolView }): React.ReactElem
  * Source tools publish legacy command messages as `display`: an array, or `{messages, approvalPresentation}`.
  * The header already shows the command, so only each message's output is shown. Unknown shapes stay visible as JSON.
  */
-function displayParts(display: JsonValue | undefined, header: string): string[] {
+function displayParts(display: JsonValue | undefined, header: string, toolName: string): string[] {
   if (display === undefined || display === null) return [];
   const messages = Array.isArray(display)
     ? display
@@ -60,10 +60,12 @@ function displayParts(display: JsonValue | undefined, header: string): string[] 
     ? display.messages
     : undefined;
   if (messages?.every((message) => isRecord(message) && message.sender === 'command')) {
-    // The concise header truncates long commands and edits; keep the full command when it says more.
+    // The concise header truncates long shell commands; keep the full command when it says more. Tools whose
+    // input is rendered by `inputParts` already show their edit/script there, so their command line would repeat it.
+    const commandShown = !INPUT_RENDERED.has(toolName);
     return messages.flatMap((message) =>
       [isRecord(message) ? message.command : '', isRecord(message) ? message.output : ''].flatMap((part, index) =>
-        typeof part === 'string' && part && !(index === 0 && header.includes(part)) ? [part] : [],
+        typeof part === 'string' && part && !(index === 0 && (!commandShown || header.includes(part))) ? [part] : [],
       ),
     );
   }
@@ -75,6 +77,7 @@ function isRecord(value: unknown): value is Record<string, JsonValue> {
 }
 
 const MAX_INPUT_LINES = 40;
+const INPUT_RENDERED = new Set(['search_replace', 'create_file', 'run_code']);
 
 /**
  * What the model asked a tool to do, where the concise header only summarises it: edit text, new file content,
@@ -83,7 +86,12 @@ const MAX_INPUT_LINES = 40;
 function inputParts(name: string, input: JsonValue | undefined): string[] {
   if (!isRecord(input)) return [];
   const mark = (prefix: string, text: unknown) =>
-    typeof text === 'string' && text ? text.split('\n').map((line) => `${prefix}${line}`) : [];
+    typeof text === 'string' && text
+      ? text
+          .replace(/\n$/, '')
+          .split('\n')
+          .map((line) => `${prefix}${line}`)
+      : [];
   let lines: string[] = [];
   if (name === 'search_replace') {
     const edits = Array.isArray(input.replacements) ? input.replacements : [input];

@@ -12,6 +12,7 @@ import { Activity, LiveNotices } from './views.js';
 import { InteractionPanel } from './interaction-panel.js';
 import type { InteractionInputHandler } from './interaction-input.js';
 import { ModelPicker } from './model-picker.js';
+import { isShiftTab, useApprovalCycle } from './shift-tab.js';
 import { RewindPicker } from './rewind-picker.js';
 import { TaskManager } from './task-manager.js';
 import { BudgetPanel } from './budget-panel.js';
@@ -100,7 +101,7 @@ export function TuiSession({
   const slash = useComposerMenu(editor.value, composerActive && !editing, theme.textSubtle);
   useHarnessInput(composerActive && !busy, Boolean(state.activeTurnId), editor.value);
   const pending = useRef(false);
-  const approvalPending = useRef(false);
+  const cycleApproval = useApprovalCycle(setNotice, () => integration.command(connection, '/auto-approve next'));
   const composerFilter = useComposerFilter({
     composerActive,
     slash,
@@ -121,26 +122,9 @@ export function TuiSession({
   useInput((input, key) => {
     if (modelOpen) return void interactionInput.current?.(input, key);
     if (confirmation.handleKey(input, key)) return;
-    if (interactionActive) {
-      interactionInput.current?.(input, key);
-      return;
-    }
+    if (interactionActive) return void interactionInput.current?.(input, key);
     if (taskOpen || budgetOpen || rewindTargets) return;
-    if (composerActive && ((key.shift && key.tab) || input === '\x1b[Z')) {
-      if (!approvalPending.current) {
-        approvalPending.current = true;
-        void integration
-          .command(connection, '/auto-approve next')
-          .then(
-            (result) => setNotice(result.message ?? 'Approval mode changed.'),
-            (error: unknown) => setNotice(error instanceof Error ? error.message : String(error)),
-          )
-          .finally(() => {
-            approvalPending.current = false;
-          });
-      }
-      return;
-    }
+    if (composerActive && isShiftTab(input, key)) return cycleApproval();
     if (slash.handle(key, replaceInput)) return;
     if (((key.ctrl && input === 'g') || input === '\x07') && !busy)
       (state.interactions.length ? setInteractionOpen : setTaskOpen)(true);

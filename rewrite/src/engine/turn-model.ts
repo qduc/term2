@@ -369,6 +369,9 @@ export class TurnModel {
             }
             break;
           }
+          case 'codex_quota':
+            await this.events.publish(event);
+            break;
           case 'usage':
             usage = event.usage;
             await this.events.publish({

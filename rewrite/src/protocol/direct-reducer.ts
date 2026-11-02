@@ -127,6 +127,8 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
           modelStep: event.payload.modelStep,
         },
       };
+    case 'codex_quota':
+      return { ...state, codexQuota: event.payload.quota ?? undefined };
     case 'reasoning_delta':
       return {
         ...state,
@@ -288,6 +290,7 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
         usage: { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 },
         lastUsage: undefined,
         lastSpeed: undefined,
+        codexQuota: undefined,
         terminal: null,
         timeline: [],
         turnResults: [],
@@ -388,6 +391,7 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
     case 'configuration':
       return {
         ...state,
+        codexQuota: undefined,
         model: event.payload.model ?? state.model,
         lastUsage: undefined,
         lastSpeed: undefined,

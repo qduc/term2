@@ -70,6 +70,7 @@ export type WireSnapshot = {
   readonly usage: WireUsage;
   readonly lastUsage?: WireUsage;
   readonly lastSpeed?: { readonly tps: number; readonly approximate: boolean };
+  readonly codexQuota?: import('../model/index.js').CodexWeeklyQuota;
   readonly reasoning: string;
   readonly reasoningIdentity?: {
     readonly messageId: string;
@@ -147,6 +148,7 @@ export type WireEventPayloads = {
   text_delta: { readonly delta: string; readonly messageId: string; readonly modelStep: number };
   reasoning: { readonly text: string; readonly messageId: string; readonly modelStep: number | null };
   reasoning_delta: { readonly delta: string; readonly modelStep: number | null; readonly messageId: string | null };
+  codex_quota: { readonly quota: import('../model/index.js').CodexWeeklyQuota | null };
   message: { readonly message: WireMessage; readonly replacesDraftId?: string };
   /** Live-only source-measured cumulative count; no execution or persisted tool item. */
   tool_call_streaming_delta: {

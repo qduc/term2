@@ -94,6 +94,7 @@ export type TuiState = {
   readonly usage?: string;
   /** Session totals behind `usage`, for the status bar. */
   readonly contextUsedTokens?: number;
+  readonly codexQuota?: { readonly usedPercent: number; readonly resetAt: number };
   readonly speed?: { readonly tps: number; readonly approximate: boolean };
   readonly usageTotals?: {
     readonly inputTokens: number;

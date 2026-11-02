@@ -181,10 +181,12 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
       let terminal = false;
       for await (const event of turn.events) {
         if (
+          event.type === 'codex_quota' ||
           event.type === 'reasoning_delta' ||
           event.type === 'tool_progress' ||
           event.type === 'tool_call_streaming_delta'
         ) {
+          if (event.type === 'codex_quota') state = { ...state, codexQuota: event.quota ?? undefined };
           if (event.type === 'reasoning_delta') state = { ...state, reasoning: state.reasoning + event.delta };
           publish({ type: 'transient', position: ++position, event });
         }

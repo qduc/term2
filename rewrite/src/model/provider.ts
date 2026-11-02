@@ -1,3 +1,5 @@
+import { stringArray } from './provider-settings.js';
+import { weeklyQuota } from './provider-quota.js';
 import { observeProviderRequestDispatch } from '../../../source/providers/request-dispatch.js';
 /**
  * Real providers behind `ModelRegistry`, without the adopted adapter. The only
@@ -350,6 +352,9 @@ async function* modelEvents(
   for await (const event of turn.stream(request)) {
     signal.throwIfAborted();
     switch (event.type) {
+      case 'codex_rate_limits':
+        if (providerId === 'codex') yield { type: 'codex_quota', quota: weeklyQuota(event.rateLimits) };
+        break;
       case 'text_delta':
         speed.recordDelta(event.text);
         yield { type: 'text_delta', delta: event.text, ...(event.partId ? { partId: event.partId } : {}) };
@@ -491,9 +496,4 @@ function resolveContinuation(
 
 function isRecord(value: unknown): value is Record<string, any> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-/** The string entries of an array setting, as `toApplicationCodexSettings` keeps them. */
-function stringArray(value: unknown): string[] | undefined {
-  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : undefined;
 }

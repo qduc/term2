@@ -158,6 +158,7 @@ async function* loop(
           case 'done':
             continuation = event.continuation;
             break;
+          case 'codex_quota':
           case 'tool_call_streaming_delta':
             // Not part of the tracer's compatibility EngineEvent contract.
             break;

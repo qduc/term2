@@ -176,6 +176,7 @@ export type TurnCompactionEvent =
       readonly requests: readonly DirectCompactionRequest[];
     };
 export type TurnEvent =
+  | { readonly type: 'codex_quota'; readonly quota: import('../model/index.js').CodexWeeklyQuota | null }
   | TurnCompactionEvent
   /** Live-only progress. The actual physical request scopes reused provider IDs. */
   | (ToolCallArgumentProgress & { readonly turnId: TurnId; readonly modelStep: number })

@@ -150,7 +150,10 @@ export type ToolCallArgumentProgress = {
   readonly callIndex?: number;
 };
 
+export type CodexWeeklyQuota = { readonly usedPercent: number; readonly resetAt: number };
+
 export type ModelEvent =
+  | { readonly type: 'codex_quota'; readonly quota: CodexWeeklyQuota | null }
   | ToolCallArgumentProgress
   | { readonly type: 'text_delta'; readonly delta: string; readonly partId?: string }
   | {

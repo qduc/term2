@@ -50,6 +50,8 @@ export function canonicalCandidate(
   context: CanonicalEventContext,
 ): Candidate | null {
   switch (event.type) {
+    case 'codex_quota':
+      return null;
     case 'session_rotated':
       // The logical Session is unchanged, and pinned agent-wire has no rotation/reset event.
       // Direct SSE retains the actual accepted boundary; do not invent session_created or a

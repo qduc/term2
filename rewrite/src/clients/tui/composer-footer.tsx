@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { formatTokensPerSecond } from './presentation/utils/streaming/streaming-speed-tracker.js';
 import { useSkin } from './presentation/skins/SkinContext.js';
 import type { StatusSegmentView, StatusView } from './presentation/skins/types.js';
@@ -28,14 +28,23 @@ const tokens = (count: number): string => (count > 1_000 ? `${(count / 1_000).to
 
 /**
  * The bar the old terminal shows under the composer: profile, provider/model, effort and approval mode, then
- * session token totals. Only data the direct wire or settings carry is shown; there is no speed, context
- * window or quota here, because the direct snapshot has no per-request usage or provider quota.
+ * session token totals and measured provider telemetry when available.
  */
 export function directStatusView(
   state: TuiState,
   info: ReturnType<NonNullable<TuiIntegration['status']>>,
   columns: number,
 ): StatusView {
+  const quota = state.codexQuota && state.codexQuota.resetAt * 1000 > Date.now() ? state.codexQuota : undefined;
+  const reset = quota ? new Date(quota.resetAt * 1000) : undefined;
+  const resetDate = reset
+    ? `${String(reset.getMonth() + 1).padStart(2, '0')}/${String(reset.getDate()).padStart(2, '0')}`
+    : '';
+  const resetText =
+    reset && reset.getTime() - Date.now() < 86400000
+      ? `${resetDate} ${reset.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}`
+      : resetDate;
+  const quotaWindows = quota ? [{ label: '7D', percent: quota.usedPercent, resetText }] : [];
   const totals = state.usageTotals;
   const cached =
     totals && totals.inputTokens > 0 ? Math.round((totals.cachedInputTokens / totals.inputTokens) * 100) : undefined;
@@ -95,13 +104,13 @@ export function directStatusView(
     config,
     metrics,
     alerts: [],
-    quotaText: '',
+    quotaText: quotaWindows.map((window) => `${window.label} ${window.percent}%→${window.resetText}`).join(' / '),
     gauges: {
       contextPercent: undefined,
       contextUsedTokens: undefined,
       contextWindowTokens: undefined,
       cachePercent: cached,
-      quotaWindows: [],
+      quotaWindows,
     },
   };
 }
@@ -119,6 +128,14 @@ export function ComposerFooter({
   readonly columns: number;
 }): React.ReactElement {
   const { Hints, StatusBar } = useSkin();
+  const [, setQuotaClock] = useState(0);
+  useEffect(() => {
+    if (!state.codexQuota) return;
+    const delay = state.codexQuota.resetAt * 1000 - Date.now();
+    if (delay <= 0) return;
+    const timer = setTimeout(() => setQuotaClock((value) => value + 1), Math.min(delay + 1, 2147483647));
+    return () => clearTimeout(timer);
+  }, [state.codexQuota]);
   const info = integration.status?.(state.sessionId);
   return (
     <>

@@ -170,6 +170,7 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
         usage: { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 },
         lastUsage: undefined,
         lastSpeed: undefined,
+        codexQuota: undefined,
         terminal: null,
         runtimeError: null,
         timeline: [],
@@ -209,6 +210,7 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
       const { type: _type, ...configuration } = fact;
       return {
         ...state,
+        codexQuota: undefined,
         configuration: structuredClone(configuration),
         model: fact.configuration.model,
         lastUsage: undefined,

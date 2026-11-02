@@ -126,6 +126,7 @@ export function snapshotDirectState(
     usage: { ...state.usage },
     ...(state.lastUsage ? { lastUsage: { ...state.lastUsage } } : {}),
     ...(state.lastSpeed ? { lastSpeed: { ...state.lastSpeed } } : {}),
+    ...(state.codexQuota ? { codexQuota: { ...state.codexQuota } } : {}),
     reasoning: state.reasoning,
     reasoningIdentity: !rotated && previous?.reasoning === state.reasoning ? previous.reasoningIdentity ?? null : null,
     retryEligibility: rotated

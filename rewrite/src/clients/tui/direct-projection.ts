@@ -148,6 +148,7 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
     ],
     usage: usageText(snapshot.usage),
     contextUsedTokens: snapshot.lastUsage?.inputTokens,
+    codexQuota: snapshot.codexQuota,
     speed: snapshot.lastSpeed,
     usageTotals: {
       inputTokens: snapshot.usage.inputTokens,

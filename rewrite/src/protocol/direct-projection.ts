@@ -80,6 +80,8 @@ export class DirectProjection {
         const task = this.#state.tasks.find((task) => task.id === progress.taskId);
         const { type: _type, ...payload } = progress;
         events = [this.#event('task_progress', payload, null, task?.turnId ?? null)];
+      } else if (update.event.type === 'codex_quota') {
+        events = [this.#event('codex_quota', { quota: update.event.quota }, null, this.#state.activeTurnId)];
       } else if (update.event.type === 'reasoning_delta') {
         events = [
           this.#event(

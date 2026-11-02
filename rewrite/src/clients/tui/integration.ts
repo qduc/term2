@@ -56,6 +56,7 @@ export interface TuiIntegration {
     input: string,
   ): Promise<{
     readonly message?: string;
+    readonly transcript?: string;
     readonly exit?: boolean;
     readonly draft?: { readonly text: string; readonly attachments: readonly WireContent[] };
     readonly sessionId?: string;

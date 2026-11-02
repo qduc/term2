@@ -1,3 +1,4 @@
+import { formatModelUsageBreakdown, summarizeModelUsage } from '../../../source/services/cost/model-cost.js';
 import { loadProviderItems } from '../../../source/providers/provider-service.js';
 /**
  * The slash commands no wire command covers by itself. Each one is either a real
@@ -247,7 +248,10 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
       completion_tokens: outputTokens,
       cache_read_tokens: cachedInputTokens,
     });
-    return { message: total };
+    const breakdown = formatModelUsageBreakdown(
+      summarizeModelUsage((snapshot.requestCosts ?? []).map(({ record }) => record)),
+    );
+    return { transcript: breakdown ? `${total}\n${breakdown}` : total };
   };
 
   /** A skill always belongs to a request, so naming one alone hands the line back to finish. */

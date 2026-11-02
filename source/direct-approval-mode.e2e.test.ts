@@ -173,6 +173,7 @@ async function runCommand(
   expectedDraft?: string,
   forbiddenOutput: readonly string[] = [],
   providerError?: string,
+  twoModels = false,
 ): Promise<void> {
   root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-tool-rows-e2e-')));
   const home = path.join(root, 'home');
@@ -280,6 +281,14 @@ async function runCommand(
     session.write('\x1b');
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 5_000 });
     return;
+  }
+  if (twoModels) {
+    await submit('/model mockprov/mock-beta');
+    await session.waitForOutput('Model set to mockprov/mock-beta.', 30_000);
+    const before = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
+    await submit('another question');
+    await session.waitForOutput('done', 30_000);
+    await waitForHarnessIdleGeneration(idlePath, { after: before, timeoutMs: 60_000 });
   }
   if (exerciseMenu === 'approval-shortcut-history') {
     session.write('\x1b[Z');
@@ -420,6 +429,22 @@ it('/resume ls labels each conversation with its time and first prompt', { timeo
 it('/usage agrees with the cached share in the status bar', { timeout: TIMEOUT_MS }, async () => {
   await runCommand('/usage', 'Token usage: 78,021 input (42,112 cached), 731 output', 'hello', false, true);
   expect(session!.getVisibleOutput()).toContain('54% cached');
+  session!.write('/auto-approve');
+  await waitForHarnessComposerValue(path.join(root, 'home', 'input-idle'), '/auto-approve', { timeoutMs: 60_000 });
+  session!.write('\r');
+  await session!.waitForOutput('Tool auto-approval is off.', 30_000);
+  const visible = session!.getVisibleOutput();
+  const afterNotice = visible.slice(visible.lastIndexOf('▌ term²'));
+  expect(afterNotice).toContain('Token usage: 78,021 input (42,112 cached), 731 output');
+  expect(afterNotice).toContain('By model:');
+  expect(afterNotice).toContain('mockprov/mock-alpha:');
+});
+
+it('/usage separates actual model request usage', { timeout: TIMEOUT_MS }, async () => {
+  await runCommand('/usage', 'Token usage: 156,042 input', 'hello', false, true, undefined, [], undefined, true);
+  const visible = session!.getVisibleOutput();
+  expect(visible).toContain('mockprov/mock-alpha:');
+  expect(visible).toContain('mockprov/mock-beta:');
 });
 
 it('/copy confirms what it copied', { timeout: TIMEOUT_MS }, () =>

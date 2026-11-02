@@ -20,7 +20,7 @@ import { primaryDraft, wireAttachments } from './draft.js';
 import { numberedInteractionAnswer } from './interaction-command.js';
 import { useSessionComposer } from './session-composer.js';
 import { useTerminalSize } from './terminal.js';
-import { useTranscriptViewport } from './viewport.js';
+import { useCommandTranscriptViewport } from './command-transcript.js';
 import { useHarnessInput } from './harness-input.js';
 import { replaceSession } from './replace-session.js';
 import { runBridgeCommand } from './bridge-command.js';
@@ -92,7 +92,7 @@ export function TuiSession({
   const confirmation = useSendConfirmation(interactionActive);
   const interactionInput = useRef<InteractionInputHandler | null>(null);
   const viewportActive = !interactionActive && !panelOpen && !confirmation.pending;
-  const viewport = useTranscriptViewport(state, columns, rows - (headerHeight ?? 0), viewportActive);
+  const viewport = useCommandTranscriptViewport(state, columns, rows - (headerHeight ?? 0), viewportActive);
   const { InputFrame, PromptMarker, LiveDivider } = useSkin();
   const theme = useTheme();
   const [notice, setNotice] = useState<string | null>(null);
@@ -353,6 +353,7 @@ export function TuiSession({
         else {
           const result = await integration.command(connection, input);
           if (result.message) (input.trim() === '/help' ? viewport.setHelp : setNotice)(result.message);
+          if (result.transcript) viewport.appendCommandOutput(result.transcript);
           if (result.draft) {
             restoreDraft(result.draft);
             return;

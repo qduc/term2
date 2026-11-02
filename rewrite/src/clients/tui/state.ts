@@ -18,6 +18,8 @@ export type Message = {
   readonly presentation?: Readonly<Record<string, JsonValue>>;
   readonly error?: boolean;
   readonly interrupted?: boolean;
+  /** Live streaming draft replaced by this finalized assistant message. */
+  readonly replacesDraftId?: string;
   readonly historyText?: string;
   readonly attachments?: readonly WireContent[];
 };

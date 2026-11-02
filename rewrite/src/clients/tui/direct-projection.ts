@@ -13,6 +13,7 @@ const messageView = (message: WireMessage): Message => ({
     ? message.content.map((part) => (part.type === 'text' ? part.text : `[image: ${part.mediaType}]`)).join('')
     : message.text,
   error: message.isError,
+  ...(message.replacesDraftId ? { replacesDraftId: message.replacesDraftId } : {}),
   ...(message.role === 'user'
     ? {
         historyText:

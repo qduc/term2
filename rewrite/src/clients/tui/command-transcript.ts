@@ -17,7 +17,17 @@ export function useCommandTranscript(state: TuiState): { state: TuiState; append
     ...(state.timeline ?? state.messages.map((message) => ({ kind: 'message' as const, id: message.id }))),
   ];
   for (const entry of entries) {
-    let index = entry.after ? timeline.findIndex((item) => item.id === entry.after) + 1 : 0;
+    // A live draft can be replaced by its final message after the command runs.
+    // Follow that explicit wire identity rather than sending output to the top.
+    const replacement =
+      entry.after === undefined
+        ? undefined
+        : state.messages.find((message) => message.replacesDraftId === entry.after)?.id;
+    const anchor =
+      entry.after === undefined
+        ? undefined
+        : timeline.findIndex((item) => item.id === entry.after || item.id === replacement);
+    let index = anchor === undefined ? 0 : anchor < 0 ? timeline.length : anchor + 1;
     while (index < timeline.length && entries.some((other) => other.message.id === timeline[index]?.id)) index++;
     timeline.splice(index, 0, { kind: 'message', id: entry.message.id });
   }

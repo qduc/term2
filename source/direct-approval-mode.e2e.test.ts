@@ -325,6 +325,8 @@ async function runCommand(
     await submit('another question');
     await session.waitForOutput('done', 30_000);
     await waitForHarnessIdleGeneration(idlePath, { after: before, timeoutMs: 60_000 });
+    // Streamed text is not turn completion; wait for the second request's measured usage.
+    await session.waitForOutput('Ctx last 12k', 30_000);
   }
   if (exerciseMenu === 'slash-picker-tab') {
     session.write('/');

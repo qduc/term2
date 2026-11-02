@@ -20,3 +20,6 @@ export function usePlanToggle(setNotice: (text: string | null) => void, run: () 
       });
   };
 }
+
+/** Ctrl+G arrives as a ctrl-modified `g` or, on terminals Ink does not decode, as the raw BEL byte. */
+export const isCtrlG = (input: string, key: Key): boolean => (key.ctrl && input === 'g') || input === '\x07';

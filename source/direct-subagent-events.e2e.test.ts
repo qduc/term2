@@ -91,7 +91,14 @@ it('a subagent run adds no per-event lines to the transcript', { timeout: TIMEOU
   fs.mkdirSync(home);
   fs.mkdirSync(workspace);
   const { execFileSync } = await import('node:child_process');
-  const g = (...a: string[]) => execFileSync('git', a, { cwd: workspace, stdio: 'pipe' });
+  // Git sees only this run's directory: not the real HOME, global config or system config.
+  const gitEnv = {
+    PATH: process.env.PATH,
+    HOME: home,
+    GIT_CONFIG_GLOBAL: '/dev/null',
+    GIT_CONFIG_NOSYSTEM: '1',
+  };
+  const g = (...a: string[]) => execFileSync('git', a, { cwd: workspace, stdio: 'pipe', env: gitEnv });
   g('init', '-q');
   g('config', 'user.email', 'a@b.c');
   g('config', 'user.name', 'x');
@@ -151,7 +158,11 @@ it('a subagent run adds no per-event lines to the transcript', { timeout: TIMEOU
 
   await submit('use a subagent');
   await session.waitForOutput('parent finished', 60_000);
+  // Positive control: the child ran and settled, so its events (turn start, message, response, end) have
+  // all arrived before the absence check below.
+  await session.waitForOutput('✓ run echo sub in the shell then report', 60_000);
   const visible = session.getVisibleOutput();
   expect(visible, visible).toContain('parent finished');
+  expect(visible, visible).toMatch(/✓ run echo sub in the shell then report \[[\w-]+\] · completed/);
   expect(visible, visible).not.toMatch(/subagent: explorer/);
 });

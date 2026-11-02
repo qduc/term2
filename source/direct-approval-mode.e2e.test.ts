@@ -95,7 +95,14 @@ async function runCommand(
   command: string,
   expected: string,
   firstPrompt?: string,
-  exerciseMenu: false | 'complete' | 'prefix-enter' | 'pick-enter' | 'model-picker' | 'approval-shortcut' = false,
+  exerciseMenu:
+    | false
+    | 'complete'
+    | 'prefix-enter'
+    | 'pick-enter'
+    | 'model-picker'
+    | 'approval-shortcut'
+    | 'approval-shortcut-history' = false,
   withUsage = false,
   expectedDraft?: string,
   forbiddenOutput: readonly string[] = [],
@@ -121,6 +128,7 @@ async function runCommand(
     [HARNESS_IDLE_ENV]: idlePath,
     // Ink suppresses dynamic terminal updates in CI mode; this test needs an interactive TUI.
     CI: 'false',
+    NODE_ENV: exerciseMenu && exerciseMenu.startsWith('approval-shortcut') ? 'production' : 'test',
   };
   const settingsDir = resolveSettingsDirectory({ homeDir: home, env: createTestChildEnv(env) });
   fs.mkdirSync(settingsDir, { recursive: true });
@@ -135,6 +143,7 @@ async function runCommand(
       providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl, apiKey: 'test-key' }],
       // Sandbox off and GREEN commands: both run without an approval prompt.
       sandbox: { enabled: false },
+      shell: { autoApproveMode: 'off' },
     }),
   );
 
@@ -152,20 +161,31 @@ async function runCommand(
     session!.write('\r');
   };
 
-  if (exerciseMenu === 'approval-shortcut') {
-    session.write('draft stays');
-    await waitForHarnessComposerValue(idlePath, 'draft stays', { timeoutMs: 60_000 });
-    for (const mode of ['advisory', 'auto', 'always', 'off']) {
-      session.write('\x1b[Z');
-      await session.waitForOutput(`Tool auto-approval set to ${mode}.`, 30_000);
-      await waitForHarnessComposerValue(idlePath, 'draft stays', { timeoutMs: 60_000 });
-    }
-    return;
-  }
   if (firstPrompt) {
     await submit(firstPrompt);
     await session.waitForOutput('unused', 30_000);
     await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
+  }
+  if (exerciseMenu === 'approval-shortcut-history') {
+    session.write('\x1b[Z');
+    await session.waitForOutput('Cannot switch modes mid-session', 30_000);
+    expect(JSON.parse(fs.readFileSync(path.join(settingsDir, 'settings.json'), 'utf8')).shell.autoApproveMode).toBe(
+      'off',
+    );
+    return;
+  }
+  if (exerciseMenu === 'approval-shortcut') {
+    session.write('draft stays');
+    await waitForHarnessComposerValue(idlePath, 'draft stays', { timeoutMs: 60_000 });
+    for (const mode of ['builtin:plan', 'builtin:bare']) {
+      session.write('\x1b[Z');
+      await session.waitForOutput(`Switched to ${mode} for this session.`, 30_000);
+      await waitForHarnessComposerValue(idlePath, 'draft stays', { timeoutMs: 60_000 });
+      expect(JSON.parse(fs.readFileSync(path.join(settingsDir, 'settings.json'), 'utf8')).shell.autoApproveMode).toBe(
+        'off',
+      );
+    }
+    return;
   }
   if (exerciseMenu === 'pick-enter') {
     // Arrow-picking a command and pressing Enter completes it into the draft; it must not run it.
@@ -288,7 +308,11 @@ it('Enter on an arrow-picked command completes it and does not run it', { timeou
   runCommand('/usage', '', undefined, 'pick-enter'),
 );
 
-it('Shift+Tab cycles approval modes without changing the draft', { timeout: TIMEOUT_MS }, () =>
+it('Shift+Tab refuses a structural mode change with history without changing approval', async () => {
+  await runCommand('', '', 'hello', 'approval-shortcut-history');
+}, 120_000);
+
+it('Shift+Tab toggles Plan and Bare without changing approval or draft', { timeout: TIMEOUT_MS }, () =>
   runCommand('', '', undefined, 'approval-shortcut'),
 );
 

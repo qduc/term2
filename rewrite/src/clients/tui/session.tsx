@@ -12,7 +12,7 @@ import { Activity, LiveNotices } from './views.js';
 import { InteractionPanel } from './interaction-panel.js';
 import type { InteractionInputHandler } from './interaction-input.js';
 import { ModelPicker } from './model-picker.js';
-import { isShiftTab, useApprovalCycle } from './shift-tab.js';
+import { isShiftTab, usePlanToggle } from './shift-tab.js';
 import { RewindPicker } from './rewind-picker.js';
 import { TaskManager } from './task-manager.js';
 import { BudgetPanel } from './budget-panel.js';
@@ -101,7 +101,7 @@ export function TuiSession({
   const slash = useComposerMenu(editor.value, composerActive && !editing, theme.textSubtle);
   useHarnessInput(composerActive && !busy, Boolean(state.activeTurnId), editor.value);
   const pending = useRef(false);
-  const cycleApproval = useApprovalCycle(setNotice, () => integration.command(connection, '/auto-approve next'));
+  const togglePlan = usePlanToggle(setNotice, () => integration.command(connection, '/plan'));
   const composerFilter = useComposerFilter({
     composerActive,
     slash,
@@ -124,7 +124,7 @@ export function TuiSession({
     if (confirmation.handleKey(input, key)) return;
     if (interactionActive) return void interactionInput.current?.(input, key);
     if (taskOpen || budgetOpen || rewindTargets) return;
-    if (composerActive && isShiftTab(input, key)) return cycleApproval();
+    if (composerActive && isShiftTab(input, key)) return togglePlan();
     if (slash.handle(key, replaceInput)) return;
     if (((key.ctrl && input === 'g') || input === '\x07') && !busy)
       (state.interactions.length ? setInteractionOpen : setTaskOpen)(true);

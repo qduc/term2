@@ -209,7 +209,6 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
         });
       const { settings } = detailsOf(connection.sessionId);
       const previous = settings.get('shell.autoApproveMode');
-      if (mode === 'next') mode = APPROVAL_MODES[(APPROVAL_MODES.indexOf(previous) + 1) % APPROVAL_MODES.length];
       if (!APPROVAL_MODES.includes(mode)) throw new Error(`Use /auto-approve ${APPROVAL_MODES.join('|')}.`);
       return write(
         connection,

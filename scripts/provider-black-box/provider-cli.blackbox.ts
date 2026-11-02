@@ -305,7 +305,8 @@ describe('assembled provider CLI black-box', () => {
         await writeFile(
           join(settingsDir, 'settings.json'),
           JSON.stringify({
-            agent: { modelSelection: { model: 'fixture', provider: 'fixture-provider' } },
+            // This scenario tests error reporting, not the separate retry policy.
+            agent: { retryAttempts: 0, modelSelection: { model: 'fixture', provider: 'fixture-provider' } },
             app: { liteMode: true },
             providers: [
               {
@@ -321,6 +322,7 @@ describe('assembled provider CLI black-box', () => {
       },
     });
     expect(result.timedOut).toBe(false);
+    expect(server!.requests).toHaveLength(1);
     expect(result.exitCode).not.toBe(0);
     expect(result.stdout).not.toContain('hello');
   });

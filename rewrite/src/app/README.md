@@ -26,7 +26,7 @@ separate and remains enabled. This is startup policy, not a runtime toggle.
 `createAppSettings` constructs only the concrete `SettingsService` through
 `createDirectSettingsService`; it does not allocate the historical scoped-service
 facade. The settings owner retains its directory, logger, and persistence policies.
-Historical bench composition uses `createLegacyAppSettings` separately. Its engine
+Historical bench composition uses `createBenchSettings` in `rewrite/bench/source-app.mts` separately. Its engine
 boundary translates source settings onto the source-independent config scope and
 owns paired-service identity and runtime forks; native startup does not use it.
 
@@ -109,7 +109,7 @@ or old store. Listings count current visible native user messages, deduplicate
 observed/derived display by message ID, and do not count hidden restoration input.
 They omit text previews so warm listing needs metadata rather than log replay.
 
-`cli-account-commands.ts` owns login and model-catalog subcommands, including
+`cli-account-commands.ts` owns global account/catalog ports as well as login and model-catalog subcommands, including
 source OAuth prompts and catalogue diagnostics. They do not open a conversation;
 `cli.ts` retains process startup, mode selection and signal ownership.
 
@@ -120,7 +120,7 @@ Session launch authority. `direct-subagent-callbacks.ts` adapts source delegatio
 callbacks and projects accepted task status/results with actual execution evidence;
 it does not introduce a task lifecycle registry or grant child authority.
 
-Local surfaces use a native `LocalExecutionContext` home/lease, retained
+Local surfaces use the native `LocalExecutionContext` in `tool-contract.ts` for a home/lease, retained
 across configured generations. Worktree tools use the existing git inventory and
 running-shell guards; `enter`/`exit` never publish a process-wide root. Native
 source-tool contexts read that lease for each execution. Child tool graphs
@@ -250,11 +250,18 @@ and watch buffers do not survive process loss; unfinished recovered tasks become
 interrupted, not reattached subprocesses. Sandbox post-execution pauses are not
 introduced by this bridge.
 
-## Historical source tool catalog
+## Historical bench composition
 
-`adopted/agent-tools.ts` still assembles source generations for the historical
-engine bridge and benches. Its `engine/adopted/tool-catalog.ts` catalog retains
-source-definition identity, ordered lookup and atomic generation replacement;
-it does not implement native parsing, approval, execution or display. The native
-CLI uses `source-tools.ts` for that adaptation. Keeping only the catalog avoids
-maintaining a second, unused source-to-native tool adapter.
+The production app has no historical agent/engine/session assembly facade.
+`rewrite/bench/source-app.mts` builds each source-agent generation once and
+publishes its exact final tool definitions into the stable
+`engine/adopted/tool-catalog.ts` catalog. There is no second per-generation
+catalog. Native tools still use `source-tools.ts` for parsing, approval,
+execution and display.
+
+`session/adopted/session-handle.ts` owns historical graph lifetime, canonical
+restore, settings/model forks, network and goal authorities, and ordered cleanup.
+Its caller supplies one synchronous engine assembler through Session-owned
+contracts; it never imports source app assembly or bench implementation upward.
+This preserves historical bench coverage without keeping an app compatibility
+facade or routing native startup through the old engine.

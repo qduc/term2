@@ -1,3 +1,4 @@
+import { createBenchEngine } from './source-app.mjs';
 import { SessionTurnAdapter } from '../../source/services/session/session-turn-adapter.ts';
 import { TurnCoordinator } from '../../source/services/session/turn-coordinator.ts';
 for (const name of ['executeInitial', 'executeContinuation', 'beginAdoptedTurn', 'continuePostExecute'])
@@ -13,13 +14,13 @@ import { FileMemoryStore } from '../../source/services/memory/memory-store.js';
 import { AutomaticMemoryCanary } from '../../source/services/memory/automatic-memory-canary.js';
 import { LocalSessionStore } from '../src/session/local-store.ts';
 import { CanonicalSessionLog } from '../src/session/adopted/conversation-log.ts';
-import { createAppAdoptedSessionHandleFactory } from '../src/app/adopted/session.ts';
+import { createLegacySessionHandleFactory } from '../src/session/adopted/session-handle.js';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
 import { once } from 'node:events';
-import { createLegacyAppSettings } from '../src/app/adopted/settings.ts';
+import { createBenchSettings } from './source-app.mjs';
 import { createAdoptedModelRegistry } from '../src/model/adopted/index.ts';
 import { createProviderRegistry } from '../../source/providers/registry.ts';
 import { SessionContextService } from '../../source/services/session/session-context-service.ts';
@@ -95,7 +96,7 @@ const provider: any = {
 };
 const providers = createProviderRegistry();
 providers.upsertProvider(provider);
-const { service: host, source } = createLegacyAppSettings({
+const { service: host, source } = createBenchSettings({
   disableLogging: true,
   disableFilePersistence: true,
   cli: {
@@ -135,7 +136,8 @@ const store = new LocalSessionStore({
   driverFactory: () => {
     throw new Error('combined handle expected');
   },
-  adoptedHandleFactory: createAppAdoptedSessionHandleFactory({
+  adoptedHandleFactory: createLegacySessionHandleFactory({
+    assembleEngine: createBenchEngine,
     engine: () => {
       const ownership = (graphOwnership = new ToolOwnershipRegistry());
       const sessionContext = (graphContext = new SessionContextService());

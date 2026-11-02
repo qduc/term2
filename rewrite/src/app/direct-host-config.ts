@@ -30,7 +30,26 @@ export type {
 } from './direct-host-config-workspace.js';
 export { DirectGlobalConfiguration } from './direct-host-config-settings.js';
 export type { SettingsProjection } from './direct-host-config-settings.js';
-export { createDirectProductPorts } from './adopted/direct-host-config-product.js';
+import { createAppSettings } from './settings.js';
+import { createDirectAccountPorts } from './cli-account-commands.js';
+import type { DirectSettingsBackend } from './direct-host-config-settings.js';
+
+/** Compose global ports around one settings owner; never opens a Session or conversation log. */
+export function createDirectProductPorts(options: { settingsDir?: string } = {}): {
+  readonly settings: DirectSettingsBackend;
+} & ReturnType<typeof createDirectAccountPorts> {
+  const { service } = createAppSettings(options.settingsDir ? { settingsDir: options.settingsDir } : {});
+  return {
+    settings: {
+      get: (key) => service.getDynamic(key),
+      getSource: (key) => service.getSource(key),
+      setPersistent: (key, value) => service.setPersistentDynamic(key, value),
+      setPersistentTransaction: (changes) => service.setPersistentDynamicTransaction(changes),
+      reset: (key) => service.reset(key),
+    },
+    ...createDirectAccountPorts(service),
+  };
+}
 export {
   bindDirectSessionAccess,
   directAcpWorkspaces,

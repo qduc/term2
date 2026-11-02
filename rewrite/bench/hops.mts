@@ -1,3 +1,4 @@
+import { createBenchEngine } from './source-app.mjs';
 // Count the modules one user message passes through between Session submit and
 // the provider call, and fail when that path grows past the recorded budget.
 import assert from 'node:assert/strict';
@@ -7,8 +8,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHook, executionAsyncId } from 'node:async_hooks';
 import { LocalSessionStore } from '../src/session/local-store.ts';
-import { createAppAdoptedSessionHandleFactory } from '../src/app/adopted/session.ts';
-import { createLegacyAppSettings } from '../src/app/adopted/settings.ts';
+import { createLegacySessionHandleFactory } from '../src/session/adopted/session-handle.js';
+import { createBenchSettings } from './source-app.mjs';
 import { createAdoptedModelRegistry } from '../src/model/adopted/index.ts';
 import { createProviderRegistry } from '../../source/providers/registry.ts';
 import { SessionContextService } from '../../source/services/session/session-context-service.ts';
@@ -66,7 +67,7 @@ const provider: any = {
 };
 const providers = createProviderRegistry();
 providers.upsertProvider(provider);
-const { service: host, source } = createLegacyAppSettings({
+const { service: host, source } = createBenchSettings({
   disableLogging: true,
   disableFilePersistence: true,
   cli: {
@@ -100,7 +101,8 @@ const store = new LocalSessionStore({
   driverFactory: () => {
     throw new Error('combined handle expected');
   },
-  adoptedHandleFactory: createAppAdoptedSessionHandleFactory({
+  adoptedHandleFactory: createLegacySessionHandleFactory({
+    assembleEngine: createBenchEngine,
     engine: () => {
       ownership = new ToolOwnershipRegistry();
       graphContext = new SessionContextService();

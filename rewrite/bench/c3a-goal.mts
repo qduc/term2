@@ -1,3 +1,4 @@
+import { createBenchEngine } from './source-app.mjs';
 // Goal slice evidence through the real app factory, owned AgentClient and canonical writer.
 // PROBE_MODE: set | fsync | achieve | propose-approve | propose-reject | propose-race
 import assert from 'node:assert/strict';
@@ -6,8 +7,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { LocalSessionStore } from '../src/session/local-store.ts';
 import { CanonicalSessionLog, loadCanonicalConversation } from '../src/session/adopted/conversation-log.ts';
-import { createAppAdoptedSessionHandleFactory } from '../src/app/adopted/session.ts';
-import { createLegacyAppSettings } from '../src/app/adopted/settings.ts';
+import { createLegacySessionHandleFactory } from '../src/session/adopted/session-handle.js';
+import { createBenchSettings } from './source-app.mjs';
 import { createAdoptedModelRegistry } from '../src/model/adopted/index.ts';
 import { createProviderRegistry } from '../../source/providers/registry.ts';
 import { SessionContextService } from '../../source/services/session/session-context-service.ts';
@@ -56,7 +57,7 @@ const provider: any = {
 };
 const providers = createProviderRegistry();
 providers.upsertProvider(provider);
-const { service: host, source } = createLegacyAppSettings({
+const { service: host, source } = createBenchSettings({
   settingsDir: path.join(root, 'settings'),
   disableLogging: true,
   disableFilePersistence: true,
@@ -125,7 +126,8 @@ function makeStore() {
     driverFactory: () => {
       throw new Error('combined handle expected');
     },
-    adoptedHandleFactory: createAppAdoptedSessionHandleFactory({
+    adoptedHandleFactory: createLegacySessionHandleFactory({
+      assembleEngine: createBenchEngine,
       engine: () => {
         ownership = new ToolOwnershipRegistry();
         graphContext = new SessionContextService();

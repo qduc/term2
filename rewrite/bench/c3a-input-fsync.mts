@@ -5,9 +5,9 @@ import { createSessionRuntimeInternals } from '../../source/services/session/ses
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createLegacyAppSettings } from '../src/app/adopted/settings.ts';
+import { createBenchSettings } from './source-app.mjs';
 import { createAdoptedModelRegistry } from '../src/model/adopted/index.ts';
-import { createAppAdoptedEngine } from '../src/app/adopted/engine.ts';
+import { createBenchEngine } from './source-app.mjs';
 import { loadCanonicalConversation } from '../src/session/adopted/conversation-log.ts';
 import { createProviderRegistry } from '../../source/providers/registry.ts';
 import { SessionContextService } from '../../source/services/session/session-context-service.ts';
@@ -46,7 +46,7 @@ const provider: any = {
 };
 const providers = createProviderRegistry();
 providers.upsertProvider(provider);
-const { service: host, source } = createLegacyAppSettings({
+const { service: host, source } = createBenchSettings({
   disableLogging: true,
   disableFilePersistence: true,
   cli: {
@@ -73,7 +73,7 @@ const models = createAdoptedModelRegistry({
   ownership: 'borrowed',
 });
 let client: any;
-const { engine, tools, turnPrompt } = createAppAdoptedEngine({
+const { engine, tools, turnPrompt } = createBenchEngine({
   bindSessionClient(value) {
     client = value;
   },

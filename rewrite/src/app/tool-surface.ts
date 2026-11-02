@@ -9,7 +9,7 @@ import { NonInteractiveApprovalPolicy } from '../../../source/services/approval/
 import { ToolApprovalPolicyRegistry } from '../../../source/services/approval/tool-approval-policy-registry.js';
 import type { ShellAutoApprovalAgentClient } from '../../../source/services/conversation-agent-client.js';
 import type { ExecutionContext } from '../../../source/services/execution-context.js';
-import { LocalExecutionContext } from './adopted/local-execution-context.js';
+import { LocalExecutionContext } from './tool-contract.js';
 import { primeActiveProfileNoticeIfActive } from '../../../source/services/mode-notices.js';
 import { installPlanModeInterceptor } from '../../../source/services/plan-mode-interceptor.js';
 import { SessionAccessState } from '../../../source/services/session/session-access-state.js';

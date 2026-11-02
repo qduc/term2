@@ -1,24 +1,38 @@
 import { isDeepStrictEqual } from 'node:util';
 import { forkLegacySettingsBinding } from '../../engine/adopted/settings.js';
 import { forkAdoptedModelRegistry, type AdoptedModelRegistry } from '../../model/adopted/index.js';
-import { projectRuntimeSettings } from '../../session/adopted/settings.js';
+import { projectRuntimeSettings } from './settings.js';
 import {
   isReasoningSetting,
   isTemperatureSetting,
 } from '../../../../source/services/settings/session-runtime-settings.js';
 import type { AgentClient } from '../../../../source/lib/agent-client.js';
 import { InvalidatableShellChildRegistry } from '../../../../source/utils/shell/shell-child-registry.js';
-import { createNetworkAuthority } from '../../session/adopted/network-authority.js';
+import { createNetworkAuthority } from './network-authority.js';
 import { createScopedSandboxNetworkAccess } from '../../../../source/utils/shell/sandbox/scoped-sandbox-network-access.js';
 import { ScopedSandboxRunner } from '../../../../source/utils/shell/sandbox/scoped-sandbox-runner.js';
 import { createSessionRuntimeInternals } from '../../../../source/services/session/session-composition.js';
 import type { SessionRuntimeInternals } from '../../../../source/services/session/session-composition.js';
-import { createAdoptedForeground } from '../../session/adopted/foreground.js';
-import { createGoalAuthority } from '../../session/adopted/goal-authority.js';
-import { loadCanonicalConversation } from '../../session/adopted/conversation-log.js';
-import type { AdoptedAdmissionContext } from '../../session/adopted/submission.js';
-import type { AdoptedSessionHandle } from '../../session/local-store.js';
-import { createAppAdoptedEngine } from './engine.js';
+import { createAdoptedForeground } from './foreground.js';
+import { createGoalAuthority } from './goal-authority.js';
+import { loadCanonicalConversation } from './conversation-log.js';
+import type { AdoptedAdmissionContext } from './submission.js';
+import type { AdoptedSessionHandle } from '../local-store.js';
+import type { createAdoptedEngine, AdoptedEngine } from '../../engine/adopted/index.js';
+import type { SettingsReader } from '../../config/index.js';
+import type { TurnPrompt } from './turn-prompt.js';
+
+/** Source-agent construction is supplied by the caller, never imported upward from app. */
+export type LegacyEngineOptions = {
+  readonly models: AdoptedModelRegistry;
+  readonly settings: SettingsReader;
+  readonly clientOptions: Parameters<typeof createAdoptedEngine>[0]['clientOptions'];
+  readonly bindSessionClient?: (client: AgentClient) => void;
+};
+export type LegacyEngineAssembly = {
+  readonly engine: AdoptedEngine;
+  readonly turnPrompt: () => TurnPrompt;
+};
 
 function synchronous<T>(value: T, name: string): T {
   if (
@@ -33,8 +47,9 @@ function synchronous<T>(value: T, name: string): T {
 }
 
 /** Construct one owned engine and source graph for each open session handle. */
-export function createAppAdoptedSessionHandleFactory(options: {
-  engine: (context: AdoptedAdmissionContext) => Omit<Parameters<typeof createAppAdoptedEngine>[0], 'bindSessionClient'>;
+export function createLegacySessionHandleFactory(options: {
+  assembleEngine: (options: LegacyEngineOptions) => LegacyEngineAssembly;
+  engine: (context: AdoptedAdmissionContext) => Omit<LegacyEngineOptions, 'bindSessionClient'>;
   runtime: (
     context: AdoptedAdmissionContext,
   ) => Omit<Parameters<typeof createSessionRuntimeInternals>[0], 'sessionId' | 'agentClient'>;
@@ -42,7 +57,7 @@ export function createAppAdoptedSessionHandleFactory(options: {
 }): (context: AdoptedAdmissionContext) => Promise<AdoptedSessionHandle> {
   return async (context) => {
     let runtime: SessionRuntimeInternals | undefined;
-    let assembly: ReturnType<typeof createAppAdoptedEngine> | undefined;
+    let assembly: LegacyEngineAssembly | undefined;
     let cancelBackground: (() => void) | undefined;
     let ownedClient: AgentClient | undefined;
     let graphModels: AdoptedModelRegistry | undefined;
@@ -95,57 +110,60 @@ export function createAppAdoptedSessionHandleFactory(options: {
       });
       const binding = forkLegacySettingsBinding(engineOptions.settings, hostSettings, initial.snapshot);
       graphModels = forkAdoptedModelRegistry(engineOptions.models, binding.service);
-      assembly = createAppAdoptedEngine({
-        ...engineOptions,
-        models: graphModels,
-        settings: binding.settings,
-        clientOptions: {
-          ...engineOptions.clientOptions,
-          selection: initial.snapshot.selection,
-          reasoningEffort: initial.snapshot.reasoningEffort,
-          deps: {
-            ...engineOptions.clientOptions.deps,
-            settings: binding.service,
-            scopedSandbox: {
-              runner,
-              registerPauseController: scope.registerPauseController,
-              childRegistry: scopedChildren,
+      assembly = synchronous(
+        options.assembleEngine({
+          ...engineOptions,
+          models: graphModels,
+          settings: binding.settings,
+          clientOptions: {
+            ...engineOptions.clientOptions,
+            selection: initial.snapshot.selection,
+            reasoningEffort: initial.snapshot.reasoningEffort,
+            deps: {
+              ...engineOptions.clientOptions.deps,
+              settings: binding.service,
+              scopedSandbox: {
+                runner,
+                registerPauseController: scope.registerPauseController,
+                childRegistry: scopedChildren,
+              },
+              // Last: the session's goal authority replaces any host goal callbacks.
+              ...goals.clientDeps,
             },
-            // Last: the session's goal authority replaces any host goal callbacks.
-            ...goals.clientDeps,
           },
-        },
-        bindSessionClient(boundClient) {
-          ownedClient = boundClient;
-          const client = boundClient;
-          clientForNetwork = client;
-          grantHumanRunBudgetExtension = () => client.grantRunBudgetExtension();
-          cancelBackground = () => {
-            let failure: unknown;
-            let failed = false;
-            try {
-              client.cancelBackgroundRuns();
-            } catch (error) {
-              failed = true;
-              failure = error;
-            }
-            try {
-              client.cancelBackgroundShellJobs();
-            } catch (error) {
-              if (!failed) failure = error;
-              failed = true;
-            }
-            if (failed) throw failure;
-          };
-          runtime = createSessionRuntimeInternals({
-            ...runtimeOptions,
-            deps: { ...runtimeOptions.deps, settingsService: binding.service },
-            sessionId: context.id,
-            conversationLogRoot: context.root,
-            agentClient: client,
-          });
-        },
-      });
+          bindSessionClient(boundClient) {
+            ownedClient = boundClient;
+            const client = boundClient;
+            clientForNetwork = client;
+            grantHumanRunBudgetExtension = () => client.grantRunBudgetExtension();
+            cancelBackground = () => {
+              let failure: unknown;
+              let failed = false;
+              try {
+                client.cancelBackgroundRuns();
+              } catch (error) {
+                failed = true;
+                failure = error;
+              }
+              try {
+                client.cancelBackgroundShellJobs();
+              } catch (error) {
+                if (!failed) failure = error;
+                failed = true;
+              }
+              if (failed) throw failure;
+            };
+            runtime = createSessionRuntimeInternals({
+              ...runtimeOptions,
+              deps: { ...runtimeOptions.deps, settingsService: binding.service },
+              sessionId: context.id,
+              conversationLogRoot: context.root,
+              agentClient: client,
+            });
+          },
+        }),
+        'engine assembly',
+      );
       if (!runtime || !ownedClient) throw new Error('Session runtime was not bound');
       const actual = ownedClient.getRuntimeSettingsSnapshot();
       if (!isDeepStrictEqual(actual, initial.snapshot))

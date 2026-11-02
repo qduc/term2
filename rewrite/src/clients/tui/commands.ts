@@ -26,19 +26,26 @@ export async function submitText(
   text: string,
   attachments: readonly WireContent[] = [],
   delivery: WireSubmission['delivery'] = 'auto',
+  expectedSteerTurnId?: string,
+  requestId = randomUUID(),
 ): Promise<void> {
   const result = await connection.send({
     type: 'submit',
-    requestId: randomUUID(),
+    requestId,
     text,
     delivery,
+    ...(expectedSteerTurnId && delivery === 'steer' ? { expectedSteerTurnId } : {}),
     ...(attachments.length ? { attachments } : {}),
     origin: { kind: 'tui' },
   });
   if (!result.ok) throw new Error(`${result.code}: ${result.message}`);
   if (result.kind !== 'admitted') throw new Error(`Unexpected submit response: ${result.kind}`);
   const admission = result.admission.kind === 'duplicate' ? result.admission.original : result.admission;
-  if (admission.kind === 'rejected') throw new Error(admission.reason);
+  if (admission.kind === 'rejected') {
+    if (admission.reason === 'steer_target_stopped')
+      throw new WireCommandFailure('steer_target_stopped', 'The turn stopped; your message is back in the input.');
+    throw new Error(admission.reason);
+  }
 }
 
 /**
@@ -67,28 +74,57 @@ export async function answerInteraction(
   requireAccepted(await connection.send({ type: 'answer', requestId, decision, provenance: { source: 'user' } }));
 }
 
-/** Request foreground cancellation without closing the connection. */
-/** `quiet` (Ctrl+C) drops the ordinary success notice; refusals and anything else still show. */
-export async function cancelForeground(
+/** Cancel once; returned steer content is the exact batch accepted by Session. */
+export async function cancelForegroundWithSteers(
   connection: TuiConnection,
   expectedTurnId?: string,
-  quiet = false,
-): Promise<string> {
+): Promise<{
+  readonly message: string;
+  readonly returnedSteers: readonly {
+    readonly messageId: string;
+    readonly clientRequestId: string;
+    readonly content: readonly WireContent[];
+  }[];
+}> {
+  const result = await connection.send({
+    type: 'cancel',
+    ...(expectedTurnId ? { expectedTurnId, discardQueue: false, returnSteers: true } : {}),
+  });
+  if (!result.ok) throw new WireCommandFailure(result.code, result.message);
+  if (result.kind === 'accepted') return { message: 'Cancellation requested.', returnedSteers: [] };
+  if (result.kind !== 'abort') throw new Error(`Unexpected cancellation response: ${result.kind}`);
+  if (result.result.kind === 'aborted') {
+    const returnedSteers = result.result.returnedSteers ?? [];
+    return {
+      message: returnedSteers.length
+        ? 'Cancelled. Your queued message is back in the input.'
+        : `Cancellation requested for ${result.result.turnId}; cleanup may still be running.`,
+      returnedSteers,
+    };
+  }
+  return {
+    message: `Cancellation ${result.result.kind.replace('_', ' ')}${
+      result.result.reason ? `: ${result.result.reason}` : '.'
+    }`,
+    returnedSteers: [],
+  };
+}
+
+/** Compatibility helper: request cancellation without consuming returned draft content. */
+export async function cancelForeground(connection: TuiConnection, expectedTurnId?: string): Promise<string> {
   const result = await connection.send({
     type: 'cancel',
     ...(expectedTurnId ? { expectedTurnId, discardQueue: false } : {}),
   });
   if (!result.ok) throw new WireCommandFailure(result.code, result.message);
-  if (result.kind === 'accepted') return quiet ? '' : 'Cancellation requested.';
+  if (result.kind === 'accepted') return 'Cancellation requested.';
   if (result.kind !== 'abort') throw new Error(`Unexpected cancellation response: ${result.kind}`);
   if (result.result.kind === 'aborted')
-    return quiet
-      ? ''
-      : `Cancellation requested for ${result.result.turnId}; cleanup may still be running.${
-          result.result.discardedMessageIds.length
-            ? ` Discarded queued messages: ${result.result.discardedMessageIds.join(', ')}.`
-            : ''
-        }`;
+    return `Cancellation requested for ${result.result.turnId}; cleanup may still be running.${
+      result.result.discardedMessageIds.length
+        ? ` Discarded queued messages: ${result.result.discardedMessageIds.join(', ')}.`
+        : ''
+    }`;
   return `Cancellation ${result.result.kind.replace('_', ' ')}${
     result.result.reason ? `: ${result.result.reason}` : '.'
   }`;

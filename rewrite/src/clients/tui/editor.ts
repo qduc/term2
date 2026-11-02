@@ -24,6 +24,7 @@ export function useEditor(initialHistory: readonly HistoryEntry[], historySize: 
   const position = useRef(-1);
   const draft = useRef<EditorDraft>({ text: '', attachments: [], cursor: 0 });
   const valueRef = useRef(value);
+  const revision = useRef(0);
   valueRef.current = value;
   useEffect(() => {
     history.current = history.current.slice(-historySize);
@@ -31,6 +32,7 @@ export function useEditor(initialHistory: readonly HistoryEntry[], historySize: 
   }, [historySize]);
 
   const change = (next: string) => {
+    if (valueRef.current !== next) revision.current++;
     valueRef.current = next;
     setValue(next);
   };
@@ -61,7 +63,12 @@ export function useEditor(initialHistory: readonly HistoryEntry[], historySize: 
         : { ...entries[position.current], cursor: entries[position.current].text.length };
     return entry;
   };
-  const accepted = (submitted: string, remember: boolean, attachments: HistoryEntry['attachments'] = []) => {
+  const accepted = (
+    submitted: string,
+    remember: boolean,
+    attachments: HistoryEntry['attachments'] = [],
+    expectedRevision?: number,
+  ) => {
     const entry = { text: submitted, attachments };
     if (remember && (submitted.trim() || attachments.length)) {
       if (JSON.stringify(history.current.at(-1)) !== JSON.stringify(entry)) {
@@ -76,11 +83,13 @@ export function useEditor(initialHistory: readonly HistoryEntry[], historySize: 
     }
     position.current = -1;
     draft.current = { text: '', attachments: [], cursor: 0 };
-    if (valueRef.current === submitted) change('');
+    if (valueRef.current === submitted && (expectedRevision === undefined || revision.current === expectedRevision))
+      change('');
   };
   return {
     value,
     current: () => valueRef.current,
+    revision: () => revision.current,
     change,
     replace,
     navigate,

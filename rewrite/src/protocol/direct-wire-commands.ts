@@ -22,6 +22,7 @@ export type WireSubmission = {
   readonly attachments?: readonly WireContent[];
   readonly origin?: WireOrigin;
   readonly delivery?: 'auto' | 'steer' | 'follow_up' | 'reject_if_busy';
+  readonly expectedSteerTurnId?: string;
 };
 export type WireCommand =
   | ({ readonly type: 'submit' } & WireSubmission)
@@ -42,6 +43,7 @@ export type WireCommand =
       readonly target?: WireCancelTarget;
       readonly expectedTurnId?: string;
       readonly discardQueue?: boolean;
+      readonly returnSteers?: boolean;
     }
   | ({
       readonly type: 'retry';
@@ -107,7 +109,16 @@ export type WireCommandResult =
       readonly ok: true;
       readonly kind: 'abort';
       readonly result:
-        | { readonly kind: 'aborted'; readonly turnId: string; readonly discardedMessageIds: readonly string[] }
+        | {
+            readonly kind: 'aborted';
+            readonly turnId: string;
+            readonly discardedMessageIds: readonly string[];
+            readonly returnedSteers?: readonly {
+              readonly messageId: string;
+              readonly clientRequestId: string;
+              readonly content: readonly WireContent[];
+            }[];
+          }
         | {
             readonly kind: 'no_op';
             readonly turnId: string;

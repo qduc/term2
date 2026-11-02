@@ -48,7 +48,10 @@ async function dispatch(
         ...(command.origin ? { origin: command.origin } : {}),
       };
       const delivery = command.delivery ?? 'auto';
-      const admission = await session.submitWithDelivery({ ...request, delivery });
+      const admission = await session.submitWithDelivery(
+        { ...request, delivery },
+        command.expectedSteerTurnId as TurnId | undefined,
+      );
       return { ok: true, kind: 'admitted', admission };
     }
     case 'answer': {
@@ -74,7 +77,7 @@ async function dispatch(
         return {
           ok: true,
           kind: 'abort',
-          result: session.abort(command.expectedTurnId as TurnId, command.discardQueue),
+          result: session.abort(command.expectedTurnId as TurnId, command.discardQueue, command.returnSteers),
         };
       }
       if (command.target?.kind === 'task')

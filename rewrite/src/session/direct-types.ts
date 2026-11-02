@@ -70,6 +70,7 @@ export type Conversation = {
   submit(
     request: DirectQueueSubmission,
     settings: Omit<TurnRequest, 'input' | 'submission'>,
+    expectedSteerTurnId?: import('../engine/index.js').TurnId,
   ): { readonly admission: DirectAdmission; readonly started?: StartedConversationTurn };
   queue(command: DirectQueueCommand): DirectQueueMutation;
   advanceQueue(settings?: Omit<TurnRequest, 'input' | 'submission'>): StartedConversationTurn | undefined;
@@ -85,6 +86,7 @@ export type Conversation = {
   abort(
     expectedTurnId: import('../engine/index.js').TurnId,
     discardQueue?: boolean,
+    returnSteers?: boolean,
   ): import('./facade-types.js').DirectAbortResult;
   /** Actual accepted request for this completed root, consumed before foreground queue dispatch. */
   rolloverAtBoundary(

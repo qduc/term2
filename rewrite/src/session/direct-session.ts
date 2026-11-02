@@ -273,7 +273,10 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
     return operation;
   };
 
-  const submit = async (request: import('./direct-queue-types.js').DirectQueueSubmission): Promise<DirectAdmission> => {
+  const submit = async (
+    request: import('./direct-queue-types.js').DirectQueueSubmission,
+    expectedSteerTurnId?: TurnId,
+  ): Promise<DirectAdmission> => {
     const invalid = validateSubmission(request);
     if (invalid) return { kind: 'rejected', clientRequestId: request.clientRequestId, reason: invalid };
     if (closing || fault)
@@ -283,7 +286,7 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
         reason: fault?.message ?? 'session is closed',
       };
     try {
-      const result = conversation.submit(structuredClone(request), requestSettings());
+      const result = conversation.submit(structuredClone(request), requestSettings(), expectedSteerTurnId);
       if (result.started) startDrain(result.started.turn, result.started.turnId);
       publishState();
       return structuredClone(result.admission);
@@ -328,7 +331,8 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
     retractQueue: (messageId) => mutate({ kind: 'retract', messageId }),
     resumeQueue: () => mutate({ kind: 'resume' }),
     discardQueue: () => mutate({ kind: 'discard' }),
-    abort: (expectedTurnId, discardQueue) => conversation.abort(expectedTurnId, discardQueue),
+    abort: (expectedTurnId, discardQueue, returnSteers) =>
+      conversation.abort(expectedTurnId, discardQueue, returnSteers),
     answerBudget: (requestId, decision, provenance) => conversation.answerBudget(requestId, decision, provenance),
     setGoal: (generation, goal, source) => conversation.setGoal(generation, goal, source),
     answer(requestId, decision, provenance) {

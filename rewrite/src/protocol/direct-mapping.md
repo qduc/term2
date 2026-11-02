@@ -258,7 +258,7 @@ too_late is a distinct wire failure, and invalid does not become accepted. Task
 controls return native outcomes; unknown/inactive targets are not successful.
 Explicit non-auto delivery and structured Discord input require real
 submitWithDelivery. Scoped grants are not offered while supportedGrants is empty.
-Expected-turn cancellation calls native atomic Session.abort. Rewind returns the
+Expected-turn cancellation calls native atomic Session.abort. A targeted `returnSteers: true` cancellation requires `discardQueue: false`; on accepted abort the response returns the exact current content of pending steers removed in the same durable batch, leaving ordinary follow-ups unchanged. This transfers them to caller-owned unsent draft state; a lost response or reconnect cannot recover that draft. Omitted flag preserves earlier abort semantics. A `steer` submission may carry `expectedSteerTurnId`; the Session rejects it before admission if that exact foreground turn is no longer running, preventing a delayed steer from starting after cancellation. Existing submissions without the field retain their earlier semantics. Rewind returns the
 actual editable draft, not reconstructed provider history. Host/global slash actions
 are app authority, not an arbitrary invoke-method RPC.
 

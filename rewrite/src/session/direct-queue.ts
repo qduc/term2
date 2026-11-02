@@ -45,6 +45,7 @@ export function submitDirectQueue(
   state: DirectQueueState,
   request: DirectQueueSubmission,
   environment: DirectQueueEnvironment,
+  expectedSteerTurnId?: TurnId,
 ): DirectQueuePlan<DirectAdmission> {
   const delivery = request.delivery === undefined || request.delivery === 'auto' ? 'follow_up' : request.delivery;
   const body = structuredClone({ ...request, delivery });
@@ -66,6 +67,11 @@ export function submitDirectQueue(
       original: previous.admission,
     });
   }
+  if (
+    expectedSteerTurnId &&
+    (body.delivery !== 'steer' || state.active?.turnId !== expectedSteerTurnId || state.active.phase !== 'running')
+  )
+    return reject('steer_target_stopped');
   const busy = Boolean(environment.dispatchHeld || state.active || state.pause || state.pending.length);
   if (body.delivery === 'reject_if_busy' && busy) return reject('busy');
   const steering = body.delivery === 'steer' && state.active?.phase === 'running';

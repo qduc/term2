@@ -83,7 +83,16 @@ export type DirectTimelineEntry = {
   readonly modelStep?: number;
 };
 export type DirectAbortResult =
-  | { readonly kind: 'aborted'; readonly turnId: TurnId; readonly discardedMessageIds: readonly string[] }
+  | {
+      readonly kind: 'aborted';
+      readonly turnId: TurnId;
+      readonly discardedMessageIds: readonly string[];
+      readonly returnedSteers?: readonly {
+        readonly messageId: string;
+        readonly clientRequestId: string;
+        readonly content: readonly ContentPart[];
+      }[];
+    }
   | {
       readonly kind: 'no_op';
       readonly turnId: TurnId;
@@ -207,12 +216,12 @@ export interface DirectSession {
   ): ReturnType<import('./direct-background-check-ins.js').DirectBackgroundCheckIns['configure']>;
   rewindTargets(): readonly import('./direct-command-types.js').DirectRewindTarget[];
   submit(request: DirectSubmission): Promise<DirectAdmission>;
-  submitWithDelivery(request: DirectQueueSubmission): Promise<DirectAdmission>;
+  submitWithDelivery(request: DirectQueueSubmission, expectedSteerTurnId?: TurnId): Promise<DirectAdmission>;
   editQueue(messageId: string, edit: DirectQueueEdit): Promise<DirectQueueMutation>;
   retractQueue(messageId: string): Promise<DirectQueueMutation>;
   resumeQueue(): Promise<DirectQueueMutation>;
   discardQueue(): Promise<DirectQueueMutation>;
-  abort(expectedTurnId: TurnId, discardQueue?: boolean): DirectAbortResult;
+  abort(expectedTurnId: TurnId, discardQueue?: boolean, returnSteers?: boolean): DirectAbortResult;
   answerBudget(
     requestId: InteractionRequestId,
     decision: import('../engine/direct-types.js').BudgetDecision,

@@ -174,104 +174,138 @@ it(
   },
 );
 
-it('queued steers run after cancellation while follow-ups stay paused', { timeout: TIMEOUT_MS }, async () => {
-  root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'p4b-steer-')));
-  const home = path.join(root, 'home');
-  const workspace = path.join(root, 'w');
-  fs.mkdirSync(home);
-  fs.mkdirSync(workspace);
-  const baseUrl = await startProvider([
-    { text: 'PARTIAL-ANSWER', hang: true, partialTool: true },
-    { text: 'STEER-REPLY-ONE' },
-    { text: 'STEER-REPLY-TWO' },
-    { text: 'FOLLOWUP-REPLY' },
-  ]);
-  const idlePath = path.join(home, 'input-idle');
-  const env = {
-    HOME: home,
-    XDG_CONFIG_HOME: path.join(home, '.config'),
-    XDG_STATE_HOME: path.join(home, '.local', 'state'),
-    XDG_CACHE_HOME: path.join(home, '.cache'),
-    XDG_DATA_HOME: path.join(home, '.local', 'share'),
-    XDG_RUNTIME_DIR: path.join(root, 'runtime'),
-    TERM2_CONFIG_DIR: path.join(home, '.term2'),
-    TERM2_CACHE_DIR: path.join(home, '.cache', 'term2'),
-    TERM2_CONVERSATIONS_DIR: path.join(root, 'conversations'),
-    DISABLE_LOGGING: '1',
-    [HARNESS_IDLE_ENV]: idlePath,
-    CI: 'false',
-  };
-  const settingsDir = resolveSettingsDirectory({ homeDir: home, env: createTestChildEnv(env) });
-  fs.mkdirSync(settingsDir, { recursive: true });
-  fs.writeFileSync(
-    path.join(settingsDir, 'settings.json'),
-    JSON.stringify({
-      agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
-      providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl, apiKey: 'test-key' }],
-      sandbox: { enabled: false },
-    }),
-  );
-  session = spawnTerminal('node', [builtCli], { cwd: workspace, env });
-  await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
-  const send = async (text: string) => {
-    session!.write(text);
-    await waitForHarnessComposerValue(idlePath, text, { timeoutMs: 30_000 });
-    session!.write('\r');
-  };
-  await send('first question');
-  await session.waitForOutput('PARTIAL-ANSWER', 60_000);
-  await send('/followup UNIQUE-FOLLOWUP');
-  await session.waitForOutput('Queued 1 (queued): UNIQUE-FOLLOWUP', 30_000);
-  await send('UNIQUE-QUEUED-STEER');
-  await session.waitForOutput('Queued 1 (steering): UNIQUE-QUEUED-STEER', 30_000);
-  await send('UNIQUE-SECOND-STEER');
-  await session.waitForOutput('Queued 2 (steering): UNIQUE-SECOND-STEER', 30_000);
-  await send('/cancel');
-  await session.waitForOutput('Cancellation requested', 30_000);
-  await session.waitForOutput('STEER-REPLY-TWO', 30_000);
-  await session.waitForOutput('Queue: paused', 30_000);
-  const log = fs.readFileSync(
-    path.join(
-      root,
-      'conversations',
-      fs.readdirSync(path.join(root, 'conversations')).find((name) => name.endsWith('.jsonl'))!,
-    ),
-    'utf8',
-  );
-  const facts = log
-    .trim()
-    .split('\n')
-    .map((line) => JSON.parse(line).fact);
-  const admitted = facts.find((fact) => fact.type === 'queue_submitted' && fact.record?.request?.delivery === 'steer');
-  expect(admitted?.record?.request?.content).toEqual([{ type: 'text', text: 'UNIQUE-QUEUED-STEER' }]);
-  expect(facts.some((fact) => fact.type === 'queue_started' && fact.messageId === admitted.record.messageId)).toBe(
-    true,
-  );
-  expect(
-    facts.some(
-      (fact) => fact.type === 'queue_cancelling' && fact.cancelledMessageIds.includes(admitted.record.messageId),
-    ),
-  ).toBe(false);
-  const followup = facts.find(
-    (fact) =>
-      fact.type === 'queue_submitted' &&
-      fact.record?.content?.some((part: { text?: string }) => part.text === 'UNIQUE-FOLLOWUP'),
-  );
-  const secondSteer = facts.find(
-    (fact) =>
-      fact.type === 'queue_submitted' &&
-      fact.record?.content?.some((part: { text?: string }) => part.text === 'UNIQUE-SECOND-STEER'),
-  );
-  expect(followup).toBeDefined();
-  expect(secondSteer).toBeDefined();
-  expect(facts.filter((fact) => fact.type === 'queue_started').map((fact) => fact.messageId)).toEqual([
-    facts.find((fact) => fact.type === 'queue_started').messageId,
-    admitted.record.messageId,
-    secondSteer.record.messageId,
-  ]);
-  await send('/queue resume');
-  await session.waitForOutput('FOLLOWUP-REPLY', 30_000);
-});
+it.each(['slash', 'ctrl-c', 'editing', 'only-steers'] as const)(
+  'cancel %s restores queued steers and keeps follow-ups paused',
+  { timeout: TIMEOUT_MS },
+  async (mode) => {
+    root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'p4b-steer-')));
+    const home = path.join(root, 'home');
+    const workspace = path.join(root, 'w');
+    fs.mkdirSync(home);
+    fs.mkdirSync(workspace);
+    const baseUrl = await startProvider([
+      { text: 'PARTIAL-ANSWER', hang: true, partialTool: true },
+      { text: 'FOLLOWUP-REPLY' },
+    ]);
+    const idlePath = path.join(home, 'input-idle');
+    const env = {
+      HOME: home,
+      XDG_CONFIG_HOME: path.join(home, '.config'),
+      XDG_STATE_HOME: path.join(home, '.local', 'state'),
+      XDG_CACHE_HOME: path.join(home, '.cache'),
+      XDG_DATA_HOME: path.join(home, '.local', 'share'),
+      XDG_RUNTIME_DIR: path.join(root, 'runtime'),
+      TERM2_CONFIG_DIR: path.join(home, '.term2'),
+      TERM2_CACHE_DIR: path.join(home, '.cache', 'term2'),
+      TERM2_CONVERSATIONS_DIR: path.join(root, 'conversations'),
+      DISABLE_LOGGING: '1',
+      [HARNESS_IDLE_ENV]: idlePath,
+      CI: 'false',
+    };
+    const settingsDir = resolveSettingsDirectory({ homeDir: home, env: createTestChildEnv(env) });
+    fs.mkdirSync(settingsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(settingsDir, 'settings.json'),
+      JSON.stringify({
+        agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
+        providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl, apiKey: 'test-key' }],
+        sandbox: { enabled: false },
+      }),
+    );
+    session = spawnTerminal('node', [builtCli], { cwd: workspace, env });
+    await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
+    const send = async (text: string) => {
+      session!.write(text);
+      await waitForHarnessComposerValue(idlePath, text, { timeoutMs: 30_000 });
+      session!.write('\r');
+    };
+    await send('first question');
+    await session.waitForOutput('PARTIAL-ANSWER', 60_000);
+    if (mode !== 'only-steers') {
+      session.write('UNIQUE-FOLLOWUP');
+      await waitForHarnessComposerValue(idlePath, 'UNIQUE-FOLLOWUP', { timeoutMs: 30_000 });
+      session.write('\x1b\r'); // Alt+Enter: queue a follow-up, not a steer.
+      await session.waitForOutput('Queued 1 (queued): UNIQUE-FOLLOWUP', 30_000);
+      await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
+      // Queue projection can lead the send acknowledgement; avoid overlapping the next physical input.
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    await send('UNIQUE-QUEUED-STEER');
+    await session.waitForOutput('Queued 1 (steering): UNIQUE-QUEUED-STEER', 30_000);
+    await send('UNIQUE-SECOND-STEER');
+    await session.waitForOutput('Queued 2 (steering): UNIQUE-SECOND-STEER', 30_000);
+    if (mode === 'editing') {
+      await send('/queue edit 1');
+      await waitForHarnessComposerValue(idlePath, 'UNIQUE-QUEUED-STEER', { timeoutMs: 30_000 });
+      session.write('-EDITED');
+      await waitForHarnessComposerValue(idlePath, 'UNIQUE-QUEUED-STEER-EDITED', { timeoutMs: 30_000 });
+    } else if (mode === 'ctrl-c') {
+      session.write('EXISTING-DRAFT');
+      await waitForHarnessComposerValue(idlePath, 'EXISTING-DRAFT', { timeoutMs: 30_000 });
+    } else {
+      session.write('/cancel');
+      await waitForHarnessComposerValue(idlePath, '/cancel', { timeoutMs: 30_000 });
+    }
+    const cancelAt = Date.now();
+    session.write(mode === 'ctrl-c' || mode === 'editing' ? '\x03' : '\r');
+    await session.waitForOutput('Cancelled. Your queued message is back in the input.', 5_000);
+    const expectedDraft = `${mode === 'ctrl-c' ? 'EXISTING-DRAFT\n\n' : ''}UNIQUE-QUEUED-STEER${
+      mode === 'editing' ? '-EDITED' : ''
+    }\n\nUNIQUE-SECOND-STEER`;
+    await waitForHarnessComposerValue(idlePath, expectedDraft, { timeoutMs: 5_000 });
+    expect(Date.now() - cancelAt).toBeLessThan(2_000);
+    if (mode !== 'only-steers') await session.waitForOutput('Queue: paused', 5_000);
+    else await new Promise((resolve) => setTimeout(resolve, 600));
+    expect(Date.now() - cancelAt).toBeLessThan(2_000);
+    const log = fs.readFileSync(
+      path.join(
+        root,
+        'conversations',
+        fs.readdirSync(path.join(root, 'conversations')).find((name) => name.endsWith('.jsonl'))!,
+      ),
+      'utf8',
+    );
+    const facts = log
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line).fact);
+    const steers = facts.filter(
+      (fact) => fact.type === 'queue_submitted' && fact.record?.request?.delivery === 'steer',
+    );
+    expect(steers).toHaveLength(2);
+    const ids = steers.map((fact) => fact.record.messageId);
+    expect(
+      facts.some(
+        (fact) => fact.type === 'queue_cancelling' && ids.every((id) => fact.cancelledMessageIds.includes(id)),
+      ),
+    ).toBe(true);
+    expect(facts.some((fact) => fact.type === 'queue_started' && ids.includes(fact.messageId))).toBe(false);
+    expect(facts.some((fact) => fact.type === 'turn_ended' && fact.outcome === 'cancelled')).toBe(true);
+    const followup = facts.find(
+      (fact) =>
+        fact.type === 'queue_submitted' &&
+        fact.record?.content?.some((part: { text?: string }) => part.text === 'UNIQUE-FOLLOWUP'),
+    );
+    if (mode === 'only-steers') {
+      expect(followup).toBeUndefined();
+      expect(session.getVisibleOutput().slice(session.getVisibleOutput().lastIndexOf('▌ term²'))).not.toContain(
+        'Queue: paused',
+      );
+      return;
+    }
+    expect(followup).toBeDefined();
+    expect(facts.some((fact) => fact.type === 'queue_started' && fact.messageId === followup.record.messageId)).toBe(
+      false,
+    );
+    // Clear the recovered draft only after checking it; Ctrl+C has a two-second exit window.
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+    session.write('\x03');
+    await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+    await send('/queue resume');
+    await session.waitForOutput('FOLLOWUP-REPLY', 30_000);
+  },
+);
 
 it.skipIf(process.platform !== 'linux')(
   'shows the continuation hint after resuming an interrupted turn',

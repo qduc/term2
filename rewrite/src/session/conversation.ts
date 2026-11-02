@@ -1,3 +1,4 @@
+import { abortConversation } from './conversation-abort.js';
 import { ConversationBackground } from './conversation-background.js';
 import { ConversationCommands } from './conversation-commands.js';
 import { ConversationJournal, modelError, nextConversationTurnId } from './conversation-journal.js';
@@ -339,35 +340,18 @@ function conversation(
     commandRevision: commands.revision,
     rewindTargets: commands.rewindTargets,
     command: commands.command,
-    abort(expectedTurnId, discardQueue = true) {
-      if (closed || journal.failure)
-        return { kind: 'not_admitting', reason: journal.failure?.message ?? 'session is closed' };
-      const target = active?.turnId ?? completionHeld;
-      if (target !== expectedTurnId || active?.cancelled)
-        return {
-          kind: 'no_op',
-          turnId: expectedTurnId,
-          status: facts.some((fact) => fact.type === 'turn_ended' && fact.turnId === expectedTurnId)
-            ? 'terminal_accepted'
-            : target === expectedTurnId && active?.cancelled
-            ? 'cancellation_requested'
-            : 'not_current',
-        };
-      const cancelPlan = planDirectQueue(
-        journal.queueState,
-        { kind: 'cancel', turnId: expectedTurnId, discardPendingSteers: discardQueue },
-        environment(),
-      );
-      const discardPlan = discardQueue
-        ? planDirectQueue(cancelPlan.state, { kind: 'discard' }, environment())
-        : undefined;
-      const discardedMessageIds =
-        discardPlan?.facts.flatMap((fact) => (fact.type === 'queue_discarded' ? [...fact.messageIds] : [])) ?? [];
-      if (!commit([...cancelPlan.facts, ...(discardPlan?.facts ?? [])]))
-        return { kind: 'not_admitting', reason: journal.failure!.message };
-      active?.cancel();
-      return { kind: 'aborted', turnId: expectedTurnId, discardedMessageIds };
-    },
+    abort: (expectedTurnId, discardQueue = true, returnSteers = false) =>
+      abortConversation({
+        expectedTurnId,
+        discardQueue,
+        returnSteers,
+        closed,
+        active,
+        completionHeld,
+        facts,
+        journal,
+        environment: environment(),
+      }),
     snapshotInputPreview(request) {
       if (closed || journal.failure) throw new Error(journal.failure?.message ?? 'Session is closed');
       return generation.preview(
@@ -394,7 +378,7 @@ function conversation(
         throw error;
       }
     },
-    submit(request, settings) {
+    submit(request, settings, expectedSteerTurnId) {
       if (
         commands.owner?.kind === 'rollover' ||
         commands.destination() ||
@@ -426,7 +410,7 @@ function conversation(
             reason: journal.failure?.message ?? 'session is closed',
           },
         };
-      const plan = submitDirectQueue(journal.queueState, request, environment());
+      const plan = submitDirectQueue(journal.queueState, request, environment(), expectedSteerTurnId);
       queueSettings = settings;
       if (plan.effect?.kind === 'start') {
         const started = startEffect(plan.effect, plan.facts);

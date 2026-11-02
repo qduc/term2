@@ -12,6 +12,7 @@ import { Activity, LiveNotices, interruptedNotice } from './views.js';
 import { InteractionPanel } from './interaction-panel.js';
 import type { InteractionInputHandler } from './interaction-input.js';
 import { runBangShell } from './bang-shell.js';
+import { useInterrupt } from './interrupt.js';
 import { PickerHost, pickerFor, openPickerFor, type PickerKind } from './picker-host.js';
 import { isCtrlG, isShiftTab, usePlanToggle } from './shift-tab.js';
 import { RewindPicker } from './rewind-picker.js';
@@ -30,7 +31,6 @@ import { ComposerFooter, useComposerFilter, useComposerMenu } from './composer-p
 import {
   answerBudget,
   answerInteraction,
-  cancelForeground,
   commandStatus,
   controlTask,
   directSlashCommand,
@@ -67,10 +67,14 @@ export function TuiSession({
   const [picker, setPicker] = useState<PickerKind | null>(null);
   const [taskOpen, setTaskOpen] = useState(false);
   const [budgetOpen, setBudgetOpen] = useState(false);
+  const [notice, setNotice] = useState<string | null>(() => interruptedNotice(state));
   const {
     images,
     setImages,
-    clearParts,
+    clearSubmittedParts,
+    cancelInput,
+    steerRecovery,
+    rewindDraft,
     onImagesChange,
     otherParts,
     setOtherParts,
@@ -84,7 +88,7 @@ export function TuiSession({
     restoreDraft,
     answerOwners,
     queueOwners,
-  } = useSessionComposer(state, preferences.historySize);
+  } = useSessionComposer(state, preferences.historySize, setNotice);
   const [rewindTargets, setRewindTargets] = useState<readonly WireRewindTarget[] | null>(null);
   // Snapshot-derived ownership leaves no gap for decision keys to land in the composer; Ctrl+G picks background requests.
   const rootInteraction = state.interactions.find((item) => item.turnId === state.activeTurnId && !item.taskId);
@@ -98,7 +102,6 @@ export function TuiSession({
   const viewport = useCommandTranscriptViewport(state, headerHeight ?? 0, viewportActive, header, historyRevision);
   const { InputFrame, PromptMarker, LiveDivider } = useSkin();
   const theme = useTheme();
-  const [notice, setNotice] = useState<string | null>(() => interruptedNotice(state));
   const notifyError = (error: unknown) => setNotice(error instanceof Error ? error.message : String(error));
   const [busy, setBusy] = useState(false);
   const composerActive = !panelOpen && !confirmation.pending && !connError && !interactionActive;
@@ -114,14 +117,7 @@ export function TuiSession({
     draft: { value: editor.value, clear: () => replaceInput('') },
     submit: (text) => void submit(text, images),
   });
-  interrupt.current = () => {
-    // Stopping a running turn comes first and keeps the draft; with nothing running, Ctrl+C clears the draft.
-    if (confirmation.pending) confirmation.clear();
-    else if (state.activeTurnId || (state.interactions.length && editor.value.length === 0))
-      void cancelForeground(connection, state.activeTurnId ?? undefined, true).then(setNotice, notifyError);
-    else if (editor.value.length > 0) replaceInput('');
-    else setNotice('Press Ctrl+C again to exit');
-  };
+  useInterrupt({ interrupt, connection, confirmation, state, editor, replaceInput, cancelInput, setNotice });
   useInput((input, key) => {
     if (picker) return void interactionInput.current?.(input, key);
     if (confirmation.handleKey(input, key)) return;
@@ -142,22 +138,7 @@ export function TuiSession({
     setNotice(null);
     setRewindTargets(null);
     try {
-      const result = await sendNativeCommand(connection, { type: 'rewind', commandId: randomUUID(), targetId });
-      if (result.kind !== 'finished' || result.receipt.outcome?.kind !== 'rewound')
-        return setNotice(receiptNotice(result));
-      const content = result.receipt.outcome.draft.content;
-      const draft = primaryDraft(content);
-      restoreDraft(draft);
-      if (disposition === 'resend') {
-        const message = await previewConfirmation(connection, draft.text, draft.attachments);
-        if (message !== null) {
-          setNotice(`${message} Draft restored, not sent; press Enter to review and confirm.`);
-          return;
-        }
-        await submitText(connection, draft.text, draft.attachments, 'auto');
-        editor.change('');
-        clearParts();
-      }
+      setNotice(await rewindDraft(connection, targetId, disposition));
     } catch (error) {
       notifyError(error);
     } finally {
@@ -179,6 +160,7 @@ export function TuiSession({
       return setNotice('Still sending the previous message. Press Enter again to send this one.');
     }
     pending.current = true;
+    const submission = steerRecovery.beginSubmission(input, submittedImages, otherParts);
     setBusy(true);
     setNotice(null);
     viewport.setHelp(null);
@@ -214,6 +196,7 @@ export function TuiSession({
             throw new Error('Queued attachments are unavailable; cannot safely replace them.');
           const changed = editing.knownParts && JSON.stringify(parts) !== JSON.stringify(editing.knownParts);
           await queueAction(connection, 'edit', editing.id, input, changed ? parts : undefined);
+          if (await steerRecovery.wasEditInvalidatedAfter(submission.submissionEpoch, editing.id)) return;
           replaceInput(editing.restoreText, editing.restoreCursor);
           setImages(editing.restoreImages);
           setOtherParts(editing.restoreOther);
@@ -222,6 +205,7 @@ export function TuiSession({
           setNotice('Queued message updated.');
           return;
         } catch (error) {
+          if (await steerRecovery.wasEditInvalidatedAfter(submission.submissionEpoch, editing.id, true)) return;
           if (error instanceof WireCommandFailure && error.code === 'too_late') {
             setEditing(null);
             setNotice(
@@ -250,8 +234,11 @@ export function TuiSession({
           match[2],
           wireAttachments(submittedImages, otherParts, originalParts),
           match[1] === 'steer' ? 'steer' : 'follow_up',
+          match[1] === 'steer' ? state.activeTurnId ?? undefined : undefined,
+          submission.requestId,
         );
-        clearParts();
+        if (await steerRecovery.wasReturnedAfter(submission.submissionEpoch, submission.requestId)) return;
+        clearSubmittedParts(submittedImages, otherParts);
       } else if (input.startsWith('!')) {
         const attached = submittedImages.length > 0 || otherParts.length > 0;
         setNotice(await runBangShell(integration, connection, input, attached, Boolean(state.activeTurnId)));
@@ -346,7 +333,8 @@ export function TuiSession({
           return;
         } else await queueAction(connection, action, item?.id, match[3]);
       } else if (input.trim() === '/cancel') {
-        setNotice(await cancelForeground(connection, state.activeTurnId ?? undefined));
+        setNotice(await cancelInput(connection, state.activeTurnId ?? undefined, input, submission.submittedRevision));
+        return;
       } else if (pickerFor(integration, input.trim())) setPicker(pickerFor(integration, input.trim()));
       else if (input.startsWith('/')) {
         const directNotice = await directSlashCommand(connection, input);
@@ -368,8 +356,9 @@ export function TuiSession({
       } else {
         const parts = wireAttachments(submittedImages, otherParts, originalParts);
         if (await held(input, parts, () => void submit(input, submittedImages, delivery, true))) return;
-        await submitText(connection, input, parts, delivery);
-        clearParts();
+        await submitText(connection, input, parts, delivery, state.activeTurnId ?? undefined, submission.requestId);
+        if (await steerRecovery.wasReturnedAfter(submission.submissionEpoch, submission.requestId)) return;
+        clearSubmittedParts(submittedImages, otherParts);
       }
       // Do not add interaction answers to recallable input history.
       editor.accepted(
@@ -378,13 +367,20 @@ export function TuiSession({
         input.startsWith('/') && !/^\/(steer|followup)\s/.test(input)
           ? []
           : wireAttachments(submittedImages, otherParts, originalParts),
+        submission.submittedRevision,
       );
       answerOwners.current = null;
       queueOwners.current = null;
     } catch (error) {
-      if (input.startsWith('/') || input.startsWith('!')) await editor.restoreRejected(input);
-      notifyError(error);
+      if (error instanceof WireCommandFailure && error.code === 'steer_target_stopped') {
+        await steerRecovery.restoreLateSteer(input, wireAttachments(submittedImages, otherParts, originalParts));
+        setNotice(steerRecovery.lateSteerNotice(submission.submissionEpoch, error.message));
+      } else {
+        if (input.startsWith('/') || input.startsWith('!')) await editor.restoreRejected(input);
+        notifyError(error);
+      }
     } finally {
+      steerRecovery.endSubmission(submission.requestId);
       pending.current = false;
       setBusy(false);
     }
@@ -450,7 +446,7 @@ export function TuiSession({
               ? async () => {
                   if (foregroundInteraction.kind === 'question')
                     await answerInteraction(connection, foregroundInteraction.id, { kind: 'decline' });
-                  else setNotice(await cancelForeground(connection, foregroundInteraction.turnId));
+                  else setNotice(await cancelInput(connection, foregroundInteraction.turnId));
                 }
               : undefined
           }

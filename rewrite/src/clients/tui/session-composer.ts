@@ -135,7 +135,10 @@ export function useSessionComposer(state: TuiState, historySize: number, onNotic
         answerOwners.current = null;
         queueOwners.current = null;
       }
-      if (!result.returnedSteers.length) return result.message;
+      // The routine success line is noise for both /cancel and Ctrl+C (the Stopped marker shows it); returned steers,
+      // refusals and anything else still show.
+      if (!result.returnedSteers.length)
+        return result.message.startsWith('Cancellation requested') ? '' : result.message;
       const activeWasReturned = result.returnedSteers.some(
         (item) => item.clientRequestId === activeSubmission.current?.id,
       );

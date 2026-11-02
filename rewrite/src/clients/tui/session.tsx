@@ -335,13 +335,7 @@ export function TuiSession({
           return;
         } else await queueAction(connection, action, item?.id, match[3]);
       } else if (input.trim() === '/cancel') {
-        const message = await cancelInput(
-          connection,
-          state.activeTurnId ?? undefined,
-          input,
-          submission.submittedRevision,
-        );
-        setNotice(message.startsWith('Cancellation requested') ? '' : message);
+        setNotice(await cancelInput(connection, state.activeTurnId ?? undefined, input, submission.submittedRevision));
         return;
       } else if (pickerFor(integration, input.trim())) setPicker(pickerFor(integration, input.trim()));
       else if (input.startsWith('/')) {

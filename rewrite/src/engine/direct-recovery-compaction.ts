@@ -2,6 +2,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { Item, ItemId, Model, ModelRef, ModelRequest, Usage } from '../model/index.js';
+import { ModelFailure } from '../model/failure.js';
 import { resolveModelContextPolicy } from '../../../source/services/agent-runtime/model-context-policy.js';
 import {
   CONTEXT_COMPACTION_INSTRUCTIONS,
@@ -203,6 +204,32 @@ export function estimateDirectContext(request: ModelRequest, contextWindow?: num
     safetyReserveTokens,
     hardFitTokens: renderedInputTokens + outputReserveTokens + safetyReserveTokens,
   };
+}
+
+/** Hard admission is independent of automatic compaction being enabled or eligible.
+ * Call with the full prepared envelope, before continuity slices it to a delta. */
+export function enforceDirectInputLimit(
+  request: ModelRequest,
+  input: { readonly maxRequestInputTokens?: number | null; readonly contextWindow?: number },
+): void {
+  const policy = resolveModelContextPolicy({
+    contextWindow: input.contextWindow,
+    maxOutputTokens: request.maxOutputTokens,
+    inputLimit: input.maxRequestInputTokens,
+  });
+  if (policy.hardInputLimit === undefined) return;
+  const estimated = estimateDirectContext(request, input.contextWindow).renderedInputTokens;
+  if (estimated <= policy.hardInputLimit) return;
+  throw new ModelFailure({
+    kind: 'context_overflow',
+    retryable: false,
+    message:
+      `request_input_limit: Request input exceeds ${
+        policy.limitSource === 'model_capacity' ? 'known model capacity' : 'configured input ceiling'
+      } ` +
+      `(${estimated} > ${policy.hardInputLimit} tokens). Work is retained. Compact, choose a larger model, ` +
+      'or explicitly raise agent.maxRequestInputTokens before resuming.',
+  });
 }
 
 type LocalOperation =

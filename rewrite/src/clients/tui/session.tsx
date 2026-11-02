@@ -91,7 +91,14 @@ export function TuiSession({
   const interactionActive = interactionOpen || Boolean(foregroundInteraction);
   const confirmation = useSendConfirmation(interactionActive);
   const interactionInput = useRef<InteractionInputHandler | null>(null);
-  const viewport = useTranscriptViewport(state, columns, rows - (headerHeight ?? 0), !interactionActive && !panelOpen);
+  const [help, setHelp] = useState<string | null>(null);
+  const viewport = useTranscriptViewport(
+    state,
+    columns,
+    rows - (headerHeight ?? 0),
+    !interactionActive && !panelOpen,
+    help,
+  );
   const { InputFrame, PromptMarker, LiveDivider } = useSkin();
   const theme = useTheme();
   const [notice, setNotice] = useState<string | null>(null);
@@ -184,6 +191,7 @@ export function TuiSession({
     pending.current = true;
     setBusy(true);
     setNotice(null);
+    setHelp(null);
     // True when the draft was held for confirmation instead of sent.
     const held = async (text: string, attachments: readonly WireContent[], retry: () => void): Promise<boolean> => {
       if (confirmed) return false;
@@ -354,7 +362,10 @@ export function TuiSession({
         if (directNotice !== null) setNotice(directNotice);
         else {
           const result = await integration.command(connection, input);
-          if (result.message) setNotice(result.message);
+          if (result.message) {
+            if (input.trim() === '/help') setHelp(result.message);
+            else setNotice(result.message);
+          }
           if (result.draft) {
             restoreDraft(result.draft);
             return;

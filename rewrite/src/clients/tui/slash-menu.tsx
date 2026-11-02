@@ -100,17 +100,19 @@ export function ComposerHints({
 }): React.ReactElement {
   return (
     <Hints
-      hints={[
-        ['Enter', activeTurn ? 'steer' : 'send'],
-        ['Alt+Enter', 'follow-up'],
-        ['↑/↓', 'history'],
-        ['PgUp/PgDn', 'scroll'],
-        ['Ctrl+G', 'approvals/tasks'],
-        ['Ctrl+B', 'budget'],
-        ['/tasks', 'manage tasks'],
-        ['/', 'commands'],
-        ['/cancel', 'stop'],
-      ]}
+      hints={
+        activeTurn
+          ? [
+              ['Enter', 'steer'],
+              ['Alt+Enter', 'follow-up'],
+              ['/cancel', 'stop'],
+            ]
+          : [
+              ['/', 'commands'],
+              ['↑/↓', 'history'],
+              ['Ctrl+G', 'tasks'],
+            ]
+      }
     />
   );
 }

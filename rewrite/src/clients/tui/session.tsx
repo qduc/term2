@@ -8,7 +8,7 @@ import { useTheme } from '../../../../source/components/theme.js';
 import { useSkin } from '../../../../source/skins/SkinContext.js';
 import { terminalPreferenceDefaults } from '../../host/terminal-preference-defaults.js';
 import { useClient } from './use-client.js';
-import { Activity } from './views.js';
+import { Activity, LiveNotices } from './views.js';
 import { InteractionPanel } from './interaction-panel.js';
 import type { InteractionInputHandler } from './interaction-input.js';
 import { RewindPicker } from './rewind-picker.js';
@@ -96,7 +96,7 @@ export function TuiSession({
     rows,
     !interactionActive && !taskOpen && !budgetOpen && !rewindTargets,
   );
-  const { InputFrame, PromptMarker } = useSkin();
+  const { InputFrame, PromptMarker, LiveDivider } = useSkin();
   const theme = useTheme();
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -448,12 +448,11 @@ export function TuiSession({
           onAnswer={(id, decision) => answerInteraction(connection, id, decision)}
         />
       ) : null}
-      {connectionError ? <Text color={theme.danger}>{connectionError}</Text> : null}
-      {transitionNotice ? <Text>{transitionNotice}</Text> : null}
+      <LiveNotices connectionError={connectionError} transitionNotice={transitionNotice} />
       {confirmation.prompt}
-      {notice ? <Text>{notice}</Text> : null}
-      {editor.historyError ? <Text>{editor.historyError}</Text> : null}
+      <LiveNotices notice={notice} historyError={editor.historyError} />
       {slash.view}
+      <LiveDivider />
       <InputFrame>
         <PromptMarker mode="input" />
         <MultilineInput

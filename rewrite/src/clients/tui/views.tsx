@@ -167,3 +167,24 @@ export function Activity({ state }: { readonly state: TuiState }): React.ReactEl
     </Box>
   );
 }
+
+/** The one-off lines above the composer: connection trouble in the danger colour, the rest as plain text. */
+export function LiveNotices({
+  connectionError,
+  transitionNotice,
+  notice,
+  historyError,
+}: {
+  readonly connectionError?: string | null;
+  readonly transitionNotice?: string | null;
+  readonly notice?: string | null;
+  readonly historyError?: string | null;
+}): React.ReactElement {
+  const theme = useTheme();
+  return (
+    <>
+      {connectionError ? <Text color={theme.danger}>{connectionError}</Text> : null}
+      {[transitionNotice, notice, historyError].map((text, index) => (text ? <Text key={index}>{text}</Text> : null))}
+    </>
+  );
+}

@@ -21,6 +21,8 @@ const DIRECT_SOURCE_IMPORTERS = new Set([
   'engine/direct-recovery-compaction.ts',
   'engine/direct-recovery.ts',
   'engine/turn-budget.ts',
+  'host/terminal-preference-defaults.ts',
+  'protocol/direct-json.ts',
   'model/failure.ts',
   'model/index.ts',
   'model/provider-items.ts',

@@ -315,8 +315,8 @@ importers:
         specifier: 2.0.0
         version: 2.0.0
       '@qduc/agent-wire':
-        specifier: file:vendor/qduc-agent-wire-0.1.0.tgz
-        version: file:vendor/qduc-agent-wire-0.1.0.tgz
+        specifier: file:vendor/qduc-agent-wire-0.2.0.tgz
+        version: file:vendor/qduc-agent-wire-0.2.0.tgz
       '@types/better-sqlite3':
         specifier: ^9.6.0
         version: 9.6.0
@@ -1122,6 +1122,11 @@ packages:
   '@qduc/agent-wire@file:vendor/qduc-agent-wire-0.1.0.tgz':
     resolution: {integrity: sha512-heg//RXoxZv1YkKJDEyizGfMg8BU2fwJqJOw9bMNi+ISDmnlfIONbXLKRHTYSSKR8SVwwXxvrlaI74E7YYoA+A==, tarball: file:vendor/qduc-agent-wire-0.1.0.tgz}
     version: 0.1.0
+    engines: {node: '>=20'}
+
+  '@qduc/agent-wire@file:vendor/qduc-agent-wire-0.2.0.tgz':
+    resolution: {integrity: sha512-cPB4cuTOepu1UiPenw+nK+gMNCPVBh1tuGQzyGGsn3Qhytl48q+raQTLPT6pWJj7UiD7JefQX8dPRASFc49Azw==, tarball: file:vendor/qduc-agent-wire-0.2.0.tgz}
+    version: 0.2.0
     engines: {node: '>=20'}
 
   '@qduc/web-fetch@0.1.4':
@@ -4797,6 +4802,7 @@ snapshots:
   '@pondwader/socks5-server@1.0.10': {}
 
   '@qduc/agent-wire@file:vendor/qduc-agent-wire-0.1.0.tgz': {}
+  '@qduc/agent-wire@file:vendor/qduc-agent-wire-0.2.0.tgz': {}
 
   '@qduc/web-fetch@0.1.4':
     dependencies:

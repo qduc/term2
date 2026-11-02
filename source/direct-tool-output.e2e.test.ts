@@ -31,7 +31,7 @@ afterEach(async () => {
   root = '';
 });
 
-type Reply = { call?: { id: string; command: string }; text?: string };
+type Reply = { call?: { id: string; command?: string; tool?: string; args?: object }; text?: string };
 
 /** One SSE reply per chat request, in order: a single shell call or plain text. */
 async function startProvider(replies: Reply[]): Promise<string> {
@@ -58,7 +58,10 @@ async function startProvider(replies: Reply[]): Promise<string> {
                         index: 0,
                         id: reply.call.id,
                         type: 'function',
-                        function: { name: 'shell', arguments: JSON.stringify({ command: reply.call.command }) },
+                        function: {
+                          name: reply.call.tool ?? 'shell',
+                          arguments: JSON.stringify(reply.call.args ?? { command: reply.call.command }),
+                        },
                       },
                     ],
                   },
@@ -91,8 +94,17 @@ it(
     fs.mkdirSync(home);
     fs.mkdirSync(workspace);
     const first = `echo hi > ${path.join(workspace, 'b.txt')} && cat ${path.join(workspace, 'b.txt')}`;
+    const file = path.join(workspace, 'c.txt');
     const baseUrl = await startProvider([
       { call: { id: 'call_0', command: first } },
+      { call: { id: 'call_1', tool: 'create_file', args: { path: file, content: 'alpha-line\nbeta-line' } } },
+      {
+        call: {
+          id: 'call_2',
+          tool: 'search_replace',
+          args: { path: file, replacements: [{ search_content: 'alpha-line', replace_content: 'gamma-line' }] },
+        },
+      },
       { text: 'Created `b.txt` and read it back: `hi`. first turn done' },
     ]);
     const idlePath = path.join(home, 'input-idle');
@@ -140,6 +152,10 @@ it(
     const visible = session.getVisibleOutput();
     expect(visible, visible).not.toContain('isApprovalRejection');
     expect(visible, visible).toContain('Created b.txt and read it back: hi.');
+    // The edit and the new content stay visible: the header only names the file.
+    expect(visible, visible).toContain('+ beta-line');
+    expect(visible, visible).toContain('- alpha-line');
+    expect(visible, visible).toContain('+ gamma-line');
     expect(visible, visible).not.toMatch(/Runtime: \d+ms\s+hi\s+Runtime: \d+ms/);
     // Quit the way a user does, so the app finishes its writes before the test removes its directories.
     session.write('\x03');

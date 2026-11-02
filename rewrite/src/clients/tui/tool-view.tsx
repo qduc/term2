@@ -16,7 +16,7 @@ export function ToolCall({ tool }: { readonly tool: ToolView }): React.ReactElem
   const contentText = (tool.content ?? []).flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n');
   const extraText = contentText && contentText !== detail ? contentText : '';
   const images = (tool.content ?? []).flatMap((part) => (part.type === 'image' ? [part.mediaType] : []));
-  const display = displayParts(tool.display, args)
+  const display = [...inputParts(tool.name, tool.input), ...displayParts(tool.display, args)]
     .filter((part) => !detail.includes(part) && !extraText.includes(part))
     .join('\n');
   return (
@@ -72,4 +72,31 @@ function displayParts(display: JsonValue | undefined, header: string): string[] 
 
 function isRecord(value: unknown): value is Record<string, JsonValue> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+const MAX_INPUT_LINES = 40;
+
+/**
+ * What the model asked a tool to do, where the concise header only summarises it: edit text, new file content,
+ * a script, or a long subagent task. The legacy renderer showed these as diffs; the old JSON dump showed them raw.
+ */
+function inputParts(name: string, input: JsonValue | undefined): string[] {
+  if (!isRecord(input)) return [];
+  const mark = (prefix: string, text: unknown) =>
+    typeof text === 'string' && text ? text.split('\n').map((line) => `${prefix}${line}`) : [];
+  let lines: string[] = [];
+  if (name === 'search_replace') {
+    const edits = Array.isArray(input.replacements) ? input.replacements : [input];
+    lines = edits.flatMap((edit) =>
+      isRecord(edit) ? [...mark('- ', edit.search_content), ...mark('+ ', edit.replace_content)] : [],
+    );
+  } else if (name === 'create_file') lines = mark('+ ', input.content);
+  else if (name === 'run_code') lines = mark('', input.code);
+  else if (name === 'run_subagent' || name === 'run_subagent_async') {
+    lines = typeof input.task === 'string' && input.task.length > 40 ? mark('', input.task) : [];
+  }
+  if (lines.length > MAX_INPUT_LINES) {
+    lines = [...lines.slice(0, MAX_INPUT_LINES), `… ${lines.length - MAX_INPUT_LINES} more lines`];
+  }
+  return lines.length ? [lines.join('\n')] : [];
 }

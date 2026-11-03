@@ -91,12 +91,12 @@ function DirectTui({
     () => ({
       modelPicker: {
         favorites(sessionId) {
-          const current = app.sessionDetails(sessionId).settings;
+          const current = app.liveSettings(sessionId);
           if (!current) throw new Error('The attached session has no live settings.');
           return getFavoriteModelInfos(current).map((model) => ({ provider: model.provider!, id: model.id }));
         },
         nicknames(sessionId) {
-          const current = app.sessionDetails(sessionId).settings;
+          const current = app.liveSettings(sessionId);
           if (!current) throw new Error('The attached session has no live settings.');
           const result: Record<string, string[]> = {};
           for (const entry of getNicknameEntries(current)) {
@@ -109,7 +109,7 @@ function DirectTui({
           return { provider: latest.current.model.provider, id: latest.current.model.model };
         },
         async list(sessionId) {
-          const current = app.sessionDetails(sessionId).settings;
+          const current = app.liveSettings(sessionId);
           if (!current) throw new Error('The attached session has no live settings.');
           const groups = await collectProviderModels({ settingsService: current, loggingService: logger });
           return {
@@ -120,7 +120,7 @@ function DirectTui({
           };
         },
         toggle(sessionId, model) {
-          const current = app.sessionDetails(sessionId).settings;
+          const current = app.liveSettings(sessionId);
           if (!current) throw new Error('The attached session has no live settings.');
           toggleFavoriteModel(current, model.provider, model.id);
         },
@@ -169,7 +169,7 @@ function DirectTui({
       ...createDirectTuiCommands({
         app,
         async modelCatalog(sessionId, provider) {
-          const settingsService = app.sessionDetails(sessionId).settings;
+          const settingsService = app.liveSettings(sessionId);
           if (!settingsService) return { models: [], error: 'session settings unavailable' };
           const [group] = await collectProviderModels({ settingsService, loggingService: logger }, [provider]);
           return group ?? { models: [], error: 'provider catalog unavailable' };

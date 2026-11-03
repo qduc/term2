@@ -103,6 +103,15 @@ export async function createDirectApplication(options: DirectApplicationOptions)
   const { selection, sessionBinding } = options;
   const hooks = options.hooks ? await startDirectHooks(options.hooks, selection) : null;
   const logicalIds = new Map<string, string>();
+  // A session's logical id never changes, so its log is read once, not on every render.
+  const logicalIdOf = (sessionId: string): string => {
+    let logicalId = logicalIds.get(sessionId);
+    if (logicalId === undefined) {
+      logicalId = readDirectLogLineage(options.conversationsDir, sessionId, {}).logicalSessionId;
+      logicalIds.set(sessionId, logicalId);
+    }
+    return logicalId;
+  };
   const runtimes = createDirectRuntimes(
     {
       ...options,
@@ -207,31 +216,36 @@ export async function createDirectApplication(options: DirectApplicationOptions)
       }
     },
     liveSettings(sessionId) {
-      // A session's logical id never changes, so the log is read once rather than on every render.
-      let logicalId = logicalIds.get(sessionId);
-      if (logicalId === undefined) {
-        logicalId = readDirectLogLineage(options.conversationsDir, sessionId, {}).logicalSessionId;
-        logicalIds.set(sessionId, logicalId);
-      }
-      return runtimes.get(logicalId)?.settings ?? null;
+      return runtimes.get(logicalIdOf(sessionId))?.settings ?? null;
     },
     contextWindow(model) {
       return getModelContextWindow(model.provider, model.model) ?? null;
     },
     sessionDetails(sessionId, seq) {
-      const lineage = readDirectLogLineage(
-        options.conversationsDir,
-        sessionId,
-        seq === undefined || seq === null ? {} : { throughSeq: seq },
-      );
-      const record = runtimes.get(lineage.logicalSessionId);
-      const first = lineage.entries[0]!;
-      const last = lineage.entries.at(-1)!;
+      // The live record needs only the cached logical id. Parsing the whole lineage
+      // costs seconds on a large session, so only the log-derived fields pay for it,
+      // once per call, when read.
+      const record = runtimes.get(logicalIdOf(sessionId));
+      let lineage: ReturnType<typeof readDirectLogLineage> | undefined;
+      const read = () =>
+        (lineage ??= readDirectLogLineage(
+          options.conversationsDir,
+          sessionId,
+          seq === undefined || seq === null ? {} : { throughSeq: seq },
+        ));
       return {
-        createdAt: first.at,
-        updatedAt: last.at,
-        earliestSeq: first.seq,
-        logPath: lineage.path,
+        get createdAt() {
+          return read().entries[0]!.at;
+        },
+        get updatedAt() {
+          return read().entries.at(-1)!.at;
+        },
+        get earliestSeq() {
+          return read().entries[0]!.seq;
+        },
+        get logPath() {
+          return read().path;
+        },
         profileId: record?.profileId ?? null,
         settings: record?.settings ?? null,
         rebuilt: record?.rebuilt ?? false,

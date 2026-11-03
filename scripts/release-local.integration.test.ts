@@ -73,6 +73,7 @@ it.each(['create tag', 'existing tag', 'build failure'] as const)(
       };
       await mkdir(path.join(cwd, 'scripts'), { recursive: true });
       await mkdir(path.join(cwd, 'dist'));
+      await mkdir(path.join(cwd, 'rewrite/dist'), { recursive: true });
       const fixtureBin = path.join(fixture, 'bin');
       await mkdir(fixtureBin);
       const sleepShim = path.join(fixtureBin, 'sleep');
@@ -88,9 +89,11 @@ it.each(['create tag', 'existing tag', 'build failure'] as const)(
         path.join(cwd, 'scripts/fixture-build.mjs'),
         `import { appendFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { copyFileSync } from 'node:fs';
 appendFileSync('.git/local-build-count', 'build\\n');
 if (process.env.FAIL_FIXTURE_BUILD) process.exit(23);
 execFileSync(process.execPath, ['scripts/write-build-info.mjs'], { stdio: 'inherit' });
+copyFileSync('dist/build-info.json', 'rewrite/dist/build-info.json');
 `,
       );
       const pkg = {
@@ -121,7 +124,8 @@ execFileSync(process.execPath, ['scripts/write-build-info.mjs'], { stdio: 'inher
       await writeFile(path.join(cwd, 'package.json'), JSON.stringify(pkg));
       await writeFile(path.join(cwd, 'CHANGELOG.md'), `# Changelog\n\n## [${pkg.version}] - 2026-10-27\n`);
       await ok(process.execPath, 'scripts/write-build-info.mjs');
-      const before = JSON.parse(await readFile(path.join(cwd, 'dist/build-info.json'), 'utf8'));
+      await copyFile(path.join(cwd, 'dist/build-info.json'), path.join(cwd, 'rewrite/dist/build-info.json'));
+      const before = JSON.parse(await readFile(path.join(cwd, 'rewrite/dist/build-info.json'), 'utf8'));
       expect(before.release).toBe(false);
       await commit(`chore(release): v${pkg.version}`);
       if (scenario !== 'create tag') await ok('git', '-c', 'tag.gpgsign=false', 'tag', `v${pkg.version}`);
@@ -140,9 +144,9 @@ execFileSync(process.execPath, ['scripts/write-build-info.mjs'], { stdio: 'inher
       if (scenario === 'build failure') {
         expect(result.code).toBe(23);
         expect(requests).toEqual([]); // No auth, version probe or publish retry after a failed build.
-        expect(JSON.parse(await readFile(path.join(cwd, 'dist/build-info.json'), 'utf8'))).toEqual(before);
+        expect(JSON.parse(await readFile(path.join(cwd, 'rewrite/dist/build-info.json'), 'utf8'))).toEqual(before);
       } else {
-        expect(JSON.parse(await readFile(path.join(cwd, 'dist/build-info.json'), 'utf8'))).toEqual({
+        expect(JSON.parse(await readFile(path.join(cwd, 'rewrite/dist/build-info.json'), 'utf8'))).toEqual({
           version: pkg.version,
           commit: head,
           release: true,

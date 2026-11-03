@@ -13,7 +13,7 @@ const requireIdentity = (condition, message) => {
 
 try {
   const { version } = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
-  const info = JSON.parse(await readFile(new URL('../dist/build-info.json', import.meta.url), 'utf8'));
+  const info = JSON.parse(await readFile(new URL('../rewrite/dist/build-info.json', import.meta.url), 'utf8'));
   const tag = `v${version}`;
   const head = git('rev-parse', '--verify', 'HEAD');
   requireIdentity(git('status', '--porcelain') === '', 'checkout is dirty; build and publish from clean tagged source');
@@ -23,7 +23,7 @@ try {
   }
   requireIdentity(
     info.release === true,
-    'dist/build-info.json must have release: true; rebuild from clean tagged source',
+    'rewrite/dist/build-info.json must have release: true; rebuild from clean tagged source',
   );
   requireIdentity(info.version === version, `build version must equal package version ${version}`);
   requireIdentity(info.commit === head, 'build commit must equal HEAD; rebuild the release artifact');

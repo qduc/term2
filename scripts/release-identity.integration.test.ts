@@ -103,6 +103,7 @@ it.each(cases)(
       };
       await mkdir(path.join(cwd, 'scripts'));
       await mkdir(path.join(cwd, 'dist'));
+      await mkdir(path.join(cwd, 'rewrite/dist'), { recursive: true });
       // Use the real package lifecycle wiring, not a test-only invocation.
       await writeFile(
         path.join(cwd, 'package.json'),
@@ -146,7 +147,8 @@ it.each(cases)(
       expect(build.code, build.output).toBe(0);
       if (scenario === 'tag added after development build') await git('-c', 'tag.gpgsign=false', 'tag', tag);
       if (scenario === 'dirty checkout after build') await writeFile(path.join(cwd, 'untracked.txt'), 'dirty');
-      const infoPath = path.join(cwd, 'dist/build-info.json');
+      const infoPath = path.join(cwd, 'rewrite/dist/build-info.json');
+      await copyFile(path.join(cwd, 'dist/build-info.json'), infoPath);
       if (scenario === 'missing metadata') await rm(infoPath);
       if (scenario === 'malformed metadata') await writeFile(infoPath, '{');
       if (['release false', 'version mismatch', 'stale commit'].includes(scenario)) {

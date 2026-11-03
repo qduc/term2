@@ -1,6 +1,6 @@
 {
   "name": "@qduc/term2",
-  "version": "0.40.0",
+  "version": "0.41.0",
   "description": "A terminal-based AI assistant that can help you get things done on your computer",
   "license": "MIT",
   "author": "qduc",
@@ -23,7 +23,7 @@
     "url": "https://github.com/qduc/term2/issues"
   },
   "bin": {
-    "term2": "dist/cli.js"
+    "term2": "rewrite/dist/rewrite/src/app/cli.js"
   },
   "exports": {
     ".": {
@@ -46,8 +46,8 @@
   },
   "engineStrict": true,
   "scripts": {
-    "start": "node dist/cli.js",
-    "build": "node scripts/build-with-rollback.mjs",
+    "start": "node rewrite/dist/rewrite/src/app/cli.js",
+    "build": "node scripts/build-with-rollback.mjs && node rewrite/scripts/build.mjs",
     "build:restore": "node scripts/restore-build-output.mjs",
     "dev": "tsc --build tsconfig.build.json --watch",
     "typecheck": "tsc --noEmit",
@@ -77,7 +77,8 @@
     "verify:generated": "node --import tsx scripts/generated-verification/run.mjs"
   },
   "files": [
-    "dist"
+    "dist",
+    "rewrite/dist"
   ],
   "dependencies": {
     "@agentclientprotocol/sdk": "1.4.0",

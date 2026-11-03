@@ -13,7 +13,7 @@ Read a codebase, edit files, and run commands locally or over SSH. Choose your m
 
 ## What you can do
 
-- **Work with a codebase.** Trace a failure, implement a feature, review a change, and run tests. Use `/plan` for read-only exploration.
+- **Work with a codebase.** Trace a failure, implement a feature, review a change, and run tests.
 - **Choose your models.** Connect a supported hosted provider or a local model endpoint. Switch models with `/model` and manage connections with `/providers`.
 - **Delegate tasks.** Use [subagents](https://qduc.github.io/term2/modes/subagents/) for research, implementation, or review, including background work.
 - **Keep working across sessions.** Resume a conversation after a break, fork it to try another approach, or work with a remote project over SSH.
@@ -27,7 +27,7 @@ npm install --global @qduc/term2
 term2 --version
 ```
 
-On Linux, sandboxed shell commands also need `bubblewrap` (`bwrap`), `socat`, and `ripgrep` (`rg`). Install them with your OS package manager. Shell execution fails closed when the enabled sandbox is unavailable. See [installation](https://qduc.github.io/term2/getting-started/installation/) for platform details.
+The direct runtime does not provide sandboxed shell execution. Review shell approvals carefully.
 
 Choose one authentication path:
 
@@ -48,7 +48,7 @@ cd /path/to/your/project
 term2 --model
 ```
 
-Ask it to explain the project, fix a bug, or implement a feature. Standard mode can apply valid local workspace edits without a prompt; shell commands require approval under the default interactive settings. Review the resulting diff before committing. Enter `/plan` for read-only exploration, then `/plan` again to return to Standard mode.
+Ask it to explain the project, fix a bug, or implement a feature. Standard mode can apply valid local workspace edits without a prompt; shell commands require approval under the default interactive settings. Review the resulting diff before committing.
 
 This README tracks `main`; npm releases may lag behind it. Check `term2 --version` and the [changelog](CHANGELOG.md) when following documentation for a newer feature.
 
@@ -64,6 +64,8 @@ This README tracks `main`; npm releases may lag behind it. Check `term2 --versio
 | Work over SSH               | `term2 --ssh user@host --remote-dir /path/to/project`         |
 | Ask a one-off question      | `term2 "Explain the difference between a merge and a rebase"` |
 
+This release uses a separate native conversation store (`conversations-next`). Existing conversations remain untouched and are not available to resume until a future migration.
+
 Continue a saved session headlessly with `term2 --resume <session-id> "Follow-up prompt"` (or use `last` instead of an ID). Add `--fork` to keep the original session unchanged.
 
 Bare is the default minimal-prompt profile with subagent delegation. Standard is retired: old `standard`/`full` profile selections and saved Standard sessions now resolve to Bare. The former Lite options (`--lite`, `-l`, `/lite`, and `--profile lite`) now select Bare too.
@@ -75,7 +77,7 @@ attaches existing opted-in terminal sessions. Start with `term2 discord --help`.
 Replies require explicit `discord_send`; status, approvals and questions stay local.
 Live Discord/mobile validation is still outstanding.
 
-`/restart` reloads the built CLI in place and resumes the conversation, recovering durably queued text (not unsaved editor drafts). It requires POSIX Node with `process.execve` support (Node 24 recommended), a built `dist/cli.js` entry, and no Node flags, loaders, or `NODE_OPTIONS`. Live background work blocks restart unless you explicitly use `/restart stop`; active workspace leases reset to home scope. Finish foreground shell commands and pending input confirmations first. See [session restart](https://qduc.github.io/term2/using-term2/sessions/#restart-the-built-cli) for recovery limits.
+`/restart` reloads the built CLI in place and resumes the conversation, recovering durably queued text (not unsaved editor drafts). It requires POSIX Node with `process.execve` support (Node 24 recommended), a built `rewrite/dist/rewrite/src/app/cli.js` entry, and no Node flags, loaders, or `NODE_OPTIONS`. Live background work blocks restart unless you explicitly use `/restart stop`; active workspace leases reset to home scope. Finish foreground shell commands and pending input confirmations first. See [session restart](https://qduc.github.io/term2/using-term2/sessions/#restart-the-built-cli) for recovery limits.
 
 ## Approvals and sandbox
 

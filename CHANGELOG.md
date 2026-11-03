@@ -1,5 +1,11 @@
 ## [Unreleased]
 
+## [0.41.0] - 2026-11-03
+
+### Changed
+- Make the direct runtime the default `term2` command. Native conversations use a separate store; existing conversations are not migrated or modified.
+- Sandboxed shell execution and the plan, pair, mentor, and orchestrator profiles are not available in the direct runtime.
+
 ## [0.40.0] - 2026-10-29
 
 ### Features

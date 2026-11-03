@@ -166,48 +166,56 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
   // Key the wrapper, not Static itself: Ink's old-node cleanup otherwise clears
   // the newly registered Static root during the same replacement commit.
   const failures = useMemo(() => failedShellGroups(rows.flatMap((row) => (row.tool ? [row.tool] : []))), [rows]);
-  const staticTranscript = (
-    <Box key={epoch}>
-      <Static style={{ width: columns }} items={header ? [{ key: 'header', header }, ...rows] : [...rows]}>
-        {(row) => {
-          if (row.header) return <Box key={row.key}>{row.header}</Box>;
-          const count = row.tool ? failures.get(row.tool.id) : undefined;
-          if (count === 0) return <Box key={row.key} />;
-          if (count !== undefined)
-            return (
-              <Box key={row.key} marginTop={1} paddingLeft={2}>
-                <FailedShellSummary count={count} />
-              </Box>
-            );
-          const entry = row.message
-            ? { kind: 'message' as const, id: row.message.id }
-            : { kind: 'tool' as const, id: row.tool!.id };
-          const single = {
-            ...state,
-            messages: row.message ? [row.message] : [],
-            tools: row.tool ? [row.tool] : [],
-            timeline: [entry],
-            drafts: {},
-            reasoning: {},
-          };
-          const failed = row.tool && (row.tool.status === 'failed' || reportsFailure(row.tool.display));
-          if (failed)
-            return (
-              <Box key={row.key} flexDirection="column">
-                <Box flexDirection="column" maxHeight={10} overflowY="hidden">
-                  <Transcript state={single} messages={single.messages} columns={columns} live staticRow />
+  // A fresh style object makes Ink mark <Static> dirty on every commit, which bypasses its render throttle.
+  const staticStyle = useMemo(() => ({ width: columns }), [columns]);
+  // Memoise the element: any Static re-render hands Ink a fresh children array, which marks it dirty
+  // and forces an unthrottled repaint. Rows render once, so the closure only needs state as of the row change.
+  const staticTranscript = useMemo(
+    () => (
+      <Box key={epoch}>
+        <Static style={staticStyle} items={header ? [{ key: 'header', header }, ...rows] : [...rows]}>
+          {(row) => {
+            if (row.header) return <Box key={row.key}>{row.header}</Box>;
+            const count = row.tool ? failures.get(row.tool.id) : undefined;
+            if (count === 0) return <Box key={row.key} />;
+            if (count !== undefined)
+              return (
+                <Box key={row.key} marginTop={1} paddingLeft={2}>
+                  <FailedShellSummary count={count} />
                 </Box>
-                <Text dimColor>Full tool output: Ctrl+O</Text>
+              );
+            const entry = row.message
+              ? { kind: 'message' as const, id: row.message.id }
+              : { kind: 'tool' as const, id: row.tool!.id };
+            const single = {
+              ...state,
+              messages: row.message ? [row.message] : [],
+              tools: row.tool ? [row.tool] : [],
+              timeline: [entry],
+              drafts: {},
+              reasoning: {},
+            };
+            const failed = row.tool && (row.tool.status === 'failed' || reportsFailure(row.tool.display));
+            if (failed)
+              return (
+                <Box key={row.key} flexDirection="column">
+                  <Box flexDirection="column" maxHeight={10} overflowY="hidden">
+                    <Transcript state={single} messages={single.messages} columns={columns} live staticRow />
+                  </Box>
+                  <Text dimColor>Full tool output: Ctrl+O</Text>
+                </Box>
+              );
+            return (
+              <Box key={row.key} paddingBottom={row.trailingBlank ? 1 : 0}>
+                <Transcript state={single} messages={single.messages} columns={columns} live staticRow />
               </Box>
             );
-          return (
-            <Box key={row.key} paddingBottom={row.trailingBlank ? 1 : 0}>
-              <Transcript state={single} messages={single.messages} columns={columns} live staticRow />
-            </Box>
-          );
-        }}
-      </Static>
-    </Box>
+          }}
+        </Static>
+      </Box>
+    ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [epoch, header, rows, failures, columns, staticStyle],
   );
   return { staticTranscript, tail, committed: rows };
 }

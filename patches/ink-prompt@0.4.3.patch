@@ -1,0 +1,44 @@
+--- a/dist/components/MultilineInput/index.js
++++ b/dist/components/MultilineInput/index.js
+@@ -16,6 +16,7 @@
+         formatPastePlaceholder,
+     });
+     const isSyncingFromProps = useRef(false);
++    const previousValue = useRef(value);
+     const onCursorChangeRef = useRef(onCursorChange);
+     useEffect(() => {
+         onCursorChangeRef.current = onCursorChange;
+@@ -26,10 +27,13 @@
+         }
+     }, [textInput.cursorOffset]);
+     useEffect(() => {
+-        if (value !== undefined && value !== textInput.value) {
++        // Cursor-only changes must not overwrite edits awaiting onChange.
++        const valueChanged = previousValue.current !== value;
++        previousValue.current = value;
++        if (valueChanged && value !== undefined && value !== textInput.value) {
+             isSyncingFromProps.current = true;
+         }
+-        textInput.syncExternalState({ value, cursorOffset: cursorOverride });
++        textInput.syncExternalState({ value: valueChanged ? value : undefined, cursorOffset: cursorOverride });
+     }, [value, cursorOverride]);
+     const onChangeRef = useRef(onChange);
+     useEffect(() => {
+@@ -148,11 +152,15 @@
+         onCursorChangeRef.current?.(textInput.cursorOffset);
+     }, [textInput.cursorOffset]);
+     const isSyncingFromProps = useRef(false);
++    const previousValue = useRef(value);
+     useEffect(() => {
+-        if (value !== undefined && value !== textInput.value) {
++        // Cursor-only changes must not overwrite edits awaiting onChange.
++        const valueChanged = previousValue.current !== value;
++        previousValue.current = value;
++        if (valueChanged && value !== undefined && value !== textInput.value) {
+             isSyncingFromProps.current = true;
+         }
+-        textInput.syncExternalState({ value, cursorOffset: cursorOverride });
++        textInput.syncExternalState({ value: valueChanged ? value : undefined, cursorOffset: cursorOverride });
+     }, [value, cursorOverride]);
+     const onChangeRef = useRef(onChange);
+     useEffect(() => {

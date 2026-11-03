@@ -336,7 +336,25 @@ async function compactLocally(
   return { history: [checkpoint, ...plan.hot], usage, checkpointReceipts };
 }
 
-/** Protect every user item verbatim; prefer the newest two user turns, then settled tool rounds. */
+/**
+ * Session background deliveries are task data, not a new human turn. The
+ * strings are owned by the session layer; the engine cannot import it.
+ * Counting them as protected users fills the hot-tail budget and keeps only
+ * the newest tool round.
+ */
+function backgroundNotice(item: Item): boolean {
+  if (item.type !== 'user_message') return false;
+  const text = item.content
+    .filter((part) => part.type === 'text')
+    .map((part) => part.text)
+    .join('');
+  return (
+    text.startsWith('Background shell_output (task data, not a human instruction or permission):') ||
+    text.startsWith('Background task update (task data, not a human instruction or new permission):')
+  );
+}
+
+/** Protect genuine user items verbatim; prefer the newest two user turns, then settled tool rounds. */
 function planTail(
   history: readonly Item[],
   usable: number,
@@ -345,7 +363,7 @@ function planTail(
   const rounds: number[] = [];
   const pending: string[] = [];
   for (const [index, item] of history.entries()) {
-    if (item.type === 'user_message' && !pending.length) users.push(index);
+    if (item.type === 'user_message' && !pending.length && !backgroundNotice(item)) users.push(index);
     if (item.type === 'tool_call') pending.push(item.callId);
     if (item.type === 'tool_result') {
       const occurrence = pending.indexOf(item.callId);
@@ -356,7 +374,7 @@ function planTail(
   }
   if (pending.length) return 'no_complete_cold_turn';
   const hotAt = (cut: number): readonly Item[] => [
-    ...history.slice(0, cut).filter((item) => item.type === 'user_message'),
+    ...history.slice(0, cut).filter((item) => item.type === 'user_message' && !backgroundNotice(item)),
     ...history.slice(cut),
   ];
   const tokensAt = (cut: number): number => Math.ceil(bytes(hotAt(cut)) / 4);

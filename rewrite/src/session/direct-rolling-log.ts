@@ -3,7 +3,14 @@ import { closeSync, lstatSync, openSync, readSync, readdirSync, realpathSync, st
 import { join, resolve } from 'node:path';
 import { z } from 'zod';
 import type { FactLine, SessionStartedFact } from './facts.js';
-import { createLog, openLog, readFactLines, type ConversationLog } from './log.js';
+import {
+  createLog,
+  openLog,
+  readFactLines,
+  readFactLinesStamped,
+  type ConversationLog,
+  type StampedLogRead,
+} from './log.js';
 import { parseDirectSessionRotation, type DirectSessionRotationFact } from './direct-session-rotation.js';
 
 const DIRECT_ID = /^conv_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -15,6 +22,8 @@ export type DirectLogSegment = {
   readonly path: string;
   readonly afterSeq: number;
   readonly throughSeq: number;
+  /** The parse of this file, so the writer can continue it without reading it again. */
+  readonly read?: StampedLogRead;
 };
 export type DirectLogLineage = {
   readonly logicalSessionId: string;
@@ -248,13 +257,14 @@ function readLineage(directory: string, id: string, discovery: Discovery, cut?: 
         throw new Error(`direct log ${physicalId} does not continue the accepted predecessor boundary`);
     }
     const path = directLogPath(directory, physicalId);
-    const accepted = readFactLines(path, { afterSeq, prefix: entries });
+    const read = readFactLinesStamped(path, { afterSeq, prefix: entries });
+    const accepted = read.entries;
     if (!accepted.length) throw new Error(`direct log ${physicalId} has no accepted first line`);
     if (accepted.slice(1).some((line) => line.fact.type === 'session_rotated' || line.fact.type === 'session_started'))
       throw new Error(`direct log ${physicalId} contains an interior physical header`);
     const throughSeq = accepted.at(-1)!.seq;
     for (const entry of accepted) entries.push(entry);
-    segments.push({ sessionId: physicalId, path, afterSeq, throughSeq });
+    segments.push({ sessionId: physicalId, path, afterSeq, throughSeq, read });
     afterSeq = throughSeq;
     const successors = children.get(physicalId) ?? [];
     if (successors.length > 1) throw new Error(`direct log ${physicalId} has divergent accepted successors`);
@@ -356,6 +366,7 @@ export function createDirectRollingLog(
     ? openLog(segment.path, {
         afterSeq: segment.afterSeq,
         prefix: acceptedEntries.filter((entry) => entry.seq <= segment.afterSeq),
+        ...(segment.read ? { parsed: segment.read } : {}),
       })
     : createLog(directory, logicalSessionId);
   let head: DirectLogBoundary = {

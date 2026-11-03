@@ -16,7 +16,7 @@
  * swallowing the next fact.
  */
 
-import { closeSync, fsyncSync, ftruncateSync, openSync, readFileSync, writeSync } from 'node:fs';
+import { closeSync, fsyncSync, ftruncateSync, openSync, readFileSync, statSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { LogPayloads } from './log-payloads.js';
@@ -223,7 +223,12 @@ function createConversationLog(
   };
 }
 
+/** A parse of one physical log with the file's identity at read time (stat taken before reading). */
+export type StampedLogRead = ParsedLog & { readonly size: number; readonly mtimeMs: number };
+
 export type LogContinuationOptions = {
+  /** An earlier read of this same file. Used instead of parsing again only while size and mtime still match. */
+  readonly parsed?: StampedLogRead;
   /** Predecessor's last accepted seq. The next line must be this value plus one. Default 0. */
   readonly afterSeq?: number;
   /** Accepted predecessor envelopes, required when payload references cross rotation. */
@@ -249,16 +254,35 @@ export function createLog(
 
 /** Changes no bytes: continues the seq, and leaves a torn final line for the next append to remove. */
 export function openLog(path: string, options: LogContinuationOptions = {}): ConversationLog {
-  const data = readFileSync(path);
-  const { lastSeq, complete, entries } = parseLog(data, path, continuationSeq(options.afterSeq), options.prefix);
+  const known = options.parsed;
+  let reuse: StampedLogRead | undefined;
+  if (known) {
+    const stat = statSync(path);
+    if (stat.size === known.size && stat.mtimeMs === known.mtimeMs) reuse = known;
+  }
+  let lastSeq: number, complete: number, entries: readonly FactLine[], size: number;
+  if (reuse) ({ lastSeq, complete, entries, size } = reuse);
+  else {
+    const data = readFileSync(path);
+    ({ lastSeq, complete, entries } = parseLog(data, path, continuationSeq(options.afterSeq), options.prefix));
+    size = data.length;
+  }
   // Append mode: after the truncate, writes land at the new end without a position.
   return createConversationLog(
     path,
     openSync(path, 'a'),
     lastSeq + 1,
     [...(options.prefix ?? []), ...entries],
-    complete !== data.length ? complete : undefined,
+    complete !== size ? complete : undefined,
   );
+}
+
+/** Like readFactLines, keeping what openLog needs to continue the same file without parsing it again. */
+export function readFactLinesStamped(path: string, options: LogContinuationOptions = {}): StampedLogRead {
+  const stat = statSync(path);
+  const data = readFileSync(path);
+  const parsed = parseLog(data, path, continuationSeq(options.afterSeq), options.prefix);
+  return { ...parsed, size: data.length, mtimeMs: stat.mtimeMs };
 }
 
 /** Pure read of accepted envelopes with payload references hydrated; ignores only a torn final line. */

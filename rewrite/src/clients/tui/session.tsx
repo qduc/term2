@@ -451,14 +451,15 @@ export function TuiSession({
           editingId={editing?.id ?? null}
           notice={queueNotice}
         />
-        <InputFrame>
-          {editing ? (
+        {editing ? (
+          <Box>
             <Text color={theme.accent}>
               edit {queueItems.find((item) => item.id === editing.id)?.delivery === 'steering' ? 'steer' : 'queued'} ▸{' '}
             </Text>
-          ) : (
-            <PromptMarker mode="input" />
-          )}
+          </Box>
+        ) : null}
+        <InputFrame>
+          <PromptMarker mode="input" />
           <MultilineInput
             key={editor.inputKey}
             value={editor.value}

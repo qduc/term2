@@ -121,7 +121,7 @@ export class ConversationJournal {
     this.#queueState = projectedQueue;
     this.#taskStates = projectedTasks;
     for (const requestId of reserved) this.#requestIds.add(requestId);
-    this.facts.push(...next);
+    for (const fact of next) this.facts.push(fact);
     for (const line of lines) this.sink.accepted(line);
     let root: TurnId | undefined;
     const waits = new Map<string, 'approval' | 'question' | 'budget'>();
@@ -194,17 +194,16 @@ function changesRootHistory(fact: Fact): boolean {
 
 /** Find the next unused numeric turn ID, including queued admissions. */
 export function nextConversationTurnId(facts: readonly Fact[]): number {
-  return Math.max(
-    1,
-    ...facts.flatMap((fact) => {
-      const candidates = [
-        'turnId' in fact ? fact.turnId : undefined,
-        fact.type === 'queue_submitted' ? fact.record.admission.turnId : undefined,
-      ];
-      return candidates.flatMap((value) => {
-        const match = value?.match(/^turn-(\d+)$/);
-        return match ? [Number(match[1]) + 1] : [];
-      });
-    }),
-  );
+  let nextId = 1;
+  for (const fact of facts) {
+    const candidates = [
+      'turnId' in fact ? fact.turnId : undefined,
+      fact.type === 'queue_submitted' ? fact.record.admission.turnId : undefined,
+    ];
+    for (const value of candidates) {
+      const match = value?.match(/^turn-(\d+)$/);
+      if (match) nextId = Math.max(nextId, Number(match[1]) + 1);
+    }
+  }
+  return nextId;
 }

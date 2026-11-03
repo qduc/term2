@@ -148,7 +148,7 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
       for (const [index, fact] of projected.entries()) candidate = reduceDirectFact(candidate, fact, seq + index + 1);
       const lines = options.log.append(accepted);
       state = candidate;
-      acceptedFacts.push(...accepted);
+      for (const fact of accepted) acceptedFacts.push(fact);
       reopened = false;
       for (const [index, line] of lines.entries()) {
         seq = line.seq;

@@ -222,7 +222,7 @@ function readLineage(directory: string, id: string, discovery: Discovery, cut?: 
     if (accepted.slice(1).some((line) => line.fact.type === 'session_rotated' || line.fact.type === 'session_started'))
       throw new Error(`direct log ${physicalId} contains an interior physical header`);
     const throughSeq = accepted.at(-1)!.seq;
-    entries.push(...accepted);
+    for (const entry of accepted) entries.push(entry);
     segments.push({ sessionId: physicalId, path, afterSeq, throughSeq });
     afterSeq = throughSeq;
     const successors = children.get(physicalId) ?? [];
@@ -348,7 +348,7 @@ export function createDirectRollingLog(
           throw new Error('physical rotation must be the first fact of its acceptance batch');
         if (first.type !== 'session_rotated') {
           const accepted = current.append(facts);
-          acceptedEntries.push(...accepted);
+          for (const entry of accepted) acceptedEntries.push(entry);
           head = { ...head, seq: accepted.at(-1)!.seq };
           return accepted;
         }
@@ -364,7 +364,7 @@ export function createDirectRollingLog(
         directLogNames(directory);
         successor = createLog(directory, rotation.sessionId, { afterSeq: head.seq, prefix: acceptedEntries });
         const accepted = successor.append(facts);
-        acceptedEntries.push(...accepted);
+        for (const entry of accepted) acceptedEntries.push(entry);
         const predecessor = current;
         current = successor;
         successor = undefined;

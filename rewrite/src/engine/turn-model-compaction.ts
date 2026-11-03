@@ -16,6 +16,7 @@ export type CompactionAttemptResult = DirectCompactionResult | { readonly kind: 
 export class TurnCompaction {
   #state: TurnSpec['compactionState'];
   #lastInputTokens: number | undefined;
+  #blockedUntilEstimatedTokens: number | undefined;
 
   constructor(
     readonly spec: TurnSpec,
@@ -39,6 +40,12 @@ export class TurnCompaction {
 
   async compact(request: ModelRequest, history: Item[], manual = false): Promise<CompactionAttemptResult> {
     if (!this.deps.compaction) return { kind: 'unavailable' };
+    if (!manual && this.#blockedUntilEstimatedTokens !== undefined) {
+      const estimate = estimateDirectContext(request);
+      if (estimate.renderedInputTokens < this.#blockedUntilEstimatedTokens) {
+        return { kind: 'deferred', reason: 'hysteresis', estimate };
+      }
+    }
     const sourceLength = history.length;
     let attempt: { compactionId: string; started: number; accepted: boolean } | undefined;
     let outcomeChosen = false;
@@ -119,7 +126,24 @@ export class TurnCompaction {
         },
       });
       if (result.kind !== 'compacted') {
-        if (result.kind === 'blocked') await failed({ kind: 'blocked', reason: result.reason });
+        if (result.kind === 'blocked') {
+          await failed({ kind: 'blocked', reason: result.reason });
+          if (!manual && attempt?.accepted) {
+            if (result.reason === 'non_reducing' || result.reason === 'result_still_too_large') {
+              throw new Error(
+                `Automatic context compaction could not make enough room (${result.reason}); use /compact or start a new conversation.`,
+              );
+            }
+            const measured = Math.max(result.estimate.renderedInputTokens, this.#lastInputTokens ?? 0);
+            this.#blockedUntilEstimatedTokens =
+              result.estimate.renderedInputTokens +
+              Math.max(1_000, Math.ceil(result.estimate.renderedInputTokens * 0.1));
+            this.#state = {
+              ...this.#state,
+              rearmAtEstimatedTokens: measured + Math.max(1_000, Math.ceil(measured * 0.1)),
+            };
+          }
+        }
         return result;
       }
       const replacement = [...result.history, ...history.slice(sourceLength)];
@@ -141,6 +165,7 @@ export class TurnCompaction {
         checkpointReceipts: result.checkpointReceipts,
       };
       this.#lastInputTokens = undefined;
+      this.#blockedUntilEstimatedTokens = undefined;
       this.acceptedReplacement();
       if (attempt?.accepted) {
         outcomeChosen = true;

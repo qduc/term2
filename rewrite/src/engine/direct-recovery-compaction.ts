@@ -153,7 +153,12 @@ export async function compactDirectHistory(input: DirectCompactionInput): Promis
         );
   const measured = Math.max(estimate.renderedInputTokens, input.lastCompletedInputTokens ?? 0);
   if (!input.manual && softTrigger !== undefined && measured < softTrigger) return { kind: 'not_needed', estimate };
-  if (!input.manual && input.rearmAtEstimatedTokens !== undefined && measured < input.rearmAtEstimatedTokens) {
+  if (
+    !input.manual &&
+    input.rearmAtEstimatedTokens !== undefined &&
+    measured < input.rearmAtEstimatedTokens &&
+    (softTrigger === undefined || estimate.renderedInputTokens < softTrigger)
+  ) {
     return { kind: 'deferred', reason: 'hysteresis', estimate };
   }
   if (!input.manual) await start();
@@ -181,7 +186,10 @@ export async function compactDirectHistory(input: DirectCompactionInput): Promis
   }
   if (!hasCompleteDirectToolPairs(operation.history))
     throw new Error('Compaction returned orphaned tool calls/results');
-  if (policy.hardInputLimit !== undefined && after.renderedInputTokens > policy.hardInputLimit) {
+  if (
+    (policy.hardInputLimit !== undefined && after.renderedInputTokens > policy.hardInputLimit) ||
+    (!input.manual && softTrigger !== undefined && after.renderedInputTokens >= Math.floor(softTrigger * 0.9))
+  ) {
     return { kind: 'blocked', reason: 'result_still_too_large', estimate, usage: operation.usage };
   }
   const retained = new Set(operation.history.map((item) => item.id));
@@ -194,7 +202,11 @@ export async function compactDirectHistory(input: DirectCompactionInput): Promis
     estimate: after,
     ...(softTrigger === undefined
       ? {}
-      : { rearmAtEstimatedTokens: after.renderedInputTokens + Math.max(1_000, Math.ceil(softTrigger * 0.1)) }),
+      : {
+          rearmAtEstimatedTokens:
+            Math.max(after.renderedInputTokens, input.lastCompletedInputTokens ?? 0) +
+            Math.max(1_000, Math.ceil(softTrigger * 0.1)),
+        }),
     usage: operation.usage,
     checkpointReceipts: operation.checkpointReceipts,
     disableChaining: true,
@@ -305,11 +317,11 @@ async function compactLocally(
   }
   input.signal.throwIfAborted();
   const removed = plan.cold.filter((item) => item.type !== 'user_message');
-  const checkpointReceipts = [...(input.checkpointReceipts ?? []), ...toolReceipts(plan.cold)];
+  const checkpointReceipts = [...(input.checkpointReceipts ?? []), ...toolReceipts(plan.cold)].slice(-40);
   const checkpoint: Item = {
     type: 'summary',
     id: `compact_${randomUUID()}` as ItemId,
-    text: wrapContextSummary(summaryText, checkpointReceipts.join('\n')),
+    text: wrapContextSummary(summaryText, checkpointReceipts.map((receipt) => receipt.slice(0, 180)).join('\n')),
     replaces: removed.map((item) => item.id),
   };
   return { history: [checkpoint, ...plan.hot], usage, checkpointReceipts };

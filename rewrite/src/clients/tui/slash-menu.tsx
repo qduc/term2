@@ -39,8 +39,8 @@ export function useSlashMenu(value: string, enabled: boolean, subtleColor: React
       const command = matches[selected];
       setDismissed(command);
       setIndex(0);
-      // Enter completes; Tab may open a picker, otherwise it completes.
-      accept(command, Boolean(key.tab));
+      // Enter selects; Tab only completes.
+      accept(command, Boolean(key.return));
     }
     return true;
   };
@@ -59,7 +59,7 @@ export function useSlashMenu(value: string, enabled: boolean, subtleColor: React
       title="Commands"
       hasItems
       borderColor={undefined}
-      footer="↑/↓ select · Enter complete · Tab complete/open · Esc dismiss"
+      footer="↑/↓ select · Enter run · Tab complete · Esc dismiss"
       footerPlacement="inside"
     >
       {matches.slice(start, start + visibleRows).map((command) => (

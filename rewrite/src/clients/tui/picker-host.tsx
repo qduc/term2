@@ -14,7 +14,7 @@ export function pickerFor(integration: TuiIntegration, command: string): PickerK
   return command === '/model' && integration.modelPicker ? 'model' : null;
 }
 
-/** Hand a slash-menu Tab selection to the same picker used by direct submission. */
+/** Hand a slash-menu Enter selection to the same picker used by direct submission. */
 export function openPickerFor(integration: TuiIntegration, show: (target: PickerKind) => void) {
   return (command: string): boolean => {
     const target = pickerFor(integration, command);

@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
@@ -393,20 +393,20 @@ async function runCommand(
   if (exerciseMenu === 'slash-picker-tab') {
     session.write('/');
     await waitForHarnessComposerValue(idlePath, '/', { timeoutMs: 60_000 });
-    await session.waitForOutput('Tab complete/open', 30_000);
+    await session.waitForOutput('Tab complete', 30_000);
     expect(session.getVisibleOutput()).toContain('╭');
     expect(session.getVisibleOutput()).toContain('Start a new conversation');
-    session.write('model');
-    await waitForHarnessComposerValue(idlePath, '/model', { timeoutMs: 60_000 });
-    session.write('\t');
+    session.write('mod');
+    await waitForHarnessComposerValue(idlePath, '/mod', { timeoutMs: 60_000 });
+    session.write('\r');
     await session.waitForOutput('Choose a model', 30_000);
     const beforeClose = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
     session.write('\x1b');
     await waitForHarnessIdleGeneration(idlePath, { after: beforeClose, timeoutMs: 60_000 });
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 60_000 });
-    session.write('/resume');
-    await waitForHarnessComposerValue(idlePath, '/resume', { timeoutMs: 60_000 });
-    session.write('\t');
+    session.write('/res');
+    await waitForHarnessComposerValue(idlePath, '/res', { timeoutMs: 60_000 });
+    session.write('\r');
     await session.waitForOutput('Resume Conversation', 30_000);
     return;
   }
@@ -482,23 +482,26 @@ async function runCommand(
     return;
   }
   if (exerciseMenu === 'pick-enter') {
-    // Arrow-picking a command and pressing Enter completes it into the draft; it must not run it.
+    // Enter executes the highlighted usage command.
     session.write('/us');
     await waitForHarnessComposerValue(idlePath, '/us', { timeoutMs: 60_000 });
     session.write('\x1b[B');
     session.write('\x1b[A');
     session.write('\r');
-    await waitForHarnessComposerValue(idlePath, '/usage ', { timeoutMs: 60_000 });
+    await session.waitForOutput('Token usage', 30_000);
     return;
   }
   if (exerciseMenu === 'prefix-enter') {
-    // Enter on an unfinished prefix completes it into the draft; it must not run /clear.
+    // Enter executes /clear, replacing the existing conversation.
+    const beforeClear = session.getOutput().length;
     session.write('/cl');
     await waitForHarnessComposerValue(idlePath, '/cl', { timeoutMs: 60_000 });
     session.write('\r');
-    await waitForHarnessComposerValue(idlePath, '/clear ', { timeoutMs: 60_000 });
-    // The conversation is intact: the earlier prompt is still on screen and the app is still running.
-    expect(session.getVisibleOutput()).toContain('keep this conversation');
+    await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 60_000 });
+    await vi.waitFor(() => expect(session!.getOutput().slice(beforeClear)).toContain('\u001b[2J\u001b[3J\u001b[H'), {
+      timeout: 30_000,
+    });
+
     return;
   }
   if (exerciseMenu === 'complete') {
@@ -678,11 +681,11 @@ it('slash menu suggests and completes a command in the terminal', { timeout: TIM
   runCommand('/settings', 'Settings · [Models]', undefined, 'complete'),
 );
 
-it('Enter on an unfinished slash prefix completes it and does not run the command', { timeout: TIMEOUT_MS }, () =>
+it('Enter on an unfinished slash prefix runs the command', { timeout: TIMEOUT_MS }, () =>
   runCommand('/clear', '', 'keep this conversation', 'prefix-enter'),
 );
 
-it('Enter on an arrow-picked command completes it and does not run it', { timeout: TIMEOUT_MS }, () =>
+it('Enter on an arrow-picked command runs it', { timeout: TIMEOUT_MS }, () =>
   runCommand('/usage', '', undefined, 'pick-enter'),
 );
 
@@ -757,7 +760,7 @@ it(
   () => runCommand('', '', undefined, 'command-clear-regression'),
 );
 
-it('Tab opens the slash model picker and Escape returns to the composer', { timeout: TIMEOUT_MS }, () =>
+it('Enter opens slash pickers and Escape returns to the composer', { timeout: TIMEOUT_MS }, () =>
   runCommand('', '', undefined, 'slash-picker-tab'),
 );
 

@@ -128,7 +128,8 @@ export function TuiSession({
     if (interactionActive) return void interactionInput.current?.(input, key);
     if (taskOpen || budgetOpen || rewindTargets) return;
     if (composerActive && isShiftTab(input, key)) return togglePlan();
-    if (slash.handle(key, replaceInput, openPickerFor(integration, setPicker))) return;
+    if (slash.handle(key, replaceInput, openPickerFor(integration, setPicker), (command) => void submit(command, [])))
+      return;
     if (composerActive && key.escape && viewport.expanded) return viewport.collapse();
     if (isCtrlG(input, key) && !busy) (state.interactions.length ? setInteractionOpen : setTaskOpen)(true);
     if (key.ctrl && input === 'b' && state.budgets.length && !busy) setBudgetOpen(true);

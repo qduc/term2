@@ -347,8 +347,13 @@ export function TuiSession({
         await steerRecovery.restoreLateSteer(input, wireAttachments(submittedImages, otherParts, originalParts));
         setNotice(steerRecovery.lateSteerNotice(submission.submissionEpoch, error.message));
       } else {
-        if (input.startsWith('/') || input.startsWith('!')) await editor.restoreRejected(input);
-        notifyError(error);
+        await editor.restoreRejected(input);
+        const message = error instanceof Error ? error.message : String(error);
+        setNotice(
+          input.startsWith('/') || input.startsWith('!')
+            ? message
+            : `${message} Draft kept; check the conversation before retrying.`,
+        );
       }
     } finally {
       steerRecovery.endSubmission(submission.requestId);

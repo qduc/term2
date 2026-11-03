@@ -345,7 +345,6 @@ export function useSessionComposer(state: TuiState, historySize: number, onNotic
       ...(item.skillEdit ? { skillPrefix: item.skillEdit.prefix } : {}),
     });
     restoreDraft({ text: item.skillEdit?.request ?? item.text, attachments: parts ?? [] });
-
   };
   const restoreRejected = async (submitted: string) => {
     // MultilineInput clears its local text immediately after calling onSubmit.

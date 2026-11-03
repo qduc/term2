@@ -26,6 +26,11 @@ function timeline(
   replacesDraftId?: string,
 ): WireSnapshot['timeline'] {
   if (state.timeline === null) return null;
+  // A streaming delta re-announces the entry already at the tail; ids are unique, so nothing changes.
+  if (replacesDraftId === undefined && entries.length === 1) {
+    const last = state.timeline.at(-1);
+    if (last && last.kind === entries[0]!.kind && last.id === entries[0]!.id) return state.timeline;
+  }
   let next = [...state.timeline];
   for (const entry of entries) {
     const index = next.findIndex(
@@ -54,6 +59,8 @@ function commandReceipts(
     : [...items, next];
 }
 function message(items: readonly WireMessage[], next: WireMessage, draftId?: string): readonly WireMessage[] {
+  // The streaming draft is the last message; replace it without scanning or rebuilding every item.
+  if (draftId === undefined && items.at(-1)?.id === next.id) return [...items.slice(0, -1), next];
   const index = items.findIndex((item) => item.id === next.id || item.id === draftId);
   if (index < 0) return [...items, next];
   return items.flatMap((item, at) =>
@@ -62,7 +69,8 @@ function message(items: readonly WireMessage[], next: WireMessage, draftId?: str
 }
 function delta(state: WireSnapshot, event: Extract<WireEvent, { type: 'text_delta' }>): WireSnapshot {
   const payload = event.payload;
-  const previous = state.messages.find((item) => item.id === payload.messageId);
+  const last = state.messages.at(-1);
+  const previous = last?.id === payload.messageId ? last : state.messages.find((item) => item.id === payload.messageId);
   const text = (previous?.text ?? '') + payload.delta;
   return {
     ...state,

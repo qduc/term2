@@ -237,7 +237,7 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
   };
   const capture = (listener: Subscriber['listener']): DirectLiveCapture => {
     const subscriber = { after: position, listener };
-    const snapshot = structuredClone(publicState());
+    const snapshot = publicState();
     subscribers.add(subscriber);
     return {
       state: snapshot,
@@ -372,7 +372,7 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
       if (!Number.isSafeInteger(fromSeq) || fromSeq < 0 || fromSeq > seq)
         throw new Error(`invalid direct log cursor ${fromSeq}`);
       // No await or callbacks between this replay cut and capture's registration.
-      const replay = structuredClone(durable.slice(fromSeq));
+      const replay = durable.slice(fromSeq);
       return { ...capture(listener), replay };
     },
     close() {

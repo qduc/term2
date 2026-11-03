@@ -161,7 +161,7 @@ function DirectTui({
         const profile = getProfileLabel(resolveActiveProfile(current).identity.id);
         return {
           profile: profile.charAt(0).toUpperCase() + profile.slice(1),
-          contextWindow: app.sessionDetails(sessionId).contextWindow(latest.current.model) ?? undefined,
+          contextWindow: app.contextWindow(latest.current.model) ?? undefined,
           effort: current.get('agent.reasoningEffort'),
           approval: current.get('shell.autoApproveMode'),
         };

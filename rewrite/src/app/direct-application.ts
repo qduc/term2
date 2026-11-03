@@ -86,6 +86,8 @@ export type DirectApplication = {
   goal(sessionId: string): Promise<DurableGoal | undefined>;
   /** Pass a snapshot's `seq` to read that cut rather than the log's current end. */
   sessionDetails(sessionId: string, seq?: number | null): DirectSessionDetails;
+  /** Catalog context window. Safe on the render path; it does not read the session log. */
+  contextWindow(model: ModelRef): number | null;
   /** The live settings of a session without reading its log each time; for code that runs on every render. */
   liveSettings(sessionId: string): DirectSessionDetails['settings'];
   /** Save only an applied interactive approval preference, never session model/profile overrides. */
@@ -212,6 +214,9 @@ export async function createDirectApplication(options: DirectApplicationOptions)
         logicalIds.set(sessionId, logicalId);
       }
       return runtimes.get(logicalId)?.settings ?? null;
+    },
+    contextWindow(model) {
+      return getModelContextWindow(model.provider, model.model) ?? null;
     },
     sessionDetails(sessionId, seq) {
       const lineage = readDirectLogLineage(

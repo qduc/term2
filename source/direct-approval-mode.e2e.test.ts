@@ -265,7 +265,12 @@ async function runCommand(
     }),
   );
 
-  session = spawnTerminal('node', [builtCli], { cwd: workspace, env, cols: exerciseMenu === 'hint-120' ? 120 : 80 });
+  session = spawnTerminal('node', [builtCli], {
+    cwd: workspace,
+    env,
+    cols: exerciseMenu === 'hint-120' ? 120 : exerciseMenu === 'model-picker' ? 100 : 80,
+    ...(exerciseMenu === 'model-picker' ? { rows: 35 } : {}),
+  });
   const idle = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
   if (exerciseMenu === 'hint-80' || exerciseMenu === 'hint-120') {
     const lines = session.getVisibleOutput().split('\n');
@@ -574,7 +579,12 @@ async function runCommand(
   }
   if (exerciseMenu === 'model-picker') {
     await session.waitForOutput('aka "luna"', 30_000);
-    expect(session.getVisibleOutput()).toContain('Nicknames');
+    // 100x35, same width as the spot check. The provider column must fit the whole name:
+    // a short one such as "codex" was painting as "cod…" because the border took the last cell.
+    const picker = session.getVisibleOutput();
+    expect(picker).toMatch(/mockprov\s+│/);
+    expect(picker).not.toContain('mockpr…');
+    expect(picker).toContain('Nicknames');
     expect(session.getVisibleOutput()).toContain('(current)');
     await session.waitForOutput('Some providers failed: brokenprov', 30_000);
     const beforeClose = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });

@@ -126,7 +126,9 @@ export function ModelPicker({
   });
   const start = Math.max(0, index - 5);
   const rows = visible.slice(start, start + 10);
-  const providerWidth = Math.max(1, ...rows.map((model) => model.provider.length));
+  // Width includes the right border and the one-cell gap, same as the old menu.
+  // Without them a name such as "codex" is one cell short and paints as "cod…".
+  const providerWidth = Math.max(0, ...visible.map((model) => model.provider.length)) + 2;
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={theme.border} paddingX={1}>
       <Text bold>Choose a model</Text>
@@ -151,6 +153,7 @@ export function ModelPicker({
             <Box
               width={providerWidth}
               flexShrink={0}
+              paddingRight={1}
               marginRight={1}
               borderStyle="single"
               borderTop={false}

@@ -121,11 +121,13 @@ export function ComposerFooter({
   state,
   active,
   columns,
+  queueSelectable,
 }: {
   readonly integration: TuiIntegration;
   readonly state: TuiState;
   readonly active: boolean;
   readonly columns: number;
+  readonly queueSelectable: boolean;
 }): React.ReactElement {
   const { Hints, StatusBar } = useSkin();
   const [, setQuotaClock] = useState(0);
@@ -139,7 +141,7 @@ export function ComposerFooter({
   const info = integration.status?.(state.sessionId);
   return (
     <>
-      {active ? <ComposerHints activeTurn={Boolean(state.activeTurnId)} columns={columns} Hints={Hints} /> : null}
+      {active ? <ComposerHints activeTurn={Boolean(state.activeTurnId)} queueSelectable={queueSelectable} columns={columns} Hints={Hints} /> : null}
       {info ? <StatusBar {...directStatusView(state, info, columns)} /> : null}
     </>
   );

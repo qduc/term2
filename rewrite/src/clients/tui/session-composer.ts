@@ -330,14 +330,14 @@ export function useSessionComposer(state: TuiState, historySize: number, onNotic
     clearSubmittedParts(submittedAttachments.images, submittedAttachments.otherParts);
     return 'Rewind complete; draft resent.';
   };
-  /** Opens a queued message for editing; `/queue cancel` restores the current draft. */
+  /** Opens a queued message for editing, preserving the draft for cancellation. */
   const startQueueEdit = (item: QueueItem) => {
     const primary = item.content?.findIndex((part) => part.type === 'text') ?? -1;
     const parts = item.content?.filter((_part, index) => index !== primary);
     setEditing({
       id: item.id,
-      restoreText: '',
-      restoreCursor: 0,
+      restoreText: editor.current(),
+      restoreCursor: editor.cursor.current,
       restoreImages: images,
       restoreOther: otherParts,
       restoreOriginal: originalParts,
@@ -345,11 +345,7 @@ export function useSessionComposer(state: TuiState, historySize: number, onNotic
       ...(item.skillEdit ? { skillPrefix: item.skillEdit.prefix } : {}),
     });
     restoreDraft({ text: item.skillEdit?.request ?? item.text, attachments: parts ?? [] });
-    onNotice?.(
-      parts
-        ? 'Editing queued input and attachments. /queue cancel restores your draft.'
-        : 'Editing queued text; attachment content is unavailable. /queue cancel restores your draft.',
-    );
+
   };
   const restoreRejected = async (submitted: string) => {
     // MultilineInput clears its local text immediately after calling onSubmit.

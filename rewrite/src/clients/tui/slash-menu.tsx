@@ -77,27 +77,28 @@ export function useSlashMenu(value: string, enabled: boolean, subtleColor: React
 /** Composer shortcuts are shown only when the composer owns input. */
 export function ComposerHints({
   activeTurn,
+  queueSelectable,
   columns,
   Hints,
 }: {
   readonly activeTurn: boolean;
+  readonly queueSelectable: boolean;
   readonly columns: number;
   readonly Hints: React.ComponentType<{ hints: ReadonlyArray<readonly [string, string]> }>;
 }): React.ReactElement {
   const hints: ReadonlyArray<readonly [string, string]> = activeTurn
     ? [
-        ['Enter', 'steer'],
-        ['Alt+Enter', 'follow-up'],
-        ['/cancel', 'stop'],
+        ...(queueSelectable ? [['↑', 'select queued'] as const] : []),
+        ['⏎', 'steer'],
+        ['Alt+⏎', 'queue'],
+        ['Ctrl+O', 'model'],
+        ['Ctrl+T', 'effort'],
       ]
     : [
         ['/', 'commands'],
         ['@', 'paths'],
         ['!', 'shell'],
-        ['Shift+Tab', 'plan mode'],
-        ['↑/↓', 'history'],
-        ['Ctrl+O', 'tool output'],
-        ['Ctrl+G', 'tasks'],
+        ['Shift+Tab', 'plan'],
       ];
   let width = 0;
   const visible = hints.filter(([key, action]) => {

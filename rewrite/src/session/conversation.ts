@@ -423,7 +423,6 @@ function conversation(
         return {
           admission: { kind: 'rejected', clientRequestId: request.clientRequestId, reason: journal.failure!.message },
         };
-      if (plan.result.kind === 'steering') active?.steer();
       return { admission: plan.result };
     },
     queue(command) {

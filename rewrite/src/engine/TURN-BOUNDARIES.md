@@ -23,15 +23,7 @@ an exact sent prefix with the corresponding same-length, same-ID/type durable pr
 otherwise it leaves the checkpoint unchanged. This preserves strict prefix matching
 for subsequent response chaining without recording request-only decoration in history.
 
-A Session-admitted steer wakes an active root request only after text has begun and
-before any tool-call output is observed. It aborts that physical request, not the
-turn; the accepted partial is finalized as an assistant item before the durable
-queue boundary admits the steer, and the next request uses that history without a
-continuity checkpoint for the interrupted response. A steer before text begins or
-after tool-call output remains pending until the usual request boundary. This
-keeps started tool calls and their results under the normal execution policy. The
-text finalization matters to replay and to the TUI: leaving the partial as a live
-draft would render it after the new user message even though it preceded it.
-When a steer interrupts a recovery attempt, the next dispatch claims a fresh
-physical recovery attempt; it never reuses the interrupted attempt's claim.
-The existing finite recovery limit can still reject that continuation.
+A Session-admitted steer stays pending until the next request boundary. It never
+aborts an in-flight physical response. Tool turns admit it before the next model
+request; a plain-text response settles first and the pending steer starts the next
+turn. This preserves the full response and its continuity before new input.

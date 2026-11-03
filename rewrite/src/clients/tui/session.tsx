@@ -9,6 +9,7 @@ import { useSkin } from './presentation/skins/SkinContext.js';
 import { terminalPreferenceDefaults } from '../../host/terminal-preference-defaults.js';
 import { useClient } from './use-client.js';
 import { Activity, BangResult, LiveNotices, interruptedNotice } from './views.js';
+import { PendingQueue } from './pending-queue.js';
 import { InteractionPanel } from './interaction-panel.js';
 import type { InteractionInputHandler } from './interaction-input.js';
 import { runBangShell } from './bang-shell.js';
@@ -70,6 +71,8 @@ export function TuiSession({
   const [picker, setPicker] = useState<PickerKind | null>(null);
   const [taskOpen, setTaskOpen] = useState(false);
   const [budgetOpen, setBudgetOpen] = useState(false);
+  const [selectedQueueId, setSelectedQueueId] = useState<string | null>(null);
+  const [queueNotice, setQueueNotice] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(() => interruptedNotice(state));
   const {
     images,
@@ -109,6 +112,8 @@ export function TuiSession({
   const notifyError = (error: unknown) => setNotice(error instanceof Error ? error.message : String(error));
   const [busy, setBusy] = useState(false);
   const composerActive = !panelOpen && !confirmation.pending && !connError && !interactionActive;
+  const queueItems = ['steering', 'queued'].flatMap((delivery) => state.queue.filter((item) => item.delivery === delivery));
+  const selectedQueueIndex = queueItems.findIndex((item) => item.id === selectedQueueId);
   const slash = useComposerMenu(editor.value, composerActive && !editing, theme.textSubtle);
   useHarnessInput(composerActive && !busy, Boolean(state.activeTurnId), editor.value);
   const pending = useRef(false);
@@ -371,6 +376,7 @@ export function TuiSession({
           Lines {viewport.start + 1}–{viewport.end} of {viewport.total} · PgUp/PgDn or Ctrl+↑/↓
         </Text>
       ) : null}
+      <Box flexDirection="column" paddingX={2} marginTop={state.activeTurnId ? 1 : state.messages.length ? 3 : 2}>
       <Activity state={state} dialogInteractionId={foregroundInteraction?.id} notice={notice} />
       {picker ? (
         <PickerHost
@@ -406,7 +412,7 @@ export function TuiSession({
           }}
         />
       ) : null}
-      {editing ? <Text>Editing queued message · Enter saves · /queue cancel restores draft</Text> : null}
+
       {interactionActive ? (
         <InteractionPanel
           key={foregroundInteraction?.id ?? 'picker'}
@@ -436,8 +442,9 @@ export function TuiSession({
       {bangResult ? <BangResult result={bangResult} expanded={viewport.expanded} /> : null}
       {slash.view}
       <LiveDivider />
+      <PendingQueue items={queueItems} selectedId={selectedQueueIndex < 0 ? null : selectedQueueId} editingId={editing?.id ?? null} notice={queueNotice} />
       <InputFrame>
-        <PromptMarker mode="input" />
+        {editing ? <Text color={theme.accent}>edit {queueItems.find((item) => item.id === editing.id)?.delivery === 'steering' ? 'steer' : 'queued'} ▸ </Text> : <PromptMarker mode="input" />}
         <MultilineInput
           key={editor.inputKey}
           value={editor.value}
@@ -449,6 +456,11 @@ export function TuiSession({
             void submit(value, submittedImages);
           }}
           onBoundaryArrow={(direction) => {
+            if (direction === 'up' && !editor.value && !editing && queueItems.length) {
+              setQueueNotice(null);
+              setSelectedQueueId(queueItems[queueItems.length - 1]!.id);
+              return;
+            }
             const entry = editor.navigate(direction, {
               text: editor.value,
               attachments: wireAttachments(images, otherParts, originalParts),
@@ -465,10 +477,42 @@ export function TuiSession({
           onImagesChange={onImagesChange}
           enableImagePaste
           onPasteError={(reason) => setNotice(`Image paste failed: ${reason}`)}
-          ignoreInput={composerFilter}
+          ignoreInput={(input, key) => {
+            if (selectedQueueIndex >= 0) {
+              const item = queueItems[selectedQueueIndex]!;
+              if (key.escape) setSelectedQueueId(null);
+              else if (key.upArrow) {
+                if (selectedQueueIndex > 0) setSelectedQueueId(queueItems[selectedQueueIndex - 1]!.id);
+                else {
+                  setSelectedQueueId(null);
+                  const entry = editor.navigate('up', { text: editor.value, attachments: wireAttachments(images, otherParts, originalParts) });
+                  if (entry) restoreDraft(entry, entry.cursor);
+                }
+              } else if (key.downArrow) setSelectedQueueId(queueItems[selectedQueueIndex + 1]?.id ?? null);
+              else if (input === 'e' || key.return) {
+                setSelectedQueueId(null);
+                setQueueNotice(null);
+                startQueueEdit(item);
+              } else if (input === 'd') {
+                setSelectedQueueId(null);
+                void queueAction(connection, 'retract', item.id).catch((error: unknown) => setQueueNotice(error instanceof Error ? error.message : String(error)));
+              }
+              return true;
+            }
+            if (editing && key.escape) {
+              replaceInput(editing.restoreText, editing.restoreCursor);
+              setImages(editing.restoreImages);
+              setOtherParts(editing.restoreOther);
+              setOriginalParts(editing.restoreOriginal);
+              setEditing(null);
+              return true;
+            }
+            return composerFilter(input, key);
+          }}
         />
       </InputFrame>
-      <ComposerFooter integration={integration} state={state} active={composerActive} columns={columns} />
+      <ComposerFooter integration={integration} state={state} active={composerActive} columns={columns - 4} queueSelectable={queueItems.length > 0 && !editor.value && !editing} />
+      </Box>
     </Box>
   );
 }

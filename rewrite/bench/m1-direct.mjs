@@ -200,14 +200,18 @@ function onlyFile(dir) {
 function snapshot(dir) {
   if (!fs.existsSync(dir)) return null;
   return fs
-    .readdirSync(dir)
-    .sort()
-    .map((name) => [
-      name,
-      crypto
-        .createHash('sha256')
-        .update(fs.readFileSync(path.join(dir, name)))
-        .digest('hex'),
+    .readdirSync(dir, { withFileTypes: true })
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((entry) => [
+      entry.name,
+      entry.isFile()
+        ? crypto
+            .createHash('sha256')
+            .update(fs.readFileSync(path.join(dir, entry.name)))
+            .digest('hex')
+        : entry.isDirectory()
+        ? 'directory'
+        : 'other',
     ]);
 }
 // Every line is one fact; the file ends with a newline and seq is contiguous.
@@ -219,7 +223,8 @@ function checkFormat(file) {
     .split('\n')
     .map((line) => JSON.parse(line));
   lines.forEach((line, i) => {
-    assert.equal(line.v, 1, 'format version');
+    assert.equal(line.v, 2, 'format version');
+    assert.equal(typeof line.fact?.type, 'string', 'fact envelope');
     assert.equal(typeof line.at, 'string', 'timestamp');
     if (i > 0) assert.equal(line.seq, lines[i - 1].seq + 1, 'seq contiguous');
   });
@@ -318,14 +323,21 @@ row(
       const facts = readFacts(file);
       const types = facts.map((fact) => fact.type);
       assert.equal(types[0], 'session_started');
-      assert.equal(types[1], 'turn_started');
-      assert.equal(types.at(-1), 'turn_ended');
-      assert.equal(facts.at(-1).outcome, 'completed');
+      assert.equal(types[1], 'queue_submitted');
+      assert.equal(types[2], 'queue_started');
+      assert.equal(types[3], 'turn_started');
+      assert.equal(types.at(-2), 'turn_ended');
+      assert.equal(types.at(-1), 'queue_settled');
+      assert.equal(facts.at(-2).outcome, 'completed');
       assert.ok(
-        types.slice(2, -1).every((type) => ['text_delta', 'item', 'usage'].includes(type)),
+        types
+          .slice(4, -2)
+          .every((type) =>
+            ['text_delta', 'item', 'usage', 'request_cost_recorded', 'model_response_completed'].includes(type),
+          ),
         `middle facts: ${types}`,
       );
-      assert.equal(textOf(facts[1].input[0]), 'say hello');
+      assert.equal(textOf(facts[3].input[0]), 'say hello');
       assert.equal(deltas(facts), 'Hello there.');
       const replayed = replay(facts);
       assert.equal(replayed.status, 'idle');
@@ -388,7 +400,8 @@ row('R3', 'HTTP 500: exact stderr, failed terminal, follow-up request is user, u
     const file = onlyFile(s.convDir);
     checkFormat(file);
     const facts = readFacts(file);
-    const end = facts.at(-1);
+    assert.equal(facts.at(-1).type, 'queue_settled');
+    const end = facts.at(-2);
     assert.equal(end.type, 'turn_ended');
     assert.equal(end.outcome, 'failed');
     assert.equal(end.error?.message, '500 boom');
@@ -526,7 +539,11 @@ row(
       assert.equal(interrupted.length, 1, 'exactly one interrupted terminal');
       assert.equal(interrupted[0].fact.turnId, killedTurn);
       const nextStart = after.findIndex((fact, index) => index > interrupted[0].index && fact.type === 'turn_started');
-      assert.equal(nextStart, interrupted[0].index + 1, 'written in the same write as the next turn_started');
+      assert.deepEqual(
+        after.slice(interrupted[0].index + 1, nextStart),
+        [{ type: 'queue_settled', turnId: killedTurn, outcome: 'interrupted' }],
+        'the interrupted turn is settled before the next turn starts',
+      );
     } finally {
       await s.close();
     }
@@ -608,7 +625,7 @@ row(
             state.failedAt = state.attempts;
             throw new Error('disk full (bench)');
           }
-          real.append(facts);
+          return real.append(facts);
         },
         close: () => real.close(),
       };
@@ -644,6 +661,13 @@ row(
       const c = failingLog(createLog(dir, idC), (fact) => fact.type === 'text_delta' && ++textDeltas === 2);
       const seenC = { aborted: false };
       const regC = fakeRegistry(async function* (request, signal) {
+        signal.addEventListener(
+          'abort',
+          () => {
+            seenC.aborted = true;
+          },
+          { once: true },
+        );
         for (const delta of ['a', 'b', 'c']) {
           if (signal.aborted) {
             seenC.aborted = true;
@@ -696,22 +720,17 @@ row(
   },
 );
 
-row('R9', 'model tool call: exit 1, message names the tool, no tool_call fact, no tool effect', async () => {
-  const s = await scenario(chunkedTool);
+row('R9', 'headless denies an unapproved shell call without side effects and continues', async () => {
+  const s = await scenario((n) => (n === 1 ? chunkedTool() : { actions: textActions('Tool denied.') }));
   try {
     const r = await runCli(s, ['say hello']);
-    assert.equal(r.code, 1);
-    assert.equal(r.stdout, '');
-    assert.ok(r.stderr.includes('model called shell; tools are not available yet'), r.stderr);
+    assert.equal(r.code, 0, r.stderr);
+    assert.equal(r.stdout, 'Tool denied.\n');
     assert.equal(fs.existsSync(path.join(s.workspace, 'made-by-tool.txt')), false, 'no tool effect');
+    assert.equal(s.requests.length, 2, 'provider receives the tool result');
+    assert.match(JSON.stringify(s.requests[1]), /denied|reject/i, 'provider sees denial');
     const facts = readFacts(onlyFile(s.convDir));
-    assert.equal(
-      facts.some((fact) => fact.type === 'item' && fact.item.type === 'tool_call'),
-      false,
-      'no tool_call fact',
-    );
-    assert.equal(facts.at(-1).outcome, 'failed');
-    assert.ok(facts.at(-1).error?.message.includes('shell'), 'terminal names the tool');
+    assert.ok(facts.some((fact) => fact.type === 'turn_ended' && fact.outcome === 'completed'));
   } finally {
     await s.close();
   }
@@ -766,15 +785,9 @@ row(
       const second = await runCli(convOnly, ['say again']);
       assert.equal(second.code, 0, second.stderr);
       assert.equal(convFiles(convOnly.convDir).length, 2);
+      const after = new Map(snapshot(convOnly.convDir));
       for (const [name, digest] of kept) {
-        assert.equal(
-          crypto
-            .createHash('sha256')
-            .update(fs.readFileSync(path.join(convOnly.convDir, name)))
-            .digest('hex'),
-          digest,
-          `${name} unchanged by a later run`,
-        );
+        assert.equal(after.get(name), digest, `${name} unchanged by a later run`);
       }
     } finally {
       await convOnly.close();
@@ -1038,7 +1051,11 @@ for (const [index, { configured, args, expected }] of [
       assert.equal(facts[0].profile.id, `builtin:${expected}`);
       assert.ok(facts[0].profile.version);
       assert.ok(facts[0].profile.digest);
-      assert.equal(textOf(facts[1].input[0]), 'select the configured profile', 'notice is not stored as human input');
+      assert.equal(
+        textOf(facts.find((fact) => fact.type === 'turn_started').input[0]),
+        'select the configured profile',
+        'notice is not stored as human input',
+      );
       assert.equal(facts.at(-1).outcome, 'completed');
       assert.deepEqual(fs.readFileSync(settingsFile), savedSettings, 'session overrides do not rewrite saved settings');
     } finally {

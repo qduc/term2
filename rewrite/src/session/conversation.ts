@@ -44,8 +44,10 @@ export function openConversation(deps: ConversationDeps & { readonly facts: read
   const started = deps.facts.find((fact) => fact.type === 'session_started');
   if (!started) throw new Error(`${deps.log.path} has no session_started fact`);
   // Reject inconsistent histories before a later run can write to them.
-  replay(deps.facts);
-  return conversation(deps, started.id, [...deps.facts]);
+  // Replay the journal's own array so its fold is kept for the first turn's boundary replays.
+  const facts = [...deps.facts];
+  replay(facts);
+  return conversation(deps, started.id, facts);
 }
 
 function conversation(

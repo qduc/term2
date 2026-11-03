@@ -91,23 +91,42 @@ type Slot = { item: Item | null };
  * Session must append them before the next turn's start, in the supplied order.
  */
 export function replay(facts: readonly Fact[], options: ReplayOptions = {}): ReplayedConversation {
-  // Session open and turn start ask for the same log under different options. When the log has no
-  // active turn and nothing to repair, every option set yields the same projection, so the clean
-  // result of the last call is reused until a fact is appended (or the array is another log).
-  const cached = cleanReplays.get(facts);
-  if (cached?.length === facts.length) return cached.result;
-  const result = replayProjection(facts, options, options.recoverActiveTurn !== false);
+  // Open and turn boundaries ask for the same, growing log many times. A log with no active turn and
+  // nothing to repair gives the same projection under every option set, so the fold that produced
+  // it is kept per facts array (journals only append) and later calls fold just the new facts.
+  // A fold that had to apply repairs is consumed by them and dropped.
+  const kept = foldCache.get(facts);
+  if (kept && kept.length === facts.length) return kept.result;
+  foldCache.delete(facts); // A fold that throws mid-way must not be resumed.
+  const fold = kept && kept.length <= facts.length ? kept.fold : createReplayFold();
+  for (let i = kept && kept.fold === fold ? kept.length : 0; i < facts.length; i++) fold.consume(facts[i]!);
+  const result = fold.finish(options, options.recoverActiveTurn !== false);
   if (result.status === 'idle' && result.recoveryFacts.length === 0)
-    cleanReplays.set(facts, { length: facts.length, result });
+    foldCache.set(facts, { fold, length: facts.length, result });
   return result;
 }
-const cleanReplays = new WeakMap<readonly Fact[], { length: number; result: ReplayedConversation }>();
+const foldCache = new WeakMap<readonly Fact[], { fold: ReplayFold; length: number; result: ReplayedConversation }>();
 
 function replayProjection(
   facts: readonly Fact[],
   options: ReplayOptions,
   repairActiveTurn: boolean,
 ): ReplayedConversation {
+  const fold = createReplayFold();
+  for (const fact of facts) fold.consume(fact);
+  return fold.finish(options, repairActiveTurn);
+}
+
+/**
+ * The fold over accepted facts. `consume` is the only thing that grows with history; `finish` applies the
+ * caller's recovery policy and is destructive whenever it has repairs to make, so a fold that finished
+ * with repairs must not be fed again.
+ */
+type ReplayFold = {
+  consume(fact: Fact): void;
+  finish(options: ReplayOptions, repairActiveTurn: boolean): ReplayedConversation;
+};
+function createReplayFold(): ReplayFold {
   let slots: Slot[] = [];
   const recoveryFacts: Fact[] = [];
   let active: ActiveTurn | null = null;
@@ -432,65 +451,67 @@ function replayProjection(
     }
   };
 
-  for (const fact of facts) consume(fact);
-  if (options.recoverQueue !== false) {
-    const start = queue.missingStart();
-    if (start) {
-      recoveryFacts.push(start);
-      consume(start);
+  const finish = (options: ReplayOptions, repairActiveTurn: boolean): ReplayedConversation => {
+    if (options.recoverQueue !== false) {
+      const start = queue.missingStart();
+      if (start) {
+        recoveryFacts.push(start);
+        consume(start);
+      }
     }
-  }
-  // A closure-mutated active turn is read through a function so TS does not
-  // mistake the initial null for a lifetime invariant.
-  const unfinished = (): ActiveTurn | null => active;
-  const turn = unfinished();
-  if (turn && repairActiveTurn) {
-    const repairs: Fact[] = [...recoverReplayRoots(turn, options.rootSettlement)];
-    for (const { request } of turn.interactions.values())
-      repairs.push({
-        type: 'interaction_closed',
-        turnId: turn.turnId,
-        requestId: request.requestId,
-        resolution: { kind: 'interrupted' },
-      });
-    for (const { requestId } of turn.budgets.values())
-      repairs.push({
-        type: 'budget_closed',
-        turnId: turn.turnId,
-        requestId,
-        decision: { kind: 'stop' },
-        source: 'system',
-      });
-    repairs.push({ type: 'turn_ended', turnId: turn.turnId, outcome: 'interrupted' });
-    for (const fact of repairs) {
-      recoveryFacts.push(fact);
-      consume(fact);
+    // A closure-mutated active turn is read through a function so TS does not
+    // mistake the initial null for a lifetime invariant.
+    const unfinished = (): ActiveTurn | null => active;
+    const turn = unfinished();
+    if (turn && repairActiveTurn) {
+      const repairs: Fact[] = [...recoverReplayRoots(turn, options.rootSettlement)];
+      for (const { request } of turn.interactions.values())
+        repairs.push({
+          type: 'interaction_closed',
+          turnId: turn.turnId,
+          requestId: request.requestId,
+          resolution: { kind: 'interrupted' },
+        });
+      for (const { requestId } of turn.budgets.values())
+        repairs.push({
+          type: 'budget_closed',
+          turnId: turn.turnId,
+          requestId,
+          decision: { kind: 'stop' },
+          source: 'system',
+        });
+      repairs.push({ type: 'turn_ended', turnId: turn.turnId, outcome: 'interrupted' });
+      for (const fact of repairs) {
+        recoveryFacts.push(fact);
+        consume(fact);
+      }
     }
-  }
-  if (turn && !repairActiveTurn) finishReplayText(turn);
-  if (options.recoverQueue !== false) {
-    recoveryFacts.push(...queue.reconcileTerminal(), ...queue.pausePending());
-  }
-  rotation.assertComplete();
-  for (const turnId of noticeDeliveries) {
-    if (!silentTurns.has(turnId)) throw new Error('replay: background notice delivery has no silent turn');
-  }
-  const background = backgroundAudit.project(sessionId, (branchFacts) =>
-    replayProjection(branchFacts, { recoverQueue: false }, options.recoverQueue !== false),
-  );
-  recoveryFacts.push(...background.recoveryFacts);
-  return {
-    status: unfinished() !== null || lastOutcome === 'interrupted' ? 'interrupted' : 'idle',
-    history: slots.flatMap(({ item }) => (item === null ? [] : [item])),
-    nextTurn: queue.nextTurn,
-    recoveryFacts,
-    queue: queue.state,
-    context,
-    background: background.background,
-    commands: commandReceipts,
-    notifications,
-    branches: background.branches,
-    compactions: [...compactions.values()],
-    ...(compactionState ? { compactionState } : {}),
+    if (turn && !repairActiveTurn) finishReplayText(turn);
+    if (options.recoverQueue !== false) {
+      recoveryFacts.push(...queue.reconcileTerminal(), ...queue.pausePending());
+    }
+    rotation.assertComplete();
+    for (const turnId of noticeDeliveries) {
+      if (!silentTurns.has(turnId)) throw new Error('replay: background notice delivery has no silent turn');
+    }
+    const background = backgroundAudit.project(sessionId, (branchFacts) =>
+      replayProjection(branchFacts, { recoverQueue: false }, options.recoverQueue !== false),
+    );
+    recoveryFacts.push(...background.recoveryFacts);
+    return {
+      status: unfinished() !== null || lastOutcome === 'interrupted' ? 'interrupted' : 'idle',
+      history: slots.flatMap(({ item }) => (item === null ? [] : [item])),
+      nextTurn: queue.nextTurn,
+      recoveryFacts,
+      queue: queue.state,
+      context,
+      background: background.background,
+      commands: commandReceipts,
+      notifications,
+      branches: background.branches,
+      compactions: [...compactions.values()],
+      ...(compactionState ? { compactionState } : {}),
+    };
   };
+  return { consume, finish };
 }

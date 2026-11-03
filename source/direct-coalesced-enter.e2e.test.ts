@@ -361,6 +361,8 @@ it.skipIf(process.platform !== 'linux')(
     session!.write('\x16');
     await session!.waitForOutput('[Pasted Image #1]', 30_000);
     expect(session!.getVisibleOutput()).not.toContain('QUEUE_SKILL_SENTINEL');
+    // The editor re-renders after an image paste; keystrokes written during that remount are lost under load.
+    await new Promise((resolve) => setTimeout(resolve, 600));
     session!.write('-EDITED');
     await until(() => composer(idlePath)?.includes('-EDITED') === true, 'edited request with pasted image');
     session!.write('\r');

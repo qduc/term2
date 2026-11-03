@@ -10,9 +10,14 @@ export type NativeSearchDocument = {
   readonly kind: string;
   readonly text: string;
 };
+export type NativeTranscript = {
+  readonly documents: readonly NativeSearchDocument[];
+  /** Public message count, the same reduction the resume list shows. */
+  readonly messageCount: number;
+};
 
 /** Use the same public reduction as clients, never provider history as searchable text. */
-export function nativeTranscript(lineage: DirectLogLineage): readonly NativeSearchDocument[] {
+export function nativeTranscript(lineage: DirectLogLineage): NativeTranscript {
   const workspace = lineage.metadata.workspaceIdentity ?? {
     root: lineage.metadata.workspace,
     target: 'local',
@@ -104,5 +109,8 @@ export function nativeTranscript(lineage: DirectLogLineage): readonly NativeSear
         text: branch.reasoning,
       });
   }
-  return docs.filter((doc) => doc.text.trim().length > 0);
+  return {
+    documents: docs.filter((doc) => doc.text.trim().length > 0),
+    messageCount: state.messages.length,
+  };
 }

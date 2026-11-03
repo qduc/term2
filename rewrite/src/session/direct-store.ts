@@ -60,7 +60,16 @@ export interface DirectLocalStore extends DirectSessionStore {
   open(id: string, binding?: DirectBinding): Promise<DirectLiveSession>;
   /** Resume listing for one project. Other logs are not parsed. */
   listWorkspace(workspaceRoot: string): ReturnType<DirectSessionStore['list']>;
+  /** Sessions already open in this process. Empty when none are. Does not read logs. */
+  liveListings(): readonly DirectLiveListing[];
 }
+
+export type DirectLiveListing = {
+  readonly id: string;
+  readonly messageCount: number;
+  readonly model: ModelRef;
+  readonly workspace: Workspace;
+};
 
 type Summary = {
   readonly id: string;
@@ -99,6 +108,7 @@ const DIRECT_ID = /^conv_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
 export function createDirectSessionStore(options: DirectSessionStoreOptions): DirectLocalStore {
   const directory = path.resolve(options.directory);
   const sessions = new Map<string, Promise<DirectLiveSession>>();
+  const live = new Map<string, DirectLiveSession>();
   let closed = false;
   let closePromise: Promise<void> | undefined;
   const assertOpen = (): void => {
@@ -118,7 +128,12 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
   const remember = (id: string, construct: () => Promise<DirectLiveSession>): Promise<DirectLiveSession> => {
     const existing = sessions.get(id);
     if (existing) return existing;
-    const pending = Promise.resolve().then(construct);
+    const pending = Promise.resolve().then(() =>
+      construct().then((session) => {
+        live.set(id, session);
+        return session;
+      }),
+    );
     sessions.set(id, pending);
     void pending.catch(() => {
       if (sessions.get(id) === pending) sessions.delete(id);
@@ -214,6 +229,7 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
         dispose: () => ownedRuntime.dispose?.(),
         released: () => {
           sessions.delete(context.id);
+          live.delete(context.id);
         },
       });
     } catch (error) {
@@ -348,6 +364,9 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
     },
     listWorkspace(workspaceRoot) {
       return listSessions(undefined, workspaceRoot);
+    },
+    liveListings() {
+      return [...live.values()].map((session) => ({ id: session.id, ...session.listingHints() }));
     },
     close() {
       if (closePromise) return closePromise;

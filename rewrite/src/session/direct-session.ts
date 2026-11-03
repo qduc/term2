@@ -33,6 +33,12 @@ export type DirectLiveCapture = Omit<DirectSessionCapture, 'state'> & {
 };
 export type DirectCatchUp = DirectSessionReplayCapture & { readonly state: DirectPublicState };
 export interface DirectLiveSession extends DirectSession {
+  /** In-memory count and selection. Does not copy the transcript. */
+  listingHints(): {
+    readonly messageCount: number;
+    readonly model: ModelRef;
+    readonly workspace: Workspace;
+  };
   capture(listener: (update: DirectSessionUpdate) => void): DirectLiveCapture;
   /** Durable catch-up then live updates. State is the final cut, never a snapshot to prepend to replay.
    * Reopened-interruption and other live-only state must be synchronized from that final state.
@@ -342,6 +348,14 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
       return conversation.answer(requestId, structuredClone(decision), provenance);
     },
     requestTaskStop: (taskId) => conversation.tasks.requestStop(taskId),
+    listingHints() {
+      const current = publicState();
+      return {
+        messageCount: current.messages.length,
+        model: current.configuration?.configuration.model ?? current.model,
+        workspace: current.workspace,
+      };
+    },
     cancel(target?: DirectCancelTarget) {
       if (target?.kind === 'task') {
         conversation.tasks.requestStop(target.id);

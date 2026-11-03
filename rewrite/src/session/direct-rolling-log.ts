@@ -388,3 +388,32 @@ export function createDirectRollingLog(
     },
   };
 }
+
+/** Header walk only: the file that starts a session and the file that currently ends it. */
+export function directLogicalEnds(directory: string): ReadonlyMap<string, { rootPath: string; headPath: string }> {
+  directory = resolve(directory);
+  const { headers, children } = discoverDirectLogs(directory);
+  const ends = new Map<string, { rootPath: string; headPath: string }>();
+  for (const id of headers.keys()) {
+    const seen = new Set<string>();
+    let rootId = id;
+    while (headers.get(rootId)?.type === 'session_rotated') {
+      if (seen.has(rootId)) break;
+      seen.add(rootId);
+      const predecessor = headers.get(rootId);
+      if (predecessor?.type !== 'session_rotated' || !headers.has(predecessor.predecessor.sessionId)) break;
+      rootId = predecessor.predecessor.sessionId;
+    }
+    if (headers.get(rootId)?.type !== 'session_started' || ends.has(rootId)) continue;
+    let headId = rootId;
+    const walked = new Set<string>();
+    while (!walked.has(headId)) {
+      walked.add(headId);
+      const next = children.get(headId) ?? [];
+      if (next.length !== 1 || !headers.has(next[0]!)) break;
+      headId = next[0]!;
+    }
+    ends.set(rootId, { rootPath: directLogPath(directory, rootId), headPath: directLogPath(directory, headId) });
+  }
+  return ends;
+}

@@ -18,6 +18,7 @@ import { createDirectSessionStore, type DirectLocalStore } from '../session/dire
 import type { DurableGoal } from '../session/direct-goal.js';
 import type { DirectSession, DirectSessionState } from '../session/facade-types.js';
 import { readDirectLogLineage } from '../session/direct-rolling-log.js';
+import { listDirectResumeSessions } from './direct-resume-list.js';
 import { replay } from '../session/replay.js';
 import type { InteractionDecision } from '../engine/index.js';
 import type { ModelRef } from '../model/index.js';
@@ -174,7 +175,9 @@ export async function createDirectApplication(options: DirectApplicationOptions)
     headlessPolicy: (sessionId, autoApprove, signal) =>
       headlessPolicy({ store, runtimes, directory: options.conversationsDir, sessionId, autoApprove, signal }),
     listWorkspaceSessions(root) {
-      return nativeStore.listWorkspace(root);
+      return listDirectResumeSessions(options.conversationsDir, root, nativeStore, (workspaceRoot, identity) =>
+        authority.resolveStored(workspaceRoot, identity),
+      );
     },
     async sessionRoot(principal, sessionId) {
       const { sessions } = await host.listSessions(principal);

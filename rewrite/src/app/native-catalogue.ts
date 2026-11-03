@@ -23,6 +23,10 @@ export type NativeCatalogueEntry = {
   readonly model: string;
   readonly profile: string;
   readonly messages: number;
+  /** Latest provider. Null on a row indexed before this column existed. */
+  readonly provider: string | null;
+  /** Public message count. Null on a row indexed before this column existed. */
+  readonly displayed: number | null;
 };
 type Physical = { name: string; stamp: string; logical: string };
 type Match = { rowid: number; logical: string; identity: string; seq: number; kind: string };
@@ -42,12 +46,17 @@ function openCache(filename: string): Database.Database {
     try {
       db.pragma('journal_mode = MEMORY');
       db.exec(`CREATE TABLE IF NOT EXISTS physical(name TEXT PRIMARY KEY, stamp TEXT NOT NULL, logical TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS catalogue(id TEXT PRIMARY KEY, updated TEXT, created TEXT, workspace TEXT, target TEXT, binding TEXT, model TEXT, profile TEXT, messages INTEGER);
+        CREATE TABLE IF NOT EXISTS catalogue(id TEXT PRIMARY KEY, updated TEXT, created TEXT, workspace TEXT, target TEXT, binding TEXT, model TEXT, profile TEXT, messages INTEGER, provider TEXT, displayed INTEGER);
         CREATE TABLE IF NOT EXISTS documents(rowid INTEGER PRIMARY KEY, logical TEXT, identity TEXT, seq INTEGER, kind TEXT);
         CREATE INDEX IF NOT EXISTS documents_logical ON documents(logical);
         CREATE VIRTUAL TABLE IF NOT EXISTS search USING fts5(text, content='', contentless_delete=1);
         PRAGMA user_version = 1;`);
       db.prepare('SELECT count(*) FROM search').get();
+      const columns = new Set(
+        (db.prepare('PRAGMA table_info(catalogue)').all() as { name: string }[]).map((column) => column.name),
+      );
+      if (!columns.has('provider')) db.exec('ALTER TABLE catalogue ADD COLUMN provider TEXT');
+      if (!columns.has('displayed')) db.exec('ALTER TABLE catalogue ADD COLUMN displayed INTEGER');
       return db;
     } catch (error) {
       db.close();
@@ -68,24 +77,27 @@ function openCache(filename: string): Database.Database {
   }
 }
 
-function allowed(entry: NativeCatalogueEntry, scope: NativeCatalogueScope): boolean {
+function allowed(entry: NativeCatalogueEntry, scope: NativeCatalogueScope, includeBound = false): boolean {
   if (entry.target !== scope.target) return false;
   const binding = JSON.parse(entry.binding || '{}') as Partial<DirectBinding>;
   if (
-    scope.binding
+    !includeBound &&
+    (scope.binding
       ? binding.client !== scope.binding.client || binding.id !== scope.binding.id
-      : binding.client !== undefined
+      : binding.client !== undefined)
   )
     return false;
   const normalize = scope.target === 'local' ? path.resolve : path.posix.normalize;
   return scope.root === null || normalize(entry.workspace) === normalize(scope.root);
 }
 
-/** Open for one synchronous operation, refresh only changed logical lineages, and close. */
+/** Open for one synchronous operation, refresh only changed logical lineages, and close.
+ * `skip` leaves those lineages unread: the caller already has them in memory, and
+ * rewriting their stamp would hide a later refresh once they are no longer open. */
 export function withNativeCatalogue<T>(
   directory: string,
   operation: (catalogue: {
-    list(scope: NativeCatalogueScope): readonly NativeCatalogueEntry[];
+    list(scope: NativeCatalogueScope, options?: { readonly includeBound?: boolean }): readonly NativeCatalogueEntry[];
     search(
       scope: NativeCatalogueScope,
       query: string,
@@ -96,7 +108,9 @@ export function withNativeCatalogue<T>(
       hits: readonly { sessionId: string; identity: string; seq: number; kind: string; snippet: string }[];
     };
   }) => T,
+  options?: { readonly skip?: readonly string[] },
 ): T {
+  const skip = new Set(options?.skip ?? []);
   directory = path.resolve(directory);
   // Namespace validation must not be hidden by cache recovery or per-lineage isolation.
   const names = directLogNames(directory);
@@ -109,7 +123,13 @@ export function withNativeCatalogue<T>(
       const affected = new Set<string>();
       const indexed = new Set((db.prepare('SELECT id FROM catalogue').all() as { id: string }[]).map((row) => row.id));
       const failed = new Set<string>();
+      const columnFill = new Set<string>();
       const current: Physical[] = [];
+      const incomplete = new Set(
+        (
+          db.prepare('SELECT id FROM catalogue WHERE provider IS NULL OR displayed IS NULL').all() as { id: string }[]
+        ).map((row) => row.id),
+      );
       for (const name of names) {
         const filename = path.join(directory, name);
         const stat = lstatSync(filename, { bigint: true });
@@ -134,6 +154,16 @@ export function withNativeCatalogue<T>(
             /* Strict lineage read below marks this affected lineage unavailable. */
           }
           affected.add(logical);
+        } else if (incomplete.has(logical)) columnFill.add(logical);
+        // An open session is already in memory. Keep the old stamp so the next
+        // list, once it is closed, still refreshes this file.
+        if (skip.has(logical) || (old !== undefined && skip.has(old.logical))) {
+          affected.delete(logical);
+          columnFill.delete(logical);
+          if (old) affected.delete(old.logical);
+          if (old) current.push(old);
+          previous.delete(name);
+          continue;
         }
         current.push({ name, stamp, logical });
         previous.delete(name);
@@ -155,32 +185,59 @@ export function withNativeCatalogue<T>(
         }
         const configuration = latestDirectConfiguration(lineage.entries.map((entry) => entry.fact));
         const metadata = lineage.metadata;
+        const model = configuration?.configuration.model ?? metadata.model;
         const target = metadata.workspaceIdentity?.target ?? (metadata.binding?.client === 'ssh' ? '' : 'local');
-        db.prepare('INSERT INTO catalogue VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+        db.prepare(
+          'INSERT INTO catalogue (id, updated, created, workspace, target, binding, model, profile, messages, provider, displayed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        ).run(
           logical,
           lineage.entries.at(-1)!.at,
           lineage.entries[0]!.at,
           metadata.workspace,
           target,
           JSON.stringify(metadata.binding ?? {}),
-          (configuration?.configuration.model ?? metadata.model).model,
+          model.model,
           (configuration?.profile ?? metadata.profile).id,
-          docs.filter((doc) => doc.kind === 'user').length,
+          docs.documents.filter((doc) => doc.kind === 'user').length,
+          model.provider,
+          docs.messageCount,
         );
-        for (const doc of docs) {
+        for (const doc of docs.documents) {
           const result = db
             .prepare('INSERT INTO documents(logical, identity, seq, kind) VALUES (?, ?, ?, ?)')
             .run(logical, doc.id, doc.seq, doc.kind);
           db.prepare('INSERT INTO search(rowid, text) VALUES (?, ?)').run(result.lastInsertRowid, doc.text);
         }
       }
+      // Same bytes as the indexed row: fill the new columns without rewriting search text.
+      for (const logical of columnFill) {
+        if (affected.has(logical)) continue;
+        try {
+          const lineage = readDirectLogLineage(directory, logical);
+          const transcript = nativeTranscript(lineage);
+          const configuration = latestDirectConfiguration(lineage.entries.map((entry) => entry.fact));
+          const model = configuration?.configuration.model ?? lineage.metadata.model;
+          db.prepare(
+            'UPDATE catalogue SET provider = ?, displayed = ?, model = ?, messages = ?, updated = ? WHERE id = ?',
+          ).run(
+            model.provider,
+            transcript.messageCount,
+            model.model,
+            transcript.documents.filter((doc) => doc.kind === 'user').length,
+            lineage.entries.at(-1)!.at,
+            logical,
+          );
+        } catch (error) {
+          console.warn(`Native catalogue columns unavailable for ${logical}: ${String(error)}`);
+        }
+      }
       db.prepare('DELETE FROM physical').run();
       const insert = db.prepare('INSERT INTO physical VALUES (?, ?, ?)');
       for (const row of current) if (!failed.has(row.logical)) insert.run(row.name, row.stamp, row.logical);
     })();
-    const list = (scope: NativeCatalogueScope) =>
+    const list = (scope: NativeCatalogueScope, listOptions?: { readonly includeBound?: boolean }) =>
       (db.prepare('SELECT * FROM catalogue ORDER BY updated DESC, id').all() as NativeCatalogueEntry[]).filter(
-        (entry) => allowed(entry, scope),
+        (entry) => allowed(entry, scope, listOptions?.includeBound === true),
       );
     return operation({
       list,
@@ -203,7 +260,9 @@ export function withNativeCatalogue<T>(
           try {
             if (!transcripts.has(row.logical))
               transcripts.set(row.logical, nativeTranscript(readDirectLogLineage(directory, row.logical)));
-            const doc = transcripts.get(row.logical)!.find((doc) => doc.id === row.identity && doc.seq === row.seq);
+            const doc = transcripts
+              .get(row.logical)!
+              .documents.find((doc) => doc.id === row.identity && doc.seq === row.seq);
             if (!doc) return [];
             const positions = terms
               .map((term) => doc.text.toLocaleLowerCase().indexOf(term.toLocaleLowerCase()))

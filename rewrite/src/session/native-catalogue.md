@@ -1,12 +1,16 @@
 # Native derived catalogue and search
 
-`withNativeCatalogue(directory, operation)` owns file discovery, cache refresh and
+`withNativeCatalogue(directory, transcript, operation, options?)` owns file discovery, cache refresh and
 SQLite lifetime for one synchronous operation. Its `list(scope)` returns metadata
 ordered by accepted timestamp then logical ID; `search(scope, query, kind?, limit?)`
 returns total matched document identities and bounded snippets. The directory must
 be the strict native conversations namespace. No source store, provenance map or
-migration reader participates. `nativeTranscript(lineage)` is the shared ephemeral
-document projection used for indexing and snippet reconstruction.
+migration reader participates. The caller supplies `transcript(lineage)` (the app's `nativeTranscript`, which needs the protocol layer) to turn a
+lineage into searchable documents. Document text is stored in the cache, so a search returns snippets without reading
+any log; the cache is disposable, and an older one without stored text is emptied and rebuilt once. `options.skip`
+leaves named sessions unindexed for this call (open sessions whose log is still growing; the search tool skips its own
+session, so that session's newest facts become searchable when it closes).
+This module lives in `session/` and the app binds it in `app/native-catalogue.ts`.
 
 ## Authority and lifetime
 

@@ -13,7 +13,13 @@ const inputSchema = z
   .strict();
 
 /** Bind directory and authority once; the model cannot supply paths or workspace filters. */
-export function createNativeSearchTool(directory: string, workspace: Workspace, binding?: DirectBinding): Tool {
+export function createNativeSearchTool(
+  directory: string,
+  workspace: Workspace,
+  binding?: DirectBinding,
+  /** The session calling the tool: its log grows during the turn, so its newest facts are indexed once it closes. */
+  ownSessionId?: string,
+): Tool {
   const scope = nativeSearchScope(workspace, binding);
   return {
     spec: {
@@ -29,7 +35,9 @@ export function createNativeSearchTool(directory: string, workspace: Workspace, 
       if (context.workspace.target !== workspace.target || context.workspace.root !== workspace.root)
         throw new Error('Native search workspace authority changed');
       const { query, kind, limit } = inputSchema.parse(raw);
-      const result = withNativeCatalogue(directory, (catalogue) => catalogue.search(scope, query, kind, limit));
+      const result = withNativeCatalogue(directory, (catalogue) => catalogue.search(scope, query, kind, limit), {
+        skip: ownSessionId ? [ownSessionId] : [],
+      });
       return { output: JSON.stringify(result), isError: false };
     },
   };

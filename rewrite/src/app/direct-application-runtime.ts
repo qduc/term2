@@ -361,7 +361,14 @@ export function createDirectRuntimes(
         const capabilities: DirectContextCapabilities = {
           ...sessionMemory,
           ...(surfaceOptions.sessionBrowser === true && options.conversationsDir && context.workspace.target === 'local'
-            ? { sessionSearch: createNativeSearchTool(options.conversationsDir, context.workspace, context.binding) }
+            ? {
+                sessionSearch: createNativeSearchTool(
+                  options.conversationsDir,
+                  context.workspace,
+                  context.binding,
+                  context.id,
+                ),
+              }
             : {}),
           ...(hooks ? { hooks } : {}),
           ...(verification

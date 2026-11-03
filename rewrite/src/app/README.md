@@ -87,7 +87,7 @@ in `cli.ts`: it silently loses the user-authored goal.
 ## Native CLI conversation discovery
 
 `cli-conversations.ts` lists existing native logical lineages through the shared
-[derived catalogue](native-catalogue.md), without opening a
+[derived catalogue](../session/native-catalogue.md), without opening a
 writable Session or creating a runtime. `--resume ls` and `--resume list` show the
 last ten matching conversations. `--resume last` and bare `--resume` select the
 matching lineage with the newest accepted fact timestamp (not copied-file mtime),

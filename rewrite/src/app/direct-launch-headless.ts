@@ -39,7 +39,9 @@ export function runDirectHeadlessOnHost(request: DirectHeadlessRequest): DirectH
         hooks: { root: fs.realpathSync(process.cwd()), mode: 'non-interactive' },
         onSurface(surface, profile) {
           profileMetadata = profile;
-          io.stderr.write(`Profile: ${surface.profileName}\n`);
+          // `--quiet` suppresses non-error diagnostics. Later event lines already
+          // honor it; this announcement is written before that run starts.
+          if (!request.quiet) io.stderr.write(`Profile: ${surface.profileName}\n`);
         },
       });
       application = app;

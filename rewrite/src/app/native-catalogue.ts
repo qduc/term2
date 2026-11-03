@@ -107,6 +107,8 @@ export function withNativeCatalogue<T>(
         (db.prepare('SELECT * FROM physical').all() as Physical[]).map((row) => [row.name, row]),
       );
       const affected = new Set<string>();
+      const indexed = new Set((db.prepare('SELECT id FROM catalogue').all() as { id: string }[]).map((row) => row.id));
+      const failed = new Set<string>();
       const current: Physical[] = [];
       for (const name of names) {
         const filename = path.join(directory, name);
@@ -114,6 +116,8 @@ export function withNativeCatalogue<T>(
         const stamp = [stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(':');
         const old = previous.get(name);
         let logical = old?.logical ?? name.slice(0, -6);
+        // Older catalogues retained stamps even when indexing failed. Retry them too.
+        if (old && !indexed.has(old.logical)) affected.add(old.logical);
         if (old?.stamp !== stamp) {
           if (old) affected.add(old.logical);
           try {
@@ -146,6 +150,7 @@ export function withNativeCatalogue<T>(
           docs = nativeTranscript(lineage);
         } catch (error) {
           console.warn(`Native catalogue unavailable for ${logical}: ${String(error)}`);
+          failed.add(logical);
           continue;
         }
         const configuration = latestDirectConfiguration(lineage.entries.map((entry) => entry.fact));
@@ -171,7 +176,7 @@ export function withNativeCatalogue<T>(
       }
       db.prepare('DELETE FROM physical').run();
       const insert = db.prepare('INSERT INTO physical VALUES (?, ?, ?)');
-      for (const row of current) insert.run(row.name, row.stamp, row.logical);
+      for (const row of current) if (!failed.has(row.logical)) insert.run(row.name, row.stamp, row.logical);
     })();
     const list = (scope: NativeCatalogueScope) =>
       (db.prepare('SELECT * FROM catalogue ORDER BY updated DESC, id').all() as NativeCatalogueEntry[]).filter(

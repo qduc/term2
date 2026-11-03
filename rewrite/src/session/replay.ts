@@ -96,16 +96,23 @@ export function replay(facts: readonly Fact[], options: ReplayOptions = {}): Rep
   // it is kept per facts array (journals only append) and later calls fold just the new facts.
   // A fold that had to apply repairs is consumed by them and dropped.
   const kept = foldCache.get(facts);
-  if (kept && kept.length === facts.length) return kept.result;
+  // The options shape the result (queue recovery, root settlement), so a held result is served only to the same options.
+  const key = `${options.recoverQueue !== false}|${options.recoverActiveTurn !== false}|${
+    options.rootSettlement ?? ''
+  }`;
+  if (kept && kept.length === facts.length && kept.key === key) return kept.result;
   foldCache.delete(facts); // A fold that throws mid-way must not be resumed.
   const fold = kept && kept.length <= facts.length ? kept.fold : createReplayFold();
   for (let i = kept && kept.fold === fold ? kept.length : 0; i < facts.length; i++) fold.consume(facts[i]!);
   const result = fold.finish(options, options.recoverActiveTurn !== false);
   if (result.status === 'idle' && result.recoveryFacts.length === 0)
-    foldCache.set(facts, { fold, length: facts.length, result });
+    foldCache.set(facts, { fold, length: facts.length, key, result });
   return result;
 }
-const foldCache = new WeakMap<readonly Fact[], { fold: ReplayFold; length: number; result: ReplayedConversation }>();
+const foldCache = new WeakMap<
+  readonly Fact[],
+  { fold: ReplayFold; length: number; key: string; result: ReplayedConversation }
+>();
 
 function replayProjection(
   facts: readonly Fact[],
@@ -128,7 +135,6 @@ type ReplayFold = {
 };
 function createReplayFold(): ReplayFold {
   let slots: Slot[] = [];
-  const recoveryFacts: Fact[] = [];
   let active: ActiveTurn | null = null;
   const queue = new DirectQueueReplay();
   const backgroundAudit = new ReplayBackground();
@@ -452,6 +458,7 @@ function createReplayFold(): ReplayFold {
   };
 
   const finish = (options: ReplayOptions, repairActiveTurn: boolean): ReplayedConversation => {
+    const recoveryFacts: Fact[] = []; // fresh per call: earlier results are held by callers and the cache
     if (options.recoverQueue !== false) {
       const start = queue.missingStart();
       if (start) {

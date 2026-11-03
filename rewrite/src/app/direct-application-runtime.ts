@@ -362,12 +362,7 @@ export function createDirectRuntimes(
           ...sessionMemory,
           ...(surfaceOptions.sessionBrowser === true && options.conversationsDir && context.workspace.target === 'local'
             ? {
-                sessionSearch: createNativeSearchTool(
-                  options.conversationsDir,
-                  context.workspace,
-                  context.binding,
-                  context.id,
-                ),
+                sessionSearch: createNativeSearchTool(options.conversationsDir, context.workspace, context.binding),
               }
             : {}),
           ...(hooks ? { hooks } : {}),

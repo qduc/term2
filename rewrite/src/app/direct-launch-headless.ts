@@ -24,7 +24,10 @@ export function runDirectHeadlessOnHost(request: DirectHeadlessRequest): DirectH
         target: opened,
         conversationsDir,
         interactive: false,
-        onNotice: (message) => io.stderr.write(`MCP: ${message}\n`),
+        onNotice: (message) => {
+          // Same non-error diagnostic as the profile line. The old CLI only logs these.
+          if (!request.quiet) io.stderr.write(`MCP: ${message}\n`);
+        },
       });
       // Headless owns one frozen generation; settle BEFORE first surface/session.
       await mcp?.whenSettled();
@@ -46,6 +49,7 @@ export function runDirectHeadlessOnHost(request: DirectHeadlessRequest): DirectH
       });
       application = app;
       const sessionId = resumeId !== undefined && request.fork ? await app.forkSession(resumeId) : resumeId;
+      // The old CLI prints this under --quiet too. It is the fork's identity, not a diagnostic.
       if (sessionId !== resumeId) io.stderr.write(`Forked conversation ${resumeId} → ${sessionId}\n`);
       const connection =
         sessionId === undefined

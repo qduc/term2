@@ -119,6 +119,47 @@ it('omits the profile line from stderr when --quiet is set', { timeout: 120_000 
   expect(announced.stdout).toContain('"type":"completed"');
 });
 
+it('omits an MCP config notice under --quiet and still prints it otherwise', { timeout: 120_000 }, async () => {
+  const baseUrl = await startProvider(200, 'PONG');
+  const { env, workspace } = prepare(baseUrl);
+  const settingsDir = resolveSettingsDirectory({ homeDir: path.join(root, 'home'), env });
+  fs.writeFileSync(path.join(settingsDir, 'mcp.json'), '{');
+
+  const quiet = await run(['--json', '-q', 'Reply with the single word PONG.'], env, workspace);
+  expect(quiet.code).toBe(0);
+  expect(quiet.stderr).not.toMatch(/^MCP: /m);
+  expect(quiet.stderr).not.toMatch(/Profile:/);
+  expect(quiet.stdout).toContain('"type":"completed"');
+
+  const announced = await run(['--json', 'Reply with the single word PONG.'], env, workspace);
+  expect(announced.code).toBe(0);
+  expect(announced.stderr).toMatch(/^MCP: /m);
+  expect(announced.stderr).toContain('is not valid JSON');
+  expect(announced.stderr).toContain('Profile: bare');
+});
+
+it('keeps the fork line under --quiet', { timeout: 120_000 }, async () => {
+  const baseUrl = await startProvider(200, 'PONG');
+  const { env, workspace } = prepare(baseUrl);
+  const created = await run(['--json', '-q', 'Reply with the single word PONG.'], env, workspace);
+  expect(created.code).toBe(0);
+  const id = fs
+    .readdirSync(env.TERM2_CONVERSATIONS_DIR!)
+    .find((name) => name.endsWith('.jsonl'))
+    ?.slice(0, -'.jsonl'.length);
+  expect(id).toBeTruthy();
+
+  const forked = await run(
+    ['--json', '-q', '--resume', id!, '--fork', 'Reply with the single word PONG.'],
+    env,
+    workspace,
+  );
+  expect(forked.code).toBe(0);
+  expect(forked.stderr).toContain(`Forked conversation ${id} →`);
+  expect(forked.stderr).not.toMatch(/Profile:/);
+  expect(forked.stdout).toContain('"type":"completed"');
+});
+
 it('still prints a plain-mode error under --quiet', { timeout: 120_000 }, async () => {
   const baseUrl = await startProvider(500, 'quiet-boom');
   const { env, workspace } = prepare(baseUrl);

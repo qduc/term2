@@ -16,7 +16,7 @@ import { useInterrupt } from './interrupt.js';
 import { runQueueCommand } from './queue-command.js';
 import { withSkillPrefix } from './skill-edit.js';
 import { PickerHost, pickerFor, openPickerFor, type PickerKind } from './picker-host.js';
-import { isCtrlG, isShiftTab, usePlanToggle } from './shift-tab.js';
+import { isCtrlG, isCtrlT, isShiftTab, usePlanToggle } from './shift-tab.js';
 import { RewindPicker } from './rewind-picker.js';
 import { TaskManager } from './task-manager.js';
 import { BudgetPanel } from './budget-panel.js';
@@ -128,6 +128,7 @@ export function TuiSession({
     if (interactionActive) return void interactionInput.current?.(input, key);
     if (taskOpen || budgetOpen || rewindTargets) return;
     if (composerActive && isShiftTab(input, key)) return togglePlan();
+    if (composerActive && isCtrlT(input, key)) return setPicker('effort');
     if (slash.handle(key, replaceInput, openPickerFor(integration, setPicker), (command) => void submit(command, [])))
       return;
     if (composerActive && key.escape && viewport.expanded) return viewport.collapse();
@@ -459,7 +460,7 @@ export function TuiSession({
           width={Math.max(1, columns - 4)}
           maxHeight={Math.max(1, rows - 8)}
           pasteThreshold={preferences.pasteThreshold}
-          isActive={composerActive}
+          isActive={composerActive && !picker}
           images={images}
           onImagesChange={onImagesChange}
           enableImagePaste

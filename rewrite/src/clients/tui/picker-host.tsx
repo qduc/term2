@@ -1,14 +1,16 @@
 import React from 'react';
 import type { TuiConnection, TuiIntegration } from './integration.js';
 import type { InteractionInput } from './interaction-input.js';
+import { EffortPicker } from './effort-picker.js';
 import { ModelPicker } from './model-picker.js';
 import { ResumePicker } from './resume-picker.js';
 import { SettingsPicker } from './settings-picker.js';
 
-export type PickerKind = 'model' | 'resume' | 'settings';
+export type PickerKind = 'model' | 'resume' | 'settings' | 'effort';
 
-/** The picker a typed command opens, if the app supplied one: `/model` and `/resume` with no argument. */
+/** The picker a typed command opens: `/model`, `/resume`, `/settings`, and bare `/effort`. */
 export function pickerFor(integration: TuiIntegration, command: string): PickerKind | null {
+  if (command === '/effort') return 'effort';
   if (command === '/resume' && integration.resumePicker) return 'resume';
   if (command === '/settings' && integration.settingsPicker) return 'settings';
   return command === '/model' && integration.modelPicker ? 'model' : null;
@@ -58,6 +60,28 @@ export function PickerHost(props: {
         onNotice={onNotice}
       />
     );
+  if (kind === 'effort') {
+    let current: string | undefined;
+    try {
+      current = integration.status?.(connection.sessionId).effort;
+    } catch {
+      current = undefined;
+    }
+    return (
+      <EffortPicker
+        current={current}
+        inputHandler={inputHandler}
+        onClose={close}
+        onSelect={(level) => {
+          close();
+          void integration.command(connection, `/effort ${level}`).then(
+            (result) => onNotice(result.message ?? null),
+            (error: unknown) => onNotice(error instanceof Error ? error.message : String(error)),
+          );
+        }}
+      />
+    );
+  }
   if (kind === 'resume' && integration.resumePicker)
     return (
       <ResumePicker

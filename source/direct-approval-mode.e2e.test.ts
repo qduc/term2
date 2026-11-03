@@ -622,7 +622,6 @@ it('/settings clears its submitted command', { timeout: TIMEOUT_MS }, () =>
 
 it.each([
   ['/profile', 'Use /profile', ''],
-  ['/effort', 'Use /effort', ''],
   ['/auto-approve', 'Use /auto-approve', ''],
 ])('%s explains its arguments and clears the composer', { timeout: TIMEOUT_MS }, (command, notice, draft) =>
   runCommand(command, notice, undefined, false, false, draft),

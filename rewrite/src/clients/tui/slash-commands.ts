@@ -46,7 +46,7 @@ export const SLASH_COMMANDS: readonly string[] = SLASH_COMMAND_TABLE.map((comman
 
 const HELP_SHORTCUTS = [
   'Keyboard shortcuts',
-  'Enter send/steer · Alt+Enter follow-up · ↑/↓ history · PgUp/PgDn scroll · Ctrl+O tool output',
+  'Enter send/steer · Alt+Enter follow-up · ↑/↓ history · PgUp/PgDn scroll · Ctrl+O tool output · Ctrl+T reasoning effort',
   'Ctrl+G approvals/tasks · Ctrl+B budget · Ctrl+C stop turn / clear input / exit',
   'Shift+Tab plan mode',
 ] as const;

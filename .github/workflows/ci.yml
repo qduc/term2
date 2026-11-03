@@ -168,7 +168,9 @@ jobs:
           ref: ${{ inputs.ref || github.sha }}
       - uses: ./.github/actions/setup-tests
       - name: Build dist
-        run: /usr/bin/time -v env SKIP_BUILD_BACKUP=1 pnpm build
+        run: |
+          /usr/bin/time -v env SKIP_BUILD_BACKUP=1 pnpm build
+          /usr/bin/time -v node rewrite/scripts/build.mjs
       - name: Run E2E and Responses provider cases
         run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs e2e
 

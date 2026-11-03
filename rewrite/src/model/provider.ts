@@ -67,7 +67,6 @@ export type ProviderRegistryDeps = {
 };
 
 const DEFAULT_RETRY_ATTEMPTS = 2;
-
 export function createProviderRegistry(deps: ProviderRegistryDeps): ModelRegistry {
   const models = new Map<string, Model>();
   // Process-wide, as the run loop keeps it per session: once a provider rejects
@@ -83,13 +82,8 @@ export function createProviderRegistry(deps: ProviderRegistryDeps): ModelRegistr
         throw new Error(`Provider '${ref.provider}' does not expose an application streamed model.`);
       }
       const model = lazyModel(ref, provider, deps, compaction);
-      if (model.catalogContextWindow === undefined) {
-        deps.logger.warn('Model context window unknown; automatic compaction assumes 128,000 tokens', {
-          provider: ref.provider,
-          model: ref.model,
-          assumedContextWindow: DEFAULT_ASSUMED_CONTEXT_WINDOW,
-        });
-      }
+      if (model.catalogContextWindow === undefined)
+        deps.logger.warn('Model context window unknown; automatic compaction assumes 128,000 tokens', ref);
       models.set(key, model);
       return model;
     },

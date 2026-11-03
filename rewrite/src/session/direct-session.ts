@@ -321,6 +321,7 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
       const planned = conversation.snapshotInputPreview({ ...requestSettings(), input: [draft] });
       return structuredClone({ ...planned, ...directPreviewLifecycle(durable, resumedAtSeq) });
     },
+    acceptedHistory: () => conversation.acceptedHistory(),
     configureTaskCheckIn: (target, policy) => conversation.configureTaskCheckIn(target, policy),
     drainBackgroundNotifications(clientRequestId) {
       if (closing || fault)

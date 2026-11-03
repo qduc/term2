@@ -207,6 +207,8 @@ export interface DirectSession {
   snapshotInputPreview(
     request: import('./direct-preview.js').DirectPreviewRequest,
   ): import('./direct-preview.js').DirectPreviewSnapshot;
+  /** Accepted provider history at the current cut; read it in the same tick as `capture` to pair with its state. */
+  acceptedHistory(): readonly import('../model/index.js').Item[];
   /** Current native mutation revision, not the event position or durable sequence. */
   commandRevision(): string;
   /** Stable invocation identity and durable outcome; admission is not completion. */

@@ -16,10 +16,8 @@ import type { DirectCommandCapabilities } from '../protocol/direct-capabilities.
 import { forkDirectConversation } from '../session/direct-fork.js';
 import { createDirectSessionStore, type DirectLocalStore } from '../session/direct-store.js';
 import type { DurableGoal } from '../session/direct-goal.js';
-import type { DirectSession, DirectSessionState } from '../session/facade-types.js';
-import { readDirectLogLineage } from '../session/direct-rolling-log.js';
+import type { DirectBinding, DirectSession, DirectSessionState } from '../session/facade-types.js';
 import { listDirectResumeSessions } from './direct-resume-list.js';
-import { replay } from '../session/replay.js';
 import type { InteractionDecision } from '../engine/index.js';
 import type { ModelRef } from '../model/index.js';
 import type { Workspace } from '../tools/index.js';
@@ -53,6 +51,8 @@ export type DirectSessionDetails = {
   /** Logs are never truncated, so a cursor can reach back to the first line. */
   readonly earliestSeq: number;
   readonly logPath: string;
+  /** Who the session belongs to; fixed at its start. */
+  readonly binding: DirectBinding | undefined;
   readonly profileId: string | null;
   readonly settings: DirectSessionSettings | null;
   /** The session's tools read a copy of `settings`, so a change needs a rebuild to reach them. */
@@ -105,16 +105,6 @@ export type DirectApplication = {
 export async function createDirectApplication(options: DirectApplicationOptions): Promise<DirectApplication> {
   const { selection, sessionBinding } = options;
   const hooks = options.hooks ? await startDirectHooks(options.hooks, selection) : null;
-  const logicalIds = new Map<string, string>();
-  // A session's logical id never changes, so its log is read once, not on every render.
-  const logicalIdOf = (sessionId: string): string => {
-    let logicalId = logicalIds.get(sessionId);
-    if (logicalId === undefined) {
-      logicalId = readDirectLogLineage(options.conversationsDir, sessionId, {}).logicalSessionId;
-      logicalIds.set(sessionId, logicalId);
-    }
-    return logicalId;
-  };
   const runtimes = createDirectRuntimes(
     {
       ...options,
@@ -224,35 +214,31 @@ export async function createDirectApplication(options: DirectApplicationOptions)
       }
     },
     liveSettings(sessionId) {
-      return runtimes.get(logicalIdOf(sessionId))?.settings ?? null;
+      return runtimes.get(sessionId)?.settings ?? null;
     },
     contextWindow(model) {
       return getModelContextWindow(model.provider, model.model) ?? null;
     },
     sessionDetails(sessionId, seq) {
-      // The live record needs only the cached logical id. Parsing the whole lineage
-      // costs seconds on a large session, so only the log-derived fields pay for it,
-      // once per call, when read.
-      const record = runtimes.get(logicalIdOf(sessionId));
-      let lineage: ReturnType<typeof readDirectLogLineage> | undefined;
-      const read = () =>
-        (lineage ??= readDirectLogLineage(
-          options.conversationsDir,
-          sessionId,
-          seq === undefined || seq === null ? {} : { throughSeq: seq },
-        ));
+      // The live session answers from memory; fields are read lazily so a caller that
+      // wants only settings pays nothing.
+      const record = runtimes.get(sessionId);
+      const meta = () => store.metadata(sessionId, seq === undefined || seq === null ? undefined : seq);
       return {
         get createdAt() {
-          return read().entries[0]!.at;
+          return meta().createdAt;
         },
         get updatedAt() {
-          return read().entries.at(-1)!.at;
+          return meta().updatedAt;
         },
         get earliestSeq() {
-          return read().entries[0]!.seq;
+          return meta().earliestSeq;
         },
         get logPath() {
-          return read().path;
+          return meta().logPath;
+        },
+        get binding() {
+          return meta().binding;
         },
         profileId: record?.profileId ?? null,
         settings: record?.settings ?? null,
@@ -316,7 +302,7 @@ async function successor(
   state: DirectSessionState,
   model: ModelRef,
 ): Promise<DirectSession> {
-  const binding = readDirectLogLineage(directory, session.id).metadata.binding;
+  const binding = store.metadata(session.id).binding;
   const next = await runtimes.inheriting(session.id, () => store.create(state.workspace, model, binding));
   const { goal } = state.context.goal;
   if (goal) writeGoal(next, goal, 'launcher');
@@ -368,22 +354,18 @@ type HeadlessPolicyInput = {
  * which answers through the Session like every other client.
  */
 function headlessPolicy(input: HeadlessPolicyInput): HeadlessApprovalDecider {
-  const { store, runtimes, directory, sessionId, autoApprove, signal } = input;
+  const { store, runtimes, sessionId, autoApprove, signal } = input;
   return async (interaction) => {
     if (interaction.kind === 'question') return decideHeadlessApproval(interaction, autoApprove);
     const session = await store.open(sessionId);
     const runtime = runtimes.get(session.id);
     if (!runtime) throw new Error(`No runtime for session ${session.id}`);
-    const { state, seq, unsubscribe } = session.capture(() => undefined);
+    const { state, unsubscribe } = session.capture(() => undefined);
     unsubscribe();
     const request = state.pendingInteractions.find((pending) => pending.requestId === interaction.requestId);
     // Already settled by cancellation. The answer this produces is reported stale.
     if (!request) return { decision: { kind: 'deny' } };
-    const { entries } = readDirectLogLineage(directory, session.id, { throughSeq: seq });
-    const { history } = replay(
-      entries.map((entry) => entry.fact),
-      { recoverQueue: false, recoverActiveTurn: false },
-    );
+    const history = session.acceptedHistory();
     const decision = await runtime.scope(() =>
       untilAborted(runtime.surface.decideInteraction(request, history), signal),
     );

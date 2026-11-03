@@ -12,6 +12,7 @@ import { createDirectSession, type DirectLiveSession } from './direct-session.js
 import type { ConversationLog } from './log.js';
 import {
   createDirectRollingLog,
+  type DirectRollingLog,
   directLogNames,
   readDirectLogLineage,
   readDirectLogLineages,
@@ -62,7 +63,22 @@ export interface DirectLocalStore extends DirectSessionStore {
   listWorkspace(workspaceRoot: string): ReturnType<DirectSessionStore['list']>;
   /** Sessions already open in this process. Empty when none are. Does not read logs. */
   liveListings(): readonly DirectLiveListing[];
+  /**
+   * Log facts of one session, optionally cut at an accepted seq. An open session answers from memory;
+   * only a session this process has not opened is read from disk.
+   */
+  metadata(id: string, throughSeq?: number): DirectSessionMetadata;
 }
+
+export type DirectSessionMetadata = {
+  readonly logicalSessionId: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly earliestSeq: number;
+  /** Physical file holding the last accepted fact at the cut. */
+  readonly logPath: string;
+  readonly binding?: DirectBinding;
+};
 
 export type DirectLiveListing = {
   readonly id: string;
@@ -109,6 +125,7 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
   const directory = path.resolve(options.directory);
   const sessions = new Map<string, Promise<DirectLiveSession>>();
   const live = new Map<string, DirectLiveSession>();
+  const writers = new Map<string, DirectRollingLog>();
   let closed = false;
   let closePromise: Promise<void> | undefined;
   const assertOpen = (): void => {
@@ -168,6 +185,7 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
       directLogNames(directory);
       const rollingLog = createDirectRollingLog(directory, context.id, lineage);
       log = rollingLog;
+      writers.set(context.id, rollingLog);
       // New roots have no readable header until attach appends session_started.
       // Acquire authority before that publication; opened roots arrive locked.
       release ??= acquireDirectWriterLock(rollingLog.path);
@@ -230,9 +248,11 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
         released: () => {
           sessions.delete(context.id);
           live.delete(context.id);
+          writers.delete(context.id);
         },
       });
     } catch (error) {
+      writers.delete(context.id);
       const failures: unknown[] = [error];
       try {
         log?.close();
@@ -367,6 +387,28 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
     },
     liveListings() {
       return [...live.values()].map((session) => ({ id: session.id, ...session.listingHints() }));
+    },
+    metadata(id, throughSeq) {
+      requireDirectId(id);
+      const summary = writers.get(id)?.summary(throughSeq);
+      if (summary)
+        return {
+          logicalSessionId: summary.logicalSessionId,
+          createdAt: summary.first.at,
+          updatedAt: summary.last.at,
+          earliestSeq: summary.first.seq,
+          logPath: summary.path,
+          ...(summary.metadata.binding ? { binding: summary.metadata.binding } : {}),
+        };
+      const lineage = readDirectLogLineage(directory, id, throughSeq === undefined ? {} : { throughSeq });
+      return {
+        logicalSessionId: lineage.logicalSessionId,
+        createdAt: lineage.entries[0]!.at,
+        updatedAt: lineage.entries.at(-1)!.at,
+        earliestSeq: lineage.entries[0]!.seq,
+        logPath: lineage.path,
+        ...(lineage.metadata.binding ? { binding: lineage.metadata.binding } : {}),
+      };
     },
     close() {
       if (closePromise) return closePromise;

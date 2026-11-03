@@ -17,7 +17,6 @@ import type { Principal } from '../host/in-process-direct-types.js';
 import type { ServerSessionPresentation, ServerTransportOptions } from '../host/server-contracts.js';
 import type { WireSnapshot } from '../protocol/direct-wire.js';
 import { DirectProtocolError } from '../protocol/direct-errors.js';
-import { readDirectLogLineage } from '../session/direct-rolling-log.js';
 import { createDirectApplication, type DirectApplication } from './direct-application.js';
 import { prepareDirectSessionConfigurationCommand } from './direct-config-settings.js';
 import type { DirectAuthorityFactory } from './direct-application-workspaces.js';
@@ -152,15 +151,15 @@ type DirectServeSessionPresentation = ServerSessionPresentation & {
 };
 
 function presentation(options: PresentationOptions): DirectServeSessionPresentation {
-  const { app, directory, grants, configuration, allowWrite } = options;
+  const { app, grants, configuration, allowWrite } = options;
   const owned = (principal: Principal, sessionId: string, seq: number | null) => {
     // Authority stays on the original logical start, validated through the same
     // accepted lineage/cut as the presentation, never on a physical filename alias.
-    const started = readDirectLogLineage(directory, sessionId, seq === null ? {} : { throughSeq: seq }).metadata;
-    if (started.binding?.client !== principal.userId) {
+    const binding = app.sessionDetails(sessionId, seq).binding;
+    if (binding?.client !== principal.userId) {
       throw new DirectProtocolError('forbidden', 'Workspace grant does not authorize this principal.');
     }
-    return { started, grant: grants.resolveGrant(principal, started.binding.id) };
+    return { grant: grants.resolveGrant(principal, binding.id) };
   };
   return {
     metadata(principal, snapshot) {

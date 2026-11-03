@@ -83,6 +83,8 @@ export type Conversation = {
   readonly tasks: DirectBackgroundTasks;
   /** Pure planned provider input; never accepts draft/context or advances continuity. */
   snapshotInputPreview(request: TurnRequest): import('./direct-preview.js').DirectPlannedInput;
+  /** Accepted provider history as of now, without inventing crash-time repairs. */
+  acceptedHistory(): readonly import('../model/index.js').Item[];
   abort(
     expectedTurnId: import('../engine/index.js').TurnId,
     discardQueue?: boolean,

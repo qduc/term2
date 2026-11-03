@@ -366,6 +366,7 @@ function conversation(
           (!journal.queueState.pause && journal.queueState.pending.length > 0),
       );
     },
+    acceptedHistory: () => replay(facts, { recoverQueue: false, recoverActiveTurn: false }).history,
     rolloverAtBoundary: (turnId) => directRolloverAtBoundary(facts, turnId),
     context: () => structuredClone(journal.context),
     setGoal(generation, goal, source = 'user') {

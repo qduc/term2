@@ -408,6 +408,18 @@ for (const entry of files(rewriteSrc)) {
   }
 }
 
+// Only session/ reads the log. app/ and clients/ ask the live session (store.metadata, session.acceptedHistory)
+// so a metadata call never re-parses a log the session already holds in memory.
+// The catalogue and the offline conversation commands read logs of sessions that are not open.
+const LOG_READERS = /\b(readDirectLogLineage|readFactLines|discoverDirectLogs)\b/;
+const LOG_READER_EXCEPTIONS = new Set(['app/native-catalogue.ts', 'app/cli-conversations.ts']);
+for (const file of files(rewriteSrc)) {
+  const relative = path.relative(rewriteSrc, file).split(path.sep).join('/');
+  if (!/^(app|clients)\//.test(relative) || LOG_READER_EXCEPTIONS.has(relative)) continue;
+  if (LOG_READERS.test(fs.readFileSync(file, 'utf8')))
+    problems.add(`${relative}: app/ and clients/ may not read session logs; ask the session`);
+}
+
 if (reachedUnknown.size) {
   console.log('reached source files missing from the layer map:');
   for (const file of [...reachedUnknown].sort()) console.log(`  source/${file}`);

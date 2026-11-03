@@ -84,6 +84,7 @@ export function bindDirectSessionAccess<TCreated, TOpened>(options: {
     list: (cursor) => options.sessions.list(cursor),
     close: () => options.sessions.close(),
   };
+  const starts = new Map<string, ReturnType<typeof sessionStart>>();
   return {
     sessions,
     async authorize(principal, access) {
@@ -93,7 +94,9 @@ export function bindDirectSessionAccess<TCreated, TOpened>(options: {
         options.authority.resolveWorkspace(principal, access.grant);
         return;
       }
-      const started = sessionStart(directory, access.sessionId);
+      // The start fact never changes, so it is read once per session, not once per send.
+      let started = starts.get(access.sessionId);
+      if (!started) starts.set(access.sessionId, (started = sessionStart(directory, access.sessionId)));
       if (!started.binding || started.binding.client !== principal.userId) throw forbidden();
       const grant = options.authority.resolveGrant(principal, started.binding.id);
       const resolved = options.authority.resolveWorkspace(principal, grant);

@@ -3,14 +3,7 @@ import { closeSync, lstatSync, openSync, readSync, readdirSync, realpathSync, st
 import { join, resolve } from 'node:path';
 import { z } from 'zod';
 import type { FactLine, SessionStartedFact } from './facts.js';
-import {
-  createLog,
-  openLog,
-  readFactLines,
-  readFactLinesStamped,
-  type ConversationLog,
-  type StampedLogRead,
-} from './log.js';
+import { createLog, openLog, readFactLinesStamped, type ConversationLog, type StampedLogRead } from './log.js';
 import { parseDirectSessionRotation, type DirectSessionRotationFact } from './direct-session-rotation.js';
 
 const DIRECT_ID = /^conv_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -34,9 +27,20 @@ export type DirectLogLineage = {
   readonly entries: readonly FactLine[];
   readonly segments: readonly DirectLogSegment[];
 };
+/** What a live writer already knows about its accepted log, so callers need no parse. */
+export type DirectLogSummary = {
+  readonly logicalSessionId: string;
+  /** Physical file containing the last accepted fact at the requested cut. */
+  readonly path: string;
+  readonly metadata: SessionStartedFact;
+  readonly first: FactLine;
+  readonly last: FactLine;
+};
 export interface DirectRollingLog extends ConversationLog {
   /** Read-only acceptance boundary; app preparation cannot append or rotate it. */
   head(): DirectLogBoundary;
+  /** Accepted-history facts from memory, optionally cut at an accepted seq. Undefined before the first fact. */
+  summary(throughSeq?: number): DirectLogSummary | undefined;
 }
 
 /** Exact logs and the one reserved lock directory; never read foreign data. */
@@ -373,6 +377,10 @@ export function createDirectRollingLog(
     sessionId: segment?.sessionId ?? logicalSessionId,
     seq: lineage?.entries.at(-1)?.seq ?? 0,
   };
+  // Where each physical file starts, so a cut can name the file that holds its last fact.
+  const physical: { path: string; afterSeq: number }[] = lineage
+    ? lineage.segments.map((entry) => ({ path: entry.path, afterSeq: entry.afterSeq }))
+    : [{ path: current.path, afterSeq: 0 }];
   let dead = false;
   let closed = false;
   return {
@@ -380,6 +388,28 @@ export function createDirectRollingLog(
       return current.path;
     },
     head: () => ({ ...head }),
+    summary(throughSeq) {
+      const first = acceptedEntries[0];
+      if (!first) return undefined;
+      if (first.fact.type !== 'session_started') throw new Error('direct lineage has invalid logical Session metadata');
+      if (throughSeq !== undefined && (!Number.isSafeInteger(throughSeq) || throughSeq < 1))
+        throw new Error('direct lineage cut must be a positive accepted sequence');
+      if (throughSeq !== undefined && throughSeq > acceptedEntries.at(-1)!.seq)
+        throw new Error('direct lineage cut exceeds accepted history');
+      let low = 0;
+      let high = acceptedEntries.length - 1;
+      if (throughSeq !== undefined)
+        while (low < high) {
+          const mid = (low + high + 1) >> 1;
+          if (acceptedEntries[mid]!.seq <= throughSeq) low = mid;
+          else high = mid - 1;
+        }
+      else low = high;
+      const last = acceptedEntries[low]!;
+      let file = physical[0]!;
+      for (const entry of physical) if (entry.afterSeq < last.seq) file = entry;
+      return { logicalSessionId, path: file.path, metadata: first.fact, first, last };
+    },
     append(facts) {
       if (dead || closed) throw new Error('direct rolling log is closed or unusable after a write failure');
       if (!facts.length) return [];
@@ -408,8 +438,10 @@ export function createDirectRollingLog(
         const accepted = successor.append(facts);
         for (const entry of accepted) acceptedEntries.push(entry);
         const predecessor = current;
+        const successorPath = successor.path;
         current = successor;
         successor = undefined;
+        physical.push({ path: successorPath, afterSeq: rotation.predecessor.throughSeq });
         head = { sessionId: rotation.sessionId, seq: accepted.at(-1)!.seq };
         predecessor.close();
         return accepted;

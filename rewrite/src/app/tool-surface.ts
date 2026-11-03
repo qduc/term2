@@ -87,6 +87,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
   let baseGraph: AnyToolDefinition[] = [];
   const delegation = createDirectSubagentTools({
     selection,
+    trimConfig: options.trimConfig,
     workspace,
     executionContext,
     skillsService,
@@ -166,6 +167,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
   const registry = createSourceToolRegistry(offered, {
     policies,
     settings,
+    trimConfig: options.trimConfig,
     sessionAccess,
     sessionId,
     withAnswer: (answer, operation) => answers.run(answer, operation),

@@ -50,6 +50,7 @@ import {
 
 export type DirectSubagentToolsOptions = {
   readonly selection: ProfileSelection;
+  readonly trimConfig?: () => { maxCharacters: number; maxLines: number };
   readonly workspace: Workspace;
   readonly executionContext: ExecutionContext;
   readonly skillsService?: SkillsService;
@@ -272,6 +273,7 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
     const registry = createSourceToolRegistry(wrapped, {
       policies,
       settings,
+      trimConfig: options.trimConfig,
       sessionAccess: options.sessionAccess,
       sessionId: options.sessionId,
       withAnswer: options.withAnswer,

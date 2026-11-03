@@ -10,6 +10,8 @@ import type { ToolRegistry, Workspace } from '../tools/index.js';
 /** App settings generations share the concrete logger whose configuration they update. */
 export type ProfileSelection = ProviderRegistryDeps & { readonly logger: LoggingService };
 export type ToolSurfaceOptions = {
+  /** Runtime-only source output limit, owned by this session. */
+  readonly trimConfig?: () => { maxCharacters: number; maxLines: number };
   /** App-owned local manager, shared across sessions/configured generations.
    * Capture ONCE per surface generation; never connect or close the manager here. */
   readonly mcp?: {

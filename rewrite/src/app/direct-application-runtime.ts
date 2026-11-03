@@ -189,7 +189,12 @@ export function createDirectRuntimes(
       }
       const settings = sessionSettings(options, context);
       const selection = { settings, logger, sessionContext };
-      const suppliedSurfaceOptions = options.surface(context.id);
+      const trimConfig = { maxCharacters: 40_000, maxLines: 1_000 };
+      const stopTrimUpdates = settings.onChange((key) => {
+        if (key === 'shell.maxOutputChars') trimConfig.maxCharacters = settings.get('shell.maxOutputChars');
+        if (key === 'shell.maxOutputLines') trimConfig.maxLines = settings.get('shell.maxOutputLines');
+      });
+      const suppliedSurfaceOptions = { ...options.surface(context.id), trimConfig: () => trimConfig };
       const surfaceOptions = {
         ...suppliedSurfaceOptions,
         ...(!suppliedSurfaceOptions.remote
@@ -422,6 +427,7 @@ export function createDirectRuntimes(
         appVersion: installationVersion,
         async dispose() {
           records.delete(context.id);
+          stopTrimUpdates();
           const results = await Promise.allSettled(generations.map(async (dispose) => dispose()));
           const failures = results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
           if (failures.length) throw new AggregateError(failures, 'A tool graph could not be released.');

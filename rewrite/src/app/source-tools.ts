@@ -1,6 +1,7 @@
 /** App composition over source definitions, concrete approval owners and native tool capabilities. */
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
+import { withTrimConfig } from '../../../source/utils/output/output-trim.js';
 import { normalizeToolInput } from '../../../source/lib/tool-invoke.js';
 import { isCancellationError, isHarnessInvariantError } from '../../../source/lib/harness-invariant-error.js';
 import type { ToolApprovalPolicyRegistry } from '../../../source/services/approval/tool-approval-policy-registry.js';
@@ -42,6 +43,7 @@ export function sourceToolContext(invocation: unknown): ToolContext {
 type SourceToolOptions = {
   readonly policies: ToolApprovalPolicyRegistry;
   readonly settings: ISettingsService;
+  readonly trimConfig?: () => { maxCharacters: number; maxLines: number };
   readonly sessionAccess: SessionAccessState;
   readonly sessionId: string;
   readonly checkInterceptors?: (name: string, input: unknown) => Promise<string | null>;
@@ -285,7 +287,11 @@ function adaptTool(definition: AnyToolDefinition, options: SourceToolOptions, ow
       let result: unknown;
       try {
         result = await withNestedApprovals(definition, context, options, owners, () =>
-          options.withAnswer(answer, async () => definition.execute(input, invocation, { toolCall: { callId } })),
+          withTrimConfig(
+            () => options.trimConfig?.() ?? { maxLines: 1_000, maxCharacters: 40_000 },
+            () =>
+              options.withAnswer(answer, async () => definition.execute(input, invocation, { toolCall: { callId } })),
+          ),
         );
       } catch (error) {
         if (context.signal.aborted || isCancellationError(error) || isHarnessInvariantError(error)) throw error;

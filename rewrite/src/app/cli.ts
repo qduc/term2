@@ -2,7 +2,7 @@
 import '../../../source/env-setup.js';
 
 import { readdir } from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { stdin, stdout, stderr } from 'node:process';
 import { homedir } from 'node:os';
 import path from 'node:path';
@@ -85,11 +85,26 @@ function homeGuardApplies(options: SessionOptions, hasPrompt: boolean): boolean 
   return !options.lite && options.resumeId === null && options.ssh === null && (!hasPrompt || options.autoApprove);
 }
 
+// Resolve existing ancestors too, so missing stores and symlinked parents compare consistently.
+function resolvedPath(filename: string): string {
+  const absolute = path.resolve(filename);
+  try {
+    return realpathSync(absolute);
+  } catch (error) {
+    if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
+    const parent = path.dirname(absolute);
+    if (parent === absolute) throw error;
+    return path.join(resolvedPath(parent), path.basename(absolute));
+  }
+}
+
 function conversationsDirectory(): string {
-  return (
-    process.env['TERM2_CONVERSATIONS_DIR'] ??
-    path.join(path.dirname(path.join(envPaths('term2').data, 'conversations')), 'conversations-next')
-  );
+  const data = envPaths('term2').data;
+  const directory = process.env['TERM2_CONVERSATIONS_DIR'] ?? path.join(data, 'conversations-next');
+  if (resolvedPath(directory) === resolvedPath(path.join(data, 'conversations'))) {
+    throw new Error('The legacy conversations directory is read-only for this version; migration comes later');
+  }
+  return directory;
 }
 
 /**

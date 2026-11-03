@@ -11,6 +11,7 @@ import {
 } from '../../../source/services/agent-runtime/permission-boundary.js';
 import { ToolApprovalPolicyRegistry } from '../../../source/services/approval/tool-approval-policy-registry.js';
 import type { ExecutionContext } from '../../../source/services/execution-context.js';
+import { withActiveWorkspaceRoot } from '../../../source/services/workspace/active-workspace-root.js';
 import { LocalExecutionContext } from './tool-contract.js';
 import { resolveActiveEnforcement } from '../../../source/services/profiles/active-profile.js';
 import type { SessionAccessState } from '../../../source/services/session/session-access-state.js';
@@ -271,6 +272,8 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
       approvalPolicyRegistry: policies,
     });
     const registry = createSourceToolRegistry(wrapped, {
+      withWorkspace: (operation) =>
+        executionContext.isRemote() ? operation() : withActiveWorkspaceRoot(() => executionContext.getCwd(), operation),
       policies,
       settings,
       trimConfig: options.trimConfig,

@@ -1,3 +1,4 @@
+import { withActiveWorkspaceRoot } from '../../../source/services/workspace/active-workspace-root.js';
 /** Direct executable assembly: source tool leaves and policy, without the legacy runtime. */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
@@ -164,7 +165,10 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     deps,
   );
   const offered = remote ? agent.tools.filter((tool) => !REMOTE_UNAVAILABLE.has(tool.name)) : agent.tools;
+  const withWorkspace = <T>(operation: () => T): T =>
+    remote ? operation() : withActiveWorkspaceRoot(() => executionContext.getCwd(), operation);
   const registry = createSourceToolRegistry(offered, {
+    withWorkspace,
     policies,
     settings,
     trimConfig: options.trimConfig,
@@ -263,17 +267,19 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
       if (isDockerRequest(request.toolName, request.input, sessionAccess)) {
         return { kind: 'deny', reason: 'Docker host control requires an explicit interactive approval' };
       }
-      const decision = await policy.decide({
-        autoApprove: options.autoApprove === true,
-        approval: {
-          agentName: agent.name,
-          toolName: request.toolName,
-          argumentsText: approvalArguments(request.toolName, request.input),
-          rawInterruption: null,
-          callId: request.sourceCallId ?? request.requestId,
-        },
-        getHistory: () => approvalHistory(history),
-      });
+      const decision = await withWorkspace(() =>
+        policy.decide({
+          autoApprove: options.autoApprove === true,
+          approval: {
+            agentName: agent.name,
+            toolName: request.toolName,
+            argumentsText: approvalArguments(request.toolName, request.input),
+            rawInterruption: null,
+            callId: request.sourceCallId ?? request.requestId,
+          },
+          getHistory: () => approvalHistory(history),
+        }),
+      );
       return decision.answer === 'y' ? { kind: 'allow' } : { kind: 'deny', reason: decision.rejectionReason };
     },
   };

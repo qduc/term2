@@ -41,6 +41,7 @@ export function sourceToolContext(invocation: unknown): ToolContext {
 }
 
 type SourceToolOptions = {
+  readonly withWorkspace: <T>(operation: () => T) => T;
   readonly policies: ToolApprovalPolicyRegistry;
   readonly settings: ISettingsService;
   readonly trimConfig?: () => { maxCharacters: number; maxLines: number };
@@ -259,7 +260,7 @@ async function questionAnswer(definition: AnyToolDefinition, input: unknown, con
 }
 
 function adaptTool(definition: AnyToolDefinition, options: SourceToolOptions, owners: Set<NestedApprovalOwner>): Tool {
-  return {
+  const tool: Tool = {
     spec: sourceToolSpec(definition),
     parallelSafe:
       typeof definition.parallelSafe === 'function'
@@ -315,6 +316,16 @@ function adaptTool(definition: AnyToolDefinition, options: SourceToolOptions, ow
         display: displayFor(definition, input, result, callId),
       };
     },
+  };
+  const parallelSafe = tool.parallelSafe;
+  return {
+    ...tool,
+    parallelSafe:
+      typeof parallelSafe === 'function'
+        ? (input, context) => options.withWorkspace(() => parallelSafe(input, context))
+        : parallelSafe,
+    approval: (input, context) => options.withWorkspace(() => tool.approval(input, context)),
+    execute: (input, context) => options.withWorkspace(() => tool.execute(input, context)),
   };
 }
 

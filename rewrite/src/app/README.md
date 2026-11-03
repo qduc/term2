@@ -138,7 +138,9 @@ Sandbox configuration and file tools receive the explicit execution root; do not
 restore global publication to avoid those extra prompts.
 
 `createToolSurface` in `tool-surface.ts` builds the offered tools and matching
-execution and approval capabilities together. It keeps a mutable copy of the
+execution and approval capabilities together. Source tool and headless approval callbacks
+run with their local session’s current workspace root scoped to that async call;
+concurrent sessions never retarget the legacy process-wide root. It keeps a mutable copy of the
 source's readonly graph for native capability replacement; the source still
 owns its original graph. Replacement rebinds the script registry. Memory leaves are adapted into that script graph before the shared source
 `isDirectlyCallable` predicate filters their top-level presentation when the

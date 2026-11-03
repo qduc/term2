@@ -1,4 +1,5 @@
 import process from 'process';
+import { AsyncLocalStorage } from 'node:async_hooks';
 
 /**
  * The session's current filesystem root, for code that cannot reach an
@@ -10,9 +11,17 @@ import process from 'process';
  * classification, workspace-membership checks, and path completion all keep
  * describing the main checkout while edits land in the worktree.
  *
- * Exactly one writer: `ExecutionContext.enterWorkspace`/`exitWorkspace`. An
- * explicitly injected root always wins over this fallback.
+ * A session-scoped root takes precedence when supplied. Otherwise exactly one
+ * writer, `ExecutionContext.enterWorkspace`/`exitWorkspace`, owns the legacy
+ * process-wide fallback. An explicitly injected root wins over either.
  */
+const scopedRoot = new AsyncLocalStorage<() => string>();
+
+/** Bind source filesystem helpers to one session without publishing a process-wide lease. */
+export function withActiveWorkspaceRoot<T>(root: () => string, operation: () => T): T {
+  return scopedRoot.run(root, operation);
+}
+
 let activeRoot: string | undefined;
 let liveSessionRuntimeCount = 0;
 
@@ -44,7 +53,7 @@ export function publishActiveWorkspaceRoot(root: string | undefined): void {
   activeRoot = root;
 }
 
-/** The leased root when a worktree is active, otherwise the process cwd. */
+/** The scoped session root, or the legacy leased root, or the process cwd. */
 export function getActiveWorkspaceRoot(): string {
-  return activeRoot ?? process.cwd();
+  return scopedRoot.getStore()?.() ?? activeRoot ?? process.cwd();
 }

@@ -15,6 +15,8 @@ type Row = {
   readonly draftId?: string;
   /** The exact draft text this row covers; the row shows it without trailing blank lines. */
   readonly draftText?: string;
+  /** The reply's last row keeps the blank row its live form had, so the footer rests where it did. */
+  readonly trailingBlank?: true;
 };
 
 const draftPrefixRows = (rows: readonly Row[], draftId: string) => rows.filter((row) => row.draftId === draftId);
@@ -100,7 +102,12 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
         const replaced = row.message?.replacesDraftId;
         if (replaced) {
           expanded.push(...draftPrefixRows(previous, replaced));
-          expanded.push({ ...row, message: withoutPrefix(row.message!, previous) });
+          const prefixed = draftPrefixRows(previous, replaced).length > 0;
+          expanded.push({
+            ...row,
+            message: withoutPrefix(row.message!, previous),
+            ...(prefixed ? { trailingBlank: true as const } : {}),
+          });
         } else expanded.push(row);
       }
       if (canSplit) {
@@ -181,7 +188,9 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
               </Box>
             );
           return (
-            <Transcript key={row.key} state={single} messages={single.messages} columns={columns} live staticRow />
+            <Box key={row.key} paddingBottom={row.trailingBlank ? 1 : 0}>
+              <Transcript state={single} messages={single.messages} columns={columns} live staticRow />
+            </Box>
           );
         }}
       </Static>

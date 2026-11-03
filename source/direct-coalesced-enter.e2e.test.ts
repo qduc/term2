@@ -38,7 +38,7 @@ afterEach(async () => {
   closedHanging = false;
 });
 
-type Reply = { text?: string; hang?: boolean; fail?: boolean };
+type Reply = { text?: string; hang?: boolean; fail?: boolean; failMessage?: string };
 
 /** One SSE reply per chat request, in order: a single shell call or plain text. */
 async function startProvider(replies: Reply[]): Promise<string> {
@@ -58,7 +58,7 @@ async function startProvider(replies: Reply[]): Promise<string> {
       const reply = replies[requests++] ?? { text: 'done' };
       if (reply.fail) {
         res.writeHead(503, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ error: { message: 'retryable failure' } }));
+        res.end(JSON.stringify({ error: { message: reply.failMessage ?? 'retryable failure' } }));
         return;
       }
       const id = `chatcmpl-${requests}`;
@@ -170,6 +170,35 @@ it('text and Enter in one write submit while a turn is streaming', { timeout: TI
   const steer = facts.findIndex((fact) => fact.type === 'queue_steered');
   expect(partial, 'the interrupted text is finalized').toBeGreaterThanOrEqual(0);
   expect(steer, 'the steer is admitted after the partial is finalized').toBeGreaterThan(partial);
+});
+
+it('retries a steered turn after a dropped connection', { timeout: TIMEOUT_MS }, async () => {
+  const { idlePath } = await start([
+    { text: 'ORIGINAL-PARTIAL', hang: true },
+    {
+      fail: true,
+      failMessage: 'WebSocket connection closed before a terminal response event. (code=1006 reason="" unsent=0)',
+    },
+    { text: 'RECOVERED-ANSWER' },
+  ]);
+  session!.write('original question');
+  await waitForHarnessComposerValue(idlePath, 'original question', { timeoutMs: 30_000 });
+  session!.write('\r');
+  await session!.waitForOutput('ORIGINAL-PARTIAL', 60_000);
+  session!.write('steer unique instruction');
+  await waitForHarnessComposerValue(idlePath, 'steer unique instruction', { timeoutMs: 30_000 });
+  session!.write('\r');
+  await session!.waitForOutput('Connection to the model dropped.', 60_000);
+  await session!.waitForOutput('/retry to try again.', 60_000);
+  expect(session!.getVisibleOutput()).not.toContain('WebSocket connection closed before a terminal response event');
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  expect(received).toHaveLength(2);
+  session!.write('/retry');
+  await waitForHarnessComposerValue(idlePath, '/retry', { timeoutMs: 30_000 });
+  session!.write('\r');
+  await session!.waitForOutput('RECOVERED-ANSWER', 60_000);
+  await until(() => received.length >= 3, 'retry request');
+  expect(received[2]).toContain('steer unique instruction');
 });
 
 it(

@@ -29,8 +29,7 @@ const input = {
   signal: new AbortController().signal,
 };
 const automatic = await compactDirectHistory({ ...input, manual: false });
-assert.equal(automatic.kind, 'blocked');
-assert.equal(automatic.kind === 'blocked' && automatic.reason, 'unknown_threshold');
+assert.equal(automatic.kind, 'not_needed');
 assert.equal(calls, 0);
 const plan = await prepareDirectManualCompaction({ executionsSettled: true, history, revision: 'r1' } as any, input);
 assert.equal(plan.kind, 'replace');
@@ -46,5 +45,5 @@ const constrained = await prepareDirectManualCompaction({ executionsSettled: tru
 assert.equal(constrained.kind, 'not_compacted');
 assert.equal(constrained.kind === 'not_compacted' && constrained.result.kind, 'blocked');
 console.log(
-  'PASS: manual unknown capacity replaces history; automatic remains blocked; explicit ceiling remains enforced',
+  'PASS: manual unknown capacity replaces history; automatic remains below fallback threshold; explicit ceiling remains enforced',
 );

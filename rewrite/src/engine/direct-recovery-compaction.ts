@@ -4,6 +4,7 @@ import { isDeepStrictEqual } from 'node:util';
 import type { Item, ItemId, Model, ModelRef, ModelRequest, Usage } from '../model/index.js';
 import { ModelFailure } from '../model/failure.js';
 import { resolveModelContextPolicy } from '../../../source/services/agent-runtime/model-context-policy.js';
+import { DEFAULT_ASSUMED_CONTEXT_WINDOW } from '../model/index.js';
 import {
   CONTEXT_COMPACTION_INSTRUCTIONS,
   CONTEXT_COMPACTION_REQUEST,
@@ -142,11 +143,16 @@ export async function compactDirectHistory(input: DirectCompactionInput): Promis
     ratio: input.settings.compactThreshold,
     rawTrigger: input.settings.compactThresholdTokens,
   });
-  if (!input.manual && policy.softTrigger === undefined)
-    return { kind: 'blocked', reason: 'unknown_threshold', estimate };
+  // The assumption schedules maintenance only; it must never become a hard admission limit.
+  const softTrigger =
+    input.manual || input.contextWindow !== undefined
+      ? policy.softTrigger
+      : Math.min(
+          policy.softTrigger ?? Infinity,
+          Math.floor(DEFAULT_ASSUMED_CONTEXT_WINDOW * input.settings.compactThreshold),
+        );
   const measured = Math.max(estimate.renderedInputTokens, input.lastCompletedInputTokens ?? 0);
-  if (!input.manual && policy.softTrigger !== undefined && measured < policy.softTrigger)
-    return { kind: 'not_needed', estimate };
+  if (!input.manual && softTrigger !== undefined && measured < softTrigger) return { kind: 'not_needed', estimate };
   if (!input.manual && input.rearmAtEstimatedTokens !== undefined && measured < input.rearmAtEstimatedTokens) {
     return { kind: 'deferred', reason: 'hysteresis', estimate };
   }
@@ -162,7 +168,7 @@ export async function compactDirectHistory(input: DirectCompactionInput): Promis
         usage: [] as Usage[],
         checkpointReceipts: input.checkpointReceipts ?? [],
       }
-    : await compactLocally(input, policy.hardInputLimit ?? policy.softTrigger ?? Infinity, estimate);
+    : await compactLocally(input, policy.hardInputLimit ?? softTrigger ?? Infinity, estimate);
   input.signal.throwIfAborted();
   if ('kind' in operation) return operation;
   const after = estimateDirectContext({ ...input.request, input: operation.history }, input.contextWindow);
@@ -186,9 +192,9 @@ export async function compactDirectHistory(input: DirectCompactionInput): Promis
     replaces: input.request.input.filter((item) => !retained.has(item.id)).map((item) => item.id),
     before: estimate,
     estimate: after,
-    ...(policy.softTrigger === undefined
+    ...(softTrigger === undefined
       ? {}
-      : { rearmAtEstimatedTokens: after.renderedInputTokens + Math.max(1_000, Math.ceil(policy.softTrigger * 0.1)) }),
+      : { rearmAtEstimatedTokens: after.renderedInputTokens + Math.max(1_000, Math.ceil(softTrigger * 0.1)) }),
     usage: operation.usage,
     checkpointReceipts: operation.checkpointReceipts,
     disableChaining: true,

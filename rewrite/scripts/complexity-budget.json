@@ -17,6 +17,10 @@
     "rewrite/src/session/adopted/conversation-log.ts": {
       "lines": 631,
       "reason": "Prettier expands the existing SessionFact union by four lines after reconciliation; no behavior or new job added. Keep the fact union with its decoder rather than extract a formatting-only seam."
+    },
+    "rewrite/src/model/provider.ts": {
+      "lines": 506,
+      "reason": "The provider registry logs its existing synthetic capacity assumption once per resolved model."
     }
   },
   "messagePath": {

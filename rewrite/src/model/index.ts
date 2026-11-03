@@ -12,6 +12,9 @@ export { ModelFailure } from './failure.js';
 export type { ModelRecoveryEvidence } from './failure.js';
 export type ModelRecoveryBudget = RetryRecoveryBudget;
 
+/** Scheduling assumption only; not evidence of provider capacity. */
+export const DEFAULT_ASSUMED_CONTEXT_WINDOW = 128_000;
+
 // ---------- Conversation items (provider-neutral history) ----------
 
 export type ItemId = string & { readonly __brand: 'ItemId' };

@@ -1,3 +1,4 @@
+import { DEFAULT_ASSUMED_CONTEXT_WINDOW } from './index.js';
 import { stringArray } from './provider-settings.js';
 import { weeklyQuota } from './provider-quota.js';
 import { observeProviderRequestDispatch } from '../../../source/providers/request-dispatch.js';
@@ -65,7 +66,6 @@ export type ProviderRegistryDeps = {
   readonly sessionContext: ISessionContextService;
 };
 
-const DEFAULT_CONTEXT_WINDOW = 128_000;
 const DEFAULT_RETRY_ATTEMPTS = 2;
 
 export function createProviderRegistry(deps: ProviderRegistryDeps): ModelRegistry {
@@ -83,6 +83,13 @@ export function createProviderRegistry(deps: ProviderRegistryDeps): ModelRegistr
         throw new Error(`Provider '${ref.provider}' does not expose an application streamed model.`);
       }
       const model = lazyModel(ref, provider, deps, compaction);
+      if (model.catalogContextWindow === undefined) {
+        deps.logger.warn('Model context window unknown; automatic compaction assumes 128,000 tokens', {
+          provider: ref.provider,
+          model: ref.model,
+          assumedContextWindow: DEFAULT_ASSUMED_CONTEXT_WINDOW,
+        });
+      }
       models.set(key, model);
       return model;
     },
@@ -140,7 +147,7 @@ function lazyModel(
   return {
     ref,
     capabilities,
-    contextWindow: catalogContextWindow ?? DEFAULT_CONTEXT_WINDOW,
+    contextWindow: catalogContextWindow ?? DEFAULT_ASSUMED_CONTEXT_WINDOW,
     ...(catalogContextWindow !== undefined ? { catalogContextWindow } : {}),
     async *stream(request, signal, onDispatched) {
       const transport = request.downgradeTransport ? 'http' : deps.settings.get('agent.transport') ?? 'websocket';

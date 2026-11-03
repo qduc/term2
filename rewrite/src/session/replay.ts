@@ -91,8 +91,17 @@ type Slot = { item: Item | null };
  * Session must append them before the next turn's start, in the supplied order.
  */
 export function replay(facts: readonly Fact[], options: ReplayOptions = {}): ReplayedConversation {
-  return replayProjection(facts, options, options.recoverActiveTurn !== false);
+  // Session open and turn start ask for the same log under different options. When the log has no
+  // active turn and nothing to repair, every option set yields the same projection, so the clean
+  // result of the last call is reused until a fact is appended (or the array is another log).
+  const cached = cleanReplays.get(facts);
+  if (cached?.length === facts.length) return cached.result;
+  const result = replayProjection(facts, options, options.recoverActiveTurn !== false);
+  if (result.status === 'idle' && result.recoveryFacts.length === 0)
+    cleanReplays.set(facts, { length: facts.length, result });
+  return result;
 }
+const cleanReplays = new WeakMap<readonly Fact[], { length: number; result: ReplayedConversation }>();
 
 function replayProjection(
   facts: readonly Fact[],

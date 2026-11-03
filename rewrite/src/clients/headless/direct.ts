@@ -297,6 +297,12 @@ export async function runDirectHeadless(
           }
           return null;
         }
+        if (result.kind === 'empty') {
+          // Session is authoritative: notices captured before this drain are no
+          // longer deliverable (for example, a closed child question). Do not
+          // discard notices that arrived while the request was in flight.
+          for (const notice of pending) delivered.add(notice.id);
+        }
         phase.drainRequestId = null;
         phase.nextDrainAt = Date.now() + 100;
       }

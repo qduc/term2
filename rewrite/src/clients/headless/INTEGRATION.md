@@ -195,7 +195,9 @@ app can map SIGINT/SIGTERM to their signal exit codes rather than ordinary error
   atomic silent drain. The client watches `snapshot.notifications`,
   `background_notice_enqueued`/`background_notices_delivered` and `task_changed`;
   after the submitted turn it drains pending batches through
-  `drain_background_notifications` (stable request ID), follows each silent
+  `drain_background_notifications` (stable request ID); an empty authoritative
+  drain retires only notices captured before that request, preserving notices
+  that arrive concurrently. It follows each silent
   `turn_started` to its terminal, answers task interactions, and waits until no
   notice or active task remains. The total wait is bounded by
   `backgroundWaitTimeoutMs` (old `agent.backgroundWaitTimeoutMs`, default one

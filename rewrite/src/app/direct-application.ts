@@ -17,7 +17,8 @@ import { forkDirectConversation } from '../session/direct-fork.js';
 import { createDirectSessionStore, type DirectLocalStore } from '../session/direct-store.js';
 import type { DurableGoal } from '../session/direct-goal.js';
 import type { DirectBinding, DirectSession, DirectSessionState } from '../session/facade-types.js';
-import { listDirectResumeSessions } from './direct-resume-list.js';
+import { listDirectResumeSessions } from '../session/direct-resume-list.js';
+import { nativeTranscript } from './native-transcript.js';
 import type { InteractionDecision } from '../engine/index.js';
 import type { ModelRef } from '../model/index.js';
 import type { Workspace } from '../tools/index.js';
@@ -165,8 +166,12 @@ export async function createDirectApplication(options: DirectApplicationOptions)
     headlessPolicy: (sessionId, autoApprove, signal) =>
       headlessPolicy({ store, runtimes, directory: options.conversationsDir, sessionId, autoApprove, signal }),
     listWorkspaceSessions(root) {
-      return listDirectResumeSessions(options.conversationsDir, root, nativeStore, (workspaceRoot, identity) =>
-        authority.resolveStored(workspaceRoot, identity),
+      return listDirectResumeSessions(
+        options.conversationsDir,
+        nativeTranscript,
+        root,
+        nativeStore,
+        (workspaceRoot, identity) => authority.resolveStored(workspaceRoot, identity),
       );
     },
     async sessionRoot(principal, sessionId) {

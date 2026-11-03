@@ -2909,7 +2909,10 @@ it('delivers an attachment-only Discord image through private storage, control, 
   const f = await fixture({ imageTools: true });
   await f.cycle();
   f.human('', { id: '100' }, { attachments: [f.image()] });
-  await f.cycle(12);
+  const followUpDeadline = Date.now() + 2_000;
+  do {
+    await f.cycle(1);
+  } while (f.received.coord.length < 2 && Date.now() < followUpDeadline);
   expect(f.mediaRequests).toEqual([{ path: '/attachments/200/501/PRIVATE_NAME.png', authorization: undefined }]);
   expect(f.received.coord.length).toBe(2);
   const wire = JSON.stringify(f.received.coord[1]!.input);
@@ -3022,7 +3025,10 @@ it('keeps outside-workspace image reads terminal-approved rather than granting r
   const f = await fixture({ imageTools: true, approveImages: false });
   await f.cycle();
   f.human('view this', { id: '100' }, { attachments: [f.image()] });
-  await f.cycle(12);
+  const approvalDeadline = Date.now() + 2_000;
+  do {
+    await f.cycle(1);
+  } while (!f.sessions.coord!.service.getNestedApprovalSnapshot() && Date.now() < approvalDeadline);
   expect(f.mediaRequests).toHaveLength(1);
   expect(f.received.coord).toHaveLength(1);
   const pending = f.sessions.coord!.service.getNestedApprovalSnapshot();

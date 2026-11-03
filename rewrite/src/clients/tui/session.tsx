@@ -8,7 +8,7 @@ import { useTheme } from './presentation/components/theme.js';
 import { useSkin } from './presentation/skins/SkinContext.js';
 import { terminalPreferenceDefaults } from '../../host/terminal-preference-defaults.js';
 import { useClient } from './use-client.js';
-import { Activity, BangResult, LiveNotices, interruptedNotice } from './views.js';
+import { ShellTaskPanel, Activity, BangResult, LiveNotices, interruptedNotice } from './views.js';
 import { PendingQueue } from './pending-queue.js';
 import { InteractionPanel } from './interaction-panel.js';
 import type { InteractionInputHandler } from './interaction-input.js';
@@ -112,7 +112,9 @@ export function TuiSession({
   const notifyError = (error: unknown) => setNotice(error instanceof Error ? error.message : String(error));
   const [busy, setBusy] = useState(false);
   const composerActive = !panelOpen && !confirmation.pending && !connError && !interactionActive;
-  const queueItems = ['steering', 'queued'].flatMap((delivery) => state.queue.filter((item) => item.delivery === delivery));
+  const queueItems = ['steering', 'queued'].flatMap((delivery) =>
+    state.queue.filter((item) => item.delivery === delivery),
+  );
   const selectedQueueIndex = queueItems.findIndex((item) => item.id === selectedQueueId);
   const slash = useComposerMenu(editor.value, composerActive && !editing, theme.textSubtle);
   useHarnessInput(composerActive && !busy, Boolean(state.activeTurnId), editor.value);
@@ -377,141 +379,164 @@ export function TuiSession({
         </Text>
       ) : null}
       <Box flexDirection="column" paddingX={2} marginTop={state.activeTurnId ? 1 : state.messages.length ? 3 : 2}>
-      <Activity state={state} dialogInteractionId={foregroundInteraction?.id} notice={notice} />
-      {picker ? (
-        <PickerHost
-          kind={picker}
-          integration={integration}
-          connection={connection}
-          inputHandler={interactionInput}
-          close={() => setPicker(null)}
-          onNotice={setNotice}
-          switchSession={switchSession}
-        />
-      ) : null}
-      {budgetOpen ? (
-        <BudgetPanel
-          requests={state.budgets}
-          onClose={() => setBudgetOpen(false)}
-          onAnswer={(id, decision) => answerBudget(connection, id, decision)}
-        />
-      ) : null}
-      {taskOpen ? (
-        <TaskManager
-          tasks={state.tasks}
-          onClose={() => setTaskOpen(false)}
-          onAction={(id, action) => controlTask(connection, id, action)}
-        />
-      ) : null}
-      {rewindTargets ? (
-        <RewindPicker
-          targets={rewindTargets}
-          onClose={() => setRewindTargets(null)}
-          onSelect={(id, disposition) => {
-            void executeRewind(id, disposition);
-          }}
-        />
-      ) : null}
+        <Activity state={state} dialogInteractionId={foregroundInteraction?.id} notice={notice} />
+        {picker ? (
+          <PickerHost
+            kind={picker}
+            integration={integration}
+            connection={connection}
+            inputHandler={interactionInput}
+            close={() => setPicker(null)}
+            onNotice={setNotice}
+            switchSession={switchSession}
+          />
+        ) : null}
+        {budgetOpen ? (
+          <BudgetPanel
+            requests={state.budgets}
+            onClose={() => setBudgetOpen(false)}
+            onAnswer={(id, decision) => answerBudget(connection, id, decision)}
+          />
+        ) : null}
+        {taskOpen ? (
+          <TaskManager
+            tasks={state.tasks}
+            onClose={() => setTaskOpen(false)}
+            onAction={(id, action) => controlTask(connection, id, action)}
+          />
+        ) : null}
+        {rewindTargets ? (
+          <RewindPicker
+            targets={rewindTargets}
+            onClose={() => setRewindTargets(null)}
+            onSelect={(id, disposition) => {
+              void executeRewind(id, disposition);
+            }}
+          />
+        ) : null}
 
-      {interactionActive ? (
-        <InteractionPanel
-          key={foregroundInteraction?.id ?? 'picker'}
-          interactions={state.interactions}
-          width={columns}
-          initialRequestId={foregroundInteraction?.id}
-          inputHandler={interactionInput}
-          onClose={() => {
-            setDismissedInteractionId(rootInteraction?.id ?? null);
-            setInteractionOpen(false);
-          }}
-          onCancel={
-            foregroundInteraction
-              ? async () => {
-                  if (foregroundInteraction.kind === 'question')
-                    await answerInteraction(connection, foregroundInteraction.id, { kind: 'decline' });
-                  else setNotice(await cancelInput(connection, foregroundInteraction.turnId));
-                }
-              : undefined
-          }
-          onAnswer={(id, decision) => answerInteraction(connection, id, decision)}
-        />
-      ) : null}
-      <LiveNotices connectionError={connError} transitionNotice={transitionNotice} />
-      {confirmation.prompt}
-      <LiveNotices notice={notice} historyError={editor.historyError} />
-      {bangResult ? <BangResult result={bangResult} expanded={viewport.expanded} /> : null}
-      {slash.view}
-      <LiveDivider />
-      <PendingQueue items={queueItems} selectedId={selectedQueueIndex < 0 ? null : selectedQueueId} editingId={editing?.id ?? null} notice={queueNotice} />
-      <InputFrame>
-        {editing ? <Text color={theme.accent}>edit {queueItems.find((item) => item.id === editing.id)?.delivery === 'steering' ? 'steer' : 'queued'} ▸ </Text> : <PromptMarker mode="input" />}
-        <MultilineInput
-          key={editor.inputKey}
-          value={editor.value}
-          onChange={(value) => {
-            slash.reset();
-            changeInput(value);
-          }}
-          onSubmit={(value, submittedImages) => {
-            void submit(value, submittedImages);
-          }}
-          onBoundaryArrow={(direction) => {
-            if (direction === 'up' && !editor.value && !editing && queueItems.length) {
-              setQueueNotice(null);
-              setSelectedQueueId(queueItems[queueItems.length - 1]!.id);
-              return;
+        {interactionActive ? (
+          <InteractionPanel
+            key={foregroundInteraction?.id ?? 'picker'}
+            interactions={state.interactions}
+            width={columns}
+            initialRequestId={foregroundInteraction?.id}
+            inputHandler={interactionInput}
+            onClose={() => {
+              setDismissedInteractionId(rootInteraction?.id ?? null);
+              setInteractionOpen(false);
+            }}
+            onCancel={
+              foregroundInteraction
+                ? async () => {
+                    if (foregroundInteraction.kind === 'question')
+                      await answerInteraction(connection, foregroundInteraction.id, { kind: 'decline' });
+                    else setNotice(await cancelInput(connection, foregroundInteraction.turnId));
+                  }
+                : undefined
             }
-            const entry = editor.navigate(direction, {
-              text: editor.value,
-              attachments: wireAttachments(images, otherParts, originalParts),
-            });
-            if (entry) restoreDraft(entry, entry.cursor);
-          }}
-          onCursorChange={editor.cursorChanged}
-          cursorOverride={editor.cursorOverride}
-          width={Math.max(1, columns - 4)}
-          maxHeight={Math.max(1, rows - 8)}
-          pasteThreshold={preferences.pasteThreshold}
-          isActive={composerActive && !picker}
-          images={images}
-          onImagesChange={onImagesChange}
-          enableImagePaste
-          onPasteError={(reason) => setNotice(`Image paste failed: ${reason}`)}
-          ignoreInput={(input, key) => {
-            if (selectedQueueIndex >= 0) {
-              const item = queueItems[selectedQueueIndex]!;
-              if (key.escape) setSelectedQueueId(null);
-              else if (key.upArrow) {
-                if (selectedQueueIndex > 0) setSelectedQueueId(queueItems[selectedQueueIndex - 1]!.id);
-                else {
-                  setSelectedQueueId(null);
-                  const entry = editor.navigate('up', { text: editor.value, attachments: wireAttachments(images, otherParts, originalParts) });
-                  if (entry) restoreDraft(entry, entry.cursor);
-                }
-              } else if (key.downArrow) setSelectedQueueId(queueItems[selectedQueueIndex + 1]?.id ?? null);
-              else if (input === 'e' || key.return) {
-                setSelectedQueueId(null);
+            onAnswer={(id, decision) => answerInteraction(connection, id, decision)}
+          />
+        ) : null}
+        <LiveNotices connectionError={connError} transitionNotice={transitionNotice} />
+        {confirmation.prompt}
+        <LiveNotices notice={notice} historyError={editor.historyError} />
+        {bangResult ? <BangResult result={bangResult} expanded={viewport.expanded} /> : null}
+        {slash.view}
+        <LiveDivider />
+        <ShellTaskPanel state={state} />
+        <PendingQueue
+          items={queueItems}
+          selectedId={selectedQueueIndex < 0 ? null : selectedQueueId}
+          editingId={editing?.id ?? null}
+          notice={queueNotice}
+        />
+        <InputFrame>
+          {editing ? (
+            <Text color={theme.accent}>
+              edit {queueItems.find((item) => item.id === editing.id)?.delivery === 'steering' ? 'steer' : 'queued'} ▸{' '}
+            </Text>
+          ) : (
+            <PromptMarker mode="input" />
+          )}
+          <MultilineInput
+            key={editor.inputKey}
+            value={editor.value}
+            onChange={(value) => {
+              slash.reset();
+              changeInput(value);
+            }}
+            onSubmit={(value, submittedImages) => {
+              void submit(value, submittedImages);
+            }}
+            onBoundaryArrow={(direction) => {
+              if (direction === 'up' && !editor.value && !editing && queueItems.length) {
                 setQueueNotice(null);
-                startQueueEdit(item);
-              } else if (input === 'd') {
-                setSelectedQueueId(null);
-                void queueAction(connection, 'retract', item.id).catch((error: unknown) => setQueueNotice(error instanceof Error ? error.message : String(error)));
+                setSelectedQueueId(queueItems[queueItems.length - 1]!.id);
+                return;
               }
-              return true;
-            }
-            if (editing && key.escape) {
-              replaceInput(editing.restoreText, editing.restoreCursor);
-              setImages(editing.restoreImages);
-              setOtherParts(editing.restoreOther);
-              setOriginalParts(editing.restoreOriginal);
-              setEditing(null);
-              return true;
-            }
-            return composerFilter(input, key);
-          }}
+              const entry = editor.navigate(direction, {
+                text: editor.value,
+                attachments: wireAttachments(images, otherParts, originalParts),
+              });
+              if (entry) restoreDraft(entry, entry.cursor);
+            }}
+            onCursorChange={editor.cursorChanged}
+            cursorOverride={editor.cursorOverride}
+            width={Math.max(1, columns - 4)}
+            maxHeight={Math.max(1, rows - 8)}
+            pasteThreshold={preferences.pasteThreshold}
+            isActive={composerActive && !picker}
+            images={images}
+            onImagesChange={onImagesChange}
+            enableImagePaste
+            onPasteError={(reason) => setNotice(`Image paste failed: ${reason}`)}
+            ignoreInput={(input, key) => {
+              if (selectedQueueIndex >= 0) {
+                const item = queueItems[selectedQueueIndex]!;
+                if (key.escape) setSelectedQueueId(null);
+                else if (key.upArrow) {
+                  if (selectedQueueIndex > 0) setSelectedQueueId(queueItems[selectedQueueIndex - 1]!.id);
+                  else {
+                    setSelectedQueueId(null);
+                    const entry = editor.navigate('up', {
+                      text: editor.value,
+                      attachments: wireAttachments(images, otherParts, originalParts),
+                    });
+                    if (entry) restoreDraft(entry, entry.cursor);
+                  }
+                } else if (key.downArrow) setSelectedQueueId(queueItems[selectedQueueIndex + 1]?.id ?? null);
+                else if (input === 'e' || key.return) {
+                  setSelectedQueueId(null);
+                  setQueueNotice(null);
+                  startQueueEdit(item);
+                } else if (input === 'd') {
+                  setSelectedQueueId(null);
+                  void queueAction(connection, 'retract', item.id).catch((error: unknown) =>
+                    setQueueNotice(error instanceof Error ? error.message : String(error)),
+                  );
+                }
+                return true;
+              }
+              if (editing && key.escape) {
+                replaceInput(editing.restoreText, editing.restoreCursor);
+                setImages(editing.restoreImages);
+                setOtherParts(editing.restoreOther);
+                setOriginalParts(editing.restoreOriginal);
+                setEditing(null);
+                return true;
+              }
+              return composerFilter(input, key);
+            }}
+          />
+        </InputFrame>
+        <ComposerFooter
+          integration={integration}
+          state={state}
+          active={composerActive}
+          columns={columns - 4}
+          queueSelectable={queueItems.length > 0 && !editor.value && !editing}
         />
-      </InputFrame>
-      <ComposerFooter integration={integration} state={state} active={composerActive} columns={columns - 4} queueSelectable={queueItems.length > 0 && !editor.value && !editing} />
       </Box>
     </Box>
   );

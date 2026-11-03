@@ -10,7 +10,7 @@ import { getFavoriteModelInfos, toggleFavoriteModel } from '../../../source/serv
 import { getNicknameEntries } from '../../../source/services/models/model-nicknames.js';
 import { resolveActiveProfile } from '../../../source/services/profiles/active-profile.js';
 import React, { useMemo, useRef, useState, type ReactNode } from 'react';
-import { render } from 'ink';
+import { Box, render } from 'ink';
 import Banner from '../../../source/components/layout/Banner.js';
 import { SettingsSkinProvider, useSkin as useSourceSkin } from '../../../source/skins/SkinContext.js';
 import { SkinProvider as DirectSkinProvider } from '../clients/tui/presentation/skins/SkinContext.js';
@@ -201,13 +201,15 @@ function DirectTui({
         <Tui
           connection={connection}
           header={
-            <Banner
-              key={`header:${connection.sessionId}`}
-              settingsService={settings}
-              onHeightChange={setHeaderHeight}
-            />
+            <Box paddingLeft={2} paddingBottom={1}>
+              <Banner
+                key={`header:${connection.sessionId}`}
+                settingsService={settings}
+                onHeightChange={setHeaderHeight}
+              />
+            </Box>
           }
-          headerHeight={headerHeight}
+          headerHeight={headerHeight + 1}
           integration={integration}
           onLiveEvent={(event) => {
             if (event.sessionId !== connection.sessionId) return;
@@ -287,7 +289,7 @@ async function runTui(
     // Read the opened session, not the launch defaults: resume may restore a
     // different profile before the terminal announces its active workflow.
     const { profileId } = await app.sessionConfiguration(initial.sessionId);
-    stderr.write(`Profile: ${getProfileLabel(profileId).toUpperCase()}\n`);
+    stderr.write(`Profile: ${profileId.replace(/^builtin:/, '')}\n`);
 
     // Ask before Ink takes stdin: the terminal's reply arrives as input.
     const detectedBackground = shouldDetectBackground(settings.get('ui.theme'), process.env)

@@ -174,7 +174,7 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
     () => (
       <Box key={epoch}>
         <Static style={staticStyle} items={header ? [{ key: 'header', header }, ...rows] : [...rows]}>
-          {(row) => {
+          {(row, index) => {
             if (row.header) return <Box key={row.key}>{row.header}</Box>;
             const count = row.tool ? failures.get(row.tool.id) : undefined;
             if (count === 0) return <Box key={row.key} />;
@@ -209,7 +209,7 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
                 </Box>
               );
             return (
-              <Box key={row.key} paddingBottom={row.trailingBlank ? 1 : 0}>
+              <Box key={row.key} paddingBottom={row.trailingBlank ? 1 : 0} marginTop={row.message?.role === 'user' && index > (header ? 1 : 0) ? 1 : 0}>
                 <Transcript state={single} messages={single.messages} columns={columns} live staticRow />
               </Box>
             );

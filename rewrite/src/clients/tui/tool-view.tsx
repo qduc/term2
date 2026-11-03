@@ -31,9 +31,11 @@ export function isUnknownCreateFile(tool: ToolView): boolean {
 export function ToolCall({
   tool,
   expanded = false,
+  startedAt,
 }: {
   readonly tool: ToolView;
   readonly expanded?: boolean;
+  readonly startedAt?: number;
 }): React.ReactElement {
   const { ToolFrame, ToolHeader, ToolSection } = useSkin();
   const theme = useTheme();
@@ -64,9 +66,19 @@ export function ToolCall({
   // Text that is hidden cannot stand in for the lines that are shown.
   const fresh = (part: string) => !open || (!detail.includes(part) && !extraText.includes(part));
   const inputText =
-    tool.name === 'shell' ? inputParts(tool.name, tool.input) : inputParts(tool.name, tool.input).filter(fresh);
+    tool.name === 'shell'
+      ? expanded
+        ? inputParts(tool.name, tool.input)
+        : []
+      : inputParts(tool.name, tool.input).filter(fresh);
   const displayText = displayParts(tool.display, args, tool.name).filter(fresh);
-  const runtime = tool.name === 'shell' ? runtimeOf(detail) : undefined;
+  const runtime =
+    tool.name === 'shell'
+      ? runtimeOf(detail) ??
+        (startedAt != null && status === 'running'
+          ? `${Math.max(0, Math.floor((Date.now() - startedAt) / 1000))}s`
+          : undefined)
+      : undefined;
   // Successful edits keep their diff visible; failed calls remain one summary row.
   const showEdit = !unknownCreateFile && EDIT_TOOLS.has(tool.name) && status !== 'failed' && status !== 'rejected';
   const display = [...(open || showEdit ? inputText : []), ...(open ? displayText : [])].join('\n');

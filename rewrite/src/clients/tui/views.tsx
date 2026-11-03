@@ -1,8 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import {
-  StreamingSpeedTracker,
-  formatTokensPerSecond,
-} from './presentation/utils/streaming/streaming-speed-tracker.js';
+import { StreamingSpeedTracker } from './presentation/utils/streaming/streaming-speed-tracker.js';
 import { Box, Text } from 'ink';
 import { useTheme } from './presentation/components/theme.js';
 import MarkdownRenderer from './presentation/components/MarkdownRenderer.js';
@@ -30,7 +27,7 @@ export function Transcript({
 }): React.ReactElement {
   const { UserMessage, AssistantFrame, assistantGutter } = useSkin();
   const theme = useTheme();
-  const width = Math.max(1, columns - 2 - assistantGutter);
+  const width = Math.max(1, columns - 4 - assistantGutter);
   const messageById = new Map(messages.map((message) => [message.id, message]));
   const toolById = new Map((live ? state.tools : []).map((tool) => [tool.id, tool]));
   const failures = expanded ? new Map<string, number>() : failedShellGroups(state.tools);
@@ -38,7 +35,7 @@ export function Transcript({
   const usedTools = new Set<string>();
   const renderMessage = (message: Message) =>
     message.role === 'user' ? (
-      <Box key={`message:${message.id}`} marginTop={1}>
+      <Box key={`message:${message.id}`} marginTop={1} paddingLeft={2}>
         <Box flexDirection="column">
           <UserMessage text={message.text} />
           {message.attachments?.length ? (
@@ -87,14 +84,21 @@ export function Transcript({
         ];
       return [
         <Box key={`tool:${tool.id}`} marginTop={1} paddingLeft={2}>
-          <ToolCall tool={tool} expanded={expanded} />
+          <ToolCall
+            tool={tool}
+            expanded={expanded}
+            startedAt={
+              state.tasks.find((task) => task.wire?.parentExecutionId === tool.id && task.wire.kind === 'shell')?.wire
+                ?.startedAt
+            }
+          />
         </Box>,
       ];
     }) ?? [];
   const remainingMessages = messages.filter((message) => !usedMessages.has(message.id));
   const remainingTools = live ? state.tools.filter((tool) => !usedTools.has(tool.id)) : [];
   return (
-    <Box flexDirection="column" paddingBottom={staticRow ? 0 : 1}>
+    <Box flexDirection="column" paddingRight={2} paddingBottom={staticRow ? 0 : 1}>
       {ordered}
       {state.timeline && (remainingMessages.length || remainingTools.length) ? (
         <Text color={theme.textSubtle}>Additional items (order unavailable)</Text>
@@ -123,7 +127,14 @@ export function Transcript({
       ) : null}
       {remainingTools.map((tool) => (
         <Box key={`tool:${tool.id}`} marginTop={1} paddingLeft={2}>
-          <ToolCall tool={tool} expanded={expanded} />
+          <ToolCall
+            tool={tool}
+            expanded={expanded}
+            startedAt={
+              state.tasks.find((task) => task.wire?.parentExecutionId === tool.id && task.wire.kind === 'shell')?.wire
+                ?.startedAt
+            }
+          />
         </Box>
       ))}
     </Box>
@@ -133,19 +144,25 @@ export function Transcript({
 /** Estimate throughput from displayed stream deltas; reset when a model step changes. */
 function StreamingStatus({ state }: { readonly state: TuiState }): React.ReactElement {
   const theme = useTheme();
+  const { WorkingIndicator } = useSkin();
   const start = useRef(Date.now());
   const tracker = useRef(new StreamingSpeedTracker());
   const previous = useRef('');
+  const liveRate = useRef<number | null>(null);
   const [now, setNow] = useState(Date.now());
+  const [dotCount, setDotCount] = useState(1);
   const text = [...Object.values(state.reasoning), ...Object.values(state.drafts)].join('');
-  const toolRunning = state.tools.some((tool) => tool.status === 'running' || tool.status === 'pending');
+  const activeTool = state.tools.find((tool) => tool.status === 'running' || tool.status === 'pending');
+  const toolRunning = activeTool != null;
   useEffect(() => {
     if (toolRunning || !text.startsWith(previous.current)) {
       tracker.current.reset();
       previous.current = '';
+      liveRate.current = null;
     }
     if (!toolRunning && text.length > previous.current.length) {
       tracker.current.recordDelta(text.slice(previous.current.length));
+      liveRate.current = tracker.current.getLiveTps() ?? liveRate.current;
       previous.current = text;
     }
   }, [text, toolRunning]);
@@ -153,13 +170,27 @@ function StreamingStatus({ state }: { readonly state: TuiState }): React.ReactEl
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, []);
-  const rate = toolRunning ? null : tracker.current.getLiveTps(now);
+  const rate = toolRunning ? null : liveRate.current;
+  const phase = toolRunning ? 'tool_call' : rate != null && rate > 0 ? 'generating' : 'processing';
+  const stepKey = phase === 'tool_call' ? `tool_call:${activeTool?.name ?? ''}` : phase;
+  useEffect(() => {
+    start.current = Date.now();
+    setNow(start.current);
+  }, [stepKey]);
+  useEffect(() => {
+    const timer = setInterval(() => setDotCount((previous) => (previous === 3 ? 1 : previous + 1)), 800);
+    return () => clearInterval(timer);
+  }, []);
   const elapsed = Math.max(0, Math.floor((now - start.current) / 1000));
   return (
-    <Text color={theme.textSubtle}>
-      {toolRunning ? 'Running tools' : 'Generating'} · {elapsed}s
-      {rate && rate > 0 ? ` (${formatTokensPerSecond(rate, true)})` : ''}
-    </Text>
+    <WorkingIndicator
+      phase={phase}
+      elapsedSeconds={elapsed}
+      tokensPerSecond={rate ?? undefined}
+      toolName={activeTool?.name}
+      argumentChars={undefined}
+      dotCount={dotCount}
+    />
   );
 }
 
@@ -207,7 +238,9 @@ export function Activity({
   const { TaskPanel } = useSkin();
   const compactFailure = compactFailureMessage(state);
   // Only running work belongs in the live region; settled tasks stay in the task manager, and ids stay out of the transcript.
-  const liveTasks = state.tasks.filter((task) => task.status === 'running' || task.status === 'awaiting_interaction');
+  const liveTasks = state.tasks.filter(
+    (task) => task.wire?.kind !== 'shell' && (task.status === 'running' || task.status === 'awaiting_interaction'),
+  );
   return (
     <Box flexDirection="column">
       {state.activeTurnId ? <StreamingStatus key={state.activeTurnId} state={state} /> : null}
@@ -216,7 +249,7 @@ export function Activity({
           {[!state.activeTurnId && state.status !== 'idle' ? state.status : '', state.cost].filter(Boolean).join(' · ')}
         </Text>
       ) : null}
-      {state.queueState !== 'idle' && (state.queueState !== 'running' || state.queue.length > 0) ? (
+      {state.queueState !== 'idle' && state.queueState !== 'running' ? (
         <Text>
           Queue: {state.queueState}
           {state.queuePauseReason ? ` · ${state.queuePauseReason}` : ''}
@@ -263,11 +296,6 @@ export function Activity({
           ))}
         </TaskPanel>
       ) : null}
-      {state.queue.map((item, index) => (
-        <Text key={item.id}>
-          Queued {index + 1} ({item.delivery}): {item.displayText ?? item.text}
-        </Text>
-      ))}
       {state.interactions.map((interaction, index) =>
         interaction.id === dialogInteractionId ? null : (
           <Box key={interaction.id} flexDirection="column">
@@ -348,6 +376,31 @@ export function BangResult({
     <Box flexDirection="column">
       <Text color={header.startsWith('✓') ? theme.success : theme.danger}>{header}</Text>
       {expanded && detail.length ? <Text>{detail.join('\n')}</Text> : null}
+    </Box>
+  );
+}
+
+/** Render active shell work below the divider, as in the legacy task panel. */
+export function ShellTaskPanel({ state }: { readonly state: TuiState }): React.ReactElement | null {
+  const theme = useTheme();
+  const [now, setNow] = useState(Date.now);
+  const tasks = state.tasks.filter(
+    (task) => task.wire?.kind === 'shell' && (task.status === 'running' || task.status === 'awaiting_interaction'),
+  );
+  useEffect(() => {
+    if (!tasks.length) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [tasks.length]);
+  if (!tasks.length) return null;
+  return (
+    <Box flexDirection="column" marginBottom={2}>
+      <Text color={theme.textSubtle}>Tasks · {tasks.length} active · ^G manage</Text>
+      {tasks.map((task) => (
+        <Text key={task.id} color={theme.textSubtle}>
+          • [Shell ↑] {task.label} · Running · {Math.max(0, Math.floor((now - (task.wire?.startedAt ?? now)) / 1000))}s
+        </Text>
+      ))}
     </Box>
   );
 }

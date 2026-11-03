@@ -98,6 +98,13 @@ export function useTranscriptViewport(
   // Ctrl+O shows every tool's output; by default only failures and edits are open.
   const height = Math.max(1, rows - 9);
   const lastRender = useRef(0);
+  const [clock, setClock] = useState(0);
+  const activeShell = state.tasks.some((task) => task.wire?.kind === 'shell' && task.status === 'running');
+  useEffect(() => {
+    if (!activeShell) return;
+    const timer = setInterval(() => setClock((value) => value + 1), 1000);
+    return () => clearInterval(timer);
+  }, [activeShell]);
   useEffect(() => {
     // Streaming changes the state many times a second. Rendering the whole transcript for each change burned
     // 60-85% of a core, so renders are spaced RENDER_INTERVAL_MS apart; the last state always gets its render.
@@ -128,7 +135,7 @@ export function useTranscriptViewport(
       );
     }, wait);
     return () => clearTimeout(pending);
-  }, [state, tail, columns, theme, skin, expanded, committed]);
+  }, [state, tail, columns, theme, skin, expanded, committed, clock]);
   const maxOffset = Math.max(0, lines.length - height);
   const visibleOffset = Math.min(offset, maxOffset);
   useInput(
@@ -173,7 +180,7 @@ export function useTranscriptViewport(
     };
   }
   const end = Math.max(0, lines.length - visibleOffset);
-  const start = Math.max(0, end - height);
+  const start = !expanded && visibleOffset === 0 ? 0 : Math.max(0, end - height);
   return {
     staticTranscript,
     redraw,

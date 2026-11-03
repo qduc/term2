@@ -135,6 +135,16 @@ export function parseModelFlag(
 }
 
 /**
+ * Model id to send when no catalog row was selected. A known provider prefix is
+ * the route, not part of the id: `-m codex/gpt-6.1-terra` binds provider `codex`
+ * and model `gpt-6.1-terra`. `rawPattern` still carries the prefix so an exact
+ * catalog id that literally contains a slash can win in `matchModels`.
+ */
+function passthroughModelId(parsed: ParsedModelFlag): string {
+  return parsed.provider ? parsed.pattern : parsed.rawPattern;
+}
+
+/**
  * Match parsed model pattern against loaded provider model groups.
  * Exact matches take strict precedence over partial/fuzzy matches, and an
  * exact match of the flag exactly as typed (including any provider-style
@@ -365,7 +375,7 @@ export async function resolveModelFlag(deps: {
   if (process.env[HARNESS_IDLE_ENV] && deps.prompter === undefined && deps.interactivePicker === undefined) {
     return {
       status: 'passthrough',
-      modelId: parsed.rawPattern,
+      modelId: passthroughModelId(parsed),
       provider: parsed.provider ?? deps.settingsService.get('agent.modelSelection').provider,
       reasoningEffort: parsed.reasoningEffort,
     };
@@ -553,8 +563,8 @@ export async function resolveModelFlag(deps: {
     }
     return {
       status: 'passthrough',
-      // Fail open with the flag as typed, matching pre-resolution behavior.
-      modelId: parsed.rawPattern,
+      // Fail open with the parsed model id. A known provider prefix stays the route.
+      modelId: passthroughModelId(parsed),
       provider: parsed.provider,
       reasoningEffort: parsed.reasoningEffort,
       ...(warnings.length > 0 ? { warnings } : {}),
@@ -570,7 +580,7 @@ export async function resolveModelFlag(deps: {
       if (targetGroup?.error || targetGroup?.models.length === 0) {
         return {
           status: 'passthrough',
-          modelId: parsed.rawPattern,
+          modelId: passthroughModelId(parsed),
           provider: parsed.provider,
           reasoningEffort: parsed.reasoningEffort,
           ...(warnings.length > 0 ? { warnings } : {}),

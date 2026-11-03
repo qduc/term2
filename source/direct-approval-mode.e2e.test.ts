@@ -417,6 +417,9 @@ async function runCommand(
     await session.waitForOutput('Clear session and switch mode?', 30_000);
     await session.waitForOutput('Switching modes requires clearing the current session.', 30_000);
     await session.waitForOutput('› No', 30_000);
+    const dialog = session.getVisibleOutput().split('\n');
+    expect(dialog.some((line) => /│.*Switching modes requires clearing the current session\./.test(line))).toBe(true);
+    expect(dialog.some((line) => /│.*Clear session and switch mode\?/.test(line))).toBe(true);
     await new Promise((resolve) => setTimeout(resolve, 100));
     let frameOffset = session.getVisibleOutput().length;
     // The default answer is No: Enter cancels the clear.

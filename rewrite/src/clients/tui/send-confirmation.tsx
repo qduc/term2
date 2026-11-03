@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, type ReactElement } from 'react';
-import { Box, Text, type Key } from 'ink';
+import { Text, type Key } from 'ink';
 import { useTheme } from './presentation/components/theme.js';
+import { useSkin } from './presentation/skins/SkinContext.js';
 
 /**
  * A send the session said needs confirmation. The draft stays frozen in the
@@ -16,6 +17,7 @@ export function useSendConfirmation(interactionActive: boolean): {
   readonly prompt: ReactElement | null;
 } {
   const theme = useTheme();
+  const { MenuFrame } = useSkin();
   const [selected, setSelected] = useState<0 | 1>(1);
   const [held, setHeld] = useState<{ message: string; proceed: () => void; hint?: string } | null>(null);
   const owned = held !== null && !interactionActive;
@@ -49,13 +51,13 @@ export function useSendConfirmation(interactionActive: boolean): {
     prompt:
       held && owned ? (
         held.hint ? (
-          <Box flexDirection="column">
+          <MenuFrame borderColor={theme.borderActive} hasItems={false} footerPlacement="outside">
             <Text color={theme.warning}>⚠ Switching modes requires clearing the current session.</Text>
             <Text bold>{held.message}</Text>
             <Text color={selected === 0 ? theme.accent : theme.textMuted}>{selected === 0 ? '›' : ' '} Yes</Text>
             <Text color={selected === 1 ? theme.accent : theme.textMuted}>{selected === 1 ? '›' : ' '} No</Text>
             <Text color={theme.textSubtle}>↑/↓ select · Enter choose · y/n answer · Esc cancel</Text>
-          </Box>
+          </MenuFrame>
         ) : (
           <Text>{held.message} Press y to send, n or Esc to keep editing.</Text>
         )

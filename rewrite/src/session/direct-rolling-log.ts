@@ -1,5 +1,5 @@
 /** One logical Session, one writable physical head, and a verified accepted lineage. */
-import { closeSync, lstatSync, openSync, readSync, readdirSync, realpathSync } from 'node:fs';
+import { closeSync, lstatSync, openSync, readSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { z } from 'zod';
 import type { FactLine, SessionStartedFact } from './facts.js';
@@ -176,7 +176,38 @@ export function readDirectLogLineage(
   const cut = options.throughSeq;
   if (cut !== undefined && (!Number.isSafeInteger(cut) || cut < 1))
     throw new Error('direct lineage cut must be a positive accepted sequence');
-  return readLineage(directory, id, discoverDirectLogs(directory), cut);
+  const discovery = discoverDirectLogs(directory);
+  if (cut !== undefined) return readLineage(directory, id, discovery, cut);
+  // Opening a session reads its lineage several times (resolve, validate, lock, construct).
+  // An unchanged log is not parsed again: reuse needs identical file stats and no new successor.
+  const key = `${directory}\0${id}`;
+  const cached = lineageCache.get(key);
+  if (cached && lineageUnchanged(cached.lineage, cached.stats, discovery)) {
+    lineageCache.delete(key);
+    lineageCache.set(key, cached);
+    return cached.lineage;
+  }
+  const lineage = readLineage(directory, id, discovery, undefined);
+  const stats = lineage.segments.map((segment) => fileStamp(segment.path));
+  lineageCache.delete(key);
+  lineageCache.set(key, { lineage, stats });
+  while (lineageCache.size > 2) lineageCache.delete(lineageCache.keys().next().value!);
+  return lineage;
+}
+
+const lineageCache = new Map<string, { lineage: DirectLogLineage; stats: readonly string[] }>();
+const fileStamp = (path: string): string => {
+  try {
+    const stat = statSync(path);
+    return `${stat.ino}:${stat.size}:${stat.mtimeMs}`;
+  } catch {
+    return 'missing';
+  }
+};
+function lineageUnchanged(lineage: DirectLogLineage, stats: readonly string[], discovery: Discovery): boolean {
+  if (lineage.segments.some((segment, i) => fileStamp(segment.path) !== stats[i])) return false;
+  const head = lineage.segments.at(-1)!;
+  return (discovery.children.get(head.sessionId) ?? []).length === 0;
 }
 
 /** Reuse one discovery snapshot for catalogue aliases, with full fact validation

@@ -44,6 +44,7 @@ import type {
 /** Replay metadata is promoted only with an accepted history replacement. */
 export type TurnCompactionState = {
   readonly rearmAtEstimatedTokens?: number;
+  readonly rearmAtRenderedTokens?: number;
   readonly checkpointReceipts?: readonly string[];
 };
 export type BudgetDecision =
@@ -186,6 +187,7 @@ export type TurnEvent =
       readonly reason: 'compaction';
       readonly compactionId?: string;
       readonly rearmAtEstimatedTokens?: number;
+      readonly rearmAtRenderedTokens?: number;
       readonly checkpointReceipts?: readonly string[];
     }
   | {

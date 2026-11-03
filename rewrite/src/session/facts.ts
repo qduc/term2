@@ -176,6 +176,7 @@ export type DirectHistoryFact = {
   readonly compactionId?: string;
   readonly history: readonly Item[];
   readonly rearmAtEstimatedTokens?: number;
+  readonly rearmAtRenderedTokens?: number;
   readonly checkpointReceipts?: readonly string[];
 };
 

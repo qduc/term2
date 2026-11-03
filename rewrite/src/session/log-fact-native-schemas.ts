@@ -234,6 +234,13 @@ export const nativeSchemas: Record<string, FactSchema> = {
     )
       check.fail('rearmAtEstimatedTokens');
     if (
+      'rearmAtRenderedTokens' in fact &&
+      (typeof fact['rearmAtRenderedTokens'] !== 'number' ||
+        !Number.isFinite(fact['rearmAtRenderedTokens']) ||
+        fact['rearmAtRenderedTokens'] < 0)
+    )
+      check.fail('rearmAtRenderedTokens');
+    if (
       'checkpointReceipts' in fact &&
       (!Array.isArray(fact['checkpointReceipts']) ||
         !fact['checkpointReceipts'].every((value) => typeof value === 'string'))

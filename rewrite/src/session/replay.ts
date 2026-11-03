@@ -77,6 +77,7 @@ export type ReplayedConversation = NativeReplayedConversation & {
   readonly compactions: readonly ReplayedCompaction[];
   readonly compactionState?: {
     readonly rearmAtEstimatedTokens?: number;
+    readonly rearmAtRenderedTokens?: number;
     readonly checkpointReceipts?: readonly string[];
   };
 };
@@ -384,6 +385,9 @@ function replayProjection(
                 ...(fact.rearmAtEstimatedTokens === undefined
                   ? {}
                   : { rearmAtEstimatedTokens: fact.rearmAtEstimatedTokens }),
+                ...(fact.rearmAtRenderedTokens === undefined
+                  ? {}
+                  : { rearmAtRenderedTokens: fact.rearmAtRenderedTokens }),
                 ...(fact.checkpointReceipts === undefined ? {} : { checkpointReceipts: fact.checkpointReceipts }),
               }
             : undefined;

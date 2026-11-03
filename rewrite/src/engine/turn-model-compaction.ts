@@ -155,6 +155,7 @@ export class TurnCompaction {
         ...(result.rearmAtEstimatedTokens === undefined
           ? {}
           : { rearmAtEstimatedTokens: result.rearmAtEstimatedTokens }),
+        ...(result.rearmAtRenderedTokens === undefined ? {} : { rearmAtRenderedTokens: result.rearmAtRenderedTokens }),
         checkpointReceipts: result.checkpointReceipts,
       });
       history.splice(0, history.length, ...replacement);
@@ -162,6 +163,7 @@ export class TurnCompaction {
         ...(result.rearmAtEstimatedTokens === undefined
           ? {}
           : { rearmAtEstimatedTokens: result.rearmAtEstimatedTokens }),
+        ...(result.rearmAtRenderedTokens === undefined ? {} : { rearmAtRenderedTokens: result.rearmAtRenderedTokens }),
         checkpointReceipts: result.checkpointReceipts,
       };
       this.#lastInputTokens = undefined;

@@ -56,6 +56,7 @@ export type DirectCompactionInput = {
   readonly maxRequestInputTokens?: number | null;
   readonly lastCompletedInputTokens?: number;
   readonly rearmAtEstimatedTokens?: number;
+  readonly rearmAtRenderedTokens?: number;
   /** Host-recorded receipt previews from the last accepted local checkpoint. */
   readonly checkpointReceipts?: readonly string[];
   readonly manual?: boolean;
@@ -92,6 +93,7 @@ export type DirectCompactionResult =
       readonly before: DirectContextEstimate;
       readonly estimate: DirectContextEstimate;
       readonly rearmAtEstimatedTokens?: number;
+      readonly rearmAtRenderedTokens?: number;
       readonly usage: readonly Usage[];
       readonly checkpointReceipts: readonly string[];
       readonly disableChaining: true;
@@ -155,6 +157,13 @@ export async function compactDirectHistory(input: DirectCompactionInput): Promis
   if (!input.manual && softTrigger !== undefined && measured < softTrigger) return { kind: 'not_needed', estimate };
   if (
     !input.manual &&
+    input.rearmAtRenderedTokens !== undefined &&
+    estimate.renderedInputTokens < input.rearmAtRenderedTokens
+  ) {
+    return { kind: 'deferred', reason: 'hysteresis', estimate };
+  }
+  if (
+    !input.manual &&
     input.rearmAtEstimatedTokens !== undefined &&
     measured < input.rearmAtEstimatedTokens &&
     (softTrigger === undefined || estimate.renderedInputTokens < softTrigger)
@@ -186,10 +195,7 @@ export async function compactDirectHistory(input: DirectCompactionInput): Promis
   }
   if (!hasCompleteDirectToolPairs(operation.history))
     throw new Error('Compaction returned orphaned tool calls/results');
-  if (
-    (policy.hardInputLimit !== undefined && after.renderedInputTokens > policy.hardInputLimit) ||
-    (!input.manual && softTrigger !== undefined && after.renderedInputTokens >= Math.floor(softTrigger * 0.9))
-  ) {
+  if (policy.hardInputLimit !== undefined && after.renderedInputTokens > policy.hardInputLimit) {
     return { kind: 'blocked', reason: 'result_still_too_large', estimate, usage: operation.usage };
   }
   const retained = new Set(operation.history.map((item) => item.id));
@@ -207,6 +213,9 @@ export async function compactDirectHistory(input: DirectCompactionInput): Promis
             Math.max(after.renderedInputTokens, input.lastCompletedInputTokens ?? 0) +
             Math.max(1_000, Math.ceil(softTrigger * 0.1)),
         }),
+    ...(!input.manual && softTrigger !== undefined && after.renderedInputTokens >= Math.floor(softTrigger * 0.9)
+      ? { rearmAtRenderedTokens: after.renderedInputTokens + Math.max(1_000, Math.ceil(softTrigger * 0.1)) }
+      : {}),
     usage: operation.usage,
     checkpointReceipts: operation.checkpointReceipts,
     disableChaining: true,

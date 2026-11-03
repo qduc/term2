@@ -125,6 +125,7 @@ export type ReplayedConversation = {
   readonly queue: DirectQueueState;
   readonly compactionState?: {
     readonly rearmAtEstimatedTokens?: number;
+    readonly rearmAtRenderedTokens?: number;
     readonly checkpointReceipts?: readonly string[];
   };
   /** Ordered missing tool results, interaction closures, then interrupted terminal. Empty after materialization. */

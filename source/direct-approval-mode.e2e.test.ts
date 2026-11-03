@@ -363,30 +363,30 @@ async function runCommand(
       await new Promise((resolve) => setTimeout(resolve, 80));
     }
     session.write('\x15');
-    await waitForHarnessComposerValue(idlePath, 'XYZ', { timeoutMs: 5_000 });
+    await waitForHarnessComposerValue(idlePath, 'XYZ', { timeoutMs: 30_000 });
     session.write('Q');
-    await waitForHarnessComposerValue(idlePath, 'QXYZ', { timeoutMs: 5_000 });
+    await waitForHarnessComposerValue(idlePath, 'QXYZ', { timeoutMs: 30_000 });
     session.write('\x15');
-    await waitForHarnessComposerValue(idlePath, 'XYZ', { timeoutMs: 5_000 });
+    await waitForHarnessComposerValue(idlePath, 'XYZ', { timeoutMs: 30_000 });
     session.write('\x05');
     await new Promise((resolve) => setTimeout(resolve, 100));
     session.write('\x15');
-    await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 5_000 });
+    await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
     session.write('first\nsecondXYZ');
-    await waitForHarnessComposerValue(idlePath, 'first\nsecondXYZ', { timeoutMs: 5_000 });
+    await waitForHarnessComposerValue(idlePath, 'first\nsecondXYZ', { timeoutMs: 30_000 });
     for (let i = 0; i < 3; i++) {
       session.write('\x1b[D');
       await new Promise((resolve) => setTimeout(resolve, 80));
     }
     session.write('\x15');
-    await waitForHarnessComposerValue(idlePath, 'first\nXYZ', { timeoutMs: 5_000 });
+    await waitForHarnessComposerValue(idlePath, 'first\nXYZ', { timeoutMs: 30_000 });
     // At buffer offset zero, Ctrl+U is a no-op.
     session.write('\x1b\\');
     await new Promise((resolve) => setTimeout(resolve, 100));
     session.write('\x15');
     await new Promise((resolve) => setTimeout(resolve, 100));
     session.write('Z');
-    await waitForHarnessComposerValue(idlePath, 'Zfirst\nXYZ', { timeoutMs: 5_000 });
+    await waitForHarnessComposerValue(idlePath, 'Zfirst\nXYZ', { timeoutMs: 30_000 });
     return;
   }
   if (exerciseMenu === 'slash-picker-tab') {

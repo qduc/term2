@@ -38,6 +38,7 @@ import { createDirectControlBridge, type DirectControlBridge } from './direct-la
 import { createDirectTuiCommands } from './direct-launch-tui-commands.js';
 import { performRestart, type DirectRestartPlan } from './direct-launch-tui-restart.js';
 import type { DirectLaunchRequest } from './direct-launch-types.js';
+import type { ISettingsService } from '../../../source/services/service-interfaces.js';
 import { INTERACTIVE_TERMINAL_REQUIRED } from './direct-launch.js';
 import { openDirectApplicationMcp } from './direct-application-mcp.js';
 import type { DirectMcp } from './direct-mcp.js';
@@ -59,6 +60,7 @@ async function confirmHomeStart({ lite, resumeId, ssh }: InteractiveRequest): Pr
 
 function DirectTui({
   app,
+  persistentSettings,
   root,
   remote,
   mcp,
@@ -69,6 +71,7 @@ function DirectTui({
   logger,
 }: {
   readonly app: DirectApplication;
+  readonly persistentSettings: ISettingsService;
   readonly root: string;
   readonly remote: DirectSessionTarget['restart'];
   readonly mcp?: DirectMcp;
@@ -123,6 +126,7 @@ function DirectTui({
           const current = app.liveSettings(sessionId);
           if (!current) throw new Error('The attached session has no live settings.');
           toggleFavoriteModel(current, model.provider, model.id);
+          persistentSettings.setPersistent('agent.favoriteModels', current.get('agent.favoriteModels'));
         },
       },
       async shell(sessionId, command) {
@@ -298,6 +302,7 @@ async function runTui(
           <SettingsSkinProvider settingsService={settings}>
             <DirectTui
               app={app}
+              persistentSettings={settings}
               root={root}
               remote={target.restart}
               mcp={mcp}

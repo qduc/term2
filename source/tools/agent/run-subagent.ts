@@ -18,7 +18,7 @@ import { AGENT_SPEC_TOOL_NAMES } from '../../services/agent-runtime/agent-spec.j
 
 function getRunSubagentDescription(backgroundEnabled: boolean): string {
   return (
-    'Delegate a bounded task to the general agent runtime. Use agent_spec for dynamic goal/context/tools/constraints/model/budget; legacy named roles are compatibility presets. ' +
+    'Delegate a bounded task to the general agent runtime. Use agent_spec for dynamic goal/context/tools/constraints/model/budget; legacy named roles are compatibility presets. agent_spec children get no shell; use role "worker" when the child must run commands. ' +
     (backgroundEnabled
       ? 'This session requires background execution: the tool returns a running handle immediately and a later completion notification. '
       : 'This session uses foreground execution and returns the structured result in this turn. ') +
@@ -139,7 +139,9 @@ const runSubagentSchema = z
     task: z.string().optional().describe(SUBAGENT_TASK_DESCRIPTION),
     agent_spec: agentSpecSchema
       .optional()
-      .describe('Dynamic goal/context/tools/constraints/model/budget; no named role required.'),
+      .describe(
+        'Dynamic goal/context/tools/constraints/model/budget; no named role required. No shell: use role "worker" to run commands.',
+      ),
     ...worktreeField,
     ...backgroundFields,
   })

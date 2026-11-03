@@ -24,6 +24,13 @@ const TOOL_PERMISSION_MAP: Record<string, keyof ResolvedAgentPermissions> = {
   activate_skill: 'canRead',
 };
 
+// Shell is only granted to named roles whose definition allows it: it cannot be
+// confined to a filesystem scope, which every ad-hoc agent spec inherits.
+const SHELL_DENIED_MESSAGE =
+  'Tool "shell" is not available to this child agent: ad-hoc agent specs (and roles without shell) cannot run commands, ' +
+  'because shell cannot be confined to a filesystem scope. For a child that must run commands (tests, builds), ' +
+  'call run_subagent with role "worker" and a task, and tell it not to edit if it is only verifying.';
+
 export interface ToolResolutionResult {
   /** Resolved tool names that pass authority checks. */
   resolved: string[];
@@ -84,7 +91,10 @@ export function resolveTools(
       errors.push({
         code: 'permission_denied',
         toolName,
-        message: `Tool "${toolName}" requires permission "${requiredPermission}" which is not granted.`,
+        message:
+          toolName === 'shell'
+            ? SHELL_DENIED_MESSAGE
+            : `Tool "${toolName}" requires permission "${requiredPermission}" which is not granted.`,
       });
       continue;
     }

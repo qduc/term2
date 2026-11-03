@@ -24,7 +24,8 @@ let session: TerminalSession | null = null;
 let root = '';
 let server: http.Server | null = null;
 let received: string[] = [];
-let closedHanging = false;
+let hangingState = { closed: false };
+let finishHanging: (() => void) | undefined;
 
 afterEach(async () => {
   session?.dispose();
@@ -35,10 +36,11 @@ afterEach(async () => {
   if (root) fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   root = '';
   received = [];
-  closedHanging = false;
+  hangingState = { closed: false };
+  finishHanging = undefined;
 });
 
-type Reply = { text?: string; hang?: boolean; fail?: boolean; failMessage?: string };
+type Reply = { text?: string; hang?: boolean; tool?: boolean; fail?: boolean; failMessage?: string };
 
 /** One SSE reply per chat request, in order: a single shell call or plain text. */
 async function startProvider(replies: Reply[]): Promise<string> {
@@ -68,10 +70,34 @@ async function startProvider(replies: Reply[]): Promise<string> {
       const wire = frames.map((frame) => `data: ${JSON.stringify(frame)}\n`).join('\n');
       // A hanging reply streams its text and then never finishes, like a long answer being cut short.
       if (reply.hang) {
+        const state = hangingState;
         res.on('close', () => {
-          closedHanging = true;
+          state.closed = !res.writableFinished;
         });
         res.write(`${wire}\n`);
+        finishHanging = () => {
+          const delta = reply.tool
+            ? {
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: 'call_1',
+                    type: 'function',
+                    function: {
+                      name: 'create_file',
+                      arguments: JSON.stringify({ path: 'tool-result.txt', content: 'tool completed' }),
+                    },
+                  },
+                ],
+              }
+            : { content: ' END-OF-STREAM' };
+          res.end(
+            `data: ${JSON.stringify({
+              id,
+              choices: [{ delta, finish_reason: reply.tool ? 'tool_calls' : 'stop' }],
+            })}\n\ndata: [DONE]\n\n`,
+          );
+        };
       } else res.end(`${wire}\ndata: [DONE]\n\n`);
     });
   });
@@ -151,25 +177,17 @@ it('text and Enter in one write submit while a turn is streaming', { timeout: TI
   await session!.waitForOutput('STREAMING-TEXT', 60_000);
   // A sender that writes text and CR together while the stream renders: the draft must be sent, not kept.
   session!.write('steer now\r');
-  await session!.waitForOutput('STEERED-REPLY', 30_000);
-  await until(() => received.length >= 2 && closedHanging, 'steer aborts the hanging response and dispatches another');
-  expect(received[1]).toContain('steer now');
-  expect(received[1]).toContain('STREAMING-TEXT');
-  // The draft state is published after the commit.
+  await session!.waitForOutput('steer · mid-turn', 30_000);
   await until(() => composer(idlePath) === '', 'submitted steer clears the draft');
-  expect(composer(idlePath), 'the coalesced text+Enter was submitted and cleared the draft').toBe('');
-  // The steer reached the durable log, so it was sent rather than dropped.
-  const logs = fs.readdirSync(path.join(root, 'conversations')).filter((name) => name.endsWith('.jsonl'));
-  const log = logs.map((name) => fs.readFileSync(path.join(root, 'conversations', name), 'utf8')).join('\n');
-  expect(log).toContain('steer now');
-  const facts = log
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => JSON.parse(line).fact);
-  const partial = facts.findIndex((fact) => fact.type === 'item' && fact.item?.id?.endsWith('-partial'));
-  const steer = facts.findIndex((fact) => fact.type === 'queue_steered');
-  expect(partial, 'the interrupted text is finalized').toBeGreaterThanOrEqual(0);
-  expect(steer, 'the steer is admitted after the partial is finalized').toBeGreaterThan(partial);
+  expect(received).toHaveLength(1);
+  expect(hangingState.closed).toBe(false);
+  expect(session!.getVisibleOutput()).not.toContain('Stopped');
+  finishHanging!();
+  await session!.waitForOutput('STEERED-REPLY', 60_000);
+  await until(() => received.length >= 2, 'steer dispatched after response finishes');
+  expect(received[1]).toContain('steer now');
+  expect(received[1]).toContain('END-OF-STREAM');
+  expect(hangingState.closed).toBe(false);
 });
 
 it('retries a steered turn after a dropped connection', { timeout: TIMEOUT_MS }, async () => {
@@ -188,6 +206,8 @@ it('retries a steered turn after a dropped connection', { timeout: TIMEOUT_MS },
   session!.write('steer unique instruction');
   await waitForHarnessComposerValue(idlePath, 'steer unique instruction', { timeoutMs: 30_000 });
   session!.write('\r');
+  await session!.waitForOutput('steer · mid-turn', 30_000);
+  finishHanging!();
   await session!.waitForOutput('Connection to the model dropped.', 60_000);
   await session!.waitForOutput('/retry to try again.', 60_000);
   expect(session!.getVisibleOutput()).not.toContain('WebSocket connection closed before a terminal response event');
@@ -201,25 +221,25 @@ it('retries a steered turn after a dropped connection', { timeout: TIMEOUT_MS },
   expect(received[2]).toContain('steer unique instruction');
 });
 
-it(
-  'a steer interrupts a retry response and the continued request reaches the provider',
-  { timeout: TIMEOUT_MS },
-  async () => {
-    const { idlePath } = await start(
-      [{ fail: true }, { text: 'RECOVERED-PARTIAL', hang: true }, { text: 'AFTER-RECOVERY-STEER' }],
-      1,
-    );
-    session!.write('retry question');
-    await waitForHarnessComposerValue(idlePath, 'retry question', { timeoutMs: 60_000 });
-    session!.write('\r');
-    await session!.waitForOutput('RECOVERED-PARTIAL', 60_000);
-    session!.write('recovery steer\r');
-    await session!.waitForOutput('AFTER-RECOVERY-STEER', 30_000);
-    await until(() => received.length >= 3 && closedHanging, 'the recovery stream closes and the steer dispatches');
-    expect(received[2]).toContain('recovery steer');
-    expect(received[2]).toContain('RECOVERED-PARTIAL');
-  },
-);
+it('a steer waits for a retry response and then reaches the provider', { timeout: TIMEOUT_MS }, async () => {
+  const { idlePath } = await start(
+    [{ fail: true }, { text: 'RECOVERED-PARTIAL', hang: true }, { text: 'AFTER-RECOVERY-STEER' }],
+    1,
+  );
+  session!.write('retry question');
+  await waitForHarnessComposerValue(idlePath, 'retry question', { timeoutMs: 60_000 });
+  session!.write('\r');
+  await session!.waitForOutput('RECOVERED-PARTIAL', 60_000);
+  session!.write('recovery steer\r');
+  await session!.waitForOutput('steer · mid-turn', 30_000);
+  expect(received).toHaveLength(2);
+  expect(hangingState.closed).toBe(false);
+  finishHanging!();
+  await session!.waitForOutput('AFTER-RECOVERY-STEER', 60_000);
+  await until(() => received.length >= 3, 'the completed recovery stream is followed by the steer');
+  expect(received[2]).toContain('recovery steer');
+  expect(received[2]).toContain('RECOVERED-PARTIAL');
+});
 
 it('retry redraw restores older static history while the new response streams', { timeout: TIMEOUT_MS }, async () => {
   const { idlePath } = await start([
@@ -329,6 +349,26 @@ it(
   },
 );
 
+it('admits a steer at the request boundary after a tool call', { timeout: TIMEOUT_MS }, async () => {
+  const { idlePath } = await start([{ text: 'TOOL-STREAM', hang: true, tool: true }, { text: 'AFTER-TOOL' }]);
+  session!.write('first question');
+  await waitForHarnessComposerValue(idlePath, 'first question', { timeoutMs: 60_000 });
+  session!.write('\r');
+  await session!.waitForOutput('TOOL-STREAM', 60_000);
+  session!.write('tool boundary steer');
+  await waitForHarnessComposerValue(idlePath, 'tool boundary steer', { timeoutMs: 30_000 });
+  session!.write('\r');
+  await session!.waitForOutput('steer · mid-turn', 30_000);
+  expect(received).toHaveLength(1);
+  expect(hangingState.closed).toBe(false);
+  finishHanging!();
+  await session!.waitForOutput('AFTER-TOOL', 60_000);
+  expect(received).toHaveLength(2);
+  expect(received[1]).toContain('tool boundary steer');
+  expect(received[1]).toContain('tool completed');
+  expect(session!.getVisibleOutput()).not.toContain('Stopped');
+});
+
 it('a second message sent while the first is still being sent is kept, not lost', { timeout: TIMEOUT_MS }, async () => {
   const { idlePath } = await start([{ text: 'STREAMING-TEXT', hang: true }, { text: 'done' }]);
   session!.write('first question');
@@ -351,19 +391,21 @@ it('a second message sent while the first is still being sent is kept, not lost'
   expect(kept, 'the second steer is in the log or the draft').toBe(true);
 });
 
-it('marks an interrupted reply before the steer', { timeout: TIMEOUT_MS }, async () => {
+it('finishes a reply before applying a queued steer without a stopped marker', { timeout: TIMEOUT_MS }, async () => {
   const { idlePath } = await start([{ text: 'PARTIAL-OLD-REPLY', hang: true }, { text: 'NEW-REPLY' }]);
   session!.write('first question');
   await waitForHarnessComposerValue(idlePath, 'first question', { timeoutMs: 60_000 });
   session!.write('\r');
   await session!.waitForOutput('PARTIAL-OLD-REPLY', 60_000);
   session!.write('STEER-PROMPT\r');
-  await session!.waitForOutput('NEW-REPLY', 30_000);
-  const visible = session!.getVisibleOutput();
-  expect(visible.lastIndexOf('PARTIAL-OLD-REPLY')).toBeGreaterThanOrEqual(0);
-  expect(visible.lastIndexOf('Stopped')).toBeGreaterThan(visible.lastIndexOf('PARTIAL-OLD-REPLY'));
-  expect(visible.lastIndexOf('STEER-PROMPT')).toBeGreaterThan(visible.lastIndexOf('Stopped'));
-  expect(visible.lastIndexOf('NEW-REPLY')).toBeGreaterThan(visible.lastIndexOf('STEER-PROMPT'));
+  await session!.waitForOutput('steer · mid-turn', 30_000);
+  expect(received).toHaveLength(1);
+  expect(hangingState.closed).toBe(false);
+  finishHanging!();
+  await session!.waitForOutput('NEW-REPLY', 60_000);
+  expect(received[1]).toContain('END-OF-STREAM');
+  expect(received[1]).toContain('STEER-PROMPT');
+  expect(session!.getVisibleOutput()).not.toContain('Stopped');
 });
 
 it.skipIf(process.platform !== 'linux')(
@@ -383,11 +425,15 @@ it.skipIf(process.platform !== 'linux')(
     await send('first question');
     await session!.waitForOutput('PARTIAL-SKILL-QUEUE', 60_000);
     await send('/skills dogfood queue request');
-    await session!.waitForOutput('Queued 1 (queued): [Skill: dogfood]', 30_000);
+    await session!.waitForOutput('queued · after this turn', 30_000);
+    await session!.waitForOutput('[Skill: dogfood]', 30_000);
     expect(session!.getVisibleOutput()).not.toContain('QUEUE_SKILL_SENTINEL');
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
     await new Promise((resolve) => setTimeout(resolve, 500));
-    await send('/queue edit 1');
+    // Select the pending request through the legacy queue keyboard interaction.
+    session!.write('\x1b[A');
+    await session!.waitForOutput('navigate', 30_000);
+    session!.write('\r');
     await waitForHarnessComposerValue(idlePath, 'queue request', { timeoutMs: 30_000 });
     expect(session!.getVisibleOutput()).not.toContain('QUEUE_SKILL_SENTINEL');
     session!.write('\x16');

@@ -356,11 +356,12 @@ async function runCommand(
     await session.waitForOutput('Ctx last 12k', 30_000);
   }
   if (exerciseMenu === 'ctrl-u') {
+    // The cursor position settles asynchronously after each arrow key; pace Ctrl+U so it reads the settled cursor.
     session.write('abcXYZ');
     await waitForHarnessComposerValue(idlePath, 'abcXYZ', { timeoutMs: 10_000 });
     for (let i = 0; i < 3; i++) {
       session.write('\x1b[D');
-      await new Promise((resolve) => setTimeout(resolve, 80));
+      await new Promise((resolve) => setTimeout(resolve, 300));
     }
     session.write('\x15');
     await waitForHarnessComposerValue(idlePath, 'XYZ', { timeoutMs: 30_000 });
@@ -369,22 +370,22 @@ async function runCommand(
     session.write('\x15');
     await waitForHarnessComposerValue(idlePath, 'XYZ', { timeoutMs: 30_000 });
     session.write('\x05');
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 300));
     session.write('\x15');
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
     session.write('first\nsecondXYZ');
     await waitForHarnessComposerValue(idlePath, 'first\nsecondXYZ', { timeoutMs: 30_000 });
     for (let i = 0; i < 3; i++) {
       session.write('\x1b[D');
-      await new Promise((resolve) => setTimeout(resolve, 80));
+      await new Promise((resolve) => setTimeout(resolve, 300));
     }
     session.write('\x15');
     await waitForHarnessComposerValue(idlePath, 'first\nXYZ', { timeoutMs: 30_000 });
     // At buffer offset zero, Ctrl+U is a no-op.
     session.write('\x1b\\');
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 300));
     session.write('\x15');
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 300));
     session.write('Z');
     await waitForHarnessComposerValue(idlePath, 'Zfirst\nXYZ', { timeoutMs: 30_000 });
     return;

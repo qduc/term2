@@ -274,11 +274,10 @@ async function runCommand(
   const idle = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
   if (exerciseMenu === 'hint-80' || exerciseMenu === 'hint-120') {
     const lines = session.getVisibleOutput().split('\n');
-    const hint = lines.find((row) => row.startsWith('/ commands'));
-    expect(hint).toContain('↑/↓ history');
+    const hintRows = lines.filter((row) => row.trimStart().startsWith('/ commands'));
+    expect(hintRows).toHaveLength(1);
+    expect(hintRows[0]?.trim()).toBe('/ commands │ @ paths │ ! shell │ Shift+Tab plan');
     expect(lines.some((row) => row.startsWith(' output │'))).toBe(false);
-    if (exerciseMenu === 'hint-120') expect(hint).toContain('Ctrl+G tasks');
-    else expect(hint).not.toContain('Ctrl+O tool');
     return;
   }
 

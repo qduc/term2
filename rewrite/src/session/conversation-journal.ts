@@ -33,6 +33,9 @@ export class ConversationJournal {
   #taskStates: readonly DirectTaskState[] = [];
   readonly #requestIds = new Set<InteractionRequestId>();
   #recoveryMaterialized = false;
+  /** Hook status is folded from each accepted fact once, never rescanned from the whole log. */
+  #root: TurnId | undefined;
+  readonly #waits = new Map<string, 'approval' | 'question' | 'budget'>();
   #hookStatus: 'idle' | 'working' | 'waiting_for_user' | 'waiting_for_approval' = 'idle';
   #failure: ModelError | null = null;
   constructor(
@@ -55,7 +58,31 @@ export class ConversationJournal {
       if (isDirectTaskFact(fact)) this.#taskStates = reduceDirectBackground(this.#taskStates, fact);
       if (fact.type === 'interaction_opened' || fact.type === 'task_interaction_opened')
         this.#requestIds.add(fact.request.requestId);
+      this.#foldStatus(fact);
     }
+  }
+  #foldStatus(fact: Fact): void {
+    if (fact.type === 'turn_started') {
+      this.#root = fact.turnId;
+      this.#waits.clear();
+    }
+    if (fact.type === 'interaction_opened' && fact.turnId === this.#root)
+      this.#waits.set(fact.request.requestId, fact.request.kind);
+    if (fact.type === 'budget_opened' && fact.turnId === this.#root) this.#waits.set(fact.requestId, 'budget');
+    if (fact.type === 'interaction_closed' || fact.type === 'budget_closed') this.#waits.delete(fact.requestId);
+    if (fact.type === 'turn_ended' && fact.turnId === this.#root) {
+      this.#root = undefined;
+      this.#waits.clear();
+    }
+  }
+  #status(): 'idle' | 'working' | 'waiting_for_user' | 'waiting_for_approval' {
+    return this.#waits.size
+      ? [...this.#waits.values()].some((kind) => kind === 'approval')
+        ? 'waiting_for_approval'
+        : 'waiting_for_user'
+      : this.#root
+      ? 'working'
+      : 'idle';
   }
   get failure(): ModelError | null {
     return this.#failure;
@@ -93,7 +120,7 @@ export class ConversationJournal {
     let projectedContext = this.#context;
     let projectedQueue = this.#queueState;
     let projectedTasks = this.#taskStates;
-    const reserved = new Set(this.#requestIds);
+    const reserved = new Set<InteractionRequestId>();
     for (const fact of next) {
       if (isDirectNotificationFactType(fact.type))
         projectedNotices = reduceDirectNotifications(projectedNotices, fact as DirectNotificationFact);
@@ -103,7 +130,8 @@ export class ConversationJournal {
       if (isDirectQueueFact(fact)) projectedQueue = reduceDirectQueue(projectedQueue, fact);
       if (isDirectTaskFact(fact)) projectedTasks = reduceDirectBackground(projectedTasks, fact);
       if (fact.type === 'interaction_opened' || fact.type === 'task_interaction_opened') {
-        if (reserved.has(fact.request.requestId)) throw new Error('Duplicate Session interaction request ID');
+        if (reserved.has(fact.request.requestId) || this.#requestIds.has(fact.request.requestId))
+          throw new Error('Duplicate Session interaction request ID');
         reserved.add(fact.request.requestId);
       }
     }
@@ -123,35 +151,14 @@ export class ConversationJournal {
     for (const requestId of reserved) this.#requestIds.add(requestId);
     for (const fact of next) this.facts.push(fact);
     for (const line of lines) this.sink.accepted(line);
-    let root: TurnId | undefined;
-    const waits = new Map<string, 'approval' | 'question' | 'budget'>();
-    for (const fact of this.facts) {
-      if (fact.type === 'turn_started') {
-        root = fact.turnId;
-        waits.clear();
-      }
-      if (fact.type === 'interaction_opened' && fact.turnId === root)
-        waits.set(fact.request.requestId, fact.request.kind);
-      if (fact.type === 'budget_opened' && fact.turnId === root) waits.set(fact.requestId, 'budget');
-      if (fact.type === 'interaction_closed' || fact.type === 'budget_closed') waits.delete(fact.requestId);
-      if (fact.type === 'turn_ended' && fact.turnId === root) {
-        root = undefined;
-        waits.clear();
-      }
-    }
-    const current = waits.size
-      ? [...waits.values()].some((kind) => kind === 'approval')
-        ? 'waiting_for_approval'
-        : 'waiting_for_user'
-      : root
-      ? 'working'
-      : 'idle';
+    for (const fact of next) this.#foldStatus(fact);
+    const current = this.#status();
     if (current !== this.#hookStatus) {
       this.sink.status(
         this.#hookStatus,
         current,
-        current === 'idle' ? 'turn_finished' : waits.size ? 'approval_requested' : 'turn_started',
-        root,
+        current === 'idle' ? 'turn_finished' : this.#waits.size ? 'approval_requested' : 'turn_started',
+        this.#root,
       );
       this.#hookStatus = current;
     }

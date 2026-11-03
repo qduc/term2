@@ -79,7 +79,9 @@ it('delivers a pending steer after cancelling an unanswered question', async () 
     await writePtyTextAndSubmit(child, 'QUESTION_PARENT');
     await child.waitForState(() => requests.length === 1);
     await writePtyTextAndSubmit(child, 'RELEASED_STEER');
-    await child.waitForVisibleOutput('RELEASED_STEER');
+    // The text appears in the composer before Enter is consumed. Wait for the
+    // pending-steer row so the question cannot take ownership of that Enter.
+    await child.waitForVisibleOutput('steer · mid-turn');
     complete(0, [question('cancelled-question', 'CANCEL_QUEUED_QUESTION')]);
     await child.waitForVisibleOutput('CANCEL_QUEUED_QUESTION');
     await child.write('\u001b');

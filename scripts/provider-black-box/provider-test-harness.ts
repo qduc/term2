@@ -686,7 +686,12 @@ function createPtyChild(options: {
         signalChild(terminal, 'SIGUSR1', true);
         try {
           return await waitForExit(timeoutMs);
-        } catch {
+        } catch (error) {
+          if (
+            !(error instanceof Error) ||
+            error.message !== `Timed out waiting for PTY child exit after ${timeoutMs}ms.`
+          )
+            throw error;
           // A detached process can keep the slave open after the child exits.
           console.error(`PTY bridge ${terminal.pid} did not exit after child termination; closing PTY.`);
           signalChild(terminal, 'SIGKILL', true);

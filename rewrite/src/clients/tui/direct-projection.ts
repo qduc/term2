@@ -152,6 +152,7 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
     sessionId: snapshot.sessionId,
     status: snapshot.status,
     activeTurnId: snapshot.activeTurnId,
+    terminalOutcome: snapshot.terminal?.outcome,
     model: modelText(snapshot.model),
     messages,
     timeline: snapshot.timeline,

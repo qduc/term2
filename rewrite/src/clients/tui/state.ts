@@ -79,6 +79,7 @@ export type TuiState = {
   readonly sessionId: string;
   readonly status: string;
   readonly activeTurnId: string | null;
+  readonly terminalOutcome?: NonNullable<WireSnapshot['terminal']>['outcome'];
   readonly model: string;
   readonly messages: readonly Message[];
   readonly timeline: WireSnapshot['timeline'];

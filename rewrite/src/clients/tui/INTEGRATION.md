@@ -121,3 +121,5 @@ Pasted images arrive from ink-prompt as editor-only private-use markers plus ima
 The slash menu uses the active skin’s MenuFrame titled `Commands`. Its visible item window fits short terminals while keeping the selected item reachable by Up/Down; at normal height it still shows up to ten entries.
 
 `/undo` is an alias of `/rewind`: the bare command opens the same target/action picker, while explicit targets use the same receipt-backed edit/resend path. The default action restores the selected prompt into the composer without submitting it.
+
+On attachment, the TUI shows the continuation hint for a recovered interrupted turn or a last cancelled turn. The notice is initialized from the snapshot, not emitted on live cancellation, and clears on the next submitted input. Completed and failed turns do not acquire this hint.

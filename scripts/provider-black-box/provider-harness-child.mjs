@@ -1,4 +1,4 @@
-import { appendFile, readFile, writeFile } from 'node:fs/promises';
+import { appendFile, readFile, rm, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,6 +13,21 @@ if (mode === 'write') {
   process.stdout.write(`read marker: ${(await readFile(markerPath, 'utf8')).trim()}\r\n`);
 } else if (mode === 'hang') {
   process.stdout.write('hanging\r\n');
+  await new Promise(() => setInterval(() => undefined, 1_000));
+} else if (mode === 'pid-and-hang') {
+  await writeFile(process.env.TERM2_HARNESS_CHILD_PID_PATH, String(process.pid));
+  process.stdout.write('hanging\r\n');
+  await new Promise(() => setInterval(() => undefined, 1_000));
+} else if (mode === 'lock-and-hang') {
+  const lock = join(process.env.TERM2_HARNESS_MARKER_DIR, 'fixture.lock');
+  await writeFile(lock, String(process.pid));
+  process.on('SIGTERM', () => {
+    setTimeout(async () => {
+      await rm(lock);
+      process.exit(0);
+    }, 200);
+  });
+  process.stdout.write('lock ready\r\n');
   await new Promise(() => setInterval(() => undefined, 1_000));
 } else if (mode === 'silent-http') {
   process.stdout.write('ready\r\n');

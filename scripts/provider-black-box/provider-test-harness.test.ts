@@ -198,6 +198,24 @@ describe('provider black-box harness', () => {
     }
   });
 
+  it('waits for the actual PTY child to release its lock before relaunch', async () => {
+    await withIsolatedWorkspace({}, async (workspace) => {
+      const first = await workspace.start({
+        command: process.execPath,
+        args: [CHILD, 'lock-and-hang'],
+        env: { TERM2_HARNESS_MARKER_DIR: workspace.root },
+      });
+      await first.waitForVisibleOutput('lock ready');
+      const lock = join(workspace.root, 'fixture.lock');
+      const pid = Number(await readFile(lock, 'utf8'));
+      await first.cleanup();
+      await expect(access(lock)).rejects.toThrow();
+      expect(() => process.kill(pid, 0)).toThrow();
+      const next = await workspace.relaunch({ command: process.execPath, args: [CHILD, 'hang'] });
+      await next.waitForVisibleOutput('hanging');
+    });
+  });
+
   it('awaits termination after a bounded timeout', async () => {
     const workspace = await createIsolatedWorkspaceLease();
     try {

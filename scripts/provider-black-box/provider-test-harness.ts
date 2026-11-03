@@ -48,13 +48,38 @@ const PYTHON_PTY_CHILD = [
   'fcntl.ioctl(0, termios.TIOCSWINSZ, size)',
   'os.execvp(sys.argv[1], sys.argv[1:])',
 ].join('; ');
+// The bridge reaps the PTY child during ordinary teardown. If the bridge itself
+// dies unexpectedly, it cannot guarantee child cleanup; that rare path is accepted.
 const PYTHON_PTY_BRIDGE = [
-  'import pty',
-  'import sys',
+  'import os, pty, signal, sys',
+  'child_pid = None',
+  'pending_signals = []',
+  'def forward(signum, frame):',
+  '    target = signal.SIGKILL if signum == signal.SIGUSR1 else signum',
+  '    if child_pid is None:',
+  '        pending_signals.append(target)',
+  '        return',
+  '    try:',
+  '        os.killpg(child_pid, target)',
+  '    except ProcessLookupError:',
+  '        pass',
+  'for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP, signal.SIGUSR1):',
+  '    signal.signal(sig, forward)',
+  'original_fork = pty.fork',
+  'def fork():',
+  '    global child_pid',
+  '    pid, fd = original_fork()',
+  '    if pid:',
+  '        child_pid = pid',
+  '        for sig in pending_signals:',
+  '            forward(sig, None)',
+  '        pending_signals.clear()',
+  '    return pid, fd',
+  'pty.fork = fork',
   `status = pty.spawn([sys.executable, '-c', ${JSON.stringify(PYTHON_PTY_CHILD)}, *sys.argv[1:]])`,
-  'print("ACTUAL_CHILD_WAIT_STATUS=" + str(status), file=sys.stderr, flush=True)',
-  'sys.exit(status)',
-].join('; ');
+  'code = os.waitstatus_to_exitcode(status)',
+  'sys.exit(code if code >= 0 else 128 - code)',
+].join('\n');
 
 const ROOT_REMOVAL_OPTIONS = {
   recursive: true,
@@ -81,7 +106,7 @@ const REAPED_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
 
 /** Synchronous by necessity — `exit` listeners cannot await. */
 function reapLiveTerminals(): void {
-  for (const terminal of liveTerminals) signalChild(terminal, 'SIGKILL', true);
+  for (const terminal of liveTerminals) signalChild(terminal, 'SIGUSR1', true);
   liveTerminals.clear();
 }
 
@@ -653,11 +678,11 @@ function createPtyChild(options: {
     if (terminationPromise) return terminationPromise;
     const attempt = (async () => {
       if (exitState) return exitState;
-      signalChild(terminal, signal, true);
+      signalChild(terminal, signal === 'SIGKILL' ? 'SIGUSR1' : signal, true);
       try {
         return await waitForExit(graceMs);
       } catch {
-        signalChild(terminal, 'SIGKILL', true);
+        signalChild(terminal, 'SIGUSR1', true);
         return await waitForExit(timeoutMs);
       }
     })();
@@ -775,7 +800,7 @@ function createPtyChild(options: {
     waitForExit,
     terminate,
     kill: (signal = 'SIGTERM') => {
-      signalChild(terminal, signal, true);
+      signalChild(terminal, signal === 'SIGKILL' ? 'SIGUSR1' : signal, true);
     },
     cleanup,
     dispose: cleanup,

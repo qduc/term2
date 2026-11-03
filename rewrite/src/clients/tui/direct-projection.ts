@@ -33,48 +33,63 @@ function skillPresentation(record: WireSubmissionRecord | undefined) {
     display: `[Skill: ${skill.name}]${request.trim() ? `\n${request}` : ''}`,
   };
 }
-const messageView = (message: WireMessage): Message => ({
-  id: message.id,
-  turnId: message.turnId,
-  role: message.role,
-  ...(message.presentation ? { presentation: structuredClone(message.presentation) } : {}),
-  text: message.content.length
-    ? message.content
-        .map((part) => (part.type === 'text' ? part.text : message.role === 'user' ? '' : `[image: ${part.mediaType}]`))
-        .join('')
-    : message.text,
-  error: message.isError,
-  ...(message.replacesDraftId ? { replacesDraftId: message.replacesDraftId } : {}),
-  ...(message.role === 'user'
-    ? {
-        historyText:
-          message.content
-            .filter((part) => part.type === 'text')
-            .map((part) => part.text)
-            .join('') || message.text,
-        attachments: message.content.filter((part) => part.type === 'image'),
-      }
-    : {}),
-});
-const toolView = (tool: WireTool): ToolView => ({
-  id: tool.executionId,
-  turnId: tool.turnId,
-  name: tool.toolName,
-  status:
-    tool.status === 'called'
-      ? 'pending'
-      : tool.status === 'started'
-      ? 'running'
-      : tool.isError || tool.status === 'unknown'
-      ? 'failed'
-      : 'completed',
-  detail: tool.output ?? tool.progress,
-  parent: tool.parentExecutionId,
-  input: tool.input,
-  display: tool.display,
-  content: tool.content,
-  outcomeUnknown: tool.status === 'unknown',
-});
+/** Wire objects are immutable once accepted, so a projection can be reused until the reducer replaces it. */
+const cached = <K extends object, V>(build: (key: K) => V): ((key: K) => V) => {
+  const views = new WeakMap<K, V>();
+  return (key) => {
+    let view = views.get(key);
+    if (view === undefined) views.set(key, (view = build(key)));
+    return view;
+  };
+};
+const messageView = cached(
+  (message: WireMessage): Message => ({
+    id: message.id,
+    turnId: message.turnId,
+    role: message.role,
+    ...(message.presentation ? { presentation: structuredClone(message.presentation) } : {}),
+    text: message.content.length
+      ? message.content
+          .map((part) =>
+            part.type === 'text' ? part.text : message.role === 'user' ? '' : `[image: ${part.mediaType}]`,
+          )
+          .join('')
+      : message.text,
+    error: message.isError,
+    ...(message.replacesDraftId ? { replacesDraftId: message.replacesDraftId } : {}),
+    ...(message.role === 'user'
+      ? {
+          historyText:
+            message.content
+              .filter((part) => part.type === 'text')
+              .map((part) => part.text)
+              .join('') || message.text,
+          attachments: message.content.filter((part) => part.type === 'image'),
+        }
+      : {}),
+  }),
+);
+const toolView = cached(
+  (tool: WireTool): ToolView => ({
+    id: tool.executionId,
+    turnId: tool.turnId,
+    name: tool.toolName,
+    status:
+      tool.status === 'called'
+        ? 'pending'
+        : tool.status === 'started'
+        ? 'running'
+        : tool.isError || tool.status === 'unknown'
+        ? 'failed'
+        : 'completed',
+    detail: tool.output ?? tool.progress,
+    parent: tool.parentExecutionId,
+    input: tool.input,
+    display: tool.display,
+    content: tool.content,
+    outcomeUnknown: tool.status === 'unknown',
+  }),
+);
 const taskView = (task: WireSnapshot['tasks'][number]): TaskView => ({
   id: task.id,
   label: task.label ?? task.name ?? task.role ?? task.agentId ?? task.id,

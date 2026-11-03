@@ -145,7 +145,7 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
   }, [state, rows]);
   // Key the wrapper, not Static itself: Ink's old-node cleanup otherwise clears
   // the newly registered Static root during the same replacement commit.
-  const failures = failedShellGroups(rows.flatMap((row) => (row.tool ? [row.tool] : [])));
+  const failures = useMemo(() => failedShellGroups(rows.flatMap((row) => (row.tool ? [row.tool] : []))), [rows]);
   const staticTranscript = (
     <Box key={epoch}>
       <Static style={{ width: columns }} items={header ? [{ key: 'header', header }, ...rows] : [...rows]}>

@@ -38,8 +38,12 @@ const withoutPrefix = (message: Message, rows: readonly Row[]): Message => {
 export function useNativeTranscript(state: TuiState, columns: number, epoch: number, header?: React.ReactNode) {
   const [stored, setStored] = useState<{ epoch: number; rows: readonly Row[] }>({ epoch, rows: [] });
   const rows = stored.epoch === epoch ? stored.rows : [];
-  useEffect(() => {
-    if (!state.timeline) return;
+  // Per-token state changes only touch drafts; the settled-row scan walks the whole
+  // history, so it is keyed on the history itself and the draft ids.
+  const draftIds = Object.keys(state.drafts).join('\u0000');
+  const settled = useMemo(() => {
+    if (!state.timeline) return null;
+    const draftKeys = new Set(draftIds ? draftIds.split('\u0000') : []);
     const messages = new Map(state.messages.map((message) => [message.id, message]));
     const tools = new Map(state.tools.map((tool) => [tool.id, tool]));
     // An active turn's assistant and tool rows stay live until it ends, so
@@ -52,7 +56,7 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
       if (entry.kind === 'message') {
         const message = messages.get(entry.id);
         // The streaming draft owns the last timeline slot until its message arrives.
-        if (!message && state.activeTurnId && entry.id in state.drafts && i === state.timeline.length - 1) break;
+        if (!message && state.activeTurnId && draftKeys.has(entry.id) && i === state.timeline.length - 1) break;
         if (
           !message ||
           (state.activeTurnId && message.role !== 'user' && (message.turnId === state.activeTurnId || !message.turnId))
@@ -78,11 +82,14 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
         tools.delete(entry.id);
       }
     }
+    return { next, reachedEnd, orphans: messages.size + tools.size };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.timeline, state.messages, state.tools, state.activeTurnId, draftIds]);
+  useEffect(() => {
+    if (!settled) return;
+    const { next, reachedEnd, orphans } = settled;
     // With no active turn, unordered fallback content cannot be committed.
-    if (
-      !state.activeTurnId &&
-      (messages.size || tools.size || Object.keys(state.drafts).length || Object.keys(state.reasoning).length)
-    )
+    if (!state.activeTurnId && (orphans || Object.keys(state.drafts).length || Object.keys(state.reasoning).length))
       return;
     // Like the old CLI, move a streaming reply's settled markdown blocks into
     // scrollback so the live frame holds only the unfinished block. Only when
@@ -91,8 +98,7 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
     const canSplit =
       reachedEnd &&
       state.activeTurnId !== null &&
-      messages.size === 0 &&
-      tools.size === 0 &&
+      orphans === 0 &&
       draftEntries.length === 1 &&
       Object.keys(state.reasoning).length === 0;
     setStored((current) => {
@@ -131,25 +137,32 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
       if (previous.length > expanded.length || previous.some((row, i) => row.key !== expanded[i]?.key)) return current;
       return current.epoch === epoch && previous.length === expanded.length ? current : { epoch, rows: expanded };
     });
-  }, [state, epoch]);
+  }, [settled, state.drafts, state.reasoning, state.activeTurnId, epoch]);
 
-  const tail = useMemo(() => {
+  // The unsettled remainder changes only when history or the committed rows do.
+  const remainder = useMemo(() => {
     const done = new Set(rows.map((row) => row.key));
     return {
-      ...state,
       messages: state.messages
         .filter((message) => !done.has(`message:${message.id}`))
         .map((message) => withoutPrefix(message, rows)),
+      tools: state.tools.filter((tool) => !done.has(`tool:${tool.id}`)),
+      timeline: state.timeline?.filter((entry) => !done.has(`${entry.kind}:${entry.id}`)) ?? null,
+    };
+  }, [state.messages, state.tools, state.timeline, rows]);
+  const tail = useMemo(
+    () => ({
+      ...state,
+      ...remainder,
       drafts: Object.fromEntries(
         Object.entries(state.drafts).map(([id, text]) => {
           const prefix = prefixLength(rows, id);
           return [id, prefix ? text.slice(prefix) : text];
         }),
       ),
-      tools: state.tools.filter((tool) => !done.has(`tool:${tool.id}`)),
-      timeline: state.timeline?.filter((entry) => !done.has(`${entry.kind}:${entry.id}`)) ?? null,
-    };
-  }, [state, rows]);
+    }),
+    [state, remainder, rows],
+  );
   // Key the wrapper, not Static itself: Ink's old-node cleanup otherwise clears
   // the newly registered Static root during the same replacement commit.
   const failures = useMemo(() => failedShellGroups(rows.flatMap((row) => (row.tool ? [row.tool] : []))), [rows]);

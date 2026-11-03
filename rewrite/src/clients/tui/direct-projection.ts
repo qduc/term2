@@ -137,6 +137,15 @@ function interactionView(interaction: WireInteraction): InteractionView {
   };
 }
 
+const shallowEqual = (a: object, b: object): boolean => {
+  const ak = Object.keys(a);
+  return ak.length === Object.keys(b).length && ak.every((k) => (a as never)[k] === (b as never)[k]);
+};
+const lastLists = new Map<string, { messages: readonly Message[]; tools: readonly ToolView[]; timeline: unknown }>();
+/** Keep a list's identity when nothing in it changed, so memoised consumers skip per-token history scans. */
+const sameList = <T>(previous: readonly T[] | undefined, next: readonly T[], equal: (a: T, b: T) => boolean) =>
+  previous && previous.length === next.length && next.every((item, i) => equal(previous[i]!, item)) ? previous : next;
+
 /** Project the direct wire snapshot at the host's attachment cut. */
 export function projectSnapshot(snapshot: WireSnapshot): TuiState {
   const drafts: Record<string, string> = {};
@@ -163,18 +172,27 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
     if (message.draft && message.role === 'assistant' && live && !interrupted) drafts[message.id] = view.text;
     else messages.push(view);
   }
+  const before = lastLists.get(snapshot.sessionId);
+  const stableMessages = sameList(before?.messages, messages, shallowEqual) as Message[];
+  const stableTools = sameList(before?.tools, snapshot.tools.map(toolView), (a, b) => a === b) as ToolView[];
+  const stableTimeline = (
+    snapshot.timeline
+      ? sameList(before?.timeline as typeof snapshot.timeline | undefined, snapshot.timeline, shallowEqual)
+      : snapshot.timeline
+  ) as typeof snapshot.timeline;
+  lastLists.set(snapshot.sessionId, { messages: stableMessages, tools: stableTools, timeline: stableTimeline });
   return {
     sessionId: snapshot.sessionId,
     status: snapshot.status,
     activeTurnId: snapshot.activeTurnId,
     terminalOutcome: snapshot.terminal?.outcome,
     model: modelText(snapshot.model),
-    messages,
-    timeline: snapshot.timeline,
+    messages: stableMessages,
+    timeline: stableTimeline,
     drafts,
     // Reasoning is live turn activity, not a settled transcript message.
     reasoning: snapshot.activeTurnId && snapshot.reasoning ? { [snapshot.activeTurnId]: snapshot.reasoning } : {},
-    tools: snapshot.tools.map(toolView),
+    tools: stableTools,
     unmatchedTools: snapshot.unmatchedToolResults ?? [],
     budgets: snapshot.pendingBudgets ?? [],
     commands: snapshot.commands ?? [],

@@ -44,3 +44,18 @@ export function nestedPresentation(state: WireSnapshot, event: Extract<WireEvent
       : {}),
   };
 }
+
+/** What the user reads for a provider-history edit; the reason names the operation that caused it. */
+export function historyReplacedMessage(reason: string): string {
+  switch (reason) {
+    case 'compaction':
+      return 'Conversation compacted: earlier messages were replaced by a summary.';
+    case 'rewind':
+      return 'Conversation rewound to the chosen point.';
+    case 'retry_turn':
+    case 'retry_tool':
+      return 'Conversation history restored to retry.';
+    default:
+      return `Conversation history replaced (${reason}).`;
+  }
+}

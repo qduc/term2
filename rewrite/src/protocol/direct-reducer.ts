@@ -1,24 +1,9 @@
 /** Pure shared public-state reducer; clients and snapshots use this same fold.
  * Local UI scroll/menu/composer state belongs to the client, not this projection.
  */
-import { nestedPresentation, replace } from './direct-reducer-nested.js';
+import { historyReplacedMessage, nestedPresentation, replace } from './direct-reducer-nested.js';
 import { completedFinalText } from './direct-turn-results.js';
 import type { WireCommandReceipt, WireEvent, WireMessage, WireSnapshot } from './direct-wire.js';
-
-/** What the user reads for a provider-history edit; the reason names the operation that caused it. */
-function historyReplacedMessage(reason: string): string {
-  switch (reason) {
-    case 'compaction':
-      return 'Conversation compacted: earlier messages were replaced by a summary.';
-    case 'rewind':
-      return 'Conversation rewound to the chosen point.';
-    case 'retry_turn':
-    case 'retry_tool':
-      return 'Conversation history restored to retry.';
-    default:
-      return `Conversation history replaced (${reason}).`;
-  }
-}
 
 function timeline(
   state: WireSnapshot,

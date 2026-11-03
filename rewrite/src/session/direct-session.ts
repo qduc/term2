@@ -116,7 +116,8 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
           for (const subscriber of [...subscribers]) {
             if (!subscribers.has(subscriber) || next.position <= subscriber.after) continue;
             try {
-              subscriber.listener(structuredClone(next));
+              // Published updates are immutable once handed out; subscribers share one object.
+              subscriber.listener(next);
             } catch {
               // A failed observer is detached, never allowed to poison accepted work
               // or prevent another connection from receiving the same ordered update.

@@ -276,7 +276,7 @@ async function runCommand(
     const lines = session.getVisibleOutput().split('\n');
     const hintRows = lines.filter((row) => row.trimStart().startsWith('/ commands'));
     expect(hintRows).toHaveLength(1);
-    expect(hintRows[0]?.trim()).toBe('/ commands │ @ paths │ ! shell │ Shift+Tab plan');
+    expect(hintRows[0]?.trimEnd()).toBe('  / commands │ @ paths │ ! shell │ Shift+Tab plan');
     expect(lines.some((row) => row.startsWith(' output │'))).toBe(false);
     return;
   }

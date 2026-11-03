@@ -119,6 +119,8 @@ export function withNativeCatalogue<T>(
           try {
             const bytes = readFileSync(filename);
             const end = bytes.indexOf(10);
+            // A new file without a complete first line is still being created, not a corrupt Session.
+            if (end < 0 && !old) continue;
             if (end >= 0) {
               const header = JSON.parse(bytes.subarray(0, end).toString('utf8')).fact;
               if (header.type === 'session_started') logical = name.slice(0, -6);

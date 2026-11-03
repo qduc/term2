@@ -45,6 +45,10 @@ fail globally. An explicit writable open still performs strict lineage validatio
 
 ## R9 refresh and projection
 
+New files without a complete first line are not indexed or warned about; they are
+rechecked on the next operation. Previously indexed files still invalidate their
+logical lineage if their first line becomes incomplete.
+
 Every operation stats physical native files (device, inode, size, nanosecond mtime
 and ctime). Only changed/new/deleted physical owners invalidate logical lineages.
 Changed rotation headers identify their logical root; strict lineage replay handles

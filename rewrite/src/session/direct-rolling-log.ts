@@ -1,5 +1,5 @@
 /** One logical Session, one writable physical head, and a verified accepted lineage. */
-import { lstatSync, readdirSync, readFileSync } from 'node:fs';
+import { closeSync, lstatSync, openSync, readSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { z } from 'zod';
 import type { FactLine, SessionStartedFact } from './facts.js';
@@ -81,6 +81,42 @@ function reportUnreadable(path: string, error: unknown): void {
   console.warn(`Skipping unreadable direct log ${path}: ${error instanceof Error ? error.message : String(error)}`);
 }
 
+/** First read is enough for every real header (a few hundred bytes). Grow only
+ * when that chunk has no newline, and stop at 1 MiB. No newline by then is the
+ * torn-header case: skip the file instead of reading the rest of it. A first
+ * line longer than 1 MiB is treated the same way. */
+const HEADER_CHUNK_BYTES = 64 * 1024;
+const HEADER_CAP_BYTES = 1024 * 1024;
+
+/** Bytes before the first newline, or null when the file has none within the cap. */
+export function readDirectLogHeaderLine(path: string): Buffer | null {
+  const fd = openSync(path, 'r');
+  try {
+    const parts: Buffer[] = [];
+    let position = 0;
+    let chunkBytes = HEADER_CHUNK_BYTES;
+    while (position < HEADER_CAP_BYTES) {
+      const want = Math.min(chunkBytes, HEADER_CAP_BYTES - position);
+      const chunk = Buffer.alloc(want);
+      const n = readSync(fd, chunk, 0, want, position);
+      if (n <= 0) return null;
+      const slice = chunk.subarray(0, n);
+      const end = slice.indexOf(0x0a);
+      if (end >= 0) {
+        parts.push(slice.subarray(0, end));
+        return parts.length === 1 ? parts[0]! : Buffer.concat(parts);
+      }
+      parts.push(slice);
+      position += n;
+      if (n < want) return null;
+      chunkBytes = Math.min(chunkBytes * 2, HEADER_CAP_BYTES);
+    }
+    return null;
+  } finally {
+    closeSync(fd);
+  }
+}
+
 /** One namespace check and header scan per read/catalogue. Unrelated bad files
  * cannot deny healthy Sessions; required bad segments still fail closed. */
 function discoverDirectLogs(directory: string): Discovery {
@@ -92,10 +128,9 @@ function discoverDirectLogs(directory: string): Discovery {
     const physicalId = name.slice(0, -6);
     const path = directLogPath(directory, physicalId);
     try {
-      const bytes = readFileSync(path);
-      const end = bytes.indexOf(0x0a);
-      if (end < 0) continue; // Unaccepted creation/torn-header artifact.
-      const raw = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes.subarray(0, end))) as {
+      const bytes = readDirectLogHeaderLine(path);
+      if (bytes === null) continue; // Unaccepted creation/torn-header artifact.
+      const raw = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) as {
         fact?: { type?: unknown; id?: unknown; predecessor?: { sessionId?: unknown } };
       } | null;
       const fact = raw?.fact;

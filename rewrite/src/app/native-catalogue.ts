@@ -1,8 +1,8 @@
 /** Disposable, contentless native search index and CLI catalogue. Logs remain authoritative. */
-import { chmodSync, closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, unlinkSync } from 'node:fs';
+import { chmodSync, closeSync, existsSync, lstatSync, mkdirSync, openSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
-import { directLogNames, readDirectLogLineage } from '../session/direct-rolling-log.js';
+import { directLogNames, readDirectLogHeaderLine, readDirectLogLineage } from '../session/direct-rolling-log.js';
 import { latestDirectConfiguration } from '../session/direct-configuration.js';
 import type { Workspace } from '../tools/index.js';
 import type { DirectBinding } from '../session/facade-types.js';
@@ -117,12 +117,11 @@ export function withNativeCatalogue<T>(
         if (old?.stamp !== stamp) {
           if (old) affected.add(old.logical);
           try {
-            const bytes = readFileSync(filename);
-            const end = bytes.indexOf(10);
+            const bytes = readDirectLogHeaderLine(filename);
             // A new file without a complete first line is still being created, not a corrupt Session.
-            if (end < 0 && !old) continue;
-            if (end >= 0) {
-              const header = JSON.parse(bytes.subarray(0, end).toString('utf8')).fact;
+            if (bytes === null && !old) continue;
+            if (bytes !== null) {
+              const header = JSON.parse(bytes.toString('utf8')).fact;
               if (header.type === 'session_started') logical = name.slice(0, -6);
               if (header.type === 'session_rotated' && /^conv_[0-9a-f-]{36}$/.test(header.logicalSessionId))
                 logical = header.logicalSessionId;

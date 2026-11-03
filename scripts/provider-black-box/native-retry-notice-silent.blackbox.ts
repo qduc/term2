@@ -35,6 +35,10 @@ it.skipIf(process.platform !== 'linux')('replays a silent background turn notice
       await writeFile(
         join(paths.logDir, 'settings.json'),
         JSON.stringify({
+          // This fixture tests notice replay, not sandbox availability or approval policy.
+          // Both shell calls are fixed, harmless fixture commands in this disposable workspace.
+          sandbox: { enabled: false },
+          shell: { autoApproveMode: 'always' },
           agent: {
             modelSelection: { model: 'gpt-5.6-luna', provider: 'openai' },
             transport: 'http',

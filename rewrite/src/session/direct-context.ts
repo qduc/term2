@@ -124,8 +124,9 @@ export function parseDirectContextFact(raw: unknown): DirectContextFact {
 }
 
 /** Recognize only the vocabulary, then use parseDirectContextFact for validation. */
+const contextFactTypes = new Set<string>(contextFactSchema.options.map((schema) => schema.shape.type.value));
 export function isDirectContextFactType(type: string): boolean {
-  return contextFactSchema.options.some((schema) => schema.shape.type.value === type);
+  return contextFactTypes.has(type);
 }
 
 /**

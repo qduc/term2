@@ -3033,7 +3033,12 @@ it('keeps outside-workspace image reads terminal-approved rather than granting r
   expect(f.received.coord).toHaveLength(1);
   expect(f.sessions.coord!.service.getNestedApprovalSnapshot()?.requestId).toBe(pending!.requestId);
   await f.sessions.coord!.service.decideNestedApproval(pending!.requestId, { answer: 'y' });
-  await f.cycle(12);
+  // Approval resolves before the read_file follow-up request reaches the provider.
+  const followUpDeadline = Date.now() + 2_000;
+  do {
+    await f.bridge().tick();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  } while ((f.received.coord?.length ?? 0) < 2 && Date.now() < followUpDeadline);
   expect(f.received.coord).toHaveLength(2);
   expect(
     f.received.coord[1]!.input.flatMap((item) =>

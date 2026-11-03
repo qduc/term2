@@ -46,8 +46,8 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
     const draftKeys = new Set(draftIds ? draftIds.split('\u0000') : []);
     const messages = new Map(state.messages.map((message) => [message.id, message]));
     const tools = new Map(state.tools.map((tool) => [tool.id, tool]));
-    // An active turn's assistant and tool rows stay live until it ends, so
-    // their order can still change. Earlier user input is already settled.
+    // Keep active rows live until a completed tool closes its assistant lead-in.
+    // A queued user row after that tool remains live during the turn.
     let reachedEnd = true;
     const next: Row[] = [];
     for (let i = 0; i < state.timeline.length; i++) {
@@ -55,11 +55,28 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
       const key = `${entry.kind}:${entry.id}`;
       if (entry.kind === 'message') {
         const message = messages.get(entry.id);
+        const following = state.timeline[i + 1];
+        const followingTool = following?.kind === 'tool' ? tools.get(following.id) : undefined;
+        const completedLeadIn =
+          followingTool?.turnId === state.activeTurnId &&
+          followingTool.status !== 'pending' &&
+          followingTool.status !== 'running' &&
+          !followingTool.outcomeUnknown;
+        const preceding = state.timeline[i - 1];
+        const precedingTool =
+          preceding?.kind === 'tool' ? state.tools.find((tool) => tool.id === preceding.id) : undefined;
+        if (state.activeTurnId && message?.role === 'user' && precedingTool?.turnId === state.activeTurnId) {
+          reachedEnd = false;
+          break;
+        }
         // The streaming draft owns the last timeline slot until its message arrives.
         if (!message && state.activeTurnId && draftKeys.has(entry.id) && i === state.timeline.length - 1) break;
         if (
           !message ||
-          (state.activeTurnId && message.role !== 'user' && (message.turnId === state.activeTurnId || !message.turnId))
+          (state.activeTurnId &&
+            message.role !== 'user' &&
+            (message.turnId === state.activeTurnId || !message.turnId) &&
+            !completedLeadIn)
         ) {
           reachedEnd = false;
           break;
@@ -68,12 +85,20 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
         messages.delete(entry.id);
       } else {
         const tool = tools.get(entry.id);
+        // Failed shells can be grouped with later failures in the same turn.
+        // Keep them live until the turn settles so Static never freezes a partial group.
+        const openFailureGroup =
+          tool &&
+          state.activeTurnId &&
+          tool.turnId === state.activeTurnId &&
+          tool.name === 'shell' &&
+          (tool.status === 'failed' || (tool.status === 'completed' && reportsFailure(tool.display)));
         if (
           !tool ||
           tool.status === 'pending' ||
           tool.status === 'running' ||
           tool.outcomeUnknown ||
-          (state.activeTurnId && tool.turnId === state.activeTurnId)
+          openFailureGroup
         ) {
           reachedEnd = false;
           break;
@@ -209,7 +234,11 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
                 </Box>
               );
             return (
-              <Box key={row.key} paddingBottom={row.trailingBlank ? 1 : 0} marginTop={row.message?.role === 'user' && index > (header ? 1 : 0) ? 1 : 0}>
+              <Box
+                key={row.key}
+                paddingBottom={row.trailingBlank ? 1 : 0}
+                marginTop={row.message?.role === 'user' && index > (header ? 1 : 0) ? 1 : 0}
+              >
                 <Transcript state={single} messages={single.messages} columns={columns} live staticRow />
               </Box>
             );

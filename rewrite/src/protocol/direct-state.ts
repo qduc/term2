@@ -43,6 +43,16 @@ export function publicWireConfiguration(state: DirectSessionState): WireConfigur
   };
 }
 
+/** First element per key, matching Array.find for unique-or-duplicate keys. */
+export function firstById<T>(items: readonly T[], key: (item: T) => string): Map<string, T> {
+  const byId = new Map<string, T>();
+  for (const item of items) {
+    const id = key(item);
+    if (!byId.has(id)) byId.set(id, item);
+  }
+  return byId;
+}
+
 export function snapshotDirectState(
   state: DirectSessionState & {
     readonly tasks?: readonly DirectTaskState[];
@@ -51,11 +61,15 @@ export function snapshotDirectState(
   },
   previous?: WireSnapshot,
 ): WireSnapshot {
+  // Lookups are by id once per snapshot; a find per item made every snapshot quadratic in history.
+  const previousMessages = firstById(previous?.messages ?? [], (message) => message.id);
+  const previousTools = firstById(previous?.tools ?? [], (tool) => tool.executionId);
+  const previousTasks = firstById(previous?.tasks ?? [], (task) => task.id);
+  const drafts = firstById(state.drafts, (draft) => draft.id);
   const messages = state.messages.map((item) => {
     const content = publicContent(item.content);
-    const { presentation: _presentation, ...known } =
-      previous?.messages.find((message) => message.id === item.id) ?? {};
-    const draft = state.drafts.find((draft) => draft.id === item.id);
+    const { presentation: _presentation, ...known } = previousMessages.get(item.id) ?? {};
+    const draft = drafts.get(item.id);
     const correlated = item as typeof item & { readonly turnId?: string; readonly modelStep?: number };
     return {
       ...known,
@@ -87,7 +101,7 @@ export function snapshotDirectState(
     activeTurnId: state.status === 'idle' || state.status === 'closed' ? null : state.activeTurnId,
     messages,
     tools: state.tools.map((tool) => {
-      const known = previous?.tools.find((item) => item.executionId === tool.executionId);
+      const known = previousTools.get(tool.executionId);
       return {
         ...known,
         executionId: tool.executionId,
@@ -142,7 +156,7 @@ export function snapshotDirectState(
         }),
     tasks:
       state.tasks?.map((task) => ({
-        ...previous?.tasks.find((known) => known.id === task.taskId),
+        ...previousTasks.get(task.taskId),
         ...publicTask(task),
       })) ??
       previous?.tasks ??

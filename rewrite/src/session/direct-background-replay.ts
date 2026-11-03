@@ -13,15 +13,31 @@ export function projectDirectBackground(facts: readonly DirectBackgroundFact[]):
   return structuredClone([...tasks.values()]);
 }
 
-/** Incremental public projection; Session separately reserves all historical request IDs. */
+/**
+ * Incremental public projection. Session separately reserves all historical
+ * request IDs. Unchanged tasks stay shared: each was detached when it last
+ * changed, and re-cloning all of them on every fact is what made resume of a
+ * long task history take seconds.
+ */
 export function reduceDirectBackground(
   states: readonly DirectTaskState[],
   fact: DirectBackgroundFact,
 ): readonly DirectTaskState[] {
   const tasks = new Map(states.map((task) => [task.taskId, task]));
   const requestIds = new Set(states.flatMap((task) => task.pendingInteractions.map((request) => request.requestId)));
+  const previous = new Map(tasks);
   applyFact(tasks, requestIds, fact);
-  return structuredClone([...tasks.values()]);
+  let changed = tasks.size !== previous.size;
+  if (!changed) {
+    for (const [id, task] of tasks) {
+      if (previous.get(id) !== task) {
+        changed = true;
+        break;
+      }
+    }
+  }
+  if (!changed) return states;
+  return [...tasks.values()].map((task) => (previous.get(task.taskId) === task ? task : structuredClone(task)));
 }
 
 /**

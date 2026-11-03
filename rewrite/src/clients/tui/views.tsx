@@ -177,6 +177,22 @@ export function compactFailureMessage(state: TuiState): string | null {
     : null;
 }
 
+const LIVE_NOTICE_LIMIT = 3;
+
+/** Repeated receipts (one line per compaction) stay in state. The live frame keeps the latest distinct lines. */
+function liveNotices(notices: readonly string[]): readonly string[] {
+  const seen = new Set<string>();
+  const latest: string[] = [];
+  for (let index = notices.length - 1; index >= 0 && latest.length < LIVE_NOTICE_LIMIT; index--) {
+    const notice = notices[index]!;
+    if (seen.has(notice)) continue;
+    seen.add(notice);
+    latest.push(notice);
+  }
+  latest.reverse();
+  return latest;
+}
+
 /** Keep pending work visible unless its active dialog already presents it. */
 export function Activity({
   state,
@@ -284,8 +300,8 @@ export function Activity({
           ))}
         </Box>
       ))}
-      {state.notices.map((notice, index) => (
-        <Text key={index}>{notice}</Text>
+      {liveNotices(state.notices).map((notice) => (
+        <Text key={notice}>{notice}</Text>
       ))}
     </Box>
   );

@@ -219,7 +219,12 @@ async function untilCancelled(
  * so a trip is not retried. Text passes `observeText` before it can be shown.
  */
 export function withGenerationGuard(models: ModelRegistry, { settings }: ProfileSelection): ModelRegistry {
-  const stream = async function* (model: Model, request: ModelRequest, signal: AbortSignal): AsyncIterable<ModelEvent> {
+  const stream = async function* (
+    model: Model,
+    request: ModelRequest,
+    signal: AbortSignal,
+    onDispatched?: () => void,
+  ): AsyncIterable<ModelEvent> {
     const maxCharacters = settings.get('agent.maxStreamOutputChars');
     const guard = new GenerationGuard({
       maxOutputCharacters: maxCharacters,
@@ -234,7 +239,7 @@ export function withGenerationGuard(models: ModelRegistry, { settings }: Profile
       () => stop.abort(),
       () => guard.progress,
     );
-    const events = model.stream(request, AbortSignal.any([signal, stop.signal]))[Symbol.asyncIterator]();
+    const events = model.stream(request, AbortSignal.any([signal, stop.signal]), onDispatched)[Symbol.asyncIterator]();
     try {
       for (;;) {
         const next = await deadlines.wait(events.next());
@@ -254,7 +259,7 @@ export function withGenerationGuard(models: ModelRegistry, { settings }: Profile
     list: () => models.list(),
     resolve(ref) {
       const model = models.resolve(ref);
-      return { ...model, stream: (request, signal) => stream(model, request, signal) };
+      return { ...model, stream: (request, signal, onDispatched) => stream(model, request, signal, onDispatched) };
     },
   };
 }

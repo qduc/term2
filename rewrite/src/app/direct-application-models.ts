@@ -10,9 +10,14 @@ export type SessionScope = <T>(operation: () => T) => T;
  * hold the scope open; it has to enter on every step of the provider stream.
  */
 export function withSessionScope(models: ModelRegistry, scope: SessionScope): ModelRegistry {
-  const stream = (model: Model, request: ModelRequest, signal: AbortSignal): AsyncIterable<ModelEvent> => ({
+  const stream = (
+    model: Model,
+    request: ModelRequest,
+    signal: AbortSignal,
+    onDispatched?: () => void,
+  ): AsyncIterable<ModelEvent> => ({
     [Symbol.asyncIterator]() {
-      const events = scope(() => model.stream(request, signal)[Symbol.asyncIterator]());
+      const events = scope(() => model.stream(request, signal, onDispatched)[Symbol.asyncIterator]());
       return {
         next: () => scope(() => events.next()),
         return: (value?: unknown) => scope(() => events.return?.(value) ?? Promise.resolve({ done: true, value })),
@@ -23,7 +28,7 @@ export function withSessionScope(models: ModelRegistry, scope: SessionScope): Mo
     list: () => models.list(),
     resolve(ref) {
       const model = models.resolve(ref);
-      return { ...model, stream: (request, signal) => stream(model, request, signal) };
+      return { ...model, stream: (request, signal, onDispatched) => stream(model, request, signal, onDispatched) };
     },
   };
 }

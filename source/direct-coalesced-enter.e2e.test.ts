@@ -293,7 +293,10 @@ it('rewind and clear redraw the terminal after successful history replacement', 
   session!.write('/clear');
   await waitForHarnessComposerValue(idlePath, '/clear', { timeoutMs: 30_000 });
   session!.write('\r');
-  await until(() => session!.getOutput().slice(beforeClear).includes(erase), 'clear redraws the terminal');
+  await until(() => {
+    const frame = session!.getOutput().slice(Math.max(session!.getOutput().lastIndexOf(erase), beforeClear));
+    return frame.includes('term²') && !frame.includes('REWIND-REPLY') && !frame.includes('question to rewind');
+  }, 'clear drops the old transcript from the visible screen');
 });
 
 it('a bracketed paste keeps its Enter as a newline and does not submit', { timeout: TIMEOUT_MS }, async () => {

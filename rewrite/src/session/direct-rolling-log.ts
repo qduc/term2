@@ -134,7 +134,7 @@ export function readDirectLogHeaderLine(path: string): Buffer | null {
 
 /** One namespace check and header scan per read/catalogue. Unrelated bad files
  * cannot deny healthy Sessions; required bad segments still fail closed. */
-function discoverDirectLogs(directory: string): Discovery {
+export function discoverDirectLogs(directory: string): Discovery {
   const headers = new Map<string, Header>();
   const children = new Map<string, string[]>();
   const errors = new Map<string, Error>();

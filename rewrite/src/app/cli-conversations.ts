@@ -1,7 +1,7 @@
 /** Read-only CLI discovery. Native logical lineages are the only history source. */
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { readDirectLogLineage, type DirectLogLineage } from '../session/direct-rolling-log.js';
+import { readDirectSessionStart } from '../session/direct-session-start.js';
 import { withNativeCatalogue, type NativeCatalogueEntry } from './native-catalogue.js';
 import { resolveDirectRemoteConnection } from './direct-remote-config.js';
 import type { SessionOptions } from './cli-args.js';
@@ -24,8 +24,7 @@ async function selection(options: SessionOptions): Promise<Selection> {
   return { target: connection.target, root: connection.directory ?? null };
 }
 
-function belongsTo(lineage: DirectLogLineage, selected: Selection): boolean {
-  const { metadata } = lineage;
+function belongsTo({ metadata }: ReturnType<typeof readDirectSessionStart>, selected: Selection): boolean {
   const target = metadata.workspaceIdentity?.target ?? (metadata.binding?.client === 'ssh' ? null : 'local');
   if (target !== selected.target) return false;
   if (selected.root === null) return true;
@@ -56,7 +55,7 @@ export async function resolveNativeResume(directory: string, options: SessionOpt
   // spelling normalization: no legacy-store read, fuzzy match, or fallback.
   const reference = IMPORTED_UUID.test(requested) ? `conv_${requested}` : requested;
   const selected = await selection(options);
-  let lineage: DirectLogLineage;
+  let lineage: ReturnType<typeof readDirectSessionStart>;
   if (reference === 'last') {
     const latest = recent(directory, selected)[0];
     if (!latest) throw notFound(reference);
@@ -65,7 +64,7 @@ export async function resolveNativeResume(directory: string, options: SessionOpt
     if (!NATIVE_ID.test(reference) || !existsSync(path.join(directory, `${reference}.jsonl`))) {
       throw notFound(reference);
     }
-    lineage = readDirectLogLineage(directory, reference);
+    lineage = readDirectSessionStart(directory, reference);
     if (!belongsTo(lineage, selected)) {
       throw new Error(
         `Conversation ${reference} belongs to a different project path or SSH workspace.\n` +

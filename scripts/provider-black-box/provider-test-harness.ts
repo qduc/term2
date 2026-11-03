@@ -50,6 +50,7 @@ const PYTHON_PTY_CHILD = [
 ].join('; ');
 // The bridge reaps the PTY child during ordinary teardown. If the bridge itself
 // dies unexpectedly, it cannot guarantee child cleanup; that rare path is accepted.
+// A detached grandchild can retain the PTY past cleanup and may outlive the test.
 const PYTHON_PTY_BRIDGE = [
   'import os, pty, signal, sys',
   'child_pid = None',
@@ -683,7 +684,17 @@ function createPtyChild(options: {
         return await waitForExit(graceMs);
       } catch {
         signalChild(terminal, 'SIGUSR1', true);
-        return await waitForExit(timeoutMs);
+        try {
+          return await waitForExit(timeoutMs);
+        } catch {
+          // A detached process can keep the slave open after the child exits.
+          console.error(`PTY bridge ${terminal.pid} did not exit after child termination; closing PTY.`);
+          signalChild(terminal, 'SIGKILL', true);
+          terminal.stdin?.destroy();
+          terminal.stdout?.destroy();
+          terminal.stderr?.destroy();
+          return await exitPromise;
+        }
       }
     })();
     terminationPromise = attempt;

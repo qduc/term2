@@ -1,11 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
-import { useTheme } from './presentation/components/theme.js';
+import { GLYPH_FAVORITE, GLYPH_SEPARATOR, GLYPH_WARNING, useTheme } from './presentation/components/theme.js';
 import type { PickerModel, TuiIntegration } from './integration.js';
 import { useInteractionInput, type InteractionInput } from './interaction-input.js';
 
 type Api = NonNullable<TuiIntegration['modelPicker']>;
 const identity = (m: PickerModel) => `${m.provider}/${m.id}`;
+
+/** Same order as the old menu: Tab and Right advance, Left moves back, both wrap. */
+const TABS = ['favorites', 'nicknames', 'all'] as const;
+type ModelTab = (typeof TABS)[number];
+const TAB_LABEL: Record<ModelTab, string> = { favorites: 'Favorites', nicknames: 'Nicknames', all: 'All' };
+
+function stepTab(tab: ModelTab, direction: 1 | -1): ModelTab {
+  return TABS[(TABS.indexOf(tab) + direction + TABS.length) % TABS.length]!;
+}
 
 /** The session owns the stable input listener (the same ref the interaction panel uses; opening this picker suppresses that panel); this panel publishes its current handler. */
 export function ModelPicker({
@@ -31,7 +40,7 @@ export function ModelPicker({
   const nicknames = api.nicknames(sessionId);
   const [models, setModels] = useState<PickerModel[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<'favorites' | 'all'>('favorites');
+  const [tab, setTab] = useState<ModelTab>('favorites');
   const [filter, setFilter] = useState('');
   const [selected, setSelected] = useState(0);
   useEffect(() => {
@@ -52,7 +61,12 @@ export function ModelPicker({
     };
   }, [api, sessionId]);
   const favoriteKeys = new Set(favorites.map(identity));
-  const visible = (tab === 'favorites' ? favorites : models ?? []).filter((model) =>
+  const named = (model: PickerModel) => (nicknames[identity(model)]?.length ?? 0) > 0;
+  const catalog = models ?? [];
+  const byKey = new Map<string, PickerModel>();
+  for (const model of [...favorites, ...catalog]) byKey.set(identity(model), model);
+  const source = tab === 'favorites' ? favorites : tab === 'nicknames' ? [...byKey.values()].filter(named) : catalog;
+  const visible = source.filter((model) =>
     `${identity(model)} ${model.name ?? ''} ${(nicknames[identity(model)] ?? []).join(' ')}`
       .toLowerCase()
       .includes(filter.toLowerCase()),
@@ -60,8 +74,13 @@ export function ModelPicker({
   const index = Math.min(selected, Math.max(0, visible.length - 1));
   useInteractionInput(inputHandler, (input, key) => {
     if (key.escape) return onClose();
-    if (key.tab || key.leftArrow || key.rightArrow) {
-      setTab(tab === 'favorites' ? 'all' : 'favorites');
+    if (key.tab || key.rightArrow) {
+      setTab(stepTab(tab, 1));
+      setSelected(0);
+      return;
+    }
+    if (key.leftArrow) {
+      setTab(stepTab(tab, -1));
       setSelected(0);
       return;
     }
@@ -106,47 +125,68 @@ export function ModelPicker({
     }
   });
   const start = Math.max(0, index - 5);
+  const rows = visible.slice(start, start + 10);
+  const providerWidth = Math.max(1, ...rows.map((model) => model.provider.length));
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={theme.border} paddingX={1}>
-      <Text bold>
-        Choose a model ·{' '}
-        <Text color={tab === 'favorites' ? theme.accent : theme.textMuted}>
-          {tab === 'favorites' ? '[Favorites]' : 'Favorites'}
-        </Text>{' '}
-        <Text color={tab === 'all' ? theme.accent : theme.textMuted}>{tab === 'all' ? '[All]' : 'All'}</Text>
-      </Text>
-      <Text>Filter: {filter}</Text>
+      <Text bold>Choose a model</Text>
       <Box>
-        <Box width={38} flexShrink={1}>
-          <Text> Model</Text>
-        </Box>
-        <Text>Provider / nickname</Text>
+        {TABS.map((id, tabIndex) => (
+          <Box key={id}>
+            {tabIndex > 0 && <Text color={theme.textSubtle}>{` ${GLYPH_SEPARATOR} `}</Text>}
+            <Text inverse={tab === id} color={tab === id ? theme.accent : theme.textSubtle} bold={tab === id}>
+              {` ${TAB_LABEL[id]} `}
+            </Text>
+          </Box>
+        ))}
       </Box>
-      {visible.slice(start, start + 10).map((model, i) => (
-        <Box key={identity(model)}>
-          <Box width={38} flexShrink={1}>
+      <Text color={theme.textSubtle}>Filter: {filter || 'type to filter'}</Text>
+      {rows.map((model, row) => {
+        const key = identity(model);
+        const selectedRow = row + start === index;
+        const aka = nicknames[key];
+        const previous = rows[row - 1];
+        return (
+          <Box key={key}>
+            <Box
+              width={providerWidth}
+              flexShrink={0}
+              marginRight={1}
+              borderStyle="single"
+              borderTop={false}
+              borderBottom={false}
+              borderLeft={false}
+              borderColor={theme.border}
+            >
+              <Text bold wrap="truncate">
+                {!previous || previous.provider !== model.provider ? model.provider : ' '}
+              </Text>
+            </Box>
             <Text wrap="truncate-end">
-              {i + start === index ? '❯' : ' '} {favoriteKeys.has(identity(model)) ? '★' : '☆'} {model.id}
-              {model.name && model.name !== model.id ? ` · ${model.name}` : ''}
-              {identity(model) === current && <Text color={theme.success}> (current)</Text>}
+              {selectedRow ? '❯' : ' '}{' '}
+              <Text color={theme.accent}>{favoriteKeys.has(key) ? `${GLYPH_FAVORITE} ` : '  '}</Text>
+              <Text color={selectedRow ? theme.accent : undefined} bold={selectedRow}>
+                {model.id}
+                {model.name && model.name !== model.id ? ` · ${model.name}` : ''}
+              </Text>
+              {aka?.length ? <Text color={theme.accent}>{` — aka "${aka.join('", "')}"`}</Text> : null}
+              {key === current && <Text color={theme.success}> (current)</Text>}
             </Text>
           </Box>
-          <Box flexShrink={1}>
-            <Text wrap="truncate-end">
-              {model.provider}
-              {nicknames[identity(model)]?.length ? ` · aka ${nicknames[identity(model)]!.join(', ')}` : ''}
-            </Text>
-          </Box>
-        </Box>
-      ))}
+        );
+      })}
       {!visible.length && (
-        <Text>{tab === 'all' && models === null && !error ? 'Loading models…' : 'No matching models.'}</Text>
+        <Text color={theme.textSubtle}>
+          {tab === 'all' && models === null && !error ? 'Loading models…' : 'No matching models.'}
+        </Text>
       )}
       {failedProviders.length > 0 && (
-        <Text color={theme.warning}>▲ Some providers failed: {failedProviders.join(', ')}</Text>
+        <Text color={theme.warning}>
+          {GLYPH_WARNING} Some providers failed: {failedProviders.join(', ')}
+        </Text>
       )}
       {error && <Text color={theme.warning}>{error}</Text>}
-      <Text>Tab switch · ↑/↓ select · Ctrl+F favorite · Enter choose · Esc cancel</Text>
+      <Text color={theme.textSubtle}>Tab/←→ switch · ↑/↓ select · Ctrl+F favorite · Enter choose · Esc cancel</Text>
     </Box>
   );
 }

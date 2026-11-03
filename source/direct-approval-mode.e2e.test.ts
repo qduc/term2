@@ -573,8 +573,8 @@ async function runCommand(
     await session.waitForOutput(literal, 30_000);
   }
   if (exerciseMenu === 'model-picker') {
-    await session.waitForOutput('mockprov · aka luna', 30_000);
-    expect(session.getVisibleOutput()).toContain('Provider / nickname');
+    await session.waitForOutput('aka "luna"', 30_000);
+    expect(session.getVisibleOutput()).toContain('Nicknames');
     expect(session.getVisibleOutput()).toContain('(current)');
     await session.waitForOutput('Some providers failed: brokenprov', 30_000);
     const beforeClose = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
@@ -595,16 +595,15 @@ async function runCommand(
       throw new Error(`No new terminal output containing ${expected}: ${session!.getVisibleOutput().slice(-1200)}`);
     };
     await step('luna', 'Filter: luna');
-    expect(session.getVisibleOutput().slice(-1200)).toContain('mockprov · aka luna');
+    expect(session.getVisibleOutput().slice(-1200)).toContain('aka "luna"');
     await step('\x7f', 'Filter: lun');
     await step('\x7f', 'Filter: lu');
     await step('\x7f', 'Filter: l');
     await step('\x7f', 'Filter: ');
     await step('mock-alpha', 'Filter: mock-alpha');
     await step('\x06', 'No matching models.'); // Ctrl+F removes the favorite.
-    await step('\t', '[All]');
-    await session.waitForOutput('☆ mock-alpha', 60_000);
-    await step('\x06', '★ mock-alpha'); // Re-add it on All.
+    await step('\t', 'mock-alpha'); // Favorites → Nicknames, where the named model remains.
+    await step('\x06', '★ mock-alpha'); // Re-add it.
     await step('\r', 'Model set to mockprov/mock-alpha.');
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 60_000 });
     const settings = JSON.parse(fs.readFileSync(path.join(settingsDir, 'settings.json'), 'utf8'));

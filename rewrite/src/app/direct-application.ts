@@ -78,6 +78,8 @@ export type DirectApplication = {
   sessionConfiguration(sessionId: string): Promise<DirectSessionConfiguration>;
   /** Canonical workspace of a direct session, for clients whose snapshot has none. */
   sessionRoot(principal: Principal, sessionId: string): Promise<string>;
+  /** Sessions in one project, without parsing logs from any other project. */
+  listWorkspaceSessions(root: string): ReturnType<DirectLocalStore['listWorkspace']>;
   /** Copies a session this mode may run into a new one, without opening the source. Returns the new id. */
   forkSession(sourceId: string): Promise<string>;
   /** `undefined` clears it. Throws if another write got there first. */
@@ -171,6 +173,9 @@ export async function createDirectApplication(options: DirectApplicationOptions)
     },
     headlessPolicy: (sessionId, autoApprove, signal) =>
       headlessPolicy({ store, runtimes, directory: options.conversationsDir, sessionId, autoApprove, signal }),
+    listWorkspaceSessions(root) {
+      return nativeStore.listWorkspace(root);
+    },
     async sessionRoot(principal, sessionId) {
       const { sessions } = await host.listSessions(principal);
       const session = sessions.find((candidate) => candidate.id === sessionId);

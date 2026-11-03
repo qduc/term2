@@ -58,6 +58,8 @@ export interface DirectLocalStore extends DirectSessionStore {
     lineage?: { readonly rolloverFrom: string },
   ): Promise<DirectLiveSession>;
   open(id: string, binding?: DirectBinding): Promise<DirectLiveSession>;
+  /** Resume listing for one project. Other logs are not parsed. */
+  listWorkspace(workspaceRoot: string): ReturnType<DirectSessionStore['list']>;
 }
 
 type Summary = {
@@ -232,6 +234,40 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
     }
   };
 
+  const listSessions = async (cursor?: string, workspaceRoot?: string) => {
+    assertOpen();
+    if (cursor !== undefined) requireDirectId(cursor);
+    const summaries: Summary[] = [];
+    // No arbitrary page size/retention policy: return the complete remaining direct namespace.
+    // A workspace scope is the resume picker: other projects stay unread.
+    for (const lineage of readDirectLogLineages(directory, workspaceRoot ? { workspace: workspaceRoot } : {})) {
+      const id = lineage.logicalSessionId;
+      if (cursor !== undefined && id <= cursor) continue;
+      const facts = lineage.entries.map((entry) => entry.fact);
+      const metadata = lineage.metadata;
+      let workspace: Workspace;
+      try {
+        // A shared directory is a catalogue, not a grant. Foreign workspaces
+        // are invisible here; selecting an ID still uses strict open above.
+        workspace = await resolveWorkspace(metadata.workspace, metadata.workspaceIdentity);
+      } catch {
+        continue;
+      }
+      summaries.push({
+        id,
+        workspace,
+        messageCount: facts.reduce(
+          (state, fact) => reduceDirectFact(state, fact),
+          initialDirectState(id, workspace, metadata.model),
+        ).messages.length,
+        model: latestDirectConfiguration(facts)?.configuration.model ?? metadata.model,
+        ...(firstPrompt(facts) ? { title: firstPrompt(facts) } : {}),
+        ...(lineage.entries.length ? { updatedAt: lineage.entries[lineage.entries.length - 1]!.at } : {}),
+      });
+    }
+    return { sessions: summaries.sort((left, right) => left.id.localeCompare(right.id)) };
+  };
+
   return {
     async create(workspace, model, binding, lineage) {
       assertOpen();
@@ -307,37 +343,11 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
         }
       });
     },
-    async list(cursor) {
-      assertOpen();
-      if (cursor !== undefined) requireDirectId(cursor);
-      const summaries: Summary[] = [];
-      // No arbitrary page size/retention policy: return the complete remaining direct namespace.
-      for (const lineage of readDirectLogLineages(directory)) {
-        const id = lineage.logicalSessionId;
-        if (cursor !== undefined && id <= cursor) continue;
-        const facts = lineage.entries.map((entry) => entry.fact);
-        const metadata = lineage.metadata;
-        let workspace: Workspace;
-        try {
-          // A shared directory is a catalogue, not a grant. Foreign workspaces
-          // are invisible here; selecting an ID still uses strict open above.
-          workspace = await resolveWorkspace(metadata.workspace, metadata.workspaceIdentity);
-        } catch {
-          continue;
-        }
-        summaries.push({
-          id,
-          workspace,
-          messageCount: facts.reduce(
-            (state, fact) => reduceDirectFact(state, fact),
-            initialDirectState(id, workspace, metadata.model),
-          ).messages.length,
-          model: latestDirectConfiguration(facts)?.configuration.model ?? metadata.model,
-          ...(firstPrompt(facts) ? { title: firstPrompt(facts) } : {}),
-          ...(lineage.entries.length ? { updatedAt: lineage.entries[lineage.entries.length - 1]!.at } : {}),
-        });
-      }
-      return { sessions: summaries.sort((left, right) => left.id.localeCompare(right.id)) };
+    list(cursor) {
+      return listSessions(cursor);
+    },
+    listWorkspace(workspaceRoot) {
+      return listSessions(undefined, workspaceRoot);
     },
     close() {
       if (closePromise) return closePromise;

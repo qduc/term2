@@ -1,5 +1,5 @@
 /** One logical Session, one writable physical head, and a verified accepted lineage. */
-import { closeSync, lstatSync, openSync, readSync, readdirSync } from 'node:fs';
+import { closeSync, lstatSync, openSync, readSync, readdirSync, realpathSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { z } from 'zod';
 import type { FactLine, SessionStartedFact } from './facts.js';
@@ -58,7 +58,9 @@ export function directLogPath(directory: string, id: string): string {
   return join(directory, `${id}.jsonl`);
 }
 
-type Header = { readonly type: 'session_started'; readonly id: string } | DirectSessionRotationFact;
+type Header =
+  | { readonly type: 'session_started'; readonly id: string; readonly workspace: string }
+  | DirectSessionRotationFact;
 // Validate the metadata consumed by catalogue/CLI callers before exposing a
 // lineage. Parsing is a check only: readFactLines retains the original fact.
 const startedHeaderSchema = z.object({
@@ -146,7 +148,7 @@ function discoverDirectLogs(directory: string): Discovery {
       if (fact?.type === 'session_rotated') header = parseDirectSessionRotation(fact);
       else if (fact?.type === 'session_started') {
         const started = startedHeaderSchema.parse(fact);
-        header = { type: 'session_started', id: started.id };
+        header = { type: 'session_started', id: started.id, workspace: started.workspace };
       } else throw new Error('physical log must begin with session_started or session_rotated');
       if ((header.type === 'session_started' ? header.id : header.sessionId) !== physicalId)
         throw new Error('physical header does not match filename');
@@ -247,16 +249,50 @@ function readLineage(directory: string, id: string, discovery: Discovery, cut?: 
   };
 }
 
+/** Same directory after resolve, then realpath when both exist. */
+function sameWorkspacePath(left: string, right: string): boolean {
+  const resolvedLeft = resolve(left);
+  const resolvedRight = resolve(right);
+  if (resolvedLeft === resolvedRight) return true;
+  try {
+    return realpathSync(resolvedLeft) === realpathSync(resolvedRight);
+  } catch {
+    return false;
+  }
+}
+
+/** Walk headers only. A rotated file's workspace lives on its session_started root. */
+function startedWorkspace(discovery: Discovery, id: string): string | undefined {
+  const seen = new Set<string>();
+  let current = id;
+  while (!seen.has(current)) {
+    seen.add(current);
+    const header = discovery.headers.get(current);
+    if (!header) return undefined;
+    if (header.type === 'session_started') return header.workspace;
+    current = header.predecessor.sessionId;
+  }
+  return undefined;
+}
+
 /** Catalogue each accepted logical lineage once, reporting/skipping unreadable
  * lineages. Empty/torn headers remain unaccepted artifacts, not Sessions.
+ * `workspace`, when set, skips other projects before their bodies are read.
  * Explicit opens still reject corrupt targets and required ancestors/successors. */
-export function readDirectLogLineages(directory: string): readonly DirectLogLineage[] {
+export function readDirectLogLineages(
+  directory: string,
+  options: { readonly workspace?: string } = {},
+): readonly DirectLogLineage[] {
   directory = resolve(directory);
   const discovery = discoverDirectLogs(directory);
   const seen = new Set<string>();
   const result: DirectLogLineage[] = [];
   for (const id of discovery.headers.keys()) {
     if (seen.has(id)) continue;
+    if (options.workspace !== undefined) {
+      const workspace = startedWorkspace(discovery, id);
+      if (workspace !== undefined && !sameWorkspacePath(workspace, options.workspace)) continue;
+    }
     try {
       const lineage = readLineage(directory, id, discovery);
       for (const segment of lineage.segments) seen.add(segment.sessionId);

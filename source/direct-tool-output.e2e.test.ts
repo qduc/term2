@@ -237,6 +237,9 @@ it(
     // accumulated PTY bytes rather than a terminal screen. Check that settled
     // reasoning is not emitted again after the last answer, not screen contents.
     expect(visible).toContain('first turn done');
+    // Settled Ink Static rows retain one separator, not a padding line per row.
+    const settledTool = visible.slice(visible.lastIndexOf('✓ Write and read the file'));
+    expect(settledTool).toMatch(/✓ Write and read the file[^\n]*\n\r?\n {2}Created b\.txt/);
     expect(visible.slice(visible.lastIndexOf('first turn done'))).not.toContain(
       'Locating the unique workspace fixture',
     );

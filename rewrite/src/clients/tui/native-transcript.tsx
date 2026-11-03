@@ -120,12 +120,14 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
             return (
               <Box key={row.key} flexDirection="column">
                 <Box flexDirection="column" maxHeight={10} overflowY="hidden">
-                  <Transcript state={single} messages={single.messages} columns={columns} live />
+                  <Transcript state={single} messages={single.messages} columns={columns} live staticRow />
                 </Box>
                 <Text dimColor>Full tool output: Ctrl+O</Text>
               </Box>
             );
-          return <Transcript key={row.key} state={single} messages={single.messages} columns={columns} live />;
+          return (
+            <Transcript key={row.key} state={single} messages={single.messages} columns={columns} live staticRow />
+          );
         }}
       </Static>
     </Box>

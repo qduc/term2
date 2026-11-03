@@ -18,6 +18,7 @@ export function Transcript({
   columns,
   live,
   expanded = false,
+  staticRow = false,
 }: {
   readonly state: TuiState;
   readonly messages: readonly Message[];
@@ -25,6 +26,7 @@ export function Transcript({
   readonly live: boolean;
   /** Show every tool's output, not only failures. */
   readonly expanded?: boolean;
+  readonly staticRow?: boolean;
 }): React.ReactElement {
   const { UserMessage, AssistantFrame, assistantGutter } = useSkin();
   const theme = useTheme();
@@ -92,7 +94,7 @@ export function Transcript({
   const remainingMessages = messages.filter((message) => !usedMessages.has(message.id));
   const remainingTools = live ? state.tools.filter((tool) => !usedTools.has(tool.id)) : [];
   return (
-    <Box flexDirection="column" paddingBottom={1}>
+    <Box flexDirection="column" paddingBottom={staticRow ? 0 : 1}>
       {ordered}
       {state.timeline && (remainingMessages.length || remainingTools.length) ? (
         <Text color={theme.textSubtle}>Additional items (order unavailable)</Text>

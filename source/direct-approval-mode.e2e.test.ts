@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { testCliPath, spawnTerminal, createTestChildEnv, type TerminalSession } from './test-helpers/terminal-e2e.js';
 import {
   HARNESS_IDLE_ENV,
+  readHarnessComposerState,
   waitForHarnessComposerValue,
   waitForHarnessIdleGeneration,
 } from './lib/harness-input-idle.js';
@@ -224,6 +225,7 @@ async function runCommand(
   const baseUrl = await startProvider([providerError ? { error: providerError } : { text: 'unused' }], withUsage);
   const idlePath = path.join(home, 'input-idle');
   const env = {
+    ...(exerciseMenu === 'ctrl-u' ? { TERM2_TEST_CURSOR_PATH: `${idlePath}.cursor` } : {}),
     HOME: home,
     XDG_CONFIG_HOME: path.join(home, '.config'),
     XDG_STATE_HOME: path.join(home, '.local', 'state'),
@@ -365,8 +367,37 @@ async function runCommand(
     }
     session.write('\x15');
     await waitForHarnessComposerValue(idlePath, 'XYZ', { timeoutMs: 30_000 });
-    session.write('Q');
-    await waitForHarnessComposerValue(idlePath, 'QXYZ', { timeoutMs: 30_000 });
+    const samples: { ms: number; state: ReturnType<typeof readHarnessComposerState>; cursor: string | null }[] = [];
+    const started = Date.now();
+    const sample = () => {
+      const state = readHarnessComposerState(idlePath);
+      let cursor: string | null = null;
+      try {
+        cursor = fs.readFileSync(`${idlePath}.cursor`, 'utf8');
+      } catch {
+        /* not published yet */
+      }
+      const last = samples.at(-1);
+      if (!last || JSON.stringify([last.state, last.cursor]) !== JSON.stringify([state, cursor]))
+        samples.push({ ms: Date.now() - started, state, cursor });
+    };
+    sample();
+    const sampler = setInterval(sample, 10);
+    try {
+      session.write('Q');
+      await waitForHarnessComposerValue(idlePath, 'QXYZ', { timeoutMs: 30_000 });
+    } catch (error) {
+      sample();
+      throw new Error(
+        `Ctrl+U composer acknowledgement failed; sampled timeline (10ms, intermediate revisions may be missed): ${JSON.stringify(
+          samples,
+        )}`,
+        { cause: error },
+      );
+    } finally {
+      clearInterval(sampler);
+    }
+
     session.write('\x15');
     await waitForHarnessComposerValue(idlePath, 'XYZ', { timeoutMs: 30_000 });
     session.write('\x05');

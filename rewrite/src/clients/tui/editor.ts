@@ -1,3 +1,4 @@
+import { writeFileSync } from 'node:fs';
 import { useEffect, useRef, useState } from 'react';
 import { appendHistory, readHistory, type HistoryEntry } from './history.js';
 
@@ -44,6 +45,7 @@ export function useEditor(initialHistory: readonly HistoryEntry[], historySize: 
   };
   const cursorChanged = (offset: number) => {
     cursor.current = offset;
+    if (process.env.TERM2_TEST_CURSOR_PATH) writeFileSync(process.env.TERM2_TEST_CURSOR_PATH, String(offset));
     if (cursorOverride === offset) setCursorOverride(undefined);
   };
   const navigate = (direction: 'up' | 'down' | 'left' | 'right', current: HistoryEntry): EditorDraft | null => {

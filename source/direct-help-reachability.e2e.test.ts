@@ -98,7 +98,7 @@ for (const [cols, rows] of [
       expect(terminal.getVisibleOutput()).not.toMatch(/Lines 1[–-]\d+ of \d+/);
     } finally {
       terminal.dispose();
-      fs.rmSync(root, { recursive: true, force: true });
+      fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   }, 120_000);
 }

@@ -143,7 +143,7 @@ it.each(['expiry', 'configuration', 'secondary'] as const)(
       terminal.dispose();
       await terminal.waitForExit(30000);
       await new Promise<void>((resolve) => server.close(() => resolve()));
-      fs.rmSync(root, { recursive: true, force: true });
+      fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   },
   120000,

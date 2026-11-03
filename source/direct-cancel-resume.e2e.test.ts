@@ -28,7 +28,7 @@ afterEach(async () => {
   server?.closeAllConnections();
   await new Promise<void>((resolve) => (server ? server.close(() => resolve()) : resolve()));
   server = null;
-  if (root) fs.rmSync(root, { recursive: true, force: true });
+  if (root) fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   root = '';
 });
 

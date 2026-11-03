@@ -19,6 +19,11 @@ function runtimeOf(...texts: readonly string[]): string | undefined {
   return undefined;
 }
 
+/** Legacy marks an unregistered create_file call completed in the UI, despite its error result. */
+export function isUnknownCreateFile(tool: ToolView): boolean {
+  return tool.name === 'create_file' && tool.status === 'failed' && tool.detail === 'Unknown tool: create_file';
+}
+
 /**
  * One row per tool call, like the old terminal: `✓ <what it did> (63ms)`. Output, scripts and nested-run
  * details stay behind expand (Ctrl+O) for settled calls; unknown outcomes, live calls and questions stay open.
@@ -44,7 +49,12 @@ export function ToolCall({
   const extraText = contentText && contentText !== detail ? contentText : '';
   const images = (tool.content ?? []).flatMap((part) => (part.type === 'image' ? [part.mediaType] : []));
   // A source tool can report a failure (non-zero exit, timeout) with isError false; its command message says so.
-  const status = tool.status === 'completed' && reportsFailure(tool.display) ? 'failed' : tool.status;
+  const unknownCreateFile = isUnknownCreateFile(tool);
+  const status = unknownCreateFile
+    ? 'completed'
+    : tool.status === 'completed' && reportsFailure(tool.display)
+    ? 'failed'
+    : tool.status;
   const open =
     expanded ||
     status === 'pending' ||
@@ -58,7 +68,7 @@ export function ToolCall({
   const displayText = displayParts(tool.display, args, tool.name).filter(fresh);
   const runtime = tool.name === 'shell' ? runtimeOf(detail) : undefined;
   // Successful edits keep their diff visible; failed calls remain one summary row.
-  const showEdit = EDIT_TOOLS.has(tool.name) && status !== 'failed' && status !== 'rejected';
+  const showEdit = !unknownCreateFile && EDIT_TOOLS.has(tool.name) && status !== 'failed' && status !== 'rejected';
   const display = [...(open || showEdit ? inputText : []), ...(open ? displayText : [])].join('\n');
   const showDetail = open;
   const reason = !open && tool.name === 'shell' && status === 'failed' ? shellFailureReason(detail) : '';
@@ -74,12 +84,24 @@ export function ToolCall({
             action={
               <Text>
                 {reason ? `${reason} · ` : ''}
-                {args || tool.name}
+                {unknownCreateFile ? `Created ${args}` : args || tool.name}
               </Text>
             }
             meta={
               tool.outcomeUnknown ? (
                 <Text color={theme.warning}>outcome unknown</Text>
+              ) : unknownCreateFile ? (
+                <Text>
+                  {' '}
+                  (
+                  <Text color={theme.textMuted}>
+                    +
+                    {isRecord(tool.input) && typeof tool.input.content === 'string'
+                      ? tool.input.content.split('\n').length
+                      : 1}
+                  </Text>{' '}
+                  <Text color={theme.danger}>-0</Text>)
+                </Text>
               ) : runtime ? (
                 <Text color={theme.textSubtle}> ({runtime})</Text>
               ) : undefined

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Box, Static, Text } from 'ink';
-import { reportsFailure } from './tool-view.js';
+import { isUnknownCreateFile, reportsFailure } from './tool-view.js';
 import type { Message, ToolView, TuiState } from './state.js';
 import { Transcript } from './views.js';
 import { failedShellGroups, FailedShellSummary } from './failed-shell-summary.js';
@@ -195,7 +195,10 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
               drafts: {},
               reasoning: {},
             };
-            const failed = row.tool && (row.tool.status === 'failed' || reportsFailure(row.tool.display));
+            const failed =
+              row.tool &&
+              !isUnknownCreateFile(row.tool) &&
+              (row.tool.status === 'failed' || reportsFailure(row.tool.display));
             if (failed)
               return (
                 <Box key={row.key} flexDirection="column">

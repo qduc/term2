@@ -4,12 +4,29 @@ import { reportsFailure } from './tool-view.js';
 import type { Message, ToolView, TuiState } from './state.js';
 import { Transcript } from './views.js';
 import { failedShellGroups, FailedShellSummary } from './failed-shell-summary.js';
+import { findMarkdownCommitOffset } from './presentation/utils/markdown-commit-frontier.js';
 
 type Row = {
   readonly key: string;
   readonly message?: Message;
   readonly tool?: ToolView;
   readonly header?: React.ReactNode;
+  /** Settled prefix of a streaming draft that is already in scrollback. */
+  readonly draftId?: string;
+  /** The exact draft text this row covers; the row shows it without trailing blank lines. */
+  readonly draftText?: string;
+};
+
+const draftPrefixRows = (rows: readonly Row[], draftId: string) => rows.filter((row) => row.draftId === draftId);
+const prefixLength = (rows: readonly Row[], draftId: string) =>
+  draftPrefixRows(rows, draftId).reduce((sum, row) => sum + row.draftText!.length, 0);
+/** Drop the part of a finalized reply that scrollback already shows. */
+const withoutPrefix = (message: Message, rows: readonly Row[]): Message => {
+  if (!message.replacesDraftId) return message;
+  const prefix = draftPrefixRows(rows, message.replacesDraftId)
+    .map((row) => row.draftText!)
+    .join('');
+  return prefix && message.text.startsWith(prefix) ? { ...message, text: message.text.slice(prefix.length) } : message;
 };
 
 /**
@@ -23,33 +40,24 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
     if (!state.timeline) return;
     const messages = new Map(state.messages.map((message) => [message.id, message]));
     const tools = new Map(state.tools.map((tool) => [tool.id, tool]));
-    // A user input can lack a turn ID. Keep the latest one live during a turn,
-    // and stop earlier at any active or unowned non-user row.
-    let boundary = state.timeline.length;
-    if (state.activeTurnId) {
-      let latestUser = -1;
-      for (let i = state.timeline.length - 1; i >= 0; i--) {
-        const entry = state.timeline[i]!;
-        if (entry.kind === 'message' && messages.get(entry.id)?.role === 'user') {
-          latestUser = i;
-          break;
-        }
-      }
-      if (latestUser < 0) return;
-      boundary = latestUser;
-    }
+    // An active turn's assistant and tool rows stay live until it ends, so
+    // their order can still change. Earlier user input is already settled.
+    let reachedEnd = true;
     const next: Row[] = [];
-    for (let i = 0; i < boundary; i++) {
+    for (let i = 0; i < state.timeline.length; i++) {
       const entry = state.timeline[i]!;
       const key = `${entry.kind}:${entry.id}`;
       if (entry.kind === 'message') {
         const message = messages.get(entry.id);
+        // The streaming draft owns the last timeline slot until its message arrives.
+        if (!message && state.activeTurnId && entry.id in state.drafts && i === state.timeline.length - 1) break;
         if (
           !message ||
-          (state.activeTurnId &&
-            (message.turnId === state.activeTurnId || (!message.turnId && message.role !== 'user')))
-        )
+          (state.activeTurnId && message.role !== 'user' && (message.turnId === state.activeTurnId || !message.turnId))
+        ) {
+          reachedEnd = false;
           break;
+        }
         next.push({ key, message });
         messages.delete(entry.id);
       } else {
@@ -60,8 +68,10 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
           tool.status === 'running' ||
           tool.outcomeUnknown ||
           (state.activeTurnId && tool.turnId === state.activeTurnId)
-        )
+        ) {
+          reachedEnd = false;
           break;
+        }
         next.push({ key, tool });
         tools.delete(entry.id);
       }
@@ -72,10 +82,47 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
       (messages.size || tools.size || Object.keys(state.drafts).length || Object.keys(state.reasoning).length)
     )
       return;
+    // Like the old CLI, move a streaming reply's settled markdown blocks into
+    // scrollback so the live frame holds only the unfinished block. Only when
+    // nothing live sits above the reply, or the order would change.
+    const draftEntries = Object.entries(state.drafts);
+    const canSplit =
+      reachedEnd &&
+      state.activeTurnId !== null &&
+      messages.size === 0 &&
+      tools.size === 0 &&
+      draftEntries.length === 1 &&
+      Object.keys(state.reasoning).length === 0;
     setStored((current) => {
       const previous = current.epoch === epoch ? current.rows : [];
-      if (previous.length > next.length || previous.some((row, i) => row.key !== next[i]?.key)) return current;
-      return current.epoch === epoch && previous.length === next.length ? current : { epoch, rows: next };
+      const expanded: Row[] = [];
+      for (const row of next) {
+        const replaced = row.message?.replacesDraftId;
+        if (replaced) {
+          expanded.push(...draftPrefixRows(previous, replaced));
+          expanded.push({ ...row, message: withoutPrefix(row.message!, previous) });
+        } else expanded.push(row);
+      }
+      if (canSplit) {
+        const [id, text] = draftEntries[0]!;
+        const existing = draftPrefixRows(previous, id);
+        const done = prefixLength(previous, id);
+        const offset = findMarkdownCommitOffset(text, done);
+        expanded.push(...existing);
+        if (offset > done)
+          expanded.push({
+            key: `draft:${id}:${existing.length}`,
+            draftId: id,
+            draftText: text.slice(done, offset),
+            message: {
+              id: `draft:${id}:${existing.length}`,
+              role: 'assistant',
+              text: text.slice(done, offset).trimEnd(),
+            },
+          });
+      }
+      if (previous.length > expanded.length || previous.some((row, i) => row.key !== expanded[i]?.key)) return current;
+      return current.epoch === epoch && previous.length === expanded.length ? current : { epoch, rows: expanded };
     });
   }, [state, epoch]);
 
@@ -83,7 +130,15 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
     const done = new Set(rows.map((row) => row.key));
     return {
       ...state,
-      messages: state.messages.filter((message) => !done.has(`message:${message.id}`)),
+      messages: state.messages
+        .filter((message) => !done.has(`message:${message.id}`))
+        .map((message) => withoutPrefix(message, rows)),
+      drafts: Object.fromEntries(
+        Object.entries(state.drafts).map(([id, text]) => {
+          const prefix = prefixLength(rows, id);
+          return [id, prefix ? text.slice(prefix) : text];
+        }),
+      ),
       tools: state.tools.filter((tool) => !done.has(`tool:${tool.id}`)),
       timeline: state.timeline?.filter((entry) => !done.has(`${entry.kind}:${entry.id}`)) ?? null,
     };

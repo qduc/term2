@@ -27,7 +27,7 @@ import { runBridgeCommand } from './bridge-command.js';
 import { useSendConfirmation } from './send-confirmation.js';
 import { ComposerFooter, useComposerFilter, useComposerMenu } from './composer-parts.js';
 import { SessionPanels } from './session-panels.js';
-import { ApprovalHost } from './approval-host.js';
+import { ApprovalHost, promptRequest } from './approval-host.js';
 import { useSessionRewind } from './session-rewind.js';
 import {
   answerInteraction,
@@ -63,6 +63,7 @@ export function TuiSession({
   const [bangResult, setBangResult] = useState<string | null>(null);
   const [interactionOpen, setInteractionOpen] = useState(false);
   const [dismissedInteractionId, setDismissedInteractionId] = useState<string | null>(null);
+  const [answeredId, setAnsweredId] = useState<string | null>(null);
   const [picker, setPicker] = useState<PickerKind | null>(null);
   const [taskOpen, setTaskOpen] = useState(false);
   const [budgetOpen, setBudgetOpen] = useState(false);
@@ -92,11 +93,12 @@ export function TuiSession({
     queueOwners,
   } = useSessionComposer(state, preferences.historySize, setNotice);
   const [rewindTargets, setRewindTargets] = useState<readonly WireRewindTarget[] | null>(null);
-  // Snapshot-derived ownership leaves no gap for decision keys to land in the composer; Ctrl+G picks background requests.
-  const rootInteraction = state.interactions.find((item) => item.turnId === state.activeTurnId && !item.taskId);
+  // Snapshot-derived ownership leaves no gap for decision keys to land in the composer; Ctrl+G picks any request.
+  const prompt = promptRequest(state, answeredId);
   const panelOpen = Boolean(picker) || taskOpen || budgetOpen || Boolean(rewindTargets);
-  const foregroundInteraction =
-    !interactionOpen && !panelOpen && rootInteraction?.id !== dismissedInteractionId ? rootInteraction : undefined;
+  const shown =
+    !interactionOpen && !panelOpen && prompt?.interaction.id !== dismissedInteractionId ? prompt : undefined;
+  const foregroundInteraction = shown?.interaction;
   const interactionActive = interactionOpen || Boolean(foregroundInteraction);
   const confirmation = useSendConfirmation(interactionActive);
   const interactionInput = useRef<InteractionInputHandler | null>(null);
@@ -381,7 +383,11 @@ export function TuiSession({
         </Text>
       ) : null}
       <Box flexDirection="column" paddingX={2} marginTop={liveGap}>
-        <Activity state={state} dialogInteractionId={foregroundInteraction?.id} notice={notice} />
+        <Activity
+          state={{ ...state, interactions: state.interactions.filter((item) => item.id !== answeredId) }}
+          dialogInteractionId={foregroundInteraction?.id}
+          notice={notice}
+        />
         <SessionPanels
           {...{
             picker,
@@ -403,7 +409,7 @@ export function TuiSession({
           closeTask={() => setTaskOpen(false)}
           closeRewind={() => setRewindTargets(null)}
           closeInteraction={() => {
-            setDismissedInteractionId(rootInteraction?.id ?? null);
+            setDismissedInteractionId(prompt?.interaction.id ?? null);
             setInteractionOpen(false);
           }}
         />
@@ -414,11 +420,13 @@ export function TuiSession({
         {slash.view}
         <LiveDivider />
         <ApprovalHost
-          interaction={foregroundInteraction}
+          request={shown}
+          activeTurnId={state.activeTurnId}
           {...{ connection, cancelInput, setNotice, changeInput, replaceInput, editorValue: editor.value }}
           inputHandler={interactionInput}
           interrupt={approvalInterrupt}
           onStopped={() => viewport.appendCommandOutput('Stopped', 'system')}
+          hide={setAnsweredId}
         />
         <ShellTaskPanel state={state} />
         <Box flexDirection="column" display={foregroundInteraction ? 'none' : 'flex'}>

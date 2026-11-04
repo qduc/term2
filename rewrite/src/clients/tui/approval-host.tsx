@@ -10,7 +10,7 @@ import { Box, Text } from 'ink';
 import { MultilineInput } from 'ink-prompt';
 import { ASK_USER_NO_ANSWER_RESULT, type WireDecision, type WireGrant } from '../../protocol/direct-wire.js';
 import type { TuiConnection } from './integration.js';
-import type { InteractionView } from './state.js';
+import type { InteractionView, TuiState } from './state.js';
 import { answerInteraction } from './commands.js';
 import { useInteractionInput, type InteractionInput, type InteractionInputHandler } from './interaction-input.js';
 import ApprovalPrompt, { type ApprovalDescriptor } from './approval-prompt.js';
@@ -30,13 +30,43 @@ const GRANTS: readonly WireGrant[] = [
   'docker-allow-project',
 ];
 
+/** Which owner's request the prompt shows; legacy resolves each one differently. */
+type PromptRequest = {
+  readonly interaction: InteractionView;
+  readonly owner: 'turn' | 'nested' | 'background';
+  readonly agentName: string;
+  readonly backgroundCount: number;
+};
+
+/**
+ * app.tsx effectivePendingApproval: a background child's request first, then the turn's own, then a foreground
+ * (script) child's, named as legacy names them. A request just answered is gone, as legacy clears it on answer.
+ */
+export function promptRequest(state: TuiState, answeredId: string | null): PromptRequest | undefined {
+  const taskOf = (item: InteractionView) => state.tasks.find((task) => task.id === item.taskId);
+  const open = state.interactions.filter((item) => item.id !== answeredId);
+  const background = open.filter((item) => item.taskId && taskOf(item)?.wire?.mode === 'background');
+  const root = open.find((item) => item.turnId === state.activeTurnId && !item.taskId);
+  const nested = open.find((item) => item.taskId && taskOf(item)?.wire?.mode !== 'background');
+  const backgroundCount = background.length;
+  if (background[0]) {
+    const interaction = background[0];
+    const agentName = `${interaction.taskId} (${interaction.toolName ?? interaction.title})`;
+    return { interaction, owner: 'background', agentName, backgroundCount };
+  }
+  if (root) return { interaction: root, owner: 'turn', agentName: 'Agent', backgroundCount };
+  if (!nested) return undefined;
+  const role = taskOf(nested)?.role ?? taskOf(nested)?.wire?.role ?? 'agent';
+  return { interaction: nested, owner: 'nested', agentName: `Script child agent (${role})`, backgroundCount };
+}
+
 /** Legacy's ApprovalDescriptor, from the direct-wire request (the data-access half of the port). */
-function approvalDescriptor(view: InteractionView): ApprovalDescriptor {
+function approvalDescriptor(view: InteractionView, agentName: string): ApprovalDescriptor {
   const presentation = (view.presentation ?? {}) as Record<string, unknown>;
   const record = (value: unknown) =>
     value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
   return {
-    agentName: 'Agent',
+    agentName,
     toolName: view.toolName ?? view.title,
     argumentsText: JSON.stringify(view.input ?? {}),
     ...(view.callId ? { callId: view.callId } : {}),
@@ -59,7 +89,9 @@ function approveDecision(answer: string | undefined): WireDecision {
 }
 
 type HostProps = {
-  readonly interaction: InteractionView;
+  readonly request: PromptRequest;
+  /** The foreground turn a stop cancels; a background child's request may outlive it. */
+  readonly activeTurnId: string | null;
   readonly connection: TuiConnection;
   readonly inputHandler: InteractionInput;
   /** Ctrl+C while this prompt is up; returns false when it does not apply. */
@@ -67,28 +99,32 @@ type HostProps = {
   readonly cancelInput: (connection: TuiConnection, turnId?: string) => Promise<string>;
   readonly setNotice: (notice: string | null) => void;
   readonly onStopped: () => void;
+  /** Legacy clears its pending approval as it answers; a failed answer brings the prompt back. */
+  readonly hide: (requestId: string | null) => void;
   /** The session composer's draft. Legacy types the reason and the custom answer in that same composer. */
   readonly editorValue: string;
   readonly changeInput: (text: string) => void;
   readonly replaceInput: (text: string) => void;
 };
 
-/** The foreground turn's request, if any; a new request gets fresh prompt state. */
+/** The request the prompt shows, if any; a new request gets fresh prompt state. */
 export function ApprovalHost({
-  interaction,
+  request,
   ...props
-}: Omit<HostProps, 'interaction'> & { readonly interaction: InteractionView | undefined }): React.ReactElement | null {
-  return interaction ? <Host key={interaction.id} interaction={interaction} {...props} /> : null;
+}: Omit<HostProps, 'request'> & { readonly request: PromptRequest | undefined }): React.ReactElement | null {
+  return request ? <Host key={request.interaction.id} request={request} {...props} /> : null;
 }
 
 function Host({
-  interaction,
+  request,
+  activeTurnId,
   connection,
   inputHandler,
   interrupt,
   cancelInput,
   setNotice,
   onStopped,
+  hide,
   editorValue: text,
   changeInput,
   replaceInput,
@@ -96,7 +132,8 @@ function Host({
   const theme = useTheme();
   const { columns, rows } = useTerminalSize();
   const { InputFrame, PromptMarker } = useSkin();
-  const approval = approvalDescriptor(interaction);
+  const { interaction, owner } = request;
+  const approval = approvalDescriptor(interaction, request.agentName);
   const isAskUser = approval.toolName === 'ask_user';
   const [entry, setEntry] = useState<'reason' | 'answer' | null>(null);
   const [answers, setAnswers] = useState<readonly AskUserAnswer[]>([]);
@@ -109,15 +146,17 @@ function Host({
   const send = (decision: WireDecision) => {
     if (pending.current) return;
     pending.current = true;
+    hide(interaction.id);
     answerInteraction(connection, interaction.id, decision).catch((error: unknown) => {
       pending.current = false;
+      hide(null);
       fail(error);
     });
   };
   const stop = () => {
     if (pending.current) return;
     pending.current = true;
-    cancelInput(connection, interaction.turnId).then((message) => {
+    cancelInput(connection, activeTurnId ?? undefined).then((message) => {
       setNotice(message);
       onStopped();
     }, fail);
@@ -153,6 +192,8 @@ function Host({
   };
   const onReject = () => setEntry('reason');
   const onCancel = () => {
+    // app.tsx handleCancelApproval: a background child's request is denied without a reason; the turn keeps going.
+    if (owner === 'background') return send({ kind: 'deny' });
     if (!isAskUser) return stop();
     // Graceful cancel: the question resolves with no answer and the turn's record stays.
     send({ kind: 'answer', answer: ASK_USER_NO_ANSWER_RESULT, stopAfterApprovalResolution: true });
@@ -168,7 +209,7 @@ function Host({
   // use-app-keyboard-shortcuts.ts: Ctrl+C clears a typed reason/answer, else stops the turn.
   interrupt.current = () => {
     if (text.length > 0) replaceInput('');
-    else stop();
+    else if (activeTurnId) stop();
     return true;
   };
   const shortcuts = !isAskUser && !approval.dockerHostControl;
@@ -228,6 +269,9 @@ function Host({
     <Box flexDirection="column">
       {entry !== 'reason' ? (
         <Box flexDirection="column" marginBottom={1}>
+          {request.backgroundCount > 1 ? (
+            <Text color={theme.warning}>Background approval · {request.backgroundCount - 1} queued</Text>
+          ) : null}
           <ApprovalPrompt
             approval={approval}
             inputHandler={promptInput}

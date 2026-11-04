@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import type { Message, TuiState } from './state.js';
 import { useTerminalSize } from './terminal.js';
 import { useTranscriptViewport } from './viewport.js';
@@ -55,9 +55,15 @@ export function useCommandTranscriptViewport(
   active: boolean,
   header?: ReactNode,
   historyRevision?: number,
+  options: { readonly transitionNotice?: string } = {},
 ) {
   const { columns, rows } = useTerminalSize();
   const transcript = useCommandTranscript(state);
+  // A session switch's notice ("Resumed conversation: <id>") follows the replayed history, where legacy adds
+  // it: once, on the switched-to session's mount (its connection already carries the snapshot).
+  useEffect(() => {
+    if (options.transitionNotice) transcript.append(options.transitionNotice, true);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const viewport = useTranscriptViewport(
     transcript.state,
     columns,
@@ -66,8 +72,11 @@ export function useCommandTranscriptViewport(
     header,
     historyRevision,
   );
+  const last = transcript.state.timeline?.at(-1)?.id ?? transcript.state.messages.at(-1)?.id;
   return {
     ...viewport,
+    /** Rows above the bottom area: legacy leaves one row less below a local system line than below a reply. */
+    bottomMargin: state.activeTurnId ? 1 : state.messages.length && !last?.startsWith('local-command-') ? 3 : 2,
     appendCommandOutput: transcript.append,
     showMessage(message: string, command: string, notice: (value: string) => void): void {
       if (command.trim() !== '/help') notice(message);

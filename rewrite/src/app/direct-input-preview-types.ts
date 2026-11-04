@@ -51,7 +51,8 @@ export type DirectInputPreviewDecisions = {
 
 /** Structurally matches the direct preview capability without importing a client. */
 export type DirectInputPreviewResult = {
-  readonly notices: readonly { readonly kind: string; readonly message: string }[];
+  /** A large_uncached_input notice carries the guard's token estimate for legacy's status-bar advisory. */
+  readonly notices: readonly { readonly kind: string; readonly message: string; readonly estimatedTokens?: number }[];
   readonly requiresConfirmation: boolean;
 };
 

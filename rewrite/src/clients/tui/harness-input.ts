@@ -8,12 +8,14 @@ let lastComposerValue: string | null = null;
 let composerRevision = 0;
 
 /** Publish opt-in native composer acknowledgments in the harness's idle/composer file format. */
-export function useHarnessInput(active: boolean, processing: boolean, value: string): void {
+export function useHarnessInput(active: boolean, processing: boolean, value: string, mounted = true): void {
   useEffect(() => {
     const path = process.env['TERM2_HARNESS_IDLE_PATH'];
     if (!path) return;
 
-    if (value !== lastComposerValue) {
+    // Legacy's input box holds its value whenever it is drawn; a draft restored into a hidden composer
+    // (a rewind before its frame) is published when the composer mounts and can take keys.
+    if (mounted && value !== lastComposerValue) {
       lastComposerValue = value;
       composerRevision += 1;
       writeAtomically(`${path}.composer`, `${JSON.stringify({ revision: composerRevision, value })}\n`);
@@ -26,7 +28,7 @@ export function useHarnessInput(active: boolean, processing: boolean, value: str
 
     generation += 1;
     writeAtomically(path, `${generation}\n`);
-  }, [active, processing, value]);
+  }, [active, processing, value, mounted]);
 }
 
 function writeAtomically(path: string, payload: string): void {

@@ -6,6 +6,7 @@
  */
 import type { MenuServices } from './menu-registry.js';
 import type { SlashCommand } from './slash-command-types.js';
+import { useSlashCommands } from './use-slash-commands.js';
 
 /** Session behaviour the menus call back into, replacing legacy app callbacks. */
 export type MenuActions = {
@@ -16,11 +17,16 @@ export type MenuActions = {
 };
 
 /** Legacy ApplicationInputSurface's enabled trigger rule ids, limited to the ported menus. */
-export const MENU_RULE_IDS: readonly string[] = [];
+export const MENU_RULE_IDS: readonly string[] = ['slash'];
 
-export function useMenuServices(_options: {
+export function useMenuServices({
+  commands,
+}: {
   readonly commands: SlashCommand[];
   readonly actions: MenuActions;
 }): MenuServices {
-  return {};
+  const slash = useSlashCommands({ commands, onClose: noop });
+  return { slash };
 }
+
+const noop = () => {};

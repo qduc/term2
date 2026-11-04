@@ -16,16 +16,6 @@ export function pickerFor(integration: TuiIntegration, command: string): PickerK
   return command === '/model' && integration.modelPicker ? 'model' : null;
 }
 
-/** Hand a slash-menu Enter selection to the same picker used by direct submission. */
-export function openPickerFor(integration: TuiIntegration, show: (target: PickerKind) => void) {
-  return (command: string): boolean => {
-    const target = pickerFor(integration, command);
-    if (!target) return false;
-    show(target);
-    return true;
-  };
-}
-
 /** One full-screen choice list at a time; it owns the keys through the session's shared input ref. */
 export function PickerHost(props: {
   readonly kind: PickerKind;

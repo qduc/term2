@@ -255,6 +255,16 @@ def compare(cols, rows, names):
         results[name] = {'text': same_text, 'style': same_style, 'legacy': a, 'next': b}
         status = 'identical' if same_text and same_style else ('differs(style)' if same_text else 'differs(text)')
         print(f'{cols}x{rows} {name}: {status}', flush=True)
+        if os.environ.get('VERBOSE') and status != 'identical':
+            for i in range(max(len(a['lines']), len(b['lines']))):
+                la = a['lines'][i] if i < len(a['lines']) else '<none>'
+                lb = b['lines'][i] if i < len(b['lines']) else '<none>'
+                sa = a['styles'][i] if i < len(a['styles']) else None
+                sb = b['styles'][i] if i < len(b['styles']) else None
+                if la != lb:
+                    print(f'  L{i:2}|{la}\n  N{i:2}|{lb}')
+                elif sa != sb:
+                    print(f'  style {i:2}|{la}\n    L {sa}\n    N {sb}')
     return results
 
 

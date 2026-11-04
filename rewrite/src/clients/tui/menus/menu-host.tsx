@@ -5,7 +5,7 @@
  * ApplicationInputSurface) and owns the keys, and when the stack empties the
  * controller's text goes back into the composer.
  */
-import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useInput } from 'ink';
 import type { TuiMenus } from '../integration.js';
 import { MenuControllerImpl } from './menu-controller.js';
@@ -42,18 +42,24 @@ export function useMenuStack(options: {
   }, [controller, commands, menus]);
   const open = Boolean(menus) && snapshot.stack.length > 0;
 
-  // The stack emptied: whatever the menu left in the editor is the composer draft again.
+  // The text both sides last agreed on. Cursor-only controller revisions and composer keystrokes not yet
+  // mirrored must not be mistaken for a menu's edit, or the hand-back would revert the keystroke.
+  const synced = useRef('');
+  // With no frame open, an editor change the composer did not make (a menu's close, or legacy's deferred
+  // command action writing `/model ` after the slash frame closed) becomes the composer draft.
   useEffect(() => {
     if (open) return;
-    const { text, cursor } = controller.getSnapshot().editor;
+    const { text, cursor } = snapshot.editor;
+    if (text === synced.current) return;
+    synced.current = text;
     if (text !== composer.value) composer.replace(text, cursor);
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, snapshot.editor.revision]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Mirror every composer draft change, typed or set from outside (restore, rewind, a command's draft), as
-  // legacy's composer wrote through the controller; a trigger may open a frame. The stack's own hand-back is
-  // already in the controller, so a Tab-completed `/model ` does not reopen a picker.
+  // legacy's composer wrote through the controller; a trigger may open a frame.
   useEffect(() => {
-    if (!menus || !enabled || open) return;
+    if (!menus || !enabled || open || composer.value === synced.current) return;
+    synced.current = composer.value;
     const previous = controller.getSnapshot().editor;
     if (previous.text === composer.value) return;
     const atEnd = previous.cursor >= previous.text.length;

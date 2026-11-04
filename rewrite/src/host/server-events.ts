@@ -1,8 +1,7 @@
-/** Pure pinned agent-wire encoding of accepted direct events. No cursor, timestamp, terminal text
+/** Pure agent-wire candidates for accepted direct events, encoded by the gated v2 wire. No cursor, timestamp, terminal text
  * or tool identity is synthesized here. The caller supplies only authoritative replay-cut context
  * when a direct payload does not itself carry the immutable data needed by the pinned DTO.
  */
-import type { AgentEventEnvelope } from '@qduc/agent-wire';
 import type { WireAdmission, WireEvent } from '../protocol/direct-wire.js';
 import { legacyCommandMessages } from '../protocol/direct-json.js';
 import type { ServerInteractions } from './server-interactions.js';
@@ -18,31 +17,6 @@ import {
 export type { CanonicalEventCandidate, CanonicalEventContext } from './server-event-values.js';
 
 type Candidate = CanonicalEventCandidate;
-
-/** Returns at most one numeric-ID envelope per accepted boundary. Non-public projection updates
- * return null. Missing accepted evidence or unsupported consumer semantics throws
- * instead of silently omitting a lifecycle boundary or lying to a retained BFF.
- */
-export function encodeCanonicalEvent(
-  event: WireEvent,
-  interactions: ServerInteractions,
-  context: CanonicalEventContext = {},
-): AgentEventEnvelope | null {
-  const candidate = canonicalCandidate(event, interactions, context);
-  if (!candidate) return null;
-  if (event.seq === null || !Number.isSafeInteger(event.seq) || event.seq < 1)
-    return missing('canonical events require an accepted durable cursor');
-  if (!event.occurredAt || /[\u0000-\u001f\u007f]/u.test(event.occurredAt))
-    return missing('canonical events require the original accepted timestamp');
-  return {
-    schemaVersion: 1,
-    id: event.seq,
-    sessionId: event.sessionId,
-    type: candidate.type,
-    occurredAt: event.occurredAt,
-    payload: candidate.payload,
-  };
-}
 
 export function canonicalCandidate(
   event: WireEvent,

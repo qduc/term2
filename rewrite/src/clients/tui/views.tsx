@@ -148,33 +148,48 @@ export function Transcript({
   );
 }
 
-/** Estimate throughput from displayed stream deltas; reset when a model step changes. */
-function StreamingStatus({ state }: { readonly state: TuiState }): React.ReactElement {
-  const theme = useTheme();
-  const { WorkingIndicator } = useSkin();
-  const start = useRef(Date.now());
+/**
+ * Legacy's liveStreamingSpeed: the rate measured from displayed stream deltas while a request streams. It resets
+ * when a tool runs or the stream restarts, and is gone when the turn ends; the working line and the status bar
+ * both show it.
+ */
+export function useLiveStreamingSpeed(state: TuiState): number | null {
   const tracker = useRef(new StreamingSpeedTracker());
   const previous = useRef('');
+  const turn = useRef<string | null>(null);
   const liveRate = useRef<number | null>(null);
+  const text = [...Object.values(state.reasoning), ...Object.values(state.drafts)].join('');
+  const toolRunning = state.tools.some((tool) => tool.status === 'running' || tool.status === 'pending');
+  if (turn.current !== state.activeTurnId || toolRunning || !text.startsWith(previous.current)) {
+    turn.current = state.activeTurnId;
+    tracker.current.reset();
+    previous.current = '';
+    liveRate.current = null;
+  }
+  if (state.activeTurnId && !toolRunning && text.length > previous.current.length) {
+    tracker.current.recordDelta(text.slice(previous.current.length));
+    liveRate.current = tracker.current.getLiveTps() ?? liveRate.current;
+    previous.current = text;
+  }
+  return state.activeTurnId && !toolRunning ? liveRate.current : null;
+}
+
+/** The working line; its rate is the session's live streaming speed. */
+function StreamingStatus({
+  state,
+  liveTps,
+}: {
+  readonly state: TuiState;
+  readonly liveTps: number | null;
+}): React.ReactElement {
+  const { WorkingIndicator } = useSkin();
+  const start = useRef(Date.now());
   const [now, setNow] = useState(Date.now());
   const [dotCount, setDotCount] = useState(1);
-  const text = [...Object.values(state.reasoning), ...Object.values(state.drafts)].join('');
   // Legacy names the latest streamed tool call, so with parallel calls the last one in flight is the one shown.
   const activeTool = [...state.tools].reverse().find((tool) => tool.status === 'running' || tool.status === 'pending');
   const toolRunning = activeTool != null;
-  useEffect(() => {
-    if (toolRunning || !text.startsWith(previous.current)) {
-      tracker.current.reset();
-      previous.current = '';
-      liveRate.current = null;
-    }
-    if (!toolRunning && text.length > previous.current.length) {
-      tracker.current.recordDelta(text.slice(previous.current.length));
-      liveRate.current = tracker.current.getLiveTps() ?? liveRate.current;
-      previous.current = text;
-    }
-  }, [text, toolRunning]);
-  const rate = toolRunning ? null : liveRate.current;
+  const rate = toolRunning ? null : liveTps;
   const phase = toolRunning ? 'tool_call' : rate != null && rate > 0 ? 'generating' : 'processing';
   const stepKey = phase === 'tool_call' ? `tool_call:${activeTool?.name ?? ''}` : phase;
   // Like legacy, the clock restarts with each step, so its seconds tick from the step's start.
@@ -249,10 +264,12 @@ export function Activity({
   state,
   dialogInteractionId,
   notice,
+  liveTps = null,
 }: {
   readonly state: TuiState;
   readonly dialogInteractionId?: string;
   readonly notice?: string | null;
+  readonly liveTps?: number | null;
 }): React.ReactElement {
   const theme = useTheme();
   const { TaskPanel } = useSkin();
@@ -264,7 +281,7 @@ export function Activity({
   return (
     <Box flexDirection="column">
       {state.activeTurnId && !state.interactions.some((item) => item.kind === 'approval') ? (
-        <StreamingStatus key={state.activeTurnId} state={state} />
+        <StreamingStatus key={state.activeTurnId} state={state} liveTps={liveTps} />
       ) : null}
       {(!state.activeTurnId && state.status !== 'idle') || state.cost ? (
         <Text color={theme.textSubtle}>
@@ -281,6 +298,8 @@ export function Activity({
         .filter(
           (receipt) =>
             receipt.outcome?.kind !== 'retried' &&
+            // Legacy prints nothing for a finished rewind.
+            receipt.outcome?.kind !== 'rewound' &&
             (receipt.request.operation.kind !== 'configure' ||
               (receipt.outcome?.kind !== 'configured' && receipt.outcome?.kind !== 'rejected')) &&
             (receipt.request.operation.kind !== 'compact' ||

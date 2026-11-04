@@ -25,7 +25,13 @@ export function formatContextUsage(usedTokens: number, contextWindow?: number): 
 
 const APPROVAL_LABEL = { off: '', advisory: 'Advisory', auto: 'Auto', always: 'YOLO' } as const;
 
-const tokens = (count: number): string => (count > 1_000 ? `${(count / 1_000).toFixed(1)}k` : String(count));
+/** Legacy StatusBar's `formatStatusBarTokens`. */
+const formatStatusBarTokens = (tokens: number): string =>
+  tokens > 1_000 ? `${(tokens / 1_000).toFixed(1)}k` : tokens.toLocaleString();
+
+/** Legacy StatusBar's `formatStatusBarRate` (`48.2t/s`). */
+const formatStatusBarRate = (tps: number, approximate: boolean): string =>
+  formatTokensPerSecond(tps, approximate).replace(' tok/s', 't/s');
 
 /**
  * The bar the old terminal shows under the composer: profile, provider/model, effort and approval mode, then
@@ -35,6 +41,8 @@ export function directStatusView(
   state: TuiState,
   info: ReturnType<NonNullable<TuiIntegration['status']>>,
   columns: number,
+  /** Legacy's liveStreamingSpeed: the rate measured while the current request streams. */
+  liveTps?: number | null,
 ): StatusView {
   const quota = state.codexQuota && state.codexQuota.resetAt * 1000 > Date.now() ? state.codexQuota : undefined;
   const reset = quota ? new Date(quota.resetAt * 1000) : undefined;
@@ -46,11 +54,30 @@ export function directStatusView(
       ? `${resetDate} ${reset.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}`
       : resetDate;
   const quotaWindows = quota ? [{ label: '7D', percent: quota.usedPercent, resetText }] : [];
-  const totals = state.usageTotals;
-  const cached =
-    totals && totals.inputTokens > 0 ? Math.round((totals.cachedInputTokens / totals.inputTokens) * 100) : undefined;
-  const used = state.contextUsedTokens;
-  const window = info.contextWindow;
+  // Legacy StatusBar: every usage figure is the last request's (lastUsage), not a session total.
+  const lastUsage = state.lastUsage;
+  const contextWindow = info.contextWindow;
+  const contextTokens = lastUsage?.inputTokens;
+  const contextPercent =
+    contextTokens != null && contextWindow ? Math.round((contextTokens / contextWindow) * 100) : undefined;
+  const cacheReadTokens = lastUsage?.cachedInputTokens;
+  const cachePercent =
+    cacheReadTokens != null && cacheReadTokens > 0 && lastUsage!.inputTokens > 0
+      ? Math.round((cacheReadTokens / lastUsage!.inputTokens) * 100)
+      : undefined;
+  const tokenPieces: string[] = [];
+  let speedText = '';
+  if (lastUsage) {
+    tokenPieces.push(
+      `↑${formatStatusBarTokens(lastUsage.inputTokens)}`,
+      `↓${formatStatusBarTokens(lastUsage.outputTokens)}`,
+    );
+    const speed = state.speed?.tps ?? liveTps ?? undefined;
+    if (speed != null && speed > 0)
+      speedText = `(${formatStatusBarRate(speed, state.speed != null && state.speed.approximate)})`;
+  } else if (liveTps != null && liveTps > 0) {
+    speedText = `(${formatStatusBarRate(liveTps, false)})`;
+  }
   const config: StatusSegmentView[] = [
     { id: 'mode', text: info.profile, tone: 'accent', bold: true, separator: 'group' },
     {
@@ -78,35 +105,22 @@ export function directStatusView(
     },
   ];
   const metrics: StatusSegmentView[] = [
-    {
-      id: 'tokens',
-      text:
-        totals && totals.inputTokens + totals.outputTokens > 0
-          ? `↑${tokens(totals.inputTokens)} ↓${tokens(totals.outputTokens)}`
-          : '',
-      tone: 'textSubtle',
-      tier: 4,
-    },
-    {
-      id: 'speed',
-      text: state.speed ? formatTokensPerSecond(state.speed.tps, state.speed.approximate).replace(' tok/s', 't/s') : '',
-      tone: 'textSubtle',
-      separator: 'metric',
-      tier: 0,
-    },
+    { id: 'tokens', text: tokenPieces.join(' '), tone: 'textSubtle', bold: false, tier: 4 },
+    { id: 'speed', text: speedText, tone: 'textSubtle', separator: 'metric', tier: 0 },
     {
       id: 'cache',
-      text: cached === undefined ? '' : `${cached}% cached`,
+      text: cachePercent != null ? `${cachePercent}% cached` : '',
       tone: 'textSubtle',
+      bold: false,
       separator: 'metric',
       tier: 1,
     },
     {
       id: 'context',
-      text: used === undefined ? '' : `Ctx last ${formatContextUsage(used, window)}`,
+      text: contextTokens != null ? `Ctx ${formatContextUsage(contextTokens, contextWindow)}` : '',
       tone: 'textSubtle',
       separator: 'metric',
-      tier: 1,
+      tier: 3,
     },
   ];
   return {
@@ -116,10 +130,10 @@ export function directStatusView(
     alerts: [],
     quotaText: quotaWindows.map((window) => `${window.label} ${window.percent}%→${window.resetText}`).join(' / '),
     gauges: {
-      contextPercent: undefined,
-      contextUsedTokens: undefined,
-      contextWindowTokens: undefined,
-      cachePercent: cached,
+      contextPercent,
+      contextUsedTokens: contextTokens,
+      contextWindowTokens: contextWindow,
+      cachePercent,
       quotaWindows,
     },
   };
@@ -129,6 +143,7 @@ export function directStatusView(
 export function ComposerFooter({
   integration,
   state,
+  liveTps,
   active,
   draftEmpty,
   escHint,
@@ -137,6 +152,7 @@ export function ComposerFooter({
 }: {
   readonly integration: TuiIntegration;
   readonly state: TuiState;
+  readonly liveTps?: number | null;
   readonly active: boolean;
   readonly draftEmpty: boolean;
   /** Legacy InputBox: after one Escape the hint replaces the shortcuts until a second clears the draft. */
@@ -166,7 +182,7 @@ export function ComposerFooter({
           Hints={Hints}
         />
       ) : null}
-      {info ? <StatusBar {...directStatusView(state, info, columns)} /> : null}
+      {info ? <StatusBar {...directStatusView(state, info, columns, liveTps)} /> : null}
     </>
   );
 }

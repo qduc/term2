@@ -1,0 +1,34 @@
+"""Key sequences for each menu branch. Steps are typed in order; <key> names are in screen.py KEYS."""
+
+SCENARIOS = {
+    'idle': [],
+    'slash': ['/'],
+    'slash-filter': ['/se'],
+    'slash-down': ['/', '<down>', '<down>'],
+    'slash-esc': ['/', '<esc>'],
+    'model': ['/model '],
+    'model-tab-all': ['/model ', '<tab>'],
+    'model-tab-nick': ['/model ', '<tab>', '<tab>'],
+    'model-filter': ['/model ', 'beta'],
+    'model-fav': ['/model ', '<tab>', '<down>', '<c-f>'],
+    'model-nickname': ['/model ', '<c-n>'],
+    'settings': ['/settings '],
+    'settings-tab': ['/settings ', '<tab>'],
+    'settings-filter': ['/settings ', 'log'],
+    'settings-value': ['/settings ', '<enter>'],
+    'settings-reset': ['/settings reset '],
+    'effort': ['/effort '],
+    'auto-approve': ['/auto-approve '],
+    'resume': ['/resume '],
+    'profile': ['/profile '],
+    'skills': ['/skills '],
+    'path': ['@'],
+    'path-filter': ['@REA'],
+    'rewind': ['/rewind<enter>'],
+    'copy': ['/copy<enter>'],
+}
+
+SEED = {
+    'path': {'files': {'README.md': 'x\n', 'src/index.ts': 'x\n', 'docs/guide.md': 'x\n'}},
+    'path-filter': {'files': {'README.md': 'x\n', 'src/index.ts': 'x\n', 'docs/guide.md': 'x\n'}},
+}

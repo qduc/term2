@@ -34,6 +34,7 @@ const DIRECT_SOURCE_IMPORTERS = new Set([
   'app/direct-launch-control.ts',
   'app/direct-launch-serve.ts',
   'app/direct-launch-tui-commands.ts',
+  'app/direct-launch-tui-menus.ts',
   'app/direct-launch-tui-restart.ts',
   'app/direct-launch-tui-settings.ts',
   'app/direct-launch-tui.tsx',

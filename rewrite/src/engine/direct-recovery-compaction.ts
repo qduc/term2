@@ -13,18 +13,20 @@ import {
 } from '../../../source/prompts/context-compaction.js';
 import { hasCompleteDirectToolPairs } from './direct-recovery-history.js';
 import { selfContained } from './direct-recovery-continuity.js';
+import {
+  estimateDirectContext,
+  legacyEstimateBytes,
+  legacyEstimateHistory,
+  type DirectContextEstimate,
+} from './direct-context-estimate.js';
+
+export { estimateDirectContext, type DirectContextEstimate };
 
 export type DirectCompactionSettings = {
   readonly enabled: boolean;
   readonly mode: 'native' | 'auto' | 'local';
   readonly compactThreshold: number;
   readonly compactThresholdTokens: number | null;
-};
-export type DirectContextEstimate = {
-  readonly renderedInputTokens: number;
-  readonly outputReserveTokens: number;
-  readonly safetyReserveTokens: number;
-  readonly hardFitTokens: number;
 };
 /** A real compaction attempt, not a physical-dispatch or history-acceptance claim.
  * Estimates describe the frozen compaction input, not measured provider usage. */
@@ -224,21 +226,6 @@ export async function compactDirectHistory(input: DirectCompactionInput): Promis
   };
 }
 
-/** Conservative bytes/4 estimate with the existing 10% capacity reserve. Never changes history. */
-export function estimateDirectContext(request: ModelRequest, contextWindow?: number): DirectContextEstimate {
-  const renderedInputTokens = Math.ceil(
-    bytes({ instructions: request.instructions, tools: request.tools, history: request.input }) / 4,
-  );
-  const outputReserveTokens = Math.max(0, Math.ceil(request.maxOutputTokens ?? 0));
-  const safetyReserveTokens = Math.ceil((contextWindow ?? 0) * 0.1);
-  return {
-    renderedInputTokens,
-    outputReserveTokens,
-    safetyReserveTokens,
-    hardFitTokens: renderedInputTokens + outputReserveTokens + safetyReserveTokens,
-  };
-}
-
 /** Hard admission is independent of automatic compaction being enabled or eligible.
  * Call with the full prepared envelope, before continuity slices it to a delta. */
 export function enforceDirectInputLimit(
@@ -328,11 +315,15 @@ async function compactLocally(
   }
   input.signal.throwIfAborted();
   const removed = plan.cold.filter((item) => item.type !== 'user_message');
-  const checkpointReceipts = [...(input.checkpointReceipts ?? []), ...toolReceipts(plan.cold)].slice(-40);
+  // Legacy keeps every receipt in the checkpoint and shows the model the newest 40 (renderToolReceipts).
+  const checkpointReceipts = [...(input.checkpointReceipts ?? []), ...toolReceipts(plan.cold)];
+  const shown = checkpointReceipts.slice(-40);
+  const omitted = checkpointReceipts.length - shown.length;
+  const rendered = [...(omitted > 0 ? [`(${omitted} earlier calls omitted)`] : []), ...shown].join('\n');
   const checkpoint: Item = {
     type: 'summary',
     id: `compact_${randomUUID()}` as ItemId,
-    text: wrapContextSummary(summaryText, checkpointReceipts.map((receipt) => receipt.slice(0, 180)).join('\n')),
+    text: wrapContextSummary(summaryText, rendered || undefined),
     replaces: removed.map((item) => item.id),
   };
   return { history: [checkpoint, ...plan.hot], usage, checkpointReceipts };
@@ -379,7 +370,7 @@ function planTail(
     ...history.slice(0, cut).filter((item) => item.type === 'user_message' && !backgroundNotice(item)),
     ...history.slice(cut),
   ];
-  const tokensAt = (cut: number): number => Math.ceil(bytes(hotAt(cut)) / 4);
+  const tokensAt = (cut: number): number => Math.ceil(legacyEstimateBytes(legacyEstimateHistory(hotAt(cut))) / 4);
   const preferred = users.length >= 3 ? users[users.length - 2]! : 0;
   const candidates = rounds.slice(0, -1);
   const budget = Math.min(16_000, Math.max(1_000, Math.floor(usable * 0.25)), usable);
@@ -453,29 +444,43 @@ function chunkColdHistory(history: readonly Item[], maxCharacters: number): read
   return chunks;
 }
 
+/** Legacy local-context-compactor's receipt line: `- name: arguments → first output line`, each clipped. */
 function toolReceipts(history: readonly Item[]): readonly string[] {
-  const pending: Extract<Item, { type: 'tool_call' }>[] = [];
-  const receipts: string[] = [];
+  const calls = new Map<string, Extract<Item, { type: 'tool_call' }>>();
+  const receipts = new Map<string, string>();
   for (const item of history) {
-    if (item.type === 'tool_call') pending.push(item);
-    if (item.type !== 'tool_result') continue;
-    const index = pending.findIndex((call) => call.callId === item.callId);
-    if (index < 0) continue;
-    const call = pending.splice(index, 1)[0]!;
-    // Preview only; exact results remain in Session's physical audit facts.
-    const args = call.rawArguments ?? JSON.stringify(call.input) ?? '';
-    const hash = createHash('sha256').update(args).digest('hex');
-    receipts.push(
-      `${call.toolName} [${call.id}; args-sha256=${hash}]: ${args.slice(0, 256)} → ${item.output.slice(0, 128)}${
-        item.isError ? ' [error]' : ''
-      }`,
+    if (item.type === 'tool_call') calls.set(item.callId, item);
+    const call = item.type === 'tool_result' ? calls.get(item.callId) : undefined;
+    if (item.type !== 'tool_result' || !call) continue;
+    const args = call.rawArguments ?? JSON.stringify(call.input ?? {});
+    const output = item.output
+      .slice(0, 128)
+      .split('\n')
+      .find((line) => line.trim() && !line.startsWith('[truncated'));
+    receipts.set(
+      item.callId,
+      `- ${call.toolName}: ${clip(receiptArguments(args), 100)} → ${clip(output ?? '(no output)', 80)}`,
     );
   }
-  return receipts;
+  return [...receipts.values()];
 }
 
-function bytes(value: unknown): number {
-  return Buffer.byteLength(JSON.stringify(value) ?? '');
+const clip = (text: string, max: number): string => {
+  const flat = text.replace(/\s+/g, ' ').trim();
+  return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
+};
+
+/** What the host ran, preferred over the model's description of it. */
+function receiptArguments(args: string): string {
+  try {
+    const parsed = JSON.parse(args) as Record<string, unknown>;
+    for (const key of ['command', 'path', 'file_path', 'url', 'query', 'description'] as const) {
+      if (typeof parsed[key] === 'string') return parsed[key];
+    }
+  } catch {
+    // Not JSON: show it as it came.
+  }
+  return args;
 }
 
 function validateSettings(input: DirectCompactionInput): void {

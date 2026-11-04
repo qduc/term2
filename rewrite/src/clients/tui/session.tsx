@@ -33,6 +33,7 @@ import { ComposerFooter, useComposerFilter } from './composer-parts.js';
 import { SessionPanels } from './session-panels.js';
 import { useSessionRewind } from './session-rewind.js';
 import { useEscapeKey } from './use-escape-key.js';
+import { useInterruptConfirm } from './interrupt-confirm.js';
 import {
   answerInteraction,
   commandStatus,
@@ -184,6 +185,11 @@ export function TuiSession({
     turnInFlight: Boolean(state.activeTurnId),
   });
   const pending = useRef(false);
+  const interruptConfirm = useInterruptConfirm(Boolean(state.activeTurnId), editor.value, () => {
+    void cancelInput(connection, state.activeTurnId ?? undefined).then(setNotice, (error: unknown) =>
+      setNotice(error instanceof Error ? error.message : String(error)),
+    );
+  });
   const togglePlan = usePlanToggle(
     integration,
     connection,
@@ -222,6 +228,15 @@ export function TuiSession({
     if (confirmation.handleKey(input, key)) return;
     if (interactionActive) return void interactionInput.current?.(input, key);
     if (taskOpen || budgetOpen) return;
+    if (
+      composerActive &&
+      key.escape &&
+      !viewport.expanded &&
+      selectedQueueIndex < 0 &&
+      !editing &&
+      interruptConfirm.press()
+    )
+      return;
     if (composerActive && isShiftTab(input, key)) return togglePlan();
     // Legacy use-app-keyboard-shortcuts: Ctrl+O and Ctrl+T replace the draft with the menu command.
     if (composerActive && isCtrlO(input, key)) return replaceInput('/model ');
@@ -477,6 +492,11 @@ export function TuiSession({
         <LiveNotices connectionError={connError} />
         <LiveNotices historyError={editor.historyError} />
         <LiveDivider />
+        {interruptConfirm.interruptConfirmVisible ? (
+          <Box marginBottom={1}>
+            <Text color={theme.warning}>Press Esc again to interrupt</Text>
+          </Box>
+        ) : null}
         <ShellTaskPanel state={state} />
         <PendingQueue
           items={queueItems}

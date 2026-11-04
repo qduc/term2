@@ -228,7 +228,14 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
                 paddingBottom={row.trailingBlank ? 1 : 0}
                 marginTop={row.message?.role === 'user' && index > (header ? 1 : 0) ? 1 : 0}
               >
-                <Transcript state={single} messages={single.messages} columns={columns} live staticRow />
+                <Transcript
+                  state={single}
+                  messages={single.messages}
+                  columns={columns}
+                  live
+                  staticRow
+                  firstRow={index === (header ? 1 : 0)}
+                />
               </Box>
             );
           }}

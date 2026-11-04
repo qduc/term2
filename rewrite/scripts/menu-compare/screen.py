@@ -143,6 +143,8 @@ KEYS = {
     '<right>': '\x1b[C', '<left>': '\x1b[D', '<bs>': '\x7f', '<del>': '\x1b[3~', '<pgup>': '\x1b[5~',
     '<pgdn>': '\x1b[6~', '<home>': '\x1b[H', '<end>': '\x1b[F', '<c-f>': '\x06', '<c-n>': '\x0e',
     '<c-r>': '\x12', '<c-d>': '\x04', '<c-o>': '\x0f', '<c-t>': '\x14', '<c-u>': '\x15', '<c-c>': '\x03',
+    '<a-enter>': '\x1b\r', '<c-g>': '\x07', '<c-b>': '\x02', '<c-a>': '\x01', '<c-e>': '\x05', '<c-k>': '\x0b',
+    '<c-w>': '\x17', '<c-l>': '\x0c', '<c-x>': '\x18', '<c-z>': '\x1a', '<c-p>': '\x10',
 }
 
 
@@ -328,12 +330,22 @@ def menu_region(cap, notice=False):
     return {'lines': lines[start:end], 'styles': cap['styles'][start:end]}
 
 
+def full_region(cap):
+    """The whole screen without trailing blank rows (FULL=1): for output the commands print above the divider."""
+    lines = cap['lines']
+    end = len(lines)
+    while end > 0 and not lines[end - 1].strip():
+        end -= 1
+    return {'lines': lines[:end], 'styles': cap['styles'][:end]}
+
+
 def compare(cols, rows, names):
     results = {}
+    FULL_MODE = bool(os.environ.get('FULL'))
     for name in names:
         notice = SEED.get(name, {}).get('notice', False)
-        a = menu_region(run('legacy', cols, rows, name), notice)
-        b = menu_region(run('next', cols, rows, name), notice)
+        a = full_region(run('legacy', cols, rows, name)) if FULL_MODE else menu_region(run('legacy', cols, rows, name), notice)
+        b = full_region(run('next', cols, rows, name)) if FULL_MODE else menu_region(run('next', cols, rows, name), notice)
         same_text = a['lines'] == b['lines']
         same_style = a['styles'] == b['styles']
         results[name] = {'text': same_text, 'style': same_style, 'legacy': a, 'next': b}

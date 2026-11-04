@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { randomUUID } from 'node:crypto';
 import { Box, Text, useInput } from 'ink';
 import { MultilineInput, type ImageRef } from 'ink-prompt';
@@ -70,7 +70,11 @@ export function TuiSession({
   const [budgetOpen, setBudgetOpen] = useState(false);
   const [selectedQueueId, setSelectedQueueId] = useState<string | null>(null);
   const [queueNotice, setQueueNotice] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(() => interruptedNotice(state));
+  // Legacy's addSystemMessage: every command result and hint is a transcript line, never a live notice.
+  const appendSystem = useRef<(text: string) => void>(() => undefined);
+  const setNotice = useCallback((text: string | null) => {
+    if (text) appendSystem.current(text);
+  }, []);
   const {
     images,
     setImages,
@@ -105,6 +109,11 @@ export function TuiSession({
   const viewport = useCommandTranscriptViewport(state, headerHeight ?? 0, viewportActive, header, historyRevision, {
     transitionNotice,
   });
+  appendSystem.current = (text) => viewport.appendCommandOutput(text, true);
+  useEffect(() => {
+    const interrupted = interruptedNotice(state);
+    if (interrupted) setNotice(interrupted);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const { InputFrame, PromptMarker, LiveDivider } = useSkin();
   const theme = useTheme();
   const [busy, setBusy] = useState(false);
@@ -394,7 +403,7 @@ export function TuiSession({
         </Text>
       ) : null}
       <Box flexDirection="column" paddingX={2} marginTop={viewport.bottomMargin}>
-        <Activity state={state} dialogInteractionId={foregroundInteraction?.id} notice={notice} />
+        <Activity state={state} dialogInteractionId={foregroundInteraction?.id} />
         <SessionPanels
           {...{
             connection,
@@ -417,7 +426,7 @@ export function TuiSession({
         />
         <LiveNotices connectionError={connError} />
         {confirmation.prompt}
-        <LiveNotices notice={notice} historyError={editor.historyError} />
+        <LiveNotices historyError={editor.historyError} />
         {bangResult ? <BangResult result={bangResult} expanded={viewport.expanded} /> : null}
         <LiveDivider />
         <ShellTaskPanel state={state} />

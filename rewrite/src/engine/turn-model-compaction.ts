@@ -4,7 +4,7 @@ import { performance } from 'node:perf_hooks';
 import type { Item, Model, ModelError, ModelEvent, ModelRequest, Usage } from '../model/index.js';
 import type { DirectCompactionResult, DirectCompactionRequest } from './direct-recovery-compaction.js';
 import { compactDirectHistory, estimateDirectContext } from './direct-recovery-compaction.js';
-import type { DirectManualCompactionOutcome, TurnCompactionEvent, TurnDeps, TurnSpec } from './direct-types.js';
+import type { TurnCompactionEvent, TurnDeps, TurnSpec } from './direct-types.js';
 import { NativeBudgetExhausted, type TurnBudgetControl } from './turn-budget.js';
 import { TurnEvents, cancelled } from './turn-events.js';
 

@@ -2,13 +2,12 @@
 import '../../../source/env-setup.js';
 
 import { readdir } from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
 import { stdin, stdout, stderr } from 'node:process';
 import { homedir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import envPaths from 'env-paths';
 import { getAllProviders, getProviderIds } from '../../../source/providers/index.js';
+import { installationVersion } from '../../../source/providers/fetch/logging-middleware.js';
 import { LoggingService } from '../../../source/services/logging/logging-service.js';
 import {
   VALID_REASONING_EFFORTS,
@@ -57,24 +56,6 @@ const errorMessage = (error: unknown): string => (error instanceof Error ? error
 
 function refused(refusal: Refusal): Error {
   return new Error(`${refusal.flag} is not available in the direct executable yet: ${refusal.reason}.`);
-}
-
-function packageVersion(): string {
-  let directory = path.dirname(fileURLToPath(import.meta.url));
-  for (;;) {
-    try {
-      const manifest = JSON.parse(readFileSync(path.join(directory, 'package.json'), 'utf8')) as {
-        name?: unknown;
-        version?: unknown;
-      };
-      if (manifest.name === '@qduc/term2' && typeof manifest.version === 'string') return manifest.version;
-    } catch {
-      // Keep searching parent directories; the built CLI is nested under rewrite/dist.
-    }
-    const parent = path.dirname(directory);
-    if (parent === directory) return 'unknown';
-    directory = parent;
-  }
 }
 
 /**
@@ -402,7 +383,7 @@ async function main(argv: readonly string[]): Promise<number> {
       stdout.write(HELP);
       return 0;
     case 'version':
-      stdout.write(`${packageVersion()}\n`);
+      stdout.write(`${installationVersion}\n`);
       return 0;
     case 'discord-help':
       stdout.write(DISCORD_HELP);

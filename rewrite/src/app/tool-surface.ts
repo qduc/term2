@@ -27,6 +27,7 @@ import { createDirectSubagentTools } from './direct-subagent-tools.js';
 import { createDirectShellTools } from './direct-shell-tools.js';
 import { createSourceToolRegistry, executeSourceChild, sourceToolSpec } from './source-tools.js';
 import type { AgentSurface, ProfileSelection, ToolSurfaceOptions } from './tool-contract.js';
+import { SSH_LOCAL_ONLY_TOOLS } from './direct-remote-tools.js';
 
 type ToolInterceptor = Parameters<Parameters<typeof installPlanModeInterceptor>[0]['addToolInterceptor']>[0];
 
@@ -104,7 +105,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     },
     withAnswer: (answer, operation) => answers.run(answer, operation),
     targetInvocation,
-    remoteUnavailable: REMOTE_UNAVAILABLE,
+    remoteUnavailable: SSH_LOCAL_ONLY_TOOLS,
   });
   const shell = createDirectShellTools();
   const allowBackgroundShell = options.interactive === true && !remote;
@@ -163,7 +164,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     { selection: modelSelection, reasoningEffort: settings.get('agent.reasoningEffort') },
     deps,
   );
-  const offered = remote ? agent.tools.filter((tool) => !REMOTE_UNAVAILABLE.has(tool.name)) : agent.tools;
+  const offered = remote ? agent.tools.filter((tool) => !SSH_LOCAL_ONLY_TOOLS.has(tool.name)) : agent.tools;
   const registry = createSourceToolRegistry(offered, {
     policies,
     settings,
@@ -278,14 +279,6 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     },
   };
 }
-
-const REMOTE_UNAVAILABLE = new Set([
-  'read_code_outline',
-  'code_context_search',
-  'enter_worktree',
-  'exit_worktree',
-  'activate_skill',
-]);
 
 /** Snapshot authority before building tools; an SSH adapter must match a current grant exactly. */
 function surfaceWorkspace(workspace: Workspace | undefined, remote: ToolSurfaceOptions['remote']): Workspace {

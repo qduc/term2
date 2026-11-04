@@ -23,6 +23,7 @@ import type {
   DirectOAuthBackend,
   DirectProviderBackend,
 } from './direct-host-config-settings.js';
+import { CREDENTIAL_SETTINGS } from './credential-settings.js';
 
 const errorMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
@@ -87,14 +88,6 @@ export async function runListModelsCommand(search: string | null, refresh: boole
   return outcome.exitCode;
 }
 
-const CREDENTIALS: Record<string, { settingKey: string; required: boolean }> = {
-  openai: { settingKey: 'agent.openai.apiKey', required: true },
-  openrouter: { settingKey: 'agent.openrouter.apiKey', required: true },
-  tavily: { settingKey: 'webSearch.tavily.apiKey', required: true },
-  exa: { settingKey: 'webSearch.exa.apiKey', required: true },
-  firecrawl: { settingKey: 'webSearch.firecrawl.apiKey', required: true },
-};
-
 const silentLog: ILoggingService = {
   info() {},
   warn() {},
@@ -153,7 +146,7 @@ export function createDirectAccountPorts(service: ProductSettings): {
 type ProductSettings = ReturnType<typeof createAppSettings>['service'];
 
 function describeCredential(service: ProductSettings, providerId: string): CredentialDescription {
-  const definition = CREDENTIALS[providerId];
+  const definition = CREDENTIAL_SETTINGS[providerId];
   const source = definition ? service.getSource(definition.settingKey) : undefined;
   if (source === 'env' || String(source) === 'environment')
     return { configured: true, required: definition?.required ?? false, source: 'environment' };

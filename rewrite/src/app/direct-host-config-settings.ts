@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { SettingsProjection } from '../host/server-contracts.js';
 import { DirectHostConfigError } from './direct-host-config-error.js';
+import { CREDENTIAL_SETTINGS } from './credential-settings.js';
 
 const SAFE_KEYS = [
   'agent.modelSelection',
@@ -39,13 +40,6 @@ const SESSION_SCOPED = new Set([
   'app.planMode',
   'app.orchestratorMode',
 ]);
-const CREDENTIALS: Record<string, { settingKey: string; providerId: string; required: boolean }> = {
-  openai: { settingKey: 'agent.openai.apiKey', providerId: 'openai', required: true },
-  openrouter: { settingKey: 'agent.openrouter.apiKey', providerId: 'openrouter', required: true },
-  tavily: { settingKey: 'webSearch.tavily.apiKey', providerId: 'tavily', required: true },
-  exa: { settingKey: 'webSearch.exa.apiKey', providerId: 'exa', required: true },
-  firecrawl: { settingKey: 'webSearch.firecrawl.apiKey', providerId: 'firecrawl', required: true },
-};
 
 export type CredentialSource = 'setting' | 'stored' | 'environment' | 'token-file' | 'local' | 'external' | 'missing';
 export type SecretFreeCredential = {
@@ -132,27 +126,27 @@ export class DirectGlobalConfiguration {
   }
 
   async setCredential(id: string, value: string): Promise<{ status: 'saved'; configured: boolean; source: string }> {
-    const definition = CREDENTIALS[id];
+    const definition = CREDENTIAL_SETTINGS[id];
     if (!definition || typeof value !== 'string' || value.length === 0)
       throw new DirectHostConfigError('settings_not_allowed', 'config');
-    const before = this.#credential(definition.providerId, definition.required);
+    const before = this.#credential(id, definition.required);
     if (before.source === 'environment') throw new DirectHostConfigError('settings_not_allowed', 'config');
     const result = this.settings.setPersistent(definition.settingKey, value);
     if (result?.status !== 'saved') throw new DirectHostConfigError('not_persisted', 'config');
-    const after = this.#credential(definition.providerId, definition.required);
+    const after = this.#credential(id, definition.required);
     return { status: 'saved', configured: after.configured, source: after.source };
   }
 
   async deleteCredential(
     id: string,
   ): Promise<{ status: 'deleted' | 'unchanged'; configured: boolean; source?: 'environment' }> {
-    const definition = CREDENTIALS[id];
+    const definition = CREDENTIAL_SETTINGS[id];
     if (!definition) throw new DirectHostConfigError('settings_not_allowed', 'config');
-    const before = this.#credential(definition.providerId, definition.required);
+    const before = this.#credential(id, definition.required);
     if (before.source === 'environment') return { status: 'unchanged', configured: true, source: 'environment' };
     const result = this.settings.reset(definition.settingKey);
     if (result?.status !== 'saved') throw new DirectHostConfigError('not_persisted', 'config');
-    const after = this.#credential(definition.providerId, definition.required);
+    const after = this.#credential(id, definition.required);
     return {
       status: 'deleted',
       configured: after.configured,
@@ -247,8 +241,8 @@ export class DirectGlobalConfiguration {
       };
     }
     const credentials: Record<string, SecretFreeCredential> = {};
-    for (const [id, definition] of Object.entries(CREDENTIALS))
-      credentials[id] = this.#credential(definition.providerId, definition.required);
+    for (const [id, definition] of Object.entries(CREDENTIAL_SETTINGS))
+      credentials[id] = this.#credential(id, definition.required);
     let providers: SettingsProjection['settings']['providers'];
     try {
       providers = this.providers.list().map((provider) => ({

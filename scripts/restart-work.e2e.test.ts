@@ -8,7 +8,12 @@ import { join, resolve } from 'node:path';
 import { expect, it } from 'vitest';
 import { createConversationLogWriter } from '../source/services/logging/conversation-log-writer.js';
 import { listControlAdvertisements } from '../source/services/control-socket/control-socket.js';
-import { createIsolatedWorkspaceLease, writePtyTextAndSubmit } from './provider-black-box/provider-test-harness.js';
+import {
+  HANG_BACKSTOP_MS,
+  READINESS_TIMEOUT_MS,
+  createIsolatedWorkspaceLease,
+  writePtyTextAndSubmit,
+} from './provider-black-box/provider-test-harness.js';
 
 const productionEnv = {
   NODE_ENV: 'production',
@@ -179,7 +184,7 @@ it
       if (mode === 'foreground' || mode === 'background') {
         const idle = child.readIdleGeneration();
         await writePtyTextAndSubmit(child, 'start owned work');
-        await expect.poll(() => requests, { timeout: 5000 }).toBeGreaterThan(0);
+        await expect.poll(() => requests, { timeout: READINESS_TIMEOUT_MS }).toBeGreaterThan(0);
         if (mode === 'foreground') {
           await writePtyTextAndSubmit(child, '/restart stop');
           await child.waitForVisibleOutput('Finish or stop the current foreground operation');
@@ -233,7 +238,7 @@ it
           await child.waitForState(
             (snapshot) => snapshot.visibleOutput.split('Resumed conversation:').length > resumedCount,
           );
-          await expect.poll(() => child.readComposerRevision(), { timeout: 5000 }).toBe(1);
+          await expect.poll(() => child.readComposerRevision(), { timeout: READINESS_TIMEOUT_MS }).toBe(1);
           expect(await pending()).toEqual(before);
           expect(
             JSON.parse(await readFile(join(workspace.paths.conversationsDir, `${seedId}.queue.json`), 'utf8')).queue,
@@ -241,7 +246,8 @@ it
         }
         expect(requests).toBe(0);
       }
-      if (mode === 'background') await expect.poll(() => child.readComposerRevision(), { timeout: 5000 }).toBe(1);
+      if (mode === 'background')
+        await expect.poll(() => child.readComposerRevision(), { timeout: READINESS_TIMEOUT_MS }).toBe(1);
       if (mode === 'foreground' || mode === 'background') {
         await writePtyTextAndSubmit(child, '/quit');
         await child.waitForExit();
@@ -252,5 +258,5 @@ it
       await new Promise<void>((done, reject) => server.close((error) => (error ? reject(error) : done())));
     }
   },
-  45_000,
+  HANG_BACKSTOP_MS,
 );

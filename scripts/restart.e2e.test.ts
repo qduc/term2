@@ -4,7 +4,12 @@ import { join, resolve, relative } from 'node:path';
 import ts from 'typescript';
 import { expect, it } from 'vitest';
 import { listControlAdvertisements } from '../source/services/control-socket/control-socket.js';
-import { createIsolatedWorkspaceLease, writePtyTextAndSubmit } from './provider-black-box/provider-test-harness.js';
+import {
+  HANG_BACKSTOP_MS,
+  READINESS_TIMEOUT_MS,
+  createIsolatedWorkspaceLease,
+  writePtyTextAndSubmit,
+} from './provider-black-box/provider-test-harness.js';
 
 /** Patch only private fixture output, refusing stale/no-op fault stimuli. */
 async function patchFixtureModule(file: string, before: string, after: string): Promise<void> {
@@ -169,7 +174,7 @@ export default function register(term2) { for (const type of ['session.start', '
         .poll(
           async () =>
             JSON.parse(await readFile(join(workspace.paths.logDir, 'settings.json'), 'utf8')).shell?.autoApproveMode,
-          { timeout: 5000 },
+          { timeout: READINESS_TIMEOUT_MS },
         )
         .toBe('advisory');
       await writePtyTextAndSubmit(child, '/sandbox');
@@ -191,7 +196,7 @@ export default function register(term2) { for (const type of ['session.start', '
       if (process.env.TERM2_TEST_CLI) {
         // Direct revisions are real raw-render offsets, not the source's reset counter.
         await child.waitForComposerValue('', { afterRevision: child.getOutput().lastIndexOf('Resumed conversation:') });
-      } else await expect.poll(() => child.readComposerRevision(), { timeout: 5000 }).toBe(1);
+      } else await expect.poll(() => child.readComposerRevision(), { timeout: READINESS_TIMEOUT_MS }).toBe(1);
       expect(await identity()).toEqual(before);
       expect(await activeLeaf()).toBe(original);
       await writePtyTextAndSubmit(child, '/help');
@@ -203,7 +208,7 @@ export default function register(term2) { for (const type of ['session.start', '
       await child.waitForIdleInput({ after: turnIdle });
       await writePtyTextAndSubmit(child, '/clear');
       if (!process.env.TERM2_TEST_CLI) await child.waitForVisibleOutput('Welcome to term²!');
-      await expect.poll(activeLeaf, { timeout: 5000 }).not.toBe(original);
+      await expect.poll(activeLeaf, { timeout: READINESS_TIMEOUT_MS }).not.toBe(original);
       const latest = await activeLeaf();
       expect(latest).not.toBe(original);
       const emptyLeaf = await readFile(join(workspace.paths.conversationsDir, `${latest}.jsonl`), 'utf8');
@@ -223,7 +228,7 @@ export default function register(term2) { for (const type of ['session.start', '
       // A functional command is also an input/raw-mode check after the second exec.
       if (process.env.TERM2_TEST_CLI)
         await child.waitForComposerValue('', { afterRevision: child.getOutput().lastIndexOf('Resumed conversation:') });
-      else await expect.poll(() => child.readComposerRevision(), { timeout: 5000 }).toBe(1);
+      else await expect.poll(() => child.readComposerRevision(), { timeout: READINESS_TIMEOUT_MS }).toBe(1);
       const helpOutputOffset = child.getVisibleOutput().length;
       const beforeHelpRevision = child.readComposerRevision();
       await writePtyTextAndSubmit(child, '/help');
@@ -283,7 +288,7 @@ export default function register(term2) { for (const type of ['session.start', '
       await new Promise<void>((done, reject) => server.close((error) => (error ? reject(error) : done())));
     }
   },
-  60_000,
+  HANG_BACKSTOP_MS,
 );
 
 it.each(['runner', 'missing-entry', 'cleanup', 'lock', 'writer-close', 'native-exec'] as const)(
@@ -404,5 +409,5 @@ it.each(['runner', 'missing-entry', 'cleanup', 'lock', 'writer-close', 'native-e
       await workspace.cleanup();
     }
   },
-  30_000,
+  HANG_BACKSTOP_MS,
 );

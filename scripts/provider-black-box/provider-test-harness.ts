@@ -36,6 +36,10 @@ process.on('exit', () => {
 // duplicates that flake independently.
 export const DEFAULT_TIMEOUT_MS = 40_000;
 const DEFAULT_WRITE_TIMEOUT_MS = 5_000;
+/** Ceiling for readiness waits (composer ack, first request): they track host load, so bound only a real hang. */
+export const READINESS_TIMEOUT_MS = DEFAULT_TIMEOUT_MS;
+/** Per-test budget for multi-step PTY scenarios: several readiness waits in sequence, so it must exceed one ceiling. */
+export const HANG_BACKSTOP_MS = 5 * READINESS_TIMEOUT_MS;
 const DEFAULT_TERMINATE_GRACE_MS = 500;
 const DEFAULT_TERMINATE_TIMEOUT_MS = 2_000;
 const ROOT_REMOVAL_MAX_RETRIES = 5;
@@ -804,7 +808,7 @@ function createPtyChild(options: {
         )}.`,
       );
     },
-    waitForComposerValue: async (value, { afterRevision, timeoutMs = DEFAULT_WRITE_TIMEOUT_MS } = {}) => {
+    waitForComposerValue: async (value, { afterRevision, timeoutMs = READINESS_TIMEOUT_MS } = {}) => {
       if (!idlePath) {
         throw new Error(`${HARNESS_IDLE_ENV} is required to wait for composer input.`);
       }
@@ -853,7 +857,7 @@ export async function writePtyTextAndSubmit(
 ): Promise<void> {
   const afterRevision = child.readComposerRevision();
   await child.write(text, timeoutMs);
-  await child.waitForComposerValue(text, { afterRevision, timeoutMs });
+  await child.waitForComposerValue(text, { afterRevision });
   await child.write('\r', timeoutMs);
 }
 

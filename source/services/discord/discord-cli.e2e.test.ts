@@ -10,6 +10,8 @@ import { spawn } from 'node:child_process';
 import { ControlSocketServer } from '../control-socket/control-socket.js';
 import { sendDiscord } from './discord-outbound.js';
 
+// Cold start of the built CLI tracks host load; bound only a real hang. The test budget below must exceed one wait.
+const READINESS_MS = 40_000;
 const cleanup: Array<() => void | Promise<void>> = [];
 afterEach(async () => {
   for (const close of cleanup.splice(0).reverse()) await close();
@@ -134,9 +136,9 @@ it.each(
     }
     const artifacts = () => fs.readdirSync(path.join(runtime, 'term2-discord')).sort();
     const first = launch();
-    await expect.poll(() => gets, { timeout: 5000 }).toBeGreaterThan(0);
+    await expect.poll(() => gets, { timeout: READINESS_MS }).toBeGreaterThan(0);
     if (boundary.startsWith('post-')) {
-      await expect.poll(() => journal().cursor, { timeout: 5000 }).toBe('10');
+      await expect.poll(() => journal().cursor, { timeout: READINESS_MS }).toBe('10');
       expect(
         await sendDiscord(runtime, coordinator.binding, {
           action: 'send',
@@ -144,10 +146,10 @@ it.each(
           text: 'one offline notification',
         }),
       ).toMatchObject({ delivery: 'queued' });
-      await expect.poll(() => posts.length, { timeout: 5000 }).toBe(1);
+      await expect.poll(() => posts.length, { timeout: READINESS_MS }).toBe(1);
       expect(journal().outbox.map((row: { state: string }) => row.state)).toEqual(['sending']);
     } else {
-      await expect.poll(() => held, { timeout: 5000 }).toBeDefined();
+      await expect.poll(() => held, { timeout: READINESS_MS }).toBeDefined();
     }
     expect(fs.existsSync(owner)).toBe(true);
     expect(artifacts()).toHaveLength(2);
@@ -193,7 +195,7 @@ it.each(
     server.closeAllConnections();
     const before = gets;
     const second = launch();
-    await expect.poll(() => gets, { timeout: 5000 }).toBeGreaterThan(before + 1);
+    await expect.poll(() => gets, { timeout: READINESS_MS }).toBeGreaterThan(before + 1);
     if (boundary.startsWith('post-')) {
       expect(
         await sendDiscord(runtime, coordinator.binding, {
@@ -206,7 +208,7 @@ it.each(
       expect(posts).toHaveLength(1);
     }
     second.child.kill(signal);
-    await expect.poll(() => second.child.exitCode, { timeout: 5000 }).toBe(code);
+    await expect.poll(() => second.child.exitCode, { timeout: READINESS_MS }).toBe(code);
     expect(await second.exited).toEqual([code, null]);
     expect(fs.existsSync(owner)).toBe(false);
     expect(artifacts()).toEqual([]);
@@ -216,5 +218,5 @@ it.each(
       expect(run.output()).not.toContain('Token usage:');
     }
   },
-  30_000,
+  5 * READINESS_MS,
 );

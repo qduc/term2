@@ -119,9 +119,9 @@ it(
       session!.write('\r');
     };
     await send('/compact');
-    await session.waitForOutput('Nothing to compact yet.', 30_000);
+    await session.waitForOutput('Nothing to compact: at least one complete cold turn is required.', 30_000);
     const failureFrame = session.getVisibleOutput().slice(session.getVisibleOutput().lastIndexOf('▌ term²'));
-    expect(failureFrame).toContain('Nothing to compact yet.');
+    expect(failureFrame).toContain('Nothing to compact: at least one complete cold turn is required.');
     expect(failureFrame).not.toContain('no_complete_cold_turn');
     expect(failureFrame).not.toContain('· compact · rejected');
     // The failure notice can render before the compact command releases input ownership.
@@ -136,7 +136,7 @@ it(
     idle = await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
     const beforeShortCompact = session.getVisibleOutput().length;
     await send('/compact');
-    await session.waitForOutput('Nothing to compact yet.', 30_000);
+    await session.waitForOutput('Nothing to compact: at least one complete cold turn is required.', 30_000);
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
     await new Promise((resolve) => setTimeout(resolve, 2100));
     await send('third');

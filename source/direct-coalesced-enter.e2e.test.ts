@@ -463,7 +463,7 @@ it.skipIf(process.platform !== 'linux')(
     session!.write('-EDITED');
     await until(() => composer(idlePath)?.includes('-EDITED') === true, 'edited request with pasted image');
     session!.write('\r');
-    await session!.waitForOutput('Queued message updated.', 30_000);
+    // Legacy saves a queued edit without a notice; the emptied composer below marks it saved.
     expect(session!.getVisibleOutput()).not.toContain('QUEUE_SKILL_SENTINEL');
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
     await new Promise((resolve) => setTimeout(resolve, 500));

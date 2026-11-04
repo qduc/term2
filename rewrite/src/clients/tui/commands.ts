@@ -225,18 +225,25 @@ function directCommandNotice(result: NativeReceiptResult): string {
 }
 
 /** Handle direct slash operations without treating a pending receipt as success. */
-export async function directSlashCommand(connection: TuiConnection, input: string): Promise<string | null> {
+export async function directSlashCommand(
+  connection: TuiConnection,
+  input: string,
+  notice: (text: string) => void,
+): Promise<string | null> {
   const commandId = randomUUID();
   switch (input.trim()) {
     case '/compact': {
+      // Legacy compact-command.ts announces at once, then adds the outcome as a second line.
+      notice('Compacting context...');
       const result = await sendNativeCommand(connection, { type: 'compact', commandId });
       if (result.kind === 'finished' && result.receipt.outcome?.kind === 'compacted') return 'Compaction complete.';
       if (result.kind === 'rejected' || result.kind === 'error') {
         const outcome = result.receipt?.outcome;
         const message = outcome?.kind === 'rejected' ? outcome.message : result.message.replace(/^[a-z_]+: /, '');
+        // Legacy manual-compaction.ts's texts.
         return message === 'Compaction did not replace history: no_complete_cold_turn.'
-          ? 'Nothing to compact yet.'
-          : `Compaction failed: ${message}`;
+          ? 'Nothing to compact: at least one complete cold turn is required.'
+          : `Context compaction failed: ${message}`;
       }
       return receiptNotice(result);
     }

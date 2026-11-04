@@ -63,6 +63,13 @@ output, both over injection to paint + 100 ms. Every sample starts from the empt
 key whose expected change never paints within 5 s is a miss, and the screen at the timeout is kept for the
 report. Separately, **store timings** record startup and the first and second `/resume` until the list paints.
 
+**One timeout: 5 s** (`PAINT_TIMEOUT_MS`). Every expected screen (a key's paint, the resume list, a walk step)
+either appears within 5 s or fails; the harness never waits longer to find out how slow it was. A failure must
+not leak into later samples, so when a CLI no longer gets back to the empty composer (a frozen UI that may still
+paint later), the harness replaces it with a fresh CLI on the same home and store copy and goes on. A resume list
+that does not paint fails all of that phase's resume-list keys without sending them. Startup alone may take a
+minute: it is reported, not gated.
+
 **Walk** (`lib/walk.mjs`). The same 30 steps for both CLIs: startup, a markdown turn, a tool call, an approval
 prompt and approval, the slash and path menus, `/model`, `/settings`, Ctrl+O, Shift+Tab, `/help`, `/resume`
 with a preview, a resize and back, the Ctrl+C confirmation, and exit. Before each screenshot, cells matching the
@@ -98,3 +105,6 @@ agent), and a small command for a context-free agent to type, read screens, take
   starts another reply and reopens the menu.
 - term2-next truncates resume rows at 80 columns before their message count, so "N msgs" alone never matches
   there; the list predicate also accepts its Preview pane. A first full run waited 30 minutes on this.
+- term2-next builds its catalogue on the first `/resume` of a fresh store copy and does not answer keys meanwhile
+  (153 s on the 420 MB store at 100x34 in the first full run). Under the 5 s rule that is a failure plus a CLI
+  restart; the restarted CLI may rebuild, so later resume-list keys can fail too.

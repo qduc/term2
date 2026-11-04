@@ -133,8 +133,12 @@ export const COMPOSER_READY = `${PRELUDE} return sep >= 0 && /❯/.test(composer
  * Home: the composer is empty and nothing is open. term2-next draws menus and dialogs as a box that closes right
  * above the separator (a resume list can be taller than half the screen); legacy draws them below it.
  */
-export const AT_HOME = `${PRELUDE}
+export const DIALOG_OPEN = `
+  // term2-next draws dialogs right above the separator (the nearest non-blank row is the box's bottom edge; a
+  // markdown code box in the transcript has text after it); legacy draws menus below it.
+  let above = sep - 1;
+  while (above >= 0 && !lines[above].trim()) above--;
+  const dialogOpen = sep >= 0 && ((above >= 0 && /^\\s*╰/.test(lines[above])) || lines.slice(sep + 1).some((l) => /^\\s*[╭╰]|Filter:/.test(l)));`;
+export const AT_HOME = `${PRELUDE}${DIALOG_OPEN}
   if (sep < 0 || !/^\\s*❯\\s*$/.test(composer)) return false;
-  for (let i = Math.max(0, sep - 3); i < sep; i++) if (/^\\s*╰/.test(lines[i])) return false;
-  for (let i = sep + 1; i < lines.length; i++) if (/^\\s*[╭╰]|Filter:/.test(lines[i])) return false;
-  return true;`;
+  return !dialogOpen;`;

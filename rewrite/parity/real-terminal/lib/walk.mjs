@@ -3,8 +3,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { sleep } from './terminal.mjs';
-import { typeText, PRELUDE, COMPOSER_READY, AT_HOME } from './session.mjs';
-import { RESUME_LIST } from './latency.mjs';
+import { typeText, PRELUDE, COMPOSER_READY, AT_HOME, DIALOG_OPEN } from './session.mjs';
+import { RESUME_LIST, PAINT_TIMEOUT_MS } from './latency.mjs';
 
 /**
  * The only things masked before pixels are compared (issue #140): version, ids, paths, ports, durations
@@ -54,8 +54,8 @@ export function walkSteps({ resizeTo }) {
     { name: '20-shift-tab-restored', do: (t) => restoreMode(t), until: READY },
     { name: '21-help', do: (t) => send(t, '/help'), until: null },
     { name: '22-help-closed', do: (t) => escapeHome(t), until: READY },
-    { name: '23-resume-list', do: (t) => send(t, '/resume'), until: RESUME_LIST, timeoutMs: 15 * 60_000 },
-    { name: '24-resume-preview', do: (t) => t.write(KEYS.down), until: /Preview|Initial Prompt|ID: /, timeoutMs: 60_000 },
+    { name: '23-resume-list', do: (t) => send(t, '/resume'), until: RESUME_LIST },
+    { name: '24-resume-preview', do: (t) => t.write(KEYS.down), until: /Preview|Initial Prompt|ID: / },
     { name: '25-resume-closed', do: (t) => escapeHome(t), until: READY },
     { name: '26-resize', resize: resizeTo, until: READY },
     { name: '27-resize-typed', do: (t) => typeText(t, 'typed after resize'), until: 'typed after resize' },
@@ -117,8 +117,14 @@ async function restoreMode(t) {
   t.write(KEYS.shiftTab);
 }
 
-export async function runWalk(session, { outDir, label, originalSize, resizeTo, log = () => {} }) {
-  const { term } = session;
+/**
+ * Every wait is PAINT_TIMEOUT_MS: a screen that has not appeared by then is recorded as timed out and the
+ * screenshot shows what was there. When a step that should end on the empty composer cannot get there (the CLI
+ * stopped answering), `restart` (optional) replaces the CLI so a late paint cannot land in a later step.
+ */
+export async function runWalk(session, { outDir, label, originalSize, resizeTo, log = () => {}, restart = null }) {
+  let term = session.term;
+  let current = session;
   const steps = walkSteps({ resizeTo });
   const shots = [];
   fs.mkdirSync(outDir, { recursive: true });
@@ -132,9 +138,9 @@ export async function runWalk(session, { outDir, label, originalSize, resizeTo, 
       await step.do(term);
     }
     if (step.until) {
-      await term.waitFor(step.until, step.timeoutMs ?? 30_000).catch(() => note.push(`wait timed out: ${String(step.until).slice(0, 80)}`));
+      await term.waitFor(step.until, PAINT_TIMEOUT_MS).catch(() => note.push(`no matching screen within ${PAINT_TIMEOUT_MS} ms`));
     }
-    if (step.then) await term.waitFor(step.then, 30_000).catch(() => note.push('composer did not come back'));
+    if (step.then) await term.waitFor(step.then, PAINT_TIMEOUT_MS).catch(() => note.push('composer did not come back'));
     if (step.exit) await Promise.race([term.exit, sleep(5_000)]);
     await sleep(250);
     await term.quiet(400, 8_000);
@@ -150,6 +156,17 @@ export async function runWalk(session, { outDir, label, originalSize, resizeTo, 
       size: [term.cols, term.rows],
     });
     log(`  ${step.name}${note.length ? ` (${note.join('; ')})` : ''}`);
+    // A step meant to end on the composer that still shows a dialog: the CLI ignored the keys that close it
+    // (term2-next's "Loading conversations…" box sits above an empty composer). The composer row alone does not
+    // show this, and a blank or partly drawn screen is a finding to keep, not a reason to restart.
+    const meantHome = step.until === READY || step.then === READY;
+    const dialog = async () => term.page.evaluate(new Function(`const lines = window.screenLines(); ${PRELUDE}${DIALOG_OPEN} return dialogOpen;`));
+    if (restart && meantHome && !step.exit && (await dialog())) {
+      log(`  ${step.name}: CLI not back at the composer, restarting it`);
+      current = await restart(current);
+      term = current.term;
+      if (step.name !== '01-startup') shots.at(-1).note.push('CLI restarted after this step');
+    }
   }
   return shots;
 }

@@ -45,8 +45,16 @@ async function tailOf(term) {
   return term.page.evaluate(new Function(`const lines = window.screenLines(); ${PRELUDE} return tail();`));
 }
 
-export async function runLatency(session, { phase, samples = {}, log = () => {}, misses = [] }) {
-  const { term } = session;
+/** How long any expected paint may take. Longer is a failure; waiting longer would only measure how bad. */
+export const PAINT_TIMEOUT_MS = 5_000;
+
+/**
+ * `restart` (optional) replaces a CLI that stopped answering keys with a fresh one on the same home, so a paint
+ * that arrives late cannot land in a later sample. It returns the new session.
+ */
+export async function runLatency(session, { phase, samples = {}, log = () => {}, misses = [], restart = null }) {
+  let current = session;
+  let term = session.term;
   const results = Object.fromEntries(CLASSES.map((name) => [name, []]));
   const n = (name, fallback) => samples[name] ?? fallback;
   const streaming = phase === 'streaming';
@@ -60,15 +68,15 @@ export async function runLatency(session, { phase, samples = {}, log = () => {},
   let openMenu = null; // the slash menu openSlash opened, while it is open
   const ensureStream = async () => {
     if (!streaming) return;
-    if (session.provider.activeStreams() > 0) return;
+    if (current.provider.activeStreams() > 0) return;
     // Never type the prompt into an open menu (its filter would take it): back to the empty composer first.
     await ensureHome();
     await typeText(term, 'stream a long reply please');
     await sleep(80);
     term.write(KEYS.enter);
     const started = Date.now();
-    while (session.provider.activeStreams() === 0 && Date.now() - started < 15_000) await sleep(20);
-    await term.waitFor(STREAM_ROW, 15_000);
+    while (current.provider.activeStreams() === 0 && Date.now() - started < PAINT_TIMEOUT_MS) await sleep(20);
+    await term.waitFor(STREAM_ROW, PAINT_TIMEOUT_MS);
     await sleep(300);
   };
 
@@ -84,16 +92,28 @@ export async function runLatency(session, { phase, samples = {}, log = () => {},
         await settle();
       }
     }
+    // Still not home: the CLI stopped answering (a frozen UI). Replace it so a late paint cannot land in a
+    // later sample.
+    if (restart && !(await atHome())) {
+      log('  CLI not answering keys, restarting it');
+      openMenu = null;
+      current = await restart(current);
+      term = current.term;
+    }
+  };
+  const recover = async () => {
+    openMenu = null;
+    await ensureHome();
   };
 
-  const measure = async (name, key, predicate, timeoutMs = 5_000, { typed = false } = {}) => {
-    if (streaming && openMenu && session.provider.activeStreams() === 0) {
+  const measure = async (name, key, predicate, timeoutMs = PAINT_TIMEOUT_MS, { typed = false } = {}) => {
+    if (streaming && openMenu && current.provider.activeStreams() === 0) {
       // The reply ended while a menu is open: close it, start another reply, reopen the same menu.
       const command = openMenu;
       await closeMenu();
       await ensureStream();
       await openSlash(command);
-      if (command === '/resume') await term.waitFor(RESUME_LIST, 30_000).catch(() => {});
+      if (command === '/resume') await term.waitFor(RESUME_LIST, PAINT_TIMEOUT_MS).catch(() => {});
       await settle();
     }
     // With a command already typed, restarting the reply would clear it; the caller started one just before.
@@ -110,7 +130,7 @@ export async function runLatency(session, { phase, samples = {}, log = () => {},
       parseMs: result.parseMs,
       cpuMs: treeCpuMs(term.pid) - cpu0,
       bytes: term.bytes - bytes0,
-      streaming: streaming && session.provider.activeStreams() > 0,
+      streaming: streaming && current.provider.activeStreams() > 0,
     };
     results[name].push(sample);
     if (!result.ok) {
@@ -161,12 +181,12 @@ export async function runLatency(session, { phase, samples = {}, log = () => {},
     let typed = prefix;
     for (const ch of letters) {
       typed += ch;
-      await measure('type char', ch, composerHas(typed), 5_000, { typed: true });
+      await measure('type char', ch, composerHas(typed), PAINT_TIMEOUT_MS, { typed: true });
       await settle();
     }
     for (let i = letters.length - 1; i >= 0; i--) {
       const kept = typed.slice(0, -1);
-      await measure('backspace', KEYS.backspace, backspaced(kept, typed.at(-1)), 5_000, { typed: true });
+      await measure('backspace', KEYS.backspace, backspaced(kept, typed.at(-1)), PAINT_TIMEOUT_MS, { typed: true });
       typed = kept;
       await settle();
     }
@@ -182,7 +202,7 @@ export async function runLatency(session, { phase, samples = {}, log = () => {},
     await typeText(term, text);
     await term.waitFor(composerHas(text), 5_000).catch(() => log(`  prompt ${text} did not appear`));
     await settle();
-    await measure('enter (composer)', KEYS.enter, composerLacks(text), 5_000, { typed: true });
+    await measure('enter (composer)', KEYS.enter, composerLacks(text), PAINT_TIMEOUT_MS, { typed: true });
     if (streaming) {
       await settle();
     } else {
@@ -206,18 +226,29 @@ export async function runLatency(session, { phase, samples = {}, log = () => {},
   // first open's load time is reported by measureStoreTimings, not here.
   await ensureStream();
   await openSlash('/resume');
-  // While a reply streams the CLI may refuse or defer /resume; measure whatever it shows after 30 s.
-  await term.waitFor(RESUME_LIST, streaming ? 30_000 : 15 * 60_000).catch(() => log('  resume list did not render'));
-  await settle();
-  for (let i = 0; i < n('arrow (resume menu)', 20); i++) {
-    await measure('arrow (resume menu)', i % 4 < 2 ? KEYS.down : KEYS.up, TAIL_CHANGED);
+  // A list that has not painted within the timeout fails every resume-list key (legacy does not open it while a
+  // reply streams): they are recorded as misses without being sent, and the CLI is recovered.
+  const listed = await term.waitFor(RESUME_LIST, PAINT_TIMEOUT_MS).then(() => true, () => false);
+  if (listed) {
     await settle();
+    for (let i = 0; i < n('arrow (resume menu)', 20); i++) {
+      await measure('arrow (resume menu)', i % 4 < 2 ? KEYS.down : KEYS.up, TAIL_CHANGED);
+      await settle();
+    }
+    for (let i = 0; i < n('scroll (resume page down/up)', 10); i++) {
+      await measure('scroll (resume page down/up)', i % 2 === 0 ? KEYS.pageDown : KEYS.pageUp, TAIL_CHANGED);
+      await settle();
+    }
+    await closeMenu();
+  } else {
+    log(`  resume list did not render within ${PAINT_TIMEOUT_MS} ms`);
+    const screen = await term.screenText();
+    for (const [name, count] of [['arrow (resume menu)', n('arrow (resume menu)', 20)], ['scroll (resume page down/up)', n('scroll (resume page down/up)', 10)]]) {
+      for (let i = 0; i < count; i++) results[name].push({ ok: false, pre: false, ms: null, unsent: true, streaming });
+      misses.push({ phase, name, index: 0, screen: `(list not painted within ${PAINT_TIMEOUT_MS} ms; ${count} keys not sent)\n${screen}` });
+    }
+    await recover();
   }
-  for (let i = 0; i < n('scroll (resume page down/up)', 10); i++) {
-    await measure('scroll (resume page down/up)', i % 2 === 0 ? KEYS.pageDown : KEYS.pageUp, TAIL_CHANGED);
-    await settle();
-  }
-  await closeMenu();
   log(`  resume menu done`);
 
   // --- Ctrl+O and Shift+Tab: whatever each CLI paints in response; restored after each sample.
@@ -254,7 +285,7 @@ export async function runLatency(session, { phase, samples = {}, log = () => {},
       await term.waitFor(composerHas(command), 5_000).catch(() => {});
       await sleep(200);
       await settle();
-      await measure(name, KEYS.enter, TAIL_CHANGED, 5_000, { typed: true });
+      await measure(name, KEYS.enter, TAIL_CHANGED, PAINT_TIMEOUT_MS, { typed: true });
       await settle();
       await sleep(200);
       await closeMenu();
@@ -274,7 +305,7 @@ export const RESUME_LIST = /\d+ msgs?\b|❯ [^\n]+\bPreview\b/;
  * Time from Enter on `/resume` to the first paint of the session list, twice (the first open may build an index),
  * plus whether keys were answered while it loaded. Run right after startup, before anything else.
  */
-export async function measureStoreTimings(session, { timeoutMs = 15 * 60_000 } = {}) {
+export async function measureStoreTimings(session, { timeoutMs = PAINT_TIMEOUT_MS } = {}) {
   const { term } = session;
   const out = {};
   for (const label of ['firstResumeMs', 'secondResumeMs']) {
@@ -285,6 +316,13 @@ export async function measureStoreTimings(session, { timeoutMs = 15 * 60_000 } =
     const listed = `fn:return lines.join('\\n') !== base && /Resume Conversation/.test(lines.join('\\n')) && ${RESUME_LIST}.test(lines.join('\\n'));`;
     const result = await term.measureKey('\r', listed, timeoutMs, 'fn:return lines.join("\\n");');
     out[label] = result.ok ? result.ms : null;
+    if (!result.ok) {
+      // Over the timeout is a failure. Leave the CLI to the caller to replace (`needsRestart`): it may still be
+      // loading, and a list that paints later would land in the next measurement.
+      out.failed = `${label === 'firstResumeMs' ? 'first' : 'second'} /resume: no list within ${timeoutMs} ms`;
+      out.needsRestart = true;
+      break;
+    }
     await sleep(300);
     // Escape until home is verified: never type the next command into a list that is still open (Enter there
     // resumes a session).
@@ -297,6 +335,8 @@ export async function measureStoreTimings(session, { timeoutMs = 15 * 60_000 } =
     if (!home) throw new Error('resume list did not close after 5 Escapes');
     await term.quiet(300, 5_000);
   }
+  // After a failed first open the second is not a cached reopen; it is not measured.
+  out.secondResumeMs ??= null;
   return out;
 }
 

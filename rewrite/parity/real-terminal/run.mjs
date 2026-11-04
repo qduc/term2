@@ -63,7 +63,7 @@ if (!values['skip-build']) {
 
 const { startStage, calibrate, TRANSPORT, xtermVersion } = await import('./lib/terminal.mjs');
 const { startCli, resolveStore } = await import('./lib/session.mjs');
-const { runLatency, measureStoreTimings, summarize, gate, CLASSES } = await import('./lib/latency.mjs');
+const { runLatency, measureStoreTimings, summarize, gate, CLASSES, PAINT_TIMEOUT_MS } = await import('./lib/latency.mjs');
 const { runWalk, MASKS } = await import('./lib/walk.mjs');
 const { diffImages, textDiff, writeReport } = await import('./lib/report.mjs');
 
@@ -164,18 +164,32 @@ try {
       const restore = workspaceGuard(workspace);
       log(`${which} ${cols}x${rows}: copying store and starting`);
       const started = Date.now();
-      const first = await startCli(stage, { which, scratch, cols, rows, store: store[which], workspace, keep: true });
+      let first = await startCli(stage, { which, scratch, cols, rows, store: store[which], workspace, keep: true });
+      // Replace a CLI that stopped answering with a fresh one on the same home (and store copy), so a paint that
+      // arrives after its 5 s timeout cannot land in a later measurement.
+      const restart = async (stale) => {
+        await stale.close();
+        first = await startCli(stage, { which, scratch, cols, rows, workspace, keep: true, home: stale.home });
+        await first.ready(60_000);
+        return first;
+      };
       try {
-        await first.ready(5 * 60_000);
+        // Startup is not gated (the issue gates keys); the minute is only how long a CLI may take to exist.
+        await first.ready(60_000);
         const startupMs = Date.now() - started;
         if (values.only !== 'walk') {
           log(`${which}: store timings`);
-          sizeResult.store[which] = { startupMs, ...(await measureStoreTimings(first)) };
+          const { needsRestart, ...timings } = await measureStoreTimings(first);
+          sizeResult.store[which] = { startupMs, ...timings };
           log(`${which}: ${JSON.stringify(sizeResult.store[which])}`);
+          if (needsRestart) {
+            log(`${which}: restarting after the failed /resume`);
+            await restart(first);
+          }
           for (const phase of ['idle', 'streaming']) {
             log(`${which}: latency ${phase}`);
             const misses = [];
-            raw[phase][which] = await runLatency(first, { phase, samples, log, misses }).catch((error) => {
+            raw[phase][which] = await runLatency(first, { phase, samples, log, misses, restart }).catch((error) => {
               log(`${which}: latency ${phase} aborted: ${error.message.split('\n')[0]}`);
               sizeResult.errors = [...(sizeResult.errors ?? []), `${which} ${phase}: ${error.message}`];
               return Object.fromEntries(CLASSES.map((c) => [c, []]));
@@ -185,7 +199,7 @@ try {
             first.term.write('\x1b');
             await new Promise((resolve) => setTimeout(resolve, 300));
             first.term.write('\x1b');
-            await first.term.waitFor(/❯/, 60_000).catch(() => {});
+            await first.term.waitFor(/❯/, PAINT_TIMEOUT_MS).catch(() => {});
             await first.term.quiet(500, 40_000);
           }
         } else {
@@ -196,10 +210,16 @@ try {
       }
       if (values.only !== 'latency') {
         log(`${which}: screenshot walk`);
-        const second = await startCli(stage, { which, scratch, cols, rows, workspace, home: first.home });
+        let second = await startCli(stage, { which, scratch, cols, rows, workspace, home: first.home, keep: true });
+        const restartWalk = async (stale) => {
+          await stale.close();
+          second = await startCli(stage, { which, scratch, cols: stale.term.cols, rows: stale.term.rows, workspace, home: stale.home, keep: true });
+          await second.ready(60_000);
+          return second;
+        };
         try {
-          await second.ready(5 * 60_000);
-          walks[which] = await runWalk(second, { outDir: shotDir, label: which, originalSize: [cols, rows], resizeTo, log }).catch(
+          await second.ready(60_000);
+          walks[which] = await runWalk(second, { outDir: shotDir, label: which, originalSize: [cols, rows], resizeTo, log, restart: restartWalk }).catch(
             (error) => {
               log(`${which}: walk aborted: ${error.message.split('\n')[0]}`);
               sizeResult.errors = [...(sizeResult.errors ?? []), `${which} walk: ${error.message}`];
@@ -208,6 +228,7 @@ try {
           );
         } finally {
           await second.close();
+          fs.rmSync(second.home.root, { recursive: true, force: true, maxRetries: 5 });
         }
       } else {
         fs.rmSync(first.home.root, { recursive: true, force: true });

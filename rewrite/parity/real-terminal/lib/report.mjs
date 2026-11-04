@@ -117,7 +117,12 @@ ${['legacy', 'next']
   .map((w) => {
     const t = size.store[w] ?? {};
     const stall = (v) => (v !== null && v !== undefined && v > 200 ? 'bad' : '');
-    return `<tr><td>${w}</td><td>${fmt(t.startupMs, 0)}</td><td class="${stall(t.firstResumeMs)}">${fmt(t.firstResumeMs, 0)}</td><td class="${stall(t.secondResumeMs)}">${fmt(t.secondResumeMs, 0)}</td></tr>`;
+    // null after a failure: no list within the paint timeout (the first) or not measured (the second).
+    const cell = (v, first) =>
+      v === null && t.failed
+        ? `<td class="bad">${first ? 'FAIL (no list within 5 s)' : 'not measured'}</td>`
+        : `<td class="${stall(v)}">${fmt(v, 0)}</td>`;
+    return `<tr><td>${w}</td><td>${fmt(t.startupMs, 0)}</td>${cell(t.firstResumeMs, true)}${cell(t.secondResumeMs, false)}</tr>`;
   })
   .join('')}</table></div>`);
     for (const phase of ['idle', 'streaming']) {

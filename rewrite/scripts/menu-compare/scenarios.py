@@ -1,4 +1,12 @@
-"""Key sequences for each menu branch. Steps are typed in order; <key> names are in screen.py KEYS."""
+"""Key sequences for each menu branch. Steps are typed in order; <key> names are in screen.py KEYS.
+
+Each menu keeps its scenarios in its own `scenarios_<menu>.py` defining SCENARIOS and optionally SEED
+(per-scenario {'settings': {...}, 'files': {...}}); they are merged here.
+"""
+import glob
+import importlib
+import os
+
 
 SCENARIOS = {
     'idle': [],
@@ -38,3 +46,8 @@ SEED = {
     'path': {'files': {'README.md': 'x\n', 'src/index.ts': 'x\n', 'docs/guide.md': 'x\n'}},
     'path-filter': {'files': {'README.md': 'x\n', 'src/index.ts': 'x\n', 'docs/guide.md': 'x\n'}},
 }
+
+for _path in sorted(glob.glob(os.path.join(os.path.dirname(__file__), 'scenarios_*.py'))):
+    _module = importlib.import_module(os.path.basename(_path)[:-3])
+    SCENARIOS.update(_module.SCENARIOS)
+    SEED.update(getattr(_module, 'SEED', {}))

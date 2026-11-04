@@ -4,6 +4,21 @@
  * wording byte-identical to legacy; the Session maps its own task facts onto these shapes.
  */
 
+/** A running task's recent activity, as legacy's check-in details carry it. */
+export type DirectTaskActivityDetails = {
+  readonly activity?: {
+    readonly phase: 'active' | 'waiting' | 'cancelling';
+    readonly reason?: 'provider' | 'approval' | 'answer';
+    readonly liveness: { readonly state: 'recent' | 'quiet'; readonly ageMs: number };
+  };
+  readonly activityState?: 'active' | 'waiting' | 'cancelling';
+  readonly waitingReason?: 'provider' | 'approval' | 'answer';
+  readonly latestNarrative?: string;
+  readonly toolCounts?: Readonly<Record<string, number>>;
+  readonly lastToolName?: string;
+  readonly outputTail?: string;
+};
+
 export type DirectLegacyNotification =
   | {
       readonly kind: 'completion';
@@ -42,15 +57,17 @@ export type DirectLegacyNotification =
       readonly kind: 'check_in';
       readonly checkInIndex: number;
       readonly elapsedMs: number;
-      readonly details:
-        | {
-            readonly kind: 'subagent';
-            readonly id: string;
-            readonly name?: string;
-            readonly role: string;
-            readonly task: string;
-          }
-        | { readonly kind: 'shell'; readonly id: string; readonly command: string; readonly status?: string };
+      readonly details: DirectTaskActivityDetails &
+        (
+          | {
+              readonly kind: 'subagent';
+              readonly id: string;
+              readonly name?: string;
+              readonly role: string;
+              readonly task: string;
+            }
+          | { readonly kind: 'shell'; readonly id: string; readonly command: string; readonly status?: string }
+        );
     }
   | {
       readonly kind: 'user_control';
@@ -171,22 +188,59 @@ export function formatDirectLegacyNotifications(notifications: readonly DirectLe
 
   if (checkIns.length > 0) {
     const noun = checkIns.length === 1 ? 'task' : 'tasks';
-    // Legacy also reports liveness, narrative and tool counts; the Session keeps no such activity record.
     const entries = checkIns.map((notification) => {
       const { details } = notification;
       const elapsedSeconds = Math.round(notification.elapsedMs / 1000);
       if (details.kind === 'subagent') {
         const nameLabel = details.name ? `${details.name} (${details.id})` : details.id;
-        return [
-          `- background subagent ${nameLabel} | role: ${details.role} | task: ${details.task}`,
-          `  still running, elapsed ${elapsedSeconds}s, check-in #${notification.checkInIndex}`,
-        ].join('\n');
+        const header = `- background subagent ${nameLabel} | role: ${details.role} | task: ${details.task}`;
+        const lines = [header];
+
+        const activityParts: string[] = [];
+        if (details.activityState) {
+          if (details.activityState === 'waiting' && details.waitingReason) {
+            activityParts.push(`waiting (${details.waitingReason})`);
+          } else {
+            activityParts.push(details.activityState);
+          }
+        }
+        const activityDesc = activityParts.length > 0 ? `status: ${activityParts.join(', ')} | ` : '';
+        lines.push(
+          `  ${activityDesc}still running, elapsed ${elapsedSeconds}s, check-in #${notification.checkInIndex}`,
+        );
+        if (details.activity) lines.push(`  liveness: ${formatLiveness(details.activity)}`);
+
+        if (details.latestNarrative) {
+          lines.push(`  latest narrative: "${details.latestNarrative}"`);
+        }
+
+        if (details.toolCounts && Object.keys(details.toolCounts).length > 0) {
+          const countsStr = Object.entries(details.toolCounts)
+            .map(([tool, count]) => `${tool} (${count})`)
+            .join(', ');
+          lines.push(`  tools used: ${countsStr}`);
+        }
+
+        if (details.lastToolName) {
+          lines.push(`  last tool: ${details.lastToolName}`);
+        }
+
+        return lines.join('\n');
       }
+
+      const header = `- background shell | jobId: ${details.id} | command: ${details.command}`;
+      const lines = [header];
       const statusDesc = details.status ? `status: ${details.status} | ` : '';
-      return [
-        `- background shell | jobId: ${details.id} | command: ${details.command}`,
-        `  ${statusDesc}still running, elapsed ${elapsedSeconds}s, check-in #${notification.checkInIndex}`,
-      ].join('\n');
+      lines.push(`  ${statusDesc}still running, elapsed ${elapsedSeconds}s, check-in #${notification.checkInIndex}`);
+      if (details.activity) lines.push(`  liveness: ${formatLiveness(details.activity)}`);
+
+      if (details.outputTail) {
+        lines.push('  recent output:');
+        const tailLines = details.outputTail.split('\n').map((line) => `    ${line}`);
+        lines.push(...tailLines);
+      }
+
+      return lines.join('\n');
     });
     sections.push(
       [
@@ -250,4 +304,21 @@ export function formatDirectLegacyNotifications(notifications: readonly DirectLe
   }
 
   return sections.join('\n\n');
+}
+
+/** Legacy's formatBackgroundTaskLiveness (background-task-activity.ts). */
+function formatLiveness(activity: NonNullable<DirectTaskActivityDetails['activity']>): string {
+  const phase = activity.phase === 'waiting' && activity.reason ? `waiting (${activity.reason})` : activity.phase;
+  return `${phase}, ${activity.liveness.state}; last observed ${formatAge(activity.liveness.ageMs)} ago`;
+}
+
+function formatAge(ageMs: number): string {
+  const totalSeconds = Math.floor(Math.max(0, ageMs) / 1_000);
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (totalMinutes < 60) return seconds === 0 ? `${totalMinutes}m` : `${totalMinutes}m ${seconds}s`;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`;
 }

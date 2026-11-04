@@ -11,6 +11,7 @@ import { DirectRunBudgets } from './direct-run-budget.js';
 import { DirectBackgroundTasks } from './direct-background.js';
 import { directShellTasks } from './direct-shell-tasks.js';
 import { DirectBackgroundCheckIns } from './direct-background-check-ins.js';
+import { DirectTaskActivity } from './direct-task-activity.js';
 import { DirectSubagents } from './direct-subagent.js';
 import { createDirectBranchDriver } from './direct-branches.js';
 import { factFor } from './conversation-turn.js';
@@ -27,6 +28,7 @@ export class ConversationBackground {
   readonly tasks: DirectBackgroundTasks;
   private readonly branchHandles = new Set<TurnHandle>();
   private readonly checkIns: DirectBackgroundCheckIns;
+  private readonly activity = new DirectTaskActivity();
   private checkInTimer: ReturnType<typeof setInterval> | undefined;
   constructor(
     private readonly deps: ConversationDeps,
@@ -70,10 +72,15 @@ export class ConversationBackground {
             !this.journal.commit([fact, ...(notice ? [{ type: 'background_notice_enqueued' as const, notice }] : [])])
           )
             throw new Error(this.journal.failure?.message ?? 'Session is closed');
+          this.activity.accepted(fact);
           // The accepted projection already includes this wait/transfer; live task state may lag the sink.
           this.runBudgets.taskWaits(this.journal.taskStates);
         },
-        publish: (event) => this.deps.publishTask?.(event),
+        publish: (event) => {
+          if (event.type === 'task_progress' && event.kind === 'tool_progress')
+            this.activity.shellOutput(event.taskId, event.chunk);
+          this.deps.publishTask?.(event);
+        },
         failed: this.journal.poison,
       },
     });
@@ -82,7 +89,14 @@ export class ConversationBackground {
       settings: () => this.generation.supplied?.backgroundCheckIns?.() ?? { enabled: false, intervalMs: 1 },
       emit: (event) => {
         if (this.admission.closed || this.journal.failure) return;
-        if (!this.journal.commit([{ type: 'background_notice_enqueued', notice: directCheckInNotice(event) }]))
+        if (
+          !this.journal.commit([
+            {
+              type: 'background_notice_enqueued',
+              notice: directCheckInNotice(event, this.activity.details(event.details)),
+            },
+          ])
+        )
           throw new Error(this.journal.failure!.message);
       },
     });
@@ -136,6 +150,7 @@ export class ConversationBackground {
         authority,
         accept: (fact) => {
           if (!this.journal.commit([fact])) throw new Error(this.journal.failure!.message);
+          this.activity.accepted(fact);
         },
         factFor,
         handles: this.branchHandles,

@@ -4,7 +4,11 @@ import type { TurnId } from '../engine/index.js';
 import type { NestedRunResult } from '../tools/index.js';
 import type { DirectTaskId, DirectTaskState, DirectTaskResult } from './direct-background-types.js';
 import type { DirectBackgroundCheckIn } from './direct-background-check-ins.js';
-import { formatDirectLegacyNotifications, type DirectLegacyNotification } from './direct-notice-format.js';
+import {
+  formatDirectLegacyNotifications,
+  type DirectLegacyNotification,
+  type DirectTaskActivityDetails,
+} from './direct-notice-format.js';
 
 export type DirectBackgroundNotice = {
   readonly id: string;
@@ -185,7 +189,10 @@ export function directQuestionNotice(
     question: question.question,
   });
 }
-export function directCheckInNotice(event: DirectBackgroundCheckIn): DirectBackgroundNotice {
+export function directCheckInNotice(
+  event: DirectBackgroundCheckIn,
+  activity: DirectTaskActivityDetails = {},
+): DirectBackgroundNotice {
   const task = event.details;
   return legacyNotice(`check_in:${event.target.id}:${event.checkInIndex}`, 'check_in', event.target.id, {
     kind: 'check_in',
@@ -193,8 +200,11 @@ export function directCheckInNotice(event: DirectBackgroundCheckIn): DirectBackg
     elapsedMs: event.elapsedMs,
     details:
       task.kind === 'shell'
-        ? { kind: 'shell', id: task.taskId, command: task.label, status: 'running' }
-        : (controlDetails(task) as Extract<ReturnType<typeof controlDetails>, { kind: 'subagent' }>),
+        ? { kind: 'shell', id: task.taskId, command: task.label, ...activity, status: 'running' }
+        : {
+            ...(controlDetails(task) as Extract<ReturnType<typeof controlDetails>, { kind: 'subagent' }>),
+            ...activity,
+          },
   });
 }
 /** A shell watch firing (the source watch's firing record) as legacy's shell_output notification. */

@@ -1,4 +1,4 @@
-import { formatModelUsageBreakdown, summarizeModelUsage } from '../../../source/services/cost/model-cost.js';
+import { printUsage, sessionUsage } from './usage-report.js';
 import { VALID_REASONING_EFFORTS } from '../../../source/services/models/reasoning-effort.js';
 import { resetSession } from '../clients/tui/commands.js';
 import { loadProviderItems } from '../../../source/providers/provider-service.js';
@@ -19,7 +19,6 @@ import { composeHandoffMessage } from '../../../source/services/handoff/handoff-
 import { formatMcpStatus } from '../../../source/services/mcp/mcp-status.js';
 import type { DirectMcp } from './direct-mcp.js';
 import { injectSkillIntoTurn } from '../../../source/types/user-turn.js';
-import { formatSessionTokenUsage } from '../../../source/utils/ai/token-usage.js';
 import { helpText } from '../clients/tui/slash-commands.js';
 import { copyToClipboard } from '../../../source/utils/clipboard.js';
 import { buildCopySelections } from '../../../source/utils/copy-selections.js';
@@ -36,20 +35,6 @@ import { createDirectTuiSettings } from './direct-launch-tui-settings.js';
 import { displaySessionId, storedSessionId } from '../protocol/session-id.js';
 
 type CommandResult = Awaited<ReturnType<TuiIntegration['command']>>;
-
-/** Legacy's session usage text (`/usage`, and the first lines printed on exit): the total, then each model. */
-export function sessionUsageText(snapshot: WireSnapshot): string {
-  const { inputTokens, outputTokens, cachedInputTokens } = snapshot.usage;
-  const total = formatSessionTokenUsage({
-    prompt_tokens: inputTokens,
-    completion_tokens: outputTokens,
-    cache_read_tokens: cachedInputTokens,
-  });
-  const breakdown = formatModelUsageBreakdown(
-    summarizeModelUsage((snapshot.requestCosts ?? []).map(({ record }) => record)),
-  );
-  return breakdown ? `${total}\n${breakdown}` : total;
-}
 
 export type DirectTuiCommandOptions = {
   readonly app: DirectApplication;
@@ -270,7 +255,7 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
     return { message: `Copied ${label} to the clipboard.` };
   };
 
-  const usage = (): CommandResult => ({ transcript: sessionUsageText(latest()) });
+  const usage = (): CommandResult => ({ message: sessionUsage(latest()) }); // legacy usage-command: one system line
 
   /** A skill always belongs to a request, so naming one alone hands the line back to finish. */
   const skills = async (connection: TuiConnection, input: string): Promise<CommandResult> => {
@@ -331,31 +316,42 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
     return options.mcp;
   };
 
+  /** Legacy handleModeSwitchConfirm: print usage, start a new session, then switch it. */
+  const clearThen = async (
+    connection: TuiConnection,
+    apply: (next: DirectConnection) => Promise<CommandResult>,
+  ): Promise<{ message?: string }> => {
+    printUsage(latest()); // through clearConversationAndRefreshBanner
+    const id = await resetSession(connection);
+    try {
+      const next = await host.connect(principal, id);
+      const result = await apply(next);
+      if (result.applied !== true) {
+        next.close();
+        throw new Error(result.message ?? 'Mode configuration did not finish.');
+      }
+      await bridge.rebind(id);
+      publish(next);
+      return { message: result.message };
+    } catch (error) {
+      throw new Error(
+        `Session ${displaySessionId(id)} was created but mode switching failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  };
+
   return {
     planNeedsClear: configuration.planNeedsClear,
-    async clearAndTogglePlan(connection) {
+    planTarget: configuration.planTarget,
+    printUsage: () => printUsage(latest()),
+    clearAndTogglePlan(connection) {
       const target = configuration.planTarget(connection);
-      const id = await resetSession(connection);
-      try {
-        const next = await host.connect(principal, id);
-        const result = await configuration.profile(next, target);
-        if (
-          result.message !== `Switched to ${target} for this session.` &&
-          result.message !== `${target} is already active.`
-        ) {
-          next.close();
-          throw new Error(result.message ?? 'Mode configuration did not finish.');
-        }
-        await bridge.rebind(id);
-        publish(next);
-        return { message: result.message };
-      } catch (error) {
-        throw new Error(
-          `Session ${displaySessionId(id)} was created but mode switching failed: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-      }
+      return clearThen(connection, (next) => configuration.toggle(next, 'plan', target));
+    },
+    clearAndSwitch(connection, profileId) {
+      return clearThen(connection, (next) => configuration.profile(next, profileId));
     },
     async command(connection, input) {
       const [name, ...rest] = input.trim().slice(1).split(/\s+/);
@@ -386,6 +382,7 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
           return configuration.settings(connection, rest.join(' '));
         case 'plan':
         case 'bare':
+        case 'lite':
         case 'mentor':
         case 'orchestrator':
           return configuration.toggle(connection, name);

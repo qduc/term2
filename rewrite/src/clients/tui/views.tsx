@@ -8,6 +8,7 @@ import MarkdownRenderer from './presentation/components/MarkdownRenderer.js';
 import { useSkin } from './presentation/skins/SkinContext.js';
 import type { Message, ToolView, TuiState } from './state.js';
 import { ToolCall } from './tool-view.js';
+import CommandMessage from './presentation/components/message/CommandMessage.js';
 import { groupTools, shownOrder, ToolGroupRow } from './tool-groups.js';
 
 /** Render mixed history only in the authoritative wire order; separate items with unknown order. */
@@ -49,6 +50,18 @@ export function Transcript({
             </Text>
           ) : null}
         </Box>
+      </Box>
+    ) : message.localShell ? (
+      <Box key={`message:${message.id}`} marginTop={1} paddingLeft={2}>
+        <CommandMessage
+          command={message.localShell.command}
+          output={message.localShell.output}
+          status={message.localShell.success ? 'completed' : 'failed'}
+          success={message.localShell.success}
+          {...(message.localShell.failureReason ? { failureReason: message.localShell.failureReason } : {})}
+          toolName="shell"
+          displayMode={expanded ? 'standard' : 'concise'}
+        />
       </Box>
     ) : message.localHelp === true ? (
       // Legacy shows /help as a system message: reasoning colour inside MessageList's paddingX 2.
@@ -270,15 +283,13 @@ export function Activity({
           {[!state.activeTurnId && state.status !== 'idle' ? state.status : '', state.cost].filter(Boolean).join(' · ')}
         </Text>
       ) : null}
-      {state.queueState !== 'idle' && state.queueState !== 'running' ? (
-        <Text>
-          Queue: {state.queueState}
-          {state.queuePauseReason ? ` · ${state.queuePauseReason}` : ''}
-        </Text>
-      ) : null}
+      {/* Legacy draws no queue-state line: a paused queue shows only its held messages. */}
       {state.commands
         .filter(
           (receipt) =>
+            // Legacy has no command receipts: a rewind or retry shows only its result.
+            receipt.request.operation.kind !== 'retry' &&
+            receipt.request.operation.kind !== 'rewind' &&
             receipt.outcome?.kind !== 'retried' &&
             // Legacy prints nothing for a finished rewind.
             receipt.outcome?.kind !== 'rewound' &&
@@ -384,24 +395,6 @@ export function LiveNotices({
       {notice ? <Text color={theme.reasoning}>{notice}</Text> : null}
       {historyError ? <Text>{historyError}</Text> : null}
     </>
-  );
-}
-
-/** Explicit shell output keeps the compact themed status visible; Ctrl+O reveals details. */
-export function BangResult({
-  result,
-  expanded,
-}: {
-  readonly result: string;
-  readonly expanded: boolean;
-}): React.ReactElement {
-  const theme = useTheme();
-  const [header = '', ...detail] = result.split('\n');
-  return (
-    <Box flexDirection="column">
-      <Text color={header.startsWith('✓') ? theme.success : theme.danger}>{header}</Text>
-      {expanded && detail.length ? <Text>{detail.join('\n')}</Text> : null}
-    </Box>
   );
 }
 

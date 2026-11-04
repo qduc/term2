@@ -3,14 +3,42 @@ import type { TuiConnection } from './integration.js';
 import { receiptNotice, resetSession, sendNativeCommand } from './commands.js';
 import { displaySessionId } from '../../protocol/session-id.js';
 
+export const WELCOME = 'Welcome to term²! Type a message to start chatting.';
+
 /**
  * `/clear` or `/rollover`: create the replacement session, then attach it.
  * Returns a notice (and attaches nothing) when a rollover did not finish; null on success.
+ * `leave` runs first (legacy prints usage as a conversation is left). `begin` arms the new conversation's opening
+ * before the reset, which can publish the new session before it answers, and cancels it when the reset fails.
  */
 export async function replaceSession(
   connection: TuiConnection,
   command: '/clear' | '/rollover',
-  switchSession: ((sessionId: string) => Promise<void>) | undefined,
+  switchSession: ((sessionId: string, notice?: string, opening?: readonly string[]) => Promise<void>) | undefined,
+  opening: readonly string[] | undefined = command === '/clear' ? [WELCOME] : undefined,
+  hooks: {
+    readonly leave?: () => Promise<void>;
+    readonly begin?: (lines: readonly string[] | null) => void;
+  } = {},
+): Promise<string | null> {
+  const { leave, begin } = hooks;
+  await leave?.();
+  if (opening) begin?.(opening);
+  try {
+    const failure = await attach(connection, command, switchSession, opening);
+    if (failure !== null) begin?.(null);
+    return failure;
+  } catch (error) {
+    begin?.(null);
+    throw error;
+  }
+}
+
+async function attach(
+  connection: TuiConnection,
+  command: '/clear' | '/rollover',
+  switchSession: ((sessionId: string, notice?: string, opening?: readonly string[]) => Promise<void>) | undefined,
+  opening: readonly string[] | undefined,
 ): Promise<string | null> {
   if (!switchSession) throw new Error('Session switching is unavailable in this app.');
   let sessionId: string;
@@ -21,7 +49,8 @@ export async function replaceSession(
     sessionId = result.receipt.outcome.sessionId;
   }
   try {
-    await switchSession(sessionId);
+    // Legacy /clear (clear-command.ts) opens the new conversation with its welcome line.
+    await switchSession(sessionId, undefined, opening);
   } catch (error) {
     throw new Error(
       `Session ${displaySessionId(sessionId)} was created; switching reported: ${

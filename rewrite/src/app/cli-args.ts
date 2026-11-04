@@ -3,6 +3,8 @@
  * settings, no providers. `cli.ts` runs the parsed command. Option wording and
  * validation messages follow the current CLI (source/cli.tsx).
  */
+import { join } from 'node:path';
+import { resolveSettingsDirectory } from '../../../source/services/settings/settings-path.js';
 import { parseServeArgs, type ServeArgs } from '../../../source/gateway/serve-args.js';
 import { parseAcpArgs, type AcpArgs } from '../../../source/acp-v2/serve-args.js';
 import { createDurableGoal } from '../../../source/services/conversation/durable-goal.js';
@@ -168,41 +170,113 @@ https://github.com/qduc/term2/blob/main/docs/reference/discord-bridge.md
 Candidate: live Discord/mobile validation is still outstanding.
 `;
 
-// Printed only while some option is still refused, so the marker never outlives the refusal.
-const refusalNote = FLAGS.some((flag) => flag.refusal)
-  ? '\n* Not available in the direct executable yet. These fail with an error; they never start the current CLI.'
-  : '';
-const optionLines = FLAGS.map((flag) => `  ${flag.label.padEnd(37)}${flag.help}${flag.refusal ? ' *' : ''}`).join('\n');
+/** Legacy's meow help (source/cli.tsx: the package description, then its help text), byte for byte. */
+export const helpText = (): string => `
+  A terminal-based AI assistant that can help you get things done on your computer
 
-export const HELP = `Usage:
-  $ term2 [options] [prompt...]
-  $ term2 <serve|acp|control|discord> [arguments]
+  Everyday usage
+    $ term2
+    $ term2 "explain this function"
+    $ term2 --resume
+    $ term2 --resume <conversation-id>
+    $ term2 --resume <conversation-id> "Follow-up prompt"
+    $ term2 --help
+    $ term2 discord --help  (candidate bridge; explicit sends, local approvals)
 
-In a chat, type / to see available commands.
+  Usage
+    $ term2 [options] [prompt...]
+    $ term2 [options] --resume [conversation-id|ls]
 
-Options:
-${optionLines}
+  In a chat, type / to see available commands.
 
-Subcommands:
-  term2 serve --local-owner <userId> [--state-dir <dir>] [--socket <path>]
-      [--listen <host:port> --tls-cert <pem> --tls-key <pem>] [--allow-remote]
-      [--pairing] [--bff-key <kid>=<pem path>]... [--workspace-root <dir>]...
-      [--issuer <iss>] [--audience <aud>] [--allow-write]
-        Run the local web gateway until SIGINT/SIGTERM.
-  term2 acp [--provider <provider>] [--model <model>] [--effort <effort>]
-        Serve the Agent Client Protocol v2 over stdio. Stdout carries protocol traffic only.
-  term2 control list [--status] | status <name> [--json] | get <name> <topic> [--json] |
-      submit|steer <name> --id <id> | interrupt <name> | wait-turn <name> --message-id <id>
-        Talk to a live control socket.
-  term2 discord [config.json] | --save-token [config.json] | --help
-        Run the Discord bridge. --help prints its reference.
+  Options
+    -m, --model <model>                  Model pattern or ID, supports provider/id and optional :<thinking>
+    -p, --provider <provider>            Override the configured provider (e.g. openai, openrouter)
+    -r, --reasoning <effort>             Set reasoning effort (default, none, minimal, low, medium, high, xhigh)
+        --goal <text>                    Persist a user-authored session outcome (max 2,000 characters)
+        --goal-criteria <text>            Optional success criteria (max 2,000 characters; requires --goal)
+        --profile <name>                 Select a profile (bare [default], plan, pair, mentor, orchestrator; standard/full/lite = bare)
+    -l, --lite                           Start in the Bare profile (alias kept from Lite)
+        --auto-approve                   Allow tool execution for a non-interactive prompt
+    -q, --quiet                          Suppress non-error diagnostics on stderr in non-interactive mode
+        --show-reasoning                 Stream reasoning deltas to stderr in non-interactive mode
+        --json                           Emit newline-delimited JSON (NDJSON) events in non-interactive mode
+        --ssh <user@host>                Enable SSH mode for a remote host
+        --discord-input                 Allow Discord input and explicit root notifications on this control socket
+        --remote-dir <path>              Remote working directory (required for non-lite SSH sessions)
+        --ssh-port <port>                SSH port (default: 22)
+        --control-socket[=<name>]        Enable a local socket for the interactive TUI
+        --grok-login                     Log in to Grok in a browser (OAuth) and exit
+        --codex-login                    Log in to Codex/ChatGPT in a browser (OAuth) and exit
+        --list-models [search]           Print available models grouped by provider, filtered by an optional search term
+        --refresh                        With --list-models, bypass the model catalog cache and re-fetch before listing
+    -R, --resume [conversation-id|ls]    Resume the last conversation, a specific ID, or list recent conversations
+        --fork                           Fork the resumed conversation into a new session (requires --resume)
+    -h, --help                           Show help
+    -v, --version                        Show version
 
-Settings:
-  Configure providers and preferences in settings.json.
+  Settings
+    Settings file: ${join(resolveSettingsDirectory(), 'settings.json')}
 
-The direct CLI supports one prompt per invocation. --resume [conversation-id|last] selects a native conversation;
-bare --resume selects the last one for this workspace. Use --resume ls (or list) to browse.
-A non-interactive resume requires a follow-up prompt.${refusalNote}
+  Notes
+    A prompt passed on the command line runs non-interactively. Tool execution is disabled by default;
+    use --auto-approve to allow tools to run without interactive confirmation.
+
+    -m/--model with no value (bare --model/-m, or followed only by another flag) opens an
+    interactive picker in a TTY session with no prompt; the same picker also opens for an
+    ambiguous or unmatched pattern. Elsewhere (no TTY, --json, or a prompt on the line) it is a
+    no-op. If no model is selected, term2 starts with the configured default.
+
+  Gateway launcher (term2 serve)
+    Runs the local web gateway until SIGINT/SIGTERM.
+
+    $ term2 serve --local-owner <userId> [--state-dir <dir>] [--socket <path>]
+        [--listen <host:port> --tls-cert <pem> --tls-key <pem>] [--allow-remote]
+        [--pairing] [--bff-key <kid>=<pem path>]... [--workspace-root <dir>]...
+        [--issuer <iss>] [--audience <aud>] [--allow-write]
+
+    Transport defaults to a Unix socket at <state-dir>/gateway.sock (mode 0660). TLS network
+    mode requires --listen with --tls-cert and --tls-key, and binds loopback unless
+    --allow-remote is also given. Browser-selected workspaces must live under your home
+    directory unless --workspace-root (repeatable) adds allowed roots. --allow-write admits
+    read_write workspace grants (workspace write access); without it every admitted root is
+    read-only.
+
+  ACP launcher (term2 acp)
+    Serves the Agent Client Protocol v2 over stdio as newline-delimited JSON-RPC, so an editor
+    can drive real term2 sessions as an ACP agent. Runs until the client closes stdin or
+    SIGINT/SIGTERM. Stdout carries protocol traffic only; diagnostics go to stderr.
+
+    $ term2 acp [--provider <provider>] [--model <model>] [--effort <effort>]
+
+    Sessions are read-only and tool approvals stay fail-closed: there is no auto-approve flag,
+    and --auto-approve is rejected. --model is resolved against the model catalog
+    non-interactively, so it needs an exact model id or <provider>/<model>.
+
+  More examples
+    $ term2 --model gpt-5.4 --provider openai
+    $ term2 --model
+    $ term2 --lite
+    $ term2 --auto-approve "list files in the current directory"
+    $ term2 -q "generate json payload"
+    $ term2 --json "explain this function"
+    $ term2 --resume
+    $ term2 --resume <conversation-id>
+    $ term2 --resume <conversation-id> "Follow-up prompt"
+    $ term2 --resume <conversation-id> --fork
+    $ term2 --resume ls
+    $ term2 --grok-login
+    $ term2 --codex-login
+    $ term2 --list-models
+    $ term2 --list-models gpt-5
+    $ term2 acp --provider openai --model gpt-5.4
+    $ term2 --list-models --refresh
+    $ term2 --ssh user@host --remote-dir /path/to/project
+    $ term2 --ssh user@host --remote-dir /path/to/project --ssh-port 2222
+    $ term2 --control-socket=worker-1
+    $ term2 control status worker-1 --json
+  
+
 `;
 
 /** A usage error the current CLI reports with exit 2 (its argument parser's convention). Other parse errors stay exit 1. */

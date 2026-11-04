@@ -227,7 +227,8 @@ it(
       cwd: workspace,
       env: createTestChildEnv(env),
     });
-    expect(help.stdout).toMatch(/term2 control list[^\n]*\|\n/);
+    // --help is legacy's meow text byte for byte; its control example is the status call.
+    expect(help.stdout).toContain('$ term2 control status worker-1 --json');
     const listing = await control(['list'], env, workspace);
     expect(JSON.parse(listing.trim()).name).toBe('coord');
     const status = JSON.parse(await control(['status', 'coord', '--json'], env, workspace));
@@ -298,11 +299,11 @@ it(
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
     session.write('output-draft');
     await waitForHarnessComposerValue(idlePath, 'output-draft', { timeoutMs: 30_000 });
-    // The task panel owns its Escape and returns the same draft to the editor.
+    // Legacy BackgroundTaskManager opens only with live work: with none, Ctrl+G leaves the draft alone.
+    const beforeCtrlG = session.getVisibleOutput().length;
     session.write('\x07');
-    await session.waitForOutput('Manage background tasks', 30_000);
-    session.write('\x1b');
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(session.getVisibleOutput().slice(beforeCtrlG)).not.toContain('Manage background tasks');
     session.write('-after');
     await waitForHarnessComposerValue(idlePath, 'output-draft-after', { timeoutMs: 30_000 });
     session.write('\x03');

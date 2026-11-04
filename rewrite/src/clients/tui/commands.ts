@@ -225,10 +225,16 @@ function directCommandNotice(result: NativeReceiptResult): string {
 }
 
 /** Handle direct slash operations without treating a pending receipt as success. */
-export async function directSlashCommand(connection: TuiConnection, input: string): Promise<string | null> {
+export async function directSlashCommand(
+  connection: TuiConnection,
+  input: string,
+  notice: (text: string) => void,
+): Promise<string | null> {
   const commandId = randomUUID();
   switch (input.trim()) {
     case '/compact': {
+      // Legacy compact-command.ts announces at once, then adds the outcome as a second line.
+      notice('Compacting context...');
       const result = await sendNativeCommand(connection, { type: 'compact', commandId });
       // Legacy's manual-compaction and compact-command wording, word for word.
       const outcome = result.kind === 'finished' || result.kind === 'rejected' ? result.receipt?.outcome : undefined;
@@ -238,6 +244,7 @@ export async function directSlashCommand(connection: TuiConnection, input: strin
         } estimated tokens).`;
       if (result.kind === 'rejected' || result.kind === 'error') {
         const message = outcome?.kind === 'rejected' ? outcome.message : result.message.replace(/^[a-z_]+: /, '');
+        // Legacy manual-compaction.ts's texts.
         const blocked = /^Compaction did not replace history: ([a-z_]+)\.$/.exec(message)?.[1];
         if (blocked === 'no_complete_cold_turn')
           return 'Nothing to compact: at least one complete cold turn is required.';
@@ -246,9 +253,14 @@ export async function directSlashCommand(connection: TuiConnection, input: strin
       return receiptNotice(result);
     }
     case '/retry-turn':
-      return directCommandNotice(await sendNativeCommand(connection, { type: 'retry', commandId, target: 'turn' }));
-    case '/retry-tool':
-      return directCommandNotice(await sendNativeCommand(connection, { type: 'retry', commandId, target: 'tool' }));
+    case '/retry-tool': {
+      const tool = input.trim() === '/retry-tool';
+      const result = await sendNativeCommand(connection, { type: 'retry', commandId, target: tool ? 'tool' : 'turn' });
+      // Legacy retry-tool-command.ts / retry-failed-turn-command.ts: silent on success, one line when nothing ran.
+      if (result.kind === 'finished' && result.receipt.outcome?.kind === 'retried') return '';
+      if (result.kind === 'rejected') return tool ? 'No tool call to retry.' : 'Retry did not produce a new response.';
+      return directCommandNotice(result);
+    }
     default:
       return null;
   }

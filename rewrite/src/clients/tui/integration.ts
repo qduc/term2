@@ -337,9 +337,15 @@ export interface TuiIntegration {
   /** The legacy menus' data access. Without it the composer opens no menus. */
   readonly menus?: TuiMenus;
   /** Run an explicit user shell command in the selected workspace, without a model turn. */
-  shell?(sessionId: string, command: string): Promise<string>;
+  shell?(sessionId: string, command: string): Promise<ShellResult>;
   planNeedsClear?(connection: TuiConnection): boolean;
+  /** The profile Shift+Tab switches to. */
+  planTarget?(connection: TuiConnection): string;
   clearAndTogglePlan?(connection: TuiConnection): Promise<{ message?: string }>;
+  /** A confirmed `confirmClear`: a new session, then the profile switch. */
+  clearAndSwitch?(connection: TuiConnection, profileId: string): Promise<{ message?: string }>;
+  /** Legacy printUsage: the usage summary written to stdout as a conversation is left for a new one. */
+  printUsage?(): void;
   /** Read the attached session's effective preferences on each render, including live /settings changes. */
   preferences?(sessionId: string): { readonly historySize: number; readonly pasteThreshold: number | undefined };
   /** What the attached session's status bar shows, read on each render so live /settings changes appear. */
@@ -357,6 +363,8 @@ export interface TuiIntegration {
     readonly applied?: boolean;
     /** A frame for the menu stack to open, as legacy commands called openCopyMenu. */
     readonly menu?: { readonly kind: 'copy'; readonly items: CopySelection[] };
+    /** Legacy requestModeSwitchConfirm: the switch needs a new session; `line` follows its welcome. */
+    readonly confirmClear?: { readonly profileId: string; readonly enable: boolean; readonly line: string };
   }>;
   /** App owns socket lifecycle and returns the current actual attachment state. */
   readonly bridge?: {
@@ -367,6 +375,14 @@ export interface TuiIntegration {
   /** Attach a returned direct session ID; do not reuse the previous connection. */
   switchSession?(sessionId: string): Promise<void | { readonly message?: string }>;
 }
+
+/** A finished `!` command, as legacy's ShellInteractionSession hands it to addShellMessage. */
+export type ShellResult = {
+  readonly command: string;
+  readonly output: string;
+  readonly exitCode: number | null;
+  readonly timedOut: boolean;
+};
 
 /** App-owned TUI callbacks cross the unkeyed shell into the keyed session. */
 export interface TuiProps {

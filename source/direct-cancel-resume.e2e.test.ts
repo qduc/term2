@@ -134,9 +134,13 @@ it(
     const live = session.getVisibleOutput();
     const liveFrame = live.slice(live.lastIndexOf('▌ term²'));
     expect(liveFrame).not.toContain('Stopped');
-    // A draft typed during the turn survives: Ctrl+C stops the turn first.
+    // Legacy use-app-keyboard-shortcuts: Ctrl+C clears a draft first, even mid-turn; the next one stops the turn.
     session.write('half typed');
     await waitForHarnessComposerValue(idlePath, 'half typed', { timeoutMs: 30_000 });
+    session.write('\x03');
+    await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
+    // Every Ctrl+C arms legacy's two-second exit, so the stopping one waits it out.
+    await new Promise((resolve) => setTimeout(resolve, 2100));
     session.write('\x03');
     idle = await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
     await session.waitForOutput('Stopped', 30_000);
@@ -146,11 +150,8 @@ it(
     expect(stoppedFrame.match(/Stopped/g)).toHaveLength(1);
     expect(stoppedFrame).not.toContain('Cancellation requested');
     expect(stoppedFrame).toMatch(/^ {0,8}Stopped\s*$/m);
-    // The idle composer still holds the draft; clear it with Ctrl+C (no turn is running now).
-    // (A second Ctrl+C inside two seconds exits the app, so let that window pass.)
+    // (A further Ctrl+C inside two seconds would exit the app, so let that window pass.)
     await new Promise((resolve) => setTimeout(resolve, 2500));
-    session.write('\x03');
-    await new Promise((resolve) => setTimeout(resolve, 500));
     await send('second question');
     await session.waitForOutput('SECOND-REPLY', 30_000);
     let screen = session.getVisibleOutput();
@@ -339,14 +340,22 @@ it.each(['slash', 'ctrl-c', 'editing', 'only-steers'] as const)(
       expect(screen).not.toContain('Stopped');
       return;
     }
+    if (mode === 'ctrl-c') {
+      // Legacy's first Ctrl+C clears the draft; the second stops the turn.
+      session.write('\x03');
+      await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 5_000 });
+      // That Ctrl+C armed legacy's two-second exit; the stopping one waits it out.
+      await new Promise((resolve) => setTimeout(resolve, 2100));
+    }
     const cancelAt = Date.now();
     session.write(mode === 'ctrl-c' ? '\x03' : '\r');
     await session.waitForOutput('Cancelled. Your queued message is back in the input.', 5_000);
-    const expectedDraft = `${mode === 'ctrl-c' ? 'EXISTING-DRAFT\n\n' : ''}UNIQUE-QUEUED-STEER\n\nUNIQUE-SECOND-STEER`;
+    const expectedDraft = 'UNIQUE-QUEUED-STEER\n\nUNIQUE-SECOND-STEER';
     await waitForHarnessComposerValue(idlePath, expectedDraft, { timeoutMs: 5_000 });
     expect(Date.now() - cancelAt).toBeLessThan(2_000);
-    if (mode !== 'only-steers') await session.waitForOutput('Queue: paused', 5_000);
-    else await new Promise((resolve) => setTimeout(resolve, 600));
+    // Legacy shows no paused-queue line; the follow-up's hold is checked in the log below (no queue_started),
+    // and it only runs after /queue resume.
+    await new Promise((resolve) => setTimeout(resolve, 600));
     expect(Date.now() - cancelAt).toBeLessThan(2_000);
     const log = fs.readFileSync(
       path.join(
@@ -379,9 +388,6 @@ it.each(['slash', 'ctrl-c', 'editing', 'only-steers'] as const)(
     );
     if (mode === 'only-steers') {
       expect(followup).toBeUndefined();
-      expect(session.getVisibleOutput().slice(session.getVisibleOutput().lastIndexOf('▌ term²'))).not.toContain(
-        'Queue: paused',
-      );
       return;
     }
     expect(followup).toBeDefined();

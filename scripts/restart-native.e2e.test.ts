@@ -94,17 +94,26 @@ async function fixture(holdFirst = false) {
     child,
     requests,
     entry,
-    async stopForeground() {
+    /** One control request on the session's socket (hello first). */
+    async control(method: 'interrupt' | 'status') {
       const socket = connect(listControlAdvertisements(runtime)[0]!.socketPath);
       const lines = createInterface({ input: socket })[Symbol.asyncIterator]();
       try {
         socket.write(JSON.stringify({ v: 1, id: 'hello', method: 'hello' }) + '\n');
         await lines.next();
-        socket.write(JSON.stringify({ v: 1, id: 'stop', method: 'interrupt' }) + '\n');
+        socket.write(JSON.stringify({ v: 1, id: method, method }) + '\n');
         return JSON.parse((await lines.next()).value!);
       } finally {
         socket.destroy();
       }
+    },
+    stopForeground() {
+      return this.control('interrupt');
+    },
+    /** The queue state off screen: legacy draws no paused-queue line. */
+    async queuePause() {
+      const { result } = await this.control('status');
+      return `${result.queueStateKind}/${result.queuePauseReason}`;
     },
     async logs() {
       const files = (await readdir(workspace.paths.conversationsDir)).filter((file) => file.endsWith('.jsonl'));
@@ -169,7 +178,7 @@ it.skipIf(process.platform !== 'linux' || !process.execve || !process.env.TERM2_
       await child.waitForVisibleOutput('Queued 1 (queued): retained plain text');
       // The public control stop preserves queued work and creates the real manual pause.
       expect(await f.stopForeground()).toMatchObject({ ok: true, result: { accepted: true } });
-      await child.waitForVisibleOutput('Queue: paused · manual');
+      await expect.poll(() => f.queuePause(), { timeout: 30_000 }).toBe('paused/manual');
       await child.waitForComposerValue('');
       const before = await f.logs();
       expect(before).toHaveLength(1);
@@ -191,9 +200,7 @@ it.skipIf(process.platform !== 'linux' || !process.execve || !process.env.TERM2_
       await child.waitForState((state) => state.output.slice(offset).includes('Resumed conversation:'));
       // Fresh post-exec input, not a retained pre-exec clear frame.
       await child.waitForComposerValue('', { afterRevision: child.getOutput().lastIndexOf('Resumed conversation:') });
-      await child.waitForState((state) =>
-        state.output.slice(state.output.lastIndexOf('Resumed conversation:')).includes('Queue: paused · manual'),
-      );
+      await expect.poll(() => f.queuePause(), { timeout: 30_000 }).toBe('paused/manual');
       await writePtyTextAndSubmit(child, '/help');
       await child.waitForVisibleOutput('Keyboard shortcuts');
       await writePtyTextAndSubmit(child, '/quit');

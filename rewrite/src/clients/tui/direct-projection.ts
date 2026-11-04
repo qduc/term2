@@ -9,6 +9,8 @@ import type {
 import { historyReplacedMessage } from '../../protocol/direct-reducer-nested.js';
 import { type InteractionView, type Message, type TaskView, type ToolView, type TuiState } from './state.js';
 
+const SILENT_HISTORY_EDITS = new Set(['rewind', 'retry_turn', 'retry_tool', 'compaction'].map(historyReplacedMessage));
+
 const usageText = (usage: WireUsage): string =>
   `${usage.inputTokens} in / ${usage.outputTokens} out (${usage.cachedInputTokens} cached)`;
 const modelText = (model: { readonly provider: string; readonly model: string }): string =>
@@ -149,8 +151,6 @@ const sameList = <T>(previous: readonly T[] | undefined, next: readonly T[], equ
 
 /** Project the direct wire snapshot at the host's attachment cut. */
 /** Legacy prints nothing after a rewind or a compaction beyond the command's own lines. */
-const SILENT_REPLACEMENTS = new Set([historyReplacedMessage('rewind'), historyReplacedMessage('compaction')]);
-
 const shownAt = new Map<string, { tick: number; waiting: Set<string>; held: Set<string>; at: Map<string, number> }>();
 /**
  * Legacy appends a call's row when it starts. A call that waits on the user (a question or an approval) starts only
@@ -248,7 +248,8 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
       ...snapshot.notices
         .filter(
           (notice) =>
-            !(notice.kind === 'history_replaced' && SILENT_REPLACEMENTS.has(notice.message)) &&
+            // Legacy redraws a rewound, retried or compacted conversation without a line about it.
+            !(notice.kind === 'history_replaced' && SILENT_HISTORY_EDITS.has(notice.message)) &&
             // Legacy loads memory into context without a line on screen.
             notice.kind !== 'memory_global_snapshot',
         )

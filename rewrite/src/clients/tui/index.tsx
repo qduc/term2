@@ -4,6 +4,7 @@ import { Box, useInput, useStdout } from 'ink';
 import { clearTerminalForRedraw } from './terminal.js';
 import type { TuiProps } from './integration.js';
 import { TuiSession } from './session.js';
+import type { HandoffHolder } from './use-handoff.js';
 
 export type { TuiIntegration } from './integration.js';
 export type { TuiState, ViewUpdate, Message, ToolView, InteractionView, QueueItem, TaskView } from './state.js';
@@ -34,11 +35,29 @@ export function Tui(props: TuiProps): React.ReactElement {
   });
   // Keep transition notices above the keyed per-session component.
   const [transition, setTransition] = useState<{ sessionId: string; message: string; resumed: boolean } | null>(null);
+  const [handoff, setHandoff] = useState<HandoffHolder['state']>(null);
   const { stdout } = useStdout();
+  // Legacy's clearConversationAndRefreshBanner: the next session to mount opens under a "New conversation"
+  // rule with these system lines, and the old transcript stays in scrollback. Armed before the switch,
+  // because the new connection can be published (and render) after the switch's promise settles.
+  const pendingNewConversation = useRef<readonly string[] | null>(null);
+  const newConversation = useRef<{ sessionId: string; lines: readonly string[] } | null>(null);
+  const mounted = useRef(props.connection.sessionId);
+  if (mounted.current !== props.connection.sessionId) {
+    mounted.current = props.connection.sessionId;
+    newConversation.current = pendingNewConversation.current
+      ? { sessionId: props.connection.sessionId, lines: pendingNewConversation.current }
+      : null;
+    pendingNewConversation.current = null;
+  }
+  const beginNewConversation = (lines: readonly string[] | null) => {
+    pendingNewConversation.current = lines;
+  };
   const switchSession = props.integration.switchSession
-    ? async (sessionId: string, notice?: string, resumed = false) => {
+    ? async (sessionId: string, notice?: string, opening?: readonly string[], resumed = false) => {
+        if (opening) beginNewConversation(opening);
         const result = await props.integration.switchSession!(sessionId);
-        clearTerminalForRedraw(stdout);
+        if (!opening) clearTerminalForRedraw(stdout);
         const message = [notice, result?.message].filter(Boolean).join('\n');
         setTransition(message || resumed ? { sessionId, message, resumed } : null);
       }
@@ -50,6 +69,11 @@ export function Tui(props: TuiProps): React.ReactElement {
         {...props}
         interrupt={interrupt}
         switchSession={switchSession}
+        beginNewConversation={beginNewConversation}
+        handoff={{ state: handoff, set: setHandoff }}
+        newConversation={
+          newConversation.current?.sessionId === props.connection.sessionId ? newConversation.current.lines : undefined
+        }
         transitionNotice={
           transition?.sessionId === props.connection.sessionId ? transition.message || undefined : undefined
         }

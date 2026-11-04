@@ -32,7 +32,8 @@ import type { DirectConnection } from '../host/in-process-direct-types.js';
 import { createDirectApplication, type DirectApplication } from './direct-application.js';
 import { openDirectSessionTarget, type DirectSessionTarget } from './direct-application-target.js';
 import { createDirectControlBridge, type DirectControlBridge } from './direct-launch-control.js';
-import { createDirectTuiCommands, sessionUsageText } from './direct-launch-tui-commands.js';
+import { createDirectTuiCommands } from './direct-launch-tui-commands.js';
+import { printUsage } from './usage-report.js';
 import { createDirectTuiMenus } from './direct-launch-tui-menus.js';
 import { performRestart, type DirectRestartPlan } from './direct-launch-tui-restart.js';
 import type { DirectLaunchRequest } from './direct-launch-types.js';
@@ -113,9 +114,7 @@ function DirectTui({
           maxOutputLines: settings.get('shell.maxOutputLines') ?? undefined,
           durationMs: Date.now() - startedAt,
         });
-        return `${result.exitCode === 0 && !result.timedOut ? '✓' : '✗'} ${command} (${Date.now() - startedAt}ms)\n${
-          formatted.text
-        }`;
+        return { command, output: formatted.text, exitCode: result.exitCode, timedOut: result.timedOut };
       },
       preferences(sessionId) {
         const current = app.liveSettings(sessionId);
@@ -296,8 +295,7 @@ async function runTui(
     );
     unmount = () => instance.unmount();
     await instance.waitUntilExit();
-    // Legacy prints the session's usage on every exit, before the resume hint.
-    if (!pending.plan && exitedSnapshot) stdout.write(`\n${sessionUsageText(exitedSnapshot)}\n`);
+    printUsage(exitedSnapshot); // legacy cli.tsx printUsageOnce, before the resume hint (restarts too)
     if (!pending.plan && exitCode === 0 && exitedSnapshot?.messages.some((message) => message.role !== 'system')) {
       // Legacy's getResumeCommand: the `term2` command, arguments unquoted.
       const args = ['term2'];

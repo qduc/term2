@@ -16,7 +16,7 @@ export function useSessionRewind({
   rewindDraft: ReturnType<typeof useSessionComposer>['rewindDraft'];
   setBusy: Dispatch<SetStateAction<boolean>>;
   viewport: { readonly epoch: number; readonly frameReady?: boolean };
-  setNotice: (message: string | null) => void;
+  setNotice: (text: string | null) => void;
 }) {
   // Legacy mounts the input box again in the same render that remounts the rewound transcript and draws its held
   // rows, with the draft already in it. The composer stays hidden from the rewind's start until that live frame.

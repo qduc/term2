@@ -1,4 +1,4 @@
-import type { TuiConnection, TuiIntegration } from './integration.js';
+import type { ShellResult, TuiConnection, TuiIntegration } from './integration.js';
 
 /** `!command` runs a shell command in the workspace without a model turn; every refusal is an Error the composer keeps. */
 export async function runBangShell(
@@ -7,7 +7,7 @@ export async function runBangShell(
   input: string,
   hasAttachments: boolean,
   turnActive: boolean,
-): Promise<string> {
+): Promise<ShellResult> {
   const command = input.slice(1).trim();
   if (!command) throw new Error('Enter a shell command after !.');
   if (!integration.shell) throw new Error('Direct shell is not available in this session.');

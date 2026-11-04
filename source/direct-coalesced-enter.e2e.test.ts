@@ -290,7 +290,7 @@ it('retry redraws after authoritative history replacement', { timeout: TIMEOUT_M
   session!.write('/retry-turn');
   await waitForHarnessComposerValue(idlePath, '/retry-turn', { timeoutMs: 30_000 });
   session!.write('\r');
-  await session!.waitForOutput('Conversation history restored to retry', 60_000);
+  // Legacy /retry-turn prints no notice on success; the second request is the signal.
   await until(() => received.length >= 2, 'retry dispatches a second model request');
   await session!.waitForOutput('RETRY-REPLY', 15_000);
   expect(session!.getOutput().slice(before)).toContain('\u001b[2J\u001b[3J\u001b[H');
@@ -463,7 +463,7 @@ it.skipIf(process.platform !== 'linux')(
     session!.write('-EDITED');
     await until(() => composer(idlePath)?.includes('-EDITED') === true, 'edited request with pasted image');
     session!.write('\r');
-    await session!.waitForOutput('Queued message updated.', 30_000);
+    // Legacy saves a queued edit without a notice; the emptied composer below marks it saved.
     expect(session!.getVisibleOutput()).not.toContain('QUEUE_SKILL_SENTINEL');
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
     await new Promise((resolve) => setTimeout(resolve, 500));
@@ -471,8 +471,11 @@ it.skipIf(process.platform !== 'linux')(
     await session!.waitForOutput('INLINE-EDIT', 30_000);
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
     await send('/cancel');
-    await session!.waitForOutput('Queue: paused', 30_000);
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
+    // Legacy shows no paused-queue line: the hold is behaviour. The queued request is not sent until resumed.
+    const requestsAtCancel = received.length;
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    expect(received).toHaveLength(requestsAtCancel);
     await send('/queue resume');
     await session!.waitForOutput('SKILL-QUEUE-REPLY', 60_000);
     const visible = session!.getVisibleOutput();
@@ -538,7 +541,7 @@ it('undo accepts an explicit last target without auto-sending', { timeout: TIMEO
   session!.write('/undo last');
   await waitForHarnessComposerValue(idlePath, '/undo last', { timeoutMs: 60_000 });
   session!.write('\r');
-  await session!.waitForOutput('/undo is now /rewind edit', 30_000);
+  // Legacy's alias line goes with the rewound turn and is never drawn (scenario cmd-undo-last); the draft is the signal.
   await waitForHarnessComposerValue(idlePath, 'explicit undo target', { timeoutMs: 60_000 });
   expect(received).toHaveLength(1);
 });

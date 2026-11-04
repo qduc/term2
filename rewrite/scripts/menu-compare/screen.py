@@ -40,8 +40,10 @@ CLIS = {
     'legacy': os.path.join(REPO, 'dist', 'cli.js'),
     'next': os.path.join(REPO, 'rewrite', 'dist', 'rewrite', 'src', 'app', 'cli.js'),
 }
-# FULL=1 compares the whole transcript (scrollback and screen) instead of the menu region.
+# FULL=1 compares the whole transcript (scrollback and screen) instead of the menu region;
+# FULL=screen compares the whole visible screen without the scrollback.
 FULL = bool(os.environ.get('FULL'))
+FULL_SCREEN = os.environ.get('FULL') == 'screen'
 MODELS = ['mock-alpha', 'mock-beta', 'mock-gamma', 'gpt-test-mini']
 
 
@@ -169,6 +171,8 @@ KEYS = {
     '<right>': '\x1b[C', '<left>': '\x1b[D', '<bs>': '\x7f', '<del>': '\x1b[3~', '<pgup>': '\x1b[5~',
     '<pgdn>': '\x1b[6~', '<home>': '\x1b[H', '<end>': '\x1b[F', '<c-f>': '\x06', '<c-n>': '\x0e',
     '<c-r>': '\x12', '<c-d>': '\x04', '<c-o>': '\x0f', '<c-t>': '\x14', '<c-u>': '\x15', '<c-c>': '\x03',
+    '<a-enter>': '\x1b\r', '<c-g>': '\x07', '<c-b>': '\x02', '<c-a>': '\x01', '<c-e>': '\x05', '<c-k>': '\x0b',
+    '<c-w>': '\x17', '<c-l>': '\x0c', '<c-x>': '\x18', '<c-z>': '\x1a', '<c-p>': '\x10',
 }
 
 
@@ -229,6 +233,10 @@ class Term:
         return False
 
     def send(self, keys):
+        if keys.startswith('<burst>'):  # the rest in one write, as a fast typist or a paste delivers it
+            os.write(self.fd, expand(keys[len('<burst>'):]).encode())
+            self.pump(quiet=0.3, limit=3.0)
+            return
         for chunk in re.split(r'(<[a-z0-9-]+>)', keys):
             if not chunk:
                 continue
@@ -359,7 +367,10 @@ def run(cli, cols, rows, name):
             for step in scenario:
                 term.send(step)
                 term.pump(quiet=0.6, limit=8)
-            return capture(term.screen, history=FULL)
+            if os.environ.get('RAW'):  # RAW=<prefix>: keep the pty bytes, for tracing redraws
+                with open(f"{os.environ['RAW']}-{cli}.bin", 'wb') as f:
+                    f.write(term.raw)
+            return capture(term.screen, history=FULL and not FULL_SCREEN)
         finally:
             term.close()
     finally:
@@ -390,7 +401,7 @@ def menu_region(cap, notice=False):
 
 
 def full_region(cap):
-    """Scrollback and screen, without trailing blank rows (FULL=1)."""
+    """Scrollback and screen (or the screen alone with FULL=screen), without trailing blank rows."""
     end = len(cap['lines'])
     while end > 0 and not cap['lines'][end - 1].strip():
         end -= 1

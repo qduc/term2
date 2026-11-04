@@ -241,9 +241,14 @@ export async function directSlashCommand(connection: TuiConnection, input: strin
       return receiptNotice(result);
     }
     case '/retry-turn':
-      return directCommandNotice(await sendNativeCommand(connection, { type: 'retry', commandId, target: 'turn' }));
-    case '/retry-tool':
-      return directCommandNotice(await sendNativeCommand(connection, { type: 'retry', commandId, target: 'tool' }));
+    case '/retry-tool': {
+      const tool = input.trim() === '/retry-tool';
+      const result = await sendNativeCommand(connection, { type: 'retry', commandId, target: tool ? 'tool' : 'turn' });
+      // Legacy retry-tool-command.ts / retry-failed-turn-command.ts: silent on success, one line when nothing ran.
+      if (result.kind === 'finished' && result.receipt.outcome?.kind === 'retried') return '';
+      if (result.kind === 'rejected') return tool ? 'No tool call to retry.' : 'Retry did not produce a new response.';
+      return directCommandNotice(result);
+    }
     default:
       return null;
   }

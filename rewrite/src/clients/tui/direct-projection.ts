@@ -6,7 +6,10 @@ import type {
   WireTool,
   WireUsage,
 } from '../../protocol/direct-wire.js';
+import { historyReplacedMessage } from '../../protocol/direct-reducer-nested.js';
 import { type InteractionView, type Message, type TaskView, type ToolView, type TuiState } from './state.js';
+
+const SILENT_HISTORY_EDITS = new Set(['rewind', 'retry_turn', 'retry_tool'].map(historyReplacedMessage));
 
 const usageText = (usage: WireUsage): string =>
   `${usage.inputTokens} in / ${usage.outputTokens} out (${usage.cachedInputTokens} cached)`;
@@ -212,9 +215,10 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
     tasks: snapshot.tasks.map(taskView),
     notices: [
       // A history edit already reads as a sentence; the raw kind label is internal.
-      ...snapshot.notices.map((notice) =>
-        notice.kind === 'history_replaced' ? notice.message : `${notice.kind}: ${notice.message}`,
-      ),
+      ...snapshot.notices
+        // Legacy redraws a rewound or retried conversation without a line about it.
+        .filter((notice) => notice.kind !== 'history_replaced' || !SILENT_HISTORY_EDITS.has(notice.message))
+        .map((notice) => (notice.kind === 'history_replaced' ? notice.message : `${notice.kind}: ${notice.message}`)),
       ...(snapshot.terminal?.notice ? [snapshot.terminal.notice] : []),
     ],
     usage: usageText(snapshot.usage),

@@ -8,7 +8,7 @@ export function useCommandTranscript(state: TuiState): {
   state: TuiState;
   append(text: string, plain?: boolean): void;
 } {
-  const [entries, setEntries] = useState<readonly { message: Message; after?: string }[]>([]);
+  const [entries, setEntries] = useState<readonly { message: Message; after?: string; idle?: true }[]>([]);
   const append = (text: string, plain = false) => {
     const after = state.timeline?.at(-1)?.id;
     setEntries((previous) => [
@@ -21,6 +21,8 @@ export function useCommandTranscript(state: TuiState): {
           ...(plain ? { localHelp: true as const } : {}),
         },
         after,
+        // Only an idle anchor is settled history; a turn's draft is replaced by its final message.
+        ...(state.activeTurnId ? {} : { idle: true as const }),
       },
     ]);
   };
@@ -28,6 +30,7 @@ export function useCommandTranscript(state: TuiState): {
   const timeline = [
     ...(state.timeline ?? state.messages.map((message) => ({ kind: 'message' as const, id: message.id }))),
   ];
+  const shown: (typeof entries)[number][] = [];
   for (const entry of entries) {
     // A live draft can be replaced by its final message after the command runs.
     // Follow that explicit wire identity rather than sending output to the top.
@@ -39,12 +42,16 @@ export function useCommandTranscript(state: TuiState): {
       entry.after === undefined
         ? undefined
         : timeline.findIndex((item) => item.id === entry.after || item.id === replacement);
+    // Legacy's rewind truncates its message list, system lines included: a line whose anchor left the
+    // history (rewound or retried away) goes with it.
+    if (anchor !== undefined && anchor < 0 && state.timeline && entry.idle) continue;
+    shown.push(entry);
     let index = anchor === undefined ? 0 : anchor < 0 ? timeline.length : anchor + 1;
     while (index < timeline.length && entries.some((other) => other.message.id === timeline[index]?.id)) index++;
     timeline.splice(index, 0, { kind: 'message', id: entry.message.id });
   }
   return {
-    state: { ...state, messages: [...state.messages, ...entries.map((entry) => entry.message)], timeline },
+    state: { ...state, messages: [...state.messages, ...shown.map((entry) => entry.message)], timeline },
     append,
   };
 }

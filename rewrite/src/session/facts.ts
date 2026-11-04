@@ -85,6 +85,8 @@ export type DirectTurnFact =
       readonly requestConfiguration?: import('./direct-preview.js').DirectPreviewConfiguration;
       /** Resolved request-only notice for retry; input remains the user's raw content. */
       readonly requestNotice?: string;
+      /** Notice retained in provider history while the submitted payload remains unchanged. */
+      readonly persistentNotice?: string;
       /** Native background planning input is durable provider context, never a displayed human admission. */
       readonly silent?: true;
       /** A command continuation reuses retained human context; it is not a new admission. */

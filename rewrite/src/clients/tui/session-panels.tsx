@@ -1,4 +1,5 @@
 import React from 'react';
+import { ASK_USER_NO_ANSWER_RESULT } from '../../protocol/direct-wire.js';
 import type { TuiConnection } from './integration.js';
 import type { TuiState } from './state.js';
 import { BudgetPanel } from './budget-panel.js';
@@ -21,6 +22,8 @@ type Props = {
   closeTask: () => void;
   closeInteraction: () => void;
   cancelInput: (connection: TuiConnection, turnId?: string) => Promise<string>;
+  /** Legacy's transcript line after Escape interrupts the turn from an approval prompt. */
+  onStopped: () => void;
 };
 
 /** Modal surfaces share input ownership; the session retains their state and routing. */
@@ -38,6 +41,7 @@ export function SessionPanels({
   closeTask,
   closeInteraction,
   cancelInput,
+  onStopped,
 }: Props): React.ReactElement {
   return (
     <>
@@ -70,8 +74,15 @@ export function SessionPanels({
             foregroundInteraction
               ? async () => {
                   if (foregroundInteraction.kind === 'question')
-                    await answerInteraction(connection, foregroundInteraction.id, { kind: 'decline' });
-                  else setNotice(await cancelInput(connection, foregroundInteraction.turnId));
+                    await answerInteraction(connection, foregroundInteraction.id, {
+                      kind: 'answer',
+                      answer: ASK_USER_NO_ANSWER_RESULT,
+                      stopAfterApprovalResolution: true,
+                    });
+                  else {
+                    setNotice(await cancelInput(connection, foregroundInteraction.turnId));
+                    onStopped();
+                  }
                 }
               : undefined
           }

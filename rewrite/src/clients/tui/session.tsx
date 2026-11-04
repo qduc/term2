@@ -446,6 +446,7 @@ export function TuiSession({
             cancelInput,
           }}
           onNotice={setNotice}
+          onStopped={() => viewport.appendCommandOutput('Stopped', 'system')}
           closeBudget={() => setBudgetOpen(false)}
           closeTask={() => setTaskOpen(false)}
           closeInteraction={() => {

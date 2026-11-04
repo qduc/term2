@@ -17,6 +17,7 @@ import { completedFinalText } from './direct-turn-results.js';
 import { publicQueue, publicQueueChange } from './direct-queue.js';
 import { taskFactEvent } from './direct-tasks.js';
 import type { Fact } from '../session/facts.js';
+import { withNotice } from '../session/direct-input-notice.js';
 import type { WireEvent, WireEventPayloads, WireEventType, WireSnapshot } from './direct-wire.js';
 import {
   contentText,
@@ -357,10 +358,12 @@ export class DirectProjection {
               input:
                 fact.silent || fact.display === false
                   ? []
-                  : fact.input.flatMap((item) => {
-                      const message = publicMessage(item, fact.turnId);
-                      return message ? [message] : [];
-                    }),
+                  : (fact.persistentNotice ? withNotice(fact.input, fact.persistentNotice) : fact.input).flatMap(
+                      (item) => {
+                        const message = publicMessage(item, fact.turnId);
+                        return message ? [message] : [];
+                      },
+                    ),
             },
             seq,
             turnId,

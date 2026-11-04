@@ -1,3 +1,4 @@
+import { withNotice } from './direct-input-notice.js';
 import { planDirectTiming } from './direct-time-gap.js';
 /** Pure direct-log projection: no writes, dispatch, provider calls or restored authority. */
 import type { TurnId } from '../engine/index.js';
@@ -24,6 +25,7 @@ import {
   hasUnsettledReplayRoots,
   recordReplayStart,
   recoverReplayRoots,
+  dropUnstartedReplayCalls,
   type ActiveReplayTurn as ActiveTurn,
 } from './replay-active-turn.js';
 import { ReplayBackground } from './replay-background.js';
@@ -229,7 +231,8 @@ export function createReplayFold(): ReplayFold {
           const input = startsDirectHumanWindow(fact, queue.state.records)
             ? planDirectTiming(clock, queue.state.records, fact.input).modelInput
             : fact.input;
-          for (const item of input) {
+          const durableInput = fact.persistentNotice ? withNotice(input, fact.persistentNotice) : input;
+          for (const item of durableInput) {
             const slot = appendHuman(item);
             if (item.type === 'user_message') lastHuman = slot;
           }
@@ -365,6 +368,7 @@ export function createReplayFold(): ReplayFold {
           throw new Error(`replay: turn ${turn.turnId} ended with unsettled calls, interactions or budget waits`);
         }
         finishReplayText(turn);
+        if (fact.outcome === 'cancelled') dropUnstartedReplayCalls(turn);
         active = null;
         lastOutcome = fact.outcome;
         break;

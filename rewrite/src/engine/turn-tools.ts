@@ -18,6 +18,7 @@ import { NativeBudgetExhausted, type TurnBudgetControl } from './turn-budget.js'
 import { TurnEvents, cancelled } from './turn-events.js';
 import { TurnToolInteractions } from './turn-tool-interactions.js';
 import { childResult, errorResult, toolResultItem } from './turn-tool-results.js';
+import { batchRequest, batched, runApprovalBatch } from './turn-tool-batch.js';
 
 type CallItem = Extract<Item, { type: 'tool_call' }>;
 type Execution = {
@@ -30,6 +31,8 @@ type Execution = {
   readonly children: Set<Promise<unknown>>;
   open: boolean;
   admitted: boolean;
+  /** A question already answered in the response's approval batch, read once by the tool body. */
+  answer?: InteractionDecision;
 };
 export type RootCall = {
   readonly item: CallItem;
@@ -45,6 +48,8 @@ type Plan = {
   readonly approval?: ApprovalRequirement;
   readonly parallelSafe: boolean;
   readonly result?: ToolResult;
+  /** The decision legacy's approval batch applied to this call. */
+  decision?: InteractionDecision;
 };
 type StopTarget = {
   executionId?: ExecutionId;
@@ -64,6 +69,8 @@ export class TurnTools {
   #executionOrdinal = 0;
   #closed = false;
   #stop: StopTarget | undefined;
+  /** Legacy ends the segment after a batch emptied by a stop decision settles. */
+  #batchStopped = false;
 
   constructor(
     readonly spec: TurnSpec,
@@ -91,7 +98,7 @@ export class TurnTools {
   }
 
   get stopped(): boolean {
-    return this.#stop !== undefined;
+    return this.#stop !== undefined || this.#batchStopped;
   }
 
   /** Provider call IDs are presentation only; even repeated IDs allocate a fresh occurrence. */
@@ -101,7 +108,8 @@ export class TurnTools {
     return { item, executionId: execution.executionId, execution, modelStep };
   }
 
-  /** Plan all complete calls, then settle contiguous safe batches in provider order. */
+  /** Plan all complete calls, decide them like legacy's approval batch (turn-tool-batch.ts),
+   * then settle contiguous safe batches in provider order. */
   async run(calls: readonly RootCall[], history: Item[]): Promise<void> {
     const plans: Plan[] = [];
     for (const call of calls) {
@@ -116,17 +124,27 @@ export class TurnTools {
       );
     }
     let position = 0;
+    this.#batchStopped = await runApprovalBatch(
+      plans,
+      async (plan) => {
+        this.#check();
+        const request = batchRequest(plan.approval, plan.call.execution);
+        return request ? this.#interactions.request(plan.call.execution, request) : { kind: 'allow' };
+      },
+      async (limit) => {
+        position = await this.#settle(plans, position, limit, history);
+      },
+    );
+  }
+
+  async #settle(plans: readonly Plan[], start: number, limit: number, history: Item[]): Promise<number> {
+    let position = start;
     const configured = this.deps.maxParallelToolCalls ?? 3;
     const width = Number.isFinite(configured) ? Math.max(1, Math.floor(configured)) : 3;
-    while (position < plans.length) {
+    while (position < limit) {
       this.#check();
       const group = [plans[position++]!];
-      while (
-        position < plans.length &&
-        group.length < width &&
-        readyParallel(group[0]!) &&
-        readyParallel(plans[position]!)
-      ) {
+      while (position < limit && group.length < width && readyParallel(group[0]!) && readyParallel(plans[position]!)) {
         group.push(plans[position++]!);
       }
       const results = await Promise.allSettled(group.map((plan) => this.#runRoot(plan)));
@@ -139,6 +157,7 @@ export class TurnTools {
       const rejected = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
       if (rejected) throw rejected.reason;
     }
+    return position;
   }
 
   /** Only a live, durably opened request can consume a matching decision. */
@@ -194,22 +213,12 @@ export class TurnTools {
       if (this.stopped) return errorResult('Tool execution stopped after interaction resolution');
       if (plan.result) return plan.result;
       if (plan.approval?.kind === 'deny') return errorResult(plan.approval.reason);
-      if (plan.approval?.kind === 'ask') {
-        const decision = await this.#interact(execution, {
-          kind: 'approval',
-          toolName: execution.toolName,
-          input: execution.input,
-          sourceCallId: execution.callId,
-          summary: plan.approval.summary,
-          ...(plan.approval.detail !== undefined ? { detail: plan.approval.detail } : {}),
-          ...(plan.approval.risk !== undefined ? { risk: plan.approval.risk } : {}),
-        });
-        if (decision.kind !== 'allow') {
-          const reason = decision.kind === 'deny' ? decision.reason : undefined;
-          return errorResult(
-            reason ? `Tool execution was not approved. User's reason: ${reason}` : 'Tool execution was not approved.',
-          );
-        }
+      if (plan.approval?.kind === 'question') execution.answer = plan.decision;
+      if (plan.approval?.kind === 'ask' && plan.decision?.kind !== 'allow') {
+        const reason = plan.decision?.kind === 'deny' ? plan.decision.reason : undefined;
+        return errorResult(
+          reason ? `Tool execution was not approved. User's reason: ${reason}` : 'Tool execution was not approved.',
+        );
       }
       return await this.#physical(
         execution,
@@ -418,10 +427,16 @@ export class TurnTools {
 
   async #interact(execution: Execution, input: ToolInteractionRequest): Promise<InteractionDecision> {
     this.#check();
-    if (this.stopped) throw new Error('Tool execution stopped after interaction resolution');
     const nested =
       input.toolName !== execution.toolName ||
       (input.sourceCallId !== undefined && input.sourceCallId !== execution.callId);
+    // The approval batch already asked this call's own question.
+    const answered = execution.answer;
+    if (!nested && input.kind === 'question' && answered) {
+      execution.answer = undefined;
+      return answered;
+    }
+    if (this.stopped) throw new Error('Tool execution stopped after interaction resolution');
     const answer = await this.#interactions.request(execution, input);
     if (answer.stopAfterApprovalResolution || (input.kind === 'question' && answer.kind === 'deny')) {
       this.#stop ??= nested
@@ -465,6 +480,7 @@ export class TurnTools {
   #checkStart(execution: Execution): void {
     this.#check();
     if (!execution.open) throw new Error('Tool execution capability is no longer active');
+    if (this.#batchStopped) throw new Error('Tool execution stopped after interaction resolution');
     if (!this.#stop || this.#stop.executionId === execution.executionId) return;
     if (
       !this.#stop.executionId &&
@@ -480,5 +496,5 @@ export class TurnTools {
 }
 
 function readyParallel(plan: Plan): boolean {
-  return plan.parallelSafe && plan.approval?.kind === 'none' && !plan.result;
+  return plan.parallelSafe && plan.approval?.kind === 'none' && !batched(plan.approval) && !plan.result;
 }

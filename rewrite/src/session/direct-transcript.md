@@ -39,6 +39,10 @@ observations and hidden provider facts can share one physical body; observations
 without turn correlation remain literal. Existing malformed, future and
 cross-turn references still fail decoding before schema validation.
 
+Native `turn_started.persistentNotice` prefixes the first admitted user message in
+provider replay while preserving the raw queue payload. Cancellation notices use
+this field and therefore survive later requests and reopening.
+
 Native `turn_started.requestNotice` stores the resolved request-only notice separately
 from raw input. Retry may attach it to the latest retained user-shaped input only
 when the recorded and current modes match; this includes silent background turns.

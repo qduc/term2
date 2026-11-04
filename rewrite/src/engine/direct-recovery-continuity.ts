@@ -128,6 +128,31 @@ export class DirectContinuity {
     };
   }
 
+  /**
+   * Legacy cancellation on a chained provider: a segment ended by a cancelled
+   * question keeps its response as the chain point, and the tool outputs it
+   * settled are never sent. Applies only when the history added since the
+   * checkpoint is exactly those outputs and one is the unanswered question.
+   */
+  skipCancelledQuestion(history: readonly Item[], noAnswer: string): void {
+    const checkpoint = this.#checkpoint;
+    if (!checkpoint || checkpoint.debt.length === 0 || !hasPrefix(history, checkpoint.history)) return;
+    const delta = history.slice(checkpoint.history.length);
+    if (delta.length !== checkpoint.debt.length) return;
+    const owed = [...checkpoint.debt];
+    let cancelled = false;
+    for (const item of delta) {
+      if (item.type !== 'tool_result') return;
+      const index = owed.indexOf(item.callId);
+      if (index < 0) return;
+      owed.splice(index, 1);
+      const call = checkpoint.history.find((entry) => entry.type === 'tool_call' && entry.callId === item.callId);
+      if (call?.type === 'tool_call' && call.toolName === 'ask_user' && item.output === noAnswer) cancelled = true;
+    }
+    if (!cancelled) return;
+    this.#checkpoint = { ...checkpoint, history: structuredClone(history), debt: [] };
+  }
+
   /** Retry, rewind, compaction, rollover, model/endpoint change and cancellation retire the checkpoint. */
   clear(): void {
     this.#checkpoint = undefined;

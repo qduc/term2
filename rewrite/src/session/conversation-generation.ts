@@ -1,3 +1,4 @@
+import { withNotice } from './direct-input-notice.js';
 import type { PreparedDirectRequest } from '../engine/direct-recovery-continuity.js';
 import type { Item, ModelRequest } from '../model/index.js';
 import type { bindDirectCapabilities } from './direct-capabilities.js';
@@ -187,22 +188,4 @@ export class ConversationGeneration {
       toolOccurrences: directPreviewOccurrences(facts, selected.request.input),
     });
   }
-}
-
-/** Notice is request-only: durable user history retains the user's exact input. */
-export function withNotice(input: readonly Item[], notice: string): readonly Item[] {
-  let prefixed = false;
-  return input.map((item) => {
-    if (prefixed || item.type !== 'user_message') return item;
-    const textIndex = item.content.findIndex((part) => part.type === 'text');
-    const part = item.content[textIndex];
-    if (part?.type !== 'text') {
-      prefixed = true;
-      return { ...item, content: [{ type: 'text', text: notice }, ...item.content] };
-    }
-    prefixed = true;
-    const content = [...item.content];
-    content[textIndex] = { ...part, text: `${notice}\n\n${part.text}` };
-    return { ...item, content };
-  });
 }

@@ -115,6 +115,7 @@ export const nativeSchemas: Record<string, FactSchema> = {
     if ('display' in fact && fact['display'] !== false) check.fail('display');
     if ('requestConfiguration' in fact) validateRequestConfiguration(fact['requestConfiguration'], check.fail);
     if ('requestNotice' in fact) check.text(fact['requestNotice'], 'requestNotice');
+    if ('persistentNotice' in fact) check.text(fact['persistentNotice'], 'persistentNotice');
     const silent = 'silent' in fact;
     if (silent && fact['silent'] !== true) check.fail('silent');
     if ('maintenance' in fact) {

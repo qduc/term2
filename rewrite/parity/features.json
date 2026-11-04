@@ -3072,14 +3072,15 @@
       }
     },
     "tool:propose_goal": {
-      "status": "todo",
+      "status": "in_progress",
       "source": "source/tools/tool-names.ts",
       "parity": [],
       "measurement": {
         "revision": "97591a7d7e41548f9ae3b8dc65763de8cc0f8c32",
         "verdict": "works",
         "evidence": "m6-inventory-measure-evidence/tool-probe-result.json#tool:propose_goal"
-      }
+      },
+      "note": "solo/tools: next registers legacy's run_code propose_goal through buildAgent for interactive runs only, where legacy offers it (user-interaction capability, ask_user allowed, goal port bound), backed by the session goal port. Headless runs, which the parity scenarios cover, offer it in neither engine, so no scenario proves it. Evidence: a side-by-side Pair-profile pty capture with a fake provider where the model proposes a goal and the user approves; the first four provider requests are byte-equal after id/time masking."
     },
     "tool:read_code_outline": {
       "status": "todo",

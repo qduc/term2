@@ -6,12 +6,12 @@
 import { statSync } from 'node:fs';
 import type { DirectPublicState } from '../session/direct-state.js';
 import {
+  directWriterLockHeld,
   replayNativeLineage,
   withNativeCatalogue,
   type NativeCatalogueEntry,
   type NativeCatalogueScope,
 } from './native-catalogue.js';
-import { nativeTranscript } from './native-transcript.js';
 import {
   extractDisplayOutput,
   INTERRUPTED_SYSTEM_MESSAGE,
@@ -24,7 +24,7 @@ const NATIVE_PREFIX = 'conv_';
 const bare = (id: string) => (id.startsWith(NATIVE_PREFIX) ? id.slice(NATIVE_PREFIX.length) : id);
 const version = (entry: NativeCatalogueEntry) => `${entry.updated}:${entry.displayed ?? ''}:${entry.messages}`;
 
-type Converted = { readonly version: string; readonly conversation: RestoredState | null };
+type Converted = { readonly version: string; readonly parts: readonly RestoredState[] | null };
 
 /** The legacy command row text: the first of these arguments, else the tool name (conversation-replay.ts). */
 function commandText(toolName: string, input: unknown): string {
@@ -97,21 +97,27 @@ function savedMessages(state: DirectPublicState, reasoning: ReadonlyMap<string, 
   return saved;
 }
 
-function convert(directory: string, entry: NativeCatalogueEntry): RestoredState | null {
+/**
+ * A lineage as legacy would have saved it: one conversation per rollover part, each later part naming the one it
+ * rolled over from. A part is named by the log it was written to, the id a rollover briefing gives its predecessor.
+ */
+function convert(directory: string, entry: NativeCatalogueEntry): readonly RestoredState[] | null {
   try {
-    const { metadata, firstAt, lastAt, state, documents } = replayNativeLineage(directory, entry.id, nativeTranscript);
-    const reasoning = new Map(documents.filter((doc) => doc.kind === 'reasoning').map((doc) => [doc.id, doc.text]));
-    const model = state.configuration?.configuration.model ?? state.model;
-    return {
-      id: bare(entry.id),
-      createdAt: firstAt,
-      updatedAt: lastAt,
-      projectPath: metadata.workspace,
-      model: model.model,
-      provider: model.provider,
-      ...(metadata.rolloverFrom ? { rolloverFrom: bare(metadata.rolloverFrom) } : {}),
-      messages: savedMessages(state, reasoning),
-    } as unknown as RestoredState;
+    const { metadata, parts, reasoning } = replayNativeLineage(directory, entry.id);
+    const ids = parts.map((part) => bare(part.sessionId));
+    return parts.map((part, index) => {
+      const model = part.state.configuration?.configuration.model ?? part.state.model;
+      return {
+        id: ids[index]!,
+        createdAt: part.firstAt,
+        updatedAt: part.lastAt,
+        projectPath: metadata.workspace,
+        model: model.model,
+        provider: model.provider,
+        ...(index > 0 ? { rolloverFrom: ids[index - 1]! } : {}),
+        messages: savedMessages(part.state, reasoning),
+      } as unknown as RestoredState;
+    });
   } catch {
     return null;
   }
@@ -127,17 +133,27 @@ export function nativeSessionBrowserStore(directory: string, scope: NativeCatalo
   const load = (entry: NativeCatalogueEntry) => {
     const current = version(entry);
     const kept = converted.get(entry.id);
-    if (kept?.version === current) return kept.conversation;
-    const conversation = convert(directory, entry);
-    converted.set(entry.id, { version: current, conversation });
-    return conversation;
+    if (kept?.version === current) return kept.parts;
+    const parts = convert(directory, entry);
+    converted.set(entry.id, { version: current, parts });
+    return parts;
   };
-  const find = (id: string, all = false) => entries(all).find((entry) => bare(entry.id) === id);
-  const loaded = (entry: NativeCatalogueEntry | undefined) => {
-    const conversation = entry ? load(entry) : null;
-    if (!entry) return { status: 'not_found' as const };
-    if (!conversation) return { status: 'unreadable' as const, error: new Error('Session transcript is unavailable.') };
-    return { status: 'loaded' as const, conversation, sourceVersion: version(entry) };
+  /** The lineage holding a browser id, and that id's part. A lineage's first log carries the lineage id. */
+  const find = (id: string, all = false) => {
+    const listed = entries(all);
+    const own = listed.find((entry) => bare(entry.id) === id);
+    if (own) return { entry: own, conversation: load(own)?.find((part) => part.id === id) ?? null };
+    for (const entry of listed) {
+      const part = load(entry)?.find((candidate) => candidate.id === id);
+      if (part) return { entry, conversation: part };
+    }
+    return undefined;
+  };
+  const loaded = (found: ReturnType<typeof find>) => {
+    if (!found) return { status: 'not_found' as const };
+    if (!found.conversation)
+      return { status: 'unreadable' as const, error: new Error('Session transcript is unavailable.') };
+    return { status: 'loaded' as const, conversation: found.conversation, sourceVersion: version(found.entry) };
   };
   return {
     browse(_projectPath, _sshHost, idPrefix) {
@@ -145,21 +161,24 @@ export function nativeSessionBrowserStore(directory: string, scope: NativeCatalo
       const sourceVersions = new Map<string, string>();
       let unavailable = 0;
       for (const entry of entries()) {
-        const id = bare(entry.id);
-        if (idPrefix !== undefined && !id.toLowerCase().startsWith(idPrefix.toLowerCase())) continue;
-        const conversation = load(entry);
-        if (!conversation) {
-          unavailable++;
+        const parts = load(entry);
+        if (!parts) {
+          if (idPrefix === undefined || bare(entry.id).toLowerCase().startsWith(idPrefix.toLowerCase())) unavailable++;
           continue;
         }
-        conversations.push(conversation);
-        sourceVersions.set(id, version(entry));
+        for (const part of parts) {
+          if (idPrefix !== undefined && !part.id.toLowerCase().startsWith(idPrefix.toLowerCase())) continue;
+          conversations.push(part);
+          sourceVersions.set(part.id, version(entry));
+        }
       }
+      // Legacy lists sessions newest first; rollover parts are separate sessions there.
+      conversations.sort((left, right) => String(right.updatedAt).localeCompare(String(left.updatedAt)));
       return { conversations, unavailable, sourceVersions, directoryVersion: this.directoryVersion() ?? undefined };
     },
     sourceVersion(id) {
-      const entry = find(id);
-      return entry ? version(entry) : null;
+      const found = find(id);
+      return found ? version(found.entry) : null;
     },
     directoryVersion() {
       try {
@@ -170,15 +189,21 @@ export function nativeSessionBrowserStore(directory: string, scope: NativeCatalo
       }
     },
     loadForProject(id) {
-      const entry = find(id);
-      if (entry) return loaded(entry);
+      const found = find(id);
+      if (found) return loaded(found);
       const elsewhere = find(id, true);
-      const conversation = elsewhere ? load(elsewhere) : null;
-      return conversation ? { status: 'project_mismatch', conversation } : { status: 'not_found' };
+      return elsewhere?.conversation
+        ? { status: 'project_mismatch', conversation: elsewhere.conversation }
+        : { status: 'not_found' };
     },
     loadUnscoped: (id) => loaded(find(id, true)),
-    // Native sessions hold no legacy conversation lock; another process's open session is not detected.
-    lock: () => null,
+    // Only the newest part of a lineage is still being written; its writer holds the lineage's lock.
+    lock(id) {
+      const found = find(id, true);
+      if (!found || load(found.entry)?.at(-1)?.id !== id || !directWriterLockHeld(directory, found.entry.id))
+        return null;
+      return { status: 'held', pid: 0, startedAt: '', host: '' };
+    },
   };
 }
 

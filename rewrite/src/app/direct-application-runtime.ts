@@ -37,6 +37,7 @@ import { createDirectVerificationOperations } from './direct-verifier.js';
 import { withGenerationGuard } from './generation-guard.js';
 import { createSettingsService, type SettingsService } from './settings.js';
 import { createNativeSessionBrowser } from './native-session-browser.js';
+import { nativeBrowserId } from './native-session-browser-store.js';
 import type { AgentSurface, ProfileSelection, ToolSurfaceOptions } from './tool-contract.js';
 
 export type DirectRuntimeOptions = {
@@ -210,7 +211,8 @@ export function createDirectRuntimes(
                 options.conversationsDir,
                 context.workspace,
                 context.binding,
-                () => context.id,
+                // The live part: after a rollover it is the newest log, as the briefing names its predecessor.
+                () => installed.bound?.port.backingSessionId ?? context.id,
               ),
             }
           : {}),
@@ -268,7 +270,8 @@ export function createDirectRuntimes(
         const { bound } = installed;
         if (!bound) throw new Error('This session has not finished starting.');
         return prepareSessionRollover({
-          previousSessionId: bound.port.backingSessionId,
+          // The bare id the session browser reads it by, as legacy names its sessions.
+          previousSessionId: nativeBrowserId(bound.port.backingSessionId),
           request,
           signal,
           taskInventory: () =>

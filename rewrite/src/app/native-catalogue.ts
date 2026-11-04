@@ -9,14 +9,13 @@ import {
   type NativeIndexer,
 } from '../session/native-catalogue.js';
 import { contentText, publicContent } from '../protocol/direct-public.js';
-import { nativeTranscript } from './native-transcript.js';
 
 export { nativeCataloguePath, nativeSearchScope, replayNativeLineage };
+export { directWriterLockHeld } from '../session/direct-writer-lock.js';
 export type { NativeCatalogueEntry, NativeCatalogueScope, NativeIndexer };
 
-/** Search documents hold only non-blank text, so the user's message count does too. */
+/** The user's message count holds only non-blank messages. */
 export const nativeIndexer: NativeIndexer = {
-  transcript: nativeTranscript,
   userMessages: (state) =>
     state.messages.filter(
       (message) => message.role === 'user' && contentText(publicContent(message.content as never)).trim().length > 0,

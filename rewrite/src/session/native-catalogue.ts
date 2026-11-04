@@ -1,4 +1,4 @@
-/** Disposable, contentless native search index and CLI catalogue. Logs remain authoritative. */
+/** Disposable native session catalogue (the resume list and the session browser's listing). Logs remain authoritative. */
 import { chmodSync, closeSync, existsSync, lstatSync, mkdirSync, openSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
@@ -14,20 +14,8 @@ import { readFactLinesFrom } from './log.js';
 import type { Workspace } from '../tools/index.js';
 import type { DirectBinding } from './facade-types.js';
 
-/** The searchable documents of one lineage. The caller owns how a transcript is read (it needs the protocol layer). */
-export type NativeTranscript = (lineage: DirectLogLineage) => {
-  readonly documents: readonly {
-    readonly id: string;
-    readonly seq: number;
-    readonly kind: string;
-    readonly text: string;
-  }[];
-  readonly messageCount: number;
-};
-
-/** How the app reads a lineage for search, and how it counts the user's messages in a reduced state. */
+/** How the app counts the user's messages in a reduced state (it needs the protocol layer). */
 export type NativeIndexer = {
-  readonly transcript: NativeTranscript;
   readonly userMessages: (state: DirectPublicState) => number;
 };
 
@@ -52,7 +40,6 @@ export type NativeCatalogueEntry = {
   readonly displayed: number | null;
 };
 type Physical = { name: string; stamp: string; logical: string };
-type Match = { rowid: number; logical: string; identity: string; seq: number; kind: string; text: string };
 
 /** Deterministic sibling cache, outside the strict native conversation namespace. */
 export function nativeCataloguePath(directory: string): string {
@@ -70,33 +57,18 @@ function openCache(filename: string): Database.Database {
       db.pragma('journal_mode = MEMORY');
       db.exec(`CREATE TABLE IF NOT EXISTS physical(name TEXT PRIMARY KEY, stamp TEXT NOT NULL, logical TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS catalogue(id TEXT PRIMARY KEY, updated TEXT, created TEXT, workspace TEXT, target TEXT, binding TEXT, model TEXT, profile TEXT, messages INTEGER, provider TEXT, displayed INTEGER);
-        CREATE TABLE IF NOT EXISTS documents(rowid INTEGER PRIMARY KEY, logical TEXT, identity TEXT, seq INTEGER, kind TEXT, text TEXT);
-        CREATE INDEX IF NOT EXISTS documents_logical ON documents(logical);
-        CREATE VIRTUAL TABLE IF NOT EXISTS search USING fts5(text, content='', contentless_delete=1);
-        CREATE TABLE IF NOT EXISTS folds(logical TEXT PRIMARY KEY, file TEXT, ino TEXT, off INTEGER, state_seq INTEGER, seq INTEGER, docs_seq INTEGER, state TEXT);`);
+        CREATE TABLE IF NOT EXISTS folds(logical TEXT PRIMARY KEY, file TEXT, ino TEXT, off INTEGER, state_seq INTEGER, seq INTEGER, state TEXT);
+        DROP TABLE IF EXISTS search; DROP TABLE IF EXISTS documents;`);
       // Version 2 keeps the reduced state of each log so a grown log is read from where it was indexed.
       // An older cache has none: it is disposable, so empty it and rebuild every lineage once.
       if ((db.pragma('user_version', { simple: true }) as number) < 2) {
-        db.exec(
-          'DELETE FROM search; DELETE FROM documents; DELETE FROM catalogue; DELETE FROM physical; DELETE FROM folds; PRAGMA user_version = 2;',
-        );
+        db.exec('DELETE FROM catalogue; DELETE FROM physical; DELETE FROM folds; PRAGMA user_version = 2;');
       }
-      db.prepare('SELECT count(*) FROM search').get();
       const columns = new Set(
         (db.prepare('PRAGMA table_info(catalogue)').all() as { name: string }[]).map((column) => column.name),
       );
       if (!columns.has('provider')) db.exec('ALTER TABLE catalogue ADD COLUMN provider TEXT');
       if (!columns.has('displayed')) db.exec('ALTER TABLE catalogue ADD COLUMN displayed INTEGER');
-      // Snippets come from the stored text, so a search never re-reads a log. An older cache has none:
-      // it is disposable, so empty it and let the next refresh rebuild every lineage once.
-      const documentColumns = (db.prepare('PRAGMA table_info(documents)').all() as { name: string }[]).map(
-        (column) => column.name,
-      );
-      if (!documentColumns.includes('text')) {
-        db.exec(
-          'ALTER TABLE documents ADD COLUMN text TEXT; DELETE FROM search; DELETE FROM documents; DELETE FROM catalogue; DELETE FROM physical;',
-        );
-      }
       return db;
     } catch (error) {
       db.close();
@@ -134,8 +106,7 @@ function allowed(entry: NativeCatalogueEntry, scope: NativeCatalogueScope, inclu
 /**
  * Open for one synchronous operation, refresh only changed logical lineages, and close.
  * Resume rows come from a stored reduced state (`folds`): a log that grew is read from the byte where it was
- * last indexed, and only a log that shrank, changed file or has no state is read whole. Search documents
- * need the full projection, so they are rebuilt, for the sessions a search may return, when its log moved.
+ * last indexed, and only a log that shrank, changed file or has no state is read whole.
  * `skip` leaves lineages unread: the caller already has them in memory, and rewriting their stamp would
  * hide a later refresh once they are no longer open.
  */
@@ -144,15 +115,6 @@ export function withNativeCatalogue<T>(
   indexer: NativeIndexer,
   operation: (catalogue: {
     list(scope: NativeCatalogueScope, options?: { readonly includeBound?: boolean }): readonly NativeCatalogueEntry[];
-    search(
-      scope: NativeCatalogueScope,
-      query: string,
-      kind?: string,
-      limit?: number,
-    ): {
-      total: number;
-      hits: readonly { sessionId: string; identity: string; seq: number; kind: string; snippet: string }[];
-    };
   }) => T,
   options?: { readonly skip?: readonly string[] },
 ): T {
@@ -231,45 +193,7 @@ export function withNativeCatalogue<T>(
       (db.prepare('SELECT * FROM catalogue ORDER BY updated DESC, id').all() as NativeCatalogueEntry[]).filter(
         (entry) => allowed(entry, scope, listOptions?.includeBound === true),
       );
-    return operation({
-      list,
-      search(scope, query, kind, limit = 20) {
-        const terms = query.trim().split(/\s+/).filter(Boolean);
-        if (!terms.length) return { total: 0, hits: [] };
-        const match = terms.map((term) => `"${term.replaceAll('"', '""')}"`).join(' OR ');
-        const authorized = new Set(list(scope).map((entry) => entry.id));
-        db.transaction(() => {
-          for (const logical of authorized)
-            if (!skip.has(logical)) refreshDocuments(db, directory, logical, indexer.transcript);
-        })();
-        const rows = (
-          db
-            .prepare(
-              `SELECT d.rowid, d.logical, d.identity, d.seq, d.kind FROM search JOIN documents d ON d.rowid = search.rowid WHERE search MATCH ? ${
-                kind ? 'AND d.kind = ?' : ''
-              } ORDER BY rank, d.logical, d.rowid`,
-            )
-            .all(...(kind ? [match, kind] : [match])) as Omit<Match, 'text'>[]
-        ).filter((row) => authorized.has(row.logical));
-        // Texts are large and only the returned hits need one.
-        const textOf = db.prepare('SELECT text FROM documents WHERE rowid = ?');
-        const hits = rows.slice(0, Math.max(1, Math.min(50, limit))).map((row) => {
-          const text = (textOf.get(row.rowid) as { text: string | null } | undefined)?.text ?? '';
-          const positions = terms
-            .map((term) => text.toLocaleLowerCase().indexOf(term.toLocaleLowerCase()))
-            .filter((position) => position >= 0);
-          const start = Math.max(0, (positions.length ? Math.min(...positions) : 0) - 100);
-          return {
-            sessionId: row.logical,
-            identity: row.identity,
-            seq: row.seq,
-            kind: row.kind,
-            snippet: text.slice(start, start + 500),
-          };
-        });
-        return { total: rows.length, hits };
-      },
-    });
+    return operation({ list });
   } finally {
     db.close();
   }
@@ -285,13 +209,10 @@ type FoldRow = {
   off: number;
   state_seq: number;
   seq: number;
-  docs_seq: number | null;
   state: string;
 };
 
 function dropLogical(db: Database.Database, logical: string): void {
-  db.prepare('DELETE FROM search WHERE rowid IN (SELECT rowid FROM documents WHERE logical = ?)').run(logical);
-  db.prepare('DELETE FROM documents WHERE logical = ?').run(logical);
   db.prepare('DELETE FROM catalogue WHERE id = ?').run(logical);
   db.prepare('DELETE FROM folds WHERE logical = ?').run(logical);
 }
@@ -377,44 +298,11 @@ function refreshColumns(
   );
   if (save)
     db.prepare(
-      `INSERT INTO folds (logical, file, ino, off, state_seq, seq, docs_seq, state) VALUES (?, ?, ?, ?, ?, ?, NULL, ?)
+      `INSERT INTO folds (logical, file, ino, off, state_seq, seq, state) VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(logical) DO UPDATE SET file = excluded.file, ino = excluded.ino, off = excluded.off,
-         state_seq = excluded.state_seq, seq = excluded.seq, docs_seq = CASE WHEN ? THEN folds.docs_seq ELSE NULL END,
-         state = excluded.state`,
-    ).run(logical, file, ino, offset, stateSeq, seq, JSON.stringify(final), lineage ? 0 : 1);
+         state_seq = excluded.state_seq, seq = excluded.seq, state = excluded.state`,
+    ).run(logical, file, ino, offset, stateSeq, seq, JSON.stringify(final));
   else db.prepare('UPDATE folds SET seq = ? WHERE logical = ?').run(seq, logical);
-}
-
-/** Rebuilds the search documents of one lineage when its log has moved past what they were built from. */
-function refreshDocuments(
-  db: Database.Database,
-  directory: string,
-  logical: string,
-  transcript: NativeTranscript,
-): void {
-  const fold = db.prepare('SELECT docs_seq, seq FROM folds WHERE logical = ?').get(logical) as
-    | { docs_seq: number | null; seq: number }
-    | undefined;
-  if (!fold || fold.docs_seq === fold.seq) return;
-  db.prepare('DELETE FROM search WHERE rowid IN (SELECT rowid FROM documents WHERE logical = ?)').run(logical);
-  db.prepare('DELETE FROM documents WHERE logical = ?').run(logical);
-  let docs: ReturnType<NativeTranscript>;
-  let lastSeq: number;
-  try {
-    const lineage = readDirectLogLineage(directory, logical);
-    docs = transcript(lineage);
-    lastSeq = lineage.entries.at(-1)!.seq;
-  } catch (error) {
-    console.warn(`Native catalogue documents unavailable for ${logical}: ${String(error)}`);
-    return;
-  }
-  for (const doc of docs.documents) {
-    const result = db
-      .prepare('INSERT INTO documents(logical, identity, seq, kind, text) VALUES (?, ?, ?, ?, ?)')
-      .run(logical, doc.id, doc.seq, doc.kind, doc.text);
-    db.prepare('INSERT INTO search(rowid, text) VALUES (?, ?)').run(result.lastInsertRowid, doc.text);
-  }
-  db.prepare('UPDATE folds SET docs_seq = ? WHERE logical = ?').run(lastSeq, logical);
 }
 
 /** Fixed authorized workspace identity, not a model-selected search path. */
@@ -422,17 +310,26 @@ export function nativeSearchScope(workspace: Workspace, binding?: DirectBinding)
   return { target: workspace.target, root: workspace.root, ...(binding ? { binding } : {}) };
 }
 
-/** One closed lineage replayed for a read-only browser: its metadata, accepted span, reduced state and documents. */
-export function replayNativeLineage(
-  directory: string,
-  logical: string,
-  transcript: NativeTranscript,
-): {
-  readonly metadata: DirectLogLineage['metadata'];
+/** One part of a lineage: what a session showed between two rollovers. */
+export type NativeLineagePart = {
+  /** The physical log the part was written to. */
+  readonly sessionId: string;
   readonly firstAt: string;
   readonly lastAt: string;
   readonly state: DirectPublicState;
-  readonly documents: ReturnType<NativeTranscript>['documents'];
+};
+
+/**
+ * One lineage replayed for a read-only browser: its metadata, each rollover part in order (a rollover resets
+ * what the session shows, so each part is the state just before the next one starts) and reasoning text by item.
+ */
+export function replayNativeLineage(
+  directory: string,
+  logical: string,
+): {
+  readonly metadata: DirectLogLineage['metadata'];
+  readonly parts: readonly NativeLineagePart[];
+  readonly reasoning: ReadonlyMap<string, string>;
 } {
   const lineage = readDirectLogLineage(path.resolve(directory), logical);
   const metadata = lineage.metadata;
@@ -441,12 +338,19 @@ export function replayNativeLineage(
     metadata.workspaceIdentity ?? { root: metadata.workspace, target: 'local', access: 'read' },
     metadata.model,
   ) as DirectPublicState;
-  for (const entry of lineage.entries) state = reduceDirectFact(state, entry.fact, entry.seq) as DirectPublicState;
-  return {
-    metadata,
-    firstAt: lineage.entries[0]!.at,
-    lastAt: lineage.entries.at(-1)!.at,
-    state,
-    documents: transcript(lineage).documents,
-  };
+  const reasoning = new Map<string, string>();
+  const parts: NativeLineagePart[] = [];
+  let entries = lineage.entries;
+  for (const segment of lineage.segments) {
+    const own = entries.filter((entry) => entry.seq > segment.afterSeq && entry.seq <= segment.throughSeq);
+    entries = entries.filter((entry) => entry.seq > segment.throughSeq);
+    if (!own.length) continue;
+    for (const entry of own) {
+      state = reduceDirectFact(state, entry.fact, entry.seq) as DirectPublicState;
+      if (entry.fact.type === 'item' && entry.fact.item.type === 'reasoning')
+        reasoning.set(entry.fact.item.id, entry.fact.item.summary);
+    }
+    parts.push({ sessionId: segment.sessionId, firstAt: own[0]!.at, lastAt: own.at(-1)!.at, state });
+  }
+  return { metadata, parts, reasoning };
 }

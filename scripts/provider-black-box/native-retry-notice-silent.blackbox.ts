@@ -51,7 +51,7 @@ it.skipIf(process.platform !== 'linux')('replays a silent background turn notice
   });
   const child = await lease.start({
     command: process.execPath,
-    args: [join(process.cwd(), 'rewrite/dist/rewrite/src/app/cli.js'), '--lite', '--profile', 'pair'],
+    args: [join(process.cwd(), 'rewrite/dist/rewrite/src/app/cli.js'), '--lite'],
     env: {
       PATH: `${join(lease.root, 'bin')}:${process.env.PATH ?? ''}`,
       CLIPBOARD_FIXTURE: join(lease.root, 'clipboard.png'),
@@ -91,23 +91,22 @@ it.skipIf(process.platform !== 'linux')('replays a silent background turn notice
     complete(1, [message('BACKGROUND_STARTED')]);
     await child.waitForVisibleOutput('BACKGROUND_STARTED');
     await child.waitForIdleInput({ after: idle });
-    await writePtyTextAndSubmit(child, '/profile plan');
-    // Legacy /profile switches silently; the status bar's profile shows the switch landed.
-    await child.waitForVisibleOutput('Plan │');
-    await child.waitForComposerValue('', { afterRevision: 0 });
-    const switchedIdle = child.readIdleGeneration();
+    const silentIdle = child.readIdleGeneration();
     await writeFile(join(lease.root, '.fixture-release'), 'go');
     await child.waitForState(() => requests.length === 3);
-    expect(JSON.stringify(requests[2]!.input)).toContain('Plan Mode is ON');
+    // The silent turn's input is the background job's completion notice; /retry-tool must replay it.
+    // (Only dropped profiles have mode notices, so the notice under test is the background one.)
+    const notice = requests[2]!.input as unknown[];
+    expect(JSON.stringify(notice)).toContain('.fixture-release');
     complete(2, [call('silent-call', 'pwd')]);
     await child.waitForState(() => requests.length === 4);
     complete(3, [message('SILENT_DONE')]);
     await child.waitForVisibleOutput('SILENT_DONE');
-    await child.waitForIdleInput({ after: switchedIdle });
+    await child.waitForIdleInput({ after: silentIdle });
     await child.waitForComposerValue('', { afterRevision: 0 });
     await writePtyTextAndSubmit(child, '/retry-tool');
     await child.waitForState(() => requests.length === 5);
-    expect(JSON.stringify(requests[4]!.input)).toContain('Plan Mode is ON');
+    expect(requests[4]!.input).toEqual(expect.arrayContaining(notice));
     complete(4, [message('RETRY_DONE')]);
     await child.waitForVisibleOutput('RETRY_DONE');
   } finally {

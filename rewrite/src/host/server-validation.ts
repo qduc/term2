@@ -182,18 +182,6 @@ export function hasAttachments(body: unknown): boolean {
   );
 }
 
-export function isMessageBody(body: unknown): body is { text: string; clientRequestId: string } {
-  if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
-  const value = body as Record<string, unknown>;
-  return (
-    Object.keys(value).every((key) => key === 'text' || key === 'clientRequestId') &&
-    typeof value.text === 'string' &&
-    value.text.length > 0 &&
-    value.text.length <= 128_000 &&
-    isOpaqueId(value.clientRequestId)
-  );
-}
-
 export function isTurnBody(body: unknown): body is { turnId: string } {
   return (
     !!body &&

@@ -116,6 +116,7 @@ export type ConversationDeps = TurnDeps & {
   /** Store-owned physical boundary, never supplied by app as write authority. */
   readonly rotationBoundary?: () => import('./direct-rolling-log.js').DirectLogBoundary;
   readonly authorizeNested?: import('./direct-branches.js').DirectNestedAuthorizer;
+  /** Store-owned live publishers: they forward transients to the session's subscribers, never to the log. */
   readonly publishNotice?: (notice: import('./direct-memory.js').DirectAutomaticMemoryNotice) => void;
   readonly publishBranch?: (event: import('./facade-types.js').DirectBranchTransient) => void;
   readonly publishTask?: (event: import('./direct-background-types.js').DirectBackgroundProgress) => void;

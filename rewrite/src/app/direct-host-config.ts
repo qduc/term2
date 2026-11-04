@@ -50,10 +50,5 @@ export function createDirectProductPorts(options: { settingsDir?: string } = {})
     ...createDirectAccountPorts(service),
   };
 }
-export {
-  bindDirectSessionAccess,
-  directAcpWorkspaces,
-  directServeToolPosture,
-  sessionStart,
-} from './direct-host-config-access.js';
+export { bindDirectSessionAccess, directServeToolPosture } from './direct-host-config-access.js';
 export type { DirectBoundSessionStore } from './direct-host-config-access.js';

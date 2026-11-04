@@ -498,9 +498,9 @@ provider; no price or charge is invented. Zero cache counters are omitted from
 legacy usage. Coverage limits remain documented here rather than emitted as an
 extra field that old consumers did not define.
 
-`DIRECT_LEGACY_JSON_FINAL_WINDOW_AVAILABLE` remains false as a declaration about
-the complete legacy ConversationEvent/private-history schema, not the bounded
-terminal window. Headless consumes the final window and exact live slices.
+The direct JSON output does not reproduce the complete legacy
+ConversationEvent/private-history schema; it carries only the bounded terminal
+window. Headless consumes the final window and exact live slices.
 In log version 2, `recoverDirectFinalWindow` projects each root terminal window
 read-only from its accepted fact prefix when a preceding `turn_started` exists.
 This is current-format projection, not `derivedFromAcceptedFacts`/`legacyDerived`

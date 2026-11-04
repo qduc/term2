@@ -35,7 +35,8 @@ export type DirectRuntimeContext = {
   readonly configuration?: DirectConfigurationState;
 };
 export type DirectConversationRuntime = {
-  readonly deps: Omit<ConversationDeps, 'log'>;
+  /** The store supplies the log and the live publishers itself; app supplies neither. */
+  readonly deps: Omit<ConversationDeps, 'log' | 'publishTask' | 'publishBranch' | 'publishNotice'>;
   readonly request: Omit<TurnRequest, 'input' | 'model' | 'submission'>;
   readonly profile: SessionStartedFact['profile'];
   readonly appVersion: string;
@@ -214,18 +215,10 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
           const liveDeps = {
             ...ownedRuntime.deps,
             rotationBoundary: () => rollingLog.head(),
-            publishTask: (event: import('./direct-background-types.js').DirectBackgroundProgress) => {
-              ownedRuntime.deps.publishTask?.(event);
-              publish(event);
-            },
-            publishBranch: (event: import('./facade-types.js').DirectBranchTransient) => {
-              ownedRuntime.deps.publishBranch?.(event);
-              publish(event);
-            },
-            publishNotice: (notice: import('./direct-memory.js').DirectAutomaticMemoryNotice) => {
-              ownedRuntime.deps.publishNotice?.(notice);
-              publish({ type: 'automatic_memory_notice', notice });
-            },
+            publishTask: (event: import('./direct-background-types.js').DirectBackgroundProgress) => publish(event),
+            publishBranch: (event: import('./facade-types.js').DirectBranchTransient) => publish(event),
+            publishNotice: (notice: import('./direct-memory.js').DirectAutomaticMemoryNotice) =>
+              publish({ type: 'automatic_memory_notice', notice }),
           };
           if (context.metadata) return openConversation({ ...liveDeps, log: observedLog, facts: initial });
           return createConversation({

@@ -244,10 +244,6 @@ export function Activity({
   const theme = useTheme();
   const { TaskPanel } = useSkin();
   const compactFailure = compactFailureMessage(state);
-  // Only running work belongs in the live region; settled tasks stay in the task manager, and ids stay out of the transcript.
-  const liveTasks = state.tasks.filter(
-    (task) => task.wire?.kind !== 'shell' && (task.status === 'running' || task.status === 'awaiting_interaction'),
-  );
   return (
     <Box flexDirection="column">
       {/* Legacy hides the working indicator while an approval prompt owns the turn. */}
@@ -292,17 +288,6 @@ export function Activity({
             ? 'Connection to the model dropped. /retry to try again.'
             : `Error: ${state.lastError}`}
         </Text>
-      ) : null}
-      {liveTasks.length ? (
-        <TaskPanel header={`Tasks · ${liveTasks.length} active · /tasks manage`}>
-          {liveTasks.map((task) => (
-            <Text key={task.id}>
-              {' '}
-              {task.status === 'running' ? '◐' : '○'} {task.label} · {task.status}
-              {task.detail ? ` — ${task.detail.split('\n')[0]}` : ''}
-            </Text>
-          ))}
-        </TaskPanel>
       ) : null}
       {state.interactions.map((interaction, index) =>
         interaction.id === dialogInteractionId ? null : (
@@ -384,48 +369,6 @@ export function BangResult({
     <Box flexDirection="column">
       <Text color={header.startsWith('✓') ? theme.success : theme.danger}>{header}</Text>
       {expanded && detail.length ? <Text>{detail.join('\n')}</Text> : null}
-    </Box>
-  );
-}
-
-/** Render active shell work below the divider, as in the legacy task panel. */
-export function ShellTaskPanel({ state }: { readonly state: TuiState }): React.ReactElement | null {
-  const theme = useTheme();
-  const { taskPanelGutter } = useSkin();
-  const { columns: terminalColumns } = useTerminalSize();
-  const columns = terminalColumns - taskPanelGutter;
-  const [now, setNow] = useState(Date.now);
-  const tasks = state.tasks.filter(
-    (task) => task.wire?.kind === 'shell' && (task.status === 'running' || task.status === 'awaiting_interaction'),
-  );
-  useEffect(() => {
-    if (!tasks.length) return;
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, [tasks.length]);
-  if (!tasks.length) return null;
-  return (
-    <Box flexDirection="column" marginBottom={2}>
-      <Text color={theme.textSubtle}>Tasks · {tasks.length} active · ^G manage</Text>
-      {tasks.map((task) => {
-        const badge = '[Shell ↑]';
-        const rawPhase = `Running · ${Math.max(0, Math.floor((now - (task.wire?.startedAt ?? now)) / 1000))}s`;
-        const fixedColumns = 2 + terminalTextWidth(badge) + 1 + 3;
-        const phase = truncateTerminalText(rawPhase, Math.max(1, columns - fixedColumns - 6));
-        const physicalBudget = Math.max(1, columns - fixedColumns - terminalTextWidth(phase));
-        const classBudget = columns < 72 ? 24 : columns >= 104 ? 60 : 36;
-        const label =
-          task.label
-            .split('\n')
-            .find((line) => line.trim())
-            ?.trim()
-            .replaceAll(/\s+/g, ' ') ?? '';
-        return (
-          <Text key={task.id} color={theme.textSubtle}>
-            • {badge} {truncateTerminalText(label, Math.min(physicalBudget, classBudget))} · {phase}
-          </Text>
-        );
-      })}
     </Box>
   );
 }

@@ -4,11 +4,10 @@ import type { TuiConnection, TuiProps } from './integration.js';
 import type { TuiState } from './state.js';
 import { PickerHost, type PickerKind } from './picker-host.js';
 import { BudgetPanel } from './budget-panel.js';
-import { TaskManager } from './task-manager.js';
 import { RewindPicker } from './rewind-picker.js';
 import { InteractionPanel } from './interaction-panel.js';
 import type { InteractionInput } from './interaction-input.js';
-import { answerBudget, answerInteraction, controlTask } from './commands.js';
+import { answerBudget, answerInteraction } from './commands.js';
 
 type Props = {
   picker: PickerKind | null;
@@ -18,7 +17,6 @@ type Props = {
   onNotice: (notice: string | null) => void;
   switchSession?: (sessionId: string) => Promise<void>;
   budgetOpen: boolean;
-  taskOpen: boolean;
   rewindTargets: readonly WireRewindTarget[] | null;
   state: TuiState;
   /** The Ctrl+G request picker; the foreground turn's request is approval-host.tsx's. */
@@ -26,7 +24,6 @@ type Props = {
   columns: number;
   closePicker: () => void;
   closeBudget: () => void;
-  closeTask: () => void;
   closeRewind: () => void;
   closeInteraction: () => void;
   executeRewind: (id: string, disposition: 'edit' | 'resend') => Promise<void>;
@@ -41,14 +38,12 @@ export function SessionPanels({
   onNotice: setNotice,
   switchSession,
   budgetOpen,
-  taskOpen,
   rewindTargets,
   state,
   interactionActive,
   columns,
   closePicker,
   closeBudget,
-  closeTask,
   closeRewind,
   closeInteraction,
   executeRewind,
@@ -71,13 +66,6 @@ export function SessionPanels({
           requests={state.budgets}
           onClose={() => closeBudget()}
           onAnswer={(id, decision) => answerBudget(connection, id, decision)}
-        />
-      ) : null}
-      {taskOpen ? (
-        <TaskManager
-          tasks={state.tasks}
-          onClose={() => closeTask()}
-          onAction={(id, action) => controlTask(connection, id, action)}
         />
       ) : null}
       {rewindTargets ? (

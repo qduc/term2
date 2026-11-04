@@ -7,7 +7,7 @@ import { useTheme } from './presentation/components/theme.js';
 import { useSkin } from './presentation/skins/SkinContext.js';
 import { terminalPreferenceDefaults } from '../../host/terminal-preference-defaults.js';
 import { useClient } from './use-client.js';
-import { ShellTaskPanel, Activity, BangResult, LiveNotices, interruptedNotice } from './views.js';
+import { Activity, BangResult, LiveNotices, interruptedNotice } from './views.js';
 import { PendingQueue, PendingQueueEdit } from './pending-queue.js';
 import type { InteractionInputHandler } from './interaction-input.js';
 import { runBangShell } from './bang-shell.js';
@@ -28,6 +28,7 @@ import { useSendConfirmation } from './send-confirmation.js';
 import { ComposerFooter, useComposerFilter, useComposerMenu } from './composer-parts.js';
 import { SessionPanels } from './session-panels.js';
 import { ApprovalHost, promptRequest } from './approval-host.js';
+import { TasksPanel } from './tasks-panel.js';
 import { useSessionRewind } from './session-rewind.js';
 import {
   answerInteraction,
@@ -396,7 +397,6 @@ export function TuiSession({
             interactionInput,
             switchSession,
             budgetOpen,
-            taskOpen,
             rewindTargets,
             state,
             columns,
@@ -406,7 +406,6 @@ export function TuiSession({
           interactionActive={interactionActive && !foregroundInteraction}
           closePicker={() => setPicker(null)}
           closeBudget={() => setBudgetOpen(false)}
-          closeTask={() => setTaskOpen(false)}
           closeRewind={() => setRewindTargets(null)}
           closeInteraction={() => {
             setDismissedInteractionId(prompt?.interaction.id ?? null);
@@ -428,8 +427,8 @@ export function TuiSession({
           onStopped={() => viewport.appendCommandOutput('Stopped', 'system')}
           hide={setAnsweredId}
         />
-        <ShellTaskPanel state={state} />
-        <Box flexDirection="column" display={foregroundInteraction ? 'none' : 'flex'}>
+        <TasksPanel state={state} connection={connection} manage={taskOpen} closeManager={() => setTaskOpen(false)} />
+        <Box flexDirection="column" display={foregroundInteraction || taskOpen ? 'none' : 'flex'}>
           <PendingQueue
             items={queueItems}
             selectedId={selectedQueueIndex < 0 ? null : selectedQueueId}

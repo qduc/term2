@@ -97,7 +97,7 @@ export function directTaskNotice(
 ): DirectBackgroundNotice {
   const kind = action === 'finished' ? 'completion' : 'control';
   return {
-    id: `task:${task.taskId}:${action}`,
+    id: `task:${task.taskId}:${action}${task.epoch ? `#${task.epoch}` : ''}`,
     kind,
     taskIds: [task.taskId],
     text:
@@ -135,7 +135,7 @@ export function directQuestionNotice(
 }
 export function directCheckInNotice(event: DirectBackgroundCheckIn): DirectBackgroundNotice {
   return {
-    id: `check_in:${event.target.id}:${event.checkInIndex}`,
+    id: `check_in:${event.target.id}${event.details.epoch ? `#${event.details.epoch}` : ''}:${event.checkInIndex}`,
     kind: 'check_in',
     taskIds: [event.target.id],
     text: planningText(event),

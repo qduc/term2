@@ -58,11 +58,21 @@ export class ReplayBackground {
       }
       case 'branch_started':
         if (this.branches.has(fact.branchId)) throw new Error('replay: duplicate branch ID');
-        if (
-          !this.backgroundFacts.some((item) => item.type === 'task_started' && item.task.taskId === fact.taskId) ||
-          this.backgroundFacts.some((item) => item.type === 'task_finished' && item.taskId === fact.taskId)
-        )
-          throw new Error('replay: branch has no live task owner');
+        {
+          // The latest start owns the branch; a continued run's earlier epochs have settled.
+          let start = this.backgroundFacts.length - 1;
+          for (; start >= 0; start--) {
+            const item = this.backgroundFacts[start]!;
+            if (item.type === 'task_started' && item.task.taskId === fact.taskId) break;
+          }
+          if (
+            start < 0 ||
+            this.backgroundFacts
+              .slice(start)
+              .some((item) => item.type === 'task_finished' && item.taskId === fact.taskId)
+          )
+            throw new Error('replay: branch has no live task owner');
+        }
         for (const cost of this.requestCosts.values())
           if (cost.turnId === fact.turnId) validateCostAncestry(cost, fact);
         this.branches.set(fact.branchId, {

@@ -61,6 +61,7 @@ export class DirectSubagents {
     const handle = this.#tasks.start<NestedRunResult>(
       {
         kind: 'subagent',
+        ...(run.runId ? { taskId: run.runId as DirectTaskId } : {}),
         role,
         label: request.task,
         ...(run.input !== undefined ? { input: run.input } : {}),

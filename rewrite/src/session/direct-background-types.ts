@@ -60,6 +60,8 @@ export type DirectTaskDescriptor = {
   readonly sourceCallId?: string;
   readonly origin?: DirectOrigin;
   readonly startedAt: number;
+  /** A continued run's start count (2, 3 ...) under its kept ID; absent on its first run. */
+  readonly epoch?: number;
 };
 export type DirectOrchestratorQuestion = { readonly messageId: string; readonly question: string };
 export type DirectQuestionResolution =
@@ -141,7 +143,9 @@ export type DirectBackgroundSink = {
   /** Notify Session to poison its writer and cancel other owned work. Must not throw. */
   failed(error: ModelError): void;
 };
-export type DirectTaskStart = Omit<DirectTaskDescriptor, 'taskId' | 'sessionId' | 'startedAt'> & {
+export type DirectTaskStart = Omit<DirectTaskDescriptor, 'taskId' | 'sessionId' | 'startedAt' | 'epoch'> & {
+  /** A settled task's ID, restarted by its continuation. */
+  readonly taskId?: DirectTaskId;
   readonly mode: DirectTaskMode;
   /** Linked only while foreground-owned; transfer detaches this signal. */
   readonly parentSignal?: AbortSignal;

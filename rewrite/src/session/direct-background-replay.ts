@@ -84,7 +84,11 @@ function applyFact(
   fact: DirectBackgroundFact,
 ): void {
   if (fact.type === 'task_started') {
-    if (tasks.has(fact.task.taskId)) throw new Error('Duplicate task start.');
+    const previous = tasks.get(fact.task.taskId);
+    // A continuation restarts its settled run under the same ID (legacy async registry).
+    if (previous && (!terminal(previous) || fact.task.epoch !== (previous.epoch ?? 1) + 1))
+      throw new Error('Duplicate task start.');
+    tasks.delete(fact.task.taskId);
     tasks.set(fact.task.taskId, {
       ...fact.task,
       mode: fact.mode,

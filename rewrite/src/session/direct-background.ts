@@ -79,12 +79,15 @@ export class DirectBackgroundTasks {
     this.#assertOpen();
     this.#validateName(request.name);
     if (request.parentSignal?.aborted) throw directTaskAbortError();
-    const entry = this.#createEntry(request);
+    const previous = request.taskId ? this.#entries.get(request.taskId) : undefined;
+    const entry = this.#createEntry(request, previous);
+    this.#entries.delete(entry.task.taskId);
     this.#entries.set(entry.task.taskId, entry);
     try {
       this.#accept({ type: 'task_started', task: entry.task, mode: entry.mode });
     } catch (error) {
       this.#entries.delete(entry.task.taskId);
+      if (previous) this.#entries.set(entry.task.taskId, previous);
       throw error;
     }
     this.#linkParent(entry, request.parentSignal);
@@ -245,9 +248,11 @@ export class DirectBackgroundTasks {
     this.#sink.failed(this.#failure);
   }
 
-  #createEntry(request: DirectTaskStart): Entry {
-    const taskId = (request.kind === 'subagent' ? createCodenameRunId() : randomUUID()) as DirectTaskId;
-    if (this.#entries.has(taskId)) throw new Error('Task ID collision.');
+  #createEntry(request: DirectTaskStart, previous: Entry | undefined): Entry {
+    if (request.taskId && !previous?.outcome) throw new Error('Only a settled task can be continued.');
+    const taskId =
+      request.taskId ?? ((request.kind === 'subagent' ? createCodenameRunId() : randomUUID()) as DirectTaskId);
+    if (!previous && this.#entries.has(taskId)) throw new Error('Task ID collision.');
     const startedAt = this.#now();
     const task: DirectTaskDescriptor = structuredClone({
       taskId,
@@ -264,6 +269,7 @@ export class DirectBackgroundTasks {
       sourceCallId: request.sourceCallId,
       origin: request.origin,
       startedAt,
+      ...(previous ? { epoch: (previous.task.epoch ?? 1) + 1 } : {}),
     });
     let resolve!: Entry['resolve'];
     let releaseForeground!: () => void;

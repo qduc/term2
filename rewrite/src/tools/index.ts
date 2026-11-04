@@ -91,6 +91,8 @@ export type NestedRunRequest = {
   /** Original caller task input, preserved separately from resolved instructions/history. */
   readonly input?: string;
   readonly mode?: 'foreground' | 'background';
+  /** A continuation keeps its settled run's ID, as legacy's async registry does. */
+  readonly runId?: string;
   readonly name?: string;
   readonly role?: string;
   readonly label?: string;

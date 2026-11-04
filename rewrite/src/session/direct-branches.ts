@@ -39,7 +39,8 @@ export function createDirectBranchDriver(options: {
 }): DirectSubagentDriver {
   return {
     async execute(request: NestedRunRequest, context: DirectSubagentContext): Promise<NestedRunResult> {
-      const branchId = context.runId;
+      // A continued run's branch is new; its ID carries the run's epoch.
+      const branchId = context.task.epoch ? `${context.runId}#${context.task.epoch}` : context.runId;
       const turnId = `branch-${branchId}` as TurnId;
       context.signal.throwIfAborted();
       if (options.authority.failure !== undefined) throw new Error(options.authority.failure);

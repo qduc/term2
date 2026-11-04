@@ -21,16 +21,19 @@ type Tasks = { get(id: string): SubagentTaskState | undefined };
 /** What a launch inherits: its session key, the history before its task, and (continuations) the definition. */
 export type PriorSession<D> = {
   readonly key: string;
+  /** A continuation's kept run ID. */
+  readonly runId?: string;
   readonly history: readonly Item[];
   readonly definition?: D;
 };
 
 const CONTINUABLE = ['agent', 'mentor', 'librarian', 'explorer', 'reviewer'];
-const SHARED_ROLES = new Set(['librarian']);
+const SHARED_ROLES = new Set(['mentor', 'librarian']);
 
 export class DirectSubagentSessions<D extends Definition> {
   readonly #runs = new Map<string, Run<D>>();
-  constructor(readonly error: RegistryError) {}
+  /** `messageCap` is legacy's subagent.asyncMessageCap: a reused session keeps its last N user turns. */
+  constructor(readonly error: RegistryError, readonly messageCap: () => number) {}
   readonly #latest = new Map<string, string>();
 
   /** Legacy startRun's continuation and shared-session admission, in its order and wording. */
@@ -58,7 +61,7 @@ export class DirectSubagentSessions<D extends Definition> {
       if (role === 'worker' || run.definition.canWrite === true)
         throw this.error('worker_blocked', 'Worker runs cannot be continued asynchronously');
       if (!CONTINUABLE.includes(role)) throw this.error('not_continuable', `Role ${role} cannot be continued`);
-      prior = { key: run.key, history: this.#history(run, task), definition: run.definition };
+      prior = { key: run.key, runId: continuation, history: this.#history(run, task), definition: run.definition };
     } else if (SHARED_ROLES.has(role)) {
       const key = `role:${role}`;
       const latest = this.#latest.get(key);
@@ -82,6 +85,11 @@ export class DirectSubagentSessions<D extends Definition> {
 
   #history(run: Run<D>, task: SubagentTaskState): readonly Item[] {
     const value = task.result?.value as NestedRunResult | undefined;
-    return [...run.input, ...(Array.isArray(value?.items) ? value.items : [])];
+    const history = [...run.input, ...(Array.isArray(value?.items) ? value.items : [])];
+    // Legacy trimUserTurns: keep history from the Nth-last user turn; a cap of 0 or less keeps none.
+    const cap = this.messageCap();
+    const turns = history.flatMap((item, index) => (item.type === 'user_message' ? [index] : []));
+    if (cap <= 0) return [];
+    return turns.length <= cap ? history : history.slice(turns[turns.length - cap]);
   }
 }

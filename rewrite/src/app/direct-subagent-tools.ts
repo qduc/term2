@@ -134,6 +134,7 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
   const executionEvidence = new Map<string, ExecutionEvidence>();
   const sessions = new DirectSubagentSessions<SubagentDefinition>(
     (code, message) => new SubagentRegistryError(code as never, message),
+    () => settings.get('subagent.asyncMessageCap') ?? 50,
   );
   const preparedSessions = new WeakMap<
     NestedRunRequest,
@@ -372,6 +373,7 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
           ));
     const request: NestedRunRequest & { readonly input: string } = Object.freeze({
       mode,
+      ...(prior?.runId ? { runId: prior.runId } : {}),
       ...(params.name ? { name: params.name } : {}),
       role: definition.role,
       // Original caller field for the native task producer; never reconstruct from label or history.

@@ -15,7 +15,7 @@ export type DirectBackgroundCheckIn = {
   readonly details: DirectTaskState;
 };
 type Policy = { enabled?: boolean; intervalMs?: number; nextDueAt?: number };
-type Progress = { lastCheckInAt: number; count: number };
+type Progress = { lastCheckInAt: number; count: number; startedAt: number };
 
 /**
  * Advisory check-in scheduling only: never aborts, caps, restarts or releases a
@@ -78,7 +78,9 @@ export class DirectBackgroundCheckIns {
   #check(task: DirectTaskState, defaultInterval: number, now: number): void {
     const policy = this.#policies.get(task.taskId);
     if (policy?.enabled === false) return;
-    const progress = this.#progress.get(task.taskId);
+    // A continued run under the same ID starts its check-ins over.
+    const recorded = this.#progress.get(task.taskId);
+    const progress = recorded?.startedAt === task.startedAt ? recorded : undefined;
     const dueAt =
       policy?.nextDueAt ?? (progress?.lastCheckInAt ?? task.startedAt) + (policy?.intervalMs ?? defaultInterval);
     if (now < dueAt) return;
@@ -90,7 +92,7 @@ export class DirectBackgroundCheckIns {
       elapsedMs: now - task.startedAt,
       details: task,
     });
-    this.#progress.set(task.taskId, { lastCheckInAt: now, count });
+    this.#progress.set(task.taskId, { lastCheckInAt: now, count, startedAt: task.startedAt });
     if (policy) policy.nextDueAt = undefined;
   }
 }

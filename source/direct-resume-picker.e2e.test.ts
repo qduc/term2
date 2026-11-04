@@ -4,13 +4,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import {
-  dismissUnlistedSlashMenu,
-  testCliPath,
-  spawnTerminal,
-  createTestChildEnv,
-  type TerminalSession,
-} from './test-helpers/terminal-e2e.js';
+import { testCliPath, spawnTerminal, createTestChildEnv, type TerminalSession } from './test-helpers/terminal-e2e.js';
 import {
   HARNESS_IDLE_ENV,
   waitForHarnessComposerValue,
@@ -130,7 +124,6 @@ it.each([160, 60])(
           .toMatch(new RegExp(`❯\\s+(★\\s+)?${picked}|No models match`));
       // Every provider's catalog lands in turn; let the list settle as a person reading it would.
       if (picked) await new Promise((resolve) => setTimeout(resolve, 500));
-      await dismissUnlistedSlashMenu(session!, text);
       session!.write('\r');
     };
     session = start();
@@ -218,7 +211,6 @@ it.each([160])(
           .toMatch(new RegExp(`❯\\s+(★\\s+)?${picked}|No models match`));
       // Every provider's catalog lands in turn; let the list settle as a person reading it would.
       if (picked) await new Promise((resolve) => setTimeout(resolve, 500));
-      await dismissUnlistedSlashMenu(session!, text);
       session!.write('\r');
     };
     session = start();
@@ -315,7 +307,6 @@ it.each([160])(
           .toMatch(new RegExp(`❯\\s+(★\\s+)?${picked}|No models match`));
       // Every provider's catalog lands in turn; let the list settle as a person reading it would.
       if (picked) await new Promise((resolve) => setTimeout(resolve, 500));
-      await dismissUnlistedSlashMenu(session!, text);
       session!.write('\r');
     };
     session = start();
@@ -429,7 +420,6 @@ it.each([160])('a failed resume leaves the composer usable at %i columns', { tim
         .toMatch(new RegExp(`❯\\s+(★\\s+)?${picked}|No models match`));
     // Every provider's catalog lands in turn; let the list settle as a person reading it would.
     if (picked) await new Promise((resolve) => setTimeout(resolve, 500));
-    await dismissUnlistedSlashMenu(session!, text);
     session!.write('\r');
   };
   session = start();

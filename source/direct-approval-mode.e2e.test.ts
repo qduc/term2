@@ -6,7 +6,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   dismissNoMatchSlashMenu,
-  dismissUnlistedSlashMenu,
   testCliPath,
   spawnTerminal,
   createTestChildEnv,
@@ -184,7 +183,6 @@ it('approves a foreground shell call from the legacy approval prompt', { timeout
         .toMatch(new RegExp(`❯\\s+(★\\s+)?${picked}|No models match`));
     // Every provider's catalog lands in turn; let the list settle as a person reading it would.
     if (picked) await new Promise((resolve) => setTimeout(resolve, 500));
-    await dismissUnlistedSlashMenu(session!, text);
     session!.write('\r');
   };
   await submit('request approval');
@@ -330,7 +328,6 @@ async function runCommand(
         .toMatch(new RegExp(`❯\\s+(★\\s+)?${picked}|No models match`));
     // Every provider's catalog lands in turn; let the list settle as a person reading it would.
     if (picked) await new Promise((resolve) => setTimeout(resolve, 500));
-    await dismissUnlistedSlashMenu(session!, text);
     session!.write('\r');
   };
 
@@ -693,7 +690,6 @@ it('/usage agrees with the cached share in the status bar', { timeout: TIMEOUT_M
   expect(session!.getVisibleOutput()).toMatch(/\d+(?:\.\d+)?t\/s/);
   session!.write('/queue nonsense');
   await waitForHarnessComposerValue(path.join(root, 'home', 'input-idle'), '/queue nonsense', { timeoutMs: 60_000 });
-  await dismissUnlistedSlashMenu(session!, '/queue nonsense');
   session!.write('\r');
   await session!.waitForOutput('Unknown command /queue', 30_000);
   const visible = session!.getVisibleOutput();

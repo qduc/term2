@@ -4,13 +4,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import {
-  dismissUnlistedSlashMenu,
-  testCliPath,
-  spawnTerminal,
-  createTestChildEnv,
-  type TerminalSession,
-} from './test-helpers/terminal-e2e.js';
+import { testCliPath, spawnTerminal, createTestChildEnv, type TerminalSession } from './test-helpers/terminal-e2e.js';
 import {
   HARNESS_IDLE_ENV,
   waitForHarnessComposerValue,
@@ -122,7 +116,6 @@ it(
     const send = async (text: string) => {
       session!.write(text);
       await waitForHarnessComposerValue(idlePath, text, { timeoutMs: 60_000 });
-      await dismissUnlistedSlashMenu(session!, text);
       session!.write('\r');
     };
     const startCli = (args: string[]) => spawnTerminal('node', [builtCli, ...args], { cwd: workspace, env });
@@ -224,7 +217,6 @@ it('Esc stops a streaming answer without a turn-id cleanup notice', { timeout: T
   const send = async (text: string) => {
     session!.write(text);
     await waitForHarnessComposerValue(idlePath, text, { timeoutMs: 60_000 });
-    await dismissUnlistedSlashMenu(session!, text);
     session!.write('\r');
   };
   const startCli = (args: string[]) => spawnTerminal('node', [builtCli, ...args], { cwd: workspace, env });
@@ -294,7 +286,6 @@ it.each(['esc', 'ctrl-c', 'editing', 'only-steers'] as const)(
     const send = async (text: string) => {
       session!.write(text);
       await waitForHarnessComposerValue(idlePath, text, { timeoutMs: 30_000 });
-      await dismissUnlistedSlashMenu(session!, text);
       session!.write('\r');
     };
     await send('first question');
@@ -448,7 +439,6 @@ it.skipIf(process.platform !== 'linux')(
     const send = async (text: string) => {
       session!.write(text);
       await waitForHarnessComposerValue(idlePath, text, { timeoutMs: 60_000 });
-      await dismissUnlistedSlashMenu(session!, text);
       session!.write('\r');
     };
     const startCli = (args: string[]) => spawnTerminal('node', [builtCli, ...args], { cwd: workspace, env });
@@ -521,7 +511,6 @@ it.skipIf(process.platform !== 'linux')(
     const send = async (text: string) => {
       session!.write(text);
       await waitForHarnessComposerValue(idlePath, text, { timeoutMs: 60_000 });
-      await dismissUnlistedSlashMenu(session!, text);
       session!.write('\r');
     };
     const startCli = (args: string[]) => spawnTerminal('node', [builtCli, ...args], { cwd: workspace, env });

@@ -214,21 +214,6 @@ export function spawnTerminal(command: string, args: string[], options: SpawnTer
   };
 }
 
-/**
- * term2-next commands legacy's slash menu does not list. Typed without arguments the menu stays open showing no
- * match; once a space follows the name the slash trigger no longer matches, so Enter submits directly.
- */
-const UNLISTED_SLASH_COMMAND = /^\/(?:exit|followup|steer|tasks)$/;
-
-/**
- * As in legacy, Enter on slash text the menu does not list only closes the menu; the next Enter submits.
- * Call after typing `text` and before the submitting Enter: for an unlisted command it closes the menu.
- * The output is the whole stream, so "closed" means the composer row is drawn after the menu's last frame.
- */
-export async function dismissUnlistedSlashMenu(session: TerminalSession, text: string): Promise<void> {
-  if (UNLISTED_SLASH_COMMAND.test(text)) await dismissNoMatchSlashMenu(session, text);
-}
-
 /** Press the Enter that closes a slash menu showing no match for the typed `text`, and wait until it closed. */
 export async function dismissNoMatchSlashMenu(session: TerminalSession, text: string): Promise<void> {
   const menu = () => session.getVisibleOutput().lastIndexOf('No matching commands');

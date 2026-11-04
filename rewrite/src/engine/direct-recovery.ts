@@ -66,6 +66,8 @@ export type DirectRecoveryDecision =
       readonly kind: 'retry';
       readonly recovery: 'transient' | 'chain' | 'model_behavior' | 'service_tier' | 'transport';
       readonly attempt: number;
+      /** This recovery kind's retry limit. */
+      readonly maxRetries: number;
       readonly delayMs: number;
       readonly inputMode: 'full_history' | 'delta';
       readonly disableChaining: boolean;
@@ -144,6 +146,7 @@ export class DirectRecovery {
       kind: 'retry',
       recovery: choice.kind,
       attempt,
+      maxRetries: this.#limit(choice.kind),
       delayMs: recoveryDelay(attempt, context.failure.error.retryAfterMs, this.#options.random),
       inputMode: choice.kind === 'service_tier' ? 'delta' : 'full_history',
       disableChaining: choice.kind !== 'service_tier',
@@ -156,10 +159,21 @@ export class DirectRecovery {
   }
 
   #withinLimit(kind: RecoveryKind): boolean {
-    if (kind === 'model_behavior') return this.#modelRetries < (this.#options.maxModelRetries ?? 2);
-    if (kind === 'service_tier') return this.#tierFallbacks < 1;
-    if (kind === 'transport') return this.#transportDowngrades < 1;
-    return this.#transientRetries < this.#options.maxTransientRetries;
+    const used =
+      kind === 'model_behavior'
+        ? this.#modelRetries
+        : kind === 'service_tier'
+        ? this.#tierFallbacks
+        : kind === 'transport'
+        ? this.#transportDowngrades
+        : this.#transientRetries;
+    return used < this.#limit(kind);
+  }
+
+  #limit(kind: RecoveryKind): number {
+    if (kind === 'model_behavior') return this.#options.maxModelRetries ?? 2;
+    if (kind === 'service_tier' || kind === 'transport') return 1;
+    return this.#options.maxTransientRetries;
   }
 
   #advance(kind: RecoveryKind): number {

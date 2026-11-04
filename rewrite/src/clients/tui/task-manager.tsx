@@ -304,7 +304,12 @@ export function TaskManager({
     const kind = task.wire?.kind === 'shell' ? 'Shell' : roleOf(task);
     const prefix = isForeground(task) ? `${marker} [${kind} · foreground] ` : `${marker} [${kind}] `;
     const status = isForeground(task) ? 'running' : managerStatusText(task);
-    return `${prefix}${compactLabel(taskText(task), labelColumns, prefix, ` · ${status}`)}· ${status}`;
+    // Legacy taskLabel: a background subagent row shows its name, else `role: task`.
+    const label =
+      isForeground(task) || task.wire?.kind === 'shell'
+        ? taskText(task)
+        : task.wire?.name ?? `${roleOf(task)}: ${taskText(task)}`;
+    return `${prefix}${compactLabel(label, labelColumns, prefix, ` · ${status}`)}· ${status}`;
   };
   return (
     <Box flexDirection="column" marginBottom={1}>

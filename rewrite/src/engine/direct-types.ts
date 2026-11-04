@@ -178,6 +178,8 @@ export type TurnCompactionEvent =
     };
 export type TurnEvent =
   | { readonly type: 'codex_quota'; readonly quota: import('../model/index.js').CodexWeeklyQuota | null }
+  /** Live-only: the engine retries a failed model request (legacy's subagent retry observation). */
+  | { readonly type: 'model_retrying'; readonly attempt: number; readonly maxRetries: number; readonly delayMs: number }
   | TurnCompactionEvent
   /** Live-only progress. The actual physical request scopes reused provider IDs. */
   | (ToolCallArgumentProgress & { readonly turnId: TurnId; readonly modelStep: number })

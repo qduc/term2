@@ -166,11 +166,14 @@ export function createDirectBranchDriver(options: {
               toolName: event.toolName ?? 'tool',
               argumentCharCount: event.argumentCharCount,
             });
-          else if (event.type === 'tool_called') {
-            toolNames.set(event.executionId, event.toolName);
-            context.observe({ kind: 'tool_started', toolName: event.toolName });
-          } else if (event.type === 'tool_execution_finished') {
-            const toolName = toolNames.get(event.executionId);
+          else if (event.type === 'model_retrying')
+            context.observe({ kind: 'retrying', attempt: event.attempt, maxRetries: event.maxRetries });
+          else if (event.type === 'tool_called') context.observe({ kind: 'tool_started', toolName: event.toolName });
+          else if (event.type === 'item' && event.item.type === 'tool_call')
+            toolNames.set(event.item.callId, event.item.toolName);
+          else if (event.type === 'item' && event.item.type === 'tool_result') {
+            // Every call's result, including one the engine answered without running (an unknown tool).
+            const toolName = toolNames.get(event.item.callId);
             context.observe({ kind: 'tool_completed', ...(toolName ? { toolName } : {}) });
           }
           if (event.type === 'tool_progress' || event.type === 'text_delta')

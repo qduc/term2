@@ -52,6 +52,15 @@ export function directStatusView(
   const window = info.contextWindow;
   const config: StatusSegmentView[] = [
     { id: 'mode', text: info.profile, tone: 'accent', bold: true, separator: 'group' },
+    {
+      id: 'queue',
+      text: state.queue.some((item) => item.delivery === 'queued')
+        ? `[Q:${state.queue.filter((item) => item.delivery === 'queued').length}]`
+        : '',
+      tone: 'accent',
+      separator: 'group',
+      tier: 3,
+    },
     { id: 'provider-model', text: state.model, tone: 'accent', separator: 'group' },
     {
       id: 'reasoning',

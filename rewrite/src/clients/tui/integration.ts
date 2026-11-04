@@ -339,6 +339,8 @@ export interface TuiIntegration {
   /** Run an explicit user shell command in the selected workspace, without a model turn. */
   shell?(sessionId: string, command: string): Promise<string>;
   planNeedsClear?(connection: TuiConnection): boolean;
+  /** The profile Shift+Tab switches to. */
+  planTarget?(connection: TuiConnection): string;
   clearAndTogglePlan?(connection: TuiConnection): Promise<{ message?: string }>;
   /** Read the attached session's effective preferences on each render, including live /settings changes. */
   preferences?(sessionId: string): { readonly historySize: number; readonly pasteThreshold: number | undefined };

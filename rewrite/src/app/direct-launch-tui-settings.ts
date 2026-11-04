@@ -66,6 +66,12 @@ function settingsBrowse(
 
 const APPROVAL_MODES = ['off', 'advisory', 'auto', 'always'];
 const PROFILE_KEY = 'app.activeProfileId';
+// Legacy source/commands/mode-commands.ts and use-app-commands.ts (React modules, so copied, not imported).
+const BARE_ENABLED_DETAIL = ' - minimal prompt; AGENTS.md read on demand; other tools via run_code';
+const MODE_DETAILS: Readonly<Record<string, string>> = {
+  mentor: ' - using simplified mentor prompt and ask_mentor tool',
+  orchestrator: ' - tool-backed work must use subagents',
+};
 /** Only the Session can change these, with `/model` and `/effort`. */
 const SELECTION_COMMANDS: Readonly<Record<string, string>> = {
   'agent.modelSelection': 'Use /model <provider>/<model>.',
@@ -99,10 +105,16 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
     return { message: receiptNotice(result) };
   };
 
-  const switchProfile = async (connection: TuiConnection, targetId: string, retry: string): Promise<CommandResult> => {
+  /** `said` is what legacy prints: nothing for /profile and /settings, the mode line for a toggle. */
+  const switchProfile = async (
+    connection: TuiConnection,
+    targetId: string,
+    retry: string,
+    said: { readonly noop?: string; readonly done?: string } = {},
+  ): Promise<CommandResult> => {
     const { settings } = detailsOf(connection.sessionId);
     const plan = planProfileTransition(settings, targetId);
-    if (plan.class === 'noop') return { message: `${plan.targetId} is already active.` };
+    if (plan.class === 'noop') return { applied: true, ...(said.noop ? { message: said.noop } : {}) };
     const snapshot = latest().sessionId === connection.sessionId ? latest() : connection.snapshot;
     if (plan.class === 'structural' && (!snapshot || snapshot.messages.length > 0)) {
       throw new Error(
@@ -112,7 +124,7 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
     const previous = settings.get(PROFILE_KEY);
     settings.set(PROFILE_KEY, plan.targetId, { persist: false });
     const undo = () => settings.set(PROFILE_KEY, previous, { persist: false });
-    return rebuild(connection, undo, `Switched to ${plan.targetId} for this session.`);
+    return rebuild(connection, undo, said.done ?? '');
   };
 
   /** Most tool gates read settings as they run, so only a reconfigured session has to wait for a rebuild. */
@@ -145,11 +157,28 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
       return latest().messages.length > 0 && planProfileTransition(settings, target).class === 'structural';
     },
     /** `/plan`, `/bare`, `/mentor` and `/orchestrator`. A mode that is on turns back to Bare. */
-    toggle(connection: TuiConnection, mode: string): Promise<CommandResult> {
+    toggle(connection: TuiConnection, mode: string, planGoal?: string): Promise<CommandResult> {
       const { settings } = detailsOf(connection.sessionId);
-      const target = `builtin:${mode}`;
+      const target = `builtin:${mode === 'lite' ? 'bare' : mode}`;
       const on = resolveActiveProfile(settings).identity.id === target;
-      return switchProfile(connection, on ? BARE_PROFILE_ID : target, `/${mode}`);
+      const goal = planGoal ?? (on ? BARE_PROFILE_ID : target);
+      // Legacy mode-commands.ts: Shift+Tab's cycleAppModes and createModeToggleCommand's lines.
+      if (mode === 'plan')
+        return switchProfile(connection, goal, '/plan', {
+          done:
+            goal === BARE_PROFILE_ID
+              ? 'Switched to Bare mode'
+              : 'Switched to Plan mode - read-only research/planning mode',
+        });
+      if (target === BARE_PROFILE_ID)
+        return switchProfile(connection, goal, `/${mode}`, {
+          noop: 'Bare mode is already active',
+          done: `Bare mode enabled${BARE_ENABLED_DETAIL}`,
+        });
+      const label = mode.charAt(0).toUpperCase() + mode.slice(1);
+      return switchProfile(connection, goal, `/${mode}`, {
+        done: `${label} mode ${on ? 'disabled' : `enabled${MODE_DETAILS[mode] ?? ''}`}`,
+      });
     },
 
     profile(connection: TuiConnection, id: string | undefined): Promise<CommandResult> {

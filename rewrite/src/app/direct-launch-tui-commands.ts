@@ -325,16 +325,14 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
 
   return {
     planNeedsClear: configuration.planNeedsClear,
+    planTarget: configuration.planTarget,
     async clearAndTogglePlan(connection) {
       const target = configuration.planTarget(connection);
       const id = await resetSession(connection);
       try {
         const next = await host.connect(principal, id);
-        const result = await configuration.profile(next, target);
-        if (
-          result.message !== `Switched to ${target} for this session.` &&
-          result.message !== `${target} is already active.`
-        ) {
+        const result = await configuration.toggle(next, 'plan', target);
+        if (result.applied !== true) {
           next.close();
           throw new Error(result.message ?? 'Mode configuration did not finish.');
         }
@@ -379,6 +377,7 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
           return configuration.settings(connection, rest.join(' '));
         case 'plan':
         case 'bare':
+        case 'lite':
         case 'mentor':
         case 'orchestrator':
           return configuration.toggle(connection, name);

@@ -437,7 +437,6 @@ export function TuiSession({
           }}
         />
         <LiveNotices connectionError={connError} />
-        {confirmation.prompt}
         <LiveNotices historyError={editor.historyError} />
         {bangResult ? <BangResult result={bangResult} expanded={viewport.expanded} /> : null}
         <LiveDivider />
@@ -450,7 +449,9 @@ export function TuiSession({
         />
         <PendingQueueEdit editingId={editing?.id ?? null} items={queueItems} />
         {menuStack.view}
-        {menuStack.open ? null : (
+        {/* Legacy BottomArea puts a confirmation prompt in the composer's place. */}
+        {confirmation.prompt}
+        {menuStack.open || confirmation.prompt ? null : (
           <InputFrame>
             <PromptMarker mode="input" />
             <MultilineInput

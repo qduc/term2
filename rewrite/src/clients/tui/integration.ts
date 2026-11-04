@@ -48,6 +48,18 @@ export type SettingsPickerCategory = {
 
 /** Legacy `PathEntry` (source/services/file-service.ts). */
 export type MenuPathEntry = { readonly path: string; readonly type: 'file' | 'directory' };
+export type MenuLogger = {
+  warn(message: string, details?: Record<string, unknown>): void;
+  error(message: string, details?: Record<string, unknown>): void;
+};
+/** Legacy `WorkspaceEntriesMeta` (source/services/file-service.ts). */
+export type MenuWorkspaceEntriesMeta = {
+  lastLoadedAt: number | null;
+  totalEntries: number;
+  truncated: boolean;
+  truncatedByTotalLimit: boolean;
+  limit: number;
+};
 /** Legacy `ModelInfo` (source/services/model-service.ts). */
 export type MenuModelInfo = {
   id: string;
@@ -78,6 +90,14 @@ export interface TuiSettingsSchema {
  */
 export interface TuiMenus {
   readonly schema: TuiSettingsSchema;
+  /** The app's logging service, for the warnings legacy menus log instead of printing. */
+  readonly logger: MenuLogger;
+  /** Legacy file-service.ts workspace listing for `@` completion; loaded asynchronously, never during render. */
+  readonly paths: {
+    entries(): Promise<MenuPathEntry[]>;
+    refresh(): Promise<MenuPathEntry[]>;
+    meta(): MenuWorkspaceEntriesMeta;
+  };
 }
 
 export interface TuiIntegration {

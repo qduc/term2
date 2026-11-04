@@ -9,6 +9,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExtern
 import { useInput } from 'ink';
 import type { TuiMenus } from '../integration.js';
 import { MenuControllerImpl } from './menu-controller.js';
+import type { UnboundFrameSpec } from './menu-types.js';
 import { createDefaultTriggerRegistry } from './triggers.js';
 import { MenuSurface } from './MenuSurface.js';
 import { InputProvider } from './input-context.js';
@@ -52,6 +53,16 @@ export function useMenuStack(options: {
     if (!menus) return;
     controller.setTriggerRegistry(createDefaultTriggerRegistry(commands, MENU_RULE_IDS, menus.schema));
   }, [controller, commands, menus]);
+  // Legacy app.tsx's intent host, limited to the ported menus' intents. A menu's composed text runs as
+  // if typed and submitted, which covers legacy's slash dispatch and its fallback to a turn.
+  useEffect(() => {
+    controller.setIntentHost(({ intentRequest }) => {
+      if (intentRequest.intent.type === 'submit-prompt') actions.runCommand(intentRequest.intent.text);
+      if (intentRequest.intent.type === 'rewind')
+        actions.rewind(intentRequest.intent.item, intentRequest.intent.disposition);
+    });
+    return () => controller.setIntentHost(undefined);
+  }, [controller, actions]);
   const open = Boolean(menus) && snapshot.stack.length > 0;
   if (menus) installSettingsLibrary(menus.settings.lib);
   // Legacy app.tsx's effect host: the controller hands committed intents to the session's commands.
@@ -71,6 +82,18 @@ export function useMenuStack(options: {
     );
     return () => controller.setIntentHost(undefined);
   }, [controller, menus, sessionId]);
+
+  // Legacy app.tsx pendingSkillRef: a skill picked in the menu rides on the next message, which runs as
+  // next's `/skills <name> <request>`; Esc drops it (legacy use-app-keyboard-shortcuts).
+  const [pendingSkill, setPendingSkill] = useState<string | null>(null);
+  useInput(
+    (_input, key) => {
+      if (!key.escape || open) return;
+      setPendingSkill(null);
+      actions.notice('Skill activation cancelled.');
+    },
+    { isActive: pendingSkill !== null && enabled },
+  );
 
   // The text both sides last agreed on. Cursor-only controller revisions and composer keystrokes not yet
   // mirrored must not be mistaken for a menu's edit, or the hand-back would revert the keystroke.
@@ -110,6 +133,17 @@ export function useMenuStack(options: {
     open,
     /** Open an explicitly opened frame, as a typed `/providers` does in legacy; false when it has no menu. */
     openFrame,
+    /** Legacy openCopyMenu: a command's frame replaces any open menu, with the input cleared. */
+    openMenu(frame: UnboundFrameSpec) {
+      controller.closeAll();
+      controller.open(frame, { buffer: { type: 'clear' } });
+    },
+    /** Legacy attachPendingSkill: only a message (not a slash command) takes the pending skill. */
+    withPendingSkill(input: string): string {
+      if (!pendingSkill || !input.trim() || input.startsWith('/')) return input;
+      setPendingSkill(null);
+      return `/skills ${pendingSkill} ${input}`;
+    },
     /** The text the harness and composer consumers see: the controller's while a menu owns it. */
     value: open ? snapshot.editor.text : composer.value,
     /** What Ctrl+C clears: the menu's text while one owns it (legacy's global handler cleared it there too). */
@@ -125,7 +159,14 @@ export function useMenuStack(options: {
     // Always mounted, as legacy's ApplicationInputSurface kept its menu hooks mounted across opens.
     view: menus ? (
       <InputProvider controller={controller} menus={menus} sessionId={sessionId}>
-        <MenuStackView open={open} enabled={enabled} commands={commands} actions={actions} controller={controller} />
+        <MenuStackView
+          open={open}
+          enabled={enabled}
+          commands={commands}
+          actions={actions}
+          controller={controller}
+          onSkillSelected={setPendingSkill}
+        />
       </InputProvider>
     ) : null,
   };
@@ -137,9 +178,10 @@ function MenuStackView(props: {
   readonly commands: ReturnType<typeof legacySlashCommands>;
   readonly actions: MenuActions;
   readonly controller: MenuControllerImpl;
+  readonly onSkillSelected: (name: string) => void;
 }): React.ReactElement | null {
-  const { open, enabled, commands, actions, controller } = props;
-  const services = useMenuServices({ commands, actions });
+  const { open, enabled, commands, actions, controller, onSkillSelected } = props;
+  const services = useMenuServices({ commands, actions, onSkillSelected });
   const { stack } = controller.getSnapshot();
   if (!open) return null;
   return (

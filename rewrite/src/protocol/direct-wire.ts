@@ -414,7 +414,14 @@ export type WireSessionRotation = {
   readonly handoff?: { readonly clientRequestId: string; readonly messageId: string; readonly turnId: string };
 };
 export type WireCancelTarget = { readonly kind: 'foreground' } | { readonly kind: 'task'; readonly id: string };
-export type WireRewindTarget = { readonly id: string; readonly label: string };
+/** A turn rewind can return to, with what rewinding there discards (the picker's cost line). */
+export type WireRewindTarget = {
+  readonly id: string;
+  readonly label: string;
+  readonly discardedTurns: number;
+  readonly discardedReplies: number;
+  readonly imageCount: number;
+};
 
 /** Stable per-invocation identity, never a command-kind key or a provider call ID. */
 export type WireNativeCommandOperation =

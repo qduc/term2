@@ -240,7 +240,6 @@ export async function directSlashCommand(connection: TuiConnection, input: strin
       }
       return receiptNotice(result);
     }
-    case '/retry':
     case '/retry-turn':
       return directCommandNotice(await sendNativeCommand(connection, { type: 'retry', commandId, target: 'turn' }));
     case '/retry-tool':

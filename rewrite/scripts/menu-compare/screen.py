@@ -197,6 +197,12 @@ class Term:
         for chunk in re.split(r'(<[a-z-]+>)', keys):
             if not chunk:
                 continue
+            if chunk == '<sleep>':
+                # Let slow asynchronous work (conversation listing, catalogues) finish before capturing.
+                end = time.time() + 3.0
+                while time.time() < end:
+                    self.pump(quiet=3.0, limit=end - time.time())
+                continue
             os.write(self.fd, expand(chunk).encode())
             time.sleep(0.15 if chunk.startswith('<') else 0.05)
             self.pump(quiet=0.15, limit=2.0)
@@ -212,7 +218,10 @@ class Term:
 MASKS = [
     (re.compile(r'127\.0\.0\.1:\d+'), '<host>:<port>'),
     (re.compile(r'v?\d+\.\d+\.\d+(-[\w.]+)?(\+[0-9a-f]+)?'), '<ver>'),
-    (re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'), '<id>'),
+    # Session ids: legacy uses bare UUIDs, term2-next prefixes them with `conv_`.
+    (re.compile(r'(conv_)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'), '<id>'),
+    (re.compile(r'\d{4}-\d\d-\d\d \d\d:\d\d:\d\d'), '<time>'),
+    (re.compile(r'\b\d+ (second|minute|hour)s? ago|\b\d+ [a-z]*…'), '<dur> ago'),
     (re.compile(r'(/tmp|/private)?/[\w.-]*menucmp[\w./-]*'), '<path>'),
     (re.compile(r'\b\d+(\.\d+)?(ms|s)\b'), '<dur>'),
 ]
@@ -224,12 +233,22 @@ def mask(line):
     return line
 
 
+def mask_row(text):
+    """Mask a screen row. Session ids differ in width (term2-next prefixes `conv_`), so on any row holding
+    one the padding after it is collapsed in both CLIs and the row's cell styles are not compared."""
+    masked = mask(text)
+    if '<id>' not in masked:
+        return masked, True
+    return re.sub(r'(<id>) +', r'\1 ', masked), False
+
+
 def capture(screen):
     lines, styles = [], []
     for y in range(screen.lines):
         row = screen.buffer[y]
         text = ''.join(row[x].data for x in range(screen.columns))
-        lines.append(mask(text).rstrip())
+        masked, comparable = mask_row(text)
+        lines.append(masked.rstrip())
         spans, prev, start = [], None, 0
         for x in range(screen.columns + 1):
             c = row[x] if x < screen.columns else None
@@ -238,18 +257,40 @@ def capture(screen):
                 if prev is not None and prev != ('default', 'default', False, False, False, False):
                     spans.append([start, x, *prev])
                 prev, start = key, x
-        styles.append(spans)
+        styles.append(spans if comparable else 'masked-width')
     return {'lines': lines, 'styles': styles}
 
 
 def run(cli, cols, rows, name):
     scenario = SCENARIOS[name]
-    Provider.replies = SEED.get(name, {}).get('replies', [{'text': 'done'}])
+    Provider.replies = [{'text': 'Noted.'}]  # for the earlier sessions
     Provider.posts = 0
     server = start_provider()
     root = tempfile.mkdtemp(prefix='menucmp-')
     try:
-        env, cwd = scratch_env(root, f'http://127.0.0.1:{server.server_address[1]}/v1', SEED.get(name, {}))
+        seed = SEED.get(name, {})
+        env, cwd = scratch_env(root, f'http://127.0.0.1:{server.server_address[1]}/v1', seed)
+        # Earlier sessions: each list of prompts is typed into its own launch, which then quits, so the
+        # scenario starts with saved conversations.
+        for prompts in seed.get('sessions', []):
+            earlier = Term(cli, cols, rows, env, cwd)
+            try:
+                earlier.wait_for('mockprov', 45)
+                earlier.pump(quiet=1.0, limit=10)
+                for prompt in prompts:
+                    earlier.send(prompt)
+                    earlier.send('<enter>')
+                    earlier.wait_for('Noted.', 30)
+                    earlier.pump(quiet=1.0, limit=10)
+                earlier.send('/quit')
+                earlier.pump(quiet=0.5, limit=3)
+                earlier.send('<enter>')
+                earlier.pump(quiet=1.5, limit=10)
+            finally:
+                earlier.close()
+            time.sleep(0.5)
+        Provider.replies = seed.get('replies', [{'text': 'done'}])
+        Provider.posts = 0
         term = Term(cli, cols, rows, env, cwd)
         try:
             term.wait_for('mockprov', 45)

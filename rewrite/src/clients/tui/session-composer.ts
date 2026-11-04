@@ -315,12 +315,12 @@ export function useSessionComposer(state: TuiState, historySize: number, onNotic
     connection: TuiConnection,
     targetId: string,
     disposition: 'edit' | 'resend',
-  ): Promise<string> => {
+  ): Promise<string | null> => {
     const result = await sendNativeCommand(connection, { type: 'rewind', commandId: randomUUID(), targetId });
     if (result.kind !== 'finished' || result.receipt.outcome?.kind !== 'rewound') return receiptNotice(result);
     const draft = primaryDraft(result.receipt.outcome.draft.content);
     restoreDraft(draft);
-    if (disposition === 'edit') return 'Rewind draft restored. Review before sending.';
+    if (disposition === 'edit') return null; // legacy restores the turn without a notice
     const submittedRevision = editor.revision();
     const submittedAttachments = attachmentSnapshot.current;
     const message = await previewConfirmation(connection, draft.text, draft.attachments);
@@ -328,7 +328,7 @@ export function useSessionComposer(state: TuiState, historySize: number, onNotic
     await submitText(connection, draft.text, draft.attachments, 'auto');
     if (editor.current() === draft.text && editor.revision() === submittedRevision) editor.change('');
     clearSubmittedParts(submittedAttachments.images, submittedAttachments.otherParts);
-    return 'Rewind complete; draft resent.';
+    return null;
   };
   /** Opens a queued message for editing, preserving the draft for cancellation. */
   const startQueueEdit = (item: QueueItem) => {

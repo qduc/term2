@@ -4,6 +4,7 @@ import { ThemeProvider, useTheme } from './presentation/components/theme.js';
 import { SkinProvider, useSkin } from './presentation/skins/SkinContext.js';
 import type { TuiState } from './state.js';
 import { Transcript } from './views.js';
+import { LiveToolAgesContext, type LiveToolAge } from './live-tool-age.js';
 import { useNativeTranscript } from './native-transcript.js';
 import { clearTerminalForRedraw, clearVisibleForResize } from './terminal.js';
 
@@ -100,11 +101,14 @@ export function useTranscriptViewport(
   const lastRender = useRef(0);
   const [clock, setClock] = useState(0);
   const activeShell = state.tasks.some((task) => task.wire?.kind === 'shell' && task.status === 'running');
+  const inFlight = state.tools.some((tool) => tool.status === 'pending' || tool.status === 'running');
+  // Live rows are drawn by a one-shot render, so their one-second delay and elapsed counter come from here.
+  const firstSeen = useRef(new Map<string, { inFlight: number; running?: number }>());
   useEffect(() => {
-    if (!activeShell) return;
-    const timer = setInterval(() => setClock((value) => value + 1), 1000);
+    if (!activeShell && !inFlight) return;
+    const timer = setInterval(() => setClock((value) => value + 1), inFlight ? 250 : 1000);
     return () => clearInterval(timer);
-  }, [activeShell]);
+  }, [activeShell, inFlight]);
   useEffect(() => {
     // Streaming changes the state many times a second. Rendering the whole transcript for each change burned
     // 60-85% of a core, so renders are spaced RENDER_INTERVAL_MS apart; the last state always gets its render.
@@ -114,10 +118,29 @@ export function useTranscriptViewport(
     const pending = setTimeout(() => {
       lastRender.current = performance.now();
       const shown = expanded ? state : tail;
+      const now = performance.now();
+      const ages = new Map<string, LiveToolAge>();
+      const seen = new Map<string, { inFlight: number; running?: number }>();
+      for (const tool of shown.tools) {
+        if (tool.status !== 'pending' && tool.status !== 'running') continue;
+        const before = firstSeen.current.get(tool.id);
+        const entry = {
+          inFlight: before?.inFlight ?? now,
+          ...(tool.status === 'running' ? { running: before?.running ?? now } : {}),
+        };
+        seen.set(tool.id, entry);
+        ages.set(tool.id, {
+          inFlightMs: now - entry.inFlight,
+          ...(entry.running === undefined ? {} : { runningMs: now - entry.running }),
+        });
+      }
+      firstSeen.current = seen;
       const rendered = renderToString(
         <ThemeProvider theme={theme}>
           <SkinProvider skin={skin}>
-            <Transcript state={shown} messages={shown.messages} columns={columns} live expanded={expanded} />
+            <LiveToolAgesContext.Provider value={ages}>
+              <Transcript state={shown} messages={shown.messages} columns={columns} live expanded={expanded} />
+            </LiveToolAgesContext.Provider>
           </SkinProvider>
         </ThemeProvider>,
         { columns: Math.max(1, columns) },

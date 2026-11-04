@@ -3,8 +3,8 @@
   "maxLines": 500,
   "fileCeilings": {
     "rewrite/src/clients/tui/presentation/components/message/CommandMessage.tsx": {
-      "lines": 1014,
-      "reason": "Verbatim copy of legacy source/components/message/CommandMessage.tsx: tool rows match legacy by construction; splitting it would reintroduce a rewrite to prove."
+      "lines": 1018,
+      "reason": "Verbatim copy of legacy source/components/message/CommandMessage.tsx: tool rows match legacy by construction; splitting it would reintroduce a rewrite to prove. Four lines are the port exception that reads a live render's measured elapsed time (live-tool-age.ts)."
     },
     "rewrite/src/clients/tui/presentation/components/message/command-message-helpers.ts": {
       "lines": 965,

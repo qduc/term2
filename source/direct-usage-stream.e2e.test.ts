@@ -217,15 +217,16 @@ it('keeps paged help available during a still-streaming response', { timeout: TI
   await session!.waitForOutput('STREAM-ANCHOR-SENTINEL', 30_000);
   const before = session!.getVisibleOutput().length;
   await submit('/help');
-  for (let i = 0; i < 400 && !session!.getVisibleOutput().slice(before).includes('Keyboard shortcuts'); i++)
+  for (let i = 0; i < 400 && !session!.getVisibleOutput().slice(before).includes('Lines 1'); i++)
     await new Promise((resolve) => setTimeout(resolve, 25));
-  expect(session!.getVisibleOutput().slice(before)).toContain('Keyboard shortcuts');
+  // Legacy's help text: the commands first, the keyboard shortcuts last.
+  expect(session!.getVisibleOutput().slice(before)).toContain('/model — Choose or set the AI model');
   expect(session!.getVisibleOutput().slice(before)).toMatch(/Lines 1[–-]\d+ of \d+/);
   for (let i = 0; i < 12; i++) {
     session!.write('\x1b[6~');
     await new Promise((resolve) => setTimeout(resolve, 80));
   }
-  await session!.waitForOutput('/orchestrator —', 30_000);
+  await session!.waitForOutput('Keyboard shortcuts', 30_000);
   expect(heldResponse?.writableEnded).toBe(false);
   heldResponse!.end(
     `data: ${JSON.stringify({

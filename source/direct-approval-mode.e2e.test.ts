@@ -4,7 +4,14 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { testCliPath, spawnTerminal, createTestChildEnv, type TerminalSession } from './test-helpers/terminal-e2e.js';
+import {
+  dismissNoMatchSlashMenu,
+  dismissUnlistedSlashMenu,
+  testCliPath,
+  spawnTerminal,
+  createTestChildEnv,
+  type TerminalSession,
+} from './test-helpers/terminal-e2e.js';
 import {
   HARNESS_IDLE_ENV,
   readHarnessComposerState,
@@ -177,6 +184,7 @@ it('dismisses a foreground approval to its numbered answer fallback', { timeout:
         .toMatch(new RegExp(`❯\\s+(★\\s+)?${picked}|No models match`));
     // Every provider's catalog lands in turn; let the list settle as a person reading it would.
     if (picked) await new Promise((resolve) => setTimeout(resolve, 500));
+    await dismissUnlistedSlashMenu(session!, text);
     session!.write('\r');
   };
   await submit('request approval');
@@ -323,6 +331,7 @@ async function runCommand(
         .toMatch(new RegExp(`❯\\s+(★\\s+)?${picked}|No models match`));
     // Every provider's catalog lands in turn; let the list settle as a person reading it would.
     if (picked) await new Promise((resolve) => setTimeout(resolve, 500));
+    await dismissUnlistedSlashMenu(session!, text);
     session!.write('\r');
   };
 
@@ -335,17 +344,12 @@ async function runCommand(
     await submit('/help');
     await session.waitForOutput('/help —', 30_000);
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 5_000 });
+    // Legacy clears a refused slash command instead of keeping it (the slash menu would reopen on it).
     await submit('/rewind nonsense');
     await session.waitForOutput('Use /rewind', 30_000);
-    await waitForHarnessComposerValue(idlePath, '/rewind nonsense', { timeoutMs: 5_000 });
-    await new Promise((resolve) => setTimeout(resolve, 2_100));
-    session.write('\x03');
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 5_000 });
     await submit('/queue nonsense');
     await session.waitForOutput('Use /queue', 30_000);
-    await waitForHarnessComposerValue(idlePath, '/queue nonsense', { timeoutMs: 5_000 });
-    await new Promise((resolve) => setTimeout(resolve, 2_100));
-    session.write('\x03');
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 5_000 });
     // The /effort menu is open; legacy refuses an unknown level inline and keeps the text.
     await submit('/effort bogus');
@@ -354,11 +358,12 @@ async function runCommand(
     await new Promise((resolve) => setTimeout(resolve, 2_100));
     session.write('\x03');
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 5_000 });
-    await submit('/not-a-real-command');
-    await session.waitForOutput('/not-a-real-command is not available', 30_000);
-    await waitForHarnessComposerValue(idlePath, '/not-a-real-command', { timeoutMs: 5_000 });
-    await new Promise((resolve) => setTimeout(resolve, 2_100));
-    session.write('\x03');
+    // As in legacy, the first Enter closes the slash menu (no match) and the second submits.
+    session.write('/not-a-real-command');
+    await waitForHarnessComposerValue(idlePath, '/not-a-real-command', { timeoutMs: 60_000 });
+    await dismissNoMatchSlashMenu(session, '/not-a-real-command');
+    session.write('\r');
+    await session.waitForOutput('Unknown command /not-a-real-command', 30_000);
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 5_000 });
     session.write('/hel');
     await waitForHarnessComposerValue(idlePath, '/hel', { timeoutMs: 5_000 });
@@ -679,6 +684,7 @@ it('/usage agrees with the cached share in the status bar', { timeout: TIMEOUT_M
   expect(session!.getVisibleOutput()).toMatch(/\d+(?:\.\d+)?t\/s/);
   session!.write('/queue nonsense');
   await waitForHarnessComposerValue(path.join(root, 'home', 'input-idle'), '/queue nonsense', { timeoutMs: 60_000 });
+  await dismissUnlistedSlashMenu(session!, '/queue nonsense');
   session!.write('\r');
   await session!.waitForOutput('Use /queue', 30_000);
   const visible = session!.getVisibleOutput();
@@ -804,10 +810,8 @@ it('shows a structured provider error as a message', { timeout: TIMEOUT_MS }, ()
   ),
 );
 
-it(
-  'accepted commands clear, rejected commands remain, and Escape clears completed slash input',
-  { timeout: TIMEOUT_MS },
-  () => runCommand('', '', undefined, 'command-clear-regression'),
+it('accepted and rejected slash commands clear, and Escape clears completed slash input', { timeout: TIMEOUT_MS }, () =>
+  runCommand('', '', undefined, 'command-clear-regression'),
 );
 
 it('Enter opens slash pickers and Escape returns to the composer', { timeout: TIMEOUT_MS }, () =>

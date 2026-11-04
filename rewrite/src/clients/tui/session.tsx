@@ -363,7 +363,9 @@ export function TuiSession({
         await steerRecovery.restoreLateSteer(input, wireAttachments(submittedImages, otherParts, originalParts));
         setNotice(steerRecovery.lateSteerNotice(submission.submissionEpoch, error.message));
       } else {
-        await editor.restoreRejected(input);
+        // Legacy clears a refused slash command (the slash menu would reopen on it); other input is kept.
+        if (input.startsWith('/')) editor.accepted(input, true, [], submission.submittedRevision);
+        else await editor.restoreRejected(input);
         const message = error instanceof Error ? error.message : String(error);
         setNotice(
           input.startsWith('/') || input.startsWith('!')

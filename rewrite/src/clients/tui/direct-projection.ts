@@ -151,16 +151,29 @@ const sameList = <T>(previous: readonly T[] | undefined, next: readonly T[], equ
 /** Legacy prints nothing after a rewind or a compaction beyond the command's own lines. */
 const SILENT_REPLACEMENTS = new Set([historyReplacedMessage('rewind'), historyReplacedMessage('compaction')]);
 
-const shownAt = new Map<string, { tick: number; waiting: Set<string>; at: Map<string, number> }>();
-/** Legacy appends a call's row when it starts, and a call that waited on the user only once that was decided. */
+const shownAt = new Map<string, { tick: number; waiting: Set<string>; held: Set<string>; at: Map<string, number> }>();
+/**
+ * Legacy appends a call's row when it starts. A call that waits on the user (a question or an approval) starts only
+ * once every decision pending in its batch is made, so until then it has no entry here.
+ */
 function toolShownAt(snapshot: WireSnapshot): ReadonlyMap<string, number> {
-  const memory = shownAt.get(snapshot.sessionId) ?? { tick: 0, waiting: new Set<string>(), at: new Map() };
+  const memory = shownAt.get(snapshot.sessionId) ?? {
+    tick: 0,
+    waiting: new Set<string>(),
+    held: new Set<string>(),
+    at: new Map<string, number>(),
+  };
   shownAt.set(snapshot.sessionId, memory);
   memory.tick += 1;
   const waiting = new Set(snapshot.pendingInteractions.flatMap((request) => request.executionId ?? []));
-  for (const id of memory.waiting) if (!waiting.has(id)) memory.at.set(id, memory.tick);
+  for (const id of memory.waiting) if (!waiting.has(id)) memory.held.add(id);
+  for (const id of [...waiting, ...memory.held]) memory.at.delete(id);
+  if (!waiting.size) {
+    for (const id of memory.held) memory.at.set(id, memory.tick);
+    memory.held.clear();
+  }
   for (const tool of snapshot.tools)
-    if (!memory.at.has(tool.executionId) && !waiting.has(tool.executionId))
+    if (!memory.at.has(tool.executionId) && !waiting.has(tool.executionId) && !memory.held.has(tool.executionId))
       memory.at.set(tool.executionId, memory.tick);
   memory.waiting = waiting;
   return memory.at;

@@ -12,9 +12,12 @@ import type { JsonValue } from '../../protocol/direct-wire.js';
 export function ToolCall({
   tool,
   expanded = false,
+  awaitingDecision = false,
 }: {
   readonly tool: ToolView;
   readonly expanded?: boolean;
+  /** Legacy's `turnPaused`: a live row reads "(waiting)" while a question or approval is up. */
+  readonly awaitingDecision?: boolean;
   /** Accepted for callers that pass it; legacy's CommandMessage draws a running shell without an elapsed label. */
   readonly startedAt?: number;
 }): React.ReactElement | null {
@@ -52,6 +55,7 @@ export function ToolCall({
       hadApproval={message?.hadApproval === true}
       displayMode={expanded ? 'standard' : 'concise'}
       isSubagent={Boolean(tool.parent)}
+      awaitingDecision={awaitingDecision}
     />
   );
   return age ? <LiveToolAgeContext.Provider value={age}>{row}</LiveToolAgeContext.Provider> : row;

@@ -143,11 +143,13 @@ type PanelProps = {
   readonly connection: TuiConnection;
   /** The session's ^G manager state; legacy BottomArea draws the manager straight under this panel. */
   readonly manager: readonly [boolean, (open: boolean) => void];
+  /** The blank row before the composer; under an approval prompt the prompt's own bottom row stands in. */
+  readonly gap: boolean;
 };
 
-export const TasksPanel: FC<PanelProps> = ({ state, connection, manager: [manage, setManage] }) => (
+export const TasksPanel: FC<PanelProps> = ({ state, connection, manager: [manage, setManage], gap }) => (
   <>
-    <TaskRows state={state} gap={!manage} />
+    <TaskRows state={state} gap={gap && !manage} />
     {manage ? (
       <>
         <TaskManager

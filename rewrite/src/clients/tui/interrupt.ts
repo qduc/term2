@@ -3,8 +3,8 @@ import type { TuiConnection } from './integration.js';
 import type { TuiState } from './state.js';
 
 /**
- * Ctrl+C, in priority order: a pending send confirmation is cleared; a queue edit is discarded; a running turn is cancelled (its queued steers
- * come back as a draft) and the draft kept; with nothing running the draft is cleared; otherwise the exit hint.
+ * Ctrl+C, in priority order: a pending send confirmation is cleared; a queue edit is discarded; a draft is cleared;
+ * a running turn is cancelled (its queued steers come back as a draft); otherwise the exit hint.
  * The plain "Cancellation requested for turn-..." success notice is dropped inside cancelInput; returned-steer and
  * refusal messages still show.
  */
@@ -24,9 +24,10 @@ export function useInterrupt(context: {
   interrupt.current = () => {
     if (confirmation.pending) confirmation.clear();
     else if (cancelQueueEdit()) return;
-    else if (state.activeTurnId || (state.interactions.length && editor.value.length === 0))
-      void cancelInput(connection, state.activeTurnId ?? undefined).then(setNotice, notifyError);
+    // Legacy use-app-keyboard-shortcuts: a draft is cleared first, even mid-turn; only an empty composer stops it.
     else if (editor.value.length > 0) editor.replace('');
+    else if (state.activeTurnId || state.interactions.length)
+      void cancelInput(connection, state.activeTurnId ?? undefined).then(setNotice, notifyError);
     else setNotice('Press Ctrl+C again to exit');
   };
 }

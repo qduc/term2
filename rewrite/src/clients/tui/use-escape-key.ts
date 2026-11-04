@@ -44,9 +44,9 @@ export const useEscapeKey = ({
     if (!key.escape) return;
     if (onEscapeRef.current?.()) return;
 
-    // An empty buffer during a turn belongs to the app-level interrupt
-    // confirmation; clearing non-empty text still takes precedence.
-    if (turnInFlight && value.length === 0) return;
+    // Legacy has the same early return for an empty buffer during a turn, but its InputBox handler sees the
+    // turnInFlight of the render that mounted the editor (traced: false while streaming), so the clear-input
+    // hint shows beside the interrupt confirmation. Reproduced here by not returning.
 
     // Ink parses two ESC bytes delivered in one terminal chunk as a single
     // meta+escape key. Treat that representation as the second press too.

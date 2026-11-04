@@ -73,10 +73,12 @@ export function useCommandTranscriptViewport(
   const last = transcript.state.timeline?.at(-1);
   return {
     ...viewport,
-    /** The transcript ends with a local system line (`Stopped`), which legacy follows with two blank rows, not three. */
-    endsWithSystemLine:
-      last?.kind === 'message' &&
-      transcript.state.messages.find((message) => message.id === last.id)?.localSystem === true,
+    /** The transcript ends with a tool row or a local system line (`Stopped`); legacy follows those with two blank
+     * rows, and an assistant answer (its markdown ends in a blank line) with three. */
+    endsWithRow:
+      last?.kind === 'tool' ||
+      (last?.kind === 'message' &&
+        transcript.state.messages.find((message) => message.id === last.id)?.localSystem === true),
     appendCommandOutput: transcript.append,
     showMessage(message: string, command: string, notice: (value: string) => void): void {
       if (command.trim() !== '/help') notice(message);

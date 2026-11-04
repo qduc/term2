@@ -370,7 +370,7 @@ export function TuiSession({
       setBusy(false);
     }
   };
-  const liveGap = state.activeTurnId ? 1 : viewport.endsWithSystemLine ? 2 : state.messages.length ? 3 : 2;
+  const liveGap = state.activeTurnId ? 1 : viewport.endsWithRow ? 2 : state.messages.length ? 3 : 2;
   return (
     <Box flexDirection="column">
       {viewport.staticTranscript}

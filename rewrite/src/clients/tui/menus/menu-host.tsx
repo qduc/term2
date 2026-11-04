@@ -53,19 +53,10 @@ export function useMenuStack(options: {
     if (!menus) return;
     controller.setTriggerRegistry(createDefaultTriggerRegistry(commands, MENU_RULE_IDS, menus.schema));
   }, [controller, commands, menus]);
-  // Legacy app.tsx's intent host, limited to the ported menus' intents. A menu's composed text runs as
-  // if typed and submitted, which covers legacy's slash dispatch and its fallback to a turn.
-  useEffect(() => {
-    controller.setIntentHost(({ intentRequest }) => {
-      if (intentRequest.intent.type === 'submit-prompt') actions.runCommand(intentRequest.intent.text);
-      if (intentRequest.intent.type === 'rewind')
-        actions.rewind(intentRequest.intent.item, intentRequest.intent.disposition);
-    });
-    return () => controller.setIntentHost(undefined);
-  }, [controller, actions]);
   const open = Boolean(menus) && snapshot.stack.length > 0;
   if (menus) installSettingsLibrary(menus.settings.lib);
-  // Legacy app.tsx's effect host: the controller hands committed intents to the session's commands.
+  // Legacy app.tsx's intent host, limited to the ported menus' intents: the controller hands committed intents
+  // to the session's commands.
   const latestActions = useRef(actions);
   latestActions.current = actions;
   useEffect(() => {
@@ -77,7 +68,9 @@ export function useMenuStack(options: {
           notice: (text) => latestActions.current.notice(text),
           settings: () => menus.settings.service(sessionId),
         }),
+        // A menu's composed text runs as if typed and submitted: legacy's slash dispatch and its fallback to a turn.
         'submit-prompt': ({ intent }) => latestActions.current.runCommand(intent.text),
+        rewind: ({ intent }) => latestActions.current.rewind(intent.item, intent.disposition),
       }),
     );
     return () => controller.setIntentHost(undefined);

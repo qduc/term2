@@ -23,8 +23,8 @@ traffic store fixes its enabled state at construction. Session runtime bindings
 may reuse the already-resolved logger; canonical conversation persistence is
 separate and remains enabled. This is startup policy, not a runtime toggle.
 
-`createAppSettings` constructs only the concrete `SettingsService` through
-`createDirectSettingsService`. The settings owner retains its directory, logger,
+`createSettingsService` (`settings.ts`) constructs the concrete
+`SettingsService`. The settings owner retains its directory, logger,
 and persistence policies.
 
 `createDirectRuntimes` in `direct-application-runtime.ts` builds session-owned

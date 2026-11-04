@@ -1,7 +1,7 @@
 /** Per-request generation limits wrapped around every model the direct application resolves. */
 import { GenerationGuard, GenerationStreamDeadlines } from '../../../source/services/agent-runtime/generation-guard.js';
 import type { Model, ModelEvent, ModelRegistry, ModelRequest } from '../model/index.js';
-import type { ProfileSelection } from './agent-surface.js';
+import type { ProfileSelection } from './tool-contract.js';
 
 /**
  * The old run loop's per-request limits: a stalled stream and oversized text end

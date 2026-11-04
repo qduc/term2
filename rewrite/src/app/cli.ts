@@ -27,7 +27,7 @@ import type { DirectLaunchBase } from './direct-launch-types.js';
 import type { InteractivePickerRequest } from '../../../source/services/models/model-resolution.js';
 import { HARNESS_IDLE_ENV } from '../../../source/lib/harness-input-idle.js';
 import { isControlSocketName } from '../../../source/services/control-socket/control-socket.js';
-import { createAppSettings } from './settings.js';
+import { createSettingsService, type SettingsService } from './settings.js';
 import { runLogin, runListModelsCommand } from './cli-account-commands.js';
 import { listNativeConversations, resolveNativeResume } from './cli-conversations.js';
 import {
@@ -92,10 +92,7 @@ async function checkConversationsDirectory(directory: string): Promise<void> {
   }
 }
 
-function chooseProfile(
-  options: Pick<SessionOptions, 'profile' | 'lite'>,
-  settings: ReturnType<typeof createAppSettings>['service'],
-): string {
+function chooseProfile(options: Pick<SessionOptions, 'profile' | 'lite'>, settings: SettingsService): string {
   const currentProfile = String(settings.get('app.activeProfileId'));
   let profileId: string;
   if (options.profile !== null) {
@@ -164,7 +161,7 @@ async function runWithSignals(request: DirectHeadlessRequest): Promise<{
  */
 async function applyModelOverrides(
   options: SessionOptions,
-  settings: ReturnType<typeof createAppSettings>['service'],
+  settings: SettingsService,
   logger: LoggingService,
   pickerEligible: boolean,
 ): Promise<string | null> {
@@ -260,7 +257,7 @@ async function runHeadless(prompt: string, options: SessionOptions): Promise<num
   await checkConversationsDirectory(directory);
 
   const sessionContext = new SessionContextService();
-  const { service: settings } = createAppSettings({
+  const settings = createSettingsService({
     env: buildEnvOverrides(),
     disableFilePersistence: true,
     loggingServiceOptions: { sessionContextService: sessionContext },
@@ -320,7 +317,7 @@ async function runInteractive(options: SessionOptions): Promise<number> {
   await checkConversationsDirectory(directory);
 
   const sessionContext = new SessionContextService();
-  const { service: settings } = createAppSettings({
+  const settings = createSettingsService({
     env: buildEnvOverrides(),
     loggingServiceOptions: { sessionContextService: sessionContext },
   });
@@ -357,7 +354,7 @@ async function launcherBase(): Promise<Pick<DirectLaunchBase, 'conversationsDir'
   await checkConversationsDirectory(directory);
 
   const sessionContext = new SessionContextService();
-  const { service: settings } = createAppSettings({
+  const settings = createSettingsService({
     env: buildEnvOverrides(),
     disableFilePersistence: true,
     loggingServiceOptions: { sessionContextService: sessionContext },

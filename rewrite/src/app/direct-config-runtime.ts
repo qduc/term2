@@ -5,7 +5,7 @@ import { createProviderRegistry } from '../model/provider.js';
 import type { DirectContextCapabilities } from '../session/direct-capabilities.js';
 import type { DirectAcceptedConfiguration } from '../session/direct-command-types.js';
 import type { DirectConversationRuntime, DirectRuntimeContext } from '../session/direct-store.js';
-import { loadSurface } from './agent-surface.js';
+import { createToolSurface } from './tool-surface.js';
 import { withSessionScope, type SessionScope } from './direct-application-models.js';
 import { createNestedAuthorizer } from './direct-application-nested.js';
 import { runPolicy } from './direct-application-policy.js';
@@ -70,7 +70,7 @@ export async function prepareDirectConfiguration(
   const selection: ProfileSelection = { ...options.selection, settings };
   const context: DirectRuntimeContext = { ...options.context, model };
   const profile = getProfileMetadata(String(settings.get('app.activeProfileId')));
-  const surface = loadSurface(
+  const surface = createToolSurface(
     selection,
     borrowDirectConfigSurfaceOptions({
       ...options.surfaceOptions,

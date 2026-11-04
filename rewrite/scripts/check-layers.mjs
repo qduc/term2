@@ -53,6 +53,7 @@ const DIRECT_SOURCE_IMPORTERS = new Set([
   'app/direct-verifier.ts',
   'app/generation-guard.ts',
   'app/sandbox-warning.ts',
+  'app/settings.ts',
   'app/source-tools.ts',
   'app/tool-contract.ts',
   'app/tool-surface.ts',

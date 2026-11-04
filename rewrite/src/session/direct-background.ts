@@ -4,7 +4,7 @@ import type { ModelError } from '../model/index.js';
 import type { InteractionDecision, InteractionRequestId, SubagentMessageResult } from '../tools/index.js';
 import type { AnswerResult } from './direct-types.js';
 import { DirectBackgroundInteractions } from './direct-background-interactions.js';
-import { DirectOrchestratorQuestions } from './direct-orchestrator-questions.js';
+import { DirectTaskQuestions } from './direct-task-questions.js';
 import { directTaskAbortError, directTaskError } from './direct-background-types.js';
 import type {
   DirectBackgroundFact,
@@ -52,7 +52,7 @@ export class DirectBackgroundTasks {
   readonly #now: () => number;
   readonly #entries = new Map<DirectTaskId, Entry>();
   readonly #interactions: DirectBackgroundInteractions;
-  readonly #questions: DirectOrchestratorQuestions;
+  readonly #questions: DirectTaskQuestions;
   #failure?: ModelError;
   #closed = false;
 
@@ -65,7 +65,7 @@ export class DirectBackgroundTasks {
     this.#sink = options.sink;
     this.#now = options.now ?? Date.now;
     this.#interactions = new DirectBackgroundInteractions((fact) => this.#accept(fact));
-    this.#questions = new DirectOrchestratorQuestions((fact) => this.#accept(fact), this.#now);
+    this.#questions = new DirectTaskQuestions((fact) => this.#accept(fact), this.#now);
   }
 
   /** Admit before invoking the body. Values/outcomes must be serializable Session data. */

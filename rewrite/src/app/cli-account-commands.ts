@@ -2,7 +2,7 @@
 import { stdin, stdout, stderr } from 'node:process';
 import { SessionContextService } from '../../../source/services/session/session-context-service.js';
 import { buildEnvOverrides } from '../../../source/services/settings/settings-service.js';
-import { createAppSettings } from './settings.js';
+import { createSettingsService, type SettingsService } from './settings.js';
 
 import type { ILoggingService } from '../../../source/services/service-interfaces.js';
 import { getProviderIds } from '../../../source/providers/index.js';
@@ -71,7 +71,7 @@ export async function runLogin(provider: 'grok' | 'codex'): Promise<number> {
 /** List the source model catalogue with its persisted app settings and diagnostics. */
 export async function runListModelsCommand(search: string | null, refresh: boolean): Promise<number> {
   const { runListModels } = await import('../../../source/services/models/model-listing.js');
-  const { service: listingSettings } = createAppSettings({
+  const listingSettings = createSettingsService({
     env: buildEnvOverrides(),
     loggingServiceOptions: { sessionContextService: new SessionContextService() },
   });
@@ -143,7 +143,7 @@ export function createDirectAccountPorts(service: ProductSettings): {
   };
 }
 
-type ProductSettings = ReturnType<typeof createAppSettings>['service'];
+type ProductSettings = SettingsService;
 
 function describeCredential(service: ProductSettings, providerId: string): CredentialDescription {
   const definition = CREDENTIAL_SETTINGS[providerId];

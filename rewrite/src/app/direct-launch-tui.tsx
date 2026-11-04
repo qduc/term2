@@ -34,6 +34,7 @@ import { createDirectApplication, type DirectApplication } from './direct-applic
 import { openDirectSessionTarget, type DirectSessionTarget } from './direct-application-target.js';
 import { createDirectControlBridge, type DirectControlBridge } from './direct-launch-control.js';
 import { createDirectTuiCommands } from './direct-launch-tui-commands.js';
+import { printUsage } from './usage-report.js';
 import { createDirectTuiMenus } from './direct-launch-tui-menus.js';
 import { performRestart, type DirectRestartPlan } from './direct-launch-tui-restart.js';
 import type { DirectLaunchRequest } from './direct-launch-types.js';
@@ -293,6 +294,7 @@ async function runTui(
     );
     unmount = () => instance.unmount();
     await instance.waitUntilExit();
+    printUsage(exitedSnapshot, false); // legacy cli.tsx printUsageOnce, before the resume hint
     if (!pending.plan && exitCode === 0 && exitedSnapshot?.messages.some((message) => message.role !== 'system')) {
       const args = ['term2-next'];
       if (target.restart) {

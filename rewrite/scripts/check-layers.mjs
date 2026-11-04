@@ -39,6 +39,7 @@ const DIRECT_SOURCE_IMPORTERS = new Set([
   'app/direct-launch-tui-settings.ts',
   'app/direct-launch-tui.tsx',
   'app/direct-launch-types.ts',
+  'app/usage-report.ts',
   'app/direct-mcp-auth.ts',
   'app/direct-mcp-source.ts',
   'app/direct-mcp.ts',

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { randomUUID } from 'node:crypto';
-import { Box, Text, useInput } from 'ink';
+import { Box, Text, useApp, useInput } from 'ink';
 import { MultilineInput, type ImageRef } from 'ink-prompt';
 import type { TuiProps } from './integration.js';
 import type { WireContent, WireSubmission } from '../../protocol/direct-wire.js';
@@ -142,8 +142,6 @@ export function TuiSession({
     if (entry) restoreDraft(entry, entry.cursor);
   };
   const queue = useQueueSelection(state, connection, { edit: startQueueEdit, historyUp });
-  const queueItems = queue.items;
-  const selectedQueueIndex = queue.index;
   // Menus call back into `submit`, which is declared below and changes every render.
   const submitRef = useRef<(input: string) => void>(() => undefined);
   const handoffRef = useRef<ReturnType<typeof useHandoff>>(null as never);
@@ -167,20 +165,25 @@ export function TuiSession({
     value: editor.value,
     onChange: (value) => replaceInput(value),
     onEscape: () => {
-      if (!composerActive || menuStack.open || viewport.expanded || selectedQueueIndex >= 0 || Boolean(editing))
-        return true;
+      if (!composerActive || menuStack.open || viewport.expanded || queue.index >= 0 || Boolean(editing)) return true;
       // Legacy InputBox handleEscape: Esc on an empty shell prompt leaves shell mode.
       return shell.escape();
     },
     turnInFlight: Boolean(state.activeTurnId),
   });
   const pending = useRef(false);
+  const { waitUntilRenderFlush } = useApp();
+  // Legacy clearInputBeforeReset paints the emptied composer, then printUsage writes under that frame.
+  const resetHooks = {
+    leave: () => waitUntilRenderFlush().then(() => integration.printUsage?.()),
+    begin: beginNewConversation,
+  };
   const handoffFlow = useHandoff({
     holder: handoff,
     state,
     connection,
     switchSession,
-    beginNewConversation,
+    resetHooks,
     menuOpen: menuStack.open,
     replaceInput,
     notice: setNotice,
@@ -222,14 +225,7 @@ export function TuiSession({
     if (interactionActive) return void interactionInput.current?.(input, key);
     if (taskOpen || budgetOpen) return;
     if (composerActive && key.escape && handoffFlow.escape()) return;
-    if (
-      composerActive &&
-      key.escape &&
-      !viewport.expanded &&
-      selectedQueueIndex < 0 &&
-      !editing &&
-      interruptConfirm.press()
-    )
+    if (composerActive && key.escape && !viewport.expanded && queue.index < 0 && !editing && interruptConfirm.press())
       return;
     if (composerActive && isShiftTab(input, key)) return togglePlan();
     // Legacy use-app-keyboard-shortcuts: Ctrl+O and Ctrl+T replace the draft with the menu command.
@@ -322,7 +318,7 @@ export function TuiSession({
         if (receipt.restored) return;
       } else if (command.trim() === '/clear' || command.trim() === '/rollover') {
         const reset = command.trim() as '/clear' | '/rollover';
-        const failure = await replaceSession(connection, reset, switchSession, undefined, beginNewConversation);
+        const failure = await replaceSession(connection, reset, switchSession, undefined, resetHooks);
         if (failure !== null) {
           setNotice(failure);
           editor.accepted(input, true, []);
@@ -441,12 +437,12 @@ export function TuiSession({
         ) : null}
         <ShellTaskPanel state={state} />
         <PendingQueue
-          items={queueItems}
+          items={queue.items}
           selectedId={queue.selectedId}
           editingId={editing?.id ?? null}
           notice={queue.notice}
         />
-        <PendingQueueEdit editingId={editing?.id ?? null} items={queueItems} />
+        <PendingQueueEdit editingId={editing?.id ?? null} items={queue.items} />
         {menuStack.view}
         {/* Legacy BottomArea puts a confirmation prompt in the composer's place. */}
         {confirmation.prompt ?? handoffFlow.prompt}
@@ -497,12 +493,12 @@ export function TuiSession({
         <ComposerFooter
           integration={integration}
           state={state}
-          active={composerActive && selectedQueueIndex < 0 && !menuStack.open}
+          active={composerActive && queue.index < 0 && !menuStack.open}
           // Legacy hides the idle hints under a prompt label.
           draftEmpty={editor.value === '' && !handoffFlow.promptLabel}
           escHint={escHintVisible}
           columns={columns - 4}
-          queueSelectable={queueItems.length > 0 && !editor.value && !editing}
+          queueSelectable={queue.items.length > 0 && !editor.value && !editing}
         />
       </Box>
     </Box>

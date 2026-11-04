@@ -342,6 +342,8 @@ export interface TuiIntegration {
   /** The profile Shift+Tab switches to. */
   planTarget?(connection: TuiConnection): string;
   clearAndTogglePlan?(connection: TuiConnection): Promise<{ message?: string }>;
+  /** Legacy printUsage: the usage summary written to stdout as a conversation is left for a new one. */
+  printUsage?(): void;
   /** Read the attached session's effective preferences on each render, including live /settings changes. */
   preferences?(sessionId: string): { readonly historySize: number; readonly pasteThreshold: number | undefined };
   /** What the attached session's status bar shows, read on each render so live /settings changes appear. */

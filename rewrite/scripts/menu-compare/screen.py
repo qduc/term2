@@ -261,8 +261,12 @@ class Term:
 MASKS = [
     (re.compile(r'127\.0\.0\.1:\d+'), '<host>:<port>'),
     (re.compile(r'v?\d+\.\d+\.\d+(-[\w.]+)?(\+[0-9a-f]+)?'), '<ver>'),
-    # Session ids: legacy uses bare UUIDs, term2-next prefixes them with `conv_`.
-    (re.compile(r'(conv_)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'), '<id>'),
+    # Session ids: both CLIs show bare UUIDs (next's store prefixes `conv_`, which must not show).
+    (re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'), '<id>'),
+    # An id wrapped in a narrow pane (the resume menu's detail column at 80 columns): its head ends a cell and its
+    # tail is the only text in the same cell on the next row.
+    (re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{0,11}(?= *│)'), '<id>'),
+    (re.compile(r'(?<=│  )[0-9a-f]{1,11}(?= +│)'), '<id>'),
     (re.compile(r'\d{4}-\d\d-\d\d \d\d:\d\d:\d\d'), '<time>'),
     (re.compile(r'\b\d+ (second|minute|hour)s? ago|\b\d+ [a-z]*…'), '<dur> ago'),
     (re.compile(r'(/tmp|/private)?/[\w.-]*menucmp[\w./-]*'), '<path>'),

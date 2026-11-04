@@ -40,6 +40,7 @@ import type { ISettingsService } from '../../../source/services/service-interfac
 import { INTERACTIVE_TERMINAL_REQUIRED } from './direct-launch.js';
 import { openDirectApplicationMcp } from './direct-application-mcp.js';
 import type { DirectMcp } from './direct-mcp.js';
+import { displaySessionId } from '../protocol/session-id.js';
 
 type InteractiveRequest = Extract<DirectLaunchRequest, { readonly kind: 'interactive' }>;
 
@@ -231,12 +232,13 @@ async function runTui(
   process.once('SIGTERM', onSignal);
   try {
     const sessionId = resumeId !== undefined && fork ? await app.forkSession(resumeId) : resumeId;
-    if (sessionId !== resumeId) stderr.write(`Forked conversation ${resumeId} → ${sessionId}\n`);
+    if (sessionId !== resumeId)
+      stderr.write(`Forked conversation ${displaySessionId(resumeId!)} → ${displaySessionId(sessionId!)}\n`);
     const initial =
       sessionId === undefined
         ? await app.host.createSession(app.principal, target.grant)
         : await app.host.connect(app.principal, sessionId);
-    if (sessionId !== undefined) stdout.write(`Resumed conversation: ${initial.sessionId}\n`);
+    if (sessionId !== undefined) stdout.write(`Resumed conversation: ${displaySessionId(initial.sessionId)}\n`);
     if (request.goal) await app.setGoal(initial.sessionId, request.goal, 'launcher');
 
     // An admitted CLI goal belongs to Session even when this process cannot render Ink.
@@ -303,8 +305,10 @@ async function runTui(
         args.push('--ssh', target.restart.target, '--remote-dir', target.restart.directory);
         if (target.restart.port && target.restart.port !== 22) args.push('--ssh-port', String(target.restart.port));
       }
-      args.push('--resume', exitedSnapshot.sessionId);
-      stdout.write(`\nSession: ${exitedSnapshot.sessionId}\nTo resume this conversation: ${args.join(' ')}\n`);
+      args.push('--resume', displaySessionId(exitedSnapshot.sessionId));
+      stdout.write(
+        `\nSession: ${displaySessionId(exitedSnapshot.sessionId)}\nTo resume this conversation: ${args.join(' ')}\n`,
+      );
     }
     return exitCode;
   } finally {

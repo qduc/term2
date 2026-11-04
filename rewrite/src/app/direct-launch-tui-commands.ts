@@ -33,6 +33,7 @@ import type { DirectSessionTarget } from './direct-application-target.js';
 import type { DirectControlBridge } from './direct-launch-control.js';
 import { prepareRestart, type DirectRestartPlan } from './direct-launch-tui-restart.js';
 import { createDirectTuiSettings } from './direct-launch-tui-settings.js';
+import { displaySessionId, storedSessionId } from '../protocol/session-id.js';
 
 type CommandResult = Awaited<ReturnType<TuiIntegration['command']>>;
 
@@ -137,12 +138,17 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
 
   const resume = async (sessionId: string | undefined): Promise<CommandResult> => {
     if (sessionId && sessionId !== 'ls') {
-      return { sessionId, message: `Resumed conversation: ${sessionId}` }; // legacy app.tsx resumeConversation
+      // legacy app.tsx resumeConversation; legacy ids are bare UUIDs, and either form resumes
+      return { sessionId: storedSessionId(sessionId), message: `Resumed conversation: ${displaySessionId(sessionId)}` };
     }
     // Legacy's bare /resume puts its trigger in the input, which opens the resume menu.
     if (!sessionId) return { draft: { text: '/resume ', attachments: [] } };
     const here = (await listResumeSessions()).map((session) =>
-      [session.id, session.updatedAt ? localMinute(session.updatedAt) : undefined, session.title ?? '(no messages yet)']
+      [
+        displaySessionId(session.id),
+        session.updatedAt ? localMinute(session.updatedAt) : undefined,
+        session.title ?? '(no messages yet)',
+      ]
         .filter(Boolean)
         .join('  '),
     );
@@ -345,7 +351,7 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
         return { message: result.message };
       } catch (error) {
         throw new Error(
-          `Session ${id} was created but mode switching failed: ${
+          `Session ${displaySessionId(id)} was created but mode switching failed: ${
             error instanceof Error ? error.message : String(error)
           }`,
         );

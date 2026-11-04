@@ -182,7 +182,10 @@ export function createDirectAutomaticMemory(deps: {
       success: true,
       command: 'Automatic memory canary',
       receipt,
-      output: `Learned (project): ${receipt.quote}\nSource session: ${receipt.sourceSessionId}\nReview with memory_get({scope:"project",id:"${receipt.id}"}); undo with ${receipt.undo}`,
+      output: `Learned (project): ${receipt.quote}\nSource session: ${receipt.sourceSessionId.replace(
+        /^conv_/,
+        '',
+      )}\nReview with memory_get({scope:"project",id:"${receipt.id}"}); undo with ${receipt.undo}`,
     };
   };
 }

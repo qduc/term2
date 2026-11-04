@@ -103,6 +103,7 @@ import { canonicalProfileId, profileIdFromLegacyMode } from '../../../source/ser
 import { builtinProfiles } from '../../../source/services/profiles/registry.js';
 import { resolveActiveProfile } from '../../../source/services/profiles/active-profile.js';
 import { getProfileLabel } from '../../../source/services/profiles/labels.js';
+import { displaySessionId } from '../protocol/session-id.js';
 
 /** Legacy listRecentConversations' limit (source/app.tsx listSavedConversations). */
 const RECENT_CONVERSATIONS = 10;
@@ -251,7 +252,7 @@ export function createDirectTuiMenus(options: MenuOptions): TuiMenus {
           .filter((session) => session.id !== sessionId)
           .map(
             (session): MenuConversationEntry => ({
-              id: session.id,
+              id: displaySessionId(session.id),
               updatedAt: session.updatedAt ?? '',
               ...(session.title ? { firstUserMessage: session.title } : {}),
               ...(session.messageCount !== undefined ? { messageCount: session.messageCount } : {}),

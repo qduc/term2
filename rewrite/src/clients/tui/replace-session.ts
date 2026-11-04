@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { TuiConnection } from './integration.js';
 import { receiptNotice, resetSession, sendNativeCommand } from './commands.js';
+import { displaySessionId } from '../../protocol/session-id.js';
 
 /**
  * `/clear` or `/rollover`: create the replacement session, then attach it.
@@ -23,7 +24,9 @@ export async function replaceSession(
     await switchSession(sessionId);
   } catch (error) {
     throw new Error(
-      `Session ${sessionId} was created; switching reported: ${error instanceof Error ? error.message : String(error)}`,
+      `Session ${displaySessionId(sessionId)} was created; switching reported: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
     );
   }
   return null;

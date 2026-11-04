@@ -155,7 +155,8 @@ it('keeps the fork line under --quiet', { timeout: 120_000 }, async () => {
     workspace,
   );
   expect(forked.code).toBe(0);
-  expect(forked.stderr).toContain(`Forked conversation ${id} →`);
+  // The store names files conv_<uuid>; the CLI prints legacy's bare UUID.
+  expect(forked.stderr).toContain(`Forked conversation ${id!.replace(/^conv_/, '')} →`);
   expect(forked.stderr).not.toMatch(/Profile:/);
   expect(forked.stdout).toContain('"type":"completed"');
 });

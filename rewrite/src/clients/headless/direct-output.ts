@@ -19,6 +19,7 @@ import {
   legacyUsageUpdate,
 } from '../../protocol/direct-json.js';
 import type { DirectHeadlessOptions, HeadlessIo } from './types.js';
+import { displaySessionId } from '../../protocol/session-id.js';
 
 const RECOVERABLE_ERROR_KINDS = new Set([
   'context_overflow',
@@ -31,7 +32,9 @@ const RECOVERABLE_ERROR_KINDS = new Set([
 /** Create one presenter per connection run. Its terminal method refuses a
  * missing accepted final window rather than emitting a partial legacy final.
  */
-export function createHeadlessOutput(options: DirectHeadlessOptions, sessionId: string) {
+export function createHeadlessOutput(options: DirectHeadlessOptions, storedId: string) {
+  // Recovery text and JSON name the session as legacy does: the bare UUID.
+  const sessionId = displaySessionId(storedId);
   const io = options.io ?? { stdout: process.stdout, stderr: process.stderr };
   const output = options.output ?? 'plain';
   const quiet = options.quiet ?? false;

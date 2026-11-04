@@ -290,7 +290,7 @@ it('retry redraws after authoritative history replacement', { timeout: TIMEOUT_M
   session!.write('/retry-turn');
   await waitForHarnessComposerValue(idlePath, '/retry-turn', { timeoutMs: 30_000 });
   session!.write('\r');
-  await session!.waitForOutput('Conversation history restored to retry', 60_000);
+  // Legacy /retry-turn prints no notice on success; the second request is the signal.
   await until(() => received.length >= 2, 'retry dispatches a second model request');
   await session!.waitForOutput('RETRY-REPLY', 15_000);
   expect(session!.getOutput().slice(before)).toContain('\u001b[2J\u001b[3J\u001b[H');

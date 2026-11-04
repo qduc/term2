@@ -92,7 +92,7 @@ it.skipIf(process.platform !== 'linux')('replays a silent background turn notice
     await child.waitForVisibleOutput('BACKGROUND_STARTED');
     const nextIdle = await child.waitForIdleInput({ after: idle });
     await writePtyTextAndSubmit(child, '/profile plan');
-    await child.waitForVisibleOutput('Switched to builtin:plan for this session.');
+    // Legacy /profile switches silently; the idle composer below marks the switch done.
     await child.waitForIdleInput({ after: nextIdle });
     await child.waitForComposerValue('', { afterRevision: 0 });
     const switchedIdle = child.readIdleGeneration();

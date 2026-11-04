@@ -522,9 +522,10 @@ async function runCommand(
   if (exerciseMenu === 'approval-shortcut') {
     session.write('draft stays');
     await waitForHarnessComposerValue(idlePath, 'draft stays', { timeoutMs: 60_000 });
-    for (const mode of ['builtin:plan', 'builtin:bare']) {
+    // Legacy's Shift+Tab lines (mode-toggle): "Switched to Plan mode - ...", then "Switched to Bare mode".
+    for (const line of ['Switched to Plan mode', 'Switched to Bare mode']) {
       session.write('\x1b[Z');
-      await session.waitForOutput(`Switched to ${mode} for this session.`, 30_000);
+      await session.waitForOutput(line, 30_000);
       await waitForHarnessComposerValue(idlePath, 'draft stays', { timeoutMs: 60_000 });
       expect(JSON.parse(fs.readFileSync(path.join(settingsDir, 'settings.json'), 'utf8')).shell.autoApproveMode).toBe(
         'off',

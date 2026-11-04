@@ -1,11 +1,13 @@
 /** `/restart`: hand this session to a freshly loaded process, once nothing here can write to it. */
 import fs from 'node:fs';
+import path from 'node:path';
 import { createRestartPlan } from '../../../source/utils/process-restart.js';
+import { acquireDirectWriterLock } from '../session/direct-writer-lock.js';
 import type { WireCommand, WireCommandResult, WireSnapshot } from '../protocol/direct-wire.js';
 import type { DirectApplication } from './direct-application.js';
 import type { DirectControlBridge, DirectControlHold } from './direct-launch-control.js';
 
-export type DirectRestartPlan = ReturnType<typeof createRestartPlan>;
+export type DirectRestartPlan = ReturnType<typeof createRestartPlan> & { readonly sessionId: string };
 
 /** Reject unusable entries before releasing the current session; do not pin the legacy build layout. */
 function assertSupported(): void {
@@ -57,7 +59,7 @@ function plan(
   const { settings, profileId } = app.sessionDetails(snapshot.sessionId);
   if (!settings || !profileId) throw new Error('This session has no live runtime to restart.');
   const server = bridge.server;
-  return createRestartPlan({
+  const restart = createRestartPlan({
     entry: process.argv[1] ?? '',
     sessionId: snapshot.sessionId,
     model: snapshot.model,
@@ -68,6 +70,7 @@ function plan(
     ...(ssh ? { ssh } : {}),
     ...(server ? { control: { name: server.name, discordInput: server.discordInputEnabled } } : {}),
   });
+  return { ...restart, sessionId: snapshot.sessionId };
 }
 
 /**
@@ -106,6 +109,12 @@ export async function prepareRestart(
 }
 
 /** Replaces this process. Runs after the host closed, so the new one is the only writer. */
-export function performRestart({ args, env }: DirectRestartPlan): void {
+export function performRestart({ args, env, sessionId }: DirectRestartPlan, conversationsDir: string): void {
+  // Legacy cli.tsx refuses when the conversation lock outlives shutdown.
+  try {
+    acquireDirectWriterLock(path.join(conversationsDir, `${sessionId}.jsonl`))();
+  } catch (error) {
+    throw new Error('Conversation lock remains after shutdown; refusing same-PID restart.', { cause: error });
+  }
   process.execve?.(process.execPath, [process.execPath, ...args], env);
 }

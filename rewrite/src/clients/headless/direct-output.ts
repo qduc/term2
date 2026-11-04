@@ -256,12 +256,20 @@ export function createHeadlessOutput(options: DirectHeadlessOptions, storedId: s
       }
     },
     /** Report a failed terminal, preserving resumable-context exit semantics. */
-    failure(message: string, kind: string | undefined): ['failed' | 'context_paused', number] {
+    failure(tagged: string, nativeKind: string | undefined): ['failed' | 'context_paused', number] {
+      // A `<code>: ` prefix names legacy's error code; legacy shows the message without it.
+      const prefix = /^([a-z_]+): /.exec(tagged)?.[1];
+      const coded = prefix !== undefined && RECOVERABLE_ERROR_KINDS.has(prefix);
+      const message = coded ? tagged.slice(prefix.length + 2) : tagged;
+      const kind = coded ? prefix : nativeKind;
       const recoverable = kind !== undefined && RECOVERABLE_ERROR_KINDS.has(kind);
       if (!recoverable) {
         errorText(message, kind);
         return ['failed', 1];
       }
+      // Legacy publishes a context failure as an error event, then reports it again on exit.
+      if (output === 'json') json({ type: 'error', message, code: kind });
+      else io.stderr.write(`error ${message}\n`);
       const recovery = `Work is retained. Resume with --resume ${sessionId} after reviewing the context limit.`;
       if (output === 'json') {
         io.stdout.write(

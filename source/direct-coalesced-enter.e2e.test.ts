@@ -471,8 +471,11 @@ it.skipIf(process.platform !== 'linux')(
     await session!.waitForOutput('INLINE-EDIT', 30_000);
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
     await send('/cancel');
-    await session!.waitForOutput('Queue: paused', 30_000);
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
+    // Legacy shows no paused-queue line: the hold is behaviour. The queued request is not sent until resumed.
+    const requestsAtCancel = received.length;
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    expect(received).toHaveLength(requestsAtCancel);
     await send('/queue resume');
     await session!.waitForOutput('SKILL-QUEUE-REPLY', 60_000);
     const visible = session!.getVisibleOutput();

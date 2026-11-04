@@ -271,12 +271,7 @@ export function Activity({
           {[!state.activeTurnId && state.status !== 'idle' ? state.status : '', state.cost].filter(Boolean).join(' · ')}
         </Text>
       ) : null}
-      {state.queueState !== 'idle' && state.queueState !== 'running' ? (
-        <Text>
-          Queue: {state.queueState}
-          {state.queuePauseReason ? ` · ${state.queuePauseReason}` : ''}
-        </Text>
-      ) : null}
+      {/* Legacy draws no queue-state line: a paused queue shows only its held messages. */}
       {state.commands
         .filter(
           (receipt) =>

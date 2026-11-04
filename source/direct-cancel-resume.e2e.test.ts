@@ -353,8 +353,9 @@ it.each(['slash', 'ctrl-c', 'editing', 'only-steers'] as const)(
     const expectedDraft = 'UNIQUE-QUEUED-STEER\n\nUNIQUE-SECOND-STEER';
     await waitForHarnessComposerValue(idlePath, expectedDraft, { timeoutMs: 5_000 });
     expect(Date.now() - cancelAt).toBeLessThan(2_000);
-    if (mode !== 'only-steers') await session.waitForOutput('Queue: paused', 5_000);
-    else await new Promise((resolve) => setTimeout(resolve, 600));
+    // Legacy shows no paused-queue line; the follow-up's hold is checked in the log below (no queue_started),
+    // and it only runs after /queue resume.
+    await new Promise((resolve) => setTimeout(resolve, 600));
     expect(Date.now() - cancelAt).toBeLessThan(2_000);
     const log = fs.readFileSync(
       path.join(
@@ -387,9 +388,6 @@ it.each(['slash', 'ctrl-c', 'editing', 'only-steers'] as const)(
     );
     if (mode === 'only-steers') {
       expect(followup).toBeUndefined();
-      expect(session.getVisibleOutput().slice(session.getVisibleOutput().lastIndexOf('▌ term²'))).not.toContain(
-        'Queue: paused',
-      );
       return;
     }
     expect(followup).toBeDefined();

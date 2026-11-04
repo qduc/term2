@@ -5,7 +5,7 @@ Flip gate item 5 of #65 (issue #140): run legacy term2 (`dist/cli.js`, the spec)
 tell them apart, by what they see or by how fast they react. The pyte/pty captures and headless goldens in
 `rewrite/parity/` compare text; this check compares the rendered terminal and the time to paint.
 
-This is a tool you run by hand or as a queued job. It is not a CI test (a full run takes about an hour), it
+This is a tool you run by hand or as a queued job. It is not a CI test (a full run takes about 30 minutes), it
 adds no unit tests, and it does not change product code. It uses only the loopback fake provider.
 
 ## One command
@@ -26,6 +26,7 @@ latency tables, gate verdicts) and `<out>/results.json` (every sample).
 | `--quick` | A quarter of the samples. A smoke run, not gate evidence. |
 | `--only latency\|walk` | One half of the run. |
 | `--soak <file>` | JSON array of soak differences to list in the report. |
+| `--report-only` | Re-render `<out>/report.html` from `<out>/results.json` without measuring; with `--soak`, adds the soak list to a finished run. |
 | `--store-mb <n>` | Size of a generated store, per format (default 420). |
 
 Check the load average the report prints; rerun any measurement taken above load 9.

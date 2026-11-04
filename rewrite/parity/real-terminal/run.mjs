@@ -11,8 +11,10 @@
 //   --quick           a quarter of the samples (a smoke run; not gate evidence)
 //   --only latency|walk
 //   --soak <file>     JSON array of soak differences to include in the report
+//   --report-only     re-render <out>/report.html from <out>/results.json (with --soak: add the soak list);
+//                     measures nothing
 //
-// Not a CI test: a full run takes about an hour. Uses the loopback fake provider only.
+// Not a CI test: a full run takes about 30 minutes. Uses the loopback fake provider only.
 import { execFileSync, execSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -34,6 +36,7 @@ const { values } = parseArgs({
     soak: { type: 'string' },
     'store-mb': { type: 'string', default: '420' },
     'skip-build': { type: 'boolean', default: false },
+    'report-only': { type: 'boolean', default: false },
   },
 });
 if (!values.out) {
@@ -43,6 +46,22 @@ if (!values.out) {
 const out = path.resolve(values.out);
 fs.mkdirSync(out, { recursive: true });
 const log = (message) => console.log(`[${new Date().toISOString().slice(11, 19)}] ${message}`);
+const readSoak = () => (values.soak && fs.existsSync(values.soak) ? JSON.parse(fs.readFileSync(values.soak, 'utf8')) : []);
+const soakVerdict = (soak) =>
+  soak.length ? `${soak.length} difference(s), all unexplained — fails the gate unless accepted` : 'not included in this run';
+
+if (values['report-only']) {
+  const { writeReport } = await import('./lib/report.mjs');
+  const results = JSON.parse(fs.readFileSync(path.join(out, 'results.json'), 'utf8'));
+  if (values.soak) {
+    results.soak = readSoak();
+    results.verdict.soak = soakVerdict(results.soak);
+    fs.writeFileSync(path.join(out, 'results.json'), JSON.stringify(results, null, 2));
+  }
+  writeReport(path.join(out, 'report.html'), results);
+  log(`report: ${path.join(out, 'report.html')} (soak: ${results.verdict.soak})`);
+  process.exit(0);
+}
 
 // ---------- prerequisites on a fresh checkout: dependencies and both builds ----------
 if (!fs.existsSync(path.join(repo, 'node_modules', '@xterm', 'xterm'))) {
@@ -280,14 +299,14 @@ environment.loadAverage1m = loadStats
 
 const allGates = results.sizes.flatMap((s) => Object.values(s.latency).flatMap((p) => Object.values(p.gate ?? {})));
 const allShots = results.sizes.flatMap((s) => s.shots);
-const soak = values.soak && fs.existsSync(values.soak) ? JSON.parse(fs.readFileSync(values.soak, 'utf8')) : [];
+const soak = readSoak();
 results.soak = soak;
 results.verdict = {
   latency: allGates.length > 0 && allGates.every((g) => g.pass),
   screenshots: allShots.length > 0 && allShots.every((s) => s.identical),
   identicalShots: allShots.filter((s) => s.identical).length,
   totalShots: allShots.length,
-  soak: soak.length ? `${soak.length} difference(s), all unexplained — fails the gate unless accepted` : 'not included in this run',
+  soak: soakVerdict(soak),
 };
 
 fs.writeFileSync(path.join(out, 'results.json'), JSON.stringify(results, null, 2));

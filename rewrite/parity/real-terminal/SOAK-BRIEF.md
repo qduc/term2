@@ -20,8 +20,8 @@ owner's team to triage. The soak does not fix anything.
 3. The server writes the agent's only command, `/tmp/soak/t` (`t type both "hi{enter}"`, `t screen A`, ...).
 4. Start a fresh agent with no repository context, no tools beyond a shell and an image viewer, and the brief
    below as its whole prompt (replace `<T>` with `/tmp/soak/t`). It must not read the repository.
-5. When it finishes, save its list as a JSON array of strings and pass it to `run.mjs --soak <file>`, or
-   append it to the report. Stop the server with `<T> stop`.
+5. When it finishes, map A/B back with `mapping.json`, save the list as a JSON array of strings and add it to
+   a finished run with `run.mjs --out <run dir> --report-only --soak <file>`. Stop the server with `<T> stop`.
 
 The fake model behind both terminals is the harness's scripted model (`lib/session.mjs`, `scriptedModel`): it
 answers deterministically, so both terminals get the same replies to the same prompts.

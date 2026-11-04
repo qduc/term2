@@ -801,7 +801,13 @@ fs.createWriteStream = (filename, options) => {
           const goals = events.filter((event) => event.type === 'goal_changed');
           expect(goals).toHaveLength(1);
           expect(goals[0]!.goal!.status).toBe('active');
-          if (background) expect(events.some((event) => event.type === 'subagent_completed')).toBe(true);
+          // The background child's completion is a `subagent_completed` event in the legacy log and a `task_finished` fact in the native one.
+          if (background)
+            expect(
+              events.some(
+                (event) => event.type === (savedLog.format === 'native' ? 'task_finished' : 'subagent_completed'),
+              ),
+            ).toBe(true);
         } finally {
           await mock.close();
         }
@@ -1312,35 +1318,80 @@ fs.createWriteStream = (filename, options) => {
 
     it('resume preserves the replayed goal without flags and replaces it before startup when flags are explicit', async () => {
       for (const explicit of [false, true]) {
-        const id = explicit ? 'resume-goal-explicit' : 'resume-goal-implicit';
+        const id = explicit ? 'conv_5e5a1b00-0000-4000-8000-000000000002' : 'conv_5e5a1b00-0000-4000-8000-000000000001';
         const originalGoal = { id: `old-${id}`, outcome: 'Original', status: 'active' };
+        // The native runtime reads its own store format; seed the same two events (session start, goal) in whichever the CLI under test owns.
+        const seed = process.env.TERM2_TEST_CLI
+          ? [
+              {
+                v: 2,
+                seq: 1,
+                at: '2026-01-01T00:00:00.000Z',
+                fact: {
+                  type: 'session_started',
+                  id,
+                  workspace: process.cwd(),
+                  workspaceIdentity: { root: process.cwd(), target: 'local', access: 'read_write' },
+                  model: { model: 'gpt-4o', provider: 'openai' },
+                  profile: {
+                    id: 'builtin:bare',
+                    version: '2.0.0',
+                    digest: '4ea566d1d75c03e6bb87743862f1016d5680568f77d6ebff267cb1e7b3d19ea4',
+                  },
+                  appVersion: '0.40.0',
+                },
+              },
+              {
+                v: 2,
+                seq: 2,
+                at: '2026-01-01T00:00:01.000Z',
+                fact: { type: 'goal_changed', goal: originalGoal, source: 'user' },
+              },
+            ]
+          : [
+              {
+                v: 3,
+                seq: 1,
+                ts: '2026-01-01T00:00:00.000Z',
+                event: { type: 'session_init', id, createdAt: '2026-01-01T00:00:00.000Z', projectPath: process.cwd() },
+              },
+              {
+                v: 3,
+                seq: 2,
+                ts: '2026-01-01T00:00:01.000Z',
+                event: { type: 'goal_changed', version: 1, goal: originalGoal },
+              },
+            ];
         fs.writeFileSync(
           path.join(conversationsDir, `${id}.jsonl`),
-          [
-            {
-              v: 3,
-              seq: 1,
-              ts: '2026-01-01T00:00:00.000Z',
-              event: { type: 'session_init', id, createdAt: '2026-01-01T00:00:00.000Z', projectPath: process.cwd() },
-            },
-            {
-              v: 3,
-              seq: 2,
-              ts: '2026-01-01T00:00:01.000Z',
-              event: { type: 'goal_changed', version: 1, goal: originalGoal },
-            },
-          ]
-            .map((event) => JSON.stringify(event))
-            .join('\n') + '\n',
+          seed.map((event) => JSON.stringify(event)).join('\n') + '\n',
           'utf8',
         );
-        const args = [cliPath(), '--resume', id, '--lite', ...(explicit ? ['--goal', 'Replacement'] : [])];
+        // Without a TTY legacy stops at "needs an interactive terminal" after applying the goal flags; the native CLI
+        // needs a prompt to get past argument checks (a separate, filed difference). Give it one aimed at a dead
+        // endpoint: the goal facts are committed before the model is called, which is all this test reads.
+        const native = Boolean(process.env.TERM2_TEST_CLI);
+        const args = [
+          cliPath(),
+          '--resume',
+          id,
+          '--lite',
+          ...(explicit ? ['--goal', 'Replacement'] : []),
+          ...(native ? ['hi'] : []),
+        ];
         const { status, stderr } = await spawnCli(
           args,
-          createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: conversationsDir, DISABLE_LOGGING: '1' }),
+          createTestChildEnv({
+            HOME: testDir,
+            TERM2_CONVERSATIONS_DIR: conversationsDir,
+            DISABLE_LOGGING: '1',
+            ...(native ? { OPENAI_API_KEY: 'x', OPENAI_BASE_URL: 'http://127.0.0.1:9/v1' } : {}),
+          }),
         );
-        expect(status).toBe(1);
-        expect(stderr).toContain('term2 needs an interactive terminal');
+        if (!native) {
+          expect(status).toBe(1);
+          expect(stderr).toContain('term2 needs an interactive terminal');
+        }
         const savedLog = readSavedHistory(path.join(conversationsDir, `${id}.jsonl`));
         const events = savedLog.records;
         const goals = events.filter((event) => event.type === 'goal_changed');

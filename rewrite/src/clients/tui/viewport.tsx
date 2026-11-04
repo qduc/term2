@@ -103,6 +103,10 @@ export function useTranscriptViewport(
   useEffect(() => {
     if (previousHistoryRevision.current === historyRevision) return;
     previousHistoryRevision.current = historyRevision;
+    // A replacement that starts a turn (retry) remounts at once: legacy remounts before the new reply streams, so the
+    // remounted rows commit when that reply renders. Deferring it could land the remount after the turn had ended,
+    // leaving every row live.
+    if (state.activeTurnId) return redraw();
     const pending = setTimeout(() => {
       const next = renderLive(state, new Map(), false);
       clearTerminalForRedraw(stdout);

@@ -342,6 +342,8 @@ export interface TuiIntegration {
   /** The profile Shift+Tab switches to. */
   planTarget?(connection: TuiConnection): string;
   clearAndTogglePlan?(connection: TuiConnection): Promise<{ message?: string }>;
+  /** A confirmed `confirmClear`: a new session, then the profile switch. */
+  clearAndSwitch?(connection: TuiConnection, profileId: string): Promise<{ message?: string }>;
   /** Legacy printUsage: the usage summary written to stdout as a conversation is left for a new one. */
   printUsage?(): void;
   /** Read the attached session's effective preferences on each render, including live /settings changes. */
@@ -361,6 +363,8 @@ export interface TuiIntegration {
     readonly applied?: boolean;
     /** A frame for the menu stack to open, as legacy commands called openCopyMenu. */
     readonly menu?: { readonly kind: 'copy'; readonly items: CopySelection[] };
+    /** Legacy requestModeSwitchConfirm: the switch needs a new session; `line` follows its welcome. */
+    readonly confirmClear?: { readonly profileId: string; readonly enable: boolean; readonly line: string };
   }>;
   /** App owns socket lifecycle and returns the current actual attachment state. */
   readonly bridge?: {

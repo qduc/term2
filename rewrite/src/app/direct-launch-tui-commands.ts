@@ -310,31 +310,42 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
     return options.mcp;
   };
 
+  /** Legacy handleModeSwitchConfirm: print usage, start a new session, then switch it. */
+  const clearThen = async (
+    connection: TuiConnection,
+    apply: (next: DirectConnection) => Promise<CommandResult>,
+  ): Promise<{ message?: string }> => {
+    printUsage(latest()); // through clearConversationAndRefreshBanner
+    const id = await resetSession(connection);
+    try {
+      const next = await host.connect(principal, id);
+      const result = await apply(next);
+      if (result.applied !== true) {
+        next.close();
+        throw new Error(result.message ?? 'Mode configuration did not finish.');
+      }
+      await bridge.rebind(id);
+      publish(next);
+      return { message: result.message };
+    } catch (error) {
+      throw new Error(
+        `Session ${id} was created but mode switching failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  };
+
   return {
     planNeedsClear: configuration.planNeedsClear,
     planTarget: configuration.planTarget,
     printUsage: () => printUsage(latest()),
-    async clearAndTogglePlan(connection) {
+    clearAndTogglePlan(connection) {
       const target = configuration.planTarget(connection);
-      printUsage(latest()); // legacy handleModeSwitchConfirm clears through clearConversationAndRefreshBanner
-      const id = await resetSession(connection);
-      try {
-        const next = await host.connect(principal, id);
-        const result = await configuration.toggle(next, 'plan', target);
-        if (result.applied !== true) {
-          next.close();
-          throw new Error(result.message ?? 'Mode configuration did not finish.');
-        }
-        await bridge.rebind(id);
-        publish(next);
-        return { message: result.message };
-      } catch (error) {
-        throw new Error(
-          `Session ${id} was created but mode switching failed: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-      }
+      return clearThen(connection, (next) => configuration.toggle(next, 'plan', target));
+    },
+    clearAndSwitch(connection, profileId) {
+      return clearThen(connection, (next) => configuration.profile(next, profileId));
     },
     async command(connection, input) {
       const [name, ...rest] = input.trim().slice(1).split(/\s+/);

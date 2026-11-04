@@ -104,6 +104,7 @@ jobs:
         run: |
           pnpm exec tsc -p rewrite/tsconfig.json
           node rewrite/scripts/check-layers.mjs
+          node rewrite/scripts/check-reachability.mjs
           node rewrite/scripts/check-complexity.mjs
           node --unhandled-rejections=strict --import tsx rewrite/bench/hops.mts
       - name: Check the direct headless path

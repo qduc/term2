@@ -33,6 +33,8 @@ export type DirectVerificationFact =
       readonly proposal: CompletionProposal;
       /** First task attempt pins counts; absence on legacy facts means historical defaults. */
       readonly limits?: DirectVerificationLimits;
+      /** First task attempt pins the task deadline (epoch ms); later attempts carry it. Absent on older facts: no deadline. */
+      readonly deadline?: number;
     }
   | { readonly type: 'completion_verification_decided'; readonly attemptId: string; readonly decision: GateDecision }
   | {
@@ -51,6 +53,7 @@ export type DirectVerificationAttempt = {
   readonly goalGeneration: number;
   readonly proposal: CompletionProposal;
   readonly limits?: DirectVerificationLimits;
+  readonly deadline?: number;
   readonly decision?: GateDecision;
   readonly report?: VerificationReport;
   readonly outcome?: 'complete' | 'repair' | 'blocked';
@@ -85,7 +88,16 @@ export function reduceDirectVerification(
       if ((['maxRepairs', 'maxGateAttempts', 'maxVerifications'] as const).some((key) => limits[key] !== pinned[key]))
         throw new Error('Completion verification task budget changed');
     }
-    return [...attempts, { attemptId: fact.attemptId, goalGeneration: fact.goalGeneration, proposal, limits }];
+    return [
+      ...attempts,
+      {
+        attemptId: fact.attemptId,
+        goalGeneration: fact.goalGeneration,
+        proposal,
+        limits,
+        ...(fact.deadline !== undefined ? { deadline: fact.deadline } : {}),
+      },
+    ];
   }
   if (index < 0) throw new Error('Unknown completion verification attempt');
   const current = attempts[index]!;
@@ -158,7 +170,10 @@ export function createDirectGoalVerifier(deps: {
       return blocked('Task contract changed or task is terminal; explicit administrative recovery required');
     if (attempts.some((attempt) => !attempt.outcome))
       return blocked('An earlier verification is unfinished; explicit recovery is required');
-    if (attempts.length >= limits.maxGateAttempts) return blocked('Completion gate attempt budget exhausted');
+    // Legacy: one deadline per task, set by its first claim; a later claim past it, or past the gate budget, is blocked.
+    const deadline = attempts[0]?.deadline ?? Date.now() + DEFAULT_BUDGETS.taskTimeoutMs;
+    if (attempts.length && (deadline <= Date.now() || attempts.length >= limits.maxGateAttempts))
+      return blocked('Task deadline or gate budget exhausted');
     const attemptId = randomUUID();
     let started = false;
     let report: VerificationReport | undefined;
@@ -180,7 +195,14 @@ export function createDirectGoalVerifier(deps: {
         evidence: check.evidence + (check.criteriaEvidence ? `\n${check.criteriaEvidence}` : ''),
       });
       await accept([
-        { type: 'completion_verification_started', attemptId, goalGeneration: state.generation, proposal, limits },
+        {
+          type: 'completion_verification_started',
+          attemptId,
+          goalGeneration: state.generation,
+          proposal,
+          limits,
+          deadline,
+        },
       ]);
       started = true;
       // A repair that left the repository as it was is not progress; legacy blocks the task here, before any gate.
@@ -205,6 +227,7 @@ export function createDirectGoalVerifier(deps: {
           reason: 'No applicable host-owned quick check',
         };
       }
+      if (Date.now() >= deadline) throw new Error('Task deadline exhausted');
       await accept([{ type: 'completion_verification_decided', attemptId, decision }]);
       if (decision.action !== 'skip') {
         const used = attempts.filter((attempt) => attempt.decision && attempt.decision.action !== 'skip').length;
@@ -219,29 +242,47 @@ export function createDirectGoalVerifier(deps: {
           revision: proposal.revision,
           environment: proposal.environment,
         };
-        report = reportSchema.parse(
-          await (decision.action === 'quick_check'
-            ? deps.operations.quickCheck!(proposal, request, signal)
-            : deps.operations.verify(request, signal)),
-        );
+        // One bounded operation, as legacy's operationTimeoutMs; any failure of it reads the same to the user.
+        const operationSignal = AbortSignal.any([
+          signal,
+          AbortSignal.timeout(Math.max(1, Math.min(deadline - Date.now(), DEFAULT_BUDGETS.operationTimeoutMs))),
+        ]);
+        try {
+          report = reportSchema.parse(
+            await (decision.action === 'quick_check'
+              ? deps.operations.quickCheck!(proposal, request, operationSignal)
+              : deps.operations.verify(request, operationSignal)),
+          );
+        } catch {
+          throw new Error('Verifier timeout, error, cancellation, or malformed result');
+        }
+        if (report.outcome === 'ERROR' || operationSignal.aborted)
+          throw new Error('Verifier timeout, error, cancellation, or malformed result');
         if (report.attemptId !== attemptId || report.revision !== proposal.revision)
-          throw new Error('Stale verification report');
+          throw new Error('Stale, late, conflicting, or cancelled verification result');
         await accept([{ type: 'completion_verification_reported', attemptId, report }]);
       }
       if ((await deps.operations.currentRevision(signal)) !== proposal.revision)
-        throw new Error('Workspace changed during verification');
+        throw new Error('Stale, late, conflicting, or cancelled verification result');
       if (report && report.outcome !== 'PASS') {
         const repairs = attempts.filter((attempt) => attempt.outcome === 'repair').length;
         // Legacy also stops a repair that fails with the very same evidence as the previous report.
         const previousEvidence = attempts.filter((attempt) => attempt.report).at(-1)?.report?.evidence;
-        if (report.outcome === 'FAIL' && repairs < limits.maxRepairs && previousEvidence !== report.evidence) {
+        const verificationsAfter = attempts.filter((a) => a.decision && a.decision.action !== 'skip').length + 1;
+        if (
+          report.outcome === 'FAIL' &&
+          repairs < limits.maxRepairs &&
+          verificationsAfter < limits.maxVerifications &&
+          Date.now() < deadline &&
+          previousEvidence !== report.evidence
+        ) {
           await end('repair', report.evidence);
           return { action: 'repair', evidence: report.evidence };
         }
         const reason =
           report.outcome === 'FAIL'
             ? 'Repair budget, deadline, or repeated-failure limit reached'
-            : `Independent verification ${report.outcome.toLowerCase()}`;
+            : `Verification ${report.outcome}; completion not established`;
         await end('blocked', reason);
         return blocked(reason, report.outcome !== 'FAIL');
       }

@@ -98,6 +98,7 @@ const contextFactSchema = z.discriminatedUnion('type', [
     goalGeneration: z.number().int().nonnegative(),
     proposal: proposalSchema,
     limits: directVerificationLimitsSchema.optional(),
+    deadline: z.number().int().positive().optional(),
   }),
   z.object({ type: z.literal('completion_verification_decided'), attemptId: identifier, decision: decisionSchema }),
   z.object({ type: z.literal('completion_verification_reported'), attemptId: identifier, report: reportSchema }),

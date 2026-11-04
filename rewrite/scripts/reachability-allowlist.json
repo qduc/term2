@@ -1,7 +1,3 @@
 {
-  "rewrite/src/config/memory.ts": "Pending deletion: reached only by the bench-only bridge path (#139).",
-  "rewrite/src/config/scoped-settings.ts": "Pending deletion: reached only by the bench-only bridge path (#139).",
-  "rewrite/src/model/scripted.ts": "Pending deletion: reached only by the bench-only bridge path (#139).",
-  "rewrite/src/session/direct-import.ts": "Offline v3 conversation migration (scripts/conversation-migration/migration-command.mjs) imports its emitted module; no CLI command reaches it.",
-  "rewrite/src/tools/notes.ts": "Pending deletion: reached only by the bench-only bridge path (#139)."
+  "rewrite/src/session/direct-import.ts": "Offline v3 conversation migration (scripts/conversation-migration/migration-command.mjs) imports its emitted module; no CLI command reaches it."
 }

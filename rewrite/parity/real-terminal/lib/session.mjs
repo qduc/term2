@@ -129,3 +129,12 @@ export const PRELUDE = `
   };
 `;
 export const COMPOSER_READY = `${PRELUDE} return sep >= 0 && /❯/.test(composer);`;
+/**
+ * Home: the composer is empty and nothing is open. term2-next draws menus and dialogs as a box that closes right
+ * above the separator (a resume list can be taller than half the screen); legacy draws them below it.
+ */
+export const AT_HOME = `${PRELUDE}
+  if (sep < 0 || !/^\\s*❯\\s*$/.test(composer)) return false;
+  for (let i = Math.max(0, sep - 3); i < sep; i++) if (/^\\s*╰/.test(lines[i])) return false;
+  for (let i = sep + 1; i < lines.length; i++) if (/^\\s*[╭╰]|Filter:/.test(lines[i])) return false;
+  return true;`;

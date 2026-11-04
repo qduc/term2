@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { sleep } from './terminal.mjs';
-import { typeText, PRELUDE, COMPOSER_READY } from './session.mjs';
+import { typeText, PRELUDE, COMPOSER_READY, AT_HOME } from './session.mjs';
 
 /**
  * The only things masked before pixels are compared (issue #140): version, ids, paths, ports, durations
@@ -23,7 +23,7 @@ export const MASKS = [
 
 const KEYS = { enter: '\r', escape: '\x1b', down: '\x1b[B', ctrlC: '\x03', ctrlO: '\x0f', shiftTab: '\x1b[Z' };
 const READY = `fn:${COMPOSER_READY}`;
-const NOT_READY_OR_MENU = `fn:${PRELUDE} return !(sep >= 0 && /^\\s*❯\\s*$/.test(composer)) || lines.slice(-18).some((l) => /^\\s*╭/.test(l));`;
+const NOT_READY_OR_MENU = `fn:return !(() => { ${AT_HOME} })();`;
 
 /**
  * Each step: what to do, what to wait for (soft: a timeout is recorded, the screenshot is still taken), and a
@@ -81,21 +81,16 @@ async function clearThen(t, key) {
 
 /** Leave whatever is open (or undo a toggle key) until the empty composer is back. */
 async function escapeHome(t, undoKey = null) {
-  const home = async () =>
-    t.page.evaluate(
-      new Function(
-        `const lines = window.screenLines(); ${PRELUDE} return sep >= 0 && /^\\s*❯\\s*$/.test(composer) && !lines.slice(-18).some((l) => /^\\s*╭/.test(l));`,
-      ),
-    );
+  const home = async () => t.page.evaluate(new Function(`const lines = window.screenLines(); ${AT_HOME}`));
   if (undoKey && (await home())) {
     // The key toggled something without opening a view (term2-next's tool output): press it again.
     t.write(undoKey);
     await sleep(400);
     return;
   }
-  for (let i = 0; i < 3 && !(await home()); i++) {
+  for (let i = 0; i < 5 && !(await home()); i++) {
     t.write(KEYS.escape);
-    await sleep(400);
+    await t.waitFor(`fn:${AT_HOME}`, 2_000).catch(() => {});
   }
 }
 

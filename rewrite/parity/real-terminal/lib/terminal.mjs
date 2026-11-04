@@ -100,7 +100,9 @@ export async function openTerminal(stage, { command, args = [], env, cwd, cols, 
   const exit = new Promise((resolve) => (resolveExit = resolve));
 
   const child = pty.spawn(command, args, { name: 'xterm-256color', cols, rows, cwd, env });
+  const rawLog = process.env.RT_RAW_LOG ? `${process.env.RT_RAW_LOG}.${label}.${child.pid}` : null;
   child.onData((data) => {
+    if (rawLog) fs.appendFileSync(rawLog, data);
     bytes += Buffer.byteLength(data, 'utf8');
     lastOutputAt = Date.now();
     const frame = `data: ${JSON.stringify(data)}\n\n`;
@@ -126,6 +128,7 @@ export async function openTerminal(stage, { command, args = [], env, cwd, cols, 
       listeners.delete(res);
     },
     input(data) {
+      if (rawLog) fs.appendFileSync(rawLog, `\n<<<INPUT ${JSON.stringify(data)}>>>\n`);
       if (!exited) child.write(data);
     },
     dispose() {

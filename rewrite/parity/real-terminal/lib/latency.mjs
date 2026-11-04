@@ -4,7 +4,7 @@
 // screen satisfies the class predicate. CPU is the CLI process tree's utime+stime and bytes are pty output,
 // both over [injection, paint + 100 ms]. While streaming, both include the stream's own rendering.
 import { sleep, treeCpuMs } from './terminal.mjs';
-import { PRELUDE, typeText, STREAM_ROW } from './session.mjs';
+import { PRELUDE, AT_HOME, typeText, STREAM_ROW } from './session.mjs';
 
 const KEYS = {
   enter: '\r',
@@ -45,11 +45,6 @@ async function tailOf(term) {
   return term.page.evaluate(new Function(`const lines = window.screenLines(); ${PRELUDE} return tail();`));
 }
 
-// Home: the composer is showing and empty, and no menu or dialog box is open.
-const AT_HOME = `${PRELUDE}
-  if (sep < 0 || !/^\\s*❯\\s*$/.test(composer)) return false;
-  return !lines.slice(-18).some((l) => /^\\s*╭/.test(l));`;
-
 export async function runLatency(session, { phase, samples = {}, log = () => {}, misses = [] }) {
   const { term } = session;
   const results = Object.fromEntries(CLASSES.map((name) => [name, []]));
@@ -82,7 +77,7 @@ export async function runLatency(session, { phase, samples = {}, log = () => {},
       if (typed > 0) await clearComposer(typed + 2);
       else {
         term.write(KEYS.escape);
-        await sleep(250);
+        await term.waitFor(`fn:${AT_HOME}`, 2_000).catch(() => {});
         await settle();
       }
     }
@@ -272,8 +267,15 @@ export async function measureStoreTimings(session, { timeoutMs = 15 * 60_000 } =
     const result = await term.measureKey('\r', listed, timeoutMs, 'fn:return lines.join("\\n");');
     out[label] = result.ok ? result.ms : null;
     await sleep(300);
-    term.write('\x1b');
-    await term.waitFor(`fn:${AT_HOME}`, timeoutMs).catch(() => {});
+    // Escape until home is verified: never type the next command into a list that is still open (Enter there
+    // resumes a session).
+    let home = false;
+    for (let attempt = 0; attempt < 5 && !home; attempt++) {
+      term.write('\x1b');
+      home = await term.waitFor(`fn:${AT_HOME}`, 3_000).then(() => true, () => false);
+      if (!home) out.escapeRetries = (out.escapeRetries ?? 0) + 1;
+    }
+    if (!home) throw new Error('resume list did not close after 5 Escapes');
     await term.quiet(300, 5_000);
   }
   return out;

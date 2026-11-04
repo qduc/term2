@@ -8,7 +8,14 @@ import { useTheme } from './presentation/components/theme.js';
 import { useSkin } from './presentation/skins/SkinContext.js';
 import { terminalPreferenceDefaults } from '../../host/terminal-preference-defaults.js';
 import { useClient } from './use-client.js';
-import { ShellTaskPanel, Activity, BangResult, LiveNotices, interruptedNotice } from './views.js';
+import {
+  ShellTaskPanel,
+  Activity,
+  BangResult,
+  LiveNotices,
+  interruptedNotice,
+  useLiveStreamingSpeed,
+} from './views.js';
 import { PendingQueue, PendingQueueEdit } from './pending-queue.js';
 import type { InteractionInputHandler } from './interaction-input.js';
 import { runBangShell } from './bang-shell.js';
@@ -63,6 +70,7 @@ export function TuiSession({
   const { state, error: connError, historyRevision } = useClient(connection, retainedSnapshot, onSnapshot, onLiveEvent);
   const preferences = integration.preferences?.(connection.sessionId) ?? terminalPreferenceDefaults();
   const { columns, rows } = useTerminalSize();
+  const liveTps = useLiveStreamingSpeed(state);
   const [bangResult, setBangResult] = useState<string | null>(null);
   const [interactionOpen, setInteractionOpen] = useState(false);
   const [dismissedInteractionId, setDismissedInteractionId] = useState<string | null>(null);
@@ -70,7 +78,13 @@ export function TuiSession({
   const [budgetOpen, setBudgetOpen] = useState(false);
   const [selectedQueueId, setSelectedQueueId] = useState<string | null>(null);
   const [queueNotice, setQueueNotice] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(() => interruptedNotice(state));
+  const [notice, setLiveNotice] = useState<string | null>(() => interruptedNotice(state));
+  // Legacy reports through addSystemMessage: each line stays in the transcript, in order, instead of one live notice.
+  const systemMessage = useRef<(text: string) => void>(() => undefined);
+  const setNotice = useCallback((text: string | null) => {
+    if (text) systemMessage.current(text);
+    else setLiveNotice(null);
+  }, []);
   const {
     images,
     setImages,
@@ -105,6 +119,7 @@ export function TuiSession({
   const viewport = useCommandTranscriptViewport(state, headerHeight ?? 0, viewportActive, header, historyRevision, {
     transitionNotice,
   });
+  systemMessage.current = (text) => viewport.appendCommandOutput(text, true);
   const { InputFrame, PromptMarker, LiveDivider } = useSkin();
   const theme = useTheme();
   const [busy, setBusy] = useState(false);
@@ -329,7 +344,7 @@ export function TuiSession({
         else {
           const result = await integration.command(connection, command);
           // A session switch carries its message into the new session, which remounts.
-          if (result.message && !result.sessionId) viewport.showMessage(result.message, command, setNotice);
+          if (result.message && !result.sessionId) viewport.showMessage(result.message, command);
           // Legacy adds command output (/usage) as a system message, like /help.
           if (result.transcript) viewport.appendCommandOutput(result.transcript, true);
           if (result.menu) menuStack.openMenu(result.menu);
@@ -394,7 +409,7 @@ export function TuiSession({
         </Text>
       ) : null}
       <Box flexDirection="column" paddingX={2} marginTop={viewport.bottomMargin}>
-        <Activity state={state} dialogInteractionId={foregroundInteraction?.id} notice={notice} />
+        <Activity state={state} dialogInteractionId={foregroundInteraction?.id} notice={notice} liveTps={liveTps} />
         <SessionPanels
           {...{
             connection,
@@ -502,6 +517,7 @@ export function TuiSession({
         <ComposerFooter
           integration={integration}
           state={state}
+          liveTps={liveTps}
           active={composerActive && selectedQueueIndex < 0 && !menuStack.open}
           draftEmpty={editor.value === ''}
           escHint={escHintVisible}

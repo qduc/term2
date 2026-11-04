@@ -78,9 +78,9 @@ export function useCommandTranscriptViewport(
     /** Rows above the bottom area: legacy leaves one row less below a local system line than below a reply. */
     bottomMargin: state.activeTurnId ? 1 : state.messages.length && !last?.startsWith('local-command-') ? 3 : 2,
     appendCommandOutput: transcript.append,
-    showMessage(message: string, command: string, notice: (value: string) => void): void {
-      if (command.trim() !== '/help') notice(message);
-      else if (state.activeTurnId) viewport.setHelp(message);
+    /** A command's message is a legacy system line in the transcript; `/help` during a turn takes the viewport. */
+    showMessage(message: string, command: string): void {
+      if (command.trim() === '/help' && state.activeTurnId) viewport.setHelp(message);
       else transcript.append(message, true);
     },
   };

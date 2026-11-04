@@ -467,16 +467,25 @@ it.skipIf(process.platform !== 'linux')(
     expect(session!.getVisibleOutput()).not.toContain('QUEUE_SKILL_SENTINEL');
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
     await new Promise((resolve) => setTimeout(resolve, 500));
-    await send('/queue edit 1 INLINE-EDIT');
+    // A second edit through the same keys: select, Enter, append, Enter.
+    session!.write('\x1b[A');
+    await session!.waitForOutput('e edit │ d delete', 30_000);
+    session!.write('\r');
+    await until(() => composer(idlePath)?.includes('-EDITED') === true, 'queued request back in the editor');
+    session!.write(' INLINE-EDIT');
+    await until(() => composer(idlePath)?.includes('INLINE-EDIT') === true, 'second edit typed');
+    session!.write('\r');
     await session!.waitForOutput('INLINE-EDIT', 30_000);
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
-    await send('/cancel');
-    await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
-    // Legacy shows no paused-queue line: the hold is behaviour. The queued request is not sent until resumed.
+    // Legacy interrupts with Esc twice; the queue pauses behind its prompt and nothing is sent until `r`.
+    session!.write('\x1b');
+    await session!.waitForOutput('Press Esc again to interrupt', 30_000);
+    session!.write('\x1b');
+    await session!.waitForOutput('Queue paused: 1 item pending.', 30_000);
     const requestsAtCancel = received.length;
     await new Promise((resolve) => setTimeout(resolve, 1500));
     expect(received).toHaveLength(requestsAtCancel);
-    await send('/queue resume');
+    session!.write('r');
     await session!.waitForOutput('SKILL-QUEUE-REPLY', 60_000);
     const visible = session!.getVisibleOutput();
     expect(visible).toContain('[Skill: dogfood]');

@@ -131,7 +131,7 @@ async function startProvider(replies: Reply[], withUsage = false): Promise<strin
   return `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}/v1`;
 }
 
-it('dismisses a foreground approval to its numbered answer fallback', { timeout: TIMEOUT_MS }, async () => {
+it('approves a foreground shell call from the legacy approval prompt', { timeout: TIMEOUT_MS }, async () => {
   root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-approval-fallback-e2e-')));
   const home = path.join(root, 'home');
   const workspace = path.join(root, 'workspace');
@@ -189,10 +189,9 @@ it('dismisses a foreground approval to its numbered answer fallback', { timeout:
   };
   await submit('request approval');
   await session.waitForOutput('Allow once', 60_000);
-  expect(session.getVisibleOutput()).not.toContain('/answer 1 <choice number>');
-  session.write('\x07');
-  await session.waitForOutput('/answer 1 <choice number>', 30_000);
-  await submit('/answer 1 1');
+  // Legacy's prompt highlights Allow once; Enter takes it.
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  session.write('\r');
   await session.waitForOutput('APPROVAL_FINISHED', 30_000);
   expect(fs.readFileSync(marker, 'utf8')).toBe('approved');
 });
@@ -348,8 +347,9 @@ async function runCommand(
     await submit('/rewind nonsense');
     await session.waitForOutput('Unrecognised argument "nonsense"', 30_000);
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 5_000 });
+    // A command legacy does not have is refused by name, and the input clears.
     await submit('/queue nonsense');
-    await session.waitForOutput('Use /queue', 30_000);
+    await session.waitForOutput('Unknown command /queue', 30_000);
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 5_000 });
     // The /effort menu is open; legacy refuses an unknown level inline and keeps the text.
     await submit('/effort bogus');
@@ -695,7 +695,7 @@ it('/usage agrees with the cached share in the status bar', { timeout: TIMEOUT_M
   await waitForHarnessComposerValue(path.join(root, 'home', 'input-idle'), '/queue nonsense', { timeoutMs: 60_000 });
   await dismissUnlistedSlashMenu(session!, '/queue nonsense');
   session!.write('\r');
-  await session!.waitForOutput('Use /queue', 30_000);
+  await session!.waitForOutput('Unknown command /queue', 30_000);
   const visible = session!.getVisibleOutput();
   const afterNotice = visible.slice(visible.lastIndexOf('▌ term²'));
   expect(afterNotice).toContain('Token usage: 78,021 input (42,112 cached), 731 output');

@@ -86,21 +86,7 @@ export function useSessionComposer(state: TuiState, historySize: number, onNotic
     ignoreInitialImages.current = true;
     editor.replace(text, cursor);
   };
-  const answerOwners = useRef<readonly string[] | null>(null);
-  const queueOwners = useRef<readonly string[] | null>(null);
-  const changeInput = (value: string) => {
-    if (/^\/answer(?:\s|$)/.test(value)) {
-      if (!answerOwners.current) answerOwners.current = state.interactions.map((item) => item.id);
-    } else {
-      answerOwners.current = null;
-    }
-    if (/^\/queue(?:\s|$)/.test(value)) {
-      if (!queueOwners.current) queueOwners.current = state.queue.map((item) => item.id);
-    } else {
-      queueOwners.current = null;
-    }
-    editor.change(value);
-  };
+  const changeInput = (value: string) => editor.change(value);
 
   const restoreDraft = (
     draft: { readonly text: string; readonly attachments: readonly WireContent[] },
@@ -134,12 +120,8 @@ export function useSessionComposer(state: TuiState, historySize: number, onNotic
     cancellationEpoch.current++;
     const operation = (async () => {
       const result = await cancelForegroundWithSteers(connection, turnId);
-      if (submitted) {
-        editor.accepted(submitted, true, [], submittedRevision);
-        answerOwners.current = null;
-        queueOwners.current = null;
-      }
-      // The routine success line is noise for both /cancel and Ctrl+C (the Stopped marker shows it); returned steers,
+      if (submitted) editor.accepted(submitted, true, [], submittedRevision);
+      // The routine success line is noise for Esc and Ctrl+C (the Stopped marker shows it); returned steers,
       // refusals and anything else still show.
       if (!result.returnedSteers.length)
         return result.message.startsWith('Cancellation requested') ? '' : result.message;
@@ -435,7 +417,5 @@ export function useSessionComposer(state: TuiState, historySize: number, onNotic
     startQueueEdit,
     cancelQueueEdit,
     submitQueueEdit,
-    answerOwners,
-    queueOwners,
   };
 }

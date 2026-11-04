@@ -6,8 +6,7 @@ import { parseModelProviderArg } from '../../../source/utils/ai/model-provider-a
 /**
  * The slash commands no wire command covers by itself. Each one is either a real
  * host or wire operation here, or it fails visibly. The TUI sends `/compact`, `/retry-*`,
- * `/queue`, `/answer`, `/cancel`, `/clear`, `/rollover` and
- * `/rewind` itself, and calls `switchSession` or `bridge` here for the app's part.
+ * `/clear` and `/rewind` itself, and calls `switchSession` or `bridge` here for the app's part.
  *
  * A replacement always attaches fresh, so there is no retained cursor: this host's
  * connections cannot drop, and a fresh snapshot needs no reasoning about what
@@ -59,7 +58,7 @@ type Configuration = Extract<WireCommand, { type: 'configure' }>['configuration'
 
 /**
  * One typed command, one id, sent once. The notice names the id, because a pending
- * or lost reply is read back with `/command-status`, never by sending it again.
+ * or lost reply is reported as such, never sent again.
  */
 async function configure(
   connection: TuiConnection,

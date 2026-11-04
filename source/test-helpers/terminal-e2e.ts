@@ -218,8 +218,7 @@ export function spawnTerminal(command: string, args: string[], options: SpawnTer
  * term2-next commands legacy's slash menu does not list. Typed without arguments the menu stays open showing no
  * match; once a space follows the name the slash trigger no longer matches, so Enter submits directly.
  */
-const UNLISTED_SLASH_COMMAND =
-  /^\/(?:answer|cancel|command-apply|command-status|exit|followup|queue|rollover|steer|tasks)$/;
+const UNLISTED_SLASH_COMMAND = /^\/(?:exit|followup|steer|tasks)$/;
 
 /**
  * As in legacy, Enter on slash text the menu does not list only closes the menu; the next Enter submits.

@@ -23,7 +23,7 @@
       "reason": "Port of source/hooks/use-subagent-pool-selection.ts with only imports changed; kept whole so it stays diffable against the legacy oracle."
     },
     "rewrite/src/clients/tui/session.tsx": {
-      "lines": 538,
+      "lines": 527,
       "reason": "The session wires the composer to the ported legacy menu stack (useMenuStack, double-Escape) and routes every report into the transcript as legacy's addSystemMessage does; that wiring closes over submit, rewind and the viewport, declared later in the same component, so moving it out would add ref plumbing rather than a job seam. The composer's JSX also sits inside ComposerWidth (legacy InputBox's width-0 first frame), which only wraps it, and the command path routes a legacy clear-and-switch confirmation to the plan-toggle hook. The approval panel's Escape adds legacy's Stopped line through the viewport (one prop)."
     }
   },

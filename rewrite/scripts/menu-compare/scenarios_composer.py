@@ -144,6 +144,17 @@ SEED.update({name: _STREAM for name in ('stream-queue-edit-save', 'stream-queue-
 SCENARIOS['stream-queue-paused'] = ['go', '<enter>', '<sleep>', 'queue this', '<a-enter>', '<esc>', '<esc>', '<sleep>',
                                     '/queue', '<enter>', '<sleep>']
 SEED['stream-queue-paused'] = _STREAM
+# legacy QueuePausedPrompt: r resumes, x discards, / types a command and keeps the queue paused
+_PAUSED = ['go', '<enter>', '<sleep>', 'queue this', '<a-enter>', '<esc>', '<esc>', '<sleep>']
+SCENARIOS.update({
+    'queue-paused-prompt': _PAUSED,
+    'queue-paused-r': _PAUSED + ['r', '<sleep>'],
+    'queue-paused-x': _PAUSED + ['x', '<sleep>'],
+    'queue-paused-slash': _PAUSED + ['/'],
+    'stream-queue-slash': ['go', '<enter>', '<sleep>', 'queue this', '<a-enter>', '/'],
+})
+SEED.update({name: _STREAM for name in ('queue-paused-prompt', 'queue-paused-r', 'queue-paused-x', 'queue-paused-slash',
+                                         'stream-queue-slash')})
 # /undo last after a turn: the alias line and the rewind (legacy rewind truncation)
 SCENARIOS['cmd-undo-last'] = ['hello', '<enter>', '<sleep>', '/undo last', '<enter>', '<sleep>']
 SEED['cmd-undo-last'] = _TURN

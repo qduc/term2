@@ -372,17 +372,6 @@ it.each([160])(
     generation = await waitForHarnessIdleGeneration(idlePath, { after: generation, timeoutMs: 60_000 });
     expect(requestBodies.at(-1)).toMatchObject({ model: 'mock-beta', reasoning_effort: 'low' });
     expect(requestBodies.at(-1)).not.toHaveProperty('temperature');
-    await send('/rollover');
-    await session.waitForOutput('rolled_over', 30_000);
-    const beforeRolloverRequest = requestBodies.length;
-    await send('after rollover');
-    const rolloverDeadline = Date.now() + 30_000;
-    while (requestBodies.length === beforeRolloverRequest && Date.now() < rolloverDeadline)
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    expect(requestBodies.length).toBeGreaterThan(beforeRolloverRequest);
-    generation = await waitForHarnessIdleGeneration(idlePath, { after: generation, timeoutMs: 60_000 });
-    expect(requestBodies.at(-1)).toMatchObject({ model: 'mock-beta', reasoning_effort: 'low' });
-    expect(requestBodies.at(-1)).not.toHaveProperty('temperature');
     await send('/model mockprov/mock-alpha');
     await session.waitForOutput('Set model to mock-alpha (mockprov)', 30_000);
     const priorRequests = requestBodies.length;

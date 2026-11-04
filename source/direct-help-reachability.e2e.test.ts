@@ -95,7 +95,20 @@ for (const [cols, rows] of [
       expect(commands.length).toBeGreaterThan(20);
       for (const command of commands.filter((name) => name !== 'undo')) expect(helpOutput).toContain(`/${command} —`);
       // Dropped by owner scope, or never in legacy.
-      for (const command of ['/plan', '/mentor', '/orchestrator', '/sandbox', '/mcp', '/tasks', '/queue']) {
+      for (const command of [
+        '/plan',
+        '/mentor',
+        '/orchestrator',
+        '/sandbox',
+        '/mcp',
+        '/tasks',
+        '/queue',
+        '/answer',
+        '/cancel',
+        '/rollover',
+        '/command-status',
+        '/command-apply',
+      ]) {
         expect(helpOutput).not.toContain(`${command} —`);
       }
       expect(terminal.getVisibleOutput()).not.toMatch(/Lines 1[–-]\d+ of \d+/);

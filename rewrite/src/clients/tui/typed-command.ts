@@ -7,20 +7,7 @@
 import { LEGACY_COMMANDS } from './menus/legacy-commands.js';
 
 /** Typed commands this client still runs by their exact name although legacy's table does not list them. */
-const OTHER_COMMANDS = new Set([
-  'answer',
-  'queue',
-  'cancel',
-  'rollover',
-  'command-status',
-  'command-apply',
-  'plan',
-  'mentor',
-  'orchestrator',
-  'sandbox',
-  'mcp',
-  'mcp-login',
-]);
+const OTHER_COMMANDS = new Set(['plan', 'mentor', 'orchestrator', 'sandbox', 'mcp', 'mcp-login']);
 
 export type TypedCommand =
   | { readonly kind: 'message' }

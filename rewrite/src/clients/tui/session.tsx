@@ -13,19 +13,17 @@ import { PendingQueue, PendingQueueEdit } from './pending-queue.js';
 import type { InteractionInputHandler } from './interaction-input.js';
 import { runBangShell } from './bang-shell.js';
 import { useInterrupt } from './interrupt.js';
-import { runQueueCommand } from './queue-command.js';
+import { useQueuePaused } from './queue-paused.js';
 import { isCtrlG, isCtrlO, isCtrlT, isShiftTab, usePlanToggle } from './shift-tab.js';
 import { resolveTypedCommand } from './typed-command.js';
 import { REWIND_COMMAND, rewindItems, runRewindCommand } from './menus/rewind-command.js';
 import { cleanImageMarkers, wireAttachments } from './draft.js';
-import { numberedInteractionAnswer } from './interaction-command.js';
 import { useSessionComposer } from './session-composer.js';
 import { useTerminalSize } from './terminal.js';
 import { useCommandTranscriptViewport } from './command-transcript.js';
 import { useHarnessInput } from './harness-input.js';
 import { replaceSession } from './replace-session.js';
 import { runBridgeCommand } from './bridge-command.js';
-import { runCommandReceipt } from './command-receipt.js';
 import { useSendConfirmation } from './send-confirmation.js';
 import { BOUNDARY_ROWS, useNewConversationHeader } from './new-conversation.js';
 import { useMenuStack } from './menus/menu-host.js';
@@ -38,7 +36,6 @@ import { useQueueSelection } from './queue-selection.js';
 import { useInterruptConfirm } from './interrupt-confirm.js';
 import { useHandoff, type HandoffHolder } from './use-handoff.js';
 import {
-  answerInteraction,
   directSlashCommand,
   listRewindTargets,
   submitText,
@@ -113,8 +110,6 @@ export function TuiSession({
     startQueueEdit,
     cancelQueueEdit,
     submitQueueEdit,
-    answerOwners,
-    queueOwners,
   } = useSessionComposer(state, preferences.historySize, setNotice);
   // Snapshot-derived ownership leaves no gap for decision keys to land in the composer; Ctrl+G picks background requests.
   const rootInteraction = state.interactions.find((item) => item.turnId === state.activeTurnId && !item.taskId);
@@ -167,6 +162,14 @@ export function TuiSession({
       command: (text) => handoffRef.current.command(text, () => integration.command(connection, text)),
       rewind: (item, how) => void executeRewind(item.targetId, how),
     },
+  });
+  const queuePaused = useQueuePaused({
+    state,
+    connection,
+    active: composerActive && !menuStack.open && !editing,
+    draft: editor.value,
+    replaceInput,
+    notice: setNotice,
   });
   useHarnessInput((composerActive || menuStack.open) && !busy, Boolean(state.activeTurnId), menuStack.value);
   // Legacy InputBox's double Escape clear; menus, panels, the expanded output viewer and the queue take Escape first.
@@ -298,7 +301,6 @@ export function TuiSession({
     };
     try {
       if (editing) {
-        if (input.trim() === '/queue cancel') return void cancelQueueEdit();
         const notice = await submitQueueEdit(connection, clean, submittedImages, submission.submissionEpoch);
         if (notice) setNotice(notice);
         return;
@@ -309,10 +311,7 @@ export function TuiSession({
       const command = typed.kind === 'command' ? typed.input : input;
       if (typed.kind === 'command' && submittedImages.length)
         throw new Error('Remove attachments before running a command.');
-      if (command.startsWith('/answer ')) {
-        const answer = numberedInteractionAnswer(command, state.interactions, answerOwners.current);
-        await answerInteraction(connection, answer.requestId, answer.decision);
-      } else if (command.startsWith('!')) {
+      if (command.startsWith('!')) {
         const attached = submittedImages.length > 0 || otherParts.length > 0;
         viewport.appendShell(
           await runBangShell(integration, connection, command, attached, Boolean(state.activeTurnId)),
@@ -331,25 +330,13 @@ export function TuiSession({
         }
       } else if (/^\/bridge(?:\s|$)/.test(command)) {
         setNotice(await runBridgeCommand(integration, command));
-      } else if (/^\/command-(status|apply)(?:\s|$)/.test(command)) {
-        const receipt = await runCommandReceipt(connection, command, { restoreDraft, switchSession });
-        if (receipt.notice) setNotice(receipt.notice);
-        if (receipt.restored) return;
-      } else if (command.trim() === '/clear' || command.trim() === '/rollover') {
-        const reset = command.trim() as '/clear' | '/rollover';
-        const failure = await replaceSession(connection, reset, switchSession, undefined, resetHooks);
+      } else if (command.trim() === '/clear') {
+        const failure = await replaceSession(connection, switchSession, undefined, resetHooks);
         if (failure !== null) {
           setNotice(failure);
           editor.accepted(input, true, []);
           return;
         }
-      } else if (/^\/queue(?:\s|$)/.test(command)) {
-        if (await runQueueCommand(connection, command, state.queue, queueOwners.current, startQueueEdit)) return;
-      } else if (command.trim() === '/cancel') {
-        setNotice(
-          await cancelInput(connection, state.activeTurnId ?? undefined, command, submission.submittedRevision),
-        );
-        return;
       } else if (/^\/handoff(?:\s|$)/.test(command)) {
         handoffFlow.start();
       } else if (/^\/providers(?:\s|$)/.test(command)) {
@@ -396,8 +383,6 @@ export function TuiSession({
         submission.submittedRevision,
         clean,
       );
-      answerOwners.current = null;
-      queueOwners.current = null;
     } catch (error) {
       if (error instanceof WireCommandFailure && error.code === 'steer_target_stopped') {
         await steerRecovery.restoreLateSteer(input, wireAttachments(submittedImages, otherParts, originalParts));
@@ -463,12 +448,16 @@ export function TuiSession({
           </Box>
         ) : null}
         <ShellTaskPanel state={state} />
-        <PendingQueue
-          items={queue.items}
-          selectedId={queue.selectedId}
-          editingId={editing?.id ?? null}
-          notice={queue.notice}
-        />
+        {/* Legacy keeps the queue list in the input surface, which a menu or the paused prompt replaces. */}
+        {queuePaused.prompt ??
+          (menuStack.open ? null : (
+            <PendingQueue
+              items={queue.items}
+              selectedId={queue.selectedId}
+              editingId={editing?.id ?? null}
+              notice={queue.notice}
+            />
+          ))}
         <PendingQueueEdit editingId={editing?.id ?? null} items={queue.items} />
         {menuStack.view}
         {/* Legacy BottomArea puts a confirmation prompt in the composer's place. */}
@@ -476,7 +465,7 @@ export function TuiSession({
         {handoffFlow.promptLabel && !menuStack.open ? (
           <Text color={theme.accent}>{handoffFlow.promptLabel}</Text>
         ) : null}
-        {menuStack.open || rewindHidden || confirmation.prompt || handoffFlow.prompt ? null : (
+        {menuStack.open || rewindHidden || confirmation.prompt || handoffFlow.prompt || queuePaused.shown ? null : (
           <ComposerWidth columns={columns} fullWidth={menuStack.handingBack}>
             {(width) => (
               <InputFrame>
@@ -525,7 +514,7 @@ export function TuiSession({
           integration={integration}
           state={footerState}
           liveTps={liveTps}
-          active={composerActive && queue.index < 0 && !menuStack.open}
+          active={composerActive && queue.index < 0 && !menuStack.open && !queuePaused.shown}
           // Legacy hides the idle hints under a prompt label.
           draftEmpty={editor.value === '' && !handoffFlow.promptLabel}
           escHint={escHintVisible}

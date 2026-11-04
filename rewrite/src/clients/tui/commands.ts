@@ -202,18 +202,14 @@ export async function commandStatus(connection: TuiConnection, commandId: string
 
 export function receiptNotice(result: NativeReceiptResult): string {
   if (result.kind === 'pending')
-    return `Command ${result.receipt.request.commandId} pending (not completed); do not repeat it. Use /command-status ${result.receipt.request.commandId}.`;
+    return `Command ${result.receipt.request.commandId} pending (not completed); do not repeat it.`;
   if (result.kind === 'finished') {
     const { request, outcome } = result.receipt;
-    return `Command ${request.commandId} finished: ${outcome?.kind ?? 'outcome unavailable'}.${
-      outcome?.kind === 'rewound' || outcome?.kind === 'rolled_over'
-        ? ` Use /command-apply ${request.commandId} to apply the result.`
-        : ''
-    }`;
+    return `Command ${request.commandId} finished: ${outcome?.kind ?? 'outcome unavailable'}.`;
   }
   return `Command ${result.commandId} ${result.kind}: ${result.message}${
     result.kind === 'uncertain' || result.kind === 'interrupted'
-      ? ` Outcome may be unknown; use /command-status ${result.commandId}; do not repeat blindly.`
+      ? ' Outcome may be unknown; do not repeat blindly.'
       : ''
   }`;
 }

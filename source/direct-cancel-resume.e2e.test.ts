@@ -182,7 +182,7 @@ it(
   },
 );
 
-it('/cancel stops a streaming answer without a turn-id cleanup notice', { timeout: TIMEOUT_MS }, async () => {
+it('Esc stops a streaming answer without a turn-id cleanup notice', { timeout: TIMEOUT_MS }, async () => {
   root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-tool-rows-e2e-')));
   const home = path.join(root, 'home');
   const workspace = path.join(root, 'w');
@@ -236,7 +236,10 @@ it('/cancel stops a streaming answer without a turn-id cleanup notice', { timeou
   const live = session.getVisibleOutput();
   const liveFrame = live.slice(live.lastIndexOf('▌ term²'));
   expect(liveFrame).not.toContain('Stopped');
-  await send('/cancel');
+  // Legacy interrupts with Esc twice.
+  session.write('\x1b');
+  await session.waitForOutput('Press Esc again to interrupt', 30_000);
+  session.write('\x1b');
   await session.waitForOutput('Stopped', 30_000);
   await new Promise((resolve) => setTimeout(resolve, 200));
   await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 30_000 });
@@ -248,7 +251,7 @@ it('/cancel stops a streaming answer without a turn-id cleanup notice', { timeou
   expect(frame).not.toContain('cleanup may still be running');
 });
 
-it.each(['slash', 'ctrl-c', 'editing', 'only-steers'] as const)(
+it.each(['esc', 'ctrl-c', 'editing', 'only-steers'] as const)(
   'cancel %s restores queued steers and keeps follow-ups paused',
   { timeout: TIMEOUT_MS },
   async (mode) => {
@@ -324,9 +327,9 @@ it.each(['slash', 'ctrl-c', 'editing', 'only-steers'] as const)(
       session.write('EXISTING-DRAFT');
       await waitForHarnessComposerValue(idlePath, 'EXISTING-DRAFT', { timeoutMs: 30_000 });
     } else {
-      session.write('/cancel');
-      await waitForHarnessComposerValue(idlePath, '/cancel', { timeoutMs: 30_000 });
-      await dismissUnlistedSlashMenu(session!, '/cancel');
+      // Legacy's first Esc asks to confirm the interrupt; the second (below) stops the turn.
+      session.write('\x1b');
+      await session.waitForOutput('Press Esc again to interrupt', 30_000);
     }
     if (mode === 'editing') {
       // Legacy's first Ctrl+C exits queue editing without cancelling the turn.
@@ -348,13 +351,14 @@ it.each(['slash', 'ctrl-c', 'editing', 'only-steers'] as const)(
       await new Promise((resolve) => setTimeout(resolve, 2100));
     }
     const cancelAt = Date.now();
-    session.write(mode === 'ctrl-c' ? '\x03' : '\r');
+    session.write(mode === 'ctrl-c' ? '\x03' : '\x1b');
     await session.waitForOutput('Cancelled. Your queued message is back in the input.', 5_000);
     const expectedDraft = 'UNIQUE-QUEUED-STEER\n\nUNIQUE-SECOND-STEER';
     await waitForHarnessComposerValue(idlePath, expectedDraft, { timeoutMs: 5_000 });
     expect(Date.now() - cancelAt).toBeLessThan(2_000);
-    // Legacy shows no paused-queue line; the follow-up's hold is checked in the log below (no queue_started),
-    // and it only runs after /queue resume.
+    // The follow-up's hold is checked in the log below (no queue_started); it only runs after `r` in legacy's
+    // paused-queue prompt.
+    if (mode !== 'only-steers') await session.waitForOutput('Queue paused: 1 item pending.', 5_000);
     await new Promise((resolve) => setTimeout(resolve, 600));
     expect(Date.now() - cancelAt).toBeLessThan(2_000);
     const log = fs.readFileSync(
@@ -394,12 +398,7 @@ it.each(['slash', 'ctrl-c', 'editing', 'only-steers'] as const)(
     expect(facts.some((fact) => fact.type === 'queue_started' && fact.messageId === followup.record.messageId)).toBe(
       false,
     );
-    // Clear the recovered draft only after checking it; Ctrl+C has a two-second exit window.
-    await new Promise((resolve) => setTimeout(resolve, 2500));
-    session.write('\x03');
-    await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
-    await new Promise((resolve) => setTimeout(resolve, 2500));
-    await send('/queue resume');
+    session.write('r');
     await session.waitForOutput('FOLLOWUP-REPLY', 30_000);
   },
 );

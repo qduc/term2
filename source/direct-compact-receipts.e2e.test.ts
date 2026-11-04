@@ -173,10 +173,5 @@ it(
     expect(results).toContain('rejected');
     expect(results).toContain('compacted');
     expect(facts.some((fact) => fact.type === 'history_replaced' && fact.reason === 'compaction')).toBe(true);
-    const rejectedId = facts.find(
-      (fact) => fact.type === 'command_finished' && fact.outcome.kind === 'rejected',
-    ).commandId;
-    await send(`/command-status ${rejectedId}`);
-    await session.waitForOutput(`Command ${rejectedId} rejected:`, 30_000);
   },
 );

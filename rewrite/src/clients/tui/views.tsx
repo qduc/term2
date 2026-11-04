@@ -349,9 +349,6 @@ export function Activity({
                 {choiceIndex + 1}. {choice.label}
               </Text>
             ))}
-            <Text color={theme.textSubtle}>
-              /answer {index + 1} &lt;choice number&gt;{interaction.acceptsText ? ' [text]' : ''}
-            </Text>
           </Box>
         ),
       )}

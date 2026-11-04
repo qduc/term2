@@ -71,6 +71,11 @@ export function TuiSession({
   const preferences = integration.preferences?.(connection.sessionId) ?? terminalPreferenceDefaults();
   const { columns, rows } = useTerminalSize();
   const liveTps = useLiveStreamingSpeed(state);
+  // Legacy's footer keeps the last request's usage until the conversation is cleared (a new session here):
+  // a model switch, rewind or compaction does not blank it.
+  const lastUsage = useRef<Pick<typeof state, 'lastUsage' | 'speed'>>({});
+  if (state.lastUsage) lastUsage.current = { lastUsage: state.lastUsage, speed: state.speed };
+  const footerState = state.lastUsage ? state : { ...state, ...lastUsage.current };
   const [bangResult, setBangResult] = useState<string | null>(null);
   const [interactionOpen, setInteractionOpen] = useState(false);
   const [dismissedInteractionId, setDismissedInteractionId] = useState<string | null>(null);
@@ -339,6 +344,8 @@ export function TuiSession({
       } else if (/^\/providers(?:\s|$)/.test(command)) {
         if (!menuStack.openFrame('providers')) throw new Error('Provider management is unavailable.');
       } else if (typed.kind === 'command') {
+        // Legacy's /compact announces itself before the summary request starts.
+        if (command.trim() === '/compact') setNotice('Compacting context...');
         const directNotice = await directSlashCommand(connection, command);
         if (directNotice !== null) setNotice(directNotice);
         else {
@@ -402,7 +409,7 @@ export function TuiSession({
   return (
     <Box flexDirection="column">
       {viewport.staticTranscript}
-      {viewport.text ? <Text>{viewport.text}</Text> : null}
+      {viewport.text.trim() ? <Text>{viewport.text}</Text> : null}
       {viewport.paged && viewport.total > 0 && (viewport.start > 0 || !viewport.live) ? (
         <Text color={theme.textSubtle}>
           Lines {viewport.start + 1}–{viewport.end} of {viewport.total} · PgUp/PgDn or Ctrl+↑/↓
@@ -516,7 +523,7 @@ export function TuiSession({
         )}
         <ComposerFooter
           integration={integration}
-          state={state}
+          state={footerState}
           liveTps={liveTps}
           active={composerActive && selectedQueueIndex < 0 && !menuStack.open}
           draftEmpty={editor.value === ''}

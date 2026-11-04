@@ -87,6 +87,8 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     sessions: boolean;
   } = { beforeMemory: [], beforeRollover: [], beforeGoal: [], sessions: false };
   let baseGraph: AnyToolDefinition[] = [];
+  // Legacy reads only list/search/read; the native browser has no lifecycle of its own.
+  const sessionBrowser = remote ? undefined : (options.sessionBrowserSource as AgentFactoryDeps['sessionBrowser']);
   const delegation = createDirectSubagentTools({
     selection,
     trimConfig: options.trimConfig,
@@ -107,6 +109,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     withAnswer: (answer, operation) => answers.run(answer, operation),
     targetInvocation,
     remoteUnavailable: SSH_LOCAL_ONLY_TOOLS,
+    sessionBrowser,
   });
   const shell = createDirectShellTools();
   const allowBackgroundShell = options.interactive === true && !remote;
@@ -123,8 +126,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     readOnly,
     shellChildRegistry: shellChildren,
     skillsService,
-    // Legacy reads only list/search/read; the native browser has no lifecycle of its own.
-    sessionBrowser: remote ? undefined : (options.sessionBrowserSource as AgentFactoryDeps['sessionBrowser']),
+    sessionBrowser,
     onNativeToolSlots(slots) {
       nativeToolSlots = slots;
     },

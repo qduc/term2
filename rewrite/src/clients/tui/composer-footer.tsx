@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { formatTokensPerSecond } from './presentation/utils/streaming/streaming-speed-tracker.js';
 import { useSkin } from './presentation/skins/SkinContext.js';
-import type { StatusSegmentView, StatusView } from './presentation/skins/types.js';
+import type { MenuHint, StatusSegmentView, StatusView } from './presentation/skins/types.js';
 import type { TuiIntegration } from './integration.js';
 import type { TuiState } from './state.js';
 
@@ -128,12 +128,14 @@ export function ComposerFooter({
   integration,
   state,
   active,
+  draftEmpty,
   columns,
   queueSelectable,
 }: {
   readonly integration: TuiIntegration;
   readonly state: TuiState;
   readonly active: boolean;
+  readonly draftEmpty: boolean;
   readonly columns: number;
   readonly queueSelectable: boolean;
 }): React.ReactElement {
@@ -152,8 +154,8 @@ export function ComposerFooter({
       {active ? (
         <ComposerHints
           activeTurn={Boolean(state.activeTurnId)}
-          queueSelectable={queueSelectable}
-          columns={columns}
+          draftEmpty={draftEmpty}
+          queued={queueSelectable}
           Hints={Hints}
         />
       ) : null}
@@ -162,38 +164,41 @@ export function ComposerFooter({
   );
 }
 
-/** Composer shortcuts are shown only when the composer owns input. */
+/** Legacy InputBox's footer hints (source/components/InputBox.tsx), with their key colours. */
+const MODEL_HINTS: ReadonlyArray<MenuHint> = [
+  ['Ctrl+O', 'model'],
+  ['Ctrl+T', 'effort'],
+];
+const IDLE_HINTS: ReadonlyArray<MenuHint> = [
+  ['/', 'commands'],
+  ['@', 'paths'],
+  ['!', 'shell'],
+  ['Shift+Tab', 'plan'],
+];
+const TURN_IN_FLIGHT_HINTS: ReadonlyArray<MenuHint> = [
+  ['⏎', 'steer', 'accent'],
+  ['Alt+⏎', 'queue', 'accentAlt'],
+  ...MODEL_HINTS,
+];
+
+/**
+ * Composer shortcuts are shown only when the composer owns input: idle hints only for an empty draft, and the
+ * steer/queue hints during a turn, led by the queue hint when messages are queued and the draft is empty.
+ */
 export function ComposerHints({
   activeTurn,
-  queueSelectable,
-  columns,
+  draftEmpty,
+  queued,
   Hints,
 }: {
   readonly activeTurn: boolean;
-  readonly queueSelectable: boolean;
-  readonly columns: number;
-  readonly Hints: React.ComponentType<{ hints: ReadonlyArray<readonly [string, string]> }>;
-}): React.ReactElement {
-  const hints: ReadonlyArray<readonly [string, string]> = activeTurn
-    ? [
-        ...(queueSelectable ? [['↑', 'select queued'] as const] : []),
-        ['⏎', 'steer'],
-        ['Alt+⏎', 'queue'],
-        ['Ctrl+O', 'model'],
-        ['Ctrl+T', 'effort'],
-      ]
-    : [
-        ['/', 'commands'],
-        ['@', 'paths'],
-        ['!', 'shell'],
-        ['Shift+Tab', 'plan'],
-      ];
-  let width = 0;
-  const visible = hints.filter(([key, action]) => {
-    const needed = key.length + 1 + action.length + (width ? 3 : 0);
-    if (width + needed > columns) return false;
-    width += needed;
-    return true;
-  });
-  return <Hints hints={visible} />;
+  readonly draftEmpty: boolean;
+  readonly queued: boolean;
+  readonly Hints: React.ComponentType<{ hints: ReadonlyArray<MenuHint> }>;
+}): React.ReactElement | null {
+  if (activeTurn)
+    return (
+      <Hints hints={queued && draftEmpty ? [['↑', 'select queued'], ...TURN_IN_FLIGHT_HINTS] : TURN_IN_FLIGHT_HINTS} />
+    );
+  return draftEmpty ? <Hints hints={IDLE_HINTS} /> : null;
 }

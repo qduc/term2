@@ -73,6 +73,8 @@ async function start(replies: Reply[]): Promise<{ idlePath: string }> {
   fs.writeFileSync(path.join(workspace, 'notes.txt'), 'n');
   fs.mkdirSync(path.join(workspace, 'node_modules'));
   fs.writeFileSync(path.join(workspace, 'node_modules', 'alphabet.js'), 'x');
+  // Legacy file-service honours .gitignore; without one it lists node_modules too.
+  fs.writeFileSync(path.join(workspace, '.gitignore'), 'node_modules/\n');
   const baseUrl = await startProvider(replies);
   const idlePath = path.join(home, 'input-idle');
   const env = {
@@ -136,17 +138,19 @@ it(
   },
 );
 
-it('a directory keeps the menu open to continue inside it', { timeout: TIMEOUT_MS }, async () => {
-  const { idlePath } = await start([{ text: 'done' }]);
-  session!.write('@sr');
-  await waitForHarnessComposerValue(idlePath, '@sr', { timeoutMs: 60_000 });
-  await session!.waitForOutput('src/', 30_000);
-  session!.write('\t');
-  await until(() => composer(idlePath) === '@src/', 'the directory kept its @ and gained a slash');
-  await session!.waitForOutput('src/alpha.ts', 30_000);
-  session!.write('\r');
-  await until(() => composer(idlePath) === 'src/alpha.ts ', 'the file replaced the @query');
-});
+it(
+  'a directory replaces the @query with its path and closes the menu, as in legacy',
+  { timeout: TIMEOUT_MS },
+  async () => {
+    const { idlePath } = await start([{ text: 'done' }]);
+    session!.write('@sr');
+    await waitForHarnessComposerValue(idlePath, '@sr', { timeoutMs: 60_000 });
+    await session!.waitForOutput('src/', 30_000);
+    session!.write('\t');
+    await until(() => composer(idlePath) === 'src/', 'the directory replaced the @query and gained a slash');
+    await session!.waitForOutput('Shift+Tab plan', 30_000);
+  },
+);
 
 it('Escape dismisses the path menu and Enter then sends the text as typed', { timeout: TIMEOUT_MS }, async () => {
   const { idlePath } = await start([{ text: 'REPLY-DONE' }]);
@@ -165,11 +169,22 @@ it('Escape dismisses the path menu and Enter then sends the text as typed', { ti
   expect(logged, 'the text was sent as typed, not replaced by a path').toContain('see @alp');
 });
 
-it('a draft ending in an ordinary @word is sent, not completed', { timeout: TIMEOUT_MS }, async () => {
-  await start([{ text: 'REPLY-DONE' }]).then(async ({ idlePath }) => {
-    session!.write('thanks @claude');
-    await waitForHarnessComposerValue(idlePath, 'thanks @claude', { timeoutMs: 60_000 });
-    session!.write('\r');
-    await session!.waitForOutput('REPLY-DONE', 30_000);
-  });
-});
+it(
+  'Enter on an @word with no match keeps the menu and draft; Escape then Enter sends it',
+  { timeout: TIMEOUT_MS },
+  async () => {
+    await start([{ text: 'REPLY-DONE' }]).then(async ({ idlePath }) => {
+      session!.write('thanks @claude');
+      await waitForHarnessComposerValue(idlePath, 'thanks @claude', { timeoutMs: 60_000 });
+      await session!.waitForOutput('No matches for "@claude"', 30_000);
+      session!.write('\r');
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      expect(composer(idlePath), 'legacy swallows Enter while the menu has no match').toBe('thanks @claude');
+      expect(session!.getOutput()).not.toContain('REPLY-DONE');
+      session!.write('\x1b');
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      session!.write('\r');
+      await session!.waitForOutput('REPLY-DONE', 30_000);
+    });
+  },
+);

@@ -503,6 +503,7 @@ export function TuiSession({
           integration={integration}
           state={state}
           active={composerActive && selectedQueueIndex < 0 && !menuStack.open}
+          draftEmpty={editor.value === ''}
           columns={columns - 4}
           queueSelectable={queueItems.length > 0 && !editor.value && !editing}
         />

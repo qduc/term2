@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import type { TuiConnection } from './integration.js';
 import { receiptNotice, resetSession, sendNativeCommand } from './commands.js';
 
+export const WELCOME = 'Welcome to term²! Type a message to start chatting.';
+
 /**
  * `/clear` or `/rollover`: create the replacement session, then attach it.
  * Returns a notice (and attaches nothing) when a rollover did not finish; null on success.
@@ -9,7 +11,7 @@ import { receiptNotice, resetSession, sendNativeCommand } from './commands.js';
 export async function replaceSession(
   connection: TuiConnection,
   command: '/clear' | '/rollover',
-  switchSession: ((sessionId: string) => Promise<void>) | undefined,
+  switchSession: ((sessionId: string, notice?: string, opening?: readonly string[]) => Promise<void>) | undefined,
 ): Promise<string | null> {
   if (!switchSession) throw new Error('Session switching is unavailable in this app.');
   let sessionId: string;
@@ -20,7 +22,8 @@ export async function replaceSession(
     sessionId = result.receipt.outcome.sessionId;
   }
   try {
-    await switchSession(sessionId);
+    // Legacy /clear (clear-command.ts) opens the new conversation with its welcome line.
+    await switchSession(sessionId, undefined, command === '/clear' ? [WELCOME] : undefined);
   } catch (error) {
     throw new Error(
       `Session ${sessionId} was created; switching reported: ${error instanceof Error ? error.message : String(error)}`,

@@ -438,7 +438,7 @@ export type WireNativeCommandRequest = {
 export type WireNativeCommandOutcome =
   | { readonly kind: 'retried'; readonly turnId: string }
   | { readonly kind: 'rewound'; readonly draft: { readonly content: readonly WireContent[] } }
-  | { readonly kind: 'compacted' }
+  | { readonly kind: 'compacted'; readonly tokensBefore?: number; readonly tokensAfter?: number }
   | { readonly kind: 'configured'; readonly configuration: WireConfiguration & { readonly model: WireModel } }
   | { readonly kind: 'rolled_over'; readonly sessionId: string }
   | {

@@ -58,6 +58,8 @@ SCENARIOS = {
     't-cancel': ['stream please', '<enter>', '<sleep>', '<esc>', '<esc>', '<sleep>'],
     # A question and a shell call in one reply. Bare has no ask_user, so the call fails at once and keeps its place.
     't-ask-mixed': ['ask me', '<enter>', '<sleep>', '<enter>', '<sleep>', '<sleep>'],
+    # /compact before any turn, with a sizeable model: legacy's "Nothing to compact" wording.
+    't-compact-empty': ['/compact', '<enter>', '<sleep>'],
     't-exit-fresh': ['<c-c>', '<c-c>', '<sleep>'],
     't-exit-turn': ['hello', '<enter>', '<sleep>', '<c-c>', '<c-c>', '<sleep>'],
     't-exit-cmd': ['hello', '<enter>', '<sleep>', '/exit', '<enter>', '<sleep>'],
@@ -101,6 +103,8 @@ SEED = {
     't-cancel': {'replies': [{'text': '\n\n'.join(f'sw{i}' for i in range(40)), 'chunks': 40, 'delay': 0.25}],
                  'usage': _USAGE},
     't-ask-mixed': {'replies': [{'calls': [_ASK, _ECHO]}, {'text': 'done'}], 'usage': _USAGE},
+    't-compact-empty': {'settings': {'agent': {'retryAttempts': 0, 'maxRequestInputTokens': 100000,
+                                               'modelSelection': {'model': 'mock-alpha', 'provider': 'mockprov'}}}},
     't-exit-turn': {'replies': [{'text': 'Hi there.'}], 'usage': _USAGE},
     't-exit-cmd': {'replies': [{'text': 'Hi there.'}], 'usage': _USAGE},
 }

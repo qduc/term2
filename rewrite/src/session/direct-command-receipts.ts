@@ -66,7 +66,13 @@ const request = z
 const outcome = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('retried'), turnId: id }).strict(),
   z.object({ kind: z.literal('rewound'), draft: z.object({ content: directContentSchema }).strict() }).strict(),
-  z.object({ kind: z.literal('compacted') }).strict(),
+  z
+    .object({
+      kind: z.literal('compacted'),
+      tokensBefore: z.number().int().nonnegative().optional(),
+      tokensAfter: z.number().int().nonnegative().optional(),
+    })
+    .strict(),
   z.object({ kind: z.literal('configured'), configuration: acceptedConfiguration }).strict(),
   z.object({ kind: z.literal('rolled_over'), sessionId: id }).strict(),
   z

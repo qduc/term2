@@ -137,14 +137,18 @@ export async function compactDirectHistory(input: DirectCompactionInput): Promis
   // The setting schedules automatic maintenance; an explicit compact command
   // is independent, as in the source Session's compactContext manual path.
   if (!input.manual && !input.settings.enabled) return { kind: 'blocked', reason: 'disabled', estimate };
-  if (!hasCompleteDirectToolPairs(input.request.input)) return { kind: 'blocked', reason: 'unsettled_tools', estimate };
   const policy = resolveModelContextPolicy({
     contextWindow: input.contextWindow,
     maxOutputTokens: input.request.maxOutputTokens,
     inputLimit: input.maxRequestInputTokens,
     ratio: input.settings.compactThreshold,
-    rawTrigger: input.settings.compactThresholdTokens,
+    // Legacy's manual compaction passes no raw trigger (session-composition compactThresholdTokens: null).
+    rawTrigger: input.manual ? undefined : input.settings.compactThresholdTokens,
   });
+  // Legacy's local compactor refuses a manual compaction it cannot size, before anything else.
+  if (input.manual && strategy === 'local' && policy.softTrigger === undefined)
+    throw new Error('Set agent.contextCompaction.compactThresholdTokens for an uncatalogued model');
+  if (!hasCompleteDirectToolPairs(input.request.input)) return { kind: 'blocked', reason: 'unsettled_tools', estimate };
   // The assumption schedules maintenance only; it must never become a hard admission limit.
   const softTrigger =
     input.manual || input.contextWindow !== undefined

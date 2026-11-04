@@ -38,7 +38,7 @@ export type DirectCommandRequest = {
 export type DirectCommandOutcome =
   | { readonly kind: 'retried'; readonly turnId: TurnId }
   | { readonly kind: 'rewound'; readonly draft: { readonly content: readonly ContentPart[] } }
-  | { readonly kind: 'compacted' }
+  | { readonly kind: 'compacted'; readonly tokensBefore?: number; readonly tokensAfter?: number }
   | { readonly kind: 'configured'; readonly configuration: DirectAcceptedConfiguration }
   | { readonly kind: 'rolled_over'; readonly sessionId: string }
   | {

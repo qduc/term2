@@ -230,13 +230,18 @@ export async function directSlashCommand(connection: TuiConnection, input: strin
   switch (input.trim()) {
     case '/compact': {
       const result = await sendNativeCommand(connection, { type: 'compact', commandId });
-      if (result.kind === 'finished' && result.receipt.outcome?.kind === 'compacted') return 'Compaction complete.';
+      // Legacy's manual-compaction and compact-command wording, word for word.
+      const outcome = result.kind === 'finished' || result.kind === 'rejected' ? result.receipt?.outcome : undefined;
+      if (outcome?.kind === 'compacted')
+        return `Context compacted locally (${outcome.tokensBefore ?? '?'} → ${
+          outcome.tokensAfter ?? '?'
+        } estimated tokens).`;
       if (result.kind === 'rejected' || result.kind === 'error') {
-        const outcome = result.receipt?.outcome;
         const message = outcome?.kind === 'rejected' ? outcome.message : result.message.replace(/^[a-z_]+: /, '');
-        return message === 'Compaction did not replace history: no_complete_cold_turn.'
-          ? 'Nothing to compact yet.'
-          : `Compaction failed: ${message}`;
+        const blocked = /^Compaction did not replace history: ([a-z_]+)\.$/.exec(message)?.[1];
+        if (blocked === 'no_complete_cold_turn')
+          return 'Nothing to compact: at least one complete cold turn is required.';
+        return blocked ? `Context compaction was blocked: ${blocked}.` : `Context compaction failed: ${message}`;
       }
       return receiptNotice(result);
     }

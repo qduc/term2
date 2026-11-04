@@ -473,12 +473,15 @@ async function runCommand(
     session.write('draft stays');
     await waitForHarnessComposerValue(idlePath, 'draft stays', { timeoutMs: 60_000 });
     session.write('\x1b[Z');
-    await session.waitForOutput('Clear session and switch mode?', 30_000);
-    await session.waitForOutput('Switching modes requires clearing the current session.', 30_000);
-    await session.waitForOutput('› No', 30_000);
+    // Legacy ModeSwitchConfirmationPrompt (ported) names the target mode and marks the choice with ❯.
+    await session.waitForOutput('Clear session and switch to Plan mode?', 30_000);
+    await session.waitForOutput('Switching to Plan mode requires clearing the current session.', 30_000);
+    await session.waitForOutput('❯ No', 30_000);
     const dialog = session.getVisibleOutput().split('\n');
-    expect(dialog.some((line) => /│.*Switching modes requires clearing the current session\./.test(line))).toBe(true);
-    expect(dialog.some((line) => /│.*Clear session and switch mode\?/.test(line))).toBe(true);
+    expect(dialog.some((line) => /│.*Switching to Plan mode requires clearing the current session\./.test(line))).toBe(
+      true,
+    );
+    expect(dialog.some((line) => /│.*Clear session and switch to Plan mode\?/.test(line))).toBe(true);
     await new Promise((resolve) => setTimeout(resolve, 100));
     let frameOffset = session.getVisibleOutput().length;
     // The default answer is No: Enter cancels the clear.
@@ -490,19 +493,19 @@ async function runCommand(
       expect(predicate()).toBe(true);
     };
     await waitFrame(
-      () => lastFrame().includes('draft stays') && !lastFrame().includes('Clear session and switch mode?'),
+      () => lastFrame().includes('draft stays') && !lastFrame().includes('Clear session and switch to Plan mode?'),
     );
     await waitForHarnessComposerValue(idlePath, 'draft stays', { timeoutMs: 5_000 });
     frameOffset = session.getVisibleOutput().length;
     session.write('\x1b[Z');
-    await waitFrame(() => lastFrame().includes('Clear session and switch mode?'));
+    await waitFrame(() => lastFrame().includes('Clear session and switch to Plan mode?'));
     await new Promise((resolve) => setTimeout(resolve, 100));
     const selectedOffset = session.getVisibleOutput().length;
     session.write('\x1b[A');
     const selectedAt = Date.now();
-    while (Date.now() - selectedAt < 10_000 && !session.getVisibleOutput().slice(selectedOffset).includes('› Yes'))
+    while (Date.now() - selectedAt < 10_000 && !session.getVisibleOutput().slice(selectedOffset).includes('❯ Yes'))
       await new Promise((resolve) => setTimeout(resolve, 25));
-    expect(session.getVisibleOutput().slice(selectedOffset)).toContain('› Yes');
+    expect(session.getVisibleOutput().slice(selectedOffset)).toContain('❯ Yes');
     const offset = session.getVisibleOutput().length;
     session.write('\r');
     const started = Date.now();
@@ -558,7 +561,8 @@ async function runCommand(
     await waitForHarnessComposerValue(idlePath, '/cl', { timeoutMs: 60_000 });
     session.write('\r');
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 60_000 });
-    await vi.waitFor(() => expect(session!.getOutput().slice(beforeClear)).toContain('\u001b[2J\u001b[3J\u001b[H'), {
+    // Legacy /clear prints the New conversation rule under the old transcript instead of clearing the screen.
+    await vi.waitFor(() => expect(session!.getOutput().slice(beforeClear)).toContain('New conversation'), {
       timeout: 30_000,
     });
 

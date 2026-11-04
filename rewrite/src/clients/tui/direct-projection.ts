@@ -151,6 +151,21 @@ const sameList = <T>(previous: readonly T[] | undefined, next: readonly T[], equ
 /** Legacy prints nothing after a rewind or a compaction beyond the command's own lines. */
 const SILENT_REPLACEMENTS = new Set([historyReplacedMessage('rewind'), historyReplacedMessage('compaction')]);
 
+const shownAt = new Map<string, { tick: number; waiting: Set<string>; at: Map<string, number> }>();
+/** Legacy appends a call's row when it starts, and a call that waited on the user only once that was decided. */
+function toolShownAt(snapshot: WireSnapshot): ReadonlyMap<string, number> {
+  const memory = shownAt.get(snapshot.sessionId) ?? { tick: 0, waiting: new Set<string>(), at: new Map() };
+  shownAt.set(snapshot.sessionId, memory);
+  memory.tick += 1;
+  const waiting = new Set(snapshot.pendingInteractions.flatMap((request) => request.executionId ?? []));
+  for (const id of memory.waiting) if (!waiting.has(id)) memory.at.set(id, memory.tick);
+  for (const tool of snapshot.tools)
+    if (!memory.at.has(tool.executionId) && !waiting.has(tool.executionId))
+      memory.at.set(tool.executionId, memory.tick);
+  memory.waiting = waiting;
+  return memory.at;
+}
+
 export function projectSnapshot(snapshot: WireSnapshot): TuiState {
   const drafts: Record<string, string> = {};
   const messages: Message[] = [];
@@ -197,6 +212,7 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
     // Reasoning is live turn activity, not a settled transcript message.
     reasoning: snapshot.activeTurnId && snapshot.reasoning ? { [snapshot.activeTurnId]: snapshot.reasoning } : {},
     tools: stableTools,
+    toolShownAt: toolShownAt(snapshot),
     unmatchedTools: snapshot.unmatchedToolResults ?? [],
     budgets: snapshot.pendingBudgets ?? [],
     commands: snapshot.commands ?? [],

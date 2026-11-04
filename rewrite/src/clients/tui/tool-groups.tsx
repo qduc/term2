@@ -49,13 +49,27 @@ export function groupTools(
   timeline: readonly { readonly kind: 'message' | 'tool'; readonly id: string }[],
   tools: readonly ToolView[],
   closed: boolean,
+  shownAt?: ReadonlyMap<string, number>,
 ): ToolGroups {
   const byId = new Map(tools.map((tool) => [tool.id, tool]));
   const items: GroupableMessage[] = [];
+  let run: ToolView[] = [];
+  // Legacy lists a run in the order its rows appeared: a call that waited on the user only once decided.
+  const at = (tool: ToolView) => shownAt?.get(tool.id) ?? Number.MAX_SAFE_INTEGER;
+  const flush = () => {
+    items.push(...[...run].sort((a, b) => at(a) - at(b)).map(groupable));
+    run = [];
+  };
   for (const entry of timeline) {
     const tool = entry.kind === 'tool' ? byId.get(entry.id) : undefined;
-    items.push(tool ? groupable(tool) : { id: `${entry.kind}:${entry.id}`, sender: 'bot' });
+    if (tool) {
+      run.push(tool);
+      continue;
+    }
+    flush();
+    items.push({ id: `${entry.kind}:${entry.id}`, sender: 'bot' });
   }
+  flush();
   const result = new Map<string, ToolGroup | null>();
   for (const item of groupCommandRuns(items, { isClosed: closed })) {
     if (item.sender !== 'command-group') continue;

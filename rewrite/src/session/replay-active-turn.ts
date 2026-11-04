@@ -16,7 +16,7 @@ const LIVE_OUTCOME_UNOBSERVED =
 
 type Call = Extract<Item, { type: 'tool_call' }>;
 type Start = Extract<Fact, { type: 'tool_started' }>;
-type Slot = { item: Item | null };
+type Slot = { item: Item | null; original?: Item | null };
 type Partial = { readonly slot: Slot; readonly deltas: string[]; readonly id: ItemId };
 type Occurrence = { readonly call: Call; readonly key: string; executionId?: ExecutionId; settled: boolean };
 type Execution = { start?: Start; result?: ToolResult; occurrence?: Occurrence };
@@ -61,14 +61,39 @@ function stepSlot(turn: ActiveReplayTurn, modelStep: number | undefined, slot: S
   turn.stepSlots.set(modelStep, own);
 }
 
+function callStep(turn: ActiveReplayTurn, callId: string): number | undefined {
+  for (const [step, own] of turn.stepSlots) {
+    if (own.some(({ item }) => item?.type === 'tool_call' && item.callId === callId)) return step;
+  }
+  return undefined;
+}
+
 /**
- * Legacy keeps a cancelled turn's finished model steps and drops the one it was in: a response still streaming,
- * or tools still running when the cancel came (their results are only the cancellation). The user's input stays.
+ * Legacy keeps a cancelled turn's finished model steps and the user's input. Live, it drops the step the turn was
+ * in (a response still streaming, or tools still running at the cancel); after a resume it shows that step's calls
+ * again with unobserved results, as it does for any unsettled call. Idempotent: a fold is finished many times.
  */
-export function dropCancelledReplayStep(turn: ActiveReplayTurn): void {
-  for (const [step, own] of turn.stepSlots)
-    if (step !== undefined && (!turn.responses.has(step) || turn.lateSteps.has(step)))
-      for (const slot of own) slot.item = null;
+export function settleCancelledReplayStep(turn: ActiveReplayTurn, resumed: boolean): void {
+  for (const [step, own] of turn.stepSlots) {
+    if (step === undefined || (turn.responses.has(step) && !turn.lateSteps.has(step))) continue;
+    for (const slot of own) {
+      if (slot.original === undefined) slot.original = slot.item;
+      const item = slot.original;
+      slot.item =
+        !resumed || !item || (item.type !== 'tool_call' && item.type !== 'tool_result')
+          ? null
+          : item.type === 'tool_result'
+          ? {
+              type: 'tool_result',
+              id: item.id,
+              callId: item.callId,
+              output: OUTCOME_UNOBSERVED,
+              isError: false,
+              ...(item.toolType ? { toolType: item.toolType } : {}),
+            }
+          : item;
+    }
+  }
 }
 
 export function appendReplayItem(turn: ActiveReplayTurn, fact: Extract<Fact, { type: 'item' }>, slots: Slot[]): void {
@@ -81,10 +106,12 @@ export function appendReplayItem(turn: ActiveReplayTurn, fact: Extract<Fact, { t
   if (item.type === 'tool_call') recordCall(turn, item, executionId);
   else if (item.type === 'tool_result') recordResult(turn, item, executionId);
   else if (executionId !== undefined) throw new Error(`replay: executionId on non-tool item ${item.id}`);
-  if (item.type === 'tool_result' && turn.cancelRequested) turn.lateSteps.add(fact.modelStep);
+  // A result written without a step (a call cancelled before it started) belongs to its call's step.
+  const modelStep = fact.modelStep ?? (item.type === 'tool_result' ? callStep(turn, item.callId) : undefined);
+  if (item.type === 'tool_result' && turn.cancelRequested) turn.lateSteps.add(modelStep);
   const slot = { item };
   slots.push(slot);
-  stepSlot(turn, fact.modelStep, slot);
+  stepSlot(turn, modelStep, slot);
 }
 
 export function appendReplayDelta(

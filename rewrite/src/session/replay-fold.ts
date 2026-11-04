@@ -20,7 +20,7 @@ import {
   appendReplayDelta,
   appendReplayItem,
   createActiveReplayTurn,
-  dropCancelledReplayStep,
+  settleCancelledReplayStep,
   finishReplayText,
   hasUnsettledReplayRoots,
   recordReplayStart,
@@ -113,7 +113,13 @@ export function createReplayFold(): ReplayFold {
     return attempt;
   };
 
+  /** Facts consumed so far, and each cancelled turn with the index of its end. */
+  let consumed = 0;
+  const cancelledTurns: { readonly turn: ActiveTurn; readonly index: number }[] = [];
+  /** The fact index of each tool call, so a later process can tell the calls it resumed (ReplayOptions.openedAt). */
+  const callFacts = new Map<Item['id'], number>();
   const consume = (fact: Fact): void => {
+    consumed++;
     // Display observations never enter provider slots, admission or lifecycle state.
     if (fact.type === 'transcript_message') return;
     if (fact.type === 'command_started' || fact.type === 'command_finished') {
@@ -251,6 +257,7 @@ export function createReplayFold(): ReplayFold {
         break;
       }
       case 'item':
+        if (fact.item.type === 'tool_call') callFacts.set(fact.item.id, consumed - 1);
         appendReplayItem(requireActive(fact.turnId, fact.type), fact, slots);
         break;
       case 'tool_started':
@@ -367,7 +374,7 @@ export function createReplayFold(): ReplayFold {
           throw new Error(`replay: turn ${turn.turnId} ended with unsettled calls, interactions or budget waits`);
         }
         finishReplayText(turn);
-        if (fact.outcome === 'cancelled') dropCancelledReplayStep(turn);
+        if (fact.outcome === 'cancelled') cancelledTurns.push({ turn, index: consumed - 1 });
         active = null;
         lastOutcome = fact.outcome;
         break;
@@ -416,6 +423,8 @@ export function createReplayFold(): ReplayFold {
       }
     }
     if (turn && !repairActiveTurn) finishReplayText(turn);
+    for (const cancelled of cancelledTurns)
+      settleCancelledReplayStep(cancelled.turn, cancelled.index < (options.openedAt ?? 0));
     if (options.recoverQueue !== false) {
       recoveryFacts.push(...queue.reconcileTerminal(), ...queue.pausePending());
     }
@@ -429,7 +438,9 @@ export function createReplayFold(): ReplayFold {
     recoveryFacts.push(...background.recoveryFacts);
     return {
       status: unfinished() !== null || lastOutcome === 'interrupted' ? 'interrupted' : 'idle',
-      history: slots.flatMap(({ item }) => (item === null ? [] : [item])),
+      history: slots.flatMap(({ item }) =>
+        item === null ? [] : [resumedCall(item, callFacts, options.openedAt ?? 0)],
+      ),
       nextTurn: queue.nextTurn,
       recoveryFacts,
       queue: queue.state,
@@ -443,4 +454,16 @@ export function createReplayFold(): ReplayFold {
     };
   };
   return { consume, finish };
+}
+
+/**
+ * Legacy re-serializes a call's arguments when it loads a saved conversation, so a call made before this process
+ * opened the session is sent as compact JSON rather than the provider's raw string.
+ */
+function resumedCall(item: Item, callFacts: ReadonlyMap<Item['id'], number>, openedAt: number): Item {
+  if (item.type !== 'tool_call' || item.rawArguments === undefined || (callFacts.get(item.id) ?? 0) >= openedAt) {
+    return item;
+  }
+  const { rawArguments: _raw, argumentsSnapshot: _snapshot, ...call } = item;
+  return call;
 }

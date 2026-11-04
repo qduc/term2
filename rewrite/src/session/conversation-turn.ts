@@ -26,6 +26,7 @@ export function admitConversationTurn(
   journal: ConversationJournal,
   capabilities: ReturnType<typeof bindDirectCapabilities>,
   requestNotice?: string,
+  persistentNotice?: string,
 ): readonly Item[] {
   const isHuman = !planned?.accepted && !planned?.silent && isDirectHumanOrigin(request.submission?.origin);
   // Plan only the actual human input. Personal-memory user-shaped notices are
@@ -54,6 +55,7 @@ export function admitConversationTurn(
         turnId,
         input: request.input,
         ...(requestNotice ? { requestNotice } : {}),
+        ...(persistentNotice ? { persistentNotice } : {}),
         ...(directPreviewConfiguration(request) ? { requestConfiguration: directPreviewConfiguration(request) } : {}),
         ...(request.submission ? { submission: request.submission } : {}),
       },

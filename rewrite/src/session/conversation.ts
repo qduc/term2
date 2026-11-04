@@ -245,8 +245,6 @@ function conversation(
     const consumeCancelNotice =
       questionCancelPending && !planned?.compaction && request.input.some((item) => item.type === 'user_message');
     const deliverCancelNotice = consumeCancelNotice && planned?.queuedFollowUp === true;
-    if (deliverCancelNotice)
-      request = { ...request, notice: [request.notice, cancelNotice].filter(Boolean).join('\n\n') };
     const turnId = planned?.turnId ?? (`turn-${nextTurnId++}` as TurnId);
     const snapshot = planned?.accepted
       ? { history: planned.history!, compactionState: planned.compactionState }
@@ -260,6 +258,7 @@ function conversation(
       journal,
       capabilities!,
       generation,
+      deliverCancelNotice ? cancelNotice : undefined,
     );
     if (deliverCancelNotice) {
       generation.continuity?.state?.skipCancelledQuestion(rawHistory, ASK_USER_NO_ANSWER_RESULT);

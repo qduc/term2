@@ -10,6 +10,7 @@ import { foldFact } from './fold-fact.js';
 import { createDirectQueueState, directQueueSteeredInput } from './direct-queue.js';
 import { isDirectCommandFactType, recoverDirectCommands } from './direct-command-receipts.js';
 import { isDirectNotificationFactType } from './direct-notifications.js';
+import { withNotice } from './direct-input-notice.js';
 
 export type DirectDisplayTool = DirectToolDisplay & {
   /** A model call is not evidence that its physical body started. */
@@ -221,7 +222,9 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
           ...state.messages,
           ...(fact.silent || fact.display === false
             ? []
-            : fact.input.flatMap((item) => messageFor(item).map((message) => ({ ...message, turnId: fact.turnId })))),
+            : (fact.persistentNotice ? withNotice(fact.input, fact.persistentNotice) : fact.input).flatMap((item) =>
+                messageFor(item).map((message) => ({ ...message, turnId: fact.turnId })),
+              )),
         ],
         admissions:
           fact.submission &&

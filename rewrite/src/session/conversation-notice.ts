@@ -3,7 +3,8 @@ import type { Item } from '../model/index.js';
 import type { bindDirectCapabilities } from './direct-capabilities.js';
 import type { TurnRequest } from './direct-types.js';
 import type { Fact } from './facts.js';
-import { ConversationGeneration, withNotice } from './conversation-generation.js';
+import { ConversationGeneration } from './conversation-generation.js';
+import { withNotice } from './direct-input-notice.js';
 import type { ConversationJournal } from './conversation-journal.js';
 import { admitConversationTurn } from './conversation-turn.js';
 
@@ -25,11 +26,21 @@ export function prepareConversationNotice(
   journal: ConversationJournal,
   capabilities: ReturnType<typeof bindDirectCapabilities>,
   generation: ConversationGeneration,
+  persistentNotice?: string,
 ) {
   // Resolve without consuming until durable admission succeeds.
   const hasProfileInput = !planned?.compaction && request.input.some((item) => item.type === 'user_message');
   const notice = generation.notice(request.notice, false, hasProfileInput);
-  const modelInput = admitConversationTurn(turnId, request, planned, journal, capabilities, notice);
+  const admittedInput = admitConversationTurn(
+    turnId,
+    request,
+    planned,
+    journal,
+    capabilities,
+    notice,
+    persistentNotice,
+  );
+  const modelInput = persistentNotice ? withNotice(admittedInput, persistentNotice) : admittedInput;
   if (hasProfileInput || (planned?.retryNotice && generation.notice(undefined) === planned.retryNotice.text)) {
     // A resumed retry can deliver the pending startup notice itself. Never
     // consume a different pending transition on an unrelated retry.

@@ -1,9 +1,10 @@
 /**
- * config/ — settings and profiles.
+ * config/ — the settings reader contract.
  *
- * Sits beside the layer stack: any layer may read it, and it depends on no
- * other layer. Layers receive a scoped `SettingsReader` instead of reaching
- * for a global, so a session can run with settings isolated from its host.
+ * Any layer may read it, and it depends on no other layer. Tools receive a
+ * `SettingsReader` in their `ToolContext` instead of reaching for a global, so
+ * a session runs with its own settings. The concrete settings service (and
+ * profiles) are source's, constructed in `app/settings.ts`; see README.md.
  */
 
 export type SettingKey = string & { readonly __brand: 'SettingKey' };

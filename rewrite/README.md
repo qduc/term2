@@ -10,10 +10,13 @@ from `source/` (legacy term2, which remains the product spec), and nothing in
 Each folder in `src/` is one layer, named after its job. A layer may only use
 the layers listed after its name, so dependencies always point down.
 
-Production files are the `direct-*`, `turn*`, `conversation*` and `server-*`
-families plus the layer's `index.ts`. `session/adopted/` is the one adopted
-folder left: it keeps the old session-fact validator for the offline v3
-conversation migration and is not reached from the CLI.
+Every file under `src/` is reached from `src/app/cli.ts`; the reachability
+check below enforces it, and its allowlist names the five exceptions with
+reasons. `session/adopted/` is the one adopted folder left: it keeps the old
+session-fact validator for the offline v3 conversation migration and is not
+reached from the CLI. "May depend on" governs imports between these layers;
+which `src/` files may also import `source/` is a separate, named list in
+`scripts/check-layers.mjs`.
 
 | Layer       | Job                                                           | May depend on                  |
 | ----------- | ------------------------------------------------------------- | ------------------------------ |
@@ -95,7 +98,7 @@ waiting turn with `TurnHandle.answer`. Headless decides with the policy in
 `clients/headless/direct-approvals.ts`: without `--auto-approve` it denies;
 with it, it allows everything except medium- or high-risk shell commands. The
 TUI asks the user. If the process dies while it waits, reopening the
-session ends that turn as interrupted.
+session records that turn as interrupted; nothing resumes on its own.
 
 ## Keeping it readable
 
@@ -116,8 +119,14 @@ measurable:
   provider, sends one headless prompt, and records the chain of files active
   when the provider's HTTP request goes out, starting at the client's submit.
   It fails when that chain gets longer (hops) or touches more files. Today it is
-  14 hops through 14 files, one pass down the layers: clients, host, protocol,
-  session, engine, app, model, then the source provider.
+  14 hops through 14 files, each layer once: `clients/headless/direct.ts`,
+  `host/in-process-direct.ts`, `protocol/direct-commands.ts`,
+  `session/direct-session.ts`, `session/conversation-turn.ts`, `engine/turn.ts`,
+  `engine/turn-model.ts`, `app/generation-guard.ts`,
+  `app/direct-application-models.ts`, `model/provider.ts`, and four
+  `source/providers/` files. `app/` appears below `engine/` because the engine
+  calls the model registry the app injected, not because `engine/` imports
+  `app/`.
 - At the end of each phase, a fresh reader gets only this README and each
   layer's `index.ts`, and explains how a message travels and where an approval
   waits. Whatever they get wrong gets fixed in the structure or the docs before

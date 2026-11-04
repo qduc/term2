@@ -2,13 +2,18 @@
  * host/ — transport and access, nothing else.
  *
  * Hands clients a `DirectConnection` to one session. The in-process host
- * (`in-process-direct.ts`, contracts in `in-process-direct-types.ts`) owns the
- * session store, sends each wire command to `protocol/direct-commands.ts` and
- * fans the projected wire events out to every attached client. The TUI, the
- * headless client, ACP and the control socket all connect through it. The HTTP
- * server (`server.ts` and its `server-*` files) exposes the same host to the
- * gateway's web client with auth, pairing and workspace admission; it never
- * drives a turn or writes conversation state itself.
+ * (`in-process-direct.ts`, contracts in `in-process-direct-types.ts`) holds the
+ * session store the app built with `session/direct-store.ts` and disposes it on
+ * shutdown. It sends each wire command to `protocol/direct-commands.ts`.
+ * `in-process-direct-attachment.ts` keeps one projection per session and fans
+ * its wire events out, in order, to every connection to that session. The TUI,
+ * the headless client, ACP and the control socket all connect through it.
+ *
+ * The HTTP server (`server.ts` and its `server-*` files, started by
+ * `term2 serve`) exposes the same host to the gateway's web client with auth,
+ * pairing and workspace admission; it never drives a turn or writes
+ * conversation state itself. Web parity is deferred (#80): the agent-wire v2
+ * format in `server-wire-v2.ts` stays gated off.
  * Depends on: protocol, session, config.
  */
 

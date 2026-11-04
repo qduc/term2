@@ -124,7 +124,9 @@ async function startProvider(replies: Reply[], withUsage = false): Promise<strin
   return `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}/v1`;
 }
 
-it('dismisses a foreground approval to its numbered answer fallback', { timeout: TIMEOUT_MS }, async () => {
+// Legacy's approval prompt owns input: Ctrl+G does nothing (there is no numbered /answer fallback) and the
+// prompt itself approves the call.
+it('Ctrl+G leaves a foreground approval on its prompt', { timeout: TIMEOUT_MS }, async () => {
   root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-approval-fallback-e2e-')));
   const home = path.join(root, 'home');
   const workspace = path.join(root, 'workspace');
@@ -173,10 +175,11 @@ it('dismisses a foreground approval to its numbered answer fallback', { timeout:
   };
   await submit('request approval');
   await session.waitForOutput('Allow once', 60_000);
-  expect(session.getVisibleOutput()).not.toContain('/answer 1 <choice number>');
   session.write('\x07');
-  await session.waitForOutput('/answer 1 <choice number>', 30_000);
-  await submit('/answer 1 1');
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  expect(session.getVisibleOutput()).toContain('Allow this action?');
+  expect(session.getVisibleOutput()).not.toContain('/answer 1 <choice number>');
+  session.write('\r');
   await session.waitForOutput('APPROVAL_FINISHED', 30_000);
   expect(fs.readFileSync(marker, 'utf8')).toBe('approved');
 });

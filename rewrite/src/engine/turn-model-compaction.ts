@@ -18,7 +18,9 @@ export class TurnCompaction {
   #state: TurnSpec['compactionState'];
   #lastInputTokens: number | undefined;
   #blockedUntilEstimatedTokens: number | undefined;
-  #milestoneOrdinal = 0;
+  #noticeOrdinal = 0;
+  /** Legacy tells a run once that local compaction cannot shorten its history yet. */
+  #coldTurnNoticed = false;
 
   constructor(
     readonly spec: TurnSpec,
@@ -39,17 +41,19 @@ export class TurnCompaction {
   /** Legacy admits each rollover milestone reminder as a "[Mode Notice]" user message before the request. */
   async milestones(history: Item[]): Promise<boolean> {
     const reminders = this.deps.contextMilestones?.observe(this.#lastInputTokens) ?? [];
-    for (const reminder of reminders) {
-      const item: Item = {
-        type: 'summary',
-        id: `${this.spec.turnId}:milestone:${++this.#milestoneOrdinal}` as ItemId,
-        text: `[Mode Notice] ${reminder}`,
-        replaces: [],
-      };
-      await this.events.publish({ type: 'item', item });
-      history.push(item);
-    }
+    for (const reminder of reminders) await this.#notice(history, reminder);
     return reminders.length > 0;
+  }
+
+  async #notice(history: Item[], text: string): Promise<void> {
+    const item: Item = {
+      type: 'summary',
+      id: `${this.spec.turnId}:notice:${++this.#noticeOrdinal}` as ItemId,
+      text: `[Mode Notice] ${text}`,
+      replaces: [],
+    };
+    await this.events.publish({ type: 'item', item });
+    history.push(item);
   }
 
   /** A reminder defers compaction while the measured request still fits the catalog window (legacy agent-client). */
@@ -161,12 +165,15 @@ export class TurnCompaction {
       if (result.kind !== 'compacted') {
         if (result.kind === 'blocked') {
           await failed({ kind: 'blocked', reason: result.reason });
+          // Legacy fails the turn only when the history cannot fit at all; a summary that did not reduce
+          // leaves the request uncompacted.
+          if (!manual && (result.reason === 'single_turn_too_large' || result.reason === 'result_still_too_large'))
+            throw new Error(hardFitMessage(result.reason));
+          if (!manual && result.reason === 'no_complete_cold_turn' && !this.#coldTurnNoticed) {
+            this.#coldTurnNoticed = true;
+            await this.#notice(history, NO_COLD_TURN_NOTICE);
+          }
           if (!manual && attempt?.accepted) {
-            if (result.reason === 'non_reducing' || result.reason === 'result_still_too_large') {
-              throw new Error(
-                `Automatic context compaction could not make enough room (${result.reason}); use /compact or start a new conversation.`,
-              );
-            }
             const measured = Math.max(result.estimate.renderedInputTokens, this.#lastInputTokens ?? 0);
             this.#blockedUntilEstimatedTokens =
               result.estimate.renderedInputTokens +
@@ -288,6 +295,19 @@ export class TurnCompaction {
       });
     }
   }
+}
+
+const NO_COLD_TURN_NOTICE =
+  'Local compaction cannot shorten this history yet: it needs an older completed turn or settled tool rounds and preserves all user requests. ' +
+  'Continue the current work; keep outputs concise and save durable progress. If session_rollover is available, consider it at a safe idle boundary; live background work survives rollover, so do not wait for it solely to rotate. Do not repeat completed work or manufacture user turns to force compaction.';
+
+/** Legacy's ContextCompactionHardFitError text. */
+function hardFitMessage(reason: 'single_turn_too_large' | 'result_still_too_large'): string {
+  const cause =
+    reason === 'single_turn_too_large'
+      ? 'The protected recent conversation is too large to fit the configured context window'
+      : 'The compacted conversation is still too large to fit the configured context window';
+  return `${cause}. Compaction did not reduce the existing context. In the interactive app, if this session has a finalized assistant reply, /handoff can copy that latest completed reply into a fresh session. Otherwise, start a fresh session and include the current session ID plus a short summary of the unfinished request.`;
 }
 
 function toModelError(error: unknown): ModelError {

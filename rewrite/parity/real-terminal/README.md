@@ -108,3 +108,7 @@ agent), and a small command for a context-free agent to type, read screens, take
 - term2-next builds its catalogue on the first `/resume` of a fresh store copy and does not answer keys meanwhile
   (153 s on the 420 MB store at 100x34 in the first full run). Under the 5 s rule that is a failure plus a CLI
   restart; the restarted CLI may rebuild, so later resume-list keys can fail too.
+- A single screen read can catch a redraw half done (legacy erases and repaints while a reply streams). "Not at
+  the composer" counts only after it lasts 300 ms (before sending Escape) or 2 s (before restarting a CLI); an
+  instant check restarted legacy four times in the second full run.
+- Legacy refuses `/resume` while a reply streams ("cannot run while the agent is working"); term2-next opens it.

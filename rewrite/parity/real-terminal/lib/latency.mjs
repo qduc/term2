@@ -80,7 +80,9 @@ export async function runLatency(session, { phase, samples = {}, log = () => {},
     await sleep(300);
   };
 
-  const atHome = () => term.page.evaluate(new Function(`const lines = window.screenLines(); ${AT_HOME}`));
+  // A redraw can show a partial screen for a frame (legacy erases and repaints while a reply streams), so "not
+  // home" counts only once it has lasted `graceMs`.
+  const atHome = (graceMs = 300) => term.waitFor(`fn:${AT_HOME}`, graceMs).then(() => true, () => false);
   /** Back to the empty composer: Escape out of menus, clear typed text. Never sends Escape while home. */
   const ensureHome = async () => {
     for (let attempt = 0; attempt < 4 && !(await atHome()); attempt++) {
@@ -94,8 +96,10 @@ export async function runLatency(session, { phase, samples = {}, log = () => {},
     }
     // Still not home: the CLI stopped answering (a frozen UI). Replace it so a late paint cannot land in a
     // later sample.
-    if (restart && !(await atHome())) {
-      log('  CLI not answering keys, restarting it');
+    if (restart && !(await atHome(2_000))) {
+      const screen = await term.screenText();
+      log(`  CLI not answering keys, restarting it; screen:\n${screen.split('\n').map((l) => `    | ${l}`).join('\n')}`);
+      misses.push({ phase, name: 'restart', index: 0, screen: `(not back at the empty composer after Escapes; CLI restarted)\n${screen}` });
       openMenu = null;
       current = await restart(current);
       term = current.term;

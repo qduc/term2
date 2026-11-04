@@ -120,6 +120,9 @@ if (stale.length)
   );
 
 // 4. One fold: the order in which the leaf reducers combine lives in session/fold-fact.ts only.
+// Keyed on the module a reducer comes from, so every way of reaching one counts: a named or aliased import, a
+// namespace or default import, an `export *` / `export { x } from`, a dynamic import(), or a reducer name
+// exported locally. Type-only imports and the modules' other exports (predicates, initial states) stay free.
 const leafReducers = new Set([
   'reduceDirectCommandReceipts',
   'reduceDirectNotifications',
@@ -127,19 +130,60 @@ const leafReducers = new Set([
   'reduceDirectQueue',
   'reduceDirectBackground',
 ]);
+const leafModules = new Set([
+  'direct-command-receipts',
+  'direct-notifications',
+  'direct-context',
+  'direct-queue-state',
+  'direct-queue',
+  'direct-background-replay',
+]);
 const foldAllowed = new Set(['session/fold-fact.ts', 'session/direct-queue-replay.ts', 'session/direct-queue.ts']);
+const fromLeafModule = (specifier) =>
+  specifier !== undefined &&
+  ts.isStringLiteralLike(specifier) &&
+  /^\.{1,2}\//.test(specifier.text) &&
+  leafModules.has(path.basename(specifier.text).replace(/\.js$/, ''));
 for (const file of files) {
   const name = rel(file);
-  if (foldAllowed.has(name) || !/reduceDirect/.test(texts.get(file))) continue;
+  if (foldAllowed.has(name)) continue;
   const sf = parse(file);
+  const flag = (node, what) =>
+    problems.push(
+      `${name}:${lineOf(sf, node)}: ${what} (rule: one fold, call foldFact from session/fold-fact.ts instead)`,
+    );
   const visit = (node) => {
-    const spec = ts.isImportSpecifier(node) || ts.isExportSpecifier(node);
-    if (spec && leafReducers.has((node.propertyName ?? node.name).text))
-      problems.push(
-        `${name}:${lineOf(sf, node)}: imports leaf reducer '${
-          (node.propertyName ?? node.name).text
-        }' (rule: one fold, call foldFact from session/fold-fact.ts instead)`,
-      );
+    if (
+      (ts.isImportSpecifier(node) || ts.isExportSpecifier(node)) &&
+      leafReducers.has((node.propertyName ?? node.name).text)
+    )
+      flag(node, `imports leaf reducer '${(node.propertyName ?? node.name).text}'`);
+    if (
+      ts.isImportDeclaration(node) &&
+      fromLeafModule(node.moduleSpecifier) &&
+      node.importClause &&
+      !node.importClause.isTypeOnly
+    ) {
+      if (node.importClause.name) flag(node, `default-imports a leaf-reducer module '${node.moduleSpecifier.text}'`);
+      if (node.importClause.namedBindings && ts.isNamespaceImport(node.importClause.namedBindings))
+        flag(node, `namespace-imports a leaf-reducer module '${node.moduleSpecifier.text}'`);
+    }
+    if (ts.isExportDeclaration(node) && fromLeafModule(node.moduleSpecifier) && !node.isTypeOnly && !node.exportClause)
+      flag(node, `re-exports everything from a leaf-reducer module '${node.moduleSpecifier.text}'`);
+    if (
+      ts.isExportDeclaration(node) &&
+      fromLeafModule(node.moduleSpecifier) &&
+      !node.isTypeOnly &&
+      node.exportClause &&
+      ts.isNamespaceExport(node.exportClause)
+    )
+      flag(node, `re-exports a leaf-reducer module as a namespace '${node.moduleSpecifier.text}'`);
+    if (
+      ts.isCallExpression(node) &&
+      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+      fromLeafModule(node.arguments[0])
+    )
+      flag(node, `dynamically imports a leaf-reducer module '${node.arguments[0].text}'`);
     ts.forEachChild(node, visit);
   };
   visit(sf);

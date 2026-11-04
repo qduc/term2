@@ -197,12 +197,12 @@ export class DirectBackgroundTasks {
   }
 
   /** Acknowledge a stop, but retain cancelling until the admitted operation cleans up. */
-  requestStop(target: string): DirectTaskControlResult {
+  requestStop(target: string, by: 'model' | 'user' = 'user'): DirectTaskControlResult {
     if (this.#failure) throw this.#failure;
     const entry = this.#resolve(target);
     if (!entry) return { ok: false, code: 'not_found' };
     if (entry.outcome || entry.status === 'cancelling') return { ok: false, code: 'not_active' };
-    this.#accept({ type: 'task_stop_requested', taskId: entry.task.taskId, at: this.#now() });
+    this.#accept({ type: 'task_stop_requested', taskId: entry.task.taskId, at: this.#now(), by });
     entry.status = 'cancelling';
     // Close waits explicitly; do not rely on throwing from an AbortSignal listener.
     this.#interactions.cancelTask(entry.task.taskId);

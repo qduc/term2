@@ -58,8 +58,9 @@ export class ConversationBackground {
               ? directQuestionNotice(previous, fact.question)
               : fact.type === 'task_backgrounded'
               ? directTaskNotice(previous, 'background')
-              : // Legacy tells the model only about a stopped background task; a cancelled turn's own work is not one.
-              fact.type === 'task_stop_requested' && previous.mode === 'background'
+              : // Legacy tells the model only about a user's stop of a background task; a cancelled turn's own work
+              // is not one, and a model's stop answers in its own tool result.
+              fact.type === 'task_stop_requested' && previous.mode === 'background' && fact.by !== 'model'
               ? directTaskNotice(previous, 'stop')
               : fact.type === 'task_finished' && previous.mode === 'background'
               ? directTaskNotice(previous, 'finished', fact.result)
@@ -221,7 +222,7 @@ export class ConversationBackground {
         const task = get(target);
         if (!task) return { ok: false, code: 'not_found' };
         if (task.result) return { ok: false, code: 'not_active' };
-        return this.tasks.requestStop(task.taskId);
+        return this.tasks.requestStop(task.taskId, 'model');
       },
     };
   };

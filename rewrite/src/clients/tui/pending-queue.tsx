@@ -73,3 +73,22 @@ export function PendingQueue({
     </Box>
   );
 }
+
+/** Label the queue item currently being edited above the composer. */
+export function PendingQueueEdit({
+  editingId,
+  items,
+}: {
+  editingId: string | null;
+  items: readonly QueueItem[];
+}): React.ReactElement | null {
+  const theme = useTheme();
+  if (!editingId) return null;
+  return (
+    <Box>
+      <Text color={theme.accent}>
+        edit {items.find((item) => item.id === editingId)?.delivery === 'steering' ? 'steer' : 'queued'} ▸{' '}
+      </Text>
+    </Box>
+  );
+}

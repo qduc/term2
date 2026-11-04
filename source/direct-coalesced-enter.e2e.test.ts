@@ -397,7 +397,9 @@ it('finishes a reply before applying a queued steer without a stopped marker', {
   await waitForHarnessComposerValue(idlePath, 'first question', { timeoutMs: 60_000 });
   session!.write('\r');
   await session!.waitForOutput('PARTIAL-OLD-REPLY', 60_000);
-  session!.write('STEER-PROMPT\r');
+  session!.write('STEER-PROMPT');
+  await waitForHarnessComposerValue(idlePath, 'STEER-PROMPT', { timeoutMs: 30_000 });
+  session!.write('\r');
   await session!.waitForOutput('steer · mid-turn', 30_000);
   expect(received).toHaveLength(1);
   expect(hangingState.closed).toBe(false);
@@ -405,7 +407,12 @@ it('finishes a reply before applying a queued steer without a stopped marker', {
   await session!.waitForOutput('NEW-REPLY', 60_000);
   expect(received[1]).toContain('END-OF-STREAM');
   expect(received[1]).toContain('STEER-PROMPT');
-  expect(session!.getVisibleOutput()).not.toContain('Stopped');
+  const visible = session!.getVisibleOutput();
+  expect(visible).not.toContain('Stopped');
+  expect(visible.indexOf('PARTIAL-OLD-REPLY')).toBeGreaterThanOrEqual(0);
+  expect(visible.indexOf('END-OF-STREAM')).toBeGreaterThan(visible.indexOf('PARTIAL-OLD-REPLY'));
+  expect(visible.lastIndexOf('STEER-PROMPT')).toBeGreaterThan(visible.indexOf('END-OF-STREAM'));
+  expect(visible.lastIndexOf('NEW-REPLY')).toBeGreaterThan(visible.lastIndexOf('STEER-PROMPT'));
 });
 
 it.skipIf(process.platform !== 'linux')(

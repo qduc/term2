@@ -1,5 +1,4 @@
 import React, { useRef, useState } from 'react';
-import { randomUUID } from 'node:crypto';
 import { Box, Text, useInput } from 'ink';
 import { MultilineInput, type ImageRef } from 'ink-prompt';
 import type { TuiProps } from './integration.js';
@@ -9,18 +8,14 @@ import { useSkin } from './presentation/skins/SkinContext.js';
 import { terminalPreferenceDefaults } from '../../host/terminal-preference-defaults.js';
 import { useClient } from './use-client.js';
 import { ShellTaskPanel, Activity, BangResult, LiveNotices, interruptedNotice } from './views.js';
-import { PendingQueue } from './pending-queue.js';
-import { InteractionPanel } from './interaction-panel.js';
+import { PendingQueue, PendingQueueEdit } from './pending-queue.js';
 import type { InteractionInputHandler } from './interaction-input.js';
 import { runBangShell } from './bang-shell.js';
 import { useInterrupt } from './interrupt.js';
 import { runQueueCommand } from './queue-command.js';
 import { withSkillPrefix } from './skill-edit.js';
-import { PickerHost, pickerFor, openPickerFor, type PickerKind } from './picker-host.js';
+import { pickerFor, openPickerFor, type PickerKind } from './picker-host.js';
 import { isCtrlG, isCtrlT, isShiftTab, usePlanToggle } from './shift-tab.js';
-import { RewindPicker } from './rewind-picker.js';
-import { TaskManager } from './task-manager.js';
-import { BudgetPanel } from './budget-panel.js';
 import { cleanImageMarkers, primaryDraft, wireAttachments } from './draft.js';
 import { numberedInteractionAnswer } from './interaction-command.js';
 import { useSessionComposer } from './session-composer.js';
@@ -31,16 +26,15 @@ import { replaceSession } from './replace-session.js';
 import { runBridgeCommand } from './bridge-command.js';
 import { useSendConfirmation } from './send-confirmation.js';
 import { ComposerFooter, useComposerFilter, useComposerMenu } from './composer-parts.js';
+import { SessionPanels } from './session-panels.js';
+import { useSessionRewind } from './session-rewind.js';
 import {
-  answerBudget,
   answerInteraction,
   commandStatus,
-  controlTask,
   directSlashCommand,
   listRewindTargets,
   queueAction,
   receiptNotice,
-  sendNativeCommand,
   submitText,
   previewConfirmation,
   WireCommandFailure,
@@ -109,7 +103,6 @@ export function TuiSession({
   const viewport = useCommandTranscriptViewport(state, headerHeight ?? 0, viewportActive, header, historyRevision);
   const { InputFrame, PromptMarker, LiveDivider } = useSkin();
   const theme = useTheme();
-  const notifyError = (error: unknown) => setNotice(error instanceof Error ? error.message : String(error));
   const [busy, setBusy] = useState(false);
   const composerActive = !panelOpen && !confirmation.pending && !connError && !interactionActive;
   const queueItems = ['steering', 'queued'].flatMap((delivery) =>
@@ -163,21 +156,7 @@ export function TuiSession({
     if (key.meta && key.return && state.activeTurnId && !busy && !editing)
       void submit(editor.value, images, 'follow_up');
   });
-  const executeRewind = async (targetId: string, disposition: 'edit' | 'resend') => {
-    if (pending.current) return;
-    pending.current = true;
-    setBusy(true);
-    setNotice(null);
-    setRewindTargets(null);
-    try {
-      setNotice(await rewindDraft(connection, targetId, disposition));
-    } catch (error) {
-      notifyError(error);
-    } finally {
-      pending.current = false;
-      setBusy(false);
-    }
-  };
+  const executeRewind = useSessionRewind({ connection, pending, rewindDraft, setBusy, setNotice, setRewindTargets });
   const submit = async (
     input: string,
     submittedImages: ImageRef[] = images,
@@ -399,64 +378,33 @@ export function TuiSession({
       ) : null}
       <Box flexDirection="column" paddingX={2} marginTop={state.activeTurnId ? 1 : state.messages.length ? 3 : 2}>
         <Activity state={state} dialogInteractionId={foregroundInteraction?.id} notice={notice} />
-        {picker ? (
-          <PickerHost
-            kind={picker}
-            integration={integration}
-            connection={connection}
-            inputHandler={interactionInput}
-            close={() => setPicker(null)}
-            onNotice={setNotice}
-            switchSession={switchSession}
-          />
-        ) : null}
-        {budgetOpen ? (
-          <BudgetPanel
-            requests={state.budgets}
-            onClose={() => setBudgetOpen(false)}
-            onAnswer={(id, decision) => answerBudget(connection, id, decision)}
-          />
-        ) : null}
-        {taskOpen ? (
-          <TaskManager
-            tasks={state.tasks}
-            onClose={() => setTaskOpen(false)}
-            onAction={(id, action) => controlTask(connection, id, action)}
-          />
-        ) : null}
-        {rewindTargets ? (
-          <RewindPicker
-            targets={rewindTargets}
-            onClose={() => setRewindTargets(null)}
-            onSelect={(id, disposition) => {
-              void executeRewind(id, disposition);
-            }}
-          />
-        ) : null}
-
-        {interactionActive ? (
-          <InteractionPanel
-            key={foregroundInteraction?.id ?? 'picker'}
-            interactions={state.interactions}
-            width={columns}
-            initialRequestId={foregroundInteraction?.id}
-            inputHandler={interactionInput}
-            onClose={() => {
-              setDismissedInteractionId(rootInteraction?.id ?? null);
-              setInteractionOpen(false);
-            }}
-            onCancel={
-              foregroundInteraction
-                ? async () => {
-                    if (foregroundInteraction.kind === 'question')
-                      await answerInteraction(connection, foregroundInteraction.id, { kind: 'decline' });
-                    else setNotice(await cancelInput(connection, foregroundInteraction.turnId));
-                  }
-                : undefined
-            }
-            onAnswer={(id, decision) => answerInteraction(connection, id, decision)}
-          />
-        ) : null}
+        <SessionPanels
+          {...{
+            picker,
+            integration,
+            connection,
+            interactionInput,
+            switchSession,
+            budgetOpen,
+            taskOpen,
+            rewindTargets,
+            state,
+            interactionActive,
+            foregroundInteraction,
+            columns,
+            executeRewind,
+            cancelInput,
+          }}
+          onNotice={setNotice}
+          closePicker={() => setPicker(null)}
+          closeBudget={() => setBudgetOpen(false)}
+          closeTask={() => setTaskOpen(false)}
+          closeRewind={() => setRewindTargets(null)}
+          closeInteraction={() => {
+            setDismissedInteractionId(rootInteraction?.id ?? null);
+            setInteractionOpen(false);
+          }}
+        />
         <LiveNotices connectionError={connError} transitionNotice={transitionNotice} />
         {confirmation.prompt}
         <LiveNotices notice={notice} historyError={editor.historyError} />
@@ -470,13 +418,7 @@ export function TuiSession({
           editingId={editing?.id ?? null}
           notice={queueNotice}
         />
-        {editing ? (
-          <Box>
-            <Text color={theme.accent}>
-              edit {queueItems.find((item) => item.id === editing.id)?.delivery === 'steering' ? 'steer' : 'queued'} ▸{' '}
-            </Text>
-          </Box>
-        ) : null}
+        <PendingQueueEdit editingId={editing?.id ?? null} items={queueItems} />
         <InputFrame>
           <PromptMarker mode="input" />
           <MultilineInput

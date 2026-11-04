@@ -153,12 +153,11 @@ export function createDirectGoalVerifier(deps: {
     // Generation/revision/configuration changes are not new tasks. Old facts
     // without a pin used defaults, even if today's setting has changed.
     const limits = attempts.length ? attempts[0]!.limits ?? defaultLimits() : newTaskLimits;
+    // Legacy settles every block as the task's final state; only a new goal starts over.
+    if (attempts.some((attempt) => attempt.outcome === 'blocked'))
+      return blocked('Task contract changed or task is terminal; explicit administrative recovery required');
     if (attempts.some((attempt) => !attempt.outcome))
       return blocked('An earlier verification is unfinished; explicit recovery is required');
-    // A repair that left the repository as it was is not progress; legacy stops here, before any gate.
-    const revisionNow = await deps.operations.currentRevision(signal).catch(() => undefined);
-    if (attempts.length && revisionNow !== undefined && attempts.at(-1)!.proposal.revision === revisionNow)
-      return blocked('Repair made no repository progress');
     if (attempts.length >= limits.maxGateAttempts) return blocked('Completion gate attempt budget exhausted');
     const attemptId = randomUUID();
     let started = false;
@@ -184,6 +183,9 @@ export function createDirectGoalVerifier(deps: {
         { type: 'completion_verification_started', attemptId, goalGeneration: state.generation, proposal, limits },
       ]);
       started = true;
+      // A repair that left the repository as it was is not progress; legacy blocks the task here, before any gate.
+      if (attempts.length && attempts.at(-1)!.proposal.revision === proposal.revision)
+        throw new Error('Repair made no repository progress');
       let decision: GateDecision = {
         action: 'independent_verify',
         policyVersion: POLICY_VERSION,
@@ -230,13 +232,15 @@ export function createDirectGoalVerifier(deps: {
         throw new Error('Workspace changed during verification');
       if (report && report.outcome !== 'PASS') {
         const repairs = attempts.filter((attempt) => attempt.outcome === 'repair').length;
-        if (report.outcome === 'FAIL' && repairs < limits.maxRepairs) {
+        // Legacy also stops a repair that fails with the very same evidence as the previous report.
+        const previousEvidence = attempts.filter((attempt) => attempt.report).at(-1)?.report?.evidence;
+        if (report.outcome === 'FAIL' && repairs < limits.maxRepairs && previousEvidence !== report.evidence) {
           await end('repair', report.evidence);
           return { action: 'repair', evidence: report.evidence };
         }
         const reason =
           report.outcome === 'FAIL'
-            ? 'Repair budget exhausted'
+            ? 'Repair budget, deadline, or repeated-failure limit reached'
             : `Independent verification ${report.outcome.toLowerCase()}`;
         await end('blocked', reason);
         return blocked(reason, report.outcome !== 'FAIL');

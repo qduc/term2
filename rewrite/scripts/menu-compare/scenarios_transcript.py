@@ -20,6 +20,7 @@ _TURNS = ['first question', '<enter>', '<sleep>', 'second question', '<enter>', 
 SCENARIOS = {
     't-startup': [],
     't-markdown': ['show me markdown', '<enter>', '<sleep>'],
+    't-markdown-stream': ['show me markdown', '<enter>', '<sleep>', '<sleep>'],
     't-long': ['say something long', '<enter>', '<sleep>'],
     't-turns': _TURNS,
     't-stream': ['stream please', '<enter>', '<sleep>'],
@@ -47,6 +48,7 @@ SCENARIOS = {
 
 SEED = {
     't-markdown': {'replies': [{'text': _MD}], 'usage': _USAGE},
+    't-markdown-stream': {'replies': [{'text': _MD, 'chunks': 20, 'delay': 0.15}], 'usage': _USAGE},
     't-long': {'replies': [{'text': _LONG}], 'usage': _USAGE},
     't-turns': {'replies': [{'text': 'Answer one.'}, {'text': 'Answer two.'}, {'text': 'Answer three.'}],
                 'usage': _USAGE},

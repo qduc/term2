@@ -32,6 +32,7 @@ import type {
   SubagentRunHandle,
 } from '../../../source/services/subagents/types.js';
 import { SUBAGENT_ROLES } from '../../../source/services/subagents/types.js';
+import { DirectSubagentSessions } from './direct-subagent-sessions.js';
 import {
   SUBAGENT_RUN_NAME_PATTERN,
   SubagentRegistryError,
@@ -126,6 +127,11 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
   // native Tool.execute entries, never model-requested tool_call items.
   const preparedEvidence = new WeakMap<NestedRunRequest, ExecutionEvidence>();
   const executionEvidence = new Map<string, ExecutionEvidence>();
+  const sessions = new DirectSubagentSessions();
+  const preparedSessions = new WeakMap<
+    NestedRunRequest,
+    { readonly key: string | undefined; readonly definition: SubagentDefinition }
+  >();
   const current = (): ToolContext => {
     const context = scope.getStore();
     if (!context) throw new Error('Subagent operation has no admitted direct tool execution');
@@ -143,14 +149,17 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
     params: Launch,
     mode: 'foreground' | 'background',
   ): Promise<NestedRunRequest & { readonly input: string }> => {
-    current();
-    if (params.continue_run_id)
-      throw new Error('Continuing a prior subagent run is not available in the native Session');
+    const prior = sessions.prior(params, mode, current().subagents);
     const planMode = resolveActiveEnforcement(settings).denials.has('filesystem-mutation');
     let definition: SubagentDefinition;
     let task: string;
     let authorizedPath: string | undefined;
-    if (params.agent_spec) {
+    if (prior?.definition) {
+      // Legacy: a continuation keeps the definition and model it ran with; no second pool draw.
+      definition = prior.definition;
+      task = params.task ?? params.agent_spec?.goal ?? '';
+      authorizedPath = params.authorizedWorktreePath;
+    } else if (params.agent_spec) {
       // run_code's boundary already resolved a script child; run_subagent's own spec resolves once here.
       const resolved =
         params.resolvedDefinition ??
@@ -361,6 +370,7 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
         skillsService,
       ),
       items: Object.freeze([
+        ...(prior?.history ?? []),
         { type: 'user_message' as const, id: randomUUID() as ItemId, content: [{ type: 'text' as const, text: task }] },
       ]),
       toolNames: Object.freeze(wrapped.map((tool) => tool.name)),
@@ -376,6 +386,7 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
       Object.freeze({ request, workspace, tools: countedRegistry, role: definition.role, label: task }),
     );
     preparedEvidence.set(request, evidence);
+    preparedSessions.set(request, { key: prior?.key, definition });
     return request;
   };
   const run = async (params: Launch): Promise<SubagentResult> => {
@@ -400,6 +411,8 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
     if (result.outcome.kind !== 'background')
       throw new Error(`Subagent admission did not return a background task: ${result.outcome.kind}`);
     executionEvidence.set(result.outcome.runId, preparedEvidence.get(request)!);
+    const session = preparedSessions.get(request)!;
+    sessions.record(result.outcome.runId, request.role ?? 'agent', session.key, request.items, session.definition);
     return {
       runId: result.outcome.runId,
       ...(params.name ? { name: params.name } : {}),

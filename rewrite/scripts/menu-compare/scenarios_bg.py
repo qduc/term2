@@ -99,3 +99,19 @@ SEED['bg-bad-name'] = dict(_child({'execution': 'background', 'role': 'explorer'
 SCENARIOS['bad-shell-args'] = _GO
 SEED['bad-shell-args'] = dict(_BG, settings={}, routes=[])
 SEED['bad-shell-args']['replies'] = [{'tool': 'shell', 'args': {'cmd': 'ls'}}, {'text': 'launched'}]
+
+# Legacy session reuse: a second background librarian run carries the first one's conversation.
+SCENARIOS['bg-librarian-reuse'] = _GO + ['again', '<enter>', '<sleep>', '<sleep>']
+SEED['bg-librarian-reuse'] = dict(_BG, settings={}, files={})
+SEED['bg-librarian-reuse']['replies'] = [
+    {'tool': 'run_subagent', 'args': {'execution': 'background', 'role': 'librarian', 'task': 'LIBONE recall'}},
+    {'text': 'launched'},
+    {'text': 'noted'},
+    {'tool': 'run_subagent', 'args': {'execution': 'background', 'role': 'librarian', 'task': 'LIBTWO recall'}},
+    {'text': 'launched again'},
+    {'text': 'noted again'},
+]
+SEED['bg-librarian-reuse']['routes'] = [{'match': 'LIB', 'replies': [{'text': 'lib one done'}, {'text': 'lib two done'}]}]
+# continue_run_id of an unknown run: legacy's not_found error.
+SCENARIOS['bg-continue-unknown'] = _GO
+SEED['bg-continue-unknown'] = dict(_child({'execution': 'background', 'role': 'explorer', 'task': 'SUBTASK more', 'continue_run_id': 'nope'}), settings={})

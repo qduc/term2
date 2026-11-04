@@ -73,6 +73,16 @@ class Provider(BaseHTTPRequestHandler):
         else:
             reply = Provider.replies[min(Provider.posts, len(Provider.replies) - 1)]
             Provider.posts += 1
+        if 'status' in reply:  # a failed request, e.g. {'status': 503, 'retry_after': seconds}
+            body = json.dumps({'error': {'message': 'Service unavailable', 'type': 'server_error'}}).encode()
+            self.send_response(reply['status'])
+            self.send_header('content-type', 'application/json')
+            if 'retry_after' in reply:
+                self.send_header('retry-after', str(reply['retry_after']))
+            self.send_header('content-length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         self.send_response(200)
         self.send_header('content-type', 'text/event-stream')
         self.end_headers()
@@ -82,13 +92,23 @@ class Provider(BaseHTTPRequestHandler):
                      'choices': [{'index': 0, 'delta': delta, 'finish_reason': finish}]}
             self.wfile.write(b'data: ' + json.dumps(chunk).encode() + b'\n\n')
 
+        if reply.get('empty'):  # a stream with no response at all
+            self.wfile.write(b'data: [DONE]\n\n')
+            return
         if 'tool' in reply:
             time.sleep(reply.get('delay', 0))  # lets a scenario type a draft before the approval opens
+            arguments = reply['raw_args'] if 'raw_args' in reply else json.dumps(reply['args'])
+            # '$RUNID' in a reply's args is the last run ID the request shows (a continue_run_id).
+            contents = ' '.join(str(m.get('content')) for m in body.get('messages', []))
+            run_ids = re.findall(r'"runId":"([\w-]+)"', contents)
+            if run_ids:
+                arguments = arguments.replace('$RUNID', run_ids[-1])
             call = {'index': 0, 'id': f'call{Provider.posts}', 'type': 'function',
-                    'function': {'name': reply['tool'], 'arguments': json.dumps(reply['args'])}}
+                    'function': {'name': reply['tool'], 'arguments': arguments}}
             event({'role': 'assistant', 'tool_calls': [call]})
             event({}, 'tool_calls')
         else:
+            time.sleep(reply.get('delay', 0))  # an open stream with no output yet
             event({'role': 'assistant', 'content': reply['text']})
             if reply.get('hold'):  # keep the turn streaming so a scenario can act mid-turn
                 self.wfile.flush()

@@ -115,3 +115,64 @@ SEED['bg-librarian-reuse']['routes'] = [{'match': 'LIB', 'replies': [{'text': 'l
 # continue_run_id of an unknown run: legacy's not_found error.
 SCENARIOS['bg-continue-unknown'] = _GO
 SEED['bg-continue-unknown'] = dict(_child({'execution': 'background', 'role': 'explorer', 'task': 'SUBTASK more', 'continue_run_id': 'nope'}), settings={})
+
+# continue_run_id of a completed run: the continuation keeps the run's ID and carries its conversation.
+SCENARIOS['bg-continue'] = _GO + ['again', '<enter>', '<sleep>', '<sleep>']
+SEED['bg-continue'] = dict(_BG, settings={}, files={})
+SEED['bg-continue']['replies'] = [
+    {'tool': 'run_subagent', 'args': {'execution': 'background', 'role': 'explorer', 'task': 'SUBTASK one'}},
+    {'text': 'launched'},
+    {'text': 'noted'},
+    {'tool': 'run_subagent', 'args': {'execution': 'background', 'role': 'explorer', 'task': 'SUBTASK two',
+                                      'continue_run_id': '$RUNID'}},
+    {'text': 'launched again'},
+    {'text': 'noted again'},
+]
+SEED['bg-continue']['routes'] = [{'match': 'SUBTASK', 'replies': [{'text': 'sub one done'}, {'text': 'sub two done'}]}]
+
+# A background worker's file write: its completion notice carries Diff stat and Files changed.
+SCENARIOS['bg-worker-file'] = _GO + ['<sleep>']
+SEED['bg-worker-file'] = dict(_BG, settings={}, files={})
+SEED['bg-worker-file']['replies'] = [
+    {'tool': 'run_subagent', 'args': {'execution': 'background', 'role': 'worker', 'task': 'SUBTASK write a file'}},
+    {'text': 'launched'},
+    {'text': 'noted'},
+]
+SEED['bg-worker-file']['routes'] = SEED['script-child-file']['routes']
+
+# A background worker pinned to a missing worktree: a failed run with the pin error, not a launch refusal.
+SCENARIOS['bg-worktree-missing'] = _GO + ['<sleep>']
+SEED['bg-worktree-missing'] = dict(_BG, settings={}, files={})
+SEED['bg-worktree-missing']['replies'] = [
+    {'tool': 'run_subagent', 'args': {'execution': 'background', 'role': 'worker', 'task': 'SUBTASK write a file',
+                                      'worktree': 'nowhere'}},
+    {'text': 'launched'},
+    {'text': 'noted'},
+]
+
+# A background child's provider retry: the ^G manager's Last observed row names it.
+SCENARIOS['bg-retry-manage'] = _GO + ['<c-g>', '<sleep>', '<enter>', '<sleep>']
+SEED['bg-retry-manage'] = dict(_BG, files={}, settings={'agent': {'retryAttempts': 2, 'modelSelection': {'model': 'mock-alpha', 'provider': 'mockprov'}}})
+SEED['bg-retry-manage']['replies'] = [
+    {'tool': 'run_subagent', 'args': {'execution': 'background', 'role': 'explorer', 'task': 'SUBTASK look'}},
+    {'text': 'launched'},
+    {'text': 'noted'},
+]
+SEED['bg-retry-manage']['routes'] = [{'match': 'SUBTASK', 'replies': [{'status': 429}, {'text': 'child done', 'delay': 30}]}]
+
+# A background child's hallucinated tool: legacy's model-behavior retry, which Last activity names.
+SCENARIOS['bg-badtool-manage'] = SCENARIOS['bg-retry-manage']
+SEED['bg-badtool-manage'] = dict(SEED['bg-retry-manage'])
+SEED['bg-badtool-manage']['routes'] = [{'match': 'SUBTASK', 'replies': [
+    {'tool': 'frobnicate', 'args': {}}, {'text': 'child done', 'delay': 30}]}]
+
+# A background child's unparseable tool arguments.
+SCENARIOS['bg-badjson-manage'] = SCENARIOS['bg-retry-manage']
+SEED['bg-badjson-manage'] = dict(SEED['bg-retry-manage'])
+SEED['bg-badjson-manage']['routes'] = [{'match': 'SUBTASK', 'replies': [
+    {'tool': 'read_file', 'raw_args': '{"path": "x', 'args': {}}, {'text': 'child done', 'delay': 30}]}]
+
+# A background child's empty model response: legacy's model-behavior retry ("Retrying 1 of 2").
+SCENARIOS['bg-empty-manage'] = SCENARIOS['bg-retry-manage']
+SEED['bg-empty-manage'] = dict(SEED['bg-retry-manage'])
+SEED['bg-empty-manage']['routes'] = [{'match': 'SUBTASK', 'replies': [{'empty': True}, {'text': 'child done', 'delay': 30}]}]

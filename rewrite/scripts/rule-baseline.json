@@ -40,7 +40,6 @@
     "clients/tui/presentation/utils/ai/token-usage.ts normalizeUsage",
     "clients/tui/presentation/utils/streaming/streaming-speed-tracker.ts DEFAULT_CHARS_PER_TOKEN",
     "clients/tui/terminal.ts TERMINAL_REDRAW_CLEAR",
-    "clients/tui/views.tsx compactFailureMessage",
     "engine/direct-recovery.ts recoveryDelay",
     "host/server-contracts.ts ASSERTION_PURPOSES",
     "host/server-sse.ts SERVER_EVENT_HEARTBEAT_INTERVAL_MS",

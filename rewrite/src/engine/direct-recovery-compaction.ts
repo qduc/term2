@@ -134,18 +134,16 @@ export async function compactDirectHistory(input: DirectCompactionInput): Promis
     await start();
     input.signal.throwIfAborted();
   }
-  // The setting schedules automatic maintenance; an explicit compact command
-  // is independent, as in the source Session's compactContext manual path.
+  // The setting schedules automatic maintenance; an explicit compact command is independent (source compactContext).
   if (!input.manual && !input.settings.enabled) return { kind: 'blocked', reason: 'disabled', estimate };
   const policy = resolveModelContextPolicy({
     contextWindow: input.contextWindow,
     maxOutputTokens: input.request.maxOutputTokens,
     inputLimit: input.maxRequestInputTokens,
     ratio: input.settings.compactThreshold,
-    // Legacy's manual compaction passes no raw trigger (session-composition compactThresholdTokens: null).
     rawTrigger: input.manual ? undefined : input.settings.compactThresholdTokens,
   });
-  // Legacy's local compactor refuses a manual compaction it cannot size, before anything else.
+  // Legacy's manual compaction passes no raw trigger, so its local compactor refuses a model it cannot size.
   if (input.manual && strategy === 'local' && policy.softTrigger === undefined)
     throw new Error('Set agent.contextCompaction.compactThresholdTokens for an uncatalogued model');
   if (!hasCompleteDirectToolPairs(input.request.input)) return { kind: 'blocked', reason: 'unsettled_tools', estimate };

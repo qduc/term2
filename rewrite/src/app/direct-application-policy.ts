@@ -10,6 +10,7 @@ import { readRunBudgetPolicy } from '../engine/direct-recovery-budget.js';
 import { DirectContinuity } from '../engine/direct-recovery-continuity.js';
 import type { ModelRef } from '../model/index.js';
 import type { DirectConversationRuntime } from '../session/direct-store.js';
+import { ContextMilestoneReminder } from '../../../source/services/agent-runtime/context-compaction/context-milestone-reminder.js';
 import type { ProfileSelection } from './tool-contract.js';
 
 type RuntimeDeps = DirectConversationRuntime['deps'];
@@ -48,5 +49,34 @@ export function runPolicy(
       maxRequestInputTokens: settings.get('agent.maxRequestInputTokens'),
     },
     ...(endpoint ? { continuity: { binding: { origin: sessionId, endpoint }, state: new DirectContinuity() } } : {}),
+  };
+}
+
+/**
+ * One session's rollover milestone reminders (legacy agent-client). Settings are read at each request boundary; a
+ * turn without its own completed request falls back to the last one an earlier turn completed. A rollover (a new
+ * backing session) starts over, as legacy's rolloverRootContext does.
+ */
+export function contextMilestones(settings: { get(key: string): unknown }, backingSessionId: () => string) {
+  let reminder = new ContextMilestoneReminder();
+  let last: number | undefined;
+  let session = backingSessionId();
+  const sameSession = (): boolean => {
+    if (backingSessionId() === session) return true;
+    session = backingSessionId();
+    reminder = new ContextMilestoneReminder();
+    last = undefined;
+    return false;
+  };
+  return {
+    observe: (lastInputTokens: number | undefined): readonly string[] =>
+      reminder.observe((sameSession() ? lastInputTokens : undefined) ?? last, {
+        enabled: (settings.get('agent.sessionRollover.enabled') as boolean | undefined) ?? true,
+        milestones: (settings.get('agent.sessionRollover.milestones') as readonly number[] | undefined) ?? [],
+        autoBrief: (settings.get('agent.sessionRollover.autoBrief') as boolean | undefined) ?? true,
+      }),
+    settle: (lastInputTokens: number | undefined): void => {
+      if (sameSession() && lastInputTokens !== undefined) last = lastInputTokens;
+    },
   };
 }

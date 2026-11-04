@@ -32,7 +32,7 @@ import { prepareDirectConfiguration } from './direct-config-runtime.js';
 import { createDirectConfigSettings, type DirectAppConfiguration } from './direct-config-settings.js';
 import { readDirectInputPreviewConfiguration } from './direct-input-preview.js';
 import { createDirectSessionMemory, directMainMemoryEnabled } from './direct-memory.js';
-import { runPolicy } from './direct-application-policy.js';
+import { contextMilestones, runPolicy } from './direct-application-policy.js';
 import { createDirectVerificationOperations } from './direct-verifier.js';
 import { withGenerationGuard } from './generation-guard.js';
 import { createSettingsService, type SettingsService } from './settings.js';
@@ -403,6 +403,7 @@ export function createDirectRuntimes(
           unattended: !interactive,
           nativeToolSlots: surface.runtime.nativeToolSlots,
           modelRollover: surfaceOptions.sessionBrowser === true && surface.runtime.nativeToolSlots.sessions,
+          contextMilestones: contextMilestones(settings, () => port.backingSessionId),
         };
         installed = { ...installed, bound: { port, capabilities } };
         return capabilities;

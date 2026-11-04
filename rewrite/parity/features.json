@@ -1717,34 +1717,37 @@
       }
     },
     "setting:agent.sessionRollover.autoBrief": {
-      "status": "todo",
+      "status": "in_progress",
       "source": "source/services/settings/settings-schema.ts",
       "parity": [],
       "measurement": {
         "revision": "97591a7d7e41548f9ae3b8dc65763de8cc0f8c32",
         "verdict": "absent",
         "evidence": "m6-inventory-measure-evidence/setting-agent-probe-result.json#setting:agent.sessionRollover.autoBrief"
-      }
+      },
+      "note": "solo/tools: autoBrief adds legacy's \"externalize the necessary state in a durable artifact and\" clause to the reminder text. Evidence: side-by-side pty captures with a fake provider (milestones [3000, 6000] over four turns; a mid-turn milestone after a tool call plus a reconsideration at 60,000 with autoBrief false; reminders across a session_rollover; a resume, where both engines drop the saved reminders): every provider request byte-equal after id/time masking. No parity scenario covers it."
     },
     "setting:agent.sessionRollover.enabled": {
-      "status": "todo",
+      "status": "in_progress",
       "source": "source/services/settings/settings-schema.ts",
       "parity": [],
       "measurement": {
         "revision": "97591a7d7e41548f9ae3b8dc65763de8cc0f8c32",
         "verdict": "absent",
         "evidence": "m6-inventory-measure-evidence/setting-agent-probe-result.json#setting:agent.sessionRollover.enabled"
-      }
+      },
+      "note": "solo/tools: next ports legacy's ContextMilestoneReminder (rewrite/src/app/direct-application-policy.ts contextMilestones, engine hook in turn-model-compaction.ts). agent.sessionRollover.enabled turns the reminders off; default true as in legacy. Evidence: side-by-side pty captures with a fake provider (milestones [3000, 6000] over four turns; a mid-turn milestone after a tool call plus a reconsideration at 60,000 with autoBrief false; reminders across a session_rollover; a resume, where both engines drop the saved reminders): every provider request byte-equal after id/time masking. No parity scenario covers it."
     },
     "setting:agent.sessionRollover.milestones": {
-      "status": "todo",
+      "status": "in_progress",
       "source": "source/services/settings/settings-schema.ts",
       "parity": [],
       "measurement": {
         "revision": "97591a7d7e41548f9ae3b8dc65763de8cc0f8c32",
         "verdict": "absent",
         "evidence": "m6-inventory-measure-evidence/setting-agent-probe-result.json#setting:agent.sessionRollover.milestones"
-      }
+      },
+      "note": "solo/tools: each configured milestone fires once per session, at the first request boundary whose last completed provider input tokens reach it, as a \"[Mode Notice]\" user message kept in later requests; a reconsideration reminder follows every 50,000 tokens. Reset on rollover; a reminder defers compaction when the request still fits the catalog window. Evidence: side-by-side pty captures with a fake provider (milestones [3000, 6000] over four turns; a mid-turn milestone after a tool call plus a reconsideration at 60,000 with autoBrief false; reminders across a session_rollover; a resume, where both engines drop the saved reminders): every provider request byte-equal after id/time masking. No parity scenario covers it."
     },
     "setting:agent.smartModel": {
       "status": "todo",

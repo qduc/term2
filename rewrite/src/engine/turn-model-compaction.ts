@@ -1,7 +1,7 @@
 /** Compaction proposal and summary lifecycle; TurnModel retains root request recovery. */
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
-import type { Item, Model, ModelError, ModelEvent, ModelRequest, Usage } from '../model/index.js';
+import type { Item, ItemId, Model, ModelError, ModelEvent, ModelRequest, Usage } from '../model/index.js';
 import type { DirectCompactionResult, DirectCompactionRequest } from './direct-recovery-compaction.js';
 import { compactDirectHistory } from './direct-recovery-compaction.js';
 import { estimateDirectContext } from './direct-context-estimate.js';
@@ -18,6 +18,7 @@ export class TurnCompaction {
   #state: TurnSpec['compactionState'];
   #lastInputTokens: number | undefined;
   #blockedUntilEstimatedTokens: number | undefined;
+  #milestoneOrdinal = 0;
 
   constructor(
     readonly spec: TurnSpec,
@@ -33,6 +34,37 @@ export class TurnCompaction {
     readonly acceptedReplacement: () => void,
   ) {
     this.#state = spec.compactionState;
+  }
+
+  /** Legacy admits each rollover milestone reminder as a "[Mode Notice]" user message before the request. */
+  async milestones(history: Item[]): Promise<boolean> {
+    const reminders = this.deps.contextMilestones?.observe(this.#lastInputTokens) ?? [];
+    for (const reminder of reminders) {
+      const item: Item = {
+        type: 'summary',
+        id: `${this.spec.turnId}:milestone:${++this.#milestoneOrdinal}` as ItemId,
+        text: `[Mode Notice] ${reminder}`,
+        replaces: [],
+      };
+      await this.events.publish({ type: 'item', item });
+      history.push(item);
+    }
+    return reminders.length > 0;
+  }
+
+  /** A reminder defers compaction while the measured request still fits the catalog window (legacy agent-client). */
+  canDefer(request: ModelRequest): boolean {
+    const contextWindow = this.deps.models.resolve(request.model).catalogContextWindow;
+    if (contextWindow === undefined) return false;
+    const estimate = estimateDirectContext(request, contextWindow);
+    return (
+      estimate.hardFitTokens + Math.max(0, (this.#lastInputTokens ?? 0) - estimate.renderedInputTokens) <= contextWindow
+    );
+  }
+
+  /** The turn ended: hand its last completed input tokens to the next turn's reminders. */
+  settleMilestones(): void {
+    this.deps.contextMilestones?.settle(this.#lastInputTokens);
   }
 
   recordInputTokens(inputTokens: number | undefined): void {

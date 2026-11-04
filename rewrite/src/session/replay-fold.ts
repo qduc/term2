@@ -116,8 +116,8 @@ export function createReplayFold(): ReplayFold {
   /** Facts consumed so far, and each cancelled turn with the index of its end. */
   let consumed = 0;
   const cancelledTurns: { readonly turn: ActiveTurn; readonly index: number }[] = [];
-  /** The fact index of each tool call, so a later process can tell the calls it resumed (ReplayOptions.openedAt). */
-  const callFacts = new Map<Item['id'], number>();
+  /** The fact index of each tool call and mode notice, so a later process can tell those it resumed (openedAt). */
+  const itemFacts = new Map<Item['id'], number>();
   const consume = (fact: Fact): void => {
     consumed++;
     // Display observations never enter provider slots, admission or lifecycle state.
@@ -257,7 +257,7 @@ export function createReplayFold(): ReplayFold {
         break;
       }
       case 'item':
-        if (fact.item.type === 'tool_call') callFacts.set(fact.item.id, consumed - 1);
+        if (fact.item.type === 'tool_call' || isModeNotice(fact.item)) itemFacts.set(fact.item.id, consumed - 1);
         appendReplayItem(requireActive(fact.turnId, fact.type), fact, slots);
         break;
       case 'tool_started':
@@ -438,9 +438,7 @@ export function createReplayFold(): ReplayFold {
     recoveryFacts.push(...background.recoveryFacts);
     return {
       status: unfinished() !== null || lastOutcome === 'interrupted' ? 'interrupted' : 'idle',
-      history: slots.flatMap(({ item }) =>
-        item === null ? [] : [resumedCall(item, callFacts, options.openedAt ?? 0)],
-      ),
+      history: slots.flatMap(({ item }) => (item === null ? [] : resumedItem(item, itemFacts, options.openedAt ?? 0))),
       nextTurn: queue.nextTurn,
       recoveryFacts,
       queue: queue.state,
@@ -456,14 +454,18 @@ export function createReplayFold(): ReplayFold {
   return { consume, finish };
 }
 
+function isModeNotice(item: Item): boolean {
+  return item.type === 'summary' && item.text.startsWith('[Mode Notice]');
+}
+
 /**
- * Legacy re-serializes a call's arguments when it loads a saved conversation, so a call made before this process
- * opened the session is sent as compact JSON rather than the provider's raw string.
+ * An item from before this process opened the session, as legacy reloads it: a saved conversation keeps no
+ * harness "[Mode Notice]" reminders, and a call's arguments are re-serialized as compact JSON.
  */
-function resumedCall(item: Item, callFacts: ReadonlyMap<Item['id'], number>, openedAt: number): Item {
-  if (item.type !== 'tool_call' || item.rawArguments === undefined || (callFacts.get(item.id) ?? 0) >= openedAt) {
-    return item;
-  }
+function resumedItem(item: Item, itemFacts: ReadonlyMap<Item['id'], number>, openedAt: number): Item[] {
+  if ((itemFacts.get(item.id) ?? openedAt) >= openedAt) return [item];
+  if (isModeNotice(item)) return [];
+  if (item.type !== 'tool_call' || item.rawArguments === undefined) return [item];
   const { rawArguments: _raw, argumentsSnapshot: _snapshot, ...call } = item;
-  return call;
+  return [call];
 }

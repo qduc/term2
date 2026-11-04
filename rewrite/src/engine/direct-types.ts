@@ -124,6 +124,14 @@ export type TurnDeps = {
   ) =>
     | { readonly request: ModelRequest; readonly tools?: ToolRegistry }
     | Promise<{ readonly request: ModelRequest; readonly tools?: ToolRegistry }>;
+  /**
+   * Session rollover milestone reminders due at a request boundary, from the last completed provider input tokens
+   * (undefined when this turn has none yet). `settle` hands the turn's last value on to the next turn.
+   */
+  readonly contextMilestones?: {
+    observe(lastInputTokens: number | undefined): readonly string[];
+    settle(lastInputTokens: number | undefined): void;
+  };
   readonly normalStop?: (context: {
     readonly turnId: TurnId;
     readonly signal: AbortSignal;

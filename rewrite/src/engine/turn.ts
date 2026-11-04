@@ -203,6 +203,7 @@ async function drive(
     events.cancel();
   } finally {
     if (signal.aborted || result.kind !== 'completed') model.clear();
+    if (result.kind !== 'cancelled' && result.kind !== 'failed') model.settleMilestones();
     // Release before cleanup: a tool may own a still-gated child it must join.
     deps.onTurnBoundary?.({ turnId: spec.turnId, kind: 'ended' });
     // Session cannot go idle while root/scripted descendants still have bodies.

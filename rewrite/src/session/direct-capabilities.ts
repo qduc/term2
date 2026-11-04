@@ -46,6 +46,8 @@ export type DirectContextCapabilities = {
     readonly beforeGoal: readonly string[];
     readonly sessions: boolean;
   };
+  /** Rollover milestone reminders for this session's root turns; a successor session gets fresh ones. */
+  readonly contextMilestones?: import('../engine/index.js').TurnDeps['contextMilestones'];
   /** Model-facing rollover availability is distinct from native rollover control. */
   readonly modelRollover?: boolean;
   readonly automaticMemory?: (input: {

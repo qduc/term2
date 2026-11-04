@@ -162,9 +162,11 @@ export class TurnModel {
     retry?: Retry,
   ): Promise<{ request: ModelRequest; modelStep: number; ticket?: number }> {
     await this.#steering(history);
+    const reminded = !retry && (await this.#compaction.milestones(history));
     const preflight = await this.#request(history, this.#step + 1);
     // A reserved recovery dispatch belongs to the main request, never a summary.
-    if (!retry) await this.#compaction.compact(preflight.request, history);
+    if (!retry && !(reminded && this.#compaction.canDefer(preflight.request)))
+      await this.#compaction.compact(preflight.request, history);
     const action = await this.budget.beforeRequest(history);
     if (action === 'stop') throw new NativeBudgetExhausted('Run budget check-in stopped the run');
     // A human wait may have accumulated steering; bind snapshots only afterward.
@@ -190,6 +192,11 @@ export class TurnModel {
     this.budget.dispatched(action === 'wrap_up');
     ++this.#mainRequests;
     return { request, modelStep, ...(prepared ? { ticket: prepared.ticket } : {}) };
+  }
+
+  /** The turn ended: hand its last completed input tokens to the next turn's reminders. */
+  settleMilestones(): void {
+    this.#compaction.settleMilestones();
   }
 
   #admit(request: ModelRequest): void {

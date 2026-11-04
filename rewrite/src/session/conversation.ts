@@ -272,6 +272,9 @@ function conversation(
           takeSteering: boundary,
           prepareRequest: capabilities!.prepareRequest,
           normalStop: capabilities!.normalStop,
+          ...(generation.supplied?.contextMilestones
+            ? { contextMilestones: generation.supplied.contextMilestones }
+            : {}),
           runNested,
           subagents: background!.subagentPort,
           shellTasks: (parent) => background!.shellTaskPort(parent, request.submission?.origin),

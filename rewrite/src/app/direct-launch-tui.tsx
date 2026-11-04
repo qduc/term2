@@ -93,7 +93,11 @@ function DirectTui({
   const notifier = useTerminalFocusNotifier({ stdout, settingsService: settings, loggingService: logger });
   const integration: TuiIntegration = useMemo(
     () => ({
-      menus: createDirectTuiMenus({ logger }),
+      menus: createDirectTuiMenus({
+        logger,
+        persistentSettings,
+        liveSettings: (sessionId) => app.liveSettings(sessionId) ?? null,
+      }),
       modelPicker: {
         favorites(sessionId) {
           const current = app.liveSettings(sessionId);

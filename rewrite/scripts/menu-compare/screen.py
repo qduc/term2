@@ -205,10 +205,10 @@ class Term:
 
 
 MASKS = [
+    (re.compile(r'127\.0\.0\.1:\d+'), '<host>:<port>'),
     (re.compile(r'v?\d+\.\d+\.\d+(-[\w.]+)?(\+[0-9a-f]+)?'), '<ver>'),
     (re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'), '<id>'),
     (re.compile(r'(/tmp|/private)?/[\w.-]*menucmp[\w./-]*'), '<path>'),
-    (re.compile(r'127\.0\.0\.1:\d+'), '127.0.0.1:<port>'),
     (re.compile(r'\b\d+(\.\d+)?(ms|s)\b'), '<dur>'),
 ]
 

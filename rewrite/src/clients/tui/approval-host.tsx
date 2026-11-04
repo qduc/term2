@@ -124,6 +124,8 @@ type HostProps = {
   readonly editorValue: string;
   readonly changeInput: (text: string) => void;
   readonly replaceInput: (text: string) => void;
+  /** Legacy BottomArea draws the tasks panel straight under the prompt, above its (hidden) input surface. */
+  readonly panel?: React.ReactNode;
 };
 
 /** The request the prompt shows, if any; a new request gets fresh prompt state. */
@@ -131,7 +133,7 @@ export function ApprovalHost({
   request,
   ...props
 }: Omit<HostProps, 'request'> & { readonly request: PromptRequest | undefined }): React.ReactElement | null {
-  return request ? <Host key={request.interaction.id} request={request} {...props} /> : null;
+  return request ? <Host key={request.interaction.id} request={request} {...props} /> : <>{props.panel}</>;
 }
 
 function Host({
@@ -147,6 +149,7 @@ function Host({
   editorValue: text,
   changeInput,
   replaceInput,
+  panel,
 }: HostProps): React.ReactElement {
   const theme = useTheme();
   const { columns, rows } = useTerminalSize();
@@ -302,8 +305,11 @@ function Host({
             currentQuestionIndex={questionIndex}
             waitingForAskUserAnswer={entry === 'answer'}
           />
+          {panel}
         </Box>
-      ) : null}
+      ) : (
+        panel
+      )}
       {composer}
     </Box>
   );

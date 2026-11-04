@@ -426,8 +426,8 @@ export function TuiSession({
           interrupt={approvalInterrupt}
           onStopped={() => viewport.appendCommandOutput('Stopped', 'system')}
           hide={setAnsweredId}
+          panel={<TasksPanel {...{ state, connection }} manager={[taskOpen, setTaskOpen]} />}
         />
-        <TasksPanel state={state} connection={connection} manage={taskOpen} closeManager={() => setTaskOpen(false)} />
         <Box flexDirection="column" display={foregroundInteraction || taskOpen ? 'none' : 'flex'}>
           <PendingQueue
             items={queueItems}

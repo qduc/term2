@@ -141,19 +141,18 @@ const formatFirstLine = (
 type PanelProps = {
   readonly state: TuiState;
   readonly connection: TuiConnection;
-  /** Legacy BottomArea draws the ^G manager straight under this panel. */
-  readonly manage: boolean;
-  readonly closeManager: () => void;
+  /** The session's ^G manager state; legacy BottomArea draws the manager straight under this panel. */
+  readonly manager: readonly [boolean, (open: boolean) => void];
 };
 
-export const TasksPanel: FC<PanelProps> = ({ state, connection, manage, closeManager }) => (
+export const TasksPanel: FC<PanelProps> = ({ state, connection, manager: [manage, setManage] }) => (
   <>
     <TaskRows state={state} gap={!manage} />
     {manage ? (
       <>
         <TaskManager
           tasks={state.tasks}
-          onClose={closeManager}
+          onClose={() => setManage(false)}
           onAction={(id, action) => controlTask(connection, id, action)}
         />
         {/* Legacy keeps its disabled input surface mounted: one empty row where the composer was. */}

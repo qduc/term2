@@ -20,7 +20,7 @@
     }
   },
   "messagePath": {
-    "maxHops": 29,
-    "maxFiles": 7
+    "maxHops": 14,
+    "maxFiles": 14
   }
 }

@@ -101,19 +101,13 @@ it('does not credit a goal check to a replacement goal', async () => {
     await child.waitForState(() => requests.length === 2);
     expect(outputs(1, 'old-goal-check')).toHaveLength(1);
     expect(outputs(1, 'old-goal-check')[0]!.output).toBe(
-      direct
-        ? 'Error: goal_check was not recorded: the session goal changed after this response began; check the current goal on the next request.'
-        : 'Error: goal_check was not recorded: the session goal changed after this response began, so this check was for a goal no longer current; check the current goal (shown in your instructions on the next request).',
+      'Error: goal_check was not recorded: the session goal changed after this response began, so this check was for a goal no longer current; check the current goal (shown in your instructions on the next request).',
     );
     complete(1, [call('replacement-blocked', 'goal_check', { status: 'blocked', evidence: 'Need user input' })]);
     await child.waitForState(() => requests.length === 3);
     const blocked = outputs(2, 'replacement-blocked');
     expect(blocked).toHaveLength(1);
-    expect(String(blocked[0]!.output)).toContain(
-      direct
-        ? 'blocked. Return control and state exactly what input or capability is needed.'
-        : 'blocked. Control returns to the user.',
-    );
+    expect(String(blocked[0]!.output)).toContain('blocked. Control returns to the user.');
     complete(2, [message('REPLACEMENT_BLOCKED_DONE')]);
     await child.waitForVisibleOutput('REPLACEMENT_BLOCKED_DONE');
     await child.waitForIdleInput({ after: idle });

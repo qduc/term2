@@ -1,7 +1,7 @@
 /** Root goal data and tools. Session supplies all state and accepts every write. */
 import { z } from 'zod';
 import { createDurableGoal, MAX_GOAL_FIELD_LENGTH } from '../../../source/services/conversation/durable-goal.js';
-import { GOAL_CHECK_DESCRIPTION } from '../../../source/tools/agent/goal-check.js';
+import { GOAL_CHANGED_PROBLEM, GOAL_CHECK_DESCRIPTION } from '../../../source/tools/agent/goal-check.js';
 import { goalCheckParameters } from '../../../source/services/conversation/durable-goal-stop-check.js';
 import { renderDurableGoalContext } from '../../../source/prompts/durable-goal-context.js';
 import type { DurableGoal } from '../../../source/services/logging/conversation-log-events.js';
@@ -97,9 +97,7 @@ export function createDirectGoalCheckTool(deps: {
       try {
         const check = parseDirectGoalCheck(raw, current.goal);
         if (request.generation !== current.generation || request.goal?.id !== current.goal?.id) {
-          throw new Error(
-            'the session goal changed after this response began; check the current goal on the next request',
-          );
+          throw new Error(GOAL_CHANGED_PROBLEM);
         }
         // Model-facing text is legacy's, word for word.
         const guidance = {

@@ -81,10 +81,12 @@ class Provider(BaseHTTPRequestHandler):
                      'choices': [{'index': 0, 'delta': delta, 'finish_reason': finish}]}
             self.wfile.write(b'data: ' + json.dumps(chunk).encode() + b'\n\n')
 
-        if 'tool' in reply:
-            call = {'index': 0, 'id': f'call{state.posts}', 'type': 'function',
-                    'function': {'name': reply['tool'], 'arguments': json.dumps(reply['args'])}}
-            event({'role': 'assistant', 'tool_calls': [call]})
+        if 'tool' in reply or 'calls' in reply:
+            # 'calls': several tool calls in one reply, each {'tool': name, 'args': {...}}.
+            calls = [{'index': i, 'id': f'call{state.posts}-{i}', 'type': 'function',
+                      'function': {'name': c['tool'], 'arguments': json.dumps(c['args'])}}
+                     for i, c in enumerate(reply.get('calls', [reply]))]
+            event({'role': 'assistant', 'tool_calls': calls})
             event({}, 'tool_calls')
         else:
             # 'chunks': stream the text in that many pieces, 'delay' seconds apart (default one piece).

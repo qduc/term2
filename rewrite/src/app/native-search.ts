@@ -1,8 +1,10 @@
 /** App-owned read-only search capability. Session registers it but owns no file access. */
+import { Worker } from 'node:worker_threads';
 import { z } from 'zod';
 import type { Tool, Workspace } from '../tools/index.js';
 import type { DirectBinding } from '../session/facade-types.js';
-import { nativeSearchScope, withNativeCatalogue } from './native-catalogue.js';
+import { nativeSearchScope, type NativeCatalogueScope } from './native-catalogue.js';
+import type { NativeSearchReply, NativeSearchRequest } from './native-search-worker.js';
 
 const inputSchema = z
   .object({
@@ -11,6 +13,64 @@ const inputSchema = z
     limit: z.number().int().min(1).max(50).optional(),
   })
   .strict();
+
+let worker: Worker | undefined;
+let nextId = 0;
+
+/** One shared worker, started on first use and never keeping the process alive. */
+function searchWorker(): Worker {
+  if (worker) return worker;
+  const created = new Worker(new URL('./native-search-worker.js', import.meta.url));
+  created.unref();
+  created.once('exit', () => {
+    if (worker === created) worker = undefined;
+  });
+  return (worker = created);
+}
+
+function searchOffThread(
+  request: Omit<NativeSearchRequest, 'id'>,
+  signal: AbortSignal,
+): Promise<{ total: number; hits: readonly unknown[] }> {
+  return new Promise((resolve, reject) => {
+    const target = searchWorker();
+    const id = ++nextId;
+    // Only a search in flight keeps the process alive (a headless run waits on it).
+    target.ref();
+    const finish = () => {
+      target.unref();
+      target.off('message', onMessage);
+      target.off('error', onError);
+      target.off('exit', onExit);
+      signal.removeEventListener('abort', onAbort);
+    };
+    const onMessage = (reply: NativeSearchReply) => {
+      if (reply.id !== id) return;
+      finish();
+      if ('error' in reply) reject(new Error(reply.error));
+      else resolve(reply.result as { total: number; hits: readonly unknown[] });
+    };
+    const onError = (error: Error) => {
+      finish();
+      reject(error);
+    };
+    const onExit = () => {
+      finish();
+      reject(new Error('Native search worker stopped'));
+    };
+    // An aborted search discards the worker, which may be mid-way through a long index refresh.
+    const onAbort = () => {
+      finish();
+      void target.terminate();
+      reject(signal.reason ?? new Error('Search cancelled'));
+    };
+    target.on('message', onMessage);
+    target.on('error', onError);
+    target.on('exit', onExit);
+    signal.addEventListener('abort', onAbort, { once: true });
+    target.postMessage({ ...request, id });
+  });
+}
 
 /** Bind directory and authority once; the model cannot supply paths or workspace filters. */
 export function createNativeSearchTool(directory: string, workspace: Workspace, binding?: DirectBinding): Tool {
@@ -29,7 +89,16 @@ export function createNativeSearchTool(directory: string, workspace: Workspace, 
       if (context.workspace.target !== workspace.target || context.workspace.root !== workspace.root)
         throw new Error('Native search workspace authority changed');
       const { query, kind, limit } = inputSchema.parse(raw);
-      const result = withNativeCatalogue(directory, (catalogue) => catalogue.search(scope, query, kind, limit));
+      const result = await searchOffThread(
+        {
+          directory,
+          scope: scope as NativeCatalogueScope,
+          query,
+          ...(kind ? { kind } : {}),
+          ...(limit ? { limit } : {}),
+        },
+        context.signal,
+      );
       return { output: JSON.stringify(result), isError: false };
     },
   };

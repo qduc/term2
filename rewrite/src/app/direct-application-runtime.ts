@@ -404,7 +404,7 @@ export function createDirectRuntimes(
           maxParallelToolCalls: runtime.maxParallelToolCalls,
           ...runPolicy(settings, context.id, context.model),
           context: contextFactory,
-          authorizeNested: createNestedAuthorizer(settings, context.model, runtime.resolveNestedAuthority),
+          authorizeNested: createNestedAuthorizer(runtime.resolveNestedAuthority),
           rollover,
           configure,
         },

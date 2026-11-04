@@ -125,7 +125,7 @@ export async function prepareDirectConfiguration(
         toolContext: runtime.toolContext,
         maxParallelToolCalls: runtime.maxParallelToolCalls,
         ...runPolicy(settings, context.id, model),
-        authorizeNested: createNestedAuthorizer(settings, model, runtime.resolveNestedAuthority),
+        authorizeNested: createNestedAuthorizer(runtime.resolveNestedAuthority),
       },
       request: {
         ...request,

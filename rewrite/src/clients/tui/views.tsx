@@ -267,6 +267,9 @@ export function Activity({
       {state.commands
         .filter(
           (receipt) =>
+            // Legacy has no command receipts: a rewind or retry shows only its result.
+            receipt.request.operation.kind !== 'retry' &&
+            receipt.request.operation.kind !== 'rewind' &&
             receipt.outcome?.kind !== 'retried' &&
             (receipt.request.operation.kind !== 'configure' ||
               (receipt.outcome?.kind !== 'configured' && receipt.outcome?.kind !== 'rejected')) &&

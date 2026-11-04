@@ -42,6 +42,11 @@ MODELS = ['mock-alpha', 'mock-beta', 'mock-gamma', 'gpt-test-mini']
 
 
 class Provider(BaseHTTPRequestHandler):
+    # Scripted chat replies, one per POST in order (the last repeats): {'text': ...} or
+    # {'tool': name, 'args': {...}}. Set from the scenario's SEED['replies'].
+    replies = [{'text': 'done'}]
+    posts = 0
+
     def log_message(self, *args):
         pass
 
@@ -54,7 +59,29 @@ class Provider(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self):
-        self.do_GET()
+        if not self.path.endswith('/chat/completions'):
+            return self.do_GET()
+        self.rfile.read(int(self.headers.get('content-length', 0)))
+        reply = Provider.replies[min(Provider.posts, len(Provider.replies) - 1)]
+        Provider.posts += 1
+        self.send_response(200)
+        self.send_header('content-type', 'text/event-stream')
+        self.end_headers()
+
+        def event(delta, finish=None):
+            chunk = {'id': 'r', 'object': 'chat.completion.chunk', 'model': 'mock-alpha',
+                     'choices': [{'index': 0, 'delta': delta, 'finish_reason': finish}]}
+            self.wfile.write(b'data: ' + json.dumps(chunk).encode() + b'\n\n')
+
+        if 'tool' in reply:
+            call = {'index': 0, 'id': f'call{Provider.posts}', 'type': 'function',
+                    'function': {'name': reply['tool'], 'arguments': json.dumps(reply['args'])}}
+            event({'role': 'assistant', 'tool_calls': [call]})
+            event({}, 'tool_calls')
+        else:
+            event({'role': 'assistant', 'content': reply['text']})
+            event({}, 'stop')
+        self.wfile.write(b'data: [DONE]\n\n')
 
 
 def start_provider():
@@ -212,6 +239,8 @@ def capture(screen):
 
 def run(cli, cols, rows, name):
     scenario = SCENARIOS[name]
+    Provider.replies = SEED.get(name, {}).get('replies', [{'text': 'done'}])
+    Provider.posts = 0
     server = start_provider()
     root = tempfile.mkdtemp(prefix='menucmp-')
     try:

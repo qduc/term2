@@ -160,6 +160,7 @@ function sameModelOnly(next: ModelRef, previous: ModelRef): void {
 /** Each tool graph has its own check-in tools, and all of them act on this one Session. */
 function bindCheckIns(surface: AgentSurface, port: DirectContextPort): void {
   surface.runtime.bindTaskCheckIn((target, policy) => port.configureTaskCheckIn(target, policy));
+  surface.runtime.bindGoal(port);
 }
 
 export function createDirectRuntimes(

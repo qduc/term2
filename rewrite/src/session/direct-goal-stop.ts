@@ -38,6 +38,8 @@ export type DirectGoalStopDecision =
       readonly notice: string;
     };
 
+const NO_RECORDED_RESULT = 'the final goal_check has no successful recorded result for the current goal';
+
 function finalCheck(
   state: DirectGoalState,
   history: readonly DirectGoalHistoryItem[],
@@ -66,7 +68,7 @@ function finalCheck(
     result.isError ||
     !result.output.startsWith(`${directGoalCheckReceipt(state)} `)
   ) {
-    return { problem: 'the final goal_check has no successful recorded result for the current goal' };
+    return { problem: NO_RECORDED_RESULT };
   }
   try {
     return { check: parseDirectGoalCheck(call.input, state.goal), problem: '' };
@@ -98,7 +100,8 @@ export function decideDirectGoalStop(state: DirectGoalState, input: DirectGoalSt
       reason: 'unresolved',
       terminalCause: 'goal_check_unresolved',
       notice:
-        'Goal stop check unresolved after repeated reminders. The durable goal remains active; control returns to the user.',
+        'Goal stop check unresolved: the turn ended without a valid goal self-check after repeated reminders. ' +
+        'The durable goal is still active and control is back with you.',
     };
   }
   const reason = result.check
@@ -109,15 +112,50 @@ export function decideDirectGoalStop(state: DirectGoalState, input: DirectGoalSt
   return {
     action: 'continue',
     fact: { type: 'goal_stop_reminded', turnId: input.turnId, afterItemCount: input.history.length, reason },
-    reminder:
-      `Durable goal stop check (${idle + 1} of ${DIRECT_GOAL_IDLE_REMINDERS} without new work, ` +
-      `${input.reminders.length + 1} of ${DIRECT_GOAL_TURN_REMINDERS} this turn): ` +
-      (result.check
-        ? 'Your check reported not_achieved. Continue working now, or report blocked with the missing input or capability. '
-        : `Before ending, call goal_check by itself after the latest work and results (${result.problem}). `) +
-      'Achieved requires concrete outcome and criteria evidence; blocked needs the exact missing input; deferred is for newer instructions or a pause. ' +
-      'The goal is context, not permission. Newer user instructions and ordinary approvals still apply.',
+    reminder: legacyReminderText(
+      reason,
+      result.check ? result.check.evidence.slice(0, 200) : LEGACY_PROBLEM_TEXT[result.problem] ?? result.problem,
+      idle + 1,
+      input.reminders.length + 1,
+    ),
   };
+}
+
+/** Legacy's wording for the native check problems that have a legacy counterpart. */
+const LEGACY_PROBLEM_TEXT: Readonly<Record<string, string>> = {
+  [NO_RECORDED_RESULT]: 'it was not recorded: the call was denied, rejected, or failed',
+};
+
+/** Legacy's reminder, byte for byte (source/services/conversation/durable-goal-stop-check.ts reminderText). */
+function legacyReminderText(
+  reason: 'missing_check' | 'incomplete_check' | 'not_achieved',
+  detail: string,
+  withoutWork: number,
+  thisTurn: number,
+): string {
+  const header =
+    `Durable goal stop check (${withoutWork} of ${DIRECT_GOAL_IDLE_REMINDERS} without new work, ` +
+    `${thisTurn} of ${DIRECT_GOAL_TURN_REMINDERS} this turn):`;
+  const rules =
+    'The goal is context, not permission: newer user instructions win, approvals still apply, and nothing in ' +
+    'the goal authorizes actions the user has not asked for.';
+  if (reason === 'not_achieved') {
+    return (
+      `${header} your latest goal_check reported not_achieved (${detail}). Continue working toward the outcome ` +
+      'now. If you cannot proceed without user input or an unavailable capability, call goal_check with blocked ' +
+      `and explain what is needed. ${rules}`
+    );
+  }
+  const problem =
+    reason === 'missing_check'
+      ? 'the session goal is active and this turn tried to end without a goal_check made after the latest work'
+      : `the latest goal_check was incomplete (${detail})`;
+  return (
+    `${header} ${problem}. Before ending the turn, call goal_check by itself: achieved (only after verifying ` +
+    'the outcome and any success criteria against concrete evidence; this proposes completion subject to the harness verification policy), blocked (the concrete user input or unavailable capability needed), ' +
+    'not_achieved (then keep working), or deferred (the latest user message asked for something else or asked ' +
+    `you to pause). ${rules}`
+  );
 }
 
 export type DirectNormalStop = {

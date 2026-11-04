@@ -81,6 +81,8 @@ export type AgentSurface = {
     bindTaskCheckIn(
       configure: import('../session/direct-capabilities.js').DirectContextPort['configureTaskCheckIn'],
     ): void;
+    /** The Session goal behind legacy's interactive propose_goal script tool. */
+    bindGoal(port: Pick<import('../session/direct-capabilities.js').DirectContextPort, 'read' | 'commit'>): void;
     readonly tools: ToolRegistry;
     readonly toolContext: ToolContextSeed;
     readonly maxParallelToolCalls: number;

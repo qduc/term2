@@ -29,6 +29,8 @@ import { createDirectShellTools } from './direct-shell-tools.js';
 import { createSourceToolRegistry, executeSourceChild, sourceToolSpec } from './source-tools.js';
 import type { AgentSurface, ProfileSelection, ToolSurfaceOptions } from './tool-contract.js';
 import { SSH_LOCAL_ONLY_TOOLS } from './direct-remote-tools.js';
+import { renderDurableGoalContext } from '../session/direct-goal.js';
+import type { DirectContextPort } from '../session/direct-capabilities.js';
 
 type ToolInterceptor = Parameters<Parameters<typeof installPlanModeInterceptor>[0]['addToolInterceptor']>[0];
 
@@ -113,6 +115,26 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
   });
   const shell = createDirectShellTools();
   const allowBackgroundShell = options.interactive === true && !remote;
+  let goalPort: Pick<DirectContextPort, 'read' | 'commit'> | undefined;
+  const goalDeps: Pick<AgentFactoryDeps, 'getGoal' | 'proposeGoal'> = {
+    getGoal: () => goalPort?.read().goal.goal,
+    proposeGoal: {
+      // The approved proposal persists the goal; legacy sets its once-per-session guard on the same write.
+      appendGoal: (goal) => {
+        const state = goalPort?.read().goal;
+        if (
+          !goalPort ||
+          !state ||
+          !goalPort.commit(state.generation, [
+            { type: 'goal_proposed', goal },
+            { type: 'goal_changed', goal, source: 'proposal' },
+          ])
+        )
+          throw new Error('The goal changed while awaiting approval; no goal was created.');
+      },
+      hasPriorProposal: () => goalPort?.read().goal.proposalMade ?? false,
+    },
+  };
   const deps: AgentFactoryDeps = {
     settings,
     logger,
@@ -142,6 +164,8 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     // Session owns the live goal tool and applicability context.
     ...delegation.callbacks,
     getAskUserAnswer: () => answers.getStore(),
+    // Legacy's root gets the goal, which offers propose_goal where the profile allows asking the user (agent.ts).
+    ...(options.interactive === true ? goalDeps : {}),
     async checkToolInterceptors(name, params, callId) {
       for (const interceptor of interceptors) {
         const rejection = await interceptor(name, params, callId);
@@ -205,7 +229,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
   });
   return {
     profileName: displayName(String(settings.get('app.activeProfileId'))),
-    instructions: agent.resolveInstructionsForRequest?.() ?? String(agent.instructions),
+    instructions: withoutGoalContext(agent.resolveInstructionsForRequest?.() ?? String(agent.instructions)),
     tools: offered.map(sourceToolSpec),
     ...(reasoning !== undefined ? { reasoning } : {}),
     ...(temperature !== undefined ? { temperature } : {}),
@@ -217,6 +241,9 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
       tools: registry,
       resolveNestedAuthority: delegation.resolveNestedAuthority,
       bindTaskCheckIn: delegation.bindTaskCheckIn,
+      bindGoal(port) {
+        goalPort = port;
+      },
       resetAdaptedTools() {
         sourceGraph.splice(0, sourceGraph.length, ...baseGraph);
         bindRunCodeRegistry(sourceGraph);
@@ -445,4 +472,10 @@ function advisoryClient(
       return completed.length > 0 ? completed.join('') : deltas;
     },
   };
+}
+
+/** The Session renders the goal per request (planDirectInstructions); drop the unbound source copy. */
+function withoutGoalContext(instructions: string): string {
+  const unbound = renderDurableGoalContext(undefined);
+  return instructions.endsWith(unbound) ? instructions.slice(0, -unbound.length) : instructions;
 }

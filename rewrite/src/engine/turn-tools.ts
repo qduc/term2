@@ -346,7 +346,8 @@ export class TurnTools {
       ) => {
         const parent = current();
         this.#checkBody(parent);
-        if (['goal_check', 'propose_goal', 'session_rollover'].includes(descriptor.toolName))
+        // Legacy's propose_goal is a run_code script tool, so a script may call it.
+        if (['goal_check', 'session_rollover'].includes(descriptor.toolName))
           throw new Error(`${descriptor.toolName} is root-only`);
         const execution = this.#allocate(
           descriptor.toolName,

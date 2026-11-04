@@ -134,7 +134,8 @@ it.skipIf(process.platform !== 'linux' || !process.execve || !process.env.TERM2_
       await expect(child.waitForComposerValue('', { afterRevision: offset + 1, timeoutMs: 250 })).rejects.toThrow(
         'Timed out',
       );
-      await writePtyTextAndSubmit(child, '/tasks');
+      // Legacy has no /tasks command; Ctrl+G opens the task manager.
+      await child.write('\u0007');
       await child.waitForVisibleOutput('No background tasks.');
       const panelOffset = child.getOutput().length;
       await child.write('blocked-input');
@@ -165,7 +166,13 @@ it.skipIf(process.platform !== 'linux' || !process.execve || !process.env.TERM2_
       await child.waitForIdleInput();
       await writePtyTextAndSubmit(child, 'start native seed turn');
       await expect.poll(() => requests.length).toBe(1);
-      await writePtyTextAndSubmit(child, '/followup retained plain text');
+      // Legacy has no /followup command; Alt+Enter submits a follow-up during a turn.
+      {
+        const afterRevision = child.readComposerRevision();
+        await child.write('retained plain text');
+        await child.waitForComposerValue('retained plain text', { afterRevision });
+        await child.write('\u001b\r');
+      }
       await child.waitForVisibleOutput('Queued 1 (queued): retained plain text');
       // The public control stop preserves queued work and creates the real manual pause.
       expect(await f.stopForeground()).toMatchObject({ ok: true, result: { accepted: true } });

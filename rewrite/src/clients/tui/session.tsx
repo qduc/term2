@@ -330,7 +330,8 @@ export function TuiSession({
           const result = await integration.command(connection, command);
           // A session switch carries its message into the new session, which remounts.
           if (result.message && !result.sessionId) viewport.showMessage(result.message, command, setNotice);
-          if (result.transcript) viewport.appendCommandOutput(result.transcript);
+          // Legacy adds command output (/usage) as a system message, like /help.
+          if (result.transcript) viewport.appendCommandOutput(result.transcript, true);
           if (result.menu) menuStack.openMenu(result.menu);
           if (result.draft) {
             restoreDraft(result.draft);

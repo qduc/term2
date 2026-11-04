@@ -49,3 +49,14 @@ SCENARIOS = {
     'auto-approve-none': ['/auto-approve ', 'zzz'],
     'auto-approve-bare': ['/auto-approve<enter>'],
 }
+
+
+# A settings file an earlier run already filled in (agent.mentorReasoningEffort present): legacy's own migration
+# then copies it to agent.smartReasoningEffort in both CLIs. On a fresh HOME only next shows it, because next writes
+# the full settings file at launch and each session reloads it; see rewrite/docs/menu-port-report.md.
+SCENARIOS['settings-second-run'] = ['/settings ']
+SEED['settings-second-run'] = {'settings': {'agent': {
+    'retryAttempts': 0,
+    'modelSelection': {'model': 'mock-alpha', 'provider': 'mockprov'},
+    'mentorReasoningEffort': 'default',
+}}}

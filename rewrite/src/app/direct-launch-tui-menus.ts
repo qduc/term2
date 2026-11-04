@@ -293,15 +293,16 @@ export function createDirectTuiMenus(options: MenuOptions): TuiMenus {
         const service: MenuSettingsService = {
           getDynamic: (key) => settings.getDynamic(key),
           getDefault: (key) => settings.getDefault(key),
-          // A session pins its start facts (model, effort, profile) as unsaved values, which legacy's
-          // service reports as 'cli'. Where the pinned value is the saved one, report the saved source.
+          // A session keeps its start facts (model, effort, profile) and every in-session change as unsaved
+          // values, which legacy's service would report as 'cli'. Only a real launch flag is a command-line
+          // flag; otherwise report the saved source where the value is the saved one, else 'config', as
+          // legacy reported a change its menu had just saved.
           getSource: (key) => {
             const source = settings.getSource(key);
             if (source !== 'cli') return source;
-            const saved = persistentSettings.getSource?.(key) ?? 'cli';
-            return saved !== 'cli' && isDeepStrictEqual(settings.getDynamic(key), persistentSettings.getDynamic(key))
-              ? saved
-              : source;
+            const saved = persistentSettings.getSource?.(key) ?? 'default';
+            if (saved === 'cli') return 'cli';
+            return isDeepStrictEqual(settings.getDynamic(key), persistentSettings.getDynamic(key)) ? saved : 'config';
           },
           getStartupOverride: (key) => settings.getStartupOverride(key),
           isRuntimeModifiable: (key) => settings.isRuntimeModifiable(key),

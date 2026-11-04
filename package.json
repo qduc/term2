@@ -111,6 +111,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
+    "@lydell/node-pty": "1.2.0-beta.18",
     "@modelcontextprotocol/server": "2.0.0",
     "@qduc/agent-wire": "file:vendor/qduc-agent-wire-0.2.1.tgz",
     "@types/better-sqlite3": "^9.6.0",
@@ -120,6 +121,7 @@
     "@types/ssh2": "^1.15.5",
     "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "^4.1.9",
+    "@xterm/xterm": "^6.0.0",
     "chalk": "^5.2.0",
     "cross-env": "^10.1.0",
     "eslint": "^9.39.4",

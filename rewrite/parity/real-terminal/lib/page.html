@@ -1,0 +1,181 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      /*XTERM_CSS*/
+      html,
+      body {
+        margin: 0;
+        background: #000;
+      }
+      #screen {
+        position: relative;
+        display: inline-block;
+        padding: 0;
+      }
+      .mask {
+        position: absolute;
+        background: #5a5a5a;
+        z-index: 10;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="screen"><div id="term"></div></div>
+    <script>
+      /*XTERM_JS*/
+    </script>
+    <script>
+      let term;
+      let id;
+      // Pending timing probes: each one is checked after every parse and every render.
+      const probes = new Set();
+
+      window.boot = (termId, cols, rows, font) =>
+        new Promise((resolve) => {
+          id = termId;
+          term = new Terminal({
+            cols,
+            rows,
+            fontFamily: font.family,
+            fontSize: font.size,
+            lineHeight: 1,
+            cursorBlink: false,
+            scrollback: 5000,
+            allowProposedApi: true,
+            theme: { background: '#000000', foreground: '#d0d0d0' },
+          });
+          term.open(document.getElementById('term'));
+          term.onRender(() => {
+            const now = performance.now();
+            for (const probe of probes) probe.onRender(now);
+          });
+          const source = new EventSource(`/out/${id}`);
+          source.onmessage = (event) => {
+            term.write(JSON.parse(event.data), () => {
+              const now = performance.now();
+              for (const probe of probes) probe.onParse(now);
+            });
+          };
+          source.onopen = () => resolve(true);
+        });
+
+      window.screenLines = () => {
+        const buffer = term.buffer.active;
+        const lines = [];
+        for (let y = 0; y < term.rows; y++) {
+          const line = buffer.getLine(buffer.viewportY + y);
+          lines.push(line ? line.translateToString(true) : '');
+        }
+        return lines;
+      };
+
+      const compile = (source) => new Function('lines', 'base', source);
+
+      window.flush = () =>
+        new Promise((resolve) => term.write('', () => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+
+      window.waitScreen = (source, timeoutMs) =>
+        new Promise((resolve) => {
+          const predicate = compile(source);
+          if (predicate(screenLines())) return resolve(true);
+          const started = performance.now();
+          const timer = setInterval(() => {
+            if (predicate(screenLines())) {
+              clearInterval(timer);
+              resolve(true);
+            } else if (performance.now() - started > timeoutMs) {
+              clearInterval(timer);
+              resolve(false);
+            }
+          }, 10);
+        });
+
+      // baseSource (optional) computes a value from the screen at injection time; the predicate sees it as base.
+      window.measureKey = (data, source, timeoutMs, baseSource) =>
+        new Promise((resolve) => {
+          const base = baseSource ? compile(baseSource)(screenLines()) : undefined;
+          const compiled = compile(source);
+          const predicate = (lines) => compiled(lines, base);
+          if (predicate(screenLines())) return resolve({ ok: true, pre: true, ms: 0, parseMs: 0 });
+          let parseMs = null;
+          let t0 = 0;
+          const finish = (result) => {
+            probes.delete(probe);
+            clearTimeout(timer);
+            resolve(result);
+          };
+          const probe = {
+            onParse(now) {
+              if (parseMs === null && predicate(screenLines())) parseMs = now - t0;
+            },
+            onRender(now) {
+              if (predicate(screenLines())) finish({ ok: true, ms: now - t0, parseMs: parseMs ?? now - t0 });
+            },
+          };
+          const timer = setTimeout(() => finish({ ok: false, ms: timeoutMs, parseMs }), timeoutMs);
+          probes.add(probe);
+          t0 = performance.now();
+          fetch(`/in/${id}`, { method: 'POST', body: JSON.stringify({ data }) });
+        });
+
+      window.resizeTerm = (cols, rows) => term.resize(cols, rows);
+
+      function cellSize() {
+        const rowsEl = document.querySelector('.xterm-screen');
+        return { w: rowsEl.clientWidth / term.cols, h: rowsEl.clientHeight / term.rows };
+      }
+
+      // Cells whose text matches any mask regex, as px rectangles. Columns come from the cell grid, so wide
+      // characters keep the right offsets.
+      window.maskRects = (masks) => {
+        const { w, h } = cellSize();
+        const buffer = term.buffer.active;
+        const rects = [];
+        for (let y = 0; y < term.rows; y++) {
+          const line = buffer.getLine(buffer.viewportY + y);
+          if (!line) continue;
+          let text = '';
+          const colOf = [];
+          for (let x = 0; x < term.cols; x++) {
+            const cell = line.getCell(x);
+            if (!cell || cell.getWidth() === 0) continue;
+            const chars = cell.getChars() || ' ';
+            for (const ch of chars) {
+              colOf.push(x);
+              text += ch;
+            }
+          }
+          colOf.push(term.cols);
+          for (const [source, flags] of masks) {
+            const re = new RegExp(source, flags.includes('g') ? flags : flags + 'g');
+            for (const match of text.matchAll(re)) {
+              if (!match[0].length) continue;
+              const start = colOf[match.index];
+              const end = colOf[match.index + match[0].length - 1] + 1;
+              rects.push({ x: start * w, y: y * h, w: (end - start) * w, h, row: y, col: start, len: end - start, re: source });
+            }
+          }
+        }
+        return rects;
+      };
+
+      window.paintMasks = (rects) => {
+        for (const el of document.querySelectorAll('.mask')) el.remove();
+        const screen = document.getElementById('screen');
+        const origin = document.querySelector('.xterm-screen').getBoundingClientRect();
+        const base = screen.getBoundingClientRect();
+        for (const r of rects) {
+          const el = document.createElement('div');
+          el.className = 'mask';
+          el.style.left = `${origin.left - base.left + r.x}px`;
+          el.style.top = `${origin.top - base.top + r.y}px`;
+          el.style.width = `${r.w}px`;
+          el.style.height = `${r.h}px`;
+          screen.appendChild(el);
+        }
+      };
+    </script>
+  </body>
+</html>

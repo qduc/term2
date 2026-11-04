@@ -350,7 +350,8 @@ export function factFor(
     case 'model_response_completed':
       return { ...event, turnId };
     case 'history_replaced':
-      return { ...event, turnId };
+      // Legacy leaves the shown transcript as it was after a compaction; only provider context is replaced.
+      return { ...event, turnId, ...(event.reason === 'compaction' ? { retainTranscript: true as const } : {}) };
     case 'usage':
       return {
         type: 'usage',

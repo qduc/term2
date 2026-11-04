@@ -123,6 +123,8 @@ def scratch_env(root, base_url, seed):
         'shell': {'autoApproveMode': 'off'},
     }
     settings.update(seed.get('settings', {}))
+    # Providers appended after mockprov, e.g. one whose model listing fails.
+    settings['providers'] = settings['providers'] + seed.get('extra_providers', [])
     with open(os.path.join(settings_dir, 'settings.json'), 'w') as f:
         json.dump(settings, f)
     for rel, content in seed.get('files', {}).items():

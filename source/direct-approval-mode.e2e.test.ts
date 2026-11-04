@@ -169,6 +169,14 @@ it('dismisses a foreground approval to its numbered answer fallback', { timeout:
   const submit = async (text: string) => {
     session!.write(text);
     await waitForHarnessComposerValue(idlePath, text, { timeoutMs: 60_000 });
+    // `/model ` opens legacy's model menu: Enter picks the highlighted row, so wait until the catalog lists it.
+    const picked = /^\/model \S+\/(\S+)$/.exec(text)?.[1];
+    if (picked)
+      await expect
+        .poll(() => session!.getVisibleOutput(), { timeout: 30_000 })
+        .toMatch(new RegExp(`❯\\s+(★\\s+)?${picked}|No models match`));
+    // Every provider's catalog lands in turn; let the list settle as a person reading it would.
+    if (picked) await new Promise((resolve) => setTimeout(resolve, 500));
     session!.write('\r');
   };
   await submit('request approval');
@@ -307,6 +315,14 @@ async function runCommand(
   const submit = async (text: string) => {
     session!.write(text);
     await waitForHarnessComposerValue(idlePath, text, { timeoutMs: 60_000 });
+    // `/model ` opens legacy's model menu: Enter picks the highlighted row, so wait until the catalog lists it.
+    const picked = /^\/model \S+\/(\S+)$/.exec(text)?.[1];
+    if (picked)
+      await expect
+        .poll(() => session!.getVisibleOutput(), { timeout: 30_000 })
+        .toMatch(new RegExp(`❯\\s+(★\\s+)?${picked}|No models match`));
+    // Every provider's catalog lands in turn; let the list settle as a person reading it would.
+    if (picked) await new Promise((resolve) => setTimeout(resolve, 500));
     session!.write('\r');
   };
 
@@ -353,7 +369,7 @@ async function runCommand(
   }
   if (twoModels) {
     await submit('/model mockprov/mock-beta');
-    await session.waitForOutput('Model set to mockprov/mock-beta.', 30_000);
+    await session.waitForOutput('Set model to mock-beta (mockprov)', 30_000);
     const before = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
     await submit('another question');
     await session.waitForOutput('done', 30_000);
@@ -434,10 +450,8 @@ async function runCommand(
     session.write('mod');
     await waitForHarnessComposerValue(idlePath, '/mod', { timeoutMs: 60_000 });
     session.write('\r');
-    await session.waitForOutput('Choose a model', 30_000);
-    const beforeClose = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
+    await session.waitForOutput('Select model', 30_000);
     session.write('\x1b');
-    await waitForHarnessIdleGeneration(idlePath, { after: beforeClose, timeoutMs: 60_000 });
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 60_000 });
     session.write('/res');
     await waitForHarnessComposerValue(idlePath, '/res', { timeoutMs: 60_000 });
@@ -577,6 +591,8 @@ async function runCommand(
     await session.waitForOutput(literal, 30_000);
   }
   if (exerciseMenu === 'model-picker') {
+    // Legacy `/model` puts `/model ` in the composer, which opens the model menu on its Favorites tab.
+    await waitForHarnessComposerValue(idlePath, '/model ', { timeoutMs: 60_000 });
     await session.waitForOutput('aka "luna"', 30_000);
     // 100x35, same width as the spot check. The provider column must fit the whole name:
     // a short one such as "codex" was painting as "cod…" because the border took the last cell.
@@ -584,15 +600,8 @@ async function runCommand(
     expect(picker).toMatch(/mockprov\s+│/);
     expect(picker).not.toContain('mockpr…');
     expect(picker).toContain('Nicknames');
-    expect(session.getVisibleOutput()).toContain('(current)');
-    await session.waitForOutput('Some providers failed: brokenprov', 30_000);
-    const beforeClose = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
-    session.write('\x1b');
-    await waitForHarnessIdleGeneration(idlePath, { after: beforeClose, timeoutMs: 60_000 });
-    await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 60_000 });
-    await submit('/model ');
-    await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 60_000 });
-    await session.waitForOutput('Choose a model', 30_000);
+    expect(picker).toContain('(current)');
+    expect(picker).toContain('ctrl+n nickname');
     const step = async (keys: string, expected: string) => {
       const offset = session!.getVisibleOutput().length;
       session!.write(keys);
@@ -603,17 +612,25 @@ async function runCommand(
       }
       throw new Error(`No new terminal output containing ${expected}: ${session!.getVisibleOutput().slice(-1200)}`);
     };
+    await step('\t\t', 'Some providers failed: brokenprov'); // The All tab lists every provider.
+    session.write('\x1b');
+    await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 60_000 });
+    session.write('/model ');
+    await waitForHarnessComposerValue(idlePath, '/model ', { timeoutMs: 60_000 });
+    await session.waitForOutput('Select model', 30_000);
     await step('luna', 'Filter: luna');
-    expect(session.getVisibleOutput().slice(-1200)).toContain('aka "luna"');
+    await session.waitForOutput('aka "luna"', 30_000);
     await step('\x7f', 'Filter: lun');
     await step('\x7f', 'Filter: lu');
     await step('\x7f', 'Filter: l');
-    await step('\x7f', 'Filter: ');
+    await step('\x7f', 'Filter:');
     await step('mock-alpha', 'Filter: mock-alpha');
-    await step('\x06', 'No matching models.'); // Ctrl+F removes the favorite.
-    await step('\t', 'mock-alpha'); // Favorites → Nicknames, where the named model remains.
-    await step('\x06', '★ mock-alpha'); // Re-add it.
-    await step('\r', 'Model set to mockprov/mock-alpha.');
+    // The menu reopened on All: legacy keeps its selection hook, and so its tab, mounted between opens.
+    await step('\x06', '❯ mock-alpha — aka "luna"'); // Ctrl+F removes the only favorite.
+    await step('\t', 'No models match "mock-alpha"'); // All → Favorites, now empty.
+    await step('\t', 'aka "luna"'); // Favorites → Nicknames, where the named model remains.
+    await step('\x06', '❯ ★ mock-alpha'); // Re-add it.
+    await step('\r', 'Set model to mock-alpha (mockprov)');
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 60_000 });
     const settings = JSON.parse(fs.readFileSync(path.join(settingsDir, 'settings.json'), 'utf8'));
     expect(settings.agent.favoriteModels).toContain('mockprov/mock-alpha');
@@ -639,12 +656,13 @@ it(
   '/model picker filters, toggles favorites, selects a model and clears the composer',
   { timeout: TIMEOUT_MS },
   async () => {
-    await runCommand('/model', 'Choose a model', undefined, 'model-picker');
+    await runCommand('/model', 'Select model', undefined, 'model-picker');
   },
 );
 
+// Typing `/model ` opens legacy's model menu; the rest of the line filters it and Enter picks the match.
 it('/model <provider>/<model> confirms the new model by name', { timeout: TIMEOUT_MS }, () =>
-  runCommand('/model mockprov/mock-beta', 'Model set to mockprov/mock-beta.'),
+  runCommand('/model mockprov/mock-beta', 'Set model to mock-beta (mockprov)'),
 );
 
 it('/resume ls labels each conversation with its time and first prompt', { timeout: TIMEOUT_MS }, async () => {
@@ -748,30 +766,27 @@ it('invalid effort reports valid values without protocol internals', { timeout: 
   );
 });
 
-it('rejected model shows one human error without receipt internals', { timeout: TIMEOUT_MS }, () =>
+// No menu row matches, so legacy's menu submits the typed id on the current provider, unchecked, and clears the line.
+it('a typed model no catalog lists is set as legacy did, without receipt internals', { timeout: TIMEOUT_MS }, () =>
   runCommand(
     '/model bogus/does-not-exist',
-    "Provider 'bogus' is not registered",
+    'Set model to bogus/does-not-exist (mockprov)',
     undefined,
     false,
     false,
-    '/model bogus/does-not-exist',
+    '',
     ['command_rejected', '· configure · rejected'],
   ),
 );
 
 it('successful configure does not leave a receipt in the activity view', { timeout: TIMEOUT_MS }, () =>
-  runCommand('/model mockprov/mock-beta', 'Model set to mockprov/mock-beta.', undefined, false, false, undefined, [
+  runCommand('/model mockprov/mock-beta', 'Set model to mock-beta (mockprov)', undefined, false, false, undefined, [
     '· configure · configured',
   ]),
 );
 
 it('quitting a conversation prints a usable resume hint', { timeout: TIMEOUT_MS }, () =>
   runCommand('', '', 'hello', 'quit-hint'),
-);
-
-it('rejects an unknown typed model', { timeout: TIMEOUT_MS }, () =>
-  runCommand('/model mockprov/made-up-model', 'Unknown model mockprov/made-up-model. Current model unchanged.'),
 );
 
 it('shows a structured provider error as a message', { timeout: TIMEOUT_MS }, () =>

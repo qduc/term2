@@ -116,6 +116,14 @@ it.each([160, 60])(
     const send = async (text: string) => {
       session!.write(text);
       await waitForHarnessComposerValue(idlePath, text, { timeoutMs: 60_000 });
+      // `/model ` opens legacy's model menu: Enter picks the highlighted row, so wait until the catalog lists it.
+      const picked = /^\/model \S+\/(\S+)$/.exec(text)?.[1];
+      if (picked)
+        await expect
+          .poll(() => session!.getVisibleOutput(), { timeout: 30_000 })
+          .toMatch(new RegExp(`❯\\s+(★\\s+)?${picked}|No models match`));
+      // Every provider's catalog lands in turn; let the list settle as a person reading it would.
+      if (picked) await new Promise((resolve) => setTimeout(resolve, 500));
       session!.write('\r');
     };
     session = start();
@@ -189,12 +197,20 @@ it.each([160])(
     const send = async (text: string) => {
       session!.write(text);
       await waitForHarnessComposerValue(idlePath, text, { timeoutMs: 60_000 });
+      // `/model ` opens legacy's model menu: Enter picks the highlighted row, so wait until the catalog lists it.
+      const picked = /^\/model \S+\/(\S+)$/.exec(text)?.[1];
+      if (picked)
+        await expect
+          .poll(() => session!.getVisibleOutput(), { timeout: 30_000 })
+          .toMatch(new RegExp(`❯\\s+(★\\s+)?${picked}|No models match`));
+      // Every provider's catalog lands in turn; let the list settle as a person reading it would.
+      if (picked) await new Promise((resolve) => setTimeout(resolve, 500));
       session!.write('\r');
     };
     session = start();
     const idle = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
     await send('/model mockprov/mock-beta');
-    await session.waitForOutput('Model set to mockprov/mock-beta.', 30_000);
+    await session.waitForOutput('Set model to mock-beta (mockprov)', 30_000);
     await send('previous unique prompt');
     await session.waitForOutput('PREVIOUS-ANSWER', 30_000);
     await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
@@ -277,12 +293,20 @@ it.each([160])(
     const send = async (text: string) => {
       session!.write(text);
       await waitForHarnessComposerValue(idlePath, text, { timeoutMs: 60_000 });
+      // `/model ` opens legacy's model menu: Enter picks the highlighted row, so wait until the catalog lists it.
+      const picked = /^\/model \S+\/(\S+)$/.exec(text)?.[1];
+      if (picked)
+        await expect
+          .poll(() => session!.getVisibleOutput(), { timeout: 30_000 })
+          .toMatch(new RegExp(`❯\\s+(★\\s+)?${picked}|No models match`));
+      // Every provider's catalog lands in turn; let the list settle as a person reading it would.
+      if (picked) await new Promise((resolve) => setTimeout(resolve, 500));
       session!.write('\r');
     };
     session = start();
     const idle = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
     await send('/model mockprov/mock-beta');
-    await session.waitForOutput('Model set to mockprov/mock-beta.', 30_000);
+    await session.waitForOutput('Set model to mock-beta (mockprov)', 30_000);
     await send('previous unique prompt');
     await session.waitForOutput('PREVIOUS-ANSWER', 30_000);
     await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
@@ -345,7 +369,7 @@ it.each([160])(
     expect(requestBodies.at(-1)).toMatchObject({ model: 'mock-beta', reasoning_effort: 'low' });
     expect(requestBodies.at(-1)).not.toHaveProperty('temperature');
     await send('/model mockprov/mock-alpha');
-    await session.waitForOutput('Model set to mockprov/mock-alpha.', 30_000);
+    await session.waitForOutput('Set model to mock-alpha (mockprov)', 30_000);
     const priorRequests = requestBodies.length;
     await send('after model change');
     const deadline = Date.now() + 30_000;
@@ -393,12 +417,20 @@ it.each([160])('a failed resume leaves the composer usable at %i columns', { tim
   const send = async (text: string) => {
     session!.write(text);
     await waitForHarnessComposerValue(idlePath, text, { timeoutMs: 60_000 });
+    // `/model ` opens legacy's model menu: Enter picks the highlighted row, so wait until the catalog lists it.
+    const picked = /^\/model \S+\/(\S+)$/.exec(text)?.[1];
+    if (picked)
+      await expect
+        .poll(() => session!.getVisibleOutput(), { timeout: 30_000 })
+        .toMatch(new RegExp(`❯\\s+(★\\s+)?${picked}|No models match`));
+    // Every provider's catalog lands in turn; let the list settle as a person reading it would.
+    if (picked) await new Promise((resolve) => setTimeout(resolve, 500));
     session!.write('\r');
   };
   session = start();
   const idle = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
   await send('/model mockprov/mock-beta');
-  await session.waitForOutput('Model set to mockprov/mock-beta.', 30_000);
+  await session.waitForOutput('Set model to mock-beta (mockprov)', 30_000);
   await send('previous unique prompt');
   await session.waitForOutput('PREVIOUS-ANSWER', 30_000);
   await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });

@@ -36,6 +36,20 @@ import { createDirectTuiSettings } from './direct-launch-tui-settings.js';
 
 type CommandResult = Awaited<ReturnType<TuiIntegration['command']>>;
 
+/** Legacy's session usage text (`/usage`, and the first lines printed on exit): the total, then each model. */
+export function sessionUsageText(snapshot: WireSnapshot): string {
+  const { inputTokens, outputTokens, cachedInputTokens } = snapshot.usage;
+  const total = formatSessionTokenUsage({
+    prompt_tokens: inputTokens,
+    completion_tokens: outputTokens,
+    cache_read_tokens: cachedInputTokens,
+  });
+  const breakdown = formatModelUsageBreakdown(
+    summarizeModelUsage((snapshot.requestCosts ?? []).map(({ record }) => record)),
+  );
+  return breakdown ? `${total}\n${breakdown}` : total;
+}
+
 export type DirectTuiCommandOptions = {
   readonly app: DirectApplication;
   readonly modelCatalog: (
@@ -250,19 +264,7 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
     return { message: `Copied ${label} to the clipboard.` };
   };
 
-  const usage = (): CommandResult => {
-    const snapshot = latest();
-    const { inputTokens, outputTokens, cachedInputTokens } = snapshot.usage;
-    const total = formatSessionTokenUsage({
-      prompt_tokens: inputTokens,
-      completion_tokens: outputTokens,
-      cache_read_tokens: cachedInputTokens,
-    });
-    const breakdown = formatModelUsageBreakdown(
-      summarizeModelUsage((snapshot.requestCosts ?? []).map(({ record }) => record)),
-    );
-    return { transcript: breakdown ? `${total}\n${breakdown}` : total };
-  };
+  const usage = (): CommandResult => ({ transcript: sessionUsageText(latest()) });
 
   /** A skill always belongs to a request, so naming one alone hands the line back to finish. */
   const skills = async (connection: TuiConnection, input: string): Promise<CommandResult> => {

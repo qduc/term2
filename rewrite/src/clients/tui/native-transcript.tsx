@@ -32,9 +32,12 @@ const withoutPrefix = (message: Message, rows: readonly Row[]): Message => {
  * Commit only an authoritative, settled prefix. Active, missing or uncertain
  * rows and their successors remain live so their ordering can still change.
  */
+/** The committed rows of a freshly mounted list; one shared value so a frame drawn for it stays current. */
+export const NO_ROWS: readonly Row[] = [];
+
 export function useNativeTranscript(state: TuiState, columns: number, epoch: number, header?: React.ReactNode) {
   const [stored, setStored] = useState<{ epoch: number; rows: readonly Row[] }>({ epoch, rows: [] });
-  const rows = stored.epoch === epoch ? stored.rows : [];
+  const rows = stored.epoch === epoch ? stored.rows : NO_ROWS;
   // Per-token state changes only touch drafts; the settled-row scan walks the whole
   // history, so it is keyed on the history itself and the draft ids.
   const draftIds = Object.keys(state.drafts).join('\u0000');
@@ -179,7 +182,8 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
         for (const row of expanded.slice(held)) deferred.add(row.key);
         expanded.length = held;
       }
-      return current.epoch === epoch && previous.length === expanded.length ? current : { epoch, rows: expanded };
+      if (current.epoch === epoch && previous.length === expanded.length) return current;
+      return { epoch, rows: expanded.length ? expanded : NO_ROWS };
     });
   }, [settled, state.drafts, state.reasoning, state.activeTurnId, epoch]);
 

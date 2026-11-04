@@ -5,7 +5,6 @@ import { join } from 'node:path';
 import fc from 'fast-check';
 import { createLog, openLog, readFactLines } from '../../rewrite/src/session/log.ts';
 import { captureDirectFinalWindow, recoverDirectFinalWindow } from '../../rewrite/src/session/direct-final.ts';
-import { inputToItem } from '../../rewrite/src/engine/adopted/conversion.ts';
 
 // Decode embedded provider JSON once, while also inspecting literal ref framing.
 function storedStrings(value, out = []) {
@@ -61,10 +60,16 @@ export const nativeLogProperties = [
             `BEGIN_ARGUMENT_${n}_` + argumentUnit.repeat(Math.ceil(u.size / argumentUnit.length)) + '_END';
           sentinels.push(body, argument);
           const input = { code: argument };
-          const call = inputToItem(
-            { type: 'tool_call', id: callId, name: 'probe', arguments: JSON.stringify(input) },
-            'mock',
-          );
+          const rawArguments = JSON.stringify(input);
+          const call = {
+            type: 'tool_call',
+            id: callId,
+            callId,
+            toolName: 'probe',
+            input: JSON.parse(rawArguments),
+            rawArguments,
+            argumentsSnapshot: JSON.parse(rawArguments),
+          };
           const sourceOutput = u.structured
             ? [{ type: 'text', text: body + '\n"\\\ud83d\ude42' }]
             : `model prefix\n${body}`;
@@ -142,7 +147,13 @@ export const nativeLogProperties = [
             paths.push(writer.path);
           }
           const item = u.structured
-            ? inputToItem({ type: 'tool_result', id: callId, output: sourceOutput }, 'mock')
+            ? // Structured tool output has no native item, so it is stored as provider input.
+              {
+                type: 'provider_input',
+                id: `result-${n}`,
+                provider: 'mock',
+                input: { type: 'tool_result', id: callId, output: sourceOutput },
+              }
             : { type: 'tool_result', id: `result-${n}`, callId, output, isError: false };
           assert.equal(item.type, u.structured ? 'provider_input' : 'tool_result');
           accept([{ type: 'item', turnId, ...(u.structured ? {} : { executionId }), item }]);

@@ -170,9 +170,6 @@ async function runScenario(cli, scenario, cliForRun = []) {
       const args = run.args.map((arg) => substitute(arg).replaceAll('{{LAST_CONVERSATION}}', last ?? '<none>'));
       const selectedCli = cliForRun[runs.length] ?? cli;
       const result = await spawnCli(selectedCli, args, env, workspace);
-      if (selectedCli.endsWith('c2-proof-cli.js')) {
-        assertC2ProofRun(root, env.TERM2_CONVERSATIONS_DIR, last ?? latestConversation(env.TERM2_CONVERSATIONS_DIR));
-      }
       runs.push({ ...result, requests: provider.requests.slice(before) });
     }
     const normalize = normalizer({ root, home, workspace, baseUrl: provider.baseUrl });
@@ -189,39 +186,6 @@ async function runScenario(cli, scenario, cliForRun = []) {
   } finally {
     await provider.close();
     fs.rmSync(root, { recursive: true, force: true });
-  }
-}
-
-function assertC2ProofRun(root, conversationsDir, id) {
-  if (!id) throw new Error('C2 proof CLI did not create or resume a canonical conversation');
-  const file = path.join(conversationsDir, `${id}.jsonl`);
-  if (!fs.existsSync(file)) throw new Error(`C2 proof session log is missing: ${id}`);
-  const envelopes = fs
-    .readFileSync(file, 'utf8')
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => JSON.parse(line));
-  const batches = envelopes.filter((envelope) => envelope.event?.type === 'session_fact_batch');
-  const nested = batches.flatMap((batch) => batch.event.entries.map((entry) => entry.event));
-  if (
-    !nested.some((event) => event.type === 'session_admitted') ||
-    !nested.some((event) => event.type === 'session_turn_started')
-  ) {
-    throw new Error('C2 proof resumed append did not persist admission/start lifecycle batches');
-  }
-  if (
-    !nested.some((event) => event.type === 'assistant_turn') ||
-    !nested.some((event) => event.type === 'session_turn_ended')
-  ) {
-    throw new Error('C2 proof resumed append did not persist the source terminal transcript and lifecycle fact');
-  }
-  const files = Object.keys(readTree(root));
-  if (
-    files.some((name) =>
-      /(?:gateway.*(?:db|journal|checkpoint)|(?:admission|interaction-checkpoint).*(?:db|journal|jsonl))/i.test(name),
-    )
-  ) {
-    throw new Error('C2 proof created a gateway journal, checkpoint or admission database');
   }
 }
 

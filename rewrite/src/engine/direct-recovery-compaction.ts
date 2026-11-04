@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { Item, ItemId, Model, ModelRef, ModelRequest, Usage } from '../model/index.js';
 import { ModelFailure } from '../model/failure.js';
+import { bytes, estimateDirectContext, type DirectContextEstimate } from './direct-context-estimate.js';
 import { resolveModelContextPolicy } from '../../../source/services/agent-runtime/model-context-policy.js';
 import { DEFAULT_ASSUMED_CONTEXT_WINDOW } from '../model/index.js';
 import {
@@ -19,12 +20,6 @@ export type DirectCompactionSettings = {
   readonly mode: 'native' | 'auto' | 'local';
   readonly compactThreshold: number;
   readonly compactThresholdTokens: number | null;
-};
-export type DirectContextEstimate = {
-  readonly renderedInputTokens: number;
-  readonly outputReserveTokens: number;
-  readonly safetyReserveTokens: number;
-  readonly hardFitTokens: number;
 };
 /** A real compaction attempt, not a physical-dispatch or history-acceptance claim.
  * Estimates describe the frozen compaction input, not measured provider usage. */
@@ -219,22 +214,6 @@ export async function compactDirectHistory(input: DirectCompactionInput): Promis
     usage: operation.usage,
     checkpointReceipts: operation.checkpointReceipts,
     disableChaining: true,
-  };
-}
-
-/** Conservative bytes/4 estimate with the existing 10% capacity reserve. Never changes history. */
-export function estimateDirectContext(request: ModelRequest, contextWindow?: number): DirectContextEstimate {
-  const renderedInputTokens = Math.ceil(
-    bytes({ instructions: request.instructions, tools: request.tools.map(legacyToolShape), history: request.input }) /
-      4,
-  );
-  const outputReserveTokens = Math.max(0, Math.ceil(request.maxOutputTokens ?? 0));
-  const safetyReserveTokens = Math.ceil((contextWindow ?? 0) * 0.1);
-  return {
-    renderedInputTokens,
-    outputReserveTokens,
-    safetyReserveTokens,
-    hardFitTokens: renderedInputTokens + outputReserveTokens + safetyReserveTokens,
   };
 }
 
@@ -487,17 +466,6 @@ function toolReceipts(history: readonly Item[]): readonly string[] {
     );
   }
   return receipts;
-}
-
-/** Tools as legacy's estimate serializes them (toModelTools), so budgets and triggers land where legacy's do. */
-function legacyToolShape(tool: ModelRequest['tools'][number]): unknown {
-  return tool.modelTool
-    ? { type: tool.modelTool.type, name: tool.name, description: tool.description, format: tool.modelTool.format }
-    : { type: 'function', name: tool.name, description: tool.description, parameters: tool.inputSchema };
-}
-
-function bytes(value: unknown): number {
-  return Buffer.byteLength(JSON.stringify(value) ?? '');
 }
 
 function validateSettings(input: DirectCompactionInput): void {

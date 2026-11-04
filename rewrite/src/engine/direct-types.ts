@@ -31,8 +31,8 @@ import type {
   DirectCompactionResult,
   DirectCompactionStart,
   DirectCompactionRequest,
-  DirectContextEstimate,
 } from './direct-recovery-compaction.js';
+import type { DirectContextEstimate } from './direct-context-estimate.js';
 import type {
   ModelRequestCost,
   RunBudget,

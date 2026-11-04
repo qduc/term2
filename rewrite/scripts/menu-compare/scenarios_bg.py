@@ -94,3 +94,8 @@ SEED['nested-once-again'] = SEED['nested-folder-again']
 # An invalid async name: legacy's schema check answers with its 'Tool input did not match schema' feedback.
 SCENARIOS['bg-bad-name'] = _GO
 SEED['bg-bad-name'] = dict(_child({'execution': 'background', 'role': 'explorer', 'name': 'Bad Name', 'task': 'SUBTASK look'}), settings={})
+
+# Any tool: invalid input is legacy's schema diagnostic and a failed row, with no approval asked.
+SCENARIOS['bad-shell-args'] = _GO
+SEED['bad-shell-args'] = dict(_BG, settings={}, routes=[])
+SEED['bad-shell-args']['replies'] = [{'tool': 'shell', 'args': {'cmd': 'ls'}}, {'text': 'launched'}]

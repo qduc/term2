@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { withTrimConfig } from '../../../source/utils/output/output-trim.js';
-import { normalizeToolInput } from '../../../source/lib/tool-invoke.js';
+import { normalizeToolInput, runToolInputDiagnostics } from '../../../source/lib/tool-invoke.js';
 import { isCancellationError, isHarnessInvariantError } from '../../../source/lib/harness-invariant-error.js';
 import type { ToolApprovalPolicyRegistry } from '../../../source/services/approval/tool-approval-policy-registry.js';
 import {
@@ -95,12 +95,28 @@ function parseInput(definition: AnyToolDefinition, raw: unknown): unknown {
   const schema =
     definition.canonicalParameters ??
     (isZodToolParameterSchema(definition.parameters) ? definition.parameters : undefined);
-  const parsed =
-    typeof raw === 'string' && definition.parseModelArguments
-      ? definition.parseModelArguments(raw)
-      : (JSON.parse(normalizeToolInput(raw, schema, definition.argumentParsing ?? 'repair')) as unknown);
-  return schema ? schema.parse(parsed) : parsed;
+  let parsed: unknown = raw;
+  try {
+    parsed =
+      typeof raw === 'string' && definition.parseModelArguments
+        ? definition.parseModelArguments(raw)
+        : (JSON.parse(normalizeToolInput(raw, schema, definition.argumentParsing ?? 'repair')) as unknown);
+    return schema ? schema.parse(parsed) : parsed;
+  } catch (error) {
+    if (!schema || !(error instanceof z.ZodError || error instanceof SyntaxError)) throw error;
+    // Legacy wrapToolInvoke: invalid input never asks for approval; execute returns the schema diagnostic,
+    // which the tool's own formatter draws as a failed row. Keep the arguments for that row.
+    const diagnostic = runToolInputDiagnostics(definition.name, schema, parsed);
+    const input = parsed && typeof parsed === 'object' ? parsed : { input: parsed };
+    invalidInputs.set(input, diagnostic);
+    return input;
+  }
 }
+
+/** Parsed-but-invalid inputs and their legacy diagnostic, between parse and execute of the same call. */
+const invalidInputs = new WeakMap<object, string>();
+const invalidInput = (input: unknown): string | undefined =>
+  input && typeof input === 'object' ? invalidInputs.get(input) : undefined;
 
 function invocationFor(context: ToolContext, sessionId: string): Invocation & { context: { sessionId: string } } {
   return { context: { sessionId }, signal: context.signal, [DIRECT_CONTEXT]: context };
@@ -304,9 +320,15 @@ function adaptTool(definition: AnyToolDefinition, options: SourceToolOptions, ow
             )
         : definition.parallelSafe,
     parse: (raw) => parseInput(definition, raw),
-    approval: (input, context) => approvalFor(definition, input, context, options),
+    approval: (input, context) =>
+      invalidInput(input) !== undefined
+        ? Promise.resolve({ kind: 'none' })
+        : approvalFor(definition, input, context, options),
     async execute(input, context) {
       context.signal.throwIfAborted();
+      const diagnostic = invalidInput(input);
+      if (diagnostic !== undefined)
+        return { output: diagnostic, isError: true, display: displayFor(definition, input, diagnostic, randomUUID()) };
       const rejection = await options.checkInterceptors?.(definition.name, input);
       if (rejection) return { output: rejection, isError: true };
       const answer = await questionAnswer(definition, input, context);

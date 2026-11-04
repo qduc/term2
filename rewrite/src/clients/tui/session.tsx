@@ -16,6 +16,7 @@ import { useInterrupt } from './interrupt.js';
 import { runQueueCommand } from './queue-command.js';
 import { withSkillPrefix } from './skill-edit.js';
 import { isCtrlG, isCtrlO, isCtrlT, isShiftTab, usePlanToggle } from './shift-tab.js';
+import { resolveTypedCommand } from './typed-command.js';
 import { REWIND_COMMAND, rewindItems, runRewindCommand } from './menus/rewind-command.js';
 import { cleanImageMarkers, primaryDraft, wireAttachments } from './draft.js';
 import { numberedInteractionAnswer } from './interaction-command.js';
@@ -262,34 +263,20 @@ export function TuiSession({
           throw error;
         }
       }
-      if (input.startsWith('/') && !/^\/(steer|followup)\s/.test(input) && submittedImages.length)
+      // Legacy resolves a typed command by exact name in any case or by a unique prefix, and refuses the rest.
+      const typed = resolveTypedCommand(input);
+      if (typed.kind === 'refused') throw new Error(typed.notice);
+      const command = typed.kind === 'command' ? typed.input : input;
+      if (typed.kind === 'command' && submittedImages.length)
         throw new Error('Remove attachments before running a command.');
-      if (input.startsWith('/answer ')) {
-        const answer = numberedInteractionAnswer(input, state.interactions, answerOwners.current);
+      if (command.startsWith('/answer ')) {
+        const answer = numberedInteractionAnswer(command, state.interactions, answerOwners.current);
         await answerInteraction(connection, answer.requestId, answer.decision);
-      } else if (/^\/(steer|followup)(?:\s|$)/.test(input)) {
-        const match = /^\/(steer|followup)\s+([\s\S]*)$/.exec(input);
-        if (!match || (!match[2].trim() && !submittedImages.length))
-          throw new Error('Enter a message after /steer or /followup.');
-        const parts = wireAttachments(submittedImages, otherParts, originalParts);
-        if (await held(cleanImageMarkers(match[2]), parts, () => void submit(input, submittedImages, delivery, true)))
-          return;
-        await submitText(
-          connection,
-          cleanImageMarkers(match[2]),
-          wireAttachments(submittedImages, otherParts, originalParts),
-          match[1] === 'steer' ? 'steer' : 'follow_up',
-          match[1] === 'steer' ? state.activeTurnId ?? undefined : undefined,
-          submission.requestId,
-        );
-        if (await steerRecovery.wasReturnedAfter(submission.submissionEpoch, submission.requestId)) return;
-        clearSubmittedParts(submittedImages, otherParts);
-      } else if (input.startsWith('!')) {
+      } else if (command.startsWith('!')) {
         const attached = submittedImages.length > 0 || otherParts.length > 0;
-        setBangResult(await runBangShell(integration, connection, input, attached, Boolean(state.activeTurnId)));
-      } else if (input.trim() === '/tasks') setTaskOpen(true);
-      else if (REWIND_COMMAND.test(input.trim())) {
-        const chosen = await runRewindCommand(input, {
+        setBangResult(await runBangShell(integration, connection, command, attached, Boolean(state.activeTurnId)));
+      } else if (REWIND_COMMAND.test(command.trim())) {
+        const chosen = await runRewindCommand(command, {
           listItems: async () => rewindItems(await listRewindTargets(connection)),
           addSystemMessage: setNotice,
           openRewindMenu: (items, how) => menuStack.openMenu({ kind: 'rewind', items, initialDisposition: how }),
@@ -300,10 +287,10 @@ export function TuiSession({
           await executeRewind(chosen.item.targetId, chosen.disposition);
           return;
         }
-      } else if (/^\/bridge(?:\s|$)/.test(input)) {
-        setNotice(await runBridgeCommand(integration, input));
-      } else if (/^\/command-(status|apply)(?:\s|$)/.test(input)) {
-        const match = /^\/command-(status|apply)\s+(\S+)$/.exec(input.trim());
+      } else if (/^\/bridge(?:\s|$)/.test(command)) {
+        setNotice(await runBridgeCommand(integration, command));
+      } else if (/^\/command-(status|apply)(?:\s|$)/.test(command)) {
+        const match = /^\/command-(status|apply)\s+(\S+)$/.exec(command.trim());
         if (!match) throw new Error('Use /command-status <id> or /command-apply <id>.');
         const result = await commandStatus(connection, match[2]);
         if (match[1] === 'status' || result.kind !== 'finished') {
@@ -320,27 +307,29 @@ export function TuiSession({
             await switchSession(outcome.sessionId);
           } else setNotice(receiptNotice(result));
         }
-      } else if (input.trim() === '/clear' || input.trim() === '/rollover') {
-        const failure = await replaceSession(connection, input.trim() as '/clear' | '/rollover', switchSession);
+      } else if (command.trim() === '/clear' || command.trim() === '/rollover') {
+        const failure = await replaceSession(connection, command.trim() as '/clear' | '/rollover', switchSession);
         if (failure !== null) {
           setNotice(failure);
           editor.accepted(input, true, []);
           return;
         }
-      } else if (/^\/queue(?:\s|$)/.test(input)) {
-        if (await runQueueCommand(connection, input, state.queue, queueOwners.current, startQueueEdit)) return;
-      } else if (input.trim() === '/cancel') {
-        setNotice(await cancelInput(connection, state.activeTurnId ?? undefined, input, submission.submittedRevision));
+      } else if (/^\/queue(?:\s|$)/.test(command)) {
+        if (await runQueueCommand(connection, command, state.queue, queueOwners.current, startQueueEdit)) return;
+      } else if (command.trim() === '/cancel') {
+        setNotice(
+          await cancelInput(connection, state.activeTurnId ?? undefined, command, submission.submittedRevision),
+        );
         return;
-      } else if (/^\/providers(?:\s|$)/.test(input)) {
+      } else if (/^\/providers(?:\s|$)/.test(command)) {
         if (!menuStack.openFrame('providers')) throw new Error('Provider management is unavailable.');
-      } else if (input.startsWith('/')) {
-        const directNotice = await directSlashCommand(connection, input);
+      } else if (typed.kind === 'command') {
+        const directNotice = await directSlashCommand(connection, command);
         if (directNotice !== null) setNotice(directNotice);
         else {
-          const result = await integration.command(connection, input);
+          const result = await integration.command(connection, command);
           // A session switch carries its message into the new session, which remounts.
-          if (result.message && !result.sessionId) viewport.showMessage(result.message, input, setNotice);
+          if (result.message && !result.sessionId) viewport.showMessage(result.message, command, setNotice);
           if (result.transcript) viewport.appendCommandOutput(result.transcript);
           if (result.menu) menuStack.openMenu(result.menu);
           if (result.draft) {
@@ -364,9 +353,7 @@ export function TuiSession({
       editor.accepted(
         input,
         !input.startsWith('/answer '),
-        input.startsWith('/') && !/^\/(steer|followup)\s/.test(input)
-          ? []
-          : wireAttachments(submittedImages, otherParts, originalParts),
+        input.startsWith('/') ? [] : wireAttachments(submittedImages, otherParts, originalParts),
         submission.submittedRevision,
         clean,
       );

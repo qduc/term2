@@ -278,7 +278,7 @@ export function useSessionComposer(state: TuiState, historySize: number, onNotic
   const lateSteerNotice = (epoch: number, fallback: string) =>
     epoch === cancellationEpoch.current ? fallback : 'Cancelled. Your queued message is back in the input.';
   const restoreLateSteer = async (submitted: string, parts: readonly WireContent[]): Promise<void> => {
-    const text = submitted.replace(/^\/steer\s+/, '');
+    const text = submitted;
     await cancellationBarrier.current;
     const current = attachmentSnapshot.current;
     const active = activeSubmission.current?.input === submitted ? activeSubmission.current : null;

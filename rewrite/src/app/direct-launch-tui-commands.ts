@@ -6,7 +6,7 @@ import { parseModelProviderArg } from '../../../source/utils/ai/model-provider-a
 /**
  * The slash commands no wire command covers by itself. Each one is either a real
  * host or wire operation here, or it fails visibly. The TUI sends `/compact`, `/retry-*`,
- * `/queue`, `/answer`, `/steer`, `/followup`, `/cancel`, `/clear`, `/rollover` and
+ * `/queue`, `/answer`, `/cancel`, `/clear`, `/rollover` and
  * `/rewind` itself, and calls `switchSession` or `bridge` here for the app's part.
  *
  * A replacement always attaches fresh, so there is no retained cursor: this host's
@@ -359,7 +359,6 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
         case 'help':
           return { message: helpText() };
         case 'quit':
-        case 'exit':
           return { exit: true };
         case 'resume':
           return resume(argument);

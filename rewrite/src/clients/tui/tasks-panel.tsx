@@ -171,7 +171,9 @@ const TaskRows: FC<{ readonly state: TuiState; readonly gap: boolean }> = ({ sta
   // The ticker only re-renders; read the clock each render so a panel mounted long ago never sees a stale time.
   const [, setTick] = useState(0);
   const now = Date.now();
-  const rows = state.tasks.map(panelRow);
+  // Legacy's foreground rows are live transfer candidates (always running): a settled foreground task leaves
+  // at once; only background rows linger for the grace period.
+  const rows = state.tasks.map(panelRow).filter((row) => row.placement === 'background' || !isTerminal(row.task));
   // Each settled row lingers briefly, long enough to read its outcome, then drops off on its own.
   const settledAt = useRef(new Map<string, number>()).current;
   const liveKeys = new Set(rows.map((row) => row.key));

@@ -119,3 +119,11 @@ SCENARIOS.update({
     'handoff-yes-model-esc': _HAND + ['<enter>', '<enter>', '<sleep>', '<esc>', '<sleep>'],
 })
 SEED.update({name: _HANDOFF for name in SCENARIOS if name.startswith('handoff-') and name != 'handoff-empty'})
+
+# exit output: legacy prints usage, then the resume hint when there was a conversation (printUsageOnce)
+SCENARIOS.update({
+    'exit-empty': ['/quit', '<enter>', '<sleep>', '<enter>', '<sleep>'],
+    'exit-turn': ['hello', '<enter>', '<sleep>', '/quit', '<enter>', '<sleep>', '<enter>', '<sleep>'],
+    'clear-twice-usage': ['hello', '<enter>', '<sleep>', '/clear', '<enter>', '<sleep>', '/usage', '<enter>'],
+})
+SEED.update({'exit-turn': _TURN, 'clear-twice-usage': _TURN})

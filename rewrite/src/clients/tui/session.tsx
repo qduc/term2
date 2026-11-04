@@ -363,7 +363,12 @@ export function TuiSession({
             if (!switchSession) throw new Error(`Session ${result.sessionId} needs an app session switch.`);
             await switchSession(result.sessionId, result.message);
           }
-          if (result.exit) onExit();
+          // Legacy clearInputBeforeReset: the emptied composer is painted before Ink unmounts.
+          if (result.exit) {
+            replaceInput('');
+            await waitUntilRenderFlush();
+            onExit();
+          }
         }
       } else {
         const parts = wireAttachments(submittedImages, otherParts, originalParts);

@@ -104,3 +104,18 @@ SCENARIOS.update({
     'bang-up': ['hello', '<enter>', '<sleep>', '!', '<up>'],
 })
 SEED['bang-up'] = _TURN
+
+_HAND = ['hello', '<enter>', '<sleep>', '/handoff', '<enter>']
+_HANDOFF = {'replies': [{'text': 'First answer.'}, {'text': 'Handed-off answer.'}, {'text': 'Third.'}]}
+SCENARIOS.update({
+    'handoff-empty': ['/handoff', '<enter>'],
+    'handoff-typed': _HAND + ['check it'],
+    'handoff-enter': _HAND + ['<enter>'],
+    'handoff-confirm-esc': _HAND + ['<enter>', '<esc>'],
+    'handoff-no': _HAND + ['<enter>', '<down>', '<enter>', '<sleep>'],
+    'handoff-yes': _HAND + ['<enter>', '<enter>', '<sleep>'],
+    'handoff-yes-model': _HAND + ['<enter>', '<enter>', '<sleep>', '<enter>', '<sleep>'],
+    'handoff-yes-effort': _HAND + ['<enter>', '<enter>', '<sleep>', '<enter>', '<sleep>', '<enter>', '<sleep>'],
+    'handoff-yes-model-esc': _HAND + ['<enter>', '<enter>', '<sleep>', '<esc>', '<sleep>'],
+})
+SEED.update({name: _HANDOFF for name in SCENARIOS if name.startswith('handoff-') and name != 'handoff-empty'})

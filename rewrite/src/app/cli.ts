@@ -396,7 +396,6 @@ async function main(argv: readonly string[]): Promise<number> {
       if (command.refused) throw refused(command.refused);
       const options = await resolveNativeResume(conversationsDirectory(), command.options);
       if (!(stdin.isTTY && stdout.isTTY)) {
-        if (options.resumeId !== null) throw new Error('--resume requires a follow-up prompt');
         // A non-lite start from the home directory is refused with the warning first, as the current CLI does.
         if (
           shouldWarnOnHomeDirectoryStart({
@@ -408,7 +407,8 @@ async function main(argv: readonly string[]): Promise<number> {
           stderr.write(`${HOME_DIRECTORY_START_WARNING.trimEnd()}\nCancelled.\n`);
           return 1;
         }
-        if (options.goal === null) {
+        // A resume opens its session first so the refusal follows the resume and profile lines, as the current CLI does.
+        if (options.goal === null && options.resumeId === null) {
           stderr.write(`${INTERACTIVE_TERMINAL_REQUIRED}\n`);
           return 1;
         }

@@ -321,7 +321,7 @@ def run(cli, cols, rows, name):
     provider = server.RequestHandlerClass
     provider.replies = [{'text': 'Noted.'}]  # for the earlier sessions
     provider.posts = 0
-    provider.usage = None
+    provider.usage = SEED.get(name, {}).get('session_usage')  # usage the earlier sessions' replies report
     root = tempfile.mkdtemp(prefix='menucmp-')
     try:
         seed = SEED.get(name, {})

@@ -61,16 +61,19 @@ export function TuiSession({
   interrupt,
   switchSession,
   transitionNotice,
+  resumed = false,
 }: TuiProps & {
   readonly interrupt: React.RefObject<() => void>;
-  readonly switchSession?: (sessionId: string, notice?: string) => Promise<void>;
+  readonly switchSession?: (sessionId: string, notice?: string, resumed?: boolean) => Promise<void>;
   readonly transitionNotice?: string;
+  /** Entered by an in-app /resume, where legacy's footer shows the restored session's totals. */
+  readonly resumed?: boolean;
 }): React.ReactElement {
   const { state, error: connError, historyRevision } = useClient(connection, retainedSnapshot, onSnapshot, onLiveEvent);
   const preferences = integration.preferences?.(connection.sessionId) ?? terminalPreferenceDefaults();
   const { columns, rows } = useTerminalSize();
   const liveTps = useLiveStreamingSpeed(state);
-  const footerState = useFooterUsage(state);
+  const footerState = useFooterUsage(state, resumed);
   const [bangResult, setBangResult] = useState<string | null>(null);
   const [interactionOpen, setInteractionOpen] = useState(false);
   const [dismissedInteractionId, setDismissedInteractionId] = useState<string | null>(null);
@@ -367,7 +370,7 @@ export function TuiSession({
           }
           if (result.sessionId) {
             if (!switchSession) throw new Error(`Session ${result.sessionId} needs an app session switch.`);
-            await switchSession(result.sessionId, result.message);
+            await switchSession(result.sessionId, result.message, input.trim().startsWith('/resume'));
           }
           if (result.exit) onExit();
         }

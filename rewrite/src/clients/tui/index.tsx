@@ -33,14 +33,14 @@ export function Tui(props: TuiProps): React.ReactElement {
     interrupt.current();
   });
   // Keep transition notices above the keyed per-session component.
-  const [transition, setTransition] = useState<{ sessionId: string; message: string } | null>(null);
+  const [transition, setTransition] = useState<{ sessionId: string; message: string; resumed: boolean } | null>(null);
   const { stdout } = useStdout();
   const switchSession = props.integration.switchSession
-    ? async (sessionId: string, notice?: string) => {
+    ? async (sessionId: string, notice?: string, resumed = false) => {
         const result = await props.integration.switchSession!(sessionId);
         clearTerminalForRedraw(stdout);
         const message = [notice, result?.message].filter(Boolean).join('\n');
-        setTransition(message ? { sessionId, message } : null);
+        setTransition(message || resumed ? { sessionId, message, resumed } : null);
       }
     : undefined;
   return (
@@ -50,7 +50,10 @@ export function Tui(props: TuiProps): React.ReactElement {
         {...props}
         interrupt={interrupt}
         switchSession={switchSession}
-        transitionNotice={transition?.sessionId === props.connection.sessionId ? transition.message : undefined}
+        transitionNotice={
+          transition?.sessionId === props.connection.sessionId ? transition.message || undefined : undefined
+        }
+        resumed={transition?.sessionId === props.connection.sessionId && transition.resumed}
       />
     </Box>
   );

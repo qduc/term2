@@ -111,6 +111,8 @@ export type TuiState = {
     readonly outputTokens: number;
     readonly cachedInputTokens: number;
   };
+  /** The session's cumulative usage, which legacy's footer shows after an in-app /resume. */
+  readonly sessionUsage?: TuiState['lastUsage'];
   readonly cost?: string;
   readonly goal?: string;
   readonly verification?: string;

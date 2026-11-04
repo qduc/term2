@@ -143,8 +143,18 @@ export function directStatusView(
  * Legacy's footer keeps the last request's usage until the conversation is cleared (a new session, so a fresh
  * mount here): a model switch, rewind or compaction does not blank it, though the snapshot drops it.
  */
-export function useFooterUsage(state: TuiState): TuiState {
+export function useFooterUsage(state: TuiState, resumed = false): TuiState {
   const kept = useRef<Pick<TuiState, 'lastUsage' | 'speed'>>({});
+  // Legacy's in-app /resume (restoreConversation) puts the restored session's cumulative usage in the footer
+  // until the next request reports its own.
+  const restored = useRef(resumed ? JSON.stringify(state.lastUsage ?? null) : null);
+  if (restored.current !== null && restored.current !== JSON.stringify(state.lastUsage ?? null))
+    restored.current = null;
+  const total = state.sessionUsage;
+  if (restored.current !== null && total && (total.inputTokens || total.outputTokens || total.cachedInputTokens)) {
+    const { speed: _speed, ...rest } = state;
+    return { ...rest, lastUsage: total };
+  }
   if (state.lastUsage) kept.current = { lastUsage: state.lastUsage, speed: state.speed };
   return state.lastUsage ? state : { ...state, ...kept.current };
 }

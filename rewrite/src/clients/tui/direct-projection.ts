@@ -259,6 +259,7 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
     codexQuota: snapshot.codexQuota,
     speed: snapshot.lastSpeed,
     lastUsage: snapshot.lastUsage,
+    sessionUsage: snapshot.usage,
     cost: snapshot.cost ? `${snapshot.cost.currency} ${snapshot.cost.totalUsd.toFixed(4)}` : undefined,
     goal: snapshot.goal ? `${snapshot.goal.status}: ${snapshot.goal.text}` : undefined,
     verification: snapshot.verification

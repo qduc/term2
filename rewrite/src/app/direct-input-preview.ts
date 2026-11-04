@@ -86,6 +86,7 @@ export function directInputPreviewResult(decisions: DirectInputPreviewDecisions)
       notices: [
         {
           kind: 'large_uncached_input',
+          estimatedTokens: large.estimatedTokens,
           message: `Large uncached input (~${large.estimatedTokens.toLocaleString(
             'en-US',
           )} estimated tokens); confirmation required (${large.reasons.join(', ')}).`,

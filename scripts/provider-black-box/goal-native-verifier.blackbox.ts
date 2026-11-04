@@ -8,8 +8,8 @@ import { usesDirectComposer } from '../../source/test-helpers/direct-composer.js
 
 const direct = usesDirectComposer([process.env.TERM2_TEST_CLI ?? '']);
 
-it.skipIf(!direct).each(['pass', 'inconclusive', 'stale', 'fail'] as const)(
-  'native verifier %s with host-collected evidence',
+it.each(['pass', 'inconclusive', 'stale', 'fail'] as const)(
+  'verifier %s on an uncommitted working tree',
   async (scenario) => {
     const requests: Record<string, unknown>[] = [];
     const pending: ServerResponse[] = [];
@@ -115,52 +115,53 @@ it.skipIf(!direct).each(['pass', 'inconclusive', 'stale', 'fail'] as const)(
       expect(String(outputs(1, 'worker-check')[0]?.output)).toContain('achieved proposed');
       complete(1, [message('WORKER_PROPOSED_DONE')]);
       await child.waitForState(() => requests.length === 3);
-      expect(requests[2]!.tools ?? []).toEqual([]);
+      // Legacy's verifier: a fresh request with only the verification_probe tool and no worker history.
+      expect((requests[2]!.tools as Record<string, unknown>[]).map((tool) => tool.name)).toEqual([
+        'verification_probe',
+      ]);
       expect(requests[2]!.previous_response_id).toBeUndefined();
-      const verifierInput = JSON.stringify(requests[2]!.input);
-      expect(verifierInput).toContain('VERIFIED_FIXTURE_CONTENT');
-      expect(verifierInput).toContain('proof.txt');
-      expect(verifierInput).toContain('HOST_ONLY_NONCE_x7');
-      const verifierRequest = JSON.stringify(requests[2]);
+      expect(requests[2]!.input as unknown[]).toHaveLength(1);
+      const verifierRequest = JSON.stringify(requests[2]!.input);
       expect(verifierRequest).not.toContain('Fixture exists');
       expect(verifierRequest).not.toContain('Read proof.txt');
-      const probeIds = [...new Set(verifierInput.match(/probe-\d+/g) ?? [])];
-      expect(probeIds).toContain('probe-1');
-      expect(probeIds).toContain('probe-2');
       expect(verifierRequest).not.toContain('WORKER_PROPOSED_DONE');
       expect(verifierRequest).not.toContain('worker-check');
+      complete(2, [call('verifier-probe', 'verification_probe', { kind: 'read_file', path: 'proof.txt' })]);
+      await child.waitForState(() => requests.length === 4);
+      // The probe reads the uncommitted working tree.
+      expect(outputs(3, 'verifier-probe')).toHaveLength(1);
+      expect(outputs(3, 'verifier-probe')[0]!.output).toBe('VERIFIED_FIXTURE_CONTENT\nHOST_ONLY_NONCE_x7\n');
       expect(JSON.stringify(requests[0])).not.toContain('HOST_ONLY_NONCE_x7');
       expect(JSON.stringify(requests[1])).not.toContain('HOST_ONLY_NONCE_x7');
       if (scenario === 'stale') await writeFile(join(lease.root, 'proof.txt'), 'CHANGED_AFTER_PROBE\n');
-      complete(2, [
+      complete(3, [
         message(
           JSON.stringify({
             outcome: scenario === 'inconclusive' ? 'INCONCLUSIVE' : scenario === 'fail' ? 'FAIL' : 'PASS',
             evidence: scenario === 'fail' ? 'Fixture counterexample' : 'proof.txt has the required content',
-            checked: probeIds,
+            checked: ['proof.txt'],
             limitations: scenario === 'inconclusive' ? ['Needs execution'] : [],
-            coverage: scenario === 'inconclusive' ? 'partial' : 'complete',
-            basis: scenario === 'inconclusive' ? 'requires_execution' : 'static_evidence',
           }),
         ),
       ]);
       if (scenario === 'fail') {
-        await child.waitForState(() => requests.length === 4);
-        expect(JSON.stringify(requests[3]!.input)).toContain('Independent verification found a reproducible failure');
-        expect(JSON.stringify(requests[3]!.input)).toContain('Fixture counterexample');
-        complete(3, [call('blocked-after-fail', 'goal_check', { status: 'blocked', evidence: 'Need user input' })]);
         await child.waitForState(() => requests.length === 5);
-        expect(outputs(4, 'blocked-after-fail')).toHaveLength(1);
-        expect(String(outputs(4, 'blocked-after-fail')[0]!.output)).toContain('blocked');
-        complete(4, [message('REPAIR_BLOCKED_DONE')]);
+        expect(JSON.stringify(requests[4]!.input)).toContain('Independent verification found a reproducible failure');
+        expect(JSON.stringify(requests[4]!.input)).toContain('Fixture counterexample');
+        complete(4, [call('blocked-after-fail', 'goal_check', { status: 'blocked', evidence: 'Need user input' })]);
+        await child.waitForState(() => requests.length === 6);
+        expect(outputs(5, 'blocked-after-fail')).toHaveLength(1);
+        expect(String(outputs(5, 'blocked-after-fail')[0]!.output)).toContain('blocked');
+        complete(5, [message('REPAIR_BLOCKED_DONE')]);
         await child.waitForVisibleOutput('REPAIR_BLOCKED_DONE');
+      } else if (scenario === 'pass') {
+        await child.waitForVisibleOutput('Completion accepted after the model');
       } else {
-        await child.waitForVisibleOutput(
-          scenario === 'pass'
-            ? 'Verification: passed: proof.txt has the required content'
-            : scenario === 'stale'
-            ? 'Completion verification blocked: Workspace changed during verification'
-            : 'Completion verification blocked: Independent verification inconclusive',
+        await child.waitForVisibleOutput('Completion verification blocked');
+        expect(child.getVisibleOutput().replace(/\s+/g, ' ')).toContain(
+          scenario === 'stale'
+            ? 'Stale, late, conflicting, or cancelled verification result'
+            : 'Verification INCONCLUSIVE; completion not established',
         );
       }
       await child.waitForIdleInput({ after: idle });
@@ -172,8 +173,12 @@ it.skipIf(!direct).each(['pass', 'inconclusive', 'stale', 'fail'] as const)(
         .trim()
         .split('\n')
         .filter(Boolean)
-        .map((line) => JSON.parse(line).fact)
-        .filter((event) => event?.type === 'goal_changed');
+        .map((line) => {
+          const row = JSON.parse(line);
+          if (direct) expect(row.v).toBe(2);
+          return direct ? row.fact : row.event;
+        })
+        .filter((event) => event.type === 'goal_changed');
       expect(changes).toHaveLength(scenario === 'pass' ? 2 : 1);
       expect(changes[0].goal).toMatchObject({
         outcome: 'Verify fixture',
@@ -187,7 +192,7 @@ it.skipIf(!direct).each(['pass', 'inconclusive', 'stale', 'fail'] as const)(
       expect(await readFile(join(lease.root, 'proof.txt'), 'utf8')).toBe(
         scenario === 'stale' ? 'CHANGED_AFTER_PROBE\n' : 'VERIFIED_FIXTURE_CONTENT\nHOST_ONLY_NONCE_x7\n',
       );
-      expect(requests).toHaveLength(scenario === 'fail' ? 5 : 3);
+      expect(requests).toHaveLength(scenario === 'fail' ? 6 : 4);
     } finally {
       await child.cleanup();
       await lease.cleanup();

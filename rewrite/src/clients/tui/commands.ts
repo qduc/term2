@@ -59,11 +59,32 @@ export async function previewConfirmation(
   text: string,
   attachments: readonly WireContent[] = [],
 ): Promise<string | null> {
+  return (await previewSendHold(connection, text, attachments))?.message ?? null;
+}
+
+/** What a held send shows: legacy's input-surge or large-uncached prompt when the session names one. */
+export type SendHold = {
+  readonly message: string;
+  /** Legacy's InputSurgeConfirmationPrompt reason. */
+  readonly surge?: string;
+  /** Legacy's LargeUncachedConfirmationPrompt; the guard's estimate feeds the status bar. */
+  readonly largeTokens?: number;
+};
+
+export async function previewSendHold(
+  connection: TuiConnection,
+  text: string,
+  attachments: readonly WireContent[] = [],
+): Promise<SendHold | null> {
   const result = await connection.send({ type: 'preview', text, ...(attachments.length ? { attachments } : {}) });
   if (!result.ok) throw new Error(`${result.code}: ${result.message}`);
   if (result.kind !== 'preview') throw new Error(`Unexpected preview response: ${result.kind}`);
   if (!result.requiresConfirmation) return null;
-  return result.notices.map((notice) => notice.message).join(' ') || 'Confirmation required before sending.';
+  const message = result.notices.map((notice) => notice.message).join(' ') || 'Confirmation required before sending.';
+  const surge = result.notices.find((notice) => notice.kind === 'input_surge');
+  if (surge) return { message, surge: surge.message };
+  const large = result.notices.find((notice) => notice.kind === 'large_uncached_input');
+  return large?.estimatedTokens !== undefined ? { message, largeTokens: large.estimatedTokens } : { message };
 }
 
 /** Resolve exactly the identified pending request through the direct protocol. */

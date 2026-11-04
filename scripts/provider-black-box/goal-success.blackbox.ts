@@ -4,6 +4,9 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { expect, it } from 'vitest';
 import { createIsolatedWorkspaceLease, writePtyTextAndSubmit } from './provider-test-harness.js';
+import { usesDirectComposer } from '../../source/test-helpers/direct-composer.js';
+
+const direct = usesDirectComposer([process.env.TERM2_TEST_CLI ?? '']);
 
 it('persists achieved goal after a real independent repository probe', async () => {
   const requests: Record<string, unknown>[] = [];
@@ -133,7 +136,11 @@ it('persists achieved goal after a real independent repository probe', async () 
     const changes = history
       .trim()
       .split('\n')
-      .map((line) => JSON.parse(line).event)
+      .map((line) => {
+        const row = JSON.parse(line);
+        if (direct) expect(row.v).toBe(2);
+        return direct ? row.fact : row.event;
+      })
       .filter((event) => event.type === 'goal_changed');
     expect(changes).toHaveLength(2);
     expect(changes[0].goal).toMatchObject({

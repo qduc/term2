@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { Box, Text, useApp, useInput } from 'ink';
 import { MultilineInput, type ImageRef } from 'ink-prompt';
 import type { TuiProps } from './integration.js';
-import type { WireContent, WireSubmission } from '../../protocol/direct-wire.js';
+import type { WireContent, WireEvent, WireSubmission } from '../../protocol/direct-wire.js';
 import { useTheme } from './presentation/components/theme.js';
 import { useSkin } from './presentation/skins/SkinContext.js';
 import { terminalPreferenceDefaults } from '../../host/terminal-preference-defaults.js';
@@ -35,13 +35,9 @@ import { useShellMode } from './shell-mode.js';
 import { useQueueSelection } from './queue-selection.js';
 import { useInterruptConfirm } from './interrupt-confirm.js';
 import { useHandoff, type HandoffHolder } from './use-handoff.js';
-import {
-  directSlashCommand,
-  listRewindTargets,
-  submitText,
-  previewConfirmation,
-  WireCommandFailure,
-} from './commands.js';
+import { useGoalClosedNotice } from './goal-closed-notice.js';
+import { useLargeUncachedAdvisory } from './large-uncached-advisory.js';
+import { directSlashCommand, listRewindTargets, submitText, previewSendHold, WireCommandFailure } from './commands.js';
 export function TuiSession({
   connection,
   header,
@@ -75,7 +71,9 @@ export function TuiSession({
   readonly newConversation?: readonly string[];
   readonly handoff?: HandoffHolder;
 }): React.ReactElement {
-  const { state, error: connError, historyRevision } = useClient(connection, retainedSnapshot, onSnapshot, onLiveEvent);
+  const goalClosed = useRef<(event: WireEvent) => void>(() => undefined);
+  const live = (event: WireEvent) => (goalClosed.current(event), onLiveEvent?.(event));
+  const { state, error: connError, historyRevision } = useClient(connection, retainedSnapshot, onSnapshot, live);
   const preferences = integration.preferences?.(connection.sessionId) ?? terminalPreferenceDefaults();
   const { columns, rows } = useTerminalSize();
   const liveTps = useLiveStreamingSpeed(state);
@@ -130,6 +128,7 @@ export function TuiSession({
     { transitionNotices: [...(newConversation ?? []), ...(transitionNotice ? [transitionNotice] : [])] },
   );
   appendSystem.current = (text) => viewport.appendCommandOutput(text, true);
+  goalClosed.current = useGoalClosedNotice(state, setNotice);
   useEffect(() => {
     const interrupted = interruptedNotice(state);
     if (interrupted) setNotice(interrupted);
@@ -171,9 +170,9 @@ export function TuiSession({
     replaceInput,
     notice: setNotice,
   });
-  useHarnessInput((composerActive || menuStack.open) && !busy, Boolean(state.activeTurnId), menuStack.value);
   // Legacy InputBox's double Escape clear; menus, panels, the expanded output viewer and the queue take Escape first.
   const shell = useShellMode(editor.value, replaceInput);
+  const largeUncached = useLargeUncachedAdvisory(connection, editor.value, !shell.active, state, confirmation);
   const { escHintVisible } = useEscapeKey({
     value: editor.value,
     onChange: (value) => replaceInput(value),
@@ -261,6 +260,8 @@ export function TuiSession({
     viewport,
     setNotice,
   });
+  const harnessActive = (composerActive || menuStack.open) && !busy;
+  useHarnessInput(harnessActive, Boolean(state.activeTurnId), menuStack.value, menuStack.open || !rewindHidden);
   const submit = async (
     input: string,
     submittedImages: ImageRef[] = images,
@@ -291,12 +292,10 @@ export function TuiSession({
         replaceInput(input);
         setImages(submittedImages);
       };
-      const message = await previewConfirmation(connection, text, attachments).catch(
-        (e) => (keepDraft(), Promise.reject(e)),
-      );
-      if (message === null) return false;
+      const hold = await previewSendHold(connection, text, attachments).catch((e) => (keepDraft(), Promise.reject(e)));
+      if (hold === null) return false;
       keepDraft();
-      confirmation.hold(message, retry);
+      confirmation.holdSend(hold, retry, footerState.lastUsage);
       return true;
     };
     try {
@@ -519,6 +518,7 @@ export function TuiSession({
           escHint={escHintVisible}
           columns={columns - 4}
           queueSelectable={queue.items.length > 0 && !editor.value && !editing}
+          largeUncached={largeUncached}
         />
       </Box>
     </Box>

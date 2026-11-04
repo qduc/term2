@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { formatTokensPerSecond } from './presentation/utils/streaming/streaming-speed-tracker.js';
 import { Text } from 'ink';
 import { useSkin } from './presentation/skins/SkinContext.js';
-import { useTheme } from './presentation/components/theme.js';
+import { GLYPH_WARNING, useTheme } from './presentation/components/theme.js';
 import type { MenuHint, StatusSegmentView, StatusView } from './presentation/skins/types.js';
 import type { TuiIntegration } from './integration.js';
 import type { TuiState } from './state.js';
@@ -43,6 +43,7 @@ export function directStatusView(
   columns: number,
   /** Legacy's liveStreamingSpeed: the rate measured while the current request streams. */
   liveTps?: number | null,
+  largeUncached?: LargeUncachedStatus,
 ): StatusView {
   const quota = state.codexQuota && state.codexQuota.resetAt * 1000 > Date.now() ? state.codexQuota : undefined;
   const reset = quota ? new Date(quota.resetAt * 1000) : undefined;
@@ -65,6 +66,23 @@ export function directStatusView(
     cacheReadTokens != null && cacheReadTokens > 0 && lastUsage!.inputTokens > 0
       ? Math.round((cacheReadTokens / lastUsage!.inputTokens) * 100)
       : undefined;
+  // Legacy StatusBar's large-uncached advisory: folded into the cache segment when the last request read cache.
+  const warning = largeUncached?.estimatedTokens !== undefined ? largeUncached : undefined;
+  const usageHasIntegratedWarning = Boolean(warning && cacheReadTokens != null && cacheReadTokens > 0);
+  const usageTone = warning ? (warning.pending ? 'danger' : 'warning') : 'textSubtle';
+  const cacheText = usageHasIntegratedWarning
+    ? `${GLYPH_WARNING} ${formatStatusBarTokens(cacheReadTokens!)} uncached`
+    : cachePercent != null
+    ? `${cachePercent}% cached`
+    : '';
+  const warningText =
+    !warning || usageHasIntegratedWarning
+      ? ''
+      : warning.pending
+      ? `${GLYPH_WARNING} confirm cache miss ~${Math.round(
+          (warning.pendingTokens ?? warning.estimatedTokens!) / 1000,
+        )}k`
+      : `${GLYPH_WARNING} cache miss risk ~${Math.round(warning.estimatedTokens! / 1000)}k`;
   const tokenPieces: string[] = [];
   let speedText = '';
   if (lastUsage) {
@@ -105,15 +123,16 @@ export function directStatusView(
     },
   ];
   const metrics: StatusSegmentView[] = [
-    { id: 'tokens', text: tokenPieces.join(' '), tone: 'textSubtle', bold: false, tier: 4 },
+    { id: 'tokens', text: tokenPieces.join(' '), tone: usageTone, bold: Boolean(warning), tier: 4 },
     { id: 'speed', text: speedText, tone: 'textSubtle', separator: 'metric', tier: 0 },
     {
       id: 'cache',
-      text: cachePercent != null ? `${cachePercent}% cached` : '',
-      tone: 'textSubtle',
-      bold: false,
+      text: cacheText,
+      tone: usageHasIntegratedWarning ? usageTone : 'textSubtle',
+      bold: usageHasIntegratedWarning,
       separator: 'metric',
-      tier: 1,
+      // The alert variant of this segment is the warning itself, so it stays on screen.
+      tier: usageHasIntegratedWarning ? undefined : 1,
     },
     {
       id: 'context',
@@ -127,7 +146,14 @@ export function directStatusView(
     columns,
     config,
     metrics,
-    alerts: [],
+    alerts: warningText
+      ? [
+          {
+            id: 'cache-warning',
+            parts: [{ text: warningText, tone: warning!.pending ? 'danger' : 'warning', bold: true }],
+          },
+        ]
+      : [],
     quotaText: quotaWindows.map((window) => `${window.label} ${window.percent}%→${window.resetText}`).join(' / '),
     gauges: {
       contextPercent,
@@ -138,6 +164,15 @@ export function directStatusView(
     },
   };
 }
+
+/** Legacy StatusBar's largeUncachedWarning and pending-confirmation inputs. */
+export type LargeUncachedStatus = {
+  /** The composer preview's estimate; undefined when there is no advisory. */
+  readonly estimatedTokens: number | undefined;
+  /** A surge or large-uncached send is waiting for confirmation. */
+  readonly pending: boolean;
+  readonly pendingTokens?: number;
+};
 
 /**
  * Legacy's footer keeps the last request's usage until the conversation is cleared (a new session, so a fresh
@@ -190,6 +225,7 @@ export function ComposerFooter({
   escHint,
   columns,
   queueSelectable,
+  largeUncached,
 }: {
   readonly integration: TuiIntegration;
   readonly state: TuiState;
@@ -200,6 +236,7 @@ export function ComposerFooter({
   readonly escHint: boolean;
   readonly columns: number;
   readonly queueSelectable: boolean;
+  readonly largeUncached?: LargeUncachedStatus;
 }): React.ReactElement {
   const { Hints, StatusBar } = useSkin();
   const theme = useTheme();
@@ -223,7 +260,7 @@ export function ComposerFooter({
           Hints={Hints}
         />
       ) : null}
-      {info ? <StatusBar {...directStatusView(state, info, columns, liveTps)} /> : null}
+      {info ? <StatusBar {...directStatusView(state, info, columns, liveTps, largeUncached)} /> : null}
     </>
   );
 }

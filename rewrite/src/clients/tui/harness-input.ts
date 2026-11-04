@@ -11,13 +11,17 @@ let sessionValue = '';
 let entryText: string | null = null;
 
 /** Publish opt-in native composer acknowledgments in the harness's idle/composer file format. */
-export function useHarnessInput(active: boolean, processing: boolean, value: string): void {
+export function useHarnessInput(active: boolean, processing: boolean, value: string, mounted = true): void {
   useEffect(() => {
     const path = process.env['TERM2_HARNESS_IDLE_PATH'];
     if (!path) return;
 
-    sessionValue = value;
-    publishComposer(path, entryText ?? value);
+    // Legacy's input box holds its value whenever it is drawn; a draft restored into a hidden composer
+    // (a rewind before its frame) is published when the composer mounts and can take keys.
+    if (mounted) {
+      sessionValue = value;
+      publishComposer(path, entryText ?? value);
+    }
 
     const idle = active && !processing;
     if (idle === lastIdle) return;
@@ -26,7 +30,7 @@ export function useHarnessInput(active: boolean, processing: boolean, value: str
 
     generation += 1;
     writeAtomically(path, `${generation}\n`);
-  }, [active, processing, value]);
+  }, [active, processing, value, mounted]);
 }
 
 /**

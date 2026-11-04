@@ -322,7 +322,8 @@ it.each(['slash', 'ctrl-c', 'editing', 'only-steers'] as const)(
       session.write('\x03');
       await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 5_000 });
       await new Promise((resolve) => setTimeout(resolve, 500));
-      const screen = session.getVisibleOutput();
+      const output = session.getVisibleOutput();
+      const screen = output.slice(output.lastIndexOf('▌ term²'));
       expect(screen).toContain('UNIQUE-QUEUED-STEER');
       expect(screen).toContain('UNIQUE-SECOND-STEER');
       expect(screen).not.toContain('UNIQUE-QUEUED-STEER-EDITED');

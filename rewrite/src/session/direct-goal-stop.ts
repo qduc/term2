@@ -180,9 +180,9 @@ export function createDirectGoalStopPolicy(deps: {
           return {
             action: 'continue',
             reminder:
-              'Independent verification found a reproducible failure. Repair it, verify, and call goal_check again. ' +
-              'Existing user permissions still apply. Reproduce against current state: ' +
-              verdict.evidence,
+              'Independent verification found a reproducible failure. Repair the problem, verify the outcome, and call goal_check again. ' +
+              'Existing user permissions still apply. Prior observation (reproduce against the current state): ' +
+              verdict.evidence.slice(0, 8000),
           };
       }
       if (

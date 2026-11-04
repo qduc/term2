@@ -184,7 +184,8 @@ async function drive(
       const item: Item = {
         type: 'summary',
         id: `${spec.turnId}:normal-stop:${++reminderOrdinal}` as ItemId,
-        text: decision.reminder,
+        // Legacy admits every harness stop reminder as a user message with this prefix.
+        text: `[Mode Notice] ${decision.reminder}`,
         replaces: [],
       };
       await events.publish({ type: 'item', item });

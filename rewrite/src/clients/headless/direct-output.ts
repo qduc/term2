@@ -278,7 +278,7 @@ export function createHeadlessOutput(options: DirectHeadlessOptions, sessionId: 
     blockedNotice(notice: string | undefined, terminalCause: string): void {
       if (notice === undefined) return;
       // Keep the accepted model answer and render the host's notice separately.
-      if (output !== 'json' && terminalCause === 'completion_verification_blocked') io.stdout.write(`\n${notice}\n`);
+      if (output !== 'json' && terminalCause === 'completion_verification_blocked') io.stdout.write(`\n\n${notice}`);
       else io.stderr.write(`${notice}\n`);
     },
     endTurn(event: Extract<WireEvent, { type: 'turn_ended' }>): boolean {

@@ -155,6 +155,10 @@ export function createDirectGoalVerifier(deps: {
     const limits = attempts.length ? attempts[0]!.limits ?? defaultLimits() : newTaskLimits;
     if (attempts.some((attempt) => !attempt.outcome))
       return blocked('An earlier verification is unfinished; explicit recovery is required');
+    // A repair that left the repository as it was is not progress; legacy stops here, before any gate.
+    const revisionNow = await deps.operations.currentRevision(signal).catch(() => undefined);
+    if (attempts.length && revisionNow !== undefined && attempts.at(-1)!.proposal.revision === revisionNow)
+      return blocked('Repair made no repository progress');
     if (attempts.length >= limits.maxGateAttempts) return blocked('Completion gate attempt budget exhausted');
     const attemptId = randomUUID();
     let started = false;

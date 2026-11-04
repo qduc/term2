@@ -70,7 +70,7 @@ export function parseDirectGoalCheck(raw: unknown, goal?: DurableGoal): DirectGo
 /** Receipt ties the accepted tool result to the goal the producing request saw. */
 export function directGoalCheckReceipt(state: DirectGoalState): string {
   if (!state.goal) throw new Error('Cannot acknowledge a check without a goal');
-  return `${DIRECT_GOAL_CHECK_PREFIX} [goal ${state.goal.id}] [generation ${state.generation}]`;
+  return `${DIRECT_GOAL_CHECK_PREFIX} [goal ${state.goal.id}]`;
 }
 
 /**
@@ -101,12 +101,16 @@ export function createDirectGoalCheckTool(deps: {
             'the session goal changed after this response began; check the current goal on the next request',
           );
         }
+        // Model-facing text is legacy's, word for word.
         const guidance = {
           achieved:
-            'achieved proposed. End the turn now; the harness evaluates completion. More work requires checking again.',
-          blocked: 'blocked. Return control and state exactly what input or capability is needed.',
-          not_achieved: 'not achieved. Continue working within current permissions, then check again.',
-          deferred: 'deferred. The goal remains active. Finish the latest user request and end the turn.',
+            'achieved proposed. The harness evaluates completion when you end the turn now; more tool work first means checking again. End the turn now with a short summary of the evidence.',
+          blocked:
+            'blocked. Control returns to the user. End the turn now and state plainly what is blocking and what input or capability is needed.',
+          not_achieved:
+            'not achieved. Continue working toward the outcome now, within the user instructions and approvals, and call goal_check again before ending the turn.',
+          deferred:
+            'deferred. The durable goal stays active and unchanged. Finish the user’s latest request and end the turn.',
         };
         return { output: `${directGoalCheckReceipt(request)} ${guidance[check.status]}`, isError: false };
       } catch (error) {

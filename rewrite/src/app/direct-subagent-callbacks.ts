@@ -2,6 +2,7 @@
  * authority or lifecycle is created here; result/status presentation uses accepted
  * task snapshots and actual execution evidence supplied by the tool surface.
  */
+import type { ResolvedAgentDefinition } from '../../../source/services/agent-runtime/resolved-agent.js';
 import type { AgentFactoryDeps } from '../../../source/lib/agent-factory.js';
 import type { ResolvedSubagentLaunch } from '../../../source/lib/subagent-bridge.js';
 import type { AgentSpec } from '../../../source/services/agent-runtime/types.js';
@@ -21,6 +22,8 @@ export type Launch = {
   authorizedWorktreePath?: string;
   mentorConsultation?: boolean;
   mentorModel?: { provider: string; model: string; reasoningEffort?: string };
+  /** run_code's successful AgentSpec boundary definition; legacy launches it without resolving again. */
+  resolvedDefinition?: ResolvedAgentDefinition;
 };
 export type ExecutionEvidence = {
   readonly filesChanged: readonly string[];
@@ -63,6 +66,7 @@ export function createDirectDelegationCallbacks(
       throw new Error('Native script delegation requires a successful host AgentSpec boundary');
     return {
       agent_spec: value.spec,
+      resolvedDefinition: value.definition,
       worktree: params.worktree ?? value.worktree,
       authorizedWorktreePath: params.authorizedWorktreePath ?? value.authorizedWorktreePath,
       name: params.name,

@@ -70,8 +70,17 @@ export function createDirectBranchDriver(options: {
       let terminal: TurnResult | undefined;
       let readFailure: unknown;
       const items: Item[] = [];
+      // Legacy execution-runner: a child launched in the background never asks. A call that still needs an
+      // answer ends its run, settled as completed with what it produced (no approval, no denial).
+      let settledOnInteraction = false;
       try {
         for await (const { token, event } of handle.events) {
+          if (event.type === 'interaction_required' && request.mode === 'background') {
+            settledOnInteraction = true;
+            handle.accept(token);
+            handle.cancel();
+            continue;
+          }
           if (event.type === 'interaction_required') {
             try {
               const decision = context.interact(event.request);
@@ -185,6 +194,7 @@ export function createDirectBranchDriver(options: {
             ? { kind: 'budget_exhausted' }
             : { kind: 'interrupted', ...(cause !== undefined ? { terminalCause: cause } : {}) };
       } else outcome = terminal;
+      if (settledOnInteraction) outcome = { kind: 'completed' };
       // Accepted physical starts, including scripted leaves, are execution
       // evidence. Provider call names and offered declarations are not usage.
       const counts = new Map<string, number>();

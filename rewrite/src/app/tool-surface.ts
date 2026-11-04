@@ -107,6 +107,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     withAnswer: (answer, operation) => answers.run(answer, operation),
     targetInvocation,
     remoteUnavailable: SSH_LOCAL_ONLY_TOOLS,
+    advisoryClient: advisoryClient(createProviderRegistry(selection), selection, advisoryAbort.signal),
   });
   const shell = createDirectShellTools();
   const allowBackgroundShell = options.interactive === true && !remote;

@@ -5,10 +5,12 @@ import type { AgentFactoryDeps } from '../../../source/lib/agent-factory.js';
 import { getCatalogModel } from '../../../source/providers/model-catalog/catalog.js';
 import { resolveOutputAllocation } from '../../../source/services/agent-runtime/model-context-policy.js';
 import { adaptLegacyDefinition } from '../../../source/services/agent-runtime/legacy-adapter.js';
-import {
-  createRootAgentAuthoritySnapshot,
-  resolveAgentSpecForChild,
-} from '../../../source/services/agent-runtime/permission-boundary.js';
+import { resolveAgent } from '../../../source/services/agent-runtime/agent-resolver.js';
+import { agentSpecToConfig } from '../../../source/services/agent-runtime/agent-spec.js';
+import type { AgentSpec } from '../../../source/services/agent-runtime/types.js';
+import { createRootBudget } from '../../../source/services/agent-runtime/execution-budget.js';
+import type { ResolvedAgentDefinition } from '../../../source/services/agent-runtime/resolved-agent.js';
+import type { ISubagentClient } from '../../../source/services/subagents/subagent-client-types.js';
 import { ToolApprovalPolicyRegistry } from '../../../source/services/approval/tool-approval-policy-registry.js';
 import type { ExecutionContext } from '../../../source/services/execution-context.js';
 import { withActiveWorkspaceRoot } from '../../../source/services/workspace/active-workspace-root.js';
@@ -21,7 +23,6 @@ import {
   buildInstructions,
   loadRoleDefinition,
   resolveSubagentSearchViaShell,
-  ROLE_MAX_TURNS_DEFAULT,
 } from '../../../source/services/subagents/role-loader.js';
 import { SubagentRolePoolSelector } from '../../../source/services/subagents/subagent-role-pool-selector.js';
 import { SubagentToolFactory, SubagentToolPolicy } from '../../../source/services/subagents/tool-policy.js';
@@ -32,9 +33,10 @@ import type {
 } from '../../../source/services/subagents/types.js';
 import { SUBAGENT_ROLES } from '../../../source/services/subagents/types.js';
 import {
-  deriveAuthorizedWorktreeScope,
-  pinWorkerWorktree,
-} from '../../../source/services/subagents/worker-worktree.js';
+  SUBAGENT_RUN_NAME_PATTERN,
+  SubagentRegistryError,
+} from '../../../source/services/subagents/subagent-async-registry.js';
+import { pinWorkerWorktree } from '../../../source/services/subagents/worker-worktree.js';
 import type { AnyToolDefinition } from '../../../source/tools/types.js';
 import type { ItemId, ReasoningEffort } from '../model/index.js';
 import type { DirectNestedAuthority } from '../session/direct-branches.js';
@@ -63,7 +65,43 @@ export type DirectSubagentToolsOptions = {
   readonly withAnswer: <T>(answer: string, operation: () => Promise<T>) => Promise<T>;
   readonly targetInvocation?: AgentFactoryDeps['withToolInvocation'];
   readonly remoteUnavailable: ReadonlySet<string>;
+  /** Legacy SubagentToolPolicy's advisory model client for a worker's YELLOW shell commands. */
+  readonly advisoryClient?: ISubagentClient;
 };
+
+/** Legacy subagent-bridge toManagerDefinition: a resolved definition with its own root budget. */
+function managerDefinition(value: ResolvedAgentDefinition): SubagentDefinition {
+  const budget = createRootBudget({
+    maxChildren: value.limits.maxChildren,
+    maxDepth: value.limits.maxDepth,
+    maxConcurrency: value.limits.maxConcurrency,
+    maxTokens: value.limits.maxTokens,
+  });
+  return { ...adaptLegacyDefinition(value, budget), isRootExecution: true };
+}
+
+/** Legacy subagent-manager #resolveAgentSpec: run_subagent's own agent_spec, with no parent ceiling. */
+function resolveRunSubagentSpec(
+  spec: AgentSpec,
+  deps: Pick<ProfileSelection, 'settings' | 'logger'> & { skillsService?: SkillsService },
+): ResolvedAgentDefinition {
+  if (spec.budget) {
+    const unsupported = Object.keys(spec.budget).filter((key) => key !== 'maxTurns' && key !== 'maxTokens');
+    if (unsupported.length > 0)
+      throw new Error(`Unsupported AgentSpec budget fields in delegated runs: ${unsupported.join(', ')}`);
+    for (const key of ['maxTurns', 'maxTokens'] as const) {
+      const value = spec.budget[key];
+      if (value !== undefined && (!Number.isInteger(value) || value <= 0))
+        throw new Error(`AgentSpec budget.${key} must be a positive integer.`);
+    }
+  }
+  const definition = resolveAgent(agentSpecToConfig(spec), deps);
+  if (definition.resolutionErrors.length > 0)
+    throw new Error(
+      `Agent specification rejected: ${definition.resolutionErrors.map((error) => error.message).join('; ')}`,
+    );
+  return definition;
+}
 
 // Named source roles grant workspace reads independently of the parent's prompt
 // profile. AgentSpec children still inherit the parent's effective-tool ceiling.
@@ -113,38 +151,13 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
     let task: string;
     let authorizedPath: string | undefined;
     if (params.agent_spec) {
-      const worktrees = deriveAuthorizedWorktreeScope({
-        homeRoot: options.workspace.root,
-        isRemote: options.executionContext.isRemote(),
-        readOnly: options.readOnly,
-        planMode,
-      });
-      const parent = createRootAgentAuthoritySnapshot({
-        effectiveTools: options.graph().map((tool) => tool.name),
-        limits: { maxTurns: settings.get('agent.maxTurns') ?? ROLE_MAX_TURNS_DEFAULT },
-        readOnly: options.readOnly,
-        planMode,
-        filesystemScope: {
-          read: ['**'],
-          write: options.readOnly || planMode ? [] : ['**'],
-        },
-        worktreeScope: worktrees,
-        worktreePaths: worktrees.authorizedPaths,
-      });
-      const bounded = resolveAgentSpecForChild(params.agent_spec, {
-        settings,
-        logger,
-        parent: parent.parent,
-        readOnly: options.readOnly,
-        planMode,
-        worktree: params.worktree,
-      });
-      if (!bounded.ok) throw new Error(bounded.errors.map((error) => error.message).join('; '));
-      definition = { ...adaptLegacyDefinition(bounded.definition), role: 'agent', isScriptGeneric: true };
-      task = bounded.spec.goal;
-      authorizedPath = bounded.authorizedWorktreePath;
-      if (params.authorizedWorktreePath !== undefined && params.authorizedWorktreePath !== authorizedPath)
-        throw new Error('Resolved AgentSpec worktree identity changed before admission');
+      // run_code's boundary already resolved a script child; run_subagent's own spec resolves once here.
+      const resolved =
+        params.resolvedDefinition ??
+        resolveRunSubagentSpec(params.agent_spec, { settings, logger, skillsService: options.skillsService });
+      definition = { ...managerDefinition(resolved), role: 'agent', isScriptGeneric: true };
+      task = params.agent_spec.goal;
+      authorizedPath = params.authorizedWorktreePath;
     } else {
       if (!params.role || !params.task) throw new Error('Subagent launch requires a role/task or agent_spec');
       const loaded = loadRoleDefinition(params.role, settings);
@@ -172,9 +185,9 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
       (definition.filesystemScope !== undefined || definition.role === 'librarian')
     )
       throw new Error('Native SSH subagents do not provide local memory or local filesystem-scope validation');
-    if (definition.canWrite && (options.readOnly || planMode)) throw new Error('This session cannot delegate writes');
-    if (definition.canWrite && !params.worktree)
-      throw new Error('Write-capable subagents require an existing worktree');
+    // Legacy launches a writer without a worktree (in the workspace) and in a read-only session (its factory
+    // then offers no writes); plan mode is refused earlier by the plan-mode interceptor.
+    if (definition.canWrite && planMode) throw new Error('This session cannot delegate writes');
     // Children retain their admission root even if the parent later changes its lease.
     let executionContext = options.executionContext.isRemote()
       ? options.executionContext
@@ -204,6 +217,7 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
       logger,
       sessionContextService: sessionContext,
       executionContext,
+      ...(options.advisoryClient ? { agentClient: options.advisoryClient } : {}),
     });
     const factory = new SubagentToolFactory({
       settings,
@@ -228,10 +242,22 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
           }
         : undefined;
     const definitions = factory
-      .buildToolDefinitions(definition, filesChanged, task, searchViaShell, true, undefined, undefined, askOrchestrator)
+      .buildToolDefinitions(
+        definition,
+        filesChanged,
+        task,
+        searchViaShell,
+        // Legacy prompts only for a foreground child; a background child's tools never ask (execution-runner).
+        mode === 'foreground',
+        undefined,
+        undefined,
+        askOrchestrator,
+      )
       .filter(
         (tool) =>
-          (parentNames.has(tool.name) ||
+          // Legacy gives a named role its whole factory set; a script child keeps its parent's ceiling.
+          (!definition.isScriptGeneric ||
+            parentNames.has(tool.name) ||
             (!definition.isScriptGeneric && definition.canRead && WORKSPACE_READ_TOOLS.has(tool.name)) ||
             (askOrchestrator && tool.name === 'ask_orchestrator') ||
             (definition.role === 'reviewer' && tool.name === 'run_explorer')) &&
@@ -360,6 +386,12 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
   const start = async (params: Launch): Promise<SubagentRunHandle> => {
     const context = current();
     const request = await prepare(params, 'background');
+    // Legacy SubagentAsyncRegistry.startRun name admission: same codes and text, which the async tool returns.
+    const name = params.name;
+    if (name !== undefined && !SUBAGENT_RUN_NAME_PATTERN.test(name))
+      throw new SubagentRegistryError('invalid_name', `Invalid async subagent name: ${name}`);
+    if (name !== undefined && context.subagents?.list().some((task) => task.name === name && !task.result))
+      throw new SubagentRegistryError('name_in_use', `Async subagent name is already active: ${name}`);
     const result = await context.runNested(request);
     if (result.outcome.kind !== 'background')
       throw new Error(`Subagent admission did not return a background task: ${result.outcome.kind}`);

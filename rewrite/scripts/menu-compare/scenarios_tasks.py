@@ -32,3 +32,11 @@ SCENARIOS['tasks-bg-shell-manage-enter'] = _GO + ['<c-g>', '<sleep>', '<enter>',
 SCENARIOS['tasks-bg-shell-manage-esc'] = _GO + ['<c-g>', '<sleep>', '<esc>', '<sleep>']
 for _name in ('tasks-bg-shell-manage-down', 'tasks-bg-shell-manage-enter', 'tasks-bg-shell-manage-esc'):
     SEED[_name] = _BG_SHELL
+
+# A background shell that finishes: legacy's "Background shell completed" row above the follow-up reply.
+SCENARIOS['tasks-bg-shell-done'] = _GO + ['<sleep>']
+SEED['tasks-bg-shell-done'] = {'replies': [
+    {'tool': 'shell', 'args': {'command': 'echo hi', 'background': True}},
+    {'text': 'started'},
+    {'text': 'noted'},
+]}

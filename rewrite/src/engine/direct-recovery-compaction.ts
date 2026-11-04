@@ -182,7 +182,7 @@ export async function compactDirectHistory(input: DirectCompactionInput): Promis
         usage: [] as Usage[],
         checkpointReceipts: input.checkpointReceipts ?? [],
       }
-    : await compactLocally(input, policy.hardInputLimit ?? softTrigger ?? Infinity, estimate);
+    : await compactLocally(input, localUsableTokens(input, policy), estimate);
   input.signal.throwIfAborted();
   if ('kind' in operation) return operation;
   const after = estimateDirectContext({ ...input.request, input: operation.history }, input.contextWindow);
@@ -225,7 +225,8 @@ export async function compactDirectHistory(input: DirectCompactionInput): Promis
 /** Conservative bytes/4 estimate with the existing 10% capacity reserve. Never changes history. */
 export function estimateDirectContext(request: ModelRequest, contextWindow?: number): DirectContextEstimate {
   const renderedInputTokens = Math.ceil(
-    bytes({ instructions: request.instructions, tools: request.tools, history: request.input }) / 4,
+    bytes({ instructions: request.instructions, tools: request.tools.map(legacyToolShape), history: request.input }) /
+      4,
   );
   const outputReserveTokens = Math.max(0, Math.ceil(request.maxOutputTokens ?? 0));
   const safetyReserveTokens = Math.ceil((contextWindow ?? 0) * 0.1);
@@ -267,11 +268,27 @@ type LocalOperation =
   | { history: readonly Item[]; usage: readonly Usage[]; checkpointReceipts: readonly string[] }
   | Extract<DirectCompactionResult, { kind: 'blocked' }>;
 
+/**
+ * Legacy's local planning budget (local-context-compactor.ts): the input ceiling, else a planning scale from the
+ * window, configured caps or trigger, less what the instructions and tools take in every request.
+ */
+function localUsableTokens(input: DirectCompactionInput, policy: ReturnType<typeof resolveModelContextPolicy>): number {
+  const window =
+    input.contextWindow ??
+    input.maxRequestInputTokens ??
+    input.settings.compactThresholdTokens ??
+    policy.softTrigger ??
+    Infinity;
+  const fixed = estimateDirectContext({ ...input.request, input: [] }, input.contextWindow).renderedInputTokens;
+  return (policy.hardInputLimit ?? window) - fixed;
+}
+
 async function compactLocally(
   input: DirectCompactionInput,
   usable: number,
   estimate: DirectContextEstimate,
 ): Promise<LocalOperation> {
+  if (usable <= 0) return { kind: 'blocked', reason: 'single_turn_too_large', estimate };
   const plan = planTail(input.request.input, usable);
   if (typeof plan === 'string') return { kind: 'blocked', reason: plan, estimate };
   if (plan.cold.some((item) => item.type === 'provider_opaque' && item.item.type === 'compaction')) {
@@ -470,6 +487,13 @@ function toolReceipts(history: readonly Item[]): readonly string[] {
     );
   }
   return receipts;
+}
+
+/** Tools as legacy's estimate serializes them (toModelTools), so budgets and triggers land where legacy's do. */
+function legacyToolShape(tool: ModelRequest['tools'][number]): unknown {
+  return tool.modelTool
+    ? { type: tool.modelTool.type, name: tool.name, description: tool.description, format: tool.modelTool.format }
+    : { type: 'function', name: tool.name, description: tool.description, parameters: tool.inputSchema };
 }
 
 function bytes(value: unknown): number {

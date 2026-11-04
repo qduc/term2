@@ -274,16 +274,9 @@ export class TurnModel {
       signal: this.signal,
     });
     if (this.signal.aborted) throw cancelled();
-    // Summary/native compaction is not a root goal/tool execution context.
-    const prepared = this.#withRecovery(
-      selfContained({
-        ...(surface?.request ?? canonical),
-        tools: [],
-        instructions: `${
-          (surface?.request ?? canonical).instructions
-        }\nThis is internal context compaction, not a root response. Output only the requested summary; do not call tools or adjudicate the durable goal.`,
-      }),
-    );
+    // Like legacy, the live-prefix summary keeps the session's instructions and tools (its prompt says not to call
+    // them); chunk summaries arrive with their own compaction instructions and no tools.
+    const prepared = this.#withRecovery(selfContained(surface?.request ?? canonical));
     this.#admit(prepared);
     return { request: prepared, modelStep };
   }

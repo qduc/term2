@@ -107,7 +107,8 @@ export function itemToInput(item: Item): StreamedModelTurnInput {
         ...(item.toolType ? { toolType: item.toolType } : {}),
       };
     case 'summary':
-      return { type: 'message', role: 'user', content: [{ type: 'text', text: item.text }] };
+      // Legacy's compaction checkpoint is a system message in history (local-context-compactor.ts).
+      return { type: 'message', role: 'system', content: [{ type: 'text', text: item.text }] };
   }
 }
 

@@ -109,6 +109,9 @@ ${Object.entries(env)
 
   for (const size of results.sizes) {
     parts.push(`<h2>${size.cols}×${size.rows}</h2>`);
+    if (size.errors?.length) {
+      parts.push(`<p class="bad">Parts of this size could not run:</p><pre>${esc(size.errors.join('\n\n'))}</pre>`);
+    }
     parts.push(`<h3>Store timings</h3><div class="wrap"><table><tr><th></th><th>startup → composer (ms)</th><th>first /resume → list (ms)</th><th>second /resume → list (ms)</th></tr>
 ${['legacy', 'next']
   .map((w) => {

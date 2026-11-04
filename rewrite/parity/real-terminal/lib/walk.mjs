@@ -102,7 +102,7 @@ async function escapeHome(t, undoKey = null) {
 /** Shift+Tab switched mode (legacy) or opened a confirmation (term2-next): get back to the starting state. */
 async function restoreMode(t) {
   const text = (await t.screen()).join('\n');
-  if (/Clear session and switch mode\?/.test(text)) {
+  if (/Clear session and switch/.test(text)) {
     t.write(KEYS.escape);
     return;
   }

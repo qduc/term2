@@ -14,6 +14,13 @@
         display: inline-block;
         padding: 0;
       }
+      /* The scrollbar thumb tracks scrollback length, which is not what the check compares. */
+      .xterm-viewport {
+        scrollbar-width: none;
+      }
+      .xterm-viewport::-webkit-scrollbar {
+        display: none;
+      }
       .mask {
         position: absolute;
         background: #5a5a5a;

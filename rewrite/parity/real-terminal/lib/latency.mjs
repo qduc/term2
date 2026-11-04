@@ -4,7 +4,7 @@
 // screen satisfies the class predicate. CPU is the CLI process tree's utime+stime and bytes are pty output,
 // both over [injection, paint + 100 ms]. While streaming, both include the stream's own rendering.
 import { sleep, treeCpuMs } from './terminal.mjs';
-import { PRELUDE, COMPOSER_READY, typeText, STREAM_ROW } from './session.mjs';
+import { PRELUDE, typeText, STREAM_ROW } from './session.mjs';
 
 const KEYS = {
   enter: '\r',
@@ -146,7 +146,7 @@ export async function runLatency(session, { phase, samples = {}, log = () => {},
     await ensureHome();
     const prefix = `q${cycle}z`;
     await typeText(term, prefix, 15);
-    await term.waitFor(composerHas(prefix), 5_000);
+    await term.waitFor(composerHas(prefix), 5_000).catch(() => log(`  typing prefix ${prefix} did not appear`));
     await settle();
     let typed = prefix;
     for (const ch of letters) {
@@ -170,7 +170,7 @@ export async function runLatency(session, { phase, samples = {}, log = () => {},
     await ensureHome();
     const text = `ping ${phase} ${i}`;
     await typeText(term, text);
-    await term.waitFor(composerHas(text), 5_000);
+    await term.waitFor(composerHas(text), 5_000).catch(() => log(`  prompt ${text} did not appear`));
     await settle();
     await measure('enter (composer)', KEYS.enter, composerLacks(text));
     if (streaming) {
@@ -267,11 +267,13 @@ export async function measureStoreTimings(session, { timeoutMs = 15 * 60_000 } =
     await typeText(term, '/resume');
     await sleep(300);
     await term.quiet(200, 3_000);
-    const result = await term.measureKey('\r', RESUME_LIST, timeoutMs);
+    // The list must appear after the key: the screen differs from the one at injection and shows session rows.
+    const listed = `fn:return lines.join('\\n') !== base && /Resume Conversation/.test(lines.join('\\n')) && ${RESUME_LIST}.test(lines.join('\\n'));`;
+    const result = await term.measureKey('\r', listed, timeoutMs, 'fn:return lines.join("\\n");');
     out[label] = result.ok ? result.ms : null;
     await sleep(300);
     term.write('\x1b');
-    await term.waitFor(`fn:${COMPOSER_READY}`, timeoutMs).catch(() => {});
+    await term.waitFor(`fn:${AT_HOME}`, timeoutMs).catch(() => {});
     await term.quiet(300, 5_000);
   }
   return out;

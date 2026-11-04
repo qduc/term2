@@ -175,7 +175,11 @@ try {
           for (const phase of ['idle', 'streaming']) {
             log(`${which}: latency ${phase}`);
             const misses = [];
-            raw[phase][which] = await runLatency(first, { phase, samples, log, misses });
+            raw[phase][which] = await runLatency(first, { phase, samples, log, misses }).catch((error) => {
+              log(`${which}: latency ${phase} aborted: ${error.message.split('\n')[0]}`);
+              sizeResult.errors = [...(sizeResult.errors ?? []), `${which} ${phase}: ${error.message}`];
+              return Object.fromEntries(CLASSES.map((c) => [c, []]));
+            });
             sizeResult.misses[phase].push(...misses.map((m) => ({ ...m, cli: which })));
             // Let a running stream finish or be cancelled before the next phase.
             first.term.write('\x1b');
@@ -195,7 +199,13 @@ try {
         const second = await startCli(stage, { which, scratch, cols, rows, workspace, home: first.home });
         try {
           await second.ready(5 * 60_000);
-          walks[which] = await runWalk(second, { outDir: shotDir, label: which, originalSize: [cols, rows], resizeTo, log });
+          walks[which] = await runWalk(second, { outDir: shotDir, label: which, originalSize: [cols, rows], resizeTo, log }).catch(
+            (error) => {
+              log(`${which}: walk aborted: ${error.message.split('\n')[0]}`);
+              sizeResult.errors = [...(sizeResult.errors ?? []), `${which} walk: ${error.message}`];
+              return [];
+            },
+          );
         } finally {
           await second.close();
         }
@@ -214,7 +224,7 @@ try {
       }
     }
     if (values.only !== 'latency') {
-      for (let i = 0; i < walks.legacy.length; i++) {
+      for (let i = 0; i < Math.min(walks.legacy?.length ?? 0, walks.next?.length ?? 0); i++) {
         const l = walks.legacy[i];
         const n = walks.next[i];
         const diffFile = path.join(shotDir, `diff-${l.step}.png`);

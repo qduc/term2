@@ -119,7 +119,12 @@ export class TurnModel {
       try {
         const surface = await this.#request(history, this.#step + 1);
         const result = await this.#compaction.compact(surface.request, history, true);
-        if (result.kind === 'compacted') return { kind: 'compacted' };
+        if (result.kind === 'compacted')
+          return {
+            kind: 'compacted',
+            tokensBefore: result.before.renderedInputTokens,
+            tokensAfter: result.estimate.renderedInputTokens,
+          };
         return { kind: 'blocked', reason: result.kind === 'blocked' ? result.reason : result.kind };
       } catch (error) {
         if (this.signal.aborted) throw cancelled();

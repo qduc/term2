@@ -119,9 +119,9 @@ it(
       session!.write('\r');
     };
     await send('/compact');
-    await session.waitForOutput('Nothing to compact yet.', 30_000);
+    await session.waitForOutput('Nothing to compact: at least one complete cold turn is required.', 30_000);
     const failureFrame = session.getVisibleOutput().slice(session.getVisibleOutput().lastIndexOf('▌ term²'));
-    expect(failureFrame).toContain('Nothing to compact yet.');
+    expect(failureFrame).toContain('Nothing to compact: at least one complete cold turn is required.');
     expect(failureFrame).not.toContain('no_complete_cold_turn');
     expect(failureFrame).not.toContain('· compact · rejected');
     // The failure notice can render before the compact command releases input ownership.
@@ -136,19 +136,24 @@ it(
     idle = await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
     const beforeShortCompact = session.getVisibleOutput().length;
     await send('/compact');
-    await session.waitForOutput('Nothing to compact yet.', 30_000);
+    await session.waitForOutput('Nothing to compact: at least one complete cold turn is required.', 30_000);
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
     await new Promise((resolve) => setTimeout(resolve, 2100));
     await send('third');
     await session.waitForOutput('NORMAL_REPLY_3', 60_000);
     idle = await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
     expect(session.getVisibleOutput().slice(beforeShortCompact)).not.toContain('no_complete_cold_turn');
+    const beforeCompact = session.getVisibleOutput().length;
     await send('/compact');
-    await session.waitForOutput('· compact · pending', 30_000);
+    // Legacy announces a running compaction as 'Compacting context...'; earlier /compact runs printed it too.
+    for (let i = 0; i < 1200 && !session.getVisibleOutput().slice(beforeCompact).includes('Compacting context...'); i++)
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(session.getVisibleOutput().slice(beforeCompact)).toContain('Compacting context...');
     for (let i = 0; i < 100 && !releaseSummary; i++) await new Promise((resolve) => setTimeout(resolve, 25));
     expect(releaseSummary).toBeDefined();
     releaseSummary!();
-    await session.waitForOutput('Compaction complete.', 30_000);
+    await session.waitForOutput('estimated tokens).', 30_000);
+    expect(session.getVisibleOutput()).toMatch(/Context compacted locally \(\d+ → \d+ estimated tokens\)\./);
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
     const beforeLater = session.getVisibleOutput().length;
     await send('after compaction');
@@ -157,7 +162,7 @@ it(
     const after = session.getVisibleOutput().slice(beforeLater);
     expect(after).not.toContain('· compact · rejected');
     expect(after).not.toContain('· compact · compacted');
-    expect(after).not.toContain('Compaction failed:');
+    expect(after).not.toContain('Context compaction failed:');
     const file = fs.readdirSync(conversations).find((name) => name.endsWith('.jsonl'))!;
     const facts = fs
       .readFileSync(path.join(conversations, file), 'utf8')

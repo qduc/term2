@@ -264,7 +264,15 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
     verification: snapshot.verification
       ? `${snapshot.verification.status}${snapshot.verification.message ? `: ${snapshot.verification.message}` : ''}`
       : undefined,
-    lastError: snapshot.lastError?.message,
+    // A failed /compact is reported once, by its 'Context compaction failed:' line, as in legacy.
+    lastError: (snapshot.commands ?? []).some(
+      (receipt) =>
+        receipt.request.operation.kind === 'compact' &&
+        receipt.outcome?.kind === 'rejected' &&
+        receipt.outcome.message === snapshot.lastError?.message,
+    )
+      ? undefined
+      : snapshot.lastError?.message,
     canRetry: snapshot.retryEligibility.turn,
   };
 }

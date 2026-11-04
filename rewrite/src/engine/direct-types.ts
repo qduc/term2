@@ -88,7 +88,8 @@ export type TurnSpec = {
   readonly limits?: { readonly maxModelCalls: number; readonly maxToolCalls: number };
 };
 export type DirectManualCompactionOutcome =
-  | { readonly kind: 'compacted' }
+  /** Estimated rendered input tokens before and after, as legacy's manual compaction reports them. */
+  | { readonly kind: 'compacted'; readonly tokensBefore: number; readonly tokensAfter: number }
   | { readonly kind: 'blocked'; readonly reason: string };
 export type TurnResult =
   | { readonly kind: 'completed'; readonly notice?: string; readonly compaction?: DirectManualCompactionOutcome }

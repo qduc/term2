@@ -286,7 +286,13 @@ export class ConversationCommands {
               this.admission.releaseCompletion(this.admission.completionHeld!);
           }
           if (terminal?.kind === 'completed' && terminal.compaction?.kind === 'compacted')
-            return { result: finish({ kind: 'compacted' }) };
+            return {
+              result: finish({
+                kind: 'compacted',
+                tokensBefore: terminal.compaction.tokensBefore,
+                tokensAfter: terminal.compaction.tokensAfter,
+              }),
+            };
           return {
             result: finish({
               kind: 'rejected',

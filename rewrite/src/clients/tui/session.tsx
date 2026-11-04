@@ -412,7 +412,7 @@ export function TuiSession({
         </Text>
       ) : null}
       <Box flexDirection="column" paddingX={2} marginTop={viewport.bottomMargin}>
-        <Activity state={state} dialogInteractionId={foregroundInteraction?.id} notice={notice} liveTps={liveTps} />
+        <Activity state={state} dialogInteractionId={foregroundInteraction?.id} liveTps={liveTps} />
         <SessionPanels
           {...{
             connection,

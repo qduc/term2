@@ -218,20 +218,6 @@ function StreamingStatus({
   );
 }
 
-/** Fold completed compaction receipts without losing the latest definite failure. */
-export function compactFailureMessage(state: TuiState): string | null {
-  const latest = state.commands
-    .filter(
-      (receipt) =>
-        receipt.request.operation.kind === 'compact' &&
-        (receipt.outcome?.kind === 'compacted' || receipt.outcome?.kind === 'rejected'),
-    )
-    .at(-1)?.outcome;
-  return latest?.kind === 'rejected' && latest.message !== 'Compaction did not replace history: no_complete_cold_turn.'
-    ? `Compaction failed: ${latest.message}`
-    : null;
-}
-
 const LIVE_NOTICE_LIMIT = 3;
 
 /** Repeated receipts (one line per compaction) stay in state. The live frame keeps the latest distinct lines. */
@@ -257,17 +243,14 @@ function undecided(state: TuiState, tool: ToolView): boolean {
 export function Activity({
   state,
   dialogInteractionId,
-  notice,
   liveTps = null,
 }: {
   readonly state: TuiState;
   readonly dialogInteractionId?: string;
-  readonly notice?: string | null;
   readonly liveTps?: number | null;
 }): React.ReactElement {
   const theme = useTheme();
   const { TaskPanel } = useSkin();
-  const compactFailure = compactFailureMessage(state);
   // Only running work belongs in the live region; settled tasks stay in the task manager, and ids stay out of the transcript.
   const liveTasks = state.tasks.filter(
     (task) => task.wire?.kind !== 'shell' && (task.status === 'running' || task.status === 'awaiting_interaction'),
@@ -296,8 +279,8 @@ export function Activity({
             receipt.outcome?.kind !== 'rewound' &&
             (receipt.request.operation.kind !== 'configure' ||
               (receipt.outcome?.kind !== 'configured' && receipt.outcome?.kind !== 'rejected')) &&
-            (receipt.request.operation.kind !== 'compact' ||
-              (receipt.outcome?.kind !== 'compacted' && receipt.outcome?.kind !== 'rejected')),
+            // Legacy shows a compaction only as its 'Compacting context...' and result lines.
+            receipt.request.operation.kind !== 'compact',
         )
         .map((receipt) => (
           <Text key={receipt.request.commandId}>
@@ -307,7 +290,6 @@ export function Activity({
             {receipt.outcome?.kind === 'interrupted' ? ' · outcome unknown' : ''}
           </Text>
         ))}
-      {compactFailure && compactFailure !== notice ? <Text color={theme.danger}>{compactFailure}</Text> : null}
       {state.budgets.length ? <Text>Pending budget decisions: {state.budgets.length} · Ctrl+B</Text> : null}
       {state.goal ? <Text>Goal: {state.goal}</Text> : null}
       {state.verification ? <Text>Verification: {state.verification}</Text> : null}

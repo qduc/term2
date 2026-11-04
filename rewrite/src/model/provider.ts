@@ -348,7 +348,6 @@ async function* modelEvents(
   const streamedToolCalls = new Map<string, Extract<StreamedModelTurnEvent, { type: 'tool_call' }>>();
   let completed = false;
   const speed = new StreamingSpeedTracker();
-  speed.reset();
   let streamedReasoning = false;
   for await (const event of turn.stream(request)) {
     signal.throwIfAborted();
@@ -371,7 +370,6 @@ async function* modelEvents(
         };
         break;
       case 'tool_call_streaming_delta':
-        // Legacy's streaming session measures a tool call's arguments as generated output too.
         speed.recordCumulativeChars(event.argumentCharCount);
         yield {
           type: 'tool_call_streaming_delta',

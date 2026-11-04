@@ -38,7 +38,8 @@ export function Transcript({
   const usedTools = new Set<string>();
   const renderMessage = (message: Message) =>
     message.role === 'user' ? (
-      <Box key={`message:${message.id}`} marginTop={1} paddingLeft={2}>
+      // Legacy MessageList: a user row sits two rows below what precedes it.
+      <Box key={`message:${message.id}`} marginTop={2} paddingLeft={2}>
         <Box flexDirection="column">
           <UserMessage text={message.text} />
           {message.attachments?.length ? (

@@ -217,7 +217,12 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
     notices: [
       // A history edit already reads as a sentence; the raw kind label is internal.
       ...snapshot.notices
-        .filter((notice) => !(notice.kind === 'history_replaced' && SILENT_REPLACEMENTS.has(notice.message)))
+        .filter(
+          (notice) =>
+            !(notice.kind === 'history_replaced' && SILENT_REPLACEMENTS.has(notice.message)) &&
+            // Legacy loads memory into context without a line on screen.
+            notice.kind !== 'memory_global_snapshot',
+        )
         .map((notice) => (notice.kind === 'history_replaced' ? notice.message : `${notice.kind}: ${notice.message}`)),
       ...(snapshot.terminal?.notice ? [snapshot.terminal.notice] : []),
     ],

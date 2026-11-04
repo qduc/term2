@@ -3,12 +3,14 @@ import { chmodSync, closeSync, existsSync, lstatSync, mkdirSync, openSync, unlin
 import path from 'node:path';
 import Database from 'better-sqlite3';
 import {
+  directLogicalEnds,
   directLogNames,
   readDirectLogHeaderLine,
   readDirectLogLineage,
   type DirectLogLineage,
 } from './direct-rolling-log.js';
-import { latestDirectConfiguration } from './direct-configuration.js';
+import { initialDirectState, reduceDirectFact, type DirectPublicState } from './direct-state.js';
+import { readFactLinesFrom } from './log.js';
 import type { Workspace } from '../tools/index.js';
 import type { DirectBinding } from './facade-types.js';
 
@@ -21,6 +23,12 @@ export type NativeTranscript = (lineage: DirectLogLineage) => {
     readonly text: string;
   }[];
   readonly messageCount: number;
+};
+
+/** How the app reads a lineage for search, and how it counts the user's messages in a reduced state. */
+export type NativeIndexer = {
+  readonly transcript: NativeTranscript;
+  readonly userMessages: (state: DirectPublicState) => number;
 };
 
 export type NativeCatalogueScope = {
@@ -65,7 +73,14 @@ function openCache(filename: string): Database.Database {
         CREATE TABLE IF NOT EXISTS documents(rowid INTEGER PRIMARY KEY, logical TEXT, identity TEXT, seq INTEGER, kind TEXT, text TEXT);
         CREATE INDEX IF NOT EXISTS documents_logical ON documents(logical);
         CREATE VIRTUAL TABLE IF NOT EXISTS search USING fts5(text, content='', contentless_delete=1);
-        PRAGMA user_version = 1;`);
+        CREATE TABLE IF NOT EXISTS folds(logical TEXT PRIMARY KEY, file TEXT, ino TEXT, off INTEGER, state_seq INTEGER, seq INTEGER, docs_seq INTEGER, state TEXT);`);
+      // Version 2 keeps the reduced state of each log so a grown log is read from where it was indexed.
+      // An older cache has none: it is disposable, so empty it and rebuild every lineage once.
+      if ((db.pragma('user_version', { simple: true }) as number) < 2) {
+        db.exec(
+          'DELETE FROM search; DELETE FROM documents; DELETE FROM catalogue; DELETE FROM physical; DELETE FROM folds; PRAGMA user_version = 2;',
+        );
+      }
       db.prepare('SELECT count(*) FROM search').get();
       const columns = new Set(
         (db.prepare('PRAGMA table_info(catalogue)').all() as { name: string }[]).map((column) => column.name),
@@ -116,12 +131,17 @@ function allowed(entry: NativeCatalogueEntry, scope: NativeCatalogueScope, inclu
   return scope.root === null || normalize(entry.workspace) === normalize(scope.root);
 }
 
-/** Open for one synchronous operation, refresh only changed logical lineages, and close.
- * `skip` leaves those lineages unread: the caller already has them in memory, and
- * rewriting their stamp would hide a later refresh once they are no longer open. */
+/**
+ * Open for one synchronous operation, refresh only changed logical lineages, and close.
+ * Resume rows come from a stored reduced state (`folds`): a log that grew is read from the byte where it was
+ * last indexed, and only a log that shrank, changed file or has no state is read whole. Search documents
+ * need the full projection, so they are rebuilt, for the sessions a search may return, when its log moved.
+ * `skip` leaves lineages unread: the caller already has them in memory, and rewriting their stamp would
+ * hide a later refresh once they are no longer open.
+ */
 export function withNativeCatalogue<T>(
   directory: string,
-  transcript: NativeTranscript,
+  indexer: NativeIndexer,
   operation: (catalogue: {
     list(scope: NativeCatalogueScope, options?: { readonly includeBound?: boolean }): readonly NativeCatalogueEntry[];
     search(
@@ -149,13 +169,7 @@ export function withNativeCatalogue<T>(
       const affected = new Set<string>();
       const indexed = new Set((db.prepare('SELECT id FROM catalogue').all() as { id: string }[]).map((row) => row.id));
       const failed = new Set<string>();
-      const columnFill = new Set<string>();
       const current: Physical[] = [];
-      const incomplete = new Set(
-        (
-          db.prepare('SELECT id FROM catalogue WHERE provider IS NULL OR displayed IS NULL').all() as { id: string }[]
-        ).map((row) => row.id),
-      );
       for (const name of names) {
         const filename = path.join(directory, name);
         const stat = lstatSync(filename, { bigint: true });
@@ -177,15 +191,14 @@ export function withNativeCatalogue<T>(
                 logical = header.logicalSessionId;
             }
           } catch {
-            /* Strict lineage read below marks this affected lineage unavailable. */
+            /* The strict read below marks this affected lineage unavailable. */
           }
           affected.add(logical);
-        } else if (incomplete.has(logical)) columnFill.add(logical);
+        }
         // An open session is already in memory. Keep the old stamp so the next
         // list, once it is closed, still refreshes this file.
         if (skip.has(logical) || (old !== undefined && skip.has(old.logical))) {
           affected.delete(logical);
-          columnFill.delete(logical);
           if (old) affected.delete(old.logical);
           if (old) current.push(old);
           previous.delete(name);
@@ -195,66 +208,19 @@ export function withNativeCatalogue<T>(
         previous.delete(name);
       }
       for (const removed of previous.values()) affected.add(removed.logical);
+      const ends = affected.size ? directLogicalEnds(directory) : new Map();
       for (const logical of affected) {
-        db.prepare('DELETE FROM search WHERE rowid IN (SELECT rowid FROM documents WHERE logical = ?)').run(logical);
-        db.prepare('DELETE FROM documents WHERE logical = ?').run(logical);
-        db.prepare('DELETE FROM catalogue WHERE id = ?').run(logical);
-        let lineage: ReturnType<typeof readDirectLogLineage>;
-        let docs: ReturnType<NativeTranscript>;
-        try {
-          lineage = readDirectLogLineage(directory, logical);
-          docs = transcript(lineage);
-        } catch (error) {
-          console.warn(`Native catalogue unavailable for ${logical}: ${String(error)}`);
-          failed.add(logical);
+        const end = ends.get(logical);
+        if (!end) {
+          dropLogical(db, logical);
           continue;
         }
-        const configuration = latestDirectConfiguration(lineage.entries.map((entry) => entry.fact));
-        const metadata = lineage.metadata;
-        const model = configuration?.configuration.model ?? metadata.model;
-        const target = metadata.workspaceIdentity?.target ?? (metadata.binding?.client === 'ssh' ? '' : 'local');
-        db.prepare(
-          'INSERT INTO catalogue (id, updated, created, workspace, target, binding, model, profile, messages, provider, displayed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        ).run(
-          logical,
-          lineage.entries.at(-1)!.at,
-          lineage.entries[0]!.at,
-          metadata.workspace,
-          target,
-          JSON.stringify(metadata.binding ?? {}),
-          model.model,
-          (configuration?.profile ?? metadata.profile).id,
-          docs.documents.filter((doc) => doc.kind === 'user').length,
-          model.provider,
-          docs.messageCount,
-        );
-        for (const doc of docs.documents) {
-          const result = db
-            .prepare('INSERT INTO documents(logical, identity, seq, kind, text) VALUES (?, ?, ?, ?, ?)')
-            .run(logical, doc.id, doc.seq, doc.kind, doc.text);
-          db.prepare('INSERT INTO search(rowid, text) VALUES (?, ?)').run(result.lastInsertRowid, doc.text);
-        }
-      }
-      // Same bytes as the indexed row: fill the new columns without rewriting search text.
-      for (const logical of columnFill) {
-        if (affected.has(logical)) continue;
         try {
-          const lineage = readDirectLogLineage(directory, logical);
-          const indexed = transcript(lineage);
-          const configuration = latestDirectConfiguration(lineage.entries.map((entry) => entry.fact));
-          const model = configuration?.configuration.model ?? lineage.metadata.model;
-          db.prepare(
-            'UPDATE catalogue SET provider = ?, displayed = ?, model = ?, messages = ?, updated = ? WHERE id = ?',
-          ).run(
-            model.provider,
-            indexed.messageCount,
-            model.model,
-            indexed.documents.filter((doc) => doc.kind === 'user').length,
-            lineage.entries.at(-1)!.at,
-            logical,
-          );
+          refreshColumns(db, directory, logical, end.headPath, indexer);
         } catch (error) {
-          console.warn(`Native catalogue columns unavailable for ${logical}: ${String(error)}`);
+          dropLogical(db, logical);
+          failed.add(logical);
+          console.warn(`Native catalogue unavailable for ${logical}: ${String(error)}`);
         }
       }
       db.prepare('DELETE FROM physical').run();
@@ -272,6 +238,10 @@ export function withNativeCatalogue<T>(
         if (!terms.length) return { total: 0, hits: [] };
         const match = terms.map((term) => `"${term.replaceAll('"', '""')}"`).join(' OR ');
         const authorized = new Set(list(scope).map((entry) => entry.id));
+        db.transaction(() => {
+          for (const logical of authorized)
+            if (!skip.has(logical)) refreshDocuments(db, directory, logical, indexer.transcript);
+        })();
         const rows = (
           db
             .prepare(
@@ -303,6 +273,148 @@ export function withNativeCatalogue<T>(
   } finally {
     db.close();
   }
+}
+
+/** A grown log is read again from the stored state's offset until this much has piled up, then the state is rewritten. */
+const STATE_KEEP_BYTES = 1 << 20;
+
+type FoldRow = {
+  logical: string;
+  file: string;
+  ino: string;
+  off: number;
+  state_seq: number;
+  seq: number;
+  docs_seq: number | null;
+  state: string;
+};
+
+function dropLogical(db: Database.Database, logical: string): void {
+  db.prepare('DELETE FROM search WHERE rowid IN (SELECT rowid FROM documents WHERE logical = ?)').run(logical);
+  db.prepare('DELETE FROM documents WHERE logical = ?').run(logical);
+  db.prepare('DELETE FROM catalogue WHERE id = ?').run(logical);
+  db.prepare('DELETE FROM folds WHERE logical = ?').run(logical);
+}
+
+/**
+ * Brings the resume columns of one lineage up to date. The reduced state is stored with the byte offset it
+ * covers, so a log that only grew costs its new bytes; anything else (no state, another file, shrunk, a
+ * tail that cannot be read alone) is reduced whole from the lineage.
+ */
+function refreshColumns(
+  db: Database.Database,
+  directory: string,
+  logical: string,
+  headPath: string,
+  indexer: NativeIndexer,
+): void {
+  const file = path.basename(headPath);
+  const stat = lstatSync(headPath, { bigint: true });
+  const ino = `${stat.dev}:${stat.ino}`;
+  const kept = db.prepare('SELECT * FROM folds WHERE logical = ?').get(logical) as FoldRow | undefined;
+  const base = db.prepare('SELECT * FROM catalogue WHERE id = ?').get(logical) as NativeCatalogueEntry | undefined;
+  let state: DirectPublicState | undefined;
+  let offset = 0;
+  let stateSeq = 0;
+  let seq = 0;
+  let updated: string | undefined;
+  let save = true;
+  if (kept && base && kept.file === file && kept.ino === ino && BigInt(kept.off) <= stat.size) {
+    try {
+      const tail = readFactLinesFrom(headPath, kept.off, kept.state_seq);
+      state = JSON.parse(kept.state) as DirectPublicState;
+      for (const entry of tail.entries) state = reduceDirectFact(state, entry.fact, entry.seq) as DirectPublicState;
+      offset = tail.complete;
+      stateSeq = tail.lastSeq;
+      seq = tail.lastSeq;
+      // Rewriting the whole state costs more than reading a small tail again, so keep the stored one
+      // until the tail it would absorb is large.
+      save = tail.complete - kept.off > STATE_KEEP_BYTES;
+      updated = tail.entries.at(-1)?.at ?? base.updated;
+    } catch {
+      state = undefined;
+    }
+  }
+  const lineage = state ? undefined : readDirectLogLineage(directory, logical);
+  if (lineage) {
+    const metadata = lineage.metadata;
+    let folded = initialDirectState(
+      lineage.logicalSessionId,
+      metadata.workspaceIdentity ?? { root: metadata.workspace, target: 'local', access: 'read' },
+      metadata.model,
+    );
+    for (const entry of lineage.entries) folded = reduceDirectFact(folded, entry.fact, entry.seq) as DirectPublicState;
+    state = folded;
+    offset = lineage.segments.at(-1)!.read?.complete ?? Number(stat.size);
+    seq = lineage.entries.at(-1)!.seq;
+    stateSeq = seq;
+    updated = lineage.entries.at(-1)!.at;
+  }
+  const final = state!;
+  const metadata = lineage?.metadata;
+  const model = final.configuration?.configuration.model ?? final.model;
+  const target = metadata
+    ? metadata.workspaceIdentity?.target ?? (metadata.binding?.client === 'ssh' ? '' : 'local')
+    : base!.target;
+  db.prepare(
+    `INSERT INTO catalogue (id, updated, created, workspace, target, binding, model, profile, messages, provider, displayed)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET updated = excluded.updated, created = excluded.created, workspace = excluded.workspace,
+       target = excluded.target, binding = excluded.binding, model = excluded.model, profile = excluded.profile,
+       messages = excluded.messages, provider = excluded.provider, displayed = excluded.displayed`,
+  ).run(
+    logical,
+    updated!,
+    metadata ? lineage!.entries[0]!.at : base!.created,
+    metadata ? metadata.workspace : base!.workspace,
+    target,
+    metadata ? JSON.stringify(metadata.binding ?? {}) : base!.binding,
+    model.model,
+    final.configuration?.profile.id ?? metadata?.profile.id ?? base!.profile,
+    indexer.userMessages(final),
+    model.provider,
+    final.messages.length,
+  );
+  if (save)
+    db.prepare(
+      `INSERT INTO folds (logical, file, ino, off, state_seq, seq, docs_seq, state) VALUES (?, ?, ?, ?, ?, ?, NULL, ?)
+       ON CONFLICT(logical) DO UPDATE SET file = excluded.file, ino = excluded.ino, off = excluded.off,
+         state_seq = excluded.state_seq, seq = excluded.seq, docs_seq = CASE WHEN ? THEN folds.docs_seq ELSE NULL END,
+         state = excluded.state`,
+    ).run(logical, file, ino, offset, stateSeq, seq, JSON.stringify(final), lineage ? 0 : 1);
+  else db.prepare('UPDATE folds SET seq = ? WHERE logical = ?').run(seq, logical);
+}
+
+/** Rebuilds the search documents of one lineage when its log has moved past what they were built from. */
+function refreshDocuments(
+  db: Database.Database,
+  directory: string,
+  logical: string,
+  transcript: NativeTranscript,
+): void {
+  const fold = db.prepare('SELECT docs_seq, seq FROM folds WHERE logical = ?').get(logical) as
+    | { docs_seq: number | null; seq: number }
+    | undefined;
+  if (!fold || fold.docs_seq === fold.seq) return;
+  db.prepare('DELETE FROM search WHERE rowid IN (SELECT rowid FROM documents WHERE logical = ?)').run(logical);
+  db.prepare('DELETE FROM documents WHERE logical = ?').run(logical);
+  let docs: ReturnType<NativeTranscript>;
+  let lastSeq: number;
+  try {
+    const lineage = readDirectLogLineage(directory, logical);
+    docs = transcript(lineage);
+    lastSeq = lineage.entries.at(-1)!.seq;
+  } catch (error) {
+    console.warn(`Native catalogue documents unavailable for ${logical}: ${String(error)}`);
+    return;
+  }
+  for (const doc of docs.documents) {
+    const result = db
+      .prepare('INSERT INTO documents(logical, identity, seq, kind, text) VALUES (?, ?, ?, ?, ?)')
+      .run(logical, doc.id, doc.seq, doc.kind, doc.text);
+    db.prepare('INSERT INTO search(rowid, text) VALUES (?, ?)').run(result.lastInsertRowid, doc.text);
+  }
+  db.prepare('UPDATE folds SET docs_seq = ? WHERE logical = ?').run(lastSeq, logical);
 }
 
 /** Fixed authorized workspace identity, not a model-selected search path. */

@@ -1,6 +1,6 @@
 /** Workspace resume rows from the catalogue, plus a short prefix of each log for the title. */
 import path from 'node:path';
-import { withNativeCatalogue, type NativeTranscript } from './native-catalogue.js';
+import { withNativeCatalogue, type NativeIndexer } from './native-catalogue.js';
 import { directLogicalEnds } from './direct-rolling-log.js';
 import { readDirectResumeTitle, readDirectResumeUpdatedAt } from './direct-list-preview.js';
 import type { DirectLiveListing, DirectLocalStore } from './direct-store.js';
@@ -10,7 +10,7 @@ import type { Workspace } from '../tools/index.js';
 /** Sessions in one project. Open sessions come from memory; the others are not replayed. */
 export async function listDirectResumeSessions(
   directory: string,
-  transcript: NativeTranscript,
+  indexer: NativeIndexer,
   root: string,
   store: Pick<DirectLocalStore, 'liveListings'>,
   resolveWorkspace: (root: string, identity?: Workspace) => Workspace | Promise<Workspace>,
@@ -18,7 +18,7 @@ export async function listDirectResumeSessions(
   const live = store.liveListings();
   const entries = withNativeCatalogue(
     directory,
-    transcript,
+    indexer,
     (catalogue) => catalogue.list({ target: 'local', root: path.resolve(root) }, { includeBound: true }),
     { skip: live.map((session) => session.id) },
   );

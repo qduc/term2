@@ -16,7 +16,17 @@
  * swallowing the next fact.
  */
 
-import { closeSync, fsyncSync, ftruncateSync, openSync, readFileSync, statSync, writeSync } from 'node:fs';
+import {
+  closeSync,
+  fstatSync,
+  fsyncSync,
+  ftruncateSync,
+  openSync,
+  readFileSync,
+  readSync,
+  statSync,
+  writeSync,
+} from 'node:fs';
 import { join } from 'node:path';
 
 import { LogPayloads } from './log-payloads.js';
@@ -283,6 +293,28 @@ export function readFactLinesStamped(path: string, options: LogContinuationOptio
   const data = readFileSync(path);
   const parsed = parseLog(data, path, continuationSeq(options.afterSeq), options.prefix);
   return { ...parsed, size: data.length, mtimeMs: stat.mtimeMs };
+}
+
+/**
+ * Parses only the bytes from `offset`, a line boundary an earlier read reported as complete. The first line
+ * there must carry `afterSeq + 1`. Payload references into earlier lines cannot be resolved without them and
+ * throw, so a caller that holds no prefix falls back to a full read. `complete` is the new absolute boundary.
+ */
+export function readFactLinesFrom(
+  path: string,
+  offset: number,
+  afterSeq: number,
+): { readonly entries: readonly FactLine[]; readonly complete: number; readonly lastSeq: number } {
+  const fd = openSync(path, 'r');
+  try {
+    const size = fstatSync(fd).size;
+    const data = Buffer.alloc(Math.max(0, size - offset));
+    readSync(fd, data, 0, data.length, offset);
+    const parsed = parseLog(data, path, afterSeq, []);
+    return { entries: parsed.entries, complete: offset + parsed.complete, lastSeq: parsed.lastSeq };
+  } finally {
+    closeSync(fd);
+  }
 }
 
 /** Pure read of accepted envelopes with payload references hydrated; ignores only a torn final line. */

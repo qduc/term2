@@ -18,7 +18,7 @@ import { createDirectSessionStore, type DirectLocalStore } from '../session/dire
 import type { DurableGoal } from '../session/direct-goal.js';
 import type { DirectBinding, DirectSession, DirectSessionState } from '../session/facade-types.js';
 import { listDirectResumeSessions } from '../session/direct-resume-list.js';
-import { nativeTranscript } from './native-transcript.js';
+import { nativeIndexer } from './native-catalogue.js';
 import type { InteractionDecision } from '../engine/index.js';
 import type { ModelRef } from '../model/index.js';
 import type { Workspace } from '../tools/index.js';
@@ -168,7 +168,7 @@ export async function createDirectApplication(options: DirectApplicationOptions)
     listWorkspaceSessions(root) {
       return listDirectResumeSessions(
         options.conversationsDir,
-        nativeTranscript,
+        nativeIndexer,
         root,
         nativeStore,
         (workspaceRoot, identity) => authority.resolveStored(workspaceRoot, identity),

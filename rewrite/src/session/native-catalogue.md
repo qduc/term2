@@ -5,11 +5,21 @@ SQLite lifetime for one synchronous operation. Its `list(scope)` returns metadat
 ordered by accepted timestamp then logical ID; `search(scope, query, kind?, limit?)`
 returns total matched document identities and bounded snippets. The directory must
 be the strict native conversations namespace. No source store, provenance map or
-migration reader participates. The caller supplies `transcript(lineage)` (the app's `nativeTranscript`, which needs the protocol layer) to turn a
-lineage into searchable documents. Document text is stored in the cache, so a search returns snippets without reading
-any log; the cache is disposable, and an older one without stored text is emptied and rebuilt once. `options.skip`
-leaves named sessions unindexed for this call (open sessions whose log is still growing; the search tool skips its own
-session, so that session's newest facts become searchable when it closes).
+migration reader participates. The caller supplies an indexer: `transcript(lineage)` (the app's `nativeTranscript`, which needs the protocol
+layer) turns a lineage into searchable documents, and `userMessages(state)` counts the user's non-blank messages.
+
+Resume rows (`list`) come from `folds`: the reduced session state, JSON, stored with the byte offset of the log it
+covers. A log that only grew is read from that offset and its new facts are reduced onto the stored state; the
+state is rewritten once the tail since the stored one passes 1 MiB, and until then the tail is read again (cheaper
+than rewriting megabytes). A log that shrank, changed file, has no state, or whose tail cannot be read alone (a payload
+reference into earlier lines) is reduced whole. `list` never builds documents. Equal to a full re-index on 12
+grown-log cases (list columns and search hits).
+
+Search documents are the full projection and are rebuilt for the sessions in scope whose log moved since they were
+built (`docs_seq` against the fold's `seq`), only when a search runs. Document text is stored in the cache, so a
+search returns snippets without reading any log; the cache is disposable, and an older one (user_version < 2) is
+emptied and rebuilt once. `options.skip` leaves named sessions unindexed for this call (the resume list skips open
+sessions, which it takes from memory). A session's own `session_search` indexes that session too, as legacy does.
 This module lives in `session/` and the app binds it in `app/native-catalogue.ts`.
 
 ## Authority and lifetime

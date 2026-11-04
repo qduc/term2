@@ -16,6 +16,7 @@ const inputSchema = z
 
 let worker: Worker | undefined;
 let nextId = 0;
+let inFlight = 0;
 
 /** One shared worker, started on first use and never keeping the process alive. */
 function searchWorker(): Worker {
@@ -37,8 +38,9 @@ function searchOffThread(
     const id = ++nextId;
     // Only a search in flight keeps the process alive (a headless run waits on it).
     target.ref();
+    inFlight++;
     const finish = () => {
-      target.unref();
+      if (--inFlight === 0) target.unref();
       target.off('message', onMessage);
       target.off('error', onError);
       target.off('exit', onExit);
@@ -58,10 +60,11 @@ function searchOffThread(
       finish();
       reject(new Error('Native search worker stopped'));
     };
-    // An aborted search discards the worker, which may be mid-way through a long index refresh.
+    // An aborted search discards the worker, which may be mid-way through a long index refresh,
+    // unless another search is waiting on it: then that one finishes and this one's reply is ignored.
     const onAbort = () => {
       finish();
-      void target.terminate();
+      if (inFlight === 0) void target.terminate();
       reject(signal.reason ?? new Error('Search cancelled'));
     };
     target.on('message', onMessage);

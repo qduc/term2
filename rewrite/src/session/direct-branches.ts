@@ -13,6 +13,10 @@ export type DirectNestedAuthority = {
   readonly tools: ToolRegistry;
   readonly role: string;
   readonly label: string;
+  /** A launch failure legacy settles as a failed run (a background worktree pin). */
+  readonly failure?: string;
+  /** Formats the settled result for the completion notice (legacy's formatSubagentResult). */
+  readonly report?: (result: NestedRunResult) => Promise<string>;
 };
 export type DirectNestedAuthorizer = (
   request: NestedRunRequest,
@@ -38,6 +42,7 @@ export function createDirectBranchDriver(options: {
       const branchId = context.runId;
       const turnId = `branch-${branchId}` as TurnId;
       context.signal.throwIfAborted();
+      if (options.authority.failure !== undefined) throw new Error(options.authority.failure);
       const local: Fact[] = [{ type: 'turn_started', turnId, input: request.items }];
       options.accept({
         type: 'branch_started',
@@ -219,7 +224,9 @@ export function createDirectBranchDriver(options: {
         counts.set(fact.toolName, (counts.get(fact.toolName) ?? 0) + 1);
       }
       const toolUseCounts = [...counts].map(([toolName, count]) => ({ toolName, count }));
-      return { items: produced, outcome, toolsUsed: [...counts.keys()], toolUseCounts };
+      const result: NestedRunResult = { items: produced, outcome, toolsUsed: [...counts.keys()], toolUseCounts };
+      const report = await options.authority.report?.({ ...result, runId: context.runId });
+      return report === undefined ? result : { ...result, report };
     },
   };
 }

@@ -112,6 +112,8 @@ export type NestedRunResult = {
   readonly toolUseCounts?: readonly { readonly toolName: string; readonly count: number }[];
   readonly items: readonly Item[];
   readonly outcome: NestedRunOutcome;
+  /** Host-formatted legacy result (evidence, final text) that a background completion notice carries. */
+  readonly report?: string;
 };
 
 export type ExecutionId = string & { readonly __brand: 'ExecutionId' };

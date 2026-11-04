@@ -163,6 +163,8 @@ function subagentCompletionText(task: DirectTaskState, result: DirectTaskResult<
   const counts = result.value?.toolUseCounts;
   if (counts?.length)
     lines.push('', `Tools used: ${counts.map((tool) => `${tool.toolName}(${tool.count})`).join(', ')}`);
+  // The host's legacy formatting carries Worktree, Validation, Diff stat and Files changed.
+  if (result.value?.report) lines.splice(0, lines.length, result.value.report);
   return [
     'Background subagent run finished (1). This is an automatic system notification, not a user message.',
     '',

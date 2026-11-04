@@ -25,7 +25,11 @@ import {
   resolveSubagentSearchViaShell,
 } from '../../../source/services/subagents/role-loader.js';
 import { SubagentRolePoolSelector } from '../../../source/services/subagents/subagent-role-pool-selector.js';
-import { SubagentToolFactory, SubagentToolPolicy } from '../../../source/services/subagents/tool-policy.js';
+import {
+  SubagentToolFactory,
+  SubagentToolPolicy,
+  type ValidationCapture,
+} from '../../../source/services/subagents/tool-policy.js';
 import type {
   SubagentResult,
   SubagentDefinition,
@@ -47,6 +51,7 @@ import type { NestedRunRequest, Tool, ToolContext, Workspace } from '../tools/in
 import type { ProfileSelection } from './tool-contract.js';
 import {
   createDirectDelegationCallbacks,
+  backgroundReport,
   projectResult,
   type Launch,
   type ExecutionEvidence,
@@ -200,6 +205,8 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
       : new LocalExecutionContext(options.executionContext.getCwd());
     let workspace = Object.freeze({ ...options.workspace, root: executionContext.getCwd() });
     let worktreePath: string | undefined;
+    // Legacy's runners settle a failed pin as a failed run (empty result, the pin error), not a launch refusal.
+    let pinFailure: string | undefined;
     if (params.worktree) {
       const pinned = await pinWorkerWorktree({
         name: params.worktree,
@@ -208,10 +215,12 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
         isRemote: executionContext.isRemote(),
         authorizedPath,
       });
-      if (!pinned.ok) throw new Error(pinned.error);
-      executionContext = pinned.executionContext;
-      workspace = Object.freeze({ ...workspace, root: pinned.worktreePath });
-      worktreePath = pinned.worktreePath;
+      if (!pinned.ok) pinFailure = pinned.error;
+      else {
+        executionContext = pinned.executionContext;
+        workspace = Object.freeze({ ...workspace, root: pinned.worktreePath });
+        worktreePath = pinned.worktreePath;
+      }
     }
     current();
     let skillsService = workspace.root === options.workspace.root ? options.skillsService : undefined;
@@ -239,6 +248,9 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
     // native explorer branch, not inherited workspace or arbitrary agent tools.
     factory.setExplorerRunner(async (question) => run({ role: 'explorer', task: question }));
     const filesChanged: string[] = [];
+    // Legacy's background runner captures diffs and validation; its foreground runner passes neither.
+    const diffDeltas = mode === 'background' ? new Map<string, { added: number; deleted: number }>() : undefined;
+    const validation: ValidationCapture | undefined = mode === 'background' ? {} : undefined;
     const searchViaShell = resolveSubagentSearchViaShell(settings, definition.canRunShell);
     const parentNames = new Set(options.graph().map((tool) => tool.name));
     const askOrchestrator =
@@ -257,8 +269,8 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
         searchViaShell,
         // Legacy prompts only for a foreground child; a background child's tools never ask (execution-runner).
         mode === 'foreground',
-        undefined,
-        undefined,
+        diffDeltas,
+        validation,
         askOrchestrator,
       )
       .filter(
@@ -322,6 +334,8 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
       toolCounts: new Map(),
       maxTurns: definition.maxTurns,
       ...(worktreePath ? { worktreePath } : {}),
+      ...(diffDeltas ? { diffDeltas } : {}),
+      ...(validation ? { validation } : {}),
     };
     const countedTools = new WeakMap<Tool, Tool>();
     const counted = (tool: Tool): Tool => {
@@ -385,7 +399,15 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
     });
     authorities.set(
       request,
-      Object.freeze({ request, workspace, tools: countedRegistry, role: definition.role, label: task }),
+      Object.freeze({
+        request,
+        workspace,
+        tools: countedRegistry,
+        role: definition.role,
+        label: task,
+        ...(pinFailure !== undefined ? { failure: pinFailure } : {}),
+        ...(mode === 'background' ? { report: backgroundReport(definition.role, evidence) } : {}),
+      }),
     );
     preparedEvidence.set(request, evidence);
     preparedSessions.set(request, { key: prior?.key, definition });

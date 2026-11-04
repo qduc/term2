@@ -78,6 +78,8 @@ interface InputState {
 
 interface InputActions {
   setInput: (value: string) => void;
+  /** Legacy's external replacement; next keeps no composer queue state, so it only replaces the text. */
+  replaceInput: (value: string) => void;
   setCursorOffset: (offset: number) => void;
   setInputAndCursor: (value: string, cursorOffset: number, cursorOverride?: number | null) => void;
   setCursorOverride: (offset: number | null) => void;
@@ -152,7 +154,14 @@ export const InputProvider = ({
     ],
   );
   const actions = useMemo<InputActions>(
-    () => ({ setInput, setCursorOffset, setInputAndCursor, setCursorOverride, setMenuPromptLabel }),
+    () => ({
+      setInput,
+      replaceInput: setInput,
+      setCursorOffset,
+      setInputAndCursor,
+      setCursorOverride,
+      setMenuPromptLabel,
+    }),
     [setInput, setCursorOffset, setInputAndCursor],
   );
   return (

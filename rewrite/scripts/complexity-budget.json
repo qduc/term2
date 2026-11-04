@@ -17,6 +17,10 @@
     "rewrite/src/clients/tui/menus/use-provider-selection.ts": {
       "lines": 926,
       "reason": "Verbatim port of source/hooks/use-provider-selection.ts (the legacy /providers manager state machine); kept whole so it stays diffable against the legacy oracle."
+    },
+    "rewrite/src/clients/tui/menus/use-subagent-pool-selection.ts": {
+      "lines": 760,
+      "reason": "Port of source/hooks/use-subagent-pool-selection.ts with only imports changed; kept whole so it stays diffable against the legacy oracle."
     }
   },
   "messagePath": {

@@ -23,7 +23,13 @@ export type MenuActions = {
 };
 
 /** Legacy ApplicationInputSurface's enabled trigger rule ids, limited to the ported menus. */
-export const MENU_RULE_IDS: readonly string[] = ['slash', 'path', 'command-model', 'settings-model'];
+export const MENU_RULE_IDS: readonly string[] = [
+  'slash',
+  'path',
+  'command-model',
+  'settings-model',
+  'settings-subagent-pool-child',
+];
 
 export function useMenuServices({
   commands,

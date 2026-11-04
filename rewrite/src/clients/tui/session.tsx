@@ -186,7 +186,7 @@ export function TuiSession({
     menuOpen: menuStack.open,
     replaceInput,
     notice: setNotice,
-    send: (text) => void submit(text, []),
+    send: (text) => submit(text, []),
   });
   handoffRef.current = handoffFlow;
   const interruptConfirm = useInterruptConfirm(Boolean(state.activeTurnId), editor.value, () => {

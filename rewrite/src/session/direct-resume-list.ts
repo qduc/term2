@@ -53,7 +53,6 @@ export async function listDirectResumeSessions(
   const resolvedRoot = path.resolve(root);
   const ends = directLogicalEnds(directory);
   const recent = recentInWorkspace(ends, resolvedRoot);
-  for (const session of live) recent.add(session.id);
   const entries = withNativeCatalogue(
     directory,
     indexer,
@@ -65,7 +64,8 @@ export async function listDirectResumeSessions(
     { skip: [...ends.keys()].filter((id) => !recent.has(id) || live.some((session) => session.id === id)) },
   );
   const listed = new Map(entries.map((entry) => [entry.id, entry]));
-  const open = new Map(live.map((session) => [session.id, session]));
+  // An open session competes for the newest ten by its log time like any other (legacy counts it in the ten).
+  const open = new Map(live.filter((session) => recent.has(session.id)).map((session) => [session.id, session]));
   const sessions: Awaited<ReturnType<DirectLocalStore['listWorkspace']>>['sessions'][number][] = [];
   for (const id of new Set([...listed.keys(), ...open.keys()])) {
     const entry = listed.get(id);

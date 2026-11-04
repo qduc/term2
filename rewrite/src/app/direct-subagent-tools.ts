@@ -180,11 +180,6 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
           reasoningEffort: params.mentorModel.reasoningEffort ?? settings.get('agent.mentorReasoningEffort'),
         };
     }
-    if (
-      options.executionContext.isRemote() &&
-      (definition.filesystemScope !== undefined || definition.role === 'librarian')
-    )
-      throw new Error('Native SSH subagents do not provide local memory or local filesystem-scope validation');
     // Legacy launches a writer without a worktree (in the workspace) and in a read-only session (its factory
     // then offers no writes); plan mode is refused earlier by the plan-mode interceptor.
     if (definition.canWrite && planMode) throw new Error('This session cannot delegate writes');

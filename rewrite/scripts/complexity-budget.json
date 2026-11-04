@@ -23,8 +23,8 @@
       "reason": "Port of source/hooks/use-subagent-pool-selection.ts with only imports changed; kept whole so it stays diffable against the legacy oracle."
     },
     "rewrite/src/clients/tui/session.tsx": {
-      "lines": 526,
-      "reason": "The session wires the composer to the ported legacy menu stack (useMenuStack, double-Escape); that wiring closes over submit and rewind, declared later in the same component, so moving it out would add ref plumbing rather than a job seam."
+      "lines": 545,
+      "reason": "The session wires the composer to the ported legacy menu stack (useMenuStack, double-Escape) and routes every report into the transcript as legacy's addSystemMessage does; that wiring closes over submit, rewind and the viewport, declared later in the same component, so moving it out would add ref plumbing rather than a job seam."
     }
   },
   "messagePath": {

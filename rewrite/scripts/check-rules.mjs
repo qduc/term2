@@ -24,8 +24,8 @@ const walk = (dir) =>
       entry.isDirectory()
         ? walk(path.join(dir, entry.name))
         : /\.(tsx?|mts|mjs|cts)$/.test(entry.name)
-          ? [path.join(dir, entry.name)]
-          : [],
+        ? [path.join(dir, entry.name)]
+        : [],
     );
 const rel = (file) => path.relative(src, file).split(path.sep).join('/');
 const files = walk(src);
@@ -41,7 +41,8 @@ const payloads = eventsText.slice(
   eventsText.indexOf('export type WireEventType'),
 );
 const wireTypes = new Set([...payloads.matchAll(/^ {2}([a-z_]+):/gm)].map((match) => match[1]));
-if (wireTypes.size < 20) problems.push('rule-check: could not read WireEventPayloads from protocol/direct-wire-events.ts');
+if (wireTypes.size < 20)
+  problems.push('rule-check: could not read WireEventPayloads from protocol/direct-wire-events.ts');
 const wireAllowed = new Set(baseline.wireEventOutsideProtocol.map((entry) => `${entry.file} ${entry.type}`));
 for (const file of files) {
   const name = rel(file);
@@ -49,11 +50,22 @@ for (const file of files) {
   const sf = parse(file);
   const visit = (node) => {
     if (ts.isObjectLiteralExpression(node)) {
-      const props = new Map(node.properties.filter(ts.isPropertyAssignment).map((p) => [p.name.getText(), p.initializer]));
+      const props = new Map(
+        node.properties.filter(ts.isPropertyAssignment).map((p) => [p.name.getText(), p.initializer]),
+      );
       const type = props.get('type');
-      if (type && ts.isStringLiteral(type) && wireTypes.has(type.text) && ['payload', 'turnId', 'seq', 'sessionId'].every((k) => props.has(k)))
+      if (
+        type &&
+        ts.isStringLiteral(type) &&
+        wireTypes.has(type.text) &&
+        ['payload', 'turnId', 'seq', 'sessionId'].every((k) => props.has(k))
+      )
         if (!wireAllowed.has(`${name} ${type.text}`))
-          problems.push(`${name}:${lineOf(sf, node)}: builds a WireEvent '${type.text}' outside protocol/ (rule: one projection, wire events are built only in protocol/)`);
+          problems.push(
+            `${name}:${lineOf(sf, node)}: builds a WireEvent '${
+              type.text
+            }' outside protocol/ (rule: one projection, wire events are built only in protocol/)`,
+          );
     }
     ts.forEachChild(node, visit);
   };
@@ -81,21 +93,35 @@ for (const file of files) {
     const mods = ts.canHaveModifiers(st) ? ts.getModifiers(st) : undefined;
     if (!mods?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword)) continue;
     if (ts.isTypeAliasDeclaration(st) || ts.isInterfaceDeclaration(st)) continue;
-    const ids = ts.isVariableStatement(st) ? st.declarationList.declarations.map((d) => d.name.getText()) : [st.name?.getText()].filter(Boolean);
+    const ids = ts.isVariableStatement(st)
+      ? st.declarationList.declarations.map((d) => d.name.getText())
+      : [st.name?.getText()].filter(Boolean);
     for (const id of ids) {
       if ([...counts.get(id).keys()].some((other) => other !== file)) continue;
       const key = `${rel(file)} ${id}`;
       found.add(key);
       if (!known.has(key))
-        problems.push(`${rel(file)}:${lineOf(sf, st)}: export '${id}' is not used anywhere (rule: no unused exports; delete it, or use it)`);
+        problems.push(
+          `${rel(file)}:${lineOf(
+            sf,
+            st,
+          )}: export '${id}' is not used anywhere (rule: no unused exports; delete it, or use it)`,
+        );
     }
   }
 }
 const stale = [...known].filter((key) => !found.has(key));
-if (stale.length) console.log(`rule-baseline.json lists ${stale.length} unused exports that are now used or gone; remove:\n  ${stale.join('\n  ')}`);
+if (stale.length)
+  console.log(
+    `rule-baseline.json lists ${stale.length} unused exports that are now used or gone; remove:\n  ${stale.join(
+      '\n  ',
+    )}`,
+  );
 
 if (problems.length) {
   console.error(problems.sort().join('\n'));
   process.exit(1);
 }
-console.log(`rule check passed (${found.size} recorded unused exports, ${wireAllowed.size} recorded wire-event exceptions)`);
+console.log(
+  `rule check passed (${found.size} recorded unused exports, ${wireAllowed.size} recorded wire-event exceptions)`,
+);

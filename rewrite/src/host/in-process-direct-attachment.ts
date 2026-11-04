@@ -18,7 +18,7 @@ export class DirectAttachment {
     // Capture can enqueue callbacks while constructing. Never lose the atomic-cut tail.
     const pending: DirectSessionUpdate[] = [];
     let ready = false;
-    const capture = session.captureFrom(0, update => {
+    const capture = session.captureFrom(0, (update) => {
       if (ready) this.#update(update);
       else pending.push(update);
     });
@@ -31,7 +31,10 @@ export class DirectAttachment {
       this.#projection = DirectProjection.forReplay(capture.state);
       for (const entry of capture.replay) this.#projection.update(entry);
       this.#projection.synchronize(capture.state);
-    } catch (error) { capture.unsubscribe(); throw error; }
+    } catch (error) {
+      capture.unsubscribe();
+      throw error;
+    }
     ready = true;
     for (const update of pending) this.#update(update);
   }
@@ -46,7 +49,8 @@ export class DirectAttachment {
   #update(update: DirectSessionUpdate): void {
     if (this.#closed || this.#failure) return;
     try {
-      if (!Number.isSafeInteger(update.position) || update.position <= this.#position) throw new Error('Session publication position is not strictly increasing');
+      if (!Number.isSafeInteger(update.position) || update.position <= this.#position)
+        throw new Error('Session publication position is not strictly increasing');
       this.#position = update.position;
       for (const event of this.#projection.update(update)) {
         for (const queue of this.#queues) queue.push(event);

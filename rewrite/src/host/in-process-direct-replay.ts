@@ -14,13 +14,18 @@ export function directReplayView(session: DirectSession, fromSeq: number) {
   let unsubscribe = (): void => undefined;
   const events = new DirectEventQueue(() => unsubscribe());
   const update = (next: DirectSessionUpdate): void => {
-    if (!projection) { pending.push(next); return; }
+    if (!projection) {
+      pending.push(next);
+      return;
+    }
     if (events.closed) return;
     try {
       if (next.position <= after) throw new Error('Session replay/live positions overlap');
       after = next.position;
       for (const event of projection.update(next)) events.push(event);
-    } catch { events.fail(new DirectProtocolError('internal_error', 'Session replay projection failed.')); }
+    } catch {
+      events.fail(new DirectProtocolError('internal_error', 'Session replay projection failed.'));
+    }
   };
   // Reconstruct projection context from the real accepted prefix. A queue edit or
   // steer tail cannot be interpreted from a current snapshot or an empty queue.
@@ -28,7 +33,8 @@ export function directReplayView(session: DirectSession, fromSeq: number) {
   const capture = session.captureFrom(0, update);
   unsubscribe = () => capture.unsubscribe();
   try {
-    if (fromSeq > capture.seq) throw new DirectProtocolError('replay_unavailable', 'Replay cursor is ahead of the accepted log.');
+    if (fromSeq > capture.seq)
+      throw new DirectProtocolError('replay_unavailable', 'Replay cursor is ahead of the accepted log.');
     after = capture.position;
     projection = DirectProjection.forReplay(capture.state);
     let previousSeq = 0;
@@ -45,5 +51,8 @@ export function directReplayView(session: DirectSession, fromSeq: number) {
     for (const event of projection.synchronize(capture.state)) events.push(event);
     for (const next of pending) update(next);
     return { snapshot: null, replay: { fromSeq, toSeq: capture.seq }, events } as const;
-  } catch (error) { events.close(); throw error; }
+  } catch (error) {
+    events.close();
+    throw error;
+  }
 }

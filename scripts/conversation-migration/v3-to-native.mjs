@@ -88,7 +88,8 @@ export function convertValidatedV3(input, options = {}) {
     const modelName = state.model ?? fallback.model;
     const derivedProfile = state.activeProfileId === undefined && state.appMode !== undefined;
     if (derivedProfile && !object(state.appMode)) refuse('missing-configuration');
-    const profileId = state.activeProfileId ?? (derivedProfile ? profileIdFromLegacyMode(state.appMode) : fallback.profileId);
+    const profileId =
+      state.activeProfileId ?? (derivedProfile ? profileIdFromLegacyMode(state.appMode) : fallback.profileId);
     const workspace = state.projectPath ?? fallback.workspace;
     if (![provider, modelName, profileId, workspace].every(text)) refuse('missing-configuration');
     if (!workspace.startsWith('/')) refuse('unsupported-workspace');
@@ -278,9 +279,12 @@ export function convertValidatedV3(input, options = {}) {
         remappedObservationIdentityCount,
         restorationTurnCount: 1,
         continuationBroken: true,
-        fallbackFieldCount: [state.provider, state.model, derivedProfile ? profileId : state.activeProfileId, state.projectPath].filter(
-          (value) => value === undefined,
-        ).length,
+        fallbackFieldCount: [
+          state.provider,
+          state.model,
+          derivedProfile ? profileId : state.activeProfileId,
+          state.projectPath,
+        ].filter((value) => value === undefined).length,
         replayWarningCount: state.replayWarnings?.length ?? 0,
       },
     };

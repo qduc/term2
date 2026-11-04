@@ -10,7 +10,9 @@ export class DirectEventQueue implements AsyncIterable<WireEvent> {
   #consumed = false;
   onClose: (() => void) | undefined;
   constructor(readonly detach: () => void) {}
-  get closed(): boolean { return this.#closed; }
+  get closed(): boolean {
+    return this.#closed;
+  }
   push(event: WireEvent): void {
     if (this.#closed) return;
     const waiter = this.#waiting.shift();
@@ -18,9 +20,14 @@ export class DirectEventQueue implements AsyncIterable<WireEvent> {
     else this.#events.push(event);
   }
   /** Disconnect discards only this connection's unread presentation, never Session work. */
-  close(): void { this.#events.length = 0; this.#end(null); }
+  close(): void {
+    this.#events.length = 0;
+    this.#end(null);
+  }
   /** Already queued accepted events remain readable before the transport failure surfaces. */
-  fail(error: Error): void { this.#end(error); }
+  fail(error: Error): void {
+    this.#end(error);
+  }
   #end(error: Error | null): void {
     if (this.#closed) return;
     this.#closed = true;
@@ -44,8 +51,14 @@ export class DirectEventQueue implements AsyncIterable<WireEvent> {
     this.#consumed = true;
     return {
       next: () => this.#next(),
-      return: async () => { this.close(); return { done: true, value: undefined }; },
-      throw: async error => { this.close(); throw error; },
+      return: async () => {
+        this.close();
+        return { done: true, value: undefined };
+      },
+      throw: async (error) => {
+        this.close();
+        throw error;
+      },
     };
   }
 }

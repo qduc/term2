@@ -11,10 +11,18 @@ export function publicBudgetRequest(fact: Extract<BudgetFact, { readonly type: '
 /** Each accepted observation/open/closure has one cursor-addressable frame. */
 export function budgetFactEvent(fact: BudgetFact, sessionId: string, seq: number): WireEvent {
   const base = { sessionId, seq, turnId: fact.turnId };
-  if (fact.type === 'budget_opened') return { ...base, type: fact.type, payload: { request: publicBudgetRequest(fact) } };
+  if (fact.type === 'budget_opened')
+    return { ...base, type: fact.type, payload: { request: publicBudgetRequest(fact) } };
   if (fact.type === 'budget_observed') return { ...base, type: fact.type, payload: { evidence: fact.evidence } };
-  const decision = fact.decision.kind === 'steer'
-    ? { kind: 'steer' as const, messages: fact.decision.items.flatMap(item => { const message = publicMessage(item, fact.turnId); return message ? [message] : []; }) }
-    : fact.decision;
+  const decision =
+    fact.decision.kind === 'steer'
+      ? {
+          kind: 'steer' as const,
+          messages: fact.decision.items.flatMap((item) => {
+            const message = publicMessage(item, fact.turnId);
+            return message ? [message] : [];
+          }),
+        }
+      : fact.decision;
   return { ...base, type: fact.type, payload: { requestId: fact.requestId, decision, source: fact.source } };
 }

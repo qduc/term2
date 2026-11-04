@@ -29,26 +29,37 @@ function request(value: Completed['requests'][number]): WireCompactionRequest {
     modelStep: value.modelStep,
     model: { provider: value.model.provider, model: value.model.model },
     outcome: value.outcome,
-    ...(value.usage !== undefined ? { usage: {
-      inputTokens: value.usage.inputTokens,
-      outputTokens: value.usage.outputTokens,
-      cachedInputTokens: value.usage.cachedInputTokens,
-    } } : {}),
+    ...(value.usage !== undefined
+      ? {
+          usage: {
+            inputTokens: value.usage.inputTokens,
+            outputTokens: value.usage.outputTokens,
+            cachedInputTokens: value.usage.cachedInputTokens,
+          },
+        }
+      : {}),
     ...(value.costUsd !== undefined ? { costUsd: value.costUsd } : {}),
   };
 }
 
 function failure(value: Failed['failure']): WireCompactionFailure {
   switch (value.kind) {
-    case 'blocked': return { kind: 'blocked', reason: value.reason };
-    case 'interrupted': return { kind: 'interrupted', reason: value.reason };
-    case 'cancelled': return { kind: 'cancelled' };
-    case 'failed': return { kind: 'failed', error: {
-      kind: value.error.kind,
-      message: value.error.message,
-      ...(value.error.retryable !== undefined ? { retryable: value.error.retryable } : {}),
-      ...(value.error.retryAfterMs !== undefined ? { retryAfterMs: value.error.retryAfterMs } : {}),
-    } };
+    case 'blocked':
+      return { kind: 'blocked', reason: value.reason };
+    case 'interrupted':
+      return { kind: 'interrupted', reason: value.reason };
+    case 'cancelled':
+      return { kind: 'cancelled' };
+    case 'failed':
+      return {
+        kind: 'failed',
+        error: {
+          kind: value.error.kind,
+          message: value.error.message,
+          ...(value.error.retryable !== undefined ? { retryable: value.error.retryable } : {}),
+          ...(value.error.retryAfterMs !== undefined ? { retryAfterMs: value.error.retryAfterMs } : {}),
+        },
+      };
   }
 }
 

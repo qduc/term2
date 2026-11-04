@@ -29,8 +29,10 @@ export type DirectSessionMemoryOptions = {
 /** True when this profile/settings would actually grant local memory. The prompt
  * may describe that capability even though Session owns the tools and context. */
 export function directMainMemoryEnabled(settings: ISettingsService): boolean {
-  return resolveActiveProfile(settings).tools.capabilities.has('memory')
-    && !resolveDisabledCapabilities(settings).has('memory');
+  return (
+    resolveActiveProfile(settings).tools.capabilities.has('memory') &&
+    !resolveDisabledCapabilities(settings).has('memory')
+  );
 }
 
 /**

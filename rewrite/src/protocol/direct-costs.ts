@@ -4,7 +4,9 @@ import type { WireRequestCost } from './direct-wire.js';
 
 /** Keep the complete native record, including optional normalized usage and price provenance. */
 export function publicRequestCost(fact: DirectRequestCostFact): WireRequestCost {
-  return { turnId: fact.turnId, rootTurnId: fact.rootTurnId,
+  return {
+    turnId: fact.turnId,
+    rootTurnId: fact.rootTurnId,
     ...(fact.parentTurnId !== undefined ? { parentTurnId: fact.parentTurnId } : {}),
     record: structuredClone(fact.record),
   };

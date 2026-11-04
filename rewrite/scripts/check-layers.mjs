@@ -421,7 +421,9 @@ for (const file of files(rewriteSrc)) {
   const hit = LOG_READERS.exec(text);
   if (hit)
     problems.add(
-      `${relative}:${text.slice(0, hit.index).split('\n').length}: app/ and clients/ may not read session logs; ask the session`,
+      `${relative}:${
+        text.slice(0, hit.index).split('\n').length
+      }: app/ and clients/ may not read session logs; ask the session`,
     );
 }
 

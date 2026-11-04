@@ -172,8 +172,15 @@ console.log(`layers: ${layers.join(' -> ')}`);
 for (const file of files) console.log(`  ${file}`);
 assert.ok(files.length > 0, 'stack trace named no repository files');
 // The path must be the production direct one (the bench-only bridge files are deleted).
-for (const required of ['rewrite/src/host/in-process-direct.ts', 'rewrite/src/session/direct-session.ts', 'rewrite/src/app/generation-guard.ts'])
-  assert.ok(distinct.includes(required), `message path no longer goes through ${required}; hops must measure the production direct path`);
+for (const required of [
+  'rewrite/src/host/in-process-direct.ts',
+  'rewrite/src/session/direct-session.ts',
+  'rewrite/src/app/generation-guard.ts',
+])
+  assert.ok(
+    distinct.includes(required),
+    `message path no longer goes through ${required}; hops must measure the production direct path`,
+  );
 assert.ok(
   files.length <= budget.maxHops,
   `message path grew to ${files.length} hops (budget ${budget.maxHops}); simplify the path or justify raising the budget`,

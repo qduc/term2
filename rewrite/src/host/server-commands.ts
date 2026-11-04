@@ -79,8 +79,10 @@ function projectReceipt(body: CommandBody, receipt: WireCommandReceipt, pending:
  * configuration. Retain request/revision/outcome identity; redact diagnostic text only. */
 export function projectServerNativeCommand(result: WireCommandResult): ServerResult {
   if (!('receipt' in result)) return result.ok ? unavailable('durable command receipt') : commandFailure(result);
-  return { status: result.ok ? (result.kind === 'command_pending' ? 202 : 200) : projectNegativeReceipt(result.receipt).status,
-    body: safeNativeCommandResult(result) };
+  return {
+    status: result.ok ? (result.kind === 'command_pending' ? 202 : 200) : projectNegativeReceipt(result.receipt).status,
+    body: safeNativeCommandResult(result),
+  };
 }
 /** Retain structural receipt evidence while applying the established safe diagnostic redaction. */
 export function safeNativeCommandResult(result: WireCommandResult): WireCommandResult {

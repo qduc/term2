@@ -164,7 +164,7 @@ function DirectTui({
         <Tui
           connection={connection}
           header={
-            <Box paddingLeft={2} paddingBottom={1}>
+            <Box paddingLeft={2}>
               <Banner
                 key={`header:${connection.sessionId}`}
                 settingsService={settings}
@@ -172,7 +172,7 @@ function DirectTui({
               />
             </Box>
           }
-          headerHeight={headerHeight + 1}
+          headerHeight={headerHeight}
           integration={integration}
           onLiveEvent={(event) => {
             if (event.sessionId !== connection.sessionId) return;

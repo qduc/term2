@@ -14,8 +14,6 @@ type Row = {
   readonly draftId?: string;
   /** The exact draft text this row covers; the row shows it without trailing blank lines. */
   readonly draftText?: string;
-  /** The reply's last row keeps the blank row its live form had, so the footer rests where it did. */
-  readonly trailingBlank?: true;
 };
 
 const draftPrefixRows = (rows: readonly Row[], draftId: string) => rows.filter((row) => row.draftId === draftId);
@@ -125,12 +123,7 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
         const replaced = row.message?.replacesDraftId;
         if (replaced) {
           expanded.push(...draftPrefixRows(previous, replaced));
-          const prefixed = draftPrefixRows(previous, replaced).length > 0;
-          expanded.push({
-            ...row,
-            message: withoutPrefix(row.message!, previous),
-            ...(prefixed ? { trailingBlank: true as const } : {}),
-          });
+          expanded.push({ ...row, message: withoutPrefix(row.message!, previous) });
         } else expanded.push(row);
       }
       if (canSplit) {
@@ -225,8 +218,8 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
             return (
               <Box
                 key={row.key}
-                paddingBottom={row.trailingBlank ? 1 : 0}
-                marginTop={row.message?.role === 'user' && index > (header ? 1 : 0) ? 1 : 0}
+                // Legacy MessageList: a user row sits two rows below what precedes it (the Transcript adds one).
+                marginTop={row.message?.role === 'user' && (header || index > 0) ? 1 : 0}
               >
                 <Transcript state={single} messages={single.messages} columns={columns} live staticRow />
               </Box>

@@ -42,6 +42,30 @@ function groupable(tool: ToolView): GroupableMessage {
 }
 
 /**
+ * Legacy lists a run of consecutive calls in the order their rows appeared, so a call that waited on the user comes
+ * once decided. Each run of tool entries is ordered by `shownAt`; everything else keeps its place.
+ */
+export function shownOrder<T extends { readonly kind: string; readonly id: string }>(
+  timeline: readonly T[],
+  shownAt: ReadonlyMap<string, number> | undefined,
+): readonly T[] {
+  if (!shownAt) return timeline;
+  const at = (entry: T) => shownAt.get(entry.id) ?? Number.MAX_SAFE_INTEGER;
+  const ordered: T[] = [];
+  let run: T[] = [];
+  for (const entry of [...timeline, undefined]) {
+    if (entry?.kind === 'tool') {
+      run.push(entry);
+      continue;
+    }
+    ordered.push(...run.sort((a, b) => at(a) - at(b)));
+    run = [];
+    if (entry) ordered.push(entry);
+  }
+  return ordered;
+}
+
+/**
  * Legacy's concise-mode grouping of consecutive tool calls (`groupCommandRuns`), over the timeline's
  * order. `closed` treats the last run as finished, as legacy does for committed history.
  */
@@ -52,24 +76,10 @@ export function groupTools(
   shownAt?: ReadonlyMap<string, number>,
 ): ToolGroups {
   const byId = new Map(tools.map((tool) => [tool.id, tool]));
-  const items: GroupableMessage[] = [];
-  let run: ToolView[] = [];
-  // Legacy lists a run in the order its rows appeared: a call that waited on the user only once decided.
-  const at = (tool: ToolView) => shownAt?.get(tool.id) ?? Number.MAX_SAFE_INTEGER;
-  const flush = () => {
-    items.push(...[...run].sort((a, b) => at(a) - at(b)).map(groupable));
-    run = [];
-  };
-  for (const entry of timeline) {
+  const items: GroupableMessage[] = shownOrder(timeline, shownAt).map((entry) => {
     const tool = entry.kind === 'tool' ? byId.get(entry.id) : undefined;
-    if (tool) {
-      run.push(tool);
-      continue;
-    }
-    flush();
-    items.push({ id: `${entry.kind}:${entry.id}`, sender: 'bot' });
-  }
-  flush();
+    return tool ? groupable(tool) : { id: `${entry.kind}:${entry.id}`, sender: 'bot' };
+  });
   const result = new Map<string, ToolGroup | null>();
   for (const item of groupCommandRuns(items, { isClosed: closed })) {
     if (item.sender !== 'command-group') continue;

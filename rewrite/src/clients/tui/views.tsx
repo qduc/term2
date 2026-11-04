@@ -8,7 +8,7 @@ import MarkdownRenderer from './presentation/components/MarkdownRenderer.js';
 import { useSkin } from './presentation/skins/SkinContext.js';
 import type { Message, ToolView, TuiState } from './state.js';
 import { ToolCall } from './tool-view.js';
-import { groupTools, ToolGroupRow } from './tool-groups.js';
+import { groupTools, shownOrder, ToolGroupRow } from './tool-groups.js';
 
 /** Render mixed history only in the authoritative wire order; separate items with unknown order. */
 export function Transcript({
@@ -70,7 +70,7 @@ export function Transcript({
       </Box>
     );
   const ordered =
-    state.timeline?.flatMap<React.ReactNode>((item) => {
+    (state.timeline && shownOrder(state.timeline, state.toolShownAt))?.flatMap<React.ReactNode>((item) => {
       if (item.kind === 'message') {
         const message = messageById.get(item.id);
         if (!message || usedMessages.has(item.id)) return [];
@@ -80,7 +80,7 @@ export function Transcript({
       const tool = toolById.get(item.id);
       if (!tool || usedTools.has(item.id)) return [];
       usedTools.add(item.id);
-      if (awaitingApproval(state, tool)) return [];
+      if (undecided(state, tool)) return [];
       const group = groups.get(tool.id);
       if (group === null) return [];
       if (group !== undefined)
@@ -94,6 +94,7 @@ export function Transcript({
           <ToolCall
             tool={tool}
             expanded={expanded}
+            awaitingDecision={live && state.interactions.length > 0}
             startedAt={
               state.tasks.find((task) => task.wire?.parentExecutionId === tool.id && task.wire.kind === 'shell')?.wire
                 ?.startedAt
@@ -103,9 +104,7 @@ export function Transcript({
       ];
     }) ?? [];
   const remainingMessages = messages.filter((message) => !usedMessages.has(message.id));
-  const remainingTools = live
-    ? state.tools.filter((tool) => !usedTools.has(tool.id) && !awaitingApproval(state, tool))
-    : [];
+  const remainingTools = live ? state.tools.filter((tool) => !usedTools.has(tool.id) && !undecided(state, tool)) : [];
   return (
     <Box flexDirection="column" paddingRight={2} paddingBottom={staticRow ? 0 : 1}>
       {ordered}
@@ -139,6 +138,7 @@ export function Transcript({
           <ToolCall
             tool={tool}
             expanded={expanded}
+            awaitingDecision={live && state.interactions.length > 0}
             startedAt={
               state.tasks.find((task) => task.wire?.parentExecutionId === tool.id && task.wire.kind === 'shell')?.wire
                 ?.startedAt
@@ -249,17 +249,9 @@ function liveNotices(notices: readonly string[]): readonly string[] {
 }
 
 /** Keep pending work visible unless its active dialog already presents it. */
-/**
- * Legacy publishes a call that needs approval only once it is decided: while its dialog is up the call has no row.
- * The wire has no tool id on the interaction, so the call is matched by turn and tool name in the dialog title.
- */
-function awaitingApproval(state: TuiState, tool: ToolView): boolean {
-  return (
-    tool.status === 'pending' &&
-    state.interactions.some(
-      (item) => item.kind === 'approval' && item.turnId === tool.turnId && item.title.startsWith(`${tool.name} `),
-    )
-  );
+/** Legacy publishes a call that waits on the user (a question or an approval) only once it is decided. */
+function undecided(state: TuiState, tool: ToolView): boolean {
+  return state.toolShownAt?.has(tool.id) === false;
 }
 
 export function Activity({
@@ -282,7 +274,7 @@ export function Activity({
   );
   return (
     <Box flexDirection="column">
-      {state.activeTurnId && !state.interactions.some((item) => item.kind === 'approval') ? (
+      {state.activeTurnId && !state.interactions.length ? (
         <StreamingStatus key={state.activeTurnId} state={state} liveTps={liveTps} />
       ) : null}
       {(!state.activeTurnId && state.status !== 'idle') || state.cost ? (

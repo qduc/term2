@@ -6,7 +6,7 @@ import { Box, Text } from 'ink';
 import { useTheme } from './presentation/components/theme.js';
 import MarkdownRenderer from './presentation/components/MarkdownRenderer.js';
 import { useSkin } from './presentation/skins/SkinContext.js';
-import type { Message, TuiState } from './state.js';
+import type { Message, ToolView, TuiState } from './state.js';
 import { ToolCall } from './tool-view.js';
 import { groupTools, ToolGroupRow } from './tool-groups.js';
 
@@ -78,6 +78,7 @@ export function Transcript({
       const tool = toolById.get(item.id);
       if (!tool || usedTools.has(item.id)) return [];
       usedTools.add(item.id);
+      if (awaitingApproval(state, tool)) return [];
       const group = groups.get(tool.id);
       if (group === null) return [];
       if (group !== undefined)
@@ -100,7 +101,9 @@ export function Transcript({
       ];
     }) ?? [];
   const remainingMessages = messages.filter((message) => !usedMessages.has(message.id));
-  const remainingTools = live ? state.tools.filter((tool) => !usedTools.has(tool.id)) : [];
+  const remainingTools = live
+    ? state.tools.filter((tool) => !usedTools.has(tool.id) && !awaitingApproval(state, tool))
+    : [];
   return (
     <Box flexDirection="column" paddingRight={2} paddingBottom={staticRow ? 0 : 1}>
       {ordered}
@@ -229,6 +232,19 @@ function liveNotices(notices: readonly string[]): readonly string[] {
 }
 
 /** Keep pending work visible unless its active dialog already presents it. */
+/**
+ * Legacy publishes a call that needs approval only once it is decided: while its dialog is up the call has no row.
+ * The wire has no tool id on the interaction, so the call is matched by turn and tool name in the dialog title.
+ */
+function awaitingApproval(state: TuiState, tool: ToolView): boolean {
+  return (
+    tool.status === 'pending' &&
+    state.interactions.some(
+      (item) => item.kind === 'approval' && item.turnId === tool.turnId && item.title.startsWith(`${tool.name} `),
+    )
+  );
+}
+
 export function Activity({
   state,
   dialogInteractionId,
@@ -247,7 +263,9 @@ export function Activity({
   );
   return (
     <Box flexDirection="column">
-      {state.activeTurnId ? <StreamingStatus key={state.activeTurnId} state={state} /> : null}
+      {state.activeTurnId && !state.interactions.some((item) => item.kind === 'approval') ? (
+        <StreamingStatus key={state.activeTurnId} state={state} />
+      ) : null}
       {(!state.activeTurnId && state.status !== 'idle') || state.cost ? (
         <Text color={theme.textSubtle}>
           {[!state.activeTurnId && state.status !== 'idle' ? state.status : '', state.cost].filter(Boolean).join(' · ')}

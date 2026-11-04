@@ -20,20 +20,22 @@ export function ToolCall({
 }): React.ReactElement | null {
   const age = useContext(LiveToolAgesContext)?.get(tool.id);
   const message = commandMessages(tool.display)[0];
+  // A call the user denied never ran, so no command message was published; legacy draws it as a rejected row.
+  const denied = !message && tool.status === 'failed' && tool.detail?.startsWith(DENIED_PREFIX) === true;
   // Legacy draws a call that never produced a command message (an unknown tool) from its arguments alone,
   // as a finished row: there is no result message to mark it failed.
   const status = tool.outcomeUnknown
     ? 'unknown'
     : tool.status === 'rejected'
     ? 'failed'
-    : tool.status === 'failed' && !message
+    : tool.status === 'failed' && !message && !denied
     ? 'completed'
     : tool.status;
-  const output = typeof message?.output === 'string' ? message.output : message ? tool.detail ?? '' : '';
+  const output = typeof message?.output === 'string' ? message.output : message || denied ? tool.detail ?? '' : '';
   const success =
     typeof message?.success === 'boolean'
       ? message.success
-      : message && (tool.status === 'failed' || tool.status === 'rejected')
+      : (message || denied) && (tool.status === 'failed' || tool.status === 'rejected')
       ? false
       : undefined;
   const row = (
@@ -45,7 +47,7 @@ export function ToolCall({
       {...(typeof message?.failureReason === 'string' ? { failureReason: message.failureReason } : {})}
       toolName={tool.name}
       toolArgs={tool.input}
-      isApprovalRejection={tool.status === 'rejected' || message?.isApprovalRejection === true}
+      isApprovalRejection={tool.status === 'rejected' || denied || message?.isApprovalRejection === true}
       autoApprovedByLlm={message?.autoApprovedByLlm === true}
       hadApproval={message?.hadApproval === true}
       displayMode={expanded ? 'standard' : 'concise'}
@@ -54,6 +56,9 @@ export function ToolCall({
   );
   return age ? <LiveToolAgeContext.Provider value={age}>{row}</LiveToolAgeContext.Provider> : row;
 }
+
+/** The result text legacy's runner records for a denied call. */
+const DENIED_PREFIX = 'Tool execution was not approved';
 
 /** The legacy command messages a source tool published as the call's `display`. */
 function commandMessages(display: JsonValue | undefined): Record<string, JsonValue>[] {
@@ -71,9 +76,9 @@ function isRecord(value: unknown): value is Record<string, JsonValue> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** Before a shell call publishes its command message, legacy labels the row from the call's arguments. */
+/** Until a shell call publishes its command message, legacy labels the row from the call's arguments. */
 function inFlightLabel(tool: ToolView): string {
-  if (tool.name !== 'shell' || (tool.status !== 'pending' && tool.status !== 'running')) return '';
+  if (tool.name !== 'shell') return '';
   const input = tool.input;
   const label = isRecord(input as JsonValue)
     ? (input as Record<string, JsonValue>).description ?? (input as Record<string, JsonValue>).command

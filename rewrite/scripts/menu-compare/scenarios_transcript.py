@@ -60,6 +60,8 @@ SCENARIOS = {
     't-ask-mixed': ['ask me', '<enter>', '<sleep>', '<enter>', '<sleep>', '<sleep>'],
     # /compact before any turn, with a sizeable model: legacy's "Nothing to compact" wording.
     't-compact-empty': ['/compact', '<enter>', '<sleep>'],
+    # A resumed conversation whose last request reported usage: does the status bar show its context?
+    't-resume-usage': ['/resume ', '<sleep>', '<enter>', '<sleep>'],
     't-exit-fresh': ['<c-c>', '<c-c>', '<sleep>'],
     't-exit-turn': ['hello', '<enter>', '<sleep>', '<c-c>', '<c-c>', '<sleep>'],
     't-exit-cmd': ['hello', '<enter>', '<sleep>', '/exit', '<enter>', '<sleep>'],
@@ -105,6 +107,8 @@ SEED = {
     't-ask-mixed': {'replies': [{'calls': [_ASK, _ECHO]}, {'text': 'done'}], 'usage': _USAGE},
     't-compact-empty': {'settings': {'agent': {'retryAttempts': 0, 'maxRequestInputTokens': 100000,
                                                'modelSelection': {'model': 'mock-alpha', 'provider': 'mockprov'}}}},
+    't-resume-usage': {'sessions': [['first turn', 'second turn']],
+                       'session_usage': {'prompt_tokens': 12000, 'completion_tokens': 80}},
     't-exit-turn': {'replies': [{'text': 'Hi there.'}], 'usage': _USAGE},
     't-exit-cmd': {'replies': [{'text': 'Hi there.'}], 'usage': _USAGE},
 }

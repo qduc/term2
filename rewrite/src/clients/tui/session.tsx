@@ -259,7 +259,10 @@ export function TuiSession({
     if (composerActive && isCtrlO(input, key)) return replaceInput('/model ');
     if (composerActive && isCtrlT(input, key)) return replaceInput('/effort ');
     if (composerActive && key.escape && viewport.expanded) return viewport.collapse();
-    if (isCtrlG(input, key) && !busy) (state.interactions.length ? setInteractionOpen : setTaskOpen)(true);
+    // Legacy BackgroundTaskManager opens only when there is live work to manage.
+    const liveTasks = state.tasks.some((task) => task.status === 'running' || task.status === 'awaiting_interaction');
+    if (isCtrlG(input, key) && !busy && state.interactions.length) setInteractionOpen(true);
+    else if (isCtrlG(input, key) && !busy && liveTasks) setTaskOpen(true);
     if (key.ctrl && input === 'b' && state.budgets.length && !busy) setBudgetOpen(true);
     if (key.meta && key.return && state.activeTurnId && !busy && !editing)
       void submit(editor.value, images, 'follow_up');

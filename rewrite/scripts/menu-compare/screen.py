@@ -74,6 +74,8 @@ class Provider(BaseHTTPRequestHandler):
         state = type(self)
         reply = state.replies[min(state.posts, len(state.replies) - 1)]
         state.posts += 1
+        # 'wait': seconds before the response starts, so a scenario can see the turn waiting for the model.
+        time.sleep(reply.get('wait', 0))
         self.send_response(200)
         self.send_header('content-type', 'text/event-stream')
         self.end_headers()

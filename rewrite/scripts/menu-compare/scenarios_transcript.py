@@ -59,6 +59,9 @@ SCENARIOS = {
     't-long-user': [_LONG, '<enter>', '<sleep>'],
     't-model-switch': ['first question', '<enter>', '<sleep>', '/model mock-beta', '<enter>', '<sleep>'],
     't-cancel': ['stream please', '<enter>', '<sleep>', '<esc>', '<esc>', '<sleep>'],
+    # The turn still waits for its first byte: the rows between the user's message and "Waiting for model".
+    't-waiting': ['go', '<enter>', '<sleep>'],
+    't-waiting-multiline': ['first line', '<a-enter>', '<a-enter>', 'third line', '<enter>', '<sleep>'],
     # A question and a shell call in one reply. Bare has no ask_user, so the call fails at once and keeps its place.
     't-ask-mixed': ['ask me', '<enter>', '<sleep>', '<enter>', '<sleep>', '<sleep>'],
     # /compact before any turn, with a sizeable model: legacy's "Nothing to compact" wording.
@@ -110,6 +113,8 @@ SEED = {
                                      'sixth turn']]},
     't-long-user': {'replies': [{'text': 'Short answer.'}], 'usage': _USAGE},
     't-model-switch': {'replies': [{'text': 'Answer one.'}], 'usage': _USAGE},
+    't-waiting': {'replies': [{'text': 'late', 'wait': 20}]},
+    't-waiting-multiline': {'replies': [{'text': 'late', 'wait': 20}]},
     't-cancel': {'replies': [{'text': '\n\n'.join(f'sw{i}' for i in range(40)), 'chunks': 40, 'delay': 0.25}],
                  'usage': _USAGE},
     't-ask-mixed': {'replies': [{'calls': [_ASK, _ECHO]}, {'text': 'done'}], 'usage': _USAGE},

@@ -1,4 +1,5 @@
-import React, { FC, useEffect, useMemo, useState } from 'react';
+import React, { FC, useContext, useEffect, useMemo, useState } from 'react';
+import { LiveToolAgeContext } from '../../../live-tool-age.js';
 import { Box, Text } from 'ink';
 import { generateDiff } from '../../utils/output/diff.js';
 import { asDisplayArray, asDisplayString } from '../../utils/tool-args-display.js';
@@ -32,6 +33,8 @@ import MemoryRenderer from './MemoryRenderer.js';
 import RunCodeRenderer from './RunCodeRenderer.js';
 
 const useRunningElapsedSeconds = (isRunning: boolean): number => {
+  // Port exception: see useCommandVisibility; the live render measures the age for this row.
+  const age = useContext(LiveToolAgeContext);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   useEffect(() => {
@@ -51,6 +54,7 @@ const useRunningElapsedSeconds = (isRunning: boolean): number => {
     return () => clearInterval(interval);
   }, [isRunning]);
 
+  if (age !== undefined) return isRunning ? Math.floor((age.runningMs ?? 0) / 1000) : 0;
   return elapsedSeconds;
 };
 

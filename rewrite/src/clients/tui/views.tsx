@@ -156,7 +156,8 @@ function StreamingStatus({ state }: { readonly state: TuiState }): React.ReactEl
   const [now, setNow] = useState(Date.now());
   const [dotCount, setDotCount] = useState(1);
   const text = [...Object.values(state.reasoning), ...Object.values(state.drafts)].join('');
-  const activeTool = state.tools.find((tool) => tool.status === 'running' || tool.status === 'pending');
+  // Legacy names the latest streamed tool call, so with parallel calls the last one in flight is the one shown.
+  const activeTool = [...state.tools].reverse().find((tool) => tool.status === 'running' || tool.status === 'pending');
   const toolRunning = activeTool != null;
   useEffect(() => {
     if (toolRunning || !text.startsWith(previous.current)) {
@@ -170,16 +171,15 @@ function StreamingStatus({ state }: { readonly state: TuiState }): React.ReactEl
       previous.current = text;
     }
   }, [text, toolRunning]);
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, []);
   const rate = toolRunning ? null : liveRate.current;
   const phase = toolRunning ? 'tool_call' : rate != null && rate > 0 ? 'generating' : 'processing';
   const stepKey = phase === 'tool_call' ? `tool_call:${activeTool?.name ?? ''}` : phase;
+  // Like legacy, the clock restarts with each step, so its seconds tick from the step's start.
   useEffect(() => {
     start.current = Date.now();
     setNow(start.current);
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
   }, [stepKey]);
   useEffect(() => {
     const timer = setInterval(() => setDotCount((previous) => (previous === 3 ? 1 : previous + 1)), 800);

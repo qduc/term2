@@ -107,10 +107,18 @@ export function itemToInput(item: Item): StreamedModelTurnInput {
         ...(item.toolType ? { toolType: item.toolType } : {}),
       };
     case 'summary':
-      // Legacy's compaction checkpoint is a system message in history (local-context-compactor.ts).
-      return { type: 'message', role: 'system', content: [{ type: 'text', text: item.text }] };
+      // Legacy's compaction checkpoint is a system message in history (local-context-compactor.ts); its harness
+      // notices ("[Mode Notice] ...") are user messages.
+      return {
+        type: 'message',
+        role: item.text.startsWith(COMPACTION_CHECKPOINT_PREFIX) ? 'system' : 'user',
+        content: [{ type: 'text', text: item.text }],
+      };
   }
 }
+
+/** The opening of legacy's compaction checkpoint wrapper (source/prompts/context-compaction.ts). */
+const COMPACTION_CHECKPOINT_PREFIX = '[Compacted Conversation Context';
 
 export function outputToItem(
   output: StreamedModelTurnOutput | Extract<StreamedModelTurnEvent, { type: 'tool_call' }>,

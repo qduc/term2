@@ -35,3 +35,13 @@ function writeAtomically(path: string, payload: string): void {
   writeFileSync(tmp, payload);
   renameSync(tmp, path);
 }
+
+let approvalRevision = 0;
+
+/** Legacy's opt-in approval-prompt readiness signal (source/lib/harness-input-idle.ts), same file format. */
+export function publishHarnessApprovalReady(callId: string): void {
+  const path = process.env['TERM2_HARNESS_IDLE_PATH'];
+  if (!path) return;
+  approvalRevision += 1;
+  writeAtomically(`${path}.approval`, `${JSON.stringify({ revision: approvalRevision, callId })}\n`);
+}

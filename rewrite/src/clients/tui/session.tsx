@@ -27,6 +27,7 @@ import { runBridgeCommand } from './bridge-command.js';
 import { useSendConfirmation } from './send-confirmation.js';
 import { ComposerFooter, useComposerFilter, useComposerMenu } from './composer-parts.js';
 import { SessionPanels } from './session-panels.js';
+import { ApprovalHost } from './approval-host.js';
 import { useSessionRewind } from './session-rewind.js';
 import {
   answerInteraction,
@@ -99,6 +100,7 @@ export function TuiSession({
   const interactionActive = interactionOpen || Boolean(foregroundInteraction);
   const confirmation = useSendConfirmation(interactionActive);
   const interactionInput = useRef<InteractionInputHandler | null>(null);
+  const approvalInterrupt = useRef<(() => boolean) | null>(null);
   const viewportActive = !interactionActive && !panelOpen && !confirmation.pending;
   const viewport = useCommandTranscriptViewport(state, headerHeight ?? 0, viewportActive, header, historyRevision);
   const { InputFrame, PromptMarker, LiveDivider } = useSkin();
@@ -132,6 +134,7 @@ export function TuiSession({
   };
   useInterrupt({
     interrupt,
+    approvalInterrupt: foregroundInteraction ? approvalInterrupt : null,
     connection,
     confirmation,
     state,
@@ -367,6 +370,7 @@ export function TuiSession({
       setBusy(false);
     }
   };
+  const liveGap = state.activeTurnId ? 1 : viewport.endsWithSystemLine ? 2 : state.messages.length ? 3 : 2;
   return (
     <Box flexDirection="column">
       {viewport.staticTranscript}
@@ -376,7 +380,7 @@ export function TuiSession({
           Lines {viewport.start + 1}–{viewport.end} of {viewport.total} · PgUp/PgDn or Ctrl+↑/↓
         </Text>
       ) : null}
-      <Box flexDirection="column" paddingX={2} marginTop={state.activeTurnId ? 1 : state.messages.length ? 3 : 2}>
+      <Box flexDirection="column" paddingX={2} marginTop={liveGap}>
         <Activity state={state} dialogInteractionId={foregroundInteraction?.id} notice={notice} />
         <SessionPanels
           {...{
@@ -389,14 +393,11 @@ export function TuiSession({
             taskOpen,
             rewindTargets,
             state,
-            interactionActive,
-            foregroundInteraction,
             columns,
             executeRewind,
-            cancelInput,
           }}
           onNotice={setNotice}
-          onStopped={() => viewport.appendCommandOutput('Stopped', 'system')}
+          interactionActive={interactionActive && !foregroundInteraction}
           closePicker={() => setPicker(null)}
           closeBudget={() => setBudgetOpen(false)}
           closeTask={() => setTaskOpen(false)}
@@ -412,80 +413,89 @@ export function TuiSession({
         {bangResult ? <BangResult result={bangResult} expanded={viewport.expanded} /> : null}
         {slash.view}
         <LiveDivider />
-        <ShellTaskPanel state={state} />
-        <PendingQueue
-          items={queueItems}
-          selectedId={selectedQueueIndex < 0 ? null : selectedQueueId}
-          editingId={editing?.id ?? null}
-          notice={queueNotice}
+        <ApprovalHost
+          interaction={foregroundInteraction}
+          {...{ connection, cancelInput, setNotice }}
+          inputHandler={interactionInput}
+          interrupt={approvalInterrupt}
+          onStopped={() => viewport.appendCommandOutput('Stopped', 'system')}
         />
-        <PendingQueueEdit editingId={editing?.id ?? null} items={queueItems} />
-        <InputFrame>
-          <PromptMarker mode="input" />
-          <MultilineInput
-            key={editor.inputKey}
-            value={editor.value}
-            onChange={(value) => {
-              slash.reset();
-              changeInput(value);
-            }}
-            onSubmit={(value, submittedImages) => {
-              void submit(value, submittedImages);
-            }}
-            onBoundaryArrow={(direction) => {
-              if (direction === 'up' && !editor.value && !editing && queueItems.length) {
-                setQueueNotice(null);
-                setSelectedQueueId(queueItems[queueItems.length - 1]!.id);
-                return;
-              }
-              const entry = editor.navigate(direction, {
-                text: editor.value,
-                attachments: wireAttachments(images, otherParts, originalParts),
-              });
-              if (entry) restoreDraft(entry, entry.cursor);
-            }}
-            onCursorChange={editor.cursorChanged}
-            cursorOverride={editor.cursorOverride}
-            width={Math.max(1, columns - 4)}
-            maxHeight={Math.max(1, rows - 8)}
-            pasteThreshold={preferences.pasteThreshold}
-            isActive={composerActive && !picker}
-            images={images}
-            onImagesChange={onImagesChange}
-            enableImagePaste
-            onPasteError={(reason) => setNotice(`Image paste failed: ${reason}`)}
-            ignoreInput={(input, key) => {
-              if (selectedQueueIndex >= 0) {
-                const item = queueItems[selectedQueueIndex]!;
-                if (key.escape) setSelectedQueueId(null);
-                else if (key.upArrow) {
-                  if (selectedQueueIndex > 0) setSelectedQueueId(queueItems[selectedQueueIndex - 1]!.id);
-                  else {
-                    setSelectedQueueId(null);
-                    const entry = editor.navigate('up', {
-                      text: editor.value,
-                      attachments: wireAttachments(images, otherParts, originalParts),
-                    });
-                    if (entry) restoreDraft(entry, entry.cursor);
-                  }
-                } else if (key.downArrow) setSelectedQueueId(queueItems[selectedQueueIndex + 1]?.id ?? null);
-                else if (input === 'e' || key.return) {
-                  setSelectedQueueId(null);
-                  setQueueNotice(null);
-                  startQueueEdit(item);
-                } else if (input === 'd') {
-                  setSelectedQueueId(null);
-                  void queueAction(connection, 'retract', item.id).catch((error: unknown) =>
-                    setQueueNotice(error instanceof Error ? error.message : String(error)),
-                  );
-                }
-                return true;
-              }
-              if (editing && key.escape) return cancelQueueEdit();
-              return composerFilter(input, key);
-            }}
+        <ShellTaskPanel state={state} />
+        <Box flexDirection="column" display={foregroundInteraction ? 'none' : 'flex'}>
+          <PendingQueue
+            items={queueItems}
+            selectedId={selectedQueueIndex < 0 ? null : selectedQueueId}
+            editingId={editing?.id ?? null}
+            notice={queueNotice}
           />
-        </InputFrame>
+          <PendingQueueEdit editingId={editing?.id ?? null} items={queueItems} />
+          <InputFrame>
+            <PromptMarker mode="input" />
+            <MultilineInput
+              key={editor.inputKey}
+              value={editor.value}
+              onChange={(value) => {
+                slash.reset();
+                changeInput(value);
+              }}
+              onSubmit={(value, submittedImages) => {
+                void submit(value, submittedImages);
+              }}
+              onBoundaryArrow={(direction) => {
+                if (direction === 'up' && !editor.value && !editing && queueItems.length) {
+                  setQueueNotice(null);
+                  setSelectedQueueId(queueItems[queueItems.length - 1]!.id);
+                  return;
+                }
+                const entry = editor.navigate(direction, {
+                  text: editor.value,
+                  attachments: wireAttachments(images, otherParts, originalParts),
+                });
+                if (entry) restoreDraft(entry, entry.cursor);
+              }}
+              onCursorChange={editor.cursorChanged}
+              cursorOverride={editor.cursorOverride}
+              width={Math.max(1, columns - 4)}
+              maxHeight={Math.max(1, rows - 8)}
+              pasteThreshold={preferences.pasteThreshold}
+              isActive={composerActive && !picker}
+              images={images}
+              onImagesChange={onImagesChange}
+              enableImagePaste
+              onPasteError={(reason) => setNotice(`Image paste failed: ${reason}`)}
+              ignoreInput={(input, key) => {
+                if (selectedQueueIndex >= 0) {
+                  const item = queueItems[selectedQueueIndex]!;
+                  if (key.escape) setSelectedQueueId(null);
+                  else if (key.upArrow) {
+                    if (selectedQueueIndex > 0) setSelectedQueueId(queueItems[selectedQueueIndex - 1]!.id);
+                    else {
+                      setSelectedQueueId(null);
+                      const entry = editor.navigate('up', {
+                        text: editor.value,
+                        attachments: wireAttachments(images, otherParts, originalParts),
+                      });
+                      if (entry) restoreDraft(entry, entry.cursor);
+                    }
+                  } else if (key.downArrow) setSelectedQueueId(queueItems[selectedQueueIndex + 1]?.id ?? null);
+                  else if (input === 'e' || key.return) {
+                    setSelectedQueueId(null);
+                    setQueueNotice(null);
+                    startQueueEdit(item);
+                  } else if (input === 'd') {
+                    setSelectedQueueId(null);
+                    void queueAction(connection, 'retract', item.id).catch((error: unknown) =>
+                      setQueueNotice(error instanceof Error ? error.message : String(error)),
+                    );
+                  }
+                  return true;
+                }
+                if (editing && key.escape) return cancelQueueEdit();
+                return composerFilter(input, key);
+              }}
+            />
+          </InputFrame>
+        </Box>
         <ComposerFooter
           integration={integration}
           state={state}

@@ -101,7 +101,8 @@ const taskView = (task: WireSnapshot['tasks'][number]): TaskView => ({
   wire: task,
 });
 
-function interactionView(interaction: WireInteraction): InteractionView {
+function interactionView(interaction: WireInteraction, tools: readonly WireTool[]): InteractionView {
+  const callId = tools.find((tool) => tool.executionId === interaction.executionId)?.callId;
   return {
     id: interaction.requestId,
     kind: interaction.kind,
@@ -134,6 +135,11 @@ function interactionView(interaction: WireInteraction): InteractionView {
     acceptsText: true,
     questions: interaction.questions,
     supportedGrants: interaction.supportedGrants,
+    toolName: interaction.toolName,
+    input: interaction.input,
+    summary: interaction.summary,
+    ...(interaction.presentation ? { presentation: interaction.presentation } : {}),
+    ...(callId ? { callId } : {}),
   };
 }
 
@@ -196,7 +202,7 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
     unmatchedTools: snapshot.unmatchedToolResults ?? [],
     budgets: snapshot.pendingBudgets ?? [],
     commands: snapshot.commands ?? [],
-    interactions: snapshot.pendingInteractions.map(interactionView),
+    interactions: snapshot.pendingInteractions.map((item) => interactionView(item, snapshot.tools)),
     queue: snapshot.queue.map((entry) => {
       const skill = skillPresentation(snapshot.submissions?.find((item) => item.messageId === entry.messageId));
       return {

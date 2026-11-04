@@ -49,7 +49,7 @@ export function Transcript({
         </Box>
       </Box>
     ) : message.localSystem === true ? (
-      <Box key={`message:${message.id}`} marginTop={1} marginBottom={1} paddingLeft={2}>
+      <Box key={`message:${message.id}`} marginTop={1} paddingLeft={2}>
         <Text color={theme.reasoning}>{message.text}</Text>
       </Box>
     ) : message.localHelp === true ? (
@@ -250,7 +250,8 @@ export function Activity({
   );
   return (
     <Box flexDirection="column">
-      {state.activeTurnId ? <StreamingStatus key={state.activeTurnId} state={state} /> : null}
+      {/* Legacy hides the working indicator while an approval prompt owns the turn. */}
+      {state.activeTurnId && !dialogInteractionId ? <StreamingStatus key={state.activeTurnId} state={state} /> : null}
       {(!state.activeTurnId && state.status !== 'idle') || state.cost ? (
         <Text color={theme.textSubtle}>
           {[!state.activeTurnId && state.status !== 'idle' ? state.status : '', state.cost].filter(Boolean).join(' · ')}

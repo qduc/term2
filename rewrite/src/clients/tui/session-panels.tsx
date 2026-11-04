@@ -1,5 +1,5 @@
 import React from 'react';
-import { ASK_USER_NO_ANSWER_RESULT, type WireRewindTarget } from '../../protocol/direct-wire.js';
+import type { WireRewindTarget } from '../../protocol/direct-wire.js';
 import type { TuiConnection, TuiProps } from './integration.js';
 import type { TuiState } from './state.js';
 import { PickerHost, type PickerKind } from './picker-host.js';
@@ -21,8 +21,8 @@ type Props = {
   taskOpen: boolean;
   rewindTargets: readonly WireRewindTarget[] | null;
   state: TuiState;
+  /** The Ctrl+G request picker; the foreground turn's request is approval-host.tsx's. */
   interactionActive: boolean;
-  foregroundInteraction: TuiState['interactions'][number] | undefined;
   columns: number;
   closePicker: () => void;
   closeBudget: () => void;
@@ -30,9 +30,6 @@ type Props = {
   closeRewind: () => void;
   closeInteraction: () => void;
   executeRewind: (id: string, disposition: 'edit' | 'resend') => Promise<void>;
-  cancelInput: (connection: TuiConnection, turnId?: string) => Promise<string>;
-  /** Legacy's transcript line after Escape interrupts the turn from an approval prompt. */
-  onStopped: () => void;
 };
 
 /** Modal surfaces share input ownership; the session retains their state and routing. */
@@ -48,7 +45,6 @@ export function SessionPanels({
   rewindTargets,
   state,
   interactionActive,
-  foregroundInteraction,
   columns,
   closePicker,
   closeBudget,
@@ -56,8 +52,6 @@ export function SessionPanels({
   closeRewind,
   closeInteraction,
   executeRewind,
-  cancelInput,
-  onStopped,
 }: Props): React.ReactElement {
   return (
     <>
@@ -98,30 +92,12 @@ export function SessionPanels({
 
       {interactionActive ? (
         <InteractionPanel
-          key={foregroundInteraction?.id ?? 'picker'}
           interactions={state.interactions}
           width={columns}
-          initialRequestId={foregroundInteraction?.id}
           inputHandler={interactionInput}
           onClose={() => {
             closeInteraction();
           }}
-          onCancel={
-            foregroundInteraction
-              ? async () => {
-                  if (foregroundInteraction.kind === 'question')
-                    await answerInteraction(connection, foregroundInteraction.id, {
-                      kind: 'answer',
-                      answer: ASK_USER_NO_ANSWER_RESULT,
-                      stopAfterApprovalResolution: true,
-                    });
-                  else {
-                    setNotice(await cancelInput(connection, foregroundInteraction.turnId));
-                    onStopped();
-                  }
-                }
-              : undefined
-          }
           onAnswer={(id, decision) => answerInteraction(connection, id, decision)}
         />
       ) : null}

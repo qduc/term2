@@ -10,6 +10,8 @@ import type { TuiState } from './state.js';
  */
 export function useInterrupt(context: {
   readonly interrupt: RefObject<() => void>;
+  /** The foreground approval prompt's Ctrl+C (approval-host.tsx), checked first while it is up. */
+  readonly approvalInterrupt: RefObject<(() => boolean) | null> | null;
   readonly connection: TuiConnection;
   readonly cancelQueueEdit: () => boolean;
   readonly confirmation: { readonly pending: boolean; clear(): void };
@@ -19,10 +21,21 @@ export function useInterrupt(context: {
   readonly cancelInput: (connection: TuiConnection, turnId?: string) => Promise<string>;
   readonly setNotice: (text: string | null) => void;
 }): void {
-  const { interrupt, connection, confirmation, state, editor, replaceInput, cancelInput, setNotice, cancelQueueEdit } =
-    context;
+  const {
+    interrupt,
+    approvalInterrupt,
+    connection,
+    confirmation,
+    state,
+    editor,
+    replaceInput,
+    cancelInput,
+    setNotice,
+    cancelQueueEdit,
+  } = context;
   const notifyError = (error: unknown) => setNotice(error instanceof Error ? error.message : String(error));
   interrupt.current = () => {
+    if (approvalInterrupt?.current?.()) return;
     if (confirmation.pending) confirmation.clear();
     else if (cancelQueueEdit()) return;
     else if (state.activeTurnId || (state.interactions.length && editor.value.length === 0))

@@ -1,0 +1,1145 @@
+/**
+ * Legacy's approval and ask_user prompt (source/components/prompt/ApprovalPrompt.tsx), ported as-is.
+ * Only the data access changed: the descriptor is built from a direct-wire interaction by approval-host.tsx,
+ * keys arrive through the session's interaction input instead of Ink's useInput, and the few source/ helpers
+ * that sit outside the client layer (docker detection, folder-read target, duration format) are local.
+ */
+import React, { FC } from 'react';
+import os from 'node:os';
+import path from 'node:path';
+import { Box, Text } from 'ink';
+import { publishHarnessApprovalReady } from './harness-input.js';
+import { useInteractionInput, type InteractionInput } from './interaction-input.js';
+import { generateDiff } from './presentation/utils/output/diff.js';
+import { asDisplayArray } from './presentation/utils/tool-args-display.js';
+import {
+  TOOL_NAME_APPLY_PATCH,
+  TOOL_NAME_ASK_USER,
+  TOOL_NAME_PROPOSE_GOAL,
+  TOOL_NAME_SEARCH_REPLACE,
+} from './presentation/tools/tool-names.js';
+import DiffView from './presentation/components/layout/DiffView.js';
+import { type ColorRole, useTheme } from './presentation/components/theme.js';
+import { SelectionMarker } from './presentation/components/common/SelectionMarker.js';
+import { useSkin } from './presentation/skins/SkinContext.js';
+
+const ASK_USER_CUSTOM_ANSWER_LABEL = 'Something else… (type your answer)';
+const ASK_USER_SUBMIT_LABEL = 'Submit answer';
+const READ_FILE_SESSION_APPROVE_ANSWER = 'allow-folder-session';
+
+const FOLDER_SESSION_READ_TOOLS = new Set(['read_file', 'grep', 'glob']);
+const supportsFolderSessionRead = (toolName: string | undefined): boolean =>
+  typeof toolName === 'string' && FOLDER_SESSION_READ_TOOLS.has(toolName);
+
+/** source/services/approval/session-read-grant-target.ts, without glob pattern resolution (tools/ is outside this layer). */
+function resolveSessionReadFolder(toolName: string | undefined, args: unknown): string | null {
+  const record = args && typeof args === 'object' ? (args as Record<string, unknown>) : null;
+  const rawPath = typeof record?.path === 'string' ? record.path.trim() : '';
+  if (toolName === 'read_file') return rawPath ? path.dirname(rawPath) : null;
+  if (toolName === 'grep' || toolName === 'glob') return rawPath && rawPath !== '.' ? rawPath : null;
+  return null;
+}
+
+/** source/components/menu/settings-value-formatter.ts formatDurationMs, for the shell timeout line. */
+function formatDurationMs(ms: number): string {
+  if (ms === 0) return '0s';
+  if (ms >= 3_600_000 && ms % 3_600_000 === 0) return `${ms / 3_600_000}h`;
+  if (ms >= 60_000 && ms % 60_000 === 0) return `${ms / 60_000}m`;
+  if (ms >= 1_000 && ms % 1_000 === 0) return `${ms / 1_000}s`;
+  if (ms >= 60_000) {
+    const mins = Math.floor(ms / 60_000);
+    const secs = Math.floor((ms % 60_000) / 1_000);
+    return secs ? `${mins}m ${secs}s` : `${mins}m`;
+  }
+  if (ms >= 1_000) return `${(ms / 1_000).toFixed(1).replace(/\.0$/, '')}s`;
+  return `${ms}ms`;
+}
+
+type LLMAdvisory = { reasoning: string; approved: boolean; model: string; source?: 'llm' | 'system' };
+
+/** The fields of legacy's ApprovalDescriptor this prompt reads. */
+export type ApprovalDescriptor = {
+  agentName: string;
+  toolName: string;
+  argumentsText: string;
+  rawInterruption?: unknown;
+  callId?: string;
+  llmAdvisory?: LLMAdvisory;
+  deniedRead?: { deniedPath: string; suggestedParent: string; sensitive?: boolean };
+  workspaceRoot?: string;
+  outsideWorkspaceEdit?: { path: string; folder: string };
+  dockerHostControl?: boolean;
+  checkIn?: 'max_turns' | 'run_budget';
+};
+
+const MenuFooter: FC<{ hints: ReadonlyArray<[string, string]> }> = ({ hints }) => {
+  const { Hints } = useSkin();
+  return <Hints hints={hints} />;
+};
+
+type Props = {
+  approval: ApprovalDescriptor;
+  inputHandler: InteractionInput;
+  onApprove: (answer?: string) => void;
+  onReject: () => void;
+  onCancel?: () => void;
+  onTypeAnswer?: (initialAnswer?: string) => void;
+  onNavigateQuestion?: (direction: 'prev' | 'next') => void;
+  currentQuestionIndex?: number;
+  waitingForAskUserAnswer?: boolean;
+};
+
+type QuestionItem = {
+  question: string;
+  options?: {
+    label: string;
+    description?: string;
+  }[];
+  is_multi_select?: boolean;
+};
+
+type AskUserArgs = {
+  questions: QuestionItem[];
+};
+
+type ApplyPatchArgs = {
+  type: 'create_file' | 'update_file' | 'delete_file';
+  path: string;
+  diff?: string;
+};
+
+type ShellArgs = {
+  commands?: string;
+  command?: string;
+  cwd?: string;
+  timeout_ms?: number;
+  max_output_length?: number;
+};
+
+type ShellApprovalArgs = ShellArgs & {
+  sandbox?: 'default' | 'unsandboxed';
+};
+
+function parseShellApprovalArgs(input: unknown): ShellApprovalArgs | null {
+  if (input === null || input === undefined) {
+    return null;
+  }
+
+  let value: unknown = input;
+  if (typeof input === 'string') {
+    try {
+      value = JSON.parse(input);
+    } catch {
+      return null;
+    }
+  }
+
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  const command = typeof record.command === 'string' ? record.command : undefined;
+  const commands = typeof record.commands === 'string' ? record.commands : undefined;
+
+  if (!command && !commands) {
+    return null;
+  }
+
+  if (record.sandbox !== undefined && record.sandbox !== 'default' && record.sandbox !== 'unsandboxed') {
+    return null;
+  }
+
+  if (record.cwd !== undefined && typeof record.cwd !== 'string') {
+    return null;
+  }
+
+  if (record.timeout_ms !== undefined && typeof record.timeout_ms !== 'number') {
+    return null;
+  }
+
+  if (record.max_output_length !== undefined && typeof record.max_output_length !== 'number') {
+    return null;
+  }
+
+  return {
+    ...(command !== undefined ? { command } : {}),
+    ...(commands !== undefined ? { commands } : {}),
+    ...(record.sandbox !== undefined ? { sandbox: record.sandbox as 'default' | 'unsandboxed' } : {}),
+    ...(record.cwd !== undefined ? { cwd: record.cwd as string } : {}),
+    ...(record.timeout_ms !== undefined ? { timeout_ms: record.timeout_ms as number } : {}),
+    ...(record.max_output_length !== undefined ? { max_output_length: record.max_output_length as number } : {}),
+  };
+}
+
+type SearchReplaceArgs = {
+  path: string;
+  replacements: {
+    search_content: string;
+    replace_content: string;
+  }[];
+};
+
+type CreateFileArgs = {
+  path: string;
+  content: string;
+};
+
+type ProposeGoalArgs = {
+  outcome: string;
+  successCriteria?: string;
+};
+
+const operationLabels: Record<string, { label: string; tone: ColorRole }> = {
+  create_file: { label: 'CREATE', tone: 'success' },
+  update_file: { label: 'UPDATE', tone: 'warning' },
+  delete_file: { label: 'DELETE', tone: 'danger' },
+};
+
+const ApplyPatchPrompt: FC<{ args: ApplyPatchArgs }> = ({ args }) => {
+  const theme = useTheme();
+  const op = operationLabels[args.type] || { label: args.type, tone: 'text' as const };
+
+  return (
+    <Box flexDirection="column">
+      <Box>
+        <Text color={theme[op.tone]} bold>
+          [{op.label}]
+        </Text>
+        <Text> {args.path}</Text>
+      </Box>
+      {args.diff && <DiffView diff={args.diff} />}
+    </Box>
+  );
+};
+
+const ShellPrompt: FC<{ args: ShellArgs }> = ({ args }) => {
+  const theme = useTheme();
+  const cmd = args.command ?? args.commands ?? '';
+  return (
+    <Box flexDirection="column" marginLeft={2} marginTop={1}>
+      <Box>
+        <Text bold color={theme.accent}>
+          {cmd}
+        </Text>
+      </Box>
+      {args.cwd && (
+        <Box>
+          <Text color={theme.textSubtle}>Cwd: {args.cwd}</Text>
+        </Box>
+      )}
+      {args.timeout_ms && (
+        <Box>
+          <Text color={theme.textSubtle}>Timeout: {formatDurationMs(args.timeout_ms)}</Text>
+        </Box>
+      )}
+      {args.max_output_length && (
+        <Box>
+          <Text color={theme.textSubtle}>Max output: {args.max_output_length} chars</Text>
+        </Box>
+      )}
+    </Box>
+  );
+};
+
+const ProposeGoalPrompt: FC<{ args: ProposeGoalArgs }> = ({ args }) => {
+  const theme = useTheme();
+  return (
+    <Box flexDirection="column" marginLeft={2} marginTop={1}>
+      <Text color={theme.textSubtle}>Outcome</Text>
+      <Text bold color={theme.accent}>
+        {args.outcome}
+      </Text>
+      {args.successCriteria && (
+        <Box flexDirection="column" marginTop={1}>
+          <Text color={theme.textSubtle}>Success criteria</Text>
+          <Text color={theme.textMuted}>{args.successCriteria}</Text>
+        </Box>
+      )}
+    </Box>
+  );
+};
+
+const SearchReplacePrompt: FC<{ args: SearchReplaceArgs }> = ({ args }) => {
+  const theme = useTheme();
+  return (
+    <Box flexDirection="column">
+      <Box>
+        <Text color={theme.warning} bold>
+          [SEARCH & REPLACE]
+        </Text>
+        <Text> {args.path}</Text>
+      </Box>
+      {asDisplayArray<SearchReplaceArgs['replacements'][number]>(args.replacements).map((rep, idx, all) => {
+        const diff = generateDiff(rep?.search_content, rep?.replace_content);
+        return (
+          <Box key={idx} flexDirection="column" marginTop={idx > 0 ? 1 : 0}>
+            {all.length > 1 && <Text color={theme.textSubtle}>Replacement #{idx + 1}:</Text>}
+            <DiffView diff={diff} />
+          </Box>
+        );
+      })}
+    </Box>
+  );
+};
+
+const CreateFilePrompt: FC<{ args: CreateFileArgs }> = ({ args }) => {
+  const theme = useTheme();
+  // Show content as a diff with all lines added
+  const diffLines = args.content
+    .split('\n')
+    .map((line) => `+${line}`)
+    .join('\n');
+
+  return (
+    <Box flexDirection="column">
+      <Box>
+        <Text color={theme.success} bold>
+          [CREATE]
+        </Text>
+        <Text> {args.path}</Text>
+      </Box>
+      <DiffView diff={diffLines} />
+    </Box>
+  );
+};
+
+type SafetyFindingLevel = 'RED' | 'YELLOW' | 'GREEN';
+
+const SAFETY_FINDING_TONES: Record<SafetyFindingLevel, ColorRole> = {
+  RED: 'danger',
+  YELLOW: 'warning',
+  GREEN: 'success',
+};
+
+type ParsedSystemSafetyReasoning = {
+  findings: { level: SafetyFindingLevel; detail: string }[];
+  modelAdvisory?: string;
+};
+
+/**
+ * The safety evaluator deliberately keeps its advisory as plain text for
+ * transport compatibility. Recover the structured severity markers only at
+ * this presentation boundary so mixed findings remain scannable in a narrow
+ * terminal.
+ */
+function parseSystemSafetyReasoning(reasoning: string): ParsedSystemSafetyReasoning | null {
+  const modelAdvisoryMarker = '\n\nModel advisory:';
+  const modelAdvisoryIndex = reasoning.indexOf(modelAdvisoryMarker);
+  const safetyText = modelAdvisoryIndex >= 0 ? reasoning.slice(0, modelAdvisoryIndex) : reasoning;
+  const modelAdvisory =
+    modelAdvisoryIndex >= 0 ? reasoning.slice(modelAdvisoryIndex + modelAdvisoryMarker.length).trim() : undefined;
+  const match = safetyText.match(
+    /^Blocked by safety heuristics \(RED\): (.*)\. Manual approval is strictly required\.$/s,
+  );
+  if (!match) return null;
+
+  const findings: ParsedSystemSafetyReasoning['findings'] = [];
+  const findingPattern = /(?:^|;\s*)((?:RED|YELLOW|GREEN)):\s*(.*?)(?=;\s*(?:RED|YELLOW|GREEN):|$)/g;
+  for (const finding of match[1].matchAll(findingPattern)) {
+    findings.push({ level: finding[1] as SafetyFindingLevel, detail: finding[2] });
+  }
+
+  // A RED result can have no reason text if the classifier only returns its
+  // status. Still make the blocking status visible instead of rendering an
+  // empty findings section.
+  if (findings.length === 0) {
+    findings.push({ level: 'RED', detail: match[1] });
+  }
+
+  return { findings, ...(modelAdvisory ? { modelAdvisory } : {}) };
+}
+
+const LLMAdvisory: FC<{ advisory: NonNullable<ApprovalDescriptor['llmAdvisory']> }> = ({ advisory }) => {
+  const theme = useTheme();
+  const { ToolSection } = useSkin();
+  const isSystem = advisory.source === 'system';
+  const tone: ColorRole = isSystem ? 'danger' : advisory.approved ? 'success' : 'warning';
+  const label = isSystem ? 'System Safety Check: BLOCKED' : `AI Advisor: ${advisory.approved ? 'SAFE' : 'CAUTION'}`;
+  const parsedSystemReasoning = isSystem ? parseSystemSafetyReasoning(advisory.reasoning) : null;
+
+  return (
+    <Box flexDirection="column" marginTop={1}>
+      <ToolSection
+        variant="callout"
+        tone={tone}
+        title={`${label} (${isSystem ? 'automated heuristic' : advisory.model})`}
+      >
+        {parsedSystemReasoning ? (
+          <Box flexDirection="column" marginTop={1}>
+            <Text bold color={theme.textMuted}>
+              Heuristic findings:
+            </Text>
+            <Box flexDirection="column" marginLeft={1}>
+              {parsedSystemReasoning.findings.map(({ level, detail }, index) => (
+                <Box key={`${level}-${detail}-${index}`}>
+                  <Text color={theme[SAFETY_FINDING_TONES[level]]} bold>
+                    {`${level}:`.padEnd(8)}
+                  </Text>
+                  <Text color={theme.textMuted}>{detail}</Text>
+                </Box>
+              ))}
+            </Box>
+            <Box marginTop={1}>
+              <Text color={theme.textMuted}>Manual approval is strictly required.</Text>
+            </Box>
+            {parsedSystemReasoning.modelAdvisory && (
+              <Box flexDirection="column" marginTop={1}>
+                <Text bold color={theme.textMuted}>
+                  Model advisory:
+                </Text>
+                <Text italic color={theme.textMuted}>
+                  {parsedSystemReasoning.modelAdvisory}
+                </Text>
+              </Box>
+            )}
+          </Box>
+        ) : (
+          <Text italic color={theme.textMuted}>
+            {isSystem ? advisory.reasoning : `"${advisory.reasoning}"`}
+          </Text>
+        )}
+      </ToolSection>
+    </Box>
+  );
+};
+
+/**
+ * The shared two-pane approval shape: an option list on the left, and a
+ * description of the highlighted option on the right. Previously only the
+ * ask_user branch explained its options; every other approval was a bare
+ * list, so a reviewer had to already know what "Allow this folder for this
+ * session" does. Reusing one layout means every approval gets that
+ * explanation for free. Each pane takes half the row, so the divider lands in
+ * the same place regardless of which approval this is or how long its option
+ * labels are.
+ */
+function deniedReadOptionTone(item: string): ColorRole {
+  if (item === 'Deny') return 'danger';
+  if (item === 'Run unsandboxed once') return 'warning';
+  return 'success';
+}
+
+const APPROVAL_FOOTER_HINTS: [string, string][] = [
+  ['↑↓', 'navigate'],
+  ['1', 'allow once'],
+  ['y/n', 'answer'],
+  ['⏎', 'select'],
+  ['Esc', 'interrupts the turn'],
+];
+
+const DOCKER_APPROVAL_FOOTER_HINTS: [string, string][] = [
+  ['↑↓', 'navigate'],
+  ['⏎', 'select'],
+  ['Esc', 'interrupts the turn'],
+];
+
+const CHECK_IN_FOOTER_HINTS: [string, string][] = [
+  ['↑↓', 'navigate'],
+  ['1/2', 'answer'],
+  ['⏎', 'select'],
+  ['Esc', 'interrupts the turn'],
+];
+
+/**
+ * Descriptions for the standard (non-ask_user) approval menus. Several
+ * contexts reuse the same label ("Allow once", "Deny") for different scope,
+ * so the description depends on which approval is showing, not just the
+ * label text.
+ */
+function describeStandardApprovalOption(
+  item: string,
+  ctx: {
+    isDockerHostControlApproval: boolean;
+    isSandboxNetworkApproval: boolean;
+    isOutsideWorkspaceEdit: boolean;
+    isFolderReadApproval: boolean;
+    folderReadGrantPath: string | null;
+  },
+): string {
+  if (ctx.isDockerHostControlApproval) {
+    switch (item) {
+      case 'Allow this command':
+        return 'Run this Docker host control command once.';
+      case 'Deny':
+        return 'Block this command.';
+      case 'Allow for this session':
+        return 'Allow Docker host control commands for the rest of this session without asking again.';
+      case 'Always allow for this project':
+        return 'Always allow Docker host control commands in this project, persisted across sessions.';
+    }
+  }
+  if (ctx.isSandboxNetworkApproval) {
+    switch (item) {
+      case 'Allow once':
+        return 'Allow network access to this host for this command only.';
+      case 'Deny':
+        return 'Block network access to this host.';
+      case 'Allow host for this session':
+        return 'Allow this host for the rest of this session.';
+      case 'Always allow host for this project':
+        return 'Always allow this host in this project, persisted across sessions.';
+    }
+  }
+  if (ctx.isOutsideWorkspaceEdit) {
+    switch (item) {
+      case 'Allow once':
+        return 'Allow this edit this one time.';
+      case 'Allow this file for this session':
+        return 'Allow edits to this exact file for the rest of this session.';
+      case 'Allow this folder for this session':
+        return 'Allow edits anywhere under this folder for the rest of this session.';
+      case 'Deny':
+        return 'Deny this edit.';
+    }
+  }
+  if (ctx.isFolderReadApproval) {
+    switch (item) {
+      case 'Allow once':
+        return 'Allow this read this one time.';
+      case 'Allow this folder for this session':
+        return ctx.folderReadGrantPath
+          ? `Allow read_file, grep, and glob to read ${ctx.folderReadGrantPath} for the rest of this session.`
+          : 'Allow read_file, grep, and glob to read this folder for the rest of this session.';
+      case 'Deny':
+        return 'Deny this read.';
+    }
+  }
+  switch (item) {
+    case 'Allow once':
+      return 'Allow this tool call.';
+    case 'Deny':
+      return 'Deny this tool call.';
+  }
+  return '';
+}
+
+const ApprovalPrompt: FC<Props> = ({
+  approval,
+  inputHandler,
+  onApprove,
+  onReject,
+  onCancel,
+  onTypeAnswer,
+  onNavigateQuestion,
+  currentQuestionIndex = 0,
+  waitingForAskUserAnswer = false,
+}) => {
+  const theme = useTheme();
+  const { ApprovalFrame, ApprovalChoices, QuestionPrompt } = useSkin();
+  const [selectedIndex, setSelectedIndex] = React.useState(0);
+  const [selectedIndices, setSelectedIndices] = React.useState<Set<number>>(new Set());
+
+  const isAskUser = approval.toolName === TOOL_NAME_ASK_USER;
+  const askUserArgs = React.useMemo<AskUserArgs | null>(() => {
+    if (!isAskUser) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(approval.argumentsText) as AskUserArgs;
+    } catch {
+      return null;
+    }
+  }, [approval.argumentsText, isAskUser]);
+
+  const questionsList = React.useMemo<QuestionItem[]>(() => {
+    if (!askUserArgs || !Array.isArray(askUserArgs.questions) || askUserArgs.questions.length === 0) {
+      return [];
+    }
+    return askUserArgs.questions;
+  }, [askUserArgs]);
+
+  const currentQuestionItem = questionsList[currentQuestionIndex] || questionsList[0];
+  const isMultiSelect = !!currentQuestionItem?.is_multi_select;
+  const askUserOptions = currentQuestionItem?.options ?? [];
+  const askUserOptionLabels = askUserOptions.map((option) => option.label);
+  const hasMultipleQuestions = questionsList.length > 1;
+
+  const isUnsandboxedShellApproval = React.useMemo(() => {
+    if (approval.toolName !== 'shell') {
+      return false;
+    }
+
+    const parsedArgsText = parseShellApprovalArgs(approval.argumentsText);
+    if (parsedArgsText?.sandbox === 'unsandboxed') {
+      return true;
+    }
+
+    const rawInterruption =
+      typeof approval.rawInterruption === 'object' && approval.rawInterruption !== null
+        ? (approval.rawInterruption as Record<string, unknown>)
+        : undefined;
+    const parsedRaw = parseShellApprovalArgs(rawInterruption?.arguments);
+    if (parsedRaw?.sandbox === 'unsandboxed') {
+      return true;
+    }
+
+    return false;
+  }, [approval.argumentsText, approval.rawInterruption, approval.toolName]);
+
+  // The producer resolves Docker host control (summary/presentation); approval-host sets the flag.
+  const isDockerHostControlApproval = approval.toolName === 'shell' && approval.dockerHostControl === true;
+
+  const isSandboxNetworkApproval = approval.toolName === 'sandbox_network_access';
+  const deniedRead = approval.deniedRead;
+  const isDeniedReadShell = !!deniedRead;
+  // read_file/grep/glob share one session-scoped folder grant, so all three offer it.
+  const isFolderReadApproval = supportsFolderSessionRead(approval.toolName);
+  const isOutsideWorkspaceEdit = Boolean(approval.outsideWorkspaceEdit);
+
+  // The exact folder the session grant would cover, shown so the scope is not a guess.
+  const folderReadGrantPath = React.useMemo(() => {
+    if (!isFolderReadApproval) return null;
+    try {
+      const folder = resolveSessionReadFolder(approval.toolName, JSON.parse(approval.argumentsText));
+      return folder ? folder.replace(os.homedir(), '~') : null;
+    } catch {
+      return null;
+    }
+  }, [approval.argumentsText, approval.toolName, isFolderReadApproval]);
+
+  const deniedReadMenuItems = React.useMemo(() => {
+    if (!deniedRead) return [];
+    const items = ['Allow once', 'Deny'];
+    if (!deniedRead.sensitive) {
+      items.push('Allow and remember this path');
+    }
+    items.push('Run unsandboxed once');
+    return items;
+  }, [deniedRead]);
+
+  const askUserMenuItems = React.useMemo(() => {
+    if (isDockerHostControlApproval) {
+      return ['Allow this command', 'Deny', 'Allow for this session', 'Always allow for this project'];
+    }
+    if (isSandboxNetworkApproval) {
+      return ['Allow once', 'Deny', 'Allow host for this session', 'Always allow host for this project'];
+    }
+    if (!isAskUser && !isDeniedReadShell) {
+      return isOutsideWorkspaceEdit
+        ? ['Allow once', 'Allow this file for this session', 'Allow this folder for this session', 'Deny']
+        : isFolderReadApproval
+        ? ['Allow once', 'Allow this folder for this session', 'Deny']
+        : ['Allow once', 'Deny'];
+    }
+    if (isDeniedReadShell) {
+      return deniedReadMenuItems;
+    }
+
+    return isMultiSelect
+      ? [...askUserOptionLabels, ASK_USER_SUBMIT_LABEL, ASK_USER_CUSTOM_ANSWER_LABEL]
+      : [...askUserOptionLabels, ASK_USER_CUSTOM_ANSWER_LABEL];
+  }, [
+    isAskUser,
+    isMultiSelect,
+    askUserOptionLabels,
+    deniedReadMenuItems,
+    isDeniedReadShell,
+    isFolderReadApproval,
+    isDockerHostControlApproval,
+    isSandboxNetworkApproval,
+    isOutsideWorkspaceEdit,
+  ]);
+
+  const handleStandardSelection = (selected: string | undefined, index: number): void => {
+    if (selected === 'Deny' || selected === 'Reject') {
+      onReject();
+    } else if (isDockerHostControlApproval) {
+      if (selected === 'Allow this command') onApprove('docker-allow-once');
+      else if (selected === 'Allow for this session') onApprove('docker-allow-session');
+      else if (selected === 'Always allow for this project') onApprove('docker-allow-project');
+    } else if (isSandboxNetworkApproval) {
+      if (selected === 'Allow once') onApprove('allow-once');
+      else if (selected === 'Allow host for this session') onApprove('allow-session');
+      else if (selected === 'Always allow host for this project') onApprove('allow-project');
+    } else if (isDeniedReadShell) {
+      if (selected === 'Allow once') onApprove('allow-once');
+      else if (selected === 'Allow and remember this path') onApprove('allow-remember');
+      else if (selected === 'Run unsandboxed once') onApprove('unsandboxed-once');
+    } else if (index === 0) {
+      onApprove();
+    } else if (isFolderReadApproval && index === 1) {
+      onApprove(READ_FILE_SESSION_APPROVE_ANSWER);
+    } else if (isOutsideWorkspaceEdit && index === 1) {
+      onApprove('allow-edit-file-session');
+    } else if (isOutsideWorkspaceEdit && index === 2) {
+      onApprove('allow-edit-folder-session');
+    }
+  };
+
+  // reset selection when question/approval changes; cannot derive user-controlled arrow-key state from props
+  React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset selection on question/approval change
+    setSelectedIndex(0);
+    setSelectedIndices(new Set());
+  }, [currentQuestionIndex, approval.argumentsText, approval.toolName]);
+
+  useInteractionInput(inputHandler, (input, key) => {
+    if (key.escape) {
+      // Escape cancels/interrupts the pending action for every approval type.
+      // The parent routes it (ask_user → graceful cancel; anything else →
+      // interrupt the turn). Kept ahead of the `waitingForAskUserAnswer` guard
+      // to match the historical ask_user Esc behavior exactly.
+      onCancel?.();
+      return;
+    }
+
+    if (waitingForAskUserAnswer) {
+      return;
+    }
+
+    if (approval.checkIn && (input === '1' || input === '2')) {
+      if (input === '1') onApprove();
+      else onReject();
+      return;
+    }
+
+    if (isAskUser) {
+      // Question navigation with p / n or left / right arrow keys
+      if (hasMultipleQuestions) {
+        if (input.toLowerCase() === 'p' || key.leftArrow) {
+          onNavigateQuestion?.('prev');
+          return;
+        }
+        if (input.toLowerCase() === 'n' || key.rightArrow) {
+          onNavigateQuestion?.('next');
+          return;
+        }
+      }
+
+      // Direct number key selection: '1'..'9'
+      const num = parseInt(input, 10);
+      if (!isNaN(num) && num >= 1 && num <= askUserMenuItems.length && String(num) === input) {
+        const targetIndex = num - 1;
+        const selected = askUserMenuItems[targetIndex];
+
+        if (selected === ASK_USER_CUSTOM_ANSWER_LABEL) {
+          onTypeAnswer?.();
+          return;
+        }
+
+        if (isMultiSelect) {
+          if (selected === ASK_USER_SUBMIT_LABEL) {
+            const chosen = Array.from(selectedIndices)
+              .map((idx) => askUserOptions[idx]?.label)
+              .filter((label): label is string => typeof label === 'string');
+            onApprove(JSON.stringify(chosen));
+            return;
+          }
+          if (targetIndex < askUserOptions.length) {
+            setSelectedIndices((prev) => {
+              const next = new Set(prev);
+              if (next.has(targetIndex)) {
+                next.delete(targetIndex);
+              } else {
+                next.add(targetIndex);
+              }
+              return next;
+            });
+            setSelectedIndex(targetIndex);
+            return;
+          }
+        } else {
+          if (targetIndex < askUserOptions.length) {
+            onApprove(askUserOptions[targetIndex]?.label);
+            return;
+          }
+        }
+      }
+    }
+
+    if (!isAskUser && !approval.checkIn && /^[1-9]$/.test(input)) {
+      const targetIndex = Number(input) - 1;
+      if (targetIndex < askUserMenuItems.length) {
+        const selected = askUserMenuItems[targetIndex];
+        if (
+          (isDockerHostControlApproval && selected === 'Deny') ||
+          (!isDockerHostControlApproval && (targetIndex === 0 || selected === 'Deny' || selected === 'Reject'))
+        ) {
+          handleStandardSelection(selected, targetIndex);
+        }
+        return;
+      }
+    }
+
+    if (key.upArrow) {
+      setSelectedIndex((prev) => (prev === 0 ? askUserMenuItems.length - 1 : prev - 1));
+    }
+
+    if (key.downArrow) {
+      setSelectedIndex((prev) => (prev === askUserMenuItems.length - 1 ? 0 : prev + 1));
+    }
+
+    // Spacebar for multi-select toggle
+    if (input === ' ' && isMultiSelect) {
+      // Only toggle if it's an actual option (not submit/custom item)
+      if (selectedIndex < askUserOptions.length) {
+        setSelectedIndices((prev) => {
+          const next = new Set(prev);
+          if (next.has(selectedIndex)) {
+            next.delete(selectedIndex);
+          } else {
+            next.add(selectedIndex);
+          }
+          return next;
+        });
+      }
+    }
+
+    if (key.return) {
+      if (approval.checkIn) {
+        if (selectedIndex === 0) onApprove();
+        else onReject();
+        return;
+      }
+      if (isDockerHostControlApproval) {
+        const selected = askUserMenuItems[selectedIndex];
+        handleStandardSelection(selected, selectedIndex);
+        return;
+      }
+      if (isSandboxNetworkApproval) {
+        const selected = askUserMenuItems[selectedIndex];
+        handleStandardSelection(selected, selectedIndex);
+        return;
+      }
+      if (isDeniedReadShell) {
+        handleStandardSelection(deniedReadMenuItems[selectedIndex], selectedIndex);
+        return;
+      }
+      if (isAskUser) {
+        const selected = askUserMenuItems[selectedIndex];
+
+        if (selected === ASK_USER_CUSTOM_ANSWER_LABEL) {
+          onTypeAnswer?.();
+        } else if (isMultiSelect) {
+          if (selected === ASK_USER_SUBMIT_LABEL) {
+            const chosen = Array.from(selectedIndices)
+              .map((idx) => askUserOptions[idx]?.label)
+              .filter((label): label is string => typeof label === 'string');
+            onApprove(JSON.stringify(chosen));
+          } else if (selectedIndex < askUserOptions.length) {
+            // Toggle checkbox for actual options
+            setSelectedIndices((prev) => {
+              const next = new Set(prev);
+              if (next.has(selectedIndex)) {
+                next.delete(selectedIndex);
+              } else {
+                next.add(selectedIndex);
+              }
+              return next;
+            });
+          }
+        } else {
+          onApprove(selected);
+        }
+      } else {
+        handleStandardSelection(askUserMenuItems[selectedIndex], selectedIndex);
+      }
+    }
+  });
+
+  // Ink's useInput subscribes in its preceding passive effect. This opt-in
+  // harness signal is scoped to tests that provide distinct call IDs.
+  React.useEffect(() => {
+    if (approval.callId && !waitingForAskUserAnswer) publishHarnessApprovalReady(approval.callId);
+  }, [approval.callId, approval.argumentsText, currentQuestionIndex, waitingForAskUserAnswer]);
+
+  // A system check-in, not a tool approval: continue or stop, no denial reason.
+  if (approval.checkIn) {
+    return (
+      <Box flexDirection="column">
+        <Text color={theme.warning} bold>
+          {approval.argumentsText}
+        </Text>
+        <Box flexDirection="column" marginTop={1}>
+          <Text>
+            {approval.checkIn === 'run_budget'
+              ? 'Continue with one finite budget extension, or stop?'
+              : 'Continue with one finite extension, or stop?'}
+          </Text>
+          <Box flexDirection="column" marginLeft={1}>
+            <Box>
+              <SelectionMarker selected={selectedIndex === 0} />
+              <Text color={selectedIndex === 0 ? theme.success : undefined}>1. Continue</Text>
+            </Box>
+            <Box>
+              <SelectionMarker selected={selectedIndex === 1} />
+              <Text color={selectedIndex === 1 ? theme.danger : undefined}>2. Stop</Text>
+            </Box>
+          </Box>
+          <Box marginTop={1} marginLeft={1}>
+            <MenuFooter hints={CHECK_IN_FOOTER_HINTS} />
+          </Box>
+        </Box>
+      </Box>
+    );
+  }
+
+  // Try to parse and render arguments nicely based on tool type
+  let content: React.ReactNode = (
+    <Box marginTop={1}>
+      <Text bold color={theme.accent}>
+        {approval.argumentsText}
+      </Text>
+    </Box>
+  );
+
+  if (approval.toolName === TOOL_NAME_APPLY_PATCH) {
+    let parsedApplyPatch: ApplyPatchArgs | null = null;
+    try {
+      parsedApplyPatch = JSON.parse(approval.argumentsText);
+    } catch {
+      // Fall back to styled raw text if parsing fails
+    }
+    if (parsedApplyPatch) {
+      content = <ApplyPatchPrompt args={parsedApplyPatch} />;
+    }
+  } else if (approval.toolName === 'shell') {
+    const parsedShell = parseShellApprovalArgs(approval.argumentsText);
+    content = parsedShell ? (
+      <ShellPrompt args={parsedShell} />
+    ) : (
+      <ShellPrompt args={{ commands: approval.argumentsText }} />
+    );
+  } else if (approval.toolName === TOOL_NAME_SEARCH_REPLACE) {
+    let parsedSearchReplace: SearchReplaceArgs | null = null;
+    try {
+      parsedSearchReplace = JSON.parse(approval.argumentsText);
+    } catch {
+      // Fall back to styled raw text if parsing fails
+    }
+    if (parsedSearchReplace) {
+      content = <SearchReplacePrompt args={parsedSearchReplace} />;
+    }
+  } else if (approval.toolName === 'create_file') {
+    let parsedCreateFile: CreateFileArgs | null = null;
+    try {
+      parsedCreateFile = JSON.parse(approval.argumentsText);
+    } catch {
+      // Fall back to styled raw text if parsing fails
+    }
+    if (parsedCreateFile) {
+      content = <CreateFilePrompt args={parsedCreateFile} />;
+    }
+  } else if (approval.toolName === TOOL_NAME_PROPOSE_GOAL) {
+    let parsedProposeGoal: ProposeGoalArgs | null = null;
+    try {
+      parsedProposeGoal = JSON.parse(approval.argumentsText);
+    } catch {
+      // Fall back to styled raw text if parsing fails
+    }
+    if (parsedProposeGoal) {
+      content = <ProposeGoalPrompt args={parsedProposeGoal} />;
+    }
+  } else if (isAskUser) {
+    const questionText = currentQuestionItem?.question || 'Unknown question';
+    const totalQuestions = questionsList.length;
+
+    // Get the highlighted option and its description
+    const highlightedMenuItem = askUserMenuItems[selectedIndex];
+    const isOptionHighlighted = selectedIndex < askUserOptions.length;
+    const highlightedOption = isOptionHighlighted ? askUserOptions[selectedIndex] : undefined;
+
+    let highlightedDescription = highlightedOption?.description || '';
+
+    // Provide default descriptions for built-in actions
+    if (!highlightedDescription) {
+      if (highlightedMenuItem === ASK_USER_CUSTOM_ANSWER_LABEL) {
+        highlightedDescription =
+          'Discuss or provide a custom response. The agent will respond and can re-ask if needed.';
+      } else if (highlightedMenuItem === ASK_USER_SUBMIT_LABEL) {
+        highlightedDescription = 'Submit the selected options.';
+      }
+    }
+
+    const rightPaneTitle = isOptionHighlighted
+      ? highlightedOption?.label ?? 'Option'
+      : highlightedMenuItem === ASK_USER_CUSTOM_ANSWER_LABEL
+      ? 'Something else…'
+      : highlightedMenuItem === ASK_USER_SUBMIT_LABEL
+      ? 'Submit answer'
+      : highlightedMenuItem ?? 'Details';
+
+    const askUserFooterHints: [string, string][] = [
+      [
+        isMultiSelect ? `1-${askUserOptions.length}` : `1-${askUserMenuItems.length}`,
+        isMultiSelect ? 'toggle' : 'select',
+      ],
+      ...(hasMultipleQuestions ? ([['p/n', 'prev/next question']] as [string, string][]) : []),
+      ...(isMultiSelect ? ([['space', 'toggle']] as [string, string][]) : []),
+      ['⏎', isMultiSelect ? 'submit' : 'confirm'],
+      ['Esc', 'cancel'],
+    ];
+
+    content = (
+      <QuestionPrompt
+        progress={totalQuestions > 1 ? `Question ${currentQuestionIndex + 1} of ${totalQuestions}` : undefined}
+        question={questionText}
+        notice={waitingForAskUserAnswer ? 'Type your custom answer in the prompt below...' : undefined}
+        options={askUserMenuItems.map((item, idx) => {
+          const isOption = idx < askUserOptions.length;
+          const isSelected = selectedIndex === idx;
+          return {
+            label: item,
+            selected: isSelected,
+            checked: isMultiSelect && isOption ? selectedIndices.has(idx) : undefined,
+            recommended: idx === 0 && isOption,
+            tone: item === ASK_USER_CUSTOM_ANSWER_LABEL ? 'accent' : 'success',
+          };
+        })}
+        description={{ title: rightPaneTitle, text: highlightedDescription }}
+        footer={<MenuFooter hints={askUserFooterHints} />}
+      />
+    );
+  }
+
+  if (isDeniedReadShell && deniedRead) {
+    // Compact the denied path for display (replace $HOME with ~).
+    const displayPath = deniedRead.deniedPath.replace(os.homedir(), '~');
+    const displaySuggestedParent = deniedRead.suggestedParent.replace(os.homedir(), '~');
+    // This approval can grant access outside the workspace, so it is the danger
+    // class: the skin must make it recognisable by shape before the words are read.
+    return (
+      <ApprovalFrame
+        tone="danger"
+        header={
+          <Text color={theme.danger} bold>
+            Sandbox blocked read access:
+          </Text>
+        }
+        subheader={<Text color={theme.danger}> {displayPath}</Text>}
+      >
+        {content}
+        <Box flexDirection="column" marginTop={1}>
+          <ApprovalChoices
+            question={undefined}
+            layout="list"
+            description={undefined}
+            selectedIndex={selectedIndex}
+            options={deniedReadMenuItems.map((item) => ({ label: item, tone: deniedReadOptionTone(item) }))}
+          />
+        </Box>
+        {!deniedRead.sensitive && (
+          <Box marginTop={1}>
+            <Text color={theme.textSubtle}>
+              "Allow and remember" persists this path for this project: {displaySuggestedParent}
+            </Text>
+          </Box>
+        )}
+        {deniedRead.sensitive && (
+          <Box marginTop={1}>
+            <Text color={theme.textSubtle}>
+              This is a sensitive path — "allow once" is available but remember is suppressed.
+            </Text>
+          </Box>
+        )}
+        <Box marginTop={1} marginLeft={1}>
+          <MenuFooter hints={APPROVAL_FOOTER_HINTS} />
+        </Box>
+      </ApprovalFrame>
+    );
+  }
+
+  const plainApprovalSection = !isAskUser && !isDeniedReadShell && (
+    <Box flexDirection="column" marginTop={1}>
+      <ApprovalChoices
+        question={
+          isDockerHostControlApproval
+            ? 'Allow Docker host access?'
+            : isOutsideWorkspaceEdit
+            ? 'Allow permission to edit this file outside the workspace?'
+            : isFolderReadApproval
+            ? 'Allow this read outside the workspace?'
+            : 'Allow this action?'
+        }
+        layout="two-pane"
+        selectedIndex={selectedIndex}
+        options={askUserMenuItems.map((item) => ({ label: item, tone: item === 'Deny' ? 'danger' : 'success' }))}
+        description={{
+          title: askUserMenuItems[selectedIndex] ?? 'Option',
+          text: describeStandardApprovalOption(askUserMenuItems[selectedIndex] ?? '', {
+            isDockerHostControlApproval,
+            isSandboxNetworkApproval,
+            isOutsideWorkspaceEdit,
+            isFolderReadApproval,
+            folderReadGrantPath,
+          }),
+        }}
+      />
+      {isFolderReadApproval && folderReadGrantPath && (
+        <Box marginTop={1}>
+          <Text color={theme.textSubtle}>
+            "Allow this folder" lets read_file, grep and glob read {folderReadGrantPath} for the rest of this session.
+          </Text>
+        </Box>
+      )}
+      {isOutsideWorkspaceEdit && approval.outsideWorkspaceEdit && (
+        <Box marginTop={1}>
+          <Text color={theme.textSubtle}>
+            File scope permits only {approval.outsideWorkspaceEdit.path}; folder scope permits edits beneath{' '}
+            {approval.outsideWorkspaceEdit.folder} for this session.
+          </Text>
+        </Box>
+      )}
+      <Box marginTop={1} marginLeft={1}>
+        <MenuFooter hints={isDockerHostControlApproval ? DOCKER_APPROVAL_FOOTER_HINTS : APPROVAL_FOOTER_HINTS} />
+      </Box>
+    </Box>
+  );
+
+  const bodyContent = (
+    <>
+      {content}
+      {isDockerHostControlApproval && (
+        <Text color={theme.danger}>
+          This command can control your Docker daemon. It can bypass filesystem and network sandbox restrictions, mount
+          host files, run privileged or persistent workloads, and is effectively equivalent to host access.
+        </Text>
+      )}
+      {approval.llmAdvisory && <LLMAdvisory advisory={approval.llmAdvisory} />}
+      {plainApprovalSection}
+    </>
+  );
+
+  // A question is not a request to run something: the skin frames it itself, so it
+  // does not also sit inside an approval frame headed "wants to run: ask_user".
+  if (isAskUser) {
+    return content;
+  }
+
+  return (
+    <ApprovalFrame
+      tone={isDockerHostControlApproval ? 'danger' : 'caution'}
+      header={
+        isDockerHostControlApproval ? (
+          <Text bold color={theme.danger}>
+            Docker host control
+          </Text>
+        ) : (
+          <>
+            {approval.agentName}
+            {isOutsideWorkspaceEdit
+              ? ' is requesting permission to edit a file outside the workspace with '
+              : isFolderReadApproval
+              ? ' wants to read outside the workspace with '
+              : isUnsandboxedShellApproval
+              ? ' wants to run in unsandboxed mode: '
+              : ' wants to run: '}
+            <Text bold>{approval.toolName}</Text>
+          </>
+        )
+      }
+      subheader={
+        isFolderReadApproval && approval.workspaceRoot ? (
+          <Text color={theme.textSubtle}>Active workspace: {approval.workspaceRoot}</Text>
+        ) : undefined
+      }
+    >
+      {bodyContent}
+    </ApprovalFrame>
+  );
+};
+
+export default ApprovalPrompt;

@@ -9,6 +9,14 @@
     "rewrite/src/clients/tui/presentation/components/message/command-message-helpers.ts": {
       "lines": 965,
       "reason": "Verbatim copy of legacy source/components/message/command-message-helpers.ts, the parsers and labels CommandMessage and its renderers share."
+    },
+    "rewrite/src/clients/tui/approval-prompt.tsx": {
+      "lines": 1145,
+      "reason": "Verbatim port of legacy source/components/prompt/ApprovalPrompt.tsx (every approval and ask_user layout and key path); only its data access changed, so it matches legacy by construction."
+    },
+    "rewrite/src/clients/tui/session.tsx": {
+      "lines": 509,
+      "reason": "The session decides which surface owns input (composer, pickers, the ported approval prompt); that routing closes over submit and the composer state declared in the same component, so moving it out would add ref plumbing rather than a job seam."
     }
   },
   "messagePath": {

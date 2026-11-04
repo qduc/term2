@@ -69,7 +69,7 @@ export type WireInteraction = {
   readonly risk?: 'low' | 'medium' | 'high';
   readonly presentation?: { readonly [key: string]: JsonValue };
   readonly questions?: readonly WireQuestion[];
-  /** Only explicitly supported grants may be offered; empty under the M2 contract. */
+  /** Only grants the tool request itself offers; Session rejects any other. */
   readonly supportedGrants: readonly WireGrant[];
 };
 export type WireMessage = {

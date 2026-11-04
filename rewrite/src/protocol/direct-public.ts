@@ -2,7 +2,7 @@
 import type { InteractionRequest } from '../engine/direct-types.js';
 import type { DirectTaskInteraction } from '../session/direct-background-types.js';
 import type { Item } from '../model/index.js';
-import { parseWireOrigin } from './direct-parse.js';
+import { isWireGrant, parseWireOrigin } from './direct-parse.js';
 import { interactionQuestions } from './direct-questions.js';
 import type { JsonValue, WireContent, WireInteraction, WireMessage, WireTerminal } from './direct-wire.js';
 
@@ -50,7 +50,7 @@ export function publicInteraction(
     ...(request.origin ? { origin: parseWireOrigin(request.origin) } : {}),
     ...(request.executionId ? { executionId: request.executionId } : {}),
     ...(request.parentExecutionId ? { parentExecutionId: request.parentExecutionId } : {}),
-    supportedGrants: [],
+    supportedGrants: (request.grants ?? []).filter(isWireGrant),
     ...(interactionQuestions(request) ? { questions: interactionQuestions(request) } : {}),
     kind: request.kind,
     toolName: request.toolName,

@@ -105,6 +105,8 @@ function factValidation(fact: Record<string, unknown>, where: string): FactValid
     const record = object(value, 'resolution');
     switch (record['kind']) {
       case 'allow':
+        if ('grant' in record && typeof record['grant'] !== 'string') fail('resolution.grant');
+        break;
       case 'cancelled':
       case 'interrupted':
         break;

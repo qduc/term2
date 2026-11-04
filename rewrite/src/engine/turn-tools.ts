@@ -33,6 +33,8 @@ type Execution = {
   admitted: boolean;
   /** A question already answered in the response's approval batch, read once by the tool body. */
   answer?: InteractionDecision;
+  /** The scoped grant chosen for this call's own approval. */
+  grant?: string;
 };
 export type RootCall = {
   readonly item: CallItem;
@@ -214,6 +216,7 @@ export class TurnTools {
       if (plan.result) return plan.result;
       if (plan.approval?.kind === 'deny') return errorResult(plan.approval.reason);
       if (plan.approval?.kind === 'question') execution.answer = plan.decision;
+      if (plan.decision?.kind === 'allow' && plan.decision.grant) execution.grant = plan.decision.grant;
       if (plan.approval?.kind === 'ask' && plan.decision?.kind !== 'allow') {
         const reason = plan.decision?.kind === 'deny' ? plan.decision.reason : undefined;
         return errorResult(
@@ -348,6 +351,9 @@ export class TurnTools {
         const execution = current();
         this.#checkBody(execution);
         return this.#interact(execution, request);
+      },
+      get approvalGrant() {
+        return current().grant;
       },
       executeChild: <T>(
         descriptor: { toolName: string; input: unknown; sourceCallId: string },

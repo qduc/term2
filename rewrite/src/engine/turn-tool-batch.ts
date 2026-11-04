@@ -54,6 +54,7 @@ export function batchRequest(
     summary: approval.summary,
     ...(approval.detail !== undefined ? { detail: approval.detail } : {}),
     ...(approval.risk !== undefined ? { risk: approval.risk } : {}),
+    ...(approval.grants?.length ? { grants: approval.grants } : {}),
   };
 }
 

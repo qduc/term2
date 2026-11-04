@@ -117,7 +117,11 @@ export type NestedRunResult = {
 export type ExecutionId = string & { readonly __brand: 'ExecutionId' };
 export type InteractionRequestId = string & { readonly __brand: 'InteractionRequestId' };
 export type InteractionDecision = (
-  | { readonly kind: 'allow' }
+  | {
+      readonly kind: 'allow';
+      /** One of the request's own `grants`: the session scope the user chose (legacy's grant answers). */
+      readonly grant?: string;
+    }
   | { readonly kind: 'deny'; readonly reason?: string }
   | { readonly kind: 'answer'; readonly answer: string }
 ) & {
@@ -135,6 +139,8 @@ export type ToolInteractionRequest = {
   readonly risk?: Risk;
   /** Serializable tool-specific approval/question presentation, never live callbacks. */
   readonly presentation?: Readonly<Record<string, unknown>>;
+  /** Scoped grants this approval offers besides plain allow; an allow may carry only one of these. */
+  readonly grants?: readonly string[];
 };
 
 /** Session-owned shell process lease. Admission precedes run; settlement includes cleanup. */
@@ -190,6 +196,8 @@ export type ToolContext = {
   ): Promise<T>;
   /** Live tool interaction routed through the engine stream and durable Session answer. */
   interact?(request: ToolInteractionRequest): Promise<InteractionDecision>;
+  /** The scoped grant the user chose for this call's own approval, if any. */
+  readonly approvalGrant?: string;
 };
 
 export type Risk = 'low' | 'medium' | 'high';
@@ -199,7 +207,13 @@ export type ApprovalRequirement =
   | { readonly kind: 'none'; readonly batched?: true }
   /** The call's own question, asked with the response's approvals before any of them runs. */
   | { readonly kind: 'question'; readonly request: ToolInteractionRequest }
-  | { readonly kind: 'ask'; readonly summary: string; readonly risk?: Risk; readonly detail?: string }
+  | {
+      readonly kind: 'ask';
+      readonly summary: string;
+      readonly risk?: Risk;
+      readonly detail?: string;
+      readonly grants?: readonly string[];
+    }
   | { readonly kind: 'deny'; readonly reason: string };
 
 export type ToolResult = {

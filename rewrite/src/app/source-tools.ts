@@ -11,6 +11,12 @@ import {
 } from '../../../source/services/approval/nested-approval-owner.js';
 import { isDockerHostControlShellApproval } from '../../../source/services/approval/shell-sandbox-approval.js';
 import type { SessionAccessState } from '../../../source/services/session/session-access-state.js';
+import {
+  DOCKER_HOST_CONTROL_APPROVE_ANSWERS,
+  supportsFolderSessionRead,
+} from '../../../source/contracts/conversation.js';
+import { applyApprovalGrant } from '../../../source/services/approval/approval-grant-executor.js';
+import { resolveSessionReadFolder } from '../../../source/services/approval/session-read-grant-target.js';
 import { shouldBypassToolApproval } from '../../../source/services/approval/shell-auto-approval-resolver.js';
 import type { ISettingsService } from '../../../source/services/service-interfaces.js';
 import { ASK_USER_NO_ANSWER_RESULT } from '../../../source/tools/agent/ask-user-constants.js';
@@ -131,17 +137,34 @@ async function approvalFor(
     const invocation = invocationFor(context, options.sessionId);
     return (await definition.needsApproval(input, invocation)) ? { kind: 'none', batched: true } : { kind: 'none' };
   }
+  const docker = dockerApproval(definition.name, input, options);
   return {
     kind: 'ask',
-    summary: dockerApproval(definition.name, input, options)
+    summary: docker
       ? `${definition.name}: Docker host control (this call only)`
       : `${definition.name} (this call only)`,
     detail: JSON.stringify(input),
+    // The session grants legacy's prompt offers for this call (ApprovalPrompt's folder and Docker options).
+    ...(docker
+      ? { grants: [...DOCKER_HOST_CONTROL_APPROVE_ANSWERS] }
+      : supportsFolderSessionRead(definition.name) && resolveSessionReadFolder(definition.name, input)
+      ? { grants: ['allow-folder-session'] }
+      : {}),
   };
+}
+
+/** The session grants legacy's prompt offers for a script child's request (its answer strings). */
+function nestedGrants(snapshot: NestedApprovalSnapshot): string[] {
+  const { approval, toolName } = snapshot;
+  if (approval.dockerHostControl) return [...DOCKER_HOST_CONTROL_APPROVE_ANSWERS];
+  if (approval.outsideWorkspaceEdit) return ['allow-edit-file-session', 'allow-edit-folder-session'];
+  return approval.deniedRead && supportsFolderSessionRead(toolName) ? ['allow-folder-session'] : [];
 }
 
 function approvalAnswer(decision: InteractionDecision, snapshot: NestedApprovalSnapshot): string {
   if (decision.kind !== 'allow') return 'n';
+  // Legacy's child approval owner applies (or, for edit grants, refuses) the session grant itself.
+  if (decision.grant) return decision.grant;
   if (snapshot.approval.deniedRead) return 'allow-once';
   return snapshot.approval.dockerHostControl ? 'docker-allow-once' : 'y';
 }
@@ -156,6 +179,7 @@ function nestedInteraction(snapshot: NestedApprovalSnapshot) {
       ? `${snapshot.toolName}: Docker host control (this call only)`
       : `${snapshot.toolName} (this call only)`,
     detail: snapshot.approval.argumentsText,
+    grants: nestedGrants(snapshot),
     presentation: {
       scope: 'once',
       workspaceRoot: snapshot.approval.workspaceRoot,
@@ -287,8 +311,13 @@ function adaptTool(definition: AnyToolDefinition, options: SourceToolOptions, ow
       if (rejection) return { output: rejection, isError: true };
       const answer = await questionAnswer(definition, input, context);
       context.signal.throwIfAborted();
-      // A direct allow means one execution only, including the separate Docker capability.
-      if (dockerApproval(definition.name, input, options)) {
+      // A chosen session grant is applied by legacy's own grant executor; a plain allow means one execution
+      // only, including the separate Docker capability.
+      const grant = context.approvalGrant;
+      if (grant) {
+        const access = { sessionId: options.sessionId, sessionAccess: options.sessionAccess };
+        applyApprovalGrant(access, { answer: grant, toolName: definition.name, rawArguments: input });
+      } else if (dockerApproval(definition.name, input, options)) {
         const command = (input as { command: string }).command;
         options.sessionAccess.grantDocker(command, context.workspace.root, 'once');
       }

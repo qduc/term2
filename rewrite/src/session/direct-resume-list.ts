@@ -1,11 +1,45 @@
 /** Workspace resume rows from the catalogue, plus a short prefix of each log for the title. */
+import { statSync } from 'node:fs';
 import path from 'node:path';
 import { withNativeCatalogue, type NativeIndexer } from './native-catalogue.js';
-import { directLogicalEnds } from './direct-rolling-log.js';
+import { directLogicalEnds, readDirectLogHeaderLine } from './direct-rolling-log.js';
 import { readDirectResumeTitle, readDirectResumeUpdatedAt } from './direct-list-preview.js';
 import type { DirectLiveListing, DirectLocalStore } from './direct-store.js';
 import type { ModelRef } from '../model/index.js';
 import type { Workspace } from '../tools/index.js';
+
+/** Rows the picker shows, as in legacy (`listRecentConversations(..., 10)`). */
+const RESUME_LIMIT = 10;
+
+/**
+ * The newest sessions that start in `root`, by head-file time, from headers alone. Legacy stats every log and
+ * parses only the newest few; indexing the rest (a cold catalogue reads every log whole) is not needed to list them.
+ */
+function recentInWorkspace(ends: ReturnType<typeof directLogicalEnds>, root: string): Set<string> {
+  const stamped: { id: string; rootPath: string; time: number }[] = [];
+  for (const [id, end] of ends) {
+    try {
+      stamped.push({ id, rootPath: end.rootPath, time: statSync(end.headPath).mtimeMs });
+    } catch {
+      /* A log that vanished is not listed. */
+    }
+  }
+  stamped.sort((a, b) => b.time - a.time);
+  const recent = new Set<string>();
+  for (const candidate of stamped) {
+    if (recent.size >= RESUME_LIMIT) break;
+    try {
+      const line = readDirectLogHeaderLine(candidate.rootPath);
+      const workspace = line ? (JSON.parse(line.toString('utf8')).fact?.workspace as unknown) : undefined;
+      // Anything this cannot judge is left to the catalogue's own workspace check.
+      if (typeof workspace === 'string' && path.resolve(workspace) !== root) continue;
+    } catch {
+      continue;
+    }
+    recent.add(candidate.id);
+  }
+  return recent;
+}
 
 /** Sessions in one project. Open sessions come from memory; the others are not replayed. */
 export async function listDirectResumeSessions(
@@ -16,13 +50,20 @@ export async function listDirectResumeSessions(
   resolveWorkspace: (root: string, identity?: Workspace) => Workspace | Promise<Workspace>,
 ): Promise<Awaited<ReturnType<DirectLocalStore['listWorkspace']>>> {
   const live = store.liveListings();
+  const resolvedRoot = path.resolve(root);
+  const ends = directLogicalEnds(directory);
+  const recent = recentInWorkspace(ends, resolvedRoot);
+  for (const session of live) recent.add(session.id);
   const entries = withNativeCatalogue(
     directory,
     indexer,
-    (catalogue) => catalogue.list({ target: 'local', root: path.resolve(root) }, { includeBound: true }),
-    { skip: live.map((session) => session.id) },
+    (catalogue) =>
+      catalogue
+        .list({ target: 'local', root: resolvedRoot }, { includeBound: true })
+        .filter((entry) => recent.has(entry.id)),
+    // Lineages outside the recent set are left unread (and unstamped) until a search needs them.
+    { skip: [...ends.keys()].filter((id) => !recent.has(id) || live.some((session) => session.id === id)) },
   );
-  const ends = directLogicalEnds(directory);
   const listed = new Map(entries.map((entry) => [entry.id, entry]));
   const open = new Map(live.map((session) => [session.id, session]));
   const sessions: Awaited<ReturnType<DirectLocalStore['listWorkspace']>>['sessions'][number][] = [];

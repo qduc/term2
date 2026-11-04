@@ -20,4 +20,17 @@ SCENARIOS = {
     'approval-ctrl-c': ['delete it', '<enter>', '<c-c>'],
     'approval-ctrl-g': ['delete it', '<enter>', '<c-g>'],
 }
+_DRAFT = ['delete it', '<enter>', 'my draft', '<sleep>']
+SCENARIOS.update({
+    'draft-approval': _DRAFT,
+    'draft-n': _DRAFT + ['n'],
+    'draft-n-type': _DRAFT + ['n', ' now'],
+    'draft-deny': _DRAFT + ['<down>', '<enter>'],
+    'draft-n-esc': _DRAFT + ['n', '<esc>'],
+    'draft-n-enter': _DRAFT + ['n', '<enter>'],
+    'draft-n-ctrl-c': _DRAFT + ['n', '<c-c>'],
+    'draft-allow': _DRAFT + ['y'],
+})
 SEED = {name: _SHELL for name in SCENARIOS}
+_SLOW = dict(_SHELL, replies=[dict(_SHELL['replies'][0], delay=2)] + _SHELL['replies'][1:])
+SEED.update({name: _SLOW for name in SCENARIOS if name.startswith('draft-')})

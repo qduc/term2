@@ -415,7 +415,7 @@ export function TuiSession({
         <LiveDivider />
         <ApprovalHost
           interaction={foregroundInteraction}
-          {...{ connection, cancelInput, setNotice }}
+          {...{ connection, cancelInput, setNotice, changeInput, replaceInput, editorValue: editor.value }}
           inputHandler={interactionInput}
           interrupt={approvalInterrupt}
           onStopped={() => viewport.appendCommandOutput('Stopped', 'system')}

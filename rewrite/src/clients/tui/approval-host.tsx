@@ -67,6 +67,10 @@ type HostProps = {
   readonly cancelInput: (connection: TuiConnection, turnId?: string) => Promise<string>;
   readonly setNotice: (notice: string | null) => void;
   readonly onStopped: () => void;
+  /** The session composer's draft. Legacy types the reason and the custom answer in that same composer. */
+  readonly editorValue: string;
+  readonly changeInput: (text: string) => void;
+  readonly replaceInput: (text: string) => void;
 };
 
 /** The foreground turn's request, if any; a new request gets fresh prompt state. */
@@ -85,6 +89,9 @@ function Host({
   cancelInput,
   setNotice,
   onStopped,
+  editorValue: text,
+  changeInput,
+  replaceInput,
 }: HostProps): React.ReactElement {
   const theme = useTheme();
   const { columns, rows } = useTerminalSize();
@@ -92,7 +99,6 @@ function Host({
   const approval = approvalDescriptor(interaction);
   const isAskUser = approval.toolName === 'ask_user';
   const [entry, setEntry] = useState<'reason' | 'answer' | null>(null);
-  const [text, setText] = useState('');
   const [answers, setAnswers] = useState<readonly AskUserAnswer[]>([]);
   const [questionIndex, setQuestionIndex] = useState(0);
   const consumed = useRef(false);
@@ -116,9 +122,10 @@ function Host({
       onStopped();
     }, fail);
   };
+  // Legacy clears the composer whenever it leaves a reason or answer entry.
   const leaveEntry = () => {
     setEntry(null);
-    setText('');
+    replaceInput('');
   };
 
   const onApprove = (answer?: string) => {
@@ -151,7 +158,7 @@ function Host({
     send({ kind: 'answer', answer: ASK_USER_NO_ANSWER_RESULT, stopAfterApprovalResolution: true });
   };
   const onNavigateQuestion = (direction: 'prev' | 'next') => {
-    leaveEntry();
+    setEntry(null);
     if (direction === 'next') return setQuestionIndex((index) => index + 1);
     if (questionIndex <= 0) return;
     setQuestionIndex(questionIndex - 1);
@@ -160,7 +167,7 @@ function Host({
 
   // use-app-keyboard-shortcuts.ts: Ctrl+C clears a typed reason/answer, else stops the turn.
   interrupt.current = () => {
-    if (text.length > 0) setText('');
+    if (text.length > 0) replaceInput('');
     else stop();
     return true;
   };
@@ -183,7 +190,8 @@ function Host({
       }
       if (input[0] === 'n') {
         consumed.current = true;
-        setText(input.slice(1));
+        // The draft plus whatever followed `n` in the same chunk becomes the reason.
+        if (input.length > 1) replaceInput(text + input.slice(1));
         onReject();
         return;
       }
@@ -193,8 +201,9 @@ function Host({
 
   const submit = (value: string) => {
     if (!value.trim()) return;
-    if (entry === 'reason') send({ kind: 'deny', reason: value });
-    else onApprove(value);
+    if (entry !== 'reason') return onApprove(value);
+    replaceInput('');
+    send({ kind: 'deny', reason: value });
   };
   const composer = entry ? (
     <Box flexDirection="column">
@@ -203,7 +212,7 @@ function Host({
         <PromptMarker mode={entry === 'reason' ? 'rejection' : 'input'} />
         <MultilineInput
           value={text}
-          onChange={setText}
+          onChange={changeInput}
           onSubmit={(value) => submit(value)}
           width={Math.max(1, columns - 4)}
           maxHeight={Math.max(1, rows - 8)}

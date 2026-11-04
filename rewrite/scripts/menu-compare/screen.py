@@ -46,6 +46,7 @@ class Provider(BaseHTTPRequestHandler):
     # {'tool': name, 'args': {...}}; 'hold' keeps the stream open after the text. Set from the scenario's SEED['replies'].
     replies = [{'text': 'done'}]
     posts = 0
+    routes = []
 
     def log_message(self, *args):
         pass
@@ -61,9 +62,17 @@ class Provider(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self.path.endswith('/chat/completions'):
             return self.do_GET()
-        self.rfile.read(int(self.headers.get('content-length', 0)))
-        reply = Provider.replies[min(Provider.posts, len(Provider.replies) - 1)]
-        Provider.posts += 1
+        body = json.loads(self.rfile.read(int(self.headers.get('content-length', 0))) or b'{}')
+        # A route serves its own scripted replies to requests whose user messages contain its marker
+        # (a subagent's task), so a parent and a child agent do not race for one reply list.
+        users = ' '.join(str(m.get('content')) for m in body.get('messages', []) if m.get('role') == 'user')
+        route = next((r for r in Provider.routes if r['match'] in users), None)
+        if route is not None:
+            reply = route['replies'][min(route['posts'], len(route['replies']) - 1)]
+            route['posts'] += 1
+        else:
+            reply = Provider.replies[min(Provider.posts, len(Provider.replies) - 1)]
+            Provider.posts += 1
         self.send_response(200)
         self.send_header('content-type', 'text/event-stream')
         self.end_headers()
@@ -74,6 +83,7 @@ class Provider(BaseHTTPRequestHandler):
             self.wfile.write(b'data: ' + json.dumps(chunk).encode() + b'\n\n')
 
         if 'tool' in reply:
+            time.sleep(reply.get('delay', 0))  # lets a scenario type a draft before the approval opens
             call = {'index': 0, 'id': f'call{Provider.posts}', 'type': 'function',
                     'function': {'name': reply['tool'], 'arguments': json.dumps(reply['args'])}}
             event({'role': 'assistant', 'tool_calls': [call]})
@@ -291,6 +301,7 @@ def run(cli, cols, rows, name):
             time.sleep(0.5)
         Provider.replies = seed.get('replies', [{'text': 'done'}])
         Provider.posts = 0
+        Provider.routes = [dict(route, posts=0) for route in seed.get('routes', [])]
         term = Term(cli, cols, rows, env, cwd)
         try:
             term.wait_for('mockprov', 45)

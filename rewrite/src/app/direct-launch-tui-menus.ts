@@ -42,6 +42,7 @@ import {
   getWorkspaceEntriesMeta,
   refreshWorkspaceEntries,
 } from '../../../source/services/file-service.js';
+import { copyToClipboard } from '../../../source/utils/clipboard.js';
 import type { LoggingService } from '../../../source/services/logging/logging-service.js';
 
 import type { ISettingsService } from '../../../source/services/service-interfaces.js';
@@ -89,14 +90,44 @@ import {
   resolveProviderCredentials,
   setProviderDisabled,
 } from '../../../source/utils/ai/provider-credentials.js';
-import type { MenuSettingsService, TuiMenus, TuiModelSettings, TuiProviderMenu } from '../clients/tui/integration.js';
+import type {
+  MenuConversationEntry,
+  MenuSettingsService,
+  TuiMenus,
+  TuiModelSettings,
+  TuiProviderMenu,
+} from '../clients/tui/integration.js';
 import type { DirectApplication } from './direct-application.js';
 
+import { canonicalProfileId, profileIdFromLegacyMode } from '../../../source/services/profiles/legacy-adapter.js';
+import { builtinProfiles } from '../../../source/services/profiles/registry.js';
+import { resolveActiveProfile } from '../../../source/services/profiles/active-profile.js';
+import { getProfileLabel } from '../../../source/services/profiles/labels.js';
+
+/** Legacy listRecentConversations' limit (source/app.tsx listSavedConversations). */
+const RECENT_CONVERSATIONS = 10;
+
+/** Legacy use-profile-selection.ts PROFILE_DETAILS, less the dropped profiles. */
+const PROFILE_DETAILS: Record<string, string> = {
+  bare: 'Default: shell-only, short prompt; other tools via run_code',
+};
+const DROPPED_PROFILES = new Set(['plan', 'pair', 'mentor', 'orchestrator']);
+
+/** Legacy PROFILE_OPTIONS without the profiles next dropped. */
+const PROFILE_OPTIONS = builtinProfiles
+  .map((profile) => {
+    const shortId = profile.id.includes(':') ? profile.id.split(':').at(-1)! : profile.id;
+    return { id: `builtin:${shortId}`, shortId, displayName: profile.name, detail: PROFILE_DETAILS[shortId] ?? '' };
+  })
+  .filter((option) => !DROPPED_PROFILES.has(option.shortId));
+
 type MenuOptions = {
-  readonly app: Pick<DirectApplication, 'liveSettings'>;
+  readonly app: Pick<DirectApplication, 'liveSettings' | 'skills' | 'listWorkspaceSessions'>;
   /** The settings file; favorite, nickname and provider edits are saved there as legacy did. */
   readonly persistentSettings: ISettingsService;
   readonly logger: LoggingService;
+  /** The workspace the TUI was launched in: saved conversations and skills are listed for it. */
+  readonly root: string;
 };
 
 /**
@@ -193,10 +224,42 @@ function modelSettings(live: ISettingsService, options: MenuOptions): TuiModelSe
 }
 
 export function createDirectTuiMenus(options: MenuOptions): TuiMenus {
-  const { app, logger, persistentSettings } = options;
+  const { app, logger, persistentSettings, root } = options;
   const bySession = new Map<string, { live: ISettingsService; settings: TuiModelSettings }>();
   const services = new Map<string, MenuSettingsService>();
   return {
+    profile: {
+      options: PROFILE_OPTIONS,
+      canonicalId: canonicalProfileId,
+      activeId(sessionId) {
+        const settings = app.liveSettings(sessionId);
+        return settings ? resolveActiveProfile(settings).identity.id : null;
+      },
+    },
+    copy: copyToClipboard,
+    skills: { list: () => [...app.skills(root)] },
+    resume: {
+      // Legacy lists saved conversations, never the one in use; the hook drops zero-message entries.
+      async list(sessionId) {
+        const { sessions } = await app.listWorkspaceSessions(root);
+        return sessions
+          .filter((session) => session.id !== sessionId)
+          .map(
+            (session): MenuConversationEntry => ({
+              id: session.id,
+              updatedAt: session.updatedAt ?? '',
+              ...(session.title ? { firstUserMessage: session.title } : {}),
+              ...(session.messageCount !== undefined ? { messageCount: session.messageCount } : {}),
+              model: session.model.model,
+              provider: session.model.provider,
+            }),
+          )
+          .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+          .slice(0, RECENT_CONVERSATIONS);
+      },
+      profileLabel: (activeProfileId, appMode) =>
+        getProfileLabel(activeProfileId ?? profileIdFromLegacyMode(appMode as never)),
+    },
     settings: {
       lib: {
         SETTING_KEYS,

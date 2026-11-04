@@ -3,6 +3,7 @@ import type { WireEvent, WireSnapshot } from '../../protocol/direct-wire.js';
 import type { DirectConnection, DirectReplayConnection } from '../../host/in-process-direct-types.js';
 
 import type { WireContent } from '../../protocol/direct-wire.js';
+import type { CopySelection } from './menus/menu-types.js';
 
 export type TuiConnection = DirectConnection | DirectReplayConnection;
 
@@ -50,6 +51,15 @@ export type MenuModelInfo = {
   unavailableReason?: 'missing-credentials' | 'missing-codex-login' | 'missing-grok-login';
   default_reasoning_level?: string;
   contextWindow?: number;
+};
+/** Legacy `ProfileOption` (source/hooks/use-profile-selection.ts). */
+export type MenuProfileOption = {
+  /** Canonical id, e.g. `builtin:bare`. */
+  id: string;
+  /** Short id accepted by `/profile`, e.g. `bare`. */
+  shortId: string;
+  displayName: string;
+  detail: string;
 };
 /** The fields of legacy `SkillInfo` the skills menu reads. */
 export type MenuSkillInfo = { name: string; description: string; isProjectLevel: boolean };
@@ -198,6 +208,22 @@ export interface MenuSettingsService {
   onChange(listener: () => void): () => void;
 }
 
+/** Legacy `ConversationListEntry` (source/services/conversation/conversation-persistence.ts). */
+export type MenuConversationEntry = {
+  id: string;
+  shortRef?: string;
+  updatedAt: string;
+  projectPath?: string;
+  sshHost?: string;
+  firstUserMessage?: string;
+  activeProfileId?: string;
+  /** Legacy SavedAppMode flags. */
+  appMode?: Readonly<Record<string, boolean | undefined>>;
+  model?: string;
+  provider?: string;
+  messageCount?: number;
+};
+
 /**
  * Data the legacy menu stack (`menus/`) reads through the app instead of
  * legacy services. Each group replaces the service calls of one ported menu.
@@ -219,6 +245,22 @@ export interface TuiMenus {
     readonly lib: TuiSettingsLibrary;
     /** The same object for a session across calls; reading it touches no disk. */
     service(sessionId: string): MenuSettingsService;
+  };
+  /** Legacy PROFILE_OPTIONS less the dropped profiles; `activeId` reads the session's live settings. */
+  readonly profile: {
+    readonly options: readonly MenuProfileOption[];
+    canonicalId(id: string): string;
+    activeId(sessionId: string): string | null;
+  };
+  /** Legacy app.tsx handleCopySelection's clipboard write. */
+  copy(text: string): Promise<void>;
+  /** Legacy skillsService.getAvailableSkills(): this workspace's skills, read from disk once per mount. */
+  readonly skills: { list(): MenuSkillInfo[] };
+  /** Legacy listConversations for the resume menu: this workspace's other saved conversations, newest first. */
+  readonly resume?: {
+    list(sessionId: string): Promise<MenuConversationEntry[]>;
+    /** Legacy getProfileLabel(activeProfileId ?? profileIdFromLegacyMode(appMode)); pure. */
+    profileLabel(activeProfileId?: string, appMode?: MenuConversationEntry['appMode']): string;
   };
   /** `/providers` manager; absent means `/providers` has no menu. */
   readonly providers?: TuiProviderMenu;
@@ -296,18 +338,6 @@ export interface TuiIntegration {
   readonly menus?: TuiMenus;
   /** Run an explicit user shell command in the selected workspace, without a model turn. */
   shell?(sessionId: string, command: string): Promise<string>;
-  readonly resumePicker?: {
-    list(): Promise<
-      readonly {
-        id: string;
-        title?: string;
-        updatedAt?: string;
-        firstUserMessage?: string;
-        messageCount?: number;
-        model?: string;
-      }[]
-    >;
-  };
   planNeedsClear?(connection: TuiConnection): boolean;
   clearAndTogglePlan?(connection: TuiConnection): Promise<{ message?: string }>;
   /** Read the attached session's effective preferences on each render, including live /settings changes. */
@@ -325,6 +355,8 @@ export interface TuiIntegration {
     readonly sessionId?: string;
     /** The change is certainly in effect (a configured receipt or a saved preference); menus apply it silently. */
     readonly applied?: boolean;
+    /** A frame for the menu stack to open, as legacy commands called openCopyMenu. */
+    readonly menu?: { readonly kind: 'copy'; readonly items: CopySelection[] };
   }>;
   /** App owns socket lifecycle and returns the current actual attachment state. */
   readonly bridge?: {

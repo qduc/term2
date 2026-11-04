@@ -91,7 +91,7 @@ function DirectTui({
   const notifier = useTerminalFocusNotifier({ stdout, settingsService: settings, loggingService: logger });
   const integration: TuiIntegration = useMemo(
     () => ({
-      menus: createDirectTuiMenus({ app, persistentSettings, logger }),
+      menus: createDirectTuiMenus({ app, persistentSettings, logger, root }),
       async shell(sessionId, command) {
         if (remote) throw new Error('Direct shell commands are not available in SSH workspaces.');
         const settings = app.liveSettings(sessionId);

@@ -344,9 +344,9 @@ async function runCommand(
     await submit('/help');
     await session.waitForOutput('/help —', 30_000);
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 5_000 });
-    // Legacy clears a refused slash command instead of keeping it (the slash menu would reopen on it).
+    // Legacy's rewind command reports a bad argument and clears the input.
     await submit('/rewind nonsense');
-    await session.waitForOutput('Use /rewind', 30_000);
+    await session.waitForOutput('Unrecognised argument "nonsense"', 30_000);
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 5_000 });
     await submit('/queue nonsense');
     await session.waitForOutput('Use /queue', 30_000);
@@ -570,6 +570,11 @@ async function runCommand(
     session.write('\r');
     await session.waitForOutput('/help —', 30_000);
   }
+  if (exerciseMenu === 'skill-baseline') {
+    // Legacy activates a skill from its menu; the next message carries it.
+    await submit('/skills dogfood');
+    await session.waitForOutput('Skill "dogfood" activated.', 30_000);
+  }
   await submit(command);
   await session.waitForOutput(expected, 30_000);
   for (const forbidden of forbiddenOutput) expect(session.getVisibleOutput()).not.toContain(forbidden);
@@ -652,10 +657,9 @@ it('/settings without an argument opens the legacy settings menu', { timeout: TI
   runCommand('/settings', 'Tab section', undefined, false, false, '/settings '),
 );
 
-it.each([['/profile', 'Use /profile', '']])(
-  '%s explains its arguments and clears the composer',
-  { timeout: TIMEOUT_MS },
-  (command, notice, draft) => runCommand(command, notice, undefined, false, false, draft),
+// Legacy's bare /profile puts its trigger back, which opens the Profiles menu.
+it('/profile without an argument opens the Profiles menu', { timeout: TIMEOUT_MS }, () =>
+  runCommand('/profile', 'Currently active', undefined, false, false, '/profile '),
 );
 
 it(
@@ -737,7 +741,7 @@ it('last-request context survives resume without becoming cumulative usage', { t
 });
 
 it('/copy confirms what it copied', { timeout: TIMEOUT_MS }, () =>
-  runCommand('/copy', 'Copied to clipboard.', 'say something'),
+  runCommand('/copy', 'Copied the latest assistant response to the clipboard.', 'say something'),
 );
 
 it('slash menu suggests and completes a command in the terminal', { timeout: TIMEOUT_MS }, () =>
@@ -828,7 +832,7 @@ it('uses the configured cards skin for the direct composer', { timeout: TIMEOUT_
 );
 
 it('displays the skill request without injected instructions', { timeout: TIMEOUT_MS }, () =>
-  runCommand('/skills dogfood SKILL-CHECK\nSECOND-LINE', 'unused', undefined, 'skill-baseline'),
+  runCommand('SKILL-CHECK\nSECOND-LINE', 'unused', undefined, 'skill-baseline'),
 );
 
 it('Ctrl+U deletes only the current line before the cursor', { timeout: TIMEOUT_MS }, () =>

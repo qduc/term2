@@ -145,17 +145,21 @@ it.each([160, 60])(
     fs.rmSync(idlePath, { force: true });
     session = start();
     await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
-    await send('/resume ');
+    // Legacy's resume menu opens on the typed trigger; the active (empty) session is not listed.
+    session.write('/resume ');
+    await waitForHarnessComposerValue(idlePath, '/resume ', { timeoutMs: 60_000 });
     await session.waitForOutput('Resume Conversation', 30_000);
-    session.write('\x1b[B');
-    await session.waitForOutput('Initial Prompt: previous unique prompt', 30_000);
+    await session.waitForOutput('Initial Prompt:', 30_000);
     const frame = session.getVisibleOutput().slice(session.getVisibleOutput().lastIndexOf('▌ term²'));
-    expect(frame).toMatch(/previous unique prompt.*seconds ago.*2 msgs/);
-    expect(frame).toContain('Preview');
-    expect(frame).toContain('Messages: 2');
-    expect(frame).toContain('ID: conv_');
-    expect(frame).toContain('Model: mockprov/mock-alpha');
+    expect(frame).toMatch(/❯ previous unique/);
+    expect(frame).toContain('conv_');
     expect(frame).toContain('Updated:');
+    expect(frame).toContain('↑↓ navigate │ ⏎ resume │ Esc cancel');
+    if (columns > 100) {
+      expect(frame).toMatch(/previous unique prompt · \d+ seconds ago · 2 msgs/);
+      expect(frame).toContain('Local • 2 msgs • mock-alpha • mode: bare');
+      expect(frame).toContain('"previous unique prompt"');
+    }
     const offset = session.getVisibleOutput().length;
     session.write('\r');
     const started = Date.now();
@@ -241,16 +245,14 @@ it.each([160])(
     fs.rmSync(idlePath, { force: true });
     session = start();
     await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
-    await send('/resume ');
-    await session.waitForOutput('Resume Conversation', 30_000);
-    session.write('\x1b[B');
-    await session.waitForOutput('Initial Prompt: previous unique prompt', 30_000);
+    // Legacy's resume menu opens on the typed trigger; the active (empty) session is not listed.
+    session!.write('/resume ');
+    await waitForHarnessComposerValue(idlePath, '/resume ', { timeoutMs: 60_000 });
+    await session!.waitForOutput('Initial Prompt:', 30_000);
     const frame = session.getVisibleOutput().slice(session.getVisibleOutput().lastIndexOf('▌ term²'));
-    expect(frame).toMatch(/previous unique prompt.*seconds ago.*2 msgs/);
-    expect(frame).toContain('Preview');
-    expect(frame).toContain('Messages: 2');
-    expect(frame).toContain('ID: conv_');
-    expect(frame).toContain('Model: codex/gpt-6.1-terra');
+    expect(frame).toMatch(/previous unique prompt · \d+ seconds ago · 2 msgs/);
+    expect(frame).toContain('conv_');
+    expect(frame).toContain('Local • 2 msgs • gpt-6.1-terra • mode: bare');
     expect(frame).toContain('Updated:');
     const offset = session.getVisibleOutput().length;
     session.write('\r');
@@ -342,16 +344,14 @@ it.each([160])(
     fs.rmSync(idlePath, { force: true });
     session = start();
     await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
-    await send('/resume ');
-    await session.waitForOutput('Resume Conversation', 30_000);
-    session.write('\x1b[B');
-    await session.waitForOutput('Initial Prompt: previous unique prompt', 30_000);
+    // Legacy's resume menu opens on the typed trigger; the active (empty) session is not listed.
+    session!.write('/resume ');
+    await waitForHarnessComposerValue(idlePath, '/resume ', { timeoutMs: 60_000 });
+    await session!.waitForOutput('Initial Prompt:', 30_000);
     const frame = session.getVisibleOutput().slice(session.getVisibleOutput().lastIndexOf('▌ term²'));
-    expect(frame).toMatch(/previous unique prompt.*seconds ago.*2 msgs/);
-    expect(frame).toContain('Preview');
-    expect(frame).toContain('Messages: 2');
-    expect(frame).toContain('ID: conv_');
-    expect(frame).toContain('Model: mockprov/mock-beta');
+    expect(frame).toMatch(/previous unique prompt · \d+ seconds ago · 2 msgs/);
+    expect(frame).toContain('conv_');
+    expect(frame).toContain('Local • 2 msgs • mock-beta • mode: bare');
     expect(frame).toContain('Updated:');
     const offset = session.getVisibleOutput().length;
     session.write('\r');
@@ -464,16 +464,14 @@ it.each([160])('a failed resume leaves the composer usable at %i columns', { tim
   fs.rmSync(idlePath, { force: true });
   session = start();
   await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
-  await send('/resume ');
-  await session.waitForOutput('Resume Conversation', 30_000);
-  session.write('\x1b[B');
-  await session.waitForOutput('Initial Prompt: previous unique prompt', 30_000);
+  // Legacy's resume menu opens on the typed trigger; the active (empty) session is not listed.
+  session!.write('/resume ');
+  await waitForHarnessComposerValue(idlePath, '/resume ', { timeoutMs: 60_000 });
+  await session!.waitForOutput('Initial Prompt:', 30_000);
   const frame = session.getVisibleOutput().slice(session.getVisibleOutput().lastIndexOf('▌ term²'));
-  expect(frame).toMatch(/previous unique prompt.*seconds ago.*2 msgs/);
-  expect(frame).toContain('Preview');
-  expect(frame).toContain('Messages: 2');
-  expect(frame).toContain('ID: conv_');
-  expect(frame).toContain('Model: codex/gpt-6.1-terra');
+  expect(frame).toMatch(/previous unique prompt · \d+ seconds ago · 2 msgs/);
+  expect(frame).toContain('conv_');
+  expect(frame).toContain('Local • 2 msgs • gpt-6.1-terra • mode: bare');
   expect(frame).toContain('Updated:');
   const offset = session.getVisibleOutput().length;
   session.write('\r');

@@ -22,6 +22,7 @@ import { injectSkillIntoTurn } from '../../../source/types/user-turn.js';
 import { formatSessionTokenUsage } from '../../../source/utils/ai/token-usage.js';
 import { helpText } from '../clients/tui/slash-commands.js';
 import { copyToClipboard } from '../../../source/utils/clipboard.js';
+import { buildCopySelections } from '../../../source/utils/copy-selections.js';
 import { isControlSocketName } from '../clients/control/index.js';
 import type { DirectConnection } from '../host/in-process-direct-types.js';
 import { previewConfirmation, receiptNotice, sendNativeCommand, submitText } from '../clients/tui/commands.js';
@@ -124,6 +125,8 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
     if (sessionId && sessionId !== 'ls') {
       return { sessionId };
     }
+    // Legacy's bare /resume puts its trigger in the input, which opens the resume menu.
+    if (!sessionId) return { draft: { text: '/resume ', attachments: [] } };
     const here = (await listResumeSessions()).map((session) =>
       [session.id, session.updatedAt ? localMinute(session.updatedAt) : undefined, session.title ?? '(no messages yet)']
         .filter(Boolean)
@@ -220,16 +223,31 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
     };
   };
 
+  /** Legacy copy-command.ts: several code blocks open the copy menu, otherwise the whole reply is copied. */
   const copy = async (argument: string | undefined): Promise<CommandResult> => {
-    const back = argument === undefined ? 1 : Number(argument);
+    const back = argument === undefined ? 1 : /^\d+$/.test(argument) ? Number(argument) : NaN;
     if (!Number.isSafeInteger(back) || back < 1) {
-      throw new Error('Copy response number must be a positive whole number, e.g. /copy 2.');
+      return { message: 'Copy response number must be a positive whole number, e.g. /copy 2.' };
     }
     const texts = assistantTexts(latest());
     const text = texts[texts.length - back];
-    if (text === undefined) return { message: 'No assistant response to copy.' };
-    await copyToClipboard(text);
-    return { message: 'Copied to clipboard.' };
+    if (text === undefined) {
+      return {
+        message:
+          back === 1
+            ? 'No assistant response is available to copy yet.'
+            : `No assistant response #${back} (counting from latest) is available to copy.`,
+      };
+    }
+    const selections = buildCopySelections(text);
+    if (selections.length > 1) return { menu: { kind: 'copy', items: selections } };
+    try {
+      await copyToClipboard(text);
+    } catch (error) {
+      return { message: `Failed to copy to clipboard: ${error instanceof Error ? error.message : String(error)}` };
+    }
+    const label = back === 1 ? 'the latest assistant response' : `assistant response #${back} (counting from latest)`;
+    return { message: `Copied ${label} to the clipboard.` };
   };
 
   const usage = (): CommandResult => {
@@ -251,10 +269,8 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
     if (remote) return { message: 'Skills are read from this machine, so they are not available over SSH.' };
     const [, name, request] = /^\/skills(?:\s+(\S+)(?:\s+([\s\S]*))?)?$/.exec(input.trim()) ?? [];
     const available = app.skills(root);
-    if (!name) {
-      const list = available.map((skill) => `${skill.name}: ${skill.description}`);
-      return { message: list.length ? list.join('\n') : 'No skills found.' };
-    }
+    // Legacy's bare /skills reopens its menu: the command puts its trigger back in the input.
+    if (!name) return { draft: { text: '/skills ', attachments: [] } };
     const skill = available.find((candidate) => candidate.name.toLowerCase() === name.toLowerCase());
     if (!skill) return { message: `Unknown skill: "${name}". Use /skills to list them.` };
     if (!request) {
@@ -308,7 +324,6 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
   };
 
   return {
-    resumePicker: { list: listResumeSessions },
     planNeedsClear: configuration.planNeedsClear,
     async clearAndTogglePlan(connection) {
       const target = configuration.planTarget(connection);
@@ -368,6 +383,8 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
         case 'orchestrator':
           return configuration.toggle(connection, name);
         case 'profile':
+          // Legacy's bare /profile reopens its menu: the command puts its trigger back in the input.
+          if (!argument) return { draft: { text: '/profile ', attachments: [] } };
           return configuration.profile(connection, argument);
         case 'skills':
           return skills(connection, input);

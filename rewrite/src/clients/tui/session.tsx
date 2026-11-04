@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { Box, Text, useInput } from 'ink';
 import { MultilineInput, type ImageRef } from 'ink-prompt';
 import type { TuiProps } from './integration.js';
-import type { WireContent, WireRewindTarget, WireSubmission } from '../../protocol/direct-wire.js';
+import type { WireContent, WireSubmission } from '../../protocol/direct-wire.js';
 import { useTheme } from './presentation/components/theme.js';
 import { useSkin } from './presentation/skins/SkinContext.js';
 import { terminalPreferenceDefaults } from '../../host/terminal-preference-defaults.js';
@@ -15,8 +15,8 @@ import { runBangShell } from './bang-shell.js';
 import { useInterrupt } from './interrupt.js';
 import { runQueueCommand } from './queue-command.js';
 import { withSkillPrefix } from './skill-edit.js';
-import { pickerFor, type PickerKind } from './picker-host.js';
 import { isCtrlG, isCtrlT, isShiftTab, usePlanToggle } from './shift-tab.js';
+import { REWIND_COMMAND, rewindItems, runRewindCommand } from './menus/rewind-command.js';
 import { cleanImageMarkers, primaryDraft, wireAttachments } from './draft.js';
 import { numberedInteractionAnswer } from './interaction-command.js';
 import { useSessionComposer } from './session-composer.js';
@@ -64,7 +64,6 @@ export function TuiSession({
   const [bangResult, setBangResult] = useState<string | null>(null);
   const [interactionOpen, setInteractionOpen] = useState(false);
   const [dismissedInteractionId, setDismissedInteractionId] = useState<string | null>(null);
-  const [picker, setPicker] = useState<PickerKind | null>(null);
   const [taskOpen, setTaskOpen] = useState(false);
   const [budgetOpen, setBudgetOpen] = useState(false);
   const [selectedQueueId, setSelectedQueueId] = useState<string | null>(null);
@@ -92,10 +91,9 @@ export function TuiSession({
     answerOwners,
     queueOwners,
   } = useSessionComposer(state, preferences.historySize, setNotice);
-  const [rewindTargets, setRewindTargets] = useState<readonly WireRewindTarget[] | null>(null);
   // Snapshot-derived ownership leaves no gap for decision keys to land in the composer; Ctrl+G picks background requests.
   const rootInteraction = state.interactions.find((item) => item.turnId === state.activeTurnId && !item.taskId);
-  const panelOpen = Boolean(picker) || taskOpen || budgetOpen || Boolean(rewindTargets);
+  const panelOpen = taskOpen || budgetOpen;
   const foregroundInteraction =
     !interactionOpen && !panelOpen && rootInteraction?.id !== dismissedInteractionId ? rootInteraction : undefined;
   const interactionActive = interactionOpen || Boolean(foregroundInteraction);
@@ -119,7 +117,12 @@ export function TuiSession({
     sessionId: connection.sessionId,
     composer: { value: editor.value, cursor: editor.cursor, replace: replaceInput },
     enabled: composerActive && !editing,
-    actions: { runCommand, notice: setNotice, command: (text) => integration.command(connection, text) },
+    actions: {
+      runCommand,
+      notice: setNotice,
+      command: (text) => integration.command(connection, text),
+      rewind: (item, how) => void executeRewind(item.targetId, how),
+    },
   });
   useHarnessInput((composerActive || menuStack.open) && !busy, Boolean(state.activeTurnId), menuStack.value);
   const pending = useRef(false);
@@ -152,10 +155,9 @@ export function TuiSession({
   });
   useInput((input, key) => {
     if (menuStack.open) return;
-    if (picker) return void interactionInput.current?.(input, key);
     if (confirmation.handleKey(input, key)) return;
     if (interactionActive) return void interactionInput.current?.(input, key);
-    if (taskOpen || budgetOpen || rewindTargets) return;
+    if (taskOpen || budgetOpen) return;
     if (composerActive && isShiftTab(input, key)) return togglePlan();
     if (composerActive && isCtrlT(input, key)) return replaceInput('/effort ');
     if (composerActive && key.escape && viewport.expanded) return viewport.collapse();
@@ -164,13 +166,15 @@ export function TuiSession({
     if (key.meta && key.return && state.activeTurnId && !busy && !editing)
       void submit(editor.value, images, 'follow_up');
   });
-  const executeRewind = useSessionRewind({ connection, pending, rewindDraft, setBusy, setNotice, setRewindTargets });
+  const executeRewind = useSessionRewind({ connection, pending, rewindDraft, setBusy, setNotice });
   const submit = async (
     input: string,
     submittedImages: ImageRef[] = images,
     delivery: WireSubmission['delivery'] = state.activeTurnId ? 'steer' : 'auto',
     confirmed = false,
+    fromMenu = false, // legacy's menus clear the input first, so their commands' failures only report
   ): Promise<void> => {
+    input = menuStack.withPendingSkill(input);
     const clean = cleanImageMarkers(input);
     if (!clean.trim() && !submittedImages.length && !otherParts.length && !editing) return;
     if (pending.current) {
@@ -271,20 +275,16 @@ export function TuiSession({
         const attached = submittedImages.length > 0 || otherParts.length > 0;
         setBangResult(await runBangShell(integration, connection, input, attached, Boolean(state.activeTurnId)));
       } else if (input.trim() === '/tasks') setTaskOpen(true);
-      else if (/^\/(?:rewind|undo)(?:\s|$)/.test(input)) {
-        const match = /^\/(?:rewind|undo)(?:\s+(last|\d+))?(?:\s+(edit|resend))?$/.exec(input.trim());
-        if (!match)
-          throw new Error(`Use /${input.trim().startsWith('/undo') ? 'undo' : 'rewind'} [last|number] [edit|resend].`);
-        const targets = await listRewindTargets(connection);
-        if (!targets.length) throw new Error('Nothing to rewind.');
-        if (!match[1]) {
-          setRewindTargets(targets);
-        } else {
-          const target = match[1] === 'last' ? targets.at(-1) : targets[Number(match[1]) - 1];
-          if (!target) throw new Error('No turn at that number.');
+      else if (REWIND_COMMAND.test(input.trim())) {
+        const chosen = await runRewindCommand(input, {
+          listItems: async () => rewindItems(await listRewindTargets(connection)),
+          addSystemMessage: setNotice,
+          openRewindMenu: (items, how) => menuStack.openMenu({ kind: 'rewind', items, initialDisposition: how }),
+        });
+        if (chosen) {
           pending.current = false;
           setBusy(false);
-          await executeRewind(target.id, match[2] === 'resend' ? 'resend' : 'edit');
+          await executeRewind(chosen.item.targetId, chosen.disposition);
           return;
         }
       } else if (/^\/bridge(?:\s|$)/.test(input)) {
@@ -321,14 +321,14 @@ export function TuiSession({
         return;
       } else if (/^\/providers(?:\s|$)/.test(input)) {
         if (!menuStack.openFrame('providers')) throw new Error('Provider management is unavailable.');
-      } else if (pickerFor(integration, input.trim())) setPicker(pickerFor(integration, input.trim()));
-      else if (input.startsWith('/')) {
+      } else if (input.startsWith('/')) {
         const directNotice = await directSlashCommand(connection, input);
         if (directNotice !== null) setNotice(directNotice);
         else {
           const result = await integration.command(connection, input);
           if (result.message) viewport.showMessage(result.message, input, setNotice);
           if (result.transcript) viewport.appendCommandOutput(result.transcript);
+          if (result.menu) menuStack.openMenu(result.menu);
           if (result.draft) {
             restoreDraft(result.draft);
             return;
@@ -364,7 +364,9 @@ export function TuiSession({
         setNotice(steerRecovery.lateSteerNotice(submission.submissionEpoch, error.message));
       } else {
         // Legacy clears a refused slash command (the slash menu would reopen on it); other input is kept.
-        if (input.startsWith('/')) editor.accepted(input, true, [], submission.submittedRevision);
+        if (fromMenu) {
+          // A menu's command leaves the composer as the menu left it.
+        } else if (input.startsWith('/')) editor.accepted(input, true, [], submission.submittedRevision);
         else await editor.restoreRejected(input);
         const message = error instanceof Error ? error.message : String(error);
         setNotice(
@@ -379,7 +381,7 @@ export function TuiSession({
       setBusy(false);
     }
   };
-  submitRef.current = (text) => void submit(text, []);
+  submitRef.current = (text) => void submit(text, [], undefined, false, true);
   return (
     <Box flexDirection="column">
       {viewport.staticTranscript}
@@ -393,26 +395,19 @@ export function TuiSession({
         <Activity state={state} dialogInteractionId={foregroundInteraction?.id} notice={notice} />
         <SessionPanels
           {...{
-            picker,
-            integration,
             connection,
             interactionInput,
-            switchSession,
             budgetOpen,
             taskOpen,
-            rewindTargets,
             state,
             interactionActive,
             foregroundInteraction,
             columns,
-            executeRewind,
             cancelInput,
           }}
           onNotice={setNotice}
-          closePicker={() => setPicker(null)}
           closeBudget={() => setBudgetOpen(false)}
           closeTask={() => setTaskOpen(false)}
-          closeRewind={() => setRewindTargets(null)}
           closeInteraction={() => {
             setDismissedInteractionId(rootInteraction?.id ?? null);
             setInteractionOpen(false);
@@ -464,7 +459,7 @@ export function TuiSession({
               width={Math.max(1, columns - 6)}
               maxHeight={Math.max(1, rows - 8)}
               pasteThreshold={preferences.pasteThreshold}
-              isActive={composerActive && !picker}
+              isActive={composerActive}
               images={images}
               onImagesChange={onImagesChange}
               enableImagePaste

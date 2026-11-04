@@ -351,7 +351,8 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
         }
         await bridge.rebind(id);
         publish(next);
-        return { message: result.message };
+        // Legacy's handleModeSwitchConfirm (app.tsx) after the clear.
+        return { message: `${target === 'builtin:plan' ? 'Plan' : 'Bare'} mode enabled` };
       } catch (error) {
         throw new Error(
           `Session ${id} was created but mode switching failed: ${

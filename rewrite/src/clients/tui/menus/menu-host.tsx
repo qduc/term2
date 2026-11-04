@@ -93,13 +93,22 @@ export function useMenuStack(options: {
   const synced = useRef('');
   // With no frame open, an editor change the composer did not make (a menu's close, or legacy's deferred
   // command action writing `/model ` after the slash frame closed) becomes the composer draft.
+  // Done in the controller's notification, not an effect: the close and the new draft then render as one
+  // frame, as in legacy. A separate frame after a tall menu closes makes Ink lose a row of the banner it
+  // has just repainted.
+  const latestComposer = useRef(composer);
+  latestComposer.current = composer;
   useEffect(() => {
-    if (open) return;
-    const { text, cursor } = snapshot.editor;
-    if (text === synced.current) return;
-    synced.current = text;
-    if (text !== composer.value) composer.replace(text, cursor);
-  }, [open, snapshot.editor.revision]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!menus) return;
+    const handBack = () => {
+      const { stack, editor } = controller.getSnapshot();
+      if (stack.length > 0 || editor.text === synced.current) return;
+      synced.current = editor.text;
+      if (editor.text !== latestComposer.current.value) latestComposer.current.replace(editor.text, editor.cursor);
+    };
+    handBack();
+    return controller.subscribe(handBack);
+  }, [controller, menus]);
 
   // Mirror every composer draft change, typed or set from outside (restore, rewind, a command's draft), as
   // legacy's composer wrote through the controller; a trigger may open a frame.

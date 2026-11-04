@@ -75,8 +75,10 @@ export function useCommandTranscriptViewport(
   const last = transcript.state.timeline?.at(-1)?.id ?? transcript.state.messages.at(-1)?.id;
   return {
     ...viewport,
-    /** Rows above the bottom area: legacy leaves one row less below a local system line than below a reply. */
-    bottomMargin: state.activeTurnId ? 1 : state.messages.length && !last?.startsWith('local-command-') ? 3 : 2,
+    /** Rows above the bottom area, live like legacy's (its spacer, list margin and bottom-area margin), so a
+     * tall menu fills the screen and Ink repaints the banner when it closes. Legacy leaves one row less below a
+     * local system line than below a reply. */
+    bottomMargin: state.activeTurnId ? 1 : last?.startsWith('local-command-') ? 2 : 3,
     appendCommandOutput: transcript.append,
     showMessage(message: string, command: string, notice: (value: string) => void): void {
       if (command.trim() !== '/help') notice(message);

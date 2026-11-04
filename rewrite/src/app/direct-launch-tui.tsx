@@ -22,6 +22,7 @@ import { getProfileLabel } from '../../../source/services/profiles/labels.js';
 import { quoteShellArg } from '../../../source/services/ssh-service.js';
 import type { WireSnapshot } from '../protocol/direct-wire.js';
 import { useTerminalFocusNotifier } from '../../../source/hooks/use-terminal-focus-notifier.js';
+import { useSetting } from '../../../source/hooks/use-setting.js';
 import type { LoggingService } from '../../../source/services/logging/logging-service.js';
 import {
   confirmHomeDirectoryStart,
@@ -88,6 +89,7 @@ function DirectTui({
   // Never use launch defaults: attached sessions own separate mutable settings.
   const settings = app.liveSettings(connection.sessionId);
   if (!settings) throw new Error('The attached session has no live settings.');
+  const displayMode = useSetting(settings, 'ui.displayMode') ?? 'concise';
   const notifier = useTerminalFocusNotifier({ stdout, settingsService: settings, loggingService: logger });
   const integration: TuiIntegration = useMemo(
     () => ({
@@ -164,7 +166,7 @@ function DirectTui({
         <Tui
           connection={connection}
           header={
-            <Box paddingLeft={2} paddingBottom={1}>
+            <Box paddingLeft={2}>
               <Banner
                 key={`header:${connection.sessionId}`}
                 settingsService={settings}
@@ -173,6 +175,7 @@ function DirectTui({
             </Box>
           }
           headerHeight={headerHeight + 1}
+          redrawKey={displayMode}
           integration={integration}
           onLiveEvent={(event) => {
             if (event.sessionId !== connection.sessionId) return;

@@ -27,7 +27,7 @@ import { getSettingMetadata } from '../../../source/services/settings/settings-u
 import { createSettingsCommand, parseSettingValue } from '../../../source/utils/settings-command.js';
 import { receiptNotice, sendNativeCommand } from '../clients/tui/commands.js';
 import type { TuiConnection, TuiIntegration } from '../clients/tui/integration.js';
-import type { WireSnapshot } from '../protocol/direct-wire.js';
+import type { WireConfigureRequest, WireSnapshot } from '../protocol/direct-wire.js';
 import type { DirectApplication } from './direct-application.js';
 
 type CommandResult = Awaited<ReturnType<TuiIntegration['command']>>;
@@ -68,11 +68,8 @@ function settingsBrowse(
 const BARE_ENABLED_DETAIL = ' - minimal prompt; AGENTS.md read on demand; other tools via run_code';
 const APPROVAL_MODES = ['off', 'advisory', 'auto', 'always'];
 const PROFILE_KEY = 'app.activeProfileId';
-/** Only the Session can change these, with `/model` and `/effort`. */
-const SELECTION_COMMANDS: Readonly<Record<string, string>> = {
-  'agent.modelSelection': 'Use /model <provider>/<model>.',
-  'agent.reasoningEffort': 'Use /effort <level>.',
-};
+/** The Session owns these, so a value the settings command saved is also sent to it. */
+const SELECTION_KEYS = new Set(['agent.modelSelection', 'agent.reasoningEffort']);
 
 export function createDirectTuiSettings(app: DirectApplication, latest: () => WireSnapshot) {
   const detailsOf = (sessionId: string) => {
@@ -152,6 +149,15 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
       const { settings } = detailsOf(connection.sessionId);
       const target = `builtin:${mode}`;
       const on = resolveActiveProfile(settings).identity.id === target;
+      if (mode === 'plan') {
+        // Shift+Tab runs `/plan`: legacy's cycleAppModes wording (mode-commands.ts).
+        const result = await switchProfile(connection, on ? BARE_PROFILE_ID : target, '/plan');
+        if (!result.applied) return result;
+        return {
+          ...result,
+          message: on ? 'Switched to Bare mode' : 'Switched to Plan mode - read-only research/planning mode',
+        };
+      }
       if (mode !== 'bare') return switchProfile(connection, on ? BARE_PROFILE_ID : target, `/${mode}`);
       // Legacy's /bare (mode-commands.ts): Bare is the default, so it never toggles back.
       if (on) return { message: 'Bare mode is already active' };
@@ -207,8 +213,34 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
           `/settings ${args}`,
         );
       }
-      const selection = SELECTION_COMMANDS[key];
-      if (selection) return { message: selection };
+      if (SELECTION_KEYS.has(key)) {
+        // Legacy's settings command parses, saves and words it; the Session then switches to the saved value.
+        const before = settings.getDynamic(key);
+        command.action(args);
+        const after = settings.getDynamic(key);
+        if (isDeepStrictEqual(before, after)) {
+          const refused = messages.some((message) => message.startsWith('Error'));
+          return { message: messages.join('\n'), ...(refused ? {} : { applied: true }) };
+        }
+        const selection = after as { readonly provider: string; readonly model: string };
+        const configuration: WireConfigureRequest =
+          key === 'agent.modelSelection'
+            ? { model: { provider: selection.provider, model: selection.model } }
+            : { reasoning: after as NonNullable<WireConfigureRequest['reasoning']> };
+        const result = await sendNativeCommand(connection, {
+          type: 'configure',
+          commandId: randomUUID(),
+          configuration,
+        });
+        if (result.kind === 'finished' && result.receipt.outcome?.kind === 'configured')
+          return { message: messages.join('\n'), applied: true };
+        if (result.kind === 'rejected' || result.kind === 'error') {
+          if (before === undefined) settings.reset(key);
+          else settings.setDynamic(key, before);
+          throw new Error(receiptNotice(result));
+        }
+        return { message: receiptNotice(result) };
+      }
       if (key === SETTING_KEYS.AGENT_TEMPERATURE) {
         if (isReset) return { message: `${key} cannot be cleared on a running session.` };
         const temperature = Number(rest[0]);

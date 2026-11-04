@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { randomUUID } from 'node:crypto';
 import { Box, Text, useInput } from 'ink';
 import { MultilineInput, type ImageRef } from 'ink-prompt';
@@ -47,6 +47,7 @@ export function TuiSession({
   connection,
   header,
   headerHeight,
+  redrawKey,
   integration,
   retainedSnapshot,
   onSnapshot,
@@ -102,9 +103,23 @@ export function TuiSession({
   const confirmation = useSendConfirmation(interactionActive);
   const interactionInput = useRef<InteractionInputHandler | null>(null);
   const viewportActive = !interactionActive && !panelOpen && !confirmation.pending;
-  const viewport = useCommandTranscriptViewport(state, headerHeight ?? 0, viewportActive, header, historyRevision, {
-    transitionNotice,
-  });
+  const [redraws, setRedraws] = useState(0);
+  const drawnKey = useRef(redrawKey);
+  useEffect(() => {
+    if (drawnKey.current === redrawKey) return;
+    drawnKey.current = redrawKey;
+    setRedraws((count) => count + 1);
+  }, [redrawKey]);
+  const viewport = useCommandTranscriptViewport(
+    state,
+    headerHeight ?? 0,
+    viewportActive,
+    header,
+    historyRevision + redraws,
+    {
+      transitionNotice,
+    },
+  );
   const { InputFrame, PromptMarker, LiveDivider } = useSkin();
   const theme = useTheme();
   const [busy, setBusy] = useState(false);

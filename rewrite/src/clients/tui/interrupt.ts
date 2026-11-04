@@ -4,9 +4,8 @@ import type { TuiState } from './state.js';
 
 /**
  * Ctrl+C, in priority order: a pending send confirmation is cleared; a queue edit is discarded; a draft is cleared;
- * a running turn is cancelled (its queued steers come back as a draft); otherwise the exit hint.
- * The plain "Cancellation requested for turn-..." success notice is dropped inside cancelInput; returned-steer and
- * refusal messages still show.
+ * a running turn is cancelled (its pending steers are dropped, as legacy); otherwise the exit hint.
+ * The plain "Cancellation requested for turn-..." success notice is dropped inside cancelInput; refusals still show.
  */
 export function useInterrupt(context: {
   readonly interrupt: RefObject<() => void>;

@@ -1,10 +1,11 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Box, Text } from 'ink';
 import { useInteractionInput, type InteractionInput, type InteractionInputHandler } from './interaction-input.js';
 import { MultilineInput } from 'ink-prompt';
 import type { WireDecision } from '../../protocol/direct-wire.js';
 import type { InteractionView } from './state.js';
 import { Questions } from './questions.js';
+import { publishHarnessApprovalReady, publishHarnessEntryText } from './harness-input.js';
 
 /** Keyboard-operated request picker; all decisions remain pinned to request IDs. */
 export function InteractionPanel({
@@ -62,6 +63,14 @@ export function InteractionPanel({
     if (request) await commit(() => onAnswer(request.id, decision));
   };
   const structured = Boolean(request?.kind === 'question' && request.questions?.length);
+  // Legacy ApprovalPrompt's harness signal, after this panel's key handler is in place.
+  const callId = request?.callId;
+  useEffect(() => {
+    if (callId && !entry) publishHarnessApprovalReady(callId);
+  }, [callId, entry]);
+  // Legacy types the rejection reason (or answer) in the composer, so the harness observes it there.
+  useEffect(() => publishHarnessEntryText(entry ? text : null), [entry, text]);
+  useEffect(() => () => publishHarnessEntryText(null), []);
   useInteractionInput(inputHandler, (input, key) => {
     if (pending.current) return;
     if (key.ctrl && input === 'g') {

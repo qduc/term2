@@ -150,13 +150,9 @@ async function exercise(mode: 'ctrl-c' | 'pending-steer-ctrl-c') {
     }
   }, 25);
   try {
-    await session.waitForOutput(
-      mode.startsWith('pending-steer-')
-        ? 'Cancelled. Your queued message is back in the input.'
-        : // Ctrl+C does not print the ordinary success notice; the Stopped marker is the first signal.
-          'Stopped',
-      5_000,
-    );
+    // Ctrl+C does not print the ordinary success notice; the Stopped marker is the first signal. Legacy drops a
+    // pending steer on cancellation without a notice.
+    await session.waitForOutput('Stopped', 5_000);
     metrics.ackMs = Date.now() - sentAt;
     const dir = path.join(root, 'conversations');
     const log = path.join(dir, fs.readdirSync(dir).find((name) => name.endsWith('.jsonl'))!);

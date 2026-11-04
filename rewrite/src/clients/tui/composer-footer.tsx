@@ -159,6 +159,23 @@ export function useFooterUsage(state: TuiState, resumed = false): TuiState {
   return state.lastUsage ? state : { ...state, ...kept.current };
 }
 
+/**
+ * Legacy InputBox's useTerminalWidth: the editor's width starts at 0 each time the input surface mounts (after a
+ * menu closes, say) and is set by an effect. A restored draft is drawn one character per line for that first
+ * frame, which at a small terminal makes Ink take its full-redraw path, as legacy does.
+ */
+export function ComposerWidth({
+  columns,
+  children,
+}: {
+  readonly columns: number;
+  readonly children: (width: number) => React.ReactNode;
+}): React.ReactElement {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  return <>{children(mounted ? Math.max(1, columns - 6) : 0)}</>;
+}
+
 /** Everything below the composer: its key hints while it is active, and the status bar always. */
 export function ComposerFooter({
   integration,

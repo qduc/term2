@@ -34,7 +34,7 @@ import { replaceSession } from './replace-session.js';
 import { runBridgeCommand } from './bridge-command.js';
 import { useSendConfirmation } from './send-confirmation.js';
 import { useMenuStack } from './menus/menu-host.js';
-import { ComposerFooter, useComposerFilter, useFooterUsage } from './composer-parts.js';
+import { ComposerFooter, ComposerWidth, useComposerFilter, useFooterUsage } from './composer-parts.js';
 import { SessionPanels } from './session-panels.js';
 import { useSessionRewind } from './session-rewind.js';
 import { useEscapeKey } from './use-escape-key.js';
@@ -198,7 +198,14 @@ export function TuiSession({
     if (key.meta && key.return && state.activeTurnId && !busy && !editing)
       void submit(editor.value, images, 'follow_up');
   });
-  const executeRewind = useSessionRewind({ connection, pending, rewindDraft, setBusy, setNotice });
+  const { executeRewind, rewindHidden } = useSessionRewind({
+    connection,
+    pending,
+    rewindDraft,
+    setBusy,
+    viewport,
+    setNotice,
+  });
   const submit = async (
     input: string,
     submittedImages: ImageRef[] = images,
@@ -462,75 +469,79 @@ export function TuiSession({
         />
         <PendingQueueEdit editingId={editing?.id ?? null} items={queueItems} />
         {menuStack.view}
-        {menuStack.open ? null : (
-          <InputFrame>
-            <PromptMarker mode="input" />
-            <MultilineInput
-              key={editor.inputKey}
-              value={editor.value}
-              onChange={(value) => {
-                changeInput(value);
-              }}
-              onSubmit={(value, submittedImages) => {
-                void submit(value, submittedImages);
-              }}
-              onBoundaryArrow={(direction) => {
-                if (direction === 'up' && !editor.value && !editing && queueItems.length) {
-                  setQueueNotice(null);
-                  setSelectedQueueId(queueItems[queueItems.length - 1]!.id);
-                  return;
-                }
-                const entry = editor.navigate(direction, {
-                  text: editor.value,
-                  attachments: wireAttachments(images, otherParts, originalParts),
-                });
-                if (entry) restoreDraft(entry, entry.cursor);
-              }}
-              onCursorChange={(offset) => {
-                editor.cursorChanged(offset);
-                menuStack.cursorChanged(offset);
-              }}
-              cursorOverride={editor.cursorOverride}
-              width={Math.max(1, columns - 6)}
-              maxHeight={Math.max(1, rows - 8)}
-              pasteThreshold={preferences.pasteThreshold}
-              isActive={composerActive}
-              images={images}
-              onImagesChange={onImagesChange}
-              enableImagePaste
-              onPasteError={(reason) => setNotice(`Image paste failed: ${reason}`)}
-              ignoreInput={(input, key) => {
-                if (selectedQueueIndex >= 0) {
-                  const item = queueItems[selectedQueueIndex]!;
-                  if (key.escape) setSelectedQueueId(null);
-                  else if (key.upArrow) {
-                    if (selectedQueueIndex > 0) setSelectedQueueId(queueItems[selectedQueueIndex - 1]!.id);
-                    else {
-                      setSelectedQueueId(null);
-                      const entry = editor.navigate('up', {
-                        text: editor.value,
-                        attachments: wireAttachments(images, otherParts, originalParts),
-                      });
-                      if (entry) restoreDraft(entry, entry.cursor);
+        {menuStack.open || rewindHidden ? null : (
+          <ComposerWidth columns={columns}>
+            {(width) => (
+              <InputFrame>
+                <PromptMarker mode="input" />
+                <MultilineInput
+                  key={editor.inputKey}
+                  value={editor.value}
+                  onChange={(value) => {
+                    changeInput(value);
+                  }}
+                  onSubmit={(value, submittedImages) => {
+                    void submit(value, submittedImages);
+                  }}
+                  onBoundaryArrow={(direction) => {
+                    if (direction === 'up' && !editor.value && !editing && queueItems.length) {
+                      setQueueNotice(null);
+                      setSelectedQueueId(queueItems[queueItems.length - 1]!.id);
+                      return;
                     }
-                  } else if (key.downArrow) setSelectedQueueId(queueItems[selectedQueueIndex + 1]?.id ?? null);
-                  else if (input === 'e' || key.return) {
-                    setSelectedQueueId(null);
-                    setQueueNotice(null);
-                    startQueueEdit(item);
-                  } else if (input === 'd') {
-                    setSelectedQueueId(null);
-                    void queueAction(connection, 'retract', item.id).catch((error: unknown) =>
-                      setQueueNotice(error instanceof Error ? error.message : String(error)),
-                    );
-                  }
-                  return true;
-                }
-                if (editing && key.escape) return cancelQueueEdit();
-                return composerFilter(input, key);
-              }}
-            />
-          </InputFrame>
+                    const entry = editor.navigate(direction, {
+                      text: editor.value,
+                      attachments: wireAttachments(images, otherParts, originalParts),
+                    });
+                    if (entry) restoreDraft(entry, entry.cursor);
+                  }}
+                  onCursorChange={(offset) => {
+                    editor.cursorChanged(offset);
+                    menuStack.cursorChanged(offset);
+                  }}
+                  cursorOverride={editor.cursorOverride}
+                  width={width}
+                  maxHeight={Math.max(1, rows - 8)}
+                  pasteThreshold={preferences.pasteThreshold}
+                  isActive={composerActive}
+                  images={images}
+                  onImagesChange={onImagesChange}
+                  enableImagePaste
+                  onPasteError={(reason) => setNotice(`Image paste failed: ${reason}`)}
+                  ignoreInput={(input, key) => {
+                    if (selectedQueueIndex >= 0) {
+                      const item = queueItems[selectedQueueIndex]!;
+                      if (key.escape) setSelectedQueueId(null);
+                      else if (key.upArrow) {
+                        if (selectedQueueIndex > 0) setSelectedQueueId(queueItems[selectedQueueIndex - 1]!.id);
+                        else {
+                          setSelectedQueueId(null);
+                          const entry = editor.navigate('up', {
+                            text: editor.value,
+                            attachments: wireAttachments(images, otherParts, originalParts),
+                          });
+                          if (entry) restoreDraft(entry, entry.cursor);
+                        }
+                      } else if (key.downArrow) setSelectedQueueId(queueItems[selectedQueueIndex + 1]?.id ?? null);
+                      else if (input === 'e' || key.return) {
+                        setSelectedQueueId(null);
+                        setQueueNotice(null);
+                        startQueueEdit(item);
+                      } else if (input === 'd') {
+                        setSelectedQueueId(null);
+                        void queueAction(connection, 'retract', item.id).catch((error: unknown) =>
+                          setQueueNotice(error instanceof Error ? error.message : String(error)),
+                        );
+                      }
+                      return true;
+                    }
+                    if (editing && key.escape) return cancelQueueEdit();
+                    return composerFilter(input, key);
+                  }}
+                />
+              </InputFrame>
+            )}
+          </ComposerWidth>
         )}
         <ComposerFooter
           integration={integration}

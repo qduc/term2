@@ -5,7 +5,7 @@ import { SkinProvider, useSkin } from './presentation/skins/SkinContext.js';
 import type { TuiState } from './state.js';
 import { Transcript } from './views.js';
 import { LiveToolAgesContext, type LiveToolAge } from './live-tool-age.js';
-import { useNativeTranscript } from './native-transcript.js';
+import { NO_ROWS, useNativeTranscript } from './native-transcript.js';
 import { clearTerminalForRedraw, clearVisibleForResize } from './terminal.js';
 
 /** Minimum spacing between transcript renders (about 8 frames a second). */
@@ -27,13 +27,6 @@ export function useTranscriptViewport(
     setEpoch((current) => current + 1);
   };
   const { staticTranscript, tail, committed } = useNativeTranscript(state, columns, epoch, header);
-  const previousHistoryRevision = useRef(historyRevision);
-  useEffect(() => {
-    if (previousHistoryRevision.current === historyRevision) return;
-    previousHistoryRevision.current = historyRevision;
-    clearTerminalForRedraw(stdout);
-    setEpoch((current) => current + 1);
-  }, [historyRevision, stdout]);
   const activeTurn = useRef(state.activeTurnId);
   activeTurn.current = state.activeTurnId;
   const pendingResize = useRef(false);
@@ -85,6 +78,34 @@ export function useTranscriptViewport(
     (!state.activeTurnId && frame.activeTurnId)
       ? []
       : frame.lines;
+  const renderLive = (shown: TuiState, ages: ReadonlyMap<string, LiveToolAge>, all: boolean): string[] => {
+    const rendered = renderToString(
+      <ThemeProvider theme={theme}>
+        <SkinProvider skin={skin}>
+          <LiveToolAgesContext.Provider value={ages}>
+            <Transcript state={shown} messages={shown.messages} columns={columns} live expanded={all} />
+          </LiveToolAgesContext.Provider>
+        </SkinProvider>
+      </ThemeProvider>,
+      { columns: Math.max(1, columns) },
+    );
+    return rendered ? rendered.split('\n') : [];
+  };
+  // A history replacement (rewind) remounts the list with every row live. Legacy draws those rows in the same
+  // frame as its remounted input, so the live frame is rendered first and lands with the new epoch.
+  const previousHistoryRevision = useRef(historyRevision);
+  useEffect(() => {
+    if (previousHistoryRevision.current === historyRevision) return;
+    previousHistoryRevision.current = historyRevision;
+    const pending = setTimeout(() => {
+      const next = renderLive(state, new Map(), false);
+      clearTerminalForRedraw(stdout);
+      setEpoch((current) => current + 1);
+      setFrame({ lines: next, activeTurnId: state.activeTurnId, expanded: false, committed: NO_ROWS });
+    }, 0);
+    return () => clearTimeout(pending);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [historyRevision, stdout]);
   const [offset, setOffset] = useState(0);
   const [helpOffset, setHelpOffset] = useState(0);
   const [helpLines, setHelpLines] = useState<string[]>([]);
@@ -135,17 +156,7 @@ export function useTranscriptViewport(
         });
       }
       firstSeen.current = seen;
-      const rendered = renderToString(
-        <ThemeProvider theme={theme}>
-          <SkinProvider skin={skin}>
-            <LiveToolAgesContext.Provider value={ages}>
-              <Transcript state={shown} messages={shown.messages} columns={columns} live expanded={expanded} />
-            </LiveToolAgesContext.Provider>
-          </SkinProvider>
-        </ThemeProvider>,
-        { columns: Math.max(1, columns) },
-      );
-      const next = rendered ? rendered.split('\n') : [];
+      const next = renderLive(shown, ages, expanded);
       // An identical frame must not re-render the whole session.
       setFrame((previous) =>
         previous.expanded === expanded &&
@@ -207,6 +218,8 @@ export function useTranscriptViewport(
     staticTranscript,
     redraw,
     paged: expanded,
+    // The live text has been drawn for the current committed rows (false right after a remount, until its render).
+    frameReady: frame.committed === committed,
     text: lines.slice(start, end).join('\n'),
     start,
     end,

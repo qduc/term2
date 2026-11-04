@@ -19,7 +19,7 @@ import {
 } from './direct-config-settings.js';
 import { readDirectInputPreviewConfiguration } from './direct-input-preview.js';
 import { createDirectVerificationOperations } from './direct-verifier.js';
-import { withGenerationGuard } from './run.js';
+import { withGenerationGuard } from './generation-guard.js';
 import type { AgentSurface, ProfileSelection, ToolSurfaceOptions } from './tool-contract.js';
 
 export type DirectConfiguredGeneration = {

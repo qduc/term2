@@ -34,7 +34,7 @@ import { readDirectInputPreviewConfiguration } from './direct-input-preview.js';
 import { createDirectSessionMemory, directMainMemoryEnabled } from './direct-memory.js';
 import { runPolicy } from './direct-application-policy.js';
 import { createDirectVerificationOperations } from './direct-verifier.js';
-import { withGenerationGuard } from './run.js';
+import { withGenerationGuard } from './generation-guard.js';
 import { createAppSettings } from './settings.js';
 import { createNativeSearchTool } from './native-search.js';
 import type { AgentSurface, ProfileSelection, ToolSurfaceOptions } from './tool-contract.js';

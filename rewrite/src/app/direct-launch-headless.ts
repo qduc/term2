@@ -1,4 +1,4 @@
-/** One headless run as a client of the direct host. `cli.ts` owns signals, as it does for any `RunHandle`. */
+/** One headless run as a client of the direct host. `cli.ts` owns signals, through the returned handle. */
 import fs from 'node:fs';
 import { openDirectApplicationMcp } from './direct-application-mcp.js';
 import type { DirectMcp } from './direct-mcp.js';

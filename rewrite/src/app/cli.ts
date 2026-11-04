@@ -95,7 +95,7 @@ function conversationsDirectory(): string {
 /**
  * Refuses any existing filename outside the `conv_` namespace. It enumerates
  * names only: no old file is opened or parsed. A missing directory is allowed;
- * `run()` creates it after this check.
+ * the session store creates it when it writes the first conversation.
  */
 async function checkConversationsDirectory(directory: string): Promise<void> {
   let entries: string[];

@@ -92,7 +92,10 @@ export function createHeadlessAnswerer(
       return false;
     }
     if (decided.reportRejection === true && decided.decision.kind === 'deny') {
-      io.stderr.write(rejectionLine(decided.decision.reason));
+      // Legacy: a JSON record on stdout under --json, the plain line on stderr otherwise.
+      if (output === 'json')
+        io.stdout.write(JSON.stringify({ type: 'approval_rejected', reason: decided.decision.reason }) + '\n');
+      else io.stderr.write(rejectionLine(decided.decision.reason));
     }
     const answerFailure = await sendAnswer(interaction.requestId, decided.decision);
     if (answerFailure === null) return true;

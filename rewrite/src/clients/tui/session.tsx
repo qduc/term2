@@ -372,7 +372,6 @@ export function TuiSession({
         const parts = wireAttachments(submittedImages, otherParts, originalParts);
         if (await held(clean, parts, () => void submit(input, submittedImages, delivery, true))) return;
         await submitText(connection, clean, parts, delivery, state.activeTurnId ?? undefined, submission.requestId);
-        if (await steerRecovery.wasReturnedAfter(submission.submissionEpoch, submission.requestId)) return;
         clearSubmittedParts(submittedImages, otherParts);
       }
       // Legacy records only admitted chat turns (conversation-admission-workflow.ts): no commands or `!` shell.

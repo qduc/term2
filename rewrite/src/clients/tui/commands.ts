@@ -97,9 +97,7 @@ export async function cancelForegroundWithSteers(
   if (result.result.kind === 'aborted') {
     const returnedSteers = result.result.returnedSteers ?? [];
     return {
-      message: returnedSteers.length
-        ? 'Cancelled. Your queued message is back in the input.'
-        : `Cancellation requested for ${result.result.turnId}; cleanup may still be running.`,
+      message: `Cancellation requested for ${result.result.turnId}; cleanup may still be running.`,
       returnedSteers,
     };
   }

@@ -104,9 +104,10 @@ const taskView = (task: WireSnapshot['tasks'][number]): TaskView => ({
   wire: task,
 });
 
-function interactionView(interaction: WireInteraction): InteractionView {
+function interactionView(interaction: WireInteraction, callId: string | undefined): InteractionView {
   return {
     id: interaction.requestId,
+    ...(callId ? { callId } : {}),
     kind: interaction.kind,
     title: interaction.summary || interaction.toolName,
     // Structured questions own their current page; raw args expose every page at once.
@@ -229,7 +230,9 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
     unmatchedTools: snapshot.unmatchedToolResults ?? [],
     budgets: snapshot.pendingBudgets ?? [],
     commands: snapshot.commands ?? [],
-    interactions: snapshot.pendingInteractions.map(interactionView),
+    interactions: snapshot.pendingInteractions.map((interaction) =>
+      interactionView(interaction, snapshot.tools.find((tool) => tool.executionId === interaction.executionId)?.callId),
+    ),
     queue: snapshot.queue.map((entry) => {
       const skill = skillPresentation(snapshot.submissions?.find((item) => item.messageId === entry.messageId));
       return {

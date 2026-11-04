@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { testCliPath, spawnTerminal, createTestChildEnv, type TerminalSession } from './test-helpers/terminal-e2e.js';
 import {
   HARNESS_IDLE_ENV,
+  readHarnessComposerState,
   waitForHarnessComposerValue,
   waitForHarnessIdleGeneration,
 } from './lib/harness-input-idle.js';
@@ -244,7 +245,7 @@ it('Esc stops a streaming answer without a turn-id cleanup notice', { timeout: T
 });
 
 it.each(['esc', 'ctrl-c', 'editing', 'only-steers'] as const)(
-  'cancel %s restores queued steers and keeps follow-ups paused',
+  'cancel %s drops queued steers and keeps follow-ups paused',
   { timeout: TIMEOUT_MS },
   async (mode) => {
     root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'p4b-steer-')));
@@ -343,15 +344,17 @@ it.each(['esc', 'ctrl-c', 'editing', 'only-steers'] as const)(
     }
     const cancelAt = Date.now();
     session.write(mode === 'ctrl-c' ? '\x03' : '\x1b');
-    await session.waitForOutput('Cancelled. Your queued message is back in the input.', 5_000);
-    const expectedDraft = 'UNIQUE-QUEUED-STEER\n\nUNIQUE-SECOND-STEER';
-    await waitForHarnessComposerValue(idlePath, expectedDraft, { timeoutMs: 5_000 });
+    // Legacy drops pending steers on cancellation (conversation-adapter's 'Pending submission was cancelled'):
+    // no notice, and nothing comes back to the composer.
+    await session.waitForOutput('Stopped', 5_000);
     expect(Date.now() - cancelAt).toBeLessThan(2_000);
     // The follow-up's hold is checked in the log below (no queue_started); it only runs after `r` in legacy's
     // paused-queue prompt.
     if (mode !== 'only-steers') await session.waitForOutput('Queue paused: 1 item pending.', 5_000);
     await new Promise((resolve) => setTimeout(resolve, 600));
     expect(Date.now() - cancelAt).toBeLessThan(2_000);
+    expect(readHarnessComposerState(idlePath)?.value ?? '').toBe('');
+    expect(session.getVisibleOutput()).not.toContain('back in the input');
     const log = fs.readFileSync(
       path.join(
         root,

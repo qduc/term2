@@ -239,10 +239,15 @@ export function createDirectTuiMenus(options: MenuOptions): TuiMenus {
     copy: copyToClipboard,
     skills: { list: () => [...app.skills(root)] },
     resume: {
-      // Legacy lists saved conversations, never the one in use; the hook drops zero-message entries.
+      // Legacy takes the 10 most recent session files, the one in use included (newest when it has not
+      // been saved yet, as legacy writes it at launch), then hides it; the hook drops zero-message entries.
       async list(sessionId) {
         const { sessions } = await app.listWorkspaceSessions(root);
-        return sessions
+        const ranked = [...sessions].sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''));
+        const recent = ranked.some((session) => session.id === sessionId)
+          ? ranked.slice(0, RECENT_CONVERSATIONS)
+          : ranked.slice(0, RECENT_CONVERSATIONS - 1);
+        return recent
           .filter((session) => session.id !== sessionId)
           .map(
             (session): MenuConversationEntry => ({
@@ -253,9 +258,7 @@ export function createDirectTuiMenus(options: MenuOptions): TuiMenus {
               model: session.model.model,
               provider: session.model.provider,
             }),
-          )
-          .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-          .slice(0, RECENT_CONVERSATIONS);
+          );
       },
       profileLabel: (activeProfileId, appMode) =>
         getProfileLabel(activeProfileId ?? profileIdFromLegacyMode(appMode as never)),

@@ -128,15 +128,28 @@ export class DirectContinuity {
     };
   }
 
-  /** Experimental legacy cancellation: retain the response while omitting its unanswered tool output. */
+  /**
+   * Legacy cancellation on a chained provider: a segment ended by a cancelled
+   * question keeps its response as the chain point, and the tool outputs it
+   * settled are never sent. Applies only when the history added since the
+   * checkpoint is exactly those outputs and one is the unanswered question.
+   */
   skipCancelledQuestion(history: readonly Item[], noAnswer: string): void {
     const checkpoint = this.#checkpoint;
-    if (!checkpoint || checkpoint.debt.length !== 1 || !hasPrefix(history, checkpoint.history)) return;
+    if (!checkpoint || checkpoint.debt.length === 0 || !hasPrefix(history, checkpoint.history)) return;
     const delta = history.slice(checkpoint.history.length);
-    const call = checkpoint.history.find((item) => item.type === 'tool_call' && item.callId === checkpoint.debt[0]);
-    if (call?.type !== 'tool_call' || call.toolName !== 'ask_user' || delta.length !== 1) return;
-    const result = delta[0];
-    if (result?.type !== 'tool_result' || result.callId !== call.callId || result.output !== noAnswer) return;
+    if (delta.length !== checkpoint.debt.length) return;
+    const owed = [...checkpoint.debt];
+    let cancelled = false;
+    for (const item of delta) {
+      if (item.type !== 'tool_result') return;
+      const index = owed.indexOf(item.callId);
+      if (index < 0) return;
+      owed.splice(index, 1);
+      const call = checkpoint.history.find((entry) => entry.type === 'tool_call' && entry.callId === item.callId);
+      if (call?.type === 'tool_call' && call.toolName === 'ask_user' && item.output === noAnswer) cancelled = true;
+    }
+    if (!cancelled) return;
     this.#checkpoint = { ...checkpoint, history: structuredClone(history), debt: [] };
   }
 

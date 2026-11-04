@@ -1,5 +1,5 @@
-import { ASK_USER_NO_ANSWER_RESULT } from '../tools/adopted/ask-user-constants.js';
 import { abortConversation } from './conversation-abort.js';
+import { ASK_USER_NO_ANSWER_RESULT, QuestionCancelNotice } from './conversation-question-cancel.js';
 import { ConversationBackground } from './conversation-background.js';
 import { ConversationCommands } from './conversation-commands.js';
 import { ConversationJournal, modelError, nextConversationTurnId } from './conversation-journal.js';
@@ -199,9 +199,7 @@ function conversation(
     now: () => new Date().toISOString(),
     dispatchHeld: !!active || !!completionHeld || !!commands.owner || closed || !!journal.failure,
   });
-  let questionCancelPending = false;
-  const cancelNotice =
-    '<system-notice>\nThe user cancelled the pending question without answering (they pressed Escape). Do not resume, continue, or restate the plan or work that was in progress when you asked; treat it as dropped. Act only on the genuinely new input in this turn.\n</system-notice>';
+  const questionCancel = new QuestionCancelNotice();
   const boundary = (turnId: TurnId): readonly Item[] => {
     if (!active || active.turnId !== turnId || active.cancelled || commands.owner || closed || journal.failure)
       return [];
@@ -224,7 +222,7 @@ function conversation(
       readonly silent?: true;
       readonly compaction?: true;
       readonly retryNotice?: { readonly messageId: Item['id']; readonly text: string };
-      readonly queuedFollowUp?: true;
+      readonly queuedFollowUp?: boolean;
       readonly compactionState?: import('../engine/direct-types.js').TurnCompactionState;
       readonly history?: readonly Item[];
     },
@@ -242,9 +240,8 @@ function conversation(
     ) {
       throw new Error('submission must identify one admitted user item');
     }
-    const consumeCancelNotice =
-      questionCancelPending && !planned?.compaction && request.input.some((item) => item.type === 'user_message');
-    const deliverCancelNotice = consumeCancelNotice && planned?.queuedFollowUp === true;
+    const hasHumanInput = !planned?.compaction && request.input.some((item) => item.type === 'user_message');
+    const cancelNotice = hasHumanInput ? questionCancel.take(planned?.queuedFollowUp === true) : undefined;
     const turnId = planned?.turnId ?? (`turn-${nextTurnId++}` as TurnId);
     const snapshot = planned?.accepted
       ? { history: planned.history!, compactionState: planned.compactionState }
@@ -258,12 +255,11 @@ function conversation(
       journal,
       capabilities!,
       generation,
-      deliverCancelNotice ? cancelNotice : undefined,
+      cancelNotice,
     );
-    if (deliverCancelNotice) {
-      generation.continuity?.state?.skipCancelledQuestion(rawHistory, ASK_USER_NO_ANSWER_RESULT);
-    }
-    if (consumeCancelNotice) questionCancelPending = false;
+    // Legacy's Responses chain never sends the outputs of a segment that a
+    // cancelled question ended; the next request chains from that response.
+    if (hasHumanInput) generation.continuity?.state?.skipCancelledQuestion(rawHistory, ASK_USER_NO_ANSWER_RESULT);
     // Old detached branches keep the exact generation that admitted their root.
     const turnDeps = generation.runtime;
     const turnContinuity = generation.continuity;
@@ -329,11 +325,7 @@ function conversation(
           ...(effect.record.request.origin ? { origin: effect.record.request.origin } : {}),
         },
       },
-      {
-        turnId: effect.turnId,
-        facts: next,
-        ...(effect.record.admission.kind !== 'started' ? { queuedFollowUp: true as const } : {}),
-      },
+      { turnId: effect.turnId, facts: next, queuedFollowUp: effect.record.admission.kind !== 'started' },
     );
   };
   const installGeneration = (
@@ -432,6 +424,7 @@ function conversation(
         };
       const plan = submitDirectQueue(journal.queueState, request, environment(), expectedSteerTurnId);
       queueSettings = settings;
+      if (plan.result.kind !== 'rejected') questionCancel.submitted(request.delivery);
       if (plan.effect?.kind === 'start') {
         const started = startEffect(plan.effect, plan.facts);
         return { admission: plan.result, started };
@@ -473,16 +466,8 @@ function conversation(
       if (closed || journal.failure)
         return journal.failure ? { kind: 'failed', error: journal.failure } : { kind: 'stale' };
       const root = active?.answer(requestId, decision, provenance);
-      if (root && root.kind !== 'stale') {
-        if (
-          root.kind === 'accepted' &&
-          decision.kind === 'answer' &&
-          decision.answer === ASK_USER_NO_ANSWER_RESULT &&
-          decision.stopAfterApprovalResolution
-        )
-          questionCancelPending = true;
-        return root;
-      }
+      if (root?.kind === 'accepted') questionCancel.answered(decision);
+      if (root && root.kind !== 'stale') return root;
       return tasks!.answer(requestId, decision);
     },
     async close() {

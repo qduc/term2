@@ -36,10 +36,11 @@ export function Tui(props: TuiProps): React.ReactElement {
   const [transition, setTransition] = useState<{ sessionId: string; message: string } | null>(null);
   const { stdout } = useStdout();
   const switchSession = props.integration.switchSession
-    ? async (sessionId: string) => {
+    ? async (sessionId: string, notice?: string) => {
         const result = await props.integration.switchSession!(sessionId);
         clearTerminalForRedraw(stdout);
-        setTransition(result && result.message ? { sessionId, message: result.message } : null);
+        const message = [notice, result?.message].filter(Boolean).join('\n');
+        setTransition(message ? { sessionId, message } : null);
       }
     : undefined;
   return (

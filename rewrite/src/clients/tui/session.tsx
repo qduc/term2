@@ -56,7 +56,7 @@ export function TuiSession({
   transitionNotice,
 }: TuiProps & {
   readonly interrupt: React.RefObject<() => void>;
-  readonly switchSession?: (sessionId: string) => Promise<void>;
+  readonly switchSession?: (sessionId: string, notice?: string) => Promise<void>;
   readonly transitionNotice?: string;
 }): React.ReactElement {
   const { state, error: connError, historyRevision } = useClient(connection, retainedSnapshot, onSnapshot, onLiveEvent);
@@ -337,7 +337,8 @@ export function TuiSession({
         if (directNotice !== null) setNotice(directNotice);
         else {
           const result = await integration.command(connection, input);
-          if (result.message) viewport.showMessage(result.message, input, setNotice);
+          // A session switch carries its message into the new session, which remounts.
+          if (result.message && !result.sessionId) viewport.showMessage(result.message, input, setNotice);
           if (result.transcript) viewport.appendCommandOutput(result.transcript);
           if (result.menu) menuStack.openMenu(result.menu);
           if (result.draft) {
@@ -346,7 +347,7 @@ export function TuiSession({
           }
           if (result.sessionId) {
             if (!switchSession) throw new Error(`Session ${result.sessionId} needs an app session switch.`);
-            await switchSession(result.sessionId);
+            await switchSession(result.sessionId, result.message);
           }
           if (result.exit) onExit();
         }

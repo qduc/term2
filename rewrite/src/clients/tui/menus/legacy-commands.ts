@@ -18,7 +18,7 @@ type Entry = {
   readonly runs?: string;
 };
 
-const ENTRIES: readonly Entry[] = [
+export const LEGACY_COMMANDS: readonly Entry[] = [
   {
     name: 'model',
     description: 'Choose or set the AI model (Ctrl+O; use /model <model-id>)',
@@ -87,7 +87,7 @@ const ENTRIES: readonly Entry[] = [
 
 /** `run(text)` executes `/name [args]` through the session; picker commands without arguments keep their trigger. */
 export function legacySlashCommands(run: (text: string) => void): SlashCommand[] {
-  return ENTRIES.map(({ runs, ...entry }) => ({
+  return LEGACY_COMMANDS.map(({ runs, ...entry }) => ({
     ...entry,
     action: (args?: string) => {
       // The slash menu already wrote `/<name> ` into the editor; keeping it open lets its trigger open the picker.

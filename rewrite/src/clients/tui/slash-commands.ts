@@ -1,67 +1,13 @@
-/** Commands accepted by the direct TUI and its app integration, with the line the menu and `/help` both show. */
-export const SLASH_COMMAND_TABLE: ReadonlyArray<{ readonly name: string; readonly description: string }> = [
-  { name: '/help', description: 'Show commands and keyboard shortcuts' },
-  { name: '/providers', description: 'List configured providers and their status' },
-  { name: '/model', description: 'Choose or set the model (/model <provider>/<model>)' },
-  { name: '/effort', description: 'Set the reasoning effort' },
-  { name: '/profile', description: 'Switch the active profile' },
-  { name: '/settings', description: 'Show or change settings' },
-  { name: '/auto-approve', description: 'Set tool auto-approval (off, advisory, auto, always)' },
-  { name: '/sandbox', description: 'Toggle shell sandboxing (preference only here)' },
-  { name: '/resume', description: 'List saved conversations or resume one by ID' },
-  { name: '/clear', description: 'Start a new conversation' },
-  { name: '/rollover', description: 'Continue in a fresh conversation seeded from this one' },
-  { name: '/compact', description: 'Compact older turns into a summary' },
-  { name: '/retry', description: 'Regenerate the latest turn (alias for /retry-turn)' },
-  { name: '/retry-turn', description: 'Regenerate the latest turn from its original prompt' },
-  { name: '/retry-tool', description: 'Retry the last tool call' },
-  { name: '/rewind', description: 'Go back to an earlier message' },
-  { name: '/undo', description: 'Rewind and edit an earlier message (alias for /rewind)' },
-  { name: '/usage', description: 'Show token usage for this session' },
-  { name: '/copy', description: 'Copy an assistant response (/copy N counts back)' },
-  { name: '/skills', description: 'Activate a skill for a request' },
-  { name: '/goal', description: 'Inspect or update the durable session goal' },
-  { name: '/handoff', description: 'Send the last response to another model for review' },
-  { name: '/tasks', description: 'Manage background tasks' },
-  { name: '/queue', description: 'Resume, discard, retract or edit queued messages' },
-  { name: '/steer', description: 'Send a message into the running turn' },
-  { name: '/followup', description: 'Queue a message for after the running turn' },
-  { name: '/cancel', description: 'Stop the running turn' },
-  { name: '/answer', description: 'Answer a pending approval or question' },
-  { name: '/bridge', description: "Attach or detach this session's control socket" },
-  { name: '/restart', description: 'Reload this executable (/restart stop also stops background work)' },
-  { name: '/quit', description: 'Exit the application' },
-  { name: '/exit', description: 'Exit the application' },
-  { name: '/command-status', description: 'Show the outcome of a command by ID' },
-  { name: '/command-apply', description: 'Apply a finished command result by ID' },
-  { name: '/mcp', description: 'Show configured MCP servers and their state' },
-  { name: '/mcp-login', description: 'Authenticate with an OAuth-protected MCP server' },
-  { name: '/plan', description: 'Toggle the plan profile' },
-  { name: '/bare', description: 'Switch to the bare profile' },
-  { name: '/mentor', description: 'Toggle the mentor profile' },
-  { name: '/orchestrator', description: 'Toggle the orchestrator profile' },
-];
+import { LEGACY_COMMANDS } from './menus/legacy-commands.js';
 
-export const SLASH_COMMANDS: readonly string[] = SLASH_COMMAND_TABLE.map((command) => command.name);
-
-const HELP_SHORTCUTS = [
-  'Keyboard shortcuts',
-  'Enter send/steer · Alt+Enter follow-up · ↑/↓ history · PgUp/PgDn scroll · Ctrl+O tool output · Ctrl+T reasoning effort',
-  'Ctrl+G approvals/tasks · Ctrl+B budget · Ctrl+C stop turn / clear input / exit',
-  'Shift+Tab plan mode',
-] as const;
-
-/** The active-turn pager begins with shortcuts; idle scrollback moves them to the end. */
+/**
+ * Legacy's `/help` text (source/hooks/use-app-commands.ts): every listed command except `/undo`, then the
+ * keyboard shortcuts. The list is legacy-commands.ts, the slash menu's own table, so commands dropped by owner
+ * scope are absent from both, and commands the old CLI lacks are not advertised.
+ */
 export function helpText(): string {
-  return [
-    ...HELP_SHORTCUTS,
-    'Commands',
-    ...SLASH_COMMAND_TABLE.map((command) => `${command.name} — ${command.description}`),
-  ].join('\n');
-}
-
-/** Preserve the supplied help text while placing its known shortcut block at the visible end. */
-export function helpForScrollback(text: string): string {
-  const prefix = `${HELP_SHORTCUTS.join('\n')}\n`;
-  return text.startsWith(prefix) ? `${text.slice(prefix.length)}\n${HELP_SHORTCUTS.join('\n')}` : text;
+  const commandLines = LEGACY_COMMANDS.filter(({ name }) => name !== 'undo')
+    .map(({ name, description }) => `/${name} — ${description}`)
+    .join('\n');
+  return `Commands\n${commandLines}\n\nKeyboard shortcuts\nCtrl+C: clear draft or interrupt; press again to exit\nCtrl+O: choose model · Ctrl+T: choose reasoning effort\nShift+Tab: switch Standard/Plan · @: complete paths · !: shell`;
 }

@@ -344,8 +344,9 @@ def compare(cols, rows, names):
     FULL_MODE = bool(os.environ.get('FULL'))
     for name in names:
         notice = SEED.get(name, {}).get('notice', False)
-        a = full_region(run('legacy', cols, rows, name)) if FULL_MODE else menu_region(run('legacy', cols, rows, name), notice)
-        b = full_region(run('next', cols, rows, name)) if FULL_MODE else menu_region(run('next', cols, rows, name), notice)
+        ca, cb = run('legacy', cols, rows, name), run('next', cols, rows, name)
+        a = full_region(ca) if FULL_MODE else menu_region(ca, notice)
+        b = full_region(cb) if FULL_MODE else menu_region(cb, notice)
         same_text = a['lines'] == b['lines']
         same_style = a['styles'] == b['styles']
         results[name] = {'text': same_text, 'style': same_style, 'legacy': a, 'next': b}

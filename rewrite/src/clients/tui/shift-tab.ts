@@ -2,6 +2,7 @@ import { useRef } from 'react';
 import type { Key } from 'ink';
 import type { TuiConnection, TuiIntegration } from './integration.js';
 import type { useSendConfirmation } from './send-confirmation.js';
+import { WELCOME } from './replace-session.js';
 
 /** Shift+Tab arrives as a modified Tab or, on terminals Ink does not decode, as the raw `ESC [ Z` sequence. */
 export const isShiftTab = (input: string, key: Key): boolean => (key.shift && key.tab) || input === '\x1b[Z';
@@ -16,6 +17,7 @@ export function usePlanToggle(
   confirmation: Pick<ReturnType<typeof useSendConfirmation>, 'hold'>,
   turnActive: boolean,
   setNotice: (text: string | null) => void,
+  beginNewConversation?: (lines: readonly string[] | null) => void,
 ) {
   const pending = useRef(false);
   const run = (command: () => Promise<{ message?: string }>) => {
@@ -23,7 +25,7 @@ export function usePlanToggle(
     pending.current = true;
     void command()
       .then(
-        (result) => setNotice(result.message ?? 'Mode changed.'),
+        (result) => setNotice(result.message ?? null),
         (error: unknown) => setNotice(error instanceof Error ? error.message : String(error)),
       )
       .finally(() => {
@@ -32,12 +34,26 @@ export function usePlanToggle(
   };
   return () => {
     const { planNeedsClear, clearAndTogglePlan, planTarget } = integration;
-    if (!turnActive && planNeedsClear?.(connection) && clearAndTogglePlan)
+    if (!turnActive && planNeedsClear?.(connection) && clearAndTogglePlan) {
+      const label = planTarget?.(connection) === 'builtin:plan' ? 'Plan' : 'Bare';
+      // Legacy handleModeSwitchConfirm: a new conversation, its welcome, then the mode line.
       return confirmation.hold(
         'Clear session and switch mode?',
-        () => run(() => clearAndTogglePlan(connection)),
-        planTarget?.(connection) === 'builtin:plan' ? 'Plan' : 'Bare',
+        () => {
+          beginNewConversation?.([WELCOME, `${label} mode enabled`]);
+          run(() =>
+            clearAndTogglePlan(connection).then(
+              () => ({}),
+              (error: unknown) => {
+                beginNewConversation?.(null);
+                throw error;
+              },
+            ),
+          );
+        },
+        label,
       );
+    }
     run(() => integration.command(connection, '/plan'));
   };
 }

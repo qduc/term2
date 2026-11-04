@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { randomUUID } from 'node:crypto';
 import { Box, Text, useInput } from 'ink';
 import { MultilineInput, type ImageRef } from 'ink-prompt';
@@ -24,9 +24,10 @@ import { useSessionComposer } from './session-composer.js';
 import { useTerminalSize } from './terminal.js';
 import { useCommandTranscriptViewport } from './command-transcript.js';
 import { useHarnessInput } from './harness-input.js';
-import { replaceSession } from './replace-session.js';
+import { replaceSession, WELCOME } from './replace-session.js';
 import { runBridgeCommand } from './bridge-command.js';
 import { useSendConfirmation } from './send-confirmation.js';
+import SessionBoundary from './presentation/components/message/SessionBoundary.js';
 import { useMenuStack } from './menus/menu-host.js';
 import { ComposerFooter, useComposerFilter } from './composer-parts.js';
 import { SessionPanels } from './session-panels.js';
@@ -55,10 +56,16 @@ export function TuiSession({
   interrupt,
   switchSession,
   transitionNotice,
+  beginNewConversation,
+  newConversation,
 }: TuiProps & {
   readonly interrupt: React.RefObject<() => void>;
-  readonly switchSession?: (sessionId: string, notice?: string) => Promise<void>;
+  readonly switchSession?: (sessionId: string, notice?: string, opening?: readonly string[]) => Promise<void>;
   readonly transitionNotice?: string;
+  /** The next session to mount opens as a new conversation with these lines (null cancels). */
+  readonly beginNewConversation?: (lines: readonly string[] | null) => void;
+  /** This session opened as a new conversation: legacy's SessionBoundary above the banner, then these lines. */
+  readonly newConversation?: readonly string[];
 }): React.ReactElement {
   const { state, error: connError, historyRevision } = useClient(connection, retainedSnapshot, onSnapshot, onLiveEvent);
   const preferences = integration.preferences?.(connection.sessionId) ?? terminalPreferenceDefaults();
@@ -106,9 +113,30 @@ export function TuiSession({
   const confirmation = useSendConfirmation(interactionActive);
   const interactionInput = useRef<InteractionInputHandler | null>(null);
   const viewportActive = !interactionActive && !panelOpen && !confirmation.pending;
-  const viewport = useCommandTranscriptViewport(state, headerHeight ?? 0, viewportActive, header, historyRevision, {
-    transitionNotice,
-  });
+  const sessionHeader = useMemo(
+    () =>
+      newConversation ? (
+        <Box flexDirection="column">
+          <Box paddingX={2}>
+            <SessionBoundary width={Math.max(1, columns - 4)} />
+          </Box>
+          {header}
+        </Box>
+      ) : (
+        header
+      ),
+    // The banner is printed once; a later resize must not re-key the static rows.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [newConversation, header],
+  );
+  const viewport = useCommandTranscriptViewport(
+    state,
+    (headerHeight ?? 0) + (newConversation ? 4 : 0),
+    viewportActive,
+    sessionHeader,
+    historyRevision,
+    { transitionNotices: [...(newConversation ?? []), ...(transitionNotice ? [transitionNotice] : [])] },
+  );
   appendSystem.current = (text) => viewport.appendCommandOutput(text, true);
   useEffect(() => {
     const interrupted = interruptedNotice(state);
@@ -147,7 +175,14 @@ export function TuiSession({
     turnInFlight: Boolean(state.activeTurnId),
   });
   const pending = useRef(false);
-  const togglePlan = usePlanToggle(integration, connection, confirmation, Boolean(state.activeTurnId), setNotice);
+  const togglePlan = usePlanToggle(
+    integration,
+    connection,
+    confirmation,
+    Boolean(state.activeTurnId),
+    setNotice,
+    beginNewConversation,
+  );
   const composerFilter = useComposerFilter({
     composerActive,
     turnActive: Boolean(state.activeTurnId),
@@ -317,8 +352,16 @@ export function TuiSession({
           } else setNotice(receiptNotice(result));
         }
       } else if (command.trim() === '/clear' || command.trim() === '/rollover') {
-        const failure = await replaceSession(connection, command.trim() as '/clear' | '/rollover', switchSession);
+        // The reset can publish the new session before it answers, so the opening is armed first.
+        if (command.trim() === '/clear') beginNewConversation?.([WELCOME]);
+        const failure = await replaceSession(connection, command.trim() as '/clear' | '/rollover', switchSession).catch(
+          (error: unknown) => {
+            beginNewConversation?.(null);
+            throw error;
+          },
+        );
         if (failure !== null) {
+          beginNewConversation?.(null);
           setNotice(failure);
           editor.accepted(input, true, []);
           return;

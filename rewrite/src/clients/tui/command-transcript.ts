@@ -55,14 +55,14 @@ export function useCommandTranscriptViewport(
   active: boolean,
   header?: ReactNode,
   historyRevision?: number,
-  options: { readonly transitionNotice?: string } = {},
+  options: { readonly transitionNotices?: readonly string[] } = {},
 ) {
   const { columns, rows } = useTerminalSize();
   const transcript = useCommandTranscript(state);
   // A session switch's notice ("Resumed conversation: <id>") follows the replayed history, where legacy adds
   // it: once, on the switched-to session's mount (its connection already carries the snapshot).
   useEffect(() => {
-    if (options.transitionNotice) transcript.append(options.transitionNotice, true);
+    for (const notice of options.transitionNotices ?? []) transcript.append(notice, true);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const viewport = useTranscriptViewport(
     transcript.state,

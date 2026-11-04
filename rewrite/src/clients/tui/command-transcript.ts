@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Message, TuiState } from './state.js';
 import { useTerminalSize } from './terminal.js';
 import { useTranscriptViewport } from './viewport.js';
@@ -7,6 +7,7 @@ import { useTranscriptViewport } from './viewport.js';
 export function useCommandTranscript(state: TuiState): {
   state: TuiState;
   append(text: string, plain?: boolean): void;
+  count: number;
 } {
   const [entries, setEntries] = useState<readonly { message: Message; after?: string }[]>([]);
   const append = (text: string, plain = false) => {
@@ -24,7 +25,7 @@ export function useCommandTranscript(state: TuiState): {
       },
     ]);
   };
-  if (!entries.length) return { state, append };
+  if (!entries.length) return { state, append, count: 0 };
   const timeline = [
     ...(state.timeline ?? state.messages.map((message) => ({ kind: 'message' as const, id: message.id }))),
   ];
@@ -46,6 +47,7 @@ export function useCommandTranscript(state: TuiState): {
   return {
     state: { ...state, messages: [...state.messages, ...entries.map((entry) => entry.message)], timeline },
     append,
+    count: entries.length,
   };
 }
 
@@ -72,11 +74,26 @@ export function useCommandTranscriptViewport(
     header,
     historyRevision,
   );
-  const last = transcript.state.timeline?.at(-1)?.id ?? transcript.state.messages.at(-1)?.id;
+  // Legacy's MessageList commits a finished row to Static only on its next render after the row appears, unless the
+  // row was live first. A system line added while idle, and every row after a redraw (resize, rewind), therefore
+  // sit in its live region until the transcript next changes, and the spacer below Static is absent.
+  const deferral = useRef({
+    timeline: state.timeline,
+    local: transcript.count,
+    epoch: viewport.epoch,
+    deferred: false,
+  });
+  const seen = deferral.current;
+  if (viewport.epoch !== seen.epoch || (transcript.count > seen.local && !state.activeTurnId)) seen.deferred = true;
+  else if (seen.timeline !== state.timeline || transcript.count > seen.local) seen.deferred = false;
+  Object.assign(seen, { timeline: state.timeline, local: transcript.count, epoch: viewport.epoch });
   return {
     ...viewport,
-    /** Rows above the bottom area: legacy leaves one row less below a local system line than below a reply. */
-    bottomMargin: state.activeTurnId ? 1 : state.messages.length && !last?.startsWith('local-command-') ? 3 : 2,
+    /**
+     * Rows above the bottom area, as legacy's layout: with no live rows, MessageList's spacer and margin and
+     * BottomArea's margin (3); under live rows the live Transcript's own bottom padding stands in for the spacer.
+     */
+    bottomMargin: viewport.text.trim() ? 1 : seen.deferred && !state.activeTurnId ? 2 : 3,
     appendCommandOutput: transcript.append,
     /** A command's message is a legacy system line in the transcript; `/help` during a turn takes the viewport. */
     showMessage(message: string, command: string): void {

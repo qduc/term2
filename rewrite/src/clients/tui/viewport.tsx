@@ -183,6 +183,7 @@ export function useTranscriptViewport(
     const start = Math.min(helpOffset, Math.max(0, helpLines.length - height));
     const end = Math.min(helpLines.length, start + height);
     return {
+      epoch,
       staticTranscript,
       redraw,
       paged: true,
@@ -202,6 +203,7 @@ export function useTranscriptViewport(
   const end = Math.max(0, lines.length - visibleOffset);
   const start = !expanded && visibleOffset === 0 ? 0 : Math.max(0, end - height);
   return {
+    epoch,
     staticTranscript,
     redraw,
     paged: expanded,

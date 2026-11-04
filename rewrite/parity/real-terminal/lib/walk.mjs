@@ -89,6 +89,18 @@ async function escapeHome(t, undoKey = null) {
     return;
   }
   for (let i = 0; i < 5 && !(await home()); i++) {
+    // Escape closes a menu but can leave its trigger text (the `@` of a path menu) in the composer.
+    const typed = await t.page.evaluate(
+      new Function(`const lines = window.screenLines(); ${PRELUDE} return /^\\s*❯\\s*\\S/.test(composer) && sep >= 0 ? composer.replace(/^\\s*❯\\s*/, '').length : 0;`),
+    );
+    if (typed > 0 && i > 0) {
+      for (let k = 0; k < typed + 2; k++) {
+        t.write('\x7f');
+        await sleep(10);
+      }
+      await sleep(300);
+      continue;
+    }
     t.write(KEYS.escape);
     await t.waitFor(`fn:${AT_HOME}`, 2_000).catch(() => {});
   }

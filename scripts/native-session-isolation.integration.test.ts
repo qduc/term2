@@ -21,6 +21,7 @@ import {
 import { createDirectSessionStore, type DirectLocalStore } from '../rewrite/src/session/direct-store.js';
 import { listNativeConversations, resolveNativeResume } from '../rewrite/src/app/cli-conversations.js';
 import { parseCommandLine } from '../rewrite/src/app/cli-args.js';
+import { displaySessionId } from '../rewrite/src/protocol/session-id.js';
 import type { SessionStartedFact } from '../rewrite/src/session/facts.js';
 import type { DirectSessionRotationFact } from '../rewrite/src/session/direct-session-rotation.js';
 
@@ -100,9 +101,9 @@ async function healthySurvives(): Promise<void> {
   ).toEqual([healthy, rotated].sort());
   expect((await store.list()).sessions.map((session) => session.id).sort()).toEqual([healthy, rotated].sort());
   const listing = await listNativeConversations(directory, options());
-  expect(listing).toContain(healthy);
-  expect(listing).toContain(rotated);
-  expect(listing).not.toContain(successor);
+  expect(listing).toContain(displaySessionId(healthy));
+  expect(listing).toContain(displaySessionId(rotated));
+  expect(listing).not.toContain(displaySessionId(successor));
   for (const [id, logical] of [
     [healthy, healthy],
     [rotated, rotated],
@@ -249,21 +250,21 @@ it('indexes a new first line once its creation artifact is completed', async () 
   const line = JSON.stringify({ v: 2, seq: 1, at: new Date().toISOString(), fact: metadata(id) }) + '\n';
   const split = Math.floor(line.length / 2);
   writeFileSync(logPath(id), line.slice(0, split));
-  expect(await listNativeConversations(directory, options())).not.toContain(id);
+  expect(await listNativeConversations(directory, options())).not.toContain(displaySessionId(id));
   expect(warnings).not.toHaveBeenCalled();
   appendFileSync(logPath(id), line.slice(split));
-  expect(await listNativeConversations(directory, options())).toContain(id);
+  expect(await listNativeConversations(directory, options())).toContain(displaySessionId(id));
   expect(warnings).not.toHaveBeenCalled();
 });
 it('invalidates a previously indexed session whose first line becomes incomplete', async () => {
   const id = newId();
   seed(id);
-  expect(await listNativeConversations(directory, options())).toContain(id);
+  expect(await listNativeConversations(directory, options())).toContain(displaySessionId(id));
   const original = readFileSync(logPath(id), 'utf8');
   writeFileSync(logPath(id), original.slice(0, Math.floor(original.length / 2)));
-  expect(await listNativeConversations(directory, options())).not.toContain(id);
+  expect(await listNativeConversations(directory, options())).not.toContain(displaySessionId(id));
   writeFileSync(logPath(id), original);
-  expect(await listNativeConversations(directory, options())).toContain(id);
+  expect(await listNativeConversations(directory, options())).toContain(displaySessionId(id));
 });
 it.each(['foreign entry', 'symlink', 'nonregular log'])('retains global namespace refusal for %s', async (kind) => {
   if (kind === 'foreign entry') writeFileSync(path.join(directory, 'foreign.txt'), 'foreign');

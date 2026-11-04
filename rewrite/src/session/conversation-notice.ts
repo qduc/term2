@@ -56,15 +56,19 @@ export function prepareConversationNotice(
 }
 
 /**
- * Each decorated turn's notice, by the user message it was applied to (the turn's first). A retry repeats it. Only
- * turns this process started: legacy's resumed history is raw.
+ * Each decorated turn's notice, by the user message it was applied to (the turn's first; a retry's is its source
+ * turn's). Only turns this process started: legacy's resumed history is raw.
  */
 function recordedNotices(facts: readonly Fact[], openedAt: number): ReadonlyMap<string, string> {
+  const firstMessage = new Map<string, string>();
   const notices = new Map<string, string>();
-  for (const fact of facts.slice(openedAt)) {
-    if (fact.type !== 'turn_started' || !fact.requestNotice || fact.retryContext) continue;
-    const first = fact.input.find((item) => item.type === 'user_message');
-    if (first && !notices.has(first.id)) notices.set(first.id, fact.requestNotice);
-  }
+  facts.forEach((fact, index) => {
+    if (fact.type !== 'turn_started') return;
+    const first = fact.retryContext
+      ? firstMessage.get(fact.retryContext.sourceTurnId)
+      : fact.input.find((item) => item.type === 'user_message')?.id;
+    if (first) firstMessage.set(fact.turnId, first);
+    if (index >= openedAt && fact.requestNotice && first && !notices.has(first)) notices.set(first, fact.requestNotice);
+  });
   return notices;
 }

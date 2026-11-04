@@ -13,7 +13,7 @@ import {
   type ModelInfo,
   type ModelSettings as SettingsService,
   type ModelTab,
-} from './model-services.js';
+} from './model-catalog.js';
 import { useSetting } from './use-setting.js';
 import type { NicknameDraftState } from './use-model-selection.js';
 import { MenuContainer, MenuFooter, SelectionMarker } from './MenuContainer.js';

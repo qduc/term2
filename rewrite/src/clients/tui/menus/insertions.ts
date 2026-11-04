@@ -47,7 +47,7 @@ export const computeModelInsertion = (args: {
   return { nextValue, nextCursor: nextValue.length };
 };
 
-export const computeSkillInsertion = (args: {
+const computeSkillInsertion = (args: {
   selection: SkillInfo | undefined;
   triggerIndex: number | null;
   value: string;

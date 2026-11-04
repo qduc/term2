@@ -9,7 +9,7 @@ type Props = {
   selectedIndex: number;
 };
 
-export function getCodePreview(text: string, maxLength = 60): string {
+function getCodePreview(text: string, maxLength = 60): string {
   const cleaned = text.replace(/\s+/g, ' ').trim();
   if (!cleaned) return '';
   if (cleaned.length <= maxLength) return cleaned;

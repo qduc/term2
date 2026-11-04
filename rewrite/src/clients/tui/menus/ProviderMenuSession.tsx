@@ -8,7 +8,7 @@ import { applyMenuEditorEvent } from './menu-editor.js';
 
 type Props = MenuComponentProps<Extract<MenuFrame, { kind: 'providers' }>>;
 
-export const getProviderWizardPromptLabel = (phase: ProviderSelectionPhase): string | undefined => {
+const getProviderWizardPromptLabel = (phase: ProviderSelectionPhase): string | undefined => {
   if (phase === 'wizard_name') return 'Enter Provider Name: ';
   if (phase === 'wizard_url') return 'Enter Base API URL: ';
   if (phase === 'wizard_key') return 'Enter API Key: ';

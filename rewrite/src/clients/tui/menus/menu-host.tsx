@@ -13,7 +13,7 @@ import type { UnboundFrameSpec } from './menu-types.js';
 import { createDefaultTriggerRegistry } from './triggers.js';
 import { MenuSurface } from './MenuSurface.js';
 import { InputProvider } from './input-context.js';
-import { MENU_RULE_IDS, useMenuServices, type MenuActions } from './menu-services.js';
+import { MENU_RULE_IDS, useMenuWiring, type MenuActions } from './menu-wiring.js';
 import { legacySlashCommands } from './legacy-commands.js';
 import { createIntentHost, settingsIntentHandlers } from './menu-intents.js';
 import { installSettingsLibrary } from './settings-lib.js';
@@ -174,7 +174,7 @@ function MenuStackView(props: {
   readonly onSkillSelected: (name: string) => void;
 }): React.ReactElement | null {
   const { open, enabled, commands, actions, controller, onSkillSelected } = props;
-  const services = useMenuServices({ commands, actions, onSkillSelected });
+  const services = useMenuWiring({ commands, actions, onSkillSelected });
   const { stack } = controller.getSnapshot();
   if (!open) return null;
   return (

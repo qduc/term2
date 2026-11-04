@@ -15,7 +15,7 @@ export interface SlashCommand {
   completion?: SlashCommandCompletion;
 }
 
-export function resolveSlashCommand(commands: SlashCommand[], commandName: string): SlashCommand | undefined {
+function resolveSlashCommand(commands: SlashCommand[], commandName: string): SlashCommand | undefined {
   const normalizedName = commandName.toLowerCase();
   const exactMatch = commands.find((command) => command.name.toLowerCase() === normalizedName);
   if (exactMatch) return exactMatch;

@@ -18,7 +18,7 @@ type ExecuteSlashCommandSelectionArgs = {
 };
 
 // Pure functions exported for testing
-export function filterCommands(commands: SlashCommand[], filter: string): SlashCommand[] {
+function filterCommands(commands: SlashCommand[], filter: string): SlashCommand[] {
   const lowerFilter = filter.toLowerCase();
 
   if (!lowerFilter) {
@@ -52,7 +52,7 @@ export function filterCommands(commands: SlashCommand[], filter: string): SlashC
     });
 }
 
-export function shouldAutocomplete(command: SlashCommand, filter: string): boolean {
+function shouldAutocomplete(command: SlashCommand, filter: string): boolean {
   if (!command.expectsArgs) {
     return false;
   }
@@ -61,11 +61,11 @@ export function shouldAutocomplete(command: SlashCommand, filter: string): boole
   return !filter.toLowerCase().startsWith(fullCommandPrefix.toLowerCase());
 }
 
-export function extractCommandArgs(filter: string, commandName: string): string {
+function extractCommandArgs(filter: string, commandName: string): string {
   return filter.slice(commandName.length).trim();
 }
 
-export function executeSlashCommandSelection({
+function executeSlashCommandSelection({
   command,
   filter,
   setInput,

@@ -10,7 +10,7 @@ import {
   resolveProviderCredentials,
   serializeFavorite,
   type ModelSettings as SettingsService,
-} from './model-services.js';
+} from './model-catalog.js';
 import { useTheme } from '../presentation/components/theme.js';
 
 type ModelsState = ReturnType<typeof useModelSelection>;

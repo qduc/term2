@@ -19,7 +19,7 @@ import {
  * Rows the settings list may use: the terminal height minus the chrome around
  * the list (prompt, tab bar, detail block, hints, status line).
  */
-export function getSettingsVisibleCount(rows: number = process.stdout.rows ?? 24): number {
+function getSettingsVisibleCount(rows: number = process.stdout.rows ?? 24): number {
   return Math.max(5, Math.min(20, rows - 14));
 }
 

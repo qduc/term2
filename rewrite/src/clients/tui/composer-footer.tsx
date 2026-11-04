@@ -192,7 +192,7 @@ const TURN_IN_FLIGHT_HINTS: ReadonlyArray<MenuHint> = [
  * Composer shortcuts are shown only when the composer owns input: idle hints only for an empty draft, and the
  * steer/queue hints during a turn, led by the queue hint when messages are queued and the draft is empty.
  */
-export function ComposerHints({
+function ComposerHints({
   activeTurn,
   draftEmpty,
   queued,

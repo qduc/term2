@@ -19,7 +19,7 @@ type Props = {
  * filter) so the column does not jitter while typing. The label text
  * truncates rather than wrapping: the description carries the meaning.
  */
-export const SLASH_COMMAND_LABEL_MAX_WIDTH = 20;
+const SLASH_COMMAND_LABEL_MAX_WIDTH = 20;
 
 const SEPARATOR_COLUMN_WIDTH = 3;
 

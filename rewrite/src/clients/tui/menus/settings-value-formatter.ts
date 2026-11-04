@@ -47,7 +47,7 @@ export function cleanSettingDescription(description: string): string {
     .trim();
 }
 
-export function formatDurationMs(ms: number, isOptionalCeiling: boolean = false): string {
+function formatDurationMs(ms: number, isOptionalCeiling: boolean = false): string {
   if (ms === 0) {
     return isOptionalCeiling ? 'disabled (0s)' : '0s';
   }
@@ -72,16 +72,16 @@ export function formatDurationMs(ms: number, isOptionalCeiling: boolean = false)
   return `${ms}ms`;
 }
 
-export function formatUsdMicros(micros: number): string {
+function formatUsdMicros(micros: number): string {
   const dollars = micros / 1_000_000;
   return `$${dollars.toFixed(2)}`;
 }
 
-export function formatNumber(num: number): string {
+function formatNumber(num: number): string {
   return num.toLocaleString('en-US');
 }
 
-export function formatMilestones(milestones: number[]): string {
+function formatMilestones(milestones: number[]): string {
   if (milestones.length === 0) return '(none)';
   return milestones
     .map((m) => {

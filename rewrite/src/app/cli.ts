@@ -409,6 +409,9 @@ async function main(argv: readonly string[]): Promise<number> {
         }
         // A resume opens its session first so the refusal follows the resume and profile lines, as the current CLI does.
         if (options.goal === null && options.resumeId === null) {
+          // The current CLI announces the profile it would have started with before refusing.
+          const settings = createSettingsService({ env: buildEnvOverrides(), disableFilePersistence: true });
+          stderr.write(`Profile: ${chooseProfile(options, settings).replace(/^builtin:/, '')}\n`);
           stderr.write(`${INTERACTIVE_TERMINAL_REQUIRED}\n`);
           return 1;
         }

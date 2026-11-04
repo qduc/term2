@@ -137,8 +137,12 @@ export function useMenuStack(options: {
       setPendingSkill(null);
       return `/skills ${pendingSkill} ${input}`;
     },
-    /** The text the harness and composer consumers see: the controller's while a menu owns it. */
-    value: open ? snapshot.editor.text : composer.value,
+    /**
+     * The text the harness and composer consumers see: the controller's while a menu owns it, and on the render
+     * where a frame closed with a new text, before the hand-back effect has written it to the composer (legacy's
+     * editor shows the menu's text at once, so its remounted input never draws the stale draft).
+     */
+    value: open || (menus && snapshot.editor.text !== synced.current) ? snapshot.editor.text : composer.value,
     /** What Ctrl+C clears: the menu's text while one owns it (legacy's global handler cleared it there too). */
     typed: {
       value: open ? snapshot.editor.text : composer.value,

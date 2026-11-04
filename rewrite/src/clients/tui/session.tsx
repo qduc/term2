@@ -483,7 +483,7 @@ export function TuiSession({
                 <PromptMarker mode={shell.active ? 'shell' : 'input'} />
                 <MultilineInput
                   key={editor.inputKey}
-                  value={editor.value}
+                  value={menuStack.value}
                   onChange={(value) => shell.change(value) || changeInput(value)}
                   onSubmit={(value, submittedImages = []) => {
                     if (!shell.submit(value, submittedImages.length > 0, (command) => submit(command, submittedImages)))

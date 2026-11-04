@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { sleep } from './terminal.mjs';
 import { typeText, PRELUDE, COMPOSER_READY, AT_HOME } from './session.mjs';
+import { RESUME_LIST } from './latency.mjs';
 
 /**
  * The only things masked before pixels are compared (issue #140): version, ids, paths, ports, durations
@@ -53,7 +54,7 @@ export function walkSteps({ resizeTo }) {
     { name: '20-shift-tab-restored', do: (t) => restoreMode(t), until: READY },
     { name: '21-help', do: (t) => send(t, '/help'), until: null },
     { name: '22-help-closed', do: (t) => escapeHome(t), until: READY },
-    { name: '23-resume-list', do: (t) => send(t, '/resume'), until: /\d+ msgs?\b/, timeoutMs: 15 * 60_000 },
+    { name: '23-resume-list', do: (t) => send(t, '/resume'), until: RESUME_LIST, timeoutMs: 15 * 60_000 },
     { name: '24-resume-preview', do: (t) => t.write(KEYS.down), until: /Preview|Initial Prompt|ID: /, timeoutMs: 60_000 },
     { name: '25-resume-closed', do: (t) => escapeHome(t), until: READY },
     { name: '26-resize', resize: resizeTo, until: READY },

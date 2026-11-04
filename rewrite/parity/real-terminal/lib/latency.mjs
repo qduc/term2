@@ -57,9 +57,12 @@ export async function runLatency(session, { phase, samples = {}, log = () => {},
   };
 
   /** Keep a reply streaming during the streaming phase (re-prompt when the previous stream ended). */
+  let openMenu = null; // the slash menu openSlash opened, while it is open
   const ensureStream = async () => {
     if (!streaming) return;
     if (session.provider.activeStreams() > 0) return;
+    // Never type the prompt into an open menu (its filter would take it): back to the empty composer first.
+    await ensureHome();
     await typeText(term, 'stream a long reply please');
     await sleep(80);
     term.write(KEYS.enter);
@@ -83,8 +86,18 @@ export async function runLatency(session, { phase, samples = {}, log = () => {},
     }
   };
 
-  const measure = async (name, key, predicate, timeoutMs = 5_000) => {
-    await ensureStream();
+  const measure = async (name, key, predicate, timeoutMs = 5_000, { typed = false } = {}) => {
+    if (streaming && openMenu && session.provider.activeStreams() === 0) {
+      // The reply ended while a menu is open: close it, start another reply, reopen the same menu.
+      const command = openMenu;
+      await closeMenu();
+      await ensureStream();
+      await openSlash(command);
+      if (command === '/resume') await term.waitFor(RESUME_LIST, 30_000).catch(() => {});
+      await settle();
+    }
+    // With a command already typed, restarting the reply would clear it; the caller started one just before.
+    if (!typed) await ensureStream();
     const cpu0 = treeCpuMs(term.pid);
     const bytes0 = term.bytes;
     const base = predicate === TAIL_CHANGED ? TAIL_NOW : null;
@@ -117,6 +130,7 @@ export async function runLatency(session, { phase, samples = {}, log = () => {},
 
   /** Open a slash menu by typing it and pressing Enter (unmeasured). */
   const openSlash = async (command) => {
+    openMenu = command;
     await typeText(term, command);
     await term.waitFor(composerHas(command), 5_000).catch(() => {});
     const before = await tailOf(term);
@@ -127,6 +141,7 @@ export async function runLatency(session, { phase, samples = {}, log = () => {},
   };
 
   const closeMenu = async () => {
+    openMenu = null;
     term.write(KEYS.escape);
     await sleep(200);
     await settle();
@@ -146,12 +161,12 @@ export async function runLatency(session, { phase, samples = {}, log = () => {},
     let typed = prefix;
     for (const ch of letters) {
       typed += ch;
-      await measure('type char', ch, composerHas(typed));
+      await measure('type char', ch, composerHas(typed), 5_000, { typed: true });
       await settle();
     }
     for (let i = letters.length - 1; i >= 0; i--) {
       const kept = typed.slice(0, -1);
-      await measure('backspace', KEYS.backspace, backspaced(kept, typed.at(-1)));
+      await measure('backspace', KEYS.backspace, backspaced(kept, typed.at(-1)), 5_000, { typed: true });
       typed = kept;
       await settle();
     }
@@ -167,7 +182,7 @@ export async function runLatency(session, { phase, samples = {}, log = () => {},
     await typeText(term, text);
     await term.waitFor(composerHas(text), 5_000).catch(() => log(`  prompt ${text} did not appear`));
     await settle();
-    await measure('enter (composer)', KEYS.enter, composerLacks(text));
+    await measure('enter (composer)', KEYS.enter, composerLacks(text), 5_000, { typed: true });
     if (streaming) {
       await settle();
     } else {
@@ -239,7 +254,7 @@ export async function runLatency(session, { phase, samples = {}, log = () => {},
       await term.waitFor(composerHas(command), 5_000).catch(() => {});
       await sleep(200);
       await settle();
-      await measure(name, KEYS.enter, TAIL_CHANGED);
+      await measure(name, KEYS.enter, TAIL_CHANGED, 5_000, { typed: true });
       await settle();
       await sleep(200);
       await closeMenu();
@@ -249,7 +264,11 @@ export async function runLatency(session, { phase, samples = {}, log = () => {},
   return results;
 }
 
-const RESUME_LIST = /\d+ msgs?\b/;
+/**
+ * The resume list has painted with entries. Legacy rows end in "N msgs"; term2-next shows a Preview pane beside
+ * the selected row, and at 80 columns it truncates rows before their message count.
+ */
+export const RESUME_LIST = /\d+ msgs?\b|❯ [^\n]+\bPreview\b/;
 
 /**
  * Time from Enter on `/resume` to the first paint of the session list, twice (the first open may build an index),

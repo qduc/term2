@@ -93,3 +93,8 @@ agent), and a small command for a context-free agent to type, read screens, take
 - A rewrite that changes the length of text inside a term2-next tool output breaks its `refs` (offsets into
   that text); the generator keeps every rewrite inside referenced text length-preserving.
 - Regexes inside predicate source built from template literals need doubled backslashes.
+- While a reply streams, a menu outlives the reply. Restarting the reply must not type into the open menu (its
+  filter takes the text, and legacy then picks a "model" named after the prompt): the harness closes the menu,
+  starts another reply and reopens the menu.
+- term2-next truncates resume rows at 80 columns before their message count, so "N msgs" alone never matches
+  there; the list predicate also accepts its Preview pane. A first full run waited 30 minutes on this.

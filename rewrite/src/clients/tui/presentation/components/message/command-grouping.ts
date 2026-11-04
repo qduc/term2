@@ -51,7 +51,7 @@ export type CommandGroupMessage = {
   members: GroupableMessage[];
 };
 
-export const isGroupableMessage = (message: GroupableMessage | undefined): boolean =>
+const isGroupableMessage = (message: GroupableMessage | undefined): boolean =>
   message?.sender === 'command' || message?.sender === 'subagent' || message?.sender === 'command-group';
 
 const extractMembers = (message: GroupableMessage): GroupableMessage[] => {
@@ -70,7 +70,7 @@ const isFailedMember = (message: GroupableMessage) =>
   message.status === 'interrupted' ||
   message.success === false;
 
-export const countFailedMembers = (members: GroupableMessage[]): number => members.filter(isFailedMember).length;
+const countFailedMembers = (members: GroupableMessage[]): number => members.filter(isFailedMember).length;
 
 const MAX_FAILURE_LABEL_CHARS = 40;
 const MAX_NAMED_FAILURES = 3;
@@ -116,7 +116,7 @@ export const describeGroupFailures = (members: GroupableMessage[]): string => {
  * A growing run must keep one identity across renders, or every new tool call
  * would remount the summary line and could commit a stale copy to <Static>.
  */
-export const buildCommandGroupMessage = (members: GroupableMessage[]): CommandGroupMessage => {
+const buildCommandGroupMessage = (members: GroupableMessage[]): CommandGroupMessage => {
   const failed = countFailedMembers(members);
   // `failed` means the whole run failed. A run where only some calls failed is
   // `partial`: painting the whole line red would claim work failed that

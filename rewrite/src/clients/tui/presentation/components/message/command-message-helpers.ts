@@ -141,7 +141,7 @@ export const parseFindFilesOutput = (output: string | undefined) => {
   return null;
 };
 
-export const classifySearchKind = (toolName: string | undefined, command: string): SearchKind => {
+const classifySearchKind = (toolName: string | undefined, command: string): SearchKind => {
   if (toolName === TOOL_NAME_GREP) return 'grep';
   if (toolName === TOOL_NAME_GLOB) return 'glob';
 

@@ -23,6 +23,11 @@ export type DirectNoticeDelivery = {
   readonly clientRequestId: string;
   readonly turnId: TurnId;
   readonly notificationIds: readonly string[];
+  /**
+   * Delivered into an already running turn at a request boundary, as legacy does, rather than to a silent turn of
+   * its own: the user message that turn admitted.
+   */
+  readonly injected?: { readonly messageId: string; readonly text: string };
 };
 export type DirectNotificationFact =
   | { readonly type: 'background_notice_enqueued'; readonly notice: DirectBackgroundNotice }
@@ -55,7 +60,13 @@ const schemas = {
     .object({ type: z.literal('background_notice_enqueued'), notice: noticeSchema })
     .strict(),
   background_notices_delivered: z
-    .object({ type: z.literal('background_notices_delivered'), clientRequestId: id, turnId: id, notificationIds: ids })
+    .object({
+      type: z.literal('background_notices_delivered'),
+      clientRequestId: id,
+      turnId: id,
+      notificationIds: ids,
+      injected: z.object({ messageId: id, text: id }).strict().optional(),
+    })
     .strict(),
 };
 
@@ -82,7 +93,9 @@ export function reduceDirectNotifications(
   }
   if (
     state.deliveries.some(
-      (delivery) => delivery.clientRequestId === fact.clientRequestId || delivery.turnId === fact.turnId,
+      (delivery) =>
+        delivery.clientRequestId === fact.clientRequestId ||
+        (!fact.injected && !delivery.injected && delivery.turnId === fact.turnId),
     )
   )
     throw new Error('Duplicate background notification delivery');
@@ -93,7 +106,12 @@ export function reduceDirectNotifications(
     ...state,
     deliveries: [
       ...state.deliveries,
-      { clientRequestId: fact.clientRequestId, turnId: fact.turnId, notificationIds: [...fact.notificationIds] },
+      {
+        clientRequestId: fact.clientRequestId,
+        turnId: fact.turnId,
+        notificationIds: [...fact.notificationIds],
+        ...(fact.injected ? { injected: { ...fact.injected } } : {}),
+      },
     ],
   };
 }
@@ -132,8 +150,18 @@ function controlDetails(task: DirectTaskState) {
 }
 
 /** Legacy's shell completion: status from the process result, output or else the failure (agent-client.ts). */
-function shellCompletion(task: DirectTaskState, result: DirectTaskResult): DirectLegacyNotification {
+function shellCompletion(task: DirectTaskState, result: DirectTaskResult, at?: number): DirectLegacyNotification {
   const value = result.value as { readonly output?: string; readonly status?: string } | undefined;
+  // Legacy spawns at once, so even a job cancelled before its process started reports a cancelled run.
+  const cancelledUnstarted =
+    result.kind === 'cancelled' && value?.output === undefined
+      ? [
+          'cancelled',
+          `Runtime: ${Math.max(0, Math.round((at ?? task.startedAt) - task.startedAt))}ms`,
+          'Interrupted: the command was cancelled before completing.',
+          'Output may be partial and effects may already have occurred.',
+        ].join('\n')
+      : undefined;
   const error = result.kind === 'failed' && value === undefined ? result.error.message : undefined;
   const status =
     result.kind === 'cancelled' ? 'cancelled' : value?.status ?? (result.kind === 'completed' ? 'completed' : 'failed');
@@ -142,7 +170,7 @@ function shellCompletion(task: DirectTaskState, result: DirectTaskResult): Direc
     jobId: task.taskId,
     command: task.label,
     status,
-    output: value?.output ?? error ?? '',
+    output: value?.output ?? error ?? cancelledUnstarted ?? '',
     ...(error ? { error } : {}),
   };
 }
@@ -152,6 +180,7 @@ export function directTaskNotice(
   task: DirectTaskState,
   action: 'background' | 'stop' | 'finished',
   result?: DirectTaskState['result'],
+  at?: number,
 ): DirectBackgroundNotice {
   const id = `task:${task.taskId}:${action}`;
   if (action !== 'finished')
@@ -163,7 +192,7 @@ export function directTaskNotice(
       task.taskId,
       subagentCompletion(task, result as DirectTaskResult<NestedRunResult>),
     );
-  if (result) return legacyNotice(id, 'completion', task.taskId, shellCompletion(task, result));
+  if (result) return legacyNotice(id, 'completion', task.taskId, shellCompletion(task, result, at));
   return {
     id,
     kind: 'completion',

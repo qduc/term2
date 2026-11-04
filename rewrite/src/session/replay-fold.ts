@@ -118,6 +118,8 @@ export function createReplayFold(): ReplayFold {
   const cancelledTurns: { readonly turn: ActiveTurn; readonly index: number }[] = [];
   /** The fact index of each tool call and mode notice, so a later process can tell those it resumed (openedAt). */
   const itemFacts = new Map<Item['id'], number>();
+  /** Background notice messages (a silent turn's input or one delivered into a running turn); legacy saves none. */
+  const noticeMessages = new Map<string, number>();
   const consume = (fact: Fact): void => {
     consumed++;
     // Display observations never enter provider slots, admission or lifecycle state.
@@ -125,6 +127,20 @@ export function createReplayFold(): ReplayFold {
     if (fact.type === 'command_started' || fact.type === 'command_finished') {
       // Receipts are not provider history and are not recovered here.
       commandReceipts = foldFact({ commands: commandReceipts }, fact).commands;
+      return;
+    }
+    if (fact.type === 'background_notices_delivered' && fact.injected) {
+      // Delivered into the running turn at a request boundary: its message joins that turn's history.
+      requireActive(fact.turnId, fact.type);
+      notifications = foldFact({ notifications }, fact).notifications;
+      noticeMessages.set(fact.injected.messageId, consumed - 1);
+      slots.push({
+        item: {
+          type: 'user_message',
+          id: fact.injected.messageId as Item['id'],
+          content: [{ type: 'text', text: fact.injected.text }],
+        },
+      });
       return;
     }
     if (fact.type === 'background_notice_enqueued' || fact.type === 'background_notices_delivered') {
@@ -230,7 +246,10 @@ export function createReplayFold(): ReplayFold {
           }
           if (fact.input.length === 0) throw new Error('replay: silent turn has no planning input');
           // Planning input is provider context, not a human admission, so it does not anchor memory.
-          for (const item of fact.input) slots.push({ item });
+          for (const item of fact.input) {
+            slots.push({ item });
+            noticeMessages.set(item.id, consumed - 1);
+          }
           silentTurns.add(fact.turnId);
         } else {
           let lastHuman: Slot | undefined;
@@ -438,7 +457,9 @@ export function createReplayFold(): ReplayFold {
     recoveryFacts.push(...background.recoveryFacts);
     return {
       status: unfinished() !== null || lastOutcome === 'interrupted' ? 'interrupted' : 'idle',
-      history: slots.flatMap(({ item }) => (item === null ? [] : resumedItem(item, itemFacts, options.openedAt ?? 0))),
+      history: slots.flatMap(({ item }) =>
+        item === null ? [] : resumedItem(item, itemFacts, noticeMessages, options.openedAt ?? 0),
+      ),
       nextTurn: queue.nextTurn,
       recoveryFacts,
       queue: queue.state,
@@ -460,9 +481,16 @@ function isModeNotice(item: Item): boolean {
 
 /**
  * An item from before this process opened the session, as legacy reloads it: a saved conversation keeps no
- * harness "[Mode Notice]" reminders, and a call's arguments are re-serialized as compact JSON.
+ * harness "[Mode Notice]" reminders or background notice messages, and a call's arguments are
+ * re-serialized as compact JSON.
  */
-function resumedItem(item: Item, itemFacts: ReadonlyMap<Item['id'], number>, openedAt: number): Item[] {
+function resumedItem(
+  item: Item,
+  itemFacts: ReadonlyMap<Item['id'], number>,
+  noticeMessages: ReadonlyMap<string, number>,
+  openedAt: number,
+): Item[] {
+  if ((noticeMessages.get(item.id) ?? openedAt) < openedAt) return [];
   if ((itemFacts.get(item.id) ?? openedAt) >= openedAt) return [item];
   if (isModeNotice(item)) return [];
   if (item.type !== 'tool_call' || item.rawArguments === undefined) return [item];

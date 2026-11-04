@@ -207,8 +207,9 @@ function conversation(
         ? planDirectTiming(journal.context.latestHumanInputAt, journal.queueState.records, plan.effect.modelInput)
             .modelInput
         : [];
-    if (!commit(plan.facts)) throw new Error(journal.failure!.message);
-    return input;
+    const notices = background!.inject(turnId);
+    if (!commit([...plan.facts, ...notices.facts])) throw new Error(journal.failure!.message);
+    return [...input, ...notices.items];
   };
   const start = (
     request: TurnRequest,

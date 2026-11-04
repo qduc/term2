@@ -1,7 +1,8 @@
 /** Owns task/check-in publication, nested branches and notification admission. */
 import { randomUUID } from 'node:crypto';
 import type { TurnHandle, TurnId, TurnDeps } from '../engine/index.js';
-import type { ModelError } from '../model/index.js';
+import type { Item, ModelError } from '../model/index.js';
+import type { Fact } from './facts.js';
 import type { DirectOrigin } from './facade-types.js';
 import type { Conversation, ConversationDeps } from './direct-types.js';
 import type { CommandAdmission } from './conversation-command-admission.js';
@@ -63,7 +64,7 @@ export class ConversationBackground {
               fact.type === 'task_stop_requested' && previous.mode === 'background' && fact.by !== 'model'
               ? directTaskNotice(previous, 'stop')
               : fact.type === 'task_finished' && previous.mode === 'background'
-              ? directTaskNotice(previous, 'finished', fact.result)
+              ? directTaskNotice(previous, 'finished', fact.result, fact.at)
               : undefined);
           if (
             (this.admission.closed &&
@@ -240,17 +241,7 @@ export class ConversationBackground {
     if (this.admission.destination())
       return { result: { kind: 'not_admitting', reason: `Session rolled over to ${this.admission.destination()}` } };
     if (this.admission.busy()) return { result: { kind: 'busy' } };
-    // Only accepted closure disproves a question notice. In particular, a
-    // recovered interrupted task has no live continuation to answer. Preserve
-    // other notices and unknown questions, and keep historical deliveries valid.
-    const closedQuestions = new Set(
-      this.journal.facts.flatMap((fact) =>
-        fact.type === 'task_question_closed' ? [`question:${fact.taskId}:${fact.messageId}`] : [],
-      ),
-    );
-    const notices = pendingDirectNotifications(this.journal.notifications).filter(
-      (notice) => notice.kind !== 'question' || !closedQuestions.has(notice.id),
-    );
+    const notices = this.#pending();
     if (!notices.length) return { result: { kind: 'empty' } };
     const turnId = this.admission.newTurnId();
     const notificationIds = notices.map((notice) => notice.id);
@@ -273,6 +264,44 @@ export class ConversationBackground {
     );
     return { result: { kind: 'started', turnId, notificationIds }, started };
   };
+  /**
+   * Legacy's interactive app hands notices that settle during a turn to that turn at its next request boundary,
+   * as one user message after any steers, instead of waking a turn of its own afterwards. Headless runs do not.
+   */
+  inject(turnId: TurnId): { readonly facts: readonly Fact[]; readonly items: readonly Item[] } {
+    const notices = this.generation.supplied?.unattended === false ? this.#pending() : [];
+    if (!notices.length) return { facts: [], items: [] };
+    const item: Item = {
+      type: 'user_message',
+      id: `background:${randomUUID()}` as Item['id'],
+      content: [{ type: 'text', text: directNoticeText(notices) }],
+    };
+    return {
+      facts: [
+        {
+          type: 'background_notices_delivered',
+          clientRequestId: `inject_${randomUUID()}`,
+          turnId,
+          notificationIds: notices.map((notice) => notice.id),
+          injected: { messageId: item.id, text: directNoticeText(notices) },
+        },
+      ],
+      items: [item],
+    };
+  }
+  #pending() {
+    // Only accepted closure disproves a question notice. In particular, a
+    // recovered interrupted task has no live continuation to answer. Preserve
+    // other notices and unknown questions, and keep historical deliveries valid.
+    const closedQuestions = new Set(
+      this.journal.facts.flatMap((fact) =>
+        fact.type === 'task_question_closed' ? [`question:${fact.taskId}:${fact.messageId}`] : [],
+      ),
+    );
+    return pendingDirectNotifications(this.journal.notifications).filter(
+      (notice) => notice.kind !== 'question' || !closedQuestions.has(notice.id),
+    );
+  }
   poison(error: ModelError): void {
     this.tasks.poison(error);
     for (const handle of this.branchHandles) handle.cancel();

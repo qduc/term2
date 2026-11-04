@@ -21,6 +21,13 @@ export type Message = {
   readonly interrupted?: boolean;
   /** Client-only immutable help, never accepted from wire or persisted. */
   readonly localHelp?: true;
+  /** Client-only `!` command row (legacy addShellMessage), never accepted from wire or persisted. */
+  readonly localShell?: {
+    readonly command: string;
+    readonly output: string;
+    readonly success: boolean;
+    readonly failureReason?: string;
+  };
   /** Live streaming draft replaced by this finalized assistant message. */
   readonly replacesDraftId?: string;
   readonly historyText?: string;

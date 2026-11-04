@@ -1,15 +1,16 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import type { Message, TuiState } from './state.js';
+import type { ShellResult } from './integration.js';
 import { useTerminalSize } from './terminal.js';
 import { useTranscriptViewport } from './viewport.js';
 
 /** Local command output belongs in the visible transcript, not provider history. */
 export function useCommandTranscript(state: TuiState): {
   state: TuiState;
-  append(text: string, plain?: boolean): void;
+  append(text: string, plain?: boolean, shell?: Message['localShell']): void;
 } {
   const [entries, setEntries] = useState<readonly { message: Message; after?: string; idle?: true }[]>([]);
-  const append = (text: string, plain = false) => {
+  const append = (text: string, plain = false, shell?: Message['localShell']) => {
     const after = state.timeline?.at(-1)?.id;
     setEntries((previous) => [
       ...previous,
@@ -19,6 +20,7 @@ export function useCommandTranscript(state: TuiState): {
           role: 'assistant',
           text,
           ...(plain ? { localHelp: true as const } : {}),
+          ...(shell ? { localShell: shell } : {}),
         },
         after,
         // Only an idle anchor is settled history; a turn's draft is replaced by its final message.
@@ -85,6 +87,23 @@ export function useCommandTranscriptViewport(
     /** Rows above the bottom area: legacy leaves one row less below a local system line than below a reply. */
     bottomMargin: state.activeTurnId ? 1 : state.messages.length && !last?.startsWith('local-command-') ? 3 : 2,
     appendCommandOutput: transcript.append,
+    /** Legacy addShellMessage: a `!` command's result is a command row in the transcript. */
+    appendShell(result: ShellResult): void {
+      const success = !result.timedOut && result.exitCode === 0;
+      const failureReason = result.timedOut
+        ? 'timeout'
+        : result.exitCode == null
+        ? 'error'
+        : result.exitCode !== 0
+        ? `exit ${result.exitCode}`
+        : undefined;
+      transcript.append('', false, {
+        command: result.command,
+        output: result.output,
+        success,
+        ...(failureReason ? { failureReason } : {}),
+      });
+    },
     showMessage(message: string, command: string, notice: (value: string) => void): void {
       if (command.trim() !== '/help') notice(message);
       else if (state.activeTurnId) viewport.setHelp(message);

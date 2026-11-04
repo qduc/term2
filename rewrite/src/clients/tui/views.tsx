@@ -8,6 +8,7 @@ import MarkdownRenderer from './presentation/components/MarkdownRenderer.js';
 import { useSkin } from './presentation/skins/SkinContext.js';
 import type { Message, TuiState } from './state.js';
 import { ToolCall } from './tool-view.js';
+import CommandMessage from './presentation/components/message/CommandMessage.js';
 import { groupTools, ToolGroupRow } from './tool-groups.js';
 
 /** Render mixed history only in the authoritative wire order; separate items with unknown order. */
@@ -51,6 +52,18 @@ export function Transcript({
             </Text>
           ) : null}
         </Box>
+      </Box>
+    ) : message.localShell ? (
+      <Box key={`message:${message.id}`} marginTop={message.id === firstId ? 0 : 1} paddingLeft={2}>
+        <CommandMessage
+          command={message.localShell.command}
+          output={message.localShell.output}
+          status={message.localShell.success ? 'completed' : 'failed'}
+          success={message.localShell.success}
+          {...(message.localShell.failureReason ? { failureReason: message.localShell.failureReason } : {})}
+          toolName="shell"
+          displayMode={expanded ? 'standard' : 'concise'}
+        />
       </Box>
     ) : message.localHelp === true ? (
       // Legacy shows /help as a system message: reasoning colour inside MessageList's paddingX 2, and
@@ -374,24 +387,6 @@ export function LiveNotices({
       {notice ? <Text color={theme.reasoning}>{notice}</Text> : null}
       {historyError ? <Text>{historyError}</Text> : null}
     </>
-  );
-}
-
-/** Explicit shell output keeps the compact themed status visible; Ctrl+O reveals details. */
-export function BangResult({
-  result,
-  expanded,
-}: {
-  readonly result: string;
-  readonly expanded: boolean;
-}): React.ReactElement {
-  const theme = useTheme();
-  const [header = '', ...detail] = result.split('\n');
-  return (
-    <Box flexDirection="column">
-      <Text color={header.startsWith('✓') ? theme.success : theme.danger}>{header}</Text>
-      {expanded && detail.length ? <Text>{detail.join('\n')}</Text> : null}
-    </Box>
   );
 }
 

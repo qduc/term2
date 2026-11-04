@@ -274,7 +274,7 @@ it(
     expect(settledFrame).not.toContain(failureOutput);
     // The first edit appears once, not again as a repeated command line.
     expect(visible, visible).not.toContain('search_replace "');
-    // Collapsed by default: one row with the runtime, and no output until expanded with Ctrl+O.
+    // Collapsed as in legacy: one row with the runtime and no output.
     expect(visible, visible).toMatch(/\S \(\d+ms\)/);
     expect(visible, visible).not.toMatch(/Runtime: \d+ms\s+hi\b/);
     expect(visible, visible).toContain('Write and read the file');
@@ -283,33 +283,20 @@ it(
       visible.lastIndexOf('Created b.txt'),
     );
     expect(collapsedRow, visible).not.toContain(first);
-    // Failure details are available on demand, not dumped beside the summary.
-    const beforeExpanded = session.getVisibleOutput().length;
-    session.write('\x0f');
-    // Legacy's standard display prints the output with the runtime stripped into the header.
-    const shownHi = () => session!.getVisibleOutput().slice(beforeExpanded).includes('fatal: not a git repository');
-    for (let i = 0; i < 40 && !shownHi(); i++) await new Promise((resolve) => setTimeout(resolve, 250));
-    expect(shownHi()).toBe(true);
-    const expanded = session.getVisibleOutput();
-    expect(expanded.slice(expanded.lastIndexOf('✓ Write and read the file'))).toContain('hi');
-    const expandedFrame = expanded.slice(beforeExpanded);
-    const failureLine = expandedFrame.split('\n').find((line) => line.trimStart().startsWith('FAIL_SENTINEL_'));
-    expect(failureLine).toBeDefined();
-    expect(failureLine!.trim()).toBe(failureOutput);
-    expect(failureLine!.length - failureLine!.trimStart().length).toBeLessThanOrEqual(8);
-    // Expansion reveals more of the long summary as well as the full output.
-    expect(expandedFrame).toContain(failedDescription.slice(0, 60));
-    expect(expandedFrame).toContain('+beta-line');
-    expect(expandedFrame).toContain('-alpha-line');
-    expect(expandedFrame).toContain('+gamma-line');
-    // Collapse expanded output with Escape without clearing the current draft.
+    // Legacy has no output expansion: Ctrl+O replaces the draft with `/model ` and opens the model menu, and the
+    // tool rows stay collapsed (use-app-keyboard-shortcuts.ts).
     session.write('output-draft');
     await waitForHarnessComposerValue(idlePath, 'output-draft', { timeoutMs: 30_000 });
-    const beforeEscape = session.getVisibleOutput().length;
+    const beforeCtrlO = session.getVisibleOutput().length;
+    session.write('\x0f');
+    await session.waitForOutput('Select model', 30_000);
+    await waitForHarnessComposerValue(idlePath, '/model ', { timeoutMs: 30_000 });
+    const afterCtrlO = session.getVisibleOutput().slice(beforeCtrlO);
+    expect(afterCtrlO).not.toMatch(/Runtime: \d+ms\s+hi\b/);
+    expect(afterCtrlO).not.toContain(failureOutput);
     session.write('\x1b');
-    await new Promise((resolve) => setTimeout(resolve, 600));
-    const afterEscape = session.getVisibleOutput().slice(beforeEscape);
-    expect(afterEscape).toContain('output-draft');
+    await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
+    session.write('output-draft');
     await waitForHarnessComposerValue(idlePath, 'output-draft', { timeoutMs: 30_000 });
     // The task panel owns its Escape and returns the same draft to the editor.
     session.write('\x07');
@@ -338,7 +325,7 @@ it(
   },
 );
 
-it('collapses failed shell probes and expands their details', { timeout: TIMEOUT_MS }, async () => {
+it('collapses failed shell probes, and Ctrl+O opens the model menu as in legacy', { timeout: TIMEOUT_MS }, async () => {
   root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-failed-probes-')));
   const home = path.join(root, 'home');
   const workspace = path.join(root, 'workspace');
@@ -393,12 +380,11 @@ it('collapses failed shell probes and expands their details', { timeout: TIMEOUT
   session.write('\r');
   await session.waitForOutput('PROBES-FINISHED', 60_000);
   await session.waitForOutput('✗ Ran 2 shell commands', 30_000);
-  const beforeExpand = session.getVisibleOutput().length;
+  // Legacy's Ctrl+O opens the model menu; the failed run stays one collapsed row.
+  const beforeCtrlO = session.getVisibleOutput().length;
   session.write('\x0f');
-  await expect
-    .poll(() => session!.getVisibleOutput().slice(beforeExpand), { timeout: 30_000 })
-    .toContain('fatal: probe-one');
-  await expect
-    .poll(() => session!.getVisibleOutput().slice(beforeExpand), { timeout: 30_000 })
-    .toContain('error: probe-two');
+  await session.waitForOutput('Select model', 30_000);
+  const afterCtrlO = session.getVisibleOutput().slice(beforeCtrlO);
+  expect(afterCtrlO).not.toContain('fatal: probe-one');
+  expect(afterCtrlO).not.toContain('error: probe-two');
 });

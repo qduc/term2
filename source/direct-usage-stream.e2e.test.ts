@@ -177,7 +177,7 @@ it('wraps settled transcript rows at terminal width', { timeout: TIMEOUT_MS }, a
 });
 
 it(
-  'does not advertise the pager during ordinary streaming, but does in the output viewer',
+  'does not advertise the pager while streaming, and Ctrl+O mid-stream opens the model menu as in legacy',
   { timeout: TIMEOUT_MS },
   async () => {
     const { idlePath } = await start();
@@ -195,12 +195,12 @@ it(
     await session!.waitForOutput('STREAM-LINE-59', 30_000);
     await new Promise((resolve) => setTimeout(resolve, 500));
     expect(session!.getVisibleOutput().slice(before)).not.toMatch(/Lines \d+[–-]\d+ of \d+ · PgUp/);
-    const viewerStart = session!.getVisibleOutput().length;
+    // Legacy has no output viewer: Ctrl+O replaces the draft with `/model ` and opens the model menu mid-stream.
+    const ctrlOStart = session!.getVisibleOutput().length;
     session!.write('\x0f');
-    await until(
-      () => /Lines \d+[–-]\d+ of \d+ · PgUp/.test(session!.getVisibleOutput().slice(viewerStart)),
-      'output viewer advertises paging',
-    );
+    await session!.waitForOutput('Select model', 30_000);
+    await waitForHarnessComposerValue(idlePath, '/model ', { timeoutMs: 30_000 });
+    expect(session!.getVisibleOutput().slice(ctrlOStart)).not.toMatch(/Lines \d+[–-]\d+ of \d+ · PgUp/);
     expect(heldResponse?.writableEnded).toBe(false);
   },
 );

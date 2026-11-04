@@ -21,10 +21,6 @@ export type HandoffAction =
   | { type: 'handoff/sent' }
   | { type: 'handoff/cancelled' };
 
-export function createInitialHandoffState(): HandoffState | null {
-  return null;
-}
-
 export function composeHandoffMessage(state: HandoffState): string {
   return `${state.handoffMessage || 'Implement this'}:\n\n${state.capturedText}`;
 }

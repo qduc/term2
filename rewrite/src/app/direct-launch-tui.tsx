@@ -19,7 +19,6 @@ import { shouldDetectBackground } from '../../../source/theme/resolve-theme.js';
 import { SettingsThemeProvider, useTheme as useSourceTheme } from '../../../source/theme/ThemeContext.js';
 import { getInkRenderOptions } from '../../../source/utils/ink-render-options.js';
 import { getProfileLabel } from '../../../source/services/profiles/labels.js';
-import { quoteShellArg } from '../../../source/services/ssh-service.js';
 import type { WireSnapshot } from '../protocol/direct-wire.js';
 import { useTerminalFocusNotifier } from '../../../source/hooks/use-terminal-focus-notifier.js';
 import type { LoggingService } from '../../../source/services/logging/logging-service.js';
@@ -298,17 +297,13 @@ async function runTui(
     // Legacy prints the session's usage on every exit, before the resume hint.
     if (!pending.plan && exitedSnapshot) stdout.write(`\n${sessionUsageText(exitedSnapshot)}\n`);
     if (!pending.plan && exitCode === 0 && exitedSnapshot?.messages.some((message) => message.role !== 'system')) {
-      const args = ['term2-next'];
+      // Legacy's getResumeCommand: the `term2` command, arguments unquoted.
+      const args = ['term2'];
       if (target.restart) {
-        args.push(
-          '--ssh',
-          quoteShellArg(target.restart.target),
-          '--remote-dir',
-          quoteShellArg(target.restart.directory),
-        );
+        args.push('--ssh', target.restart.target, '--remote-dir', target.restart.directory);
         if (target.restart.port && target.restart.port !== 22) args.push('--ssh-port', String(target.restart.port));
       }
-      args.push('--resume', quoteShellArg(exitedSnapshot.sessionId));
+      args.push('--resume', exitedSnapshot.sessionId);
       stdout.write(`\nSession: ${exitedSnapshot.sessionId}\nTo resume this conversation: ${args.join(' ')}\n`);
     }
     return exitCode;

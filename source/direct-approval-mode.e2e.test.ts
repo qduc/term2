@@ -384,7 +384,7 @@ async function runCommand(
     await session.waitForOutput('done', 30_000);
     await waitForHarnessIdleGeneration(idlePath, { after: before, timeoutMs: 60_000 });
     // Streamed text is not turn completion; wait for the second request's measured usage.
-    await session.waitForOutput('Ctx last 12k', 30_000);
+    await session.waitForOutput('Ctx 12k', 30_000);
   }
   if (exerciseMenu === 'ctrl-u') {
     // The cursor position settles asynchronously after each arrow key; pace Ctrl+U so it reads the settled cursor.
@@ -537,7 +537,7 @@ async function runCommand(
     const exit = await session.waitForExit(30_000);
     expect(exit.exitCode).toBe(0);
     const output = session.getVisibleOutput();
-    expect(output).toMatch(/To resume this conversation: term2-next --resume ['\"]?conv_[0-9a-f-]{36}/);
+    expect(output).toMatch(/To resume this conversation: term2 --resume conv_[0-9a-f-]{36}\r?\n/);
     return;
   }
   if (exerciseMenu === 'pick-enter') {
@@ -682,7 +682,7 @@ it('/model <provider>/<model> confirms the new model by name', { timeout: TIMEOU
 it('/usage agrees with the cached share in the status bar', { timeout: TIMEOUT_MS }, async () => {
   await runCommand('/usage', 'Token usage: 78,021 input (42,112 cached), 731 output', 'hello', false, true);
   expect(session!.getVisibleOutput()).toContain('54% cached');
-  expect(session!.getVisibleOutput()).toContain('Ctx last 78k');
+  expect(session!.getVisibleOutput()).toContain('Ctx 78k');
   expect(session!.getVisibleOutput()).toMatch(/\d+(?:\.\d+)?t\/s/);
   session!.write('/queue nonsense');
   await waitForHarnessComposerValue(path.join(root, 'home', 'input-idle'), '/queue nonsense', { timeoutMs: 60_000 });
@@ -711,7 +711,7 @@ it('last-request context survives resume without becoming cumulative usage', { t
   await waitForHarnessComposerValue(idlePath, 'second request', { timeoutMs: 60_000 });
   session!.write('\r');
   await session!.waitForOutput('done', 30_000);
-  await session!.waitForOutput('Ctx last 12k', 30_000);
+  await session!.waitForOutput('Ctx 12k', 30_000);
   session!.write('/quit');
   await waitForHarnessComposerValue(idlePath, '/quit', { timeoutMs: 60_000 });
   session!.write('\r');
@@ -734,8 +734,8 @@ it('last-request context survives resume without becoming cumulative usage', { t
     cwd: path.join(root, 'w'),
     env,
   });
-  await session.waitForOutput('Ctx last 12k', 30_000);
-  expect(session.getVisibleOutput()).not.toContain('Ctx last 90k');
+  await session.waitForOutput('Ctx 12k', 30_000);
+  expect(session.getVisibleOutput()).not.toContain('Ctx 90k');
 });
 
 it('/copy confirms what it copied', { timeout: TIMEOUT_MS }, () =>

@@ -2,6 +2,7 @@
 import {
   nativeCataloguePath,
   nativeSearchScope,
+  replayNativeLineage,
   withNativeCatalogue as withCatalogue,
   type NativeCatalogueEntry,
   type NativeCatalogueScope,
@@ -10,7 +11,7 @@ import {
 import { contentText, publicContent } from '../protocol/direct-public.js';
 import { nativeTranscript } from './native-transcript.js';
 
-export { nativeCataloguePath, nativeSearchScope };
+export { nativeCataloguePath, nativeSearchScope, replayNativeLineage };
 export type { NativeCatalogueEntry, NativeCatalogueScope, NativeIndexer };
 
 /** Search documents hold only non-blank text, so the user's message count does too. */

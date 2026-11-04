@@ -4,9 +4,13 @@
  * exactly as legacy does. Ids are shown bare (no `conv_` prefix), as legacy shows its session ids.
  */
 import { statSync } from 'node:fs';
-import { readDirectLogLineage } from '../session/direct-rolling-log.js';
-import { initialDirectState, reduceDirectFact, type DirectPublicState } from '../session/direct-state.js';
-import { withNativeCatalogue, type NativeCatalogueEntry, type NativeCatalogueScope } from './native-catalogue.js';
+import type { DirectPublicState } from '../session/direct-state.js';
+import {
+  replayNativeLineage,
+  withNativeCatalogue,
+  type NativeCatalogueEntry,
+  type NativeCatalogueScope,
+} from './native-catalogue.js';
 import { nativeTranscript } from './native-transcript.js';
 import {
   extractDisplayOutput,
@@ -95,24 +99,13 @@ function savedMessages(state: DirectPublicState, reasoning: ReadonlyMap<string, 
 
 function convert(directory: string, entry: NativeCatalogueEntry): RestoredState | null {
   try {
-    const lineage = readDirectLogLineage(directory, entry.id);
-    const metadata = lineage.metadata;
-    let state = initialDirectState(
-      lineage.logicalSessionId,
-      metadata.workspaceIdentity ?? { root: metadata.workspace, target: 'local', access: 'read' },
-      metadata.model,
-    ) as DirectPublicState;
-    for (const line of lineage.entries) state = reduceDirectFact(state, line.fact, line.seq) as DirectPublicState;
-    const reasoning = new Map(
-      nativeTranscript(lineage)
-        .documents.filter((doc) => doc.kind === 'reasoning')
-        .map((doc) => [doc.id, doc.text]),
-    );
+    const { metadata, firstAt, lastAt, state, documents } = replayNativeLineage(directory, entry.id, nativeTranscript);
+    const reasoning = new Map(documents.filter((doc) => doc.kind === 'reasoning').map((doc) => [doc.id, doc.text]));
     const model = state.configuration?.configuration.model ?? state.model;
     return {
       id: bare(entry.id),
-      createdAt: lineage.entries[0]!.at,
-      updatedAt: lineage.entries.at(-1)!.at,
+      createdAt: firstAt,
+      updatedAt: lastAt,
       projectPath: metadata.workspace,
       model: model.model,
       provider: model.provider,

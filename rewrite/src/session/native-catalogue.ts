@@ -421,3 +421,32 @@ function refreshDocuments(
 export function nativeSearchScope(workspace: Workspace, binding?: DirectBinding): NativeCatalogueScope {
   return { target: workspace.target, root: workspace.root, ...(binding ? { binding } : {}) };
 }
+
+/** One closed lineage replayed for a read-only browser: its metadata, accepted span, reduced state and documents. */
+export function replayNativeLineage(
+  directory: string,
+  logical: string,
+  transcript: NativeTranscript,
+): {
+  readonly metadata: DirectLogLineage['metadata'];
+  readonly firstAt: string;
+  readonly lastAt: string;
+  readonly state: DirectPublicState;
+  readonly documents: ReturnType<NativeTranscript>['documents'];
+} {
+  const lineage = readDirectLogLineage(path.resolve(directory), logical);
+  const metadata = lineage.metadata;
+  let state = initialDirectState(
+    lineage.logicalSessionId,
+    metadata.workspaceIdentity ?? { root: metadata.workspace, target: 'local', access: 'read' },
+    metadata.model,
+  ) as DirectPublicState;
+  for (const entry of lineage.entries) state = reduceDirectFact(state, entry.fact, entry.seq) as DirectPublicState;
+  return {
+    metadata,
+    firstAt: lineage.entries[0]!.at,
+    lastAt: lineage.entries.at(-1)!.at,
+    state,
+    documents: transcript(lineage).documents,
+  };
+}

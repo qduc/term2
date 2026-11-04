@@ -13,10 +13,26 @@ import {
   getSubagentPoolEntryShape,
   getSubagentPoolRoleLabel,
 } from '../../../source/services/subagents/subagent-pool-config.js';
+import {
+  getWorkspaceEntries,
+  getWorkspaceEntriesMeta,
+  refreshWorkspaceEntries,
+} from '../../../source/services/file-service.js';
+import type { LoggingService } from '../../../source/services/logging/logging-service.js';
 import type { TuiMenus } from '../clients/tui/integration.js';
 
-export function createDirectTuiMenus(): TuiMenus {
+export function createDirectTuiMenus(options: { readonly logger: LoggingService }): TuiMenus {
+  const { logger } = options;
   return {
+    logger: {
+      warn: (message, details) => logger.warn(message, details),
+      error: (message, details) => logger.error(message, details),
+    },
+    paths: {
+      entries: getWorkspaceEntries,
+      refresh: refreshWorkspaceEntries,
+      meta: getWorkspaceEntriesMeta,
+    },
     schema: {
       isKnownSettingKey,
       label: getSettingLabel,

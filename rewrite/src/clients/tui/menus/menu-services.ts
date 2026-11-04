@@ -7,6 +7,7 @@
 import type { MenuServices } from './menu-registry.js';
 import type { SlashCommand } from './slash-command-types.js';
 import { useSlashCommands } from './use-slash-commands.js';
+import { usePathCompletion } from './use-path-completion.js';
 
 /** Session behaviour the menus call back into, replacing legacy app callbacks. */
 export type MenuActions = {
@@ -17,7 +18,7 @@ export type MenuActions = {
 };
 
 /** Legacy ApplicationInputSurface's enabled trigger rule ids, limited to the ported menus. */
-export const MENU_RULE_IDS: readonly string[] = ['slash'];
+export const MENU_RULE_IDS: readonly string[] = ['slash', 'path'];
 
 export function useMenuServices({
   commands,
@@ -26,7 +27,8 @@ export function useMenuServices({
   readonly actions: MenuActions;
 }): MenuServices {
   const slash = useSlashCommands({ commands, onClose: noop });
-  return { slash };
+  const path = usePathCompletion();
+  return { slash, path };
 }
 
 const noop = () => {};

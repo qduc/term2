@@ -27,7 +27,7 @@ import { replaceSession } from './replace-session.js';
 import { runBridgeCommand } from './bridge-command.js';
 import { useSendConfirmation } from './send-confirmation.js';
 import { useMenuStack } from './menus/menu-host.js';
-import { ComposerFooter, useComposerFilter, useComposerMenu } from './composer-parts.js';
+import { ComposerFooter, useComposerFilter } from './composer-parts.js';
 import { SessionPanels } from './session-panels.js';
 import { useSessionRewind } from './session-rewind.js';
 import {
@@ -111,7 +111,6 @@ export function TuiSession({
     state.queue.filter((item) => item.delivery === delivery),
   );
   const selectedQueueIndex = queueItems.findIndex((item) => item.id === selectedQueueId);
-  const slash = useComposerMenu(editor.value, composerActive && !editing, theme.textSubtle);
   // Menus call back into `submit`, which is declared below and changes every render.
   const submitRef = useRef<(input: string) => void>(() => undefined);
   const runCommand = useCallback((text: string) => submitRef.current(text), []);
@@ -127,7 +126,6 @@ export function TuiSession({
   const togglePlan = usePlanToggle(integration, connection, confirmation, Boolean(state.activeTurnId), setNotice);
   const composerFilter = useComposerFilter({
     composerActive,
-    slash,
     turnActive: Boolean(state.activeTurnId),
     outputExpanded: viewport.expanded,
     draft: { value: editor.value, cursor: editor.cursor, replace: replaceInput },
@@ -161,7 +159,6 @@ export function TuiSession({
     if (taskOpen || budgetOpen || rewindTargets) return;
     if (composerActive && isShiftTab(input, key)) return togglePlan();
     if (composerActive && isCtrlT(input, key)) return setPicker('effort');
-    if (slash.handle(key, replaceInput)) return;
     if (composerActive && key.escape && viewport.expanded) return viewport.collapse();
     if (isCtrlG(input, key) && !busy) (state.interactions.length ? setInteractionOpen : setTaskOpen)(true);
     if (key.ctrl && input === 'b' && state.budgets.length && !busy) setBudgetOpen(true);
@@ -422,7 +419,6 @@ export function TuiSession({
         {confirmation.prompt}
         <LiveNotices notice={notice} historyError={editor.historyError} />
         {bangResult ? <BangResult result={bangResult} expanded={viewport.expanded} /> : null}
-        {menuStack.open ? null : slash.view}
         <LiveDivider />
         <ShellTaskPanel state={state} />
         <PendingQueue
@@ -440,7 +436,6 @@ export function TuiSession({
               key={editor.inputKey}
               value={editor.value}
               onChange={(value) => {
-                slash.reset();
                 changeInput(value);
               }}
               onSubmit={(value, submittedImages) => {

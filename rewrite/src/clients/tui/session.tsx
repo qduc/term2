@@ -336,7 +336,7 @@ export function TuiSession({
       } else if (/^\/providers(?:\s|$)/.test(command)) {
         if (!menuStack.openFrame('providers')) throw new Error('Provider management is unavailable.');
       } else if (typed.kind === 'command') {
-        const directNotice = await directSlashCommand(connection, command);
+        const directNotice = await directSlashCommand(connection, command, setNotice);
         if (directNotice !== null) setNotice(directNotice);
         else {
           const result = await handoffFlow.command(command, () => integration.command(connection, command));

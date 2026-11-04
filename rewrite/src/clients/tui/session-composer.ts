@@ -381,7 +381,7 @@ export function useSessionComposer(state: TuiState, historySize: number, onNotic
       );
       if (await wasEditInvalidatedAfter(epoch, editing.id)) return null;
       cancelQueueEdit();
-      return 'Queued message updated.';
+      return null; // legacy saves a queued edit without a line
     } catch (error) {
       if (await wasEditInvalidatedAfter(epoch, editing.id, true)) return null;
       if (error instanceof WireCommandFailure && error.code === 'too_late') {

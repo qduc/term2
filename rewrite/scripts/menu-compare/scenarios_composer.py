@@ -127,3 +127,16 @@ SCENARIOS.update({
     'clear-twice-usage': ['hello', '<enter>', '<sleep>', '/clear', '<enter>', '<sleep>', '/usage', '<enter>'],
 })
 SEED.update({'exit-turn': _TURN, 'clear-twice-usage': _TURN})
+
+# queued-message edit (queued-message-updated notice) and back-to-back queue keys (fast-queue-keys)
+_QUEUE3 = ['go', '<enter>', '<sleep>', 'FOLLOWUP-ONE', '<a-enter>', 'STEER-ONE', '<enter>', 'STEER-TWO', '<enter>']
+SCENARIOS.update({
+    'stream-queue-edit-save': ['go', '<enter>', '<sleep>', 'queue this', '<a-enter>', '<up>', 'e', ' more', '<enter>'],
+    'stream-queue-burst': _QUEUE3 + ['<burst><up><up><up>e'],
+    'stream-queue-spaced': _QUEUE3 + ['<up>', '<up>', '<up>', 'e'],
+})
+SEED.update({name: _STREAM for name in ('stream-queue-edit-save', 'stream-queue-burst', 'stream-queue-spaced')})
+# item 75: /queue + Enter while the queue is paused by an interrupt
+SCENARIOS['stream-queue-paused'] = ['go', '<enter>', '<sleep>', 'queue this', '<a-enter>', '<esc>', '<esc>', '<sleep>',
+                                    '/queue', '<enter>', '<sleep>']
+SEED['stream-queue-paused'] = _STREAM

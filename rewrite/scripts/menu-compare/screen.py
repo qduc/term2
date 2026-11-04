@@ -196,6 +196,10 @@ class Term:
         return False
 
     def send(self, keys):
+        if keys.startswith('<burst>'):  # the rest in one write, as a fast typist or a paste delivers it
+            os.write(self.fd, expand(keys[len('<burst>'):]).encode())
+            self.pump(quiet=0.3, limit=3.0)
+            return
         for chunk in re.split(r'(<[a-z-]+>)', keys):
             if not chunk:
                 continue

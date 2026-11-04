@@ -327,15 +327,17 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
       },
       available: (context: Pick<ToolContext, 'workspace' | 'settings'>) => registry.available(context).map(counted),
     };
-    // Preserve the source child policy: explicit role allocation wins; otherwise
-    // inherit the configured setting with the same catalog default clamp.
+    // Preserve the source child policy: explicit role allocation wins. Legacy's background runner otherwise
+    // inherits the configured setting with the catalog default clamp; its foreground runner sends none.
     const maxOutputTokens =
       definition.maxTokens ??
-      resolveOutputAllocation(
-        getCatalogModel(definition.provider, definition.model),
-        settings.get('agent.maxOutputTokens'),
-        settings.getSource?.('agent.maxOutputTokens') === 'default',
-      );
+      (mode === 'foreground'
+        ? undefined
+        : resolveOutputAllocation(
+            getCatalogModel(definition.provider, definition.model),
+            settings.get('agent.maxOutputTokens'),
+            settings.getSource?.('agent.maxOutputTokens') === 'default',
+          ));
     const request: NestedRunRequest & { readonly input: string } = Object.freeze({
       mode,
       ...(params.name ? { name: params.name } : {}),

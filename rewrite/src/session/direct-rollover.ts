@@ -7,7 +7,14 @@ import type { Fact } from './facts.js';
 
 const requestSchema = z
   .object({
-    brief: z.string().max(8_000),
+    brief: z
+      .string()
+      .max(8_000)
+      .describe(
+        'Handoff for a successor with no memory of this session; keep well below 8,000 characters. ' +
+          'Cover the goal, standing user constraints, verified versus assumed state, diagnosis and approaches ruled out, and the next open step. ' +
+          'When a canonical artifact already holds the state, write a short delta and pointer instead of copying it.',
+      ),
     reason: z.enum(['context_pressure', 'task_boundary']).optional(),
   })
   .strict();
@@ -36,12 +43,15 @@ export function createDirectRolloverTool(
       name: 'session_rollover',
       description:
         'Request a session rollover only when a system reminder prompts you to consider it or the user explicitly asks for one. Do not initiate rollover on your own. ' +
-        'Before calling, save state the successor must not lose and the brief cannot hold to a durable workspace artifact (not /tmp), and point to it from the brief. ' +
-        'The brief is the only context the successor starts with: include the goal and done condition, standing constraints, completed effects with durable pointers and verified versus assumed state, ' +
-        'diagnosis and approaches ruled out, the next concrete step and unresolved decisions, and live background work with handles/status/next action. ' +
-        'Save reusable lessons in relevant project documentation or memory when appropriate; do not save the handoff wholesale as memory. ' +
-        'Keep the brief well below 8,000 characters; prefer a short delta and canonical artifact pointer over copying history. ' +
-        'Call this tool alone after other tool results. A request stops this root only after its tool result is accepted; the actual rollover authority runs at the settled boundary and can still refuse.',
+        'Before calling, save state the successor must not lose and the brief cannot hold (plans, findings, task state) to a durable artifact in the workspace, such as a plan doc, notes file, or commit, and point to it from the brief. Do not use /tmp for this; it does not survive a reboot. ' +
+        'The brief is the only context the successor starts with, so write it for a capable engineer with no memory of this session:\n' +
+        '- Goal and done condition, plus user constraints and preferences that still apply.\n' +
+        '- Completed effects with durable pointers (paths, commits, docs), marking what is verified versus assumed.\n' +
+        '- Working knowledge that is costly to rediscover: diagnosis, root causes, key files and symbols, and approaches ruled out with why.\n' +
+        '- Next open step, concrete enough to act on immediately, and any unresolved decisions.\n' +
+        '- Live background work: handle, status, and next action. Handles are session-owned and survive the rotation, so the successor can inspect or control them; do not wait for them merely to rotate, and save durable results when ready rather than copying transient output.\n' +
+        '- If this session established a lasting user preference, accepted project decision, or reusable lesson learned, update persistent memory when appropriate; skip facts easily recovered from the repository, and do not save the handoff wholesale as memory.\n' +
+        'Keep the brief well below the 8,000-character limit: point to a canonical artifact instead of copying it, and omit narrative history the successor can read from the previous session on demand.',
       inputSchema: z.toJSONSchema(requestSchema),
     },
     parallelSafe: false,

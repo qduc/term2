@@ -136,7 +136,9 @@ for (const file of files) {
     const spec = ts.isImportSpecifier(node) || ts.isExportSpecifier(node);
     if (spec && leafReducers.has((node.propertyName ?? node.name).text))
       problems.push(
-        `${name}:${lineOf(sf, node)}: imports leaf reducer '${(node.propertyName ?? node.name).text}' (rule: one fold, call foldFact from session/fold-fact.ts instead)`,
+        `${name}:${lineOf(sf, node)}: imports leaf reducer '${
+          (node.propertyName ?? node.name).text
+        }' (rule: one fold, call foldFact from session/fold-fact.ts instead)`,
       );
     ts.forEachChild(node, visit);
   };

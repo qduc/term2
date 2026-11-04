@@ -305,7 +305,8 @@ it('rewind and clear redraw the terminal after successful history replacement', 
   await waitForHarnessComposerValue(idlePath, '/rewind last', { timeoutMs: 30_000 });
   session!.write('\r');
   await waitForHarnessComposerValue(idlePath, 'question to rewind', { timeoutMs: 30_000 });
-  expect(session!.getOutput().slice(beforeRewind)).toContain(erase);
+  // Composer telemetry and PTY output arrive independently; wait for the redraw itself.
+  await until(() => session!.getOutput().slice(beforeRewind).includes(erase), 'rewind redraws the terminal');
 
   session!.write('\x03');
   await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });

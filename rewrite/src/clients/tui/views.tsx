@@ -18,6 +18,7 @@ export function Transcript({
   live,
   expanded = false,
   staticRow = false,
+  firstRow = false,
 }: {
   readonly state: TuiState;
   readonly messages: readonly Message[];
@@ -26,6 +27,8 @@ export function Transcript({
   /** Show every tool's output, not only failures. */
   readonly expanded?: boolean;
   readonly staticRow?: boolean;
+  /** The static row is the transcript's first, under the header. */
+  readonly firstRow?: boolean;
 }): React.ReactElement {
   const { UserMessage, AssistantFrame, assistantGutter } = useSkin();
   const theme = useTheme();
@@ -34,6 +37,7 @@ export function Transcript({
   const toolById = new Map((live ? state.tools : []).map((tool) => [tool.id, tool]));
   // Legacy folds runs of tool calls only in concise display; a committed row is its own, already grouped, run.
   const groups = expanded || !state.timeline ? new Map() : groupTools(state.timeline, state.tools, false);
+  const firstId = staticRow ? (firstRow ? messages[0]?.id : undefined) : state.timeline?.[0]?.id ?? messages[0]?.id;
   const usedMessages = new Set<string>();
   const usedTools = new Set<string>();
   const renderMessage = (message: Message) =>
@@ -49,8 +53,9 @@ export function Transcript({
         </Box>
       </Box>
     ) : message.localHelp === true ? (
-      // Legacy shows /help as a system message: reasoning colour inside MessageList's paddingX 2.
-      <Box key={`message:${message.id}`} marginTop={1} paddingX={2}>
+      // Legacy shows /help as a system message: reasoning colour inside MessageList's paddingX 2, and
+      // MessageList's first message has no top margin.
+      <Box key={`message:${message.id}`} marginTop={message.id === firstId ? 0 : 1} paddingX={2}>
         <Text color={theme.reasoning}>{message.text}</Text>
       </Box>
     ) : message.role === 'assistant' ? (

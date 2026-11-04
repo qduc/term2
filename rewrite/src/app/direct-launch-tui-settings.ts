@@ -116,6 +116,13 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
     const plan = planProfileTransition(settings, targetId);
     if (plan.class === 'noop') return { applied: true, ...(said.noop ? { message: said.noop } : {}) };
     const snapshot = latest().sessionId === connection.sessionId ? latest() : connection.snapshot;
+    // Legacy mode-commands.ts: a change to or from Bare with history asks to clear (requestModeSwitchConfirm).
+    const current = resolveActiveProfile(settings).identity.id;
+    const enable = plan.targetId === BARE_PROFILE_ID;
+    if ((enable || current === BARE_PROFILE_ID) && snapshot?.messages.some((message) => message.role !== 'system')) {
+      const line = `Bare mode ${enable ? `enabled${BARE_ENABLED_DETAIL}` : 'disabled'}`;
+      return { confirmClear: { profileId: plan.targetId, enable, line } };
+    }
     if (plan.class === 'structural' && (!snapshot || snapshot.messages.length > 0)) {
       throw new Error(
         `Cannot switch modes mid-session (tool/context mismatch). Use \`/clear\` first, then \`${retry}\`.`,

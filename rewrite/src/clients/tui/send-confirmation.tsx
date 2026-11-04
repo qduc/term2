@@ -9,14 +9,16 @@ import ModeSwitchConfirmationPrompt from './presentation/components/prompt/ModeS
  */
 export function useSendConfirmation(interactionActive: boolean): {
   readonly pending: boolean;
-  /** `mode` names the mode a session-clearing switch goes to (legacy's mode-switch confirmation). */
-  hold(message: string, proceed: () => void, mode?: string): void;
+  /** `mode` names the mode a session-clearing switch turns on or off (legacy's mode-switch confirmation). */
+  hold(message: string, proceed: () => void, mode?: string, enable?: boolean): void;
   clear(): void;
   /** True when the key was consumed. */
   handleKey(input: string, key: Key): boolean;
   readonly prompt: ReactElement | null;
 } {
-  const [held, setHeld] = useState<{ message: string; proceed: () => void; mode?: string } | null>(null);
+  const [held, setHeld] = useState<{ message: string; proceed: () => void; mode?: string; enable?: boolean } | null>(
+    null,
+  );
   const owned = held !== null && !interactionActive;
   // Restart the handoff window whenever this prompt regains the keys from an approval panel.
   const handoffAt = useRef(0);
@@ -25,9 +27,9 @@ export function useSendConfirmation(interactionActive: boolean): {
   }, [interactionActive]);
   return {
     pending: held !== null,
-    hold: (message, proceed, mode) => {
+    hold: (message, proceed, mode, enable) => {
       handoffAt.current = performance.now();
-      setHeld({ message, proceed, ...(mode ? { mode } : {}) });
+      setHeld({ message, proceed, ...(mode ? { mode, enable } : {}) });
     },
     clear: () => setHeld(null),
     handleKey(input, key) {
@@ -47,6 +49,7 @@ export function useSendConfirmation(interactionActive: boolean): {
         held.mode ? (
           <ModeSwitchConfirmationPrompt
             modeLabel={held.mode}
+            targetValue={held.enable ?? true}
             onConfirm={() => {
               setHeld(null);
               held.proceed();

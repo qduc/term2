@@ -32,29 +32,41 @@ export function usePlanToggle(
         pending.current = false;
       });
   };
-  return () => {
+  /** Legacy handleModeSwitchConfirm: on Yes, a new conversation, its welcome, then the mode line. */
+  const confirmSwitch = (label: string, enable: boolean, line: string, clear: () => Promise<{ message?: string }>) =>
+    confirmation.hold(
+      'Clear session and switch mode?',
+      () => {
+        beginNewConversation?.([WELCOME, line]);
+        run(() =>
+          clear().then(
+            () => ({}),
+            (error: unknown) => {
+              beginNewConversation?.(null);
+              throw error;
+            },
+          ),
+        );
+      },
+      label,
+      enable,
+    );
+  const toggle = () => {
     const { planNeedsClear, clearAndTogglePlan, planTarget } = integration;
     if (!turnActive && planNeedsClear?.(connection) && clearAndTogglePlan) {
       const label = planTarget?.(connection) === 'builtin:plan' ? 'Plan' : 'Bare';
-      // Legacy handleModeSwitchConfirm: a new conversation, its welcome, then the mode line.
-      return confirmation.hold(
-        'Clear session and switch mode?',
-        () => {
-          beginNewConversation?.([WELCOME, `${label} mode enabled`]);
-          run(() =>
-            clearAndTogglePlan(connection).then(
-              () => ({}),
-              (error: unknown) => {
-                beginNewConversation?.(null);
-                throw error;
-              },
-            ),
-          );
-        },
-        label,
-      );
+      return confirmSwitch(label, true, `${label} mode enabled`, () => clearAndTogglePlan(connection));
     }
     run(() => integration.command(connection, '/plan'));
+  };
+  return {
+    toggle,
+    /** A command's `confirmClear` (legacy /profile to or from Bare with history). */
+    confirmClear(request: { readonly profileId: string; readonly enable: boolean; readonly line: string }) {
+      const { clearAndSwitch } = integration;
+      if (clearAndSwitch)
+        confirmSwitch('Bare', request.enable, request.line, () => clearAndSwitch(connection, request.profileId));
+    },
   };
 }
 

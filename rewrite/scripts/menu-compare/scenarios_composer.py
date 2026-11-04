@@ -94,8 +94,12 @@ SCENARIOS.update({
     'stab-history-yes': ['hello', '<enter>', '<sleep>', '<stab>', '<up>', '<enter>', '<sleep>'],
     'stab-history-esc': ['hello', '<enter>', '<sleep>', '<stab>', '<esc>'],
     'cmd-bare-history': ['hello', '<enter>', '<sleep>', '/bare', '<enter>'],
+    'cmd-plan-profile-bare': ['<stab>', 'hello', '<enter>', '<sleep>', '/profile bare', '<enter>'],
+    'cmd-plan-profile-bare-yes': ['<stab>', 'hello', '<enter>', '<sleep>', '/profile bare', '<enter>', '<up>', '<enter>', '<sleep>'],
+    'cmd-plan-profile-bare-esc': ['<stab>', 'hello', '<enter>', '<sleep>', '/profile bare', '<enter>', '<esc>'],
 })
-SEED.update({name: _TURN for name in ('stab-history', 'stab-history-yes', 'stab-history-esc', 'cmd-bare-history')})
+SEED.update({name: _TURN for name in ('stab-history', 'stab-history-yes', 'stab-history-esc', 'cmd-bare-history',
+    'cmd-plan-profile-bare', 'cmd-plan-profile-bare-yes', 'cmd-plan-profile-bare-esc')})
 
 SCENARIOS.update({
     'bang-run': ['!pwd', '<enter>', '<sleep>'],

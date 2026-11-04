@@ -195,7 +195,7 @@ export function TuiSession({
       setNotice(error instanceof Error ? error.message : String(error)),
     );
   });
-  const togglePlan = usePlanToggle(
+  const planToggle = usePlanToggle(
     integration,
     connection,
     confirmation,
@@ -227,7 +227,7 @@ export function TuiSession({
     if (composerActive && key.escape && handoffFlow.escape()) return;
     if (composerActive && key.escape && !viewport.expanded && queue.index < 0 && !editing && interruptConfirm.press())
       return;
-    if (composerActive && isShiftTab(input, key)) return togglePlan();
+    if (composerActive && isShiftTab(input, key)) return planToggle.toggle();
     // Legacy use-app-keyboard-shortcuts: Ctrl+O and Ctrl+T replace the draft with the menu command.
     if (composerActive && isCtrlO(input, key)) return replaceInput('/model ');
     if (composerActive && isCtrlT(input, key)) return replaceInput('/effort ');
@@ -345,6 +345,7 @@ export function TuiSession({
           // Legacy adds command output (/usage) as a system message, like /help.
           if (result.transcript) viewport.appendCommandOutput(result.transcript, true);
           if (result.menu) menuStack.openMenu(result.menu);
+          if (result.confirmClear) planToggle.confirmClear(result.confirmClear);
           if (result.draft) {
             restoreDraft(result.draft);
             return;

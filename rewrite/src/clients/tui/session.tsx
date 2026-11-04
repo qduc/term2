@@ -119,7 +119,7 @@ export function TuiSession({
     sessionId: connection.sessionId,
     composer: { value: editor.value, cursor: editor.cursor, replace: replaceInput },
     enabled: composerActive && !editing,
-    actions: { runCommand, notice: setNotice },
+    actions: { runCommand, notice: setNotice, command: (text) => integration.command(connection, text) },
   });
   useHarnessInput((composerActive || menuStack.open) && !busy, Boolean(state.activeTurnId), menuStack.value);
   const pending = useRef(false);

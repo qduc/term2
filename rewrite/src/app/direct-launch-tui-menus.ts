@@ -27,15 +27,10 @@ import {
   isProviderBuiltIn,
   validateWizardName,
   validateWizardUrl,
+  loadProviderItems,
   type CustomProviderDraft,
 } from '../../../source/providers/provider-service.js';
 import { ProviderManagementSession } from '../../../source/services/providers/provider-management-session.js';
-import {
-  getProviderCredentialSettingKey,
-  hasProviderCredentials,
-  isProviderDisabled,
-  setProviderDisabled,
-} from '../../../source/utils/ai/provider-credentials.js';
 import {
   resolveProviderId,
   resolveProviderName,
@@ -49,15 +44,35 @@ import {
 } from '../../../source/providers/oauth-accounts.js';
 import { getSessionAccount } from '../../../source/providers/oauth-session-account.js';
 import { PROVIDER_PRESETS } from '../../../source/providers/provider-presets.js';
-import { getProvider } from '../../../source/providers/registry.js';
-import type { TuiMenus, TuiProviderMenu } from '../clients/tui/integration.js';
+import { getAllProviders, getProvider, getProviderIds } from '../../../source/providers/index.js';
+import { filterModels } from '../../../source/services/model-service.js';
+import { getFavoriteModelInfos, toggleFavoriteModel } from '../../../source/services/models/model-favorites.js';
+import { ModelCatalogSession, orderedProviderIds } from '../../../source/services/models/model-catalog-session.js';
+import {
+  commitNicknameEdit,
+  getNicknameEntries,
+  getNicknameLabels,
+  getNicknameModelInfos,
+  removeNicknameTarget,
+} from '../../../source/services/models/model-nicknames.js';
+import { RUNTIME_MODIFIABLE_SETTINGS } from '../../../source/services/settings/settings-schema.js';
+import {
+  getAvailableProviderIds,
+  getProviderCredentialSettingKey,
+  getProviderIdForCredentialSettingKey,
+  hasProviderCredentials,
+  isProviderDisabled,
+  resolveProviderCredentials,
+  setProviderDisabled,
+} from '../../../source/utils/ai/provider-credentials.js';
+import type { TuiMenus, TuiModelSettings, TuiProviderMenu } from '../clients/tui/integration.js';
+import type { DirectApplication } from './direct-application.js';
 
 type MenuOptions = {
+  readonly app: Pick<DirectApplication, 'liveSettings'>;
+  /** The settings file; favorite, nickname and provider edits are saved there as legacy did. */
+  readonly persistentSettings: ISettingsService;
   readonly logger: LoggingService;
-  /** The launch settings service: legacy's provider manager writes here (setPersistent*), to the settings file. */
-  readonly persistentSettings?: ISettingsService;
-  /** The attached session's live settings, for what that session currently uses (its model selection). */
-  readonly liveSettings?: (sessionId: string) => ISettingsService | null;
 };
 
 /**
@@ -110,10 +125,65 @@ function createProviderMenu(persistent: ISettingsService, live: (sessionId: stri
   return menu;
 }
 
-export function createDirectTuiMenus(options: MenuOptions): TuiMenus {
-  const { logger, persistentSettings, liveSettings } = options;
+/** The legacy model services bound to one session's live settings. */
+function modelSettings(live: ISettingsService, options: MenuOptions): TuiModelSettings {
+  const save = (key: 'agent.favoriteModels' | 'agent.modelNicknames') =>
+    options.persistentSettings.setPersistentDynamic(key, live.get(key));
   return {
-    ...(persistentSettings ? { providers: createProviderMenu(persistentSettings, liveSettings ?? (() => null)) } : {}),
+    get: (key) => live.get(key as never),
+    getDynamic: (key) => live.getDynamic(key),
+    isRuntimeModifiable: (key) => RUNTIME_MODIFIABLE_SETTINGS.has(key),
+    onChange: live.onChange ? (listener) => live.onChange!(listener) : undefined,
+    providerIds: () => getProviderIds(),
+    orderedProviderIds: (ids) => orderedProviderIds(live, ids),
+    providers: () => getAllProviders(),
+    providerLabel: (id) => getProvider(id)?.label,
+    availableProviderIds: (ids) => getAvailableProviderIds(live, ids),
+    hasProviderCredentials: (id) => hasProviderCredentials(live, id),
+    unavailableReason: (id) => resolveProviderCredentials(live, id).unavailableReason,
+    credentialSettingKey: getProviderCredentialSettingKey,
+    providerIdForCredentialSettingKey: getProviderIdForCredentialSettingKey,
+    createCatalog: () => new ModelCatalogSession({ settingsService: live, loggingService: options.logger }),
+    favoriteModelInfos: () => getFavoriteModelInfos(live),
+    toggleFavorite(provider, modelId) {
+      const favorited = toggleFavoriteModel(live, provider, modelId);
+      save('agent.favoriteModels');
+      return favorited;
+    },
+    nicknameEntries: () => getNicknameEntries(live),
+    nicknameLabels: () => getNicknameLabels(live),
+    nicknameModelInfos: () => getNicknameModelInfos(live),
+    commitNickname(draft, providerIds) {
+      const result = commitNicknameEdit(live, draft, providerIds);
+      if (result.saved) save('agent.modelNicknames');
+      return result;
+    },
+    removeNickname(target) {
+      const removed = removeNicknameTarget(live, target);
+      if (removed) save('agent.modelNicknames');
+      return removed;
+    },
+    filterModels,
+    providerItems: () => loadProviderItems(live),
+  };
+}
+
+export function createDirectTuiMenus(options: MenuOptions): TuiMenus {
+  const { app, logger, persistentSettings } = options;
+  const bySession = new Map<string, { live: ISettingsService; settings: TuiModelSettings }>();
+  return {
+    providers: createProviderMenu(persistentSettings, (sessionId) => app.liveSettings(sessionId) ?? null),
+    models: {
+      settings(sessionId) {
+        const live = options.app.liveSettings(sessionId);
+        if (!live) throw new Error('The attached session has no live settings.');
+        const cached = bySession.get(sessionId);
+        if (cached?.live === live) return cached.settings;
+        const settings = modelSettings(live, options);
+        bySession.set(sessionId, { live, settings });
+        return settings;
+      },
+    },
     logger: {
       warn: (message, details) => logger.warn(message, details),
       error: (message, details) => logger.error(message, details),

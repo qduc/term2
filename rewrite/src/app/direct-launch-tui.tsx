@@ -6,8 +6,6 @@ import { homedir } from 'node:os';
 import { stderr, stdin, stdout } from 'node:process';
 import { createInterface } from 'node:readline/promises';
 import { collectProviderModels } from '../../../source/services/models/model-listing.js';
-import { getFavoriteModelInfos, toggleFavoriteModel } from '../../../source/services/models/model-favorites.js';
-import { getNicknameEntries } from '../../../source/services/models/model-nicknames.js';
 import { resolveActiveProfile } from '../../../source/services/profiles/active-profile.js';
 import React, { useMemo, useRef, useState, type ReactNode } from 'react';
 import { Box, render } from 'ink';
@@ -93,48 +91,7 @@ function DirectTui({
   const notifier = useTerminalFocusNotifier({ stdout, settingsService: settings, loggingService: logger });
   const integration: TuiIntegration = useMemo(
     () => ({
-      menus: createDirectTuiMenus({
-        logger,
-        persistentSettings,
-        liveSettings: (sessionId) => app.liveSettings(sessionId) ?? null,
-      }),
-      modelPicker: {
-        favorites(sessionId) {
-          const current = app.liveSettings(sessionId);
-          if (!current) throw new Error('The attached session has no live settings.');
-          return getFavoriteModelInfos(current).map((model) => ({ provider: model.provider!, id: model.id }));
-        },
-        nicknames(sessionId) {
-          const current = app.liveSettings(sessionId);
-          if (!current) throw new Error('The attached session has no live settings.');
-          const result: Record<string, string[]> = {};
-          for (const entry of getNicknameEntries(current)) {
-            const key = `${entry.provider}/${entry.modelId}`;
-            (result[key] ??= []).push(entry.nickname);
-          }
-          return result;
-        },
-        current() {
-          return { provider: latest.current.model.provider, id: latest.current.model.model };
-        },
-        async list(sessionId) {
-          const current = app.liveSettings(sessionId);
-          if (!current) throw new Error('The attached session has no live settings.');
-          const groups = await collectProviderModels({ settingsService: current, loggingService: logger });
-          return {
-            models: groups.flatMap((group) =>
-              group.models.map((model) => ({ provider: group.provider, id: model.id, name: model.name })),
-            ),
-            failedProviders: groups.filter((group) => group.error).map((group) => group.provider),
-          };
-        },
-        toggle(sessionId, model) {
-          const current = app.liveSettings(sessionId);
-          if (!current) throw new Error('The attached session has no live settings.');
-          toggleFavoriteModel(current, model.provider, model.id);
-          persistentSettings.setPersistent('agent.favoriteModels', current.get('agent.favoriteModels'));
-        },
-      },
+      menus: createDirectTuiMenus({ app, persistentSettings, logger }),
       async shell(sessionId, command) {
         if (remote) throw new Error('Direct shell commands are not available in SSH workspaces.');
         const settings = app.liveSettings(sessionId);

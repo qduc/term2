@@ -14,6 +14,7 @@ import { MenuSurface } from './MenuSurface.js';
 import { InputProvider } from './input-context.js';
 import { MENU_RULE_IDS, useMenuServices, type MenuActions } from './menu-services.js';
 import { legacySlashCommands } from './legacy-commands.js';
+import { menuIntentHost } from './menu-intent-host.js';
 
 type Composer = {
   readonly value: string;
@@ -50,6 +51,13 @@ export function useMenuStack(options: {
     if (!menus) return;
     controller.setTriggerRegistry(createDefaultTriggerRegistry(commands, MENU_RULE_IDS, menus.schema));
   }, [controller, commands, menus]);
+  // The session passes fresh callbacks each render; the host reads the latest.
+  const latestActions = useRef(actions);
+  latestActions.current = actions;
+  useEffect(() => {
+    controller.setIntentHost(menuIntentHost(() => latestActions.current));
+    return () => controller.setIntentHost(undefined);
+  }, [controller]);
   const open = Boolean(menus) && snapshot.stack.length > 0;
 
   // The text both sides last agreed on. Cursor-only controller revisions and composer keystrokes not yet

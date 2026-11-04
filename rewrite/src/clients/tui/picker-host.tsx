@@ -2,18 +2,16 @@ import React from 'react';
 import type { TuiConnection, TuiIntegration } from './integration.js';
 import type { InteractionInput } from './interaction-input.js';
 import { EffortPicker } from './effort-picker.js';
-import { ModelPicker } from './model-picker.js';
 import { ResumePicker } from './resume-picker.js';
 import { SettingsPicker } from './settings-picker.js';
 
-export type PickerKind = 'model' | 'resume' | 'settings' | 'effort';
+export type PickerKind = 'resume' | 'settings' | 'effort';
 
-/** The picker a typed command opens: `/model`, `/resume`, `/settings`, and bare `/effort`. */
+/** The picker a typed command opens: `/resume`, `/settings`, and bare `/effort`. */
 export function pickerFor(integration: TuiIntegration, command: string): PickerKind | null {
   if (command === '/effort') return 'effort';
   if (command === '/resume' && integration.resumePicker) return 'resume';
-  if (command === '/settings' && integration.settingsPicker) return 'settings';
-  return command === '/model' && integration.modelPicker ? 'model' : null;
+  return command === '/settings' && integration.settingsPicker ? 'settings' : null;
 }
 
 /** One full-screen choice list at a time; it owns the keys through the session's shared input ref. */
@@ -37,17 +35,6 @@ export function PickerHost(props: {
         onClose={close}
         onNotice={onNotice}
         run={(text) => integration.command(connection, text)}
-      />
-    );
-  if (kind === 'model' && integration.modelPicker)
-    return (
-      <ModelPicker
-        api={integration.modelPicker}
-        sessionId={connection.sessionId}
-        inputHandler={inputHandler}
-        onClose={close}
-        run={(text) => integration.command(connection, text)}
-        onNotice={onNotice}
       />
     );
   if (kind === 'effort') {

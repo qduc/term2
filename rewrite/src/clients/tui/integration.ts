@@ -27,7 +27,6 @@ export type TuiStatusInfo = {
   readonly effort: string | undefined;
   readonly approval: 'off' | 'advisory' | 'auto' | 'always';
 };
-export type PickerModel = { readonly provider: string; readonly id: string; readonly name?: string };
 
 export type SettingsPickerItem = {
   readonly key: string;
@@ -84,6 +83,67 @@ export interface TuiSettingsSchema {
   subagentPool(key: string): { readonly roleLabel: string; readonly entryShape: 'entries' | 'models' } | undefined;
 }
 
+/** Legacy ProviderSelectionItem (source/providers/provider-service.ts). */
+export interface MenuProviderSelectionItem {
+  id: string;
+  label: string;
+  isCustom: boolean;
+  isActive: boolean;
+  hasCredentials: boolean;
+  isDisabled: boolean;
+}
+
+/** A legacy ModelCatalogSession (source/services/models/model-catalog-session.ts). */
+export interface MenuModelCatalog {
+  getCached(provider: string): MenuModelInfo[] | undefined;
+  load(provider: string): Promise<{ kind: 'loaded' | 'cached' | 'stale'; models: MenuModelInfo[] }>;
+  begin(): void;
+  refresh(provider: string): void;
+  invalidate(provider: string): void;
+  clear(): void;
+}
+export type MenuNicknameTarget = { provider: string; modelId: string; reasoningEffort?: string };
+export type MenuNicknameEntry = { nickname: string } & MenuNicknameTarget;
+export type MenuNicknameConflict = { nickname: string; provider: string; modelId: string };
+
+/**
+ * One session's live settings and the legacy model services bound to them
+ * (model-favorites, model-nicknames, provider-credentials, providers/index,
+ * model-service). In-memory reads only; `createCatalog().load` fetches and is
+ * called when a picker opens, never during render. Favorite and nickname writes
+ * also save to the settings file, as legacy's setPersistent did.
+ */
+export interface TuiModelSettings {
+  get(key: string): any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  getDynamic(key: string): unknown;
+  isRuntimeModifiable(key: string): boolean;
+  onChange?(listener: (key?: string) => void): () => void;
+  providerIds(): string[];
+  orderedProviderIds(providerIds: string[]): string[];
+  providers(): readonly { readonly id: string; readonly label: string }[];
+  providerLabel(providerId: string): string | undefined;
+  availableProviderIds(providerIds: string[]): string[];
+  hasProviderCredentials(providerId: string): boolean;
+  unavailableReason(providerId: string): MenuModelInfo['unavailableReason'];
+  credentialSettingKey(providerId: string): string | undefined;
+  providerIdForCredentialSettingKey(key: string | undefined): string | undefined;
+  createCatalog(): MenuModelCatalog;
+  favoriteModelInfos(): MenuModelInfo[];
+  toggleFavorite(provider: string, modelId: string): boolean;
+  nicknameEntries(): MenuNicknameEntry[];
+  nicknameLabels(): Map<string, string>;
+  nicknameModelInfos(): MenuModelInfo[];
+  commitNickname(
+    draft: { text: string; provider: string; modelId: string; pendingReplace?: MenuNicknameConflict | null },
+    providerIds?: readonly string[],
+  ): { saved: true } | { saved: false; error: string; pendingReplace: MenuNicknameConflict | null };
+  removeNickname(target: { provider: string; modelId: string }): boolean;
+  /** model-service.ts filterModels. */
+  filterModels(models: MenuModelInfo[], query: string): MenuModelInfo[];
+  /** provider-service.ts loadProviderItems, for the pool editor's provider step. */
+  providerItems(): MenuProviderSelectionItem[];
+}
+
 /**
  * Data the legacy menu stack (`menus/`) reads through the app instead of
  * legacy services. Each group replaces the service calls of one ported menu.
@@ -98,6 +158,8 @@ export interface TuiMenus {
     refresh(): Promise<MenuPathEntry[]>;
     meta(): MenuWorkspaceEntriesMeta;
   };
+  /** The model and subagent-pool menus. Memoise per session: it is not a render-path read. */
+  readonly models: { settings(sessionId: string): TuiModelSettings };
   /** `/providers` manager; absent means `/providers` has no menu. */
   readonly providers?: TuiProviderMenu;
 }
@@ -186,13 +248,6 @@ export interface TuiIntegration {
         model?: string;
       }[]
     >;
-  };
-  readonly modelPicker?: {
-    favorites(sessionId: string): PickerModel[];
-    nicknames(sessionId: string): Readonly<Record<string, readonly string[]>>;
-    list(sessionId: string): Promise<{ models: PickerModel[]; failedProviders: string[] }>;
-    current(sessionId: string): PickerModel;
-    toggle(sessionId: string, model: PickerModel): void;
   };
   planNeedsClear?(connection: TuiConnection): boolean;
   clearAndTogglePlan?(connection: TuiConnection): Promise<{ message?: string }>;

@@ -1,6 +1,8 @@
 import { formatModelUsageBreakdown, summarizeModelUsage } from '../../../source/services/cost/model-cost.js';
 import { VALID_REASONING_EFFORTS } from '../../../source/services/models/reasoning-effort.js';
 import { resetSession } from '../clients/tui/commands.js';
+import { loadProviderItems } from '../../../source/providers/provider-service.js';
+import { parseModelProviderArg } from '../../../source/utils/ai/model-provider-arg.js';
 /**
  * The slash commands no wire command covers by itself. Each one is either a real
  * host or wire operation here, or it fails visibly. The TUI sends `/compact`, `/retry-*`,
@@ -130,16 +132,20 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
     return { message: here.length ? here.join('\n') : 'No direct sessions in this workspace.' };
   };
 
-  const model = async (connection: TuiConnection, reference: string | undefined): Promise<CommandResult> => {
-    if (!reference) {
-      const current = app.sessionDetails(connection.sessionId).settings?.get('agent.modelSelection');
-      return {
-        message: `${
-          current ? `Current model: ${current.provider}/${current.model}. ` : ''
-        }Choose a model: enter <provider>/<model>.`,
-      };
-    }
+  const model = async (connection: TuiConnection, args: string): Promise<CommandResult> => {
+    // Legacy model-command.ts: bare `/model` puts `/model ` in the composer, which opens the model menu.
+    if (!args) return { draft: { text: '/model ', attachments: [] } };
+    // The legacy menu submits `/model <id> --provider=<provider>`; legacy also takes a bare id on the
+    // current provider. `<provider>/<model>` stays for next's existing callers.
+    const legacy = parseModelProviderArg(args);
+    const current = app.sessionDetails(connection.sessionId).settings?.get('agent.modelSelection');
+    const provider =
+      legacy.provider || !legacy.modelId.includes('/') ? legacy.provider ?? current?.provider : undefined;
+    const reference = provider === undefined ? legacy.modelId : `${provider}/${legacy.modelId}`;
+    const done = provider === undefined ? `Model set to ${reference}.` : `Set model to ${legacy.modelId} (${provider})`;
     const selected = parseModel(reference);
+    // Legacy set a `<id> [--provider=]` selection without checking the catalog; the menu submits that form.
+    if (provider !== undefined) return configure(connection, { model: selected }, done);
     const catalog = await options.modelCatalog(connection.sessionId, selected.provider);
     if (catalog.error || catalog.models.length === 0) {
       throw new Error(
@@ -155,7 +161,7 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
           .join(', ')}.`,
       );
     }
-    return configure(connection, { model: selected }, `Model set to ${reference}.`);
+    return configure(connection, { model: selected }, done);
   };
 
   const effort = async (connection: TuiConnection, value: string | undefined): Promise<CommandResult> => {
@@ -341,7 +347,7 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
         case 'resume':
           return resume(argument);
         case 'model':
-          return model(connection, argument);
+          return model(connection, rest.join(' '));
         case 'effort':
           return effort(connection, argument);
         case 'copy':

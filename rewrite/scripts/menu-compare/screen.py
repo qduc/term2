@@ -276,12 +276,18 @@ def mask(line):
     return line
 
 
+TIMING = re.compile(r'\b\d+(\.\d+)?(ms|s)\b|\d+(\.\d+)?(?= ?(tok/s|t/s))')
+
+
 def mask_row(text):
     """Mask a screen row. Session ids differ in width (term2-next prefixes `conv_`), so on any row holding
-    one the padding after it is collapsed in both CLIs and the row's cell styles are not compared."""
+    one the padding after it is collapsed in both CLIs and the row's cell styles are not compared. A timing
+    ('9ms' against '12ms') shifts the cells after it, so styles are compared up to the first timing only;
+    the second value is that column (True: the whole row)."""
     masked = mask(text)
     if '<id>' not in masked:
-        return masked, True
+        timing = TIMING.search(text)
+        return masked, True if timing is None else timing.start()
     return re.sub(r'(<id>) +', r'\1 ', masked), False
 
 
@@ -301,7 +307,9 @@ def capture(screen, history=False):
                 if prev is not None and prev != ('default', 'default', False, False, False, False):
                     spans.append([start, x, *prev])
                 prev, start = key, x
-        styles.append(spans if comparable else 'masked-width')
+        if comparable is not True and comparable is not False:  # clip at the first timing
+            spans = [[a, min(b, comparable), *rest] for a, b, *rest in spans if a < comparable]
+        styles.append(spans if comparable is not False else 'masked-width')
     return {'lines': lines, 'styles': styles}
 
 

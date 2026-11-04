@@ -450,7 +450,8 @@ it.skipIf(process.platform !== 'linux')(
     await new Promise((resolve) => setTimeout(resolve, 500));
     // Select the pending request through the legacy queue keyboard interaction.
     session!.write('\x1b[A');
-    await session!.waitForOutput('navigate', 30_000);
+    // The skills menu's footer also reads "navigate"; wait for the queue selection's own hint.
+    await session!.waitForOutput('e edit │ d delete', 30_000);
     session!.write('\r');
     await waitForHarnessComposerValue(idlePath, 'queue request', { timeoutMs: 30_000 });
     expect(session!.getVisibleOutput()).not.toContain('QUEUE_SKILL_SENTINEL');

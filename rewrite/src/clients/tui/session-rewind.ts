@@ -20,7 +20,7 @@ export function useSessionRewind({
     if (pending.current) return;
     pending.current = true;
     setBusy(true);
-    setNotice(null);
+    // No reset: `/undo` prints legacy's alias notice just before this runs.
     try {
       const message = await rewindDraft(connection, targetId, disposition); // legacy says nothing on success
       if (message) setNotice(message);

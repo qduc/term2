@@ -14,6 +14,11 @@ _SHELL = {'tool': 'shell', 'args': {'command': 'echo hi', 'description': 'Print 
 _TOUCH = {'tool': 'shell', 'args': {'command': 'touch created-by-walk.txt'}}
 _LS = {'tool': 'shell', 'args': {'command': 'ls'}}
 _FAIL = {'tool': 'shell', 'args': {'command': 'exit 3', 'description': 'Fail on purpose'}}
+# Long answers, so a short summary actually reduces the history.
+_FILL = ' Filler sentence to make the history worth compacting.' * 40
+_COMPACT_REPLIES = [{'text': 'Answer one.' + _FILL}, {'text': 'Answer two.' + _FILL}, {'text': 'Answer three.' + _FILL},
+                    {'text': 'Summary of the conversation.'}, {'text': 'Answer four.' + _FILL},
+                    {'text': 'Answer five.' + _FILL}, {'text': 'Summary again.'}]
 _TURNS = ['first question', '<enter>', '<sleep>', 'second question', '<enter>', '<sleep>', 'third question', '<enter>',
           '<sleep>']
 
@@ -21,6 +26,7 @@ SCENARIOS = {
     't-startup': [],
     't-markdown': ['show me markdown', '<enter>', '<sleep>'],
     't-markdown-stream': ['show me markdown', '<enter>', '<sleep>', '<sleep>'],
+    't-stream-long': ['write a lot', '<enter>', '<sleep>', '<sleep>', '<sleep>'],
     't-long': ['say something long', '<enter>', '<sleep>'],
     't-turns': _TURNS,
     't-stream': ['stream please', '<enter>', '<sleep>'],
@@ -32,8 +38,9 @@ SCENARIOS = {
     't-tool-pending': ['run it', '<enter>', '<sleep>'],
     't-tool-deny': ['run it', '<enter>', '<sleep>', '2', '<sleep>', '<sleep>'],
     't-tool-deny-reason': ['run it', '<enter>', '<sleep>', '2', '<sleep>', 'not now', '<enter>', '<sleep>', '<sleep>'],
-    't-compact': ['first question', '<enter>', '<sleep>', '/compact', '<enter>', '<sleep>', 'second question', '<enter>',
-                  '<sleep>', '/compact', '<enter>', '<sleep>'],
+    't-compact': _TURNS + ['/compact', '<enter>', '<sleep>', '<sleep>', 'fourth question', '<enter>', '<sleep>',
+                           'fifth question', '<enter>', '<sleep>', '/compact', '<enter>', '<sleep>', '<sleep>'],
+    't-compact-unconfigured': ['first question', '<enter>', '<sleep>', '/compact', '<enter>', '<sleep>'],
     't-resize-down': ['say something long', '<enter>', '<sleep>', '<resize-80x24>', '<sleep>'],
     't-resize-back': ['say something long', '<enter>', '<sleep>', '<resize-80x24>', '<sleep>', '<resize-100x34>',
                       '<sleep>'],
@@ -41,6 +48,11 @@ SCENARIOS = {
     't-status-msgs': ['/usage', '<enter>', '<sleep>', '/effort', '<enter>', '<sleep>', 'hello', '<enter>', '<sleep>'],
     't-rewind': ['first question', '<enter>', '<sleep>', 'second question', '<enter>', '<sleep>', '/rewind ', '<enter>',
                  '<sleep>', '<enter>', '<sleep>', 'third question', '<enter>', '<sleep>'],
+    't-resume-long': ['/resume ', '<sleep>', '<enter>', '<sleep>'],
+    't-long-user': [_LONG, '<enter>', '<sleep>'],
+    't-model-switch': ['first question', '<enter>', '<sleep>', '/model mock-beta', '<enter>', '<sleep>'],
+    't-plan-stream': ['<stab>', '<sleep>', '<stab>', '<sleep>', 'stream please', '<enter>', '<sleep>'],
+    't-cancel': ['stream please', '<enter>', '<sleep>', '<esc>', '<esc>', '<sleep>'],
     't-exit-fresh': ['<c-c>', '<c-c>', '<sleep>'],
     't-exit-turn': ['hello', '<enter>', '<sleep>', '<c-c>', '<c-c>', '<sleep>'],
     't-exit-cmd': ['hello', '<enter>', '<sleep>', '/exit', '<enter>', '<sleep>'],
@@ -49,6 +61,8 @@ SCENARIOS = {
 SEED = {
     't-markdown': {'replies': [{'text': _MD}], 'usage': _USAGE},
     't-markdown-stream': {'replies': [{'text': _MD, 'chunks': 20, 'delay': 0.15}], 'usage': _USAGE},
+    't-stream-long': {'replies': [{'text': '\n\n'.join(f'Paragraph {i} has a few words in it.' for i in range(14)),
+                                   'chunks': 28, 'delay': 0.1}], 'usage': _USAGE},
     't-long': {'replies': [{'text': _LONG}], 'usage': _USAGE},
     't-turns': {'replies': [{'text': 'Answer one.'}, {'text': 'Answer two.'}, {'text': 'Answer three.'}],
                 'usage': _USAGE},
@@ -64,16 +78,22 @@ SEED = {
     't-tool-pending': {'replies': [_TOUCH, {'text': 'done'}], 'usage': _USAGE},
     't-tool-deny': {'replies': [_TOUCH, {'text': 'done'}], 'usage': _USAGE},
     't-tool-deny-reason': {'replies': [_TOUCH, {'text': 'done'}], 'usage': _USAGE},
-    't-compact': {'replies': [{'text': 'Answer one.'}, {'text': 'Summary of the conversation.'},
-                              {'text': 'Answer two.'}, {'text': 'Summary again.'}], 'usage': _USAGE,
-                  'settings': {'agent': {'retryAttempts': 0, 'modelSelection': {'model': 'mock-alpha', 'provider': 'mockprov'},
-                                         'contextCompaction': {'enabled': True, 'mode': 'local',
-                                                               'compactThreshold': 0.8,
-                                                               'compactThresholdTokens': 60000}}}},
+    # Legacy's /compact ignores compactThresholdTokens, so an uncatalogued model needs an input ceiling to compact.
+    't-compact': {'replies': _COMPACT_REPLIES, 'usage': _USAGE,
+                  'settings': {'agent': {'retryAttempts': 0, 'maxRequestInputTokens': 100000,
+                                         'modelSelection': {'model': 'mock-alpha', 'provider': 'mockprov'}}}},
+    't-compact-unconfigured': {'replies': _COMPACT_REPLIES, 'usage': _USAGE},
     't-resize-down': {'replies': [{'text': _LONG}], 'usage': _USAGE},
     't-resize-back': {'replies': [{'text': _LONG}], 'usage': _USAGE},
     't-resume': {'sessions': [['short first turn', 'second turn', 'third turn']]},
     't-rewind': {'replies': [{'text': 'Answer one.'}, {'text': 'Answer two.'}, {'text': 'Answer three.'}]},
+    't-resume-long': {'sessions': [['short first turn', _LONG, 'third turn', _LONG + ' again', 'fifth turn',
+                                     'sixth turn']]},
+    't-long-user': {'replies': [{'text': 'Short answer.'}], 'usage': _USAGE},
+    't-model-switch': {'replies': [{'text': 'Answer one.'}], 'usage': _USAGE},
+    't-plan-stream': {'replies': [{'text': 'line\n\n' * 30, 'chunks': 30, 'delay': 0.3}], 'usage': _USAGE},
+    't-cancel': {'replies': [{'text': '\n\n'.join(f'sw{i}' for i in range(40)), 'chunks': 40, 'delay': 0.25}],
+                 'usage': _USAGE},
     't-exit-turn': {'replies': [{'text': 'Hi there.'}], 'usage': _USAGE},
     't-exit-cmd': {'replies': [{'text': 'Hi there.'}], 'usage': _USAGE},
 }

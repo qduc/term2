@@ -71,38 +71,32 @@ for (const [cols, rows] of [
       expect(menu).toContain('╭');
       expect(menu).toContain('Commands');
       expect(menu).toContain('╰');
-      expect(menu).toContain('› /help');
-      const menuLines = menu.slice(menu.lastIndexOf('╭'), menu.lastIndexOf('╰')).split('\n');
-      expect(menuLines.filter((line) => /[› ] \/[a-z-]+\s/.test(line)).length).toBe(Math.min(10, rows - 12));
-      // Navigate past the first short-screen window; the selected command must remain visible.
-      for (let i = 0; i < 8; i++) {
+      // Legacy's slash menu (ported): first entry selected, a fixed ten-row window.
+      expect(menu).toContain('❯ /model');
+      // Navigate past the first window; the selected command must remain visible.
+      for (let i = 0; i < 10; i++) {
         terminal.write('\x1b[B');
         await new Promise((resolve) => setTimeout(resolve, 80));
       }
-      await terminal.waitForOutput('› /resume', 30_000);
+      await terminal.waitForOutput('❯ /retry-tool', 30_000);
       terminal.write('help');
       await waitForHarnessComposerValue(idle, '/help', { timeoutMs: 60_000 });
       terminal.write('\r');
       // Help must be emitted in full without keyboard paging, even on a short terminal.
-      await terminal.waitForOutput('/orchestrator —', 30_000);
-      await terminal.waitForOutput('Keyboard shortcuts', 30_000);
-      // The heading can land a frame before its shortcut lines; wait for the lines the asserts read.
-      await terminal.waitForOutput('Ctrl+G approvals/tasks', 30_000);
-      expect(terminal.getVisibleOutput()).toContain('Keyboard shortcuts');
-      expect(terminal.getVisibleOutput()).toContain('Ctrl+G approvals/tasks');
-      const helpOutput = terminal.getVisibleOutput();
-      const shortcutsAt = helpOutput.lastIndexOf('Keyboard shortcuts');
-      expect(shortcutsAt).toBeGreaterThan(helpOutput.lastIndexOf('/orchestrator —'));
-      expect(helpOutput.slice(shortcutsAt)).toContain('Shift+Tab plan mode');
+      await terminal.waitForOutput('Shift+Tab: switch Standard/Plan', 30_000);
+      const helpOutput = terminal.getOutput();
+      expect(helpOutput.lastIndexOf('Keyboard shortcuts')).toBeGreaterThan(helpOutput.lastIndexOf('/help —'));
+      // Legacy's command table, except /undo, as the slash menu lists it.
       const table = fs.readFileSync(
-        fileURLToPath(new URL('../rewrite/src/clients/tui/slash-commands.ts', import.meta.url)),
+        fileURLToPath(new URL('../rewrite/src/clients/tui/menus/legacy-commands.ts', import.meta.url)),
         'utf8',
       );
       const commands = [...table.matchAll(/name: '([^']+)'/g)].map((match) => match[1]!);
       expect(commands.length).toBeGreaterThan(20);
-      for (const command of commands) expect(terminal.getOutput()).toContain(command);
-      for (const command of ['/plan', '/mentor', '/bare', '/mcp', '/restart', '/quit']) {
-        expect(terminal.getVisibleOutput()).toContain(`${command} —`);
+      for (const command of commands.filter((name) => name !== 'undo')) expect(helpOutput).toContain(`/${command} —`);
+      // Dropped by owner scope, or never in legacy.
+      for (const command of ['/plan', '/mentor', '/orchestrator', '/sandbox', '/mcp', '/tasks', '/queue']) {
+        expect(helpOutput).not.toContain(`${command} —`);
       }
       expect(terminal.getVisibleOutput()).not.toMatch(/Lines 1[–-]\d+ of \d+/);
     } finally {

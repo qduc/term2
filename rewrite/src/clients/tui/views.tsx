@@ -49,8 +49,9 @@ export function Transcript({
         </Box>
       </Box>
     ) : message.localHelp === true ? (
-      <Box key={`message:${message.id}`} marginTop={1}>
-        <Text color={theme.textSubtle}>{message.text}</Text>
+      // Legacy shows /help as a system message: reasoning colour inside MessageList's paddingX 2.
+      <Box key={`message:${message.id}`} marginTop={1} paddingX={2}>
+        <Text color={theme.reasoning}>{message.text}</Text>
       </Box>
     ) : message.role === 'assistant' ? (
       <Box key={`message:${message.id}`} flexDirection="column" marginTop={1} paddingLeft={2}>

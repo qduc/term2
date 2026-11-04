@@ -13,6 +13,9 @@ _SHELL = {'tool': 'shell', 'args': {'command': 'echo hi', 'description': 'Print 
 # A write needs approval (a read-only `echo` is approved on its own); no description, as in the soak.
 _TOUCH = {'tool': 'shell', 'args': {'command': 'touch created-by-walk.txt'}}
 _LS = {'tool': 'shell', 'args': {'command': 'ls'}}
+_ASK = {'tool': 'ask_user', 'args': {'questions': [{'question': 'Pick a colour?',
+                                                   'options': [{'label': 'Amber'}, {'label': 'Violet'}]}]}}
+_ECHO = {'tool': 'shell', 'args': {'command': 'echo parallel-ok'}}
 _FAIL = {'tool': 'shell', 'args': {'command': 'exit 3', 'description': 'Fail on purpose'}}
 # Long answers, so a short summary actually reduces the history.
 _FILL = ' Filler sentence to make the history worth compacting.' * 40
@@ -53,6 +56,8 @@ SCENARIOS = {
     't-long-user': [_LONG, '<enter>', '<sleep>'],
     't-model-switch': ['first question', '<enter>', '<sleep>', '/model mock-beta', '<enter>', '<sleep>'],
     't-cancel': ['stream please', '<enter>', '<sleep>', '<esc>', '<esc>', '<sleep>'],
+    # A question and a shell call in one reply. Bare has no ask_user, so the call fails at once and keeps its place.
+    't-ask-mixed': ['ask me', '<enter>', '<sleep>', '<enter>', '<sleep>', '<sleep>'],
     't-exit-fresh': ['<c-c>', '<c-c>', '<sleep>'],
     't-exit-turn': ['hello', '<enter>', '<sleep>', '<c-c>', '<c-c>', '<sleep>'],
     't-exit-cmd': ['hello', '<enter>', '<sleep>', '/exit', '<enter>', '<sleep>'],
@@ -95,6 +100,7 @@ SEED = {
     't-model-switch': {'replies': [{'text': 'Answer one.'}], 'usage': _USAGE},
     't-cancel': {'replies': [{'text': '\n\n'.join(f'sw{i}' for i in range(40)), 'chunks': 40, 'delay': 0.25}],
                  'usage': _USAGE},
+    't-ask-mixed': {'replies': [{'calls': [_ASK, _ECHO]}, {'text': 'done'}], 'usage': _USAGE},
     't-exit-turn': {'replies': [{'text': 'Hi there.'}], 'usage': _USAGE},
     't-exit-cmd': {'replies': [{'text': 'Hi there.'}], 'usage': _USAGE},
 }

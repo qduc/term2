@@ -1,5 +1,5 @@
 /** Bounded reads for a resume row. Never loads a conversation body. */
-import { closeSync, fstatSync, openSync, readSync } from 'node:fs';
+import { closeSync, openSync, readSync } from 'node:fs';
 
 const TITLE_CAP_BYTES = 8 * 1024 * 1024;
 
@@ -55,34 +55,6 @@ export function readDirectResumeTitle(filePath: string): string | undefined {
       }
       pending = pending.subarray(start);
       if (pending.length >= TITLE_CAP_BYTES) return undefined;
-    }
-    return undefined;
-  } finally {
-    closeSync(fd);
-  }
-}
-
-/** Timestamp of the last terminated line, when that line fits in the tail. */
-export function readDirectResumeUpdatedAt(filePath: string): string | undefined {
-  const fd = openSync(filePath, 'r');
-  try {
-    const size = Number(fstatSync(fd).size);
-    if (!Number.isFinite(size) || size <= 0) return undefined;
-    const start = Math.max(0, size - 64 * 1024);
-    const buf = Buffer.alloc(size - start);
-    const n = readSync(fd, buf, 0, buf.length, start);
-    const lines = buf.subarray(0, n).toString('utf8').split('\n');
-    if (start > 0) lines.shift();
-    if (lines.at(-1) !== '') lines.pop();
-    for (let index = lines.length - 1; index >= 0; index -= 1) {
-      const line = lines[index];
-      if (!line) continue;
-      try {
-        const at = JSON.parse(line).at;
-        if (typeof at === 'string') return at;
-      } catch {
-        continue;
-      }
     }
     return undefined;
   } finally {

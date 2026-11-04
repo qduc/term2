@@ -3,7 +3,7 @@ import { statSync } from 'node:fs';
 import path from 'node:path';
 import { withNativeCatalogue, type NativeIndexer } from './native-catalogue.js';
 import { directLogicalEnds, readDirectLogHeaderLine } from './direct-rolling-log.js';
-import { readDirectResumeTitle, readDirectResumeUpdatedAt } from './direct-list-preview.js';
+import { readDirectResumeTitle } from './direct-list-preview.js';
 import type { DirectLiveListing, DirectLocalStore } from './direct-store.js';
 import type { ModelRef } from '../model/index.js';
 import type { Workspace } from '../tools/index.js';
@@ -93,7 +93,8 @@ export async function listDirectResumeSessions(
     let updatedAt = entry?.updated;
     if (current) {
       try {
-        updatedAt = readDirectResumeUpdatedAt(ends.get(id)?.headPath ?? rootPath) ?? updatedAt;
+        // Legacy ages a row by the file's mtime, not by the timestamp inside its last line.
+        updatedAt = statSync(ends.get(id)?.headPath ?? rootPath).mtime.toISOString();
       } catch {
         /* The catalogue time still describes the last indexed line. */
       }

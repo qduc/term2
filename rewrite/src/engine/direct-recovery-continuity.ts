@@ -128,6 +128,18 @@ export class DirectContinuity {
     };
   }
 
+  /** Experimental legacy cancellation: retain the response while omitting its unanswered tool output. */
+  skipCancelledQuestion(history: readonly Item[], noAnswer: string): void {
+    const checkpoint = this.#checkpoint;
+    if (!checkpoint || checkpoint.debt.length !== 1 || !hasPrefix(history, checkpoint.history)) return;
+    const delta = history.slice(checkpoint.history.length);
+    const call = checkpoint.history.find((item) => item.type === 'tool_call' && item.callId === checkpoint.debt[0]);
+    if (call?.type !== 'tool_call' || call.toolName !== 'ask_user' || delta.length !== 1) return;
+    const result = delta[0];
+    if (result?.type !== 'tool_result' || result.callId !== call.callId || result.output !== noAnswer) return;
+    this.#checkpoint = { ...checkpoint, history: structuredClone(history), debt: [] };
+  }
+
   /** Retry, rewind, compaction, rollover, model/endpoint change and cancellation retire the checkpoint. */
   clear(): void {
     this.#checkpoint = undefined;

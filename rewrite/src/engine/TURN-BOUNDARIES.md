@@ -27,3 +27,9 @@ A Session-admitted steer stays pending until the next request boundary. It never
 aborts an in-flight physical response. Tool turns admit it before the next model
 request; a plain-text response settles first and the pending steer starts the next
 turn. This preserves the full response and its continuity before new input.
+
+For a cancelled `ask_user` whose result is persisted locally but intentionally not
+sent in the legacy continuation, Session may call `skipCancelledQuestion` before
+starting the next user turn. It advances a checkpoint only for an exact history
+prefix with one outstanding `ask_user` call and exactly its matching no-answer
+result. Any mismatch leaves the normal outstanding-tool-debt guard unchanged.

@@ -1,5 +1,5 @@
 import React from 'react';
-import type { WireRewindTarget } from '../../protocol/direct-wire.js';
+import { ASK_USER_NO_ANSWER_RESULT, type WireRewindTarget } from '../../protocol/direct-wire.js';
 import type { TuiConnection, TuiProps } from './integration.js';
 import type { TuiState } from './state.js';
 import { PickerHost, type PickerKind } from './picker-host.js';
@@ -107,7 +107,11 @@ export function SessionPanels({
             foregroundInteraction
               ? async () => {
                   if (foregroundInteraction.kind === 'question')
-                    await answerInteraction(connection, foregroundInteraction.id, { kind: 'decline' });
+                    await answerInteraction(connection, foregroundInteraction.id, {
+                      kind: 'answer',
+                      answer: ASK_USER_NO_ANSWER_RESULT,
+                      stopAfterApprovalResolution: true,
+                    });
                   else setNotice(await cancelInput(connection, foregroundInteraction.turnId));
                 }
               : undefined

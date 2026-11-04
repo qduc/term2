@@ -18,6 +18,7 @@ import { NativeBudgetExhausted, type TurnBudgetControl } from './turn-budget.js'
 import { TurnEvents, cancelled } from './turn-events.js';
 import { TurnToolInteractions } from './turn-tool-interactions.js';
 import { childResult, errorResult, toolResultItem } from './turn-tool-results.js';
+import { ASK_USER_NO_ANSWER_RESULT } from '../tools/adopted/ask-user-constants.js';
 
 type CallItem = Extract<Item, { type: 'tool_call' }>;
 type Execution = {
@@ -64,6 +65,7 @@ export class TurnTools {
   #executionOrdinal = 0;
   #closed = false;
   #stop: StopTarget | undefined;
+  #cancelledQuestionStop: StopTarget | undefined;
 
   constructor(
     readonly spec: TurnSpec,
@@ -139,6 +141,10 @@ export class TurnTools {
       const rejected = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
       if (rejected) throw rejected.reason;
     }
+    // Legacy settles the other calls already planned in this response before
+    // returning control after an unanswered question.
+    this.#stop ??= this.#cancelledQuestionStop;
+    this.#cancelledQuestionStop = undefined;
   }
 
   /** Only a live, durably opened request can consume a matching decision. */
@@ -423,7 +429,15 @@ export class TurnTools {
       input.toolName !== execution.toolName ||
       (input.sourceCallId !== undefined && input.sourceCallId !== execution.callId);
     const answer = await this.#interactions.request(execution, input);
-    if (answer.stopAfterApprovalResolution || (input.kind === 'question' && answer.kind === 'deny')) {
+    if (
+      !nested &&
+      input.toolName === 'ask_user' &&
+      answer.kind === 'answer' &&
+      answer.answer === ASK_USER_NO_ANSWER_RESULT &&
+      answer.stopAfterApprovalResolution
+    ) {
+      this.#cancelledQuestionStop ??= { executionId: execution.executionId, toolName: input.toolName };
+    } else if (answer.stopAfterApprovalResolution || (input.kind === 'question' && answer.kind === 'deny')) {
       this.#stop ??= nested
         ? { parentExecutionId: execution.executionId, toolName: input.toolName, sourceCallId: input.sourceCallId }
         : { executionId: execution.executionId, toolName: input.toolName };

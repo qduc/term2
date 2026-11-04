@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import { directPreviewLifecycle } from './direct-preview.js';
 import type { Item, ItemId } from '../model/index.js';
-import type { InteractionDecision, InteractionRequestId, TurnId } from '../engine/index.js';
+import type { TurnId } from '../engine/index.js';
 import type { ModelError, ModelRef } from '../model/index.js';
 import type { Workspace } from '../tools/index.js';
 import type { Conversation, Turn, TurnRequest } from './direct-types.js';

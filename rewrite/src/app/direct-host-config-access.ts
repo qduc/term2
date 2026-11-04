@@ -198,28 +198,3 @@ function parseLine(line: string): FactLine | undefined {
     return undefined;
   }
 }
-
-/** ACP admits only an exact canonical grant root for this principal. Tool approval stays off. */
-export function directAcpWorkspaces(options: {
-  readonly authority: DirectWorkspaceAuthority;
-  readonly principal: Principal;
-  readonly directory: string;
-}): {
-  authorize(cwd: string): Promise<WorkspaceGrant>;
-  cwd(sessionId: string): Promise<string>;
-  readonly toolPosture: { readonly autoApprove: false; readonly allowUnsandboxed: false };
-} {
-  return {
-    async authorize(cwd) {
-      return options.authority.admitRoot(options.principal, cwd);
-    },
-    async cwd(sessionId) {
-      const started = sessionStart(options.directory, sessionId);
-      if (!started.binding || started.binding.client !== options.principal.userId) throw forbidden();
-      const grant = options.authority.admitRoot(options.principal, started.root);
-      if (grant.workspaceId !== started.binding.id) throw forbidden();
-      return options.authority.resolveWorkspace(options.principal, grant).workspace.root;
-    },
-    toolPosture: { autoApprove: false, allowUnsandboxed: false },
-  };
-}

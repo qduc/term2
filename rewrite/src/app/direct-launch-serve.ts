@@ -10,7 +10,6 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync } from 'no
 import path from 'node:path';
 import { getProfileLabel } from '../../../source/services/profiles/labels.js';
 import { defaultServeStateDir } from '../../../source/gateway/serve-args.js';
-import { getDefaultShellSandboxRunner } from '../../../source/utils/shell/sandbox/shell-sandbox-runner.js';
 import { createDirectServerHost, createServerAuthentication } from '../host/server.js';
 import { SqliteReplayLedger } from '../host/server-auth.js';
 import type { Principal } from '../host/in-process-direct-types.js';
@@ -28,6 +27,7 @@ import {
   DirectWorkspaceAuthority,
 } from './direct-host-config.js';
 import type { DirectLaunchRequest } from './direct-launch-types.js';
+import { warnIfSandboxUnavailable } from './sandbox-warning.js';
 
 type ServeRequest = Extract<DirectLaunchRequest, { readonly kind: 'serve' }>;
 
@@ -82,23 +82,6 @@ function transportOf({ transport }: ServeRequest['args']): ServerTransportOption
     port: transport.port,
     tls: { certPath: transport.certPath, keyPath: transport.keyPath, requireClientCert: false },
   };
-}
-
-async function warnIfSandboxUnavailable(): Promise<void> {
-  const warn = (type: string, reason?: string): void => {
-    const detail = reason ? ` (${reason})` : '';
-    process.stderr.write(
-      `term2 serve: warning: shell sandbox unavailable: ${type}${detail}; shell tool calls will be refused\n`,
-    );
-  };
-  try {
-    const availability = await getDefaultShellSandboxRunner().availability();
-    if (availability.type !== 'available') {
-      warn(availability.type, 'reason' in availability ? availability.reason : undefined);
-    }
-  } catch (error) {
-    warn('probe_failed', messageOf(error));
-  }
 }
 
 /**
@@ -210,7 +193,7 @@ export async function launchServe({ args, selection }: ServeRequest): Promise<nu
     process.stderr.write(`term2 serve: ${error.message}\n`);
     return 1;
   }
-  await warnIfSandboxUnavailable();
+  await warnIfSandboxUnavailable('serve', (line) => process.stderr.write(`${line}\n`));
 
   // Grants and globals live here, in this state directory, and never in a conversation.
   const grants = new DirectWorkspaceAuthority({

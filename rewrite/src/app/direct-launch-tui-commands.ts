@@ -1,4 +1,5 @@
 import { formatModelUsageBreakdown, summarizeModelUsage } from '../../../source/services/cost/model-cost.js';
+import { VALID_REASONING_EFFORTS } from '../../../source/services/models/reasoning-effort.js';
 import { resetSession } from '../clients/tui/commands.js';
 import { loadProviderItems } from '../../../source/providers/provider-service.js';
 /**
@@ -161,10 +162,10 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
   const effort = async (connection: TuiConnection, value: string | undefined): Promise<CommandResult> => {
     if (!value)
       return {
-        message: 'Use /effort default|none|minimal|low|medium|high|xhigh.',
+        message: `Use /effort ${VALID_REASONING_EFFORTS.join('|')}.`,
       };
-    if (!['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'].includes(value))
-      throw new Error(`Unknown effort '${value}'. Use: default, none, minimal, low, medium, high, xhigh.`);
+    if (!(VALID_REASONING_EFFORTS as readonly string[]).includes(value))
+      throw new Error(`Unknown effort '${value}'. Use: ${VALID_REASONING_EFFORTS.join(', ')}.`);
     return configure(
       connection,
       { reasoning: value as NonNullable<Configuration['reasoning']> },

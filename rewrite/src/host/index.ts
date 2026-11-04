@@ -1,16 +1,21 @@
 /**
  * host/ — transport and access, nothing else.
  *
- * Hands clients a `Connection` to a session. The in-process host is what
- * the TUI uses. A server host, not built yet, will expose the same contract
- * over HTTP for the gateway's web client, ACP and Discord. Auth, pairing and
- * workspace admission live here; turn logic does not.
+ * Hands clients a `DirectConnection` to one session. The in-process host
+ * (`in-process-direct.ts`, contracts in `in-process-direct-types.ts`) holds the
+ * session store the app built with `session/direct-store.ts` and disposes it on
+ * shutdown. It sends each wire command to `protocol/direct-commands.ts`.
+ * `in-process-direct-attachment.ts` keeps one projection per session and fans
+ * its wire events out, in order, to every connection to that session. The TUI,
+ * the headless client, ACP and the control socket all connect through it.
+ *
+ * The HTTP server (`server.ts` and its `server-*` files, started by
+ * `term2 serve`) exposes the same host to the gateway's web client with auth,
+ * pairing and workspace admission; it never drives a turn or writes
+ * conversation state itself. Web parity is deferred (#80): the agent-wire v2
+ * format in `server-wire-v2.ts` stays gated off.
  * Depends on: protocol, session, config.
  */
-
-import type { WireCommand, WireCommandResult, WireEvent, WireSnapshot } from '../protocol/index.js';
-import type { SessionStore } from '../session/index.js';
-import type { SettingsSource } from '../config/index.js';
 
 export type Principal = {
   readonly userId: string;
@@ -22,51 +27,3 @@ export type WorkspaceGrant = {
   readonly workspaceId: string;
   readonly access: 'read' | 'read_write';
 };
-
-export interface Connection {
-  readonly sessionId: string;
-  readonly snapshot: WireSnapshot;
-  /** Events after `snapshot.seq`, then live. Ends when the connection closes. */
-  readonly events: AsyncIterable<WireEvent>;
-  send(command: WireCommand): Promise<WireCommandResult>;
-  close(): void;
-}
-
-export interface Host {
-  listSessions(
-    principal: Principal,
-    cursor?: string,
-  ): Promise<{
-    readonly sessions: readonly { readonly id: string; readonly title: string | null; readonly updatedAt: string }[];
-    readonly nextCursor: string | null;
-  }>;
-  createSession(principal: Principal, grant: WorkspaceGrant): Promise<Connection>;
-  /** `fromSeq` lets a reconnecting client skip what it already has. */
-  connect(principal: Principal, sessionId: string, fromSeq?: number): Promise<Connection>;
-}
-
-export type HostDeps = {
-  readonly sessions: SessionStore;
-  readonly settings: SettingsSource;
-  /** Maps a granted workspace id to its root; this is where admission checks belong. */
-  resolveWorkspace(grant: WorkspaceGrant): string;
-  readonly defaultModel: Parameters<SessionStore['create']>[1];
-};
-
-export type InProcessHostFactory = (deps: HostDeps) => Host;
-
-export type ServerHostOptions = {
-  readonly listen: { readonly host: string; readonly port: number };
-  readonly allowedWorkspaces: readonly {
-    readonly id: string;
-    readonly root: string;
-    readonly access: 'read' | 'read_write';
-  }[];
-};
-
-export interface ServerHost extends Host {
-  start(): Promise<{ readonly url: string }>;
-  stop(): Promise<void>;
-}
-
-export type ServerHostFactory = (deps: HostDeps, options: ServerHostOptions) => ServerHost;

@@ -1,6 +1,4 @@
-/** Direct public protocol. No engine tokens, provider history or live callbacks cross this boundary.
- * The unprefixed exports in index.ts still serve the isolated bridge, not this runtime.
- */
+/** Direct public protocol. No engine tokens, provider history or live callbacks cross this boundary. */
 import type { ModelRequestCost } from '../engine/direct-recovery-budget.js';
 import type { DirectFinalWindow } from '../session/direct-final.js';
 

@@ -2,13 +2,12 @@
 import '../../../source/env-setup.js';
 
 import { readdir } from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
 import { stdin, stdout, stderr } from 'node:process';
 import { homedir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import envPaths from 'env-paths';
 import { getAllProviders, getProviderIds } from '../../../source/providers/index.js';
+import { installationVersion } from '../../../source/providers/fetch/logging-middleware.js';
 import { LoggingService } from '../../../source/services/logging/logging-service.js';
 import {
   VALID_REASONING_EFFORTS,
@@ -28,7 +27,7 @@ import type { DirectLaunchBase } from './direct-launch-types.js';
 import type { InteractivePickerRequest } from '../../../source/services/models/model-resolution.js';
 import { HARNESS_IDLE_ENV } from '../../../source/lib/harness-input-idle.js';
 import { isControlSocketName } from '../../../source/services/control-socket/control-socket.js';
-import { createAppSettings } from './settings.js';
+import { createSettingsService, type SettingsService } from './settings.js';
 import { runLogin, runListModelsCommand } from './cli-account-commands.js';
 import { listNativeConversations, resolveNativeResume } from './cli-conversations.js';
 import {
@@ -59,24 +58,6 @@ function refused(refusal: Refusal): Error {
   return new Error(`${refusal.flag} is not available in the direct executable yet: ${refusal.reason}.`);
 }
 
-function packageVersion(): string {
-  let directory = path.dirname(fileURLToPath(import.meta.url));
-  for (;;) {
-    try {
-      const manifest = JSON.parse(readFileSync(path.join(directory, 'package.json'), 'utf8')) as {
-        name?: unknown;
-        version?: unknown;
-      };
-      if (manifest.name === '@qduc/term2' && typeof manifest.version === 'string') return manifest.version;
-    } catch {
-      // Keep searching parent directories; the built CLI is nested under rewrite/dist.
-    }
-    const parent = path.dirname(directory);
-    if (parent === directory) return 'unknown';
-    directory = parent;
-  }
-}
-
 /**
  * When the home-directory guard applies, as in the current CLI: non-lite, not a
  * resume, not SSH, and (without a prompt, or with --auto-approve for a prompt).
@@ -95,7 +76,7 @@ function conversationsDirectory(): string {
 /**
  * Refuses any existing filename outside the `conv_` namespace. It enumerates
  * names only: no old file is opened or parsed. A missing directory is allowed;
- * `run()` creates it after this check.
+ * the session store creates it when it writes the first conversation.
  */
 async function checkConversationsDirectory(directory: string): Promise<void> {
   let entries: string[];
@@ -111,10 +92,7 @@ async function checkConversationsDirectory(directory: string): Promise<void> {
   }
 }
 
-function chooseProfile(
-  options: Pick<SessionOptions, 'profile' | 'lite'>,
-  settings: ReturnType<typeof createAppSettings>['service'],
-): string {
+function chooseProfile(options: Pick<SessionOptions, 'profile' | 'lite'>, settings: SettingsService): string {
   const currentProfile = String(settings.get('app.activeProfileId'));
   let profileId: string;
   if (options.profile !== null) {
@@ -183,7 +161,7 @@ async function runWithSignals(request: DirectHeadlessRequest): Promise<{
  */
 async function applyModelOverrides(
   options: SessionOptions,
-  settings: ReturnType<typeof createAppSettings>['service'],
+  settings: SettingsService,
   logger: LoggingService,
   pickerEligible: boolean,
 ): Promise<string | null> {
@@ -279,7 +257,7 @@ async function runHeadless(prompt: string, options: SessionOptions): Promise<num
   await checkConversationsDirectory(directory);
 
   const sessionContext = new SessionContextService();
-  const { service: settings } = createAppSettings({
+  const settings = createSettingsService({
     env: buildEnvOverrides(),
     disableFilePersistence: true,
     loggingServiceOptions: { sessionContextService: sessionContext },
@@ -301,7 +279,6 @@ async function runHeadless(prompt: string, options: SessionOptions): Promise<num
     io,
     autoApprove: options.autoApprove,
     ...(options.resumeId === null ? {} : { resumeId: options.resumeId }),
-    // --fork is still refused in cli-args.ts until the launch calls the fork operation with the store's resolver.
     ...(options.fork ? { fork: true } : {}),
     ...(options.goal === null ? {} : { goal: options.goal }),
     profileExplicit: options.profile !== null || options.lite,
@@ -309,7 +286,6 @@ async function runHeadless(prompt: string, options: SessionOptions): Promise<num
     showReasoning: options.output.showReasoning,
     quiet: options.output.quiet,
     lite: options.lite,
-    // --ssh is still refused in cli-args.ts; this forwards the parsed target once the tool surface can run it.
     ...(options.ssh === null ? {} : { ssh: options.ssh }),
   });
   if (result.kind === 'completed') return 0;
@@ -341,7 +317,7 @@ async function runInteractive(options: SessionOptions): Promise<number> {
   await checkConversationsDirectory(directory);
 
   const sessionContext = new SessionContextService();
-  const { service: settings } = createAppSettings({
+  const settings = createSettingsService({
     env: buildEnvOverrides(),
     loggingServiceOptions: { sessionContextService: sessionContext },
   });
@@ -365,9 +341,7 @@ async function runInteractive(options: SessionOptions): Promise<number> {
     lite: options.lite,
     ...(options.resumeId === null ? {} : { resumeId: options.resumeId }),
     ...(controlSocket === undefined ? {} : { controlSocket }),
-    // Still refused in cli-args.ts until the tool surface can run a remote workspace.
     ...(options.ssh === null ? {} : { ssh: options.ssh }),
-    // --fork is still refused in cli-args.ts until the fork operation is on the candidate.
     ...(options.fork ? { fork: true } : {}),
     ...(options.goal === null ? {} : { goal: options.goal }),
   };
@@ -380,7 +354,7 @@ async function launcherBase(): Promise<Pick<DirectLaunchBase, 'conversationsDir'
   await checkConversationsDirectory(directory);
 
   const sessionContext = new SessionContextService();
-  const { service: settings } = createAppSettings({
+  const settings = createSettingsService({
     env: buildEnvOverrides(),
     disableFilePersistence: true,
     loggingServiceOptions: { sessionContextService: sessionContext },
@@ -406,7 +380,7 @@ async function main(argv: readonly string[]): Promise<number> {
       stdout.write(HELP);
       return 0;
     case 'version':
-      stdout.write(`${packageVersion()}\n`);
+      stdout.write(`${installationVersion}\n`);
       return 0;
     case 'discord-help':
       stdout.write(DISCORD_HELP);

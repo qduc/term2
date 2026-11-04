@@ -158,42 +158,6 @@ export class DirectWorkspaceAuthority {
     };
   }
 
-  /**
-   * Open/list re-check. Stored access is never replaced by a wider grant.
-   * A narrower current grant fails instead of silently downgrading a writable session.
-   */
-  reresolve(
-    principal: Principal,
-    stored: { root: string; access: WorkspaceAccess; workspaceId?: string },
-  ): WorkspaceAuthorityResult {
-    const owner = requirePrincipal(principal);
-    if (stored.access !== 'read' && stored.access !== 'read_write') {
-      throw new DirectHostConfigError('workspace_authority_revoked', 'authority');
-    }
-    const root = canonicalizeUse(stored.root);
-    const record = stored.workspaceId ? this.#owned(principal, stored.workspaceId) : this.#onlyRoot(owner, root);
-    if (record.root !== root) throw new DirectHostConfigError('workspace_grant_mismatch', 'authority');
-    if (rank(record.access) < rank(stored.access)) throw new DirectHostConfigError('write_not_allowed', 'authority');
-    const access: WorkspaceAccess = stored.access === 'read' ? 'read' : record.access;
-    this.#assertBoundary(root, access, 'authority');
-    return {
-      workspace: { root, access, target: 'local' },
-      workspaceId: record.workspaceId,
-      grantVersion: record.grantVersion,
-    };
-  }
-
-  /** ACP/host admission of an exact canonical root. Access comes from the grant, not the caller. */
-  admitRoot(principal: Principal, root: string): WorkspaceGrant {
-    const canonical = canonicalizeUse(root);
-    const record = this.#byRoot(canonical);
-    if (!record || record.ownerUserId !== requirePrincipal(principal)) {
-      throw new DirectHostConfigError('workspace_authority_revoked', 'authority');
-    }
-    this.#assertBoundary(canonical, record.access, 'authority');
-    return { workspaceId: record.workspaceId, access: record.access };
-  }
-
   /** Store callback has only a path. Ambiguous or missing roots fail closed. */
   resolveStoredRoot(root: string): Workspace {
     const canonical = canonicalizeUse(root);
@@ -216,13 +180,6 @@ export class DirectWorkspaceAuthority {
     if (record.dynamic && !this.#roots.some((root) => contained(root, record.root))) {
       throw new DirectHostConfigError('workspace_authority_revoked', 'authority');
     }
-    return record;
-  }
-
-  #onlyRoot(owner: string, root: string): GrantRecord {
-    const record = this.#byRoot(root);
-    if (!record || record.ownerUserId !== owner)
-      throw new DirectHostConfigError('workspace_authority_revoked', 'authority');
     return record;
   }
 
@@ -294,8 +251,4 @@ function selection(record: GrantRecord): CandidateSelection {
       access: record.access,
     },
   };
-}
-
-function rank(access: WorkspaceAccess): number {
-  return access === 'read_write' ? 2 : 1;
 }

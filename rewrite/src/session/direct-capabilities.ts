@@ -10,7 +10,7 @@ import {
   type DirectContextState,
   type DirectContextFact,
 } from './direct-context.js';
-import { createDirectGoalCheckTool, createDirectProposeGoalTool, type DirectGoalState } from './direct-goal.js';
+import { createDirectGoalCheckTool, createDirectProposeGoalTool } from './direct-goal.js';
 import { createDirectGoalStopPolicy, type DirectGoalHistoryItem } from './direct-goal-stop.js';
 import { createDirectGoalVerifier } from './direct-goal-verification.js';
 import type { DirectMemoryCapability, DirectAutomaticMemoryNotice } from './direct-memory.js';

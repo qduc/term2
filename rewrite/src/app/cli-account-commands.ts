@@ -2,7 +2,7 @@
 import { stdin, stdout, stderr } from 'node:process';
 import { SessionContextService } from '../../../source/services/session/session-context-service.js';
 import { buildEnvOverrides } from '../../../source/services/settings/settings-service.js';
-import { createAppSettings } from './settings.js';
+import { createSettingsService, type SettingsService } from './settings.js';
 
 import type { ILoggingService } from '../../../source/services/service-interfaces.js';
 import { getProviderIds } from '../../../source/providers/index.js';
@@ -23,6 +23,7 @@ import type {
   DirectOAuthBackend,
   DirectProviderBackend,
 } from './direct-host-config-settings.js';
+import { CREDENTIAL_SETTINGS } from './credential-settings.js';
 
 const errorMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
@@ -70,7 +71,7 @@ export async function runLogin(provider: 'grok' | 'codex'): Promise<number> {
 /** List the source model catalogue with its persisted app settings and diagnostics. */
 export async function runListModelsCommand(search: string | null, refresh: boolean): Promise<number> {
   const { runListModels } = await import('../../../source/services/models/model-listing.js');
-  const { service: listingSettings } = createAppSettings({
+  const listingSettings = createSettingsService({
     env: buildEnvOverrides(),
     loggingServiceOptions: { sessionContextService: new SessionContextService() },
   });
@@ -86,14 +87,6 @@ export async function runListModelsCommand(search: string | null, refresh: boole
   if (outcome.output) stdout.write(`${outcome.output}\n`);
   return outcome.exitCode;
 }
-
-const CREDENTIALS: Record<string, { settingKey: string; required: boolean }> = {
-  openai: { settingKey: 'agent.openai.apiKey', required: true },
-  openrouter: { settingKey: 'agent.openrouter.apiKey', required: true },
-  tavily: { settingKey: 'webSearch.tavily.apiKey', required: true },
-  exa: { settingKey: 'webSearch.exa.apiKey', required: true },
-  firecrawl: { settingKey: 'webSearch.firecrawl.apiKey', required: true },
-};
 
 const silentLog: ILoggingService = {
   info() {},
@@ -150,10 +143,10 @@ export function createDirectAccountPorts(service: ProductSettings): {
   };
 }
 
-type ProductSettings = ReturnType<typeof createAppSettings>['service'];
+type ProductSettings = SettingsService;
 
 function describeCredential(service: ProductSettings, providerId: string): CredentialDescription {
-  const definition = CREDENTIALS[providerId];
+  const definition = CREDENTIAL_SETTINGS[providerId];
   const source = definition ? service.getSource(definition.settingKey) : undefined;
   if (source === 'env' || String(source) === 'environment')
     return { configured: true, required: definition?.required ?? false, source: 'environment' };

@@ -1,9 +1,9 @@
-import { createDirectSettingsService, type DirectSettingsOptions } from './direct-config-settings.js';
+/** The app's one settings owner: the source `SettingsService`. Sessions build their own runtime generations from it. */
+import { SettingsService } from '../../../source/services/settings/settings-service.js';
 
-export type AppSettingsOptions = DirectSettingsOptions;
-export type AppSettings = { readonly service: ReturnType<typeof createDirectSettingsService> };
+export type AppSettingsOptions = NonNullable<ConstructorParameters<typeof SettingsService>[0]>;
+export type { SettingsService };
 
-/** Builds only the concrete settings owner; native sessions own their runtime generations. */
-export function createAppSettings(options: AppSettingsOptions = {}): AppSettings {
-  return { service: createDirectSettingsService(options) };
+export function createSettingsService(options: AppSettingsOptions = {}): SettingsService {
+  return new SettingsService(options);
 }

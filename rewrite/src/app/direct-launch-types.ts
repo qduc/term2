@@ -2,7 +2,7 @@
 import type { AcpArgs } from '../../../source/acp-v2/serve-args.js';
 import type { ServeArgs } from '../../../source/gateway/serve-args.js';
 import type { DurableGoal } from '../session/direct-goal.js';
-import type { RunHandle, RunRequest } from './run-types.js';
+import type { HeadlessIo } from '../clients/headless/index.js';
 import type { ProfileSelection } from './tool-contract.js';
 
 /**
@@ -26,7 +26,16 @@ export type DirectSshRequest = {
 };
 
 /** A headless run. Output modes live here because only the host client reads them. */
-export type DirectHeadlessRequest = RunRequest & {
+export type DirectHeadlessRequest = {
+  readonly prompt: string;
+  readonly conversationsDir: string;
+  readonly selection: ProfileSelection;
+  readonly io: HeadlessIo;
+  readonly autoApprove?: boolean;
+  /** Exact direct `conv_<uuid>`; absent starts a new session. */
+  readonly resumeId?: string;
+  /** True only for an explicit --profile/--lite, which overrides the resumed profile. */
+  readonly profileExplicit?: boolean;
   readonly output?: 'plain' | 'json';
   /** Reasoning deltas go to stderr, never stdout. */
   readonly showReasoning?: boolean;
@@ -45,7 +54,11 @@ export type DirectHeadlessRequest = RunRequest & {
 export type DirectHeadlessResult = {
   readonly kind: 'completed' | 'cancelled' | 'failed' | 'context_paused' | 'blocked' | 'budget_paused';
 };
-export type DirectHeadlessHandle = Omit<RunHandle, 'result'> & { readonly result: Promise<DirectHeadlessResult> };
+export type DirectHeadlessHandle = {
+  readonly result: Promise<DirectHeadlessResult>;
+  turnActive(): boolean;
+  cancel(): void;
+};
 
 export type DirectControlSocketRequest = {
   /** Already checked with `isControlSocketName`; defaults to the pid in `cli.ts`. */

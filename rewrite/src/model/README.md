@@ -3,8 +3,6 @@
 `createProviderRegistry` in `provider.ts` implements the native `ModelRegistry`
 contract from `index.ts` using registered source streamed-model factories. It
 owns request/item translation; the engine owns recovery admission and history.
-The historical engine owns its source transport pool and history conversion separately;
-its transport lifetime differs from this native registry.
 
 ## Flex service tier
 

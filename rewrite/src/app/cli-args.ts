@@ -92,7 +92,7 @@ const FLAGS: readonly Flag[] = [
   opt(
     ['--profile'],
     ' <name>',
-    'Select a profile (full, bare, plan, pair, mentor, orchestrator; lite = bare)',
+    'Select a profile (bare [default], plan, pair, mentor, orchestrator; standard/full/lite = bare)',
     undefined,
     'required',
   ),
@@ -168,6 +168,10 @@ https://github.com/qduc/term2/blob/main/docs/reference/discord-bridge.md
 Candidate: live Discord/mobile validation is still outstanding.
 `;
 
+// Printed only while some option is still refused, so the marker never outlives the refusal.
+const refusalNote = FLAGS.some((flag) => flag.refusal)
+  ? '\n* Not available in the direct executable yet. These fail with an error; they never start the current CLI.'
+  : '';
 const optionLines = FLAGS.map((flag) => `  ${flag.label.padEnd(37)}${flag.help}${flag.refusal ? ' *' : ''}`).join('\n');
 
 export const HELP = `Usage:
@@ -180,17 +184,17 @@ Options:
 ${optionLines}
 
 Subcommands:
-  term2 serve --local-owner <userId> [--state-dir <dir>] [--socket <path>] *
+  term2 serve --local-owner <userId> [--state-dir <dir>] [--socket <path>]
       [--listen <host:port> --tls-cert <pem> --tls-key <pem>] [--allow-remote]
       [--pairing] [--bff-key <kid>=<pem path>]... [--workspace-root <dir>]...
       [--issuer <iss>] [--audience <aud>] [--allow-write]
         Run the local web gateway until SIGINT/SIGTERM.
-  term2 acp [--provider <provider>] [--model <model>] [--effort <effort>] *
+  term2 acp [--provider <provider>] [--model <model>] [--effort <effort>]
         Serve the Agent Client Protocol v2 over stdio. Stdout carries protocol traffic only.
   term2 control list [--status] | status <name> [--json] | get <name> <topic> [--json] |
       submit|steer <name> --id <id> | interrupt <name> | wait-turn <name> --message-id <id>
         Talk to a live control socket.
-  term2 discord [config.json] | --save-token [config.json] | --help *
+  term2 discord [config.json] | --save-token [config.json] | --help
         Run the Discord bridge. --help prints its reference.
 
 Settings:
@@ -198,8 +202,7 @@ Settings:
 
 The direct CLI supports one prompt per invocation. --resume [conversation-id|last] selects a native conversation;
 bare --resume selects the last one for this workspace. Use --resume ls (or list) to browse.
-A non-interactive resume requires a follow-up prompt.
-* Not available in the direct executable yet. These fail with an error; they never start the current CLI.
+A non-interactive resume requires a follow-up prompt.${refusalNote}
 `;
 
 /** A usage error the current CLI reports with exit 2 (its argument parser's convention). Other parse errors stay exit 1. */

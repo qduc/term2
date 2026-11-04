@@ -8,9 +8,11 @@ type Pending = DirectOrchestratorQuestion & {
   readonly reject: (error: Error) => void;
 };
 
-/** Session-owned live continuations, separate from user interactions. Every release
- * follows accepted closure; recovery closes facts, never rehydrates these promises. */
-export class DirectOrchestratorQuestions {
+/** One pending question per background task: a child's `ask_orchestrator` call waits
+ * here until its parent replies to that message, or the task stops. Separate from user
+ * interactions. Every release follows the accepted `task_question_closed` fact; recovery
+ * closes facts, never rehydrates these promises. */
+export class DirectTaskQuestions {
   readonly #pending = new Map<DirectTaskId, Pending>();
   constructor(private readonly accept: (fact: DirectBackgroundFact) => void, private readonly now: () => number) {}
 

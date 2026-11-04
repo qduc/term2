@@ -21,7 +21,7 @@ import type { DirectRolloverPreparer } from '../session/direct-session-rotation.
 import type { DirectVerificationOperations } from '../session/direct-goal-verification.js';
 import { DEFAULT_BUDGETS } from '../../../source/services/completion-verification/contracts.js';
 import type { DirectConversationRuntime, DirectRuntimeContext } from '../session/direct-store.js';
-import { loadSurface } from './agent-surface.js';
+import { createToolSurface } from './tool-surface.js';
 import type { DirectHookRuntime } from './direct-application-hooks.js';
 import { withSessionScope, type SessionScope } from './direct-application-models.js';
 import { createNestedAuthorizer } from './direct-application-nested.js';
@@ -34,8 +34,8 @@ import { readDirectInputPreviewConfiguration } from './direct-input-preview.js';
 import { createDirectSessionMemory, directMainMemoryEnabled } from './direct-memory.js';
 import { runPolicy } from './direct-application-policy.js';
 import { createDirectVerificationOperations } from './direct-verifier.js';
-import { withGenerationGuard } from './run.js';
-import { createAppSettings } from './settings.js';
+import { withGenerationGuard } from './generation-guard.js';
+import { createSettingsService, type SettingsService } from './settings.js';
 import { createNativeSearchTool } from './native-search.js';
 import type { AgentSurface, ProfileSelection, ToolSurfaceOptions } from './tool-contract.js';
 
@@ -85,7 +85,7 @@ export type DirectRuntimes = {
   inheriting<Result>(sessionId: string, operation: () => Promise<Result>): Promise<Result>;
 };
 
-export type DirectSessionSettings = ReturnType<typeof createAppSettings>['service'];
+export type DirectSessionSettings = SettingsService;
 
 /** The settings a new session continues from, carried through the store's creation call. */
 const continuedSettings = new AsyncLocalStorage<DirectSessionSettings>();
@@ -101,7 +101,7 @@ function sessionSettings(
 ): DirectSessionSettings {
   const continued = continuedSettings.getStore();
   const defaults = continued ?? selection.settings;
-  const { service: settings } = createAppSettings({
+  const settings = createSettingsService({
     env: buildEnvOverrides(),
     disableFilePersistence: true,
     loggingService: selection.logger,
@@ -205,7 +205,7 @@ export function createDirectRuntimes(
       // The Session owns memory, so the surface must not offer it a second time. It
       // borrows SSH because the connection outlives this tool graph and this session.
       // The prompt may still describe that real native capability without source tools.
-      const surface = loadSurface(
+      const surface = createToolSurface(
         selection,
         borrowDirectConfigSurfaceOptions({
           ...surfaceOptions,

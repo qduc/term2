@@ -30,7 +30,7 @@ export type {
 } from './direct-host-config-workspace.js';
 export { DirectGlobalConfiguration } from './direct-host-config-settings.js';
 export type { SettingsProjection } from './direct-host-config-settings.js';
-import { createAppSettings } from './settings.js';
+import { createSettingsService } from './settings.js';
 import { createDirectAccountPorts } from './cli-account-commands.js';
 import type { DirectSettingsBackend } from './direct-host-config-settings.js';
 
@@ -38,7 +38,7 @@ import type { DirectSettingsBackend } from './direct-host-config-settings.js';
 export function createDirectProductPorts(options: { settingsDir?: string } = {}): {
   readonly settings: DirectSettingsBackend;
 } & ReturnType<typeof createDirectAccountPorts> {
-  const { service } = createAppSettings(options.settingsDir ? { settingsDir: options.settingsDir } : {});
+  const service = createSettingsService(options.settingsDir ? { settingsDir: options.settingsDir } : {});
   return {
     settings: {
       get: (key) => service.getDynamic(key),
@@ -50,10 +50,5 @@ export function createDirectProductPorts(options: { settingsDir?: string } = {})
     ...createDirectAccountPorts(service),
   };
 }
-export {
-  bindDirectSessionAccess,
-  directAcpWorkspaces,
-  directServeToolPosture,
-  sessionStart,
-} from './direct-host-config-access.js';
+export { bindDirectSessionAccess, directServeToolPosture } from './direct-host-config-access.js';
 export type { DirectBoundSessionStore } from './direct-host-config-access.js';

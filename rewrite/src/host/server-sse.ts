@@ -2,7 +2,6 @@
  * supplied direct connection supports Session captureFrom; null cursors have no ID. The gateway's
  * historical agent-wire envelope still needs enrichment; x-term2-event-format is explicit.
  */
-import type { AgentEventEnvelope } from '@qduc/agent-wire';
 import type { DirectConnection, DirectReplayConnection } from './in-process-direct-types.js';
 import type { WireEvent } from '../protocol/direct-wire.js';
 import type { AgentWireV2Envelope } from './server-wire-v2.js';
@@ -15,7 +14,7 @@ const DRAIN_TIMEOUT_MS = 10_000;
 const MAX_BUFFERED_EVENTS = 256;
 type StreamFrame = { readonly id: number | null; readonly event?: 'accepted' | 'live'; readonly data: unknown };
 type StreamEncoding = {
-  readonly format: 'direct-wire-v1' | 'agent-wire-v1' | 'agent-wire-v2';
+  readonly format: 'direct-wire-v1' | 'agent-wire-v2';
   /** V2 accepted frames retain their real accepted seq even when replay is unavailable. */
   readonly acceptedIds?: boolean;
   readonly snapshot: boolean;
@@ -27,22 +26,6 @@ export function directEventStream(connection: DirectConnection | DirectReplayCon
     format: 'direct-wire-v1',
     snapshot: true,
     encode: (event) => ({ id: event.seq, data: event }),
-  });
-}
-/** Canonical SSE consumes only the atomic accepted tail, never a current snapshot before history.
- * Encoding is supplied by the server's semantic adapter; this transport owns no domain projection.
- */
-export function canonicalEventStream(
-  connection: DirectReplayConnection,
-  encode: (event: WireEvent) => AgentEventEnvelope | null,
-): ServerResult {
-  return eventStream(connection, {
-    format: 'agent-wire-v1',
-    snapshot: false,
-    encode(event) {
-      const envelope = encode(event);
-      return envelope ? { id: envelope.id, data: envelope } : null;
-    },
   });
 }
 export function agentWireV2EventStream(

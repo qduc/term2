@@ -1,4 +1,4 @@
-/** Direct host boundary. These domain contracts do not invoke the bridge Session.
+/** Direct host boundary: the session contracts the host and app use.
  * Admission is not completion; capture is an atomic snapshot/subscription cut.
  * M3/M4 extend this facade when their actual domain capabilities land.
  */

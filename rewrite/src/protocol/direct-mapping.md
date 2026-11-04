@@ -1,8 +1,7 @@
 # Direct public mapping and remaining producer contracts
 
 Scope: direct `direct-wire.ts`, `DirectProjection`, `reduceWireEvent` and
-`host/in-process-direct*`. The old unprefixed protocol/index exports still serve
-the isolated bridge. This document describes implementation, not runtime acceptance.
+`host/in-process-direct*`. This document describes implementation, not runtime acceptance.
 The earlier pre-M6 verification hold no longer applies. The native-v2 unit has
 focused persistence, generated-property, build/type/lint, independent-review and
 fenced CLI evidence; see `m6-native-format-final.md` in the coordinator task records.
@@ -498,9 +497,9 @@ provider; no price or charge is invented. Zero cache counters are omitted from
 legacy usage. Coverage limits remain documented here rather than emitted as an
 extra field that old consumers did not define.
 
-`DIRECT_LEGACY_JSON_FINAL_WINDOW_AVAILABLE` remains false as a declaration about
-the complete legacy ConversationEvent/private-history schema, not the bounded
-terminal window. Headless consumes the final window and exact live slices.
+The direct JSON output does not reproduce the complete legacy
+ConversationEvent/private-history schema; it carries only the bounded terminal
+window. Headless consumes the final window and exact live slices.
 In log version 2, `recoverDirectFinalWindow` projects each root terminal window
 read-only from its accepted fact prefix when a preceding `turn_started` exists.
 This is current-format projection, not `derivedFromAcceptedFacts`/`legacyDerived`

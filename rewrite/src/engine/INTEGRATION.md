@@ -22,13 +22,6 @@ When adding another execution-launch entry point, reuse the selected-start polic
 at that entry point, not just the body-liveness check or the root model-loop stop.
 Checking only “no next model request” misses a sibling's late nested launch.
 
-## Historical adopted boundary
-
-The historical adopted boundary no longer contains a duplicate native-style
-nested adapter. Live source nesting remains owned by the source runtime; native
-nesting remains unchanged.
-
-
 ## Background launch ordering
 
 Session's `DirectBackgroundTasks` holds newly admitted background bodies with a

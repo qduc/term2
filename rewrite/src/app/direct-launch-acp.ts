@@ -7,11 +7,11 @@ import fs from 'node:fs';
 import { getAllProviders, getProviderIds } from '../../../source/providers/index.js';
 import { installationVersion } from '../../../source/providers/fetch/logging-middleware.js';
 import { resolveModelFlag } from '../../../source/services/models/model-resolution.js';
-import { getDefaultShellSandboxRunner } from '../../../source/utils/shell/sandbox/shell-sandbox-runner.js';
 import { createAcpBackend, createStdioAcpIo, serveAcp, type AcpIo, type AcpWorkspaces } from '../clients/acp/index.js';
 import { createDirectApplication, type DirectApplication } from './direct-application.js';
 import { createLocalAuthority, LOCAL_PRINCIPAL, localGrant } from './direct-application-workspaces.js';
 import type { DirectLaunchRequest } from './direct-launch-types.js';
+import { warnIfSandboxUnavailable } from './sandbox-warning.js';
 
 type AcpRequest = Extract<DirectLaunchRequest, { readonly kind: 'acp' }>;
 
@@ -65,23 +65,6 @@ async function applyModelFlags({ args, selection }: AcpRequest, io: AcpIo): Prom
   return true;
 }
 
-async function warnIfSandboxUnavailable(io: AcpIo): Promise<void> {
-  const warn = (type: string, reason?: string): void =>
-    io.writeStderr(
-      `term2 acp: warning: shell sandbox unavailable: ${type}${
-        reason ? ` (${reason})` : ''
-      }; shell tool calls will be refused`,
-    );
-  try {
-    const availability = await getDefaultShellSandboxRunner().availability();
-    if (availability.type !== 'available') {
-      warn(availability.type, 'reason' in availability ? availability.reason : undefined);
-    }
-  } catch (error) {
-    warn('probe_failed', messageOf(error));
-  }
-}
-
 /** An ACP client names its cwd per session; any real directory is admitted, as today. */
 function acpWorkspaces(app: DirectApplication): AcpWorkspaces {
   return {
@@ -95,7 +78,7 @@ function acpWorkspaces(app: DirectApplication): AcpWorkspaces {
 export async function launchAcp(request: AcpRequest): Promise<number> {
   const io = createStdioAcpIo();
   if (!(await applyModelFlags(request, io))) return 1;
-  await warnIfSandboxUnavailable(io);
+  await warnIfSandboxUnavailable('acp', (line) => io.writeStderr(line));
 
   const { conversationsDir, selection } = request;
   const app = await createDirectApplication({

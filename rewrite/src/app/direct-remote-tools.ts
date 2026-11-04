@@ -7,8 +7,8 @@ import type { Workspace } from '../tools/index.js';
 type Scope = { readonly access: 'read' | 'write' | 'shell' | 'none'; readonly signal: AbortSignal };
 const READERS = new Set(['read_file', 'grep', 'glob', 'run_code']);
 const WRITERS = new Set(['create_file', 'search_replace', 'apply_patch']);
-/** These source leaves use local fs/index/worktree facilities, not SSH. */
-const LOCAL_ONLY = new Set([
+/** These source leaves use local fs/index/worktree facilities, not SSH, so an SSH tool surface does not offer them. */
+export const SSH_LOCAL_ONLY_TOOLS: ReadonlySet<string> = new Set([
   'read_code_outline',
   'code_context_search',
   'enter_worktree',
@@ -66,7 +66,7 @@ export class DirectRemoteTools implements ISSHService {
   async runTool<T>(toolName: string, signal: AbortSignal, operation: () => Promise<T>): Promise<T> {
     this.#assertConnected();
     signal.throwIfAborted();
-    if (LOCAL_ONLY.has(toolName)) throw new Error(`${toolName} has no direct SSH implementation.`);
+    if (SSH_LOCAL_ONLY_TOOLS.has(toolName)) throw new Error(`${toolName} has no direct SSH implementation.`);
     const access = READERS.has(toolName)
       ? 'read'
       : WRITERS.has(toolName)

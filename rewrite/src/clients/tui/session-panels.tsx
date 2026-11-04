@@ -31,6 +31,8 @@ type Props = {
   closeInteraction: () => void;
   executeRewind: (id: string, disposition: 'edit' | 'resend') => Promise<void>;
   cancelInput: (connection: TuiConnection, turnId?: string) => Promise<string>;
+  /** Legacy's transcript line after Escape interrupts the turn from an approval prompt. */
+  onStopped: () => void;
 };
 
 /** Modal surfaces share input ownership; the session retains their state and routing. */
@@ -55,6 +57,7 @@ export function SessionPanels({
   closeInteraction,
   executeRewind,
   cancelInput,
+  onStopped,
 }: Props): React.ReactElement {
   return (
     <>
@@ -112,7 +115,10 @@ export function SessionPanels({
                       answer: ASK_USER_NO_ANSWER_RESULT,
                       stopAfterApprovalResolution: true,
                     });
-                  else setNotice(await cancelInput(connection, foregroundInteraction.turnId));
+                  else {
+                    setNotice(await cancelInput(connection, foregroundInteraction.turnId));
+                    onStopped();
+                  }
                 }
               : undefined
           }

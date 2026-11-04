@@ -25,6 +25,7 @@ import {
   hasUnsettledReplayRoots,
   recordReplayStart,
   recoverReplayRoots,
+  dropUnstartedReplayCalls,
   type ActiveReplayTurn as ActiveTurn,
 } from './replay-active-turn.js';
 import { ReplayBackground } from './replay-background.js';
@@ -367,6 +368,7 @@ export function createReplayFold(): ReplayFold {
           throw new Error(`replay: turn ${turn.turnId} ended with unsettled calls, interactions or budget waits`);
         }
         finishReplayText(turn);
+        if (fact.outcome === 'cancelled') dropUnstartedReplayCalls(turn);
         active = null;
         lastOutcome = fact.outcome;
         break;

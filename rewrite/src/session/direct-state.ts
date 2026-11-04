@@ -11,10 +11,13 @@ import { createDirectQueueState, directQueueSteeredInput } from './direct-queue.
 import { isDirectCommandFactType, recoverDirectCommands } from './direct-command-receipts.js';
 import { isDirectNotificationFactType } from './direct-notifications.js';
 import { withNotice } from './direct-input-notice.js';
+import { INTERRUPTED_BEFORE_START } from './replay-active-turn.js';
 
 export type DirectDisplayTool = DirectToolDisplay & {
   /** A model call is not evidence that its physical body started. */
   readonly phase: 'called' | 'started' | 'completed' | 'unknown';
+  /** Interrupted before its physical start; a cancelled turn drops such rows like legacy. */
+  readonly unstarted?: true;
 };
 type DirectReadMessage = DirectMessage & {
   /** Ephemeral read-model provenance, never a durable fact or wire field. */
@@ -278,6 +281,9 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
                   ...tool,
                   status: 'completed',
                   phase: 'completed',
+                  ...(tool.phase === 'called' && result.output === INTERRUPTED_BEFORE_START
+                    ? { unstarted: true as const }
+                    : {}),
                   output: result.output,
                   isError: result.isError,
                   ...(result.providerOutput ? { providerOutput: result.providerOutput } : {}),
@@ -359,11 +365,13 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
         pendingInteractions: state.pendingInteractions.filter(
           (request) => 'taskId' in request || request.turnId !== fact.turnId,
         ),
-        tools: state.tools.map((tool) =>
-          tool.turnId === fact.turnId && tool.status === 'started'
-            ? { ...tool, status: 'unknown', phase: 'unknown' }
-            : tool,
-        ),
+        tools: state.tools
+          .filter((tool) => !(fact.outcome === 'cancelled' && tool.turnId === fact.turnId && tool.unstarted))
+          .map((tool) =>
+            tool.turnId === fact.turnId && tool.status === 'started'
+              ? { ...tool, status: 'unknown', phase: 'unknown' }
+              : tool,
+          ),
         terminal: {
           turnId: fact.turnId,
           outcome: fact.outcome,

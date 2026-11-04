@@ -48,6 +48,10 @@ export function Transcript({
           ) : null}
         </Box>
       </Box>
+    ) : message.localSystem === true ? (
+      <Box key={`message:${message.id}`} marginTop={1} marginBottom={1} paddingLeft={2}>
+        <Text color={theme.reasoning}>{message.text}</Text>
+      </Box>
     ) : message.localHelp === true ? (
       <Box key={`message:${message.id}`} marginTop={1}>
         <Text color={theme.textSubtle}>{message.text}</Text>

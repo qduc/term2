@@ -21,6 +21,8 @@ export type Message = {
   readonly interrupted?: boolean;
   /** Client-only immutable help, never accepted from wire or persisted. */
   readonly localHelp?: true;
+  /** Client-only legacy system line (e.g. `Stopped`), never accepted from wire or persisted. */
+  readonly localSystem?: true;
   /** Live streaming draft replaced by this finalized assistant message. */
   readonly replacesDraftId?: string;
   readonly historyText?: string;

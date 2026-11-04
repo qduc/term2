@@ -7,10 +7,10 @@ import { helpForScrollback } from './slash-commands.js';
 /** Local command output belongs in the visible transcript, not provider history. */
 export function useCommandTranscript(state: TuiState): {
   state: TuiState;
-  append(text: string, plain?: boolean): void;
+  append(text: string, plain?: boolean | 'system'): void;
 } {
   const [entries, setEntries] = useState<readonly { message: Message; after?: string }[]>([]);
-  const append = (text: string, plain = false) => {
+  const append = (text: string, plain: boolean | 'system' = false) => {
     const after = state.timeline?.at(-1)?.id;
     setEntries((previous) => [
       ...previous,
@@ -19,7 +19,7 @@ export function useCommandTranscript(state: TuiState): {
           id: `local-command-${crypto.randomUUID()}`,
           role: 'assistant',
           text,
-          ...(plain ? { localHelp: true as const } : {}),
+          ...(plain === 'system' ? { localSystem: true as const } : plain ? { localHelp: true as const } : {}),
         },
         after,
       },

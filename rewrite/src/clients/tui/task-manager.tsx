@@ -40,11 +40,74 @@ const roleOf = (task: TaskView): string => task.wire?.role ?? task.role ?? 'agen
 const taskText = (task: TaskView): string => task.wire?.input ?? task.wire?.label ?? task.label;
 
 /** Legacy statusText, from the snapshot status (a running background task is legacy's `active` phase). */
+/** Legacy background-task-activity.ts quiet thresholds. */
+const SUBAGENT_QUIET_AFTER_MS = 30_000;
+const SHELL_QUIET_AFTER_MS = 10_000;
+/** The registry's waiting reason after each observation (subagent-async-registry); others are active. */
+const WAITING_AFTER: Partial<Record<string, 'provider' | 'approval' | 'answer'>> = {
+  request_dispatched: 'provider',
+  tool_completed: 'provider',
+  approval_requested: 'approval',
+  question_asked: 'answer',
+};
+
+/** Legacy normalizeBackgroundTaskActivity over the snapshot's last observation. */
+export const taskActivity = (task: TaskView, now: number) => {
+  const observation = task.wire?.lastObservation;
+  const at = observation?.at ?? task.wire?.lastActivityAt ?? now;
+  const reason =
+    task.status === 'awaiting_interaction'
+      ? task.wire?.pendingQuestion
+        ? 'answer'
+        : 'approval'
+      : task.wire?.kind === 'shell'
+      ? undefined
+      : WAITING_AFTER[observation?.kind ?? 'request_dispatched'];
+  const phase = task.status === 'cancelling' ? 'cancelling' : reason ? 'waiting' : 'active';
+  const ageMs = Math.max(0, now - at);
+  const quiet = ageMs >= (task.wire?.kind === 'shell' ? SHELL_QUIET_AFTER_MS : SUBAGENT_QUIET_AFTER_MS);
+  return { phase, ...(phase === 'waiting' ? { reason } : {}), observation, ageMs, quiet } as const;
+};
+
+/** Legacy statusText for a live task with activity. */
 const managerStatusText = (task: TaskView): string => {
-  if (task.status === 'cancelling') return 'cancelling';
-  if (task.wire?.pendingQuestion) return 'waiting for answer';
-  if (task.status === 'awaiting_interaction') return 'awaiting approval response';
+  const activity = taskActivity(task, Date.now());
+  if (activity.phase === 'waiting')
+    return `awaiting ${activity.reason ?? 'provider'} response${activity.quiet ? ' · quiet' : ''}`;
+  if (activity.phase === 'cancelling') return 'cancelling';
   return 'active';
+};
+
+/** Legacy observationText. */
+const observationText = (observation: NonNullable<NonNullable<TaskView['wire']>['lastObservation']>): string => {
+  switch (observation.kind) {
+    case 'request_dispatched':
+      return 'Request handed to model runtime';
+    case 'response_started':
+      return 'Response started';
+    case 'text_received':
+      return 'Text received';
+    case 'tool_input_received':
+      return `Tool input received: ${observation.toolName} (${observation.argumentCharCount} chars)`;
+    case 'tool_started':
+      return `Tool started: ${observation.toolName}`;
+    case 'tool_completed':
+      return observation.toolName ? `Tool completed: ${observation.toolName}` : 'Tool completed';
+    case 'retrying':
+      return `Retrying ${observation.attempt} of ${observation.maxRetries}`;
+    case 'approval_requested':
+      return 'Approval requested';
+    case 'question_asked':
+      return 'Question asked';
+    case 'shell_started':
+      return 'Shell started';
+    case 'shell_output_received':
+      return 'Shell output received';
+    case 'stop_requested':
+      return 'Stop requested';
+    case 'settled':
+      return 'Task settled';
+  }
 };
 
 const compactLabel = (value: string, columns: number, prefix: string, suffix: string): string => {
@@ -93,6 +156,13 @@ function DetailsView({ task }: { readonly task: TaskView }): React.ReactElement 
     <Box flexDirection="column" marginTop={1} paddingLeft={2}>
       <Text color={theme.accentAlt}>ID: {task.id}</Text>
       <Text>State: {managerStatusText(task)}</Text>
+      {task.wire?.lastObservation ? (
+        <Text>
+          Last observed: {formatElapsed(taskActivity(task, Date.now()).ageMs)} ago
+          {taskActivity(task, Date.now()).quiet ? ' (quiet)' : ''}
+        </Text>
+      ) : null}
+      {task.wire?.lastObservation ? <Text>Last activity: {observationText(task.wire.lastObservation)}</Text> : null}
       {wire?.kind === 'shell' ? (
         <>
           <Text wrap="wrap">Command: {taskText(task)}</Text>

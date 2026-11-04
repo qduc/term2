@@ -73,6 +73,7 @@ export function createDirectBranchDriver(options: {
       // Legacy execution-runner: a child launched in the background never asks. A call that still needs an
       // answer ends its run, settled as completed with what it produced (no approval, no denial).
       let settledOnInteraction = false;
+      const toolNames = new Map<string, string>();
       try {
         for await (const { token, event } of handle.events) {
           if (event.type === 'interaction_required' && request.mode === 'background') {
@@ -82,6 +83,7 @@ export function createDirectBranchDriver(options: {
             continue;
           }
           if (event.type === 'interaction_required') {
+            context.observe({ kind: 'approval_requested' });
             try {
               const decision = context.interact(event.request);
               // interact synchronously appends the task-owned open before yielding.
@@ -151,6 +153,20 @@ export function createDirectBranchDriver(options: {
               parentTurnId: options.parentTurnId,
               rootTurnId: options.rootTurnId,
             });
+          // Legacy's activity tracker (subagent-async-registry): what the manager's "Last activity" row names.
+          if (event.type === 'tool_call_streaming_delta')
+            context.observe({
+              kind: 'tool_input_received',
+              toolName: event.toolName ?? 'tool',
+              argumentCharCount: event.argumentCharCount,
+            });
+          else if (event.type === 'tool_called') {
+            toolNames.set(event.executionId, event.toolName);
+            context.observe({ kind: 'tool_started', toolName: event.toolName });
+          } else if (event.type === 'tool_execution_finished') {
+            const toolName = toolNames.get(event.executionId);
+            context.observe({ kind: 'tool_completed', ...(toolName ? { toolName } : {}) });
+          }
           if (event.type === 'tool_progress' || event.type === 'text_delta')
             context.progress(
               event.type === 'text_delta' ? event.delta : event.chunk,

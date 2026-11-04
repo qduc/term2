@@ -6,7 +6,7 @@
 import React, { useEffect, useRef, useState, type FC } from 'react';
 import { Box, Text } from 'ink';
 import type { TaskView, TuiState } from './state.js';
-import { TaskManager, terminalTextWidth, truncateTerminalText } from './task-manager.js';
+import { TaskManager, taskActivity, terminalTextWidth, truncateTerminalText } from './task-manager.js';
 import type { TuiConnection } from './integration.js';
 import { controlTask } from './commands.js';
 import { useTerminalSize } from './terminal.js';
@@ -41,12 +41,13 @@ type PanelTask = {
 type Row = { readonly key: string; readonly placement: 'foreground' | 'background'; readonly task: PanelTask };
 
 /** Legacy formatPhase's base word, from the snapshot status (no activity stream: a live task is `Active`). */
-const backgroundPhase = (view: TaskView): string =>
-  view.status === 'cancelling'
-    ? 'Cancelling'
-    : view.status === 'awaiting_interaction'
-    ? `Waiting (${view.wire?.pendingQuestion ? 'answer' : 'approval'})`
-    : 'Active';
+const backgroundPhase = (view: TaskView): string => {
+  const activity = taskActivity(view, Date.now());
+  // Provider is the common wait; only exceptional reasons (approval, answer) get the parenthetical.
+  if (activity.phase === 'waiting')
+    return activity.reason && activity.reason !== 'provider' ? `Waiting (${activity.reason})` : 'Waiting';
+  return activity.phase === 'cancelling' ? 'Cancelling' : 'Active';
+};
 
 /** The data-access half of the port: legacy's live task row, from a snapshot task. */
 function panelRow(view: TaskView): Row {

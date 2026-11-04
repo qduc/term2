@@ -242,6 +242,7 @@ export type WireEventPayloads = {
     readonly kind: 'text' | 'tool_progress' | 'activity';
     readonly chunk: string;
     readonly executionId?: string;
+    readonly observation?: import('./direct-wire.js').WireTaskObservation;
   };
   subagent: {
     readonly agentId: string;

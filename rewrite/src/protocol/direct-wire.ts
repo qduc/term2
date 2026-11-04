@@ -299,11 +299,37 @@ export type WireTask = {
     | 'interrupted';
   readonly startedAt?: number;
   readonly lastActivityAt?: number;
+  /** Legacy's last observation of the live task (BackgroundTaskObservation); presentation owns the wording. */
+  readonly lastObservation?: WireTaskObservation;
   readonly completedAt?: number;
   readonly text?: string;
   readonly progress?: string;
   readonly result?: WireTaskResult;
 };
+/** Legacy source/services/background-task-activity.ts BackgroundTaskObservation, as wire data. */
+export type WireTaskObservation =
+  | {
+      readonly kind:
+        | 'request_dispatched'
+        | 'response_started'
+        | 'text_received'
+        | 'approval_requested'
+        | 'question_asked'
+        | 'shell_started'
+        | 'shell_output_received'
+        | 'stop_requested'
+        | 'settled';
+      readonly at: number;
+    }
+  | {
+      readonly kind: 'tool_input_received';
+      readonly at: number;
+      readonly toolName: string;
+      readonly argumentCharCount: number;
+    }
+  | { readonly kind: 'tool_started'; readonly at: number; readonly toolName: string }
+  | { readonly kind: 'tool_completed'; readonly at: number; readonly toolName?: string }
+  | { readonly kind: 'retrying'; readonly at: number; readonly attempt: number; readonly maxRetries: number };
 /** Public task descriptor ownership; does not imply the parent foreground still runs. */
 export type WireTaskOwner = Pick<
   WireTask,

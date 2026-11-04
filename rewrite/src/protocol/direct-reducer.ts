@@ -427,6 +427,7 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
             ? {
                 ...task,
                 lastActivityAt: event.payload.at,
+                ...(event.payload.observation ? { lastObservation: event.payload.observation } : {}),
                 progress: (task.progress ?? '') + event.payload.chunk,
                 ...(event.payload.kind === 'text' ? { text: (task.text ?? '') + event.payload.chunk } : {}),
               }

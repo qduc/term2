@@ -345,7 +345,7 @@ export const interruptedNotice = (state: TuiState): string | null =>
     ? 'Previous turn was interrupted — send a message to continue.'
     : null;
 
-/** The one-off lines above the composer: connection trouble in the danger colour, the rest as plain text. */
+/** The one-off lines above the composer: connection trouble in the danger colour, a command's notice in legacy's system-message colour, the rest as plain text. */
 export function LiveNotices({
   connectionError,
   transitionNotice,
@@ -361,7 +361,10 @@ export function LiveNotices({
   return (
     <>
       {connectionError ? <Text color={theme.danger}>{connectionError}</Text> : null}
-      {[transitionNotice, notice, historyError].map((text, index) => (text ? <Text key={index}>{text}</Text> : null))}
+      {transitionNotice ? <Text>{transitionNotice}</Text> : null}
+      {/* Legacy shows a command's reply as a system message, in the reasoning colour (ChatMessage.tsx). */}
+      {notice ? <Text color={theme.reasoning}>{notice}</Text> : null}
+      {historyError ? <Text>{historyError}</Text> : null}
     </>
   );
 }

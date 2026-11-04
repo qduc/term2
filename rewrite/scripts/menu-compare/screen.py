@@ -306,14 +306,22 @@ def run(cli, cols, rows, name):
         shutil.rmtree(root, ignore_errors=True)
 
 
-def menu_region(cap):
+def menu_region(cap, notice=False):
     """The bottom area from the composer divider down, without trailing blank rows.
 
     The start-up banner above it is transcript chrome outside the menu port and differs in layout,
-    which shifts absolute rows; anchoring on the divider compares what the menus draw.
+    which shifts absolute rows; anchoring on the divider compares what the menus draw. With `notice`
+    the region also takes the last non-blank row above the divider (a command's notice), without the
+    blank rows between them.
     """
     lines = cap['lines']
     start = next((i for i, line in enumerate(lines) if re.fullmatch(r'\s*─{20,}', line)), 0)
+    if notice:
+        above = next((i for i in range(start - 1, -1, -1) if lines[i].strip()), None)
+        if above is not None:
+            keep = [above] + list(range(start, len(lines)))
+            cap = {'lines': [lines[i] for i in keep], 'styles': [cap['styles'][i] for i in keep]}
+            lines, start = cap['lines'], 0
     end = len(lines)
     while end > start and not lines[end - 1].strip():
         end -= 1
@@ -323,8 +331,9 @@ def menu_region(cap):
 def compare(cols, rows, names):
     results = {}
     for name in names:
-        a = menu_region(run('legacy', cols, rows, name))
-        b = menu_region(run('next', cols, rows, name))
+        notice = SEED.get(name, {}).get('notice', False)
+        a = menu_region(run('legacy', cols, rows, name), notice)
+        b = menu_region(run('next', cols, rows, name), notice)
         same_text = a['lines'] == b['lines']
         same_style = a['styles'] == b['styles']
         results[name] = {'text': same_text, 'style': same_style, 'legacy': a, 'next': b}

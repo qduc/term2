@@ -5,6 +5,8 @@ import { PathMenuSession } from './PathMenuSession.js';
 import { ProviderMenuSession } from './ProviderMenuSession.js';
 import { ModelMenuSession } from './ModelMenuSession.js';
 import { SubagentPoolMenuSession } from './SubagentPoolMenuSession.js';
+import { SettingsMenuSession } from './SettingsMenuSession.js';
+import { SettingsValueMenuSession } from './SettingsValueMenuSession.js';
 
 export type MenuServices = Record<string, unknown>;
 
@@ -27,6 +29,8 @@ const defaultRegistry: Partial<MenuRegistry> = {
   providers: ProviderMenuSession,
   model: ModelMenuSession as React.ComponentType<any>,
   subagent_pool: SubagentPoolMenuSession as React.ComponentType<any>,
+  settings: SettingsMenuSession as React.ComponentType<any>,
+  settings_value: SettingsValueMenuSession as React.ComponentType<any>,
 };
 
 export function getMenuRegistry(): Partial<MenuRegistry> {

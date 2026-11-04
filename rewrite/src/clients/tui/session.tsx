@@ -145,8 +145,7 @@ export function TuiSession({
     connection,
     confirmation,
     state,
-    editor,
-    replaceInput,
+    editor: menuStack.typed,
     cancelInput,
     setNotice,
     cancelQueueEdit,
@@ -158,7 +157,7 @@ export function TuiSession({
     if (interactionActive) return void interactionInput.current?.(input, key);
     if (taskOpen || budgetOpen || rewindTargets) return;
     if (composerActive && isShiftTab(input, key)) return togglePlan();
-    if (composerActive && isCtrlT(input, key)) return setPicker('effort');
+    if (composerActive && isCtrlT(input, key)) return replaceInput('/effort ');
     if (composerActive && key.escape && viewport.expanded) return viewport.collapse();
     if (isCtrlG(input, key) && !busy) (state.interactions.length ? setInteractionOpen : setTaskOpen)(true);
     if (key.ctrl && input === 'b' && state.budgets.length && !busy) setBudgetOpen(true);

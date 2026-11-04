@@ -14,20 +14,19 @@ export function useInterrupt(context: {
   readonly cancelQueueEdit: () => boolean;
   readonly confirmation: { readonly pending: boolean; clear(): void };
   readonly state: TuiState;
-  readonly editor: { readonly value: string };
-  readonly replaceInput: (text: string) => void;
+  /** The text Ctrl+C clears: the open menu's while one owns it, else the composer's. */
+  readonly editor: { readonly value: string; replace(text: string): void };
   readonly cancelInput: (connection: TuiConnection, turnId?: string) => Promise<string>;
   readonly setNotice: (text: string | null) => void;
 }): void {
-  const { interrupt, connection, confirmation, state, editor, replaceInput, cancelInput, setNotice, cancelQueueEdit } =
-    context;
+  const { interrupt, connection, confirmation, state, editor, cancelInput, setNotice, cancelQueueEdit } = context;
   const notifyError = (error: unknown) => setNotice(error instanceof Error ? error.message : String(error));
   interrupt.current = () => {
     if (confirmation.pending) confirmation.clear();
     else if (cancelQueueEdit()) return;
     else if (state.activeTurnId || (state.interactions.length && editor.value.length === 0))
       void cancelInput(connection, state.activeTurnId ?? undefined).then(setNotice, notifyError);
-    else if (editor.value.length > 0) replaceInput('');
+    else if (editor.value.length > 0) editor.replace('');
     else setNotice('Press Ctrl+C again to exit');
   };
 }

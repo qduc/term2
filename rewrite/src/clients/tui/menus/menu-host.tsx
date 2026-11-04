@@ -14,7 +14,8 @@ import { MenuSurface } from './MenuSurface.js';
 import { InputProvider } from './input-context.js';
 import { MENU_RULE_IDS, useMenuServices, type MenuActions } from './menu-services.js';
 import { legacySlashCommands } from './legacy-commands.js';
-import { menuIntentHost } from './menu-intent-host.js';
+import { createIntentHost, settingsIntentHandlers } from './menu-intents.js';
+import { installSettingsLibrary } from './settings-lib.js';
 
 type Composer = {
   readonly value: string;
@@ -51,14 +52,25 @@ export function useMenuStack(options: {
     if (!menus) return;
     controller.setTriggerRegistry(createDefaultTriggerRegistry(commands, MENU_RULE_IDS, menus.schema));
   }, [controller, commands, menus]);
-  // The session passes fresh callbacks each render; the host reads the latest.
+  const open = Boolean(menus) && snapshot.stack.length > 0;
+  if (menus) installSettingsLibrary(menus.settings.lib);
+  // Legacy app.tsx's effect host: the controller hands committed intents to the session's commands.
   const latestActions = useRef(actions);
   latestActions.current = actions;
   useEffect(() => {
-    controller.setIntentHost(menuIntentHost(() => latestActions.current));
+    if (!menus) return;
+    controller.setIntentHost(
+      createIntentHost({
+        ...settingsIntentHandlers({
+          command: (text) => latestActions.current.command(text),
+          notice: (text) => latestActions.current.notice(text),
+          settings: () => menus.settings.service(sessionId),
+        }),
+        'submit-prompt': ({ intent }) => latestActions.current.runCommand(intent.text),
+      }),
+    );
     return () => controller.setIntentHost(undefined);
-  }, [controller]);
-  const open = Boolean(menus) && snapshot.stack.length > 0;
+  }, [controller, menus, sessionId]);
 
   // The text both sides last agreed on. Cursor-only controller revisions and composer keystrokes not yet
   // mirrored must not be mistaken for a menu's edit, or the hand-back would revert the keystroke.
@@ -100,6 +112,11 @@ export function useMenuStack(options: {
     openFrame,
     /** The text the harness and composer consumers see: the controller's while a menu owns it. */
     value: open ? snapshot.editor.text : composer.value,
+    /** What Ctrl+C clears: the menu's text while one owns it (legacy's global handler cleared it there too). */
+    typed: {
+      value: open ? snapshot.editor.text : composer.value,
+      replace: (text: string) => (open ? controller.replaceText(text, text.length) : composer.replace(text)),
+    },
     cursorChanged(cursor: number) {
       if (!menus || !enabled) return;
       if (controller.getSnapshot().editor.cursor !== cursor)

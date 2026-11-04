@@ -125,8 +125,9 @@ it.each(['expiry', 'configuration', 'secondary'] as const)(
       } else if (clearBy === 'configuration') {
         await terminal.waitForOutput('REPLY-2', 30000);
         await waitForHarnessIdleGeneration(idle, { after: generation, timeoutMs: 60000 });
+        // The /effort menu takes the Enter and applies the level silently, as legacy does.
         await submit('/effort high');
-        await terminal.waitForOutput('Reasoning effort set to high', 30000);
+        await terminal.waitForOutput('· high', 30000);
       }
       if (clearBy !== 'secondary') {
         const updates = terminal.getVisibleOutput().slice(mark);

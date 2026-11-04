@@ -93,18 +93,8 @@ async function waitForRedraw(after: number): Promise<void> {
   throw new Error('timed out waiting for the terminal to redraw');
 }
 
-/** Match text painted after `after`, so an earlier picker frame cannot satisfy the wait. */
-async function waitForNewOutput(after: number, expected: string): Promise<void> {
-  const started = Date.now();
-  while (Date.now() - started < 30_000) {
-    if (session!.getOutput().slice(after).includes(expected)) return;
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-  throw new Error(`No new terminal output containing ${expected}: ${session!.getVisibleOutput().slice(-800)}`);
-}
-
 it(
-  'bare /effort opens the reasoning picker, applies a level, and Escape leaves it unchanged',
+  'bare /effort opens the legacy effort menu, applies a level, and Escape leaves it unchanged',
   { timeout: TIMEOUT_MS },
   async () => {
     const { idlePath } = await start();
@@ -112,43 +102,43 @@ it(
     session!.write('/effort');
     await waitForHarnessComposerValue(idlePath, '/effort', { timeoutMs: 30_000 });
     session!.write('\r');
-    await session!.waitForOutput('Reasoning effort', 30_000);
-    expect(session!.getVisibleOutput()).toContain('Use the model default');
+    // Legacy's action puts `/effort ` in the composer, which opens the value menu.
+    await waitForHarnessComposerValue(idlePath, '/effort ', { timeoutMs: 30_000 });
+    await session!.waitForOutput('Use the model default', 30_000);
     expect(session!.getOutput()).not.toContain('Use /effort default|none');
     const beforeClose = session!.getOutput().length;
     session!.write('\x1b');
     await waitForRedraw(beforeClose);
     const closed = await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
-    expect(session!.getOutput()).not.toContain('Reasoning effort set to');
     expect(storedEffort()).toBe(before);
 
-    session!.write('/effort');
-    await waitForHarnessComposerValue(idlePath, '/effort', { afterRevision: closed.revision, timeoutMs: 30_000 });
-    const opened = session!.getOutput().length;
-    session!.write('\r');
-    await waitForNewOutput(opened, '❯ default');
+    session!.write('/effort ');
+    await waitForHarnessComposerValue(idlePath, '/effort ', { afterRevision: closed.revision, timeoutMs: 30_000 });
+    await session!.waitForOutput('Enter will set: default', 30_000);
+    // Ink repaints only changed cells, so read the screen rather than the raw stream.
     const up = async (marker: string) => {
-      const at = session!.getOutput().length;
       session!.write('\x1b[A');
-      await waitForNewOutput(at, marker);
+      for (let i = 0; i < 1200 && !session!.getVisibleOutput().includes(marker); i++)
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      expect(session!.getVisibleOutput()).toContain(marker);
     };
     await up('❯ xhigh');
     await up('❯ high');
     session!.write('\r');
-    await session!.waitForOutput('Reasoning effort set to high.', 30_000);
+    // Legacy applies silently; the status bar shows the new level.
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
-    expect(session!.getVisibleOutput()).toContain('mockprov/mock-alpha · high');
+    await session!.waitForOutput('mockprov/mock-alpha · high', 30_000);
   },
 );
 
-it('Ctrl+T opens the same reasoning picker and Escape cancels', { timeout: TIMEOUT_MS }, async () => {
+it('Ctrl+T puts /effort in the composer like legacy, and Escape cancels', { timeout: TIMEOUT_MS }, async () => {
   const { idlePath } = await start();
   const before = storedEffort();
   session!.write('\x14');
+  await waitForHarnessComposerValue(idlePath, '/effort ', { timeoutMs: 30_000 });
   await session!.waitForOutput('Reasoning effort', 30_000);
   expect(session!.getVisibleOutput()).toContain('none');
   session!.write('\x1b');
   await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
-  expect(session!.getOutput()).not.toContain('Reasoning effort set to');
   expect(storedEffort()).toBe(before);
 });

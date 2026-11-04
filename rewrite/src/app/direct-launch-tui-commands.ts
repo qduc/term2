@@ -69,7 +69,7 @@ async function configure(
   const command = { type: 'configure', commandId: randomUUID(), configuration } as const;
   const result = await sendNativeCommand(connection, command);
   const configured = result.kind === 'finished' && result.receipt.outcome?.kind === 'configured';
-  if (configured && done) return { message: done };
+  if (configured && done) return { message: done, applied: true };
   if (result.kind === 'rejected' || result.kind === 'error') {
     const outcome = result.receipt?.outcome;
     throw new Error(outcome?.kind === 'rejected' ? outcome.message : result.message.replace(/^[a-z_]+: /, ''));
@@ -309,7 +309,6 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
 
   return {
     resumePicker: { list: listResumeSessions },
-    settingsPicker: { list: configuration.picker },
     planNeedsClear: configuration.planNeedsClear,
     async clearAndTogglePlan(connection) {
       const target = configuration.planTarget(connection);
@@ -338,6 +337,9 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
     async command(connection, input) {
       const [name, ...rest] = input.trim().slice(1).split(/\s+/);
       const argument = rest[0];
+      // Legacy's bare /settings, /effort and /auto-approve put the trigger in the composer, which opens their menu.
+      if ((name === 'settings' || name === 'effort' || name === 'auto-approve') && rest.length === 0)
+        return { draft: { text: `/${name} `, attachments: [] } };
       switch (name) {
         case 'help':
           return { message: helpText() };

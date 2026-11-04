@@ -1,6 +1,4 @@
 {
-  "rewrite/src/clients/headless.ts": "Pending deletion: reached only by the bench-only bridge path (#139).",
-  "rewrite/src/clients/index.ts": "Pending deletion: reached only by the bench-only bridge path (#139).",
   "rewrite/src/config/memory.ts": "Pending deletion: reached only by the bench-only bridge path (#139).",
   "rewrite/src/config/scoped-settings.ts": "Pending deletion: reached only by the bench-only bridge path (#139).",
   "rewrite/src/engine/adopted/conversion.ts": "Pending deletion: reached only by the bench-only bridge path (#139).",
@@ -10,10 +8,7 @@
   "rewrite/src/engine/adopted/settings.ts": "Pending deletion: reached only by the bench-only bridge path (#139).",
   "rewrite/src/engine/adopted/tool-catalog.ts": "Pending deletion: reached only by the bench-only bridge path (#139).",
   "rewrite/src/engine/loop.ts": "Pending deletion: reached only by the bench-only bridge path (#139).",
-  "rewrite/src/host/in-process.ts": "Pending deletion: reached only by the bench-only bridge path (#139).",
   "rewrite/src/model/scripted.ts": "Pending deletion: reached only by the bench-only bridge path (#139).",
-  "rewrite/src/protocol/commands.ts": "Pending deletion: reached only by the bench-only bridge path (#139).",
-  "rewrite/src/protocol/projection.ts": "Pending deletion: reached only by the bench-only bridge path (#139).",
   "rewrite/src/session/adopted/compact-command.ts": "Pending deletion: reached only by the bench-only bridge path (#139).",
   "rewrite/src/session/adopted/conversation-index.ts": "Pending deletion: reached only by the bench-only bridge path (#139).",
   "rewrite/src/session/adopted/conversation-retry-projection.ts": "Pending deletion: reached only by the bench-only bridge path (#139).",

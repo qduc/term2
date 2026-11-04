@@ -2,6 +2,7 @@ import { testCliPath } from '../../source/test-helpers/terminal-e2e.js';
 import { mkdir, writeFile, readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
+import { usesDirectComposer } from '../../source/test-helpers/direct-composer.js';
 import { startFakeProviderHttpServer, type FakeProviderHttpServer } from './fake-provider-http-server.js';
 import {
   createIsolatedWorkspaceLease,
@@ -10,6 +11,17 @@ import {
   exitInteractive,
 } from './provider-test-harness.js';
 
+const direct = usesDirectComposer([process.env.TERM2_TEST_CLI ?? '']);
+/**
+ * Separate conversation store (accepted difference): legacy names a headless
+ * session `non-interactive-<uuid>`; next stores `conv_<uuid>` and resumes by the
+ * bare UUID. Either way the recovery text must name the retained session.
+ */
+const resumeLocator = async (lease: IsolatedWorkspaceLease): Promise<string> => {
+  if (!direct) return '--resume non-interactive-';
+  const [log] = (await readdir(lease.paths.conversationsDir)).filter((name) => name.endsWith('.jsonl'));
+  return `--resume ${log!.replace(/^conv_/, '').replace(/\.jsonl$/, '')} `;
+};
 let server: FakeProviderHttpServer | undefined;
 let workspace: IsolatedWorkspaceLease | undefined;
 let scenarioOptions: { scenario: 'success' | 'tool-fragments' | 'context-overflow'; protocol: 'chat-completions' };
@@ -88,7 +100,7 @@ it('pauses before dispatch on a known small model with fresh defaults', async ()
   });
   expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(2);
   expect(result.stdout).toContain('context_paused');
-  expect(result.stdout).toContain('--resume non-interactive-');
+  expect(result.stdout).toContain(await resumeLocator(lease));
   expect(server!.requests).toHaveLength(0);
 });
 
@@ -108,7 +120,7 @@ it.each([undefined, 'warn'] as const)(
     expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(2);
     expect(result.stdout).toContain('context_paused');
     expect(result.stdout).toContain('request_input_limit');
-    expect(result.stdout).toContain('--resume non-interactive-');
+    expect(result.stdout).toContain(await resumeLocator(lease));
     expect(server!.requests).toHaveLength(0);
     const logs = (await readdir(lease.paths.conversationsDir)).filter((name) => name.endsWith('.jsonl'));
     expect(logs).toHaveLength(1);
@@ -127,7 +139,7 @@ it('parks an unattended critical budget under explicit contain without auto-gran
   expect(result.timedOut).toBe(false);
   expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(2);
   expect(result.stdout).toContain('run_budget_paused');
-  expect(result.stdout).toContain('--resume non-interactive-');
+  expect(result.stdout).toContain(await resumeLocator(lease));
   expect(server!.requests).toHaveLength(1);
   const logs = (await readdir(lease.paths.conversationsDir)).filter((name) => name.endsWith('.jsonl'));
   expect(logs).toHaveLength(1);
@@ -160,7 +172,7 @@ it('retains unknown-model work after structured provider overflow without retryi
   expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(2);
   expect(result.stdout).toContain('context_paused');
   expect(result.stdout).toContain('provider_context_overflow');
-  expect(result.stdout).toContain('--resume non-interactive-');
+  expect(result.stdout).toContain(await resumeLocator(lease));
   expect(server!.requests).toHaveLength(1);
   const logs = (await readdir(lease.paths.conversationsDir)).filter((name) => name.endsWith('.jsonl'));
   expect(await readFile(join(lease.paths.conversationsDir, logs[0]!), 'utf8')).toContain('retain this request');

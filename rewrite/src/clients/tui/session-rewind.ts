@@ -14,7 +14,7 @@ export function useSessionRewind({
   pending: RefObject<boolean>;
   rewindDraft: ReturnType<typeof useSessionComposer>['rewindDraft'];
   setBusy: Dispatch<SetStateAction<boolean>>;
-  setNotice: Dispatch<SetStateAction<string | null>>;
+  setNotice: (message: string | null) => void;
 }) {
   return async (targetId: string, disposition: 'edit' | 'resend') => {
     if (pending.current) return;

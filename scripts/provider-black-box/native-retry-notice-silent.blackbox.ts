@@ -90,10 +90,10 @@ it.skipIf(process.platform !== 'linux')('replays a silent background turn notice
     await child.waitForState(() => requests.length === 2);
     complete(1, [message('BACKGROUND_STARTED')]);
     await child.waitForVisibleOutput('BACKGROUND_STARTED');
-    const nextIdle = await child.waitForIdleInput({ after: idle });
+    await child.waitForIdleInput({ after: idle });
     await writePtyTextAndSubmit(child, '/profile plan');
-    // Legacy /profile switches silently; the idle composer below marks the switch done.
-    await child.waitForIdleInput({ after: nextIdle });
+    // Legacy /profile switches silently; the status bar's profile shows the switch landed.
+    await child.waitForVisibleOutput('Plan │');
     await child.waitForComposerValue('', { afterRevision: 0 });
     const switchedIdle = child.readIdleGeneration();
     await writeFile(join(lease.root, '.fixture-release'), 'go');

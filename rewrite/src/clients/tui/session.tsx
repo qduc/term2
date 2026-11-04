@@ -8,7 +8,7 @@ import { useTheme } from './presentation/components/theme.js';
 import { useSkin } from './presentation/skins/SkinContext.js';
 import { terminalPreferenceDefaults } from '../../host/terminal-preference-defaults.js';
 import { useClient } from './use-client.js';
-import { ShellTaskPanel, Activity, BangResult, LiveNotices, interruptedNotice } from './views.js';
+import { ShellTaskPanel, Activity, LiveNotices, interruptedNotice } from './views.js';
 import { PendingQueue, PendingQueueEdit } from './pending-queue.js';
 import type { InteractionInputHandler } from './interaction-input.js';
 import { runBangShell } from './bang-shell.js';
@@ -69,12 +69,13 @@ export function TuiSession({
   const { state, error: connError, historyRevision } = useClient(connection, retainedSnapshot, onSnapshot, onLiveEvent);
   const preferences = integration.preferences?.(connection.sessionId) ?? terminalPreferenceDefaults();
   const { columns, rows } = useTerminalSize();
-  const [bangResult, setBangResult] = useState<string | null>(null);
   const [interactionOpen, setInteractionOpen] = useState(false);
   const [dismissedInteractionId, setDismissedInteractionId] = useState<string | null>(null);
   const [taskOpen, setTaskOpen] = useState(false);
   const [budgetOpen, setBudgetOpen] = useState(false);
   const [selectedQueueId, setSelectedQueueId] = useState<string | null>(null);
+  // Legacy useShellMode: `!` on an empty composer swaps the prompt for a shell prompt; the `!` is not typed.
+  const [shellMode, setShellMode] = useState(false);
   const [queueNotice, setQueueNotice] = useState<string | null>(null);
   // Legacy's addSystemMessage: every command result and hint is a transcript line, never a live notice.
   const appendSystem = useRef<(text: string) => void>(() => undefined);
@@ -169,8 +170,16 @@ export function TuiSession({
   const { escHintVisible } = useEscapeKey({
     value: editor.value,
     onChange: (value) => replaceInput(value),
-    onEscape: () =>
-      !composerActive || menuStack.open || viewport.expanded || selectedQueueIndex >= 0 || Boolean(editing),
+    onEscape: () => {
+      if (!composerActive || menuStack.open || viewport.expanded || selectedQueueIndex >= 0 || Boolean(editing))
+        return true;
+      // Legacy InputBox handleEscape: Esc on an empty shell prompt leaves shell mode.
+      if (shellMode && editor.value === '') {
+        setShellMode(false);
+        return true;
+      }
+      return false;
+    },
     turnInFlight: Boolean(state.activeTurnId),
   });
   const pending = useRef(false);
@@ -184,7 +193,6 @@ export function TuiSession({
   );
   const composerFilter = useComposerFilter({
     composerActive,
-    turnActive: Boolean(state.activeTurnId),
     outputExpanded: viewport.expanded,
     draft: { value: editor.value, cursor: editor.cursor, replace: replaceInput },
     submit: (text) => void submit(text, images),
@@ -244,7 +252,6 @@ export function TuiSession({
     const submission = steerRecovery.beginSubmission(input, submittedImages, otherParts);
     setBusy(true);
     setNotice(null);
-    setBangResult(null);
     viewport.setHelp(null);
     // True when the draft was held for confirmation instead of sent.
     const held = async (text: string, attachments: readonly WireContent[], retry: () => void): Promise<boolean> => {
@@ -330,7 +337,7 @@ export function TuiSession({
         clearSubmittedParts(submittedImages, otherParts);
       } else if (input.startsWith('!')) {
         const attached = submittedImages.length > 0 || otherParts.length > 0;
-        setBangResult(await runBangShell(integration, connection, input, attached, Boolean(state.activeTurnId)));
+        viewport.appendShell(await runBangShell(integration, connection, input, attached, Boolean(state.activeTurnId)));
       } else if (input.trim() === '/tasks') setTaskOpen(true);
       else if (REWIND_COMMAND.test(input.trim())) {
         const chosen = await runRewindCommand(input, {
@@ -412,10 +419,10 @@ export function TuiSession({
         if (await steerRecovery.wasReturnedAfter(submission.submissionEpoch, submission.requestId)) return;
         clearSubmittedParts(submittedImages, otherParts);
       }
-      // Do not add interaction answers to recallable input history.
+      // Legacy records only admitted chat turns (conversation-admission-workflow.ts): no commands or `!` shell.
       editor.accepted(
         input,
-        !input.startsWith('/answer '),
+        !/^[/!]/.test(input) || /^\/(steer|followup)\s/.test(input),
         input.startsWith('/') && !/^\/(steer|followup)\s/.test(input)
           ? []
           : wireAttachments(submittedImages, otherParts, originalParts),
@@ -481,7 +488,6 @@ export function TuiSession({
         />
         <LiveNotices connectionError={connError} />
         <LiveNotices historyError={editor.historyError} />
-        {bangResult ? <BangResult result={bangResult} expanded={viewport.expanded} /> : null}
         <LiveDivider />
         <ShellTaskPanel state={state} />
         <PendingQueue
@@ -496,17 +502,30 @@ export function TuiSession({
         {confirmation.prompt}
         {menuStack.open || confirmation.prompt ? null : (
           <InputFrame>
-            <PromptMarker mode="input" />
+            <PromptMarker mode={shellMode ? 'shell' : 'input'} />
             <MultilineInput
               key={editor.inputKey}
               value={editor.value}
               onChange={(value) => {
+                if (!shellMode && editor.value === '' && value.startsWith('!')) {
+                  setShellMode(true);
+                  replaceInput(value.slice(1));
+                  return;
+                }
                 changeInput(value);
               }}
               onSubmit={(value, submittedImages) => {
+                if (shellMode && !submittedImages?.length) {
+                  // Legacy handleShellSubmit: a blank command stays in shell mode; any command leaves it.
+                  if (!value.trim()) return;
+                  replaceInput('');
+                  void submit(`!${value}`, submittedImages).finally(() => setShellMode(false));
+                  return;
+                }
                 void submit(value, submittedImages);
               }}
               onBoundaryArrow={(direction) => {
+                if (shellMode) return;
                 if (direction === 'up' && !editor.value && !editing && queueItems.length) {
                   setQueueNotice(null);
                   setSelectedQueueId(queueItems[queueItems.length - 1]!.id);
@@ -559,6 +578,14 @@ export function TuiSession({
                   return true;
                 }
                 if (editing && key.escape) return cancelQueueEdit();
+                if (
+                  shellMode &&
+                  editor.value === '' &&
+                  (key.backspace || key.delete || input === '\x7f' || input === '\b')
+                ) {
+                  setShellMode(false);
+                  return true;
+                }
                 return composerFilter(input, key);
               }}
             />

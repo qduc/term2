@@ -113,9 +113,7 @@ function DirectTui({
           maxOutputLines: settings.get('shell.maxOutputLines') ?? undefined,
           durationMs: Date.now() - startedAt,
         });
-        return `${result.exitCode === 0 && !result.timedOut ? '✓' : '✗'} ${command} (${Date.now() - startedAt}ms)\n${
-          formatted.text
-        }`;
+        return { command, output: formatted.text, exitCode: result.exitCode, timedOut: result.timedOut };
       },
       preferences(sessionId) {
         const current = app.liveSettings(sessionId);

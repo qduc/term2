@@ -337,7 +337,7 @@ export interface TuiIntegration {
   /** The legacy menus' data access. Without it the composer opens no menus. */
   readonly menus?: TuiMenus;
   /** Run an explicit user shell command in the selected workspace, without a model turn. */
-  shell?(sessionId: string, command: string): Promise<string>;
+  shell?(sessionId: string, command: string): Promise<ShellResult>;
   planNeedsClear?(connection: TuiConnection): boolean;
   /** The profile Shift+Tab switches to. */
   planTarget?(connection: TuiConnection): string;
@@ -369,6 +369,14 @@ export interface TuiIntegration {
   /** Attach a returned direct session ID; do not reuse the previous connection. */
   switchSession?(sessionId: string): Promise<void | { readonly message?: string }>;
 }
+
+/** A finished `!` command, as legacy's ShellInteractionSession hands it to addShellMessage. */
+export type ShellResult = {
+  readonly command: string;
+  readonly output: string;
+  readonly exitCode: number | null;
+  readonly timedOut: boolean;
+};
 
 /** App-owned TUI callbacks cross the unkeyed shell into the keyed session. */
 export interface TuiProps {

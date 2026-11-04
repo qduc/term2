@@ -96,3 +96,11 @@ SCENARIOS.update({
     'cmd-bare-history': ['hello', '<enter>', '<sleep>', '/bare', '<enter>'],
 })
 SEED.update({name: _TURN for name in ('stab-history', 'stab-history-yes', 'stab-history-esc', 'cmd-bare-history')})
+
+SCENARIOS.update({
+    'bang-run': ['!pwd', '<enter>', '<sleep>'],
+    'bang-esc': ['!', '<esc>'],
+    'bang-blank': ['!', '<enter>'],
+    'bang-up': ['hello', '<enter>', '<sleep>', '!', '<up>'],
+})
+SEED['bang-up'] = _TURN

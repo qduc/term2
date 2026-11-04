@@ -261,7 +261,7 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
     const breakdown = formatModelUsageBreakdown(
       summarizeModelUsage((snapshot.requestCosts ?? []).map(({ record }) => record)),
     );
-    return { transcript: breakdown ? `${total}\n${breakdown}` : total };
+    return { message: breakdown ? `${total}\n${breakdown}` : total }; // legacy usage-command: one system line
   };
 
   /** A skill always belongs to a request, so naming one alone hands the line back to finish. */

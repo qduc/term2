@@ -10,7 +10,10 @@ import type { SlashCommand } from './slash-command-types.js';
 import { useSlashCommands } from './use-slash-commands.js';
 import { usePathCompletion } from './use-path-completion.js';
 import { useModelSelection } from './use-model-selection.js';
+import { useSettingsCompletion } from './use-settings-completion.js';
+import { useSettingsValueCompletion } from './use-settings-value-completion.js';
 import { useInputContext } from './input-context.js';
+import type { CommandResult } from '../integration.js';
 
 /** Session behaviour the menus call back into, replacing legacy app callbacks. */
 export type MenuActions = {
@@ -18,8 +21,8 @@ export type MenuActions = {
   readonly runCommand: (text: string) => void;
   /** Show a one-line notice, as legacy addSystemMessage did. */
   readonly notice: (text: string) => void;
-  /** Run a slash command for its answer (the notice legacy printed); rejects with the command's error. */
-  readonly command: (text: string) => Promise<{ readonly message?: string }>;
+  /** Run an app-owned command and return its result instead of showing it (menu intents). */
+  readonly command: (text: string) => Promise<CommandResult>;
 };
 
 /** Legacy ApplicationInputSurface's enabled trigger rule ids, limited to the ported menus. */
@@ -29,6 +32,9 @@ export const MENU_RULE_IDS: readonly string[] = [
   'command-model',
   'settings-model',
   'settings-subagent-pool-child',
+  'settings',
+  'settings-value-child',
+  'direct-setting-value',
 ];
 
 export function useMenuServices({
@@ -39,11 +45,17 @@ export function useMenuServices({
 }): MenuServices {
   const slash = useSlashCommands({ commands, onClose: noop });
   const { menus, sessionId } = useInputContext();
-  // Legacy passed its one settings service; next's is the attached session's, bound once per session.
-  const settingsService = useMemo(() => menus.models.settings(sessionId), [menus, sessionId]);
+  // Legacy passed its one settings service; next's is the attached session's live settings, bound once per
+  // session: the model services and the settings reads together make up legacy's SettingsService surface.
+  const settingsService = useMemo(
+    () => ({ ...menus.models.settings(sessionId), ...menus.settings.service(sessionId) }),
+    [menus, sessionId],
+  );
   const models = useModelSelection({ settingsService });
   const path = usePathCompletion();
-  return { slash, path, models, settingsService };
+  const settings = useSettingsCompletion(settingsService);
+  const settingsValue = useSettingsValueCompletion(settingsService);
+  return { slash, path, models, settings, settingsValue, settingsService, schema: menus.schema };
 }
 
 const noop = () => {};

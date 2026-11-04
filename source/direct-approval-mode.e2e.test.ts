@@ -347,8 +347,9 @@ async function runCommand(
     await new Promise((resolve) => setTimeout(resolve, 2_100));
     session.write('\x03');
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 5_000 });
+    // The /effort menu is open; legacy refuses an unknown level inline and keeps the text.
     await submit('/effort bogus');
-    await session.waitForOutput('Unknown effort', 30_000);
+    await session.waitForOutput('"bogus" is not one of the options', 30_000);
     await waitForHarnessComposerValue(idlePath, '/effort bogus', { timeoutMs: 5_000 });
     await new Promise((resolve) => setTimeout(resolve, 2_100));
     session.write('\x03');
@@ -637,19 +638,19 @@ async function runCommand(
   }
 }
 
-it('/auto-approve without an argument reports the current mode', { timeout: TIMEOUT_MS }, () =>
-  runCommand('/auto-approve', 'Tool auto-approval is off.'),
+// Legacy's bare /auto-approve and /settings put their trigger in the composer, which opens the menu.
+it('/auto-approve without an argument opens the legacy auto-approval menu', { timeout: TIMEOUT_MS }, () =>
+  runCommand('/auto-approve', 'Shell auto-approval', undefined, false, false, '/auto-approve '),
 );
 
-it('/settings clears its submitted command', { timeout: TIMEOUT_MS }, () =>
-  runCommand('/settings', 'Settings · [Models]', undefined, false, false, ''),
+it('/settings without an argument opens the legacy settings menu', { timeout: TIMEOUT_MS }, () =>
+  runCommand('/settings', 'Tab section', undefined, false, false, '/settings '),
 );
 
-it.each([
-  ['/profile', 'Use /profile', ''],
-  ['/auto-approve', 'Use /auto-approve', ''],
-])('%s explains its arguments and clears the composer', { timeout: TIMEOUT_MS }, (command, notice, draft) =>
-  runCommand(command, notice, undefined, false, false, draft),
+it.each([['/profile', 'Use /profile', '']])(
+  '%s explains its arguments and clears the composer',
+  { timeout: TIMEOUT_MS },
+  (command, notice, draft) => runCommand(command, notice, undefined, false, false, draft),
 );
 
 it(
@@ -676,10 +677,10 @@ it('/usage agrees with the cached share in the status bar', { timeout: TIMEOUT_M
   expect(session!.getVisibleOutput()).toContain('54% cached');
   expect(session!.getVisibleOutput()).toContain('Ctx last 78k');
   expect(session!.getVisibleOutput()).toMatch(/\d+(?:\.\d+)?t\/s/);
-  session!.write('/auto-approve');
-  await waitForHarnessComposerValue(path.join(root, 'home', 'input-idle'), '/auto-approve', { timeoutMs: 60_000 });
+  session!.write('/queue nonsense');
+  await waitForHarnessComposerValue(path.join(root, 'home', 'input-idle'), '/queue nonsense', { timeoutMs: 60_000 });
   session!.write('\r');
-  await session!.waitForOutput('Tool auto-approval is off.', 30_000);
+  await session!.waitForOutput('Use /queue', 30_000);
   const visible = session!.getVisibleOutput();
   const afterNotice = visible.slice(visible.lastIndexOf('▌ term²'));
   expect(afterNotice).toContain('Token usage: 78,021 input (42,112 cached), 731 output');
@@ -734,7 +735,7 @@ it('/copy confirms what it copied', { timeout: TIMEOUT_MS }, () =>
 );
 
 it('slash menu suggests and completes a command in the terminal', { timeout: TIMEOUT_MS }, () =>
-  runCommand('/settings', 'Settings · [Models]', undefined, 'complete'),
+  runCommand('/settings', 'Tab section', undefined, 'complete'),
 );
 
 it('Enter on an unfinished slash prefix runs the command', { timeout: TIMEOUT_MS }, () =>
@@ -759,12 +760,13 @@ it('/providers opens the legacy provider manager', { timeout: TIMEOUT_MS }, () =
 
 it('/retry aliases retry-turn', { timeout: TIMEOUT_MS }, () => runCommand('/retry', 'No retained'));
 
-it('invalid effort reports valid values without protocol internals', { timeout: TIMEOUT_MS }, async () => {
-  await runCommand('/effort ultra', 'xhigh.', undefined, false, false, undefined, ['invalid_command', 'Command ']);
-  expect(session!.getVisibleOutput().replace(/\s+/g, ' ')).toContain(
-    "Unknown effort 'ultra'. Use: default, none, minimal, low, medium, high, xhigh.",
-  );
-});
+// The /effort menu owns the Enter, so legacy refuses an unknown level inline and keeps the text.
+it('invalid effort is refused inline without protocol internals', { timeout: TIMEOUT_MS }, () =>
+  runCommand('/effort bogus', '"bogus" is not one of the options', undefined, false, false, undefined, [
+    'invalid_command',
+    'Command ',
+  ]),
+);
 
 // No menu row matches, so legacy's menu submits the typed id on the current provider, unchecked, and clears the line.
 it('a typed model no catalog lists is set as legacy did, without receipt internals', { timeout: TIMEOUT_MS }, () =>

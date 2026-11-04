@@ -4,10 +4,34 @@
  * the attached session's live settings, never launch defaults.
  */
 import {
+  getAllSettingDescriptions,
   getSettingLabel,
+  getSettingMetadata,
+  isBooleanSetting,
+  isDurationSetting,
   isKnownSettingKey,
+  isNumberSetting,
   isSecretSetting,
+  isStringSetting,
+  isUsdMicrosSetting,
 } from '../../../source/services/settings/settings-ui-metadata.js';
+import { SETTING_KEYS } from '../../../source/services/settings/settings-schema.js';
+import { SETTING_ENV_VARIABLES } from '../../../source/services/settings/settings-env.js';
+import { SETTINGS_CATEGORIES } from '../../../source/hooks/settings-completion-config.js';
+import {
+  buildSettingsList,
+  filterSettingsByCategory,
+  filterSettingsByQuery,
+  getSettingCategory,
+} from '../../../source/hooks/settings-completion-logic.js';
+import {
+  buildSettingValueSuggestions,
+  fetchLiveSettingValueSuggestions,
+  filterSettingValueSuggestionsByQuery,
+  mergeSettingValueSuggestions,
+} from '../../../source/utils/value-suggestions.js';
+import { parseSettingValueForKey } from '../../../source/utils/settings-command.js';
+import { isDeepStrictEqual } from 'node:util';
 import {
   SUBAGENT_POOL_SETTING_KEYS,
   getSubagentPoolEntryShape,
@@ -65,7 +89,7 @@ import {
   resolveProviderCredentials,
   setProviderDisabled,
 } from '../../../source/utils/ai/provider-credentials.js';
-import type { TuiMenus, TuiModelSettings, TuiProviderMenu } from '../clients/tui/integration.js';
+import type { MenuSettingsService, TuiMenus, TuiModelSettings, TuiProviderMenu } from '../clients/tui/integration.js';
 import type { DirectApplication } from './direct-application.js';
 
 type MenuOptions = {
@@ -171,7 +195,59 @@ function modelSettings(live: ISettingsService, options: MenuOptions): TuiModelSe
 export function createDirectTuiMenus(options: MenuOptions): TuiMenus {
   const { app, logger, persistentSettings } = options;
   const bySession = new Map<string, { live: ISettingsService; settings: TuiModelSettings }>();
+  const services = new Map<string, MenuSettingsService>();
   return {
+    settings: {
+      lib: {
+        SETTING_KEYS,
+        SETTING_ENV_VARIABLES,
+        SETTINGS_CATEGORIES,
+        SETTING_DESCRIPTIONS: getAllSettingDescriptions(),
+        buildSettingsList,
+        filterSettingsByQuery,
+        filterSettingsByCategory,
+        getSettingCategory,
+        getSettingMetadata,
+        getSettingLabel,
+        isSecretSetting,
+        isStringSetting,
+        isNumberSetting,
+        isBooleanSetting,
+        isDurationSetting,
+        isUsdMicrosSetting,
+        buildSettingValueSuggestions,
+        fetchLiveSettingValueSuggestions: (key) => fetchLiveSettingValueSuggestions(key),
+        mergeSettingValueSuggestions,
+        filterSettingValueSuggestionsByQuery,
+        parseSettingValueForKey,
+      },
+      // Legacy hooks take one SettingsService; this is the attached session's live one (no disk read).
+      service(sessionId) {
+        const cached = services.get(sessionId);
+        if (cached) return cached;
+        const settings = app.liveSettings(sessionId);
+        if (!settings) throw new Error('The attached session has no live settings.');
+        const service: MenuSettingsService = {
+          getDynamic: (key) => settings.getDynamic(key),
+          getDefault: (key) => settings.getDefault(key),
+          // A session pins its start facts (model, effort, profile) as unsaved values, which legacy's
+          // service reports as 'cli'. Where the pinned value is the saved one, report the saved source.
+          getSource: (key) => {
+            const source = settings.getSource(key);
+            if (source !== 'cli') return source;
+            const saved = persistentSettings.getSource?.(key) ?? 'cli';
+            return saved !== 'cli' && isDeepStrictEqual(settings.getDynamic(key), persistentSettings.getDynamic(key))
+              ? saved
+              : source;
+          },
+          getStartupOverride: (key) => settings.getStartupOverride(key),
+          isRuntimeModifiable: (key) => settings.isRuntimeModifiable(key),
+          onChange: (listener) => settings.onChange(() => listener()),
+        };
+        services.set(sessionId, service);
+        return service;
+      },
+    },
     providers: createProviderMenu(persistentSettings, (sessionId) => app.liveSettings(sessionId) ?? null),
     models: {
       settings(sessionId) {

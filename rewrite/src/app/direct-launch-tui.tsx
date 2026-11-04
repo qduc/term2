@@ -154,7 +154,7 @@ function DirectTui({
         },
       }),
     }),
-    [app, root, remote, mcp, bridge, restart, logger],
+    [app, persistentSettings, root, remote, mcp, bridge, restart, logger],
   );
   const skin = useSourceSkin();
   const theme = useSourceTheme();

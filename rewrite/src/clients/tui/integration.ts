@@ -28,23 +28,6 @@ export type TuiStatusInfo = {
   readonly approval: 'off' | 'advisory' | 'auto' | 'always';
 };
 
-export type SettingsPickerItem = {
-  readonly key: string;
-  readonly label: string;
-  readonly description: string;
-  readonly current: string;
-  readonly defaultValue: string;
-  readonly editable: boolean;
-  readonly reason?: string;
-};
-export type SettingsPickerCategory = {
-  readonly id: string;
-  readonly label: string;
-  /** Search-only entries stay out of the curated category tabs. */
-  readonly searchOnly?: boolean;
-  readonly items: readonly SettingsPickerItem[];
-};
-
 /** Legacy `PathEntry` (source/services/file-service.ts). */
 export type MenuPathEntry = { readonly path: string; readonly type: 'file' | 'directory' };
 export type MenuLogger = {
@@ -144,6 +127,77 @@ export interface TuiModelSettings {
   providerItems(): MenuProviderSelectionItem[];
 }
 
+/** Legacy `SettingCompletionItem` (source/hooks/settings-completion-config.ts). */
+export type SettingCompletionItem = {
+  key: string;
+  label: string;
+  description?: string;
+  currentValue?: unknown;
+  source?: 'cli' | 'env' | 'config' | 'default';
+  isModified?: boolean;
+  startupOverride?: { source: 'env' | 'cli'; name?: string };
+  requiresRestart?: boolean;
+  isAdvanced?: boolean;
+};
+export type SettingsCategory = { id: string; label: string };
+/** Legacy `SettingValueSuggestion` (source/utils/value-suggestions.ts). */
+export type SettingValueSuggestion = { value: string; description?: string };
+
+/**
+ * The legacy settings-menu library: schema metadata, list building, filtering,
+ * value suggestions and value parsing, from source/services/settings,
+ * source/hooks/settings-completion-{config,logic}.ts, source/utils/value-suggestions.ts
+ * and source/utils/settings-command.ts. All pure except
+ * `fetchLiveSettingValueSuggestions`, which legacy also calls only when a
+ * value frame opens, never per render.
+ */
+export interface TuiSettingsLibrary {
+  readonly SETTING_KEYS: Readonly<Record<string, string>>;
+  readonly SETTING_ENV_VARIABLES: Readonly<Record<string, string>>;
+  readonly SETTINGS_CATEGORIES: SettingsCategory[];
+  readonly SETTING_DESCRIPTIONS: Record<string, string>;
+  buildSettingsList(
+    keys: Readonly<Record<string, string>>,
+    descriptions: Record<string, string>,
+    excludeSensitive?: boolean,
+    getCurrentValue?: (key: string) => unknown,
+  ): SettingCompletionItem[];
+  filterSettingsByQuery(settings: SettingCompletionItem[], query: string, maxResults?: number): SettingCompletionItem[];
+  filterSettingsByCategory<T extends { key: string }>(settings: T[], categoryId: string): T[];
+  getSettingCategory(key: string): SettingsCategory | undefined;
+  getSettingMetadata(key: string): { readonly type?: string } | undefined;
+  getSettingLabel(key: string): string;
+  isSecretSetting(key: string): boolean;
+  isStringSetting(key: string): boolean;
+  isNumberSetting(key: string): boolean;
+  isBooleanSetting(key: string): boolean;
+  isDurationSetting(key: string): boolean;
+  isUsdMicrosSetting(key: string): boolean;
+  buildSettingValueSuggestions(key: string): SettingValueSuggestion[];
+  fetchLiveSettingValueSuggestions(key: string): Promise<SettingValueSuggestion[] | null>;
+  mergeSettingValueSuggestions(
+    curated: SettingValueSuggestion[],
+    live: SettingValueSuggestion[] | null,
+  ): SettingValueSuggestion[];
+  filterSettingValueSuggestionsByQuery(
+    suggestions: SettingValueSuggestion[],
+    query: string,
+    maxResults?: number,
+    key?: string,
+  ): SettingValueSuggestion[];
+  parseSettingValueForKey(key: string, raw: string): unknown;
+}
+
+/** The SettingsService reads the legacy settings menus make, on the attached session's live settings. */
+export interface MenuSettingsService {
+  getDynamic(key: string): unknown;
+  getDefault(key: string): unknown;
+  getSource(key: string): SettingCompletionItem['source'];
+  getStartupOverride(key: string): 'env' | 'cli' | undefined;
+  isRuntimeModifiable(key: string): boolean;
+  onChange(listener: () => void): () => void;
+}
+
 /**
  * Data the legacy menu stack (`menus/`) reads through the app instead of
  * legacy services. Each group replaces the service calls of one ported menu.
@@ -160,6 +214,12 @@ export interface TuiMenus {
   };
   /** The model and subagent-pool menus. Memoise per session: it is not a render-path read. */
   readonly models: { settings(sessionId: string): TuiModelSettings };
+  /** `/settings`, `/settings reset`, setting values, `/effort` and `/auto-approve`. */
+  readonly settings: {
+    readonly lib: TuiSettingsLibrary;
+    /** The same object for a session across calls; reading it touches no disk. */
+    service(sessionId: string): MenuSettingsService;
+  };
   /** `/providers` manager; absent means `/providers` has no menu. */
   readonly providers?: TuiProviderMenu;
 }
@@ -234,7 +294,6 @@ export interface TuiProviderMenu {
 export interface TuiIntegration {
   /** The legacy menus' data access. Without it the composer opens no menus. */
   readonly menus?: TuiMenus;
-  readonly settingsPicker?: { list(sessionId: string): readonly SettingsPickerCategory[] };
   /** Run an explicit user shell command in the selected workspace, without a model turn. */
   shell?(sessionId: string, command: string): Promise<string>;
   readonly resumePicker?: {
@@ -264,6 +323,8 @@ export interface TuiIntegration {
     readonly exit?: boolean;
     readonly draft?: { readonly text: string; readonly attachments: readonly WireContent[] };
     readonly sessionId?: string;
+    /** The change is certainly in effect (a configured receipt or a saved preference); menus apply it silently. */
+    readonly applied?: boolean;
   }>;
   /** App owns socket lifecycle and returns the current actual attachment state. */
   readonly bridge?: {
@@ -287,3 +348,5 @@ export interface TuiProps {
   readonly onLiveEvent?: (event: WireEvent) => void;
   readonly onExit: () => void;
 }
+
+export type CommandResult = Awaited<ReturnType<TuiIntegration['command']>>;

@@ -26,7 +26,24 @@ export function useTranscriptViewport(
     clearTerminalForRedraw(stdout);
     setEpoch((current) => current + 1);
   };
-  const { staticTranscript, tail, committed } = useNativeTranscript(state, columns, epoch, header);
+  const [frame, setFrame] = useState<{
+    lines: string[];
+    activeTurnId: string | null;
+    expanded: boolean;
+    committed: readonly unknown[] | null;
+  }>({
+    lines: [],
+    activeTurnId: null,
+    expanded: false,
+    committed: null,
+  });
+  // Legacy draws a streamed reply live before it commits; a reply the throttled frame never drew is held for one
+  // frame. Each drawn frame is the "next render" that commits held rows.
+  const drawnDrafts = useRef(new Set<string>());
+  const { staticTranscript, tail, committed } = useNativeTranscript(state, columns, epoch, header, {
+    drafts: drawnDrafts,
+    frame,
+  });
   const activeTurn = useRef(state.activeTurnId);
   activeTurn.current = state.activeTurnId;
   const pendingResize = useRef(false);
@@ -60,17 +77,6 @@ export function useTranscriptViewport(
   const theme = useTheme();
   const skin = useSkin();
   const [expanded, setExpanded] = useState(false);
-  const [frame, setFrame] = useState<{
-    lines: string[];
-    activeTurnId: string | null;
-    expanded: boolean;
-    committed: readonly unknown[] | null;
-  }>({
-    lines: [],
-    activeTurnId: null,
-    expanded: false,
-    committed: null,
-  });
   // Never print a throttled active-turn frame after its turn has settled.
   const lines =
     frame.expanded !== expanded ||
@@ -157,6 +163,10 @@ export function useTranscriptViewport(
       }
       firstSeen.current = seen;
       const next = renderLive(shown, ages, expanded);
+      for (const [id, text] of Object.entries(shown.drafts)) if (text) drawnDrafts.current.add(id);
+      // A held reply drawn here counts as drawn: the next commit pass moves it to scrollback.
+      for (const message of shown.messages)
+        if (message.replacesDraftId) drawnDrafts.current.add(message.replacesDraftId);
       // An identical frame must not re-render the whole session.
       setFrame((previous) =>
         previous.expanded === expanded &&

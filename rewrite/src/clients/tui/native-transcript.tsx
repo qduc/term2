@@ -35,7 +35,15 @@ const withoutPrefix = (message: Message, rows: readonly Row[]): Message => {
 /** The committed rows of a freshly mounted list; one shared value so a frame drawn for it stays current. */
 export const NO_ROWS: readonly Row[] = [];
 
-export function useNativeTranscript(state: TuiState, columns: number, epoch: number, header?: React.ReactNode) {
+export function useNativeTranscript(
+  state: TuiState,
+  columns: number,
+  epoch: number,
+  header?: React.ReactNode,
+  /** The live frame: the drafts it has drawn (a reply whose draft was never drawn was never live) and its latest
+   * drawing, after which held rows commit. */
+  drawn?: { readonly drafts: { readonly current: ReadonlySet<string> }; readonly frame: unknown },
+) {
   const [stored, setStored] = useState<{ epoch: number; rows: readonly Row[] }>({ epoch, rows: [] });
   const rows = stored.epoch === epoch ? stored.rows : NO_ROWS;
   // Per-token state changes only touch drafts; the settled-row scan walks the whole
@@ -127,7 +135,8 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
       !reachedEnd || orphans > 0 || Object.keys(state.drafts).length > 0 || Object.keys(state.reasoning).length > 0;
     const fresh = (row: Row) =>
       !live &&
-      !row.message?.replacesDraftId &&
+      (!row.message?.replacesDraftId ||
+        (drawn !== undefined && !drawn.drafts.current.has(row.message.replacesDraftId))) &&
       (remounted || (memory.candidates.has(row.key) ? !rendered : memory.seen !== null && !memory.seen.has(row.key)));
     commit.current = {
       epoch,
@@ -185,7 +194,8 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
       if (current.epoch === epoch && previous.length === expanded.length) return current;
       return { epoch, rows: expanded.length ? expanded : NO_ROWS };
     });
-  }, [settled, state.drafts, state.reasoning, state.activeTurnId, epoch]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settled, state.drafts, state.reasoning, state.activeTurnId, epoch, drawn?.frame]);
 
   // The unsettled remainder changes only when history or the committed rows do.
   const remainder = useMemo(() => {

@@ -3,7 +3,7 @@ import { ConversationBackground } from './conversation-background.js';
 import { ConversationCommands } from './conversation-commands.js';
 import { ConversationJournal, modelError, nextConversationTurnId } from './conversation-journal.js';
 import { failedTurn, ownConversationTurn, terminalFact, type OwnedConversationTurn } from './conversation-turn.js';
-import { prepareConversationNotice, completedConversationTurn } from './conversation-notice.js';
+import { prepareConversationNotice } from './conversation-notice.js';
 /**
  * The direct conversation owns the engine reader and the durable writer. An
  * engine envelope is accepted only after its fact has committed. Public events
@@ -281,13 +281,6 @@ function conversation(
         capabilities: capabilities!,
         publishNotice: deps.publishNotice,
         released: () => {
-          if (
-            !journal.failure &&
-            completedConversationTurn(journal.facts, turnId) &&
-            (notice || planned?.retryNotice)
-          ) {
-            turnContinuity?.state?.reconcilePrefix([...modelHistory, ...sentInput], [...rawHistory, ...modelInput]);
-          }
           if (active?.turnId === turnId) active = null;
         },
       });
@@ -364,9 +357,11 @@ function conversation(
           !!completionHeld ||
           !!journal.queueState.active ||
           (!journal.queueState.pause && journal.queueState.pending.length > 0),
+        journal.openedAt,
       );
     },
-    acceptedHistory: () => replay(facts, { recoverQueue: false, recoverActiveTurn: false }).history,
+    acceptedHistory: () =>
+      replay(facts, { recoverQueue: false, recoverActiveTurn: false, openedAt: journal.openedAt }).history,
     rolloverAtBoundary: (turnId) => directRolloverAtBoundary(facts, turnId),
     context: () => structuredClone(journal.context),
     setGoal(generation, goal, source = 'user') {

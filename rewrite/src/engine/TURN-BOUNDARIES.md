@@ -17,11 +17,9 @@ durable readiness and matching answer waits. It cannot select or start work; tha
 policy remains in `TurnTools`, preserving selected-stop matching and ordered result
 publication.
 
-After a decorated request commits successfully, Session may reconcile a continuity
-checkpoint to its raw durable input. `DirectContinuity.reconcilePrefix` only replaces
-an exact sent prefix with the corresponding same-length, same-ID/type durable prefix;
-otherwise it leaves the checkpoint unchanged. This preserves strict prefix matching
-for subsequent response chaining without recording request-only decoration in history.
+A decorated request's notice is recorded on its `turn_started`, and Session applies it again to the same
+message whenever it builds a later request, as legacy keeps it in history. Stored history stays raw, and the
+continuity checkpoint keeps matching the decorated prefix.
 
 A Session-admitted steer stays pending until the next request boundary. It never
 aborts an in-flight physical response. Tool turns admit it before the next model

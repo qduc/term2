@@ -36,8 +36,14 @@ export function prepareConversationNotice(
     generation.notice(undefined, true);
   }
   const rawHistory = planned?.history ?? snapshotHistory;
-  let modelHistory = rawHistory;
-  if (planned?.retryNotice) {
+  // Legacy keeps a notice on the message it decorated in every later request. History stays raw; the turn's
+  // recorded notice is applied again each time a request is built.
+  const recorded = recordedNotices(journal.facts, journal.openedAt);
+  let modelHistory: readonly Item[] = rawHistory.map((item) => {
+    const text = item.type === 'user_message' ? recorded.get(item.id) : undefined;
+    return text ? withNotice([item], text)[0]! : item;
+  });
+  if (planned?.retryNotice && !recorded.has(planned.retryNotice.messageId)) {
     let index = modelHistory.length - 1;
     while (index >= 0 && modelHistory[index]?.id !== planned.retryNotice.messageId) index--;
     if (index >= 0) {
@@ -49,8 +55,16 @@ export function prepareConversationNotice(
   return { notice, modelInput, rawHistory, modelHistory, sentInput };
 }
 
-/** Only a durably completed turn may reconcile its decorated model prefix. */
-export function completedConversationTurn(facts: readonly Fact[], turnId: TurnId): boolean {
-  const ended = [...facts].reverse().find((fact) => fact.type === 'turn_ended' && fact.turnId === turnId);
-  return ended?.type === 'turn_ended' && ended.outcome === 'completed';
+/**
+ * Each decorated turn's notice, by the user message it was applied to (the turn's first). A retry repeats it. Only
+ * turns this process started: legacy's resumed history is raw.
+ */
+function recordedNotices(facts: readonly Fact[], openedAt: number): ReadonlyMap<string, string> {
+  const notices = new Map<string, string>();
+  for (const fact of facts.slice(openedAt)) {
+    if (fact.type !== 'turn_started' || !fact.requestNotice || fact.retryContext) continue;
+    const first = fact.input.find((item) => item.type === 'user_message');
+    if (first && !notices.has(first.id)) notices.set(first.id, fact.requestNotice);
+  }
+  return notices;
 }

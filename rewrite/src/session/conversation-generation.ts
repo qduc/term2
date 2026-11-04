@@ -150,13 +150,14 @@ export class ConversationGeneration {
     facts: readonly Fact[],
     capabilities: ReturnType<typeof bindDirectCapabilities>,
     queueActive: boolean,
+    openedAt?: number,
   ): ReturnType<Conversation['snapshotInputPreview']> {
     const configuration = directPreviewConfiguration(request);
     if (!configuration) throw new Error('App has not supplied the effective previewMode');
     // Preview the accepted live cut, including in-flight Items/deltas, without
     // synthesizing crash-time tool results, wait closures or root terminals.
     // An unfinished projection's interrupted status is not a live failure.
-    const history = replay(facts, { recoverQueue: false, recoverActiveTurn: false }).history;
+    const history = replay(facts, { recoverQueue: false, recoverActiveTurn: false, openedAt }).history;
     // This is the same pure admission plan, but its returned context facts are
     // deliberately NOT accepted. No memory/notice/goal state is consumed.
     const human = capabilities.humanPlan('preview', request.input);

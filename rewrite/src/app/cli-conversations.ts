@@ -5,9 +5,9 @@ import { readDirectSessionStart } from '../session/direct-session-start.js';
 import { withNativeCatalogue, type NativeCatalogueEntry } from './native-catalogue.js';
 import { resolveDirectRemoteConnection } from './direct-remote-config.js';
 import type { SessionOptions } from './cli-args.js';
+import { displaySessionId, storedSessionId } from '../protocol/session-id.js';
 
 const NATIVE_ID = /^conv_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const IMPORTED_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 type Selection = { readonly target: string; readonly root: string | null };
 
 async function selection(options: SessionOptions): Promise<Selection> {
@@ -43,7 +43,9 @@ function recent(directory: string, selected: Selection): readonly NativeCatalogu
 
 function notFound(reference: string): Error {
   return new Error(
-    `No conversation found to resume (${reference}).\nRun "term2 --resume ls" to list available conversations.`,
+    `No conversation found to resume (${displaySessionId(
+      reference,
+    )}).\nRun "term2 --resume ls" to list available conversations.`,
   );
 }
 
@@ -53,7 +55,7 @@ export async function resolveNativeResume(directory: string, options: SessionOpt
   if (requested === null) return options;
   // The standalone migrator chooses this deterministic native ID. This is only
   // spelling normalization: no legacy-store read, fuzzy match, or fallback.
-  const reference = IMPORTED_UUID.test(requested) ? `conv_${requested}` : requested;
+  const reference = storedSessionId(requested);
   const selected = await selection(options);
   let lineage: ReturnType<typeof readDirectSessionStart>;
   if (reference === 'last') {
@@ -67,8 +69,8 @@ export async function resolveNativeResume(directory: string, options: SessionOpt
     lineage = readDirectSessionStart(directory, reference);
     if (!belongsTo(lineage, selected)) {
       throw new Error(
-        `Conversation ${reference} belongs to a different project path or SSH workspace.\n` +
-          `Resume it from that project directory with: term2 --resume ${reference}`,
+        `Conversation ${displaySessionId(reference)} belongs to a different project path or SSH workspace.\n` +
+          `Resume it from that project directory with: term2 --resume ${displaySessionId(reference)}`,
       );
     }
   }
@@ -80,11 +82,11 @@ export async function listNativeConversations(directory: string, options: Sessio
   const lines = ['Recent Conversations (last 10):'];
   for (const lineage of conversations) {
     lines.push(
-      `\n${lineage.id}  ${lineage.updated}`,
+      `\n${displaySessionId(lineage.id)}  ${lineage.updated}`,
       `  ${lineage.messages} message${lineage.messages === 1 ? '' : 's'} | model: ${
         lineage.model
       } | mode: ${lineage.profile.replace(/^builtin:/, '')}`,
-      `  term2 --resume ${lineage.id}`,
+      `  term2 --resume ${displaySessionId(lineage.id)}`,
     );
   }
   if (conversations.length === 0) lines.push('No conversations found for this project.');

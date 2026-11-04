@@ -1,4 +1,5 @@
 import type { TuiIntegration } from './integration.js';
+import { displaySessionId } from '../../protocol/session-id.js';
 
 /** Run `/bridge [status|connect [name]|disconnect]` and return the notice to show. */
 export async function runBridgeCommand(integration: TuiIntegration, input: string): Promise<string> {
@@ -21,6 +22,10 @@ export async function runBridgeCommand(integration: TuiIntegration, input: strin
         status.attachment.socketPath
       }; Discord input ${
         status.attachment.discordInputEnabled ? 'enabled' : 'disabled'
-      } (Discord connectivity not verified); session ${status.sessionId}${status.startup ? '; startup socket' : ''}.`
-    : `Session not attached; session ${status.sessionId}. To enable remote input, use /bridge connect [name].`;
+      } (Discord connectivity not verified); session ${displaySessionId(status.sessionId)}${
+        status.startup ? '; startup socket' : ''
+      }.`
+    : `Session not attached; session ${displaySessionId(
+        status.sessionId,
+      )}. To enable remote input, use /bridge connect [name].`;
 }

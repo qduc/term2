@@ -537,7 +537,9 @@ async function runCommand(
     const exit = await session.waitForExit(30_000);
     expect(exit.exitCode).toBe(0);
     const output = session.getVisibleOutput();
-    expect(output).toMatch(/To resume this conversation: term2 --resume conv_[0-9a-f-]{36}\r?\n/);
+    expect(output).toMatch(
+      /To resume this conversation: term2 --resume [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\r?\n/,
+    );
     return;
   }
   if (exerciseMenu === 'pick-enter') {

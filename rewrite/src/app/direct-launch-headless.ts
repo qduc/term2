@@ -6,6 +6,7 @@ import { runDirectHeadless } from '../clients/headless/index.js';
 import { createDirectApplication, type DirectApplication } from './direct-application.js';
 import { openDirectSessionTarget, type DirectSessionTarget } from './direct-application-target.js';
 import type { DirectHeadlessHandle, DirectHeadlessRequest, DirectHeadlessResult } from './direct-launch-types.js';
+import { displaySessionId } from '../protocol/session-id.js';
 
 export function runDirectHeadlessOnHost(request: DirectHeadlessRequest): DirectHeadlessHandle {
   const stop = new AbortController();
@@ -50,7 +51,8 @@ export function runDirectHeadlessOnHost(request: DirectHeadlessRequest): DirectH
       application = app;
       const sessionId = resumeId !== undefined && request.fork ? await app.forkSession(resumeId) : resumeId;
       // The old CLI prints this under --quiet too. It is the fork's identity, not a diagnostic.
-      if (sessionId !== resumeId) io.stderr.write(`Forked conversation ${resumeId} → ${sessionId}\n`);
+      if (sessionId !== resumeId)
+        io.stderr.write(`Forked conversation ${displaySessionId(resumeId!)} → ${displaySessionId(sessionId!)}\n`);
       const connection =
         sessionId === undefined
           ? await app.host.createSession(app.principal, opened.grant)

@@ -534,7 +534,7 @@ export function TuiSession({
         <ComposerFooter
           integration={integration}
           state={state}
-          active={composerActive}
+          active={composerActive && selectedQueueIndex < 0}
           columns={columns - 4}
           queueSelectable={queueItems.length > 0 && !editor.value && !editing}
         />

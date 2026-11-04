@@ -256,8 +256,7 @@ export function createDirectGoalVerifier(deps: {
         } catch {
           throw new Error('Verifier timeout, error, cancellation, or malformed result');
         }
-        if (report.outcome === 'ERROR' || operationSignal.aborted)
-          throw new Error('Verifier timeout, error, cancellation, or malformed result');
+        if (operationSignal.aborted) throw new Error('Verifier timeout, error, cancellation, or malformed result');
         if (report.attemptId !== attemptId || report.revision !== proposal.revision)
           throw new Error('Stale, late, conflicting, or cancelled verification result');
         await accept([{ type: 'completion_verification_reported', attemptId, report }]);

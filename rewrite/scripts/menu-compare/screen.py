@@ -178,7 +178,7 @@ class Term:
 
 
 MASKS = [
-    (re.compile(r'v?\d+\.\d+\.\d+(-[\w.]+)?'), '<ver>'),
+    (re.compile(r'v?\d+\.\d+\.\d+(-[\w.]+)?(\+[0-9a-f]+)?'), '<ver>'),
     (re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'), '<id>'),
     (re.compile(r'(/tmp|/private)?/[\w.-]*menucmp[\w./-]*'), '<path>'),
     (re.compile(r'127\.0\.0\.1:\d+'), '127.0.0.1:<port>'),
@@ -232,15 +232,24 @@ def run(cli, cols, rows, name):
 
 
 def menu_region(cap):
-    """Compare the whole screen; transcript above the composer is the same empty start-up for both."""
-    return cap
+    """The bottom area from the composer divider down, without trailing blank rows.
+
+    The start-up banner above it is transcript chrome outside the menu port and differs in layout,
+    which shifts absolute rows; anchoring on the divider compares what the menus draw.
+    """
+    lines = cap['lines']
+    start = next((i for i, line in enumerate(lines) if re.fullmatch(r'\s*─{20,}', line)), 0)
+    end = len(lines)
+    while end > start and not lines[end - 1].strip():
+        end -= 1
+    return {'lines': lines[start:end], 'styles': cap['styles'][start:end]}
 
 
 def compare(cols, rows, names):
     results = {}
     for name in names:
-        a = run('legacy', cols, rows, name)
-        b = run('next', cols, rows, name)
+        a = menu_region(run('legacy', cols, rows, name))
+        b = menu_region(run('next', cols, rows, name))
         same_text = a['lines'] == b['lines']
         same_style = a['styles'] == b['styles']
         results[name] = {'text': same_text, 'style': same_style, 'legacy': a, 'next': b}

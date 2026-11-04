@@ -464,7 +464,7 @@ export function TuiSession({
                 menuStack.cursorChanged(offset);
               }}
               cursorOverride={editor.cursorOverride}
-              width={Math.max(1, columns - 4)}
+              width={Math.max(1, columns - 6)}
               maxHeight={Math.max(1, rows - 8)}
               pasteThreshold={preferences.pasteThreshold}
               isActive={composerActive && !picker}

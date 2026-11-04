@@ -8,6 +8,9 @@ import {
   loadConversationUnscopedForIndex,
   resolveConversationReference,
   uniqueConversationShortRefs,
+  type BrowseConversationsForProjectResult,
+  type ConversationLockDiagnostic,
+  type LoadConversationForProjectResult,
   type RestoredState,
 } from './conversation-persistence.js';
 import {
@@ -93,8 +96,29 @@ export type SessionReadInput = {
   maxChars?: number;
 };
 
+/** The conversation store the canonical backend reads; defaults to the legacy conversations directory. */
+export interface SessionBrowserStore {
+  browse(projectPath: string, sshHost?: string, idPrefix?: string): BrowseConversationsForProjectResult;
+  sourceVersion(id: string): string | null;
+  directoryVersion(): string | null;
+  loadForProject(id: string, projectPath: string, sshHost?: string): LoadConversationForProjectResult;
+  loadUnscoped(id: string): LoadConversationForProjectResult;
+  lock(id: string): ConversationLockDiagnostic | null;
+}
+
+const legacyStore: SessionBrowserStore = {
+  browse: browseConversationsForProject,
+  sourceVersion: (id) => getConversationSourceVersionReadOnly(id),
+  directoryVersion: getConversationsDirectoryVersionReadOnly,
+  loadForProject: loadConversationForProjectReadOnly,
+  loadUnscoped: (id) => loadConversationUnscopedForIndex(id),
+  lock: isConversationLocked,
+};
+
 export interface SessionBrowserOptions {
   backend?: 'canonical' | 'indexed';
+  /** Canonical backend only. */
+  store?: SessionBrowserStore;
   indexService?: SessionIndexService;
   /** Separate opaque handles for the canonical fallback worker. */
   cursorPrefix?: 'c' | 'f';
@@ -110,12 +134,14 @@ export class SessionBrowser {
   #lazyIndexService: SessionIndexService | null = null;
   #canonicalWorker: SessionIndexWorkerClient | null = null;
   readonly #cursorPrefix: 'c' | 'f';
+  readonly #store: SessionBrowserStore;
 
   constructor(private readonly getContext: () => SessionBrowserContext, options?: SessionBrowserOptions) {
     this.#backend =
       options?.backend ?? (process.env['TERM2_SESSION_BROWSER_BACKEND'] === 'canonical' ? 'canonical' : 'indexed');
     this.#indexService = options?.indexService;
     this.#cursorPrefix = options?.cursorPrefix ?? 'c';
+    this.#store = options?.store ?? legacyStore;
   }
 
   async close(): Promise<void> {
@@ -374,7 +400,12 @@ export class SessionBrowser {
       resolvedId = conversation.id;
     } else {
       const browsed = this.conversations(input.id);
-      const resolution = resolveSessionReference(input.id, browsed.conversations, context.currentSessionId);
+      const resolution = resolveSessionReference(
+        input.id,
+        browsed.conversations,
+        this.#store,
+        context.currentSessionId,
+      );
       if (resolution.kind === 'ambiguous') {
         return (
           fitted(
@@ -405,12 +436,12 @@ export class SessionBrowser {
       if (
         indexedConversation &&
         indexedSourceVersion &&
-        getConversationSourceVersionReadOnly(resolvedId) === indexedSourceVersion
+        this.#store.sourceVersion(resolvedId) === indexedSourceVersion
       ) {
         canonicalConversation = indexedConversation;
         sourceVersion = indexedSourceVersion;
       } else {
-        const loaded = loadConversationForProjectReadOnly(resolvedId, context.projectPath, context.sshHost);
+        const loaded = this.#store.loadForProject(resolvedId, context.projectPath, context.sshHost);
         if (loaded.status === 'not_found')
           return boundedError('not_found', `Session was not found in scope ${context.projectPath}.`, budget);
         if (loaded.status === 'project_mismatch')
@@ -717,15 +748,15 @@ export class SessionBrowser {
     // snapshot must still be active, and every persistence source that can
     // affect this page must still have the same cheap filesystem version.
     if (snapshot.contextKey !== contextKey(context)) return null;
-    if (getConversationsDirectoryVersionReadOnly() !== snapshot.directoryVersion) return null;
-    if (getConversationSourceVersionReadOnly(cursor.sessionId) !== snapshot.sourceVersion) return null;
+    if (this.#store.directoryVersion() !== snapshot.directoryVersion) return null;
+    if (this.#store.sourceVersion(cursor.sessionId) !== snapshot.sourceVersion) return null;
     if (inputId !== cursor.sessionId) {
       const dependency = snapshot.previousDependency;
       if (
         inputId !== 'previous' ||
         !dependency ||
         dependency.sessionId !== context.currentSessionId ||
-        getConversationSourceVersionReadOnly(dependency.sessionId) !== dependency.sourceVersion
+        this.#store.sourceVersion(dependency.sessionId) !== dependency.sourceVersion
       )
         return null;
     }
@@ -755,7 +786,7 @@ export class SessionBrowser {
     // IDs, so short refs and ambiguity match a full scoped catalog.
     // `previous` still needs all sessions for predecessor/recency selection.
     const idPrefix = reference && reference !== 'previous' ? reference.slice(0, 8) : undefined;
-    const result = browseConversationsForProject(context.projectPath, context.sshHost, idPrefix);
+    const result = this.#store.browse(context.projectPath, context.sshHost, idPrefix);
     return {
       unavailable: result.unavailable,
       scope: context.projectPath,
@@ -787,13 +818,14 @@ const CURRENT_OUT_OF_SCOPE_MESSAGE =
  * sibling rather than anything this session continues; the recency fallback
  * for "previous" skips those.
  */
-function isRunningElsewhere(sessionId: string): boolean {
-  return isConversationLocked(sessionId)?.status === 'held';
+function isRunningElsewhere(sessionId: string, store: SessionBrowserStore = legacyStore): boolean {
+  return store.lock(sessionId)?.status === 'held';
 }
 
 function resolveSessionReference(
   reference: string,
   conversations: readonly RestoredState[],
+  store: SessionBrowserStore,
   currentSessionId?: string,
 ): SessionReferenceResolution {
   if (reference === 'previous') {
@@ -805,7 +837,7 @@ function resolveSessionReference(
     if (!current) {
       // The live session's own record names its predecessor even when it was
       // persisted outside this scope; the predecessor read stays scope-checked.
-      const own = loadConversationUnscopedForIndex(currentSessionId);
+      const own = store.loadUnscoped(currentSessionId);
       if (own.status === 'loaded' && own.conversation.rolloverFrom)
         return { kind: 'resolved', id: own.conversation.rolloverFrom };
       // A recency guess from outside the scope is likely a concurrent sibling.
@@ -817,7 +849,7 @@ function resolveSessionReference(
         conversation.id !== currentSessionId && isBrowsableSession(conversation) && project(conversation) !== null,
     );
     if (others.length === 0) return { kind: 'not_found', message: NO_OTHER_SESSION_MESSAGE };
-    const fallback = others.find((conversation) => !isRunningElsewhere(conversation.id));
+    const fallback = others.find((conversation) => !isRunningElsewhere(conversation.id, store));
     if (!fallback) return { kind: 'not_found', message: ONLY_RUNNING_SESSIONS_MESSAGE };
     return { kind: 'resolved', id: fallback.id };
   }

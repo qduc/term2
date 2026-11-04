@@ -36,7 +36,7 @@ import { runPolicy } from './direct-application-policy.js';
 import { createDirectVerificationOperations } from './direct-verifier.js';
 import { withGenerationGuard } from './generation-guard.js';
 import { createSettingsService, type SettingsService } from './settings.js';
-import { createNativeSearchTool } from './native-search.js';
+import { createNativeSessionBrowser } from './native-session-browser.js';
 import type { AgentSurface, ProfileSelection, ToolSurfaceOptions } from './tool-contract.js';
 
 export type DirectRuntimeOptions = {
@@ -200,6 +200,19 @@ export function createDirectRuntimes(
         ...(!suppliedSurfaceOptions.remote
           ? { localExecutionContext: new LocalExecutionContext(context.workspace.root) }
           : {}),
+        // Legacy gives only an interactive local client a session browser (cli.tsx).
+        ...(suppliedSurfaceOptions.sessionBrowser === true &&
+        options.conversationsDir &&
+        context.workspace.target === 'local'
+          ? {
+              sessionBrowserSource: createNativeSessionBrowser(
+                options.conversationsDir,
+                context.workspace,
+                context.binding,
+                () => context.id,
+              ),
+            }
+          : {}),
       };
       const promptMemoryEnabled = context.workspace.target === 'local' && directMainMemoryEnabled(settings);
       // The Session owns memory, so the surface must not offer it a second time. It
@@ -360,11 +373,6 @@ export function createDirectRuntimes(
         // one real guidance/global context here instead of appending a duplicate.
         const capabilities: DirectContextCapabilities = {
           ...sessionMemory,
-          ...(surfaceOptions.sessionBrowser === true && options.conversationsDir && context.workspace.target === 'local'
-            ? {
-                sessionSearch: createNativeSearchTool(options.conversationsDir, context.workspace, context.binding),
-              }
-            : {}),
           ...(hooks ? { hooks } : {}),
           ...(verification
             ? {
@@ -389,7 +397,6 @@ export function createDirectRuntimes(
           }),
           // Only a client with a person behind it can answer these.
           unattended: !interactive,
-          proposeGoal: interactive,
           nativeToolSlots: surface.runtime.nativeToolSlots,
           modelRollover: surfaceOptions.sessionBrowser === true && surface.runtime.nativeToolSlots.sessions,
         };

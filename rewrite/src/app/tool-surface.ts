@@ -123,6 +123,8 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     readOnly,
     shellChildRegistry: shellChildren,
     skillsService,
+    // Legacy reads only list/search/read; the native browser has no lifecycle of its own.
+    sessionBrowser: remote ? undefined : (options.sessionBrowserSource as AgentFactoryDeps['sessionBrowser']),
     onNativeToolSlots(slots) {
       nativeToolSlots = slots;
     },

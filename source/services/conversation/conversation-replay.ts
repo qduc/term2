@@ -90,7 +90,7 @@ const isRetrySourceUser = (message: { sender: string; text?: string; consumedFor
   !message.consumedForAbort &&
   !projectConversationMessage({ type: 'message', role: 'user', content: message.text ?? '' })?.isSynthetic;
 
-const INTERRUPTED_SYSTEM_MESSAGE = 'Previous turn was interrupted — send a message to continue.';
+export const INTERRUPTED_SYSTEM_MESSAGE = 'Previous turn was interrupted — send a message to continue.';
 
 const cloneSnapshot = (snap: StateSnapshot): StateSnapshot => {
   try {
@@ -329,7 +329,7 @@ function shouldReuseCumulativeUsageAsDisplayUsage(turn: PersistedAssistantTurn):
  * Many tools (apply_patch, create_file, search_replace) return JSON-stringified
  * objects. This function unwraps common shapes to show meaningful text.
  */
-function extractDisplayOutput(parsed: Record<string, unknown>): string {
+export function extractDisplayOutput(parsed: Record<string, unknown>): string {
   // Error messages first — they're the most important to surface.
   if (typeof parsed.error === 'string' && parsed.error) {
     return parsed.error;

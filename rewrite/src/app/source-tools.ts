@@ -357,3 +357,16 @@ export function createSourceToolRegistry(
     },
   };
 }
+
+// Legacy's session browser runs over the native store; the app adapts only its storage (native-session-browser*.ts).
+export { SessionBrowser } from '../../../source/services/conversation/session-browser.js';
+export type {
+  SessionBrowserContext,
+  SessionBrowserStore,
+} from '../../../source/services/conversation/session-browser.js';
+export {
+  extractDisplayOutput,
+  INTERRUPTED_SYSTEM_MESSAGE,
+} from '../../../source/services/conversation/conversation-replay.js';
+export { RESTART_UNOBSERVED_TOOL_RESULT } from '../../../source/services/tool-execution-ledger.js';
+export type { RestoredState } from '../../../source/services/conversation/conversation-replay.js';

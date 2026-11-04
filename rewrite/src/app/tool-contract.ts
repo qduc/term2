@@ -32,6 +32,11 @@ export type ToolSurfaceOptions = {
   readonly interactive?: boolean;
   /** The client owns a session browser, making model-requested rollover available. */
   readonly sessionBrowser?: boolean;
+  /** The client's browser behind legacy's session_list/search/read script tools; local only. */
+  readonly sessionBrowserSource?: Pick<
+    import('../../../source/services/conversation/session-browser.js').SessionBrowser,
+    'list' | 'search' | 'read'
+  >;
   /** Already-authorized workspace. Defaults only to the existing local CLI cwd.
    * Unsupported targets fail; assembly must never promote read access to write. */
   readonly workspace?: Workspace;

@@ -19,24 +19,17 @@ Search documents are the full projection and are rebuilt for the sessions in sco
 built (`docs_seq` against the fold's `seq`), only when a search runs. Document text is stored in the cache, so a
 search returns snippets without reading any log; the cache is disposable, and an older one (user_version < 2) is
 emptied and rebuilt once. `options.skip` leaves named sessions unindexed for this call (the resume list skips open
-sessions, which it takes from memory). A session's own `session_search` indexes that session too, as legacy does.
+sessions, which it takes from memory).
 This module lives in `session/` and the app binds it in `app/native-catalogue.ts`.
 
 ## Authority and lifetime
 
-`createNativeSearchTool` binds one app-authorized directory, workspace and optional
-client binding. The model supplies only query, kind and result count. Both catalogue
-operations filter exact target, normalized root and binding. Unbound local queries
-exclude bound sessions. CLI SSH discovery binds the resolved endpoint identity.
-Runtime search is local-only and requires the client's `sessionBrowser` surface,
-matching source positional-versus-interactive availability. Positional/headless CLI
-runs and SSH runtimes do not receive this local-file capability. A profile's
-`sessions` slot alone does not establish that a client owns a browser. Session
-registers the optional Tool only when `nativeToolSlots.sessions` permits it; search
-precedes the native rollover tool, matching source session-tool ordering. Configured
-generations retain the client-bound capability but reapply their new profile's slot
-gate. The native schema promises search only, not the unsupported source
-browser/open/read operations.
+The model reaches sessions only through legacy's `session_list`, `session_search` and `session_read` script tools
+in `run_code`, with legacy's definitions. `app/native-session-browser.ts` binds one app-authorized directory,
+workspace and optional client binding, and runs legacy's `SessionBrowser` (canonical backend) in a worker over
+`app/native-session-browser-store.ts`, which lists the scope with `list(scope)` and turns each lineage into the
+saved-message shape legacy pages and scores. Like legacy (cli.tsx), only an interactive local client gets a
+browser: positional/headless runs and SSH runtimes do not. Catalogue `search` is no longer reached by the model.
 
 ## Disposable storage
 

@@ -320,6 +320,8 @@ export function TuiSession({
       } else if (input.trim() === '/cancel') {
         setNotice(await cancelInput(connection, state.activeTurnId ?? undefined, input, submission.submittedRevision));
         return;
+      } else if (/^\/providers(?:\s|$)/.test(input)) {
+        if (!menuStack.openFrame('providers')) throw new Error('Provider management is unavailable.');
       } else if (pickerFor(integration, input.trim())) setPicker(pickerFor(integration, input.trim()));
       else if (input.startsWith('/')) {
         const directNotice = await directSlashCommand(connection, input);

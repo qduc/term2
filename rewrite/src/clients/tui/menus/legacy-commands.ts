@@ -16,6 +16,8 @@ type Entry = {
   readonly completion?: SlashCommandCompletion;
   /** Legacy runs another command's action (`/lite` toggles Bare). */
   readonly runs?: string;
+  /** Legacy's action opens this explicitly opened frame instead of running a command. */
+  readonly opens?: 'providers';
 };
 
 export const LEGACY_COMMANDS: readonly Entry[] = [
@@ -73,7 +75,7 @@ export const LEGACY_COMMANDS: readonly Entry[] = [
     completion: { type: 'settings', trigger: '/settings ', resetTrigger: '/settings reset ' },
   },
   { name: 'bridge', description: 'Attach or detach this local session for Discord bridge input' },
-  { name: 'providers', description: 'Manage API providers (list, add, edit, delete)' },
+  { name: 'providers', description: 'Manage API providers (list, add, edit, delete)', opens: 'providers' },
   {
     name: 'skills',
     description: 'Activate a skill for the next request',
@@ -86,10 +88,15 @@ export const LEGACY_COMMANDS: readonly Entry[] = [
 ];
 
 /** `run(text)` executes `/name [args]` through the session; picker commands without arguments keep their trigger. */
-export function legacySlashCommands(run: (text: string) => void): SlashCommand[] {
-  return LEGACY_COMMANDS.map(({ runs, ...entry }) => ({
+export function legacySlashCommands(
+  run: (text: string) => void,
+  open: (frame: 'providers') => boolean = () => false,
+): SlashCommand[] {
+  return LEGACY_COMMANDS.map(({ runs, opens, ...entry }) => ({
     ...entry,
     action: (args?: string) => {
+      // Legacy's /providers ignores arguments and opens the manager (use-app-commands openProvidersMenu).
+      if (opens && open(opens)) return true;
       // The slash menu already wrote `/<name> ` into the editor; keeping it open lets its trigger open the picker.
       if (!args && entry.completion) return false;
       run(`/${runs ?? entry.name}${args ? ` ${args}` : ''}`);

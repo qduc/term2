@@ -19,11 +19,101 @@ import {
   refreshWorkspaceEntries,
 } from '../../../source/services/file-service.js';
 import type { LoggingService } from '../../../source/services/logging/logging-service.js';
-import type { TuiMenus } from '../clients/tui/integration.js';
 
-export function createDirectTuiMenus(options: { readonly logger: LoggingService }): TuiMenus {
-  const { logger } = options;
+import type { ISettingsService } from '../../../source/services/service-interfaces.js';
+import {
+  PROVIDER_TYPES,
+  getProviderLabel,
+  isProviderBuiltIn,
+  validateWizardName,
+  validateWizardUrl,
+  type CustomProviderDraft,
+} from '../../../source/providers/provider-service.js';
+import { ProviderManagementSession } from '../../../source/services/providers/provider-management-session.js';
+import {
+  getProviderCredentialSettingKey,
+  hasProviderCredentials,
+  isProviderDisabled,
+  setProviderDisabled,
+} from '../../../source/utils/ai/provider-credentials.js';
+import {
+  resolveProviderId,
+  resolveProviderName,
+} from '../../../source/services/settings/custom-provider-normalization.js';
+import {
+  isOAuthAccountProvider,
+  listOAuthAccounts,
+  oauthLoginCommand,
+  removeOAuthAccount,
+  setActiveOAuthAccount,
+} from '../../../source/providers/oauth-accounts.js';
+import { getSessionAccount } from '../../../source/providers/oauth-session-account.js';
+import { PROVIDER_PRESETS } from '../../../source/providers/provider-presets.js';
+import { getProvider } from '../../../source/providers/registry.js';
+import type { TuiMenus, TuiProviderMenu } from '../clients/tui/integration.js';
+
+type MenuOptions = {
+  readonly logger: LoggingService;
+  /** The launch settings service: legacy's provider manager writes here (setPersistent*), to the settings file. */
+  readonly persistentSettings?: ISettingsService;
+  /** The attached session's live settings, for what that session currently uses (its model selection). */
+  readonly liveSettings?: (sessionId: string) => ISettingsService | null;
+};
+
+/**
+ * Legacy hands the provider manager its one global SettingsService. Here writes go to the persistent service (as
+ * legacy's did) and the active model is read from the attached session, which owns its own selection. A rename of
+ * the active provider saves the renamed selection for the next session; this session keeps its own until /model.
+ */
+function providerSettings(persistent: ISettingsService, live: ISettingsService | null): ISettingsService {
   return {
+    ...persistent,
+    get: ((key: string) =>
+      key === 'agent.modelSelection' && live ? live.get(key) : persistent.get(key as never)) as ISettingsService['get'],
+    getDynamic: (key) => persistent.getDynamic(key),
+    set: (key, value, options) => persistent.set(key, value, options),
+    setDynamic: (key, value, options) => persistent.setDynamic(key, value, options),
+    setPersistent: (key, value) => persistent.setPersistent(key, value),
+    setPersistentDynamic: (key, value) => persistent.setPersistentDynamic(key, value),
+  };
+}
+
+function createProviderMenu(persistent: ISettingsService, live: (sessionId: string) => ISettingsService | null) {
+  const settings = (sessionId: string) => providerSettings(persistent, live(sessionId));
+  const menu: TuiProviderMenu = {
+    types: PROVIDER_TYPES,
+    presets: () =>
+      PROVIDER_PRESETS.filter((preset) => !preset.builtinProviderId || getProvider(preset.builtinProviderId)),
+    list: (sessionId) => new ProviderManagementSession(settings(sessionId)).list(),
+    save: (sessionId, draft, original) =>
+      new ProviderManagementSession(settings(sessionId)).save(draft as CustomProviderDraft, original),
+    delete: (sessionId, id) => new ProviderManagementSession(settings(sessionId)).delete(id),
+    validateName: (sessionId, value, editing, original) =>
+      validateWizardName(value, settings(sessionId), editing, original),
+    validateUrl: validateWizardUrl,
+    isBuiltIn: isProviderBuiltIn,
+    label: getProviderLabel,
+    getDynamic: (sessionId, key) => settings(sessionId).getDynamic(key),
+    resolveProviderId,
+    resolveProviderName,
+    credentialSettingKey: getProviderCredentialSettingKey,
+    hasCredentials: (sessionId, id) => hasProviderCredentials(settings(sessionId), id),
+    isDisabled: (sessionId, id) => isProviderDisabled(settings(sessionId), id),
+    setDisabled: (sessionId, id, disabled) => setProviderDisabled(settings(sessionId), id, disabled),
+    isOAuthAccountProvider,
+    listAccounts: (id) => (isOAuthAccountProvider(id) ? listOAuthAccounts(id) : []),
+    loginCommand: (id) => (isOAuthAccountProvider(id) ? oauthLoginCommand(id) : ''),
+    removeAccount: (id, account) => isOAuthAccountProvider(id) && removeOAuthAccount(id, account),
+    setActiveAccount: (id, account) => isOAuthAccountProvider(id) && setActiveOAuthAccount(id, account),
+    sessionAccount: (id) => getSessionAccount(id),
+  };
+  return menu;
+}
+
+export function createDirectTuiMenus(options: MenuOptions): TuiMenus {
+  const { logger, persistentSettings, liveSettings } = options;
+  return {
+    ...(persistentSettings ? { providers: createProviderMenu(persistentSettings, liveSettings ?? (() => null)) } : {}),
     logger: {
       warn: (message, details) => logger.warn(message, details),
       error: (message, details) => logger.error(message, details),

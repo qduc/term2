@@ -98,6 +98,75 @@ export interface TuiMenus {
     refresh(): Promise<MenuPathEntry[]>;
     meta(): MenuWorkspaceEntriesMeta;
   };
+  /** `/providers` manager; absent means `/providers` has no menu. */
+  readonly providers?: TuiProviderMenu;
+}
+
+/** Legacy `CustomProviderDraft` (source/providers/provider-service.ts). */
+export type MenuProviderDraft = { name: string; type: string; baseUrl?: string; apiKey?: string };
+/** Legacy `ProviderSelectionItem`. */
+export type MenuProviderItem = {
+  id: string;
+  label: string;
+  isCustom: boolean;
+  isActive: boolean;
+  hasCredentials: boolean;
+  isDisabled: boolean;
+};
+/** Legacy `ProviderPreset`, the fields the manager reads. */
+export type MenuProviderPreset = {
+  id: string;
+  name: string;
+  category: string;
+  docsUrl: string;
+  builtinProviderId?: string;
+  type?: string;
+  baseUrl?: string;
+};
+/** Legacy `OAuthAccountSummary` (source/providers/oauth-accounts.ts). */
+export type MenuOAuthAccount = { id: string; label: string; isSelected: boolean; isInUse: boolean };
+
+/**
+ * The legacy provider services the `/providers` manager calls (provider-service,
+ * provider-management-session, provider-credentials, oauth-accounts). Writes go
+ * where legacy writes them, the persistent settings file. Lookups read settings
+ * already in memory; `listAccounts` reads the account store and is called only on
+ * selection, never during render.
+ */
+export interface TuiProviderMenu {
+  readonly types: readonly string[];
+  /** Presets whose built-in provider (if any) is registered. */
+  presets(): readonly MenuProviderPreset[];
+  list(sessionId: string): MenuProviderItem[];
+  save(
+    sessionId: string,
+    draft: MenuProviderDraft,
+    editingOriginalName: string | null,
+  ): { success: boolean; errorMessage?: string; fieldErrors?: Record<string, string> };
+  delete(sessionId: string, providerId: string): void;
+  validateName(
+    sessionId: string,
+    value: string,
+    isEditingField: boolean,
+    editingOriginalName?: string,
+  ): { valid: boolean; errorMessage?: string };
+  validateUrl(value: string, type: string): { valid: boolean; errorMessage?: string };
+  isBuiltIn(id: string): boolean;
+  label(id: string): string | undefined;
+  /** Raw stored value of a setting (legacy `settingsService.getDynamic`). */
+  getDynamic(sessionId: string, key: string): unknown;
+  resolveProviderId(entry: unknown): string | undefined;
+  resolveProviderName(entry: unknown, id: string): string;
+  credentialSettingKey(providerId: string): string | undefined;
+  hasCredentials(sessionId: string, providerId: string): boolean;
+  isDisabled(sessionId: string, providerId: string): boolean;
+  setDisabled(sessionId: string, providerId: string, disabled: boolean): void;
+  isOAuthAccountProvider(providerId: string): boolean;
+  listAccounts(providerId: string): MenuOAuthAccount[];
+  loginCommand(providerId: string): string;
+  removeAccount(providerId: string, accountId: string): boolean;
+  setActiveAccount(providerId: string, accountId: string): boolean;
+  sessionAccount(providerId: string): string | null;
 }
 
 export interface TuiIntegration {

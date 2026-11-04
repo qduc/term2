@@ -735,8 +735,8 @@ it('Shift+Tab toggles Plan and Bare without changing approval or draft', { timeo
   runCommand('', '', undefined, 'approval-shortcut'),
 );
 
-it('/providers lists the configured active provider', { timeout: TIMEOUT_MS }, () =>
-  runCommand('/providers', 'mockprov (mockprov) — configured · active'),
+it('/providers opens the legacy provider manager', { timeout: TIMEOUT_MS }, () =>
+  runCommand('/providers', 'Your Providers', undefined, false, false, undefined, ['Configured providers:']),
 );
 
 it('/retry aliases retry-turn', { timeout: TIMEOUT_MS }, () => runCommand('/retry', 'No retained'));

@@ -13,6 +13,10 @@
     "rewrite/src/clients/tui/menus/menu-controller.ts": {
       "lines": 846,
       "reason": "Verbatim port of source/components/input/menu-controller.ts (the legacy menu stack); kept whole so it stays diffable against the legacy oracle."
+    },
+    "rewrite/src/clients/tui/menus/use-provider-selection.ts": {
+      "lines": 926,
+      "reason": "Verbatim port of source/hooks/use-provider-selection.ts (the legacy /providers manager state machine); kept whole so it stays diffable against the legacy oracle."
     }
   },
   "messagePath": {

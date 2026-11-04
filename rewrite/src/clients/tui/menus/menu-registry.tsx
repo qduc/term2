@@ -2,6 +2,7 @@ import React from 'react';
 import type { MenuController, MenuFrame, MenuInteractionRegistry } from './menu-types.js';
 import { SlashMenuSession } from './SlashMenuSession.js';
 import { PathMenuSession } from './PathMenuSession.js';
+import { ProviderMenuSession } from './ProviderMenuSession.js';
 
 export type MenuServices = Record<string, unknown>;
 
@@ -21,6 +22,7 @@ export type MenuRegistry = {
 const defaultRegistry: Partial<MenuRegistry> = {
   path: PathMenuSession as React.ComponentType<any>,
   slash: SlashMenuSession as React.ComponentType<any>,
+  providers: ProviderMenuSession,
 };
 
 export function getMenuRegistry(): Partial<MenuRegistry> {

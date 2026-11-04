@@ -5,7 +5,7 @@
  * ApplicationInputSurface) and owns the keys, and when the stack empties the
  * controller's text goes back into the composer.
  */
-import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useInput } from 'ink';
 import type { TuiMenus } from '../integration.js';
 import { MenuControllerImpl } from './menu-controller.js';
@@ -35,7 +35,17 @@ export function useMenuStack(options: {
     (listener) => controller.subscribe(listener),
     () => controller.getSnapshot(),
   );
-  const commands = useMemo(() => legacySlashCommands(actions.runCommand), [actions.runCommand]);
+  // Legacy openProvidersMenu: close whatever is open and open the frame; only when the app serves its data.
+  const openFrame = useCallback(
+    (frame: 'providers'): boolean => {
+      if (!menus?.[frame]) return false;
+      controller.closeAll();
+      controller.open({ kind: frame });
+      return true;
+    },
+    [controller, menus],
+  );
+  const commands = useMemo(() => legacySlashCommands(actions.runCommand, openFrame), [actions.runCommand, openFrame]);
   useEffect(() => {
     if (!menus) return;
     controller.setTriggerRegistry(createDefaultTriggerRegistry(commands, MENU_RULE_IDS, menus.schema));
@@ -78,6 +88,8 @@ export function useMenuStack(options: {
 
   return {
     open,
+    /** Open an explicitly opened frame, as a typed `/providers` does in legacy; false when it has no menu. */
+    openFrame,
     /** The text the harness and composer consumers see: the controller's while a menu owns it. */
     value: open ? snapshot.editor.text : composer.value,
     cursorChanged(cursor: number) {

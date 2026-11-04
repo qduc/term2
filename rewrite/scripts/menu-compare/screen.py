@@ -42,8 +42,8 @@ MODELS = ['mock-alpha', 'mock-beta', 'mock-gamma', 'gpt-test-mini']
 
 
 class Provider(BaseHTTPRequestHandler):
-    # Scripted chat replies, one per POST in order (the last repeats): {'text': ...} or
-    # {'tool': name, 'args': {...}}. Set from the scenario's SEED['replies'].
+    # Scripted chat replies, one per POST in order (the last repeats): {'text': ..., 'hold': seconds?} or
+    # {'tool': name, 'args': {...}}; 'hold' keeps the stream open after the text. Set from the scenario's SEED['replies'].
     replies = [{'text': 'done'}]
     posts = 0
 
@@ -80,6 +80,9 @@ class Provider(BaseHTTPRequestHandler):
             event({}, 'tool_calls')
         else:
             event({'role': 'assistant', 'content': reply['text']})
+            if reply.get('hold'):  # keep the turn streaming so a scenario can act mid-turn
+                self.wfile.flush()
+                time.sleep(reply['hold'])
             event({}, 'stop')
         self.wfile.write(b'data: [DONE]\n\n')
 

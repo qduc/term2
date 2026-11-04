@@ -4,7 +4,7 @@
  * Command acknowledgement is admission, never completion. The run stays on the
  * ordered event stream until the submitted turn's `turn_ended`, and every
  * failure path states what happened instead of reporting success. It never
- * opens storage, imports Session/Engine, or calls the bridge runtime.
+ * opens storage or imports Session/Engine.
  */
 import { randomUUID } from 'node:crypto';
 import type { DirectConnection } from '../../host/in-process-direct-types.js';

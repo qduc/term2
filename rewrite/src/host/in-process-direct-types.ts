@@ -1,4 +1,4 @@
-/** Direct in-process host boundary; the bridge Host remains isolated in index.ts. */
+/** Direct in-process host boundary. `Principal` and `WorkspaceGrant` live in index.ts. */
 import type { DirectSession, DirectSessionState, DirectSessionStore } from '../session/facade-types.js';
 import type { Principal, WorkspaceGrant } from './index.js';
 import type { WireCommand, WireCommandResult, WireEvent, WireSnapshot } from '../protocol/direct-wire.js';

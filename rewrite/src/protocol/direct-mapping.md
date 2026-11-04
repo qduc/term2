@@ -1,8 +1,7 @@
 # Direct public mapping and remaining producer contracts
 
 Scope: direct `direct-wire.ts`, `DirectProjection`, `reduceWireEvent` and
-`host/in-process-direct*`. The old unprefixed protocol/index exports still serve
-the isolated bridge. This document describes implementation, not runtime acceptance.
+`host/in-process-direct*`. This document describes implementation, not runtime acceptance.
 The earlier pre-M6 verification hold no longer applies. The native-v2 unit has
 focused persistence, generated-property, build/type/lint, independent-review and
 fenced CLI evidence; see `m6-native-format-final.md` in the coordinator task records.

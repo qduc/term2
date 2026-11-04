@@ -5,8 +5,7 @@ aligned with the updated contract commit `0a27e134` (typed delivery,
 structured questions/answers, base64 images, admission identity, cursor replay
 and nested output). It consumes only `DirectConnection` from
 `host/in-process-direct-types.ts` and `protocol/direct-wire.ts`; it never
-imports Session, Engine, adopted code or the bridge runtime, and never opens
-conversation storage.
+imports Session, Engine or adopted code, and never opens conversation storage.
 
 ## App wiring
 
@@ -156,12 +155,11 @@ app can map SIGINT/SIGTERM to their signal exit codes rather than ordinary error
 
 ## Remaining shared contract gaps
 
-- **Host assembly:** this candidate has the `DirectHost`/`DirectConnection`
-  types but no `createDirectInProcessHost`/direct store wiring. The host must
-  deliver the attach snapshot and ordered live events atomically, ack commands
-  without implying completion, and dispose sessions on shutdown. The app
-  integration owner switches `app/run.ts`/`app/cli.ts` to this client once that
-  exists.
+- **Host assembly:** `app/direct-launch-headless.ts` runs every headless
+  prompt through this client on a connection from `createDirectInProcessHost`
+  (`host/in-process-direct.ts`). The host delivers the attach snapshot and
+  ordered live events atomically, acks commands without implying completion,
+  and disposes sessions on shutdown.
 - **`--json` schema:** the direct client emits `session_start`, exact live slices
   (`text_delta`, `reasoning_delta`, `tool_call_streaming_delta`,
   `tool_started`/`tool_dispatched` when the wire call ID is present, `retry`

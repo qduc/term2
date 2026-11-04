@@ -3,7 +3,7 @@
 This subtree implements experimental ACP v2 against the published direct
 protocol through `82d37ded91705090bc6b253301c7411ac5d5e389` (including
 `77bca90b`/`5451b43c`) and native keyed-command Session `f14c9baa`. Imports target
-`protocol/direct-wire.ts` and `host/in-process-direct-types.ts`, not bridge types.
+`protocol/direct-wire.ts` and `host/in-process-direct-types.ts`.
 Shared owner commits were inspected read-only, not copied/cherry-picked into this
 worker's older base. This is implementation, not M6 acceptance.
 

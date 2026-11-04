@@ -24,11 +24,8 @@ may reuse the already-resolved logger; canonical conversation persistence is
 separate and remains enabled. This is startup policy, not a runtime toggle.
 
 `createAppSettings` constructs only the concrete `SettingsService` through
-`createDirectSettingsService`; it does not allocate the historical scoped-service
-facade. The settings owner retains its directory, logger, and persistence policies.
-Historical bench composition uses `createBenchSettings` in `rewrite/bench/source-app.mts` separately. Its engine
-boundary translates source settings onto the source-independent config scope and
-owns paired-service identity and runtime forks; native startup does not use it.
+`createDirectSettingsService`. The settings owner retains its directory, logger,
+and persistence policies.
 
 `createDirectRuntimes` in `direct-application-runtime.ts` builds session-owned
 settings and tool generations. `createDirectConfigSettings` in
@@ -36,8 +33,11 @@ settings and tool generations. `createDirectConfigSettings` in
 snapshot; it does not persist selection changes. Its
 `prepareDirectSessionConfigurationCommand` validates HTTP selection intent,
 retains request identity and expected revision, and rejects unknown or empty
-mutations. Reasoning validation uses the output object of the source agent
-settings preprocess schema, not a second hand-maintained enum.
+mutations. Reasoning effort has three validators, each reading a source-owned
+list rather than its own copy: HTTP configuration uses the output object of the
+source agent settings preprocess schema, while the `--reasoning` flag
+(`cli.ts`) and the TUI's `/effort` command (`direct-launch-tui-commands.ts`)
+check against `VALID_REASONING_EFFORTS`.
 
 `DirectGlobalConfiguration` in `direct-host-config-settings.ts` implements the
 host's public `SettingsProjection` rather than maintaining another projection
@@ -255,22 +255,8 @@ and watch buffers do not survive process loss; unfinished recovered tasks become
 interrupted, not reattached subprocesses. Sandbox post-execution pauses are not
 introduced by this bridge.
 
-## Historical bench composition
+## Control socket and `/settings`
 
-The production app has no historical agent/engine/session assembly facade.
-`rewrite/bench/source-app.mts` builds each source-agent generation once and
-publishes its exact final tool definitions into the stable
-`engine/adopted/tool-catalog.ts` catalog. There is no second per-generation
-catalog. Native tools still use `source-tools.ts` for parsing, approval,
-execution and display.
-
-`session/adopted/session-handle.ts` owns historical graph lifetime, canonical
-restore, settings/model forks, network and goal authorities, and ordered cleanup.
-Its caller supplies one synchronous engine assembler through Session-owned
-contracts; it never imports source app assembly or bench implementation upward.
-This preserves historical bench coverage without keeping an app compatibility
-facade or routing native startup through the old engine.
-
-The direct CLI supports the standalone `control` client and `--control-socket=<name>` interactive startup. Both use the private `XDG_RUNTIME_DIR` advertisement and the same socket protocol; the help must not mark control as unavailable. A socket is opt-in, not started by a normal launch.
+The direct CLI supports the standalone `control` client and `--control-socket=<name>` interactive startup. Both use the private `XDG_RUNTIME_DIR` advertisement and the same socket protocol; the help must not mark control, or any other dispatched subcommand, as unavailable. A socket is opt-in, not started by a normal launch.
 
 The direct `/settings` command presents a category index and three-item category pages (`/settings <category> [page]`) with descriptions and redacted secret values instead of dumping all settings into the unscrollable notice. Existing `/settings <key> [value]` and reset routes remain the editing interface and retain their session/restart restrictions.

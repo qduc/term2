@@ -60,6 +60,13 @@ for (const [cols, rows] of [
       terminal.write('/');
       await waitForHarnessComposerValue(idle, '/', { timeoutMs: 60_000 });
       await terminal.waitForOutput('Commands', 30_000);
+      // The title can arrive in a frame before the box's bottom border; slice only the finished box.
+      const boxDeadline = Date.now() + 30_000;
+      const finishedBox = () => {
+        const fresh = terminal.getVisibleOutput().slice(menuOffset);
+        return fresh.lastIndexOf('╰') > fresh.lastIndexOf('╭');
+      };
+      while (!finishedBox() && Date.now() < boxDeadline) await new Promise((resolve) => setTimeout(resolve, 50));
       const menu = terminal.getVisibleOutput().slice(menuOffset);
       expect(menu).toContain('╭');
       expect(menu).toContain('Commands');
@@ -79,6 +86,8 @@ for (const [cols, rows] of [
       // Help must be emitted in full without keyboard paging, even on a short terminal.
       await terminal.waitForOutput('/orchestrator —', 30_000);
       await terminal.waitForOutput('Keyboard shortcuts', 30_000);
+      // The heading can land a frame before its shortcut lines; wait for the lines the asserts read.
+      await terminal.waitForOutput('Ctrl+G approvals/tasks', 30_000);
       expect(terminal.getVisibleOutput()).toContain('Keyboard shortcuts');
       expect(terminal.getVisibleOutput()).toContain('Ctrl+G approvals/tasks');
       const helpOutput = terminal.getVisibleOutput();

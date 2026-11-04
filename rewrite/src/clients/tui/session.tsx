@@ -15,7 +15,7 @@ import { runBangShell } from './bang-shell.js';
 import { useInterrupt } from './interrupt.js';
 import { runQueueCommand } from './queue-command.js';
 import { withSkillPrefix } from './skill-edit.js';
-import { isCtrlG, isCtrlT, isShiftTab, usePlanToggle } from './shift-tab.js';
+import { isCtrlG, isCtrlO, isCtrlT, isShiftTab, usePlanToggle } from './shift-tab.js';
 import { REWIND_COMMAND, rewindItems, runRewindCommand } from './menus/rewind-command.js';
 import { cleanImageMarkers, primaryDraft, wireAttachments } from './draft.js';
 import { numberedInteractionAnswer } from './interaction-command.js';
@@ -168,6 +168,8 @@ export function TuiSession({
     if (interactionActive) return void interactionInput.current?.(input, key);
     if (taskOpen || budgetOpen) return;
     if (composerActive && isShiftTab(input, key)) return togglePlan();
+    // Legacy use-app-keyboard-shortcuts: Ctrl+O and Ctrl+T replace the draft with the menu command.
+    if (composerActive && isCtrlO(input, key)) return replaceInput('/model ');
     if (composerActive && isCtrlT(input, key)) return replaceInput('/effort ');
     if (composerActive && key.escape && viewport.expanded) return viewport.collapse();
     if (isCtrlG(input, key) && !busy) (state.interactions.length ? setInteractionOpen : setTaskOpen)(true);

@@ -148,9 +148,6 @@ export function useTranscriptViewport(
             Math.min(Math.max(0, helpLines.length - height), current + (key.pageUp || key.upArrow ? -delta : delta)),
           ),
         );
-      } else if (key.ctrl && input === 'o') {
-        setOffset(0);
-        setExpanded((current) => !current);
       } else if (key.pageUp || (key.ctrl && key.upArrow)) {
         setOffset((current) => Math.min(maxOffset, current + (key.pageUp ? height : 1)));
       } else if (key.pageDown || (key.ctrl && key.downArrow)) {

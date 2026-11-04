@@ -113,9 +113,14 @@ it('runs bang input locally rather than sending it to the model', { timeout: TIM
   await waitForHarnessComposerValue(idlePath, '!pwd ', { timeoutMs: 60_000 });
   session.write('\r');
   await session.waitForOutput('✓ pwd', 30_000);
+  // Legacy keeps the shell row collapsed; Ctrl+O replaces the draft with `/model ` and opens the model menu.
+  const beforeCtrlO = session.getVisibleOutput().length;
   session.write('\x0f');
-  await session.waitForOutput(workspace, 30_000);
+  await session.waitForOutput('Select model', 30_000);
+  await waitForHarnessComposerValue(idlePath, '/model ', { timeoutMs: 30_000 });
   expect(session.getVisibleOutput()).toContain('✓ pwd');
+  expect(session.getVisibleOutput().slice(beforeCtrlO)).not.toContain(workspace);
+  session.write('\x1b');
   expect(session.getVisibleOutput()).not.toContain('MODEL-WAS-CALLED');
   expect(providerRequests).toBe(0);
   await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 60_000 });

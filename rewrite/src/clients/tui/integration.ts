@@ -46,7 +46,43 @@ export type SettingsPickerCategory = {
   readonly items: readonly SettingsPickerItem[];
 };
 
+/** Legacy `PathEntry` (source/services/file-service.ts). */
+export type MenuPathEntry = { readonly path: string; readonly type: 'file' | 'directory' };
+/** Legacy `ModelInfo` (source/services/model-service.ts). */
+export type MenuModelInfo = {
+  id: string;
+  name?: string;
+  provider: string;
+  unavailableReason?: 'missing-credentials' | 'missing-codex-login' | 'missing-grok-login';
+  default_reasoning_level?: string;
+  contextWindow?: number;
+};
+/** The fields of legacy `SkillInfo` the skills menu reads. */
+export type MenuSkillInfo = { name: string; description: string; isProjectLevel: boolean };
+
+/**
+ * Pure lookups over the legacy settings schema (settings-ui-metadata.ts,
+ * subagent-pool-config.ts). Called during render and trigger parsing, so they
+ * must not touch disk or the session log.
+ */
+export interface TuiSettingsSchema {
+  isKnownSettingKey(key: string): boolean;
+  label(key: string): string;
+  isSecret(key: string): boolean;
+  subagentPool(key: string): { readonly roleLabel: string; readonly entryShape: 'entries' | 'models' } | undefined;
+}
+
+/**
+ * Data the legacy menu stack (`menus/`) reads through the app instead of
+ * legacy services. Each group replaces the service calls of one ported menu.
+ */
+export interface TuiMenus {
+  readonly schema: TuiSettingsSchema;
+}
+
 export interface TuiIntegration {
+  /** The legacy menus' data access. Without it the composer opens no menus. */
+  readonly menus?: TuiMenus;
   readonly settingsPicker?: { list(sessionId: string): readonly SettingsPickerCategory[] };
   /** Run an explicit user shell command in the selected workspace, without a model turn. */
   shell?(sessionId: string, command: string): Promise<string>;

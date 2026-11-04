@@ -36,6 +36,7 @@ import { createDirectApplication, type DirectApplication } from './direct-applic
 import { openDirectSessionTarget, type DirectSessionTarget } from './direct-application-target.js';
 import { createDirectControlBridge, type DirectControlBridge } from './direct-launch-control.js';
 import { createDirectTuiCommands } from './direct-launch-tui-commands.js';
+import { createDirectTuiMenus } from './direct-launch-tui-menus.js';
 import { performRestart, type DirectRestartPlan } from './direct-launch-tui-restart.js';
 import type { DirectLaunchRequest } from './direct-launch-types.js';
 import type { ISettingsService } from '../../../source/services/service-interfaces.js';
@@ -92,6 +93,7 @@ function DirectTui({
   const notifier = useTerminalFocusNotifier({ stdout, settingsService: settings, loggingService: logger });
   const integration: TuiIntegration = useMemo(
     () => ({
+      menus: createDirectTuiMenus(),
       modelPicker: {
         favorites(sessionId) {
           const current = app.liveSettings(sessionId);

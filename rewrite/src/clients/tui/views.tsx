@@ -8,7 +8,7 @@ import MarkdownRenderer from './presentation/components/MarkdownRenderer.js';
 import { useSkin } from './presentation/skins/SkinContext.js';
 import type { Message, TuiState } from './state.js';
 import { ToolCall } from './tool-view.js';
-import { failedShellGroups, FailedShellSummary } from './failed-shell-summary.js';
+import { groupTools, ToolGroupRow } from './tool-groups.js';
 
 /** Render mixed history only in the authoritative wire order; separate items with unknown order. */
 export function Transcript({
@@ -32,7 +32,8 @@ export function Transcript({
   const width = Math.max(1, columns - 2 - assistantGutter);
   const messageById = new Map(messages.map((message) => [message.id, message]));
   const toolById = new Map((live ? state.tools : []).map((tool) => [tool.id, tool]));
-  const failures = expanded ? new Map<string, number>() : failedShellGroups(state.tools);
+  // Legacy folds runs of tool calls only in concise display; a committed row is its own, already grouped, run.
+  const groups = expanded || !state.timeline ? new Map() : groupTools(state.timeline, state.tools, false);
   const usedMessages = new Set<string>();
   const usedTools = new Set<string>();
   const renderMessage = (message: Message) =>
@@ -76,12 +77,12 @@ export function Transcript({
       const tool = toolById.get(item.id);
       if (!tool || usedTools.has(item.id)) return [];
       usedTools.add(item.id);
-      const count = failures.get(tool.id);
-      if (count === 0) return [];
-      if (count !== undefined)
+      const group = groups.get(tool.id);
+      if (group === null) return [];
+      if (group !== undefined)
         return [
           <Box key={`tool:${tool.id}`} marginTop={1} paddingLeft={2}>
-            <FailedShellSummary count={count} />
+            <ToolGroupRow group={group} />
           </Box>,
         ];
       return [

@@ -238,8 +238,10 @@ it(
     // reasoning is not emitted again after the last answer, not screen contents.
     expect(visible).toContain('first turn done');
     // Settled Ink Static rows retain one separator, not a padding line per row.
-    const settledTool = visible.slice(visible.lastIndexOf('✓ Write and read the file'));
-    expect(settledTool).toMatch(/✓ Write and read the file[^\n]*\n\r?\n {2}Created b\.txt/);
+    // Concise display folds the settled run into legacy's one summary line, with the failures named below it.
+    expect(visible).toMatch(
+      /✓ Ran 2 shell commands, created 1 file, edited 1 file\r?\n[^\n]*✗ 1 failed: Check failure/,
+    );
     expect(visible.slice(visible.lastIndexOf('first turn done'))).not.toContain(
       'Locating the unique workspace fixture',
     );
@@ -266,10 +268,8 @@ it(
     // The current frame collapses the known failed call, even though earlier live frames may contain its input.
     const settledFrame = visible.slice(beforeSettled);
     const summaryLines = settledFrame.split('\n');
-    const summaryIndex = summaryLines.findIndex((line) => line.includes('✗') && line.includes('exit 128'));
+    const summaryIndex = summaryLines.findIndex((line) => line.includes('✗') && line.includes('1 failed:'));
     expect(summaryIndex).toBeGreaterThanOrEqual(0);
-    expect(summaryLines[summaryIndex]).toContain('exit 128');
-    expect(summaryLines[summaryIndex]).toContain('fatal: not a git repository');
     expect(summaryLines[summaryIndex + 1]?.trim() ?? '').not.toMatch(/^H/);
     expect(settledFrame).not.toContain(failureOutput);
     // The first edit appears once, not again as a repeated command line.
@@ -286,22 +286,22 @@ it(
     // Failure details are available on demand, not dumped beside the summary.
     const beforeExpanded = session.getVisibleOutput().length;
     session.write('\x0f');
-    for (let i = 0; i < 40 && !/Runtime: \d+ms\s+hi\b/.test(session.getVisibleOutput()); i++)
-      await new Promise((resolve) => setTimeout(resolve, 250));
-    expect(session.getVisibleOutput()).toMatch(/Runtime: \d+ms\s+hi\b/);
+    // Legacy's standard display prints the output with the runtime stripped into the header.
+    const shownHi = () => session!.getVisibleOutput().slice(beforeExpanded).includes('fatal: not a git repository');
+    for (let i = 0; i < 40 && !shownHi(); i++) await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(shownHi()).toBe(true);
     const expanded = session.getVisibleOutput();
-    expect(expanded.slice(expanded.lastIndexOf('✓ Write and read the file'))).toContain(first);
+    expect(expanded.slice(expanded.lastIndexOf('✓ Write and read the file'))).toContain('hi');
     const expandedFrame = expanded.slice(beforeExpanded);
     const failureLine = expandedFrame.split('\n').find((line) => line.trimStart().startsWith('FAIL_SENTINEL_'));
     expect(failureLine).toBeDefined();
     expect(failureLine!.trim()).toBe(failureOutput);
     expect(failureLine!.length - failureLine!.trimStart().length).toBeLessThanOrEqual(8);
-    expect(expandedFrame).toContain('exit 128');
     // Expansion reveals more of the long summary as well as the full output.
     expect(expandedFrame).toContain(failedDescription.slice(0, 60));
-    expect(expandedFrame).toContain('+ beta-line');
-    expect(expandedFrame).toContain('- alpha-line');
-    expect(expandedFrame).toContain('+ gamma-line');
+    expect(expandedFrame).toContain('+beta-line');
+    expect(expandedFrame).toContain('-alpha-line');
+    expect(expandedFrame).toContain('+gamma-line');
     // Collapse expanded output with Escape without clearing the current draft.
     session.write('output-draft');
     await waitForHarnessComposerValue(idlePath, 'output-draft', { timeoutMs: 30_000 });
@@ -310,7 +310,6 @@ it(
     await new Promise((resolve) => setTimeout(resolve, 600));
     const afterEscape = session.getVisibleOutput().slice(beforeEscape);
     expect(afterEscape).toContain('output-draft');
-    expect(afterEscape).not.toMatch(/Runtime: \d+ms\s+hi\b/);
     await waitForHarnessComposerValue(idlePath, 'output-draft', { timeoutMs: 30_000 });
     // The task panel owns its Escape and returns the same draft to the editor.
     session.write('\x07');
@@ -393,7 +392,7 @@ it('collapses failed shell probes and expands their details', { timeout: TIMEOUT
   await waitForHarnessComposerValue(idlePath, 'run probes', { timeoutMs: 60_000 });
   session.write('\r');
   await session.waitForOutput('PROBES-FINISHED', 60_000);
-  await session.waitForOutput('2 commands failed · Ctrl+O for details', 30_000);
+  await session.waitForOutput('✗ Ran 2 shell commands', 30_000);
   const beforeExpand = session.getVisibleOutput().length;
   session.write('\x0f');
   await expect

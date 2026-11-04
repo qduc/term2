@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Box, Static, Text } from 'ink';
-import { isUnknownCreateFile, reportsFailure } from './tool-view.js';
+import { Box, Static } from 'ink';
+import { reportsFailure } from './tool-view.js';
 import type { Message, ToolView, TuiState } from './state.js';
 import { Transcript } from './views.js';
-import { failedShellGroups, FailedShellSummary } from './failed-shell-summary.js';
+import { groupTools, ToolGroupRow } from './tool-groups.js';
 import { findMarkdownCommitOffset } from './presentation/utils/markdown-commit-frontier.js';
 
 type Row = {
@@ -190,7 +190,17 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
   );
   // Key the wrapper, not Static itself: Ink's old-node cleanup otherwise clears
   // the newly registered Static root during the same replacement commit.
-  const failures = useMemo(() => failedShellGroups(rows.flatMap((row) => (row.tool ? [row.tool] : []))), [rows]);
+  const groups = useMemo(
+    () =>
+      groupTools(
+        rows.map((row) =>
+          row.message ? { kind: 'message' as const, id: row.message.id } : { kind: 'tool' as const, id: row.tool!.id },
+        ),
+        rows.flatMap((row) => (row.tool ? [row.tool] : [])),
+        true,
+      ),
+    [rows],
+  );
   // A fresh style object makes Ink mark <Static> dirty on every commit, which bypasses its render throttle.
   const staticStyle = useMemo(() => ({ width: columns }), [columns]);
   // Memoise the element: any Static re-render hands Ink a fresh children array, which marks it dirty
@@ -201,12 +211,12 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
         <Static style={staticStyle} items={header ? [{ key: 'header', header }, ...rows] : [...rows]}>
           {(row, index) => {
             if (row.header) return <Box key={row.key}>{row.header}</Box>;
-            const count = row.tool ? failures.get(row.tool.id) : undefined;
-            if (count === 0) return <Box key={row.key} />;
-            if (count !== undefined)
+            const group = row.tool ? groups.get(row.tool.id) : undefined;
+            if (group === null) return <Box key={row.key} />;
+            if (group !== undefined)
               return (
                 <Box key={row.key} marginTop={1} paddingLeft={2}>
-                  <FailedShellSummary count={count} />
+                  <ToolGroupRow group={group} />
                 </Box>
               );
             const entry = row.message
@@ -220,19 +230,6 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
               drafts: {},
               reasoning: {},
             };
-            const failed =
-              row.tool &&
-              !isUnknownCreateFile(row.tool) &&
-              (row.tool.status === 'failed' || reportsFailure(row.tool.display));
-            if (failed)
-              return (
-                <Box key={row.key} flexDirection="column">
-                  <Box flexDirection="column" maxHeight={10} overflowY="hidden">
-                    <Transcript state={single} messages={single.messages} columns={columns} live staticRow />
-                  </Box>
-                  <Text dimColor>Full tool output: Ctrl+O</Text>
-                </Box>
-              );
             return (
               <Box
                 key={row.key}
@@ -247,7 +244,7 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
       </Box>
     ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [epoch, header, rows, failures, columns, staticStyle],
+    [epoch, header, rows, groups, columns, staticStyle],
   );
   return { staticTranscript, tail, committed: rows };
 }

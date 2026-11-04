@@ -97,11 +97,11 @@ export type TuiState = {
   readonly tasks: readonly TaskView[];
   readonly notices: readonly string[];
   readonly usage?: string;
-  /** Session totals behind `usage`, for the status bar. */
-  readonly contextUsedTokens?: number;
   readonly codexQuota?: { readonly usedPercent: number; readonly resetAt: number };
+  /** The last model request's settled rate, shown with `lastUsage` as legacy's footer does. */
   readonly speed?: { readonly tps: number; readonly approximate: boolean };
-  readonly usageTotals?: {
+  /** The last model request's usage: legacy's status bar shows this request, not session totals. */
+  readonly lastUsage?: {
     readonly inputTokens: number;
     readonly outputTokens: number;
     readonly cachedInputTokens: number;

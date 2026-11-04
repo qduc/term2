@@ -6,6 +6,7 @@ import type {
   WireTool,
   WireUsage,
 } from '../../protocol/direct-wire.js';
+import { historyReplacedMessage } from '../../protocol/direct-reducer-nested.js';
 import { type InteractionView, type Message, type TaskView, type ToolView, type TuiState } from './state.js';
 
 const usageText = (usage: WireUsage): string =>
@@ -147,6 +148,8 @@ const sameList = <T>(previous: readonly T[] | undefined, next: readonly T[], equ
   previous && previous.length === next.length && next.every((item, i) => equal(previous[i]!, item)) ? previous : next;
 
 /** Project the direct wire snapshot at the host's attachment cut. */
+const REWOUND = historyReplacedMessage('rewind');
+
 export function projectSnapshot(snapshot: WireSnapshot): TuiState {
   const drafts: Record<string, string> = {};
   const messages: Message[] = [];
@@ -212,20 +215,16 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
     tasks: snapshot.tasks.map(taskView),
     notices: [
       // A history edit already reads as a sentence; the raw kind label is internal.
-      ...snapshot.notices.map((notice) =>
-        notice.kind === 'history_replaced' ? notice.message : `${notice.kind}: ${notice.message}`,
-      ),
+      // Legacy says nothing after a rewind: the redrawn transcript is the confirmation.
+      ...snapshot.notices
+        .filter((notice) => !(notice.kind === 'history_replaced' && notice.message === REWOUND))
+        .map((notice) => (notice.kind === 'history_replaced' ? notice.message : `${notice.kind}: ${notice.message}`)),
       ...(snapshot.terminal?.notice ? [snapshot.terminal.notice] : []),
     ],
     usage: usageText(snapshot.usage),
-    contextUsedTokens: snapshot.lastUsage?.inputTokens,
     codexQuota: snapshot.codexQuota,
     speed: snapshot.lastSpeed,
-    usageTotals: {
-      inputTokens: snapshot.usage.inputTokens,
-      outputTokens: snapshot.usage.outputTokens,
-      cachedInputTokens: snapshot.usage.cachedInputTokens,
-    },
+    lastUsage: snapshot.lastUsage,
     cost: snapshot.cost ? `${snapshot.cost.currency} ${snapshot.cost.totalUsd.toFixed(4)}` : undefined,
     goal: snapshot.goal ? `${snapshot.goal.status}: ${snapshot.goal.text}` : undefined,
     verification: snapshot.verification

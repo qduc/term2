@@ -222,8 +222,12 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
 
       const before = settings.getDynamic(key);
       command.action(args);
-      // The command refused the value and said why.
-      if (isDeepStrictEqual(before, settings.getDynamic(key))) return { message: messages.join('\n') };
+      if (isDeepStrictEqual(before, settings.getDynamic(key))) {
+        // The command refused the value and said why; otherwise the value was already set, which legacy's
+        // menus save as a no-op (a pool saved unchanged closes back to the list).
+        const refused = messages.some((message) => message.startsWith('Error'));
+        return { message: messages.join('\n'), ...(refused ? {} : { applied: true }) };
+      }
       const undo = () => {
         if (before === undefined) settings.reset(key);
         else settings.setDynamic(key, before, { persist: false });

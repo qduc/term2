@@ -34,25 +34,26 @@ The masks cover only:
 
 ## Result
 
-**211 of 234 branches are identical at both 100x34 and 80x24.**
-The other 23 fall into three groups:
+**221 of 244 branches are identical at both 100x34 and 80x24.**
+Those counts are from the build rebased onto main.
+The other 23 fall into two groups:
 
 - **Dropped by scope.** These cover the Plan, Pair, Mentor and Orchestrator profile rows, and the slash commands that serve dropped features: MCP, ACP, sandbox, and those profiles.
-  - The profile list has fewer rows.
-  - The slash list is shorter, so its scrollbar thumb is one row longer. At 80x24 this also moves the `slash-pgdn` page.
-- **Masking limits at 80x24, with otherwise identical text.**
-  - A session id that wraps across two rows escapes the id mask (`resume-*`).
-  - The truncated scratch path escapes the path mask (`settings-tab2`).
-  - Both are identical at 100x34, where nothing wraps.
-- **The first-run settings artifact.** "Smart reasoning effort" reads `default` instead of `(default)` in the settings and subagent-pool captures.
+  - The profile list has fewer rows (4 branches).
+  - The slash list is shorter, so its scrollbar thumb is one row longer (3 branches). At 80x24 this also moves the `slash-pgdn` page.
+- **The first-run settings artifact (16 branches).** "Smart reasoning effort" reads `default` instead of `(default)` in the settings and subagent-pool captures.
   - Cause: term2-next writes a full settings file at launch, and each later session reloads it. Legacy's migration then copies `agent.mentorReasoningEffort` into the smart effort key, so the value shows as set.
   - In a second run, where the key already exists in the file on both sides, the screens are identical. That is the `settings-second-run` scenario.
   - The artifact comes from next's start-up settings write, not from the ported menu.
 
+Branches marked "identical after masking" count as identical. Their text matches, but at 80x24 the masks can't reach part of a value:
+- A session id that wraps across two rows escapes the id mask (`resume-*`).
+- The truncated scratch path escapes the path mask (`settings-tab2`).
+Both are identical at 100x34, where nothing wraps.
+
 `pool-add-done` once differed under parallel load. It is identical in two solo runs, so it counts as identical.
 
 ## Branch table
-
 
 ### /auto-approve
 
@@ -152,6 +153,7 @@ The other 23 fall into three groups:
 | `resume-filter` | identical | identical after masking; the wrapped session id escapes the id mask (next ids carry `conv_`) |
 | `resume-filter-none` | identical | identical |
 | `resume-list` | identical | identical after masking; the wrapped session id escapes the id mask (next ids carry `conv_`) |
+| `resume-pgdn` | identical | identical after masking; the wrapped session id escapes the id mask (next ids carry `conv_`) |
 
 ### /rewind
 
@@ -164,12 +166,14 @@ The other 23 fall into three groups:
 | `rewind-esc` | identical | identical |
 | `rewind-far` | identical | identical |
 | `rewind-junk` | identical | identical |
+| `rewind-long` | identical | identical |
 | `rewind-number` | identical | identical |
 | `rewind-open` | identical | identical |
 | `rewind-resend` | identical | identical |
 | `rewind-tab` | identical | identical |
 | `rewind-up` | identical | identical |
 | `undo-open` | identical | identical |
+| `undo-resumed` | identical | identical |
 
 ### /skills
 
@@ -330,9 +334,11 @@ The other 23 fall into three groups:
 | `slash-enter-usage` | identical | identical |
 | `slash-esc` | identical | identical |
 | `slash-filter` | identical | identical |
+| `slash-filter-re` | identical | identical |
 | `slash-none` | identical | identical |
 | `slash-pgdn` | differs: scrollbar thumb one row longer (the dropped commands are absent from the list) | differs: scrollbar thumb one row longer (the dropped commands are absent from the list) |
 | `slash-tab` | identical | identical |
+| `slash-tab-re` | identical | identical |
 | `slash-tab-type` | identical | identical |
 
 ### Subagent pool
@@ -363,10 +369,21 @@ The other 23 fall into three groups:
 | `pool-seeded-esc` | differs: "Smart reasoning effort" reads `default` instead of `(default)` (first-run artifact, see below) | differs: "Smart reasoning effort" reads `default` instead of `(default)` (first-run artifact, see below) |
 | `pool-seeded-save` | differs: "Smart reasoning effort" reads `default` instead of `(default)` (first-run artifact, see below) | differs: "Smart reasoning effort" reads `default` instead of `(default)` (first-run artifact, see below) |
 
-### ask_user question menu: dropped by scope
+### ask_user question
 
-`scenarios_question.py` drives legacy's question box: options, "Something else…" and "Esc cancel".
-In term2-next the `ask_user` tool needs the `user-interaction` capability, and only the dropped profiles grant it. Bare does not.
+| Branch (scenario) | 100x34 | 80x24 |
+|---|---|---|
+| `question` | identical | identical |
+| `question-answer` | identical | identical |
+| `question-down` | identical | identical |
+| `question-esc` | identical | identical |
+| `question-other` | identical | identical |
+
+## ask_user question menu: dropped by scope
+
+`scenarios_question.py` scripts an `ask_user` call under the default Bare profile.
+Both CLIs print `Unknown tool: ask_user` and show no question box, which is why those branches are identical.
+In term2-next the tool needs the `user-interaction` capability, and only the dropped profiles grant it. Legacy behaves the same way.
 So no in-scope profile can reach the question menu, and it was not ported.
 This also settles the acceptance case below: the "Decline to answer" and "Stop after resolving" entries can't appear.
 
@@ -400,3 +417,30 @@ These six supervisor queue files were readable and were checked against the capt
 | `build-tui-settings-editors` | Rows use legacy's aligned table and value formats. Enum, boolean, number, duration, text, list, secret and model rows open legacy's editors. All seven tabs are identical (`settings-*`), apart from the first-run artifact. |
 | `build-tui-question-menu-extra-entries` | Dropped by scope: the question menu is unreachable without the dropped profiles. |
 | `build-tui-rewind-picker-parity` | `/undo` prints legacy's notice and opens rewind edit, with legacy's rows and footer. Tab resend works (`undo-open`, `rewind-*`, `rewind-resend`, `rewind-tab`), and every branch is identical. |
+
+### Real-terminal soak items
+
+The supervisor's real-terminal side-by-side check (`rewrite/parity/real-terminal/report/soak-differences.md`, branch `claude/ecstatic-tesla-86lzj4`) was measured on main, before this port. These are its menu items:
+
+| Soak item | Covered by | Result |
+|---|---|---|
+| 22 `/` menu as a `Filter:` box | `slash`, `slash-down` | identical apart from the scope scrollbar |
+| 23 `/` menu contents and order | `slash`, `slash-pgdn` | legacy's list and order. The next-only commands are gone, `/lite` and `/retry` are back. The dropped-feature commands are absent (scope). |
+| 24 selected-row style | `slash-down` | identical (styles compared) |
+| 25 filtering `/re` | `slash-filter-re` | identical |
+| 26 Tab runs the highlighted command | `slash-tab-re`, `slash-tab` | identical |
+| 30 `/model` opening tab and empty-tab text | `model`, `model-none`, `model-tab-nick` | identical |
+| 31 model picker border, `Filter:` and hints | `model*` | identical |
+| 32 model chosen message | `model-select` | identical |
+| 33 effort picker | `effort-*` | identical |
+| 34–35 `/settings` layout and value display | `settings-*` | identical apart from the first-run artifact |
+| 36 Enter toggles a boolean | `settings-bool` | identical |
+| 37 settings search | `settings-search-all` | identical |
+| 39–41 `/profile`, `/providers`, `/auto-approve` open pickers | `profile-*`, `prov-*`, `auto-approve-*` | identical apart from the scope profile rows |
+| 42 `/mcp` | none | dropped by scope |
+| 50 `/rewind` flow | `rewind-*`, `rewind-long` | identical |
+| 52 `/undo` in a resumed chat | `undo-resumed` | identical |
+| 54–55 resume list layout and entries | `resume-*` | identical (ids masked) |
+| 56 PgDn in the resume list | `resume-pgdn` | identical, after a fix: next listed 10 entries where legacy lists 9. Legacy counts the session in use toward its 10 and then hides it. |
+| 59 `@` menu | `path-*` | identical |
+

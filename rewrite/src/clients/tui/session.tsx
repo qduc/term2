@@ -128,7 +128,26 @@ export function TuiSession({
     draft: { value: editor.value, cursor: editor.cursor, replace: replaceInput },
     submit: (text) => void submit(text, images),
   });
-  useInterrupt({ interrupt, connection, confirmation, state, editor, replaceInput, cancelInput, setNotice });
+  const cancelQueueEdit = () => {
+    if (!editing) return false;
+    replaceInput(editing.restoreText, editing.restoreCursor);
+    setImages(editing.restoreImages);
+    setOtherParts(editing.restoreOther);
+    setOriginalParts(editing.restoreOriginal);
+    setEditing(null);
+    return true;
+  };
+  useInterrupt({
+    interrupt,
+    connection,
+    confirmation,
+    state,
+    editor,
+    replaceInput,
+    cancelInput,
+    setNotice,
+    cancelQueueEdit,
+  });
   useInput((input, key) => {
     if (picker) return void interactionInput.current?.(input, key);
     if (confirmation.handleKey(input, key)) return;
@@ -519,14 +538,7 @@ export function TuiSession({
                 }
                 return true;
               }
-              if (editing && key.escape) {
-                replaceInput(editing.restoreText, editing.restoreCursor);
-                setImages(editing.restoreImages);
-                setOtherParts(editing.restoreOther);
-                setOriginalParts(editing.restoreOriginal);
-                setEditing(null);
-                return true;
-              }
+              if (editing && key.escape) return cancelQueueEdit();
               return composerFilter(input, key);
             }}
           />

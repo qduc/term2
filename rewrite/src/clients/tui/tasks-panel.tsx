@@ -150,11 +150,15 @@ export const TasksPanel: FC<PanelProps> = ({ state, connection, manage, closeMan
   <>
     <TaskRows state={state} gap={!manage} />
     {manage ? (
-      <TaskManager
-        tasks={state.tasks}
-        onClose={closeManager}
-        onAction={(id, action) => controlTask(connection, id, action)}
-      />
+      <>
+        <TaskManager
+          tasks={state.tasks}
+          onClose={closeManager}
+          onAction={(id, action) => controlTask(connection, id, action)}
+        />
+        {/* Legacy keeps its disabled input surface mounted: one empty row where the composer was. */}
+        <Text> </Text>
+      </>
     ) : null}
   </>
 );

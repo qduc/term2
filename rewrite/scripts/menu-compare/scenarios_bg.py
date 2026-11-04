@@ -91,6 +91,6 @@ SEED['nested-folder-again']['routes'] = [{'match': 'SUBTASK', 'replies': [
 SCENARIOS['nested-once-again'] = _GO + ['<enter>', '<sleep>']
 SEED['nested-once-again'] = SEED['nested-folder-again']
 
-# Legacy async name admission: an invalid name fails with invalid_name and legacy's text.
+# An invalid async name: legacy's schema check answers with its 'Tool input did not match schema' feedback.
 SCENARIOS['bg-bad-name'] = _GO
 SEED['bg-bad-name'] = dict(_child({'execution': 'background', 'role': 'explorer', 'name': 'Bad Name', 'task': 'SUBTASK look'}), settings={})

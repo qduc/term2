@@ -417,8 +417,12 @@ const LOG_READERS =
 for (const file of files(rewriteSrc)) {
   const relative = path.relative(rewriteSrc, file).split(path.sep).join('/');
   if (!/^(app|clients)\//.test(relative)) continue;
-  if (LOG_READERS.test(fs.readFileSync(file, 'utf8')))
-    problems.add(`${relative}: app/ and clients/ may not read session logs; ask the session`);
+  const text = fs.readFileSync(file, 'utf8');
+  const hit = LOG_READERS.exec(text);
+  if (hit)
+    problems.add(
+      `${relative}:${text.slice(0, hit.index).split('\n').length}: app/ and clients/ may not read session logs; ask the session`,
+    );
 }
 
 if (reachedUnknown.size) {

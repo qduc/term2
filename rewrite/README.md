@@ -44,7 +44,31 @@ which `src/` files may also import `source/` is a separate, named list in
   answer it, and the session alone writes the pending interaction to the log.
   A process that dies while a turn waits reopens that turn as interrupted;
   nothing resumes on its own.
-- **Names are jobs.** No layer is called service, adapter or orchestrator.
+- **Names are jobs.** No layer or file under `src/` is called service, adapter or orchestrator.
+
+## Rule checks
+
+Every rule above and every claim below has a check, or it is not a rule. Each check was shown failing on a
+seeded violation (`bash rewrite/scripts/prove-checks.sh` redoes that in about a minute). Per-commit checks are
+static and need no build; the heavy ones run per candidate and report, they do not gate commits. Times are
+wall-clock on a loaded 7-core box.
+
+| Rule | Check | When | Time |
+| ---- | ----- | ---- | ---- |
+| Dependencies point down the layer table | `check-layers.mjs` | every commit | 4.1 s |
+| Only `session/` reads the log (`app/`, `clients/` ask the live session) | `check-layers.mjs` (log-reader guard) | every commit | in the above |
+| One projection: wire events are built only in `protocol/` | `check-rules.mjs` (one recorded exception: deferred web server) | every commit | 2.4 s |
+| Names are jobs (no service/adapter/orchestrator file or folder) | `check-rules.mjs` | every commit | in the above |
+| No new unused runtime exports (69 old ones recorded in `rule-baseline.json`; the list only shrinks) | `check-rules.mjs` | every commit | in the above |
+| Every file is reached from `app/cli.ts` | `check-reachability.mjs` | every commit | 1.2 s |
+| Files stay under 500 lines; legacy edges only shrink | `check-complexity.mjs` | every commit | 0.15 s |
+| A message's path stays short and runs through the production direct files | `bench/hops.mts` | every commit | 5.8 s |
+| The engine waits instead of calling up | layer table above (no upward import); the callbacks that still write facts (audit F1) are **not** checked | every commit | - |
+| One log: no second state to keep in sync | only the log-reader half is checked; the duplicate-reducer half (audit H1) is **not** | every commit | - |
+| Speed stays within 1.2x of legacy on a large session | queue job, run on each candidate at load under 9 | per candidate | minutes |
+| A fresh reader can explain how a message travels from this README and the `index.ts` files | queue job `measure-fresh-reader-review`, each milestone | per milestone | minutes |
+
+A check that has a false positive or flakes is fixed or deleted the same day; never retry it through.
 
 ## Shared JSON transport contract
 

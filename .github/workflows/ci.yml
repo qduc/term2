@@ -106,6 +106,7 @@ jobs:
           node rewrite/scripts/check-layers.mjs
           node rewrite/scripts/check-reachability.mjs
           node rewrite/scripts/check-complexity.mjs
+          node rewrite/scripts/check-rules.mjs
           node --unhandled-rejections=strict --import tsx rewrite/bench/hops.mts
       - name: Check the direct headless path
         run: |

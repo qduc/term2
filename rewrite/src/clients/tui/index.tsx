@@ -4,6 +4,7 @@ import { Box, useInput, useStdout } from 'ink';
 import { clearTerminalForRedraw } from './terminal.js';
 import type { TuiProps } from './integration.js';
 import { TuiSession } from './session.js';
+import type { HandoffHolder } from './use-handoff.js';
 
 export type { TuiIntegration } from './integration.js';
 export type { TuiState, ViewUpdate, Message, ToolView, InteractionView, QueueItem, TaskView } from './state.js';
@@ -34,6 +35,7 @@ export function Tui(props: TuiProps): React.ReactElement {
   });
   // Keep transition notices above the keyed per-session component.
   const [transition, setTransition] = useState<{ sessionId: string; message: string } | null>(null);
+  const [handoff, setHandoff] = useState<HandoffHolder['state']>(null);
   const { stdout } = useStdout();
   // Legacy's clearConversationAndRefreshBanner: the next session to mount opens under a "New conversation"
   // rule with these system lines, and the old transcript stays in scrollback. Armed before the switch,
@@ -68,6 +70,7 @@ export function Tui(props: TuiProps): React.ReactElement {
         interrupt={interrupt}
         switchSession={switchSession}
         beginNewConversation={beginNewConversation}
+        handoff={{ state: handoff, set: setHandoff }}
         newConversation={
           newConversation.current?.sessionId === props.connection.sessionId ? newConversation.current.lines : undefined
         }

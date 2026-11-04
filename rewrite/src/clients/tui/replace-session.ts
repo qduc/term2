@@ -12,6 +12,7 @@ export async function replaceSession(
   connection: TuiConnection,
   command: '/clear' | '/rollover',
   switchSession: ((sessionId: string, notice?: string, opening?: readonly string[]) => Promise<void>) | undefined,
+  opening: readonly string[] | undefined = command === '/clear' ? [WELCOME] : undefined,
 ): Promise<string | null> {
   if (!switchSession) throw new Error('Session switching is unavailable in this app.');
   let sessionId: string;
@@ -23,7 +24,7 @@ export async function replaceSession(
   }
   try {
     // Legacy /clear (clear-command.ts) opens the new conversation with its welcome line.
-    await switchSession(sessionId, undefined, command === '/clear' ? [WELCOME] : undefined);
+    await switchSession(sessionId, undefined, opening);
   } catch (error) {
     throw new Error(
       `Session ${sessionId} was created; switching reported: ${error instanceof Error ? error.message : String(error)}`,

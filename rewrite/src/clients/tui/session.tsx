@@ -33,6 +33,7 @@ import { SessionPanels } from './session-panels.js';
 import { useSessionRewind } from './session-rewind.js';
 import { useEscapeKey } from './use-escape-key.js';
 import { useInterruptConfirm } from './interrupt-confirm.js';
+import { useHandoff, type HandoffHolder } from './use-handoff.js';
 import {
   answerInteraction,
   commandStatus,
@@ -58,6 +59,7 @@ export function TuiSession({
   transitionNotice,
   beginNewConversation,
   newConversation,
+  handoff,
 }: TuiProps & {
   readonly interrupt: React.RefObject<() => void>;
   readonly switchSession?: (sessionId: string, notice?: string, opening?: readonly string[]) => Promise<void>;
@@ -66,6 +68,7 @@ export function TuiSession({
   readonly beginNewConversation?: (lines: readonly string[] | null) => void;
   /** This session opened as a new conversation: legacy's SessionBoundary above the banner, then these lines. */
   readonly newConversation?: readonly string[];
+  readonly handoff?: HandoffHolder;
 }): React.ReactElement {
   const { state, error: connError, historyRevision } = useClient(connection, retainedSnapshot, onSnapshot, onLiveEvent);
   const preferences = integration.preferences?.(connection.sessionId) ?? terminalPreferenceDefaults();
@@ -146,13 +149,15 @@ export function TuiSession({
   const { InputFrame, PromptMarker, LiveDivider } = useSkin();
   const theme = useTheme();
   const [busy, setBusy] = useState(false);
-  const composerActive = !panelOpen && !confirmation.pending && !connError && !interactionActive;
+  const handoffPrompting = handoff?.state?.stage === 'confirm_model';
+  const composerActive = !panelOpen && !confirmation.pending && !handoffPrompting && !connError && !interactionActive;
   const queueItems = ['steering', 'queued'].flatMap((delivery) =>
     state.queue.filter((item) => item.delivery === delivery),
   );
   const selectedQueueIndex = queueItems.findIndex((item) => item.id === selectedQueueId);
   // Menus call back into `submit`, which is declared below and changes every render.
   const submitRef = useRef<(input: string) => void>(() => undefined);
+  const handoffRef = useRef<ReturnType<typeof useHandoff>>(null as never);
   const runCommand = useCallback((text: string) => submitRef.current(text), []);
   const menuStack = useMenuStack({
     menus: integration.menus,
@@ -162,7 +167,7 @@ export function TuiSession({
     actions: {
       runCommand,
       notice: setNotice,
-      command: (text) => integration.command(connection, text),
+      command: (text) => handoffRef.current.command(text, () => integration.command(connection, text)),
       rewind: (item, how) => void executeRewind(item.targetId, how),
     },
   });
@@ -184,6 +189,18 @@ export function TuiSession({
     turnInFlight: Boolean(state.activeTurnId),
   });
   const pending = useRef(false);
+  const handoffFlow = useHandoff({
+    holder: handoff,
+    state,
+    connection,
+    switchSession,
+    beginNewConversation,
+    menuOpen: menuStack.open,
+    replaceInput,
+    notice: setNotice,
+    send: (text) => void submit(text, []),
+  });
+  handoffRef.current = handoffFlow;
   const interruptConfirm = useInterruptConfirm(Boolean(state.activeTurnId), editor.value, () => {
     void cancelInput(connection, state.activeTurnId ?? undefined).then(setNotice, (error: unknown) =>
       setNotice(error instanceof Error ? error.message : String(error)),
@@ -227,6 +244,7 @@ export function TuiSession({
     if (confirmation.handleKey(input, key)) return;
     if (interactionActive) return void interactionInput.current?.(input, key);
     if (taskOpen || budgetOpen) return;
+    if (composerActive && key.escape && handoffFlow.escape()) return;
     if (
       composerActive &&
       key.escape &&
@@ -254,6 +272,7 @@ export function TuiSession({
     confirmed = false,
     fromMenu = false, // legacy's menus clear the input first, so their commands' failures only report
   ): Promise<void> => {
+    if (handoffFlow.submit(input)) return;
     input = menuStack.withPendingSkill(input);
     const clean = cleanImageMarkers(input);
     if (!clean.trim() && !submittedImages.length && !otherParts.length && !editing) return;
@@ -406,13 +425,15 @@ export function TuiSession({
       } else if (input.trim() === '/cancel') {
         setNotice(await cancelInput(connection, state.activeTurnId ?? undefined, input, submission.submittedRevision));
         return;
+      } else if (/^\/handoff(?:\s|$)/.test(input)) {
+        handoffFlow.start();
       } else if (/^\/providers(?:\s|$)/.test(input)) {
         if (!menuStack.openFrame('providers')) throw new Error('Provider management is unavailable.');
       } else if (input.startsWith('/')) {
         const directNotice = await directSlashCommand(connection, input);
         if (directNotice !== null) setNotice(directNotice);
         else {
-          const result = await integration.command(connection, input);
+          const result = await handoffFlow.command(input, () => integration.command(connection, input));
           // A session switch carries its message into the new session, which remounts.
           if (result.message && !result.sessionId) viewport.showMessage(result.message, input, setNotice);
           if (result.transcript) viewport.appendCommandOutput(result.transcript);
@@ -519,8 +540,11 @@ export function TuiSession({
         <PendingQueueEdit editingId={editing?.id ?? null} items={queueItems} />
         {menuStack.view}
         {/* Legacy BottomArea puts a confirmation prompt in the composer's place. */}
-        {confirmation.prompt}
-        {menuStack.open || confirmation.prompt ? null : (
+        {confirmation.prompt ?? handoffFlow.prompt}
+        {handoffFlow.promptLabel && !menuStack.open ? (
+          <Text color={theme.accent}>{handoffFlow.promptLabel}</Text>
+        ) : null}
+        {menuStack.open || confirmation.prompt || handoffFlow.prompt ? null : (
           <InputFrame>
             <PromptMarker mode={shellMode ? 'shell' : 'input'} />
             <MultilineInput
@@ -615,7 +639,8 @@ export function TuiSession({
           integration={integration}
           state={state}
           active={composerActive && selectedQueueIndex < 0 && !menuStack.open}
-          draftEmpty={editor.value === ''}
+          // Legacy hides the idle hints under a prompt label.
+          draftEmpty={editor.value === '' && !handoffFlow.promptLabel}
           escHint={escHintVisible}
           columns={columns - 4}
           queueSelectable={queueItems.length > 0 && !editor.value && !editing}

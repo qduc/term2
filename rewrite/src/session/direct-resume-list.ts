@@ -91,13 +91,11 @@ export async function listDirectResumeSessions(
     }
     const messageCount = current?.messageCount ?? entry?.displayed ?? undefined;
     let updatedAt = entry?.updated;
-    if (current) {
-      try {
-        // Legacy ages a row by the file's mtime, not by the timestamp inside its last line.
-        updatedAt = statSync(ends.get(id)?.headPath ?? rootPath).mtime.toISOString();
-      } catch {
-        /* The catalogue time still describes the last indexed line. */
-      }
+    try {
+      // Legacy ages every row by the file's mtime, not by the timestamp inside its last line.
+      updatedAt = statSync(ends.get(id)?.headPath ?? rootPath).mtime.toISOString();
+    } catch {
+      /* The catalogue time still describes the last indexed line. */
     }
     sessions.push({
       id,

@@ -1,5 +1,5 @@
 /** Real compaction operations, returning proposals for Session's sole writer. */
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { Item, ItemId, Model, ModelRef, ModelRequest, Usage } from '../model/index.js';
 import { ModelFailure } from '../model/failure.js';

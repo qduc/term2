@@ -90,6 +90,28 @@ export type DirectSessionSettings = SettingsService;
 /** The settings a new session continues from, carried through the store's creation call. */
 const continuedSettings = new AsyncLocalStorage<DirectSessionSettings>();
 
+/** Targets of source/services/settings/ancillary-settings-migration.ts. */
+const ANCILLARY_MIGRATION_TARGETS = [
+  'agent.smartReasoningEffort',
+  'agent.balancedReasoningEffort',
+  'agent.cheapReasoningEffort',
+  'agent.decisionModel',
+] as const;
+
+/**
+ * Legacy's one service migrates an old key (say `agent.mentorReasoningEffort`) only when it loads the file at
+ * launch, and the file it writes keeps the old key without the new one. A session reading that file again would
+ * migrate a key the launch did not have and show a value legacy shows only from its next launch on.
+ */
+function keepLoadTimeMigrations(settings: SettingsService, launch: Pick<SettingsService, 'getDynamic'>): void {
+  for (const key of ANCILLARY_MIGRATION_TARGETS) {
+    const value = launch.getDynamic(key);
+    if (isDeepStrictEqual(value, settings.getDynamic(key))) continue;
+    if (value === undefined) settings.reset(key);
+    else if (settings.isRuntimeModifiable(key)) settings.setDynamic(key, value, { persist: false });
+  }
+}
+
 /**
  * A session owns its settings. `selection.settings` only supplies defaults: one
  * host runs sessions with different models and profiles, and restoring one
@@ -116,6 +138,7 @@ function sessionSettings(
       }
     }
   }
+  keepLoadTimeMigrations(settings, defaults);
   // The latest configuration, where there is one, outranks the session's start fact.
   const stored = configuration?.profile ?? metadata?.profile;
   const profile = stored && !profileExplicit ? stored.id : defaults.get('app.activeProfileId');

@@ -110,7 +110,8 @@ it('runs bang input locally rather than sending it to the model', { timeout: TIM
   session = spawnTerminal('node', [builtCli], { cwd: workspace, env });
   await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
   session.write('!pwd ');
-  await waitForHarnessComposerValue(idlePath, '!pwd ', { timeoutMs: 60_000 });
+  // Legacy's `!` switches the composer into shell mode and is not part of the draft.
+  await waitForHarnessComposerValue(idlePath, 'pwd ', { timeoutMs: 60_000 });
   session.write('\r');
   await session.waitForOutput('✓ pwd', 30_000);
   // Legacy keeps the shell row collapsed; Ctrl+O replaces the draft with `/model ` and opens the model menu.
@@ -125,7 +126,7 @@ it('runs bang input locally rather than sending it to the model', { timeout: TIM
   expect(providerRequests).toBe(0);
   await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 60_000 });
   session.write('!false ');
-  await waitForHarnessComposerValue(idlePath, '!false ', { timeoutMs: 60_000 });
+  await waitForHarnessComposerValue(idlePath, 'false ', { timeoutMs: 60_000 });
   session.write('\r');
   await session.waitForOutput('✗ false', 30_000);
   expect(providerRequests).toBe(0);

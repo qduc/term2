@@ -538,7 +538,7 @@ it('undo accepts an explicit last target without auto-sending', { timeout: TIMEO
   session!.write('/undo last');
   await waitForHarnessComposerValue(idlePath, '/undo last', { timeoutMs: 60_000 });
   session!.write('\r');
-  await session!.waitForOutput('/undo is now /rewind edit', 30_000);
+  // Legacy's alias line goes with the rewound turn and is never drawn (scenario cmd-undo-last); the draft is the signal.
   await waitForHarnessComposerValue(idlePath, 'explicit undo target', { timeoutMs: 60_000 });
   expect(received).toHaveLength(1);
 });

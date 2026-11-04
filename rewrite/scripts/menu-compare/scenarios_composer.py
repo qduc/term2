@@ -140,3 +140,6 @@ SEED.update({name: _STREAM for name in ('stream-queue-edit-save', 'stream-queue-
 SCENARIOS['stream-queue-paused'] = ['go', '<enter>', '<sleep>', 'queue this', '<a-enter>', '<esc>', '<esc>', '<sleep>',
                                     '/queue', '<enter>', '<sleep>']
 SEED['stream-queue-paused'] = _STREAM
+# /undo last after a turn: the alias line and the rewind (legacy rewind truncation)
+SCENARIOS['cmd-undo-last'] = ['hello', '<enter>', '<sleep>', '/undo last', '<enter>', '<sleep>']
+SEED['cmd-undo-last'] = _TURN

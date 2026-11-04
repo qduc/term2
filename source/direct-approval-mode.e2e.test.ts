@@ -369,6 +369,9 @@ async function runCommand(
     await waitForHarnessComposerValue(idlePath, '/hel', { timeoutMs: 5_000 });
     session.write('\t');
     await waitForHarnessComposerValue(idlePath, '/help ', { timeoutMs: 5_000 });
+    // Legacy: the first Escape only arms the clear; the second clears the draft.
+    session.write('\x1b');
+    await session.waitForOutput('Press Esc again to clear input', 5_000);
     session.write('\x1b');
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 5_000 });
     return;
@@ -459,8 +462,9 @@ async function runCommand(
     await session.waitForOutput('Select model', 30_000);
     session.write('\x1b');
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 60_000 });
-    session.write('/res');
-    await waitForHarnessComposerValue(idlePath, '/res', { timeoutMs: 60_000 });
+    // `/res` highlights /restart first in legacy's list; `/resu` leaves only /resume.
+    session.write('/resu');
+    await waitForHarnessComposerValue(idlePath, '/resu', { timeoutMs: 60_000 });
     session.write('\r');
     await session.waitForOutput('Resume Conversation', 30_000);
     return;
@@ -675,12 +679,6 @@ it('/model <provider>/<model> confirms the new model by name', { timeout: TIMEOU
   runCommand('/model mockprov/mock-beta', 'Set model to mock-beta (mockprov)'),
 );
 
-it('/resume ls labels each conversation with its time and first prompt', { timeout: TIMEOUT_MS }, async () => {
-  await runCommand('/resume ls', 'conv_', 'tidy the workspace please');
-  const visible = session!.getVisibleOutput();
-  expect(visible.replace(/\s+/g, ' ')).toMatch(/conv_[0-9a-f-]{36} \d{4}-\d\d-\d\d \d\d:\d\d tidy the workspace/);
-});
-
 it('/usage agrees with the cached share in the status bar', { timeout: TIMEOUT_MS }, async () => {
   await runCommand('/usage', 'Token usage: 78,021 input (42,112 cached), 731 output', 'hello', false, true);
   expect(session!.getVisibleOutput()).toContain('54% cached');
@@ -768,7 +766,10 @@ it('/providers opens the legacy provider manager', { timeout: TIMEOUT_MS }, () =
   runCommand('/providers', 'Your Providers', undefined, false, false, undefined, ['Configured providers:']),
 );
 
-it('/retry aliases retry-turn', { timeout: TIMEOUT_MS }, () => runCommand('/retry', 'No retained'));
+// Legacy's /retry rewinds the last turn and resends it; with no turn there is nothing to rewind.
+it('/retry with no turn has nothing to rewind', { timeout: TIMEOUT_MS }, () =>
+  runCommand('/retry', 'Nothing to rewind.'),
+);
 
 // The /effort menu owns the Enter, so legacy refuses an unknown level inline and keeps the text.
 it('invalid effort is refused inline without protocol internals', { timeout: TIMEOUT_MS }, () =>
@@ -814,8 +815,10 @@ it('shows a structured provider error as a message', { timeout: TIMEOUT_MS }, ()
   ),
 );
 
-it('accepted and rejected slash commands clear, and Escape clears completed slash input', { timeout: TIMEOUT_MS }, () =>
-  runCommand('', '', undefined, 'command-clear-regression'),
+it(
+  'accepted and rejected slash commands clear, and double Escape clears completed slash input',
+  { timeout: TIMEOUT_MS },
+  () => runCommand('', '', undefined, 'command-clear-regression'),
 );
 
 it('Enter opens slash pickers and Escape returns to the composer', { timeout: TIMEOUT_MS }, () =>

@@ -313,10 +313,10 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
   return {
     planNeedsClear: configuration.planNeedsClear,
     planTarget: configuration.planTarget,
-    printUsage: () => printUsage(latest(), true),
+    printUsage: () => printUsage(latest()),
     async clearAndTogglePlan(connection) {
       const target = configuration.planTarget(connection);
-      printUsage(latest(), true); // legacy handleModeSwitchConfirm clears through clearConversationAndRefreshBanner
+      printUsage(latest()); // legacy handleModeSwitchConfirm clears through clearConversationAndRefreshBanner
       const id = await resetSession(connection);
       try {
         const next = await host.connect(principal, id);

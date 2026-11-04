@@ -294,7 +294,7 @@ async function runTui(
     );
     unmount = () => instance.unmount();
     await instance.waitUntilExit();
-    printUsage(exitedSnapshot, false); // legacy cli.tsx printUsageOnce, before the resume hint
+    printUsage(exitedSnapshot); // legacy cli.tsx printUsageOnce, before the resume hint
     if (!pending.plan && exitCode === 0 && exitedSnapshot?.messages.some((message) => message.role !== 'system')) {
       const args = ['term2-next'];
       if (target.restart) {

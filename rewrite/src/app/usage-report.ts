@@ -4,26 +4,19 @@ import {
   formatUsdMicros,
   summarizeCost,
   summarizeModelUsage,
-  type ModelRequestCost,
 } from '../../../source/services/cost/model-cost.js';
 import { formatSessionUsageBreakdown } from '../clients/tui/presentation/utils/ai/token-usage.js';
 import type { WireSnapshot } from '../protocol/direct-wire.js';
 
-/**
- * Legacy cli.tsx keeps one usage accumulator for the whole process: a /clear, rollover or handoff starts a new
- * conversation but not a new count. Next's snapshots count per session, so the sessions this process left are
- * carried here. Not carried: a session left through /resume (legacy counts what it ran there; next forgets it).
- */
-const carried = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, records: [] as ModelRequestCost[] };
-
+/** The session's counts, as legacy's accumulators hold them (reset on /clear, rollover and resume). */
 function totals(snapshot: WireSnapshot | undefined) {
   const usage = snapshot?.usage;
-  const records = [...carried.records, ...(snapshot?.requestCosts ?? []).map(({ record }) => record)];
+  const records = (snapshot?.requestCosts ?? []).map(({ record }) => record);
   const tokens = formatSessionUsageBreakdown(
     {
-      prompt_tokens: carried.inputTokens + (usage?.inputTokens ?? 0),
-      completion_tokens: carried.outputTokens + (usage?.outputTokens ?? 0),
-      cache_read_tokens: carried.cachedInputTokens + (usage?.cachedInputTokens ?? 0),
+      prompt_tokens: usage?.inputTokens ?? 0,
+      completion_tokens: usage?.outputTokens ?? 0,
+      cache_read_tokens: usage?.cachedInputTokens ?? 0,
     },
     undefined,
   );
@@ -44,9 +37,8 @@ export function sessionUsage(snapshot: WireSnapshot): string {
 /**
  * Legacy cli.tsx printUsage, written straight to stdout under Ink's live frame on /clear, rollover and exit.
  * Ink then erases its frame from the moved cursor, so the frame's top rows stay behind; legacy shows that too.
- * `leaving` carries the session's count into the next one.
  */
-export function printUsage(snapshot: WireSnapshot | undefined, leaving: boolean): void {
+export function printUsage(snapshot: WireSnapshot | undefined): void {
   const { tokens, models, cost } = totals(snapshot);
   const costLine =
     cost.state === 'exact'
@@ -57,9 +49,4 @@ export function printUsage(snapshot: WireSnapshot | undefined, leaving: boolean)
       ? `Est ${formatUsdMicros(cost.knownUsdMicros)}+`
       : null;
   stdout.write(`\n${[tokens, models, costLine].filter(Boolean).join('\n')}\n`);
-  if (!leaving || !snapshot) return;
-  carried.inputTokens += snapshot.usage?.inputTokens ?? 0;
-  carried.outputTokens += snapshot.usage?.outputTokens ?? 0;
-  carried.cachedInputTokens += snapshot.usage?.cachedInputTokens ?? 0;
-  carried.records.push(...(snapshot.requestCosts ?? []).map(({ record }) => record));
 }

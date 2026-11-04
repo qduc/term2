@@ -232,7 +232,8 @@ describe('crash after tool effect but before the tool result', () => {
 
       // Crash strictly between the effect and any terminal tool_result.
       const crashed = await first.terminate({ signal: 'SIGKILL', timeoutMs: 40_000 });
-      expect(crashed.signal).toBe('SIGKILL');
+      // The PTY bridge reports a SIGKILLed child as exit code 128 + 9 on every CLI.
+      expect(crashed.exitCode).toBe(137);
 
       // The persisted journal records the executed call but no tool_result.
       const files = (await readdir(lease.paths.conversationsDir)).filter((file) => file.endsWith('.jsonl'));

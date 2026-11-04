@@ -224,6 +224,8 @@ describe('provider black-box harness', () => {
       const result = await workspace.runCli({
         cwd: workspace.root,
         args: ['spawn-tree-and-hang'],
+        // Harness self-test: always run the fixture child, not TERM2_TEST_CLI.
+        cliPath: join(distDir, 'cli.js'),
         env: { TERM2_HARNESS_TREE_PID_PATH: pidPath },
         deadlineMs: 1_000,
       });

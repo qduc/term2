@@ -3,6 +3,7 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { SettingsService } from '../../source/services/settings/settings-service.js';
+import { usesDirectComposer } from '../../source/test-helpers/direct-composer.js';
 import {
   createIsolatedWorkspaceLease,
   exitInteractive,
@@ -229,12 +230,30 @@ describe('crash after tool effect but before the tool result', () => {
     expect(files).toHaveLength(1);
     const conversationId = files[0]!.slice(0, -'.jsonl'.length);
     const journal = await readFile(join(lease.paths.conversationsDir, files[0]!), 'utf8');
-    const events = journal
+    const rows = journal
       .trim()
       .split('\n')
-      .map((line) => (JSON.parse(line) as { event: { type: string; toolCallId?: string; callId?: string } }).event);
-    expect(events.some((event) => event.type === 'tool_started' && event.toolCallId === TOOL_CALL_ID)).toBe(true);
-    expect(events.some((event) => event.type === 'tool_result' && event.callId === TOOL_CALL_ID)).toBe(false);
+      .map(
+        (line) =>
+          JSON.parse(line) as {
+            event?: { type: string; toolCallId?: string; callId?: string };
+            fact?: { type: string; callId?: string; item?: { type: string; callId?: string } };
+          },
+      );
+    if (usesDirectComposer([process.env.TERM2_TEST_CLI ?? ''])) {
+      // term2-next writes its own store rows ({v:2, fact}); same semantic check.
+      const facts = rows.map((row) => row.fact!);
+      expect(facts.some((fact) => fact.type === 'tool_started' && fact.callId === TOOL_CALL_ID)).toBe(true);
+      expect(
+        facts.some(
+          (fact) => fact.type === 'item' && fact.item?.type === 'tool_result' && fact.item.callId === TOOL_CALL_ID,
+        ),
+      ).toBe(false);
+    } else {
+      const events = rows.map((row) => row.event!);
+      expect(events.some((event) => event.type === 'tool_started' && event.toolCallId === TOOL_CALL_ID)).toBe(true);
+      expect(events.some((event) => event.type === 'tool_result' && event.callId === TOOL_CALL_ID)).toBe(false);
+    }
 
     // Turn 2: resume from the crashed journal; the model verifies instead
     // of the app blindly redispatching.

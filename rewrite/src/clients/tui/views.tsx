@@ -60,7 +60,12 @@ export function Transcript({
         <AssistantFrame kind="answer">
           <MarkdownRenderer maxWidth={width}>{message.text}</MarkdownRenderer>
         </AssistantFrame>
-        {message.interrupted ? <Text color={theme.textSubtle}>Stopped</Text> : null}
+        {/* Legacy's stopProcessingWithNotice: a system row (reasoning colour) one row below the reply. */}
+        {message.interrupted ? (
+          <Box marginTop={1}>
+            <Text color={theme.reasoning}>Stopped</Text>
+          </Box>
+        ) : null}
       </Box>
     ) : (
       <Box key={`message:${message.id}`} marginTop={1}>

@@ -29,7 +29,14 @@ request; a plain-text response settles first and the pending steer starts the ne
 turn. This preserves the full response and its continuity before new input.
 
 For a cancelled `ask_user` whose result is persisted locally but intentionally not
-sent in the legacy continuation, Session may call `skipCancelledQuestion` before
+sent in the legacy continuation, Session calls `skipCancelledQuestion` before
 starting the next user turn. It advances a checkpoint only for an exact history
-prefix with one outstanding `ask_user` call and exactly its matching no-answer
-result. Any mismatch leaves the normal outstanding-tool-debt guard unchanged.
+prefix whose added items are exactly the outstanding tool results, one of them the
+`ask_user` no-answer result. Any mismatch leaves the normal tool-debt guard unchanged.
+
+Root calls of one response go through legacy's approval batch first
+(`turn-tool-batch.ts`): questions, approval prompts and policy-approved calls that
+legacy stages are decided in order, only the last decision of each pass applies, and
+calls run in order up to the first undecided one. A question re-asked this way is the
+legacy behaviour, not a bug to fix here. Escape on an approval prompt cancels the
+turn; Session then drops the calls that never started (call and result) like legacy.

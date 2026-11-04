@@ -26,6 +26,7 @@ import type {
   InteractionDecision,
   Tool,
   ToolContext,
+  ToolInteractionRequest,
   ToolRegistry,
   ToolResult,
 } from '../tools/index.js';
@@ -119,13 +120,17 @@ async function approvalFor(
     return { kind: 'deny', reason: `No approval policy registered for ${definition.name}` };
   if (policy.kind === 'interceptor_denied')
     return { kind: 'deny', reason: `Tool ${definition.name} was refused by an approval interceptor` };
-  // ask_user is a question, not consent to execute. Its answer is requested by execute().
+  // ask_user is a question, not consent to execute. Legacy asks it with the
+  // response's other approvals; execute() then reads that answer.
+  if (definition.name === 'ask_user') return { kind: 'question', request: questionRequest(definition, input) };
   if (
-    definition.name === 'ask_user' ||
     policy.kind === 'auto_approve' ||
     shouldBypassToolApproval(definition.name, options.settings.get('shell.autoApproveMode'))
-  )
-    return { kind: 'none' };
+  ) {
+    // Legacy stages every call whose definition needs approval, even when policy then approves it.
+    const invocation = invocationFor(context, options.sessionId);
+    return (await definition.needsApproval(input, invocation)) ? { kind: 'none', batched: true } : { kind: 'none' };
+  }
   return {
     kind: 'ask',
     summary: dockerApproval(definition.name, input, options)
@@ -245,17 +250,21 @@ function providerOutput(result: unknown): ToolResult['providerOutput'] {
     : undefined;
 }
 
-async function questionAnswer(definition: AnyToolDefinition, input: unknown, context: ToolContext): Promise<string> {
-  if (definition.name !== 'ask_user') return '';
-  if (!context.interact) throw new Error('Direct question interaction capability is unavailable');
-  const decision = await context.interact({
+function questionRequest(definition: AnyToolDefinition, input: unknown): ToolInteractionRequest {
+  return {
     kind: 'question',
     toolName: definition.name,
     input,
     summary: 'Answer the model’s questions',
     detail: JSON.stringify(input),
     presentation: { questions: (input as { questions: unknown }).questions },
-  });
+  };
+}
+
+async function questionAnswer(definition: AnyToolDefinition, input: unknown, context: ToolContext): Promise<string> {
+  if (definition.name !== 'ask_user') return '';
+  if (!context.interact) throw new Error('Direct question interaction capability is unavailable');
+  const decision = await context.interact(questionRequest(definition, input));
   return decision.kind === 'answer' ? decision.answer : ASK_USER_NO_ANSWER_RESULT;
 }
 

@@ -195,7 +195,10 @@ export type ToolContext = {
 export type Risk = 'low' | 'medium' | 'high';
 
 export type ApprovalRequirement =
-  | { readonly kind: 'none' }
+  /** `batched`: legacy still counts the call in its approval batch, decided by policy without a prompt. */
+  | { readonly kind: 'none'; readonly batched?: true }
+  /** The call's own question, asked with the response's approvals before any of them runs. */
+  | { readonly kind: 'question'; readonly request: ToolInteractionRequest }
   | { readonly kind: 'ask'; readonly summary: string; readonly risk?: Risk; readonly detail?: string }
   | { readonly kind: 'deny'; readonly reason: string };
 

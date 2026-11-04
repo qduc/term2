@@ -22,7 +22,7 @@ import {
   serializeFavorite,
   type ModelInfo,
   type ModelSettings as SettingsService,
-} from './model-services.js';
+} from './model-catalog.js';
 
 const SETTING_KEYS = { AGENT_MODEL_SELECTION: 'agent.modelSelection' } as const;
 // source/services/settings/model-selection.ts ModelSelectionSchema, which settings-schema.ts uses for pool entries.
@@ -32,15 +32,7 @@ const TierModelPoolEntrySchema = z.object({
 });
 type TierModelPoolSetting = z.infer<typeof TierModelPoolEntrySchema>[];
 
-export const SUBAGENT_POOL_REASONING_EFFORTS = [
-  'default',
-  'none',
-  'minimal',
-  'low',
-  'medium',
-  'high',
-  'xhigh',
-] as const;
+const SUBAGENT_POOL_REASONING_EFFORTS = ['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const;
 export type SubagentPoolReasoningEffort = (typeof SUBAGENT_POOL_REASONING_EFFORTS)[number];
 export type SubagentPoolEntry = {
   model: string;
@@ -119,7 +111,7 @@ export function formatSubagentPoolReasoning(
   }
 }
 
-export function mergeSubagentPoolModels({
+function mergeSubagentPoolModels({
   catalogModels,
   entries,
   provider,
@@ -146,7 +138,7 @@ export function mergeSubagentPoolModels({
   return [...suggestions, ...catalogModels];
 }
 
-export function resolveSubagentPoolModelSelection(
+function resolveSubagentPoolModelSelection(
   models: readonly ModelInfo[],
   selectedIndex: number,
   typedModel: string,
@@ -155,7 +147,7 @@ export function resolveSubagentPoolModelSelection(
 }
 
 /** Starting provider for custom pool model rows. */
-export function resolveSubagentPoolBrowseProvider({
+function resolveSubagentPoolBrowseProvider({
   draftProvider,
   roleProvider,
   agentProvider,
@@ -168,11 +160,7 @@ export function resolveSubagentPoolBrowseProvider({
 }
 
 /** Apply a model catalog pick: pin both model id and its provider. */
-export function applySubagentPoolModelPick(
-  draft: SubagentPoolDraft,
-  model: string,
-  provider: string,
-): SubagentPoolDraft {
+function applySubagentPoolModelPick(draft: SubagentPoolDraft, model: string, provider: string): SubagentPoolDraft {
   return {
     ...draft,
     model,
@@ -181,16 +169,16 @@ export function applySubagentPoolModelPick(
 }
 
 /** Every catalog pick binds its provider, including the tier's current default. */
-export function tierPoolEntryForPick(model: string, provider: string): TierModelPoolSetting[number] {
+function tierPoolEntryForPick(model: string, provider: string): TierModelPoolSetting[number] {
   return TierModelPoolEntrySchema.parse({ model, provider });
 }
 
 /** Refuse to persist a tier model without its provider binding. */
-export function serializeTierPoolEntries(entries: readonly SubagentPoolEntry[]): TierModelPoolSetting {
+function serializeTierPoolEntries(entries: readonly SubagentPoolEntry[]): TierModelPoolSetting {
   return TierModelPoolEntrySchema.array().parse(entries);
 }
 
-export function buildSubagentPoolListItems(entries: readonly SubagentPoolEntry[]): SubagentPoolMenuItem[] {
+function buildSubagentPoolListItems(entries: readonly SubagentPoolEntry[]): SubagentPoolMenuItem[] {
   const actions: SubagentPoolMenuItem[] = [];
   if (entries.length < MAX_SUBAGENT_POOL_ENTRIES) actions.push({ kind: 'action', action: 'add', label: 'Add Entry' });
   actions.push({ kind: 'action', action: 'save', label: 'Save Changes' });

@@ -15,7 +15,6 @@
     "clients/tui/command-transcript.ts useCommandTranscript",
     "clients/tui/composer-footer.tsx directStatusView",
     "clients/tui/draft.ts wireImages",
-    "clients/tui/path-menu.tsx findPathTrigger",
     "clients/tui/presentation/skins/ledger/approval.tsx APPROVAL_VERTICAL_BELOW_COLUMNS",
     "clients/tui/presentation/skins/ledger/tools.tsx nameColumnWidth",
     "clients/tui/presentation/skins/names.ts DEFAULT_SKIN_NAME",

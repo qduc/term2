@@ -21,7 +21,7 @@
  */
 
 /** Every event/command id a menu interaction may advertise a key for. */
-export const MENU_COMMAND_VOCABULARY = [
+const MENU_COMMAND_VOCABULARY = [
   'move',
   'accept',
   'escape',
@@ -112,7 +112,7 @@ const MODEL_MENU_TAIL_BINDINGS: MenuBindingTable = [
   { key: 'esc', action: 'cancel', commands: ['escape'] },
 ];
 
-export const MODEL_MENU_BINDINGS: MenuBindingTable = [
+const MODEL_MENU_BINDINGS: MenuBindingTable = [
   ...MODEL_MENU_CORE_BINDINGS,
   ...MODEL_MENU_TAB_BINDINGS,
   ...MODEL_MENU_NICKNAME_BINDINGS,
@@ -120,7 +120,7 @@ export const MODEL_MENU_BINDINGS: MenuBindingTable = [
 ];
 
 /** Model picker, legacy per-provider tab mode (←→ switches provider tabs). */
-export const MODEL_MENU_PROVIDER_TAB_BINDINGS: MenuBindingTable = [
+const MODEL_MENU_PROVIDER_TAB_BINDINGS: MenuBindingTable = [
   { key: '←→', action: 'provider', commands: ['left', 'right'] },
 ];
 

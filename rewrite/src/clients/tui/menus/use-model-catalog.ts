@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { ModelInfo, ModelCatalogSession } from './model-services.js';
+import type { ModelInfo, ModelCatalogSession } from './model-catalog.js';
 
 /**
  * Shared catalog state for composer and pool model menus. Publish each provider

@@ -7,7 +7,7 @@ export { PROFILE_TRIGGER } from './triggers.js';
 export type { ProfileOption };
 
 /** Case-insensitive match over short id and display name. */
-export const filterProfiles = (
+const filterProfiles = (
   profiles: readonly ProfileOption[],
   query: string,
   canonicalProfileId: (id: string) => string,

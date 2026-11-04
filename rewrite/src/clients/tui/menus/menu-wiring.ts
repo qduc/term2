@@ -46,7 +46,7 @@ export const MENU_RULE_IDS: readonly string[] = [
   'skills',
 ];
 
-export function useMenuServices({
+export function useMenuWiring({
   commands,
   actions,
   onSkillSelected,

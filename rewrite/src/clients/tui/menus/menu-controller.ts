@@ -21,7 +21,7 @@ import type {
   UnboundFrameSpec,
 } from './menu-types.js';
 
-export function createInteractionRegistry(): MenuInteractionRegistry {
+function createInteractionRegistry(): MenuInteractionRegistry {
   const interactions = new Map<FrameId, MenuInteraction>();
 
   return {

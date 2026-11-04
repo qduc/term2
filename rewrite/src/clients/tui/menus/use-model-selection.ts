@@ -26,7 +26,7 @@ import {
   toggleFavoriteModel,
   type ModelSettings,
   type ModelTab,
-} from './model-services.js';
+} from './model-catalog.js';
 
 const SETTING_KEYS = {
   AGENT_FAVORITE_MODELS: 'agent.favoriteModels',

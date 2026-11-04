@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { ModelSettings } from './model-services.js';
+import type { ModelSettings } from './model-catalog.js';
 
 /** Copied from source/hooks/use-setting.ts over the session's model settings handle. */
 

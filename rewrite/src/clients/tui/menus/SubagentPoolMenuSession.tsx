@@ -3,7 +3,7 @@ import { useInputContext } from './input-context.js';
 import { useSubagentPoolSelection } from './use-subagent-pool-selection.js';
 import SubagentPoolSelectionMenu from './SubagentPoolSelectionMenu.js';
 import ModelSelectionMenu from './ModelSelectionMenu.js';
-import type { ModelSettings } from './model-services.js';
+import type { ModelSettings } from './model-catalog.js';
 
 const SETTING_KEYS = { AGENT_MENTOR_POOL: 'agent.mentorPool' } as const;
 import type { MenuComponentProps } from './menu-registry.js';

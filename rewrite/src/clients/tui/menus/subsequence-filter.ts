@@ -8,7 +8,7 @@ export const isSubsequenceMatch = (query: string, target: string): boolean => {
   return qi === q.length;
 };
 
-export const BOUNDARY_REGEX = /[/.\-_]/;
+const BOUNDARY_REGEX = /[/.\-_]/;
 
 /**
  * Returns -Infinity if query is not a subsequence of target.

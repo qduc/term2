@@ -5,12 +5,12 @@ import { getModelSettingConfigForInput } from './model-settings.js';
 import type { TuiSettingsSchema } from '../integration.js';
 
 const STOP_CHAR_REGEX = /[\s,;:()[\]{}<>]/;
-export const SETTINGS_TRIGGER = '/settings ';
+const SETTINGS_TRIGGER = '/settings ';
 export const SETTINGS_RESET_TRIGGER = '/settings reset ';
-export const AUTO_APPROVE_TRIGGER = '/auto-approve ';
-export const EFFORT_TRIGGER = '/effort ';
-export const SKILLS_TRIGGER = '/skills ';
-export const RESUME_TRIGGER = '/resume ';
+const AUTO_APPROVE_TRIGGER = '/auto-approve ';
+const EFFORT_TRIGGER = '/effort ';
+const SKILLS_TRIGGER = '/skills ';
+const RESUME_TRIGGER = '/resume ';
 export const PROFILE_TRIGGER = '/profile ';
 
 const whitespaceRegex = /\s/;

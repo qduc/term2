@@ -11,9 +11,9 @@ export type ModelSettingConfig = {
   pool?: boolean;
 };
 
-export const MODEL_CMD_TRIGGER = '/model ';
+const MODEL_CMD_TRIGGER = '/model ';
 
-export const MODEL_SETTING_CONFIGS: ModelSettingConfig[] = [
+const MODEL_SETTING_CONFIGS: ModelSettingConfig[] = [
   {
     modelKey: 'agent.modelSelection',
     trigger: '/settings agent.modelSelection ',

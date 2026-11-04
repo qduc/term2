@@ -4,7 +4,7 @@ import { useSelection } from './use-selection.js';
 import type { MenuConversationEntry as ConversationListEntry } from '../integration.js';
 
 /** Case-insensitive match over id, first message, model, and SSH host. */
-export const filterConversations = (conversations: ConversationListEntry[], query: string): ConversationListEntry[] => {
+const filterConversations = (conversations: ConversationListEntry[], query: string): ConversationListEntry[] => {
   if (!query) return conversations;
   const lowerQuery = query.toLowerCase();
   return conversations.filter(

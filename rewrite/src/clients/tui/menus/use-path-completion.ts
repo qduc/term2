@@ -23,7 +23,7 @@ type UsePathCompletionDeps = {
 // Builds an accurate warning for whichever truncation actually occurred. The
 // total-entry limit is the only cap on the workspace listing, so any warning
 // must be specific to that cause.
-export const buildWorkspaceLimitWarning = (
+const buildWorkspaceLimitWarning = (
   meta: Pick<WorkspaceEntriesMeta, 'truncatedByTotalLimit' | 'limit'>,
 ): string | null => {
   if (meta.truncatedByTotalLimit) {

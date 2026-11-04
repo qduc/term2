@@ -4,7 +4,7 @@ import { useSelection } from './use-selection.js';
 import type { MenuSkillInfo as SkillInfo } from '../integration.js';
 
 /** Case-insensitive match over skill name and description. */
-export const filterSkills = (skills: SkillInfo[], query: string): SkillInfo[] => {
+const filterSkills = (skills: SkillInfo[], query: string): SkillInfo[] => {
   if (!query) return skills;
   const lowerQuery = query.toLowerCase();
   return skills.filter(

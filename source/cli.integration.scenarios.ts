@@ -201,7 +201,7 @@ function readSavedHistory(file: string): SavedHistory {
   const format = Object.hasOwn(envelopes[0], 'fact') ? 'native' : 'legacy';
   if (format === 'native') {
     const records = envelopes.map((entry, index) => {
-      expect(entry).toMatchObject({ v: 1, seq: index + 1, at: expect.any(String), fact: { type: expect.any(String) } });
+      expect(entry).toMatchObject({ v: 2, seq: index + 1, at: expect.any(String), fact: { type: expect.any(String) } });
       expect(Object.hasOwn(entry, 'event'), 'mixed saved envelope').toBe(false);
       return entry.fact;
     });
@@ -1066,10 +1066,6 @@ fs.createWriteStream = (filename, options) => {
           evidence: 'Provider returned the reply',
           criteriaEvidence: 'math.ts exports add(a, b) returning a + b',
         };
-        const nativeVerifierInputs: {
-          revision: string;
-          probes: { id: string; description: string; content: string; complete: boolean }[];
-        }[] = [];
         const mock = await startModelMock(['mock-alpha', 'mock-verifier'], (n, body) => {
           const tools = Array.isArray(body?.tools) ? (body!.tools as Record<string, unknown>[]) : [];
           const messages = Array.isArray(body?.messages) ? (body!.messages as Record<string, unknown>[]) : [];
@@ -1077,51 +1073,6 @@ fs.createWriteStream = (filename, options) => {
             const fn = tool?.function as { name?: string } | undefined;
             return (fn?.name ?? (tool?.name as string | undefined)) === 'verification_probe';
           });
-          if (tools.length === 0) {
-            // Native verification has no model tool authority: the host supplies
-            // actual read-only probes, and accepts only a strict assessment of them.
-            const content = messages.at(-1)?.content;
-            const input = JSON.parse(
-              typeof content === 'string'
-                ? content
-                : (content as { type: string; text: string }[]).map((part) => part.text).join(''),
-            );
-            expect(input).toMatchObject({
-              goal: 'Ship math.ts',
-              criteria: 'math.ts exports add(a, b) returning a + b',
-              revision: expect.any(String),
-              omittedFileCount: 0,
-              hostLimitations: [],
-            });
-            const probes = input.probes as (typeof nativeVerifierInputs)[number]['probes'];
-            expect(probes.length).toBeGreaterThan(0);
-            expect(probes.every((probe) => probe.complete)).toBe(true);
-            const math = probes.find((probe) => probe.description === 'read_file math.ts');
-            expect(math?.content).toContain('export function add(a: number, b: number): number');
-            expect(math?.content).toContain('return a + b;');
-            nativeVerifierInputs.push(input);
-            return [
-              {
-                id: 'native-verdict',
-                choices: [
-                  {
-                    delta: {
-                      role: 'assistant',
-                      content: JSON.stringify({
-                        outcome: 'PASS',
-                        evidence: `${math!.id}: math.ts exports add(a, b) returning a + b.`,
-                        checked: [math!.id],
-                        limitations: [],
-                        coverage: 'complete',
-                        basis: 'static_evidence',
-                      }),
-                    },
-                  },
-                ],
-              },
-              { id: 'native-verdict', choices: [{ delta: {}, finish_reason: 'stop' }] },
-            ];
-          }
           if (isVerifier) {
             // The source verifier still owns its tool probe round and verdict round.
             if (!messages.some((message) => message?.role === 'tool')) {
@@ -1226,22 +1177,19 @@ fs.createWriteStream = (filename, options) => {
           const savedLog = readSavedHistory(path.join(conversationsDir, saved));
           const native = savedLog.format === 'native';
           const requests = mock.capturedRequests();
-          // Two worker rounds; native assesses host-collected evidence in one
-          // independent request, while source uses a probe and a verdict round.
-          expect(requests).toHaveLength(native ? 3 : 4);
+          // Two worker rounds, then the verifier's probe round and verdict round.
+          expect(requests).toHaveLength(4);
           const verifierRequests = requests.slice(2);
           expect(mock.capturedModels()).toEqual([
             'mock-alpha',
             'mock-alpha',
-            ...(native
-              ? [verifierModel || 'mock-alpha']
-              : [verifierModel || 'mock-alpha', verifierModel || 'mock-alpha']),
+            verifierModel || 'mock-alpha',
+            verifierModel || 'mock-alpha',
           ]);
-          expect(nativeVerifierInputs).toHaveLength(native ? 1 : 0);
           for (const request of verifierRequests) {
             const tools = (request.tools as Record<string, unknown>[]) ?? [];
-            expect(tools).toHaveLength(native ? 0 : 1);
-            if (!native) expect((tools[0]!.function as { name: string }).name).toBe('verification_probe');
+            expect(tools).toHaveLength(1);
+            expect((tools[0]!.function as { name: string }).name).toBe('verification_probe');
           }
           // The verifier sees the goal, never the worker's prompt or its evidence.
           const verifierBody = JSON.stringify(verifierRequests);
@@ -1274,14 +1222,13 @@ fs.createWriteStream = (filename, options) => {
               attemptId: attempt.attemptId,
               report: {
                 outcome: 'PASS',
-                verifierVersion: 'direct-provider-readonly-v1',
+                verifierVersion: 'fresh-repository-verifier-v1',
                 attemptId: attempt.attemptId,
                 revision: attempt.proposal.revision,
-                limitations: [],
+                limitations: ['Static inspection only'],
               },
             });
-            expect(events[reported]!.report.checked).toEqual([expect.stringContaining('read_file math.ts')]);
-            expect(nativeVerifierInputs[0]!.revision).toBe(attempt.proposal.revision);
+            expect(events[reported]!.report.checked).toEqual(['list_files', 'Repository listing']);
             expect(events[ended]).toMatchObject({ attemptId: attempt.attemptId, outcome: 'complete' });
             expect(events[achieved]).toMatchObject({ source: 'goal_check', goal: { status: 'achieved' } });
           } else {

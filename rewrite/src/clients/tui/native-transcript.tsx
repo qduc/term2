@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Box, Static } from 'ink';
-import { reportsFailure } from './tool-view.js';
 import type { Message, ToolView, TuiState } from './state.js';
 import { Transcript } from './views.js';
 import { groupTools, ToolGroupRow } from './tool-groups.js';
@@ -85,21 +84,14 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
         messages.delete(entry.id);
       } else {
         const tool = tools.get(entry.id);
-        // Failed shells can be grouped with later failures in the same turn.
-        // Keep them live until the turn settles so Static never freezes a partial group.
-        const openFailureGroup =
+        // Legacy keeps a run of consecutive tool calls live until the run is closed (a later
+        // message arrives or the turn settles), so Static never freezes a partial group.
+        const openRun =
           tool &&
           state.activeTurnId &&
           tool.turnId === state.activeTurnId &&
-          tool.name === 'shell' &&
-          (tool.status === 'failed' || (tool.status === 'completed' && reportsFailure(tool.display)));
-        if (
-          !tool ||
-          tool.status === 'pending' ||
-          tool.status === 'running' ||
-          tool.outcomeUnknown ||
-          openFailureGroup
-        ) {
+          state.timeline.slice(i + 1).every((later) => later.kind === 'tool');
+        if (!tool || tool.status === 'pending' || tool.status === 'running' || tool.outcomeUnknown || openRun) {
           reachedEnd = false;
           break;
         }
@@ -215,7 +207,7 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
             if (group === null) return <Box key={row.key} />;
             if (group !== undefined)
               return (
-                <Box key={row.key} marginTop={1} paddingLeft={2}>
+                <Box key={row.key} marginTop={1} paddingLeft={2} width={columns - 2}>
                   <ToolGroupRow group={group} />
                 </Box>
               );

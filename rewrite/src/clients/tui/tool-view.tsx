@@ -67,13 +67,3 @@ function commandMessages(display: JsonValue | undefined): Record<string, JsonVal
 function isRecord(value: unknown): value is Record<string, JsonValue> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
-
-/** True when a legacy command message in `display` marks the call unsuccessful. */
-export function reportsFailure(display: JsonValue | undefined): boolean {
-  const messages = Array.isArray(display)
-    ? display
-    : isRecord(display) && Array.isArray(display.messages)
-    ? display.messages
-    : [];
-  return messages.some((message) => isRecord(message) && message.success === false);
-}

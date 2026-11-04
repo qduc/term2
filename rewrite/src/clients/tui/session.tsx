@@ -171,7 +171,7 @@ export function TuiSession({
     replaceInput,
     notice: setNotice,
   });
-  useHarnessInput((composerActive || menuStack.open) && !busy, Boolean(state.activeTurnId), menuStack.value);
+  useHarnessInput(composerActive && !menuStack.owns && !busy, Boolean(state.activeTurnId), menuStack.value);
   // Legacy InputBox's double Escape clear; menus, panels, the expanded output viewer and the queue take Escape first.
   const shell = useShellMode(editor.value, replaceInput);
   const { escHintVisible } = useEscapeKey({
@@ -442,6 +442,7 @@ export function TuiSession({
         <LiveNotices connectionError={connError} />
         <LiveNotices historyError={editor.historyError} />
         <LiveDivider />
+        {menuStack.firstRunPrompt}
         {interruptConfirm.interruptConfirmVisible ? (
           <Box marginBottom={1}>
             <Text color={theme.warning}>Press Esc again to interrupt</Text>
@@ -465,7 +466,7 @@ export function TuiSession({
         {handoffFlow.promptLabel && !menuStack.open ? (
           <Text color={theme.accent}>{handoffFlow.promptLabel}</Text>
         ) : null}
-        {menuStack.open || rewindHidden || confirmation.prompt || handoffFlow.prompt || queuePaused.shown ? null : (
+        {menuStack.owns || rewindHidden || confirmation.prompt || handoffFlow.prompt || queuePaused.shown ? null : (
           <ComposerWidth columns={columns} fullWidth={menuStack.handingBack}>
             {(width) => (
               <InputFrame>

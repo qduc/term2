@@ -17,6 +17,8 @@ import { MENU_RULE_IDS, useMenuWiring, type MenuActions } from './menu-wiring.js
 import { legacySlashCommands } from './legacy-commands.js';
 import { createIntentHost, settingsIntentHandlers } from './menu-intents.js';
 import { installSettingsLibrary } from './settings-lib.js';
+import { FirstRunSetupPrompt } from '../presentation/components/prompt/FirstRunSetupPrompt.js';
+import { useFirstRunSetupGate, type FirstRunSetupGate } from './use-first-run-setup.js';
 
 type Composer = {
   readonly value: string;
@@ -53,6 +55,21 @@ export function useMenuStack(options: {
     if (!menus) return;
     controller.setTriggerRegistry(createDefaultTriggerRegistry(commands, MENU_RULE_IDS, menus.schema));
   }, [controller, commands, menus]);
+  // Legacy app.tsx useFirstRunSetupGate. Credentials are the providers menu's: it saves them.
+  const gateSettings = useMemo(() => {
+    const providers = menus?.providers;
+    if (!menus || !providers) return undefined;
+    const models = menus.models.settings(sessionId);
+    return {
+      get: models.get,
+      onChange: menus.settings.service(sessionId).onChange,
+      providerLabel: models.providerLabel,
+      hasProviderCredentials: (id: string) => providers.hasCredentials(sessionId, id),
+    };
+  }, [menus, sessionId]);
+  const firstRun = useFirstRunSetupGate({ settings: gateSettings, controller });
+  const latestFirstRun = useRef(firstRun);
+  latestFirstRun.current = firstRun;
   const open = Boolean(menus) && snapshot.stack.length > 0;
   if (menus) installSettingsLibrary(menus.settings.lib);
   // Legacy app.tsx's intent host, limited to the ported menus' intents: the controller hands committed intents
@@ -61,13 +78,21 @@ export function useMenuStack(options: {
   latestActions.current = actions;
   useEffect(() => {
     if (!menus) return;
+    const settingsHandlers = settingsIntentHandlers({
+      command: (text) => latestActions.current.command(text),
+      notice: (text) => latestActions.current.notice(text),
+      settings: () => menus.settings.service(sessionId),
+    });
     controller.setIntentHost(
       createIntentHost({
-        ...settingsIntentHandlers({
-          command: (text) => latestActions.current.command(text),
-          notice: (text) => latestActions.current.notice(text),
-          settings: () => menus.settings.service(sessionId),
-        }),
+        ...settingsHandlers,
+        // Legacy: an applied main-model selection completes first-run setup.
+        'apply-settings': async (request) => {
+          const result = await settingsHandlers['apply-settings']!(request);
+          if (result?.ok && request.intent.changes.some((change) => change.key === 'agent.modelSelection'))
+            latestFirstRun.current.completeModelSelection();
+          return result;
+        },
         // A menu's composed text runs as if typed and submitted: legacy's slash dispatch and its fallback to a turn.
         'submit-prompt': ({ intent }) => latestActions.current.runCommand(intent.text),
         rewind: ({ intent }) => latestActions.current.rewind(intent.item, intent.disposition),
@@ -124,6 +149,20 @@ export function useMenuStack(options: {
 
   return {
     open,
+    /**
+     * Legacy input owners 'menu' and 'first-run-setup': no composer, and no harness idle, while a menu or
+     * first-run setup owns input.
+     */
+    owns: open || firstRun.active,
+    /** Legacy BottomArea's FirstRunSetupPrompt, right under the live divider. */
+    firstRunPrompt:
+      firstRun.active && firstRun.phase ? (
+        <FirstRunSetupPrompt
+          phase={firstRun.phase}
+          provider={firstRun.provider}
+          providerLabel={gateSettings?.providerLabel(firstRun.provider) ?? firstRun.provider}
+        />
+      ) : null,
     /** Open an explicitly opened frame, as a typed `/providers` does in legacy; false when it has no menu. */
     openFrame,
     /** Legacy openCopyMenu: a command's frame replaces any open menu, with the input cleared. */
@@ -137,8 +176,12 @@ export function useMenuStack(options: {
       setPendingSkill(null);
       return `/skills ${pendingSkill} ${input}`;
     },
-    /** The text the harness and composer consumers see: the controller's while a menu owns it. */
-    value: open ? snapshot.editor.text : composer.value,
+    /**
+     * The text the harness sees: the controller's while a menu owns it, and while the stack mirrors the composer
+     * also until the draft reached the controller. Legacy's composer was the controller's editor, so a typed
+     * trigger opened its menu before the draft was acknowledged.
+     */
+    value: open || (menus && enabled) ? snapshot.editor.text : composer.value,
     /**
      * A frame closed with a new text that the hand-back effect has not yet written to the composer. Legacy's editor
      * shows the menu's text at once, so the remounting composer must not draw the stale draft one character per line.
@@ -164,6 +207,7 @@ export function useMenuStack(options: {
           actions={actions}
           controller={controller}
           onSkillSelected={setPendingSkill}
+          firstRun={firstRun}
         />
       </InputProvider>
     ) : null,
@@ -177,9 +221,16 @@ function MenuStackView(props: {
   readonly actions: MenuActions;
   readonly controller: MenuControllerImpl;
   readonly onSkillSelected: (name: string) => void;
+  readonly firstRun: FirstRunSetupGate;
 }): React.ReactElement | null {
-  const { open, enabled, commands, actions, controller, onSkillSelected } = props;
-  const services = useMenuWiring({ commands, actions, onSkillSelected });
+  const { open, enabled, commands, actions, controller, onSkillSelected, firstRun } = props;
+  const wired = useMenuWiring({ commands, actions, onSkillSelected });
+  // Legacy BottomArea: provider selection reports to the gate only during setup; an unavailable model reopens it.
+  const services = {
+    ...wired,
+    onProviderSelected: firstRun.active ? firstRun.onProviderSelected : undefined,
+    onUnavailableModelSelected: firstRun.requestSetup,
+  };
   const { stack } = controller.getSnapshot();
   if (!open) return null;
   return (

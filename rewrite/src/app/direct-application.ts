@@ -94,8 +94,14 @@ export type DirectApplication = {
   contextWindow(model: ModelRef): number | null;
   /** The live settings of a session without reading its log each time; for code that runs on every render. */
   liveSettings(sessionId: string): DirectSessionDetails['settings'];
-  /** Save only an applied interactive approval preference, never session model/profile overrides. */
-  saveApprovalPreference(sessionId: string, key: 'shell.autoApproveMode' | 'sandbox.enabled'): DurableWriteResult;
+  /**
+   * Save an applied interactive preference: the approval mode, sandbox, or a `/model` selection (legacy
+   * model-command.ts saves it). Never startup or profile overrides.
+   */
+  saveApprovalPreference(
+    sessionId: string,
+    key: 'shell.autoApproveMode' | 'sandbox.enabled' | 'agent.modelSelection',
+  ): DurableWriteResult;
   /** The skills under a local workspace root, read fresh so a new one shows up without a restart. */
   skills(root: string): readonly SkillInfo[];
   /** Starts a new session on `model`, or this one's, with `text` as its first turn. Returns its id. */

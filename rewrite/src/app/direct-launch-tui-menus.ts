@@ -145,7 +145,13 @@ function providerSettings(persistent: ISettingsService, live: ISettingsService |
     set: (key, value, options) => persistent.set(key, value, options),
     setDynamic: (key, value, options) => persistent.setDynamic(key, value, options),
     setPersistent: (key, value) => persistent.setPersistent(key, value),
-    setPersistentDynamic: (key, value) => persistent.setPersistentDynamic(key, value),
+    // Legacy has one settings service: a saved provider or key is at once what the session's
+    // model picker and credential checks read (the session's copy never writes the file).
+    setPersistentDynamic: (key, value) => {
+      const result = persistent.setPersistentDynamic(key, value);
+      live?.setPersistentDynamic(key, value);
+      return result;
+    },
   };
 }
 

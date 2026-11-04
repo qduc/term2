@@ -61,14 +61,33 @@ export function promptRequest(state: TuiState, answeredId: string | null): Promp
 }
 
 /** Legacy's ApprovalDescriptor, from the direct-wire request (the data-access half of the port). */
-function approvalDescriptor(view: InteractionView, agentName: string): ApprovalDescriptor {
+/**
+ * Legacy interruption-info.ts getCommandFromArgs: a turn's (and a background child's) approval carries only the
+ * command when there is one, so the prompt cannot parse shell Cwd/Timeout rows from it. A script child's carries
+ * its prepared arguments as JSON (app.tsx projectNestedApproval).
+ */
+function argumentsText(input: unknown, nested: boolean): string {
+  const record = input && typeof input === 'object' ? (input as Record<string, unknown>) : undefined;
+  if (!nested && record?.command !== undefined) return String(record.command);
+  if (!nested && Array.isArray(record?.commands)) return (record.commands as unknown[]).join('\n');
+  return JSON.stringify(input ?? {});
+}
+
+function approvalDescriptor(
+  view: InteractionView,
+  agentName: string,
+  owner: PromptRequest['owner'],
+): ApprovalDescriptor {
+  const nested = owner === 'nested';
   const presentation = (view.presentation ?? {}) as Record<string, unknown>;
   const record = (value: unknown) =>
     value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
   return {
     agentName,
     toolName: view.toolName ?? view.title,
-    argumentsText: JSON.stringify(view.input ?? {}),
+    argumentsText: argumentsText(view.input, nested),
+    // The turn's own interruption keeps its raw arguments (the prompt reads `sandbox` from them).
+    ...(owner === 'turn' ? { rawInterruption: { arguments: JSON.stringify(view.input ?? {}) } } : {}),
     ...(view.callId ? { callId: view.callId } : {}),
     dockerHostControl:
       presentation.dockerHostControl === true || /: Docker host control \(this call only\)$/.test(view.summary ?? ''),
@@ -133,7 +152,7 @@ function Host({
   const { columns, rows } = useTerminalSize();
   const { InputFrame, PromptMarker } = useSkin();
   const { interaction, owner } = request;
-  const approval = approvalDescriptor(interaction, request.agentName);
+  const approval = approvalDescriptor(interaction, request.agentName, owner);
   const isAskUser = approval.toolName === 'ask_user';
   const [entry, setEntry] = useState<'reason' | 'answer' | null>(null);
   const [answers, setAnswers] = useState<readonly AskUserAnswer[]>([]);

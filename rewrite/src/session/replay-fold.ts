@@ -20,6 +20,7 @@ import {
   appendReplayDelta,
   appendReplayItem,
   createActiveReplayTurn,
+  dropCancelledReplayStep,
   finishReplayText,
   hasUnsettledReplayRoots,
   recordReplayStart,
@@ -137,6 +138,7 @@ export function createReplayFold(): ReplayFold {
     }
     if (isDirectQueueFactType(fact.type)) {
       if (fact.type === 'queue_started') rotation.authorizeSeed(fact, queue.state);
+      if (fact.type === 'queue_cancelling' && active?.turnId === fact.turnId) active.cancelRequested = true;
       const clock = context.latestHumanInputAt;
       const input = queue.accept(fact, active?.turnId ?? null);
       for (const item of planDirectTiming(clock, queue.state.records, input).modelInput) appendHuman(item);
@@ -365,6 +367,7 @@ export function createReplayFold(): ReplayFold {
           throw new Error(`replay: turn ${turn.turnId} ended with unsettled calls, interactions or budget waits`);
         }
         finishReplayText(turn);
+        if (fact.outcome === 'cancelled') dropCancelledReplayStep(turn);
         active = null;
         lastOutcome = fact.outcome;
         break;

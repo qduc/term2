@@ -31,6 +31,11 @@ export type ActiveReplayTurn = {
   readonly responses: Set<number>;
   readonly budgets: Map<string, Extract<Fact, { type: 'budget_opened' }>>;
   readonly closedBudgets: Set<string>;
+  /** Each model step's provider slots, so a cancelled turn can drop the step it was in. */
+  readonly stepSlots: Map<number | undefined, Slot[]>;
+  /** Steps whose tool results arrived after the cancel was requested. */
+  readonly lateSteps: Set<number | undefined>;
+  cancelRequested: boolean;
 };
 
 export function createActiveReplayTurn(turnId: TurnId): ActiveReplayTurn {
@@ -44,7 +49,26 @@ export function createActiveReplayTurn(turnId: TurnId): ActiveReplayTurn {
     responses: new Set(),
     budgets: new Map(),
     closedBudgets: new Set(),
+    stepSlots: new Map(),
+    lateSteps: new Set(),
+    cancelRequested: false,
   };
+}
+
+function stepSlot(turn: ActiveReplayTurn, modelStep: number | undefined, slot: Slot): void {
+  const own = turn.stepSlots.get(modelStep) ?? [];
+  own.push(slot);
+  turn.stepSlots.set(modelStep, own);
+}
+
+/**
+ * Legacy keeps a cancelled turn's finished model steps and drops the one it was in: a response still streaming,
+ * or tools still running when the cancel came (their results are only the cancellation). The user's input stays.
+ */
+export function dropCancelledReplayStep(turn: ActiveReplayTurn): void {
+  for (const [step, own] of turn.stepSlots)
+    if (step !== undefined && (!turn.responses.has(step) || turn.lateSteps.has(step)))
+      for (const slot of own) slot.item = null;
 }
 
 export function appendReplayItem(turn: ActiveReplayTurn, fact: Extract<Fact, { type: 'item' }>, slots: Slot[]): void {
@@ -57,7 +81,10 @@ export function appendReplayItem(turn: ActiveReplayTurn, fact: Extract<Fact, { t
   if (item.type === 'tool_call') recordCall(turn, item, executionId);
   else if (item.type === 'tool_result') recordResult(turn, item, executionId);
   else if (executionId !== undefined) throw new Error(`replay: executionId on non-tool item ${item.id}`);
-  slots.push({ item });
+  if (item.type === 'tool_result' && turn.cancelRequested) turn.lateSteps.add(fact.modelStep);
+  const slot = { item };
+  slots.push(slot);
+  stepSlot(turn, fact.modelStep, slot);
 }
 
 export function appendReplayDelta(
@@ -72,6 +99,7 @@ export function appendReplayDelta(
     partial = { slot: { item: null }, deltas: [], id: `${turn.turnId}${step}-partial` as ItemId };
     turn.partials.set(fact.modelStep, partial);
     slots.push(partial.slot);
+    stepSlot(turn, fact.modelStep, partial.slot);
   }
   partial.deltas.push(fact.delta);
 }

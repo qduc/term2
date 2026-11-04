@@ -58,7 +58,8 @@ export class ConversationBackground {
               ? directQuestionNotice(previous, fact.question)
               : fact.type === 'task_backgrounded'
               ? directTaskNotice(previous, 'background')
-              : fact.type === 'task_stop_requested'
+              : // Legacy tells the model only about a stopped background task; a cancelled turn's own work is not one.
+              fact.type === 'task_stop_requested' && previous.mode === 'background'
               ? directTaskNotice(previous, 'stop')
               : fact.type === 'task_finished' && previous.mode === 'background'
               ? directTaskNotice(previous, 'finished', fact.result)

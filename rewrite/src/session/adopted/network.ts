@@ -1,5 +1,4 @@
-/** Private Session-owned network facts and ordered projection. */
-import { validateCompactionSequence } from '../../../../source/services/conversation/conversation-decoder.js';
+/** Network-approval facts of the adopted session log, validated for the v3 migration. */
 import {
   isSandboxNetworkHost,
   isSandboxNetworkPort,
@@ -76,30 +75,4 @@ export function validateNetworkFact(value: Record<string, unknown>): void {
   )
     return;
   throw new Error('invalid network resolution');
-}
-
-/** Reject impossible history rather than silently making an orphan actionable. */
-export function projectNetworkFacts(facts: readonly { readonly type: string }[]): readonly NetworkRequestFact[] {
-  validateCompactionSequence(facts, { requireSessionBound: true });
-  const seen = new Set<string>();
-  const pending: NetworkRequestFact[] = [];
-  for (const raw of facts) {
-    if (raw.type === 'context_compaction_recorded') {
-      if (pending.length > 0) throw new Error('context_compaction_recorded while network approval is pending');
-    } else if (raw.type === 'session_network_requested') {
-      const fact = raw as NetworkRequestFact;
-      if (seen.has(fact.requestId)) throw new Error('duplicate network request id');
-      seen.add(fact.requestId);
-      pending.push(fact);
-    } else if (raw.type === 'session_network_resolved') {
-      const fact = raw as NetworkResolutionFact;
-      const index = pending.findIndex(
-        (request) => request.requestId === fact.requestId && request.generation === fact.generation,
-      );
-      if (index < 0 || (fact.resolution.kind === 'answered' && index !== 0))
-        throw new Error('invalid network resolution order or identity');
-      pending.splice(index, 1);
-    }
-  }
-  return pending;
 }

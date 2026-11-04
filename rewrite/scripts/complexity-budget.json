@@ -1,12 +1,7 @@
 {
   "maxSourceEdges": 521,
   "maxLines": 500,
-  "fileCeilings": {
-    "rewrite/src/session/adopted/conversation-log.ts": {
-      "lines": 631,
-      "reason": "Prettier expands the existing SessionFact union by four lines after reconciliation; no behavior or new job added. Keep the fact union with its decoder rather than extract a formatting-only seam."
-    }
-  },
+  "fileCeilings": {},
   "messagePath": {
     "maxHops": 14,
     "maxFiles": 14

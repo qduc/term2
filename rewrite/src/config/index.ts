@@ -27,18 +27,3 @@ export interface SettingsReader {
   /** Returns an unsubscribe function. */
   watch(listener: (change: SettingsChange) => void): () => void;
 }
-
-export interface SettingsWriter extends SettingsReader {
-  set(key: SettingKey, value: SettingValue): Promise<void>;
-}
-
-/** Narrows settings to an allowlist, e.g. what a remote client may see or change. */
-export type SettingsScope = {
-  readonly readable: readonly SettingKey[];
-  readonly writable: readonly SettingKey[];
-};
-
-export interface SettingsSource {
-  /** Settings for one session: host defaults, then profile, then session overrides. */
-  forSession(scope: SettingsScope, overrides?: ReadonlyMap<SettingKey, SettingValue>): SettingsWriter;
-}

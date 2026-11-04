@@ -1,5 +1,6 @@
 import React from 'react';
 import type { MenuController, MenuFrame, MenuInteractionRegistry } from './menu-types.js';
+import { SlashMenuSession } from './SlashMenuSession.js';
 
 export type MenuServices = Record<string, unknown>;
 
@@ -16,7 +17,9 @@ export type MenuRegistry = {
 };
 
 /** Each ported menu session registers here; a frame without a session renders nothing. */
-const defaultRegistry: Partial<MenuRegistry> = {};
+const defaultRegistry: Partial<MenuRegistry> = {
+  slash: SlashMenuSession as React.ComponentType<any>,
+};
 
 export function getMenuRegistry(): Partial<MenuRegistry> {
   return defaultRegistry;

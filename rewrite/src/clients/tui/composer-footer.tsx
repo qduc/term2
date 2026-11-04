@@ -4,7 +4,6 @@ import { useSkin } from './presentation/skins/SkinContext.js';
 import type { StatusSegmentView, StatusView } from './presentation/skins/types.js';
 import type { TuiIntegration } from './integration.js';
 import type { TuiState } from './state.js';
-import { ComposerHints } from './slash-menu.js';
 
 function formatCompactTokens(tokens: number): string {
   return tokens >= 1_000_000 ? `${(tokens / 1_000_000).toFixed(1)}M` : `${Math.round(tokens / 1_000)}k`;
@@ -161,4 +160,40 @@ export function ComposerFooter({
       {info ? <StatusBar {...directStatusView(state, info, columns)} /> : null}
     </>
   );
+}
+
+/** Composer shortcuts are shown only when the composer owns input. */
+export function ComposerHints({
+  activeTurn,
+  queueSelectable,
+  columns,
+  Hints,
+}: {
+  readonly activeTurn: boolean;
+  readonly queueSelectable: boolean;
+  readonly columns: number;
+  readonly Hints: React.ComponentType<{ hints: ReadonlyArray<readonly [string, string]> }>;
+}): React.ReactElement {
+  const hints: ReadonlyArray<readonly [string, string]> = activeTurn
+    ? [
+        ...(queueSelectable ? [['↑', 'select queued'] as const] : []),
+        ['⏎', 'steer'],
+        ['Alt+⏎', 'queue'],
+        ['Ctrl+O', 'model'],
+        ['Ctrl+T', 'effort'],
+      ]
+    : [
+        ['/', 'commands'],
+        ['@', 'paths'],
+        ['!', 'shell'],
+        ['Shift+Tab', 'plan'],
+      ];
+  let width = 0;
+  const visible = hints.filter(([key, action]) => {
+    const needed = key.length + 1 + action.length + (width ? 3 : 0);
+    if (width + needed > columns) return false;
+    width += needed;
+    return true;
+  });
+  return <Hints hints={visible} />;
 }

@@ -15,7 +15,7 @@ import { runBangShell } from './bang-shell.js';
 import { useInterrupt } from './interrupt.js';
 import { runQueueCommand } from './queue-command.js';
 import { withSkillPrefix } from './skill-edit.js';
-import { pickerFor, openPickerFor, type PickerKind } from './picker-host.js';
+import { pickerFor, type PickerKind } from './picker-host.js';
 import { isCtrlG, isCtrlT, isShiftTab, usePlanToggle } from './shift-tab.js';
 import { cleanImageMarkers, primaryDraft, wireAttachments } from './draft.js';
 import { numberedInteractionAnswer } from './interaction-command.js';
@@ -161,8 +161,7 @@ export function TuiSession({
     if (taskOpen || budgetOpen || rewindTargets) return;
     if (composerActive && isShiftTab(input, key)) return togglePlan();
     if (composerActive && isCtrlT(input, key)) return setPicker('effort');
-    if (slash.handle(key, replaceInput, openPickerFor(integration, setPicker), (command) => void submit(command, [])))
-      return;
+    if (slash.handle(key, replaceInput)) return;
     if (composerActive && key.escape && viewport.expanded) return viewport.collapse();
     if (isCtrlG(input, key) && !busy) (state.interactions.length ? setInteractionOpen : setTaskOpen)(true);
     if (key.ctrl && input === 'b' && state.budgets.length && !busy) setBudgetOpen(true);

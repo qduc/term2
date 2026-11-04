@@ -301,7 +301,6 @@ async function runHeadless(prompt: string, options: SessionOptions): Promise<num
     io,
     autoApprove: options.autoApprove,
     ...(options.resumeId === null ? {} : { resumeId: options.resumeId }),
-    // --fork is still refused in cli-args.ts until the launch calls the fork operation with the store's resolver.
     ...(options.fork ? { fork: true } : {}),
     ...(options.goal === null ? {} : { goal: options.goal }),
     profileExplicit: options.profile !== null || options.lite,
@@ -309,7 +308,6 @@ async function runHeadless(prompt: string, options: SessionOptions): Promise<num
     showReasoning: options.output.showReasoning,
     quiet: options.output.quiet,
     lite: options.lite,
-    // --ssh is still refused in cli-args.ts; this forwards the parsed target once the tool surface can run it.
     ...(options.ssh === null ? {} : { ssh: options.ssh }),
   });
   if (result.kind === 'completed') return 0;
@@ -365,9 +363,7 @@ async function runInteractive(options: SessionOptions): Promise<number> {
     lite: options.lite,
     ...(options.resumeId === null ? {} : { resumeId: options.resumeId }),
     ...(controlSocket === undefined ? {} : { controlSocket }),
-    // Still refused in cli-args.ts until the tool surface can run a remote workspace.
     ...(options.ssh === null ? {} : { ssh: options.ssh }),
-    // --fork is still refused in cli-args.ts until the fork operation is on the candidate.
     ...(options.fork ? { fork: true } : {}),
     ...(options.goal === null ? {} : { goal: options.goal }),
   };

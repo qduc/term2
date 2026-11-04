@@ -132,6 +132,10 @@ export type TurnDeps = {
     observe(lastInputTokens: number | undefined): readonly string[];
     settle(lastInputTokens: number | undefined): void;
   };
+  /** Session-wide hold after a blocked or failed automatic compaction (legacy agent-client), across turns. */
+  readonly compactionHold?: { rearmAt?: number };
+  /** The application log, for the legacy warnings a turn writes (compaction blocked or failed). */
+  readonly warn?: (message: string, fields: Readonly<Record<string, unknown>>) => void;
   readonly normalStop?: (context: {
     readonly turnId: TurnId;
     readonly signal: AbortSignal;

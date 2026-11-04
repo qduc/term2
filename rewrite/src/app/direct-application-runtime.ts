@@ -404,6 +404,7 @@ export function createDirectRuntimes(
           nativeToolSlots: surface.runtime.nativeToolSlots,
           modelRollover: surfaceOptions.sessionBrowser === true && surface.runtime.nativeToolSlots.sessions,
           contextMilestones: contextMilestones(settings, () => port.backingSessionId),
+          warn: (message, fields) => logger.warn(message, fields),
         };
         installed = { ...installed, bound: { port, capabilities } };
         return capabilities;

@@ -198,6 +198,10 @@ function conversation(
     now: () => new Date().toISOString(),
     dispatchHeld: !!active || !!completionHeld || !!commands.owner || closed || !!journal.failure,
   });
+  // Legacy's agent client holds off automatic compaction after a blocked or failed attempt, across turns,
+  // and drops that hold when the conversation is cleared or rolled over to a new backing session.
+  const compactionHold: { rearmAt?: number } = {};
+  let compactionHoldSession: string | undefined;
   const boundary = (turnId: TurnId): readonly Item[] => {
     if (!active || active.turnId !== turnId || active.cancelled || commands.owner || closed || journal.failure)
       return [];
@@ -257,6 +261,11 @@ function conversation(
     const turnContinuity = generation.continuity;
     try {
       const runNested = background!.nested(turnDeps, turnId, request.submission?.origin);
+      const backingSession = deps.rotationBoundary?.().sessionId ?? id;
+      if (compactionHoldSession !== backingSession) {
+        compactionHoldSession = backingSession;
+        delete compactionHold.rearmAt;
+      }
       const handle = (planned?.compaction ? startCompaction : startTurn)(
         {
           ...settings,
@@ -276,6 +285,8 @@ function conversation(
           ...(generation.supplied?.contextMilestones
             ? { contextMilestones: generation.supplied.contextMilestones }
             : {}),
+          compactionHold,
+          ...(generation.supplied?.warn ? { warn: generation.supplied.warn } : {}),
           runNested,
           subagents: background!.subagentPort,
           shellTasks: (parent) => background!.shellTaskPort(parent, request.submission?.origin),

@@ -7,17 +7,26 @@ import { compactDirectHistory } from './direct-recovery-compaction.js';
 import { estimateDirectContext } from './direct-context-estimate.js';
 import type { TurnCompactionEvent, TurnDeps, TurnSpec } from './direct-types.js';
 import { NativeBudgetExhausted, type TurnBudgetControl } from './turn-budget.js';
+import { recoveryDelay } from './direct-recovery.js';
 import { TurnEvents, cancelled } from './turn-events.js';
 
 type Done = Extract<ModelEvent, { type: 'done' }>;
 export class CompactionWrapUp extends Error {}
-export type CompactionAttemptResult = DirectCompactionResult | { readonly kind: 'unavailable' | 'wrap_up' };
+/** Blocked outcomes legacy's agent client logs; hard-fit refusals fail the turn instead. */
+const LOGGED_BLOCKS: ReadonlySet<string> = new Set([
+  'no_complete_cold_turn',
+  'opaque_context',
+  'summary_input_too_large',
+  'non_reducing',
+]);
+
+class CompactionHardFit extends Error {}
+export type CompactionAttemptResult = DirectCompactionResult | { readonly kind: 'unavailable' | 'wrap_up' | 'failed' };
 
 /** Owns private summary work and accepts only a durable history replacement. */
 export class TurnCompaction {
   #state: TurnSpec['compactionState'];
   #lastInputTokens: number | undefined;
-  #blockedUntilEstimatedTokens: number | undefined;
   #noticeOrdinal = 0;
   /** Legacy tells a run once that local compaction cannot shorten its history yet. */
   #coldTurnNoticed = false;
@@ -77,12 +86,6 @@ export class TurnCompaction {
 
   async compact(request: ModelRequest, history: Item[], manual = false): Promise<CompactionAttemptResult> {
     if (!this.deps.compaction) return { kind: 'unavailable' };
-    if (!manual && this.#blockedUntilEstimatedTokens !== undefined) {
-      const estimate = estimateDirectContext(request);
-      if (estimate.renderedInputTokens < this.#blockedUntilEstimatedTokens) {
-        return { kind: 'deferred', reason: 'hysteresis', estimate };
-      }
-    }
     const sourceLength = history.length;
     let attempt: { compactionId: string; started: number; accepted: boolean } | undefined;
     let outcomeChosen = false;
@@ -105,7 +108,11 @@ export class TurnCompaction {
       ref: model.ref,
       contextWindow: model.contextWindow,
       stream: (summary, signal) =>
-        this.#summary(model, summary, history, signal, request.instructions, (record) => requests.push(record)),
+        retrySummary(
+          () => this.#summary(model, summary, history, signal, request.instructions, (record) => requests.push(record)),
+          this.deps.recovery?.maxTransientRetries ?? 0,
+          signal,
+        ),
       ...(model.compact
         ? {
             compact: async (native: ModelRequest, signal: AbortSignal) => {
@@ -146,6 +153,9 @@ export class TurnCompaction {
         signal: this.signal,
         ...this.#state,
         lastCompletedInputTokens: this.#lastInputTokens,
+        ...(this.deps.compactionHold?.rearmAt !== undefined
+          ? { blockedRearmAtEstimatedTokens: this.deps.compactionHold.rearmAt }
+          : {}),
         ...(manual ? { manual: true } : {}),
         onStarted: async (evidence) => {
           const started = {
@@ -168,21 +178,23 @@ export class TurnCompaction {
           // Legacy fails the turn only when the history cannot fit at all; a summary that did not reduce
           // leaves the request uncompacted.
           if (!manual && (result.reason === 'single_turn_too_large' || result.reason === 'result_still_too_large'))
-            throw new Error(hardFitMessage(result.reason));
+            throw new CompactionHardFit(hardFitMessage(result.reason));
           if (!manual && result.reason === 'no_complete_cold_turn' && !this.#coldTurnNoticed) {
             this.#coldTurnNoticed = true;
             await this.#notice(history, NO_COLD_TURN_NOTICE);
           }
-          if (!manual && attempt?.accepted) {
-            const measured = Math.max(result.estimate.renderedInputTokens, this.#lastInputTokens ?? 0);
-            this.#blockedUntilEstimatedTokens =
-              result.estimate.renderedInputTokens +
-              Math.max(1_000, Math.ceil(result.estimate.renderedInputTokens * 0.1));
-            this.#state = {
-              ...this.#state,
-              rearmAtEstimatedTokens: measured + Math.max(1_000, Math.ceil(measured * 0.1)),
-            };
-          }
+          if (!manual && result.rearmAtEstimatedTokens !== undefined && this.deps.compactionHold)
+            this.deps.compactionHold.rearmAt = result.rearmAtEstimatedTokens;
+          if (!manual && LOGGED_BLOCKS.has(result.reason))
+            this.deps.warn?.('Local context compaction blocked; continuing with uncompacted history', {
+              provider: request.model.provider,
+              model: request.model.model,
+              reason: result.reason,
+              renderedInputTokens: result.estimate.renderedInputTokens,
+              ...(result.rearmAtEstimatedTokens !== undefined
+                ? { rearmAtEstimatedTokens: result.rearmAtEstimatedTokens }
+                : {}),
+            });
         }
         return result;
       }
@@ -207,7 +219,7 @@ export class TurnCompaction {
         checkpointReceipts: result.checkpointReceipts,
       };
       this.#lastInputTokens = undefined;
-      this.#blockedUntilEstimatedTokens = undefined;
+      if (this.deps.compactionHold) this.deps.compactionHold.rearmAt = undefined;
       this.acceptedReplacement();
       if (attempt?.accepted) {
         outcomeChosen = true;
@@ -235,7 +247,28 @@ export class TurnCompaction {
           : { kind: 'failed', error: toModelError(error) },
       );
       if (error instanceof CompactionWrapUp) return { kind: 'wrap_up' };
-      throw error;
+      // Legacy logs a failed automatic attempt, holds off further attempts and continues with the full context.
+      // Cancellation, budgets, a hard-fit refusal and a provider context overflow still end the turn.
+      if (
+        manual ||
+        this.signal.aborted ||
+        error instanceof NativeBudgetExhausted ||
+        error instanceof CompactionHardFit ||
+        toModelError(error).kind === 'context_overflow'
+      )
+        throw error;
+      if (this.deps.compactionHold) {
+        const contextWindow = this.deps.compaction.contextWindow ?? model.catalogContextWindow;
+        const ceiling = this.deps.compaction.maxRequestInputTokens ?? contextWindow ?? 64_000;
+        this.deps.compactionHold.rearmAt =
+          estimateDirectContext(request, contextWindow).renderedInputTokens + Math.max(1_000, Math.ceil(ceiling * 0.1));
+      }
+      this.deps.warn?.('Automatic local context compaction failed; continuing with uncompacted history', {
+        provider: request.model.provider,
+        model: request.model.model,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return { kind: 'failed' };
     }
   }
 
@@ -292,6 +325,36 @@ export class TurnCompaction {
       this.budget.record({
         ...record,
         serviceTier: prepared.request.useStandardServiceTier ? 'standard' : undefined,
+      });
+    }
+  }
+}
+
+/**
+ * Legacy runs a summary request like any model run, so a retryable failure is retried up to agent.retryAttempts
+ * with backoff, even after part of the response arrived. The summary is private text, so it is held until the
+ * request completes and a retry never repeats any of it.
+ */
+async function* retrySummary(
+  attempt: () => AsyncGenerator<ModelEvent>,
+  maxRetries: number,
+  signal: AbortSignal,
+): AsyncGenerator<ModelEvent> {
+  for (let retry = 1; ; retry++) {
+    const events: ModelEvent[] = [];
+    try {
+      for await (const event of attempt()) events.push(event);
+      yield* events;
+      return;
+    } catch (error) {
+      const failure = toModelError(error);
+      const interrupted =
+        (error as { recoveryEvidence?: unknown } | null)?.recoveryEvidence === 'connection_interrupted';
+      const transient = failure.retryable && ['network', 'rate_limit', 'provider'].includes(failure.kind);
+      if (signal.aborted || retry > maxRetries || !(transient || interrupted)) throw error;
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(resolve, recoveryDelay(retry, failure.retryAfterMs));
+        signal.addEventListener('abort', () => (clearTimeout(timer), reject(cancelled())), { once: true });
       });
     }
   }

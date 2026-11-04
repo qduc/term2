@@ -41,7 +41,7 @@ import type { HeadlessIo } from '../clients/headless/index.js';
 import {
   CONTROL_USAGE,
   DISCORD_HELP,
-  HELP,
+  helpText,
   parseCommandLine,
   UsageError,
   type Command,
@@ -377,7 +377,7 @@ async function main(argv: readonly string[]): Promise<number> {
   const command: Command = parseCommandLine(argv);
   switch (command.kind) {
     case 'help':
-      stdout.write(HELP);
+      stdout.write(helpText());
       return 0;
     case 'version':
       stdout.write(`${installationVersion}\n`);

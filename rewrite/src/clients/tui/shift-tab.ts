@@ -31,12 +31,12 @@ export function usePlanToggle(
       });
   };
   return () => {
-    const { planNeedsClear, clearAndTogglePlan } = integration;
+    const { planNeedsClear, clearAndTogglePlan, planTarget } = integration;
     if (!turnActive && planNeedsClear?.(connection) && clearAndTogglePlan)
       return confirmation.hold(
         'Clear session and switch mode?',
         () => run(() => clearAndTogglePlan(connection)),
-        'Press y to confirm, n or Esc to cancel.',
+        planTarget?.(connection) === 'builtin:plan' ? 'Plan' : 'Bare',
       );
     run(() => integration.command(connection, '/plan'));
   };

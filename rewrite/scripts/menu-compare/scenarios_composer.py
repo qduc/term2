@@ -86,3 +86,13 @@ SCENARIOS = {
 
 SEED = {name: _TURN for name in SCENARIOS if 'turn' in name or name.startswith(('history', 'cmd-handoff'))}
 SEED.update({name: _STREAM for name in SCENARIOS if name.startswith('stream')})
+
+SCENARIOS.update({
+    'cmd-profile-plan': ['/profile plan', '<enter>', '<sleep>'],
+    'stab-twice': ['<stab>', '<sleep>', '<stab>', '<sleep>'],
+    'stab-history': ['hello', '<enter>', '<sleep>', '<stab>'],
+    'stab-history-yes': ['hello', '<enter>', '<sleep>', '<stab>', '<up>', '<enter>', '<sleep>'],
+    'stab-history-esc': ['hello', '<enter>', '<sleep>', '<stab>', '<esc>'],
+    'cmd-bare-history': ['hello', '<enter>', '<sleep>', '/bare', '<enter>'],
+})
+SEED.update({name: _TURN for name in ('stab-history', 'stab-history-yes', 'stab-history-esc', 'cmd-bare-history')})

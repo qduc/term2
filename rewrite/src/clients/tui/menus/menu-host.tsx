@@ -105,6 +105,9 @@ export function useMenuStack(options: {
       if (stack.length > 0 || editor.text === synced.current) return;
       synced.current = editor.text;
       if (editor.text !== latestComposer.current.value) latestComposer.current.replace(editor.text, editor.cursor);
+      // The handed-back text may open a frame (legacy's deferred `/settings ` or `/model `), as the
+      // composer's echo of it did in legacy.
+      if (editor.text) controller.replaceText(editor.text, editor.cursor);
     };
     handBack();
     return controller.subscribe(handBack);

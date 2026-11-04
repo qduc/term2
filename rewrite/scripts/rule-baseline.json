@@ -33,7 +33,7 @@
     "clients/tui/presentation/utils/ai/token-usage.ts createUsageAccumulator",
     "clients/tui/presentation/utils/ai/token-usage.ts extractUsage",
     "clients/tui/presentation/utils/ai/token-usage.ts formatFooterUsage",
-    "clients/tui/presentation/utils/ai/token-usage.ts formatSessionUsageBreakdown",
+    "clients/tui/presentation/utils/ai/token-usage.ts formatSessionTokenUsage",
     "clients/tui/presentation/utils/ai/token-usage.ts formatUsageLine",
     "clients/tui/presentation/utils/ai/token-usage.ts mergeUsage",
     "clients/tui/presentation/utils/ai/token-usage.ts normalizeAgentRunUsage",

@@ -26,7 +26,8 @@ export function useHandoff(options: {
   readonly switchSession:
     | ((sessionId: string, notice?: string, opening?: readonly string[]) => Promise<void>)
     | undefined;
-  readonly beginNewConversation: ((lines: readonly string[] | null) => void) | undefined;
+  /** replaceSession's hooks: print usage as the conversation is left, then arm the new one's opening. */
+  readonly resetHooks: Parameters<typeof replaceSession>[4];
   readonly menuOpen: boolean;
   readonly replaceInput: (text: string) => void;
   readonly notice: (text: string) => void;
@@ -45,13 +46,7 @@ export function useHandoff(options: {
   const clear = async (next: NonNullable<HandoffHolder['state']>) => {
     holder?.set(next);
     try {
-      const failure = await replaceSession(
-        connection,
-        '/clear',
-        options.switchSession,
-        [],
-        options.beginNewConversation,
-      );
+      const failure = await replaceSession(connection, '/clear', options.switchSession, [], options.resetHooks);
       if (failure !== null) throw new Error(failure);
     } catch (error) {
       holder?.set(null);

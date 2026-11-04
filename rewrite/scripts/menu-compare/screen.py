@@ -300,6 +300,9 @@ def run(cli, cols, rows, name):
             for step in scenario:
                 term.send(step)
                 term.pump(quiet=0.6, limit=8)
+            if os.environ.get('RAW'):  # RAW=<prefix>: keep the pty bytes, for tracing redraws
+                with open(f"{os.environ['RAW']}-{cli}.bin", 'wb') as f:
+                    f.write(term.raw)
             return capture(term.screen)
         finally:
             term.close()

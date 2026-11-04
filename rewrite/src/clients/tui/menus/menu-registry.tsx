@@ -4,6 +4,7 @@ import { SlashMenuSession } from './SlashMenuSession.js';
 import { PathMenuSession } from './PathMenuSession.js';
 import { ProviderMenuSession } from './ProviderMenuSession.js';
 import { ModelMenuSession } from './ModelMenuSession.js';
+import { SubagentPoolMenuSession } from './SubagentPoolMenuSession.js';
 
 export type MenuServices = Record<string, unknown>;
 
@@ -25,6 +26,7 @@ const defaultRegistry: Partial<MenuRegistry> = {
   slash: SlashMenuSession as React.ComponentType<any>,
   providers: ProviderMenuSession,
   model: ModelMenuSession as React.ComponentType<any>,
+  subagent_pool: SubagentPoolMenuSession as React.ComponentType<any>,
 };
 
 export function getMenuRegistry(): Partial<MenuRegistry> {

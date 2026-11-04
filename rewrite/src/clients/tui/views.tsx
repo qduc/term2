@@ -33,7 +33,8 @@ export function Transcript({
   const messageById = new Map(messages.map((message) => [message.id, message]));
   const toolById = new Map((live ? state.tools : []).map((tool) => [tool.id, tool]));
   // Legacy folds runs of tool calls only in concise display; a committed row is its own, already grouped, run.
-  const groups = expanded || !state.timeline ? new Map() : groupTools(state.timeline, state.tools, false);
+  const groups =
+    expanded || !state.timeline ? new Map() : groupTools(state.timeline, state.tools, false, state.toolShownAt);
   const usedMessages = new Set<string>();
   const usedTools = new Set<string>();
   const renderMessage = (message: Message) =>

@@ -87,6 +87,11 @@ export type TuiState = {
   readonly drafts: Readonly<Record<string, string>>;
   readonly reasoning: Readonly<Record<string, string>>;
   readonly tools: readonly ToolView[];
+  /**
+   * When each tool's row would appear in legacy: at its call, or, for a call that waited on the user (a
+   * question or an approval), once that was decided. Orders a grouped run's summary as legacy does.
+   */
+  readonly toolShownAt?: ReadonlyMap<string, number>;
   readonly unmatchedTools: readonly WireToolResult[];
   readonly budgets: readonly WireBudgetRequest[];
   readonly commands: readonly WireCommandReceipt[];

@@ -218,8 +218,9 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
         ),
         rows.flatMap((row) => (row.tool ? [row.tool] : [])),
         true,
+        state.toolShownAt,
       ),
-    [rows],
+    [rows, state.toolShownAt],
   );
   // A fresh style object makes Ink mark <Static> dirty on every commit, which bypasses its render throttle.
   const staticStyle = useMemo(() => ({ width: columns }), [columns]);

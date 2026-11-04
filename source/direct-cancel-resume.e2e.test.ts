@@ -4,7 +4,13 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { testCliPath, spawnTerminal, createTestChildEnv, type TerminalSession } from './test-helpers/terminal-e2e.js';
+import {
+  dismissUnlistedSlashMenu,
+  testCliPath,
+  spawnTerminal,
+  createTestChildEnv,
+  type TerminalSession,
+} from './test-helpers/terminal-e2e.js';
 import {
   HARNESS_IDLE_ENV,
   waitForHarnessComposerValue,
@@ -116,6 +122,7 @@ it(
     const send = async (text: string) => {
       session!.write(text);
       await waitForHarnessComposerValue(idlePath, text, { timeoutMs: 60_000 });
+      await dismissUnlistedSlashMenu(session!, text);
       session!.write('\r');
     };
     const startCli = (args: string[]) => spawnTerminal('node', [builtCli, ...args], { cwd: workspace, env });
@@ -216,6 +223,7 @@ it('/cancel stops a streaming answer without a turn-id cleanup notice', { timeou
   const send = async (text: string) => {
     session!.write(text);
     await waitForHarnessComposerValue(idlePath, text, { timeoutMs: 60_000 });
+    await dismissUnlistedSlashMenu(session!, text);
     session!.write('\r');
   };
   const startCli = (args: string[]) => spawnTerminal('node', [builtCli, ...args], { cwd: workspace, env });
@@ -282,6 +290,7 @@ it.each(['slash', 'ctrl-c', 'editing', 'only-steers'] as const)(
     const send = async (text: string) => {
       session!.write(text);
       await waitForHarnessComposerValue(idlePath, text, { timeoutMs: 30_000 });
+      await dismissUnlistedSlashMenu(session!, text);
       session!.write('\r');
     };
     await send('first question');
@@ -316,6 +325,7 @@ it.each(['slash', 'ctrl-c', 'editing', 'only-steers'] as const)(
     } else {
       session.write('/cancel');
       await waitForHarnessComposerValue(idlePath, '/cancel', { timeoutMs: 30_000 });
+      await dismissUnlistedSlashMenu(session!, '/cancel');
     }
     if (mode === 'editing') {
       // Legacy's first Ctrl+C exits queue editing without cancelling the turn.
@@ -433,6 +443,7 @@ it.skipIf(process.platform !== 'linux')(
     const send = async (text: string) => {
       session!.write(text);
       await waitForHarnessComposerValue(idlePath, text, { timeoutMs: 60_000 });
+      await dismissUnlistedSlashMenu(session!, text);
       session!.write('\r');
     };
     const startCli = (args: string[]) => spawnTerminal('node', [builtCli, ...args], { cwd: workspace, env });
@@ -505,6 +516,7 @@ it.skipIf(process.platform !== 'linux')(
     const send = async (text: string) => {
       session!.write(text);
       await waitForHarnessComposerValue(idlePath, text, { timeoutMs: 60_000 });
+      await dismissUnlistedSlashMenu(session!, text);
       session!.write('\r');
     };
     const startCli = (args: string[]) => spawnTerminal('node', [builtCli, ...args], { cwd: workspace, env });

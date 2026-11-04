@@ -395,7 +395,7 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
           );
           return { exit: true };
         default:
-          throw new Error(`/${name} is not available in the direct executable yet.`);
+          throw new Error(`Unknown command /${name}`);
       }
     },
     async switchSession(sessionId) {

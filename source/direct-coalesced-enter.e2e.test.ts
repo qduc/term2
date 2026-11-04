@@ -4,7 +4,13 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { testCliPath, spawnTerminal, createTestChildEnv, type TerminalSession } from './test-helpers/terminal-e2e.js';
+import {
+  dismissUnlistedSlashMenu,
+  testCliPath,
+  spawnTerminal,
+  createTestChildEnv,
+  type TerminalSession,
+} from './test-helpers/terminal-e2e.js';
 import {
   HARNESS_IDLE_ENV,
   waitForHarnessComposerValue,
@@ -428,6 +434,7 @@ it.skipIf(process.platform !== 'linux')(
     const send = async (text: string) => {
       session!.write(text);
       await waitForHarnessComposerValue(idlePath, text, { timeoutMs: 60_000 });
+      await dismissUnlistedSlashMenu(session!, text);
       session!.write('\r');
     };
     await send('first question');

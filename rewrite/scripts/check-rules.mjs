@@ -5,6 +5,7 @@
 //   2. Names are jobs: no file or folder under src/ is called service, adapter or orchestrator.
 //   3. No new unused runtime exports: an exported function/const/class must be named somewhere else in src/ or bench/.
 //      Existing ones are recorded in rule-baseline.json (reason: still to delete or wire); the list only shrinks.
+//   4. One fold: only session/fold-fact.ts imports the leaf fact reducers (queue replay and the queue barrel are its legs).
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -117,6 +118,30 @@ if (stale.length)
       '\n  ',
     )}`,
   );
+
+// 4. One fold: the order in which the leaf reducers combine lives in session/fold-fact.ts only.
+const leafReducers = new Set([
+  'reduceDirectCommandReceipts',
+  'reduceDirectNotifications',
+  'reduceDirectContext',
+  'reduceDirectQueue',
+  'reduceDirectBackground',
+]);
+const foldAllowed = new Set(['session/fold-fact.ts', 'session/direct-queue-replay.ts', 'session/direct-queue.ts']);
+for (const file of files) {
+  const name = rel(file);
+  if (foldAllowed.has(name) || !/reduceDirect/.test(texts.get(file))) continue;
+  const sf = parse(file);
+  const visit = (node) => {
+    const spec = ts.isImportSpecifier(node) || ts.isExportSpecifier(node);
+    if (spec && leafReducers.has((node.propertyName ?? node.name).text))
+      problems.push(
+        `${name}:${lineOf(sf, node)}: imports leaf reducer '${(node.propertyName ?? node.name).text}' (rule: one fold, call foldFact from session/fold-fact.ts instead)`,
+      );
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+}
 
 if (problems.length) {
   console.error(problems.sort().join('\n'));

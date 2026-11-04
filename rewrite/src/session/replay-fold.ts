@@ -2,18 +2,17 @@ import { planDirectTiming } from './direct-time-gap.js';
 /** Pure direct-log projection: no writes, dispatch, provider calls or restored authority. */
 import type { TurnId } from '../engine/index.js';
 import type { Item } from '../model/index.js';
-import { reduceDirectCommandReceipts } from './direct-command-receipts.js';
 import type { DirectCommandReceipts } from './direct-command-types.js';
 import { parseDirectConfigurationFact } from './direct-configuration.js';
 import {
   initialDirectContextState,
   isDirectContextFactType,
   parseDirectContextFact,
-  reduceDirectContext,
   startsDirectHumanWindow,
 } from './direct-context.js';
 import { directPersonalMemoryItem, type DirectMemoryFact } from './direct-memory.js';
-import { reduceDirectNotifications, type DirectNotificationState } from './direct-notifications.js';
+import type { DirectNotificationState } from './direct-notifications.js';
+import { foldFact } from './fold-fact.js';
 import { isDirectQueueFactType } from './direct-queue-decode.js';
 import { DirectQueueReplay } from './direct-queue-replay.js';
 import type { Fact, TurnOutcomeName } from './facts.js';
@@ -118,14 +117,14 @@ export function createReplayFold(): ReplayFold {
     if (fact.type === 'transcript_message') return;
     if (fact.type === 'command_started' || fact.type === 'command_finished') {
       // Receipts are not provider history and are not recovered here.
-      commandReceipts = reduceDirectCommandReceipts(commandReceipts, fact);
+      commandReceipts = foldFact({ commands: commandReceipts }, fact).commands;
       return;
     }
     if (fact.type === 'background_notice_enqueued' || fact.type === 'background_notices_delivered') {
       if (fact.type === 'background_notices_delivered' && startedTurns.has(fact.turnId)) {
         throw new Error('replay: background notice delivery does not own its turn');
       }
-      notifications = reduceDirectNotifications(notifications, fact);
+      notifications = foldFact({ notifications }, fact).notifications;
       if (fact.type === 'background_notices_delivered') noticeDeliveries.add(fact.turnId);
       return;
     }
@@ -142,7 +141,8 @@ export function createReplayFold(): ReplayFold {
       const input = queue.accept(fact, active?.turnId ?? null);
       for (const item of planDirectTiming(clock, queue.state.records, input).modelInput) appendHuman(item);
       // Human steers reset the goal window; automatic steers keep the same reminders.
-      if (fact.type === 'queue_steered') context = reduceDirectContext(context, fact, queue.state.records);
+      if (fact.type === 'queue_steered')
+        context = foldFact({ context, queueRecords: queue.state.records }, fact).context;
       return;
     }
     if (isDirectContextFactType(fact.type)) {
@@ -164,7 +164,7 @@ export function createReplayFold(): ReplayFold {
         humanSlots.clear();
         return;
       }
-      context = reduceDirectContext(context, accepted, queue.state.records);
+      context = foldFact({ context, queueRecords: queue.state.records }, accepted).context;
       if (accepted.type === 'memory_personal_snapshot') {
         if (personalSnapshots.has(accepted.admissionId))
           throw new Error('replay: duplicate personal snapshot admission');
@@ -176,7 +176,7 @@ export function createReplayFold(): ReplayFold {
     if (backgroundAudit.accept(fact)) return;
     queue.accept(fact, active?.turnId ?? null);
     const clock = context.latestHumanInputAt;
-    context = reduceDirectContext(context, fact, queue.state.records);
+    context = foldFact({ context, queueRecords: queue.state.records }, fact).context;
     switch (fact.type) {
       case 'session_started':
         if (sessionId && sessionId !== fact.id) throw new Error('replay: conflicting Session identity');

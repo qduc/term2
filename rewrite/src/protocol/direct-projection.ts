@@ -6,7 +6,8 @@ import type { DirectSessionState, DirectSessionUpdate } from '../session/facade-
 import { directDraftId, initialDirectState } from '../session/direct-state.js';
 import { contextFactEvent } from './direct-context.js';
 import type { DirectQueueState } from '../session/direct-queue-types.js';
-import { createDirectQueueState, directQueueSteeredInput, reduceDirectQueue } from '../session/direct-queue-state.js';
+import { createDirectQueueState, directQueueSteeredInput } from '../session/direct-queue-state.js';
+import { foldFact } from '../session/fold-fact.js';
 import { argumentStreamEvent } from './direct-argument-stream.js';
 import { commandFactEvent } from './direct-command-receipts.js';
 import { publicRequestCost } from './direct-costs.js';
@@ -177,7 +178,7 @@ export class DirectProjection {
                 return message ? [message] : [];
               })
             : [];
-        this.#queue = reduceDirectQueue(this.#queue, fact);
+        this.#queue = foldFact({ queue: this.#queue }, fact).queue;
         const queue = publicQueue(this.#queue, this.#state.turnResults);
         return [
           this.#event(

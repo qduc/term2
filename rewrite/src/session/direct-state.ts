@@ -5,20 +5,11 @@ import type { Workspace } from '../tools/index.js';
 import type { DirectMessage, DirectSessionState, DirectToolDisplay } from './facade-types.js';
 export type { DirectDraft } from './facade-types.js';
 import { isDirectTaskFact, isDirectQueueFact, type Fact } from './facts.js';
-import { initialDirectContextState, reduceDirectContext } from './direct-context.js';
-import { createDirectQueueState, reduceDirectQueue, directQueueSteeredInput } from './direct-queue.js';
-import {
-  isDirectCommandFactType,
-  reduceDirectCommandReceipts,
-  recoverDirectCommands,
-} from './direct-command-receipts.js';
-import {
-  isDirectNotificationFactType,
-  reduceDirectNotifications,
-  type DirectNotificationFact,
-} from './direct-notifications.js';
-import type { DirectCommandFact } from './direct-command-types.js';
-import { reduceDirectBackground } from './direct-background-replay.js';
+import { initialDirectContextState } from './direct-context.js';
+import { foldFact } from './fold-fact.js';
+import { createDirectQueueState, directQueueSteeredInput } from './direct-queue.js';
+import { isDirectCommandFactType, recoverDirectCommands } from './direct-command-receipts.js';
+import { isDirectNotificationFactType } from './direct-notifications.js';
 
 export type DirectDisplayTool = DirectToolDisplay & {
   /** A model call is not evidence that its physical body started. */
@@ -72,10 +63,8 @@ export function directDraftId(turnId: TurnId, modelStep?: number): string {
 
 /** Applies one accepted fact without mutating any previously captured snapshot. */
 export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0): DirectPublicState {
-  if (isDirectNotificationFactType(fact.type))
-    return { ...state, notifications: reduceDirectNotifications(state.notifications, fact as DirectNotificationFact) };
-  if (isDirectCommandFactType(fact.type))
-    return { ...state, commands: reduceDirectCommandReceipts(state.commands, fact as DirectCommandFact) };
+  if (isDirectNotificationFactType(fact.type) || isDirectCommandFactType(fact.type))
+    return { ...state, ...foldFact({ notifications: state.notifications, commands: state.commands }, fact) };
   const timeline = [...state.timeline];
   const add = (
     kind: import('./facade-types.js').DirectTimelineEntry['kind'],
@@ -113,9 +102,10 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
   }
   if (fact.type === 'tool_started' || fact.type === 'tool_finished') add('tool', fact.executionId, fact.turnId);
   if (fact.type === 'task_started') add('task', fact.task.taskId, fact.task.parentTurnId);
-  state = { ...state, timeline, context: reduceDirectContext(state.context, fact, state.queue.records) };
+  const folded = foldFact({ context: state.context, queue: state.queue, tasks: state.tasks }, fact);
+  state = { ...state, timeline, context: folded.context };
   if (isDirectTaskFact(fact)) {
-    const tasks = reduceDirectBackground(state.tasks, fact);
+    const tasks = folded.tasks;
     const rootRequests = state.pendingInteractions.filter((request) => !('taskId' in request));
     return {
       ...state,
@@ -128,7 +118,7 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
     for (const item of input)
       if (item.type === 'user_message')
         add('message', item.id, fact.type === 'queue_steered' ? fact.turnId : undefined);
-    const queue = reduceDirectQueue(state.queue, fact);
+    const queue = folded.queue;
     return {
       ...state,
       queue,
@@ -398,7 +388,10 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
 /** Reopening cannot resurrect a live interaction or claim an unobserved effect finished. */
 export function interruptedDirectState(state: DirectPublicState): DirectPublicState {
   const unfinished = state.tasks.some((task) => ['running', 'waiting_for_answer', 'cancelling'].includes(task.status));
-  const commands = recoverDirectCommands(state.commands).reduce(reduceDirectCommandReceipts, state.commands);
+  const commands = recoverDirectCommands(state.commands).reduce(
+    (receipts, fact) => foldFact({ commands: receipts }, fact).commands,
+    state.commands,
+  );
   if (!state.activeTurnId && !unfinished) return { ...state, commands };
   return {
     ...state,

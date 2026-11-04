@@ -4,33 +4,27 @@ import type { ModelError } from '../model/index.js';
 import type { ConversationLog } from './log.js';
 import type { Fact, FactLine } from './facts.js';
 import { isDirectTaskFact, isDirectQueueFact } from './facts.js';
-import { initialDirectContextState, reduceDirectContext } from './direct-context.js';
-import { createDirectQueueState, reduceDirectQueue } from './direct-queue.js';
-import { reduceDirectBackground, recoverDirectBackground } from './direct-background-replay.js';
+import { initialDirectContextState } from './direct-context.js';
+import { createDirectQueueState } from './direct-queue.js';
+import { recoverDirectBackground } from './direct-background-replay.js';
+import { foldFact, type FoldState } from './fold-fact.js';
 import type { DirectTaskState } from './direct-background-types.js';
-import {
-  isDirectCommandFactType,
-  reduceDirectCommandReceipts,
-  recoverDirectCommands,
-} from './direct-command-receipts.js';
-import type { DirectCommandFact, DirectCommandReceipts } from './direct-command-types.js';
-import {
-  isDirectNotificationFactType,
-  reduceDirectNotifications,
-  type DirectNotificationFact,
-  type DirectNotificationState,
-} from './direct-notifications.js';
+import { recoverDirectCommands } from './direct-command-receipts.js';
+import type { DirectCommandReceipts } from './direct-command-types.js';
+import type { DirectNotificationState } from './direct-notifications.js';
 import type { bindDirectCapabilities } from './direct-capabilities.js';
 import { replay } from './replay.js';
 
 /** One synchronous durable boundary shared by root, command and background acceptance. */
 export class ConversationJournal {
-  #commandReceipts: DirectCommandReceipts = [];
   #historyRevision = 0;
-  #notifications: DirectNotificationState = { notices: [], deliveries: [] };
-  #context = initialDirectContextState();
-  #queueState = createDirectQueueState();
-  #taskStates: readonly DirectTaskState[] = [];
+  #folded: Required<Omit<FoldState, 'queueRecords'>> = {
+    commands: [],
+    notifications: { notices: [], deliveries: [] },
+    context: initialDirectContextState(),
+    queue: createDirectQueueState(),
+    tasks: [],
+  };
   readonly #requestIds = new Set<InteractionRequestId>();
   #recoveryMaterialized = false;
   /** Hook status is folded from each accepted fact once, never rescanned from the whole log. */
@@ -48,14 +42,8 @@ export class ConversationJournal {
     },
   ) {
     for (const fact of this.facts) {
-      if (isDirectCommandFactType(fact.type))
-        this.#commandReceipts = reduceDirectCommandReceipts(this.#commandReceipts, fact as DirectCommandFact);
-      if (isDirectNotificationFactType(fact.type))
-        this.#notifications = reduceDirectNotifications(this.#notifications, fact as DirectNotificationFact);
+      this.#folded = foldFact(this.#folded, fact);
       if (changesRootHistory(fact)) ++this.#historyRevision;
-      this.#context = reduceDirectContext(this.#context, fact, this.#queueState.records);
-      if (isDirectQueueFact(fact)) this.#queueState = reduceDirectQueue(this.#queueState, fact);
-      if (isDirectTaskFact(fact)) this.#taskStates = reduceDirectBackground(this.#taskStates, fact);
       if (fact.type === 'interaction_opened' || fact.type === 'task_interaction_opened')
         this.#requestIds.add(fact.request.requestId);
       this.#foldStatus(fact);
@@ -88,22 +76,22 @@ export class ConversationJournal {
     return this.#failure;
   }
   get commandReceipts(): DirectCommandReceipts {
-    return this.#commandReceipts;
+    return this.#folded.commands;
   }
   get historyRevision(): number {
     return this.#historyRevision;
   }
   get notifications(): Readonly<DirectNotificationState> {
-    return this.#notifications;
+    return this.#folded.notifications;
   }
   get context() {
-    return this.#context;
+    return this.#folded.context;
   }
   get queueState() {
-    return this.#queueState;
+    return this.#folded.queue;
   }
   get taskStates(): readonly DirectTaskState[] {
-    return this.#taskStates;
+    return this.#folded.tasks;
   }
   readonly poison = (error: unknown): void => {
     if (this.#failure) return;
@@ -115,20 +103,10 @@ export class ConversationJournal {
   readonly commit = (next: readonly Fact[]): boolean => {
     if (this.#failure) return false;
     if (next.length === 0) return true;
-    let projectedNotices = this.#notifications;
-    let projectedReceipts = this.#commandReceipts;
-    let projectedContext = this.#context;
-    let projectedQueue = this.#queueState;
-    let projectedTasks = this.#taskStates;
+    let projected = this.#folded;
     const reserved = new Set<InteractionRequestId>();
     for (const fact of next) {
-      if (isDirectNotificationFactType(fact.type))
-        projectedNotices = reduceDirectNotifications(projectedNotices, fact as DirectNotificationFact);
-      if (isDirectCommandFactType(fact.type))
-        projectedReceipts = reduceDirectCommandReceipts(projectedReceipts, fact as DirectCommandFact);
-      projectedContext = reduceDirectContext(projectedContext, fact, projectedQueue.records);
-      if (isDirectQueueFact(fact)) projectedQueue = reduceDirectQueue(projectedQueue, fact);
-      if (isDirectTaskFact(fact)) projectedTasks = reduceDirectBackground(projectedTasks, fact);
+      projected = foldFact(projected, fact);
       if (fact.type === 'interaction_opened' || fact.type === 'task_interaction_opened') {
         if (reserved.has(fact.request.requestId) || this.#requestIds.has(fact.request.requestId))
           throw new Error('Duplicate Session interaction request ID');
@@ -142,12 +120,8 @@ export class ConversationJournal {
       this.poison(error);
       return false;
     }
-    this.#notifications = projectedNotices;
-    this.#commandReceipts = projectedReceipts;
+    this.#folded = projected;
     this.#historyRevision += next.filter(changesRootHistory).length;
-    this.#context = projectedContext;
-    this.#queueState = projectedQueue;
-    this.#taskStates = projectedTasks;
     for (const requestId of reserved) this.#requestIds.add(requestId);
     for (const fact of next) this.facts.push(fact);
     for (const line of lines) this.sink.accepted(line);
@@ -172,7 +146,7 @@ export class ConversationJournal {
     if (this.#recoveryMaterialized) return !this.#failure;
     const recovered = replay(this.facts);
     const taskRecovery = recoverDirectBackground(this.facts.filter(isDirectTaskFact), Date.now());
-    if (!this.commit([...recovered.recoveryFacts, ...taskRecovery, ...recoverDirectCommands(this.#commandReceipts)]))
+    if (!this.commit([...recovered.recoveryFacts, ...taskRecovery, ...recoverDirectCommands(this.#folded.commands)]))
       return false;
     this.#recoveryMaterialized = true;
     return true;

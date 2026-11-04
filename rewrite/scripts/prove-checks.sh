@@ -14,6 +14,7 @@ seed() { # name, file, content, command...
 seed "wire event built outside protocol/" rewrite/src/clients/tui/draft.ts $'\nexport const seededWire = { sessionId: "s", seq: 1, turnId: null, type: "text_delta", payload: {} };\n' node rewrite/scripts/check-rules.mjs
 seed "file named service" rewrite/src/app/seeded-service.ts $'export const seeded = 1;\n' node rewrite/scripts/check-rules.mjs
 seed "new unused export" rewrite/src/app/settings.ts $'\nexport function seededUnusedExport() { return 1; }\n' node rewrite/scripts/check-rules.mjs
+seed "leaf reducer imported outside foldFact" rewrite/src/app/settings.ts $'\nimport { reduceDirectQueue } from "../session/direct-queue-state.js";\nexport const seededFold = reduceDirectQueue;\n' node rewrite/scripts/check-rules.mjs
 seed "app/ reads a session log" rewrite/src/app/settings.ts $'\nexport const seededReader = readFactLines;\n' node rewrite/scripts/check-layers.mjs
 seed "engine imports app (layer direction)" rewrite/src/engine/turn.ts $'\nimport "../app/settings.js";\n' node rewrite/scripts/check-layers.mjs
 seed "file never reached from app/cli.ts" rewrite/src/app/seeded-dead.ts $'export const dead = 1;\n' node rewrite/scripts/check-reachability.mjs

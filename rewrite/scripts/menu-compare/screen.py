@@ -22,7 +22,9 @@ import struct
 import sys
 import tempfile
 import termios
+import difflib
 import fcntl
+import fnmatch
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -38,6 +40,8 @@ CLIS = {
     'legacy': os.path.join(REPO, 'dist', 'cli.js'),
     'next': os.path.join(REPO, 'rewrite', 'dist', 'rewrite', 'src', 'app', 'cli.js'),
 }
+# FULL=1 compares the whole transcript (scrollback and screen) instead of the menu region.
+FULL = bool(os.environ.get('FULL'))
 MODELS = ['mock-alpha', 'mock-beta', 'mock-gamma', 'gpt-test-mini']
 
 
@@ -46,6 +50,9 @@ class Provider(BaseHTTPRequestHandler):
     # {'tool': name, 'args': {...}}; 'hold' keeps the stream open after the text. Set from the scenario's SEED['replies'].
     replies = [{'text': 'done'}]
     posts = 0
+    # {'prompt_tokens': n, 'completion_tokens': n, 'cached': n?}: sent in a final usage chunk after every reply
+    # (SEED['usage']); None sends no usage.
+    usage = None
 
     def log_message(self, *args):
         pass
@@ -62,8 +69,9 @@ class Provider(BaseHTTPRequestHandler):
         if not self.path.endswith('/chat/completions'):
             return self.do_GET()
         self.rfile.read(int(self.headers.get('content-length', 0)))
-        reply = Provider.replies[min(Provider.posts, len(Provider.replies) - 1)]
-        Provider.posts += 1
+        state = type(self)
+        reply = state.replies[min(state.posts, len(state.replies) - 1)]
+        state.posts += 1
         self.send_response(200)
         self.send_header('content-type', 'text/event-stream')
         self.end_headers()
@@ -74,21 +82,37 @@ class Provider(BaseHTTPRequestHandler):
             self.wfile.write(b'data: ' + json.dumps(chunk).encode() + b'\n\n')
 
         if 'tool' in reply:
-            call = {'index': 0, 'id': f'call{Provider.posts}', 'type': 'function',
+            call = {'index': 0, 'id': f'call{state.posts}', 'type': 'function',
                     'function': {'name': reply['tool'], 'arguments': json.dumps(reply['args'])}}
             event({'role': 'assistant', 'tool_calls': [call]})
             event({}, 'tool_calls')
         else:
-            event({'role': 'assistant', 'content': reply['text']})
+            # 'chunks': stream the text in that many pieces, 'delay' seconds apart (default one piece).
+            text, pieces = reply['text'], max(1, reply.get('chunks', 1))
+            size = -(-len(text) // pieces)
+            for i in range(0, len(text), size):
+                event({'role': 'assistant', 'content': text[i:i + size]} if i == 0 else {'content': text[i:i + size]})
+                if pieces > 1:
+                    self.wfile.flush()
+                    time.sleep(reply.get('delay', 0.1))
             if reply.get('hold'):  # keep the turn streaming so a scenario can act mid-turn
                 self.wfile.flush()
                 time.sleep(reply['hold'])
             event({}, 'stop')
+        usage = reply.get('usage', state.usage)
+        if usage:
+            total = {'prompt_tokens': usage['prompt_tokens'], 'completion_tokens': usage['completion_tokens'],
+                     'total_tokens': usage['prompt_tokens'] + usage['completion_tokens'],
+                     'prompt_tokens_details': {'cached_tokens': usage.get('cached', 0)}}
+            self.wfile.write(b'data: ' + json.dumps({'id': 'r', 'object': 'chat.completion.chunk', 'model': 'mock-alpha',
+                                                      'choices': [], 'usage': total}).encode() + b'\n\n')
         self.wfile.write(b'data: [DONE]\n\n')
 
 
 def start_provider():
-    server = ThreadingHTTPServer(('127.0.0.1', 0), Provider)
+    # A handler class per server, so runs in parallel threads (JOBS) keep their own scripted replies.
+    handler = type('RunProvider', (Provider,), {})
+    server = ThreadingHTTPServer(('127.0.0.1', 0), handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return server
 
@@ -148,14 +172,23 @@ KEYS = {
 
 def expand(step):
     out = []
-    for part in re.split(r'(<[a-z-]+>)', step):
+    for part in re.split(r'(<[a-z0-9-]+>)', step):
         out.append(KEYS.get(part, part))
     return ''.join(out)
 
 
+class Screen(pyte.HistoryScreen):
+    """A screen that keeps scrollback, and drops it on ESC[3J as a terminal does."""
+
+    def erase_in_display(self, how=0, *args, **kwargs):
+        if how == 3:
+            self.history.top.clear()
+        super().erase_in_display(how, *args, **kwargs)
+
+
 class Term:
     def __init__(self, cli, cols, rows, env, cwd):
-        self.screen = pyte.Screen(cols, rows)
+        self.screen = Screen(cols, rows, history=5000)
         self.stream = pyte.ByteStream(self.screen)
         self.pid, self.fd = pty.fork()
         if self.pid == 0:
@@ -194,8 +227,16 @@ class Term:
         return False
 
     def send(self, keys):
-        for chunk in re.split(r'(<[a-z-]+>)', keys):
+        for chunk in re.split(r'(<[a-z0-9-]+>)', keys):
             if not chunk:
+                continue
+            m = re.fullmatch(r'<resize-(\d+)x(\d+)>', chunk)
+            if m:
+                cols, rows = int(m.group(1)), int(m.group(2))
+                self.screen.resize(rows, cols)
+                fcntl.ioctl(self.fd, termios.TIOCSWINSZ, struct.pack('HHHH', rows, cols, 0, 0))
+                os.kill(self.pid, signal.SIGWINCH)
+                self.pump(quiet=1.0, limit=5.0)
                 continue
             if chunk == '<sleep>':
                 # Let slow asynchronous work (conversation listing, catalogues) finish before capturing.
@@ -224,6 +265,8 @@ MASKS = [
     (re.compile(r'\b\d+ (second|minute|hour)s? ago|\b\d+ [a-z]*…'), '<dur> ago'),
     (re.compile(r'(/tmp|/private)?/[\w.-]*menucmp[\w./-]*'), '<path>'),
     (re.compile(r'\b\d+(\.\d+)?(ms|s)\b'), '<dur>'),
+    # Stream rates depend on timing; keep their format (brackets, `~`, unit), mask the number.
+    (re.compile(r'\d+(\.\d+)?(?= ?(tok/s|t/s))'), '<n>'),
 ]
 
 
@@ -242,10 +285,11 @@ def mask_row(text):
     return re.sub(r'(<id>) +', r'\1 ', masked), False
 
 
-def capture(screen):
+def capture(screen, history=False):
+    """The visible screen, after the scrollback when `history` is set."""
     lines, styles = [], []
-    for y in range(screen.lines):
-        row = screen.buffer[y]
+    rows = (list(screen.history.top) if history else []) + [screen.buffer[y] for y in range(screen.lines)]
+    for row in rows:
         text = ''.join(row[x].data for x in range(screen.columns))
         masked, comparable = mask_row(text)
         lines.append(masked.rstrip())
@@ -263,9 +307,11 @@ def capture(screen):
 
 def run(cli, cols, rows, name):
     scenario = SCENARIOS[name]
-    Provider.replies = [{'text': 'Noted.'}]  # for the earlier sessions
-    Provider.posts = 0
     server = start_provider()
+    provider = server.RequestHandlerClass
+    provider.replies = [{'text': 'Noted.'}]  # for the earlier sessions
+    provider.posts = 0
+    provider.usage = None
     root = tempfile.mkdtemp(prefix='menucmp-')
     try:
         seed = SEED.get(name, {})
@@ -289,8 +335,9 @@ def run(cli, cols, rows, name):
             finally:
                 earlier.close()
             time.sleep(0.5)
-        Provider.replies = seed.get('replies', [{'text': 'done'}])
-        Provider.posts = 0
+        provider.replies = seed.get('replies', [{'text': 'done'}])
+        provider.usage = seed.get('usage')
+        provider.posts = 0
         term = Term(cli, cols, rows, env, cwd)
         try:
             term.wait_for('mockprov', 45)
@@ -298,7 +345,7 @@ def run(cli, cols, rows, name):
             for step in scenario:
                 term.send(step)
                 term.pump(quiet=0.6, limit=8)
-            return capture(term.screen)
+            return capture(term.screen, history=FULL)
         finally:
             term.close()
     finally:
@@ -328,27 +375,40 @@ def menu_region(cap, notice=False):
     return {'lines': lines[start:end], 'styles': cap['styles'][start:end]}
 
 
+def full_region(cap):
+    """Scrollback and screen, without trailing blank rows (FULL=1)."""
+    end = len(cap['lines'])
+    while end > 0 and not cap['lines'][end - 1].strip():
+        end -= 1
+    return {'lines': cap['lines'][:end], 'styles': cap['styles'][:end]}
+
+
 def compare(cols, rows, names):
     results = {}
+    # JOBS=n runs n scenarios at once (both CLIs of a scenario run side by side as well).
+    from concurrent.futures import ThreadPoolExecutor
+    pool = ThreadPoolExecutor(max_workers=2 * max(1, int(os.environ.get('JOBS', '1'))))
+    futures = {name: (pool.submit(run, 'legacy', cols, rows, name), pool.submit(run, 'next', cols, rows, name))
+               for name in names}
     for name in names:
         notice = SEED.get(name, {}).get('notice', False)
-        a = menu_region(run('legacy', cols, rows, name), notice)
-        b = menu_region(run('next', cols, rows, name), notice)
+        a = full_region(futures[name][0].result()) if FULL else menu_region(futures[name][0].result(), notice)
+        b = full_region(futures[name][1].result()) if FULL else menu_region(futures[name][1].result(), notice)
         same_text = a['lines'] == b['lines']
         same_style = a['styles'] == b['styles']
         results[name] = {'text': same_text, 'style': same_style, 'legacy': a, 'next': b}
         status = 'identical' if same_text and same_style else ('differs(style)' if same_text else 'differs(text)')
         print(f'{cols}x{rows} {name}: {status}', flush=True)
         if os.environ.get('VERBOSE') and status != 'identical':
-            for i in range(max(len(a['lines']), len(b['lines']))):
-                la = a['lines'][i] if i < len(a['lines']) else '<none>'
-                lb = b['lines'][i] if i < len(b['lines']) else '<none>'
-                sa = a['styles'][i] if i < len(a['styles']) else None
-                sb = b['styles'][i] if i < len(b['styles']) else None
-                if la != lb:
-                    print(f'  L{i:2}|{la}\n  N{i:2}|{lb}')
-                elif sa != sb:
-                    print(f'  style {i:2}|{la}\n    L {sa}\n    N {sb}')
+            if not same_text:  # rows as a unified diff (- legacy, + next), so one extra row does not shift the rest
+                for line in difflib.unified_diff(a['lines'], b['lines'], 'legacy', 'next', n=1, lineterm=''):
+                    print(f'  {line}')
+            matcher = difflib.SequenceMatcher(None, a['lines'], b['lines'], autojunk=False)
+            for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+                for i, j in zip(range(i1, i2), range(j1, j2)) if tag == 'equal' else []:
+                    if a['styles'][i] != b['styles'][j]:
+                        print(f'  style L{i}/N{j}|{a["lines"][i]}\n    L {a["styles"][i]}\n    N {b["styles"][j]}')
+        sys.stdout.flush()
     return results
 
 
@@ -368,7 +428,8 @@ if __name__ == '__main__':
                     print(i, s)
     elif cmd == 'compare':
         cols, rows = int(sys.argv[2]), int(sys.argv[3])
-        names = sys.argv[4:] or list(SCENARIOS)
+        # Names may be globs, e.g. 't-*' for every transcript scenario.
+        names = [n for arg in sys.argv[4:] for n in (fnmatch.filter(SCENARIOS, arg) or [arg])] or list(SCENARIOS)
         out = compare(cols, rows, names)
         dump = os.environ.get('DUMP')
         if dump:

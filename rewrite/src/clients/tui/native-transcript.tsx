@@ -82,13 +82,9 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
         messages.delete(entry.id);
       } else {
         const tool = tools.get(entry.id);
-        // Legacy keeps a run of consecutive tool calls live until the run is closed (a later
-        // message arrives or the turn settles), so Static never freezes a partial group.
-        const openRun =
-          tool &&
-          state.activeTurnId &&
-          tool.turnId === state.activeTurnId &&
-          state.timeline.slice(i + 1).every((later) => later.kind === 'tool');
+        // Legacy keeps a trailing run of consecutive tool calls live until a later message closes it, even
+        // after the turn ends (findOpenTrailingCommandRunStart), so Static never freezes a partial group.
+        const openRun = tool && state.timeline.slice(i + 1).every((later) => later.kind === 'tool');
         if (!tool || tool.status === 'pending' || tool.status === 'running' || tool.outcomeUnknown || openRun) {
           reachedEnd = false;
           break;
@@ -100,9 +96,9 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
     return { next, reachedEnd, orphans: messages.size + tools.size };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.timeline, state.messages, state.tools, state.activeTurnId, draftIds]);
-  // Legacy MessageList (shouldCommitMessageToStatic): while idle, a finished row that was never live (a system line,
-  // or every row after a redraw remounts the list) stays in the live region for one render, and is committed on the
-  // next one. Resumed history and rows that were live (a reply replacing its draft) commit at once.
+  // Legacy MessageList (shouldCommitMessageToStatic): with nothing live below, a finished row that was never live (a
+  // system line, or every row after a redraw remounts the list) stays in the live region for one render, and is
+  // committed on the next one. Resumed history and rows that were live (a reply replacing its draft) commit at once.
   const commit = useRef<{
     epoch: number;
     signature: string | null;
@@ -123,8 +119,11 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
     const rendered = remounted || signature !== memory.signature;
     const deferred = new Set<string>(rendered ? [] : memory.candidates);
     // A remount starts legacy's list afresh: every row waits for its next render, whatever waited before.
+    // Legacy's hasActiveMessages: anything still streaming or running below the settled rows.
+    const live =
+      !reachedEnd || orphans > 0 || Object.keys(state.drafts).length > 0 || Object.keys(state.reasoning).length > 0;
     const fresh = (row: Row) =>
-      !state.activeTurnId &&
+      !live &&
       !row.message?.replacesDraftId &&
       (remounted || (memory.candidates.has(row.key) ? !rendered : memory.seen !== null && !memory.seen.has(row.key)));
     commit.current = {

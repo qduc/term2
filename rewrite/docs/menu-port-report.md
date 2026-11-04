@@ -392,7 +392,8 @@ This also settles the acceptance case below: the "Decline to answer" and "Stop a
 None of these appear in a captured menu branch. They are behaviour around the menus.
 
 - **Settings are session-only in term2-next.** Next's settings service runs with `disableFilePersistence`. A value saved from `/settings` applies for the session but isn't written to `settings.json`, as it is in legacy. This is a deliberate next design choice. The menu shows the same provenance markers, because `getSource` maps a session-only value back to its saved source.
-- **Ctrl+O.** Legacy binds Ctrl+O to `/model `. Next uses Ctrl+O for the tool-output viewer, which is wired into the transcript. That conflict is the owner's call, so it was left alone. The hints and `/help` keep legacy's "Ctrl+O model" text.
+- **Tool-output expansion is gone.** Legacy's Ctrl+O replaces the draft with `/model ` (`use-app-keyboard-shortcuts.ts:365`), and so does next's now (`ctrl-o-*` scenarios, identical at both sizes). Next's tool-output viewer, which used Ctrl+O, has no key left, because legacy has none to give it. The supervisor chose this (option a). The unreachable viewer code stays for builder-c to delete.
+- **"Resumed conversation: <id>"** shows just above the composer divider in next, as the switch's transition notice. Legacy writes it into the transcript two rows higher.
 - **The next-only slash commands** are `/answer /cancel /command-apply /command-status /exit /followup /queue /rollover /steer /tasks`.
   - They are gone from the slash menu and `/help`.
   - Their dispatch was kept, because the e2e drivers and receipt notices type them.
@@ -413,7 +414,7 @@ These six supervisor queue files were readable and were checked against the capt
 |---|---|
 | `build-tui-menu-visual-parity` | The slash menu, `/settings`, `/profile`, `/resume` and the model picker are legacy's components, and the captures are identical apart from the scope rows. `/resume` with no saved sessions matches legacy (`resume-empty`). The ten next-only commands are gone from the menu and `/help`, but stay dispatchable (see above). `/lite` is back as a Bare toggle. |
 | `build-tui-menu-pickers-missing` | `/profile`, `/providers` (list, wizard, edit, review, delete), `/skills` and `/auto-approve` open legacy's pickers, all identical. `/mcp` is dropped by scope. `/effort` and Ctrl+T are identical. |
-| `build-tui-model-picker-actions` | Legacy's footer, failed-provider notice and scrollbar (`model-failing`), and the Favorites tab, are identical. Nickname set, edit, clear and replace, and refresh, are identical (`model-nick-*`, `model-refresh`). The Ctrl+O decision is left to the owner (see above). |
+| `build-tui-model-picker-actions` | Legacy's footer, failed-provider notice and scrollbar (`model-failing`), and the Favorites tab, are identical. Nickname set, edit, clear and replace, and refresh, are identical (`model-nick-*`, `model-refresh`). Ctrl+O opens the picker as in legacy, replacing the draft (`ctrl-o-*`). |
 | `build-tui-settings-editors` | Rows use legacy's aligned table and value formats. Enum, boolean, number, duration, text, list, secret and model rows open legacy's editors. All seven tabs are identical (`settings-*`), apart from the first-run artifact. |
 | `build-tui-question-menu-extra-entries` | Dropped by scope: the question menu is unreachable without the dropped profiles. |
 | `build-tui-rewind-picker-parity` | `/undo` prints legacy's notice and opens rewind edit, with legacy's rows and footer. Tab resend works (`undo-open`, `rewind-*`, `rewind-resend`, `rewind-tab`), and every branch is identical. |
@@ -443,4 +444,7 @@ The supervisor's real-terminal side-by-side check (`rewrite/parity/real-terminal
 | 54–55 resume list layout and entries | `resume-*` | identical (ids masked) |
 | 56 PgDn in the resume list | `resume-pgdn` | identical, after a fix: next listed 10 entries where legacy lists 9. Legacy counts the session in use toward its 10 and then hides it. |
 | 59 `@` menu | `path-*` | identical |
+| Ctrl+O, idle or mid-stream (supervisor case) | `ctrl-o-*` | identical. The draft is replaced, as in legacy. |
+| Resume: Enter on a listed session (supervisor case a) | `resume-enter` | The replay matches. "Resumed conversation: <id>" now prints, two rows lower than legacy's (see above). There's no blank prompt with a store written by real runs. |
+| Resume: filter as you type (supervisor case b) | `resume-filter`, `resume-filter-none` | identical |
 

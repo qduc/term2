@@ -227,7 +227,7 @@ async function runDirectVerifier(
       let isError = false;
       if (call.toolName !== PROBE) {
         denied = true;
-        output = toolFailure(new Error(`Tool ${call.toolName} not found`));
+        output = `Unknown tool: ${call.toolName}`;
         isError = true;
       } else {
         const valid = probeInput.safeParse(call.input);

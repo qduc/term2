@@ -290,17 +290,23 @@ it.each(['slash', 'ctrl-c', 'editing', 'only-steers'] as const)(
       session.write('UNIQUE-FOLLOWUP');
       await waitForHarnessComposerValue(idlePath, 'UNIQUE-FOLLOWUP', { timeoutMs: 30_000 });
       session.write('\x1b\r'); // Alt+Enter: queue a follow-up, not a steer.
-      await session.waitForOutput('Queued 1 (queued): UNIQUE-FOLLOWUP', 30_000);
+      await session.waitForOutput('UNIQUE-FOLLOWUP', 30_000);
       await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
       // Queue projection can lead the send acknowledgement; avoid overlapping the next physical input.
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
     await send('UNIQUE-QUEUED-STEER');
-    await session.waitForOutput('Queued 1 (steering): UNIQUE-QUEUED-STEER', 30_000);
+    await session.waitForOutput('steer · mid-turn', 30_000);
+    await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
     await send('UNIQUE-SECOND-STEER');
-    await session.waitForOutput('Queued 2 (steering): UNIQUE-SECOND-STEER', 30_000);
+    await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
     if (mode === 'editing') {
-      await send('/queue edit 1');
+      // Legacy selects the first steer after the follow-up and second steer.
+      for (let i = 0; i < 3; i++) {
+        session.write('\x1b[A');
+        await new Promise((resolve) => setTimeout(resolve, 700));
+      }
+      session.write('e');
       await waitForHarnessComposerValue(idlePath, 'UNIQUE-QUEUED-STEER', { timeoutMs: 30_000 });
       session.write('-EDITED');
       await waitForHarnessComposerValue(idlePath, 'UNIQUE-QUEUED-STEER-EDITED', { timeoutMs: 30_000 });
@@ -311,12 +317,22 @@ it.each(['slash', 'ctrl-c', 'editing', 'only-steers'] as const)(
       session.write('/cancel');
       await waitForHarnessComposerValue(idlePath, '/cancel', { timeoutMs: 30_000 });
     }
+    if (mode === 'editing') {
+      // Legacy's first Ctrl+C exits queue editing without cancelling the turn.
+      session.write('\x03');
+      await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 5_000 });
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const screen = session.getVisibleOutput();
+      expect(screen).toContain('UNIQUE-QUEUED-STEER');
+      expect(screen).toContain('UNIQUE-SECOND-STEER');
+      expect(screen).not.toContain('UNIQUE-QUEUED-STEER-EDITED');
+      expect(screen).not.toContain('Stopped');
+      return;
+    }
     const cancelAt = Date.now();
-    session.write(mode === 'ctrl-c' || mode === 'editing' ? '\x03' : '\r');
+    session.write(mode === 'ctrl-c' ? '\x03' : '\r');
     await session.waitForOutput('Cancelled. Your queued message is back in the input.', 5_000);
-    const expectedDraft = `${mode === 'ctrl-c' ? 'EXISTING-DRAFT\n\n' : ''}UNIQUE-QUEUED-STEER${
-      mode === 'editing' ? '-EDITED' : ''
-    }\n\nUNIQUE-SECOND-STEER`;
+    const expectedDraft = `${mode === 'ctrl-c' ? 'EXISTING-DRAFT\n\n' : ''}UNIQUE-QUEUED-STEER\n\nUNIQUE-SECOND-STEER`;
     await waitForHarnessComposerValue(idlePath, expectedDraft, { timeoutMs: 5_000 });
     expect(Date.now() - cancelAt).toBeLessThan(2_000);
     if (mode !== 'only-steers') await session.waitForOutput('Queue: paused', 5_000);

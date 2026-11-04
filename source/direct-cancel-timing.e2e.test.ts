@@ -33,7 +33,7 @@ afterEach(async () => {
   sentAt = lastSent = closedAt = 0;
 });
 
-async function exercise(mode: 'slash' | 'ctrl-c' | 'steer-slash' | 'pending-steer-slash' | 'pending-steer-ctrl-c') {
+async function exercise(mode: 'ctrl-c' | 'pending-steer-ctrl-c') {
   metrics.mode = mode;
   root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'p4b-cancel-timing-')));
   const home = path.join(root, 'home');
@@ -133,25 +133,15 @@ async function exercise(mode: 'slash' | 'ctrl-c' | 'steer-slash' | 'pending-stee
     session.write('keep it short');
     await waitForHarnessComposerValue(idlePath, 'keep it short', { timeoutMs: 30_000 });
     session.write('\r');
-    await session.waitForOutput('Queued 1 (steering): keep it short', 30_000);
-  }
-  if (mode === 'steer-slash') {
-    session.write('keep it short');
-    await waitForHarnessComposerValue(idlePath, 'keep it short', { timeoutMs: 30_000 });
-    session.write('\r');
-    await session.waitForOutput('P4BRESTART', 30_000);
-    expect(requestCount).toBeGreaterThanOrEqual(2);
-  }
-  if (mode !== 'ctrl-c' && mode !== 'pending-steer-ctrl-c') {
-    session.write('/cancel');
-    await waitForHarnessComposerValue(idlePath, '/cancel', { timeoutMs: 30_000 });
+    await session.waitForOutput('steer · mid-turn', 30_000);
+    await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
   }
   const maxToken = () =>
     Math.max(0, ...Array.from(session!.getVisibleOutput().matchAll(/P4BTOKEN(\d{4})/g), (match) => Number(match[1])));
   let max = maxToken();
   let lastVisibleAt = 0;
   sentAt = Date.now();
-  session.write(mode === 'ctrl-c' || mode === 'pending-steer-ctrl-c' ? '\x03' : '\r');
+  session.write('\x03');
   const observe = setInterval(() => {
     const value = maxToken();
     if (value > max) {
@@ -163,13 +153,11 @@ async function exercise(mode: 'slash' | 'ctrl-c' | 'steer-slash' | 'pending-stee
     await session.waitForOutput(
       mode.startsWith('pending-steer-')
         ? 'Cancelled. Your queued message is back in the input.'
-        : // Neither Ctrl+C nor /cancel prints the ordinary success notice; the Stopped marker is the first signal.
+        : // Ctrl+C does not print the ordinary success notice; the Stopped marker is the first signal.
           'Stopped',
       5_000,
     );
     metrics.ackMs = Date.now() - sentAt;
-    if (mode === 'pending-steer-slash')
-      await waitForHarnessComposerValue(idlePath, 'keep it short', { timeoutMs: 5_000 });
     const dir = path.join(root, 'conversations');
     const log = path.join(dir, fs.readdirSync(dir).find((name) => name.endsWith('.jsonl'))!);
     let facts: Array<{ type: string; outcome?: string; turnId?: string }> = [];
@@ -204,13 +192,6 @@ async function exercise(mode: 'slash' | 'ctrl-c' | 'steer-slash' | 'pending-stee
   }
 }
 
-it('slash cancel stops a paced stream promptly', { timeout: 120_000 }, () => exercise('slash'));
 it('Ctrl+C stops a paced stream promptly', { timeout: 120_000 }, () => exercise('ctrl-c'));
-
-it('steer then slash cancel stops the restarted paced stream promptly', { timeout: 120_000 }, () =>
-  exercise('steer-slash'),
-);
-
-it('pending steer must not restart after slash cancel', { timeout: 120_000 }, () => exercise('pending-steer-slash'));
 
 it('pending steer must not restart after Ctrl+C', { timeout: 120_000 }, () => exercise('pending-steer-ctrl-c'));

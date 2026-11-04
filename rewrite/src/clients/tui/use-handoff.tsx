@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { useApp } from 'ink';
 import type { CommandResult, TuiConnection } from './integration.js';
 import type { TuiState } from './state.js';
 import { composeHandoffMessage, handoffFlowReducer, type HandoffAction, type HandoffState } from './handoff-flow.js';
@@ -31,8 +32,8 @@ export function useHandoff(options: {
   readonly menuOpen: boolean;
   readonly replaceInput: (text: string) => void;
   readonly notice: (text: string) => void;
-  /** Send a chat message as if typed. */
-  readonly send: (text: string) => void;
+  /** Send a chat message as if typed; settles once the send is admitted or refused. */
+  readonly send: (text: string) => Promise<void>;
 }) {
   const { holder, state, connection, menuOpen, replaceInput, notice, send } = options;
   const handoff = holder?.state ?? null;
@@ -40,7 +41,8 @@ export function useHandoff(options: {
   const sendAndFinish = (current: HandoffState) => {
     const { capturedText, handoffMessage } = current;
     holder?.set(null);
-    if (capturedText) send(composeHandoffMessage({ capturedText, handoffMessage, stage: current.stage }));
+    if (!capturedText) return Promise.resolve();
+    return send(composeHandoffMessage({ capturedText, handoffMessage, stage: current.stage }));
   };
   // Legacy clearConversationAndRefreshBanner: the new session opens under the boundary with no welcome line.
   const clear = async (next: NonNullable<HandoffHolder['state']>) => {
@@ -57,8 +59,27 @@ export function useHandoff(options: {
   // After Yes the new session opens the model menu; after No it sends straight away.
   useEffect(() => {
     if (handoff?.stage === 'selecting_model') replaceInput('/model ');
-    if (handoff?.sendOnOpen) sendAndFinish(handoff);
+    if (handoff?.sendOnOpen) void sendAndFinish(handoff);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Legacy completeHandoffWithEffort sends while the effort menu is still up, so the turn is painted under it
+  // and the menu closes on a later frame. `shown` resolves once the sent turn is in the transcript.
+  const { waitUntilRenderFlush } = useApp();
+  const shown = useRef<{ readonly count: number; readonly done: () => void } | null>(null);
+  useEffect(() => {
+    if (shown.current && state.messages.length > shown.current.count) shown.current.done();
+  });
+  const sendUnderMenu = async (current: HandoffState) => {
+    const count = state.messages.length;
+    const painted = new Promise<void>((done) => {
+      shown.current = { count, done };
+      setTimeout(done, 1_000); // a refused send adds no turn; close the menu anyway
+    });
+    await sendAndFinish(current);
+    await painted;
+    shown.current = null;
+    await waitUntilRenderFlush();
+  };
 
   // The model menu closing without a choice sends the captured handoff (legacy's controller subscription).
   const selected = useRef(false);
@@ -68,7 +89,7 @@ export function useHandoff(options: {
     wasOpen.current = menuOpen;
     if (!closed || handoff?.stage !== 'selecting_model') return;
     if (selected.current) selected.current = false;
-    else sendAndFinish(handoff);
+    else void sendAndFinish(handoff);
   });
 
   return {
@@ -109,7 +130,7 @@ export function useHandoff(options: {
       }
       if (handoff?.stage === 'selecting_effort' && text.startsWith('/effort ')) {
         const result = await run();
-        sendAndFinish(handoff);
+        await sendUnderMenu(handoff);
         return { ...result, message: undefined };
       }
       return run();

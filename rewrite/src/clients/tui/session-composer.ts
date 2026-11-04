@@ -10,9 +10,12 @@ import {
   cancelForegroundWithSteers,
   sendNativeCommand,
   previewConfirmation,
+  queueAction,
   receiptNotice,
   submitText,
+  WireCommandFailure,
 } from './commands.js';
+import { withSkillPrefix } from './skill-edit.js';
 import { randomUUID } from 'node:crypto';
 import type { TuiConnection } from './integration.js';
 import { useEditor } from './editor.js';
@@ -346,6 +349,50 @@ export function useSessionComposer(state: TuiState, historySize: number, onNotic
     });
     restoreDraft({ text: item.skillEdit?.request ?? item.text, attachments: parts ?? [] });
   };
+  /** Leaves a queued-message edit, restoring the draft it replaced; false when nothing was being edited. */
+  const cancelQueueEdit = () => {
+    if (!editing) return false;
+    replaceInput(editing.restoreText, editing.restoreCursor);
+    setImages(editing.restoreImages);
+    setOtherParts(editing.restoreOther);
+    setOriginalParts(editing.restoreOriginal);
+    setEditing(null);
+    return true;
+  };
+  /** Enter while editing a queued message: replaces it and returns the notice to show (null when superseded). */
+  const submitQueueEdit = async (
+    connection: TuiConnection,
+    clean: string,
+    submittedImages: readonly ImageRef[],
+    epoch: number,
+  ): Promise<string | null> => {
+    if (!editing) return null;
+    try {
+      const parts = wireAttachments(submittedImages, otherParts, originalParts);
+      if (!editing.knownParts && parts.length)
+        throw new Error('Queued attachments are unavailable; cannot safely replace them.');
+      const changed = editing.knownParts && JSON.stringify(parts) !== JSON.stringify(editing.knownParts);
+      await queueAction(
+        connection,
+        'edit',
+        editing.id,
+        withSkillPrefix(editing.skillPrefix, clean),
+        changed ? parts : undefined,
+      );
+      if (await wasEditInvalidatedAfter(epoch, editing.id)) return null;
+      cancelQueueEdit();
+      return 'Queued message updated.';
+    } catch (error) {
+      if (await wasEditInvalidatedAfter(epoch, editing.id, true)) return null;
+      if (error instanceof WireCommandFailure && error.code === 'too_late') {
+        setEditing(null);
+        return editing.knownParts
+          ? 'Queued input is no longer editable. Your edited draft and attachments are preserved; review before resubmitting.'
+          : 'Queued input is no longer editable. Your edited text is preserved, but original attachments were unavailable; review before resubmitting.';
+      }
+      throw error;
+    }
+  };
   const restoreRejected = async (submitted: string) => {
     // MultilineInput clears its local text immediately after calling onSubmit.
     await Promise.resolve();
@@ -386,6 +433,8 @@ export function useSessionComposer(state: TuiState, historySize: number, onNotic
     changeInput,
     restoreDraft,
     startQueueEdit,
+    cancelQueueEdit,
+    submitQueueEdit,
     answerOwners,
     queueOwners,
   };

@@ -12,7 +12,7 @@ export type HandoffHolder = {
   set(next: (HandoffState & { readonly sendOnOpen?: true }) | null): void;
 };
 
-export const HANDOFF_PROMPT_LABEL = 'Handoff message (enter to use default message): ';
+const HANDOFF_PROMPT_LABEL = 'Handoff message (enter to use default message): ';
 
 /**
  * Legacy useHandoffFlow/HandoffSession: /handoff asks for a message, then "Change model?"; Yes starts a new
@@ -44,12 +44,16 @@ export function useHandoff(options: {
   // Legacy clearConversationAndRefreshBanner: the new session opens under the boundary with no welcome line.
   const clear = async (next: NonNullable<HandoffHolder['state']>) => {
     holder?.set(next);
-    options.beginNewConversation?.([]);
     try {
-      const failure = await replaceSession(connection, '/clear', options.switchSession, []);
+      const failure = await replaceSession(
+        connection,
+        '/clear',
+        options.switchSession,
+        [],
+        options.beginNewConversation,
+      );
       if (failure !== null) throw new Error(failure);
     } catch (error) {
-      options.beginNewConversation?.(null);
       holder?.set(null);
       notice(error instanceof Error ? error.message : String(error));
     }

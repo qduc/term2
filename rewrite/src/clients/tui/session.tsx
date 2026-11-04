@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { randomUUID } from 'node:crypto';
 import { Box, Text, useInput } from 'ink';
 import { MultilineInput, type ImageRef } from 'ink-prompt';
@@ -14,34 +14,33 @@ import type { InteractionInputHandler } from './interaction-input.js';
 import { runBangShell } from './bang-shell.js';
 import { useInterrupt } from './interrupt.js';
 import { runQueueCommand } from './queue-command.js';
-import { withSkillPrefix } from './skill-edit.js';
 import { isCtrlG, isCtrlO, isCtrlT, isShiftTab, usePlanToggle } from './shift-tab.js';
 import { resolveTypedCommand } from './typed-command.js';
 import { REWIND_COMMAND, rewindItems, runRewindCommand } from './menus/rewind-command.js';
-import { cleanImageMarkers, primaryDraft, wireAttachments } from './draft.js';
+import { cleanImageMarkers, wireAttachments } from './draft.js';
 import { numberedInteractionAnswer } from './interaction-command.js';
 import { useSessionComposer } from './session-composer.js';
 import { useTerminalSize } from './terminal.js';
 import { useCommandTranscriptViewport } from './command-transcript.js';
 import { useHarnessInput } from './harness-input.js';
-import { replaceSession, WELCOME } from './replace-session.js';
+import { replaceSession } from './replace-session.js';
 import { runBridgeCommand } from './bridge-command.js';
+import { runCommandReceipt } from './command-receipt.js';
 import { useSendConfirmation } from './send-confirmation.js';
-import SessionBoundary from './presentation/components/message/SessionBoundary.js';
+import { BOUNDARY_ROWS, useNewConversationHeader } from './new-conversation.js';
 import { useMenuStack } from './menus/menu-host.js';
 import { ComposerFooter, useComposerFilter } from './composer-parts.js';
 import { SessionPanels } from './session-panels.js';
 import { useSessionRewind } from './session-rewind.js';
 import { useEscapeKey } from './use-escape-key.js';
+import { useShellMode } from './shell-mode.js';
+import { useQueueSelection } from './queue-selection.js';
 import { useInterruptConfirm } from './interrupt-confirm.js';
 import { useHandoff, type HandoffHolder } from './use-handoff.js';
 import {
   answerInteraction,
-  commandStatus,
   directSlashCommand,
   listRewindTargets,
-  queueAction,
-  receiptNotice,
   submitText,
   previewConfirmation,
   WireCommandFailure,
@@ -78,10 +77,6 @@ export function TuiSession({
   const [dismissedInteractionId, setDismissedInteractionId] = useState<string | null>(null);
   const [taskOpen, setTaskOpen] = useState(false);
   const [budgetOpen, setBudgetOpen] = useState(false);
-  const [selectedQueueId, setSelectedQueueId] = useState<string | null>(null);
-  // Legacy useShellMode: `!` on an empty composer swaps the prompt for a shell prompt; the `!` is not typed.
-  const [shellMode, setShellMode] = useState(false);
-  const [queueNotice, setQueueNotice] = useState<string | null>(null);
   // Legacy's addSystemMessage: every command result and hint is a transcript line, never a live notice.
   const appendSystem = useRef<(text: string) => void>(() => undefined);
   const setNotice = useCallback((text: string | null) => {
@@ -106,6 +101,8 @@ export function TuiSession({
     changeInput,
     restoreDraft,
     startQueueEdit,
+    cancelQueueEdit,
+    submitQueueEdit,
     answerOwners,
     queueOwners,
   } = useSessionComposer(state, preferences.historySize, setNotice);
@@ -118,25 +115,10 @@ export function TuiSession({
   const confirmation = useSendConfirmation(interactionActive);
   const interactionInput = useRef<InteractionInputHandler | null>(null);
   const viewportActive = !interactionActive && !panelOpen && !confirmation.pending;
-  const sessionHeader = useMemo(
-    () =>
-      newConversation ? (
-        <Box flexDirection="column">
-          <Box paddingX={2}>
-            <SessionBoundary width={Math.max(1, columns - 4)} />
-          </Box>
-          {header}
-        </Box>
-      ) : (
-        header
-      ),
-    // The banner is printed once; a later resize must not re-key the static rows.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [newConversation, header],
-  );
+  const sessionHeader = useNewConversationHeader(header, newConversation, columns);
   const viewport = useCommandTranscriptViewport(
     state,
-    (headerHeight ?? 0) + (newConversation ? 4 : 0),
+    (headerHeight ?? 0) + (newConversation ? BOUNDARY_ROWS : 0),
     viewportActive,
     sessionHeader,
     historyRevision,
@@ -152,10 +134,16 @@ export function TuiSession({
   const [busy, setBusy] = useState(false);
   const handoffPrompting = handoff?.state?.stage === 'confirm_model';
   const composerActive = !panelOpen && !confirmation.pending && !handoffPrompting && !connError && !interactionActive;
-  const queueItems = ['steering', 'queued'].flatMap((delivery) =>
-    state.queue.filter((item) => item.delivery === delivery),
-  );
-  const selectedQueueIndex = queueItems.findIndex((item) => item.id === selectedQueueId);
+  const historyUp = () => {
+    const entry = editor.navigate('up', {
+      text: editor.value,
+      attachments: wireAttachments(images, otherParts, originalParts),
+    });
+    if (entry) restoreDraft(entry, entry.cursor);
+  };
+  const queue = useQueueSelection(state, connection, { edit: startQueueEdit, historyUp });
+  const queueItems = queue.items;
+  const selectedQueueIndex = queue.index;
   // Menus call back into `submit`, which is declared below and changes every render.
   const submitRef = useRef<(input: string) => void>(() => undefined);
   const handoffRef = useRef<ReturnType<typeof useHandoff>>(null as never);
@@ -174,6 +162,7 @@ export function TuiSession({
   });
   useHarnessInput((composerActive || menuStack.open) && !busy, Boolean(state.activeTurnId), menuStack.value);
   // Legacy InputBox's double Escape clear; menus, panels, the expanded output viewer and the queue take Escape first.
+  const shell = useShellMode(editor.value, replaceInput);
   const { escHintVisible } = useEscapeKey({
     value: editor.value,
     onChange: (value) => replaceInput(value),
@@ -181,11 +170,7 @@ export function TuiSession({
       if (!composerActive || menuStack.open || viewport.expanded || selectedQueueIndex >= 0 || Boolean(editing))
         return true;
       // Legacy InputBox handleEscape: Esc on an empty shell prompt leaves shell mode.
-      if (shellMode && editor.value === '') {
-        setShellMode(false);
-        return true;
-      }
-      return false;
+      return shell.escape();
     },
     turnInFlight: Boolean(state.activeTurnId),
   });
@@ -221,15 +206,6 @@ export function TuiSession({
     draft: { value: editor.value, cursor: editor.cursor, replace: replaceInput },
     submit: (text) => void submit(text, images),
   });
-  const cancelQueueEdit = () => {
-    if (!editing) return false;
-    replaceInput(editing.restoreText, editing.restoreCursor);
-    setImages(editing.restoreImages);
-    setOtherParts(editing.restoreOther);
-    setOriginalParts(editing.restoreOriginal);
-    setEditing(null);
-    return true;
-  };
   useInterrupt({
     interrupt,
     connection,
@@ -309,47 +285,10 @@ export function TuiSession({
     };
     try {
       if (editing) {
-        if (input.trim() === '/queue cancel') {
-          replaceInput(editing.restoreText, editing.restoreCursor);
-          setImages(editing.restoreImages);
-          setOtherParts(editing.restoreOther);
-          setOriginalParts(editing.restoreOriginal);
-          setEditing(null);
-          return;
-        }
-        try {
-          const parts = wireAttachments(submittedImages, otherParts, originalParts);
-          if (!editing.knownParts && parts.length)
-            throw new Error('Queued attachments are unavailable; cannot safely replace them.');
-          const changed = editing.knownParts && JSON.stringify(parts) !== JSON.stringify(editing.knownParts);
-          await queueAction(
-            connection,
-            'edit',
-            editing.id,
-            withSkillPrefix(editing.skillPrefix, clean),
-            changed ? parts : undefined,
-          );
-          if (await steerRecovery.wasEditInvalidatedAfter(submission.submissionEpoch, editing.id)) return;
-          replaceInput(editing.restoreText, editing.restoreCursor);
-          setImages(editing.restoreImages);
-          setOtherParts(editing.restoreOther);
-          setOriginalParts(editing.restoreOriginal);
-          setEditing(null);
-          setNotice('Queued message updated.');
-          return;
-        } catch (error) {
-          if (await steerRecovery.wasEditInvalidatedAfter(submission.submissionEpoch, editing.id, true)) return;
-          if (error instanceof WireCommandFailure && error.code === 'too_late') {
-            setEditing(null);
-            setNotice(
-              editing.knownParts
-                ? 'Queued input is no longer editable. Your edited draft and attachments are preserved; review before resubmitting.'
-                : 'Queued input is no longer editable. Your edited text is preserved, but original attachments were unavailable; review before resubmitting.',
-            );
-            return;
-          }
-          throw error;
-        }
+        if (input.trim() === '/queue cancel') return void cancelQueueEdit();
+        const notice = await submitQueueEdit(connection, clean, submittedImages, submission.submissionEpoch);
+        if (notice) setNotice(notice);
+        return;
       }
       // Legacy resolves a typed command by exact name in any case or by a unique prefix, and refuses the rest.
       const typed = resolveTypedCommand(input);
@@ -378,34 +317,13 @@ export function TuiSession({
       } else if (/^\/bridge(?:\s|$)/.test(command)) {
         setNotice(await runBridgeCommand(integration, command));
       } else if (/^\/command-(status|apply)(?:\s|$)/.test(command)) {
-        const match = /^\/command-(status|apply)\s+(\S+)$/.exec(command.trim());
-        if (!match) throw new Error('Use /command-status <id> or /command-apply <id>.');
-        const result = await commandStatus(connection, match[2]);
-        if (match[1] === 'status' || result.kind !== 'finished') {
-          setNotice(receiptNotice(result));
-        } else {
-          const outcome = result.receipt.outcome;
-          if (outcome?.kind === 'rewound') {
-            restoreDraft(primaryDraft(outcome.draft.content));
-            setNotice('Rewind draft restored. Review before sending.');
-            return;
-          }
-          if (outcome?.kind === 'rolled_over') {
-            if (!switchSession) throw new Error(`Session ${outcome.sessionId} needs an app session switch.`);
-            await switchSession(outcome.sessionId);
-          } else setNotice(receiptNotice(result));
-        }
+        const receipt = await runCommandReceipt(connection, command, { restoreDraft, switchSession });
+        if (receipt.notice) setNotice(receipt.notice);
+        if (receipt.restored) return;
       } else if (command.trim() === '/clear' || command.trim() === '/rollover') {
-        // The reset can publish the new session before it answers, so the opening is armed first.
-        if (command.trim() === '/clear') beginNewConversation?.([WELCOME]);
-        const failure = await replaceSession(connection, command.trim() as '/clear' | '/rollover', switchSession).catch(
-          (error: unknown) => {
-            beginNewConversation?.(null);
-            throw error;
-          },
-        );
+        const reset = command.trim() as '/clear' | '/rollover';
+        const failure = await replaceSession(connection, reset, switchSession, undefined, beginNewConversation);
         if (failure !== null) {
-          beginNewConversation?.(null);
           setNotice(failure);
           editor.accepted(input, true, []);
           return;
@@ -524,9 +442,9 @@ export function TuiSession({
         <ShellTaskPanel state={state} />
         <PendingQueue
           items={queueItems}
-          selectedId={selectedQueueIndex < 0 ? null : selectedQueueId}
+          selectedId={queue.selectedId}
           editingId={editing?.id ?? null}
-          notice={queueNotice}
+          notice={queue.notice}
         />
         <PendingQueueEdit editingId={editing?.id ?? null} items={queueItems} />
         {menuStack.view}
@@ -537,35 +455,18 @@ export function TuiSession({
         ) : null}
         {menuStack.open || confirmation.prompt || handoffFlow.prompt ? null : (
           <InputFrame>
-            <PromptMarker mode={shellMode ? 'shell' : 'input'} />
+            <PromptMarker mode={shell.active ? 'shell' : 'input'} />
             <MultilineInput
               key={editor.inputKey}
               value={editor.value}
-              onChange={(value) => {
-                if (!shellMode && editor.value === '' && value.startsWith('!')) {
-                  setShellMode(true);
-                  replaceInput(value.slice(1));
-                  return;
-                }
-                changeInput(value);
-              }}
-              onSubmit={(value, submittedImages) => {
-                if (shellMode && !submittedImages?.length) {
-                  // Legacy handleShellSubmit: a blank command stays in shell mode; any command leaves it.
-                  if (!value.trim()) return;
-                  replaceInput('');
-                  void submit(`!${value}`, submittedImages).finally(() => setShellMode(false));
-                  return;
-                }
-                void submit(value, submittedImages);
+              onChange={(value) => shell.change(value) || changeInput(value)}
+              onSubmit={(value, submittedImages = []) => {
+                if (!shell.submit(value, submittedImages.length > 0, (command) => submit(command, submittedImages)))
+                  void submit(value, submittedImages);
               }}
               onBoundaryArrow={(direction) => {
-                if (shellMode) return;
-                if (direction === 'up' && !editor.value && !editing && queueItems.length) {
-                  setQueueNotice(null);
-                  setSelectedQueueId(queueItems[queueItems.length - 1]!.id);
-                  return;
-                }
+                if (shell.active) return;
+                if (direction === 'up' && !editor.value && !editing && queue.open()) return;
                 const entry = editor.navigate(direction, {
                   text: editor.value,
                   attachments: wireAttachments(images, otherParts, originalParts),
@@ -586,42 +487,9 @@ export function TuiSession({
               enableImagePaste
               onPasteError={(reason) => setNotice(`Image paste failed: ${reason}`)}
               ignoreInput={(input, key) => {
-                if (selectedQueueIndex >= 0) {
-                  const item = queueItems[selectedQueueIndex]!;
-                  if (key.escape) setSelectedQueueId(null);
-                  else if (key.upArrow) {
-                    if (selectedQueueIndex > 0) setSelectedQueueId(queueItems[selectedQueueIndex - 1]!.id);
-                    else {
-                      setSelectedQueueId(null);
-                      const entry = editor.navigate('up', {
-                        text: editor.value,
-                        attachments: wireAttachments(images, otherParts, originalParts),
-                      });
-                      if (entry) restoreDraft(entry, entry.cursor);
-                    }
-                  } else if (key.downArrow) setSelectedQueueId(queueItems[selectedQueueIndex + 1]?.id ?? null);
-                  else if (input === 'e' || key.return) {
-                    setSelectedQueueId(null);
-                    setQueueNotice(null);
-                    startQueueEdit(item);
-                  } else if (input === 'd') {
-                    setSelectedQueueId(null);
-                    void queueAction(connection, 'retract', item.id).catch((error: unknown) =>
-                      setQueueNotice(error instanceof Error ? error.message : String(error)),
-                    );
-                  }
-                  return true;
-                }
+                if (queue.key(input, key)) return true;
                 if (editing && key.escape) return cancelQueueEdit();
-                if (
-                  shellMode &&
-                  editor.value === '' &&
-                  (key.backspace || key.delete || input === '\x7f' || input === '\b')
-                ) {
-                  setShellMode(false);
-                  return true;
-                }
-                return composerFilter(input, key);
+                return shell.key(input, key) || composerFilter(input, key);
               }}
             />
           </InputFrame>

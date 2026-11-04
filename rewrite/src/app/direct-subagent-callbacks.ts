@@ -8,6 +8,7 @@ import type { ResolvedSubagentLaunch } from '../../../source/lib/subagent-bridge
 import type { AgentSpec } from '../../../source/services/agent-runtime/types.js';
 import { SubagentPoolEntrySchema } from '../../../source/services/settings/settings-schema.js';
 import type { SubagentResult, SubagentRunHandle, SubagentRunStatus } from '../../../source/services/subagents/types.js';
+import { buildTurnBudgetExhaustedFinalText } from '../../../source/services/subagents/utils.js';
 import type { Item } from '../model/index.js';
 import type { NestedRunResult, SubagentTaskState, ToolContext } from '../tools/index.js';
 import type { ProfileSelection } from './tool-contract.js';
@@ -28,6 +29,9 @@ export type Launch = {
 export type ExecutionEvidence = {
   readonly filesChanged: readonly string[];
   readonly toolCounts: Map<string, number>;
+  /** The child's turn budget, for legacy's budget-stop text. */
+  readonly maxTurns?: number;
+  readonly worktreePath?: string;
 };
 type DelegationCallbacks = Pick<
   AgentFactoryDeps,
@@ -153,11 +157,9 @@ export function projectResult(result: NestedRunResult, role: string, evidence?: 
   if (result.outcome.kind === 'background')
     throw new Error('Expected a subagent result, received background admission');
   const status = result.outcome.kind === 'budget_exhausted' ? 'interrupted' : result.outcome.kind;
-  return {
-    agentId: runId,
-    role,
-    status,
-    finalText: result.items
+  // Legacy extractFinalText: the child's last assistant text.
+  const lastText =
+    result.items
       .filter((item): item is Extract<Item, { type: 'assistant_message' }> => item.type === 'assistant_message')
       .map((item) =>
         item.content
@@ -165,7 +167,25 @@ export function projectResult(result: NestedRunResult, role: string, evidence?: 
           .map((part) => part.text)
           .join(''),
       )
-      .join('\n'),
+      .filter((text) => text.length > 0)
+      .at(-1) ?? '';
+  const toolCalls = tools.reduce((total, [, count]) => total + count, 0);
+  // Legacy nested-runner: a budget stop reports its partial text under the budget header, and a failure after
+  // tool work is contained with the partial findings.
+  const finalText =
+    result.outcome.kind === 'budget_exhausted'
+      ? buildTurnBudgetExhaustedFinalText({ maxTurns: evidence?.maxTurns, partialText: lastText })
+      : result.outcome.kind === 'failed' && toolCalls > 0
+      ? lastText
+        ? `${lastText}\n\n[Subagent stopped due to error: ${result.outcome.error.message}]`
+        : `[Subagent stopped due to error after ${toolCalls} tool action(s): ${result.outcome.error.message}]`
+      : lastText;
+  return {
+    agentId: runId,
+    role,
+    status,
+    finalText,
+    ...(evidence?.worktreePath ? { worktreePath: evidence.worktreePath } : {}),
     filesChanged: [...new Set(evidence?.filesChanged ?? [])],
     toolsUsed: tools.map(([toolName, count]) => ({ toolName, count })),
     ...(result.outcome.kind === 'failed' ? { error: result.outcome.error.message } : {}),

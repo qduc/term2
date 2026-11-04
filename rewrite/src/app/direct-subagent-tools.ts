@@ -188,6 +188,7 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
       ? options.executionContext
       : new LocalExecutionContext(options.executionContext.getCwd());
     let workspace = Object.freeze({ ...options.workspace, root: executionContext.getCwd() });
+    let worktreePath: string | undefined;
     if (params.worktree) {
       const pinned = await pinWorkerWorktree({
         name: params.worktree,
@@ -199,6 +200,7 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
       if (!pinned.ok) throw new Error(pinned.error);
       executionContext = pinned.executionContext;
       workspace = Object.freeze({ ...workspace, root: pinned.worktreePath });
+      worktreePath = pinned.worktreePath;
     }
     current();
     let skillsService = workspace.root === options.workspace.root ? options.skillsService : undefined;
@@ -304,7 +306,12 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
       checkInterceptors: options.checkInterceptors,
     });
     children.set(registry, policies);
-    const evidence: ExecutionEvidence = { filesChanged, toolCounts: new Map() };
+    const evidence: ExecutionEvidence = {
+      filesChanged,
+      toolCounts: new Map(),
+      maxTurns: definition.maxTurns,
+      ...(worktreePath ? { worktreePath } : {}),
+    };
     const countedTools = new WeakMap<Tool, Tool>();
     const counted = (tool: Tool): Tool => {
       let adapted = countedTools.get(tool);

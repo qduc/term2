@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdir, writeFile, readdir, readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { expect, it } from 'vitest';
+import { usesDirectComposer } from '../source/test-helpers/direct-composer.js';
 import { createIsolatedWorkspaceLease, writePtyTextAndSubmit } from './provider-black-box/provider-test-harness.js';
 
 // Real shell, sandbox, session facade, Ink input and provider wire. Only the
@@ -13,7 +14,10 @@ const hasSandbox =
   process.platform === 'linux' &&
   spawnSync('bwrap', ['--ro-bind', '/', '/', '--', '/bin/true']).status === 0 &&
   spawnSync('socat', ['-V']).status === 0;
-it.skipIf(!hasSandbox).each(['deny', 'allow-once', 'escape', 'auto-approve'] as const)(
+// Sandbox execution is an accepted difference: term2-next has no sandbox, so this is legacy-only.
+it
+  .skipIf(!hasSandbox || usesDirectComposer([process.env.TERM2_TEST_CLI ?? '']))
+  .each(['deny', 'allow-once', 'escape', 'auto-approve'] as const)(
   'settles a sandbox blocked-read approval through the interactive CLI: %s',
   async (decision) => {
     const requests: { messages: { role: string; content: string; tool_call_id?: string }[] }[] = [];

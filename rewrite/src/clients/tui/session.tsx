@@ -260,7 +260,7 @@ export function TuiSession({
     viewport,
     setNotice,
   });
-  const harnessActive = (composerActive || menuStack.open) && !busy;
+  const harnessActive = composerActive && !menuStack.owns && !busy;
   useHarnessInput(harnessActive, Boolean(state.activeTurnId), menuStack.value, menuStack.open || !rewindHidden);
   const submit = async (
     input: string,
@@ -440,6 +440,7 @@ export function TuiSession({
         <LiveNotices connectionError={connError} />
         <LiveNotices historyError={editor.historyError} />
         <LiveDivider />
+        {menuStack.firstRunPrompt}
         {interruptConfirm.interruptConfirmVisible ? (
           <Box marginBottom={1}>
             <Text color={theme.warning}>Press Esc again to interrupt</Text>
@@ -463,7 +464,7 @@ export function TuiSession({
         {handoffFlow.promptLabel && !menuStack.open ? (
           <Text color={theme.accent}>{handoffFlow.promptLabel}</Text>
         ) : null}
-        {menuStack.open || rewindHidden || confirmation.prompt || handoffFlow.prompt || queuePaused.shown ? null : (
+        {menuStack.owns || rewindHidden || confirmation.prompt || handoffFlow.prompt || queuePaused.shown ? null : (
           <ComposerWidth columns={columns} fullWidth={menuStack.handingBack}>
             {(width) => (
               <InputFrame>

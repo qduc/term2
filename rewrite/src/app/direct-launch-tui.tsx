@@ -327,23 +327,33 @@ export async function launchTui(request: InteractiveRequest): Promise<number> {
   let exitCode: number;
   let mcp: DirectMcp | undefined;
   try {
-    // Terminal refusal must not start MCP subprocesses or authorization flows.
-    if (stdin.isTTY && stdout.isTTY) {
-      mcp = await openDirectApplicationMcp({
-        target,
-        conversationsDir: request.conversationsDir,
-        interactive: true,
-        onNotice: (message) => stderr.write(`MCP: ${message}\n`),
-      });
-    }
-    exitCode = await runTui(request, target, pending, mcp);
-  } finally {
     try {
-      await mcp?.close();
+      // Terminal refusal must not start MCP subprocesses or authorization flows.
+      if (stdin.isTTY && stdout.isTTY) {
+        mcp = await openDirectApplicationMcp({
+          target,
+          conversationsDir: request.conversationsDir,
+          interactive: true,
+          onNotice: (message) => stderr.write(`MCP: ${message}\n`),
+        });
+      }
+      exitCode = await runTui(request, target, pending, mcp);
     } finally {
-      await target.close();
+      try {
+        await mcp?.close();
+      } finally {
+        await target.close();
+      }
     }
+    if (pending.plan) performRestart(pending.plan, request.conversationsDir);
+  } catch (error) {
+    if (!pending.plan) throw error;
+    // Legacy cli.tsx: a failed restart cleanup never attempts the replacement.
+    stderr.write(
+      `Restart cleanup failed; no replacement attempted: ${error instanceof Error ? error.message : String(error)}\n` +
+        `Restart recovery command: ${pending.plan.manualCommand}\n`,
+    );
+    return 1;
   }
-  if (pending.plan) performRestart(pending.plan);
   return exitCode;
 }

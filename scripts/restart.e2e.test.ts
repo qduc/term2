@@ -155,7 +155,7 @@ export default function register(term2) { for (const type of ['session.start', '
         // Native commands have no legacy quit-command module. Change a real command
         // diagnostic that /help reaches, after the running process has imported it.
         await patchFixtureModule(
-          join(workspace.root, 'direct-dist/rewrite/src/app/direct-launch-tui-commands.js'),
+          join(workspace.root, 'direct-dist/rewrite/src/clients/tui/menus/legacy-commands.js'),
           'Exit the application',
           'Changed compiled core B',
         );
@@ -177,11 +177,14 @@ export default function register(term2) { for (const type of ['session.start', '
           { timeout: READINESS_TIMEOUT_MS },
         )
         .toBe('advisory');
-      await writePtyTextAndSubmit(child, '/sandbox');
-      await child.waitForVisibleOutput('Shell sandbox mode disabled');
-      expect(JSON.parse(await readFile(join(workspace.paths.logDir, 'settings.json'), 'utf8')).sandbox.enabled).toBe(
-        false,
-      );
+      // Sandbox execution (and its /sandbox command) is an accepted difference: legacy only.
+      if (!process.env.TERM2_TEST_CLI) {
+        await writePtyTextAndSubmit(child, '/sandbox');
+        await child.waitForVisibleOutput('Shell sandbox mode disabled');
+        expect(JSON.parse(await readFile(join(workspace.paths.logDir, 'settings.json'), 'utf8')).sandbox.enabled).toBe(
+          false,
+        );
+      }
       const savedSettings = JSON.parse(await readFile(join(workspace.paths.logDir, 'settings.json'), 'utf8'));
       expect(savedSettings.providers).toEqual(initialSettings.providers);
       expect(savedSettings.agent).toEqual(initialSettings.agent);
@@ -193,10 +196,7 @@ export default function register(term2) { for (const type of ['session.start', '
       // Exec resets the idle counter, so the old generation is not an after token.
       await child.waitForState((snapshot) => snapshot.visibleOutput.includes('Resumed conversation'));
       await child.waitForIdleInput();
-      if (process.env.TERM2_TEST_CLI) {
-        // Direct revisions are real raw-render offsets, not the source's reset counter.
-        await child.waitForComposerValue('', { afterRevision: child.getOutput().lastIndexOf('Resumed conversation:') });
-      } else await expect.poll(() => child.readComposerRevision(), { timeout: READINESS_TIMEOUT_MS }).toBe(1);
+      await expect.poll(() => child.readComposerRevision(), { timeout: READINESS_TIMEOUT_MS }).toBe(1);
       expect(await identity()).toEqual(before);
       expect(await activeLeaf()).toBe(original);
       await writePtyTextAndSubmit(child, '/help');
@@ -226,9 +226,7 @@ export default function register(term2) { for (const type of ['session.start', '
       );
       await child.waitForIdleInput();
       // A functional command is also an input/raw-mode check after the second exec.
-      if (process.env.TERM2_TEST_CLI)
-        await child.waitForComposerValue('', { afterRevision: child.getOutput().lastIndexOf('Resumed conversation:') });
-      else await expect.poll(() => child.readComposerRevision(), { timeout: READINESS_TIMEOUT_MS }).toBe(1);
+      await expect.poll(() => child.readComposerRevision(), { timeout: READINESS_TIMEOUT_MS }).toBe(1);
       const helpOutputOffset = child.getVisibleOutput().length;
       const beforeHelpRevision = child.readComposerRevision();
       await writePtyTextAndSubmit(child, '/help');
@@ -282,7 +280,8 @@ export default function register(term2) { for (const type of ['session.start', '
       ]);
       expect(new Set(hooks.map((event) => event.pid))).toEqual(new Set([Number(before.pid)]));
       expect(hooks.every((event) => event.herdr === 'restart-owned-fixture')).toBe(true);
-      expect(hooks[2]).toMatchObject({ approval: 'advisory', sandbox: 'false' });
+      expect(hooks[2]).toMatchObject({ approval: 'advisory' });
+      if (!process.env.TERM2_TEST_CLI) expect(hooks[2]).toMatchObject({ sandbox: 'false' });
     } finally {
       await workspace.cleanup();
       await new Promise<void>((done, reject) => server.close((error) => (error ? reject(error) : done())));
@@ -331,10 +330,34 @@ it.each(['runner', 'missing-entry', 'cleanup', 'lock', 'writer-close', 'native-e
         );
         const cli = restartEntry(root);
         if (process.env.TERM2_TEST_CLI) {
-          // These source-only failure controls need a legacy writer/exit observer.
-          // Keep their assertions intact; the fenced direct baseline excludes them by name.
-          if (fault === 'cleanup' || fault === 'lock' || fault === 'writer-close')
-            throw new Error(`Direct coverage gap: ${fault} fixture depends on legacy cleanup internals.`);
+          // The same faults at next's own seams: exit observer, session shutdown, writer lock.
+          const tui = join(root, 'direct-dist/rewrite/src/app/direct-launch-tui.js');
+          await patchFixtureModule(
+            cli,
+            'void main(process.argv.slice(2))',
+            `process.on('exit', code => process.getBuiltinModule('node:fs').writeFileSync(${JSON.stringify(
+              join(root, 'node-exit-code'),
+            )}, String(code)));\nvoid main(process.argv.slice(2))`,
+          );
+          if (fault === 'cleanup')
+            await patchFixtureModule(
+              tui,
+              'await app.close();',
+              "if (pending.plan) throw new Error('fixture cleanup failure');\nawait app.close();",
+            );
+          if (fault === 'lock')
+            // Hold the session's writer lock past shutdown, as a leaked writer would.
+            await patchFixtureModule(
+              tui,
+              'await app.close();',
+              "await app.close();\nif (pending.plan) globalThis.fixtureLock = (await import('../session/direct-writer-lock.js')).acquireDirectWriterLock(process.getBuiltinModule('node:path').join(conversationsDir, `${pending.plan.sessionId}.jsonl`));",
+            );
+          if (fault === 'writer-close')
+            await patchFixtureModule(
+              tui,
+              'await app.close();',
+              "await app.close();\nif (pending.plan) throw new Error('fixture writer close failure');",
+            );
           if (fault === 'native-exec')
             await patchFixtureModule(
               join(root, 'direct-dist/rewrite/src/app/direct-launch-tui-restart.js'),
@@ -401,7 +424,10 @@ it.each(['runner', 'missing-entry', 'cleanup', 'lock', 'writer-close', 'native-e
         expect(await readFile(join(workspace.root, 'node-exit-code'), 'utf8')).toBe('1');
         const logs = (await readdir(workspace.paths.conversationsDir)).filter((file) => file.endsWith('.jsonl'));
         expect(logs).toHaveLength(1);
-        expect(await readFile(join(workspace.paths.conversationsDir, logs[0]!), 'utf8')).toContain('init');
+        // term2-next's own store starts with a session_started fact, legacy's with session_init.
+        expect(await readFile(join(workspace.paths.conversationsDir, logs[0]!), 'utf8')).toContain(
+          process.env.TERM2_TEST_CLI ? 'session_started' : 'init',
+        );
         expect(child.getVisibleOutput()).not.toContain('Resumed conversation:');
         expect(child.getVisibleOutput()).toContain('Restart recovery command:');
       }

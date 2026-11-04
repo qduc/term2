@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { formatTokensPerSecond } from './presentation/utils/streaming/streaming-speed-tracker.js';
+import { Text } from 'ink';
 import { useSkin } from './presentation/skins/SkinContext.js';
+import { useTheme } from './presentation/components/theme.js';
 import type { MenuHint, StatusSegmentView, StatusView } from './presentation/skins/types.js';
 import type { TuiIntegration } from './integration.js';
 import type { TuiState } from './state.js';
@@ -129,6 +131,7 @@ export function ComposerFooter({
   state,
   active,
   draftEmpty,
+  escHint,
   columns,
   queueSelectable,
 }: {
@@ -136,10 +139,13 @@ export function ComposerFooter({
   readonly state: TuiState;
   readonly active: boolean;
   readonly draftEmpty: boolean;
+  /** Legacy InputBox: after one Escape the hint replaces the shortcuts until a second clears the draft. */
+  readonly escHint: boolean;
   readonly columns: number;
   readonly queueSelectable: boolean;
 }): React.ReactElement {
   const { Hints, StatusBar } = useSkin();
+  const theme = useTheme();
   const [, setQuotaClock] = useState(0);
   useEffect(() => {
     if (!state.codexQuota) return;
@@ -151,7 +157,8 @@ export function ComposerFooter({
   const info = integration.status?.(state.sessionId);
   return (
     <>
-      {active ? (
+      {active && escHint ? <Text color={theme.textSubtle}>Press Esc again to clear input</Text> : null}
+      {active && !escHint ? (
         <ComposerHints
           activeTurn={Boolean(state.activeTurnId)}
           draftEmpty={draftEmpty}

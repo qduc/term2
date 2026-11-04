@@ -30,6 +30,7 @@ import { useMenuStack } from './menus/menu-host.js';
 import { ComposerFooter, useComposerFilter } from './composer-parts.js';
 import { SessionPanels } from './session-panels.js';
 import { useSessionRewind } from './session-rewind.js';
+import { useEscapeKey } from './use-escape-key.js';
 import {
   answerInteraction,
   commandStatus,
@@ -125,6 +126,14 @@ export function TuiSession({
     },
   });
   useHarnessInput((composerActive || menuStack.open) && !busy, Boolean(state.activeTurnId), menuStack.value);
+  // Legacy InputBox's double Escape clear; menus, panels, the expanded output viewer and the queue take Escape first.
+  const { escHintVisible } = useEscapeKey({
+    value: editor.value,
+    onChange: (value) => replaceInput(value),
+    onEscape: () =>
+      !composerActive || menuStack.open || viewport.expanded || selectedQueueIndex >= 0 || Boolean(editing),
+    turnInFlight: Boolean(state.activeTurnId),
+  });
   const pending = useRef(false);
   const togglePlan = usePlanToggle(integration, connection, confirmation, Boolean(state.activeTurnId), setNotice);
   const composerFilter = useComposerFilter({
@@ -502,6 +511,7 @@ export function TuiSession({
           state={state}
           active={composerActive && selectedQueueIndex < 0 && !menuStack.open}
           draftEmpty={editor.value === ''}
+          escHint={escHintVisible}
           columns={columns - 4}
           queueSelectable={queueItems.length > 0 && !editor.value && !editing}
         />

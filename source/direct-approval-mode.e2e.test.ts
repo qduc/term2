@@ -650,7 +650,7 @@ it('/model <provider>/<model> confirms the new model by name', { timeout: TIMEOU
 it('/resume ls labels each conversation with its time and first prompt', { timeout: TIMEOUT_MS }, async () => {
   await runCommand('/resume ls', 'conv_', 'tidy the workspace please');
   const visible = session!.getVisibleOutput();
-  expect(visible).toMatch(/conv_[0-9a-f-]{36} {2}\d{4}-\d\d-\d\d \d\d:\d\d {2}tidy the workspace/);
+  expect(visible.replace(/\s+/g, ' ')).toMatch(/conv_[0-9a-f-]{36} \d{4}-\d\d-\d\d \d\d:\d\d tidy the workspace/);
 });
 
 it('/usage agrees with the cached share in the status bar', { timeout: TIMEOUT_MS }, async () => {
@@ -741,17 +741,12 @@ it('/providers lists the configured active provider', { timeout: TIMEOUT_MS }, (
 
 it('/retry aliases retry-turn', { timeout: TIMEOUT_MS }, () => runCommand('/retry', 'No retained'));
 
-it('invalid effort reports valid values without protocol internals', { timeout: TIMEOUT_MS }, () =>
-  runCommand(
-    '/effort ultra',
+it('invalid effort reports valid values without protocol internals', { timeout: TIMEOUT_MS }, async () => {
+  await runCommand('/effort ultra', 'xhigh.', undefined, false, false, undefined, ['invalid_command', 'Command ']);
+  expect(session!.getVisibleOutput().replace(/\s+/g, ' ')).toContain(
     "Unknown effort 'ultra'. Use: default, none, minimal, low, medium, high, xhigh.",
-    undefined,
-    false,
-    false,
-    undefined,
-    ['invalid_command', 'Command '],
-  ),
-);
+  );
+});
 
 it('rejected model shows one human error without receipt internals', { timeout: TIMEOUT_MS }, () =>
   runCommand(

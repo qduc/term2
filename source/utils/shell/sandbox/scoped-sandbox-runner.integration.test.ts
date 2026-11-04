@@ -11,6 +11,14 @@ import { SandboxNetworkApprovalCoordinator } from './sandbox-network-approval-co
 import { executeShellCommand } from '../execute-shell.js';
 import { InvalidatableShellChildRegistry } from '../shell-child-registry.js';
 
+// These two cases fork the shipped helper, so they need a built dist; fail with that instruction
+// rather than a misleading "Sandbox helper lost" from a missing file.
+function builtHelperEntry(): URL {
+  const entry = new URL('../../../../dist/utils/shell/sandbox/scoped-sandbox-helper.js', import.meta.url);
+  if (!existsSync(entry)) throw new Error(`Run \`pnpm build\` first: ${fileURLToPath(entry)} does not exist.`);
+  return entry;
+}
+
 // The CI integration lane builds dist before running this test. The real helper
 // must be the shipped JavaScript entry, not a test-only TypeScript loader.
 describe('scoped sandbox helpers', () => {
@@ -19,7 +27,7 @@ describe('scoped sandbox helpers', () => {
       workspaceRoot: process.cwd(),
       requestApproval: async () => false,
     });
-    const entry = new URL('../../../../dist/utils/shell/sandbox/scoped-sandbox-helper.js', import.meta.url);
+    const entry = builtHelperEntry();
     const runner = new ScopedSandboxRunner(
       scope,
       () => {},
@@ -242,7 +250,7 @@ process.on('message', async x => { if (x.type !== 'wrap') return; writeFileSync(
   }, 20_000);
   it('routes simultaneous sandboxed network requests to their owning graph', async () => {
     const approvals: string[] = [];
-    const entry = new URL('../../../../dist/utils/shell/sandbox/scoped-sandbox-helper.js', import.meta.url);
+    const entry = builtHelperEntry();
     const make = (owner: string) => {
       const scope = createScopedSandboxNetworkAccess({
         workspaceRoot: process.cwd(),

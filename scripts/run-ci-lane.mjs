@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { relative } from 'node:path';
+import { relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // Keep the existing four check names and runner count. Discover through each
@@ -7,10 +7,19 @@ import { fileURLToPath } from 'node:url';
 const lanes = ['test', 'integration', 'e2e', 'provider-black-box'];
 const lane = process.argv[2];
 const listOnly = process.argv.includes('--list');
+// `--cli=next` runs the lane's terminal and black-box tests against term2-next instead of legacy
+// dist/cli.js: testCliPath() and the provider harness both read TERM2_TEST_CLI.
+const cli = process.argv.find((arg) => arg.startsWith('--cli='))?.slice('--cli='.length) ?? 'legacy';
+if (cli !== 'legacy' && cli !== 'next') throw new Error('Expected --cli=legacy or --cli=next');
 if (!lanes.includes(lane)) throw new Error(`Expected a CI lane: ${lanes.join(', ')}`);
 // Keep the reported plan and every Vitest project on the same worker count.
 const maxWorkers = 3;
-const env = { ...process.env, CI: '1', NODE_ENV: 'test' };
+const env = {
+  ...process.env,
+  CI: '1',
+  NODE_ENV: 'test',
+  ...(cli === 'next' ? { TERM2_TEST_CLI: resolve('rewrite/dist/rewrite/src/app/cli.js') } : {}),
+};
 // Dependencies are installed and verified by the setup action. Invoke the
 // locked executable directly; pnpm exec may relink dependencies before a run.
 const vitest = fileURLToPath(new URL('../node_modules/vitest/vitest.mjs', import.meta.url));
@@ -44,9 +53,9 @@ const plan = tiers.map(([tier, config]) => {
   if (files.length === 0 || new Set(files).size !== files.length) throw new Error(`Invalid ${tier} inventory`);
   return { tier, config, total: files.length, files: files.filter((file) => owner(tier, file) === lane).sort() };
 });
-console.log(JSON.stringify({ lane, maxWorkers, plan }, null, 2));
+console.log(JSON.stringify({ lane, cli, maxWorkers, plan }, null, 2));
 if (!listOnly) {
-  if (lane === 'provider-black-box') {
+  if (lane === 'provider-black-box' || cli === 'next') {
     const build = spawnSync(process.execPath, ['rewrite/scripts/build.mjs'], { env, stdio: 'inherit' });
     if (build.status !== 0 || build.error)
       throw new Error(`Direct CLI build failed: ${build.error?.message ?? build.signal ?? build.status}`);

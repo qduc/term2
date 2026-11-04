@@ -39,7 +39,7 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-22.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
         with:
@@ -60,6 +60,8 @@ jobs:
           if-no-files-found: error
       - name: Run guards, CLI integration and safety provider cases
         run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs test
+      - name: Run the same lane against term2-next
+        run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs test --cli=next
 
   port:
     needs: test
@@ -116,7 +118,7 @@ jobs:
 
   integration:
     runs-on: ubuntu-22.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
         with:
@@ -129,10 +131,12 @@ jobs:
         run: /usr/bin/time -v env SKIP_BUILD_BACKUP=1 pnpm build
       - name: Run remaining integration and stateless provider cases
         run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs integration
+      - name: Run the same lane against term2-next
+        run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs integration --cli=next
 
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
         with:
@@ -144,10 +148,12 @@ jobs:
           /usr/bin/time -v node rewrite/scripts/build.mjs
       - name: Run E2E and Responses provider cases
         run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs e2e
+      - name: Run the same lane against term2-next
+        run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs e2e --cli=next
 
   provider-black-box:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
         with:
@@ -157,3 +163,5 @@ jobs:
         run: /usr/bin/time -v env SKIP_BUILD_BACKUP=1 pnpm build
       - name: Run resilience and remaining provider cases
         run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs provider-black-box
+      - name: Run the same lane against term2-next
+        run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs provider-black-box --cli=next

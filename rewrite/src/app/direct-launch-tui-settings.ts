@@ -1,11 +1,11 @@
 /**
  * `/settings`, the mode commands, `/sandbox` and `/auto-approve`. They all write
- * the session's own settings. A session's tools read a copy of those once it has
+ * the session's own settings, which save through the app's settings owner what legacy saves. A session's tools read a copy of those once it has
  * been reconfigured, so a change only counts once the Session has rebuilt them:
  * its receipt says whether that happened, and these commands report that receipt
  * rather than the write. Approval mode and sandbox preference also save through
  * the app's global settings owner after application, as their source commands do.
- * Other changes remain session-only. Saving a sandbox preference does not add
+ * Saving a sandbox preference does not add
  * sandbox execution support to the direct executable.
  */
 import { randomUUID } from 'node:crypto';
@@ -64,6 +64,8 @@ function settingsBrowse(
   ].join('\n');
 }
 
+/** source/commands/mode-commands.ts BARE_ENABLED_DETAIL (that module pulls the command layer in). */
+const BARE_ENABLED_DETAIL = ' - minimal prompt; AGENTS.md read on demand; other tools via run_code';
 const APPROVAL_MODES = ['off', 'advisory', 'auto', 'always'];
 const PROFILE_KEY = 'app.activeProfileId';
 /** Only the Session can change these, with `/model` and `/effort`. */
@@ -110,8 +112,9 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
       );
     }
     const previous = settings.get(PROFILE_KEY);
-    settings.set(PROFILE_KEY, plan.targetId, { persist: false });
-    const undo = () => settings.set(PROFILE_KEY, previous, { persist: false });
+    // Legacy's profile transition saves the new profile; a refused rebuild takes it back on disk as well.
+    settings.set(PROFILE_KEY, plan.targetId);
+    const undo = () => settings.set(PROFILE_KEY, previous);
     return rebuild(connection, undo, `Switched to ${plan.targetId} for this session.`);
   };
 
@@ -145,11 +148,15 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
       return latest().messages.length > 0 && planProfileTransition(settings, target).class === 'structural';
     },
     /** `/plan`, `/bare`, `/mentor` and `/orchestrator`. A mode that is on turns back to Bare. */
-    toggle(connection: TuiConnection, mode: string): Promise<CommandResult> {
+    async toggle(connection: TuiConnection, mode: string): Promise<CommandResult> {
       const { settings } = detailsOf(connection.sessionId);
       const target = `builtin:${mode}`;
       const on = resolveActiveProfile(settings).identity.id === target;
-      return switchProfile(connection, on ? BARE_PROFILE_ID : target, `/${mode}`);
+      if (mode !== 'bare') return switchProfile(connection, on ? BARE_PROFILE_ID : target, `/${mode}`);
+      // Legacy's /bare (mode-commands.ts): Bare is the default, so it never toggles back.
+      if (on) return { message: 'Bare mode is already active' };
+      const result = await switchProfile(connection, BARE_PROFILE_ID, '/bare');
+      return result.applied ? { ...result, message: `Bare mode enabled${BARE_ENABLED_DETAIL}` } : result;
     },
 
     profile(connection: TuiConnection, id: string | undefined): Promise<CommandResult> {
@@ -213,11 +220,10 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
         const applied = result.kind === 'finished' && result.receipt.outcome?.kind === 'configured';
         return { message: receiptNotice(result), ...(applied ? { applied } : {}) };
       }
-      // The source would save these for the next start, which this executable never reads back.
+      // Legacy saves a restart-only key (and the hook trust roots) for the next start and says so.
       if (!settings.isRuntimeModifiable(key) || key === SETTING_KEYS.HOOKS_TRUSTED_PROJECT_ROOTS) {
-        return {
-          message: `${key} needs a restart and this executable does not save settings, so it cannot change here.`,
-        };
+        command.action(args);
+        return { message: messages.join('\n'), applied: true };
       }
 
       const before = settings.getDynamic(key);
@@ -228,9 +234,10 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
         const refused = messages.some((message) => message.startsWith('Error'));
         return { message: messages.join('\n'), ...(refused ? {} : { applied: true }) };
       }
+      // The command saved the value as legacy does; a refused rebuild takes it back on disk as well.
       const undo = () => {
         if (before === undefined) settings.reset(key);
-        else settings.setDynamic(key, before, { persist: false });
+        else settings.setDynamic(key, before);
       };
       return rebuild(connection, undo, messages.join('\n'));
     },

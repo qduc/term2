@@ -6,7 +6,7 @@ import { installationVersion } from '../../../source/providers/fetch/logging-mid
 import { getProfileMetadata } from '../../../source/services/profiles/active-profile.js';
 import { planProfileTransition } from '../../../source/services/profiles/profile-transition.js';
 import { RUNTIME_MODIFIABLE_SETTINGS } from '../../../source/services/settings/settings-schema.js';
-import { buildEnvOverrides } from '../../../source/services/settings/settings-service.js';
+import { buildEnvOverrides, SettingsService } from '../../../source/services/settings/settings-service.js';
 import type { ModelRef } from '../model/index.js';
 import { createProviderRegistry } from '../model/provider.js';
 import type { DirectBackgroundTasks } from '../session/direct-background.js';
@@ -35,7 +35,7 @@ import { createDirectSessionMemory, directMainMemoryEnabled } from './direct-mem
 import { runPolicy } from './direct-application-policy.js';
 import { createDirectVerificationOperations } from './direct-verifier.js';
 import { withGenerationGuard } from './generation-guard.js';
-import { createSettingsService, type SettingsService } from './settings.js';
+import { SessionSettingsService } from './settings.js';
 import { createNativeSearchTool } from './native-search.js';
 import type { AgentSurface, ProfileSelection, ToolSurfaceOptions } from './tool-contract.js';
 
@@ -123,11 +123,7 @@ function sessionSettings(
 ): DirectSessionSettings {
   const continued = continuedSettings.getStore();
   const defaults = continued ?? selection.settings;
-  const settings = createSettingsService({
-    env: buildEnvOverrides(),
-    disableFilePersistence: true,
-    loggingService: selection.logger,
-  });
+  const settings = new SessionSettingsService({ env: buildEnvOverrides(), loggingService: selection.logger });
   // `/clear` must not undo what someone changed, least of all a tightened approval
   // mode. Only real differences: rewriting a default would change what it means.
   if (continued) {
@@ -151,6 +147,8 @@ function sessionSettings(
   const temperature = configuration?.intent.temperature;
   if (temperature !== undefined) settings.set('agent.temperature', temperature, { persist: false });
   if (approvalAlwaysAsks) settings.set('shell.autoApproveMode', 'off', { persist: false });
+  // From here on, what legacy's one service would save is saved through the app's settings owner.
+  if (selection.settings instanceof SettingsService) settings.saveThrough(selection.settings);
   return settings;
 }
 
@@ -349,13 +347,18 @@ export function createDirectRuntimes(
             publish(generation.surface, nextProfile.id, true, generation.settings);
             queueMicrotask(() => {
               try {
-                // Generations are read-only copies, so the next one has to start from this.
-                settings.set('app.activeProfileId', nextProfile.id, { persist: false });
-                settings.set('agent.modelSelection', intent.modelSelection, { persist: false });
-                settings.set('agent.reasoningEffort', intent.reasoningEffort, { persist: false });
-                if (intent.temperature !== undefined) {
-                  settings.set('agent.temperature', intent.temperature, { persist: false });
-                }
+                // Generations are read-only copies, so the next one has to start from this. A changed value is
+                // saved, as legacy's configuration service saves a picked model, effort, profile or temperature.
+                const record = (key: string, value: unknown) =>
+                  settings.setDynamic(
+                    key,
+                    value,
+                    isDeepStrictEqual(settings.getDynamic(key), value) ? { persist: false } : {},
+                  );
+                record('app.activeProfileId', nextProfile.id);
+                record('agent.modelSelection', intent.modelSelection);
+                record('agent.reasoningEffort', intent.reasoningEffort);
+                if (intent.temperature !== undefined) record('agent.temperature', intent.temperature);
                 options.onSurface?.(generation.surface, getProfileMetadata(nextProfile.id));
               } catch (error) {
                 logger.warn(`Could not record the new configuration: ${String(error)}`);

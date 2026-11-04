@@ -34,7 +34,7 @@ import { replaceSession } from './replace-session.js';
 import { runBridgeCommand } from './bridge-command.js';
 import { useSendConfirmation } from './send-confirmation.js';
 import { useMenuStack } from './menus/menu-host.js';
-import { ComposerFooter, useComposerFilter } from './composer-parts.js';
+import { ComposerFooter, useComposerFilter, useFooterUsage } from './composer-parts.js';
 import { SessionPanels } from './session-panels.js';
 import { useSessionRewind } from './session-rewind.js';
 import { useEscapeKey } from './use-escape-key.js';
@@ -70,11 +70,7 @@ export function TuiSession({
   const preferences = integration.preferences?.(connection.sessionId) ?? terminalPreferenceDefaults();
   const { columns, rows } = useTerminalSize();
   const liveTps = useLiveStreamingSpeed(state);
-  // Legacy's footer keeps the last request's usage until the conversation is cleared (a new session here):
-  // a model switch, rewind or compaction does not blank it.
-  const lastUsage = useRef<Pick<typeof state, 'lastUsage' | 'speed'>>({});
-  if (state.lastUsage) lastUsage.current = { lastUsage: state.lastUsage, speed: state.speed };
-  const footerState = state.lastUsage ? state : { ...state, ...lastUsage.current };
+  const footerState = useFooterUsage(state);
   const [bangResult, setBangResult] = useState<string | null>(null);
   const [interactionOpen, setInteractionOpen] = useState(false);
   const [dismissedInteractionId, setDismissedInteractionId] = useState<string | null>(null);

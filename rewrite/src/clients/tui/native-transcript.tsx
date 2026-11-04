@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Static } from 'ink';
 import type { Message, ToolView, TuiState } from './state.js';
 import { Transcript } from './views.js';
@@ -100,9 +100,39 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
     return { next, reachedEnd, orphans: messages.size + tools.size };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.timeline, state.messages, state.tools, state.activeTurnId, draftIds]);
+  // Legacy MessageList (shouldCommitMessageToStatic): while idle, a finished row that was never live (a system line,
+  // or every row after a redraw remounts the list) stays in the live region for one render, and is committed on the
+  // next one. Resumed history and rows that were live (a reply replacing its draft) commit at once.
+  const commit = useRef<{
+    epoch: number;
+    signature: string | null;
+    seen: ReadonlySet<string> | null;
+    candidates: ReadonlySet<string>;
+  }>({ epoch, signature: null, seen: null, candidates: new Set() });
   useEffect(() => {
     if (!settled) return;
     const { next, reachedEnd, orphans } = settled;
+    const memory = commit.current;
+    const remounted = memory.epoch !== epoch;
+    // Legacy's list renders again only when its messages change; this effect also runs for unrelated updates.
+    const signature = [
+      state.activeTurnId ?? '',
+      ...(state.timeline ?? []).map((entry) => `${entry.kind}:${entry.id}`),
+      ...state.tools.map((tool) => tool.status),
+    ].join('\u0000');
+    const rendered = remounted || signature !== memory.signature;
+    const deferred = new Set<string>(rendered ? [] : memory.candidates);
+    // A remount starts legacy's list afresh: every row waits for its next render, whatever waited before.
+    const fresh = (row: Row) =>
+      !state.activeTurnId &&
+      !row.message?.replacesDraftId &&
+      (remounted || (memory.candidates.has(row.key) ? !rendered : memory.seen !== null && !memory.seen.has(row.key)));
+    commit.current = {
+      epoch,
+      signature,
+      seen: new Set(state.timeline?.map((entry) => `${entry.kind}:${entry.id}`) ?? []),
+      candidates: deferred,
+    };
     // With no active turn, unordered fallback content cannot be committed.
     if (!state.activeTurnId && (orphans || Object.keys(state.drafts).length || Object.keys(state.reasoning).length))
       return;
@@ -145,6 +175,11 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
           });
       }
       if (previous.length > expanded.length || previous.some((row, i) => row.key !== expanded[i]?.key)) return current;
+      const held = expanded.findIndex((row, i) => i >= previous.length && fresh(row));
+      if (held >= 0) {
+        for (const row of expanded.slice(held)) deferred.add(row.key);
+        expanded.length = held;
+      }
       return current.epoch === epoch && previous.length === expanded.length ? current : { epoch, rows: expanded };
     });
   }, [settled, state.drafts, state.reasoning, state.activeTurnId, epoch]);
@@ -216,11 +251,7 @@ export function useNativeTranscript(state: TuiState, columns: number, epoch: num
               reasoning: {},
             };
             return (
-              <Box
-                key={row.key}
-                // Legacy MessageList: a user row sits two rows below what precedes it (the Transcript adds one).
-                marginTop={row.message?.role === 'user' && (header || index > 0) ? 1 : 0}
-              >
+              <Box key={row.key}>
                 <Transcript state={single} messages={single.messages} columns={columns} live staticRow />
               </Box>
             );

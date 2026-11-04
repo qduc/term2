@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { formatTokensPerSecond } from './presentation/utils/streaming/streaming-speed-tracker.js';
 import { Text } from 'ink';
 import { useSkin } from './presentation/skins/SkinContext.js';
@@ -137,6 +137,16 @@ export function directStatusView(
       quotaWindows,
     },
   };
+}
+
+/**
+ * Legacy's footer keeps the last request's usage until the conversation is cleared (a new session, so a fresh
+ * mount here): a model switch, rewind or compaction does not blank it, though the snapshot drops it.
+ */
+export function useFooterUsage(state: TuiState): TuiState {
+  const kept = useRef<Pick<TuiState, 'lastUsage' | 'speed'>>({});
+  if (state.lastUsage) kept.current = { lastUsage: state.lastUsage, speed: state.speed };
+  return state.lastUsage ? state : { ...state, ...kept.current };
 }
 
 /** Everything below the composer: its key hints while it is active, and the status bar always. */

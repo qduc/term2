@@ -5,9 +5,8 @@ import type { TuiState } from './state.js';
 import { PickerHost, type PickerKind } from './picker-host.js';
 import { BudgetPanel } from './budget-panel.js';
 import { RewindPicker } from './rewind-picker.js';
-import { InteractionPanel } from './interaction-panel.js';
 import type { InteractionInput } from './interaction-input.js';
-import { answerBudget, answerInteraction } from './commands.js';
+import { answerBudget } from './commands.js';
 
 type Props = {
   picker: PickerKind | null;
@@ -19,13 +18,10 @@ type Props = {
   budgetOpen: boolean;
   rewindTargets: readonly WireRewindTarget[] | null;
   state: TuiState;
-  /** The Ctrl+G request picker; the foreground turn's request is approval-host.tsx's. */
-  interactionActive: boolean;
   columns: number;
   closePicker: () => void;
   closeBudget: () => void;
   closeRewind: () => void;
-  closeInteraction: () => void;
   executeRewind: (id: string, disposition: 'edit' | 'resend') => Promise<void>;
 };
 
@@ -40,12 +36,10 @@ export function SessionPanels({
   budgetOpen,
   rewindTargets,
   state,
-  interactionActive,
   columns,
   closePicker,
   closeBudget,
   closeRewind,
-  closeInteraction,
   executeRewind,
 }: Props): React.ReactElement {
   return (
@@ -75,18 +69,6 @@ export function SessionPanels({
           onSelect={(id, disposition) => {
             void executeRewind(id, disposition);
           }}
-        />
-      ) : null}
-
-      {interactionActive ? (
-        <InteractionPanel
-          interactions={state.interactions}
-          width={columns}
-          inputHandler={interactionInput}
-          onClose={() => {
-            closeInteraction();
-          }}
-          onAnswer={(id, decision) => answerInteraction(connection, id, decision)}
         />
       ) : null}
     </>

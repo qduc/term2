@@ -62,8 +62,6 @@ export function TuiSession({
   const preferences = integration.preferences?.(connection.sessionId) ?? terminalPreferenceDefaults();
   const { columns, rows } = useTerminalSize();
   const [bangResult, setBangResult] = useState<string | null>(null);
-  const [interactionOpen, setInteractionOpen] = useState(false);
-  const [dismissedInteractionId, setDismissedInteractionId] = useState<string | null>(null);
   const [answeredId, setAnsweredId] = useState<string | null>(null);
   const [picker, setPicker] = useState<PickerKind | null>(null);
   const [taskOpen, setTaskOpen] = useState(false);
@@ -94,13 +92,12 @@ export function TuiSession({
     queueOwners,
   } = useSessionComposer(state, preferences.historySize, setNotice);
   const [rewindTargets, setRewindTargets] = useState<readonly WireRewindTarget[] | null>(null);
-  // Snapshot-derived ownership leaves no gap for decision keys to land in the composer; Ctrl+G picks any request.
+  // Snapshot-derived ownership leaves no gap for decision keys to land in the composer.
   const prompt = promptRequest(state, answeredId);
   const panelOpen = Boolean(picker) || taskOpen || budgetOpen || Boolean(rewindTargets);
-  const shown =
-    !interactionOpen && !panelOpen && prompt?.interaction.id !== dismissedInteractionId ? prompt : undefined;
+  const shown = !panelOpen ? prompt : undefined;
   const foregroundInteraction = shown?.interaction;
-  const interactionActive = interactionOpen || Boolean(foregroundInteraction);
+  const interactionActive = Boolean(foregroundInteraction);
   const confirmation = useSendConfirmation(interactionActive);
   const interactionInput = useRef<InteractionInputHandler | null>(null);
   const approvalInterrupt = useRef<(() => boolean) | null>(null);
@@ -157,7 +154,8 @@ export function TuiSession({
     if (slash.handle(key, replaceInput, openPickerFor(integration, setPicker), (command) => void submit(command, [])))
       return;
     if (composerActive && key.escape && viewport.expanded) return viewport.collapse();
-    if (isCtrlG(input, key) && !busy) (state.interactions.length ? setInteractionOpen : setTaskOpen)(true);
+    // Legacy's Ctrl+G is only the background task manager; it has no pending-interactions list.
+    if (isCtrlG(input, key) && !busy) setTaskOpen(true);
     if (key.ctrl && input === 'b' && state.budgets.length && !busy) setBudgetOpen(true);
     if (key.meta && key.return && state.activeTurnId && !busy && !editing)
       void submit(editor.value, images, 'follow_up');
@@ -403,14 +401,9 @@ export function TuiSession({
             executeRewind,
           }}
           onNotice={setNotice}
-          interactionActive={interactionActive && !foregroundInteraction}
           closePicker={() => setPicker(null)}
           closeBudget={() => setBudgetOpen(false)}
           closeRewind={() => setRewindTargets(null)}
-          closeInteraction={() => {
-            setDismissedInteractionId(prompt?.interaction.id ?? null);
-            setInteractionOpen(false);
-          }}
         />
         <LiveNotices connectionError={connError} transitionNotice={transitionNotice} />
         {confirmation.prompt}

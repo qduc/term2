@@ -15,7 +15,7 @@
       "reason": "Verbatim port of legacy source/components/prompt/ApprovalPrompt.tsx (every approval and ask_user layout and key path); only its data access changed, so it matches legacy by construction."
     },
     "rewrite/src/clients/tui/session.tsx": {
-      "lines": 516,
+      "lines": 509,
       "reason": "The session decides which surface owns input (composer, pickers, the ported approval prompt); that routing closes over submit and the composer state declared in the same component, so moving it out would add ref plumbing rather than a job seam."
     },
     "rewrite/src/engine/turn-tools.ts": {

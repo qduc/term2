@@ -19,6 +19,9 @@ SCENARIOS = {
     'approval-esc-again': ['delete it', '<enter>', '<esc>', 'hello', '<enter>'],
     'approval-ctrl-c': ['delete it', '<enter>', '<c-c>'],
     'approval-ctrl-g': ['delete it', '<enter>', '<c-g>'],
+    # A second Ctrl+G after the first: legacy has no pending-interactions list.
+    'approval-ctrl-g-again': ['delete it', '<enter>', '<c-g>', '<sleep>', '<c-g>', '<sleep>'],
+    'approval-ctrl-g-again-enter': ['delete it', '<enter>', '<c-g>', '<sleep>', '<c-g>', '<sleep>', '<enter>', '<sleep>'],
 }
 _DRAFT = ['delete it', '<enter>', 'my draft', '<sleep>']
 SCENARIOS.update({

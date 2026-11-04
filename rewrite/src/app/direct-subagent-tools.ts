@@ -127,7 +127,9 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
   // native Tool.execute entries, never model-requested tool_call items.
   const preparedEvidence = new WeakMap<NestedRunRequest, ExecutionEvidence>();
   const executionEvidence = new Map<string, ExecutionEvidence>();
-  const sessions = new DirectSubagentSessions();
+  const sessions = new DirectSubagentSessions<SubagentDefinition>(
+    (code, message) => new SubagentRegistryError(code as never, message),
+  );
   const preparedSessions = new WeakMap<
     NestedRunRequest,
     { readonly key: string | undefined; readonly definition: SubagentDefinition }

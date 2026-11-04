@@ -64,7 +64,11 @@ function searchOffThread(
     // unless another search is waiting on it: then that one finishes and this one's reply is ignored.
     const onAbort = () => {
       finish();
-      if (inFlight === 0) void target.terminate();
+      if (inFlight === 0) {
+        // Forget the worker first so a search started right now gets a fresh one, not this dying thread.
+        if (worker === target) worker = undefined;
+        void target.terminate();
+      }
       reject(signal.reason ?? new Error('Search cancelled'));
     };
     target.on('message', onMessage);

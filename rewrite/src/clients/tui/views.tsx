@@ -27,7 +27,7 @@ export function Transcript({
 }): React.ReactElement {
   const { UserMessage, AssistantFrame, assistantGutter } = useSkin();
   const theme = useTheme();
-  const width = Math.max(1, columns - 4 - assistantGutter);
+  const width = Math.max(1, columns - 2 - assistantGutter);
   const messageById = new Map(messages.map((message) => [message.id, message]));
   const toolById = new Map((live ? state.tools : []).map((tool) => [tool.id, tool]));
   const failures = expanded ? new Map<string, number>() : failedShellGroups(state.tools);

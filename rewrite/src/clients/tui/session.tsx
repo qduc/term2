@@ -477,13 +477,13 @@ export function TuiSession({
           <Text color={theme.accent}>{handoffFlow.promptLabel}</Text>
         ) : null}
         {menuStack.open || rewindHidden || confirmation.prompt || handoffFlow.prompt ? null : (
-          <ComposerWidth columns={columns}>
+          <ComposerWidth columns={columns} fullWidth={menuStack.handingBack}>
             {(width) => (
               <InputFrame>
                 <PromptMarker mode={shell.active ? 'shell' : 'input'} />
                 <MultilineInput
                   key={editor.inputKey}
-                  value={menuStack.value}
+                  value={editor.value}
                   onChange={(value) => shell.change(value) || changeInput(value)}
                   onSubmit={(value, submittedImages = []) => {
                     if (!shell.submit(value, submittedImages.length > 0, (command) => submit(command, submittedImages)))

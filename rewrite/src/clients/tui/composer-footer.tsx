@@ -166,12 +166,16 @@ export function useFooterUsage(state: TuiState, resumed = false): TuiState {
  */
 export function ComposerWidth({
   columns,
+  fullWidth = false,
   children,
 }: {
   readonly columns: number;
+  /** Mounting as a menu hands its text back: legacy's editor already holds that text, so the stale draft the
+   * composer still has for this render is not drawn one character per line. */
+  readonly fullWidth?: boolean;
   readonly children: (width: number) => React.ReactNode;
 }): React.ReactElement {
-  const [mounted, setMounted] = useState(false);
+  const [mounted, setMounted] = useState(fullWidth);
   useEffect(() => setMounted(true), []);
   return <>{children(mounted ? Math.max(1, columns - 6) : 0)}</>;
 }

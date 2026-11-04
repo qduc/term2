@@ -163,6 +163,9 @@ it(
         reasoning: 'Locating the unique workspace fixture',
         text: 'Created `b.txt` and read it back: `hi`. Flags: `--foo` `--bar` first turn done. Bold **`BOLDCHIP`** here. End **`ENDCHIP`**. List: **`ONECHIP`** `TWOCHIP` end. Italic *`ITALICCHIP`* end.\n\n- `LISTCHIP` starts here.',
       },
+      // A live background shell, so ^G has a task to manage.
+      { call: { id: 'call_bg', args: { command: 'sleep 300', background: true } } },
+      { text: 'background task started' },
     ]);
     const idlePath = path.join(home, 'input-idle');
     const env = {
@@ -302,6 +305,15 @@ it(
     expect(expandedFrame).toContain('+beta-line');
     expect(expandedFrame).toContain('-alpha-line');
     expect(expandedFrame).toContain('+gamma-line');
+    // Legacy's ^G opens nothing while no task is live.
+    const beforeNoTask = session.getVisibleOutput().length;
+    session.write('\x07');
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    expect(session.getVisibleOutput().slice(beforeNoTask)).not.toContain('Manage background tasks');
+    // Start a live background shell for the manager below.
+    await submit('start a background task');
+    await session.waitForOutput('background task started', 60_000);
+    idle = await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
     // Collapse expanded output with Escape without clearing the current draft.
     session.write('output-draft');
     await waitForHarnessComposerValue(idlePath, 'output-draft', { timeoutMs: 30_000 });

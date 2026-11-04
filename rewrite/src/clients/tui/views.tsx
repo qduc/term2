@@ -1,3 +1,5 @@
+import { terminalTextWidth, truncateTerminalText } from './task-manager.js';
+import { useTerminalSize } from './terminal.js';
 import React, { useEffect, useRef, useState } from 'react';
 import { StreamingSpeedTracker } from './presentation/utils/streaming/streaming-speed-tracker.js';
 import { Box, Text } from 'ink';
@@ -383,6 +385,9 @@ export function BangResult({
 /** Render active shell work below the divider, as in the legacy task panel. */
 export function ShellTaskPanel({ state }: { readonly state: TuiState }): React.ReactElement | null {
   const theme = useTheme();
+  const { taskPanelGutter } = useSkin();
+  const { columns: terminalColumns } = useTerminalSize();
+  const columns = terminalColumns - taskPanelGutter;
   const [now, setNow] = useState(Date.now);
   const tasks = state.tasks.filter(
     (task) => task.wire?.kind === 'shell' && (task.status === 'running' || task.status === 'awaiting_interaction'),
@@ -396,11 +401,25 @@ export function ShellTaskPanel({ state }: { readonly state: TuiState }): React.R
   return (
     <Box flexDirection="column" marginBottom={2}>
       <Text color={theme.textSubtle}>Tasks · {tasks.length} active · ^G manage</Text>
-      {tasks.map((task) => (
-        <Text key={task.id} color={theme.textSubtle}>
-          • [Shell ↑] {task.label} · Running · {Math.max(0, Math.floor((now - (task.wire?.startedAt ?? now)) / 1000))}s
-        </Text>
-      ))}
+      {tasks.map((task) => {
+        const badge = '[Shell ↑]';
+        const rawPhase = `Running · ${Math.max(0, Math.floor((now - (task.wire?.startedAt ?? now)) / 1000))}s`;
+        const fixedColumns = 2 + terminalTextWidth(badge) + 1 + 3;
+        const phase = truncateTerminalText(rawPhase, Math.max(1, columns - fixedColumns - 6));
+        const physicalBudget = Math.max(1, columns - fixedColumns - terminalTextWidth(phase));
+        const classBudget = columns < 72 ? 24 : columns >= 104 ? 60 : 36;
+        const label =
+          task.label
+            .split('\n')
+            .find((line) => line.trim())
+            ?.trim()
+            .replaceAll(/\s+/g, ' ') ?? '';
+        return (
+          <Text key={task.id} color={theme.textSubtle}>
+            • {badge} {truncateTerminalText(label, Math.min(physicalBudget, classBudget))} · {phase}
+          </Text>
+        );
+      })}
     </Box>
   );
 }

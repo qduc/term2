@@ -4,10 +4,10 @@ import type { TaskView } from './state.js';
 import { useTerminalSize } from './terminal.js';
 
 /** Conservative terminal-cell width used before Ink performs physical layout. */
-const terminalTextWidth = (value: string): number =>
+export const terminalTextWidth = (value: string): number =>
   Array.from(value).reduce((columns, point) => columns + (point.codePointAt(0)! > 0x7f ? 2 : 1), 0);
 
-const truncateTerminalText = (value: string, maxColumns: number): string => {
+export const truncateTerminalText = (value: string, maxColumns: number): string => {
   if (terminalTextWidth(value) <= maxColumns) return value;
   const ellipsis = '…';
   const ellipsisWidth = terminalTextWidth(ellipsis);

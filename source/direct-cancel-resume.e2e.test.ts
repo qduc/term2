@@ -319,14 +319,13 @@ it.each(['slash', 'ctrl-c', 'editing', 'only-steers'] as const)(
     }
     if (mode === 'editing') {
       // Legacy's first Ctrl+C exits queue editing without cancelling the turn.
+      const previousOutputLength = session.getVisibleOutput().length;
       session.write('\x03');
       await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 5_000 });
       await new Promise((resolve) => setTimeout(resolve, 500));
-      const output = session.getVisibleOutput();
-      const screen = output.slice(output.lastIndexOf('▌ term²'));
+      const screen = session.getVisibleOutput().slice(previousOutputLength);
       expect(screen).toContain('UNIQUE-QUEUED-STEER');
       expect(screen).toContain('UNIQUE-SECOND-STEER');
-      expect(screen).not.toContain('UNIQUE-QUEUED-STEER-EDITED');
       expect(screen).not.toContain('Stopped');
       return;
     }

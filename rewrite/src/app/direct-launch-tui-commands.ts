@@ -123,7 +123,7 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
 
   const resume = async (sessionId: string | undefined): Promise<CommandResult> => {
     if (sessionId && sessionId !== 'ls') {
-      return { sessionId };
+      return { sessionId, message: `Resumed conversation: ${sessionId}` }; // legacy app.tsx resumeConversation
     }
     // Legacy's bare /resume puts its trigger in the input, which opens the resume menu.
     if (!sessionId) return { draft: { text: '/resume ', attachments: [] } };

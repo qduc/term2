@@ -101,7 +101,9 @@ export function TuiSession({
   const confirmation = useSendConfirmation(interactionActive);
   const interactionInput = useRef<InteractionInputHandler | null>(null);
   const viewportActive = !interactionActive && !panelOpen && !confirmation.pending;
-  const viewport = useCommandTranscriptViewport(state, headerHeight ?? 0, viewportActive, header, historyRevision);
+  const viewport = useCommandTranscriptViewport(state, headerHeight ?? 0, viewportActive, header, historyRevision, {
+    transitionNotice,
+  });
   const { InputFrame, PromptMarker, LiveDivider } = useSkin();
   const theme = useTheme();
   const [busy, setBusy] = useState(false);
@@ -403,7 +405,7 @@ export function TuiSession({
           Lines {viewport.start + 1}–{viewport.end} of {viewport.total} · PgUp/PgDn or Ctrl+↑/↓
         </Text>
       ) : null}
-      <Box flexDirection="column" paddingX={2} marginTop={state.activeTurnId ? 1 : state.messages.length ? 3 : 2}>
+      <Box flexDirection="column" paddingX={2} marginTop={viewport.bottomMargin}>
         <Activity state={state} dialogInteractionId={foregroundInteraction?.id} notice={notice} />
         <SessionPanels
           {...{
@@ -425,7 +427,7 @@ export function TuiSession({
             setInteractionOpen(false);
           }}
         />
-        <LiveNotices connectionError={connError} transitionNotice={transitionNotice} />
+        <LiveNotices connectionError={connError} />
         {confirmation.prompt}
         <LiveNotices notice={notice} historyError={editor.historyError} />
         {bangResult ? <BangResult result={bangResult} expanded={viewport.expanded} /> : null}

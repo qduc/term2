@@ -31,12 +31,38 @@ export function publicQueue(
   };
 }
 
+/** A record is rebuilt only when it or its turn's result changed: replay publishes the whole list per queue fact. */
+const publicRecords = new WeakMap<
+  DirectQueueRecord,
+  { result: WireTurnResult | undefined; value: WireSubmissionRecord }
+>();
+const resultsByTurn = new WeakMap<readonly WireTurnResult[], Map<string, WireTurnResult>>();
+
+function turnResultFor(turnResults: readonly WireTurnResult[], turnId: string): WireTurnResult | undefined {
+  let index = resultsByTurn.get(turnResults);
+  if (!index) {
+    index = new Map();
+    // find() returns the first match, so the first result of a turn wins.
+    for (const result of turnResults) if (!index.has(result.turnId)) index.set(result.turnId, result);
+    resultsByTurn.set(turnResults, index);
+  }
+  return index.get(turnId);
+}
+
 /** Retain the accepted original/current body and correlation, not a rewritten input. */
 function publicQueueRecord(
   record: DirectQueueRecord,
   turnResults: readonly WireTurnResult[] = [],
 ): WireSubmissionRecord {
-  const result = record.turnId ? turnResults.find((result) => result.turnId === record.turnId) : undefined;
+  const result = record.turnId ? turnResultFor(turnResults, record.turnId) : undefined;
+  const kept = publicRecords.get(record);
+  if (kept && kept.result === result) return kept.value;
+  const value = buildPublicQueueRecord(record, result);
+  publicRecords.set(record, { result, value });
+  return value;
+}
+
+function buildPublicQueueRecord(record: DirectQueueRecord, result: WireTurnResult | undefined): WireSubmissionRecord {
   return {
     clientRequestId: record.request.clientRequestId,
     messageId: record.messageId,

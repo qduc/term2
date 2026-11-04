@@ -88,16 +88,27 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
   // Every root terminal window is a read-only projection from its accepted
   // prefix, including audit facts before history replacement/rotation.
   const acceptedFacts: Fact[] = [];
+  // A window reads only its own turn's facts (and its cost records), so replay keeps them by turn
+  // instead of rescanning the whole history at every turn end.
+  const factsByTurn = new Map<string, Fact[]>();
   for (const entry of options.entries) {
     let fact = entry.fact;
     if (fact.type === 'turn_ended' && fact.finalWindow === undefined) {
-      const finalWindow = recoverDirectFinalWindow(acceptedFacts, fact);
+      const finalWindow = recoverDirectFinalWindow(factsByTurn.get(fact.turnId) ?? [], fact);
       if (finalWindow !== undefined) fact = { ...fact, finalWindow };
     }
     state = reduceDirectFact(state, fact, entry.seq);
     seq = entry.seq;
     durable.push({ type: 'fact', position: ++position, seq: entry.seq, at: entry.at, fact });
     acceptedFacts.push(fact);
+    for (const key of new Set([
+      ...('turnId' in fact && typeof fact.turnId === 'string' ? [fact.turnId] : []),
+      ...(fact.type === 'request_cost_recorded' ? [fact.rootTurnId] : []),
+    ])) {
+      const bucket = factsByTurn.get(key);
+      if (bucket) bucket.push(fact);
+      else factsByTurn.set(key, [fact]);
+    }
   }
   const resumedAtSeq = seq;
   let reopened = true;

@@ -148,7 +148,8 @@ const sameList = <T>(previous: readonly T[] | undefined, next: readonly T[], equ
   previous && previous.length === next.length && next.every((item, i) => equal(previous[i]!, item)) ? previous : next;
 
 /** Project the direct wire snapshot at the host's attachment cut. */
-const REWOUND = historyReplacedMessage('rewind');
+/** Legacy prints nothing after a rewind or a compaction beyond the command's own lines. */
+const SILENT_REPLACEMENTS = new Set([historyReplacedMessage('rewind'), historyReplacedMessage('compaction')]);
 
 export function projectSnapshot(snapshot: WireSnapshot): TuiState {
   const drafts: Record<string, string> = {};
@@ -215,9 +216,8 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
     tasks: snapshot.tasks.map(taskView),
     notices: [
       // A history edit already reads as a sentence; the raw kind label is internal.
-      // Legacy says nothing after a rewind: the redrawn transcript is the confirmation.
       ...snapshot.notices
-        .filter((notice) => !(notice.kind === 'history_replaced' && notice.message === REWOUND))
+        .filter((notice) => !(notice.kind === 'history_replaced' && SILENT_REPLACEMENTS.has(notice.message)))
         .map((notice) => (notice.kind === 'history_replaced' ? notice.message : `${notice.kind}: ${notice.message}`)),
       ...(snapshot.terminal?.notice ? [snapshot.terminal.notice] : []),
     ],

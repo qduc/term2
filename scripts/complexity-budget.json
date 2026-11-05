@@ -47,8 +47,8 @@
       "reason": "The wire type catalogue; candidate 2 adds the task's live tool state fields beside the others, and usage carries OpenRouter's upstream provider."
     },
     "src/session/conversation.ts": {
-      "lines": 510,
-      "reason": "The Conversation's turn driver; candidate 2 keeps both the question-cancel notice (a3) and the cross-turn compaction hold (solo/tools), each closing over the same driver state."
+      "lines": 572,
+      "reason": "The Conversation's turn driver; candidate 2 keeps both the question-cancel notice (a3) and the cross-turn compaction hold (solo/tools), each closing over the same driver state. Direct admission checks foreign native compaction coverage before accepting a turn, using the same configured provider and history as the driver."
     },
     "src/session/replay-fold.ts": {
       "lines": 503,
@@ -119,8 +119,8 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/model/providers/codex-responses-model.ts": {
-      "lines": 2444,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
+      "lines": 2450,
+      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Responses Lite reconnect checks the existing response chain before filtering unpaired tool items; this remains part of the same wire request preparation."
     },
     "src/model/providers/codex.provider.ts": {
       "lines": 765,

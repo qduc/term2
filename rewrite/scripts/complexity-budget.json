@@ -3,8 +3,8 @@
   "maxLines": 500,
   "fileCeilings": {
     "rewrite/src/model/provider.ts": {
-      "lines": 502,
-      "reason": "lazyModel is the one place a provider's streamed model becomes a Model; its native compact entry (body in provider-compact.ts) belongs beside stream."
+      "lines": 505,
+      "reason": "lazyModel is the one place a provider's streamed model becomes a Model; its native compact entry (body in provider-compact.ts) belongs beside stream. The usage it emits carries an aggregator's upstream provider, read from the same completion."
     },
     "rewrite/src/clients/tui/presentation/components/message/CommandMessage.tsx": {
       "lines": 1021,
@@ -27,7 +27,7 @@
       "reason": "Port of source/hooks/use-subagent-pool-selection.ts with only imports changed; kept whole so it stays diffable against the legacy oracle."
     },
     "rewrite/src/clients/tui/session.tsx": {
-      "lines": 547,
+      "lines": 541,
       "reason": "The session wires the composer to the ported legacy menu stack (useMenuStack, double-Escape) and routes every report into the transcript as legacy's addSystemMessage does; that wiring closes over submit, rewind and the viewport, declared later in the same component, so moving it out would add ref plumbing rather than a job seam. The composer's JSX also sits inside ComposerWidth (legacy InputBox's width-0 first frame), which only wraps it, and the command path routes a legacy clear-and-switch confirmation to the plan-toggle hook. The approval panel's Escape adds legacy's Stopped line through the viewport (one prop). The menu stack's first-run setup prompt sits under the live divider as legacy BottomArea places it (one line; the gate itself lives in menus/use-first-run-setup.ts). Candidate 2 adds the ported approval prompt host and tasks panel around the hidden composer box (legacy BottomArea order), which the same routing owns. The harness composer acknowledgement waits for the input to remount after an Esc-closed menu (two lines)."
     },
     "rewrite/src/clients/tui/approval-prompt.tsx": {

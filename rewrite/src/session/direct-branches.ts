@@ -76,14 +76,15 @@ export function createDirectBranchDriver(options: {
       let terminal: TurnResult | undefined;
       let readFailure: unknown;
       const items: Item[] = [];
-      // Legacy execution-runner: a child launched in the background never asks. A call that still needs an
-      // answer ends its run, settled as completed with what it produced (no approval, no denial).
-      let settledOnInteraction = false;
+      // A child launched in the background never asks. A call that still needs an answer ends its run. Legacy
+      // settles that as completed with an empty result, which hides the stop from the model: a confirmed legacy
+      // bug (#136 item 11, accepted-differences). Next reports a failed run that names the call.
+      let settledOnInteraction: { readonly kind: 'approval' | 'question'; readonly toolName: string } | undefined;
       const toolNames = new Map<string, string>();
       try {
         for await (const { token, event } of handle.events) {
           if (event.type === 'interaction_required' && request.mode === 'background') {
-            settledOnInteraction = true;
+            settledOnInteraction ??= { kind: event.request.kind, toolName: event.request.toolName };
             handle.accept(token);
             handle.cancel();
             continue;
@@ -219,7 +220,7 @@ export function createDirectBranchDriver(options: {
             ? { kind: 'budget_exhausted' }
             : { kind: 'interrupted', ...(cause !== undefined ? { terminalCause: cause } : {}) };
       } else outcome = terminal;
-      if (settledOnInteraction) outcome = { kind: 'completed' };
+      if (settledOnInteraction) outcome = { kind: 'failed', error: backgroundInteractionError(settledOnInteraction) };
       // Accepted physical starts, including scripted leaves, are execution
       // evidence. Provider call names and offered declarations are not usage.
       const counts = new Map<string, number>();
@@ -232,5 +233,15 @@ export function createDirectBranchDriver(options: {
       const report = await options.authority.report?.({ ...result, runId: context.runId });
       return report === undefined ? result : { ...result, report };
     },
+  };
+}
+
+/** Why a background run stopped: it can't ask the user, and a call needed an answer. */
+function backgroundInteractionError(stop: { readonly kind: 'approval' | 'question'; readonly toolName: string }) {
+  const need = stop.kind === 'approval' ? `${stop.toolName} needed approval` : `${stop.toolName} asked a question`;
+  return {
+    kind: 'invalid_request' as const,
+    message: `${need}; a background run can't ask`,
+    retryable: false,
   };
 }

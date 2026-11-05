@@ -106,9 +106,7 @@ it('bounds missing goal checks and keeps blocked and deferred goals active', asy
     const blockedOutputs = outputs(4, 'blocked-check');
     expect(blockedOutputs).toHaveLength(1);
     expect(blockedOutputs[0]!.output).toMatch(
-      direct
-        ? /^Self-check recorded: \[goal [^\]]+\] \[generation \d+\] blocked\. Return control and state exactly what input or capability is needed\.$/
-        : /^Self-check recorded: \[goal [^\]]+\] blocked\. Control returns to the user\./,
+      /^Self-check recorded: \[goal [^\]]+\] blocked\. Control returns to the user\./,
     );
     complete(4, [message('BLOCKED_DONE')]);
     await child.waitForVisibleOutput('BLOCKED_DONE');
@@ -121,9 +119,7 @@ it('bounds missing goal checks and keeps blocked and deferred goals active', asy
     const deferredOutputs = outputs(6, 'deferred-check');
     expect(deferredOutputs).toHaveLength(1);
     expect(deferredOutputs[0]!.output).toMatch(
-      direct
-        ? /^Self-check recorded: \[goal [^\]]+\] \[generation \d+\] deferred\. The goal remains active\. Finish the latest user request and end the turn\.$/
-        : /^Self-check recorded: \[goal [^\]]+\] deferred\. The durable goal stays active and unchanged\./,
+      /^Self-check recorded: \[goal [^\]]+\] deferred\. The durable goal stays active and unchanged\./,
     );
     complete(6, [message('DEFERRED_DONE')]);
     await child.waitForVisibleOutput('DEFERRED_DONE');

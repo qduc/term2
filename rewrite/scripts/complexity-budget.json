@@ -2,6 +2,10 @@
   "maxSourceEdges": 521,
   "maxLines": 500,
   "fileCeilings": {
+    "rewrite/src/model/provider.ts": {
+      "lines": 503,
+      "reason": "lazyModel is the one place a provider's streamed model becomes a Model; its native compact entry (body in provider-compact.ts) belongs beside stream."
+    },
     "rewrite/src/clients/tui/presentation/components/message/CommandMessage.tsx": {
       "lines": 1018,
       "reason": "Verbatim copy of legacy source/components/message/CommandMessage.tsx: tool rows match legacy by construction; splitting it would reintroduce a rewrite to prove. Four lines are the port exception that reads a live render's measured elapsed time (live-tool-age.ts)."
@@ -24,7 +28,7 @@
     },
     "rewrite/src/clients/tui/session.tsx": {
       "lines": 527,
-      "reason": "The session wires the composer to the ported legacy menu stack (useMenuStack, double-Escape) and routes every report into the transcript as legacy's addSystemMessage does; that wiring closes over submit, rewind and the viewport, declared later in the same component, so moving it out would add ref plumbing rather than a job seam. The composer's JSX also sits inside ComposerWidth (legacy InputBox's width-0 first frame), which only wraps it, and the command path routes a legacy clear-and-switch confirmation to the plan-toggle hook. The approval panel's Escape adds legacy's Stopped line through the viewport (one prop)."
+      "reason": "The session wires the composer to the ported legacy menu stack (useMenuStack, double-Escape) and routes every report into the transcript as legacy's addSystemMessage does; that wiring closes over submit, rewind and the viewport, declared later in the same component, so moving it out would add ref plumbing rather than a job seam. The composer's JSX also sits inside ComposerWidth (legacy InputBox's width-0 first frame), which only wraps it, and the command path routes a legacy clear-and-switch confirmation to the plan-toggle hook. The approval panel's Escape adds legacy's Stopped line through the viewport (one prop). The menu stack's first-run setup prompt sits under the live divider as legacy BottomArea places it (one line; the gate itself lives in menus/use-first-run-setup.ts)."
     }
   },
   "messagePath": {

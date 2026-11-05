@@ -61,7 +61,6 @@ export function useSessionComposer(state: TuiState, historySize: number, onNotic
   } | null>(null);
   const editingSnapshot = useRef(editing);
   editingSnapshot.current = editing;
-  const returnedRequestIds = useRef(new Set<string>());
   const cancellationEpoch = useRef(0);
   const cancellationBarrier = useRef<Promise<void>>(Promise.resolve());
   const pendingCancel = useRef<Promise<string> | null>(null);
@@ -121,86 +120,20 @@ export function useSessionComposer(state: TuiState, historySize: number, onNotic
     const operation = (async () => {
       const result = await cancelForegroundWithSteers(connection, turnId);
       if (submitted) editor.accepted(submitted, true, [], submittedRevision);
-      // The routine success line is noise for Esc and Ctrl+C (the Stopped marker shows it); returned steers,
-      // refusals and anything else still show.
-      if (!result.returnedSteers.length)
-        return result.message.startsWith('Cancellation requested') ? '' : result.message;
-      const activeWasReturned = result.returnedSteers.some(
-        (item) => item.clientRequestId === activeSubmission.current?.id,
-      );
-      if (activeWasReturned && activeSubmission.current) returnedRequestIds.current.add(activeSubmission.current.id);
-      const current = attachmentSnapshot.current;
-      const active = activeWasReturned ? activeSubmission.current : null;
-      const currentImages = active
-        ? current.images.filter((image) => !active.imageIds.includes(image.id))
-        : current.images;
-      const currentOther = active
-        ? current.otherParts.filter((part) => !active.otherParts.includes(part))
-        : current.otherParts;
-      const currentParts = wireAttachments(currentImages, currentOther, current.originalParts);
+      // Legacy drops pending steers on cancellation (conversation-adapter's 'Pending submission was cancelled'):
+      // none come back to the draft. A queue edit of a dropped steer ends and its saved draft returns.
       const edit = editingSnapshot.current;
-      const editingReturnedSteer = edit && result.returnedSteers.some((item) => item.messageId === edit.id);
-      const existing = edit
-        ? wireAttachments(edit.restoreImages, edit.restoreOther, edit.restoreOriginal)
-        : currentParts;
-      const currentText =
-        activeWasReturned &&
-        editor.current() === activeSubmission.current?.input &&
-        editor.revision() === activeSubmission.current?.revision
-          ? ''
-          : editor.current();
-      const editSubmission = edit ? activeSubmission.current : null;
-      const newerEditText =
-        editSubmission && (editor.revision() !== editSubmission.revision || editor.current() !== editSubmission.input)
-          ? editor.current()
-          : '';
-      const editText = editSubmission ? editSubmission.input : editor.current();
-      const prefix = edit
-        ? [edit.restoreText, ...(editingReturnedSteer || editSubmission ? [newerEditText] : [editText, newerEditText])]
-        : [currentText];
-      const texts = result.returnedSteers.map(({ messageId, content }) =>
-        edit && messageId === edit.id
-          ? editText
-          : content
-              .filter((part) => part.type === 'text')
-              .map((part) => part.text)
-              .join(''),
-      );
-      const pendingEditParts = editSubmission
-        ? wireAttachments(editSubmission.images, editSubmission.otherParts, editSubmission.originalParts)
-        : [];
-      const currentEditImages = editSubmission
-        ? current.images.filter((image) => !editSubmission.imageIds.includes(image.id))
-        : current.images;
-      const currentEditOther = editSubmission
-        ? current.otherParts.filter((part) => !editSubmission.otherParts.includes(part))
-        : current.otherParts;
-      const newEditParts = wireAttachments(currentEditImages, currentEditOther, current.originalParts);
-      const editedParts = editSubmission ? [...pendingEditParts, ...newEditParts] : currentParts;
-      if (edit && editSubmission)
-        invalidatedEdits.current.set(
-          edit.id,
-          editingReturnedSteer ? {} : { text: editSubmission.input, attachments: pendingEditParts },
-        );
-      const attachments = result.returnedSteers.flatMap(({ messageId, content }) => {
-        if (edit && messageId === edit.id)
-          return edit.knownParts ? editedParts : [...content.filter((part) => part.type === 'image'), ...editedParts];
-        return content.filter((part) => part.type === 'image');
-      });
-      if (edit && !editingReturnedSteer) attachments.unshift(...(editSubmission ? newEditParts : editedParts));
-      if (edit) {
+      if (edit && result.returnedSteers.some((item) => item.messageId === edit.id)) {
+        if (activeSubmission.current) invalidatedEdits.current.set(edit.id, {});
         editingSnapshot.current = null;
         setEditing(null);
+        restoreDraft({
+          text: edit.restoreText,
+          attachments: wireAttachments(edit.restoreImages, edit.restoreOther, edit.restoreOriginal),
+        });
       }
-      const reordered = result.returnedSteers.some(({ content }) => {
-        const image = content.findIndex((part) => part.type === 'image');
-        return image >= 0 && content.slice(image + 1).some((part) => part.type === 'text');
-      });
-      restoreDraft({
-        text: [...prefix, ...texts].filter((text) => text.length > 0).join('\n\n'),
-        attachments: [...existing, ...attachments],
-      });
-      return result.message + (reordered ? ' Original text/image order cannot be retained in the draft.' : '');
+      // The routine success line is noise for Esc and Ctrl+C (the Stopped marker shows it); refusals still show.
+      return result.message.startsWith('Cancellation requested') ? '' : result.message;
     })();
     pendingCancel.current = operation;
     const settled = operation.finally(() => {
@@ -232,13 +165,6 @@ export function useSessionComposer(state: TuiState, historySize: number, onNotic
       activeSubmission.current = null;
       invalidatedEdits.current.clear();
     }
-    returnedRequestIds.current.delete(requestId);
-  };
-  /** A send started before cancellation must not clear a draft restored by its later receipt. */
-  const wasReturnedAfter = async (epoch: number, clientRequestId: string): Promise<boolean> => {
-    if (epoch === cancellationEpoch.current && !pendingCancel.current) return false;
-    await cancellationBarrier.current;
-    return returnedRequestIds.current.has(clientRequestId);
   };
   const wasEditInvalidatedAfter = async (epoch: number, messageId: string, failed = false): Promise<boolean> => {
     if (epoch === cancellationEpoch.current && !pendingCancel.current) return false;
@@ -397,7 +323,6 @@ export function useSessionComposer(state: TuiState, historySize: number, onNotic
       beginSubmission,
       endSubmission,
       cancellationEpoch,
-      wasReturnedAfter,
       wasEditInvalidatedAfter,
       restoreLateSteer,
       lateSteerNotice,

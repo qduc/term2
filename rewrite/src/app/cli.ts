@@ -26,10 +26,11 @@ import type { ServeArgs } from '../../../source/gateway/serve-args.js';
 import type { DirectLaunchBase } from './direct-launch-types.js';
 import type { InteractivePickerRequest } from '../../../source/services/models/model-resolution.js';
 import { HARNESS_IDLE_ENV } from '../../../source/lib/harness-input-idle.js';
+import { formatResumeList } from '../../../source/utils/resume-list.js';
 import { isControlSocketName } from '../../../source/services/control-socket/control-socket.js';
 import { createSettingsService, type SettingsService } from './settings.js';
 import { runLogin, runListModelsCommand } from './cli-account-commands.js';
-import { listNativeConversations, resolveNativeResume } from './cli-conversations.js';
+import { listNativeConversations, resolveNativeResume, ResumeRefusal } from './cli-conversations.js';
 import {
   launchDirect,
   INTERACTIVE_TERMINAL_REQUIRED,
@@ -390,7 +391,7 @@ async function main(argv: readonly string[]): Promise<number> {
     case 'list-models':
       return runListModelsCommand(command.search, command.refresh);
     case 'list-conversations':
-      stdout.write(await listNativeConversations(conversationsDirectory(), command.options));
+      stdout.write(`${formatResumeList(await listNativeConversations(conversationsDirectory(), command.options))}\n`);
       return 0;
     case 'interactive': {
       if (command.refused) throw refused(command.refused);
@@ -444,7 +445,7 @@ async function main(argv: readonly string[]): Promise<number> {
 void main(process.argv.slice(2)).then(
   (code) => process.exit(code),
   (error: unknown) => {
-    stderr.write(`error ${errorMessage(error)}\n`);
+    stderr.write(error instanceof ResumeRefusal ? `${error.message}\n` : `error ${errorMessage(error)}\n`);
     process.exit(error instanceof UsageError ? error.exitCode : 1);
   },
 );

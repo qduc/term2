@@ -11,7 +11,8 @@ import { usesDirectComposer } from '../../source/test-helpers/direct-composer.js
 it.each(['retained', 'legacy', 'invalid'] as const)(
   'retains the human clock across rollover and resumed successor for Discord input (%s baseline)',
   async (baseline) => {
-    const nativeRetained = baseline === 'retained' && usesDirectComposer([process.env.TERM2_TEST_CLI ?? '']);
+    // Next keeps its own store; its human-clock metadata is the accepted receipt's receivedAt.
+    const native = usesDirectComposer([process.env.TERM2_TEST_CLI ?? '']);
     const requests: any[] = [];
     const server = createServer(async (request, response) => {
       const chunks: Buffer[] = [];
@@ -120,7 +121,7 @@ globalThis.Date = class extends RealDate {
           throw new Error(`control ${kind} ${id}: ${error.code} ${error.message}`);
         });
         expect(receipt.delivery).toBe('started');
-        if (nativeRetained) {
+        if (native) {
           await child!.waitForOutput(`timing-response-${responseRequest}`);
           await child!.waitForState(() => requests.length === responseRequest);
         }
@@ -137,25 +138,40 @@ globalThis.Date = class extends RealDate {
             text: await readFile(join(workspace.paths.conversationsDir, name), 'utf8'),
           })),
         )
-      ).find((s) => s.text.includes(nativeRetained ? '"session_rotated"' : '"rolloverFrom"'))!;
-      const predecessor = (
-        await Promise.all(sessions.map(async (name) => readFile(join(workspace.paths.conversationsDir, name), 'utf8')))
-      ).find((s) => !s.includes(nativeRetained ? '"session_rotated"' : '"rolloverFrom"'))!;
+      ).find((s) => s.text.includes(native ? '"session_rotated"' : '"rolloverFrom"'))!;
+      const { name: predecessorName, text: predecessor } = (
+        await Promise.all(
+          sessions.map(async (name) => ({
+            name,
+            text: await readFile(join(workspace.paths.conversationsDir, name), 'utf8'),
+          })),
+        )
+      ).find((s) => !s.text.includes(native ? '"session_rotated"' : '"rolloverFrom"'))!;
       const predecessorRows = predecessor
         .split('\n')
         .filter(Boolean)
         .map((line) => JSON.parse(line));
-      const firstAt = nativeRetained
+      const firstAt = native
         ? predecessorRows.find(
             (row) => row.fact.type === 'queue_submitted' && row.fact.record.request.clientRequestId === 'timing-test-1',
           ).fact.record.receivedAt
         : predecessorRows.find((row) => row.event.type === 'user_message').event.message.humanInputAt;
-      if (nativeRetained) expect(firstAt).toEqual(expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/));
+      if (native) expect(firstAt).toEqual(expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/));
       await child.cleanup();
       child = undefined;
       // Old successors have no checkpoint; malformed optional metadata fails closed.
       // Only disposable fixture logs are edited, never application-owned live state.
-      if (baseline !== 'retained') {
+      if (baseline !== 'retained' && native) {
+        const first = predecessorRows.find(
+          (row) => row.fact.type === 'queue_submitted' && row.fact.record.request.clientRequestId === 'timing-test-1',
+        );
+        if (baseline === 'legacy') delete first.fact.record.receivedAt;
+        else first.fact.record.receivedAt = 'not-a-timestamp';
+        await writeFile(
+          join(workspace.paths.conversationsDir, predecessorName),
+          predecessorRows.map((row) => JSON.stringify(row)).join('\n') + '\n',
+        );
+      } else if (baseline !== 'retained') {
         const rows = successor.text
           .trim()
           .split('\n')

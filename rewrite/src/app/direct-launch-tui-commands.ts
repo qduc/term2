@@ -151,8 +151,13 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
     const reference = provider === undefined ? legacy.modelId : `${provider}/${legacy.modelId}`;
     const done = provider === undefined ? `Model set to ${reference}.` : `Set model to ${legacy.modelId} (${provider})`;
     const selected = parseModel(reference);
+    // Legacy model-command.ts saves the selection as the default for the next launch.
+    const save = (result: CommandResult): CommandResult => {
+      if (result.applied) app.saveApprovalPreference(connection.sessionId, 'agent.modelSelection');
+      return result;
+    };
     // Legacy set a `<id> [--provider=]` selection without checking the catalog; the menu submits that form.
-    if (provider !== undefined) return configure(connection, { model: selected }, done);
+    if (provider !== undefined) return save(await configure(connection, { model: selected }, done));
     const catalog = await options.modelCatalog(connection.sessionId, selected.provider);
     if (catalog.error || catalog.models.length === 0) {
       throw new Error(
@@ -168,7 +173,7 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
           .join(', ')}.`,
       );
     }
-    return configure(connection, { model: selected }, done);
+    return save(await configure(connection, { model: selected }, done));
   };
 
   const effort = async (connection: TuiConnection, value: string | undefined): Promise<CommandResult> => {

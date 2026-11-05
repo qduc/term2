@@ -241,16 +241,13 @@ export function enforceDirectInputLimit(
   if (policy.hardInputLimit === undefined) return;
   const estimated = estimateDirectContext(request, input.contextWindow).renderedInputTokens;
   if (estimated <= policy.hardInputLimit) return;
-  throw new ModelFailure({
-    kind: 'context_overflow',
-    retryable: false,
-    message:
-      `request_input_limit: Request input exceeds ${
-        policy.limitSource === 'model_capacity' ? 'known model capacity' : 'configured input ceiling'
-      } ` +
-      `(${estimated} > ${policy.hardInputLimit} tokens). Work is retained. Compact, choose a larger model, ` +
-      'or explicitly raise agent.maxRequestInputTokens before resuming.',
-  });
+  // Legacy's RequestInputLimitError text (source/services/agent-runtime/request-input-limit.ts);
+  // the `request_input_limit: ` prefix carries its code to clients.
+  const text =
+    policy.limitSource === 'model_capacity'
+      ? `Request cannot fit the known model capacity (input budget ${policy.hardInputLimit}, output reserve ${policy.outputReserve}, estimation reserve ${policy.estimationReserve}, capacity ${policy.capacity}). Work is retained. Compact, choose a larger-capacity model, or lower an explicit output allocation before resuming.`
+      : `Request input exceeds configured ceiling (${estimated} > ${policy.hardInputLimit} tokens). Work is retained. Compact, use a concise artifact-backed handoff, or explicitly raise agent.maxRequestInputTokens before resuming.`;
+  throw new ModelFailure({ kind: 'context_overflow', retryable: false, message: `request_input_limit: ${text}` });
 }
 
 type LocalOperation =

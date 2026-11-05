@@ -101,7 +101,7 @@ export function bindDirectSessionAccess<TCreated, TOpened>(options: {
       const grant = options.authority.resolveGrant(principal, started.binding.id);
       const resolved = options.authority.resolveWorkspace(principal, grant);
       if (path.resolve(resolved.workspace.root) !== path.resolve(started.root)) throw forbidden();
-      if (access.kind === 'write' && resolved.workspace.access !== 'read_write') throw forbidden();
+      // A read grant still chats, as in the legacy gateway: its tools, not its commands, are read-only.
     },
     resolveWorkspace(principal, grant) {
       const resolved = options.authority.resolveWorkspace(principal, grant);

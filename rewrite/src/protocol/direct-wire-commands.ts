@@ -131,7 +131,7 @@ export type WireCommandResult =
   | {
       readonly ok: true;
       readonly kind: 'preview';
-      readonly notices: readonly WireNotice[];
+      readonly notices: readonly (WireNotice & { readonly estimatedTokens?: number })[];
       readonly requiresConfirmation: boolean;
     }
   | { readonly ok: true; readonly kind: 'session_changed'; readonly sessionId: string }

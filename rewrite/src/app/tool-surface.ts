@@ -8,6 +8,11 @@ import { getCatalogModel } from '../../../source/providers/model-catalog/catalog
 import { resolveRequestOutput } from '../../../source/services/agent-runtime/model-context-policy.js';
 import { NonInteractiveApprovalPolicy } from '../../../source/services/approval/non-interactive-approval-policy.js';
 import { ToolApprovalPolicyRegistry } from '../../../source/services/approval/tool-approval-policy-registry.js';
+import {
+  isAutoApprovableTool,
+  ShellAutoApprovalResolver,
+} from '../../../source/services/approval/shell-auto-approval-resolver.js';
+import type { ConversationRecord } from '../../../source/services/conversation/conversation-record.js';
 import type { ShellAutoApprovalAgentClient } from '../../../source/services/conversation-agent-client.js';
 import type { ExecutionContext } from '../../../source/services/execution-context.js';
 import { LocalExecutionContext } from './tool-contract.js';
@@ -190,11 +195,23 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
   primeActiveProfileNoticeIfActive(settings, (text) => {
     notice = text;
   });
+  const agentClient = advisoryClient(createProviderRegistry(selection), selection, advisoryAbort.signal);
+  // Legacy's in-loop advisory (approval batch coordinator): it sees the pending
+  // call in history and caches per call id; `auto` mode may approve from it.
+  let advisoryHistory: ProviderInputItem[] = [];
+  const advisor = new ShellAutoApprovalResolver({
+    record: { getHistory: () => advisoryHistory } as unknown as ConversationRecord,
+    agentClient,
+    logger,
+    settingsService: settings,
+    sessionContextService: selection.sessionContext,
+    sessionAccess,
+  });
   const policy = new NonInteractiveApprovalPolicy({
     settingsService: settings,
     logger,
     sessionContextService: selection.sessionContext,
-    agentClient: advisoryClient(createProviderRegistry(selection), selection, advisoryAbort.signal),
+    agentClient,
     // Exactly the source run_code collision set; MCP adapter owns member identity
     // and allowlist matching. No second name policy or live catalog lookup here.
     ...mcp?.approvalPolicy(new Set([...sourceGraph.map((tool) => tool.name), TOOL_NAME_DESCRIBE])),
@@ -268,6 +285,19 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
       if (isDockerRequest(request.toolName, request.input, sessionAccess)) {
         return { kind: 'deny', reason: 'Docker host control requires an explicit interactive approval' };
       }
+      const callId = request.sourceCallId ?? request.requestId;
+      if (isAutoApprovableTool(request.toolName) && settings.get('shell.autoApproveMode') !== 'always') {
+        advisoryHistory = approvalHistory(history);
+        const advisory = await withWorkspace(() =>
+          advisor.resolveAdvisoryForInterruption({
+            interruption: { name: request.toolName, arguments: request.input, callId },
+            siblings: [{ name: request.toolName, arguments: request.input, callId }],
+          }),
+        );
+        if (advisor.shouldAutoApprove(advisory)) return { kind: 'allow' };
+      }
+      // Legacy's headless continuation then decides from the session history,
+      // which does not yet hold the paused response's unresolved calls.
       const decision = await withWorkspace(() =>
         policy.decide({
           autoApprove: options.autoApprove === true,
@@ -276,9 +306,9 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
             toolName: request.toolName,
             argumentsText: approvalArguments(request.toolName, request.input),
             rawInterruption: null,
-            callId: request.sourceCallId ?? request.requestId,
+            callId,
           },
-          getHistory: () => approvalHistory(history),
+          getHistory: () => approvalHistory(settledHistory(history)),
         }),
       );
       return decision.answer === 'y' ? { kind: 'allow' } : { kind: 'deny', reason: decision.rejectionReason };
@@ -357,6 +387,12 @@ function isDockerRequest(name: string, input: unknown, access: SessionAccessStat
     typeof input.command === 'string' &&
     access.requiresDockerApproval(input.command)
   );
+}
+
+/** History without tool calls that have no result yet. */
+function settledHistory(history: readonly Item[]): readonly Item[] {
+  const settled = new Set(history.flatMap((item) => (item.type === 'tool_result' ? [item.callId] : [])));
+  return history.filter((item) => item.type !== 'tool_call' || settled.has(item.callId));
 }
 
 function approvalHistory(history: readonly Item[]): ProviderInputItem[] {

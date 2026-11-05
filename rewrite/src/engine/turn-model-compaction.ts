@@ -317,7 +317,17 @@ export class TurnCompaction {
         requestId,
         modelStep: prepared.modelStep,
         model: prepared.request.model,
-        ...(usage !== undefined ? { usage } : {}),
+        // The persisted record holds the three counters only (log-facts validates them exactly); the upstream
+        // provider OpenRouter usage carries belongs to the status bar, not to the compaction record.
+        ...(usage !== undefined
+          ? {
+              usage: {
+                inputTokens: usage.inputTokens,
+                outputTokens: usage.outputTokens,
+                cachedInputTokens: usage.cachedInputTokens,
+              },
+            }
+          : {}),
         ...(done?.costUsd !== undefined ? { costUsd: done.costUsd } : {}),
         outcome: signal.aborted ? 'cancelled' : outcome,
       };

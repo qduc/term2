@@ -3,6 +3,11 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { expect, it } from 'vitest';
 import { createIsolatedWorkspaceLease, writePtyTextAndSubmit } from './provider-test-harness.js';
+import { usesDirectComposer } from '../../source/test-helpers/direct-composer.js';
+
+// Legacy chains past the cancelled question without its output, which a real Responses server refuses with
+// "No tool output found". Next sends that output ahead of the steer (#150 item 10, a confirmed legacy bug).
+const sendsCancelledOutput = usesDirectComposer([process.env.TERM2_TEST_CLI ?? '']);
 
 it('delivers a pending steer after cancelling an unanswered question', async () => {
   const requests: Record<string, unknown>[] = [];
@@ -96,6 +101,9 @@ it('delivers a pending steer after cancelling an unanswered question', async () 
     expect(historyAtRelease).toContain('User did not provide an answer.');
     expect(requests[1]!.previous_response_id).toBe('question-response-0');
     expect(requests[1]!.input).toEqual([
+      ...(sendsCancelledOutput
+        ? [{ type: 'function_call_output', call_id: 'cancelled-question', output: 'User did not provide an answer.' }]
+        : []),
       {
         type: 'message',
         role: 'user',

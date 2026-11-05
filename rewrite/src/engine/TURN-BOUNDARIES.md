@@ -26,11 +26,13 @@ aborts an in-flight physical response. Tool turns admit it before the next model
 request; a plain-text response settles first and the pending steer starts the next
 turn. This preserves the full response and its continuity before new input.
 
-For a cancelled `ask_user` whose result is persisted locally but intentionally not
-sent in the legacy continuation, Session calls `skipCancelledQuestion` before
-starting the next user turn. It advances a checkpoint only for an exact history
-prefix whose added items are exactly the outstanding tool results, one of them the
-`ask_user` no-answer result. Any mismatch leaves the normal tool-debt guard unchanged.
+For a cancelled `ask_user`, Session calls `chainCancelledQuestion` before starting
+the next user turn. When the history added since the checkpoint is exactly the
+outstanding tool results, one of them the `ask_user` no-answer result, that turn
+may chain from the question's response and sends those results ahead of its own
+input. Legacy chained without them and the Responses API refused the request with
+"No tool output found" (#150 item 10). Any mismatch leaves the normal rule: a new
+turn never inherits tool debt, so it sends full history instead.
 
 Root calls of one response go through legacy's approval batch first
 (`turn-tool-batch.ts`): questions, approval prompts and policy-approved calls that

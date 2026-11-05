@@ -26,6 +26,8 @@ type Checkpoint = {
   continuation?: unknown;
   previousResponseId?: string;
   debt: readonly ToolCallId[];
+  /** A cancelled question settled this debt locally: the next user turn may chain by sending those outputs. */
+  newTurnPays?: boolean;
 };
 
 /**
@@ -64,7 +66,7 @@ export class DirectContinuity {
       isDeepStrictEqual(binding, checkpoint.binding) &&
       isDeepStrictEqual(envelope(canonical), checkpoint.envelope) &&
       hasPrefix(canonical.input, checkpoint.history) &&
-      !(newTurn && checkpoint.debt.length > 0) &&
+      !(newTurn && checkpoint.debt.length > 0 && !checkpoint.newTurnPays) &&
       paysToolDebt(canonical.input.slice(checkpoint.history.length), checkpoint.debt);
     return {
       chained: canChain,
@@ -118,12 +120,13 @@ export class DirectContinuity {
   }
 
   /**
-   * Legacy cancellation on a chained provider: a segment ended by a cancelled
-   * question keeps its response as the chain point, and the tool outputs it
-   * settled are never sent. Applies only when the history added since the
-   * checkpoint is exactly those outputs and one is the unanswered question.
+   * A segment ended by a cancelled question keeps its response as the chain point. The next user turn chains from
+   * it and sends the tool outputs that segment settled, the no-answer result included, ahead of its own input
+   * (#150 item 10: legacy left them out, and the Responses API refused the request with "No tool output found").
+   * Applies only when the history added since the checkpoint is exactly those outputs and one is the unanswered
+   * question; anything else keeps the normal rule that a new turn cannot inherit tool debt.
    */
-  skipCancelledQuestion(history: readonly Item[], noAnswer: string): void {
+  chainCancelledQuestion(history: readonly Item[], noAnswer: string): void {
     const checkpoint = this.#checkpoint;
     if (!checkpoint || checkpoint.debt.length === 0 || !hasPrefix(history, checkpoint.history)) return;
     const delta = history.slice(checkpoint.history.length);
@@ -139,7 +142,7 @@ export class DirectContinuity {
       if (call?.type === 'tool_call' && call.toolName === 'ask_user' && item.output === noAnswer) cancelled = true;
     }
     if (!cancelled) return;
-    this.#checkpoint = { ...checkpoint, history: structuredClone(history), debt: [] };
+    this.#checkpoint = { ...checkpoint, newTurnPays: true };
   }
 
   /** Retry, rewind, compaction, rollover, model/endpoint change and cancellation retire the checkpoint. */

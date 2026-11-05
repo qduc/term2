@@ -107,21 +107,32 @@ function shared(value: string, base: string): { start: number; length: number; p
   return best;
 }
 
+/** Width of an anchor: any common span of MIN_SHARED holds one whole aligned window of this width. */
+const ANCHOR = MIN_SHARED / 2;
+const BASE = 31;
+/** BASE^(ANCHOR-1) mod 2^32, to drop a window's first character from its rolling hash. */
+const LEAD = Array.from({ length: ANCHOR - 1 }).reduce<number>((power) => Math.imul(power, BASE), 1);
+const windowHash = (text: string, offset: number): number => {
+  let hash = 0;
+  for (let index = offset; index < offset + ANCHOR; index++)
+    hash = (Math.imul(hash, BASE) + text.charCodeAt(index)) | 0;
+  return hash;
+};
+
 /**
- * A turn's candidate strings in accepted order, indexed by their MIN_SHARED/2-aligned anchors. `shared` can only
- * return a body of MIN_SHARED or more when value and candidate have a common span that long, and such a span holds
- * one of the candidate's aligned anchors whole: a candidate none of whose anchors occur in the value is skipped
- * without changing the chosen reference.
+ * A turn's candidate strings in accepted order, indexed by the hashes of their ANCHOR-aligned windows. `shared` can
+ * only return a body of MIN_SHARED or more when value and candidate have a common span that long, and such a span
+ * holds one of the candidate's aligned windows whole: a candidate none of whose window hashes occur in the value is
+ * skipped without changing the chosen reference (a hash collision only adds a candidate `shared` then rejects).
  */
 class Candidates {
   readonly list: Candidate[] = [];
-  readonly #anchors = new Map<string, number[]>();
+  readonly #anchors = new Map<number, number[]>();
 
   push(candidate: Candidate): void {
     const index = this.list.push(candidate) - 1;
-    const anchor = MIN_SHARED / 2;
-    for (let offset = 0; offset + anchor <= candidate.value.length; offset += anchor) {
-      const key = candidate.value.slice(offset, offset + anchor);
+    for (let offset = 0; offset + ANCHOR <= candidate.value.length; offset += ANCHOR) {
+      const key = windowHash(candidate.value, offset);
       const owners = this.#anchors.get(key);
       if (!owners) this.#anchors.set(key, [index]);
       else if (owners.at(-1) !== index) owners.push(index);
@@ -130,13 +141,23 @@ class Candidates {
 
   /** Indexes into `list` of the candidates that may share MIN_SHARED with `value`, ascending. */
   matching(value: string): number[] {
-    const found = new Set<number>();
-    const anchor = MIN_SHARED / 2;
-    for (let offset = 0; offset + anchor <= value.length; offset++) {
-      const owners = this.#anchors.get(value.slice(offset, offset + anchor));
-      if (owners) for (const index of owners) found.add(index);
+    if (!this.list.length || value.length < ANCHOR) return [];
+    const lists = new Set<number[]>();
+    let hash = windowHash(value, 0);
+    for (let offset = 0; ; offset++) {
+      const owners = this.#anchors.get(hash);
+      if (owners) lists.add(owners);
+      if (offset + ANCHOR >= value.length) break;
+      // Roll the window one character right.
+      hash =
+        (Math.imul(hash - Math.imul(value.charCodeAt(offset), LEAD), BASE) + value.charCodeAt(offset + ANCHOR)) | 0;
     }
-    return [...found].sort((a, b) => a - b);
+    if (lists.size <= 1) return [...lists][0] ?? [];
+    const found = new Uint8Array(this.list.length);
+    for (const owners of lists) for (const index of owners) found[index] = 1;
+    const indexes: number[] = [];
+    for (let index = 0; index < found.length; index++) if (found[index]) indexes.push(index);
+    return indexes;
   }
 }
 
@@ -209,13 +230,26 @@ export class LogPayloads {
         ...accepted.matching(value).map((index) => accepted.list[index]!),
         ...own.matching(value).map((index) => own.list[index]!),
       ];
+      const literal = JSON.stringify(value).length;
+      // Repeated bodies are common in a long turn: the shared span and the escaped length of its framing depend
+      // only on the candidate's text, so they are worked out once per distinct text.
+      const parts = new Map<string, { part: ReturnType<typeof shared>; framing: number }>();
       for (const candidate of candidates) {
-        const part = shared(value, candidate.value);
+        let known = parts.get(candidate.value);
+        if (!known) {
+          const part = shared(value, candidate.value);
+          const framing =
+            part.length < MIN_SHARED ? 0 : JSON.stringify(part.prefix).length + JSON.stringify(part.suffix).length - 4;
+          parts.set(candidate.value, (known = { part, framing }));
+        }
+        const { part, framing } = known;
         if (part.length < MIN_SHARED) continue;
-        const ref = { path, source: candidate.source, ...part };
-        const saving = JSON.stringify(value).length - JSON.stringify(ref).length;
+        // The length JSON.stringify(ref) would have: prefix and suffix add exactly their escaped lengths.
+        const size =
+          JSON.stringify({ path, source: candidate.source, ...part, prefix: '', suffix: '' }).length + framing;
+        const saving = literal - size;
         if (saving > saved) {
-          best = ref;
+          best = { path, source: candidate.source, ...part };
           saved = saving;
         }
       }

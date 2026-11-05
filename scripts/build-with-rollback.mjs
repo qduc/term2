@@ -1,19 +1,17 @@
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { buildWithRollback } from './build-output.mjs';
-import { buildInputs, writeBuildReceipt } from './build-provenance.mjs';
 
 /**
- * `pnpm build` entry point. Keeps the previous `dist/` recoverable at
- * `dist.bak/`; see scripts/build-output.mjs for the behavior.
+ * `pnpm build` entry point: runs rewrite/scripts/build.mjs (term2 into dist/)
+ * and keeps the previous `dist/` recoverable at `dist.bak/`; see
+ * scripts/build-output.mjs for the behavior.
  *
  * Set SKIP_BUILD_BACKUP=1 to build without keeping the previous output (e.g. in
  * CI, where it is disposable and the extra copy is only cost).
  */
 
 const projectRoot = fileURLToPath(new URL('..', import.meta.url));
-
-const inputs = buildInputs(projectRoot, 'old');
 
 const run = (command, args) => () =>
   new Promise((resolve) => {
@@ -33,21 +31,7 @@ const exitCode = await buildWithRollback({
   distDir: fileURLToPath(new URL('../dist/', import.meta.url)),
   backupDir: fileURLToPath(new URL('../dist.bak/', import.meta.url)),
   backup: process.env.SKIP_BUILD_BACKUP !== '1',
-  steps: [
-    run('tsc', ['--project', 'tsconfig.build.json']),
-    run(process.execPath, ['scripts/write-build-info.mjs']),
-    run('pnpm', ['run', 'post-build']),
-    run(process.execPath, ['scripts/embed-agent-wire.mjs']),
-    async () => {
-      try {
-        writeBuildReceipt(projectRoot, 'old', inputs);
-        return 0;
-      } catch (error) {
-        console.error(`[build] ${error.message}`);
-        return 1;
-      }
-    },
-  ],
+  steps: [run(process.execPath, ['rewrite/scripts/build.mjs'])],
   log: (message) => console.log(message),
 });
 

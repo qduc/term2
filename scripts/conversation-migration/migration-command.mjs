@@ -141,9 +141,9 @@ function inventory(source) {
  */
 export async function runMigration(options, synthetic = {}) {
   const paths = preparePaths(options);
-  const { importDirectSession } = await import('../../rewrite/dist/rewrite/src/session/import.js');
-  const { acquireDirectWriterLock } = await import('../../rewrite/dist/rewrite/src/session/writer-lock.js');
-  const { readDirectLogLineage } = await import('../../rewrite/dist/rewrite/src/session/rolling-log.js');
+  const { importDirectSession } = await import('../../dist/rewrite/src/session/import.js');
+  const { acquireDirectWriterLock } = await import('../../dist/rewrite/src/session/writer-lock.js');
+  const { readDirectLogLineage } = await import('../../dist/rewrite/src/session/rolling-log.js');
   const { readV3Conversation } = await import('./v3-input.mjs');
   const release = acquireDirectWriterLock(join(paths.privateDirectory, 'command-authority'));
   let scratch;

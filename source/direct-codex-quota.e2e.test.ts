@@ -12,7 +12,7 @@ import {
   waitForHarnessIdleGeneration,
 } from './lib/harness-input-idle.js';
 
-const cli = testCliPath(fileURLToPath(new URL('../rewrite/dist/rewrite/src/app/cli.js', import.meta.url)));
+const cli = testCliPath(fileURLToPath(new URL('../dist/rewrite/src/app/cli.js', import.meta.url)));
 
 it.each(['expiry', 'configuration', 'secondary'] as const)(
   'shows genuine Codex quota and clears it on %s',

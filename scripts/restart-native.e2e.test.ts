@@ -84,7 +84,7 @@ async function fixture(holdFirst = false, backgroundFirst = false) {
     prepare: async (root, paths) => {
       await mkdir(join(root, 'work'));
       await mkdir(join(root, 'runtime'), { mode: 0o700 });
-      await cp(resolve('rewrite/dist'), join(root, 'direct-dist'), { recursive: true });
+      await cp(resolve('dist'), join(root, 'direct-dist'), { recursive: true });
       await cp(resolve('package.json'), join(root, 'package.json'));
       await symlink(resolve('node_modules'), join(root, 'node_modules'), 'dir');
       await mkdir(paths.logDir, { recursive: true });

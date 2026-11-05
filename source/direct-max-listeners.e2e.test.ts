@@ -14,7 +14,7 @@ import { resolveSettingsDirectory } from './services/settings/settings-path.js';
 
 // Built direct TUI. Opening the approval reason field mounts a second editor.
 // That editor must not push stdout's resize listeners past Node's default of 10.
-const cli = testCliPath(fileURLToPath(new URL('../rewrite/dist/rewrite/src/app/cli.js', import.meta.url)));
+const cli = testCliPath(fileURLToPath(new URL('../dist/rewrite/src/app/cli.js', import.meta.url)));
 
 let session: TerminalSession | null = null;
 let root = '';

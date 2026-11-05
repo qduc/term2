@@ -20,7 +20,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const dist = path.join(repo, 'rewrite/dist/rewrite/src');
+const dist = path.join(repo, 'dist/rewrite/src');
 const CLI = path.join(dist, 'app/cli.js');
 const STUB = 'the direct headless path is not implemented yet';
 
@@ -835,7 +835,7 @@ row('R11', 'directness: the real executable loads none of the forbidden modules'
     assert.equal(r.stdout, 'Hello there.\n');
     const loaded = fs.readFileSync(loadedLog, 'utf8').split('\n').filter(Boolean);
     assert.ok(
-      loaded.some((url) => url.endsWith('/rewrite/dist/rewrite/src/app/cli.js')),
+      loaded.some((url) => url.endsWith('/dist/rewrite/src/app/cli.js')),
       'the hook saw the entry point',
     );
     const forbidden =

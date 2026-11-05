@@ -13,7 +13,7 @@ Run it with:
 pnpm test:provider-black-box
 ```
 
-This command builds the legacy `dist/` and direct `rewrite/dist/` CLIs first, then runs the dedicated configuration in `vitest.provider-black-box.config.ts`. It is intentionally separate from ordinary `pnpm test` because it launches the built CLI in isolated child processes.
+This command builds the CLI into `dist/` first (`pnpm build`), then runs the dedicated configuration in `vitest.provider-black-box.config.ts`. It is intentionally separate from ordinary `pnpm test` because it launches the built CLI in isolated child processes.
 
 Global setup primes a disposable Node compile cache with `dist/cli.js --help`
 before starting the workers. Only compiled bytecode is shared: every scenario

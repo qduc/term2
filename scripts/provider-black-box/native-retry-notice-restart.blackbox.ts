@@ -49,7 +49,7 @@ it.skipIf(process.platform !== 'linux')(
     });
     let child = await lease.start({
       command: process.execPath,
-      args: [join(process.cwd(), 'rewrite/dist/rewrite/src/app/cli.js'), '--lite', '--profile', 'plan'],
+      args: [join(process.cwd(), 'dist/rewrite/src/app/cli.js'), '--lite', '--profile', 'plan'],
       env: {
         PATH: `${join(lease.root, 'bin')}:${process.env.PATH ?? ''}`,
         TERM2_DIRECT_CONVERSATIONS_DIR: lease.paths.conversationsDir,
@@ -114,7 +114,7 @@ it.skipIf(process.platform !== 'linux')(
       child = await lease.start({
         command: process.execPath,
         args: [
-          join(process.cwd(), 'rewrite/dist/rewrite/src/app/cli.js'),
+          join(process.cwd(), 'dist/rewrite/src/app/cli.js'),
           '--lite',
           '--profile',
           'plan',

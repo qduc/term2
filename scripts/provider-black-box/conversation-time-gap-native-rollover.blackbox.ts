@@ -104,7 +104,7 @@ globalThis.Date = class extends RealDate {
       child = await workspace.start({
         command: process.execPath,
         cwd: process.cwd(),
-        args: [join(process.cwd(), 'rewrite/dist/rewrite/src/app/cli.js'), ...args],
+        args: [join(process.cwd(), 'dist/rewrite/src/app/cli.js'), ...args],
         env,
         cols: 120,
         rows: 40,
@@ -183,7 +183,7 @@ globalThis.Date = class extends RealDate {
         cwd: process.cwd(),
         command: process.execPath,
         args: [
-          join(process.cwd(), 'rewrite/dist/rewrite/src/app/cli.js'),
+          join(process.cwd(), 'dist/rewrite/src/app/cli.js'),
           ...args,
           '--resume',
           successor.name.replace(/\.jsonl$/, ''),

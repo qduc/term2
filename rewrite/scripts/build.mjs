@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Build rewrite/ with its adopted source/ dependencies and copy runtime assets.
+// Build term2 (rewrite/ with its adopted source/ dependencies) into dist/, the package's only output.
+// `pnpm build` wraps this in scripts/build-with-rollback.mjs to keep the previous dist/ recoverable.
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -8,9 +9,10 @@ import { buildInputs, writeBuildReceipt } from '../../scripts/build-provenance.m
 import { writeBuildInfo } from '../../scripts/write-build-info.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const dist = path.join(repo, 'dist');
 const inputs = buildInputs(repo, 'direct');
-// Never certify obsolete modules left behind by a source deletion or failed build.
-fs.rmSync(path.join(repo, 'rewrite/dist'), { recursive: true, force: true });
+// Never certify obsolete modules left behind by a source deletion, a failed build or an older layout.
+fs.rmSync(dist, { recursive: true, force: true });
 const result = spawnSync('pnpm', ['exec', 'tsc', '-p', 'rewrite/tsconfig.build.json'], {
   cwd: repo,
   stdio: 'inherit',
@@ -19,17 +21,26 @@ const result = spawnSync('pnpm', ['exec', 'tsc', '-p', 'rewrite/tsconfig.build.j
 if (result.error) throw result.error;
 if (result.status !== 0) process.exit(result.status ?? 1);
 
-const emittedSource = path.join(repo, 'rewrite/dist/source');
+const emittedSource = path.join(dist, 'source');
 fs.mkdirSync(path.join(emittedSource, 'providers'), { recursive: true });
 fs.cpSync(path.join(repo, 'source/prompts'), path.join(emittedSource, 'prompts'), { recursive: true });
 fs.copyFileSync(
   path.join(repo, 'source/providers/provider-presets.json'),
   path.join(emittedSource, 'providers/provider-presets.json'),
 );
+// package.json bin.term2. A static import keeps argv[1] (used by restart) on this file.
+fs.writeFileSync(path.join(dist, 'cli.js'), "#!/usr/bin/env node\nimport './rewrite/src/app/cli.js';\n", {
+  mode: 0o755,
+});
+fs.writeFileSync(path.join(dist, 'cli.d.ts'), 'export {};\n');
+// The gateway imports @qduc/agent-wire, a vendored dev dependency; ship a copy beside the build.
+const embed = spawnSync(process.execPath, ['scripts/embed-agent-wire.mjs'], { cwd: repo, stdio: 'inherit' });
+if (embed.error) throw embed.error;
+if (embed.status !== 0) process.exit(embed.status ?? 1);
 
 await writeBuildInfo({
   root: repo,
-  dist: path.join(repo, 'rewrite/dist'),
+  dist,
   runGit(args) {
     const result = spawnSync('git', args, { cwd: repo, encoding: 'utf8' });
     return result.status === 0 ? result.stdout.trim() : null;

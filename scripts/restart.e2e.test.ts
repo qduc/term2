@@ -22,7 +22,7 @@ async function patchFixtureModule(file: string, before: string, after: string): 
 // The native entry needs its adopted source dependencies beside it in a private build tree.
 function restartEntry(root: string): string {
   return process.env.TERM2_TEST_CLI
-    ? join(root, 'direct-dist', relative(resolve('rewrite/dist'), resolve(process.env.TERM2_TEST_CLI)))
+    ? join(root, 'direct-dist', relative(resolve('dist'), resolve(process.env.TERM2_TEST_CLI)))
     : join(root, 'dist/cli.js');
 }
 
@@ -85,7 +85,7 @@ export default function register(term2) { for (const type of ['session.start', '
         if (!process.env.TERM2_TEST_CLI) await cp(resolve('dist'), join(root, 'dist'), { recursive: true });
         if (process.env.TERM2_TEST_CLI) {
           // Restart faults may delete the entry. Never mutate the runner's shared build.
-          await cp(resolve('rewrite/dist'), join(root, 'direct-dist'), { recursive: true });
+          await cp(resolve('dist'), join(root, 'direct-dist'), { recursive: true });
         }
         await cp(resolve('package.json'), join(root, 'package.json'));
         await symlink(resolve('node_modules'), join(root, 'node_modules'), 'dir');
@@ -307,7 +307,7 @@ it.each(['runner', 'missing-entry', 'cleanup', 'lock', 'writer-close', 'native-e
         await cp(resolve('dist'), join(root, 'dist'), { recursive: true });
         if (process.env.TERM2_TEST_CLI) {
           // Restart faults may delete the entry. Never mutate the runner's shared build.
-          await cp(resolve('rewrite/dist'), join(root, 'direct-dist'), { recursive: true });
+          await cp(resolve('dist'), join(root, 'direct-dist'), { recursive: true });
         }
         await cp(resolve('package.json'), join(root, 'package.json'));
         await symlink(resolve('node_modules'), join(root, 'node_modules'), 'dir');

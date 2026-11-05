@@ -31,7 +31,7 @@
       "default": "./dist/cli.js"
     },
     "./hooks": {
-      "types": "./dist/services/hooks/index.d.ts"
+      "types": "./dist/source/services/hooks/index.d.ts"
     }
   },
   "type": "module",
@@ -49,12 +49,12 @@
     "start": "node dist/cli.js",
     "build": "node scripts/build-with-rollback.mjs",
     "build:restore": "node scripts/restore-build-output.mjs",
-    "dev": "tsc --build tsconfig.build.json --watch",
+    "dev": "tsc -p rewrite/tsconfig.build.json --watch",
     "typecheck": "tsc --noEmit",
     "test": "cross-env NODE_ENV=test node scripts/run-test.mjs",
     "check:no-unit-tests": "node scripts/check-no-unit-tests.mjs",
-    "test:e2e": "cross-env NODE_ENV=test vitest run --reporter=minimal --config vitest.e2e.config.ts",
-    "test:integration": "cross-env NODE_ENV=test vitest run --reporter=minimal --config vitest.integration.config.ts",
+    "test:e2e": "cross-env NODE_ENV=test TERM2_TEST_CLI=dist/rewrite/src/app/cli.js vitest run --reporter=minimal --config vitest.e2e.config.ts",
+    "test:integration": "cross-env NODE_ENV=test TERM2_TEST_CLI=dist/rewrite/src/app/cli.js vitest run --reporter=minimal --config vitest.integration.config.ts",
     "test:codex-network": "cross-env NODE_ENV=test vitest run --reporter=minimal --config vitest.e2e.config.ts scripts/fake-codex-server.e2e.test.ts",
     "test:provider-black-box": "cross-env NODE_ENV=test node scripts/run-provider-black-box.mjs",
     "provider:record": "tsx scripts/provider-record.ts",
@@ -68,10 +68,9 @@
     "lint": "eslint . && prettier --check .",
     "lint-fix": "eslint --fix . && prettier --write .",
     "prepublishOnly": "node scripts/check-release-identity.mjs",
-    "post-build": "cp -r source/prompts dist/ && mkdir -p dist/providers && cp source/providers/provider-presets.json dist/providers/ && chmod +x dist/cli.js",
     "release": "./scripts/release.sh",
     "logs": "node tools/log_viewer/src/server.js",
-    "eval:auto-approval": "tsc --project tsconfig.build.json && RUN_LIVE_EVAL=1 node dist/scripts/eval-auto-approval/runner.js",
+    "eval:auto-approval": "tsc --project tsconfig.build.json --outDir node_modules/.cache/term2-eval && RUN_LIVE_EVAL=1 node node_modules/.cache/term2-eval/scripts/eval-auto-approval/runner.js",
     "prepare": "husky",
     "catalog:update": "tsx scripts/update-model-catalog.ts",
     "verify:generated": "node --import tsx scripts/generated-verification/run.mjs"

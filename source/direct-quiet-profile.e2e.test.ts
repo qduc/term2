@@ -10,7 +10,7 @@ import { resolveSettingsDirectory } from './services/settings/settings-path.js';
 
 // Built direct CLI. `--quiet` is documented to suppress non-error diagnostics.
 // The profile announcement is one of those; a failed turn still reports its error.
-const cli = testCliPath(fileURLToPath(new URL('../rewrite/dist/rewrite/src/app/cli.js', import.meta.url)));
+const cli = testCliPath(fileURLToPath(new URL('../dist/rewrite/src/app/cli.js', import.meta.url)));
 
 let root = '';
 let server: http.Server | null = null;

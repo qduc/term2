@@ -14,7 +14,7 @@ import { assertFreshBuild } from './build-provenance.mjs';
 const integrating = process.argv[2] === '--integrate';
 const root = path.resolve(process.argv[integrating ? 4 : 2] ?? fileURLToPath(new URL('..', import.meta.url)));
 const clis = [
-  ['direct', 'rewrite/dist/rewrite/src/app/cli.js'],
+  ['direct', 'dist/rewrite/src/app/cli.js'],
   ['old', 'dist/cli.js'],
 ];
 const repeats = 24;

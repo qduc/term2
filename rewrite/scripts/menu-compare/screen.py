@@ -46,8 +46,9 @@ sys.path.insert(0, HERE)
 from scenarios import SCENARIOS, SEED  # noqa: E402
 
 CLIS = {
+    # Since the flip (#86) dist/cli.js starts term2-next too; legacy is no longer built from this tree.
     'legacy': os.path.join(REPO, 'dist', 'cli.js'),
-    'next': os.path.join(REPO, 'rewrite', 'dist', 'rewrite', 'src', 'app', 'cli.js'),
+    'next': os.path.join(REPO, 'dist', 'rewrite', 'src', 'app', 'cli.js'),
 }
 # FULL=1 compares the whole transcript (scrollback and screen) instead of the menu region;
 # FULL=screen compares the whole visible screen without the scrollback.
@@ -466,7 +467,7 @@ def _tree_hash(root, skip=BUILD_METADATA):
 def build_key(cli):
     """Everything outside the harness that decides what a CLI draws: its build, dependencies and Node."""
     if cli not in _BUILD_KEYS:
-        dist = os.path.join(REPO, 'dist') if cli == 'legacy' else os.path.join(REPO, 'rewrite', 'dist')
+        dist = os.path.join(REPO, 'dist')
         digest = hashlib.sha256()
         digest.update(cli.encode() + _tree_hash(dist).encode())
         with open(os.path.join(REPO, 'pnpm-lock.yaml'), 'rb') as f:

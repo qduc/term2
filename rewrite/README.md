@@ -1,9 +1,9 @@
 # term2-next (rewrite)
 
-This folder holds term2-next: a restructured term2 whose production entry is
-`src/app/cli.ts`, built to `rewrite/dist/rewrite/src/app/cli.js`. It is separate
-from `source/` (legacy term2, which remains the product spec), and nothing in
-`source/` imports it.
+This folder holds term2-next, which is term2: its production entry is
+`src/app/cli.ts`, built by `pnpm build` to `dist/rewrite/src/app/cli.js` and
+started by the package's `dist/cli.js` (#86). Legacy `source/` is no longer
+built as a CLI; nothing in `source/` imports this folder.
 
 ## Layers
 
@@ -198,9 +198,8 @@ grandfathered, not evidence that clients or shared helpers have unrestricted
 model/config/Session access. Every reached target's closure is still checked;
 new source edges and reverse `source/` → `rewrite/` imports remain prohibited.
 
-The direct CLI is a separate program,
-`node rewrite/dist/rewrite/src/app/cli.js ["<prompt>"]`, with no fallback to the
-old engine. It stores native conversation logs in its own directory
+The CLI is `node dist/cli.js ["<prompt>"]` (the `term2` bin), with no fallback
+to the old engine. It stores native conversation logs in its own directory
 (`conversations-next`) and does not read old conversations; the offline
 `scripts/migrate-conversations.mjs` copies v3 conversations into native logs.
 `rewrite/bench/m1-direct.mjs` covers the headless path.
@@ -212,17 +211,15 @@ keyed mutation. Discovery does not activate the v2 hydration or mutation gates.
 
 ```sh
 node rewrite/parity/inventory.mjs
-node rewrite/parity/run.mjs check --cli dist/cli.js          # old CLI: must stay green
-node rewrite/parity/run.mjs check --cli <new build>/cli.js   # new CLI: the port's progress
-node rewrite/parity/run.mjs record --cli dist/cli.js <id>    # new scenario, from the old CLI only
-TERM2_TEST_CLI=<new build>/cli.js pnpm test:integration      # CLI-level suite against any build
+node rewrite/parity/run.mjs check --cli dist/cli.js          # the built CLI against the goldens
+TERM2_TEST_CLI=dist/rewrite/src/app/cli.js pnpm test:integration   # CLI-level suite, as the CI lanes run it
 ```
 
 ## Checks
 
 These use the root project's TypeScript options and dependencies, so run
 `pnpm install` at the repository root first. The build keeps repository-relative
-paths beneath `rewrite/dist/`; imports of `source/` therefore resolve to the emitted
+paths beneath `dist/`; imports of `source/` therefore resolve to the emitted
 `source/` tree beside `rewrite/`.
 
 ```sh

@@ -28,8 +28,8 @@ export const resolveDisplayVersion = (load: (specifier: string) => unknown = req
       // No generated build identity in this layout.
     }
   }
-  // The direct build emits this file below rewrite/dist/source, two levels deeper.
-  for (const specifier of ['../../../package.json', '../../../../../package.json']) {
+  // The build emits this file below dist/source, one level deeper than the source tree.
+  for (const specifier of ['../../../package.json', '../../../../package.json']) {
     try {
       const manifest = load(specifier) as { version?: string };
       if (manifest.version) return manifest.version;

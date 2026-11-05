@@ -34,7 +34,7 @@ concurrency:
   cancel-in-progress: true
 
 # The same four runners now share the complete inventory. Each tier keeps its
-# configuration and module isolation; run-ci-lane.mjs assigns
+# configuration and module isolation; run-ci-lane.mjs builds dist/ and assigns
 # every discovered file once. No test selection depends on changed paths.
 jobs:
   test:
@@ -50,18 +50,14 @@ jobs:
           ripgrep: 'true'
       - name: Reject committed unit tests
         run: pnpm check:no-unit-tests
-      - name: Build dist
-        run: /usr/bin/time -v env SKIP_BUILD_BACKUP=1 pnpm build
-      - name: Upload built CLI for rewrite port checks
+      - name: Run guards, CLI integration and safety provider cases
+        run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs test
+      - name: Upload built CLI for port checks
         uses: actions/upload-artifact@v4
         with:
           name: term2-dist
           path: dist/
           if-no-files-found: error
-      - name: Run guards, CLI integration and safety provider cases
-        run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs test
-      - name: Run the same lane against term2-next
-        run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs test --cli=next
 
   port:
     needs: test
@@ -98,7 +94,7 @@ jobs:
             echo "$changed"
             exit 1
           fi
-      - name: Check rewrite inventory and old CLI parity
+      - name: Check rewrite inventory and golden parity
         run: |
           node rewrite/parity/inventory.mjs
           node rewrite/parity/run.mjs check --cli dist/cli.js
@@ -110,11 +106,8 @@ jobs:
           node rewrite/scripts/check-complexity.mjs
           node rewrite/scripts/check-rules.mjs
           node --unhandled-rejections=strict --import tsx rewrite/bench/hops.mts
-      - name: Check the direct headless path
-        run: |
-          node rewrite/scripts/build.mjs
-          node rewrite/parity/run.mjs check --cli rewrite/dist/rewrite/src/app/cli.js headless-plain-answer settings-batch
-          node rewrite/bench/m1-direct.mjs
+      - name: Check the headless path
+        run: node rewrite/bench/m1-direct.mjs
 
   integration:
     runs-on: ubuntu-22.04
@@ -127,12 +120,8 @@ jobs:
       - uses: ./.github/actions/setup-tests
         with:
           ripgrep: 'true'
-      - name: Build dist
-        run: /usr/bin/time -v env SKIP_BUILD_BACKUP=1 pnpm build
       - name: Run remaining integration and stateless provider cases
         run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs integration
-      - name: Run the same lane against term2-next
-        run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs integration --cli=next
 
   e2e:
     runs-on: ubuntu-latest
@@ -142,14 +131,8 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha }}
       - uses: ./.github/actions/setup-tests
-      - name: Build dist
-        run: |
-          /usr/bin/time -v env SKIP_BUILD_BACKUP=1 pnpm build
-          /usr/bin/time -v node rewrite/scripts/build.mjs
       - name: Run E2E and Responses provider cases
         run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs e2e
-      - name: Run the same lane against term2-next
-        run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs e2e --cli=next
 
   provider-black-box:
     runs-on: ubuntu-latest
@@ -159,9 +142,5 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha }}
       - uses: ./.github/actions/setup-tests
-      - name: Build dist
-        run: /usr/bin/time -v env SKIP_BUILD_BACKUP=1 pnpm build
       - name: Run resilience and remaining provider cases
         run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs provider-black-box
-      - name: Run the same lane against term2-next
-        run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs provider-black-box --cli=next

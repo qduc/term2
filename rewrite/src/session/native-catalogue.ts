@@ -209,7 +209,7 @@ type FoldRow = {
   off: number;
   state_seq: number;
   seq: number;
-  state: string;
+  state: string | null;
 };
 
 function dropLogical(db: Database.Database, logical: string): void {
@@ -240,7 +240,7 @@ function refreshColumns(
   let seq = 0;
   let updated: string | undefined;
   let save = true;
-  if (kept && base && kept.file === file && kept.ino === ino && BigInt(kept.off) <= stat.size) {
+  if (kept?.state && base && kept.file === file && kept.ino === ino && BigInt(kept.off) <= stat.size) {
     try {
       const tail = readFactLinesFrom(headPath, kept.off, kept.state_seq);
       state = JSON.parse(kept.state) as DirectPublicState;
@@ -296,12 +296,15 @@ function refreshColumns(
     model.provider,
     final.messages.length,
   );
+  // A lineage indexed for the first time keeps no state: most never change again, and writing a long session's
+  // state costs more than reading its log. One that is found to have changed stores it, so its growth is read alone.
+  const keep = kept !== undefined;
   if (save)
     db.prepare(
       `INSERT INTO folds (logical, file, ino, off, state_seq, seq, state) VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(logical) DO UPDATE SET file = excluded.file, ino = excluded.ino, off = excluded.off,
          state_seq = excluded.state_seq, seq = excluded.seq, state = excluded.state`,
-    ).run(logical, file, ino, offset, stateSeq, seq, JSON.stringify(final));
+    ).run(logical, file, ino, offset, stateSeq, seq, keep ? JSON.stringify(final) : null);
   else db.prepare('UPDATE folds SET seq = ? WHERE logical = ?').run(seq, logical);
 }
 

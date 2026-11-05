@@ -53,11 +53,18 @@ export function usePlanToggle(
     );
   const toggle = () => {
     const { planNeedsClear, clearAndTogglePlan, planTarget } = integration;
-    if (!turnActive && planNeedsClear?.(connection) && clearAndTogglePlan) {
+    const confirmPlan = () => {
       const label = planTarget?.(connection) === 'builtin:plan' ? 'Plan' : 'Bare';
-      return confirmSwitch(label, true, `${label} mode enabled`, () => clearAndTogglePlan(connection));
-    }
-    run(() => integration.command(connection, '/plan'));
+      confirmSwitch(label, true, `${label} mode enabled`, () => clearAndTogglePlan!(connection));
+    };
+    if (!turnActive && planNeedsClear?.(connection) && clearAndTogglePlan) return confirmPlan();
+    // Legacy cycleAppModes asks the same during a turn, when the switch is to or from Bare with history.
+    run(() =>
+      integration.command(connection, '/plan').then((result) => {
+        if (result.confirmClear && clearAndTogglePlan) confirmPlan();
+        return result;
+      }),
+    );
   };
   return {
     toggle,

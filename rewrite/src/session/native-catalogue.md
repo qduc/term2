@@ -11,9 +11,11 @@ Resume rows (`list`) come from `folds`: the reduced session state, JSON, stored 
 covers. A log that only grew is read from that offset and its new facts are reduced onto the stored state; the
 state is rewritten once the tail since the stored one passes 1 MiB, and until then the tail is read again (cheaper
 than rewriting megabytes). A log that shrank, changed file, has no state, or whose tail cannot be read alone (a payload
-reference into earlier lines) is reduced whole. The cache is disposable; an older one (user_version < 2) is emptied
-and rebuilt once. `options.skip` leaves named sessions unindexed for this call (the resume list skips open
-sessions, which it takes from memory).
+reference into earlier lines) is reduced whole. A lineage indexed for the first time stores no state (most never
+change again, and writing a long session's state costs more than reading its log); the first refresh that finds it
+changed stores one. The cache is disposable; an older one (user_version < 2) is emptied and rebuilt once.
+`options.skip` leaves named sessions unindexed for this call (the resume list skips open sessions, which it takes
+from memory).
 
 `replayNativeLineage(directory, logical)` replays one lineage for the session browser: its metadata, each rollover
 part (the state just before the next rotation resets what the session shows, with the physical log it was written

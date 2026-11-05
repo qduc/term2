@@ -44,6 +44,9 @@ import { openDirectApplicationMcp } from './direct-application-mcp.js';
 import type { DirectMcp } from './direct-mcp.js';
 import { displaySessionId } from '../protocol/session-id.js';
 
+/** Footer profile labels by the selected profile setting (a profile id resolves to the same label). */
+const profileLabels = new Map<unknown, string>();
+
 type InteractiveRequest = Extract<DirectLaunchRequest, { readonly kind: 'interactive' }>;
 
 async function confirmHomeStart({ lite, resumeId, ssh }: InteractiveRequest): Promise<boolean> {
@@ -126,9 +129,15 @@ function DirectTui({
       status(sessionId) {
         const current = app.liveSettings(sessionId);
         if (!current) throw new Error('The attached session has no live settings.');
-        const profile = getProfileLabel(resolveActiveProfile(current).identity.id);
+        // The footer asks on every render; resolving the profile each time cost about a tenth of a streaming frame.
+        const selected = current.get('app.activeProfileId');
+        let profile = profileLabels.get(selected);
+        if (profile === undefined) {
+          const label = getProfileLabel(resolveActiveProfile(current).identity.id);
+          profileLabels.set(selected, (profile = label.charAt(0).toUpperCase() + label.slice(1)));
+        }
         return {
-          profile: profile.charAt(0).toUpperCase() + profile.slice(1),
+          profile,
           contextWindow: app.contextWindow(latest.current.model) ?? undefined,
           effort: current.get('agent.reasoningEffort'),
           approval: current.get('shell.autoApproveMode'),

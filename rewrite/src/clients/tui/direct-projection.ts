@@ -189,6 +189,9 @@ function toolShownAt(snapshot: WireSnapshot): ReadonlyMap<string, number> {
 export function projectSnapshot(snapshot: WireSnapshot): TuiState {
   const drafts: Record<string, string> = {};
   const messages: Message[] = [];
+  const submissions = new Map<string, WireSubmissionRecord>();
+  for (const entry of snapshot.submissions ?? [])
+    if (!submissions.has(entry.messageId)) submissions.set(entry.messageId, entry);
   for (const message of snapshot.messages) {
     // The engine finalizes interrupted stream text with this deterministic ID before admitting a steer.
     // Keep the marker in the projection so it survives replay without changing stored message text.
@@ -201,7 +204,7 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
       message.modelStep !== undefined &&
       message.id === `${message.turnId}-model-${message.modelStep}-partial`;
     const view = { ...messageView(message), ...(interrupted ? { interrupted: true } : {}) };
-    const skill = skillPresentation(snapshot.submissions?.find((entry) => entry.messageId === message.id));
+    const skill = message.role === 'user' ? skillPresentation(submissions.get(message.id)) : undefined;
     if (message.role === 'user' && skill) {
       view.text = skill.display;
       view.historyText = `/skills ${skill.name}${skill.request ? ` ${skill.request}` : ''}`;
@@ -245,7 +248,7 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
       interactionView(interaction, snapshot.tools.find((tool) => tool.executionId === interaction.executionId)?.callId),
     ),
     queue: snapshot.queue.map((entry) => {
-      const skill = skillPresentation(snapshot.submissions?.find((item) => item.messageId === entry.messageId));
+      const skill = skillPresentation(submissions.get(entry.messageId));
       return {
         id: entry.messageId,
         text: entry.text,

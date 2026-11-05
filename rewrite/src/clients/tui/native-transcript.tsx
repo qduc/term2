@@ -44,8 +44,6 @@ export function useNativeTranscript(
    * drawing, after which held rows commit. */
   drawn?: { readonly drafts: { readonly current: ReadonlySet<string> }; readonly frame: unknown },
 ) {
-  const [stored, setStored] = useState<{ epoch: number; rows: readonly Row[] }>({ epoch, rows: [] });
-  const rows = stored.epoch === epoch ? stored.rows : NO_ROWS;
   // Per-token state changes only touch drafts; the settled-row scan walks the whole
   // history, so it is keyed on the history itself and the draft ids.
   const draftIds = Object.keys(state.drafts).join('\u0000');
@@ -107,6 +105,20 @@ export function useNativeTranscript(
     return { next, reachedEnd, orphans: messages.size + tools.size };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.timeline, state.messages, state.tools, state.activeTurnId, draftIds]);
+  // A first mount with settled history and nothing live commits it all at once (the effect below would, one render
+  // later). Legacy's first frame already holds its Static history, so a resumed session paints with its composer.
+  const [stored, setStored] = useState<{ epoch: number; rows: readonly Row[] }>(() => ({
+    epoch,
+    rows:
+      settled?.next.length &&
+      !state.activeTurnId &&
+      !settled.orphans &&
+      !Object.keys(state.drafts).length &&
+      !Object.keys(state.reasoning).length
+        ? settled.next
+        : NO_ROWS,
+  }));
+  const rows = stored.epoch === epoch ? stored.rows : NO_ROWS;
   // Legacy MessageList (shouldCommitMessageToStatic): with nothing live below, a finished row that was never live (a
   // system line, or every row after a redraw remounts the list) stays in the live region for one render, and is
   // committed on the next one. Resumed history and rows that were live (a reply replacing its draft) commit at once.

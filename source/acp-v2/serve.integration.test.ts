@@ -10,7 +10,6 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
 import * as acp from '@agentclientprotocol/sdk/experimental/v2';
 import { resolveSettingsDirectory } from '../services/settings/settings-path.js';
 import { createTestChildEnv } from '../test-helpers/terminal-e2e.js';
-import { usesDirectComposer } from '../test-helpers/direct-composer.js';
 
 // The launcher is exercised as a real child process because its contract is a
 // stdio one: stdout must carry nothing but JSON-RPC, and the process must exit 0
@@ -26,10 +25,6 @@ import { usesDirectComposer } from '../test-helpers/direct-composer.js';
 
 const projectRoot = fileURLToPath(new URL('../..', import.meta.url));
 import { integrationCliPath } from '../test-helpers/integration-cli.js';
-
-// Legacy-only on next: ACP is not supported there (accepted difference).
-const acpUnsupported = usesDirectComposer([process.env.TERM2_TEST_CLI ?? '']);
-const ACP_UNSUPPORTED = 'ACP is an accepted difference on next';
 
 const packageVersion: string = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8')).version;
 
@@ -120,144 +115,6 @@ afterAll(async () => {
   for (const dispose of disposables.splice(0).reverse()) {
     await dispose();
   }
-});
-
-describe('term2 acp (child process)', () => {
-  it('serves initialize, a session turn and an EOF shutdown over real stdio', async ({ skip }) => {
-    skip(acpUnsupported, ACP_UNSUPPORTED);
-    const tempHome = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'acp-home-')));
-    const stateHome = path.join(tempHome, 'state');
-    const conversationsDir = path.join(tempHome, 'conversations');
-    const workspaceRoot = path.join(tempHome, 'workspace');
-    fs.mkdirSync(workspaceRoot, { recursive: true });
-    const workspace = realpathSync(workspaceRoot);
-    disposables.push(() => rmSync(tempHome, { recursive: true, force: true }));
-
-    const mock = await startModelMock(['acp-mock-model']);
-    disposables.push(mock.close);
-
-    const settingsDir = resolveSettingsDirectory({ homeDir: tempHome, env: { XDG_STATE_HOME: stateHome } });
-    fs.mkdirSync(settingsDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(settingsDir, 'settings.json'),
-      JSON.stringify(
-        {
-          agent: { modelSelection: { provider: 'acpmock', model: 'acp-mock-model' }, retryAttempts: 0 },
-          providers: [{ name: 'acpmock', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
-        },
-        null,
-        2,
-      ),
-      'utf-8',
-    );
-
-    const child = spawn(
-      process.execPath,
-      [integrationCliPath(), 'acp', '--provider', 'acpmock', '--model', 'acp-mock-model'],
-      {
-        cwd: projectRoot,
-        env: createTestChildEnv({
-          HOME: tempHome,
-          XDG_STATE_HOME: stateHome,
-          TERM2_CONVERSATIONS_DIR: conversationsDir,
-          TERM2_TEST_DB_DIR: conversationsDir,
-          DISABLE_LOGGING: '1',
-        }),
-        stdio: ['pipe', 'pipe', 'pipe'],
-      },
-    );
-    disposables.push(() => {
-      child.kill('SIGKILL');
-    });
-
-    let stderr = '';
-    child.stderr.on('data', (chunk: Buffer | string) => {
-      stderr += String(chunk);
-    });
-
-    // stdio contract: stdout is captured verbatim, then forwarded to the client.
-    let stdoutText = '';
-    const recorder = new TransformStream<Uint8Array, Uint8Array>({
-      transform(chunk, controller) {
-        stdoutText += Buffer.from(chunk).toString('utf8');
-        controller.enqueue(chunk);
-      },
-    });
-    const agentToClient = (Readable.toWeb(child.stdout!) as unknown as ReadableStream<Uint8Array>).pipeThrough(
-      recorder,
-    );
-
-    const clientToAgent = new TransformStream<Uint8Array, Uint8Array>();
-    const stdinWriter = clientToAgent.writable.getWriter();
-    void clientToAgent.readable.pipeTo(Writable.toWeb(child.stdin!) as unknown as WritableStream<Uint8Array>);
-
-    const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
-      child.on('close', (code, signal) => resolve({ code, signal }));
-    });
-
-    const updates: acp.UpdateSessionNotification[] = [];
-    const client = acp
-      .client({ name: 'acp-m2-e2e-client' })
-      .onNotification(acp.methods.client.session.update, ({ params }) => {
-        updates.push(params);
-      });
-
-    let sessionId = '';
-    try {
-      await client.connectWith(
-        acp.ndJsonStream(new WritableStream<Uint8Array>({ write: (chunk) => stdinWriter.write(chunk) }), agentToClient),
-        async (context) => {
-          const initialized = await context.request(acp.methods.agent.initialize, {
-            protocolVersion: acp.PROTOCOL_VERSION,
-            info: { name: 'acp-m2-e2e-client', version: '1.0.0' },
-          });
-          expect(initialized.info.version).toBe(packageVersion);
-
-          const created = await context.request(acp.methods.agent.session.new, { cwd: workspace });
-          sessionId = created.sessionId;
-
-          await context.request(acp.methods.agent.session.prompt, {
-            sessionId,
-            prompt: [{ type: 'text', text: 'say hello' }],
-          });
-          await vi.waitFor(
-            () => {
-              expect(updates).toEqual(
-                expect.arrayContaining([
-                  expect.objectContaining({ update: { sessionUpdate: 'state_update', state: 'running' } }),
-                  expect.objectContaining({
-                    update: expect.objectContaining({ sessionUpdate: 'agent_message_chunk' }),
-                  }),
-                  expect.objectContaining({
-                    update: { sessionUpdate: 'state_update', state: 'idle', stopReason: 'end_turn' },
-                  }),
-                ]),
-              );
-            },
-            { timeout: 30_000 },
-          );
-        },
-      );
-    } finally {
-      // Closing stdin is the client's disconnect: the launcher must cancel and
-      // close the still-live session without an explicit session/close.
-      await stdinWriter.close();
-    }
-
-    const exit = await exited;
-    expect(stderr).not.toContain('term2 acp: failed to start');
-    expect({ code: exit.code, signal: exit.signal }, stderr).toEqual({ code: 0, signal: null });
-
-    const lines = stdoutText.split('\n').filter((line) => line.trim().length > 0);
-    expect(lines.length).toBeGreaterThan(0);
-    for (const line of lines) {
-      expect(JSON.parse(line), line).toMatchObject({ jsonrpc: '2.0' });
-    }
-
-    expect(sessionId).not.toBe('');
-    expect(fs.existsSync(path.join(conversationsDir, `${sessionId}.jsonl`))).toBe(true);
-    expect(fs.existsSync(path.join(conversationsDir, `${sessionId}.lock`))).toBe(false);
-  }, 180_000);
 });
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -435,30 +292,5 @@ describe('term2 acp permission round trips (child process)', () => {
         expect(written, 'an allowed shell call must run').toBe(true);
       },
     );
-  }, 180_000);
-
-  it('rejects the call without writing and keeps stdout protocol-only', async ({ skip }) => {
-    skip(acpUnsupported, ACP_UNSUPPORTED);
-    const { stdoutText, exit } = await runAcpChild(
-      async () => ({ outcome: { outcome: 'cancelled' } }),
-      async (session) => {
-        await session.context.request(acp.methods.agent.session.prompt, {
-          sessionId: session.sessionId,
-          prompt: [{ type: 'text', text: 'run the tool' }],
-        });
-
-        // Whether the rejection is honored or the fail-closed default denies it,
-        // an approval-required call must not run.
-        await sleep(3_000);
-        expect(fs.existsSync(session.workspaceFile)).toBe(false);
-      },
-    );
-
-    expect(exit).toEqual({ code: 0, signal: null });
-    const lines = stdoutText.split('\n').filter((line) => line.trim().length > 0);
-    expect(lines.length).toBeGreaterThan(0);
-    for (const line of lines) {
-      expect(JSON.parse(line), line).toMatchObject({ jsonrpc: '2.0' });
-    }
   }, 180_000);
 });

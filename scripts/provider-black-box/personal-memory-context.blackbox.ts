@@ -8,9 +8,6 @@ import { startFakeCodexServer } from '../fake-codex-server-lib.js';
 import { FileMemoryStore } from '../../source/services/memory/memory-store.js';
 import { projectScopeKey } from '../../source/utils/project-scope.js';
 import { createIsolatedWorkspaceLease, writePtyTextAndSubmit, type PtyChildDriver } from './provider-test-harness.js';
-import { usesDirectComposer } from '../../source/test-helpers/direct-composer.js';
-
-const direct = usesDirectComposer([process.env.TERM2_TEST_CLI ?? '']);
 
 // Actual built CLI + persisted sessions + exact provider frames. No backend cache simulation.
 it.each([
@@ -165,8 +162,8 @@ it.each([
       await send('After opting out.', true, 'earlier automatic snapshots are withdrawn');
       await send('Still opted out.', false);
       const log = await readFile(join(workspace.paths.conversationsDir, sessions[0]!), 'utf8');
-      // Next's separate store records the snapshot as its own fact type.
-      expect(log).toContain(direct ? '"type":"memory_personal_snapshot"' : 'personal_memory_context');
+      // The store records the snapshot as its own fact type.
+      expect(log).toContain('"type":"memory_personal_snapshot"');
       expect(log).toContain('builtin:bare');
     } finally {
       await child?.cleanup();

@@ -3,11 +3,9 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { expect, it } from 'vitest';
 import { createIsolatedWorkspaceLease, writePtyTextAndSubmit } from './provider-test-harness.js';
-import { usesDirectComposer } from '../../source/test-helpers/direct-composer.js';
 
-// Legacy chains past the cancelled question without its output, which a real Responses server refuses with
-// "No tool output found". Next sends that output ahead of the steer (#150 item 10, a confirmed legacy bug).
-const sendsCancelledOutput = usesDirectComposer([process.env.TERM2_TEST_CLI ?? '']);
+// The cancelled question's output goes ahead of the steer; without it a real Responses server refuses the
+// chain with "No tool output found" (#150 item 10).
 
 // Codex has its own input filters on a chained request, so item 10 is pinned on both Responses routes.
 it.each(['openai', 'codex'] as const)(
@@ -133,9 +131,7 @@ it.each(['openai', 'codex'] as const)(
         (item) => item.type !== 'additional_tools',
       );
       expect(turnItems).toEqual([
-        ...(sendsCancelledOutput
-          ? [{ type: 'function_call_output', call_id: 'cancelled-question', output: 'User did not provide an answer.' }]
-          : []),
+        { type: 'function_call_output', call_id: 'cancelled-question', output: 'User did not provide an answer.' },
         {
           type: 'message',
           role: 'user',

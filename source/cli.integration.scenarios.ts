@@ -8,7 +8,6 @@ import { fileURLToPath } from 'url';
 import Database from 'better-sqlite3';
 import { resolveSettingsDirectory } from './services/settings/settings-path.js';
 import { createTestChildEnv } from './test-helpers/terminal-e2e.js';
-import { usesDirectComposer } from './test-helpers/direct-composer.js';
 
 import { writeMockCliSettings } from './test-helpers/mock-cli-settings.js';
 
@@ -1304,78 +1303,50 @@ fs.createWriteStream = (filename, options) => {
       for (const explicit of [false, true]) {
         const id = explicit ? 'conv_5e5a1b00-0000-4000-8000-000000000002' : 'conv_5e5a1b00-0000-4000-8000-000000000001';
         const originalGoal = { id: `old-${id}`, outcome: 'Original', status: 'active' };
-        // The native runtime reads its own store format; seed the same two events (session start, goal) in whichever the CLI under test owns.
-        const seed = process.env.TERM2_TEST_CLI
-          ? [
-              {
-                v: 2,
-                seq: 1,
-                at: '2026-01-01T00:00:00.000Z',
-                fact: {
-                  type: 'session_started',
-                  id,
-                  workspace: process.cwd(),
-                  workspaceIdentity: { root: process.cwd(), target: 'local', access: 'read_write' },
-                  model: { model: 'gpt-4o', provider: 'openai' },
-                  profile: {
-                    id: 'builtin:bare',
-                    version: '2.0.0',
-                    digest: '4ea566d1d75c03e6bb87743862f1016d5680568f77d6ebff267cb1e7b3d19ea4',
-                  },
-                  appVersion: '0.40.0',
-                },
+        const seed = [
+          {
+            v: 2,
+            seq: 1,
+            at: '2026-01-01T00:00:00.000Z',
+            fact: {
+              type: 'session_started',
+              id,
+              workspace: process.cwd(),
+              workspaceIdentity: { root: process.cwd(), target: 'local', access: 'read_write' },
+              model: { model: 'gpt-4o', provider: 'openai' },
+              profile: {
+                id: 'builtin:bare',
+                version: '2.0.0',
+                digest: '4ea566d1d75c03e6bb87743862f1016d5680568f77d6ebff267cb1e7b3d19ea4',
               },
-              {
-                v: 2,
-                seq: 2,
-                at: '2026-01-01T00:00:01.000Z',
-                fact: { type: 'goal_changed', goal: originalGoal, source: 'user' },
-              },
-            ]
-          : [
-              {
-                v: 3,
-                seq: 1,
-                ts: '2026-01-01T00:00:00.000Z',
-                event: { type: 'session_init', id, createdAt: '2026-01-01T00:00:00.000Z', projectPath: process.cwd() },
-              },
-              {
-                v: 3,
-                seq: 2,
-                ts: '2026-01-01T00:00:01.000Z',
-                event: { type: 'goal_changed', version: 1, goal: originalGoal },
-              },
-            ];
+              appVersion: '0.40.0',
+            },
+          },
+          {
+            v: 2,
+            seq: 2,
+            at: '2026-01-01T00:00:01.000Z',
+            fact: { type: 'goal_changed', goal: originalGoal, source: 'user' },
+          },
+        ];
         fs.writeFileSync(
           path.join(conversationsDir, `${id}.jsonl`),
           seed.map((event) => JSON.stringify(event)).join('\n') + '\n',
           'utf8',
         );
-        // Without a TTY legacy stops at "needs an interactive terminal" after applying the goal flags; the native CLI
-        // needs a prompt to get past argument checks (a separate, filed difference). Give it one aimed at a dead
-        // endpoint: the goal facts are committed before the model is called, which is all this test reads.
-        const native = Boolean(process.env.TERM2_TEST_CLI);
-        const args = [
-          cliPath(),
-          '--resume',
-          id,
-          '--lite',
-          ...(explicit ? ['--goal', 'Replacement'] : []),
-          ...(native ? ['hi'] : []),
-        ];
+        // The CLI needs a prompt to get past argument checks (a separate, filed difference). Give it one aimed at a
+        // dead endpoint: the goal facts are committed before the model is called, which is all this test reads.
+        const args = [cliPath(), '--resume', id, '--lite', ...(explicit ? ['--goal', 'Replacement'] : []), 'hi'];
         const { status, stderr } = await spawnCli(
           args,
           createTestChildEnv({
             HOME: testDir,
             TERM2_CONVERSATIONS_DIR: conversationsDir,
             DISABLE_LOGGING: '1',
-            ...(native ? { OPENAI_API_KEY: 'x', OPENAI_BASE_URL: 'http://127.0.0.1:9/v1' } : {}),
+            OPENAI_API_KEY: 'x',
+            OPENAI_BASE_URL: 'http://127.0.0.1:9/v1',
           }),
         );
-        if (!native) {
-          expect(status).toBe(1);
-          expect(stderr).toContain('term2 needs an interactive terminal');
-        }
         const savedLog = readSavedHistory(path.join(conversationsDir, `${id}.jsonl`));
         const events = savedLog.records;
         const goals = events.filter((event) => event.type === 'goal_changed');
@@ -1423,65 +1394,11 @@ fs.createWriteStream = (filename, options) => {
     it('CLI --resume ls prints list of conversations and exits', () => {
       // Create a mock conversation file in the conversations directory
       const convId = 'f81d4fae-7dec-11d0-a765-00a0c91e6bf6';
-      const filePath = path.join(conversationsDir, `${convId}.jsonl`);
-      const initEnvelope = {
-        v: 1,
-        seq: 1,
-        ts: '2026-05-28T14:40:16.000Z',
-        event: {
-          type: 'session_init',
-          id: convId,
-          createdAt: '2026-05-28T14:40:16.000Z',
-          projectPath: process.cwd(),
-          model: 'gpt-4o',
-          appMode: {
-            mentorMode: false,
-            liteMode: true,
-            planMode: false,
-            orchestratorMode: false,
-          },
-        },
-      };
-      const userEnvelope = {
-        v: 1,
-        seq: 2,
-        ts: '2026-05-28T14:40:20.000Z',
-        event: {
-          type: 'user_message',
-          message: {
-            id: 'user-msg-1',
-            sender: 'user',
-            text: 'hello this is a test prompt',
-          },
-        },
-      };
 
       // Create a second mock conversation from a different project path
       const otherConvId = 'b22d4fae-7dec-11d0-a765-00a0c91e6bf6';
-      const otherFilePath = path.join(conversationsDir, `${otherConvId}.jsonl`);
-      const otherInitEnvelope = {
-        v: 1,
-        seq: 1,
-        ts: '2026-05-28T14:40:16.000Z',
-        event: {
-          type: 'session_init',
-          id: otherConvId,
-          createdAt: '2026-05-28T14:40:16.000Z',
-          projectPath: '/Users/qduc/src/other-project',
-        },
-      };
-      if (process.env.TERM2_TEST_CLI) {
-        writeNativeSeed(conversationsDir, convId, { workspace: process.cwd(), prompt: 'hello this is a test prompt' });
-        writeNativeSeed(conversationsDir, otherConvId, { workspace: '/Users/qduc/src/other-project' });
-      } else {
-        fs.writeFileSync(filePath, JSON.stringify(initEnvelope) + '\n' + JSON.stringify(userEnvelope) + '\n', 'utf-8');
-        fs.writeFileSync(otherFilePath, JSON.stringify(otherInitEnvelope) + '\n', 'utf-8');
-
-        // Also touch the files so listConversations gets mtime
-        const now = new Date();
-        fs.utimesSync(filePath, now, now);
-        fs.utimesSync(otherFilePath, now, now);
-      }
+      writeNativeSeed(conversationsDir, convId, { workspace: process.cwd(), prompt: 'hello this is a test prompt' });
+      writeNativeSeed(conversationsDir, otherConvId, { workspace: '/Users/qduc/src/other-project' });
 
       const stdout = execFileSync('node', [cliPath(), '--resume', 'ls'], {
         env: createTestChildEnv({
@@ -1506,25 +1423,7 @@ fs.createWriteStream = (filename, options) => {
     it('CLI --resume list also works', () => {
       // Create a mock conversation file in the conversations directory
       const convId = 'a12d4fae-7dec-11d0-a765-00a0c91e6bf6';
-      const filePath = path.join(conversationsDir, `${convId}.jsonl`);
-      const initEnvelope = {
-        v: 1,
-        seq: 1,
-        ts: '2026-05-28T14:40:16.000Z',
-        event: {
-          type: 'session_init',
-          id: convId,
-          createdAt: '2026-05-28T14:40:16.000Z',
-          projectPath: process.cwd(),
-        },
-      };
-      if (process.env.TERM2_TEST_CLI) {
-        writeNativeSeed(conversationsDir, convId, { workspace: process.cwd() });
-      } else {
-        fs.writeFileSync(filePath, JSON.stringify(initEnvelope) + '\n', 'utf-8');
-        const now = new Date();
-        fs.utimesSync(filePath, now, now);
-      }
+      writeNativeSeed(conversationsDir, convId, { workspace: process.cwd() });
 
       const stdout = execFileSync('node', [cliPath(), '--resume', 'list'], {
         env: createTestChildEnv({
@@ -1566,24 +1465,7 @@ fs.createWriteStream = (filename, options) => {
 
     it('CLI --resume does not suggest --fork for a conversation from another project', async () => {
       const conversationId = 'c22d4fae-7dec-11d0-a765-00a0c91e6bf6';
-      if (process.env.TERM2_TEST_CLI)
-        writeNativeSeed(conversationsDir, conversationId, { workspace: '/another/project' });
-      else
-        fs.writeFileSync(
-          path.join(conversationsDir, `${conversationId}.jsonl`),
-          `${JSON.stringify({
-            v: 1,
-            seq: 1,
-            ts: '2026-05-28T14:40:16.000Z',
-            event: {
-              type: 'session_init',
-              id: conversationId,
-              createdAt: '2026-05-28T14:40:16.000Z',
-              projectPath: '/another/project',
-            },
-          })}\n`,
-          'utf8',
-        );
+      writeNativeSeed(conversationsDir, conversationId, { workspace: '/another/project' });
 
       const { status, stderr } = await spawnCli(
         [cliPath(), '--resume', conversationId],
@@ -2345,47 +2227,17 @@ fs.createWriteStream = (filename, options) => {
           path.join(resolveSettingsDirectory({ homeDir: testDir }), 'settings.json'),
           'utf8',
         );
-        // The native store holds only conv_<uuid> logs; its seed is the same saved session and prompt.
-        const native = Boolean(process.env.TERM2_TEST_CLI);
-        const resumeId = native ? '5a7ed000-0000-4000-8000-000000000001' : 'saved-standard';
-        const resumePath = path.join(conversationsDir, `${native ? `conv_${resumeId}` : resumeId}.jsonl`);
+        // The store holds only conv_<uuid> logs; its seed is the saved session and prompt.
+        const resumeId = '5a7ed000-0000-4000-8000-000000000001';
+        const resumePath = path.join(conversationsDir, `conv_${resumeId}.jsonl`);
         const savedHistory = !selection.endsWith('-resume')
           ? ''
-          : native
-          ? writeNativeSeed(conversationsDir, resumeId, {
-              // A native start always records its model; legacy's saved init has none and uses the configured one.
+          : writeNativeSeed(conversationsDir, resumeId, {
+              // A start always records its model.
               workspace: repo,
               model: { provider: 'mockprov', model: 'mock-alpha' },
               prompt: 'SAVED_STANDARD_HISTORY_SENTINEL',
-            })
-          : [
-              {
-                v: 3,
-                seq: 1,
-                ts: '2026-01-01T00:00:00.000Z',
-                event: {
-                  type: 'session_init',
-                  id: resumeId,
-                  createdAt: '2026-01-01T00:00:00.000Z',
-                  projectPath: repo,
-                  ...(selection === 'standard-resume'
-                    ? { activeProfileId: 'builtin:standard' }
-                    : { appMode: { liteMode: false, planMode: false, mentorMode: false, orchestratorMode: false } }),
-                },
-              },
-              {
-                v: 3,
-                seq: 2,
-                ts: '2026-01-01T00:00:01.000Z',
-                event: {
-                  type: 'user_message',
-                  message: { id: 'old-user', sender: 'user', text: 'SAVED_STANDARD_HISTORY_SENTINEL' },
-                },
-              },
-            ]
-              .map((event) => JSON.stringify(event))
-              .join('\n') + '\n';
-        if (savedHistory && !native) fs.writeFileSync(resumePath, savedHistory);
+            });
         try {
           const result = await spawnCli(
             [
@@ -2489,11 +2341,9 @@ fs.createWriteStream = (filename, options) => {
       },
     );
 
-    it.for(['pair', 'bare', 'full', 'standard'])(
+    it.for(['bare', 'full', 'standard'])(
       'headless %s completion in an unsupported workspace reports missing verification',
-      async (profile, { skip }) => {
-        // Legacy-only: the pair profile is dropped on next (accepted difference).
-        if (profile === 'pair' && usesDirectComposer([process.env.TERM2_TEST_CLI ?? ''])) skip();
+      async (profile) => {
         const mock = await startModelMock(['mock-alpha'], (n) =>
           n === 1
             ? [
@@ -2534,10 +2384,8 @@ fs.createWriteStream = (filename, options) => {
             createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: conversationsDir, DISABLE_LOGGING: '1' }),
             testDir,
           );
-          expect(result.status, result.stderr).toBe(profile === 'pair' ? 0 : 2);
-          expect(result.stdout).toContain(
-            profile === 'pair' ? 'independent verification not performed' : 'Completion verification blocked',
-          );
+          expect(result.status, result.stderr).toBe(2);
+          expect(result.stdout).toContain('Completion verification blocked');
           expect(result.stdout).toContain('durable goal remains active');
           expect(result.stderr).toContain(`Profile: ${['standard', 'full'].includes(profile) ? 'bare' : profile}`);
         } finally {

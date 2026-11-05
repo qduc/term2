@@ -4,9 +4,6 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { expect, it } from 'vitest';
 import { createIsolatedWorkspaceLease, writePtyTextAndSubmit } from './provider-test-harness.js';
-import { usesDirectComposer } from '../../source/test-helpers/direct-composer.js';
-
-const direct = usesDirectComposer([process.env.TERM2_TEST_CLI ?? '']);
 
 it.each(['pass', 'inconclusive', 'stale', 'fail'] as const)(
   'verifier %s on an uncommitted working tree',
@@ -175,8 +172,8 @@ it.each(['pass', 'inconclusive', 'stale', 'fail'] as const)(
         .filter(Boolean)
         .map((line) => {
           const row = JSON.parse(line);
-          if (direct) expect(row.v).toBe(2);
-          return direct ? row.fact : row.event;
+          expect(row.v).toBe(2);
+          return row.fact;
         })
         .filter((event) => event.type === 'goal_changed');
       expect(changes).toHaveLength(scenario === 'pass' ? 2 : 1);

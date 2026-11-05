@@ -4,7 +4,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { testCliPath, spawnTerminal, type TerminalSession } from './test-helpers/terminal-e2e.js';
-import { usesDirectComposer } from './test-helpers/direct-composer.js';
 import { HARNESS_IDLE_ENV, waitForHarnessIdleGeneration } from './lib/harness-input-idle.js';
 
 // tsx cold-starts the whole app through an on-demand transform; inside CI's
@@ -46,7 +45,7 @@ it.sequential.each(['lite', 'bare'])(
     const idlePath = path.join(tempHome, 'input-idle');
     session = spawnTerminal(
       'node',
-      ['--import', 'tsx', testCliPath('source/cli.tsx'), ...(profile === 'lite' ? ['--lite'] : ['--profile', 'bare'])],
+      ['--import', 'tsx', testCliPath('dist/cli.js'), ...(profile === 'lite' ? ['--lite'] : ['--profile', 'bare'])],
       {
         cwd: process.cwd(),
         env: {
@@ -95,11 +94,6 @@ it.sequential.each(['lite', 'bare'])(
         activeProfileId: 'builtin:bare',
         activeProfileVersion: '2.0.0',
       });
-      // The legacy liteMode flag projects from Bare for older readers of the legacy store.
-      if (!usesDirectComposer([testCliPath('source/cli.tsx')]))
-        expect(headers[0]).toMatchObject({
-          appMode: { orchestratorMode: false, liteMode: true, planMode: false, mentorMode: false },
-        });
       expect(headers[0].activeProfileDigest).toMatch(/^[a-f0-9]{64}$/);
     }
 

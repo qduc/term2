@@ -4,7 +4,6 @@ import { promisify } from 'node:util';
 import { readFile, readdir, writeFile, mkdir } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { usesDirectComposer } from '../../source/test-helpers/direct-composer.js';
 import { WebSocket, WebSocketServer } from 'ws';
 import {
   createIsolatedWorkspaceLease,
@@ -336,8 +335,8 @@ async function writeCorruptCodexResume(
         projectPath,
         model,
         provider: 'codex',
-        // The offline migration requires the session's profile; legacy defaults it.
-        ...(usesDirectComposer([process.env.TERM2_TEST_CLI ?? '']) ? { activeProfileId: 'builtin:bare' } : {}),
+        // The offline migration requires the session's profile.
+        activeProfileId: 'builtin:bare',
       },
     },
     {
@@ -1307,10 +1306,8 @@ export function registerResilienceScenarios(group: 'transport' | 'continuity'): 
 
           const persisted = await readConversation(workspace.paths, conversationId);
           expect(persisted).toContain(TOOL_CALL_ID);
-          // Next's separate store records the response continuation as a fact; the resumed
+          // The store records the response continuation as a fact; the resumed
           // request below proves the stale id is not reused (no previous_response_id).
-          if (!usesDirectComposer([process.env.TERM2_TEST_CLI ?? '']))
-            expect(persisted).not.toContain('resp_stale_interrupted');
 
           // SIGKILL intentionally leaves the application-owned lock behind; use the
           // documented fork escape hatch to resume the recovered state safely.
@@ -1570,12 +1567,11 @@ export function registerResilienceScenarios(group: 'transport' | 'continuity'): 
           activeWorkspaces.push(workspace);
           await enableTransientRetries(workspace.paths.logDir);
           const conversationId = '3281ca05-cc92-4a25-b686-5c4e969fc17c';
-          // Next keeps its own store: seed it from the same legacy log through the offline migration.
-          const direct = usesDirectComposer([process.env.TERM2_TEST_CLI ?? '']);
-          const legacyDir = direct ? join(workspace.root, 'legacy-conversations') : workspace.paths.conversationsDir;
+          // Seed the store from a legacy log through the offline migration.
+          const legacyDir = join(workspace.root, 'legacy-conversations');
           await writeCorruptCodexResume(legacyDir, conversationId, process.cwd(), model);
-          if (direct) await migrateLegacyConversations(workspace, legacyDir);
-          const storedId = direct ? `conv_${conversationId}` : conversationId;
+          await migrateLegacyConversations(workspace, legacyDir);
+          const storedId = `conv_${conversationId}`;
 
           const child = await startInteractive(workspace, route, ['--resume', conversationId]);
           await child.waitForVisibleOutput(`Resumed conversation: ${shownId(conversationId)}`);

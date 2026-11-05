@@ -216,8 +216,6 @@ async function runCommand(
     | 'prefix-enter'
     | 'pick-enter'
     | 'model-picker'
-    | 'approval-shortcut'
-    | 'approval-shortcut-history'
     | 'bare-clear-history'
     | 'quit-hint' = false,
   withUsage = false,
@@ -257,7 +255,7 @@ async function runCommand(
     [HARNESS_IDLE_ENV]: idlePath,
     // Ink suppresses dynamic terminal updates in CI mode; this test needs an interactive TUI.
     CI: 'false',
-    NODE_ENV: exerciseMenu && exerciseMenu.startsWith('approval-shortcut') ? 'production' : 'test',
+    NODE_ENV: 'test',
   };
   const settingsDir = resolveSettingsDirectory({ homeDir: home, env: createTestChildEnv(env) });
   fs.mkdirSync(settingsDir, { recursive: true });
@@ -475,59 +473,6 @@ async function runCommand(
     await session.waitForOutput('Resume Conversation', 30_000);
     return;
   }
-  if (exerciseMenu === 'approval-shortcut-history') {
-    session.write('draft stays');
-    await waitForHarnessComposerValue(idlePath, 'draft stays', { timeoutMs: 60_000 });
-    session.write('\x1b[Z');
-    // Legacy ModeSwitchConfirmationPrompt (ported) names the target mode and marks the choice with ❯.
-    await session.waitForOutput('Clear session and switch to Plan mode?', 30_000);
-    await session.waitForOutput('Switching to Plan mode requires clearing the current session.', 30_000);
-    await session.waitForOutput('❯ No', 30_000);
-    const dialog = session.getVisibleOutput().split('\n');
-    expect(dialog.some((line) => /│.*Switching to Plan mode requires clearing the current session\./.test(line))).toBe(
-      true,
-    );
-    expect(dialog.some((line) => /│.*Clear session and switch to Plan mode\?/.test(line))).toBe(true);
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    let frameOffset = session.getVisibleOutput().length;
-    // The default answer is No: Enter cancels the clear.
-    session.write('\r');
-    const lastFrame = () => session!.getVisibleOutput().slice(frameOffset);
-    const waitFrame = async (predicate: () => boolean) => {
-      const deadline = Date.now() + 10_000;
-      while (!predicate() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 25));
-      expect(predicate()).toBe(true);
-    };
-    await waitFrame(
-      () => lastFrame().includes('draft stays') && !lastFrame().includes('Clear session and switch to Plan mode?'),
-    );
-    await waitForHarnessComposerValue(idlePath, 'draft stays', { timeoutMs: 5_000 });
-    frameOffset = session.getVisibleOutput().length;
-    session.write('\x1b[Z');
-    await waitFrame(() => lastFrame().includes('Clear session and switch to Plan mode?'));
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    const selectedOffset = session.getVisibleOutput().length;
-    session.write('\x1b[A');
-    const selectedAt = Date.now();
-    while (Date.now() - selectedAt < 10_000 && !session.getVisibleOutput().slice(selectedOffset).includes('❯ Yes'))
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    expect(session.getVisibleOutput().slice(selectedOffset)).toContain('❯ Yes');
-    const offset = session.getVisibleOutput().length;
-    session.write('\r');
-    const started = Date.now();
-    while (Date.now() - started < 30_000 && !session.getVisibleOutput().slice(offset).includes('PLAN'))
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    const after = session.getVisibleOutput().slice(offset);
-    expect(after).toContain('PLAN');
-    // The PTY retains previous redraws; only the latest banner-delimited frame is current.
-    const currentFrame = after;
-    expect(currentFrame).toContain('PLAN');
-    expect(currentFrame).not.toContain('hello');
-    expect(JSON.parse(fs.readFileSync(path.join(settingsDir, 'settings.json'), 'utf8')).shell.autoApproveMode).toBe(
-      'off',
-    );
-    return;
-  }
   if (exerciseMenu === 'bare-clear-history') {
     // Legacy mode-commands: /bare with history asks before it clears, defaulting to No.
     let offset = session.getVisibleOutput().length;
@@ -560,20 +505,6 @@ async function runCommand(
     await waitSince(() => since().includes('BARE'));
     // Confirming clears the conversation, then switches.
     expect(since()).not.toContain('hello');
-    return;
-  }
-  if (exerciseMenu === 'approval-shortcut') {
-    session.write('draft stays');
-    await waitForHarnessComposerValue(idlePath, 'draft stays', { timeoutMs: 60_000 });
-    // Legacy's Shift+Tab lines (mode-toggle): "Switched to Plan mode - ...", then "Switched to Bare mode".
-    for (const line of ['Switched to Plan mode', 'Switched to Bare mode']) {
-      session.write('\x1b[Z');
-      await session.waitForOutput(line, 30_000);
-      await waitForHarnessComposerValue(idlePath, 'draft stays', { timeoutMs: 60_000 });
-      expect(JSON.parse(fs.readFileSync(path.join(settingsDir, 'settings.json'), 'utf8')).shell.autoApproveMode).toBe(
-        'off',
-      );
-    }
     return;
   }
   if (exerciseMenu === 'quit-hint') {
@@ -800,17 +731,7 @@ it('Enter on an arrow-picked command runs it', { timeout: TIMEOUT_MS }, () =>
   runCommand('/usage', '', undefined, 'pick-enter'),
 );
 
-// Plan mode is an accepted difference: plan is a dropped profile and next's Shift+Tab does nothing (#149).
-it.skip('Shift+Tab confirms a clear before changing mode with history', async () => {
-  await runCommand('', '', 'hello', 'approval-shortcut-history');
-}, 120_000);
-
-// Plan mode is an accepted difference: plan is a dropped profile and next's Shift+Tab does nothing (#149).
-it.skip('Shift+Tab toggles Plan and Bare without changing approval or draft', { timeout: TIMEOUT_MS }, () =>
-  runCommand('', '', undefined, 'approval-shortcut'),
-);
-
-// Replaces the Shift+Tab clear test above: /bare out of a settings-named Pair profile with history.
+// /bare out of a settings-named Pair profile with history.
 it('/bare confirms a clear before leaving a non-Bare profile with history', { timeout: TIMEOUT_MS }, () =>
   runCommand('', '', 'hello', 'bare-clear-history'),
 );

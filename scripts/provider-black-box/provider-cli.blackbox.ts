@@ -4,9 +4,6 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { startFakeProviderHttpServer, type FakeProviderHttpServer } from './fake-provider-http-server.js';
 import { runIsolatedCli, createIsolatedWorkspaceLease } from './provider-test-harness.js';
-import { usesDirectComposer } from '../../source/test-helpers/direct-composer.js';
-
-const direct = usesDirectComposer([process.env.TERM2_TEST_CLI ?? '']);
 
 let server: FakeProviderHttpServer | undefined;
 afterEach(async () => {
@@ -62,13 +59,12 @@ describe('assembled provider CLI black-box', () => {
       const after = await readFile(join(dir, logs[0]!), 'utf8');
       expect(after.startsWith(before)).toBe(true);
       expect(after).toContain('Recall the animal');
-      // Next's separate store: session metadata lives in session_started, the effort in each turn's configuration.
+      // The store: session metadata lives in session_started, the effort in each turn's configuration.
       const latestInit = (text: string) => {
         const rows = text
           .trim()
           .split('\n')
           .map((line) => JSON.parse(line));
-        if (!direct) return rows.filter((envelope) => envelope.event.type === 'session_init').at(-1).event;
         const facts = rows.map((row) => row.fact);
         return {
           forkedFrom: facts.find((fact) => fact.type === 'session_started')?.forkedFrom,

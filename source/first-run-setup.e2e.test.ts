@@ -54,7 +54,7 @@ it.each(['unreachable', 'catalog'] as const)(
         'node',
         '--import',
         'tsx',
-        testCliPath('source/cli.tsx'),
+        testCliPath('dist/cli.js'),
       ],
       { cols: 120, rows: 40 },
     );

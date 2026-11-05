@@ -6,13 +6,11 @@ import { expect, it } from 'vitest';
 import { callDiscordControl } from '../../source/services/discord/discord-bridge.js';
 import { listControlAdvertisements } from '../../source/services/control-socket/control-socket.js';
 import { createIsolatedWorkspaceLease, type PtyChildDriver } from './provider-test-harness.js';
-import { usesDirectComposer } from '../../source/test-helpers/direct-composer.js';
 
 it.each(['retained', 'legacy', 'invalid'] as const)(
   'retains the human clock across rollover and resumed successor for Discord input (%s baseline)',
   async (baseline) => {
-    // Next keeps its own store; its human-clock metadata is the accepted receipt's receivedAt.
-    const native = usesDirectComposer([process.env.TERM2_TEST_CLI ?? '']);
+    // The human-clock metadata is the accepted receipt's receivedAt.
     const requests: any[] = [];
     const server = createServer(async (request, response) => {
       const chunks: Buffer[] = [];
@@ -121,10 +119,8 @@ globalThis.Date = class extends RealDate {
           throw new Error(`control ${kind} ${id}: ${error.code} ${error.message}`);
         });
         expect(receipt.delivery).toBe('started');
-        if (native) {
-          await child!.waitForOutput(`timing-response-${responseRequest}`);
-          await child!.waitForState(() => requests.length === responseRequest);
-        }
+        await child!.waitForOutput(`timing-response-${responseRequest}`);
+        await child!.waitForState(() => requests.length === responseRequest);
         await child!.waitForIdleInput({ after: idle });
       };
       await send('human', 'first Discord human');
@@ -138,7 +134,7 @@ globalThis.Date = class extends RealDate {
             text: await readFile(join(workspace.paths.conversationsDir, name), 'utf8'),
           })),
         )
-      ).find((s) => s.text.includes(native ? '"session_rotated"' : '"rolloverFrom"'))!;
+      ).find((s) => s.text.includes('"session_rotated"'))!;
       const { name: predecessorName, text: predecessor } = (
         await Promise.all(
           sessions.map(async (name) => ({
@@ -146,22 +142,20 @@ globalThis.Date = class extends RealDate {
             text: await readFile(join(workspace.paths.conversationsDir, name), 'utf8'),
           })),
         )
-      ).find((s) => !s.text.includes(native ? '"session_rotated"' : '"rolloverFrom"'))!;
+      ).find((s) => !s.text.includes('"session_rotated"'))!;
       const predecessorRows = predecessor
         .split('\n')
         .filter(Boolean)
         .map((line) => JSON.parse(line));
-      const firstAt = native
-        ? predecessorRows.find(
-            (row) => row.fact.type === 'queue_submitted' && row.fact.record.request.clientRequestId === 'timing-test-1',
-          ).fact.record.receivedAt
-        : predecessorRows.find((row) => row.event.type === 'user_message').event.message.humanInputAt;
-      if (native) expect(firstAt).toEqual(expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/));
+      const firstAt = predecessorRows.find(
+        (row) => row.fact.type === 'queue_submitted' && row.fact.record.request.clientRequestId === 'timing-test-1',
+      ).fact.record.receivedAt;
+      expect(firstAt).toEqual(expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/));
       await child.cleanup();
       child = undefined;
       // Old successors have no checkpoint; malformed optional metadata fails closed.
       // Only disposable fixture logs are edited, never application-owned live state.
-      if (baseline !== 'retained' && native) {
+      if (baseline !== 'retained') {
         const first = predecessorRows.find(
           (row) => row.fact.type === 'queue_submitted' && row.fact.record.request.clientRequestId === 'timing-test-1',
         );

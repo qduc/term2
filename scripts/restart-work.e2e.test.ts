@@ -1,13 +1,10 @@
 import { testCliPath } from '../source/test-helpers/terminal-e2e.js';
 import { createServer } from 'node:http';
-import { randomUUID } from 'node:crypto';
 import { connect } from 'node:net';
 import { createInterface } from 'node:readline';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { expect, it } from 'vitest';
-import { usesDirectComposer } from '../source/test-helpers/direct-composer.js';
-import { createConversationLogWriter } from '../source/services/logging/conversation-log-writer.js';
 import { listControlAdvertisements } from '../source/services/control-socket/control-socket.js';
 import {
   HANG_BACKSTOP_MS,
@@ -51,7 +48,7 @@ async function rpc(socketPath: string, method: string, params?: unknown): Promis
   }
 }
 
-async function restartOwnership(mode: 'foreground' | 'background' | 'paused-text' | 'placeholder'): Promise<void> {
+async function restartOwnership(mode: 'foreground' | 'background'): Promise<void> {
   let requests = 0;
   let finishForeground: (() => void) | undefined;
   let work = '';
@@ -100,7 +97,6 @@ async function restartOwnership(mode: 'foreground' | 'background' | 'paused-text
   await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('No fixture address');
-  const seedId = randomUUID();
   const workspace = await createIsolatedWorkspaceLease({
     env: productionEnv,
     prepare: async (root, paths) => {
@@ -130,125 +126,68 @@ async function restartOwnership(mode: 'foreground' | 'background' | 'paused-text
           memory: { enabled: false },
         }),
       );
-      if (mode === 'paused-text' || mode === 'placeholder') {
-        const writer = createConversationLogWriter({
-          sessionId: seedId,
-          dir: paths.conversationsDir,
-          saveLast: () => undefined,
-        });
-        writer.init({ id: seedId, createdAt: new Date().toISOString(), projectPath: work });
-        await writer.close();
-        await writeFile(
-          join(paths.conversationsDir, `${seedId}.queue.json`),
-          JSON.stringify({
-            version: 1,
-            nextSequence: 2,
-            pause: { reason: 'manual' },
-            queue: [
-              {
-                id: 'retained',
-                text: mode === 'paused-text' ? 'retained plain text' : '[queued non-text user turn]',
-                sequence: 1,
-                submittedAt: new Date().toISOString(),
-              },
-            ],
-          }),
-        );
-      }
     },
   });
   try {
     const runtimeDir = join(workspace.root, 'runtime');
     const child = await workspace.start({
       command: process.execPath,
-      args: [
-        testCliPath(resolve('dist/cli.js')),
-        '--profile',
-        'bare',
-        '--control-socket=restart-work',
-        ...(mode.startsWith('paused') || mode === 'placeholder' ? ['--resume', seedId] : []),
-      ],
+      args: [testCliPath(resolve('dist/cli.js')), '--profile', 'bare', '--control-socket=restart-work'],
       cwd: work,
       env: { ...productionEnv, XDG_RUNTIME_DIR: runtimeDir },
       cols: 180,
       rows: 50,
     });
-    if (mode === 'paused-text' || mode === 'placeholder') await child.waitForComposerValue('', { afterRevision: 0 });
-    else await child.waitForIdleInput();
+    await child.waitForIdleInput();
     const socketPath = () => listControlAdvertisements(runtimeDir)[0]!.socketPath;
-    const pending = async () =>
-      JSON.parse(await readFile(join(workspace.paths.conversationsDir, `${seedId}.queue.json`), 'utf8'));
-    if (mode === 'foreground' || mode === 'background') {
-      const idle = child.readIdleGeneration();
-      await writePtyTextAndSubmit(child, 'start owned work');
-      await expect.poll(() => requests, { timeout: READINESS_TIMEOUT_MS }).toBeGreaterThan(0);
-      if (mode === 'foreground') {
-        await writePtyTextAndSubmit(child, '/restart stop');
-        await child.waitForVisibleOutput('Finish or stop the current foreground operation');
-        expect(requests).toBe(1);
-        finishForeground!();
-        await child.waitForIdleInput({ after: idle });
-      } else {
-        await child.waitForVisibleOutput('work-fixture-ready');
-        await child.waitForIdleInput({ after: idle });
-        const tasks = async () => (await rpc(socketPath(), 'get', { topic: 'background' })).result.tasks;
-        expect((await tasks()).some((task: any) => task.status === 'running')).toBe(true);
-        const ownedPid = Number((await readFile(join(work, 'owned-child.pid'), 'utf8')).trim());
-        expect(ownedPid).toBeGreaterThan(0);
-        await writePtyTextAndSubmit(child, '/restart');
-        await child.waitForVisibleOutput('Live background work:');
-        expect((await tasks()).some((task: any) => task.status === 'running')).toBe(true);
-        expect(ownedPid).toBeGreaterThan(0);
-        await writePtyTextAndSubmit(child, '/restart stop');
-        await child.waitForVisibleOutput('Resumed conversation:');
-        const logs = (await readdir(workspace.paths.conversationsDir)).filter((file) => file.endsWith('.jsonl'));
-        const log = await readFile(join(workspace.paths.conversationsDir, logs[0]!), 'utf8');
-        const records = log
-          .trim()
-          .split('\n')
-          .map((line) => JSON.parse(line));
-        // Native persistence records facts, not legacy events. Observe the same
-        // shell completion contract without requiring the legacy storage format.
-        const shellTasks = new Set(
-          records
-            .filter(({ fact }) => fact?.type === 'task_started' && fact.task.kind === 'shell')
-            .map(({ fact }) => fact.task.taskId),
-        );
-        const events = records.map(({ event, fact }) =>
-          fact?.type === 'task_finished' && shellTasks.has(fact.taskId)
-            ? { type: 'background_shell_completed', status: fact.result.kind }
-            : event ?? fact,
-        );
-        expect(events.filter((event) => event.type === 'background_shell_completed')).toEqual([
-          expect.objectContaining({ status: 'cancelled' }),
-        ]);
-      }
+    const idle = child.readIdleGeneration();
+    await writePtyTextAndSubmit(child, 'start owned work');
+    await expect.poll(() => requests, { timeout: READINESS_TIMEOUT_MS }).toBeGreaterThan(0);
+    if (mode === 'foreground') {
+      await writePtyTextAndSubmit(child, '/restart stop');
+      await child.waitForVisibleOutput('Finish or stop the current foreground operation');
+      expect(requests).toBe(1);
+      finishForeground!();
+      await child.waitForIdleInput({ after: idle });
     } else {
-      const before = await pending();
-      const resumedCount = child.getVisibleOutput().split('Resumed conversation:').length;
-      expect(JSON.stringify(before)).toContain('retained');
+      await child.waitForVisibleOutput('work-fixture-ready');
+      await child.waitForIdleInput({ after: idle });
+      const tasks = async () => (await rpc(socketPath(), 'get', { topic: 'background' })).result.tasks;
+      expect((await tasks()).some((task: any) => task.status === 'running')).toBe(true);
+      const ownedPid = Number((await readFile(join(work, 'owned-child.pid'), 'utf8')).trim());
+      expect(ownedPid).toBeGreaterThan(0);
       await writePtyTextAndSubmit(child, '/restart');
-      if (mode === 'placeholder') {
-        await child.waitForVisibleOutput('non-durable input');
-        expect(await pending()).toEqual(before);
-      } else {
-        await child.waitForState(
-          (snapshot) => snapshot.visibleOutput.split('Resumed conversation:').length > resumedCount,
-        );
-        await expect.poll(() => child.readComposerRevision(), { timeout: READINESS_TIMEOUT_MS }).toBe(1);
-        expect(await pending()).toEqual(before);
-        expect(
-          JSON.parse(await readFile(join(workspace.paths.conversationsDir, `${seedId}.queue.json`), 'utf8')).queue,
-        ).toHaveLength(1);
-      }
-      expect(requests).toBe(0);
+      await child.waitForVisibleOutput('Live background work:');
+      expect((await tasks()).some((task: any) => task.status === 'running')).toBe(true);
+      expect(ownedPid).toBeGreaterThan(0);
+      await writePtyTextAndSubmit(child, '/restart stop');
+      await child.waitForVisibleOutput('Resumed conversation:');
+      const logs = (await readdir(workspace.paths.conversationsDir)).filter((file) => file.endsWith('.jsonl'));
+      const log = await readFile(join(workspace.paths.conversationsDir, logs[0]!), 'utf8');
+      const records = log
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line));
+      // Native persistence records facts, not legacy events. Observe the same
+      // shell completion contract without requiring the legacy storage format.
+      const shellTasks = new Set(
+        records
+          .filter(({ fact }) => fact?.type === 'task_started' && fact.task.kind === 'shell')
+          .map(({ fact }) => fact.task.taskId),
+      );
+      const events = records.map(({ event, fact }) =>
+        fact?.type === 'task_finished' && shellTasks.has(fact.taskId)
+          ? { type: 'background_shell_completed', status: fact.result.kind }
+          : event ?? fact,
+      );
+      expect(events.filter((event) => event.type === 'background_shell_completed')).toEqual([
+        expect.objectContaining({ status: 'cancelled' }),
+      ]);
     }
     if (mode === 'background')
       await expect.poll(() => child.readComposerRevision(), { timeout: READINESS_TIMEOUT_MS }).toBe(1);
-    if (mode === 'foreground' || mode === 'background') {
-      await writePtyTextAndSubmit(child, '/quit');
-      await child.waitForExit();
-    }
+    await writePtyTextAndSubmit(child, '/quit');
+    await child.waitForExit();
   } finally {
     finishForeground?.();
     await workspace.cleanup();
@@ -259,8 +198,3 @@ async function restartOwnership(mode: 'foreground' | 'background' | 'paused-text
 const restartable = process.platform === 'linux' && Boolean(process.execve);
 const name = 'restart handles real %s ownership without discarding or automatically running retained input';
 it.skipIf(!restartable).each(['foreground', 'background'] as const)(name, restartOwnership, HANG_BACKSTOP_MS);
-// These seed legacy's conversation log and queue.json sidecar; term2-next keeps its own
-// store (accepted difference). restart-native.e2e.test.ts covers native paused text.
-it
-  .skipIf(!restartable || usesDirectComposer([process.env.TERM2_TEST_CLI ?? '']))
-  .each(['paused-text', 'placeholder'] as const)(name, restartOwnership, HANG_BACKSTOP_MS);

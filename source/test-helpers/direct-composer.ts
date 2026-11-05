@@ -5,10 +5,6 @@ const END_FRAME = '\x1b[?2026l';
 const MODEL_STATUS = /^[^\n]+\/[^\n]+ · ([^·]+) · [\d,]+ in \/ [\d,]+ out/;
 const ACTIVE_CURSOR = /\x1b\[7m \x1b\[27m(?:\x1b\[[\d;]*m)*$/;
 
-/** Native test entry selection, never a fallback from a failed source-marker wait. */
-export function usesDirectComposer(args: readonly string[]): boolean {
-  return args.some((arg) => arg.replaceAll('\\', '/').endsWith('/rewrite/src/app/cli.js'));
-}
 /**
  * Read the latest complete full Ink render's active single-line editor.
  * Only the ordinary composer matches.

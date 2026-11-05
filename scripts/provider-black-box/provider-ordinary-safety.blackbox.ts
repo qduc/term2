@@ -2,7 +2,6 @@ import { testCliPath } from '../../source/test-helpers/terminal-e2e.js';
 import { mkdir, writeFile, readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
-import { usesDirectComposer } from '../../source/test-helpers/direct-composer.js';
 import { startFakeProviderHttpServer, type FakeProviderHttpServer } from './fake-provider-http-server.js';
 import {
   createIsolatedWorkspaceLease,
@@ -11,14 +10,11 @@ import {
   exitInteractive,
 } from './provider-test-harness.js';
 
-const direct = usesDirectComposer([process.env.TERM2_TEST_CLI ?? '']);
 /**
- * Separate conversation store (accepted difference): legacy names a headless
- * session `non-interactive-<uuid>`; next stores `conv_<uuid>` and resumes by the
- * bare UUID. Either way the recovery text must name the retained session.
+ * The store names a headless session `conv_<uuid>` and resumes by the bare UUID.
+ * The recovery text must name the retained session.
  */
 const resumeLocator = async (lease: IsolatedWorkspaceLease): Promise<string> => {
-  if (!direct) return '--resume non-interactive-';
   const [log] = (await readdir(lease.paths.conversationsDir)).filter((name) => name.endsWith('.jsonl'));
   return `--resume ${log!.replace(/^conv_/, '').replace(/\.jsonl$/, '')} `;
 };

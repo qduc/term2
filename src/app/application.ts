@@ -30,6 +30,7 @@ import {
   type DirectSessionSettings,
 } from './application-runtime.js';
 import { LOCAL_PRINCIPAL, type DirectAuthority, type DirectAuthorityFactory } from './application-workspaces.js';
+import type { DirectCommandConfiguration } from '../session/command-types.js';
 import type { DirectConfigurationIntent } from './config-settings.js';
 import { createDirectInputPreview } from './input-preview.js';
 import { createDirectMcpRefresh } from './application-mcp.js';
@@ -84,6 +85,8 @@ export type DirectApplication = {
   listWorkspaceSessions(root: string): ReturnType<DirectLocalStore['listWorkspace']>;
   /** Copies a session this mode may run into a new one, without opening the source. Returns the new id. */
   forkSession(sourceId: string): Promise<string>;
+  /** Apply explicit local CLI selection through Session acceptance, without saving defaults. */
+  applyLaunchConfiguration(sessionId: string, configuration: DirectCommandConfiguration): Promise<void>;
   /** `undefined` clears it. Throws if another write got there first. */
   setGoal(sessionId: string, goal: DurableGoal | undefined, source: 'user' | 'launcher'): Promise<void>;
   /** The durable goal of a session, and whether one is set at all. */
@@ -199,6 +202,23 @@ export async function createDirectApplication(options: DirectApplicationOptions)
         },
       });
       return id;
+    },
+    async applyLaunchConfiguration(sessionId, configuration) {
+      if (Object.keys(configuration).length === 0) return;
+      await authority.authorize(LOCAL_PRINCIPAL, { kind: 'write', sessionId });
+      const session = await sessions.open(sessionId);
+      const result = await runtimes.launching(session.id, configuration, () =>
+        session.command({
+          commandId: randomUUID(),
+          admission: 'idle',
+          operation: { kind: 'configure', configuration },
+        }),
+      );
+      if (result.kind === 'finished' && result.receipt.outcome?.kind === 'configured') return;
+      const outcome = result.kind === 'finished' ? result.receipt.outcome : undefined;
+      throw new Error(
+        outcome?.kind === 'rejected' ? outcome.message : 'Could not apply the requested resume configuration.',
+      );
     },
     async setGoal(sessionId, goal, source) {
       writeGoal(await store.open(sessionId), goal, source);

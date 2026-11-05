@@ -1435,6 +1435,28 @@ export function registerResilienceScenarios(group: 'transport' | 'continuity'): 
         await waitForConversationContent(workspace.paths, conversationId, COMPACTION_CIPHERTEXT);
         await exitInteractive(first);
 
+        const headless = await workspace.runCli({
+          cwd: process.cwd(),
+          args: [
+            'try the switched provider headlessly',
+            '--lite',
+            '--resume',
+            conversationId,
+            '--provider',
+            COMPACTION_ROUTE.alternateProvider!,
+            '--model',
+            COMPACTION_ROUTE.model,
+          ],
+          deadlineMs: DEFAULT_TIMEOUT_MS,
+        });
+        expect(headless.timedOut, headless.stderr).toBe(false);
+        expect(headless.exitCode, headless.stderr).not.toBe(0);
+        expect(headless.stderr).toContain('Cannot switch this conversation');
+        expect(server.requests).toHaveLength(1);
+        expect(await readConversation(workspace.paths, conversationId)).not.toContain(
+          'try the switched provider headlessly',
+        );
+
         const switched = await startInteractive(
           workspace,
           {
@@ -1466,6 +1488,10 @@ export function registerResilienceScenarios(group: 'transport' | 'continuity'): 
         expect(server.requests).toHaveLength(1);
         expect(JSON.stringify(server.requests)).not.toContain('try the switched provider');
         expect(JSON.stringify(server.requests)).not.toContain(COMPACTION_CIPHERTEXT);
+        expect(await readConversation(workspace.paths, conversationId)).not.toContain('try the switched provider');
+        expect(
+          JSON.parse(await readFile(join(workspace.paths.logDir, 'settings.json'), 'utf8')).agent.modelSelection,
+        ).toEqual({ provider: COMPACTION_ROUTE.provider, model: COMPACTION_ROUTE.model });
         await switched.waitForComposerValue('try the switched provider', { afterRevision: 0 });
         for (let remaining = 'try the switched provider'.length - 1; remaining >= 0; remaining--) {
           await switched.write('\u007f');

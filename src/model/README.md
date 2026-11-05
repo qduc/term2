@@ -4,6 +4,16 @@
 contract from `index.ts` using registered source streamed-model factories. It
 owns request/item translation; the engine owns recovery admission and history.
 
+## Foreign native compaction
+
+`history-compatibility.ts` retains the legacy input planner's lane/source check:
+a foreign native compaction item is a hard refusal, because dropping it can lose
+the history it replaced. Foreign reasoning alone remains droppable. Session checks
+new submissions before accepting queue/turn facts, preserving the rejected draft
+and allowing a switch back. The provider stream and native compact boundaries
+also check before dispatch, covering auxiliary calls and non-queue callers.
+Duplicate submission receipts remain valid without accepting or sending new input.
+
 ## Flex service tier
 
 For the built-in OpenAI provider advertising `supportsFlexServiceTier`,

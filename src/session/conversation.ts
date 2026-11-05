@@ -15,6 +15,7 @@ import { randomUUID } from 'node:crypto';
 import type { TurnId } from '../engine/index.js';
 import { startCompaction, startTurn } from '../engine/index.js';
 import type { Item, ModelError } from '../model/index.js';
+import { foreignCompactionRefusal } from '../model/history-compatibility.js';
 import { ConversationGeneration, type PreparedConversationGeneration } from './conversation-generation.js';
 import { bindDirectCapabilities } from './capabilities.js';
 import type { DirectPreparedConfiguration } from './configuration.js';
@@ -433,6 +434,12 @@ function conversation(
           },
         };
       const plan = submitDirectQueue(journal.queueState, request, environment(), expectedSteerTurnId);
+      // Refuse before accepting the input: clients keep their draft and can switch
+      // back without a failed turn or a poisoned Session. Existing receipts stay idempotent.
+      if (plan.result.kind !== 'rejected' && plan.result.kind !== 'duplicate') {
+        const reason = foreignCompactionRefusal(liveReplay().history, settings.model.provider);
+        if (reason) return { admission: { kind: 'rejected', clientRequestId: request.clientRequestId, reason } };
+      }
       queueSettings = settings;
       if (plan.result.kind !== 'rejected') questionCancel.submitted(request.delivery);
       if (plan.effect?.kind === 'start') {

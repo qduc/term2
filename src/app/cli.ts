@@ -21,6 +21,7 @@ import {
 import type { AcpArgs } from '../clients/acp-v2/serve-args.js';
 import type { ServeArgs } from '../host/gateway/serve-args.js';
 import type { DirectLaunchBase } from './launch-types.js';
+import type { DirectCommandConfiguration } from '../session/command-types.js';
 import type { InteractivePickerRequest } from '../model/models/model-resolution.js';
 import { HARNESS_IDLE_ENV } from '../shared/lib/harness-input-idle.js';
 import { formatResumeList } from '../shared/utils/resume-list.js';
@@ -153,7 +154,7 @@ async function runWithSignals(request: DirectHeadlessRequest): Promise<{
 
 /**
  * Applies --model, --provider and --reasoning to the session settings, in the
- * current CLI's order and with its messages. Returns the error to print, or null.
+ * current CLI's order and with its messages. Returns the error to print, or the resolved explicit selection intent.
  * `pickerEligible` is the current CLI's picker gate (TTY, no prompt, no --json,
  * no harness marker). Only the interactive path sets it; headless is always unattended.
  */
@@ -162,13 +163,17 @@ async function applyModelOverrides(
   settings: SettingsService,
   logger: LoggingService,
   pickerEligible: boolean,
-): Promise<string | null> {
+): Promise<string | DirectCommandConfiguration> {
+  let overrides: DirectCommandConfiguration = {};
   const reasoning = options.reasoning?.trim() || undefined;
   const validReasoning =
     reasoning !== undefined && (VALID_REASONING_EFFORTS as readonly string[]).includes(reasoning)
       ? (reasoning as ModelSettingsReasoningEffort)
       : undefined;
-  if (validReasoning !== undefined) settings.set('agent.reasoningEffort', validReasoning, { persist: false });
+  if (validReasoning !== undefined) {
+    settings.set('agent.reasoningEffort', validReasoning, { persist: false });
+    overrides = { reasoning: validReasoning };
+  }
 
   // Providers are checked after settings load, so runtime providers from settings.json are known.
   const provider = options.provider?.trim() || undefined;
@@ -189,20 +194,21 @@ async function applyModelOverrides(
 
   // A bare -m opens the picker itself (old cli.tsx); Escape keeps the configured model.
   if (options.model === '') {
-    if (picker === undefined) return null;
+    if (picker === undefined) return overrides;
     const picked = await picker.runModelPickerHost({ settingsService: settings, loggingService: logger });
     if (picked.status !== 'cancelled') {
+      overrides = { ...overrides, model: { model: picked.selection.modelId, provider: picked.selection.provider } };
       settings.set(
         'agent.modelSelection',
         { model: picked.selection.modelId, provider: picked.selection.provider },
         { persist: false },
       );
     }
-    return null;
+    return overrides;
   }
 
   const modelFlag = options.model?.trim();
-  if (!modelFlag) return null;
+  if (!modelFlag) return overrides;
   const { resolveModelFlag } = await import('../model/models/model-resolution.js');
   // The picker replaces the readline fallback and the hard no_match error, as the current CLI does.
   const interactivePicker =
@@ -229,8 +235,9 @@ async function applyModelOverrides(
   });
   if (resolution.status === 'no_match') return resolution.error;
   // Escape returns to the configured default when the picker was offered; otherwise the run stops.
-  if (resolution.status === 'cancelled') return pickerEligible ? null : 'Cancelled.';
+  if (resolution.status === 'cancelled') return pickerEligible ? overrides : 'Cancelled.';
   for (const warning of resolution.warnings ?? []) stderr.write(`${warning}\n`);
+  overrides = { ...overrides, model: { model: resolution.modelId, provider: resolution.provider } };
   // --model is a per-session override: persist:false keeps the saved defaults intact.
   settings.set(
     'agent.modelSelection',
@@ -239,8 +246,9 @@ async function applyModelOverrides(
   );
   if (resolution.reasoningEffort && validReasoning === undefined) {
     settings.set('agent.reasoningEffort', resolution.reasoningEffort, { persist: false });
+    overrides = { ...overrides, reasoning: resolution.reasoningEffort };
   }
-  return null;
+  return overrides;
 }
 
 async function runHeadless(prompt: string, options: SessionOptions): Promise<number> {
@@ -261,9 +269,9 @@ async function runHeadless(prompt: string, options: SessionOptions): Promise<num
     loggingServiceOptions: { sessionContextService: sessionContext },
   });
   const logger = settings.getLoggingService();
-  const modelError = await applyModelOverrides(options, settings, logger, false);
-  if (modelError !== null) {
-    stderr.write(`${modelError}\n`);
+  const modelOverrides = await applyModelOverrides(options, settings, logger, false);
+  if (typeof modelOverrides === 'string') {
+    stderr.write(`${modelOverrides}\n`);
     return 1;
   }
   // The profile is announced by the app after a resumed selection is restored; announcing here would show the pre-restore value.
@@ -280,6 +288,7 @@ async function runHeadless(prompt: string, options: SessionOptions): Promise<num
     ...(options.fork ? { fork: true } : {}),
     ...(options.goal === null ? {} : { goal: options.goal }),
     profileExplicit: options.profile !== null || options.lite,
+    resumeConfiguration: modelOverrides,
     output: options.output.json ? 'json' : 'plain',
     showReasoning: options.output.showReasoning,
     quiet: options.output.quiet,
@@ -322,9 +331,9 @@ async function runInteractive(options: SessionOptions): Promise<number> {
   const logger = settings.getLoggingService();
   // The picker gate of src/model/models/model-picker-host.tsx: TTY on both ends, no --json, no harness marker.
   const pickerEligible = Boolean(stdin.isTTY && stdout.isTTY) && !options.output.json && !process.env[HARNESS_IDLE_ENV];
-  const modelError = await applyModelOverrides(options, settings, logger, pickerEligible);
-  if (modelError !== null) {
-    stderr.write(`${modelError}\n`);
+  const modelOverrides = await applyModelOverrides(options, settings, logger, pickerEligible);
+  if (typeof modelOverrides === 'string') {
+    stderr.write(`${modelOverrides}\n`);
     return 1;
   }
   chooseProfile(options, settings);
@@ -336,6 +345,7 @@ async function runInteractive(options: SessionOptions): Promise<number> {
     conversationsDir: directory,
     selection: { settings, logger, sessionContext },
     profileExplicit: options.profile !== null || options.lite,
+    resumeConfiguration: modelOverrides,
     lite: options.lite,
     ...(options.resumeId === null ? {} : { resumeId: options.resumeId }),
     ...(controlSocket === undefined ? {} : { controlSocket }),

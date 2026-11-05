@@ -1,4 +1,5 @@
 /** What `cli.ts` hands the direct application after parsing. No Session or engine authority crosses here. */
+import type { DirectCommandConfiguration } from '../session/command-types.js';
 import type { AcpArgs } from '../clients/acp-v2/serve-args.js';
 import type { ServeArgs } from '../host/gateway/serve-args.js';
 import type { DurableGoal } from '../session/goal.js';
@@ -16,6 +17,8 @@ export type DirectLaunchBase = {
   readonly selection: ProfileSelection;
   /** True only for an explicit profile flag, which overrides a resumed profile. */
   readonly profileExplicit?: boolean;
+  /** Resolved explicit CLI model/effort only; applied durably after resume/fork, never saved globally. */
+  readonly resumeConfiguration?: DirectCommandConfiguration;
 };
 
 /** Null port means none was given, so SSH config decides. An explicit 22 still wins over it. */
@@ -36,6 +39,8 @@ export type DirectHeadlessRequest = {
   readonly resumeId?: string;
   /** True only for an explicit --profile/--lite, which overrides the resumed profile. */
   readonly profileExplicit?: boolean;
+  /** Resolved explicit CLI model/effort only; applied durably after resume/fork, never saved globally. */
+  readonly resumeConfiguration?: DirectCommandConfiguration;
   readonly output?: 'plain' | 'json';
   /** Reasoning deltas go to stderr, never stdout. */
   readonly showReasoning?: boolean;

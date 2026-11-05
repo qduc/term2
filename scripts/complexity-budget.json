@@ -3,8 +3,8 @@
   "maxLines": 500,
   "fileCeilings": {
     "src/model/provider.ts": {
-      "lines": 505,
-      "reason": "lazyModel is the one place a provider's streamed model becomes a Model; its native compact entry (body in provider-compact.ts) belongs beside stream. The usage it emits carries an aggregator's upstream provider, read from the same completion."
+      "lines": 508,
+      "reason": "lazyModel is the one place a provider's streamed model becomes a Model; its native compact entry (body in provider-compact.ts) belongs beside stream. The usage it emits carries an aggregator's upstream provider, read from the same completion. The foreign-compaction policy lives in history-compatibility.ts; its three-line pre-dispatch callsite must precede continuation translation in this request owner."
     },
     "src/clients/tui/presentation/components/message/CommandMessage.tsx": {
       "lines": 1021,
@@ -55,8 +55,8 @@
       "reason": "The wire type catalogue; candidate 2 adds the task's live tool state fields beside the others, and usage carries OpenRouter's upstream provider."
     },
     "src/session/conversation.ts": {
-      "lines": 510,
-      "reason": "The Conversation's turn driver; candidate 2 keeps both the question-cancel notice (a3) and the cross-turn compaction hold (solo/tools), each closing over the same driver state."
+      "lines": 517,
+      "reason": "The Conversation's turn driver; candidate 2 keeps both the question-cancel notice (a3) and the cross-turn compaction hold (solo/tools), each closing over the same driver state. Foreign-compaction policy is extracted to model/history-compatibility.ts; the seven-line callsite stays between pure queue planning and the existing acceptance transaction so duplicate receipts are preserved and rejected drafts are never committed."
     },
     "src/session/replay-fold.ts": {
       "lines": 503,

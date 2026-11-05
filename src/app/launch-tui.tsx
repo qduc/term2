@@ -250,6 +250,8 @@ async function runTui(
     const sessionId = resumeId !== undefined && fork ? await app.forkSession(resumeId) : resumeId;
     if (sessionId !== resumeId)
       stderr.write(`Forked conversation ${displaySessionId(resumeId!)} → ${displaySessionId(sessionId!)}\n`);
+    if (sessionId !== undefined && request.resumeConfiguration)
+      await app.applyLaunchConfiguration(sessionId, request.resumeConfiguration);
     const initial =
       sessionId === undefined
         ? await app.host.createSession(app.principal, target.grant)

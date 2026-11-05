@@ -34,6 +34,7 @@ import { withGenerationGuard } from './generation-guard.js';
 import { SessionSettingsService } from './settings.js';
 import { createNativeSessionBrowser } from './native-session-browser.js';
 import { nativeBrowserId } from './native-session-browser-store.js';
+import type { DirectCommandConfiguration } from '../session/command-types.js';
 import type { AgentSurface, ProfileSelection, ToolSurfaceOptions } from './tool-contract.js';
 
 export type DirectRuntimeOptions = {
@@ -74,6 +75,11 @@ export type DirectRuntimeRecord = {
 
 export type DirectRuntimes = {
   create(context: DirectRuntimeContext): DirectConversationRuntime;
+  launching<Result>(
+    sessionId: string,
+    configuration: DirectCommandConfiguration,
+    operation: () => Promise<Result>,
+  ): Promise<Result>;
   /** Throws unless this application lets a session move from `previous` to `next`. */
   authorizeModel(next: ModelRef, previous: ModelRef): void | Promise<void>;
   /** An open session's runtime, for app-owned policy and commands. */
@@ -187,6 +193,7 @@ export function createDirectRuntimes(
   options: DirectRuntimeOptions,
   hookRuntime: DirectHookRuntime | null,
 ): DirectRuntimes {
+  const launchConfiguration = new AsyncLocalStorage<{ sessionId: string; configuration: DirectCommandConfiguration }>();
   const records = new Map<string, DirectRuntimeRecord>();
   const { logger, sessionContext } = options.selection;
   const authorizeModel = options.authorizeModel ?? sameModelOnly;
@@ -198,6 +205,8 @@ export function createDirectRuntimes(
 
   return {
     authorizeModel,
+    launching: (sessionId, configuration, operation) =>
+      launchConfiguration.run({ sessionId, configuration }, operation),
     create(context) {
       // Metadata records a path, so the store resolves a foreign root narrower
       // rather than refusing it. Running it would act outside this mode's admission.
@@ -299,6 +308,8 @@ export function createDirectRuntimes(
         });
       };
       const configure = async (configuration: DirectAppConfiguration): Promise<DirectPreparedConfiguration> => {
+        const launch = launchConfiguration.getStore();
+        const isLaunch = launch?.sessionId === context.id;
         const { bound } = installed;
         if (!bound) throw new Error('This session has not finished starting.');
         const generation = await prepareDirectConfiguration({
@@ -309,7 +320,11 @@ export function createDirectRuntimes(
           configuration,
           capabilities: bound.capabilities,
           memoryBinding,
-          authorizeModel,
+          authorizeModel: (next, previous) => {
+            const selected = isLaunch ? launch.configuration.model : undefined;
+            if (selected && selected.provider === next.provider && selected.model === next.model) return;
+            return authorizeModel(next, previous);
+          },
         });
         let profileTransitionNotice: string | undefined;
         try {
@@ -368,7 +383,7 @@ export function createDirectRuntimes(
                   settings.setDynamic(
                     key,
                     value,
-                    isDeepStrictEqual(settings.getDynamic(key), value) ? { persist: false } : {},
+                    isLaunch || isDeepStrictEqual(settings.getDynamic(key), value) ? { persist: false } : {},
                   );
                 record('app.activeProfileId', nextProfile.id);
                 record('agent.modelSelection', intent.modelSelection);

@@ -434,7 +434,7 @@ async function runFailureScenario(
   await child.waitForIdleInput();
   await writePrompt(child, `exercise ${mode}`);
   await waitForRequests(server, child, (requests) => normalRequests(requests).length >= 1);
-  const failureSignal = mode === 'native-error' ? /error|failed/i : /PARTIAL|error|failed|closed/i;
+  const failureSignal = mode === 'native-error' ? /error|failed/i : /PARTIAL|error|failed|closed|dropped/i;
   await child.waitForState(
     (snapshot) => failureSignal.test(snapshot.visibleOutput) && !snapshot.visibleOutput.includes('SUCCESS'),
     10_000,

@@ -27,7 +27,8 @@ export async function applyDirectCommand(
     const identity = command && 'commandId' in command ? { commandId: command.commandId } : {};
     if (error instanceof DirectProtocolError)
       return { ok: false, code: error.code, message: error.message, ...identity };
-    return { ok: false, code: 'internal_error', message: 'Session command failed.', ...identity };
+    const message = error instanceof Error ? error.message : 'Session command failed.';
+    return { ok: false, code: 'internal_error', message, ...identity };
   }
 }
 const accepted = { ok: true, kind: 'accepted' } as const;

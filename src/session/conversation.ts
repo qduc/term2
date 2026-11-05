@@ -25,11 +25,53 @@ import type { DirectQueueEffect } from './queue-types.js';
 import { planDirectQueue, submitDirectQueue } from './queue.js';
 import { directRolloverAtBoundary } from './rollover.js';
 import { DirectRunBudgets } from './run-budget.js';
+import {
+  GROK_RESPONSES_OPAQUE_TAG,
+  OPENAI_RESPONSES_OPAQUE_TAG,
+  isForeignProviderOpaque,
+  providerOpaqueSourceOf,
+  providerOpaqueTagOf,
+} from '../model/providers/provider-opaque-compatibility.js';
 import type { Conversation, ConversationDeps, StartedConversationTurn, TurnRequest } from './types.js';
 import type { Fact, FactLine, SessionStartedFact } from './facts.js';
 import { replay } from './replay.js';
 
 export type { AnswerResult, Conversation, ConversationDeps, Turn, TurnRequest } from './types.js';
+
+function isOpaqueCompactionItem(item: unknown): boolean {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+  const record = item as Record<string, unknown>;
+  if (record.type === 'compaction') return true;
+  if (record.type !== 'provider_opaque' || !record.item || typeof record.item !== 'object') return false;
+  return (record.item as Record<string, unknown>).type === 'compaction';
+}
+
+function foreignCompactionRefusal(history: readonly Item[], targetProvider: string): string | null {
+  const targetOpaqueLane =
+    targetProvider === 'openai'
+      ? OPENAI_RESPONSES_OPAQUE_TAG
+      : targetProvider === 'grok'
+      ? GROK_RESPONSES_OPAQUE_TAG
+      : targetProvider === 'codex'
+      ? OPENAI_RESPONSES_OPAQUE_TAG
+      : targetProvider;
+  const foreignOpaque = history.find(
+    (item) =>
+      isOpaqueCompactionItem(item) &&
+      providerOpaqueTagOf(item) !== undefined &&
+      isForeignProviderOpaque(item, targetOpaqueLane, targetProvider),
+  );
+  const foreignOpaqueSource =
+    foreignOpaque && (providerOpaqueSourceOf(foreignOpaque) ?? providerOpaqueTagOf(foreignOpaque));
+  if (foreignOpaqueSource) {
+    return (
+      `Cannot switch this conversation from ${foreignOpaqueSource} to ${targetProvider}: native provider history ` +
+      `has no verified portable coverage, so sending it would omit earlier context. Switch back to ${foreignOpaqueSource} ` +
+      `to continue, or start a fresh conversation on ${targetProvider}.`
+    );
+  }
+  return null;
+}
 
 /** Writes session_started before any engine can be constructed. */
 export function createConversation(
@@ -252,6 +294,10 @@ function conversation(
       ? { history: planned.history!, compactionState: planned.compactionState }
       : liveReplay();
     const { input: _input, notice: _notice, submission: _submission, previewMode: _previewMode, ...settings } = request;
+    if (settings?.model) {
+      const refusal = foreignCompactionRefusal(snapshot.history, settings.model.provider);
+      if (refusal) throw new Error(refusal);
+    }
     const { modelHistory, sentInput } = prepareConversationNotice(
       turnId,
       request,
@@ -373,6 +419,10 @@ function conversation(
       }),
     snapshotInputPreview(request) {
       if (closed || journal.failure) throw new Error(journal.failure?.message ?? 'Session is closed');
+      if (request?.model) {
+        const refusal = foreignCompactionRefusal(liveReplay().history, request.model.provider);
+        if (refusal) throw new Error(refusal);
+      }
       return generation.preview(
         request,
         facts,
@@ -421,6 +471,18 @@ function conversation(
         } catch {
           return {
             admission: { kind: 'rejected', clientRequestId: request.clientRequestId, reason: 'invalid origin' },
+          };
+        }
+      }
+      if (settings?.model) {
+        const refusal = foreignCompactionRefusal(liveReplay().history, settings.model.provider);
+        if (refusal) {
+          return {
+            admission: {
+              kind: 'rejected',
+              clientRequestId: request.clientRequestId,
+              reason: refusal,
+            },
           };
         }
       }

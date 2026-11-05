@@ -501,7 +501,7 @@ function fromLastReplacementBoundary(history: readonly Item[]): Item[] {
   for (let index = history.length - 1; index >= 0; index--) {
     const item = history[index]!;
     if (
-      (item.type === 'summary' && !item.id.includes(':notice:')) ||
+      (item.type === 'summary' && (item.replaces.length > 0 || item.id.startsWith('compact_'))) ||
       (item.type === 'provider_opaque' && item.provider === 'openai' && item.item.type === 'compaction')
     )
       return history.slice(index);

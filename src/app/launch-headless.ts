@@ -1,5 +1,7 @@
 /** One headless run as a client of the direct host. `cli.ts` owns signals, through the returned handle. */
 import fs from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import type { ModelRef } from '../model/index.js';
 import { openDirectApplicationMcp } from './application-mcp.js';
 import type { DirectMcp } from './mcp.js';
 import { runDirectHeadless } from '../clients/headless/index.js';
@@ -39,6 +41,7 @@ export function runDirectHeadlessOnHost(request: DirectHeadlessRequest): DirectH
         ...(request.profileExplicit !== undefined ? { profileExplicit: request.profileExplicit } : {}),
         surface: () => ({ autoApprove, interactive: false, ...opened.surface, ...(mcp ? { mcp } : {}) }),
         authority: opened.authority,
+        ...(request.modelExplicit ? { authorizeModel: () => undefined } : {}),
         ...(opened.binding ? { sessionBinding: opened.binding } : {}),
         hooks: { root: fs.realpathSync(process.cwd()), mode: 'non-interactive' },
         onSurface(surface, profile) {
@@ -57,6 +60,17 @@ export function runDirectHeadlessOnHost(request: DirectHeadlessRequest): DirectH
         sessionId === undefined
           ? await app.host.createSession(app.principal, opened.grant)
           : await app.host.connect(app.principal, sessionId);
+      if (sessionId !== undefined && request.modelExplicit) {
+        const explicitModel = selection.settings.get('agent.modelSelection') as ModelRef;
+        const current = connection.snapshot.model;
+        if (current.model !== explicitModel.model || current.provider !== explicitModel.provider) {
+          await connection.send({
+            type: 'configure',
+            commandId: randomUUID(),
+            configuration: { model: explicitModel },
+          });
+        }
+      }
       if (request.goal) await app.setGoal(connection.sessionId, request.goal, 'launcher');
       active = true;
       const { outcome } = await runDirectHeadless(connection, {

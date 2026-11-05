@@ -16,6 +16,8 @@ export type DirectLaunchBase = {
   readonly selection: ProfileSelection;
   /** True only for an explicit profile flag, which overrides a resumed profile. */
   readonly profileExplicit?: boolean;
+  /** True only for an explicit model/provider flag, which overrides a resumed model. */
+  readonly modelExplicit?: boolean;
 };
 
 /** Null port means none was given, so SSH config decides. An explicit 22 still wins over it. */
@@ -36,6 +38,8 @@ export type DirectHeadlessRequest = {
   readonly resumeId?: string;
   /** True only for an explicit --profile/--lite, which overrides the resumed profile. */
   readonly profileExplicit?: boolean;
+  /** True only for an explicit model/provider flag, which overrides a resumed model. */
+  readonly modelExplicit?: boolean;
   readonly output?: 'plain' | 'json';
   /** Reasoning deltas go to stderr, never stdout. */
   readonly showReasoning?: boolean;

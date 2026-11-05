@@ -1639,7 +1639,13 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       // previousResponseId (nested explorers do). Injecting a terra-style
       // remembered id here would duplicate that owner. disableChaining still
       // clears the wire state via #forgetCodexResponseId above.
-      const input = Array.isArray(request.input) ? dropUnpairedCodexToolItems(request.input) : request.input;
+      const key = this.#getCodexServerHistoryKey();
+      const hasPrevious = Boolean(
+        (typeof request?.previousResponseId === 'string' && request.previousResponseId.length > 0) ||
+          (key && this.chainedWireState.getStoredResponseId(key)),
+      );
+      const input =
+        !hasPrevious && Array.isArray(request.input) ? dropUnpairedCodexToolItems(request.input) : request.input;
       return { request: input === request.input ? request : { ...request, input } };
     }
 

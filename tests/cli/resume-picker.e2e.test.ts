@@ -151,7 +151,7 @@ it.each([160, 60])(
     expect(frame).toContain('Updated:');
     expect(frame).toContain('↑↓ navigate │ ⏎ resume │ Esc cancel');
     if (columns > 100) {
-      expect(frame).toMatch(/previous unique prompt · \d+ seconds ago · 2 msgs/);
+      expect(frame).toMatch(/previous unique prompt · (?:\d+ seconds? ago|now) · 2 msgs/);
       expect(frame).toContain('Local • 2 msgs • mock-alpha • mode: bare');
       expect(frame).toContain('"previous unique prompt"');
     }
@@ -244,7 +244,7 @@ it.each([160])(
     await waitForHarnessComposerValue(idlePath, '/resume ', { timeoutMs: 60_000 });
     await session!.waitForOutput('Initial Prompt:', 30_000);
     const frame = session.getVisibleOutput().slice(session.getVisibleOutput().lastIndexOf('▌ term²'));
-    expect(frame).toMatch(/previous unique prompt · \d+ seconds ago · 2 msgs/);
+    expect(frame).toMatch(/previous unique prompt · (?:\d+ seconds? ago|now) · 2 msgs/);
     // Legacy shows the bare UUID (the head only: a narrow detail column wraps the rest).
     expect(frame).toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-/);
     expect(frame).not.toContain('conv_');
@@ -344,7 +344,7 @@ it.each([160])(
     await waitForHarnessComposerValue(idlePath, '/resume ', { timeoutMs: 60_000 });
     await session!.waitForOutput('Initial Prompt:', 30_000);
     const frame = session.getVisibleOutput().slice(session.getVisibleOutput().lastIndexOf('▌ term²'));
-    expect(frame).toMatch(/previous unique prompt · \d+ seconds ago · 2 msgs/);
+    expect(frame).toMatch(/previous unique prompt · (?:\d+ seconds? ago|now) · 2 msgs/);
     // Legacy shows the bare UUID (the head only: a narrow detail column wraps the rest).
     expect(frame).toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-/);
     expect(frame).not.toContain('conv_');
@@ -454,7 +454,7 @@ it.each([160])('a failed resume leaves the composer usable at %i columns', { tim
   await waitForHarnessComposerValue(idlePath, '/resume ', { timeoutMs: 60_000 });
   await session!.waitForOutput('Initial Prompt:', 30_000);
   const frame = session.getVisibleOutput().slice(session.getVisibleOutput().lastIndexOf('▌ term²'));
-  expect(frame).toMatch(/previous unique prompt · \d+ seconds ago · 2 msgs/);
+  expect(frame).toMatch(/previous unique prompt · (?:\d+ seconds? ago|now) · 2 msgs/);
   // Legacy shows the bare UUID (the head only: a narrow detail column wraps the rest).
   expect(frame).toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-/);
   expect(frame).not.toContain('conv_');

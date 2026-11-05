@@ -121,7 +121,17 @@ it.each(['expiry', 'configuration', 'secondary'] as const)(
       expect(terminal.getVisibleOutput()).toMatch(/7D 37%→\d\d\/\d\d/);
       const mark = terminal.getVisibleOutput().length;
       if (clearBy === 'expiry') {
-        await new Promise((resolve) => setTimeout(resolve, 9000));
+        // The window resets 8 s after the reply; wait for the status line that drops it.
+        await expect
+          .poll(
+            () => {
+              const updates = terminal.getVisibleOutput().slice(mark);
+              const at = updates.lastIndexOf('Bare │ Codex/');
+              return at >= 0 && !updates.slice(at).includes('7D 37%');
+            },
+            { timeout: 30000, interval: 100 },
+          )
+          .toBe(true);
       } else if (clearBy === 'configuration') {
         await terminal.waitForOutput('REPLY-2', 30000);
         await waitForHarnessIdleGeneration(idle, { after: generation, timeoutMs: 60000 });

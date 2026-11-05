@@ -380,16 +380,19 @@ it('a second message sent while the first is still being sent is kept, not lost'
   session!.write('steer alpha\r');
   await new Promise((resolve) => setTimeout(resolve, 15));
   session!.write('steer bravo\r');
-  await new Promise((resolve) => setTimeout(resolve, 3000));
-  const logged = fs
-    .readdirSync(path.join(root, 'conversations'))
-    .filter((name) => name.endsWith('.jsonl'))
-    .map((name) => fs.readFileSync(path.join(root, 'conversations', name), 'utf8'))
-    .join('\n');
-  expect(logged, 'the first steer reached the log').toContain('steer alpha');
+  const logged = () =>
+    fs
+      .readdirSync(path.join(root, 'conversations'))
+      .filter((name) => name.endsWith('.jsonl'))
+      .map((name) => fs.readFileSync(path.join(root, 'conversations', name), 'utf8'))
+      .join('\n');
+  // Wait for the first steer to land rather than a fixed 3 s.
+  await expect.poll(logged, { timeout: 30_000, interval: 100 }).toContain('steer alpha');
   // The second one is either sent or still in the composer; it is never nowhere.
-  const kept = logged.includes('steer bravo') || (composer(idlePath) ?? '').includes('steer bravo');
-  expect(kept, 'the second steer is in the log or the draft').toBe(true);
+  const kept = () => logged().includes('steer bravo') || (composer(idlePath) ?? '').includes('steer bravo');
+  await expect
+    .poll(kept, { timeout: 30_000, interval: 100, message: 'the second steer is in the log or the draft' })
+    .toBe(true);
 });
 
 it('finishes a reply before applying a queued steer without a stopped marker', { timeout: TIMEOUT_MS }, async () => {

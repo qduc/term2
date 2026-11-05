@@ -179,7 +179,7 @@ it('a subagent run adds no per-event lines to the transcript', { timeout: TIMEOU
     return child !== undefined && facts.some((fact) => fact.type === 'task_finished' && fact.taskId === child);
   };
   while (!settled() && Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await new Promise((resolve) => setTimeout(resolve, 50));
     log = await logged();
   }
   expect(settled(), 'the subagent task started and finished in the log').toBe(true);

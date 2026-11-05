@@ -4,7 +4,6 @@ import { parseArgs } from 'node:util';
 import { writeFileSync } from 'node:fs';
 import fc from 'fast-check';
 import { historyProperties } from './history.mjs';
-import { queueProperties } from './queue.mjs';
 import { compactionProperties } from './compaction.mjs';
 import { continuityProperties } from './continuity.mjs';
 import { journalProperties } from './journal.mjs';
@@ -13,7 +12,6 @@ import { nativeLogProperties } from './native-log.mjs';
 
 const targets = {
   history: historyProperties,
-  queue: queueProperties,
   compaction: compactionProperties,
   continuity: continuityProperties,
   journal: journalProperties,
@@ -37,7 +35,7 @@ try {
   });
   if (values.help) {
     console.log(
-      'pnpm verify:generated [--target all|history|queue|compaction|continuity|journal|opaque|native] [--property NAME] [--runs N] [--seed INT] [--path SHRINK_PATH] [--output FILE]',
+      'pnpm verify:generated [--target all|history|compaction|continuity|journal|opaque|native] [--property NAME] [--runs N] [--seed INT] [--path SHRINK_PATH] [--output FILE]',
     );
   } else {
     const runs = Number(values.runs);

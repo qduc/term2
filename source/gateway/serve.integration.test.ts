@@ -7,7 +7,7 @@ import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { createGatewayAssertion } from './assertion.js';
+import { createGatewayAssertion } from '../../rewrite/src/host/server-assertion.js';
 import { getDefaultShellSandboxRunner } from '../utils/shell/sandbox/shell-sandbox-runner.js';
 import { resolveSettingsDirectory } from '../services/settings/settings-path.js';
 import { createTestChildEnv } from '../test-helpers/terminal-e2e.js';

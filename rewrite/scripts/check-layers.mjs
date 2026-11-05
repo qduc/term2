@@ -319,8 +319,10 @@ try {
 for (const edge of legacyEdges) if (!allowedLegacyEdges.has(edge)) problems.add(`new source dependency edge: ${edge}`);
 for (const edge of allowedLegacyEdges) if (!actualEdges.has(edge)) console.log(`stale allowlist entry: ${edge}`);
 
-// source/ must not reach back into rewrite/, including indirect imports.
+// source/ must not reach back into rewrite/, including indirect imports. A test may import the
+// rewrite module it drives (serve.integration signs with host/server-assertion.ts).
 for (const importer of sourceFiles) {
+  if (/\.(?:test|spec)\.tsx?$/.test(importer)) continue;
   for (const { target } of imports(importer)) {
     if (target && target.startsWith(rewriteRoot + path.sep))
       problems.add(

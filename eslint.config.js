@@ -153,14 +153,9 @@ export default tseslint.config(
   // permissive until their explicit-any cleanup is complete.
   {
     files: [
-      'source/components/message/ChatMessage.tsx',
-      'source/components/message/MessageList.tsx',
-      'source/components/message/SubagentActivityMessage.tsx',
-      'source/components/prompt/ApprovalPrompt.tsx',
       'source/providers/ai-sdk-message-normalizer.ts',
       'source/providers/ai-sdk-streamed-model.ts',
       'source/providers/provider-service.ts',
-      'source/services/conversation/conversation-orchestrator.types.ts',
       'source/services/rtk-service.ts',
       'source/services/session/post-execute-pause-capability.ts',
       'source/services/settings/custom-provider-normalization.ts',

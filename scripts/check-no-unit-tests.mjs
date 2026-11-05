@@ -16,7 +16,6 @@ import { execFileSync } from 'node:child_process';
 export const GUARDS = new Set([
   'source/compatibility-retirement.guard.test.ts',
   'source/contracts/model-contract-retirement.test.ts',
-  'source/core/core-boundary.test.ts',
   'source/no-manual-stdout-sync.guard.test.ts',
   'source/services/application-stream-boundary.test.ts',
   'source/theme/no-raw-colors.guard.test.ts',

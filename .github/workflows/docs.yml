@@ -7,7 +7,7 @@ on:
     paths:
       - 'website/**'
       - 'source/services/settings/**'
-      - 'source/cli.tsx'
+      - 'rewrite/src/app/cli-args.ts'
       - 'source/gateway/serve-args.ts'
       - '.github/workflows/docs.yml'
   workflow_dispatch:

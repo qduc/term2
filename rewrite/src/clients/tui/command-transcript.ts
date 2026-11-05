@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { Message, TuiState } from './state.js';
 import type { ShellResult } from './integration.js';
 import { useTerminalSize } from './terminal.js';
@@ -29,32 +29,37 @@ export function useCommandTranscript(state: TuiState): {
       },
     ]);
   };
-  if (!entries.length) return { state, append, count: 0 };
-  const timeline = [
-    ...(state.timeline ?? state.messages.map((message) => ({ kind: 'message' as const, id: message.id }))),
-  ];
-  const shown: (typeof entries)[number][] = [];
-  for (const entry of entries) {
-    // A live draft can be replaced by its final message after the command runs.
-    // Follow that explicit wire identity rather than sending output to the top.
-    const replacement =
-      entry.after === undefined
-        ? undefined
-        : state.messages.find((message) => message.replacesDraftId === entry.after)?.id;
-    const anchor =
-      entry.after === undefined
-        ? undefined
-        : timeline.findIndex((item) => item.id === entry.after || item.id === replacement);
-    // Legacy's rewind truncates its message list, system lines included: a line whose anchor left the
-    // history (rewound or retried away) goes with it.
-    if (anchor !== undefined && anchor < 0 && state.timeline && entry.idle) continue;
-    shown.push(entry);
-    let index = anchor === undefined ? 0 : anchor < 0 ? timeline.length : anchor + 1;
-    while (index < timeline.length && entries.some((other) => other.message.id === timeline[index]?.id)) index++;
-    timeline.splice(index, 0, { kind: 'message', id: entry.message.id });
-  }
+  // Memoised on the history lists, so a streamed token does not hand every history scan below a new list.
+  const merged = useMemo(() => {
+    if (!entries.length) return null;
+    const timeline = [
+      ...(state.timeline ?? state.messages.map((message) => ({ kind: 'message' as const, id: message.id }))),
+    ];
+    const shown: (typeof entries)[number][] = [];
+    for (const entry of entries) {
+      // A live draft can be replaced by its final message after the command runs.
+      // Follow that explicit wire identity rather than sending output to the top.
+      const replacement =
+        entry.after === undefined
+          ? undefined
+          : state.messages.find((message) => message.replacesDraftId === entry.after)?.id;
+      const anchor =
+        entry.after === undefined
+          ? undefined
+          : timeline.findIndex((item) => item.id === entry.after || item.id === replacement);
+      // Legacy's rewind truncates its message list, system lines included: a line whose anchor left the
+      // history (rewound or retried away) goes with it.
+      if (anchor !== undefined && anchor < 0 && state.timeline && entry.idle) continue;
+      shown.push(entry);
+      let index = anchor === undefined ? 0 : anchor < 0 ? timeline.length : anchor + 1;
+      while (index < timeline.length && entries.some((other) => other.message.id === timeline[index]?.id)) index++;
+      timeline.splice(index, 0, { kind: 'message', id: entry.message.id });
+    }
+    return { messages: [...state.messages, ...shown.map((entry) => entry.message)], timeline };
+  }, [entries, state.timeline, state.messages]);
+  if (!merged) return { state, append, count: 0 };
   return {
-    state: { ...state, messages: [...state.messages, ...shown.map((entry) => entry.message)], timeline },
+    state: { ...state, ...merged },
     append,
     count: entries.length,
   };

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { renderToString, useInput, useStdout, Text } from 'ink';
 import { ThemeProvider, useTheme } from './presentation/components/theme.js';
 import { SkinProvider, useSkin } from './presentation/skins/SkinContext.js';
@@ -11,9 +11,38 @@ import { clearTerminalForRedraw, clearVisibleForResize } from './terminal.js';
 /** Minimum spacing between transcript renders (about 8 frames a second). */
 const RENDER_INTERVAL_MS = 120;
 
+/** Legacy keeps its last 300 UI messages (use-conversation MAX_MESSAGE_COUNT): a mount or a remount prints only those. */
+const LEGACY_MESSAGE_CAP = 300;
+const entryKey = (entry: { readonly kind: string; readonly id: string }) => `${entry.kind}:${entry.id}`;
+
+/**
+ * The history a mount shows: the last LEGACY_MESSAGE_CAP timeline entries. Its first entry is fixed for the epoch
+ * once there is history, so rows keep committing below it as the session grows, like legacy's append-only Static.
+ */
+function useLegacyWindow(state: TuiState, epoch: number): TuiState {
+  const start = useRef<{ epoch: number; key: string }>({ epoch: -1, key: '' });
+  const timeline = state.timeline;
+  if (start.current.epoch !== epoch && timeline?.length)
+    start.current = { epoch, key: entryKey(timeline[Math.max(0, timeline.length - LEGACY_MESSAGE_CAP)]!) };
+  const key = start.current.epoch === epoch ? start.current.key : '';
+  const windowed = useMemo(() => {
+    const index = key && timeline ? timeline.findIndex((entry) => entryKey(entry) === key) : -1;
+    if (!timeline || index <= 0) return null;
+    const dropped = new Set(timeline.slice(0, index).map(entryKey));
+    const tools = state.tools.filter((tool) => {
+      if (!dropped.has(`tool:${tool.id}`) && !(tool.parent && dropped.has(`tool:${tool.parent}`))) return true;
+      dropped.add(`tool:${tool.id}`);
+      return false;
+    });
+    const messages = state.messages.filter((message) => !dropped.has(`message:${message.id}`));
+    return { timeline: timeline.slice(index), messages, tools };
+  }, [timeline, state.messages, state.tools, key]);
+  return useMemo(() => (windowed ? { ...state, ...windowed } : state), [state, windowed]);
+}
+
 /** Render the skin and markdown at the terminal width, then scroll by visible rows. */
 export function useTranscriptViewport(
-  state: TuiState,
+  history: TuiState,
   columns: number,
   rows: number,
   active: boolean,
@@ -22,6 +51,7 @@ export function useTranscriptViewport(
 ) {
   const { stdout } = useStdout();
   const [epoch, setEpoch] = useState(0);
+  const state = useLegacyWindow(history, epoch);
   const redraw = () => {
     clearTerminalForRedraw(stdout);
     setEpoch((current) => current + 1);

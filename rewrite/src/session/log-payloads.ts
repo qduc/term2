@@ -107,16 +107,51 @@ function shared(value: string, base: string): { start: number; length: number; p
   return best;
 }
 
+/**
+ * A turn's candidate strings in accepted order, indexed by their MIN_SHARED/2-aligned anchors. `shared` can only
+ * return a body of MIN_SHARED or more when value and candidate have a common span that long, and such a span holds
+ * one of the candidate's aligned anchors whole: a candidate none of whose anchors occur in the value is skipped
+ * without changing the chosen reference.
+ */
+class Candidates {
+  readonly list: Candidate[] = [];
+  readonly #anchors = new Map<string, number[]>();
+
+  push(candidate: Candidate): void {
+    const index = this.list.push(candidate) - 1;
+    const anchor = MIN_SHARED / 2;
+    for (let offset = 0; offset + anchor <= candidate.value.length; offset += anchor) {
+      const key = candidate.value.slice(offset, offset + anchor);
+      const owners = this.#anchors.get(key);
+      if (!owners) this.#anchors.set(key, [index]);
+      else if (owners.at(-1) !== index) owners.push(index);
+    }
+  }
+
+  /** Indexes into `list` of the candidates that may share MIN_SHARED with `value`, ascending. */
+  matching(value: string): number[] {
+    const found = new Set<number>();
+    const anchor = MIN_SHARED / 2;
+    for (let offset = 0; offset + anchor <= value.length; offset++) {
+      const owners = this.#anchors.get(value.slice(offset, offset + anchor));
+      if (owners) for (const index of owners) found.add(index);
+    }
+    return [...found].sort((a, b) => a - b);
+  }
+}
+
 /** One codec per accepted lineage/writer; seed only with accepted hydrated entries. */
 export class LogPayloads {
   readonly #entries = new Map<number, Fact>();
-  readonly #candidates = new Map<string, Candidate[]>();
+  /** Accepted eligible seqs of each open turn; their candidates are built only when the turn is encoded. */
+  readonly #turns = new Map<string, number[]>();
+  readonly #candidates = new Map<string, Candidates>();
 
   constructor(entries: readonly FactLine[] = []) {
     for (const entry of entries) this.accept(entry.seq, entry.fact);
   }
 
-  #add(candidates: Candidate[], source: Source, value: string): void {
+  #add(candidates: { push(candidate: Candidate): void }, source: Source, value: string): void {
     if (value.length < MIN_SHARED) return;
     const add = (source: Source, value: string): void => {
       if (value.length < MIN_SHARED) return;
@@ -145,17 +180,35 @@ export class LogPayloads {
     }
   }
 
+  /** The turn's accepted candidates, built from its accepted facts on first use. */
+  #turnCandidates(owner: string): Candidates {
+    let candidates = this.#candidates.get(owner);
+    if (!candidates) {
+      const built = new Candidates();
+      for (const seq of this.#turns.get(owner) ?? [])
+        strings(this.#entries.get(seq), (value, path) => this.#add(built, { seq, path }, value));
+      this.#candidates.set(owner, (candidates = built));
+    }
+    return candidates;
+  }
+
   /** Serialize a clone, leaving the caller and all accepted evidence untouched. */
   encode(seq: number, fact: Fact): { fact: Fact; refs?: readonly PayloadReference[] } {
     const physical = structuredClone(fact);
     const owner = turn(fact);
     if (!owner || !eligible(fact)) return { fact: physical };
-    const candidates = [...(this.#candidates.get(owner) ?? [])];
+    const accepted = this.#turnCandidates(owner);
+    // Earlier strings of this fact are candidates too, after the accepted ones.
+    const own = new Candidates();
     const refs: PayloadReference[] = [];
     strings(fact, (value, path) => {
       if (value.length < MIN_SHARED) return;
       let best: PayloadReference | undefined;
       let saved = Number.NEGATIVE_INFINITY;
+      const candidates = [
+        ...accepted.matching(value).map((index) => accepted.list[index]!),
+        ...own.matching(value).map((index) => own.list[index]!),
+      ];
       for (const candidate of candidates) {
         const part = shared(value, candidate.value);
         if (part.length < MIN_SHARED) continue;
@@ -170,7 +223,7 @@ export class LogPayloads {
         refs.push(best);
         replace(physical, path, null);
       }
-      this.#add(candidates, { seq, path }, value);
+      this.#add(own, { seq, path }, value);
     });
     return { fact: physical, ...(refs.length ? { refs } : {}) };
   }
@@ -229,12 +282,15 @@ export class LogPayloads {
     if (!owner) return;
     const terminal = fact.type === 'branch_event' ? fact.fact.type : fact.type;
     if (terminal === 'turn_ended') {
+      this.#turns.delete(owner);
       this.#candidates.delete(owner);
       return;
     }
     if (!eligible(fact)) return;
-    const candidates = this.#candidates.get(owner) ?? [];
-    strings(fact, (value, path) => this.#add(candidates, { seq, path }, value));
-    this.#candidates.set(owner, candidates);
+    const seqs = this.#turns.get(owner);
+    if (seqs) seqs.push(seq);
+    else this.#turns.set(owner, [seq]);
+    const candidates = this.#candidates.get(owner);
+    if (candidates) strings(fact, (value, path) => this.#add(candidates, { seq, path }, value));
   }
 }

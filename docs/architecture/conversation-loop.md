@@ -119,6 +119,13 @@ consumption, keeping `ApplicationRequestPreparation.run` alive for the complete
 request. Model resolution precedes per-attempt construction, including retries;
 retry attempts do not repeat logical-boundary compaction or increment turn count.
 
+Request-only history slicing lives in `model/history-projection.ts`: it clones
+from the last native compaction or local summary replacement boundary. This
+lossy projection does not consult durable session state.
+`session/conversation/conversation-state-projector.ts` retains durable ledger
+reconciliation and re-exports the existing projection API for session callers;
+the engine imports the model helper directly rather than depending on session.
+
 `RunResponseRecorder` is not a second session acceptance owner. It maintains the
 runtime's local history/input views and publishes through `EventQueue`, whose
 synchronous acceptance callback still reaches `ConversationRecord` before stream

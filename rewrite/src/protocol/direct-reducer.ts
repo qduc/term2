@@ -1,7 +1,7 @@
 /** Pure shared public-state reducer; clients and snapshots use this same fold.
  * Local UI scroll/menu/composer state belongs to the client, not this projection.
  */
-import { historyReplacedMessage, nestedPresentation, replace } from './direct-reducer-nested.js';
+import { historyReplacedMessage, nestedPresentation, replace, withToolTracking } from './direct-reducer-nested.js';
 import { completedFinalText } from './direct-turn-results.js';
 import { COMPACTING, COMPACTION_NOTICE, compactionOutcome, ENDS_RETRY, retrying } from './direct-reducer-notices.js';
 import type { WireCommandReceipt, WireEvent, WireMessage, WireSnapshot } from './direct-wire.js';
@@ -417,15 +417,7 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
         ),
       };
     case 'task_changed': {
-      // A lifecycle change keeps the live tool tracking; a (re)start begins it afresh.
-      const previous = state.tasks.find((task) => task.id === event.payload.task.id);
-      const { lastTool, lastToolName, toolCounts } = event.payload.change === 'task_started' ? {} : previous ?? {};
-      const task = {
-        ...event.payload.task,
-        ...(lastTool ? { lastTool } : {}),
-        ...(lastToolName ? { lastToolName } : {}),
-        ...(toolCounts ? { toolCounts } : {}),
-      };
+      const task = withToolTracking(state, event.payload.change, event.payload.task);
       return {
         ...state,
         tasks: replace(state.tasks, task),

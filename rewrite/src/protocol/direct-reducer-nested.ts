@@ -1,6 +1,6 @@
 /** Scoped subagent presentation and the id-keyed replace both use. */
 import { formatToolCommand } from './direct-json.js';
-import type { WireEvent, WireSnapshot } from './direct-wire.js';
+import type { WireEvent, WireSnapshot, WireTask } from './direct-wire.js';
 
 type Identified = { readonly id: string };
 export function replace<T extends Identified>(items: readonly T[], next: T): readonly T[] {
@@ -66,6 +66,18 @@ export function nestedPresentation(state: WireSnapshot, event: Extract<WireEvent
           ],
         }
       : {}),
+  };
+}
+
+/** A lifecycle change keeps a task's live tool tracking; a (re)start begins it afresh. */
+export function withToolTracking(state: WireSnapshot, change: string, next: WireTask): WireTask {
+  const previous = change === 'task_started' ? undefined : state.tasks.find((task) => task.id === next.id);
+  const { lastTool, lastToolName, toolCounts } = previous ?? {};
+  return {
+    ...next,
+    ...(lastTool ? { lastTool } : {}),
+    ...(lastToolName ? { lastToolName } : {}),
+    ...(toolCounts ? { toolCounts } : {}),
   };
 }
 

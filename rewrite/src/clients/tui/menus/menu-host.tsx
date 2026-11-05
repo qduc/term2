@@ -93,8 +93,11 @@ export function useMenuStack(options: {
   const synced = useRef('');
   // With no frame open, an editor change the composer did not make (a menu's close, or legacy's deferred
   // command action writing `/model ` after the slash frame closed) becomes the composer draft.
+  // Escape pressed in an open frame, until the hand-back below has run.
+  const escaped = useRef(false);
   useEffect(() => {
     if (open) return;
+    escaped.current = false;
     const { text, cursor } = snapshot.editor;
     if (text === synced.current) return;
     synced.current = text;
@@ -117,6 +120,7 @@ export function useMenuStack(options: {
     (_input, key) => {
       if (!open || !enabled || !key.escape) return;
       if (controller.getSnapshot().stack.length === 0) return;
+      escaped.current = true;
       controller.escape();
     },
     { isActive: open },
@@ -144,6 +148,12 @@ export function useMenuStack(options: {
      * shows the menu's text at once, so the remounting composer must not draw the stale draft one character per line.
      */
     handingBack: !open && Boolean(menus) && snapshot.editor.text !== synced.current,
+    /**
+     * The render Esc closed a frame on with an empty text, over a non-empty draft. Legacy's editor is empty at once;
+     * a stale draft in a frame that overflows the screen takes Ink's full redraw, and the corrective frame after it
+     * erases a transcript row.
+     */
+    closedEmpty: !open && Boolean(menus) && escaped.current && snapshot.editor.text === '' && synced.current !== '',
     /** What Ctrl+C clears: the menu's text while one owns it (legacy's global handler cleared it there too). */
     typed: {
       value: open ? snapshot.editor.text : composer.value,

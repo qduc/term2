@@ -470,42 +470,50 @@ export function TuiSession({
             {(width) => (
               <InputFrame>
                 <PromptMarker mode={shell.active ? 'shell' : 'input'} />
-                <MultilineInput
-                  key={editor.inputKey}
-                  value={editor.value}
-                  onChange={(value) => shell.change(value) || changeInput(value)}
-                  onSubmit={(value, submittedImages = []) => {
-                    if (!shell.submit(value, submittedImages.length > 0, (command) => submit(command, submittedImages)))
-                      void submit(value, submittedImages);
-                  }}
-                  onBoundaryArrow={(direction) => {
-                    if (shell.active) return;
-                    if (direction === 'up' && !editor.value && !editing && queue.open()) return;
-                    const entry = editor.navigate(direction, {
-                      text: editor.value,
-                      attachments: wireAttachments(images, otherParts, originalParts),
-                    });
-                    if (entry) restoreDraft(entry, entry.cursor);
-                  }}
-                  onCursorChange={(offset) => {
-                    editor.cursorChanged(offset);
-                    menuStack.cursorChanged(offset);
-                  }}
-                  cursorOverride={editor.cursorOverride}
-                  width={width}
-                  maxHeight={Math.max(1, rows - 8)}
-                  pasteThreshold={preferences.pasteThreshold}
-                  isActive={composerActive}
-                  images={images}
-                  onImagesChange={onImagesChange}
-                  enableImagePaste
-                  onPasteError={(reason) => setNotice(`Image paste failed: ${reason}`)}
-                  ignoreInput={(input, key) => {
-                    if (queue.key(input, key)) return true;
-                    if (editing && key.escape) return cancelQueueEdit();
-                    return shell.key(input, key) || composerFilter(input, key);
-                  }}
-                />
+                {menuStack.closedEmpty ? (
+                  // A menu closed empty (Esc) on this render: draw the empty input legacy's editor shows, and mount
+                  // the input once the hand-back has cleared the composer.
+                  <Text inverse> </Text>
+                ) : (
+                  <MultilineInput
+                    key={editor.inputKey}
+                    value={editor.value}
+                    onChange={(value) => shell.change(value) || changeInput(value)}
+                    onSubmit={(value, submittedImages = []) => {
+                      if (
+                        !shell.submit(value, submittedImages.length > 0, (command) => submit(command, submittedImages))
+                      )
+                        void submit(value, submittedImages);
+                    }}
+                    onBoundaryArrow={(direction) => {
+                      if (shell.active) return;
+                      if (direction === 'up' && !editor.value && !editing && queue.open()) return;
+                      const entry = editor.navigate(direction, {
+                        text: editor.value,
+                        attachments: wireAttachments(images, otherParts, originalParts),
+                      });
+                      if (entry) restoreDraft(entry, entry.cursor);
+                    }}
+                    onCursorChange={(offset) => {
+                      editor.cursorChanged(offset);
+                      menuStack.cursorChanged(offset);
+                    }}
+                    cursorOverride={editor.cursorOverride}
+                    width={width}
+                    maxHeight={Math.max(1, rows - 8)}
+                    pasteThreshold={preferences.pasteThreshold}
+                    isActive={composerActive}
+                    images={images}
+                    onImagesChange={onImagesChange}
+                    enableImagePaste
+                    onPasteError={(reason) => setNotice(`Image paste failed: ${reason}`)}
+                    ignoreInput={(input, key) => {
+                      if (queue.key(input, key)) return true;
+                      if (editing && key.escape) return cancelQueueEdit();
+                      return shell.key(input, key) || composerFilter(input, key);
+                    }}
+                  />
+                )}
               </InputFrame>
             )}
           </ComposerWidth>
@@ -516,7 +524,7 @@ export function TuiSession({
           liveTps={liveTps}
           active={composerActive && queue.index < 0 && !menuStack.open && !queuePaused.shown}
           // Legacy hides the idle hints under a prompt label.
-          draftEmpty={editor.value === '' && !handoffFlow.promptLabel}
+          draftEmpty={(menuStack.closedEmpty || editor.value === '') && !handoffFlow.promptLabel}
           escHint={escHintVisible}
           columns={columns - 4}
           queueSelectable={queue.items.length > 0 && !editor.value && !editing}

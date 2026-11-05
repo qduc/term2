@@ -158,3 +158,9 @@ SEED.update({name: _STREAM for name in ('queue-paused-prompt', 'queue-paused-r',
 # /undo last after a turn: the alias line and the rewind (legacy rewind truncation)
 SCENARIOS['cmd-undo-last'] = ['hello', '<enter>', '<sleep>', '/undo last', '<enter>', '<sleep>']
 SEED['cmd-undo-last'] = _TURN
+
+# handoff-yes-effort with the handed-off turn still waiting for the model under the effort menu
+SCENARIOS['handoff-yes-effort-waiting'] = SCENARIOS['handoff-yes-effort']
+SEED['handoff-yes-effort-waiting'] = {
+    'replies': [{'text': 'First answer.'}, {'text': 'Handed-off answer.', 'wait': 20}, {'text': 'Third.'}]
+}

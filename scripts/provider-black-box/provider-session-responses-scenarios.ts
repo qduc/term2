@@ -219,7 +219,7 @@ export function registerResponsesContinuityScenarios(): void {
       expect(toolResultText(continuation)).toContain(workspace.root);
     });
 
-    it('session_search through run_code completes canonical fallback in the shipped CLI', async () => {
+    it('session_search through run_code rebuilds the catalogue and finds migrated tool output', async () => {
       const server = await startResponsesFixtureServer({ mode: 'session-search', retainWebSocket: true });
       activeServer = server;
       const workspace = await createWorkspace(server, { provider: 'codex', transport: 'websocket' }, 'session-search');
@@ -231,10 +231,26 @@ export function registerResponsesContinuityScenarios(): void {
       await waitForIdleAfterResponse(child, idle, 'SECOND-RESPONSE');
       const requests = normalRequests(server.requests);
       expect(requests).toHaveLength(2);
+      expect(requests[1]!.body.previous_response_id).toBe(TOOL_RESPONSE_ID);
+      const outputs = toolResultItems(requests[1]);
+      expect(outputs).toHaveLength(1);
+      expect(outputs[0]!.call_id).toBe(TOOL_CALL_ID);
       const result = toolResultText(requests[1]!);
       expect(result).toContain(SESSION_SEARCH_FIXTURE_ID);
       expect(result).toContain('No healthy model in agent.balancedModel pool');
       expect(result).not.toContain('timed out');
+      const output = String(outputs[0]!.output);
+      expect(output).toMatch(/^Result:\n\{/);
+      const search = JSON.parse(output.split('\n')[1]!);
+      expect(search.results[0]).toMatchObject({
+        sessionId: SESSION_SEARCH_FIXTURE_ID,
+        kind: 'tool',
+        messageIndex: 1,
+        snippet: { text: expect.stringContaining('No healthy model in agent.balancedModel pool'), truncated: true },
+      });
+      expect(search.scope).toBe(workspace.root);
+      expect(search.unavailable).toBe(0);
+      expect(search.charsUsed).toBeLessThanOrEqual(7000);
     });
 
     it.each(['openai', 'codex'] as const)(
@@ -535,8 +551,8 @@ async function createWorkspace(
           join(root, 'migration-private', 'map.json'),
         ]).catch((error: { stdout?: string }) => ({ stdout: error.stdout ?? '' }));
         expect(JSON.parse(stdout).codes).toEqual({ MIGRATED: 1 });
-        // An unavailable optional index must still allow canonical browsing.
-        await writeFile(join(root, 'session-index.db'), 'unavailable fixture index');
+        // The native disposable catalogue must rebuild from the migrated log.
+        await writeFile(`${paths.conversationsDir}.catalogue.sqlite`, 'unavailable fixture catalogue');
       }
       await mkdir(paths.logDir, { recursive: true });
       await writeFile(

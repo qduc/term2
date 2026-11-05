@@ -29,7 +29,11 @@ in `run_code`, with legacy's definitions. `app/native-session-browser.ts` binds 
 workspace and optional client binding, and runs legacy's `SessionBrowser` (canonical backend) in a worker over
 `app/native-session-browser-store.ts`. The store lists the scope with `list(scope)` and turns each lineage into the
 saved-message shape legacy pages and scores, one conversation per rollover part named by its log (the id a rollover
-briefing gives), each later part naming the one it rolled over from, as legacy saves rolled-over sessions. The live
+briefing gives), each later part naming the one it rolled over from, as legacy saves rolled-over sessions. The
+adapter restores recognized `presentation.sourceMessage` shapes on imported transcript observations before
+ordinary native role conversion. Migrated commands have no invented tool executions, and migrated reasoning and
+subagents have system observation roles; their saved kinds and text must remain searchable and readable.
+Absent or malformed source metadata falls back to the native projection and never grants execution authority. The live
 part is the session's current log. A newest part whose lineage writer lock is held by another process counts as
 running elsewhere, so "previous" skips it like legacy. Like legacy (cli.tsx), only an interactive local client gets a
 browser: positional/headless runs and SSH runtimes do not. The catalogue keeps no search index; legacy's browser

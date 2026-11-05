@@ -13,7 +13,7 @@ import type { ToolStatusKind } from '../../theme/palettes.js';
  * goes: the action already names its verb, and the columns are worth more to it.
  */
 const NAME_COLUMN_MIN_COLUMNS = 50;
-export function nameColumnWidth(columns: number): number {
+function nameColumnWidth(columns: number): number {
   if (columns < NAME_COLUMN_MIN_COLUMNS) return 0;
   if (columns < 80) return 10;
   return 12;

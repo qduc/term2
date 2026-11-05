@@ -79,7 +79,7 @@ human units.
 
 ### 5. Visibility: a tab or advanced
 
-**File:** `src/clients/hooks/settings-completion-config.ts`
+**File:** `src/config/settings/settings-completion-config.ts`
 
 A setting listed in a `CATEGORY_KEYS` array (`models`, `providers`, `context`,
 `safety`, `tools`, `ui`, `hooks`) appears in that browse tab, at that position

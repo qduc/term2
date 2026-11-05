@@ -9,20 +9,17 @@ import { collectProviderModels } from '../model/models/model-listing.js';
 import { resolveActiveProfile } from '../config/profiles/active-profile.js';
 import React, { useMemo, useRef, useState, type ReactNode } from 'react';
 import { Box, render } from 'ink';
-import Banner from '../clients/components/layout/Banner.js';
-import { SettingsSkinProvider, useSkin as useSourceSkin } from '../clients/skins/SkinContext.js';
-import { SkinProvider as DirectSkinProvider } from '../clients/tui/presentation/skins/SkinContext.js';
-import { getSkin as getDirectSkin } from '../clients/tui/presentation/skins/registry.js';
-import { ThemeProvider as DirectThemeProvider } from '../clients/tui/presentation/theme/ThemeContext.js';
-import { detectTerminalBackground } from '../clients/theme/detect-terminal-background.js';
-import { shouldDetectBackground } from '../clients/theme/resolve-theme.js';
-import { SettingsThemeProvider, useTheme as useSourceTheme } from '../clients/theme/ThemeContext.js';
+import Banner from '../clients/tui/presentation/components/layout/Banner.js';
+import { SettingsSkinProvider } from '../clients/tui/presentation/skins/SkinContext.js';
+import { detectTerminalBackground } from '../clients/tui/presentation/theme/detect-terminal-background.js';
+import { shouldDetectBackground } from '../clients/tui/presentation/theme/resolve-theme.js';
+import { SettingsThemeProvider } from '../clients/tui/presentation/theme/ThemeContext.js';
 import { getInkRenderOptions } from '../shared/utils/ink-render-options.js';
 import { getProfileLabel } from '../config/profiles/labels.js';
 import { getProvider } from '../model/providers/registry.js';
 import type { WireSnapshot } from '../protocol/wire.js';
-import { useTerminalFocusNotifier } from '../clients/hooks/use-terminal-focus-notifier.js';
-import { useSetting } from '../clients/hooks/use-setting.js';
+import { useTerminalFocusNotifier } from '../clients/tui/presentation/hooks/use-terminal-focus-notifier.js';
+import { useSetting } from '../clients/tui/presentation/hooks/use-setting.js';
 import type { LoggingService } from '../session/logging/logging-service.js';
 import {
   confirmHomeDirectoryStart,
@@ -171,38 +168,28 @@ function DirectTui({
     }),
     [app, persistentSettings, root, remote, mcp, bridge, restart, logger],
   );
-  const skin = useSourceSkin();
-  const theme = useSourceTheme();
   return (
-    <DirectThemeProvider theme={theme}>
-      <DirectSkinProvider skin={getDirectSkin(skin.name)}>
-        <Tui
-          connection={connection}
-          header={
-            <Box paddingLeft={2}>
-              <Banner
-                key={`header:${connection.sessionId}`}
-                settingsService={settings}
-                onHeightChange={setHeaderHeight}
-              />
-            </Box>
-          }
-          headerHeight={headerHeight}
-          redrawKey={displayMode}
-          integration={integration}
-          onLiveEvent={(event) => {
-            if (event.sessionId !== connection.sessionId) return;
-            if (event.type === 'interaction_opened' && event.payload.interaction.kind === 'approval')
-              notifier.approvalNeeded();
-            if (event.type === 'turn_ended' && event.payload.outcome === 'completed') notifier.turnComplete();
-          }}
-          onSnapshot={(snapshot) => {
-            latest.current = snapshot;
-          }}
-          onExit={() => onExit(latest.current)}
-        />
-      </DirectSkinProvider>
-    </DirectThemeProvider>
+    <Tui
+      connection={connection}
+      header={
+        <Box paddingLeft={2}>
+          <Banner key={`header:${connection.sessionId}`} settingsService={settings} onHeightChange={setHeaderHeight} />
+        </Box>
+      }
+      headerHeight={headerHeight}
+      redrawKey={displayMode}
+      integration={integration}
+      onLiveEvent={(event) => {
+        if (event.sessionId !== connection.sessionId) return;
+        if (event.type === 'interaction_opened' && event.payload.interaction.kind === 'approval')
+          notifier.approvalNeeded();
+        if (event.type === 'turn_ended' && event.payload.outcome === 'completed') notifier.turnComplete();
+      }}
+      onSnapshot={(snapshot) => {
+        latest.current = snapshot;
+      }}
+      onExit={() => onExit(latest.current)}
+    />
   );
 }
 

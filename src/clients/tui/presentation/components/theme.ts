@@ -4,14 +4,14 @@
  * Colours are not constants here any more. They come from the active theme, so
  * a component asks `useTheme()` for a *meaning* (`theme.danger`, `theme.textSubtle`)
  * and the user's `ui.theme` setting decides what that looks like. Palettes live
- * in `src/clients/theme/palettes.ts`; do not write a hex literal or a named terminal
+ * in `src/clients/tui/presentation/theme/palettes.ts`; do not write a hex literal or a named terminal
  * colour (`'green'`, `'gray'`) in a component — `no-raw-colors.guard.test.ts`
  * enforces it.
  *
  * What stays here is what does not vary by palette: the shared glyph vocabulary.
  */
 
-export { useTheme, ThemeProvider } from '../theme/ThemeContext.js';
+export { useTheme, ThemeProvider, SettingsThemeProvider } from '../theme/ThemeContext.js';
 export type { ThemeTokens, ThemeName, ModeBadge, ToolStatusKind, Color, ColorRole } from '../theme/palettes.js';
 
 import type { ToolStatusKind } from '../theme/palettes.js';

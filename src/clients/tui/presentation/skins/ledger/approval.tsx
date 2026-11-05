@@ -5,7 +5,7 @@ import type { ApprovalChoicesProps, ApprovalFrameProps } from '../types.js';
 import { Chip } from './chip.js';
 
 /** Below this width the options stack, one per row, instead of wrapping as a chip row. */
-export const APPROVAL_VERTICAL_BELOW_COLUMNS = 60;
+const APPROVAL_VERTICAL_BELOW_COLUMNS = 60;
 
 /**
  * A bar row that names the class of request, then the container's title. A caution is

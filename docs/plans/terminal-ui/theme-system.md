@@ -2,21 +2,29 @@
 
 ## Resume here
 
-Read this before touching `source/theme/`, `source/components/theme.ts`, or adding a
-colour to any component.
+Read this before touching `src/clients/tui/presentation/theme/`,
+`src/clients/tui/presentation/components/theme.ts`, or adding a colour to any component.
+
+The canonical UI lives in `src/clients/tui/presentation/` and
+`src/clients/tui/menus/`. Both interactive launch and the pre-session model picker
+use the same theme and skin contexts; launch no longer bridges two context trees.
+Historical `source/` paths below describe the original implementation, not an
+additional maintained UI tree. Settings list metadata and search logic now live
+under `src/config/settings/settings-completion-{config,logic}.ts`, supplied to
+menus through `TuiMenus.settings.lib`.
 
 **What exists.** Colours are not constants any more; a component asks for a
 *meaning* and the user's `ui.theme` setting decides what it looks like.
 
-- `source/theme/palettes.ts` — `ThemeTokens` (the semantic token set), the
+- `src/clients/tui/presentation/theme/palettes.ts` — `ThemeTokens` (the semantic token set), the
   `THEMES` registry (`dark`, `light`, `high-contrast`, `mono`), and `ColorRole`.
-- `source/theme/ThemeContext.tsx` — `useTheme()`, `ThemeProvider`, and
+- `src/clients/tui/presentation/theme/ThemeContext.tsx` — `useTheme()`, `ThemeProvider`, and
   `SettingsThemeProvider`, which resolves `ui.theme` and re-renders when it changes.
-- `source/theme/resolve-theme.ts` — `resolveThemeName()` plus the pure parsers
+- `src/clients/tui/presentation/theme/resolve-theme.ts` — `resolveThemeName()` plus the pure parsers
   (`parseColorFgBg`, `parseOsc11Response`, `backgroundModeFromRgb`) and
   `shouldDetectBackground()`.
-- `source/theme/detect-terminal-background.ts` — the startup OSC 11 query.
-- `source/components/theme.ts` — what components import: `useTheme`, the glyph
+- `src/clients/tui/presentation/theme/detect-terminal-background.ts` — the startup OSC 11 query.
+- `src/clients/tui/presentation/components/theme.ts` — what components import: `useTheme`, the glyph
   constants, and the types. Glyphs stay here because they do not vary by palette.
 
 **Using a colour in a component.**
@@ -109,17 +117,17 @@ scrollback caveat as themes.
 `CommandGroupSummary`) keep owning behaviour, data, formatting and input. They hand a
 skin finished *view data* plus the content to place. A skin never reimplements what a
 tool call means, only where its parts go and how they are framed. The contract is
-`Skin` in `source/skins/types.ts`; read its doc comments, they are the spec.
+`Skin` in `src/clients/tui/presentation/skins/types.ts`; read its doc comments, they are the spec.
 
 **Slots** (all required; a skin spreads `classicSkin` and overrides what it draws
 differently): `Banner`, `UserMessage`, `AssistantFrame` (+ `assistantGutter`),
 `ToolFrame`, `ToolHeader`, `ToolGroupSummary`, `WorkingIndicator`, `LiveDivider`,
 `PromptMarker`, `InputFrame`, `Hints`, `ApprovalFrame`, `ApprovalChoices`, `QuestionPrompt`,
 `SubagentFeed`, `ToolSection`, `MenuFrame`, `ShellActivity`, `TaskPanel`, `StatusBar`.
-The classic implementations are in `source/skins/classic/`; they reproduce the
+The classic implementations are in `src/clients/tui/presentation/skins/classic/`; they reproduce the
 original output exactly and are the reference for what each slot receives.
 
-**Where a skin's code goes.** Each skin owns one folder, `source/skins/<name>/`, with
+**Where a skin's code goes.** Each skin owns one folder, `src/clients/tui/presentation/skins/<name>/`, with
 an `index.ts` exporting its `Skin`. Do not edit another skin's folder, `classic/`, the
 containers, or `types.ts` from a skin change: a slot that cannot express what a skin
 needs is a contract question, to be raised rather than worked around. The four

@@ -18,13 +18,13 @@ import {
 } from '../config/settings/settings-ui-metadata.js';
 import { SETTING_KEYS } from '../config/settings/settings-schema.js';
 import { SETTING_ENV_VARIABLES } from '../config/settings/settings-env.js';
-import { SETTINGS_CATEGORIES } from '../clients/hooks/settings-completion-config.js';
+import { SETTINGS_CATEGORIES } from '../config/settings/settings-completion-config.js';
 import {
   buildSettingsList,
   filterSettingsByCategory,
   filterSettingsByQuery,
   getSettingCategory,
-} from '../clients/hooks/settings-completion-logic.js';
+} from '../config/settings/settings-completion-logic.js';
 import {
   buildSettingValueSuggestions,
   fetchLiveSettingValueSuggestions,

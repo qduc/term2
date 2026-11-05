@@ -1,8 +1,7 @@
 /**
- * The menu half of src/clients/context/InputContext.tsx. Legacy menu hooks read the
- * controller-owned editor through `useInputContext()`; this keeps that contract
- * so the hooks copy unchanged. Queue/image composer state stays with the native
- * session composer, which mirrors its draft into the controller.
+ * Menus read the controller-owned editor through `useInputContext()`.
+ * Queue/image composer state stays with the session composer, which mirrors
+ * its draft into the controller; there is no parallel composer state here.
  */
 import React, {
   createContext,

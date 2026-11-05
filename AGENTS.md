@@ -41,7 +41,7 @@ other agents' uncommitted work. The [isolation procedure](docs/agent-context.md#
 covers integration and cleanup.
 
 UI components use `useTheme()` for colours and `useSkin()` for layout. Skins live
-under `src/clients/skins/<name>/`; component colour literals bypass this boundary.
+under `src/clients/tui/presentation/skins/<name>/`; component colour literals bypass this boundary.
 
 ## Evidence and institutional knowledge
 

@@ -5,7 +5,7 @@ import { getModelSettingConfigForInput } from './model-settings.js';
 import type { TuiSettingsSchema } from '../integration.js';
 
 const STOP_CHAR_REGEX = /[\s,;:()[\]{}<>]/;
-const SETTINGS_TRIGGER = '/settings ';
+export const SETTINGS_TRIGGER = '/settings ';
 export const SETTINGS_RESET_TRIGGER = '/settings reset ';
 export const PROFILE_TRIGGER = '/profile ';
 

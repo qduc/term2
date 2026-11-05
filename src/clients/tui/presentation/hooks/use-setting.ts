@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import type { ISettingsService } from '../../shared/service-interfaces.js';
-import type { SettingKey, SettingValue } from '../../config/settings/settings-schema.js';
+import type { ISettingsService } from '../../../../shared/service-interfaces.js';
+import type { SettingKey, SettingValue } from '../../../../config/settings/settings-schema.js';
 
 /**
  * Hook to subscribe to a specific setting value.

@@ -1,0 +1,15 @@
+diff --git a/build/ink.js b/build/ink.js
+index 98ba6eff90db503fbd82fca6a19ef8d82d07ed8e..7e88f2b79e0b11ee6cf5085e5570ce50e23ddad8 100644
+--- a/build/ink.js
++++ b/build/ink.js
+@@ -706,7 +706,9 @@ export default class Ink {
+             this.lastOutput = output;
+             this.lastOutputToRender = outputToRender;
+             this.lastOutputHeight = outputHeight;
+-            this.log.sync(outputToRender);
++            // Record what was written: `output` has no trailing newline here, so syncing `outputToRender`
++            // made the next erase take one extra row of scrollback (term2 #145).
++            this.log.sync(output);
+             if (sync) {
+                 this.options.stdout.write(esu);
+             }

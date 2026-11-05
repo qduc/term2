@@ -328,6 +328,8 @@ MASKS = [
     # tail is the only text in the same cell on the next row.
     (re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{0,11}(?= *│)'), '<id>'),
     (re.compile(r'(?<=│  )[0-9a-f]{1,11}(?= +│)'), '<id>'),
+    # Generated subagent run ids ("western-mantis-118"): random per run in both CLIs.
+    (re.compile(r'\b[a-z]+-[a-z]+-\d{1,4}\b'), '<run>'),
     (re.compile(r'\d{4}-\d\d-\d\d \d\d:\d\d:\d\d'), '<time>'),
     (re.compile(r'\b\d+ (second|minute|hour)s? ago|\b\d+ [a-z]*…'), '<dur> ago'),
     (re.compile(r'(/tmp|/private)?/[\w.-]*menucmp[\w./-]*'), '<path>'),

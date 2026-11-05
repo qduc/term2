@@ -762,11 +762,13 @@ it('Enter on an arrow-picked command runs it', { timeout: TIMEOUT_MS }, () =>
   runCommand('/usage', '', undefined, 'pick-enter'),
 );
 
-it('Shift+Tab confirms a clear before changing mode with history', async () => {
+// Plan mode is an accepted difference: plan is a dropped profile and next's Shift+Tab does nothing (#149).
+it.skip('Shift+Tab confirms a clear before changing mode with history', async () => {
   await runCommand('', '', 'hello', 'approval-shortcut-history');
 }, 120_000);
 
-it('Shift+Tab toggles Plan and Bare without changing approval or draft', { timeout: TIMEOUT_MS }, () =>
+// Plan mode is an accepted difference: plan is a dropped profile and next's Shift+Tab does nothing (#149).
+it.skip('Shift+Tab toggles Plan and Bare without changing approval or draft', { timeout: TIMEOUT_MS }, () =>
   runCommand('', '', undefined, 'approval-shortcut'),
 );
 

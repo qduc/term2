@@ -308,7 +308,7 @@ async function runCommand(
     return;
   }
   const identity = JSON.parse(
-    fs.readFileSync(path.resolve(path.dirname(builtCli), '../../../build-info.json'), 'utf8'),
+    fs.readFileSync(path.resolve(path.dirname(builtCli), '../../build-info.json'), 'utf8'),
   ) as {
     version: string;
     commit: string | null;

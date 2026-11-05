@@ -3,6 +3,11 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { expect, it } from 'vitest';
 import { createIsolatedWorkspaceLease, writePtyTextAndSubmit } from './provider-test-harness.js';
+import { usesDirectComposer } from '../../source/test-helpers/direct-composer.js';
+
+// Shift+Tab into Plan mode is an accepted difference: Plan is a dropped profile in term2-next (#149), so next keeps
+// the cache-guard journey and skips only the mode switch and its notice.
+const planToggle = !usesDirectComposer([process.env.TERM2_TEST_CLI ?? '']);
 
 it.skipIf(process.platform !== 'linux')('confirms a large uncached request after undo before dispatch', async () => {
   const requests: Record<string, unknown>[] = [];
@@ -109,8 +114,10 @@ it.skipIf(process.platform !== 'linux')('confirms a large uncached request after
       await child.write('\u007f');
       await child.waitForComposerValue('SECOND_CACHE_INPUT'.slice(0, remaining), { afterRevision: 0 });
     }
-    await child.write('\u001b[Z');
-    await child.waitForVisibleOutput('Plan');
+    if (planToggle) {
+      await child.write('\u001b[Z');
+      await child.waitForVisibleOutput('Plan');
+    }
     await child.write('\u0016');
     await child.waitForVisibleOutput('Paste text #1');
     await child.waitForVisibleOutput('cache miss risk');
@@ -128,7 +135,7 @@ it.skipIf(process.platform !== 'linux')('confirms a large uncached request after
     await child.waitForState((state) => state.output.slice(confirmationMarker).includes('Large request'));
     await child.write('y');
     await child.waitForState(() => requests.length === 3);
-    expect(JSON.stringify(requests[2]!.input).match(/Plan Mode is ON/g)).toHaveLength(1);
+    expect(JSON.stringify(requests[2]!.input).match(/Plan Mode is ON/g) ?? []).toHaveLength(planToggle ? 1 : 0);
     expect(JSON.stringify(requests[2]!.input).match(/LARGE_DRAFT_START/g)).toHaveLength(1);
     expect(JSON.stringify(requests[2]!.input)).toContain('LARGE_DRAFT_START' + 'x'.repeat(270_000) + 'LARGE_DRAFT_END');
     complete(2);

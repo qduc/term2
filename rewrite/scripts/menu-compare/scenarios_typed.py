@@ -16,3 +16,6 @@ SCENARIOS = {
     'typed-followup': ['/followup hi', '<enter>'],
 }
 SEED = {name: {'notice': True} for name in SCENARIOS}
+# Dropped profiles through /settings (#149): next refuses them as unknown profiles; legacy switches.
+SCENARIOS['typed-settings-plan'] = ['/settings app.activeProfileId plan', '<enter>', '<sleep>']
+SCENARIOS['typed-settings-planmode'] = ['/settings app.planMode true', '<enter>', '<sleep>']

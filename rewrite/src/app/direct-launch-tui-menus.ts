@@ -1,9 +1,9 @@
-import { isDroppedProfile } from './dropped-profiles.js';
 /**
  * The data the ported legacy menus (clients/tui/menus/) read, served from the
  * same legacy services their source counterparts called. Session settings are
  * the attached session's live settings, never launch defaults.
  */
+import { isDroppedProfile } from './dropped-profiles.js';
 import {
   getAllSettingDescriptions,
   getSettingLabel,

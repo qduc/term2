@@ -1,4 +1,3 @@
-import { isDroppedProfile } from './dropped-profiles.js';
 /**
  * `/settings`, the mode commands, `/sandbox` and `/auto-approve`. They all write
  * the session's own settings, which save through the app's settings owner what legacy saves. A session's tools read a copy of those once it has
@@ -9,6 +8,7 @@ import { isDroppedProfile } from './dropped-profiles.js';
  * Saving a sandbox preference does not add
  * sandbox execution support to the direct executable.
  */
+import { isDroppedProfile } from './dropped-profiles.js';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { resolveActiveProfile } from '../../../source/services/profiles/active-profile.js';
@@ -106,6 +106,9 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
     retry: string,
     said: { readonly noop?: string; readonly done?: string } = {},
   ): Promise<CommandResult> => {
+    // Every TUI switch (/profile, /settings app.activeProfileId, app.planMode, ...) refuses a dropped profile (#149)
+    // exactly as it refuses an unknown one: the resolver's own error.
+    if (isDroppedProfile(targetId)) throw new Error(`Missing parent or Profile '${targetId}'`);
     const { settings } = detailsOf(connection.sessionId);
     const plan = planProfileTransition(settings, targetId);
     if (plan.class === 'noop') return { applied: true, ...(said.noop ? { message: said.noop } : {}) };
@@ -162,10 +165,7 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
         return Promise.resolve({
           message: 'Use /profile <name or full profile ID>.',
         });
-      const target = id.includes(':') ? id : `builtin:${id}`;
-      // A dropped profile (#149) is refused exactly as an unknown one is (the resolver's own error).
-      if (isDroppedProfile(target)) return Promise.reject(new Error(`Missing parent or Profile '${target}'`));
-      return switchProfile(connection, target, `/profile ${id}`);
+      return switchProfile(connection, id.includes(':') ? id : `builtin:${id}`, `/profile ${id}`);
     },
 
     async settings(connection: TuiConnection, args: string): Promise<CommandResult> {

@@ -525,14 +525,23 @@ def accept_differences(cap):
                         kept.append([a, b, *rest])
                     elif a >= end:
                         kept.append([a - len(text), b - len(text), *rest])
+                    elif a < cut and b > end:  # covers the whole segment: it closes up around the cut
+                        kept.append([a, b - len(text), *rest])
                     elif a < cut:  # straddles the start: keep the part before it
                         kept.append([a, cut, *rest])
                     elif b > end:  # straddles the end: keep the part after it, shifted
                         kept.append([cut, b - len(text), *rest])
-                spans = [[a, min(b, len(line)), *rest] for a, b, *rest in kept if a < len(line)]
+                merged = []  # a capture merges touching runs of one style, so the closed-up row must too
+                for a, b, *rest in kept:
+                    if merged and merged[-1][1] == a and merged[-1][2:] == rest:
+                        merged[-1][1] = b
+                    else:
+                        merged.append([a, b, *rest])
+                spans = [[a, min(b, len(line)), *rest] for a, b, *rest in merged if a < len(line)]
         lines.append(line)
         styles.append(spans)
     return {**cap, 'lines': lines, 'styles': styles}
+
 
 def menu_region(cap, notice=False):
     """The bottom area from the composer divider down, without trailing blank rows.

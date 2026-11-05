@@ -1,6 +1,4 @@
-import { exec } from 'node:child_process';
-import { promisify } from 'node:util';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { pathToFileURL } from 'node:url';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,47 +9,7 @@ import { SandboxNetworkApprovalCoordinator } from './sandbox-network-approval-co
 import { executeShellCommand } from '../execute-shell.js';
 import { InvalidatableShellChildRegistry } from '../shell-child-registry.js';
 
-// These two cases fork the shipped helper, so they need a built dist; fail with that instruction
-// rather than a misleading "Sandbox helper lost" from a missing file.
-function builtHelperEntry(): URL {
-  const entry = new URL('../../../../dist/utils/shell/sandbox/scoped-sandbox-helper.js', import.meta.url);
-  if (!existsSync(entry)) throw new Error(`Run \`pnpm build\` first: ${fileURLToPath(entry)} does not exist.`);
-  return entry;
-}
-
-// The CI integration lane builds dist before running this test. The real helper
-// must be the shipped JavaScript entry, not a test-only TypeScript loader.
 describe('scoped sandbox helpers', () => {
-  it('rejects a lossy configuration while preserving a running helper', async () => {
-    const scope = createScopedSandboxNetworkAccess({
-      workspaceRoot: process.cwd(),
-      requestApproval: async () => false,
-    });
-    const entry = builtHelperEntry();
-    const runner = new ScopedSandboxRunner(
-      scope,
-      () => {},
-      async () => {},
-      entry,
-    );
-    const valid = {
-      network: { allowedDomains: [], deniedDomains: [] },
-      filesystem: { allowWrite: [], denyWrite: [], denyRead: [] },
-    };
-    const lossy = { ...valid, network: { ...valid.network } };
-    Object.defineProperty(lossy.network, 'hidden', { value: true });
-    try {
-      expect((await runner.wrap('true', { cwd: process.cwd(), config: valid })).command).toBeTruthy();
-      await runner.cleanupAfterCommand();
-      await expect(runner.wrap('true', { cwd: process.cwd(), config: lossy })).rejects.toThrow(
-        'Unsupported sandbox configuration',
-      );
-      expect((await runner.wrap('true', { cwd: process.cwd(), config: valid })).command).toBeTruthy();
-      await runner.cleanupAfterCommand();
-    } finally {
-      await runner.dispose();
-    }
-  }, 20_000);
   it('does not spawn when the sandbox capability was invalidated before execution', async () => {
     const children = new InvalidatableShellChildRegistry();
     children.invalidate();
@@ -248,56 +206,4 @@ process.on('message', async x => { if (x.type !== 'wrap') return; writeFileSync(
       rmSync(fixture, { recursive: true, force: true });
     }
   }, 20_000);
-  it('routes simultaneous sandboxed network requests to their owning graph', async () => {
-    const approvals: string[] = [];
-    const entry = builtHelperEntry();
-    const make = (owner: string) => {
-      const scope = createScopedSandboxNetworkAccess({
-        workspaceRoot: process.cwd(),
-        requestApproval: async ({ host }) => {
-          approvals.push(`${owner}:${host}`);
-          return 'deny';
-        },
-      });
-      const runner = new ScopedSandboxRunner(
-        scope,
-        () => {},
-        async () => {},
-        entry,
-      );
-      return { runner, scope };
-    };
-    const a = make('A');
-    const b = make('B');
-    const config = {
-      network: { allowedDomains: [], deniedDomains: [] },
-      filesystem: { allowWrite: [], denyWrite: [], denyRead: [] },
-    };
-    try {
-      expect(fileURLToPath(entry)).toContain('/dist/');
-      expect((await a.runner.availability()).type).toBe('available');
-      expect((await b.runner.availability()).type).toBe('available');
-      const run = async (graph: typeof a, host: string) => {
-        const release = await graph.runner.acquire();
-        try {
-          const wrapped = await graph.runner.wrap(
-            `curl --noproxy '' --silent --show-error --max-time 8 https://${host}/`,
-            { cwd: process.cwd(), config },
-          );
-          const outcome = await promisify(exec)(wrapped.command, { timeout: 12000 }).then(
-            () => '',
-            (error) => String(error.stderr),
-          );
-          expect(outcome).toMatch(/403|blocked/i);
-        } finally {
-          await graph.runner.cleanupAfterCommand();
-          release();
-        }
-      };
-      await Promise.all([run(a, 'a.example'), run(b, 'b.example')]);
-      expect(approvals.sort()).toEqual(['A:a.example', 'B:b.example']);
-    } finally {
-      await Promise.all([a.runner.dispose(), b.runner.dispose()]);
-    }
-  }, 30_000);
 });

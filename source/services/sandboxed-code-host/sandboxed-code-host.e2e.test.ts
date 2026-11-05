@@ -39,7 +39,7 @@ async function runWorkerChild(
       repositoryRoot,
       kind === 'source'
         ? 'source/services/conversation/session-index/session-index-worker-client.ts'
-        : 'dist/services/conversation/session-index/session-index-worker-client.js',
+        : 'dist/source/services/conversation/session-index/session-index-worker-client.js',
     ),
   ).href;
   const hostModule = pathToFileURL(
@@ -47,7 +47,7 @@ async function runWorkerChild(
       repositoryRoot,
       kind === 'source'
         ? 'source/services/sandboxed-code-host/sandboxed-code-host.ts'
-        : 'dist/services/sandboxed-code-host/sandboxed-code-host.js',
+        : 'dist/source/services/sandboxed-code-host/sandboxed-code-host.js',
     ),
   ).href;
   const workerImport =
@@ -257,10 +257,10 @@ it('starts a real built worker from an actual child module after cwd deletion', 
     join(repositoryRoot, 'source/services/conversation/session-index/session-index-worker-client.ts'),
   ];
   const builtPaths = [
-    join(repositoryRoot, 'dist/services/sandboxed-code-host/sandboxed-code-host.js'),
-    join(repositoryRoot, 'dist/utils/worker-bootstrap.js'),
-    join(repositoryRoot, 'dist/utils/worker-cwd-preload.cjs'),
-    join(repositoryRoot, 'dist/services/conversation/session-index/session-index-worker-client.js'),
+    join(repositoryRoot, 'dist/source/services/sandboxed-code-host/sandboxed-code-host.js'),
+    join(repositoryRoot, 'dist/source/utils/worker-bootstrap.js'),
+    join(repositoryRoot, 'dist/source/utils/worker-cwd-preload.cjs'),
+    join(repositoryRoot, 'dist/source/services/conversation/session-index/session-index-worker-client.js'),
   ];
   const [sourceStats, builtStats] = await Promise.all([
     Promise.all(sourcePaths.map((sourcePath) => stat(sourcePath))),

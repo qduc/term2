@@ -34,6 +34,14 @@ Retry, compact, rewind and rollover use a fresh stable UUID per deliberate invoc
 
 A supplied terminal notice is rendered alongside accepted Session notices, including goal-stop and completion-verification blockers. The TUI does not infer it from interrupted status or tool text; the wire terminal owns its exact message, and the next foreground admission clears that terminal presentation.
 
+`menus/menu-controller.ts` remains the public menu/editor state owner.
+`editor-triggers.ts` reconciles trigger candidates and dismissed activations;
+`frame-transitions.ts` applies editor/stack effects and return-point policies.
+Neither helper publishes state or owns keyboard input. The provider manager
+retains list/account navigation in `use-provider-selection.ts`, draft editing
+in `use-provider-editor.ts`, and row projection in `provider-menu-model.ts`;
+provider data and persistence still cross the injected menu integration port.
+
 This interface note is not a verification certificate. Integration verification must cover snapshot/replay, input ownership and terminal rendering (including automatic foreground versus explicit background decisions), attachments and late queue edits, task and budget decisions, switching/rebind notices, and actual application integration. Module presence or an accepted wire receipt alone is not proof that the keyboard workflow reaches the next provider/tool output.
 
 Ctrl+U belongs to the active composer and deletes from the current line's start

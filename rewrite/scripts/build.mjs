@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildInputs, writeBuildReceipt } from '../../scripts/build-provenance.mjs';
 import { writeBuildInfo } from '../../scripts/write-build-info.mjs';
+import { bundleEntry } from './bundle-entry.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const dist = path.join(repo, 'dist');
@@ -33,6 +34,8 @@ fs.writeFileSync(path.join(dist, 'cli.d.ts'), 'export {};\n');
 const embed = spawnSync(process.execPath, ['scripts/embed-agent-wire.mjs'], { cwd: repo, stdio: 'inherit' });
 if (embed.error) throw embed.error;
 if (embed.status !== 0) process.exit(embed.status ?? 1);
+// After the embed: the gateway's @qduc/agent-wire import resolves to that copy.
+await bundleEntry(dist);
 
 await writeBuildInfo({
   root: repo,

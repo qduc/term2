@@ -2,6 +2,10 @@ import { createServer } from 'node:http';
 import { cp, mkdir, readFile, readdir, symlink, writeFile } from 'node:fs/promises';
 import { join, resolve, relative } from 'node:path';
 import { expect, it } from 'vitest';
+import {
+  compiledIdentifier,
+  patchCompiledModule as patchFixtureModule,
+} from '../tests/helpers/patch-compiled-module.js';
 import { listControlAdvertisements } from '../rewrite/src/clients/control-socket/control-socket.js';
 import {
   HANG_BACKSTOP_MS,
@@ -9,14 +13,6 @@ import {
   createIsolatedWorkspaceLease,
   writePtyTextAndSubmit,
 } from './provider-black-box/provider-test-harness.js';
-
-/** Patch only private fixture output, refusing stale/no-op fault stimuli. */
-async function patchFixtureModule(file: string, before: string, after: string): Promise<void> {
-  const code = await readFile(file, 'utf8');
-  const index = code.indexOf(before);
-  if (index < 0) throw new Error(`Missing fixture mutation anchor in ${file}: ${before}`);
-  await writeFile(file, code.slice(0, index) + after + code.slice(index + before.length));
-}
 
 // The real entry module (its anchors are patched below) in a private copy of the build tree.
 function restartEntry(root: string): string {
@@ -280,6 +276,7 @@ it.each(['runner', 'missing-entry', 'cleanup', 'lock', 'writer-close', 'native-e
         const cli = restartEntry(root);
         // The same faults at next's own seams: exit observer, session shutdown, writer lock.
         const tui = join(root, 'direct-dist/rewrite/src/app/launch-tui.js');
+        const pending = await compiledIdentifier(tui, 'pending');
         await patchFixtureModule(
           cli,
           'void main(process.argv.slice(2))',
@@ -291,20 +288,20 @@ it.each(['runner', 'missing-entry', 'cleanup', 'lock', 'writer-close', 'native-e
           await patchFixtureModule(
             tui,
             'await app.close();',
-            "if (pending.plan) throw new Error('fixture cleanup failure');\nawait app.close();",
+            `if (${pending}.plan) throw new Error('fixture cleanup failure');\nawait app.close();`,
           );
         if (fault === 'lock')
           // Hold the session's writer lock past shutdown, as a leaked writer would.
           await patchFixtureModule(
             tui,
             'await app.close();',
-            "await app.close();\nif (pending.plan) globalThis.fixtureLock = (await import('../session/writer-lock.js')).acquireDirectWriterLock(process.getBuiltinModule('node:path').join(conversationsDir, `${pending.plan.sessionId}.jsonl`));",
+            `await app.close();\nif (${pending}.plan) globalThis.fixtureLock = (await import('../session/writer-lock.js')).acquireDirectWriterLock(process.getBuiltinModule('node:path').join(conversationsDir, \`\${${pending}.plan.sessionId}.jsonl\`));`,
           );
         if (fault === 'writer-close')
           await patchFixtureModule(
             tui,
             'await app.close();',
-            "await app.close();\nif (pending.plan) throw new Error('fixture writer close failure');",
+            `await app.close();\nif (${pending}.plan) throw new Error('fixture writer close failure');`,
           );
         if (fault === 'native-exec')
           await patchFixtureModule(

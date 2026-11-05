@@ -1,4 +1,5 @@
 /** Native counterparts to legacy-storage restart probes. No legacy facts or sidecars are seeded. */
+import { patchCompiledModule } from '../tests/helpers/patch-compiled-module.js';
 import { createServer } from 'node:http';
 import { cp, mkdir, readFile, readdir, readlink, symlink, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -300,9 +301,7 @@ it.skipIf(process.platform !== 'linux' || !process.execve)(
       await child.waitForIdleInput();
       const original = (await f.logs())[0]!.file;
       const commands = join(f.workspace.root, 'direct-dist/rewrite/src/clients/tui/menus/legacy-commands.js');
-      const code = await readFile(commands, 'utf8');
-      expect(code).toContain('Exit the application');
-      await writeFile(commands, code.replace('Exit the application', 'Changed compiled core B'));
+      await patchCompiledModule(commands, 'Exit the application', 'Changed compiled core B');
       // Running module must still be A; B is only available after real exec.
       await writePtyTextAndSubmit(child, '/help');
       await child.waitForVisibleOutput('Exit the application');

@@ -254,22 +254,18 @@ async function runTui(
       sessionId === undefined
         ? await app.host.createSession(app.principal, target.grant)
         : await app.host.connect(app.principal, sessionId);
+    // Read the opened session, not the launch defaults: resume may restore a different profile. Legacy (cli.tsx)
+    // announces it before "Resumed conversation", and both before refusing a non-interactive terminal.
+    const { profileId } = await app.sessionConfiguration(initial.sessionId);
+    stderr.write(`Profile: ${profileId.replace(/^builtin:/, '')}\n`);
     if (sessionId !== undefined) stdout.write(`Resumed conversation: ${displaySessionId(initial.sessionId)}\n`);
     if (request.goal) await app.setGoal(initial.sessionId, request.goal, 'launcher');
 
     // An admitted CLI goal belongs to Session even when this process cannot render Ink.
     if (!(stdin.isTTY && stdout.isTTY)) {
-      // The current CLI announces the (restored) profile before refusing.
-      const { profileId } = await app.sessionConfiguration(initial.sessionId);
-      stderr.write(`Profile: ${profileId.replace(/^builtin:/, '')}\n`);
       stderr.write(`${INTERACTIVE_TERMINAL_REQUIRED}\n`);
       return 1;
     }
-
-    // Read the opened session, not the launch defaults: resume may restore a
-    // different profile before the terminal announces its active workflow.
-    const { profileId } = await app.sessionConfiguration(initial.sessionId);
-    stderr.write(`Profile: ${profileId.replace(/^builtin:/, '')}\n`);
 
     // Ask before Ink takes stdin: the terminal's reply arrives as input.
     const detectedBackground = shouldDetectBackground(settings.get('ui.theme'), process.env)

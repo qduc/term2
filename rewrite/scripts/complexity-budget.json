@@ -3,7 +3,7 @@
   "maxLines": 500,
   "fileCeilings": {
     "rewrite/src/model/provider.ts": {
-      "lines": 503,
+      "lines": 502,
       "reason": "lazyModel is the one place a provider's streamed model becomes a Model; its native compact entry (body in provider-compact.ts) belongs beside stream."
     },
     "rewrite/src/clients/tui/presentation/components/message/CommandMessage.tsx": {
@@ -27,16 +27,40 @@
       "reason": "Port of source/hooks/use-subagent-pool-selection.ts with only imports changed; kept whole so it stays diffable against the legacy oracle."
     },
     "rewrite/src/clients/tui/session.tsx": {
-      "lines": 527,
-      "reason": "The session wires the composer to the ported legacy menu stack (useMenuStack, double-Escape) and routes every report into the transcript as legacy's addSystemMessage does; that wiring closes over submit, rewind and the viewport, declared later in the same component, so moving it out would add ref plumbing rather than a job seam. The composer's JSX also sits inside ComposerWidth (legacy InputBox's width-0 first frame), which only wraps it, and the command path routes a legacy clear-and-switch confirmation to the plan-toggle hook. The approval panel's Escape adds legacy's Stopped line through the viewport (one prop). The menu stack's first-run setup prompt sits under the live divider as legacy BottomArea places it (one line; the gate itself lives in menus/use-first-run-setup.ts)."
+      "lines": 545,
+      "reason": "The session wires the composer to the ported legacy menu stack (useMenuStack, double-Escape) and routes every report into the transcript as legacy's addSystemMessage does; that wiring closes over submit, rewind and the viewport, declared later in the same component, so moving it out would add ref plumbing rather than a job seam. The composer's JSX also sits inside ComposerWidth (legacy InputBox's width-0 first frame), which only wraps it, and the command path routes a legacy clear-and-switch confirmation to the plan-toggle hook. The approval panel's Escape adds legacy's Stopped line through the viewport (one prop). The menu stack's first-run setup prompt sits under the live divider as legacy BottomArea places it (one line; the gate itself lives in menus/use-first-run-setup.ts). Candidate 2 adds the ported approval prompt host and tasks panel around the hidden composer box (legacy BottomArea order), which the same routing owns."
     },
     "rewrite/src/clients/tui/approval-prompt.tsx": {
       "lines": 1145,
       "reason": "Verbatim port of legacy source/components/prompt/ApprovalPrompt.tsx (every approval and ask_user layout and key path); only its data access changed, so it matches legacy by construction."
     },
     "rewrite/src/engine/turn-tools.ts": {
-      "lines": 513,
+      "lines": 514,
       "reason": "One per-call Execution record carries a call's planning, admission, interaction answers and settlement; the chosen approval grant rides it like the batch-asked answer, so splitting would pass that record across files."
+    },
+    "rewrite/src/app/tool-surface.ts": {
+      "lines": 518,
+      "reason": "Builds one agent's tool surface; candidate 2 joins the session browser (solo/tools) and the worker advisory client (solo/approvals), each one wiring line in the same builder."
+    },
+    "rewrite/src/engine/turn-model.ts": {
+      "lines": 511,
+      "reason": "One model step with its recovery loop; candidate 2 joins the replacement-boundary projection with legacy's retry notices and model_retrying observation, which share the loop's state."
+    },
+    "rewrite/src/protocol/direct-projection.ts": {
+      "lines": 503,
+      "reason": "Snapshot projection of every wire fact kind; candidate 2's retry and child tool-state fields are a few lines each in the same switch."
+    },
+    "rewrite/src/protocol/direct-wire.ts": {
+      "lines": 505,
+      "reason": "The wire type catalogue; candidate 2 adds the task's live tool state fields beside the others."
+    },
+    "rewrite/src/session/conversation.ts": {
+      "lines": 510,
+      "reason": "The Conversation's turn driver; candidate 2 keeps both the question-cancel notice (a3) and the cross-turn compaction hold (solo/tools), each closing over the same driver state."
+    },
+    "rewrite/src/session/replay-fold.ts": {
+      "lines": 503,
+      "reason": "The replay fold; candidate 2 keeps both cancelled-turn settlings (a3's unstarted calls and tools' in-flight step), which run on the same fold state."
     }
   },
   "messagePath": {

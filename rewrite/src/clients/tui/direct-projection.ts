@@ -163,7 +163,7 @@ const shownAt = new Map<string, { tick: number; waiting: Set<string>; held: Set<
  * Legacy appends a call's row when it starts. A call that waits on the user (a question or an approval) starts only
  * once every decision pending in its batch is made, so until then it has no entry here.
  */
-function toolShownAt(snapshot: WireSnapshot): ReadonlyMap<string, number> {
+function toolShownAt(snapshot: WireSnapshot, noticeRows: readonly ToolView[]): ReadonlyMap<string, number> {
   const memory = shownAt.get(snapshot.sessionId) ?? {
     tick: 0,
     waiting: new Set<string>(),
@@ -182,6 +182,9 @@ function toolShownAt(snapshot: WireSnapshot): ReadonlyMap<string, number> {
   for (const tool of snapshot.tools)
     if (!memory.at.has(tool.executionId) && !waiting.has(tool.executionId) && !memory.held.has(tool.executionId))
       memory.at.set(tool.executionId, memory.tick);
+  // Notice rows are drawn from a delivered turn and never wait on a decision; without an entry they'd count as
+  // undecided and never draw. Recorded in the same map, so its identity stays stable for memoised consumers.
+  for (const row of noticeRows) if (!memory.at.has(row.id)) memory.at.set(row.id, memory.tick);
   memory.waiting = waiting;
   return memory.at;
 }
@@ -240,7 +243,7 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
     // Reasoning is live turn activity, not a settled transcript message.
     reasoning: snapshot.activeTurnId && snapshot.reasoning ? { [snapshot.activeTurnId]: snapshot.reasoning } : {},
     tools: stableTools,
-    toolShownAt: toolShownAt(snapshot),
+    toolShownAt: toolShownAt(snapshot, notices.tools),
     unmatchedTools: snapshot.unmatchedToolResults ?? [],
     budgets: snapshot.pendingBudgets ?? [],
     commands: snapshot.commands ?? [],

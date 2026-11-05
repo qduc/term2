@@ -40,9 +40,7 @@ import {
   DOCKER_HOST_CONTROL_RETRY_INSTRUCTION,
   type DockerHostControl,
 } from '../../shared/utils/shell/sandbox/docker-host-control.js';
-import type { SessionAccessState } from '../../session/session/session-access-state.js';
-import type { NestedToolCompatibilityState } from '../../session/session/nested-tool-compatibility-state.js';
-import type { ToolInvocationContext } from '../../engine/agent-runtime/tool-invocation-context.js';
+import type { ShellAccessPort, NestedShellAccessPort } from '../access-port.js';
 import {
   type BackgroundShellJob,
   type BackgroundShellTerminalStatus,
@@ -689,9 +687,9 @@ export function createShellToolDefinition(deps: {
   /** Root-only: pause denied reads through the application-owned post-execute seam. */
   postExecuteDeniedRead?: boolean;
   /** Root clients receive this handle-owned Docker capability. */
-  sessionAccess?: SessionAccessState;
+  sessionAccess?: ShellAccessPort;
   /** Isolated legacy protocol for nested tools only. */
-  nestedCompatibility?: NestedToolCompatibilityState;
+  nestedCompatibility?: NestedShellAccessPort;
   /** Root session-owned lifecycle for local background shell jobs. */
   backgroundShellRegistry?: BackgroundShellRegistryPort<BackgroundShellExecutionResult>;
   /** Root session-owned output store + watch layer for background jobs. */
@@ -840,7 +838,7 @@ export function createShellToolDefinition(deps: {
       // The application run loop owns turn cancellation on its typed context;
       // SDK details only identify the provider tool call.
       const toolSignal =
-        (_context as ToolInvocationContext | undefined)?.signal ??
+        (_context as { readonly signal?: AbortSignal } | undefined)?.signal ??
         (details as { signal?: AbortSignal } | undefined)?.signal;
       const cwd = executionContext?.getCwd() || process.cwd();
       if (sandbox === 'unsandboxed' && !allowUnsandboxed) {

@@ -1,8 +1,7 @@
 import { z } from 'zod';
 import type { ScriptedToolDefinition, FormatCommandMessage } from '../types.js';
 import { TOOL_NAME_PROPOSE_GOAL } from '../tool-names.js';
-import { createDurableGoal } from '../../session/conversation/durable-goal.js';
-import type { DurableGoal } from '../../session/logging/conversation-log-events.js';
+import type { DurableGoal } from '../../shared/contracts/durable-goal.js';
 import {
   getOutputText,
   isSuccessOutput,
@@ -19,6 +18,7 @@ const PROPOSE_GOAL_DESCRIPTION =
   'The outcome must state what must become true, not a plan or step list.';
 
 export interface ProposeGoalDeps {
+  createGoal: (outcome: string, successCriteria?: string) => DurableGoal;
   getGoal: () => DurableGoal | undefined;
   hasPriorProposal: () => boolean;
   /** May return the durable write, which `execute` awaits before reporting success. */
@@ -78,7 +78,7 @@ export function createProposeGoalToolDefinition(
         return `Error: propose_goal refused because ${reason}. Use /goal set to replace an existing goal.`;
       }
       try {
-        const goal = createDurableGoal(params.outcome, params.successCriteria);
+        const goal = deps.createGoal(params.outcome, params.successCriteria);
         await deps.appendGoal(goal);
         return `Goal proposed and persisted with the user's approval: ${goal.outcome}`;
       } catch (error) {

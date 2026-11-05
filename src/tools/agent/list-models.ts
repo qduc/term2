@@ -4,7 +4,13 @@ import type { ILoggingService, ISettingsService } from '../../shared/service-int
 import { getAllProviders } from '../../model/providers/index.js';
 import { isProviderDisabled, resolveProviderCredentials } from '../../shared/utils/ai/provider-credentials.js';
 import { loadProviderModelGroup, type LoadProviderModelGroupDeps } from '../../model/models/model-listing.js';
-import type { IndexedListResult } from '../../session/conversation/session-index/session-index-database.js';
+
+/** Project-scoped model usage metadata; discovery has no need for transcript or index internals. */
+export interface ModelDiscoveryHistory {
+  sessions: readonly { provider?: string; model?: string; updatedAt: string }[];
+  scope: string;
+  unavailable: number;
+}
 
 const parameters = z.object({
   provider: z.string().optional().describe('Exact registered provider ID. Omit to search all providers.'),
@@ -85,7 +91,7 @@ export const modelDiscoveryResultSchema = z.object({
 type DiscoveryDeps = {
   settingsService: ISettingsService;
   loggingService: ILoggingService;
-  getHistory?: () => Promise<IndexedListResult | null>;
+  getHistory?: () => Promise<ModelDiscoveryHistory | null>;
   catalogDeps?: Pick<LoadProviderModelGroupDeps, 'fetcher' | 'cacheDir' | 'signal'>;
 };
 

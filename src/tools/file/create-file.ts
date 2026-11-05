@@ -7,7 +7,7 @@ import { SANDBOX_TEMP_DIR } from '../../shared/utils/shell/temp-dir.js';
 import type { ScriptedToolDefinition, FormatCommandMessage } from '../types.js';
 import { TOOL_NAME_CREATE_FILE } from '../tool-names.js';
 import type { ILoggingService, ISettingsService, ISSHService } from '../../shared/service-interfaces.js';
-import type { SessionAccessState } from '../../session/session/session-access-state.js';
+import type { FileEditAccessPort } from '../access-port.js';
 import {
   getOutputText,
   isSuccessOutput,
@@ -72,7 +72,7 @@ export function createCreateFileToolDefinition(deps: {
   loggingService: ILoggingService;
   settingsService: ISettingsService;
   executionContext?: ExecutionContext;
-  sessionAccess?: SessionAccessState;
+  sessionAccess?: FileEditAccessPort;
 }): ScriptedToolDefinition<typeof createFileParametersSchema> {
   const { loggingService, settingsService, executionContext, sessionAccess } = deps;
   const pendingOverwrites = new Map<string, PendingOverwrite>();

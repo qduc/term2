@@ -6,7 +6,7 @@ import type {
 import type { SearchReplaceFullOperation } from './search-replace.js';
 import type { ILoggingService, ISettingsService } from '../../shared/service-interfaces.js';
 import { getProvider } from '../../model/providers/index.js';
-import { selectAgentStreamItems } from '../../engine/agent-stream.js';
+import { selectAgentStreamItems } from '../../shared/utils/ai/stream-items.js';
 
 export interface HealingResult {
   params: SearchReplaceFullOperation;

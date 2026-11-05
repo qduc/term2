@@ -2,9 +2,16 @@ import type { z, ZodTypeAny } from 'zod';
 import type { ProhibitedToolName } from './tool-names.js';
 import type { ApprovalPresentationCapability } from './tool-capabilities.js';
 import type { DeniedReadMetadata, PostExecuteDecision } from '../shared/contracts/conversation.js';
-import type { Term2HookScope } from '../session/hooks/hook-contracts.js';
 import type { StreamedModelCustomToolFormat } from '../shared/contracts/streamed-model-turn.js';
-import type { DurableGoal } from '../session/logging/conversation-log-events.js';
+import type { DurableGoal } from '../shared/contracts/durable-goal.js';
+
+/** Physical tool execution scope, also projected unchanged into public hook events. */
+export type ToolExecutionScope = 'root' | { readonly subagent: ToolExecutionSubagentScope };
+
+export interface ToolExecutionSubagentScope {
+  readonly agentId: string;
+  readonly role: string;
+}
 
 /**
  * Session state captured when a model request is built, in the same step that
@@ -42,7 +49,7 @@ export interface ToolExecutionLifecycleContext {
   readonly toolName: string;
   readonly normalizedArguments: unknown;
   readonly attempt: number;
-  readonly scope: Term2HookScope;
+  readonly scope: ToolExecutionScope;
 }
 
 export interface ToolExecutionLifecyclePort {

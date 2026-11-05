@@ -1,12 +1,12 @@
 import { getRequestSnapshot, type ToolDefinition, type FormatCommandMessage } from '../types.js';
 import { TOOL_NAME_GOAL_CHECK } from '../tool-names.js';
-import type { DurableGoal } from '../../session/logging/conversation-log-events.js';
+import type { DurableGoal } from '../../shared/contracts/durable-goal.js';
 import {
   formatRecordedGoalCheck,
   goalCheckParameters,
   validateGoalCheck,
   type GoalCheckStatus,
-} from '../../session/conversation/durable-goal-stop-check.js';
+} from './goal-check-contract.js';
 import {
   getOutputText,
   isSuccessOutput,

@@ -73,6 +73,8 @@ import { shouldPreferPatchEditingModel } from '../shared/lib/tool-selection-poli
 import { SkillsService } from '../tools/skills/skills-service.js';
 import { createProposeGoalToolDefinition } from '../tools/agent/propose-goal.js';
 import { createGoalCheckToolDefinition } from '../tools/agent/goal-check.js';
+import { createDurableGoal } from '../session/conversation/durable-goal.js';
+import { resolveAncillaryModelTier } from '../engine/agent-runtime/model-resolver.js';
 import { createRunAgentWorkflowToolDefinition } from '../tools/run-agent-workflow.js';
 import { createWorktreeToolDefinitions } from '../tools/system/worktree.js';
 import { createRunCodeToolDefinition } from '../tools/system/run-code/index.js';
@@ -630,6 +632,7 @@ export const getAgentDefinition = (
   if (hasCapability('user-interaction') && allowAskUser && proposeGoal && deps.getGoal) {
     tools.push(
       createProposeGoalToolDefinition({
+        createGoal: createDurableGoal,
         getGoal: deps.getGoal,
         appendGoal: proposeGoal.appendGoal,
         hasPriorProposal: proposeGoal.hasPriorProposal,
@@ -679,6 +682,7 @@ export const getAgentDefinition = (
       if (usesPatchEditingSurface) {
         tools.push(
           createApplyPatchToolDefinition({
+            resolveHealingModel: () => resolveAncillaryModelTier('chore', settingsService),
             settingsService,
             loggingService,
             executionContext,
@@ -700,6 +704,7 @@ export const getAgentDefinition = (
             sessionAccess,
           }),
           createSearchReplaceToolDefinition({
+            resolveHealingModel: () => resolveAncillaryModelTier('chore', settingsService),
             editHealing: (params, content, model, key, healingDeps) =>
               healSearchReplaceParams(params, content, model, key, {
                 ...healingDeps,

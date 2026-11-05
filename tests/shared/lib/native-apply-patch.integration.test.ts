@@ -9,6 +9,7 @@ import { ApprovalLedger } from '../../../src/engine/agent-runtime/tool-invocatio
 import { ToolCallExecution } from '../../../src/engine/agent-runtime/tool-call-execution.js';
 import { createMockSettingsService } from '../../helpers/settings-service.mock.js';
 import { createApplyPatchToolDefinition } from '../../../src/tools/file/apply-patch.js';
+import { resolveAncillaryModelTier } from '../../../src/engine/agent-runtime/model-resolver.js';
 import type { AnyToolDefinition } from '../../../src/tools/types.js';
 import { buildAgentTools, type AgentFactoryDeps } from '../../../src/app/lib/agent-factory.js';
 import { createEditorImpl } from '../../../src/shared/lib/editor-impl.js';
@@ -56,6 +57,7 @@ async function nativePatchTool() {
   const tools = buildAgentTools({
     toolDefinitions: [
       createApplyPatchToolDefinition({
+        resolveHealingModel: () => resolveAncillaryModelTier('chore', settings),
         settingsService: settings,
         loggingService: logger,
         executionContext,

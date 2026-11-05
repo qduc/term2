@@ -1,7 +1,7 @@
 import { z, type ZodTypeAny } from 'zod';
 import type { AnyScriptedToolDefinition, ScriptedToolDefinition } from '../types.js';
 import { MAX_SESSION_BROWSER_CHARS } from './limits.js';
-import type { Kind, SessionBrowser } from '../../session/conversation/session-browser.js';
+import type { Kind, SessionBrowserPort } from './session-browser-port.js';
 import { boundedJsonFailure, fitsSerializedText } from '../../shared/utils/output/bounded-json.js';
 import { isScriptedToolCall, resolveToolResultMaxBytes } from '../../shared/utils/output/bound-tool-result.js';
 import {
@@ -128,7 +128,7 @@ const sessionReadScriptedReturnSchema = z.union([
   sessionBrowserErrorSchema,
 ]);
 
-export function createSessionBrowserToolDefinitions(browser: SessionBrowser): AnyScriptedToolDefinition[] {
+export function createSessionBrowserToolDefinitions(browser: SessionBrowserPort): AnyScriptedToolDefinition[] {
   return [
     definition(
       'session_list',

@@ -5,7 +5,7 @@ import { isProtectedHookPath, isWorkspacePathPhysicallyInside, resolveWorkspaceP
 import { SANDBOX_TEMP_DIR } from '../../shared/utils/shell/temp-dir.js';
 import type { ScriptedToolDefinition, FormatCommandMessage } from '../types.js';
 import type { ILoggingService, ISettingsService } from '../../shared/service-interfaces.js';
-import type { SessionAccessState } from '../../session/session/session-access-state.js';
+import type { FileEditAccessPort } from '../access-port.js';
 import {
   getOutputText,
   isSuccessOutput,
@@ -16,7 +16,6 @@ import {
 } from '../format-helpers.js';
 import { healSearchReplaceParams } from './edit-healing.js';
 import { ExecutionContext } from '../execution-context.js';
-import { resolveAncillaryModelTier } from '../../engine/agent-runtime/model-resolver.js';
 import { getApprovalPresentationCapability } from '../tool-capabilities.js';
 import { withFileLock } from './file-locks.js';
 import {
@@ -271,8 +270,9 @@ const SEARCH_REPLACE_DESCRIPTION =
 export function createSearchReplaceToolDefinition(deps: {
   loggingService: ILoggingService;
   settingsService: ISettingsService;
+  resolveHealingModel: () => { model: string; provider: string };
   executionContext?: ExecutionContext;
-  sessionAccess?: SessionAccessState;
+  sessionAccess?: FileEditAccessPort;
   editHealing?: typeof healSearchReplaceParams;
 }): ScriptedToolDefinition<typeof searchReplaceParametersSchema> {
   const {
@@ -467,10 +467,7 @@ export function createSearchReplaceToolDefinition(deps: {
           const enableEditHealing = settingsService.get('tools.enableEditHealing') ?? true;
           if (enableEditHealing) {
             healingAttempted = true;
-            const { model: healingModel, provider: healingProvider } = resolveAncillaryModelTier(
-              'chore',
-              settingsService,
-            );
+            const { model: healingModel, provider: healingProvider } = deps.resolveHealingModel();
             const healingResult = await editHealing(
               operation,
               content,

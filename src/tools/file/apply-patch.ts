@@ -6,7 +6,7 @@ import { isProtectedHookPath, isWorkspacePathPhysicallyInside, resolveWorkspaceP
 import { SANDBOX_TEMP_DIR } from '../../shared/utils/shell/temp-dir.js';
 import type { ScriptedToolDefinition, FormatCommandMessage } from '../types.js';
 import type { ILoggingService, ISettingsService } from '../../shared/service-interfaces.js';
-import type { SessionAccessState } from '../../session/session/session-access-state.js';
+import type { FileEditAccessPort } from '../access-port.js';
 import {
   getOutputText,
   isSuccessOutput,
@@ -25,7 +25,6 @@ import {
   truncateToUtf8Bytes,
 } from '../../shared/utils/output/bound-tool-result.js';
 import { healPatchOperation } from './patch-healing.js';
-import { resolveAncillaryModelTier } from '../../engine/agent-runtime/model-resolver.js';
 import { parseUpstreamApplyPatch } from './upstream-apply-patch.js';
 
 /**
@@ -227,8 +226,9 @@ const APPLY_PATCH_DESCRIPTION =
 export function createApplyPatchToolDefinition(deps: {
   loggingService: ILoggingService;
   settingsService: ISettingsService;
+  resolveHealingModel: () => { model: string; provider: string };
   executionContext?: ExecutionContext;
-  sessionAccess?: SessionAccessState;
+  sessionAccess?: FileEditAccessPort;
   patchHealing?: typeof healPatchOperation;
 }): ScriptedToolDefinition<typeof applyPatchParametersSchema> {
   const { loggingService, settingsService, executionContext, sessionAccess, patchHealing = healPatchOperation } = deps;
@@ -535,10 +535,7 @@ export function createApplyPatchToolDefinition(deps: {
                   const mismatchDiagnosis = diagnoseContextMismatch(contextText, original);
 
                   try {
-                    const { model: healingModel, provider: providerId } = resolveAncillaryModelTier(
-                      'chore',
-                      settingsService,
-                    );
+                    const { model: healingModel, provider: providerId } = deps.resolveHealingModel();
 
                     const healingResult = await patchHealing(
                       filePath,

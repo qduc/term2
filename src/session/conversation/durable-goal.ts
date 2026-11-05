@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { DurableGoal, GoalChangedEvent, GoalStatus } from '../logging/conversation-log-events.js';
 
-export const MAX_GOAL_FIELD_LENGTH = 2000;
+import { MAX_GOAL_FIELD_LENGTH } from '../../shared/contracts/durable-goal.js';
+export { MAX_GOAL_FIELD_LENGTH } from '../../shared/contracts/durable-goal.js';
 
 export function createDurableGoal(
   outcome: string,

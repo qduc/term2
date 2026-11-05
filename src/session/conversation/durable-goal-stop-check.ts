@@ -1,10 +1,17 @@
-import { z } from 'zod';
 import type { ProviderInputItem } from '../../shared/contracts/provider-input.js';
 import type { RunTerminationCause } from '../../shared/contracts/run-termination.js';
 import type { ApplicationAgent, NormalStopDecision } from '../../engine/agent-runtime/application-run-loop.js';
 import { TOOL_NAME_GOAL_CHECK } from '../../tools/tool-names.js';
 import type { DurableGoal } from '../logging/conversation-log-events.js';
-import { MAX_GOAL_FIELD_LENGTH } from './durable-goal.js';
+import { validateGoalCheck, GOAL_CHECK_RECORDED_PREFIX } from '../../tools/agent/goal-check-contract.js';
+export {
+  GOAL_CHECK_STATUSES,
+  goalCheckParameters,
+  validateGoalCheck,
+  GOAL_CHECK_RECORDED_PREFIX,
+  formatRecordedGoalCheck,
+} from '../../tools/agent/goal-check-contract.js';
+export type { GoalCheckStatus, GoalCheckParams, GoalCheckValidation } from '../../tools/agent/goal-check-contract.js';
 
 /**
  * Active-goal stop check.
@@ -12,8 +19,8 @@ import { MAX_GOAL_FIELD_LENGTH } from './durable-goal.js';
  * While the session's durable goal is `active`, a root turn may not end
  * normally until the working model reports, through `goal_check`, whether the
  * goal is achieved, blocked, still not achieved, or deferred because the
- * latest user message asked for something else. This module owns the report
- * contract and the stop decision; `ApplicationRunLoop` only asks it at its
+ * latest user message asked for something else. This module consumes the tool's
+ * report contract and owns the stop decision; `ApplicationRunLoop` only asks it at its
  * normal-stop seam, and the turn continues through the loop's existing
  * request boundary when the decision is `continue`.
  *
@@ -25,60 +32,6 @@ import { MAX_GOAL_FIELD_LENGTH } from './durable-goal.js';
  * any check that was denied, failed, unrecorded, or superseded by later work.
  * The user still sets, replaces, abandons, and reopens goals.
  */
-
-export const GOAL_CHECK_STATUSES = ['achieved', 'blocked', 'not_achieved', 'deferred'] as const;
-export type GoalCheckStatus = (typeof GOAL_CHECK_STATUSES)[number];
-
-export const goalCheckParameters = z.object({
-  status: z
-    .enum(GOAL_CHECK_STATUSES)
-    .describe(
-      'achieved: the outcome holds now, verified against concrete evidence; this proposes completion to the harness. blocked: progress needs user input or a capability you do not have. ' +
-        'not_achieved: more work is needed and you can do it. deferred: the latest user message asked for ' +
-        'something else, asked you to pause, or superseded the goal.',
-    ),
-  evidence: z
-    .string()
-    .trim()
-    .min(1)
-    .max(MAX_GOAL_FIELD_LENGTH)
-    .describe(
-      'achieved: concrete evidence that the outcome holds (commands run, results, files). blocked: the concrete ' +
-        'blocker and exactly what is needed from the user. not_achieved: what remains and your next step. ' +
-        'deferred: which newer user request or pause took priority.',
-    ),
-  criteriaEvidence: z
-    .string()
-    .trim()
-    .max(MAX_GOAL_FIELD_LENGTH)
-    .optional()
-    .describe('Required for achieved when the goal has success criteria: evidence for each criterion.'),
-});
-
-export type GoalCheckParams = z.infer<typeof goalCheckParameters>;
-
-export type GoalCheckValidation =
-  | { readonly ok: true; readonly check: GoalCheckParams }
-  | { readonly ok: false; readonly problem: string };
-
-/** One validation path for the tool's execution and the stop decision. */
-export function validateGoalCheck(raw: unknown, goal: DurableGoal | undefined): GoalCheckValidation {
-  if (goal?.status !== 'active') return { ok: false, problem: 'there is no active durable goal to check' };
-  const parsed = goalCheckParameters.safeParse(raw);
-  if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    const field = issue?.path.join('.') || 'input';
-    return { ok: false, problem: `${field}: ${issue?.message ?? 'invalid'}` };
-  }
-  const check = parsed.data;
-  if (check.status === 'achieved' && goal.successCriteria && !check.criteriaEvidence) {
-    return {
-      ok: false,
-      problem: 'criteriaEvidence is required for achieved because the goal has success criteria',
-    };
-  }
-  return { ok: true, check };
-}
 
 /**
  * Consecutive stop-check reminders allowed without intervening work.
@@ -107,24 +60,13 @@ export const MAX_GOAL_STOP_REMINDERS_WITHOUT_WORK = 2;
 export const MAX_GOAL_STOP_REMINDERS_PER_TURN = 6;
 
 /**
- * Every successful `goal_check` result starts with this text. Only a check
- * whose recorded result carries it counts: a denied, rejected, or failed call
- * leaves the tool's own result text absent.
- */
-export const GOAL_CHECK_RECORDED_PREFIX = 'Self-check recorded:';
-
-/**
- * The recorded result names the goal the check judged, read from the session
- * at execution time. The goal can change while a turn runs (`/goal set` from
+ * The recorded result names the goal the check judged in its request snapshot.
+ * The goal can change while a turn runs (`/goal set` from
  * the prompt or the control socket mid-turn adds no history), so the stop seam
  * counts a check only for the goal it was made against: identity is the goal
  * id, which only a new goal mints (status changes keep id, outcome, and
  * criteria).
  */
-export function formatRecordedGoalCheck(goalId: string, text: string): string {
-  return `${GOAL_CHECK_RECORDED_PREFIX} [goal ${goalId}] ${text}`;
-}
-
 const RECORDED_GOAL_ID = /^\[goal ([^\]\s]+)\]/;
 
 /** Marks the harness reminder so the decision can count it in the turn history. */

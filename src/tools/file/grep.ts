@@ -4,9 +4,8 @@ import { homedir } from 'node:os';
 import util from 'util';
 import { trimOutput } from '../../shared/utils/output/output-trim.js';
 import type { ScriptedToolDefinition, FormatCommandMessage } from '../types.js';
-import { isSessionReadGranted } from '../../session/approval/session-read-access.js';
-import type { SessionAccessState } from '../../session/session/session-access-state.js';
-import type { NestedToolCompatibilityState } from '../../session/session/nested-tool-compatibility-state.js';
+import { isSessionReadGranted } from './read-access.js';
+import type { FileReadAccessPort, NestedReadAccessPort } from '../access-port.js';
 import type { ISettingsService } from '../../shared/service-interfaces.js';
 import { resolveWorkspacePath } from '../utils.js';
 import {
@@ -178,9 +177,9 @@ export const createGrepToolDefinition = (
     globAvailable?: boolean;
     allowOutsideWorkspace?: boolean;
     /** Root clients receive this handle-owned capability. */
-    sessionAccess?: SessionAccessState;
+    sessionAccess?: FileReadAccessPort;
     /** Isolated legacy protocol for nested tools only. */
-    nestedCompatibility?: NestedToolCompatibilityState;
+    nestedCompatibility?: NestedReadAccessPort;
     /** YOLO (autoApproveMode 'always') read bypass. */
     settingsService?: ISettingsService;
     /** Overrides the host ripgrep probe so tests can pin either search lane. */

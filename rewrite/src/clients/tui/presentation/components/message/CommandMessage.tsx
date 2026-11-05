@@ -118,7 +118,10 @@ const CommandMessage: FC<Props> = ({
   const theme = useTheme();
   const { ToolFrame, ToolHeader, ToolSection } = useSkin();
   const { isVisible, isRunning } = useCommandVisibility(status);
-  const isWaiting = awaitingDecision;
+  // Legacy reads "(waiting)" on every live row while a decision is up, finished ones included, so a call that already
+  // ran looks pending. A confirmed legacy bug (#136 item 8, accepted-differences): a finished row keeps its status.
+  const isFinished = status === 'completed' || status === 'failed' || status === 'unknown';
+  const isWaiting = awaitingDecision && !isFinished;
   const isQueued = status === 'pending' && !awaitingDecision;
   const isExecuting = isRunning && !awaitingDecision;
   const runningElapsedSeconds = useRunningElapsedSeconds(isExecuting);

@@ -33,3 +33,11 @@ for _name, _keys in {
 }.items():
     SCENARIOS[_name] = _GO + ['<sleep>', '<sleep>'] + _keys + ['<sleep>']
     SEED[_name] = SEED['grant-docker-prompt']
+# A finished row stays live while a later call waits for approval. Legacy keeps drawing it as "○ … (waiting)";
+# next shows its final status (#136 item 8, a confirmed legacy bug; accepted-differences).
+SCENARIOS['wait-finished-row'] = _GO
+SEED['wait-finished-row'] = {'replies': [
+    {'tool': 'shell', 'args': {'command': 'ls'}},
+    {'tool': 'shell', 'args': {'command': 'rm -f gone.txt'}},
+    {'text': 'done'},
+]}

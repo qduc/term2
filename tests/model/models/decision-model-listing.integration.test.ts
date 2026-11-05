@@ -1,9 +1,6 @@
 import { createServer, type Server } from 'node:http';
 import { afterEach, beforeEach, expect, it } from 'vitest';
-import {
-  clearDecisionModelListCache,
-  fetchDecisionModels,
-} from '../../../rewrite/src/model/models/decision-model-listing.js';
+import { clearDecisionModelListCache, fetchDecisionModels } from '../../../src/model/models/decision-model-listing.js';
 
 let server: Server;
 let fixtureUrl: string;

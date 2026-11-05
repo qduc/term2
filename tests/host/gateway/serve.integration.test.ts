@@ -7,9 +7,9 @@ import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { createGatewayAssertion } from '../../../rewrite/src/host/server-assertion.js';
-import { getDefaultShellSandboxRunner } from '../../../rewrite/src/shared/utils/shell/sandbox/shell-sandbox-runner.js';
-import { resolveSettingsDirectory } from '../../../rewrite/src/config/settings/settings-path.js';
+import { createGatewayAssertion } from '../../../src/host/server-assertion.js';
+import { getDefaultShellSandboxRunner } from '../../../src/shared/utils/shell/sandbox/shell-sandbox-runner.js';
+import { resolveSettingsDirectory } from '../../../src/config/settings/settings-path.js';
 import { createTestChildEnv } from '../../helpers/terminal-e2e.js';
 
 // The launcher is exercised as a real child process: pair with a pre-shared

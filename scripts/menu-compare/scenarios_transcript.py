@@ -157,7 +157,7 @@ SCENARIOS['t-walk-short-tool'] = _WALK
 SEED['t-walk-short-tool'] = {'replies': [{'text': _MD + '\n\nThat is all.'},
                                          {'tool': 'shell', 'args': {'command': 'sleep 0.4; ls'}}, {'text': 'Done.'}],
                              'usage': _USAGE, 'settings': {'shell': {'autoApproveMode': 'always'}}}
-# The whole real-terminal walk, step by step (rewrite/parity/real-terminal/lib/walk.mjs), up to each checked step.
+# The whole real-terminal walk, step by step (parity/real-terminal/lib/walk.mjs), up to each checked step.
 _FULLWALK = {
     '03': ['show markdown please', '<enter>', '<sleep>'],
     '04': ['list the files please', '<enter>', '<sleep>', '<sleep>'],

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Drive the legacy CLI and term2-next in a pty and capture the screen with pyte.
 
-Evidence harness for rewrite/docs/menu-port-report.md, not a test suite.
+Evidence harness for docs/menu-port-report.md, not a test suite.
 
-  python3 rewrite/scripts/menu-compare/screen.py run <legacy|next> <cols> <rows> <scenario>
-  python3 rewrite/scripts/menu-compare/screen.py compare <cols> <rows> [scenario ...]
+  python3 scripts/menu-compare/screen.py run <legacy|next> <cols> <rows> <scenario>
+  python3 scripts/menu-compare/screen.py compare <cols> <rows> [scenario ...]
 
 Captures are cached under .cache/menu-compare/, keyed by the CLI's built output (dist, minus build metadata),
 the lockfile, the Node version, the capture code (MODELS through run()), the scenario's own steps and seed,
@@ -41,14 +41,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pyte
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-REPO = os.path.abspath(os.path.join(HERE, '..', '..', '..'))
+REPO = os.path.abspath(os.path.join(HERE, '..', '..'))
 sys.path.insert(0, HERE)
 from scenarios import SCENARIOS, SEED  # noqa: E402
 
 CLIS = {
     # Since the flip (#86) dist/cli.js starts term2-next too; legacy is no longer built from this tree.
     'legacy': os.path.join(REPO, 'dist', 'cli.js'),
-    'next': os.path.join(REPO, 'dist', 'rewrite', 'src', 'app', 'cli.js'),
+    'next': os.path.join(REPO, 'dist', 'src', 'app', 'cli.js'),
 }
 # FULL=1 compares the whole transcript (scrollback and screen) instead of the menu region;
 # FULL=screen compares the whole visible screen without the scrollback.

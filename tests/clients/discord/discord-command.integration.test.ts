@@ -5,7 +5,7 @@ import path from 'node:path';
 import { createServer, type ServerResponse } from 'node:http';
 import { once } from 'node:events';
 import { spawn } from 'node:child_process';
-import { ControlSocketServer } from '../../../rewrite/src/clients/control-socket/control-socket.js';
+import { ControlSocketServer } from '../../../src/clients/control-socket/control-socket.js';
 import { WebSocketServer, type WebSocket } from 'ws';
 
 const cleanup: Array<() => void | Promise<void>> = [];
@@ -110,7 +110,7 @@ it.each(['push', 'off', 'blackhole-recovery', 'blackhole-stop'])(
       if (!String(url).startsWith('https://discord.com/api/v10/')) throw new Error('Unexpected REST endpoint');
       return nativeFetch('http://127.0.0.1:${restPort}/messages', options);
     };
-    const {runDiscordBridge} = await import('./rewrite/src/clients/discord/discord-command.ts');
+    const {runDiscordBridge} = await import('./src/clients/discord/discord-command.ts');
     await runDiscordBridge([${JSON.stringify(configFile)}]);
     process.send({returned: true});
     process.disconnect();

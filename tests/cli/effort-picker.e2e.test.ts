@@ -9,11 +9,11 @@ import {
   HARNESS_IDLE_ENV,
   waitForHarnessComposerValue,
   waitForHarnessIdleGeneration,
-} from '../../rewrite/src/shared/lib/harness-input-idle.js';
-import { resolveSettingsDirectory } from '../../rewrite/src/config/settings/settings-path.js';
+} from '../../src/shared/lib/harness-input-idle.js';
+import { resolveSettingsDirectory } from '../../src/config/settings/settings-path.js';
 
 const projectRoot = fileURLToPath(new URL('../..', import.meta.url));
-const builtCli = testCliPath(path.join(projectRoot, 'rewrite', 'dist', 'rewrite', 'src', 'app', 'cli.js'));
+const builtCli = testCliPath(path.join(projectRoot, 'dist', 'src', 'app', 'cli.js'));
 const TIMEOUT_MS = 120_000;
 
 let session: TerminalSession | null = null;

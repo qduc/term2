@@ -2,8 +2,8 @@
 // Behaviour parity harness: run the same scripted scenario against a term2 CLI build and compare
 // what can be observed from outside against a golden recorded from the current architecture.
 //
-//   node rewrite/parity/run.mjs record [--cli dist/cli.js] [scenario-id...]   write goldens
-//   node rewrite/parity/run.mjs check  [--cli <path>]      [scenario-id...]   compare to goldens
+//   node parity/run.mjs record [--cli dist/cli.js] [scenario-id...]   write goldens
+//   node parity/run.mjs check  [--cli <path>]      [scenario-id...]   compare to goldens
 //
 // Observables, all architecture-neutral:
 //   exitCode, stdout, stderr   what the user sees (paths, ids, timings and ANSI normalized away)
@@ -21,7 +21,7 @@ import { stripVTControlCharacters } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const repo = path.resolve(here, '..', '..');
+const repo = path.resolve(here, '..');
 const scenariosDir = path.join(here, 'scenarios');
 const goldensDir = path.join(here, 'goldens');
 const RUN_TIMEOUT_MS = 60_000;

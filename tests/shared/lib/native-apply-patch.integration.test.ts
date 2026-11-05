@@ -3,15 +3,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { ExecutionContext } from '../../../rewrite/src/tools/execution-context.js';
-import { ToolApprovalPolicyRegistry } from '../../../rewrite/src/session/approval/tool-approval-policy-registry.js';
-import { ApprovalLedger } from '../../../rewrite/src/engine/agent-runtime/tool-invocation-context.js';
-import { ToolCallExecution } from '../../../rewrite/src/engine/agent-runtime/tool-call-execution.js';
+import { ExecutionContext } from '../../../src/tools/execution-context.js';
+import { ToolApprovalPolicyRegistry } from '../../../src/session/approval/tool-approval-policy-registry.js';
+import { ApprovalLedger } from '../../../src/engine/agent-runtime/tool-invocation-context.js';
+import { ToolCallExecution } from '../../../src/engine/agent-runtime/tool-call-execution.js';
 import { createMockSettingsService } from '../../helpers/settings-service.mock.js';
-import { createApplyPatchToolDefinition } from '../../../rewrite/src/tools/file/apply-patch.js';
-import type { AnyToolDefinition } from '../../../rewrite/src/tools/types.js';
-import { buildAgentTools, type AgentFactoryDeps } from '../../../rewrite/src/app/lib/agent-factory.js';
-import { createEditorImpl } from '../../../rewrite/src/shared/lib/editor-impl.js';
+import { createApplyPatchToolDefinition } from '../../../src/tools/file/apply-patch.js';
+import type { AnyToolDefinition } from '../../../src/tools/types.js';
+import { buildAgentTools, type AgentFactoryDeps } from '../../../src/app/lib/agent-factory.js';
+import { createEditorImpl } from '../../../src/shared/lib/editor-impl.js';
 
 const logger = {
   info() {},

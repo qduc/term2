@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
-import { stageDiscordImages } from '../../../rewrite/src/clients/discord/discord-images.js';
+import { stageDiscordImages } from '../../../src/clients/discord/discord-images.js';
 
 const cleanup: Array<() => void | Promise<void>> = [];
 afterEach(async () => {

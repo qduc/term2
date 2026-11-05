@@ -4,26 +4,23 @@ import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import {
-  createShellToolDefinition,
-  type BackgroundShellExecutionResult,
-} from '../../../../rewrite/src/tools/system/shell.js';
-import { presentBareShell } from '../../../../rewrite/src/tools/system/bare-shell.js';
-import { createRunCodeToolDefinition } from '../../../../rewrite/src/tools/system/run-code/run-code.js';
-import { buildAgentTools, type AgentFactoryDeps } from '../../../../rewrite/src/app/lib/agent-factory.js';
-import { createEditorImpl } from '../../../../rewrite/src/shared/lib/editor-impl.js';
+import { createShellToolDefinition, type BackgroundShellExecutionResult } from '../../../../src/tools/system/shell.js';
+import { presentBareShell } from '../../../../src/tools/system/bare-shell.js';
+import { createRunCodeToolDefinition } from '../../../../src/tools/system/run-code/run-code.js';
+import { buildAgentTools, type AgentFactoryDeps } from '../../../../src/app/lib/agent-factory.js';
+import { createEditorImpl } from '../../../../src/shared/lib/editor-impl.js';
 import { createMockSettingsService } from '../../../helpers/settings-service.mock.js';
-import { ExecutionContext } from '../../../../rewrite/src/tools/execution-context.js';
+import { ExecutionContext } from '../../../../src/tools/execution-context.js';
 import {
   NestedApprovalOwner,
   type NestedApprovalSnapshot,
-} from '../../../../rewrite/src/session/approval/nested-approval-owner.js';
-import { ToolApprovalPolicyRegistry } from '../../../../rewrite/src/session/approval/tool-approval-policy-registry.js';
-import { SessionAccessState } from '../../../../rewrite/src/session/session/session-access-state.js';
-import { BackgroundShellRegistry } from '../../../../rewrite/src/tools/shell/background-shell-registry.js';
-import { PostExecutePauseCapability } from '../../../../rewrite/src/session/session/post-execute-pause-capability.js';
-import { PostExecutePendingRegistry } from '../../../../rewrite/src/session/session/post-execute-pending-registry.js';
-import type { ShellSandboxRunner } from '../../../../rewrite/src/shared/utils/shell/sandbox/sandbox-policy.js';
+} from '../../../../src/session/approval/nested-approval-owner.js';
+import { ToolApprovalPolicyRegistry } from '../../../../src/session/approval/tool-approval-policy-registry.js';
+import { SessionAccessState } from '../../../../src/session/session/session-access-state.js';
+import { BackgroundShellRegistry } from '../../../../src/tools/shell/background-shell-registry.js';
+import { PostExecutePauseCapability } from '../../../../src/session/session/post-execute-pause-capability.js';
+import { PostExecutePendingRegistry } from '../../../../src/session/session/post-execute-pending-registry.js';
+import type { ShellSandboxRunner } from '../../../../src/shared/utils/shell/sandbox/sandbox-policy.js';
 
 const logger = {
   info() {},

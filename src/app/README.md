@@ -184,7 +184,7 @@ contracts over Session's admitted nested requests and task controls:
   causes are preserved. An interruption with no supplied cause stays
   unclassified: the adapter must not invent a provider-continuation cause or
   imply an approval pause. Native task lifecycle remains Session-owned.
-- The source prompt builder in `rewrite/src/tools/subagents/role-loader.ts` omits
+- The source prompt builder in `src/tools/subagents/role-loader.ts` omits
   local memory guidance and context for remote execution. Those optional memory
   sections must not be dereferenced on the remote path.
 

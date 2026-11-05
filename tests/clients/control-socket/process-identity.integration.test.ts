@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { expect, it } from 'vitest';
-import { readProcStartTime } from '../../../rewrite/src/clients/control-socket/control-socket.js';
+import { readProcStartTime } from '../../../src/clients/control-socket/control-socket.js';
 
 it('reads the kernel identity of a live child and stops identifying it after exit', async () => {
   const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });

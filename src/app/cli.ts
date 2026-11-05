@@ -320,7 +320,7 @@ async function runInteractive(options: SessionOptions): Promise<number> {
     loggingServiceOptions: { sessionContextService: sessionContext },
   });
   const logger = settings.getLoggingService();
-  // The picker gate of rewrite/src/model/models/model-picker-host.tsx: TTY on both ends, no --json, no harness marker.
+  // The picker gate of src/model/models/model-picker-host.tsx: TTY on both ends, no --json, no harness marker.
   const pickerEligible = Boolean(stdin.isTTY && stdout.isTTY) && !options.output.json && !process.env[HARNESS_IDLE_ENV];
   const modelError = await applyModelOverrides(options, settings, logger, pickerEligible);
   if (modelError !== null) {

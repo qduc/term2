@@ -1,4 +1,4 @@
-"""Real-terminal soak items (rewrite/parity/real-terminal/report/soak-differences.md) not covered elsewhere."""
+"""Real-terminal soak items (parity/real-terminal/report/soak-differences.md) not covered elsewhere."""
 
 _LONG = ('please look through the whole repository and explain in detail how the menu stack decides which '
          'menu is active when several trigger rules match the same composer text at once')

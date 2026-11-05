@@ -6,7 +6,7 @@ import type { Readable } from 'node:stream';
 /**
  * The loopback half of an OAuth 2.0 + PKCE login, shared by every client that
  * completes a callback in the browser: the providers term2 logs in to (see
- * `rewrite/src/model/providers/oauth-pkce.ts`) and MCP servers that speak OAuth.
+ * `src/model/providers/oauth-pkce.ts`) and MCP servers that speak OAuth.
  *
  * Only the redirect mechanics live here — where to listen, how to recognize the
  * callback, and how to accept a pasted redirect from a remote host. Building the

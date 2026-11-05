@@ -5,7 +5,7 @@ import type { ModelInfo } from '../model-service.js';
  * Sentinel "provider id" for the pseudo-provider tab that shows favorited
  * models in the picker. Deliberately not a valid provider id shape: real
  * provider ids must match `PROVIDER_NAME_REGEX`
- * (`/^[a-zA-Z0-9][-a-zA-Z0-9_.]*$/` in rewrite/src/model/providers/provider-service.ts),
+ * (`/^[a-zA-Z0-9][-a-zA-Z0-9_.]*$/` in src/model/providers/provider-service.ts),
  * which requires the FIRST character to be a letter or digit — a leading
  * underscore is never legal — so this sentinel can never collide with a real
  * or custom provider id.
@@ -19,7 +19,7 @@ const FAVORITE_SEPARATOR = '/';
  *
  * Splitting on the FIRST '/' is the only unambiguous scheme: provider ids are
  * validated at creation time by `PROVIDER_NAME_REGEX`
- * (rewrite/src/model/providers/provider-service.ts), which allows only letters, numbers,
+ * (src/model/providers/provider-service.ts), which allows only letters, numbers,
  * hyphens, underscores, and dots — never '/'. A model id, by contrast, CAN
  * contain '/' (e.g. OpenRouter's `anthropic/claude-3.5-sonnet`). So "provider
  * id, then everything after the first separator" round-trips every real

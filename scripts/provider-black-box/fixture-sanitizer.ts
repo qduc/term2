@@ -1,4 +1,4 @@
-import { sanitizeHeaders } from '../../rewrite/src/shared/utils/header-sanitizer.js';
+import { sanitizeHeaders } from '../../src/shared/utils/header-sanitizer.js';
 import type { FixtureEnvelopeV1, FixtureFrame } from './fixture-envelope.js';
 
 export type SanitizationReport = {

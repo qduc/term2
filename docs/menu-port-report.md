@@ -1,14 +1,14 @@
 # Menu port report: legacy menus in term2-next
 
-The legacy menu stack and its menu sessions were copied into `rewrite/src/clients/tui/menus/`.
+The legacy menu stack and its menu sessions were copied into `src/clients/tui/menus/`.
 The stack is MenuStackHost, MenuSurface, menu-controller, menu-bindings and the trigger rules.
 The sessions are Model, Settings, SettingsValue, Resume, Rewind, Profile, Provider, Slash, Path, Skills, Copy, SubagentPool and MenuContainer.
-Only their data access was changed: it now goes through `TuiIntegration` (`clients/tui/integration.ts`), which `rewrite/src/app/launch-tui-menus.ts` implements.
+Only their data access was changed: it now goes through `TuiIntegration` (`clients/tui/integration.ts`), which `src/app/launch-tui-menus.ts` implements.
 The rewritten pickers were deleted: model, settings, effort, resume, rewind, and the picker host.
 
 ## How this was measured
 
-`rewrite/scripts/menu-compare/screen.py` runs both CLIs in a pty and captures the screen with pyte, keeping per-cell colour and attributes.
+`scripts/menu-compare/screen.py` runs both CLIs in a pty and captures the screen with pyte, keeping per-cell colour and attributes.
 The legacy CLI is `dist/cli.js` and term2-next is `rewrite/dist`.
 Each run gets:
 - a fresh scratch HOME and XDG tree;
@@ -16,10 +16,10 @@ Each run gets:
 - a fake OpenAI-compatible provider. It lists models and can play scripted replies and tool calls.
 
 ```sh
-pnpm install && pnpm build && node rewrite/scripts/build.mjs
-python3 rewrite/scripts/menu-compare/screen.py compare 100 34          # every scenario
-python3 rewrite/scripts/menu-compare/screen.py compare 80 24 settings  # named scenarios
-python3 rewrite/scripts/menu-compare/screen.py run next 100 34 model   # print one capture
+pnpm install && pnpm build && node scripts/build.mjs
+python3 scripts/menu-compare/screen.py compare 100 34          # every scenario
+python3 scripts/menu-compare/screen.py compare 80 24 settings  # named scenarios
+python3 scripts/menu-compare/screen.py run next 100 34 model   # print one capture
 ```
 
 **Speed.** A run is mostly waiting for the screen to settle (CLI boot, the quiet period after each step,
@@ -499,7 +499,7 @@ These six supervisor queue files were readable and were checked against the capt
 
 ### Real-terminal soak items
 
-The supervisor's real-terminal side-by-side check (`rewrite/parity/real-terminal/report/soak-differences.md`, branch `claude/ecstatic-tesla-86lzj4`) was measured on main, before this port. These are its menu items:
+The supervisor's real-terminal side-by-side check (`parity/real-terminal/report/soak-differences.md`, branch `claude/ecstatic-tesla-86lzj4`) was measured on main, before this port. These are its menu items:
 
 | Soak item | Covered by | Result |
 |---|---|---|

@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import fc from 'fast-check';
-import { ProviderContinuity } from '../../rewrite/src/session/provider-continuity.ts';
+import { ProviderContinuity } from '../../src/session/provider-continuity.ts';
 import {
   filterChainedModelInput,
   MissingChainedToolOutputError,
   OrphanedChainedToolOutputError,
-} from '../../rewrite/src/shared/lib/chained-input-filter.ts';
+} from '../../src/shared/lib/chained-input-filter.ts';
 
 const action = fc.record({
   count: fc.integer({ min: 1, max: 4 }),

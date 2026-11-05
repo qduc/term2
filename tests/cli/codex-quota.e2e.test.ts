@@ -5,14 +5,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnTerminal, testCliPath, createTestChildEnv } from '../helpers/terminal-e2e.js';
-import { resolveSettingsDirectory } from '../../rewrite/src/config/settings/settings-path.js';
+import { resolveSettingsDirectory } from '../../src/config/settings/settings-path.js';
 import {
   HARNESS_IDLE_ENV,
   waitForHarnessComposerValue,
   waitForHarnessIdleGeneration,
-} from '../../rewrite/src/shared/lib/harness-input-idle.js';
+} from '../../src/shared/lib/harness-input-idle.js';
 
-const cli = testCliPath(fileURLToPath(new URL('../../dist/rewrite/src/app/cli.js', import.meta.url)));
+const cli = testCliPath(fileURLToPath(new URL('../../dist/src/app/cli.js', import.meta.url)));
 
 it.each(['expiry', 'configuration', 'secondary'] as const)(
   'shows genuine Codex quota and clears it on %s',

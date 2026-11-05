@@ -5,7 +5,7 @@ import { createInterface } from 'node:readline';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { expect, it } from 'vitest';
-import { listControlAdvertisements } from '../rewrite/src/clients/control-socket/control-socket.js';
+import { listControlAdvertisements } from '../src/clients/control-socket/control-socket.js';
 import {
   HANG_BACKSTOP_MS,
   READINESS_TIMEOUT_MS,

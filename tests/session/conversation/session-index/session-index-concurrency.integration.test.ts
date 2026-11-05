@@ -5,14 +5,14 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createConversationLogWriter } from '../../../helpers/conversation-log-writer.js';
-import { setConversationsDirForTest } from '../../../../rewrite/src/session/conversation/conversation-persistence.js';
-import { SessionIndexDatabase } from '../../../../rewrite/src/session/conversation/session-index/session-index-database.js';
+import { setConversationsDirForTest } from '../../../../src/session/conversation/conversation-persistence.js';
+import { SessionIndexDatabase } from '../../../../src/session/conversation/session-index/session-index-database.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const databaseTsPath = path.join(
   __dirname,
-  '../../../../rewrite/src/session/conversation/session-index/session-index-database.ts',
+  '../../../../src/session/conversation/session-index/session-index-database.ts',
 );
 
 let dir = '';

@@ -5,7 +5,7 @@
 // injection. Written against the approved behaviour and the frozen interfaces, not against
 // any implementation.
 //
-//   node rewrite/scripts/build.mjs && node rewrite/bench/m1-direct.mjs
+//   node scripts/build.mjs && node bench/m1-direct.mjs
 //
 // A row is BLOCKED, not PASS, when it reaches a frozen stub that is still unimplemented, so an
 // unfinished CLI or session layer can never pass by accident. Exit 0 only when every row passes.
@@ -19,13 +19,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const dist = path.join(repo, 'dist/rewrite/src');
+const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const dist = path.join(repo, 'dist/src');
 const CLI = path.join(dist, 'app/cli.js');
 const STUB = 'the direct headless path is not implemented yet';
 
 if (!fs.existsSync(CLI)) {
-  console.error(`missing ${path.relative(repo, CLI)}; build first: node rewrite/scripts/build.mjs`);
+  console.error(`missing ${path.relative(repo, CLI)}; build first: node scripts/build.mjs`);
   process.exit(2);
 }
 
@@ -835,7 +835,7 @@ row('R11', 'directness: the real executable loads none of the forbidden modules'
     assert.equal(r.stdout, 'Hello there.\n');
     const loaded = fs.readFileSync(loadedLog, 'utf8').split('\n').filter(Boolean);
     assert.ok(
-      loaded.some((url) => url.endsWith('/dist/rewrite/src/app/cli.js')),
+      loaded.some((url) => url.endsWith('/dist/src/app/cli.js')),
       'the hook saw the entry point',
     );
     const forbidden =

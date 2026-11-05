@@ -4,16 +4,13 @@ import { once } from 'node:events';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import {
-  createListModelsToolDefinition,
-  modelDiscoveryResultSchema,
-} from '../../../rewrite/src/tools/agent/list-models.js';
-import { clearModelMemoryCacheForTest } from '../../../rewrite/src/model/model-service.js';
-import { SettingsService } from '../../../rewrite/src/config/settings/settings-service.js';
-import { SessionIndexService } from '../../../rewrite/src/session/conversation/session-index/session-index-service.js';
+import { createListModelsToolDefinition, modelDiscoveryResultSchema } from '../../../src/tools/agent/list-models.js';
+import { clearModelMemoryCacheForTest } from '../../../src/model/model-service.js';
+import { SettingsService } from '../../../src/config/settings/settings-service.js';
+import { SessionIndexService } from '../../../src/session/conversation/session-index/session-index-service.js';
 import { createConversationLogWriter } from '../../helpers/conversation-log-writer.js';
-import { registerProvider, unregisterProvider } from '../../../rewrite/src/model/providers/index.js';
-import type { ILoggingService } from '../../../rewrite/src/shared/service-interfaces.js';
+import { registerProvider, unregisterProvider } from '../../../src/model/providers/index.js';
+import type { ILoggingService } from '../../../src/shared/service-interfaces.js';
 
 const directories: string[] = [];
 const logger = {

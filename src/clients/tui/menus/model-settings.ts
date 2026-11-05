@@ -1,4 +1,4 @@
-/** Copied from rewrite/src/shared/utils/ai/model-settings.ts with SETTING_KEYS inlined. */
+/** Copied from src/shared/utils/ai/model-settings.ts with SETTING_KEYS inlined. */
 
 export type ModelSettingConfig = {
   modelKey: string;

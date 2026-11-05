@@ -5,8 +5,8 @@ import { createHash } from 'node:crypto';
 import { expect, it } from 'vitest';
 import { startFakeProviderHttpServer } from './fake-provider-http-server.js';
 import { startFakeCodexServer } from '../fake-codex-server-lib.js';
-import { FileMemoryStore } from '../../rewrite/src/tools/memory/memory-store.js';
-import { projectScopeKey } from '../../rewrite/src/shared/utils/project-scope.js';
+import { FileMemoryStore } from '../../src/tools/memory/memory-store.js';
+import { projectScopeKey } from '../../src/shared/utils/project-scope.js';
 import { createIsolatedWorkspaceLease, writePtyTextAndSubmit, type PtyChildDriver } from './provider-test-harness.js';
 
 // Actual built CLI + persisted sessions + exact provider frames. No backend cache simulation.

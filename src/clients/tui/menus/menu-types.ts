@@ -1,7 +1,7 @@
 import type { TriggerRuleRegistry } from './menu-controller.js';
 import type { SlashCommand } from './slash-command-types.js';
 
-/** Copied from rewrite/src/shared/utils/conversation/rewind-items.ts; the app builds it from wire rewind targets. */
+/** Copied from src/shared/utils/conversation/rewind-items.ts; the app builds it from wire rewind targets. */
 export interface RewindItem {
   targetId: string;
   uiIndex: number;

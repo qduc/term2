@@ -4,12 +4,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnTerminal, testCliPath, createTestChildEnv, type TerminalSession } from '../helpers/terminal-e2e.js';
-import { HARNESS_IDLE_ENV, waitForHarnessIdleGeneration } from '../../rewrite/src/shared/lib/harness-input-idle.js';
-import { resolveSettingsDirectory } from '../../rewrite/src/config/settings/settings-path.js';
+import { HARNESS_IDLE_ENV, waitForHarnessIdleGeneration } from '../../src/shared/lib/harness-input-idle.js';
+import { resolveSettingsDirectory } from '../../src/config/settings/settings-path.js';
 
 // Built direct CLI. An idle composer matches the old CLI: the first Ctrl+C asks,
 // the second within the confirm window exits 0, and an empty session prints no resume hint.
-const cli = testCliPath(fileURLToPath(new URL('../../dist/rewrite/src/app/cli.js', import.meta.url)));
+const cli = testCliPath(fileURLToPath(new URL('../../dist/src/app/cli.js', import.meta.url)));
 
 let session: TerminalSession | null = null;
 let root = '';

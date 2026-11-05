@@ -2,10 +2,10 @@ import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
-import { HookService } from '../../../rewrite/src/session/hooks/hook-service.js';
-import { HookRegistry } from '../../../rewrite/src/session/hooks/hook-registry.js';
-import { discoverHookFiles } from '../../../rewrite/src/session/hooks/hook-discovery.js';
-import type { Term2HookEvent } from '../../../rewrite/src/session/hooks/hook-contracts.js';
+import { HookService } from '../../../src/session/hooks/hook-service.js';
+import { HookRegistry } from '../../../src/session/hooks/hook-registry.js';
+import { discoverHookFiles } from '../../../src/session/hooks/hook-discovery.js';
+import type { Term2HookEvent } from '../../../src/session/hooks/hook-contracts.js';
 
 describe('Hook System Integration', () => {
   const testDir = join(tmpdir(), `term2-hooks-integration-${Date.now()}`);

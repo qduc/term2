@@ -291,7 +291,7 @@ export interface ISSHService {
   isConnected(): boolean;
   /**
    * Resolves with the remote result on terminal channel close. Rejects with a
-   * typed {@link SSHTransportError} (from `rewrite/src/tools/ssh-service.ts`) on
+   * typed {@link SSHTransportError} (from `src/tools/ssh-service.ts`) on
    * pre-dispatch failure (`'not_connected'`, pre-aborted `'aborted'`), exec
    * dispatch failure (`'exec_failed'`), transport drop while in flight
    * (`'connection_error'`, `'connection_end'`, `'connection_close'`,

@@ -38,16 +38,16 @@ async function runWorkerChild(
     join(
       repositoryRoot,
       kind === 'source'
-        ? 'rewrite/src/session/conversation/session-index/session-index-worker-client.ts'
-        : 'dist/rewrite/src/session/conversation/session-index/session-index-worker-client.js',
+        ? 'src/session/conversation/session-index/session-index-worker-client.ts'
+        : 'dist/src/session/conversation/session-index/session-index-worker-client.js',
     ),
   ).href;
   const hostModule = pathToFileURL(
     join(
       repositoryRoot,
       kind === 'source'
-        ? 'rewrite/src/tools/sandboxed-code-host/sandboxed-code-host.ts'
-        : 'dist/rewrite/src/tools/sandboxed-code-host/sandboxed-code-host.js',
+        ? 'src/tools/sandboxed-code-host/sandboxed-code-host.ts'
+        : 'dist/src/tools/sandboxed-code-host/sandboxed-code-host.js',
     ),
   ).href;
   const workerImport =
@@ -251,16 +251,16 @@ it('starts a real source worker from an actual child module after cwd deletion',
 
 it('starts a real built worker from an actual child module after cwd deletion', async () => {
   const sourcePaths = [
-    join(repositoryRoot, 'rewrite/src/tools/sandboxed-code-host/sandbox.ts'),
-    join(repositoryRoot, 'rewrite/src/shared/utils/worker-bootstrap.ts'),
-    join(repositoryRoot, 'rewrite/src/shared/utils/worker-cwd-preload.cts'),
-    join(repositoryRoot, 'rewrite/src/session/conversation/session-index/session-index-worker-client.ts'),
+    join(repositoryRoot, 'src/tools/sandboxed-code-host/sandbox.ts'),
+    join(repositoryRoot, 'src/shared/utils/worker-bootstrap.ts'),
+    join(repositoryRoot, 'src/shared/utils/worker-cwd-preload.cts'),
+    join(repositoryRoot, 'src/session/conversation/session-index/session-index-worker-client.ts'),
   ];
   const builtPaths = [
-    join(repositoryRoot, 'dist/rewrite/src/tools/sandboxed-code-host/sandboxed-code-host.js'),
-    join(repositoryRoot, 'dist/rewrite/src/shared/utils/worker-bootstrap.js'),
-    join(repositoryRoot, 'dist/rewrite/src/shared/utils/worker-cwd-preload.cjs'),
-    join(repositoryRoot, 'dist/rewrite/src/session/conversation/session-index/session-index-worker-client.js'),
+    join(repositoryRoot, 'dist/src/tools/sandboxed-code-host/sandboxed-code-host.js'),
+    join(repositoryRoot, 'dist/src/shared/utils/worker-bootstrap.js'),
+    join(repositoryRoot, 'dist/src/shared/utils/worker-cwd-preload.cjs'),
+    join(repositoryRoot, 'dist/src/session/conversation/session-index/session-index-worker-client.js'),
   ];
   const [sourceStats, builtStats] = await Promise.all([
     Promise.all(sourcePaths.map((sourcePath) => stat(sourcePath))),

@@ -144,7 +144,7 @@ const CONTROL_COMMANDS = new Set(['list', 'status', 'get', 'submit', 'steer', 'i
 export const CONTROL_USAGE =
   'Usage: term2 control list [--status] | status <name> [--json] | get <name> <topic> [--json] | submit|steer <name> --id <id> | interrupt <name> | wait-turn <name> --message-id <id>\n';
 
-// Copied from rewrite/src/clients/discord/discord-command.ts, whose module pulls in the old bridge runtime.
+// Copied from src/clients/discord/discord-command.ts, whose module pulls in the old bridge runtime.
 export const DISCORD_HELP = `Discord bridge (candidate) — attach existing opted-in terminal sessions.
 
 Usage:

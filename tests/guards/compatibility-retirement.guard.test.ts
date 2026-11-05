@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-const productionRoot = path.resolve(import.meta.dirname, '../../rewrite/src');
+const productionRoot = path.resolve(import.meta.dirname, '../../src');
 const forbidden = [
   ['create', 'Runner'].join(''),
   ['Runner', 'Manager'].join(''),

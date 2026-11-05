@@ -6,7 +6,7 @@ import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import Database from 'better-sqlite3';
-import { resolveSettingsDirectory } from '../../rewrite/src/config/settings/settings-path.js';
+import { resolveSettingsDirectory } from '../../src/config/settings/settings-path.js';
 import { createTestChildEnv } from '../helpers/terminal-e2e.js';
 
 import { writeMockCliSettings } from '../helpers/mock-cli-settings.js';

@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const scripts = path.dirname(fileURLToPath(import.meta.url));
-const repo = path.resolve(scripts, '../..');
+const repo = path.resolve(scripts, '..');
 const budget = JSON.parse(fs.readFileSync(path.join(scripts, 'complexity-budget.json'), 'utf8'));
 const edges = JSON.parse(fs.readFileSync(path.join(scripts, 'layer-allowlist.json'), 'utf8'));
 
@@ -28,7 +28,7 @@ const walk = (dir) => {
     else if (/\.tsx?$/.test(entry.name)) files.push(full);
   }
 };
-walk(path.join(repo, 'rewrite/src'));
+walk(path.join(repo, 'src'));
 
 // The line limit is a prompt to look for a second job, not a target: a file that
 // reads better whole keeps a ceiling, with the reason written next to it.
@@ -54,7 +54,7 @@ for (const full of files.sort()) {
 for (const file of Object.keys(budget.fileCeilings))
   if (!fs.existsSync(path.join(repo, file))) hints.push(`remove the ceiling for missing ${file}`);
 
-for (const hint of hints) console.log(`under budget: ${hint} in rewrite/scripts/complexity-budget.json`);
+for (const hint of hints) console.log(`under budget: ${hint} in scripts/complexity-budget.json`);
 if (problems.length) {
   console.error(problems.join('\n'));
   process.exit(1);

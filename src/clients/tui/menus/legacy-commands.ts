@@ -1,6 +1,6 @@
 /**
  * Legacy's slash command list (source/hooks/use-app-commands.ts and
- * rewrite/src/clients/commands/*), in its order and with its names, descriptions,
+ * src/clients/commands/*), in its order and with its names, descriptions,
  * `expectsArgs` and menu completions. Commands dropped by owner scope (plan,
  * mentor, orchestrator, sandbox, mcp, mcp-login) are left out. Actions run the
  * typed command through the session, so behaviour stays with its native owner;

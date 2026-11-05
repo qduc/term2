@@ -6,7 +6,7 @@ import {
   compiledIdentifier,
   patchCompiledModule as patchFixtureModule,
 } from '../tests/helpers/patch-compiled-module.js';
-import { listControlAdvertisements } from '../rewrite/src/clients/control-socket/control-socket.js';
+import { listControlAdvertisements } from '../src/clients/control-socket/control-socket.js';
 import {
   HANG_BACKSTOP_MS,
   READINESS_TIMEOUT_MS,
@@ -19,7 +19,7 @@ function restartEntry(root: string): string {
   return join(
     root,
     'direct-dist',
-    relative(resolve('dist'), resolve(process.env.TERM2_TEST_CLI ?? 'dist/rewrite/src/app/cli.js')),
+    relative(resolve('dist'), resolve(process.env.TERM2_TEST_CLI ?? 'dist/src/app/cli.js')),
   );
 }
 
@@ -142,7 +142,7 @@ export default function register(term2) { for (const type of ['session.start', '
       // The old process already imported A; only a fresh core can show B.
       // Change a real command diagnostic that /help reaches, after the running process has imported it.
       await patchFixtureModule(
-        join(workspace.root, 'direct-dist/rewrite/src/clients/tui/menus/legacy-commands.js'),
+        join(workspace.root, 'direct-dist/src/clients/tui/menus/legacy-commands.js'),
         'Exit the application',
         'Changed compiled core B',
       );
@@ -275,7 +275,7 @@ it.each(['runner', 'missing-entry', 'cleanup', 'lock', 'writer-close', 'native-e
         );
         const cli = restartEntry(root);
         // The same faults at next's own seams: exit observer, session shutdown, writer lock.
-        const tui = join(root, 'direct-dist/rewrite/src/app/launch-tui.js');
+        const tui = join(root, 'direct-dist/src/app/launch-tui.js');
         const pending = await compiledIdentifier(tui, 'pending');
         await patchFixtureModule(
           cli,
@@ -305,7 +305,7 @@ it.each(['runner', 'missing-entry', 'cleanup', 'lock', 'writer-close', 'native-e
           );
         if (fault === 'native-exec')
           await patchFixtureModule(
-            join(root, 'direct-dist/rewrite/src/app/launch-tui-restart.js'),
+            join(root, 'direct-dist/src/app/launch-tui-restart.js'),
             'process.execve?.(process.execPath,',
             `process.execve?.(${JSON.stringify(join(root, 'missing-node'))},`,
           );

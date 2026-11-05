@@ -1,7 +1,7 @@
 # term2-next (rewrite)
 
 This folder holds term2-next, which is term2: its production entry is
-`src/app/cli.ts`, built by `pnpm build` to `dist/rewrite/src/app/cli.js` and
+`src/app/cli.ts`, built by `pnpm build` to `dist/src/app/cli.js` and
 started by the package's `dist/cli.js` (#86). All production code lives in
 `src/`: legacy code the CLI no longer reached was deleted (#88) and the rest of
 the old `source/` tree was moved into these layers (#87). Tests live in the
@@ -56,7 +56,7 @@ prints listed edges that no longer exist so the list only shrinks.
 ## Rule checks
 
 Every rule above and every claim below has a check, or it is not a rule. Each check was shown failing on a
-seeded violation (`bash rewrite/scripts/prove-checks.sh` redoes that in about a minute). Per-commit checks are
+seeded violation (`bash scripts/prove-checks.sh` redoes that in about a minute). Per-commit checks are
 static and need no build; the heavy ones run per candidate and report, they do not gate commits. Times are
 wall-clock on a loaded 7-core box.
 
@@ -79,7 +79,7 @@ A check that has a false positive or flakes is fixed or deleted the same day; ne
 
 ## Shared JSON transport contract
 
-`rewrite/src/shared/utils/json-value.ts` owns `JsonValue` and `isJsonValue` for workflow,
+`src/shared/utils/json-value.ts` owns `JsonValue` and `isJsonValue` for workflow,
 sandbox-host and scripted tool-return consumers. The type and validator are
 transport primitives, not workflow policy: importing the workflow domain from
 these tool leaves inverted ownership. Workflow and host type modules retain
@@ -183,7 +183,7 @@ The CLI is `node dist/cli.js ["<prompt>"]` (the `term2` bin), with no fallback
 to the old engine. It stores native conversation logs in its own directory
 (`conversations-next`) and does not read old conversations; the offline
 `scripts/migrate-conversations.mjs` copies v3 conversations into native logs.
-`rewrite/bench/m1-direct.mjs` covers the headless path.
+`bench/m1-direct.mjs` covers the headless path.
 
 For direct HTTP session configuration, the BFF's `session_update` assertion binds
 only `sessionId`, not `workspaceId`; session lookup is separate, and the gateway
@@ -191,24 +191,24 @@ authorizes the session owner. An empty `{}` POST is read-only discovery, not a
 keyed mutation. Discovery does not activate the v2 hydration or mutation gates.
 
 ```sh
-node rewrite/parity/run.mjs check --cli dist/cli.js          # the built CLI against the goldens
-TERM2_TEST_CLI=dist/rewrite/src/app/cli.js pnpm test:integration   # CLI-level suite, as the CI lanes run it
+node parity/run.mjs check --cli dist/cli.js          # the built CLI against the goldens
+TERM2_TEST_CLI=dist/src/app/cli.js pnpm test:integration   # CLI-level suite, as the CI lanes run it
 ```
 
 ## Checks
 
 These use the root project's TypeScript options and dependencies, so run
 `pnpm install` at the repository root first. The build keeps repository-relative
-paths beneath `dist/` (`dist/rewrite/src/...`).
+paths beneath `dist/` (`dist/src/...`).
 
 ```sh
-pnpm exec tsc -p rewrite/tsconfig.json                 # production typecheck
-node rewrite/scripts/check-layers.mjs                  # production dependency direction
-node rewrite/scripts/check-reachability.mjs            # every src file is reached from app/cli.ts
-node rewrite/scripts/check-complexity.mjs              # size budgets only shrink
-node --import tsx rewrite/bench/hops.mts               # one message's path stays short
-node rewrite/scripts/build.mjs                         # production build
-node rewrite/bench/m1-direct.mjs                       # headless behaviour against the built CLI
+pnpm exec tsc -p tsconfig.build.json --noEmit         # production typecheck
+node scripts/check-layers.mjs                  # production dependency direction
+node scripts/check-reachability.mjs            # every src file is reached from app/cli.ts
+node scripts/check-complexity.mjs              # size budgets only shrink
+node --import tsx bench/hops.mts               # one message's path stays short
+node scripts/build.mjs                         # production build
+node bench/m1-direct.mjs                       # headless behaviour against the built CLI
 ```
 
 A profile-dependent probe needs an explicit profile rather than the
@@ -218,10 +218,10 @@ interaction the probe waits for. Isolate the probe's settings directory too:
 `disableFilePersistence` disables writes, not loading existing settings.
 
 The build script emits the TypeScript tree and copies the runtime assets just as
-the root build does: prompts come from `rewrite/src/session/prompts/` and provider presets
-from `rewrite/src/model/providers/provider-presets.json`.
+the root build does: prompts come from `src/session/prompts/` and provider presets
+from `src/model/providers/provider-presets.json`.
 The production build config also explicitly includes
-`rewrite/src/shared/utils/worker-cwd-preload.cts`. `workerBootstrapExecArgv` locates its
+`src/shared/utils/worker-cwd-preload.cts`. `workerBootstrapExecArgv` locates its
 emitted `.cjs` through a URL, not a static import, so transitive compilation
 alone misses it. Without that entry, built `run_code` workers fail at startup
 before executing any tool, even though the CLI and provider turn can complete.
@@ -258,7 +258,7 @@ behaves as it does today.
   `/sandbox` command and the tool surface's `allowUnsandboxed` posture
   (`app/tool-surface.ts`) remain, and `term2 serve` and `term2 acp` warn when
   the sandbox is unavailable. A real return needs shell policy in
-  `rewrite/src/shared/utils/shell/sandbox/`, approval rules and the sandboxed code-host
+  `src/shared/utils/shell/sandbox/`, approval rules and the sandboxed code-host
   lifecycle together. Shared settings remain.
 - **Web server/browser and canonical v2 wire — deferred, not dropped.** Retain
   candidate server/browser code, branches and the vendored wire artifact; gates
@@ -275,8 +275,8 @@ behaves as it does today.
 The traced direct control/Discord runtime uses the in-process host and direct
 protocol plus the `clients/control-socket/` and `clients/discord/` modules,
 not the HTTP server or ACP backend. The CLI
-still statically imports `rewrite/src/host/gateway/serve-args.ts` and
-`rewrite/src/clients/acp-v2/serve-args.ts`; preserve those modules while the imports exist.
+still statically imports `src/host/gateway/serve-args.ts` and
+`src/clients/acp-v2/serve-args.ts`; preserve those modules while the imports exist.
 No live SSH fixture was identified in that trace.
 
 ## Build receipts

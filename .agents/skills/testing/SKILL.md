@@ -173,7 +173,7 @@ branches; do not infer that remote source `42724797` has those capabilities.
 
 ## Prompt and instruction changes
 
-Prompt text under `rewrite/src/session/prompts/` is product behavior. When trimming a prompt, show
+Prompt text under `src/session/prompts/` is product behavior. When trimming a prompt, show
 that its non-obvious content survives. For example, run the assembled prompt for the
 affected model and confirm the text is present, or run a non-interactive turn that
 depends on it.

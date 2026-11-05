@@ -1,4 +1,4 @@
-import { SettingsService } from '../../rewrite/src/config/settings/settings-service.js';
+import { SettingsService } from '../../src/config/settings/settings-service.js';
 import { tmpdir } from 'os';
 import { join } from 'path';
 

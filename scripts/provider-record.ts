@@ -10,7 +10,7 @@ import { fixtureRequest } from './provider-black-box/provider-wire-fixtures.js';
 import { createFixtureRecorder, createRecordingMiddleware } from './provider-black-box/fixture-recorder.js';
 import type { FixtureTransport } from './provider-black-box/fixture-envelope.js';
 import type { FakeProviderScenario } from './provider-black-box/fake-provider-http-server.js';
-import { selectOpencodeModelTransport } from '../rewrite/src/model/providers/opencode-routing.js';
+import { selectOpencodeModelTransport } from '../src/model/providers/opencode-routing.js';
 
 const require = createRequire(import.meta.url);
 
@@ -108,8 +108,8 @@ async function runLiveRecording(
   if (process.env.TERM2_RECORDING_TRANSPORT === 'websocket')
     fail('WebSocket live recording requires the ResponsesWS adapter; use HTTP recording for this pilot.');
   const { getProbeScenario } = await import('./provider-black-box/probe-scenarios.js');
-  const { getProvider, upsertProvider } = await import('../rewrite/src/model/providers/registry.js');
-  await import('../rewrite/src/model/providers/index.js');
+  const { getProvider, upsertProvider } = await import('../src/model/providers/registry.js');
+  await import('../src/model/providers/index.js');
   const scenarioDefinition = getProbeScenario(probeId);
   const nativeFetch = globalThis.fetch;
   const recorder = createFixtureRecorder({
@@ -143,7 +143,7 @@ async function runLiveRecording(
     const runtimeConfig = runtimeProviderConfig(providerId);
     if (!getProvider(providerId) && runtimeConfig) {
       const { createOpenAICompatibleProviderDefinition } = await import(
-        '../rewrite/src/model/providers/openai-compatible.provider.js'
+        '../src/model/providers/openai-compatible.provider.js'
       );
       upsertProvider(createOpenAICompatibleProviderDefinition(runtimeConfig));
     }

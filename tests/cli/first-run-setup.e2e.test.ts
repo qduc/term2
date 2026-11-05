@@ -9,8 +9,8 @@ import {
   HARNESS_IDLE_ENV,
   waitForHarnessComposerValue,
   waitForHarnessIdleGeneration,
-} from '../../rewrite/src/shared/lib/harness-input-idle.js';
-import { resolveSettingsDirectory } from '../../rewrite/src/config/settings/settings-path.js';
+} from '../../src/shared/lib/harness-input-idle.js';
+import { resolveSettingsDirectory } from '../../src/config/settings/settings-path.js';
 
 // Drive the actual first-run wizard and its menu/editor boundary, not mocked
 // hooks. Every child starts under env -i and can discover only our loopback URL.

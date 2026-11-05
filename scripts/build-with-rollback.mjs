@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { buildWithRollback } from './build-output.mjs';
 
 /**
- * `pnpm build` entry point: runs rewrite/scripts/build.mjs (term2 into dist/)
+ * `pnpm build` entry point: runs scripts/build.mjs (term2 into dist/)
  * and keeps the previous `dist/` recoverable at `dist.bak/`; see
  * scripts/build-output.mjs for the behavior.
  *
@@ -31,7 +31,7 @@ const exitCode = await buildWithRollback({
   distDir: fileURLToPath(new URL('../dist/', import.meta.url)),
   backupDir: fileURLToPath(new URL('../dist.bak/', import.meta.url)),
   backup: process.env.SKIP_BUILD_BACKUP !== '1',
-  steps: [run(process.execPath, ['rewrite/scripts/build.mjs'])],
+  steps: [run(process.execPath, ['scripts/build.mjs'])],
   log: (message) => console.log(message),
 });
 

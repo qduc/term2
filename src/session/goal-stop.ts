@@ -126,7 +126,7 @@ const LEGACY_PROBLEM_TEXT: Readonly<Record<string, string>> = {
   [NO_RECORDED_RESULT]: 'it was not recorded: the call was denied, rejected, or failed',
 };
 
-/** Legacy's reminder, byte for byte (rewrite/src/session/conversation/durable-goal-stop-check.ts reminderText). */
+/** Legacy's reminder, byte for byte (src/session/conversation/durable-goal-stop-check.ts reminderText). */
 function legacyReminderText(
   reason: 'missing_check' | 'incomplete_check' | 'not_achieved',
   detail: string,

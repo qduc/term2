@@ -32,6 +32,6 @@ if (build !== 0) process.exit(build);
 const tests = await run(
   'pnpm',
   ['exec', 'vitest', 'run', '--config', 'vitest.provider-black-box.config.ts', '--reporter=verbose', '--bail=1'],
-  { ...process.env, TERM2_TEST_CLI: resolve('dist/rewrite/src/app/cli.js') },
+  { ...process.env, TERM2_TEST_CLI: resolve('dist/src/app/cli.js') },
 );
 process.exit(tests);

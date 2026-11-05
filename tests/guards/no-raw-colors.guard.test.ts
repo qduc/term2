@@ -14,11 +14,11 @@ import path from 'node:path';
  *  - a removed `COLOR_*` / `TOOL_STATUS_COLOR` / `MODE_BADGE_*` constant: a static
  *    colour that bypasses the active theme entirely.
  *
- * Palettes themselves live in `rewrite/src/clients/theme/`, which is the one place hex
+ * Palettes themselves live in `src/clients/theme/`, which is the one place hex
  * literals belong.
  */
 
-const sourceRoot = path.resolve(import.meta.dirname, '../../rewrite/src');
+const sourceRoot = path.resolve(import.meta.dirname, '../../src');
 // The TUI keeps a ported copy of the palettes beside its presentation components.
 const themeDirectories = new Set(
   ['clients/theme', 'clients/tui/presentation/theme'].map((dir) => path.join(sourceRoot, dir)),

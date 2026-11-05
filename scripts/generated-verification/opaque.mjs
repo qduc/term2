@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import fc from 'fast-check';
-import { OpenAIResponsesModelWithPromptCacheKey } from '../../rewrite/src/model/providers/openai-responses-model.ts';
-import { OpenAIChatCompletionsModel } from '../../rewrite/src/model/providers/openai-chat-completions-model.ts';
-import { toCodexResponsesInput } from '../../rewrite/src/model/providers/codex-turn-converter.ts';
+import { OpenAIResponsesModelWithPromptCacheKey } from '../../src/model/providers/openai-responses-model.ts';
+import { OpenAIChatCompletionsModel } from '../../src/model/providers/openai-chat-completions-model.ts';
+import { toCodexResponsesInput } from '../../src/model/providers/codex-turn-converter.ts';
 
 const entry = fc.record({
   lane: fc.constantFrom('openai', 'grok', 'chat-a', 'chat-b', 'openai-compatible'),

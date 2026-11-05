@@ -117,7 +117,7 @@ export function itemToInput(item: Item): StreamedModelTurnInput {
   }
 }
 
-/** The opening of legacy's compaction checkpoint wrapper (rewrite/src/session/prompts/context-compaction.ts). */
+/** The opening of legacy's compaction checkpoint wrapper (src/session/prompts/context-compaction.ts). */
 const COMPACTION_CHECKPOINT_PREFIX = '[Compacted Conversation Context';
 
 export function outputToItem(

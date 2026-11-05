@@ -19,8 +19,8 @@ const require = createRequire(import.meta.url);
  * The loader is injectable so the fallback rule is testable without a build.
  */
 export const resolveDisplayVersion = (load: (specifier: string) => unknown = require): string => {
-  // The build (dist/rewrite/src/...) and the source tree place this module at different depths.
-  for (const specifier of ['../../../../../build-info.json', '../../../../../dist/build-info.json']) {
+  // The build (dist/src/...) and the source tree place this module at different depths.
+  for (const specifier of ['../../../../build-info.json', '../../../../dist/build-info.json']) {
     try {
       const buildInfo = load(specifier) as { version?: string };
       if (buildInfo.version) return buildInfo.version;
@@ -29,7 +29,7 @@ export const resolveDisplayVersion = (load: (specifier: string) => unknown = req
     }
   }
   // The build emits this file below dist/, one level deeper than the source tree.
-  for (const specifier of ['../../../../../package.json', '../../../../../../package.json']) {
+  for (const specifier of ['../../../../package.json', '../../../../../package.json']) {
     try {
       const manifest = load(specifier) as { version?: string };
       if (manifest.version) return manifest.version;

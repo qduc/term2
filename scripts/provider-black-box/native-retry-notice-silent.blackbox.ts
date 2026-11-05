@@ -51,7 +51,7 @@ it.skipIf(process.platform !== 'linux')('replays a silent background turn notice
   });
   const child = await lease.start({
     command: process.execPath,
-    args: [join(process.cwd(), 'dist/rewrite/src/app/cli.js'), '--lite'],
+    args: [join(process.cwd(), 'dist/src/app/cli.js'), '--lite'],
     env: {
       PATH: `${join(lease.root, 'bin')}:${process.env.PATH ?? ''}`,
       CLIPBOARD_FIXTURE: join(lease.root, 'clipboard.png'),

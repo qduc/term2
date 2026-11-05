@@ -1,4 +1,4 @@
-/** Copied from rewrite/src/shared/slash-commands.ts. */
+/** Copied from src/shared/slash-commands.ts. */
 export type SlashCommandCompletion =
   | { type: 'model'; trigger: string }
   | { type: 'settings'; trigger: string; resetTrigger: string }

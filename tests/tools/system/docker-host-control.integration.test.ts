@@ -1,17 +1,17 @@
 import { spawnSync } from 'node:child_process';
 import { expect, it } from 'vitest';
 import { createMockSettingsService } from '../../helpers/settings-service.mock.js';
-import type { ILoggingService } from '../../../rewrite/src/shared/service-interfaces.js';
+import type { ILoggingService } from '../../../src/shared/service-interfaces.js';
 import {
   grantDockerHostControl,
   resetDockerHostControlGrantsForTests,
-} from '../../../rewrite/src/shared/utils/shell/sandbox/docker-host-control-grants.js';
+} from '../../../src/shared/utils/shell/sandbox/docker-host-control-grants.js';
 import {
   createDockerHostControl,
   DOCKER_HOST_CONTROL_RETRY_INSTRUCTION,
-} from '../../../rewrite/src/shared/utils/shell/sandbox/docker-host-control.js';
-import { getDefaultShellSandboxRunner } from '../../../rewrite/src/shared/utils/shell/sandbox/shell-sandbox-runner.js';
-import { createShellToolDefinition } from '../../../rewrite/src/tools/system/shell.js';
+} from '../../../src/shared/utils/shell/sandbox/docker-host-control.js';
+import { getDefaultShellSandboxRunner } from '../../../src/shared/utils/shell/sandbox/shell-sandbox-runner.js';
+import { createShellToolDefinition } from '../../../src/tools/system/shell.js';
 
 const createNoopLogger = (): ILoggingService => ({
   info: () => {},

@@ -1,12 +1,12 @@
 {
-  "rewrite/src/model/providers/model-catalog/generate-catalog.ts": "Dev tool: scripts/update-model-catalog.ts (pnpm catalog:update) regenerates catalog.generated.ts with it.",
-  "rewrite/src/protocol/index.ts": "Layer map: the README's fresh-reader check reads each layer's index.ts. Production imports the layer's files directly, so nothing imports this index.",
-  "rewrite/src/session/adopted/conversation-log.ts": "The offline v3 conversation migration (scripts/conversation-migration/v3-input.mjs) imports validateSessionFact from its emitted module; production no longer writes adopted facts.",
-  "rewrite/src/session/adopted/network.ts": "Network facts validated by session/adopted/conversation-log.ts for the v3 migration.",
-  "rewrite/src/session/hooks/index.ts": "Public type surface of the package export ./hooks (package.json exports); hook authors import it, the CLI does not.",
-  "rewrite/src/session/import.ts": "Offline v3 conversation migration (scripts/conversation-migration/migration-command.mjs) imports its emitted module; no CLI command reaches it.",
-  "rewrite/src/session/index.ts": "Layer map: the README's fresh-reader check reads each layer's index.ts. Production imports the layer's files directly, so nothing imports this index.",
-  "rewrite/src/shared/gateway/interaction-protocol.ts": "Reached only from session/adopted/, the offline v3 conversation migration listed above.",
-  "rewrite/src/shared/utils/shell/sandbox/sandbox-network-validation.ts": "Reached only from session/adopted/network.ts, the offline v3 conversation migration listed above.",
-  "rewrite/src/shared/utils/worker-cwd-preload.cts": "Loaded by path, not imported: shared/utils/worker-bootstrap.ts passes it to workers with --require."
+  "src/model/providers/model-catalog/generate-catalog.ts": "Dev tool: scripts/update-model-catalog.ts (pnpm catalog:update) regenerates catalog.generated.ts with it.",
+  "src/protocol/index.ts": "Layer map: the README's fresh-reader check reads each layer's index.ts. Production imports the layer's files directly, so nothing imports this index.",
+  "src/session/adopted/conversation-log.ts": "The offline v3 conversation migration (scripts/conversation-migration/v3-input.mjs) imports validateSessionFact from its emitted module; production no longer writes adopted facts.",
+  "src/session/adopted/network.ts": "Network facts validated by session/adopted/conversation-log.ts for the v3 migration.",
+  "src/session/hooks/index.ts": "Public type surface of the package export ./hooks (package.json exports); hook authors import it, the CLI does not.",
+  "src/session/import.ts": "Offline v3 conversation migration (scripts/conversation-migration/migration-command.mjs) imports its emitted module; no CLI command reaches it.",
+  "src/session/index.ts": "Layer map: the README's fresh-reader check reads each layer's index.ts. Production imports the layer's files directly, so nothing imports this index.",
+  "src/shared/gateway/interaction-protocol.ts": "Reached only from session/adopted/, the offline v3 conversation migration listed above.",
+  "src/shared/utils/shell/sandbox/sandbox-network-validation.ts": "Reached only from session/adopted/network.ts, the offline v3 conversation migration listed above.",
+  "src/shared/utils/worker-cwd-preload.cts": "Loaded by path, not imported: shared/utils/worker-bootstrap.ts passes it to workers with --require."
 }

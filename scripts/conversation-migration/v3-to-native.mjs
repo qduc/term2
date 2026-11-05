@@ -1,10 +1,10 @@
 import { isDeepStrictEqual } from 'node:util';
-import { normalizeApplicationInput } from '../../dist/rewrite/src/engine/agent-runtime/application-run-loop.js';
-import { getProfileMetadata } from '../../dist/rewrite/src/config/profiles/active-profile.js';
-import { profileIdFromLegacyMode } from '../../dist/rewrite/src/shared/profiles/legacy-adapter.js';
-import { itemToInput } from '../../dist/rewrite/src/model/provider-items.js';
-import { validateFact } from '../../dist/rewrite/src/session/log-facts.js';
-import { replay } from '../../dist/rewrite/src/session/replay.js';
+import { normalizeApplicationInput } from '../../dist/src/engine/agent-runtime/application-run-loop.js';
+import { getProfileMetadata } from '../../dist/src/config/profiles/active-profile.js';
+import { profileIdFromLegacyMode } from '../../dist/src/shared/profiles/legacy-adapter.js';
+import { itemToInput } from '../../dist/src/model/provider-items.js';
+import { validateFact } from '../../dist/src/session/log-facts.js';
+import { replay } from '../../dist/src/session/replay.js';
 
 const uuid = /^(?:conv_)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 const efforts = new Set(['none', 'minimal', 'low', 'medium', 'high', 'xhigh']);

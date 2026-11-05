@@ -24,9 +24,9 @@ Keep policy in the policy modules:
 
 | Concern | Owner |
 | --- | --- |
-| Approval decisions | `rewrite/src/session/approval/` |
-| Retry classification, recovery decisions | `rewrite/src/engine/retry/` |
-| Provider transport details | `rewrite/src/model/providers/` |
+| Approval decisions | `src/session/approval/` |
+| Retry classification, recovery decisions | `src/engine/retry/` |
+| Provider transport details | `src/model/providers/` |
 
 Do not add a new `Runner`, `Driver`, `Coordinator`, `Manager`, or `Handler` just to shorten a file. Add a module only when it owns a stable concept, hides real decisions, or has more than one meaningful caller.
 
@@ -49,5 +49,5 @@ These are not derivable from reading the code:
 - `subagent-manager.ts` is a **compatibility facade**. It emits top-level lifecycle events and delegates through the composition root in `runtime.ts`. Do not add execution, prompt, cache, or tool-policy logic back to it. Strategy-specific execution belongs in `mentor-runner.ts` (persistent mentor history, provider continuity), `execution-runner.ts` (one-shot explorer/worker/librarian), or `nested-runner.ts` (cached `Agent.asTool()` instances, approval interruption/resume).
 - Role frontmatter, prompt selection, environment context, and tool guidance belong in `role-loader.ts`. Capability construction and write/shell safety policy belong in `tool-policy.ts`. Wiring and the nested role-tool cache stay in `runtime.ts`.
 - New providers must be registered through the provider registry.
-- New tools must be registered in `rewrite/src/app/agent.ts`; the tool surface (`rewrite/src/app/tool-surface.ts`) builds them from there.
-- `rewrite/src/app/application.ts` is the composition root; `rewrite/src/session/session/session-composition.ts` composes the subagent session path.
+- New tools must be registered in `src/app/agent.ts`; the tool surface (`src/app/tool-surface.ts`) builds them from there.
+- `src/app/application.ts` is the composition root; `src/session/session/session-composition.ts` composes the subagent session path.

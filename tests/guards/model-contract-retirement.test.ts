@@ -22,7 +22,7 @@ async function productionTypeScriptFiles(directory: string): Promise<string[]> {
 }
 
 it('keeps production code off the retired model contract', async () => {
-  const sourceRoot = join(process.cwd(), 'rewrite/src');
+  const sourceRoot = join(process.cwd(), 'src');
   const files = (await productionTypeScriptFiles(sourceRoot)).filter(
     (file) => relative(sourceRoot, file) !== 'shared/contracts/model.ts',
   );

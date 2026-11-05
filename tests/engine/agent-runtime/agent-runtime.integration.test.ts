@@ -1,15 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { adaptLegacyRole, adaptLegacyDefinition } from '../../../rewrite/src/engine/agent-runtime/legacy-adapter.js';
-import { resolveAgent } from '../../../rewrite/src/engine/agent-runtime/agent-resolver.js';
-import type { ISettingsService, ILoggingService } from '../../../rewrite/src/shared/service-interfaces.js';
+import { adaptLegacyRole, adaptLegacyDefinition } from '../../../src/engine/agent-runtime/legacy-adapter.js';
+import { resolveAgent } from '../../../src/engine/agent-runtime/agent-resolver.js';
+import type { ISettingsService, ILoggingService } from '../../../src/shared/service-interfaces.js';
 import type {
   AgentConfig,
   AgentPermissions,
   AgentLimits,
   ResolvedAgentPermissions,
-} from '../../../rewrite/src/engine/agent-runtime/types.js';
-import type { ResolvedAgentDefinition } from '../../../rewrite/src/engine/agent-runtime/resolved-agent.js';
-import type { SubagentDefinition } from '../../../rewrite/src/tools/subagents/types.js';
+} from '../../../src/engine/agent-runtime/types.js';
+import type { ResolvedAgentDefinition } from '../../../src/engine/agent-runtime/resolved-agent.js';
+import type { SubagentDefinition } from '../../../src/tools/subagents/types.js';
 
 function logger(): ILoggingService {
   return {

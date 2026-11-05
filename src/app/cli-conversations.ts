@@ -92,7 +92,7 @@ export async function resolveNativeResume(directory: string, options: SessionOpt
   return { ...options, resumeId: lineage.logicalSessionId };
 }
 
-/** Rows for legacy's `--resume ls` listing (rewrite/src/shared/utils/resume-list.ts formats them), from the native catalogue. */
+/** Rows for legacy's `--resume ls` listing (src/shared/utils/resume-list.ts formats them), from the native catalogue. */
 export async function listNativeConversations(directory: string, options: SessionOptions) {
   const conversations = recent(directory, await selection(options)).slice(0, 10);
   const details = readDirectListDetails(

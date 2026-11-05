@@ -5,14 +5,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { testCliPath, spawnTerminal, createTestChildEnv, type TerminalSession } from '../helpers/terminal-e2e.js';
-import { resolveSettingsDirectory } from '../../rewrite/src/config/settings/settings-path.js';
-import { getProviderIds } from '../../rewrite/src/model/providers/index.js';
+import { resolveSettingsDirectory } from '../../src/config/settings/settings-path.js';
+import { getProviderIds } from '../../src/model/providers/index.js';
 
 // Built direct CLI, loopback provider. A background child can't ask the user, so a call that needs approval ends
 // its run. Legacy reports that run as "completed" with an empty result, which hides the stop from the model: a
 // confirmed legacy bug (#136 item 11, #150). Next reports a failed run that names the call.
 const projectRoot = fileURLToPath(new URL('../..', import.meta.url));
-const builtCli = testCliPath(path.join(projectRoot, 'rewrite', 'dist', 'rewrite', 'src', 'app', 'cli.js'));
+const builtCli = testCliPath(path.join(projectRoot, 'dist', 'src', 'app', 'cli.js'));
 
 let session: TerminalSession | null = null;
 let root = '';

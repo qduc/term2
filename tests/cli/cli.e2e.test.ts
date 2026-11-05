@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { testCliPath, spawnTerminal, type TerminalSession } from '../helpers/terminal-e2e.js';
-import { HARNESS_IDLE_ENV, waitForHarnessIdleGeneration } from '../../rewrite/src/shared/lib/harness-input-idle.js';
+import { HARNESS_IDLE_ENV, waitForHarnessIdleGeneration } from '../../src/shared/lib/harness-input-idle.js';
 
 // tsx cold-starts the whole app through an on-demand transform; inside CI's
 // full-suite run that competes with dozens of vitest workers for every core,

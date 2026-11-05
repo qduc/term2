@@ -3,8 +3,8 @@ import type {
   NestedApprovalDecision,
   NestedApprovalDecisionResult,
   NestedApprovalSnapshot,
-} from '../../rewrite/src/session/approval/nested-approval-owner.js';
-import { RUN_CODE_PROHIBITED_TOOLS } from '../../rewrite/src/tools/system/run-code/run-code.js';
+} from '../../src/session/approval/nested-approval-owner.js';
+import { RUN_CODE_PROHIBITED_TOOLS } from '../../src/tools/system/run-code/run-code.js';
 
 /** The public nested-approval surface used by a host of a real session. */
 export type NestedApprovalDecisionPort = {

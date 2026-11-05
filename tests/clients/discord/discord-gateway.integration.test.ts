@@ -1,7 +1,7 @@
 import { afterEach, expect, it } from 'vitest';
 import { once } from 'node:events';
 import { WebSocketServer, type WebSocket } from 'ws';
-import { DiscordGatewayNudge } from '../../../rewrite/src/clients/discord/discord-gateway.js';
+import { DiscordGatewayNudge } from '../../../src/clients/discord/discord-gateway.js';
 
 // Offline fake of the Discord Gateway protocol subset the doorbell uses. No real Discord.
 

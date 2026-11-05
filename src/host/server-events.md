@@ -30,5 +30,5 @@ Nested tool/retry projection remains in `server-events.ts` to reuse the root
 payload rules without a circular dependency or another lifecycle owner. v1/v2
 activation and browser/BFF compatibility remain separate transport contracts.
 
-Root ESLint ignores `rewrite/`; scoped projection lint must select these files
-with a rewrite-aware TypeScript project instead of accepting ignored-file warnings.
+Root ESLint lints `src/` with the root TypeScript project, which includes these
+files.

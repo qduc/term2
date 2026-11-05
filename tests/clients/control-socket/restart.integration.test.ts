@@ -6,7 +6,7 @@ import { expect, it } from 'vitest';
 import {
   ControlSocketServer,
   type ControlMutationReceipt,
-} from '../../../rewrite/src/clients/control-socket/control-socket.js';
+} from '../../../src/clients/control-socket/control-socket.js';
 
 it('pauses real socket mutations at the existing admission FIFO, drains entered receipts and keeps reads available', async () => {
   const runtimeDir = await mkdtemp(join(tmpdir(), 'term2-restart-socket-'));

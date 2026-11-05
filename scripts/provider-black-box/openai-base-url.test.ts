@@ -1,8 +1,8 @@
 import { createServer, type Server } from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
-import '../../rewrite/src/model/providers/index.js';
-import { getProvider } from '../../rewrite/src/model/providers/registry.js';
-import type { ILoggingService, ISettingsService } from '../../rewrite/src/shared/service-interfaces.js';
+import '../../src/model/providers/index.js';
+import { getProvider } from '../../src/model/providers/registry.js';
+import type { ILoggingService, ISettingsService } from '../../src/shared/service-interfaces.js';
 import { collectStream } from './provider-test-harness.js';
 import { createIsolatedWorkspaceLease, type IsolatedWorkspaceLease } from './provider-test-harness.js';
 

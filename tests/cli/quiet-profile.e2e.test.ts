@@ -6,11 +6,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createTestChildEnv, testCliPath } from '../helpers/terminal-e2e.js';
-import { resolveSettingsDirectory } from '../../rewrite/src/config/settings/settings-path.js';
+import { resolveSettingsDirectory } from '../../src/config/settings/settings-path.js';
 
 // Built direct CLI. `--quiet` is documented to suppress non-error diagnostics.
 // The profile announcement is one of those; a failed turn still reports its error.
-const cli = testCliPath(fileURLToPath(new URL('../../dist/rewrite/src/app/cli.js', import.meta.url)));
+const cli = testCliPath(fileURLToPath(new URL('../../dist/src/app/cli.js', import.meta.url)));
 
 let root = '';
 let server: http.Server | null = null;

@@ -20,7 +20,7 @@ import { findWebSocketClosedEarly } from './providers/websocket-close-evidence.j
 import { AmbiguousModelOutcomeError } from '../engine/retry/retry-errors.js';
 import { isRetryRecoveryBudgetExhaustedError } from '../engine/retry/retry-recovery-budget.js';
 
-/** Legacy's ProviderContextOverflowError text (rewrite/src/engine/agent-runtime/request-input-limit.ts). */
+/** Legacy's ProviderContextOverflowError text (src/engine/agent-runtime/request-input-limit.ts). */
 const PROVIDER_CONTEXT_OVERFLOW =
   'Provider rejected context capacity. Work is retained. Compact or choose a model with verified larger capacity before resuming.';
 

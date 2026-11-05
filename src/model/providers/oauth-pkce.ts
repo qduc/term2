@@ -18,7 +18,7 @@ import {
  * endpoint wants its request body encoded, so all of that is configuration and
  * the flow itself lives here once.
  *
- * The loopback listener and callback handling live in `rewrite/src/shared/lib/oauth-loopback.ts`
+ * The loopback listener and callback handling live in `src/shared/lib/oauth-loopback.ts`
  * so MCP OAuth (whose redirect port is chosen at runtime) can reuse them.
  */
 export { openInBrowser };

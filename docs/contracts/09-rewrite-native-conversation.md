@@ -4,7 +4,7 @@ Status: **implementation-owned refactor boundary (2026-11-01).**
 
 The rewrite session is a durable, single-writer conversation boundary. Its public
 surface is `createConversation` and `openConversation` in
-`rewrite/src/session/conversation.ts`; callers do not receive the writer or an
+`src/session/conversation.ts`; callers do not receive the writer or an
 engine acceptance token.
 
 ## Ownership

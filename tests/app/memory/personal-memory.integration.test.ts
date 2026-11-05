@@ -2,13 +2,13 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { MemoryCapabilityBuilder } from '../../../rewrite/src/tools/memory/memory-capabilities.js';
-import { FileMemoryStore } from '../../../rewrite/src/tools/memory/memory-store.js';
+import { MemoryCapabilityBuilder } from '../../../src/tools/memory/memory-capabilities.js';
+import { FileMemoryStore } from '../../../src/tools/memory/memory-store.js';
 import { createMockSettingsService } from '../../helpers/settings-service.mock.js';
-import { getAgentDefinition } from '../../../rewrite/src/app/agent.js';
-import { PERSONAL_MEMORY_NOTICE_OVERHEAD } from '../../../rewrite/src/shared/conversation/personal-memory-context.js';
-import { ExecutionContext } from '../../../rewrite/src/tools/execution-context.js';
-import type { ILoggingService } from '../../../rewrite/src/shared/service-interfaces.js';
+import { getAgentDefinition } from '../../../src/app/agent.js';
+import { PERSONAL_MEMORY_NOTICE_OVERHEAD } from '../../../src/shared/conversation/personal-memory-context.js';
+import { ExecutionContext } from '../../../src/tools/execution-context.js';
+import type { ILoggingService } from '../../../src/shared/service-interfaces.js';
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -157,7 +157,7 @@ describe('project personal context through filesystem and normal prompt assembly
     await s.create();
     const capability = s.builder.build({ kind: 'main' }, { projectPath: s.projectPath });
     const { createHash } = await import('node:crypto');
-    const { projectScopeKey } = await import('../../../rewrite/src/shared/utils/project-scope.js');
+    const { projectScopeKey } = await import('../../../src/shared/utils/project-scope.js');
     const index = path.join(
       s.root,
       'projects',
@@ -190,7 +190,7 @@ describe('project personal context through filesystem and normal prompt assembly
     const bare = build();
     expect(bare.resolveInstructionsForRequest?.() ?? bare.instructions).toBe(bare.instructions);
     const { createHash } = await import('node:crypto');
-    const { projectScopeKey } = await import('../../../rewrite/src/shared/utils/project-scope.js');
+    const { projectScopeKey } = await import('../../../src/shared/utils/project-scope.js');
     const optIn = path.join(
       s.root,
       'projects',
@@ -226,7 +226,7 @@ describe('project personal context through filesystem and normal prompt assembly
     const s = await setup();
     await s.create();
     const { createHash } = await import('node:crypto');
-    const { projectScopeKey } = await import('../../../rewrite/src/shared/utils/project-scope.js');
+    const { projectScopeKey } = await import('../../../src/shared/utils/project-scope.js');
     const optIn = path.join(
       s.root,
       'projects',

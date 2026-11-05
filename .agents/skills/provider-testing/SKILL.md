@@ -19,7 +19,7 @@ Global setup primes a disposable Node compile cache with `dist/cli.js --help`
 before starting the workers. Only compiled bytecode is shared: every scenario
 still starts fresh processes and isolated application state. The cache is
 removed on teardown and is disabled for V8 coverage or
-`NODE_DISABLE_COMPILE_CACHE=1`. Direct Vitest invocations still require both CLI builds first (`pnpm build` and `node rewrite/scripts/build.mjs`). Native receipt-rollover and retry-notice restart/silent scenarios explicitly run the direct CLI; other scenarios retain their configured legacy or overridden CLI. Integration launchers similarly share one emitted CLI build prepared by
+`NODE_DISABLE_COMPILE_CACHE=1`. Direct Vitest invocations still require both CLI builds first (`pnpm build` and `node scripts/build.mjs`). Native receipt-rollover and retry-notice restart/silent scenarios explicitly run the direct CLI; other scenarios retain their configured legacy or overridden CLI. Integration launchers similarly share one emitted CLI build prepared by
 their global setup; they do not reuse a running application.
 
 Compare timing with a recent run on a similarly loaded host; a fixed healthy
@@ -43,7 +43,7 @@ scenario is the one whose CLI never reached the state it waits for.
 ## Suite ownership
 
 - `scripts/provider-black-box/provider-contract.test.ts` obtains models through
-  `rewrite/src/model/providers/registry.ts`; do not bypass the registry by constructing
+  `src/model/providers/registry.ts`; do not bypass the registry by constructing
   transport classes directly.
 - `scripts/provider-black-box/provider-cli.blackbox.ts` exercises the shipped
   `dist/cli.js` with isolated settings, filesystem state, stdout/stderr files,
@@ -58,7 +58,7 @@ scenario is the one whose CLI never reached the state it waits for.
   Interactive ready/idle waits use `child.waitForIdleInput()`, not a prompt
   glyph. Both the legacy and direct CLIs publish an incrementing generation to
   `TERM2_HARNESS_IDLE_PATH` when the composer owns the keyboard and no turn is
-  in flight (`rewrite/src/shared/lib/harness-input-idle.ts`). Text submission uses
+  in flight (`src/shared/lib/harness-input-idle.ts`). Text submission uses
   `writePtyTextAndSubmit()`, which waits for the CLI's companion composer-state
   acknowledgment before sending Enter; fixed sleeps and PTY echo do not prove
   Ink consumed the text. A PTY-stripped `❯` is not a readiness signal, and

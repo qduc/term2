@@ -2,7 +2,7 @@
  * The one place that says how an accepted fact is folded into the shared leaf projections (command receipts,
  * notifications, goal/context, queue, background tasks) and in what order. Every projection of the log (live
  * journal, replay, public state, history capture, wire projection) calls this; a rule in
- * rewrite/scripts/check-rules.mjs fails any other module that imports a leaf reducer.
+ * scripts/check-rules.mjs fails any other module that imports a leaf reducer.
  *
  * A state carries only the slices its caller needs; absent slices are not folded. Order: notification and
  * command facts touch only their own slice; any other fact folds context (which reads the queue records as they

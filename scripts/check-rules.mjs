@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Static checks for the rules in rewrite/README.md that no other script covers. Parse-only, no build, well under a second.
+// Static checks for the rules in docs/architecture/layers.md that no other script covers. Parse-only, no build, well under a second.
 // Every failure names file:line and the rule, so the author can fix it alone.
 //   1. One projection: a WireEvent (the {sessionId, seq, turnId, type, payload} envelope) is only built in protocol/.
 //   2. Names are jobs: no file or folder under src/ is called service, adapter or orchestrator
@@ -13,8 +13,8 @@ import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
 const scripts = path.dirname(fileURLToPath(import.meta.url));
-const repo = path.resolve(scripts, '../..');
-const src = path.join(repo, 'rewrite/src');
+const repo = path.resolve(scripts, '..');
+const src = path.join(repo, 'src');
 const baselinePath = path.join(scripts, 'rule-baseline.json');
 const baseline = JSON.parse(fs.readFileSync(baselinePath, 'utf8'));
 const problems = [];
@@ -31,7 +31,7 @@ const walk = (dir) =>
     );
 const rel = (file) => path.relative(src, file).split(path.sep).join('/');
 const files = walk(src);
-const benchFiles = walk(path.join(repo, 'rewrite/bench'));
+const benchFiles = walk(path.join(repo, 'bench'));
 const texts = new Map([...files, ...benchFiles].map((file) => [file, fs.readFileSync(file, 'utf8')]));
 const parse = (file) => ts.createSourceFile(file, texts.get(file), ts.ScriptTarget.Latest, true);
 const lineOf = (sf, node) => sf.getLineAndCharacterOfPosition(node.getStart()).line + 1;

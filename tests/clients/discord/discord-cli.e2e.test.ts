@@ -7,8 +7,8 @@ import path from 'node:path';
 import { createServer, type ServerResponse } from 'node:http';
 import { once } from 'node:events';
 import { spawn } from 'node:child_process';
-import { ControlSocketServer } from '../../../rewrite/src/clients/control-socket/control-socket.js';
-import { sendDiscord } from '../../../rewrite/src/clients/discord/discord-outbound.js';
+import { ControlSocketServer } from '../../../src/clients/control-socket/control-socket.js';
+import { sendDiscord } from '../../../src/clients/discord/discord-outbound.js';
 
 // Cold start of the built CLI tracks host load; bound only a real hang. The test budget below must exceed one wait.
 const READINESS_MS = 40_000;

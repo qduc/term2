@@ -10,8 +10,8 @@ import {
   HARNESS_IDLE_ENV,
   waitForHarnessComposerValue,
   waitForHarnessIdleGeneration,
-} from '../../rewrite/src/shared/lib/harness-input-idle.js';
-import { resolveSettingsDirectory } from '../../rewrite/src/config/settings/settings-path.js';
+} from '../../src/shared/lib/harness-input-idle.js';
+import { resolveSettingsDirectory } from '../../src/config/settings/settings-path.js';
 
 const projectRoot = fileURLToPath(new URL('../..', import.meta.url));
 const builtCli = testCliPath(path.join(projectRoot, 'dist', 'cli.js'));

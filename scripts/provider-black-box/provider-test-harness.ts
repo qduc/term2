@@ -7,14 +7,14 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { finished } from 'node:stream/promises';
 import type { Writable } from 'node:stream';
 import { stripVTControlCharacters } from 'node:util';
-import { resolveSettingsDirectory } from '../../rewrite/src/config/settings/settings-path.js';
+import { resolveSettingsDirectory } from '../../src/config/settings/settings-path.js';
 import {
   HARNESS_IDLE_ENV,
   readHarnessComposerState,
   readHarnessIdleGeneration,
   waitForHarnessComposerValue,
   waitForHarnessIdleGeneration,
-} from '../../rewrite/src/shared/lib/harness-input-idle.js';
+} from '../../src/shared/lib/harness-input-idle.js';
 
 const openWorkspaceRoots = new Set<string>();
 

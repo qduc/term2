@@ -1,9 +1,9 @@
 import fs from 'fs';
-import { isToolResultHistoryItem } from '../../rewrite/src/session/tool-execution-ledger.js';
+import { isToolResultHistoryItem } from '../../src/session/tool-execution-ledger.js';
 import crypto from 'crypto';
 import os from 'os';
 import path from 'path';
-import type { ILoggingService } from '../../rewrite/src/shared/service-interfaces.js';
+import type { ILoggingService } from '../../src/shared/service-interfaces.js';
 import {
   LOG_ENVELOPE_VERSION,
   SIDECAR_EVENT_TYPES,
@@ -11,9 +11,9 @@ import {
   type LogEnvelope,
   type LogEvent,
   type SessionInitEvent,
-} from '../../rewrite/src/session/logging/conversation-log-events.js';
-import { decodeLogEnvelope } from '../../rewrite/src/session/conversation/conversation-decoder.js';
-import { isPidAlive, saveLastConversation } from '../../rewrite/src/session/conversation/conversation-persistence.js';
+} from '../../src/session/logging/conversation-log-events.js';
+import { decodeLogEnvelope } from '../../src/session/conversation/conversation-decoder.js';
+import { isPidAlive, saveLastConversation } from '../../src/session/conversation/conversation-persistence.js';
 
 export const CONVERSATION_FSYNC_EVENTS = new Set<LogEvent['type']>([
   'user_message',

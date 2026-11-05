@@ -10,13 +10,13 @@ import {
   waitForHarnessComposerValue,
   waitForHarnessIdleGeneration,
   readHarnessComposerState,
-} from '../../rewrite/src/shared/lib/harness-input-idle.js';
-import { resolveSettingsDirectory } from '../../rewrite/src/config/settings/settings-path.js';
+} from '../../src/shared/lib/harness-input-idle.js';
+import { resolveSettingsDirectory } from '../../src/config/settings/settings-path.js';
 
 // Runs the built terminal UI (`pnpm build` output, as CI does before test:e2e) in a real pty against
 // an OpenAI-compatible chat-completions double, and reads what the terminal rendered.
 const projectRoot = fileURLToPath(new URL('../..', import.meta.url));
-const builtCli = testCliPath(path.join(projectRoot, 'rewrite', 'dist', 'rewrite', 'src', 'app', 'cli.js'));
+const builtCli = testCliPath(path.join(projectRoot, 'dist', 'src', 'app', 'cli.js'));
 const TIMEOUT_MS = 120_000;
 
 let session: TerminalSession | null = null;

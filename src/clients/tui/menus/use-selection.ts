@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 
-// Copied from rewrite/src/clients/hooks/settings-completion-logic.ts.
+// Copied from src/clients/hooks/settings-completion-logic.ts.
 export function clampIndex(currentIndex: number, arrayLength: number): number {
   if (arrayLength === 0) {
     return 0;

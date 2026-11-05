@@ -262,7 +262,7 @@ export const ENCRYPTED_CONTENT_REDACTION = '<redacted>';
  * sidecar, where the body is otherwise written unsanitized — headers arrive
  * pre-sanitized via `sanitizeHeaders` at every call site, but nothing stands
  * between the body and disk there. Keep in sync with the pattern in
- * `rewrite/src/shared/utils/header-sanitizer.ts`.
+ * `src/shared/utils/header-sanitizer.ts`.
  */
 const RAW_CREDENTIAL_KEY_PATTERN = /authorization|api[_-]?key|key|cookie|token|secret|signature/i;
 

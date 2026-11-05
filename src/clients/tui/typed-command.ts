@@ -1,6 +1,6 @@
 /**
  * Legacy's typed slash command resolution (source/utils/slash-command-dispatch.ts and
- * rewrite/src/shared/slash-commands.ts `resolveSlashCommand`), over legacy-commands.ts: an exact name in any case, else
+ * src/shared/slash-commands.ts `resolveSlashCommand`), over legacy-commands.ts: an exact name in any case, else
  * a unique prefix, runs that command; several prefix matches are "Ambiguous"; none is "Unknown", with
  * legacy's nearby-name suggestions. Text whose first word is not command-like (`/tmp/x`) is a message.
  */

@@ -13,17 +13,13 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, it, vi, type MockInstance } from 'vitest';
-import {
-  createDirectRollingLog,
-  readDirectLogLineage,
-  readDirectLogLineages,
-} from '../rewrite/src/session/rolling-log.js';
-import { createDirectSessionStore, type DirectLocalStore } from '../rewrite/src/session/store.js';
-import { listNativeConversations, resolveNativeResume } from '../rewrite/src/app/cli-conversations.js';
-import { parseCommandLine } from '../rewrite/src/app/cli-args.js';
-import { displaySessionId } from '../rewrite/src/protocol/session-id.js';
-import type { SessionStartedFact } from '../rewrite/src/session/facts.js';
-import type { DirectSessionRotationFact } from '../rewrite/src/session/session-rotation.js';
+import { createDirectRollingLog, readDirectLogLineage, readDirectLogLineages } from '../src/session/rolling-log.js';
+import { createDirectSessionStore, type DirectLocalStore } from '../src/session/store.js';
+import { listNativeConversations, resolveNativeResume } from '../src/app/cli-conversations.js';
+import { parseCommandLine } from '../src/app/cli-args.js';
+import { displaySessionId } from '../src/protocol/session-id.js';
+import type { SessionStartedFact } from '../src/session/facts.js';
+import type { DirectSessionRotationFact } from '../src/session/session-rotation.js';
 
 const model = { provider: 'fixture', model: 'no-provider' };
 const profile = { id: 'bare', version: '1', digest: 'isolation-fixture' };

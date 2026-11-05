@@ -2,7 +2,7 @@ import { createServer, type ServerResponse } from 'node:http';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { expect, it } from 'vitest';
-import { readHarnessComposerState } from '../../rewrite/src/shared/lib/harness-input-idle.js';
+import { readHarnessComposerState } from '../../src/shared/lib/harness-input-idle.js';
 import { createIsolatedWorkspaceLease, writePtyTextAndSubmit } from './provider-test-harness.js';
 
 it.skipIf(process.platform !== 'linux')('retries the original pasted image and chains the following turn', async () => {

@@ -1,5 +1,5 @@
 /**
- * Contract between the MCP connection layer (`rewrite/src/tools/mcp/`) and its
+ * Contract between the MCP connection layer (`src/tools/mcp/`) and its
  * only consumer, the `run_code` script surface. MCP tools are never direct
  * model tools; see docs/plans/tools/run-code/mcp-code-mode.md, Decision 1.
  *

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Fail when a file under rewrite/src cannot be reached from the production entry.
+// Fail when a file under src cannot be reached from the production entry.
 // The walk follows every static, type-only, re-export and dynamic import from
-// rewrite/src/app/cli.ts. A file kept on purpose without a production importer
+// src/app/cli.ts. A file kept on purpose without a production importer
 // goes in reachability-allowlist.json with the reason it stays.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -9,8 +9,8 @@ import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
 const scripts = path.dirname(fileURLToPath(import.meta.url));
-const repo = path.resolve(scripts, '../..');
-const rewriteSrc = path.join(repo, 'rewrite/src');
+const repo = path.resolve(scripts, '..');
+const rewriteSrc = path.join(repo, 'src');
 const ENTRY = path.join(rewriteSrc, 'app/cli.ts');
 const allowlistPath = path.join(scripts, 'reachability-allowlist.json');
 const SOURCE_FILE = /\.(?:ts|tsx|mts|cts)$/;
@@ -65,17 +65,17 @@ for (const file of all) {
     continue;
   }
   const reason = allowlist[file];
-  if (typeof reason !== 'string' || !reason.trim()) problems.push(`unreached from rewrite/src/app/cli.ts: ${file}`);
+  if (typeof reason !== 'string' || !reason.trim()) problems.push(`unreached from src/app/cli.ts: ${file}`);
 }
 for (const file of Object.keys(allowlist))
   if (!all.includes(file)) problems.push(`reachability allowlist names missing file ${file}.`);
 
-console.log(`reachability: ${reachedRelative.size} of ${all.length} rewrite/src files reached from app/cli.ts`);
+console.log(`reachability: ${reachedRelative.size} of ${all.length} src files reached from app/cli.ts`);
 if (problems.length) {
   console.error(problems.join('\n'));
   console.error(
     'Delete code production no longer reaches. If a file must stay, add it to ' +
-      'rewrite/scripts/reachability-allowlist.json with the reason.',
+      'scripts/reachability-allowlist.json with the reason.',
   );
   process.exit(1);
 }

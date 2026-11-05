@@ -16,7 +16,7 @@ import path from 'node:path';
  * comments) are what a terminal would act on, so this guard matches those.
  */
 
-const productionRoot = path.resolve(import.meta.dirname, '../../rewrite/src');
+const productionRoot = path.resolve(import.meta.dirname, '../../src');
 const SYNC_BEGIN = '\u001b[?2026h';
 const SYNC_END = '\u001b[?2026l';
 

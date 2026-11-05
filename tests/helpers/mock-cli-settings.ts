@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { resolveSettingsDirectory } from '../../rewrite/src/config/settings/settings-path.js';
+import { resolveSettingsDirectory } from '../../src/config/settings/settings-path.js';
 
 /** Startup-only controls must not inherit the real default provider, even on an early exit. */
 export function writeMockCliSettings(homeDir: string, env: NodeJS.ProcessEnv = {}): void {

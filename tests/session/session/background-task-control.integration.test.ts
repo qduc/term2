@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
-import { BackgroundTaskControl } from '../../../rewrite/src/session/session/background-task-control.js';
-import { BackgroundShellRegistry } from '../../../rewrite/src/tools/shell/background-shell-registry.js';
+import { BackgroundTaskControl } from '../../../src/session/session/background-task-control.js';
+import { BackgroundShellRegistry } from '../../../src/tools/shell/background-shell-registry.js';
 
 const registries: BackgroundShellRegistry<unknown>[] = [];
 const capacityReleases: (() => void)[] = [];

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const source = (name: string): string =>
-  readFileSync(new URL(`../../rewrite/src/tools/system/run-code/${name}`, import.meta.url), 'utf8');
+  readFileSync(new URL(`../../src/tools/system/run-code/${name}`, import.meta.url), 'utf8');
 
 describe('run_code product/runtime dependency boundary', () => {
   it('keeps the runtime and lifecycle contract independent of the outer tool module', () => {

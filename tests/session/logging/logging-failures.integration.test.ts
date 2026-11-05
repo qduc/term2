@@ -4,11 +4,8 @@ import { chmod, mkdtemp, mkdir, readFile, readdir, rm, symlink, truncate, writeF
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
-import { localLogDateKey, LoggingService } from '../../../rewrite/src/session/logging/logging-service.js';
-import {
-  ProviderTraffic,
-  ProviderTrafficArtifactStore,
-} from '../../../rewrite/src/session/logging/provider-traffic.js';
+import { localLogDateKey, LoggingService } from '../../../src/session/logging/logging-service.js';
+import { ProviderTraffic, ProviderTrafficArtifactStore } from '../../../src/session/logging/provider-traffic.js';
 
 const directories: string[] = [];
 afterEach(async () => {
@@ -38,7 +35,7 @@ it('keeps a process alive after ENOSPC, reports once, and drops further logs wit
       'tsx',
       '--input-type=module',
       '-e',
-      `import { LoggingService } from './rewrite/src/session/logging/logging-service.ts';
+      `import { LoggingService } from './src/session/logging/logging-service.ts';
        const failureReported = new Promise(resolve => {
          const write = process.stderr.write.bind(process.stderr);
          let stderrBuffer = '';

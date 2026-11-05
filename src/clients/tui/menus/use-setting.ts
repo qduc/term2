@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { ModelSettings } from './model-catalog.js';
 
-/** Copied from rewrite/src/clients/hooks/use-setting.ts over the session's model settings handle. */
+/** Copied from src/clients/hooks/use-setting.ts over the session's model settings handle. */
 
 /**
  * Hook to subscribe to a specific setting value.

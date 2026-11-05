@@ -367,7 +367,7 @@ export function getSubagentsRolesSection({
 }: { includeLibrarian?: boolean; includeMentor?: boolean } = {}): string {
   let promptsDir = path.join(import.meta.dirname, '../prompts/subagents');
   if (!fs.existsSync(promptsDir)) {
-    const altDir = path.join(import.meta.dirname, '../../rewrite/src/session/prompts/subagents');
+    const altDir = path.join(import.meta.dirname, '../../src/session/prompts/subagents');
     if (fs.existsSync(altDir)) {
       promptsDir = altDir;
     }

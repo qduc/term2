@@ -87,7 +87,7 @@ export type DirectSessionSettings = SettingsService;
 /** The settings a new session continues from, carried through the store's creation call. */
 const continuedSettings = new AsyncLocalStorage<DirectSessionSettings>();
 
-/** Targets of rewrite/src/config/settings/ancillary-settings-migration.ts. */
+/** Targets of src/config/settings/ancillary-settings-migration.ts. */
 const ANCILLARY_MIGRATION_TARGETS = [
   'agent.smartReasoningEffort',
   'agent.balancedReasoningEffort',

@@ -3,7 +3,7 @@ name: Update model catalog
 # Weekly refresh of the vendored model catalog. Checks out the latest pi-ai
 # source from the upstream main branch, generates provider data into a
 # throwaway directory, points PI_AI_DATA_DIR at it, and regenerates
-# rewrite/src/model/providers/model-catalog/catalog.generated.ts via
+# src/model/providers/model-catalog/catalog.generated.ts via
 # `pnpm catalog:update`, runs typechecking and repository guards, and opens or
 # force-updates one predictable automation PR. Reuses the full CI matrix at the
 # pushed commit, then merges that exact head on success. The workflow exits
@@ -75,7 +75,7 @@ jobs:
         id: changes
         run: |
           set -euo pipefail
-          if git diff --quiet -- rewrite/src/model/providers/model-catalog/catalog.generated.ts; then
+          if git diff --quiet -- src/model/providers/model-catalog/catalog.generated.ts; then
             echo "No catalog drift; nothing to PR."
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
@@ -102,7 +102,7 @@ jobs:
           PR_TITLE="chore: update model catalog (pi-ai ${PI_AI_REF:0:7})"
           PR_BODY="Automated weekly model-catalog refresh.
 
-          Regenerates \`rewrite/src/model/providers/model-catalog/catalog.generated.ts\` from the
+          Regenerates \`src/model/providers/model-catalog/catalog.generated.ts\` from the
           pi-ai \`main\` at commit \`${PI_AI_REF}\` via its strict data-only
           model generator and \`pnpm catalog:update\`. Typechecking and repository guards ran in the
           \`Update model catalog\` workflow."
@@ -110,7 +110,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -b "$BRANCH"
-          git add rewrite/src/model/providers/model-catalog/catalog.generated.ts
+          git add src/model/providers/model-catalog/catalog.generated.ts
           git commit -m "$PR_TITLE"
           git push -u origin "$BRANCH" --force
 

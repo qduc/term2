@@ -1,7 +1,7 @@
 /**
  * Native subagent handles use the source codename vocabulary rather than UUIDs:
  * models can reconstruct adjective-noun-number handles without mistyping hex.
- * Copied from rewrite/src/tools/subagents/codename-run-id.ts as a pure Session leaf
+ * Copied from src/tools/subagents/codename-run-id.ts as a pure Session leaf
  * to keep the dependency one-way. The Session still owns identity/collisions.
  */
 const ADJECTIVES = `

@@ -3,8 +3,8 @@ import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { expect, it } from 'vitest';
-import { callDiscordControl } from '../../rewrite/src/clients/discord/discord-bridge.js';
-import { listControlAdvertisements } from '../../rewrite/src/clients/control-socket/control-socket.js';
+import { callDiscordControl } from '../../src/clients/discord/discord-bridge.js';
+import { listControlAdvertisements } from '../../src/clients/control-socket/control-socket.js';
 import { createIsolatedWorkspaceLease, type PtyChildDriver } from './provider-test-harness.js';
 
 it.each(['missing', 'invalid', 'missing-middle'] as const)(
@@ -104,7 +104,7 @@ globalThis.Date = class extends RealDate {
       child = await workspace.start({
         command: process.execPath,
         cwd: process.cwd(),
-        args: [join(process.cwd(), 'dist/rewrite/src/app/cli.js'), ...args],
+        args: [join(process.cwd(), 'dist/src/app/cli.js'), ...args],
         env,
         cols: 120,
         rows: 40,
@@ -182,12 +182,7 @@ globalThis.Date = class extends RealDate {
       child = await workspace.relaunch({
         cwd: process.cwd(),
         command: process.execPath,
-        args: [
-          join(process.cwd(), 'dist/rewrite/src/app/cli.js'),
-          ...args,
-          '--resume',
-          successor.name.replace(/\.jsonl$/, ''),
-        ],
+        args: [join(process.cwd(), 'dist/src/app/cli.js'), ...args, '--resume', successor.name.replace(/\.jsonl$/, '')],
         env,
         cols: 120,
         rows: 40,

@@ -4,15 +4,17 @@ import path from 'node:path';
 /**
  * Patch one emitted module in a private copy of dist/, refusing stale or no-op fault stimuli.
  *
- * The entry (dist/rewrite/src/app/cli.js) is a single-file bundle of every module it imports, and
+ * The entry (dist/src/app/cli.js) is a single-file bundle of every module it imports, and
  * esbuild heads each inlined module with a `// dist/<path>` comment. When `file` is inlined, the
  * same text is patched inside its section of the bundle, which is the code a (re)started CLI runs.
  */
 async function compiledSection(file: string) {
   const normalized = file.split(path.sep).join('/');
-  const at = normalized.lastIndexOf('/rewrite/src/');
+  // The dist root is the first *dist/ folder followed by src/ (dist/, or a copy such as direct-dist/).
+  const found = /dist\/src\//.exec(normalized);
+  const at = found ? found.index + 'dist'.length : -1;
   const distRoot = at < 0 ? undefined : normalized.slice(0, at);
-  const entry = distRoot === undefined ? undefined : `${distRoot}/rewrite/src/app/cli.js`;
+  const entry = distRoot === undefined ? undefined : `${distRoot}/src/app/cli.js`;
   // The entry itself is the bundle: patch it as one file.
   const marker = distRoot === undefined || normalized === entry ? '' : `// dist${normalized.slice(at)}\n`;
   const bundle = entry === undefined ? '' : await readFile(entry, 'utf8');

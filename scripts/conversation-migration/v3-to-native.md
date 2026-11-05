@@ -2,7 +2,7 @@
 
 `convertValidatedV3(input, options?)` in `v3-to-native.mjs` consumes the successful
 `readV3Conversation` result. Build the actual dependencies with
-`node rewrite/scripts/build.mjs` before importing it. This module performs no
+`node scripts/build.mjs` before importing it. This module performs no
 filesystem access, source discovery, publication, CLI invocation, provider call,
 or network request. It neither imports the reader nor invokes a runtime.
 

@@ -1,4 +1,4 @@
-import { resolveSettingsDirectory } from '../../rewrite/src/config/settings/settings-path.js';
+import { resolveSettingsDirectory } from '../../src/config/settings/settings-path.js';
 import { expect, it } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -9,9 +9,9 @@ import {
   HARNESS_IDLE_ENV,
   waitForHarnessComposerValue,
   waitForHarnessIdleGeneration,
-} from '../../rewrite/src/shared/lib/harness-input-idle.js';
+} from '../../src/shared/lib/harness-input-idle.js';
 
-const cli = testCliPath(fileURLToPath(new URL('../../dist/rewrite/src/app/cli.js', import.meta.url)));
+const cli = testCliPath(fileURLToPath(new URL('../../dist/src/app/cli.js', import.meta.url)));
 
 for (const [cols, rows] of [
   [119, 40],
@@ -89,7 +89,7 @@ for (const [cols, rows] of [
       expect(helpOutput.lastIndexOf('Keyboard shortcuts')).toBeGreaterThan(helpOutput.lastIndexOf('/help —'));
       // Legacy's command table, except /undo, as the slash menu lists it.
       const table = fs.readFileSync(
-        fileURLToPath(new URL('../../rewrite/src/clients/tui/menus/legacy-commands.ts', import.meta.url)),
+        fileURLToPath(new URL('../../src/clients/tui/menus/legacy-commands.ts', import.meta.url)),
         'utf8',
       );
       const commands = [...table.matchAll(/name: '([^']+)'/g)].map((match) => match[1]!);

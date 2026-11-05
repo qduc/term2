@@ -38,10 +38,9 @@ export default tseslint.config(
       // Standalone Next.js app with its own toolchain and tsconfig; root
       // project-aware linting does not apply to it.
       'web-client/**',
-      // Build and check tooling, like scripts/ above; rewrite/src is linted.
-      'rewrite/scripts/**',
-      'rewrite/bench/**',
-      'rewrite/parity/**',
+      // Build and check tooling, like scripts/ above; src is linted.
+      'bench/**',
+      'parity/**',
     ],
   },
   eslint.configs.recommended,
@@ -103,14 +102,14 @@ export default tseslint.config(
   // Production code is held to a higher standard: unused vars are an error.
   // Test files are excluded by the test override below.
   {
-    files: ['rewrite/src/**/*.{ts,tsx}'],
+    files: ['src/**/*.{ts,tsx}'],
     rules: {
       '@typescript-eslint/no-unused-vars': ['error', noUnusedVarsOptions],
     },
   },
   {
-    files: ['rewrite/src/**/*.{ts,tsx}'],
-    ignores: ['rewrite/src/session/conversation/conversation-state-projector.ts'],
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: ['src/session/conversation/conversation-state-projector.ts'],
     rules: {
       'no-restricted-imports': [
         'error',
@@ -140,23 +139,23 @@ export default tseslint.config(
   // permissive until their explicit-any cleanup is complete.
   {
     files: [
-      'rewrite/src/model/providers/ai-sdk-message-normalizer.ts',
-      'rewrite/src/model/providers/ai-sdk-streamed-model.ts',
-      'rewrite/src/model/providers/provider-service.ts',
-      'rewrite/src/session/session/post-execute-pause-capability.ts',
-      'rewrite/src/config/settings/custom-provider-normalization.ts',
-      'rewrite/src/config/settings/settings-env.ts',
-      'rewrite/src/config/settings/settings-merger.ts',
-      'rewrite/src/config/settings/settings-persistence.ts',
-      'rewrite/src/tools/agent/ask-orchestrator.ts',
-      'rewrite/src/tools/file/glob.ts',
-      'rewrite/src/tools/file/grep.ts',
-      'rewrite/src/tools/run-agent-workflow.ts',
-      'rewrite/src/tools/system/shell.ts',
-      'rewrite/src/tools/types.ts',
-      'rewrite/src/shared/utils/shell/command-safety/find-helpers.ts',
-      'rewrite/src/shared/utils/shell/command-safety/index.ts',
-      'rewrite/src/shared/utils/shell/command-safety/utils.ts',
+      'src/model/providers/ai-sdk-message-normalizer.ts',
+      'src/model/providers/ai-sdk-streamed-model.ts',
+      'src/model/providers/provider-service.ts',
+      'src/session/session/post-execute-pause-capability.ts',
+      'src/config/settings/custom-provider-normalization.ts',
+      'src/config/settings/settings-env.ts',
+      'src/config/settings/settings-merger.ts',
+      'src/config/settings/settings-persistence.ts',
+      'src/tools/agent/ask-orchestrator.ts',
+      'src/tools/file/glob.ts',
+      'src/tools/file/grep.ts',
+      'src/tools/run-agent-workflow.ts',
+      'src/tools/system/shell.ts',
+      'src/tools/types.ts',
+      'src/shared/utils/shell/command-safety/find-helpers.ts',
+      'src/shared/utils/shell/command-safety/index.ts',
+      'src/shared/utils/shell/command-safety/utils.ts',
     ],
     rules: {
       '@typescript-eslint/no-explicit-any': 'error',

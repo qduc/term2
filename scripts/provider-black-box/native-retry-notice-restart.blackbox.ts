@@ -49,7 +49,7 @@ it.skipIf(process.platform !== 'linux')(
     });
     let child = await lease.start({
       command: process.execPath,
-      args: [join(process.cwd(), 'dist/rewrite/src/app/cli.js'), '--lite', '--profile', 'plan'],
+      args: [join(process.cwd(), 'dist/src/app/cli.js'), '--lite', '--profile', 'plan'],
       env: {
         PATH: `${join(lease.root, 'bin')}:${process.env.PATH ?? ''}`,
         TERM2_DIRECT_CONVERSATIONS_DIR: lease.paths.conversationsDir,
@@ -113,14 +113,7 @@ it.skipIf(process.platform !== 'linux')(
       expect(facts[0]!.requestNotice).toContain('Plan Mode is ON');
       child = await lease.start({
         command: process.execPath,
-        args: [
-          join(process.cwd(), 'dist/rewrite/src/app/cli.js'),
-          '--lite',
-          '--profile',
-          'plan',
-          '--resume',
-          sessionId,
-        ],
+        args: [join(process.cwd(), 'dist/src/app/cli.js'), '--lite', '--profile', 'plan', '--resume', sessionId],
         env: {
           PATH: `${join(lease.root, 'bin')}:${process.env.PATH ?? ''}`,
           TERM2_DIRECT_CONVERSATIONS_DIR: lease.paths.conversationsDir,

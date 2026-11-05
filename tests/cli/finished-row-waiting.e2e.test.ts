@@ -5,14 +5,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { testCliPath, spawnTerminal, createTestChildEnv, type TerminalSession } from '../helpers/terminal-e2e.js';
-import { resolveSettingsDirectory } from '../../rewrite/src/config/settings/settings-path.js';
-import { getProviderIds } from '../../rewrite/src/model/providers/index.js';
+import { resolveSettingsDirectory } from '../../src/config/settings/settings-path.js';
+import { getProviderIds } from '../../src/model/providers/index.js';
 
 // Built direct CLI, loopback provider. While a later call waits for approval, legacy draws every live row as
 // "○ … (waiting)", finished ones included. A confirmed legacy bug (#136 item 8, #150): next keeps a finished row's
 // final status.
 const projectRoot = fileURLToPath(new URL('../..', import.meta.url));
-const builtCli = testCliPath(path.join(projectRoot, 'rewrite', 'dist', 'rewrite', 'src', 'app', 'cli.js'));
+const builtCli = testCliPath(path.join(projectRoot, 'dist', 'src', 'app', 'cli.js'));
 
 let session: TerminalSession | null = null;
 let root = '';

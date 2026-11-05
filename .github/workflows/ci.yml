@@ -82,7 +82,7 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          changed="$(git diff --name-only "$PR_BASE...$PR_HEAD" -- rewrite/parity/goldens/)"
+          changed="$(git diff --name-only "$PR_BASE...$PR_HEAD" -- parity/goldens/)"
           if [[ -n "$changed" ]]; then
             # Query live PR state so reruns and label removals cannot reuse a stale event payload.
             golden_change_allowed="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq 'any(.labels[]; .name == "golden-change")')"
@@ -95,17 +95,17 @@ jobs:
             exit 1
           fi
       - name: Check golden parity
-        run: node rewrite/parity/run.mjs check --cli dist/cli.js
-      - name: Typecheck rewrite and check layer boundaries
+        run: node parity/run.mjs check --cli dist/cli.js
+      - name: Typecheck production and check layer boundaries
         run: |
-          pnpm exec tsc -p rewrite/tsconfig.json
-          node rewrite/scripts/check-layers.mjs
-          node rewrite/scripts/check-reachability.mjs
-          node rewrite/scripts/check-complexity.mjs
-          node rewrite/scripts/check-rules.mjs
-          node --unhandled-rejections=strict --import tsx rewrite/bench/hops.mts
+          pnpm exec tsc -p tsconfig.build.json --noEmit
+          node scripts/check-layers.mjs
+          node scripts/check-reachability.mjs
+          node scripts/check-complexity.mjs
+          node scripts/check-rules.mjs
+          node --unhandled-rejections=strict --import tsx bench/hops.mts
       - name: Check the headless path
-        run: node rewrite/bench/m1-direct.mjs
+        run: node bench/m1-direct.mjs
 
   integration:
     runs-on: ubuntu-22.04

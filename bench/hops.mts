@@ -13,10 +13,8 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createHook, executionAsyncId } from 'node:async_hooks';
 
-const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const budget = JSON.parse(
-  fs.readFileSync(path.join(repo, 'rewrite/scripts/complexity-budget.json'), 'utf8'),
-).messagePath;
+const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const budget = JSON.parse(fs.readFileSync(path.join(repo, 'scripts/complexity-budget.json'), 'utf8')).messagePath;
 const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'rewrite-hops-')));
 const home = path.join(root, 'home');
 const workspace = path.join(root, 'workspace');
@@ -118,12 +116,12 @@ const exited = new Promise<number>((resolve) => {
 const output: string[] = [];
 const write = process.stdout.write.bind(process.stdout);
 process.stdout.write = ((chunk: string | Uint8Array) => (output.push(String(chunk)), true)) as typeof write;
-process.argv = [process.execPath, path.join(repo, 'rewrite/src/app/cli.ts'), 'hello'];
+process.argv = [process.execPath, path.join(repo, 'src/app/cli.ts'), 'hello'];
 
 let code: number;
 hook.enable();
 try {
-  await import(pathToFileURL(path.join(repo, 'rewrite/src/app/cli.ts')).href);
+  await import(pathToFileURL(path.join(repo, 'src/app/cli.ts')).href);
   code = await exited;
 } finally {
   hook.disable();
@@ -143,12 +141,12 @@ for (const line of stack.split('\n')) {
   const match = /\(?((?:file:\/\/)?\/[^():]+\.m?tsx?):\d+:\d+\)?$/.exec(line.trim());
   if (!match) continue;
   const file = path.relative(repo, match[1]!.replace(/^file:\/\//, ''));
-  if (file.startsWith('..') || file.includes('node_modules') || file.startsWith('rewrite/bench/')) continue;
+  if (file.startsWith('..') || file.includes('node_modules') || file.startsWith('bench/')) continue;
   if (sequence.at(-1) !== file) sequence.push(file);
 }
 // The message path starts where the client hands the message to the host, as a
 // user message does in every mode; startup work before it is not message path.
-const START = 'rewrite/src/clients/headless/direct.ts';
+const START = 'src/clients/headless/direct.ts';
 assert.ok(sequence.includes(START), `the provider call was not caused by ${START}`);
 // Fold the sequence into the chain of files still active at the provider call:
 // returning to a file already on the chain pops back to it, so finished setup
@@ -160,7 +158,7 @@ for (const file of sequence.slice(sequence.indexOf(START))) {
   else files.push(file);
 }
 const distinct = [...new Set(files)];
-const layerOf = (file: string) => /^rewrite\/src\/([^/]+)\//.exec(file)?.[1] ?? 'other';
+const layerOf = (file: string) => /^src\/([^/]+)\//.exec(file)?.[1] ?? 'other';
 const layers = files.map(layerOf).filter((layer, index, all) => layer !== all[index - 1]);
 
 console.log(
@@ -171,11 +169,7 @@ console.log(`layers: ${layers.join(' -> ')}`);
 for (const file of files) console.log(`  ${file}`);
 assert.ok(files.length > 0, 'stack trace named no repository files');
 // The path must be the production direct one (the bench-only bridge files are deleted).
-for (const required of [
-  'rewrite/src/host/in-process-direct.ts',
-  'rewrite/src/session/session.ts',
-  'rewrite/src/app/generation-guard.ts',
-])
+for (const required of ['src/host/in-process-direct.ts', 'src/session/session.ts', 'src/app/generation-guard.ts'])
   assert.ok(
     distinct.includes(required),
     `message path no longer goes through ${required}; hops must measure the production direct path`,
@@ -190,7 +184,7 @@ assert.ok(
 );
 if (files.length < budget.maxHops || distinct.length < budget.maxFiles)
   console.log(
-    `path is under budget: lower messagePath to { maxHops: ${files.length}, maxFiles: ${distinct.length} } in rewrite/scripts/complexity-budget.json`,
+    `path is under budget: lower messagePath to { maxHops: ${files.length}, maxFiles: ${distinct.length} } in scripts/complexity-budget.json`,
   );
 console.log('PASS message path within budget');
 realExit(0);

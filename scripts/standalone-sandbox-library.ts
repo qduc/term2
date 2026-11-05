@@ -53,9 +53,9 @@ import { SandboxManager, type SandboxRuntimeConfig } from '@anthropic-ai/sandbox
 import {
   createSandboxRuntimeConfig,
   type SandboxReadPolicy,
-} from '../rewrite/src/shared/utils/shell/sandbox/sandbox-policy.js';
-import { createSandboxEnvironment } from '../rewrite/src/shared/utils/shell/sandbox/sandbox-env.js';
-import { SANDBOX_TEMP_DIR } from '../rewrite/src/shared/utils/shell/temp-dir.js';
+} from '../src/shared/utils/shell/sandbox/sandbox-policy.js';
+import { createSandboxEnvironment } from '../src/shared/utils/shell/sandbox/sandbox-env.js';
+import { SANDBOX_TEMP_DIR } from '../src/shared/utils/shell/temp-dir.js';
 import { resolve } from 'node:path';
 
 // ---------------------------------------------------------------------------

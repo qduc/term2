@@ -1,5 +1,5 @@
-import type { FetchMiddleware } from '../../rewrite/src/model/providers/fetch/compose.js';
-import { sanitizeHeaders } from '../../rewrite/src/shared/utils/header-sanitizer.js';
+import type { FetchMiddleware } from '../../src/model/providers/fetch/compose.js';
+import { sanitizeHeaders } from '../../src/shared/utils/header-sanitizer.js';
 import {
   validateFixtureEnvelope,
   type FixtureEnvelopeV1,

@@ -52,7 +52,7 @@ export type InteractivePickerRequest = {
 /**
  * Opens the interactive model picker and resolves to the chosen model, or
  * `null` on cancellation. Callers wire this to `runModelPickerHost`
- * (rewrite/src/model/models/model-picker-host.tsx); tests can supply a stub.
+ * (src/model/models/model-picker-host.tsx); tests can supply a stub.
  * When supplied, it REPLACES the readline-based `promptForDisambiguation`
  * fallback for ambiguous matches, and replaces the hard `no_match` error with
  * an interactive re-search seeded with the same query. It must only ever be

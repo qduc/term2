@@ -16,7 +16,7 @@ const env = {
   NODE_ENV: 'test',
   // The lanes drive term2's real entry module. Tests still branch on this variable while
   // their legacy-only expectations remain (#88 removes them).
-  TERM2_TEST_CLI: resolve('dist/rewrite/src/app/cli.js'),
+  TERM2_TEST_CLI: resolve('dist/src/app/cli.js'),
 };
 // Dependencies are installed and verified by the setup action. Invoke the
 // locked executable directly; pnpm exec may relink dependencies before a run.
@@ -53,7 +53,7 @@ const plan = tiers.map(([tier, config]) => {
 });
 console.log(JSON.stringify({ lane, maxWorkers, plan }, null, 2));
 if (!listOnly) {
-  const build = spawnSync(process.execPath, ['rewrite/scripts/build.mjs'], { env, stdio: 'inherit' });
+  const build = spawnSync(process.execPath, ['scripts/build.mjs'], { env, stdio: 'inherit' });
   if (build.status !== 0 || build.error)
     throw new Error(`CLI build failed: ${build.error?.message ?? build.signal ?? build.status}`);
   const result = spawnSync(process.execPath, [vitest, 'run', '--config', 'vitest.ci.config.ts', '--reporter=verbose'], {

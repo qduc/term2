@@ -246,7 +246,7 @@ export function enforceDirectInputLimit(
   if (policy.hardInputLimit === undefined) return;
   const estimated = estimateDirectContext(request, input.contextWindow).renderedInputTokens;
   if (estimated <= policy.hardInputLimit) return;
-  // Legacy's RequestInputLimitError text (rewrite/src/engine/agent-runtime/request-input-limit.ts);
+  // Legacy's RequestInputLimitError text (src/engine/agent-runtime/request-input-limit.ts);
   // the `request_input_limit: ` prefix carries its code to clients.
   const text =
     policy.limitSource === 'model_capacity'

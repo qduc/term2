@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Enforce the layer graph over the whole production tree (rewrite/src).
-// Each top-level folder of rewrite/src is a layer. A layer may import itself, the
+// Enforce the layer graph over the whole production tree (src).
+// Each top-level folder of src is a layer. A layer may import itself, the
 // layers listed in LAYER_DEPENDENCIES and shared/ (pure helpers every layer may use).
 // Edges that predate the guard are listed one per line in layer-allowlist.json;
 // a new crossing edge fails, and a listed edge that no longer exists is reported.
@@ -9,8 +9,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const scripts = path.dirname(fileURLToPath(import.meta.url));
-const repo = path.resolve(scripts, '../..');
-const rewriteSrc = path.join(repo, 'rewrite/src');
+const repo = path.resolve(scripts, '..');
+const rewriteSrc = path.join(repo, 'src');
 const allowlistPath = path.join(scripts, 'layer-allowlist.json');
 
 const LAYER_DEPENDENCIES = {
@@ -73,7 +73,7 @@ for (const importer of files(rewriteSrc)) {
     const target = resolveImport(importer, specifier);
     if (!target) continue;
     if (!target.startsWith(rewriteSrc + path.sep)) {
-      problems.add(`${relative(importer)} imports ${path.relative(repo, target)} outside rewrite/src`);
+      problems.add(`${relative(importer)} imports ${path.relative(repo, target)} outside src`);
       continue;
     }
     const toLayer = layerOf(target);

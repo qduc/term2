@@ -2,315 +2,315 @@
   "maxLayerEdges": 270,
   "maxLines": 500,
   "fileCeilings": {
-    "rewrite/src/model/provider.ts": {
+    "src/model/provider.ts": {
       "lines": 505,
       "reason": "lazyModel is the one place a provider's streamed model becomes a Model; its native compact entry (body in provider-compact.ts) belongs beside stream. The usage it emits carries an aggregator's upstream provider, read from the same completion."
     },
-    "rewrite/src/clients/tui/presentation/components/message/CommandMessage.tsx": {
+    "src/clients/tui/presentation/components/message/CommandMessage.tsx": {
       "lines": 1021,
       "reason": "Verbatim copy of legacy source/components/message/CommandMessage.tsx: tool rows match legacy by construction; splitting it would reintroduce a rewrite to prove. Four lines are the port exception that reads a live render's measured elapsed time (live-tool-age.ts). Three more are the accepted difference that keeps a finished row's status while a decision is open (#136 item 8)."
     },
-    "rewrite/src/clients/tui/presentation/components/message/command-message-helpers.ts": {
+    "src/clients/tui/presentation/components/message/command-message-helpers.ts": {
       "lines": 965,
       "reason": "Verbatim copy of legacy source/components/message/command-message-helpers.ts, the parsers and labels CommandMessage and its renderers share."
     },
-    "rewrite/src/clients/tui/menus/menu-controller.ts": {
+    "src/clients/tui/menus/menu-controller.ts": {
       "lines": 846,
-      "reason": "Verbatim port of rewrite/src/clients/components/input/menu-controller.ts (the legacy menu stack); kept whole so it stays diffable against the legacy oracle."
+      "reason": "Verbatim port of src/clients/components/input/menu-controller.ts (the legacy menu stack); kept whole so it stays diffable against the legacy oracle."
     },
-    "rewrite/src/clients/tui/menus/use-provider-selection.ts": {
+    "src/clients/tui/menus/use-provider-selection.ts": {
       "lines": 926,
-      "reason": "Verbatim port of rewrite/src/clients/hooks/use-provider-selection.ts (the legacy /providers manager state machine); kept whole so it stays diffable against the legacy oracle."
+      "reason": "Verbatim port of src/clients/hooks/use-provider-selection.ts (the legacy /providers manager state machine); kept whole so it stays diffable against the legacy oracle."
     },
-    "rewrite/src/clients/tui/menus/use-subagent-pool-selection.ts": {
+    "src/clients/tui/menus/use-subagent-pool-selection.ts": {
       "lines": 748,
       "reason": "Port of source/hooks/use-subagent-pool-selection.ts with only imports changed; kept whole so it stays diffable against the legacy oracle."
     },
-    "rewrite/src/clients/tui/session.tsx": {
+    "src/clients/tui/session.tsx": {
       "lines": 541,
       "reason": "The session wires the composer to the ported legacy menu stack (useMenuStack, double-Escape) and routes every report into the transcript as legacy's addSystemMessage does; that wiring closes over submit, rewind and the viewport, declared later in the same component, so moving it out would add ref plumbing rather than a job seam. The composer's JSX also sits inside ComposerWidth (legacy InputBox's width-0 first frame), which only wraps it, and the command path routes a legacy clear-and-switch confirmation to the plan-toggle hook. The approval panel's Escape adds legacy's Stopped line through the viewport (one prop). The menu stack's first-run setup prompt sits under the live divider as legacy BottomArea places it (one line; the gate itself lives in menus/use-first-run-setup.ts). Candidate 2 adds the ported approval prompt host and tasks panel around the hidden composer box (legacy BottomArea order), which the same routing owns. The harness composer acknowledgement waits for the input to remount after an Esc-closed menu (two lines)."
     },
-    "rewrite/src/clients/tui/approval-prompt.tsx": {
+    "src/clients/tui/approval-prompt.tsx": {
       "lines": 1145,
       "reason": "Verbatim port of legacy source/components/prompt/ApprovalPrompt.tsx (every approval and ask_user layout and key path); only its data access changed, so it matches legacy by construction."
     },
-    "rewrite/src/engine/turn-tools.ts": {
+    "src/engine/turn-tools.ts": {
       "lines": 514,
       "reason": "One per-call Execution record carries a call's planning, admission, interaction answers and settlement; the chosen approval grant rides it like the batch-asked answer, so splitting would pass that record across files."
     },
-    "rewrite/src/app/tool-surface.ts": {
+    "src/app/tool-surface.ts": {
       "lines": 518,
       "reason": "Builds one agent's tool surface; candidate 2 joins the session browser (solo/tools) and the worker advisory client (solo/approvals), each one wiring line in the same builder."
     },
-    "rewrite/src/engine/turn-model.ts": {
+    "src/engine/turn-model.ts": {
       "lines": 511,
       "reason": "One model step with its recovery loop; candidate 2 joins the replacement-boundary projection with legacy's retry notices and model_retrying observation, which share the loop's state."
     },
-    "rewrite/src/protocol/projection.ts": {
+    "src/protocol/projection.ts": {
       "lines": 503,
       "reason": "Snapshot projection of every wire fact kind; candidate 2's retry and child tool-state fields are a few lines each in the same switch."
     },
-    "rewrite/src/protocol/wire.ts": {
+    "src/protocol/wire.ts": {
       "lines": 507,
       "reason": "The wire type catalogue; candidate 2 adds the task's live tool state fields beside the others, and usage carries OpenRouter's upstream provider."
     },
-    "rewrite/src/session/conversation.ts": {
+    "src/session/conversation.ts": {
       "lines": 510,
       "reason": "The Conversation's turn driver; candidate 2 keeps both the question-cancel notice (a3) and the cross-turn compaction hold (solo/tools), each closing over the same driver state."
     },
-    "rewrite/src/session/replay-fold.ts": {
+    "src/session/replay-fold.ts": {
       "lines": 503,
       "reason": "The replay fold; candidate 2 keeps both cancelled-turn settlings (a3's unstarted calls and tools' in-flight step), which run on the same fold state."
     },
-    "rewrite/src/app/agent.ts": {
+    "src/app/agent.ts": {
       "lines": 877,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/app/lib/agent-configuration.ts": {
+    "src/app/lib/agent-configuration.ts": {
       "lines": 544,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/app/lib/agent-factory.ts": {
+    "src/app/lib/agent-factory.ts": {
       "lines": 673,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/clients/components/input/menu-controller.ts": {
+    "src/clients/components/input/menu-controller.ts": {
       "lines": 849,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/clients/control-socket/control-socket.ts": {
+    "src/clients/control-socket/control-socket.ts": {
       "lines": 889,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/clients/discord/discord-bridge.ts": {
+    "src/clients/discord/discord-bridge.ts": {
       "lines": 1275,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/clients/hooks/use-provider-selection.ts": {
+    "src/clients/hooks/use-provider-selection.ts": {
       "lines": 901,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/config/profiles/resolver.ts": {
+    "src/config/profiles/resolver.ts": {
       "lines": 741,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/config/settings/settings-schema.ts": {
+    "src/config/settings/settings-schema.ts": {
       "lines": 1361,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/config/settings/settings-service.ts": {
+    "src/config/settings/settings-service.ts": {
       "lines": 1263,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/config/settings/settings-ui-metadata.ts": {
+    "src/config/settings/settings-ui-metadata.ts": {
       "lines": 543,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/engine/agent-runtime/application-run-loop.ts": {
+    "src/engine/agent-runtime/application-run-loop.ts": {
       "lines": 2593,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/engine/agent-runtime/context-compaction/local-context-compactor.ts": {
+    "src/engine/agent-runtime/context-compaction/local-context-compactor.ts": {
       "lines": 543,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/engine/agent-runtime/generation-guard.ts": {
+    "src/engine/agent-runtime/generation-guard.ts": {
       "lines": 536,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/engine/agent-runtime/permission-boundary.ts": {
+    "src/engine/agent-runtime/permission-boundary.ts": {
       "lines": 659,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/engine/agent-runtime/scope-resolver.ts": {
+    "src/engine/agent-runtime/scope-resolver.ts": {
       "lines": 717,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/engine/lib/subagent-bridge.ts": {
+    "src/engine/lib/subagent-bridge.ts": {
       "lines": 659,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/engine/retry/retry-error-classification.ts": {
+    "src/engine/retry/retry-error-classification.ts": {
       "lines": 542,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/model/models/model-resolution.ts": {
+    "src/model/models/model-resolution.ts": {
       "lines": 699,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/model/providers/ai-sdk-streamed-model.ts": {
+    "src/model/providers/ai-sdk-streamed-model.ts": {
       "lines": 523,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/model/providers/codex-responses-model.ts": {
+    "src/model/providers/codex-responses-model.ts": {
       "lines": 2444,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/model/providers/codex.provider.ts": {
+    "src/model/providers/codex.provider.ts": {
       "lines": 765,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/model/providers/model-catalog/catalog.generated.ts": {
+    "src/model/providers/model-catalog/catalog.generated.ts": {
       "lines": 3789,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/model/providers/openai-chat-completions-model.ts": {
+    "src/model/providers/openai-chat-completions-model.ts": {
       "lines": 673,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/model/providers/openai-responses-model.ts": {
+    "src/model/providers/openai-responses-model.ts": {
       "lines": 928,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/session/approval/shell-auto-approval-evaluator.ts": {
+    "src/session/approval/shell-auto-approval-evaluator.ts": {
       "lines": 797,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/session/conversation/conversation-decoder.ts": {
+    "src/session/conversation/conversation-decoder.ts": {
       "lines": 771,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/session/conversation/conversation-events.ts": {
+    "src/session/conversation/conversation-events.ts": {
       "lines": 538,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/session/conversation/conversation-persistence.ts": {
+    "src/session/conversation/conversation-persistence.ts": {
       "lines": 1224,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/session/conversation/conversation-replay.ts": {
+    "src/session/conversation/conversation-replay.ts": {
       "lines": 1974,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/session/conversation/conversation-store.ts": {
+    "src/session/conversation/conversation-store.ts": {
       "lines": 570,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/session/conversation/session-browser.ts": {
+    "src/session/conversation/session-browser.ts": {
       "lines": 1076,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/session/conversation/session-index/session-index-database.ts": {
+    "src/session/conversation/session-index/session-index-database.ts": {
       "lines": 1042,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/session/logging/conversation-log-events.ts": {
+    "src/session/logging/conversation-log-events.ts": {
       "lines": 511,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/session/logging/logging-service.ts": {
+    "src/session/logging/logging-service.ts": {
       "lines": 566,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/session/logging/provider-traffic.ts": {
+    "src/session/logging/provider-traffic.ts": {
       "lines": 1766,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/session/session/session-composition.ts": {
+    "src/session/session/session-composition.ts": {
       "lines": 1484,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/session/session/session-turn-domain.ts": {
+    "src/session/session/session-turn-domain.ts": {
       "lines": 863,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/session/tool-execution-ledger.ts": {
+    "src/session/tool-execution-ledger.ts": {
       "lines": 779,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/shared/gateway/interaction-protocol.ts": {
+    "src/shared/gateway/interaction-protocol.ts": {
       "lines": 657,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/shared/lib/tool-invoke.ts": {
+    "src/shared/lib/tool-invoke.ts": {
       "lines": 559,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/shared/utils/settings-command.ts": {
+    "src/shared/utils/settings-command.ts": {
       "lines": 593,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/shared/utils/shell/execute-shell.ts": {
+    "src/shared/utils/shell/execute-shell.ts": {
       "lines": 605,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/shared/utils/shell/sandbox/sandbox-policy.ts": {
+    "src/shared/utils/shell/sandbox/sandbox-policy.ts": {
       "lines": 564,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/tools/agent/run-subagent-async.ts": {
+    "src/tools/agent/run-subagent-async.ts": {
       "lines": 555,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/tools/agent/run-subagent.ts": {
+    "src/tools/agent/run-subagent.ts": {
       "lines": 577,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/tools/file/apply-patch.ts": {
+    "src/tools/file/apply-patch.ts": {
       "lines": 878,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/tools/file/code-context.ts": {
+    "src/tools/file/code-context.ts": {
       "lines": 796,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/tools/file/search-replace.ts": {
+    "src/tools/file/search-replace.ts": {
       "lines": 669,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/tools/mcp/mcp-connection-manager.ts": {
+    "src/tools/mcp/mcp-connection-manager.ts": {
       "lines": 595,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/tools/memory/memory-store.ts": {
+    "src/tools/memory/memory-store.ts": {
       "lines": 648,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/tools/memory/memory-tools.ts": {
+    "src/tools/memory/memory-tools.ts": {
       "lines": 591,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/tools/sandboxed-code-host/sandboxed-code-host.ts": {
+    "src/tools/sandboxed-code-host/sandboxed-code-host.ts": {
       "lines": 523,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/tools/subagents/codename-run-id.ts": {
+    "src/tools/subagents/codename-run-id.ts": {
       "lines": 694,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/tools/subagents/execution-runner.ts": {
+    "src/tools/subagents/execution-runner.ts": {
       "lines": 634,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/tools/subagents/nested-runner.ts": {
+    "src/tools/subagents/nested-runner.ts": {
       "lines": 988,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/tools/subagents/subagent-async-registry.ts": {
+    "src/tools/subagents/subagent-async-registry.ts": {
       "lines": 1038,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/tools/subagents/subagent-notification-store.ts": {
+    "src/tools/subagents/subagent-notification-store.ts": {
       "lines": 602,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/tools/subagents/tool-policy.ts": {
+    "src/tools/subagents/tool-policy.ts": {
       "lines": 1444,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/tools/system/run-code/run-code-agent-capability.ts": {
+    "src/tools/system/run-code/run-code-agent-capability.ts": {
       "lines": 529,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/tools/system/run-code/run-code-runtime.ts": {
+    "src/tools/system/run-code/run-code-runtime.ts": {
       "lines": 1194,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/tools/system/run-code/run-code.ts": {
+    "src/tools/system/run-code/run-code.ts": {
       "lines": 665,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "rewrite/src/tools/system/shell.ts": {
+    "src/tools/system/shell.ts": {
       "lines": 1465,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     }

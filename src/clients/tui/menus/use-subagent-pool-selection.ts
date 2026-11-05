@@ -25,7 +25,7 @@ import {
 } from './model-catalog.js';
 
 const SETTING_KEYS = { AGENT_MODEL_SELECTION: 'agent.modelSelection' } as const;
-// rewrite/src/config/settings/model-selection.ts ModelSelectionSchema, which settings-schema.ts uses for pool entries.
+// src/config/settings/model-selection.ts ModelSelectionSchema, which settings-schema.ts uses for pool entries.
 const TierModelPoolEntrySchema = z.object({
   model: z.string().trim().min(1),
   provider: z.string().trim().min(1),

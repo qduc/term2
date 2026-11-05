@@ -31,13 +31,13 @@ export type TuiStatusInfo = {
   readonly provider?: { readonly id: string; readonly label: string };
 };
 
-/** Legacy `PathEntry` (rewrite/src/app/file-service.ts). */
+/** Legacy `PathEntry` (src/app/file-service.ts). */
 export type MenuPathEntry = { readonly path: string; readonly type: 'file' | 'directory' };
 export type MenuLogger = {
   warn(message: string, details?: Record<string, unknown>): void;
   error(message: string, details?: Record<string, unknown>): void;
 };
-/** Legacy `WorkspaceEntriesMeta` (rewrite/src/app/file-service.ts). */
+/** Legacy `WorkspaceEntriesMeta` (src/app/file-service.ts). */
 export type MenuWorkspaceEntriesMeta = {
   lastLoadedAt: number | null;
   totalEntries: number;
@@ -45,7 +45,7 @@ export type MenuWorkspaceEntriesMeta = {
   truncatedByTotalLimit: boolean;
   limit: number;
 };
-/** Legacy `ModelInfo` (rewrite/src/model/model-service.ts). */
+/** Legacy `ModelInfo` (src/model/model-service.ts). */
 export type MenuModelInfo = {
   id: string;
   name?: string;
@@ -78,7 +78,7 @@ export interface TuiSettingsSchema {
   subagentPool(key: string): { readonly roleLabel: string; readonly entryShape: 'entries' | 'models' } | undefined;
 }
 
-/** Legacy ProviderSelectionItem (rewrite/src/model/providers/provider-service.ts). */
+/** Legacy ProviderSelectionItem (src/model/providers/provider-service.ts). */
 export interface MenuProviderSelectionItem {
   id: string;
   label: string;
@@ -88,7 +88,7 @@ export interface MenuProviderSelectionItem {
   isDisabled: boolean;
 }
 
-/** A legacy ModelCatalogSession (rewrite/src/model/models/model-catalog-session.ts). */
+/** A legacy ModelCatalogSession (src/model/models/model-catalog-session.ts). */
 export interface MenuModelCatalog {
   getCached(provider: string): MenuModelInfo[] | undefined;
   load(provider: string): Promise<{ kind: 'loaded' | 'cached' | 'stale'; models: MenuModelInfo[] }>;
@@ -139,7 +139,7 @@ export interface TuiModelSettings {
   providerItems(): MenuProviderSelectionItem[];
 }
 
-/** Legacy `SettingCompletionItem` (rewrite/src/clients/hooks/settings-completion-config.ts). */
+/** Legacy `SettingCompletionItem` (src/clients/hooks/settings-completion-config.ts). */
 export type SettingCompletionItem = {
   key: string;
   label: string;
@@ -152,14 +152,14 @@ export type SettingCompletionItem = {
   isAdvanced?: boolean;
 };
 export type SettingsCategory = { id: string; label: string };
-/** Legacy `SettingValueSuggestion` (rewrite/src/shared/utils/value-suggestions.ts). */
+/** Legacy `SettingValueSuggestion` (src/shared/utils/value-suggestions.ts). */
 export type SettingValueSuggestion = { value: string; description?: string };
 
 /**
  * The legacy settings-menu library: schema metadata, list building, filtering,
- * value suggestions and value parsing, from rewrite/src/config/settings,
- * rewrite/src/clients/hooks/settings-completion-{config,logic}.ts, rewrite/src/shared/utils/value-suggestions.ts
- * and rewrite/src/shared/utils/settings-command.ts. All pure except
+ * value suggestions and value parsing, from src/config/settings,
+ * src/clients/hooks/settings-completion-{config,logic}.ts, src/shared/utils/value-suggestions.ts
+ * and src/shared/utils/settings-command.ts. All pure except
  * `fetchLiveSettingValueSuggestions`, which legacy also calls only when a
  * value frame opens, never per render.
  */
@@ -210,7 +210,7 @@ export interface MenuSettingsService {
   onChange(listener: () => void): () => void;
 }
 
-/** Legacy `ConversationListEntry` (rewrite/src/session/conversation/conversation-persistence.ts). */
+/** Legacy `ConversationListEntry` (src/session/conversation/conversation-persistence.ts). */
 export type MenuConversationEntry = {
   id: string;
   shortRef?: string;
@@ -268,7 +268,7 @@ export interface TuiMenus {
   readonly providers?: TuiProviderMenu;
 }
 
-/** Legacy `CustomProviderDraft` (rewrite/src/model/providers/provider-service.ts). */
+/** Legacy `CustomProviderDraft` (src/model/providers/provider-service.ts). */
 export type MenuProviderDraft = { name: string; type: string; baseUrl?: string; apiKey?: string };
 /** Legacy `ProviderSelectionItem`. */
 export type MenuProviderItem = {
@@ -289,7 +289,7 @@ export type MenuProviderPreset = {
   type?: string;
   baseUrl?: string;
 };
-/** Legacy `OAuthAccountSummary` (rewrite/src/model/providers/oauth-accounts.ts). */
+/** Legacy `OAuthAccountSummary` (src/model/providers/oauth-accounts.ts). */
 export type MenuOAuthAccount = { id: string; label: string; isSelected: boolean; isInUse: boolean };
 
 /**

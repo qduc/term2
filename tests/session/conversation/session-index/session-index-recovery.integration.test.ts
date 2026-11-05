@@ -4,15 +4,12 @@ import os from 'node:os';
 import path from 'node:path';
 import Database from 'better-sqlite3';
 import { createConversationLogWriter } from '../../../helpers/conversation-log-writer.js';
-import { setConversationsDirForTest } from '../../../../rewrite/src/session/conversation/conversation-persistence.js';
-import {
-  SessionBrowser,
-  type SessionBrowserContext,
-} from '../../../../rewrite/src/session/conversation/session-browser.js';
-import { SessionIndexDatabase } from '../../../../rewrite/src/session/conversation/session-index/session-index-database.js';
-import { SessionIndexService } from '../../../../rewrite/src/session/conversation/session-index/session-index-service.js';
-import { SCHEMA_VERSION } from '../../../../rewrite/src/session/conversation/session-index/session-index-schema.js';
-import { deltaSidecarPathFor } from '../../../../rewrite/src/session/logging/conversation-log-events.js';
+import { setConversationsDirForTest } from '../../../../src/session/conversation/conversation-persistence.js';
+import { SessionBrowser, type SessionBrowserContext } from '../../../../src/session/conversation/session-browser.js';
+import { SessionIndexDatabase } from '../../../../src/session/conversation/session-index/session-index-database.js';
+import { SessionIndexService } from '../../../../src/session/conversation/session-index/session-index-service.js';
+import { SCHEMA_VERSION } from '../../../../src/session/conversation/session-index/session-index-schema.js';
+import { deltaSidecarPathFor } from '../../../../src/session/logging/conversation-log-events.js';
 
 let dir = '';
 let dbPath = '';

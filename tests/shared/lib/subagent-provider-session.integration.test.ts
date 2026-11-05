@@ -1,9 +1,9 @@
 import { it, expect } from 'vitest';
-import { SubagentBridge as ProductionSubagentBridge } from '../../../rewrite/src/engine/lib/subagent-bridge.js';
-import { SessionContextService } from '../../../rewrite/src/session/session/session-context-service.js';
-import { ToolOwnershipRegistry } from '../../../rewrite/src/session/approval/tool-ownership-registry.js';
-import { createOpencodeSessionInjector } from '../../../rewrite/src/model/providers/opencode-session.js';
-import { SubagentAsyncRegistry } from '../../../rewrite/src/tools/subagents/subagent-async-registry.js';
+import { SubagentBridge as ProductionSubagentBridge } from '../../../src/engine/lib/subagent-bridge.js';
+import { SessionContextService } from '../../../src/session/session/session-context-service.js';
+import { ToolOwnershipRegistry } from '../../../src/session/approval/tool-ownership-registry.js';
+import { createOpencodeSessionInjector } from '../../../src/model/providers/opencode-session.js';
+import { SubagentAsyncRegistry } from '../../../src/tools/subagents/subagent-async-registry.js';
 
 /**
  * The seam this file guards: `SubagentBridge` (foreground runs) and

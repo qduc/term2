@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { Readable, Writable } from 'node:stream';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import * as acp from '@agentclientprotocol/sdk/experimental/v2';
-import { resolveSettingsDirectory } from '../../../rewrite/src/config/settings/settings-path.js';
+import { resolveSettingsDirectory } from '../../../src/config/settings/settings-path.js';
 import { createTestChildEnv } from '../../helpers/terminal-e2e.js';
 
 // The launcher is exercised as a real child process because its contract is a
@@ -39,7 +39,7 @@ const textTurnBody = [
 
 /**
  * One OpenAI-compatible tool-call turn: a `shell` call with
- * `sandbox: 'unsandboxed'`, which `rewrite/src/tools/system/shell.ts` makes
+ * `sandbox: 'unsandboxed'`, which `src/tools/system/shell.ts` makes
  * approval-required, so the child must ask its ACP client for permission.
  */
 function approvalToolTurnBody(command: string): string {

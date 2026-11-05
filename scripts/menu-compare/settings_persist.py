@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Settings persistence evidence: run a settings-changing path in both CLIs, then compare what is on disk.
 
-  python3 rewrite/scripts/menu-compare/settings_persist.py [cols rows] [case ...]
+  python3 scripts/menu-compare/settings_persist.py [cols rows] [case ...]
 
 Per case and CLI: a fresh scratch HOME with the seeded settings file (screen.py), one launch that runs
 the case's steps and quits, the first launch's last screen with its notice row, the settings file as it is then (masked text, so key

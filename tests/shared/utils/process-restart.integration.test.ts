@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { expect, it } from 'vitest';
-import { createRestartPlan } from '../../../rewrite/src/shared/utils/process-restart.js';
+import { createRestartPlan } from '../../../src/shared/utils/process-restart.js';
 
 it('executes shell-quoted manual recovery with exactly the current resume/settings/SSH/control context', async () => {
   const root = await mkdtemp(join(tmpdir(), "term2-restart-quote-'"));

@@ -5,13 +5,13 @@ import {
   unregisterProvider,
   upsertProvider,
   type ProviderDefinition,
-} from '../../rewrite/src/model/providers/registry.js';
-import '../../rewrite/src/model/providers/index.js';
-import { createOpenAICompatibleProviderDefinition } from '../../rewrite/src/model/providers/openai-compatible.provider.js';
-import { RetryingModel } from '../../rewrite/src/model/providers/retrying-model.js';
-import { classifyInLoopModelRetry } from '../../rewrite/src/engine/retry/in-loop-model-retry.js';
-import { isTransientRetryableError } from '../../rewrite/src/engine/retry/retry-error-classification.js';
-import type { ILoggingService, ISettingsService } from '../../rewrite/src/shared/service-interfaces.js';
+} from '../../src/model/providers/registry.js';
+import '../../src/model/providers/index.js';
+import { createOpenAICompatibleProviderDefinition } from '../../src/model/providers/openai-compatible.provider.js';
+import { RetryingModel } from '../../src/model/providers/retrying-model.js';
+import { classifyInLoopModelRetry } from '../../src/engine/retry/in-loop-model-retry.js';
+import { isTransientRetryableError } from '../../src/engine/retry/retry-error-classification.js';
+import type { ILoggingService, ISettingsService } from '../../src/shared/service-interfaces.js';
 import { startFakeProviderHttpServer, type FakeProviderHttpServer } from './fake-provider-http-server.js';
 import { readFixtureEnvelope } from './fixture-envelope.js';
 import { fixtureRequest, fixtureTool, multiTurnFixture } from './provider-wire-fixtures.js';

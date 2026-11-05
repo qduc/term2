@@ -3,8 +3,8 @@ import { mkdtempSync, readFileSync, appendFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import fc from 'fast-check';
-import { createLog, openLog, readFactLines } from '../../rewrite/src/session/log.ts';
-import { captureDirectFinalWindow, recoverDirectFinalWindow } from '../../rewrite/src/session/final.ts';
+import { createLog, openLog, readFactLines } from '../../src/session/log.ts';
+import { captureDirectFinalWindow, recoverDirectFinalWindow } from '../../src/session/final.ts';
 
 // Decode embedded provider JSON once, while also inspecting literal ref framing.
 function storedStrings(value, out = []) {

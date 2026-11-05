@@ -3,16 +3,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { unregisterProvider } from '../../../rewrite/src/model/providers/registry.js';
-import type { ProviderFetch } from '../../../rewrite/src/model/providers/registry.js';
-import type { ILoggingService } from '../../../rewrite/src/shared/service-interfaces.js';
-import { SettingsService } from '../../../rewrite/src/config/settings/settings-service.js';
-import type { KnownCustomProviderType } from '../../../rewrite/src/config/settings/settings-schema.js';
-import {
-  clearModelMemoryCacheForTest,
-  fetchModels,
-  getModelCacheFilePath,
-} from '../../../rewrite/src/model/model-service.js';
+import { unregisterProvider } from '../../../src/model/providers/registry.js';
+import type { ProviderFetch } from '../../../src/model/providers/registry.js';
+import type { ILoggingService } from '../../../src/shared/service-interfaces.js';
+import { SettingsService } from '../../../src/config/settings/settings-service.js';
+import type { KnownCustomProviderType } from '../../../src/config/settings/settings-schema.js';
+import { clearModelMemoryCacheForTest, fetchModels, getModelCacheFilePath } from '../../../src/model/model-service.js';
 
 const catalog = [
   { id: 'chat', supported_endpoint_types: ['openai', 'anthropic', 'gemini'] },

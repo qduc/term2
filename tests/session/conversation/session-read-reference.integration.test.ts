@@ -3,9 +3,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createConversationLogWriter } from '../../helpers/conversation-log-writer.js';
-import { setConversationsDirForTest } from '../../../rewrite/src/session/conversation/conversation-persistence.js';
-import { SessionBrowser } from '../../../rewrite/src/session/conversation/session-browser.js';
-import { SessionIndexService } from '../../../rewrite/src/session/conversation/session-index/session-index-service.js';
+import { setConversationsDirForTest } from '../../../src/session/conversation/conversation-persistence.js';
+import { SessionBrowser } from '../../../src/session/conversation/session-browser.js';
+import { SessionIndexService } from '../../../src/session/conversation/session-index/session-index-service.js';
 
 const dirs: string[] = [];
 afterEach(() => {

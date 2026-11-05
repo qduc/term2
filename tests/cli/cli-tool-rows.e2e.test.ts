@@ -9,8 +9,8 @@ import {
   HARNESS_IDLE_ENV,
   waitForHarnessComposerValue,
   waitForHarnessIdleGeneration,
-} from '../../rewrite/src/shared/lib/harness-input-idle.js';
-import { resolveSettingsDirectory } from '../../rewrite/src/config/settings/settings-path.js';
+} from '../../src/shared/lib/harness-input-idle.js';
+import { resolveSettingsDirectory } from '../../src/config/settings/settings-path.js';
 
 // Runs the built terminal UI (`pnpm build` output, as CI does before test:e2e) in a real pty against
 // an OpenAI-compatible chat-completions double, and reads what the terminal rendered.

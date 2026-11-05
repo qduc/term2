@@ -3,14 +3,14 @@
 // Startup is mostly Node's ESM loader resolving and compiling some thousand separate modules:
 // 1.6 s to an idle composer unbundled, about 1.05 s bundled (with a compile cache). The
 // bundle takes the entry's own path, so dist/cli.js, restart (argv[1]) and every test that
-// launches dist/rewrite/src/app/cli.js run it unchanged. The other emitted modules stay
+// launches dist/src/app/cli.js run it unchanged. The other emitted modules stay
 // beside it: worker threads, prompts and other assets are still loaded from their own files.
 import fs from 'node:fs';
 import path from 'node:path';
 import { build } from 'esbuild';
 
 export async function bundleEntry(dist) {
-  const entry = path.join(dist, 'rewrite/src/app/cli.js');
+  const entry = path.join(dist, 'src/app/cli.js');
   const entryDir = path.dirname(entry);
   const tmp = path.join(dist, '.cli.bundle.js');
   // Our modules locate assets, workers and dynamic imports from import.meta. Rewrite each use to

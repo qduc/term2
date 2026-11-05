@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path';
 import { connect } from 'node:net';
 import { createInterface } from 'node:readline';
 import { expect, it } from 'vitest';
-import { listControlAdvertisements } from '../rewrite/src/clients/control-socket/control-socket.js';
+import { listControlAdvertisements } from '../src/clients/control-socket/control-socket.js';
 import { createIsolatedWorkspaceLease, writePtyTextAndSubmit } from './provider-black-box/provider-test-harness.js';
 
 const productionEnv = {
@@ -109,7 +109,7 @@ async function fixture(holdFirst = false, backgroundFirst = false) {
       );
     },
   });
-  const entry = join(workspace.root, 'direct-dist/rewrite/src/app/cli.js');
+  const entry = join(workspace.root, 'direct-dist/src/app/cli.js');
   const runtime = join(workspace.root, 'runtime');
   const child = await workspace.start({
     command: process.execPath,
@@ -300,7 +300,7 @@ it.skipIf(process.platform !== 'linux' || !process.execve)(
       await child.waitForVisibleOutput('native-restart-answer');
       await child.waitForIdleInput();
       const original = (await f.logs())[0]!.file;
-      const commands = join(f.workspace.root, 'direct-dist/rewrite/src/clients/tui/menus/legacy-commands.js');
+      const commands = join(f.workspace.root, 'direct-dist/src/clients/tui/menus/legacy-commands.js');
       await patchCompiledModule(commands, 'Exit the application', 'Changed compiled core B');
       // Running module must still be A; B is only available after real exec.
       await writePtyTextAndSubmit(child, '/help');

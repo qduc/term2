@@ -12,7 +12,7 @@ import type {
   SubagentRunHandle,
   SubagentRunStatus,
 } from '../../subagents/types.js';
-import type { ResolvedSubagentLaunch } from '../../../engine/lib/subagent-bridge.js';
+import type { ResolvedSubagentLaunch } from '../../../engine/lib/resolved-subagent-launch.js';
 import type { NestedApprovalOwner } from '../../../session/approval/nested-approval-owner.js';
 import type { ToolApprovalPolicyRegistry } from '../../../session/approval/tool-approval-policy-registry.js';
 import { applyApprovalGrant } from '../../../session/approval/approval-grant-executor.js';
@@ -22,7 +22,7 @@ import { RUN_CODE_LIMITS } from './run-code-runtime.js';
 
 /**
  * Host-owned bridge callbacks the script `agent` capability launches through.
- * Only the resolved-definition entry points of {@link '../lib/subagent-bridge.js'}
+ * Only the resolved-definition entry points of {@link ResolvedSubagentLaunch}
  * appear here: a raw script spec can never reach a raw `runSubagent` callback,
  * because the only path from script input to a launch goes through
  * `resolveAgentSpecForChild` first.

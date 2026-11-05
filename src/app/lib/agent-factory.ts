@@ -47,7 +47,7 @@ import type { DurableGoal } from '../../session/logging/conversation-log-events.
 import { ModelSelectionSchema, type ModelSelection } from '../../config/settings/model-selection.js';
 import type { AgentSpec } from '../../engine/agent-runtime/types.js';
 import type { NestedSubagentResult, SubagentRunHandle } from '../../tools/subagents/types.js';
-import type { ResolvedSubagentLaunch } from '../../engine/lib/subagent-bridge.js';
+import type { ResolvedSubagentLaunch } from '../../engine/lib/resolved-subagent-launch.js';
 
 export interface AgentFactoryDeps {
   driverFactory?: NestedRunDriverFactory;

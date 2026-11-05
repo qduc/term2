@@ -51,7 +51,7 @@ import type {
   SubagentRunHandle,
   SubagentRunStatus,
 } from '../tools/subagents/types.js';
-import type { ResolvedSubagentLaunch } from '../engine/lib/subagent-bridge.js';
+import type { ResolvedSubagentLaunch } from '../engine/lib/resolved-subagent-launch.js';
 import type {
   CancelRunParams,
   GetSubagentResultParams,

@@ -200,7 +200,7 @@ describe('adaptLegacyDefinition round-trip fidelity', () => {
     expect(legacy.maxTurns).toBe(15);
   });
 
-  it('custom resolved agent adapts to a legacy definition that ExecutionSubagentRunner can consume', () => {
+  it('custom resolved agent adapts to a legacy definition for nested execution', () => {
     const resolved: ResolvedAgentDefinition = {
       name: 'custom-reader',
       instructions: 'Read files and report.',
@@ -220,7 +220,7 @@ describe('adaptLegacyDefinition round-trip fidelity', () => {
 
     const legacy = adaptLegacyDefinition(resolved);
 
-    // The legacy definition is directly consumable by ExecutionSubagentRunner
+    // The legacy definition remains the nested-execution launch contract
     expect(legacy.role).toBe('custom-reader');
     expect(legacy.name).toBe('custom-reader');
     expect(legacy.instructions).toBe('Read files and report.');

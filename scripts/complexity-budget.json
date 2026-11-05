@@ -1,5 +1,5 @@
 {
-  "maxLayerEdges": 266,
+  "maxLayerEdges": 237,
   "maxLines": 500,
   "fileCeilings": {
     "src/model/provider.ts": {
@@ -120,10 +120,6 @@
     },
     "src/engine/agent-runtime/scope-resolver.ts": {
       "lines": 717,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
-    },
-    "src/engine/lib/subagent-bridge.ts": {
-      "lines": 659,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/engine/retry/retry-error-classification.ts": {
@@ -272,10 +268,6 @@
     },
     "src/tools/subagents/codename-run-id.ts": {
       "lines": 694,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
-    },
-    "src/tools/subagents/execution-runner.ts": {
-      "lines": 569,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/tools/subagents/nested-runner.ts": {

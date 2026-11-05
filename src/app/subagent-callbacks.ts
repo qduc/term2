@@ -4,7 +4,7 @@
  */
 import type { ResolvedAgentDefinition } from '../engine/agent-runtime/resolved-agent.js';
 import type { AgentFactoryDeps } from './lib/agent-factory.js';
-import type { ResolvedSubagentLaunch } from '../engine/lib/subagent-bridge.js';
+import type { ResolvedSubagentLaunch } from '../engine/lib/resolved-subagent-launch.js';
 import type { AgentSpec } from '../engine/agent-runtime/types.js';
 import { SubagentPoolEntrySchema } from '../config/settings/settings-schema.js';
 import type { SubagentResult, SubagentRunHandle, SubagentRunStatus } from '../tools/subagents/types.js';

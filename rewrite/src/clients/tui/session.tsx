@@ -264,7 +264,9 @@ export function TuiSession({
     setNotice,
   });
   const harnessActive = composerActive && !menuStack.owns && !busy;
-  useHarnessInput(harnessActive, Boolean(state.activeTurnId), menuStack.value, menuStack.open || !rewindHidden);
+  // Not under an Esc-closed menu's placeholder: the input that takes the next keys mounts a render later.
+  const harnessMounted = (menuStack.open || !rewindHidden) && !menuStack.closedEmpty;
+  useHarnessInput(harnessActive, Boolean(state.activeTurnId), menuStack.value, harnessMounted);
   const submit = async (
     input: string,
     submittedImages: ImageRef[] = images,

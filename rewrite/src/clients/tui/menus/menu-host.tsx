@@ -120,8 +120,11 @@ export function useMenuStack(options: {
   // command action writing `/model ` after the slash frame closed) becomes the composer draft.
   // Escape pressed in an open frame, until the hand-back below has run.
   const escaped = useRef(false);
+  // The render after the hand-back mounts the input; nothing else may render it soon (an already empty composer).
+  const [, afterEscape] = useState(0);
   useEffect(() => {
     if (open) return;
+    if (escaped.current) afterEscape((count) => count + 1);
     escaped.current = false;
     const { text, cursor } = snapshot.editor;
     if (text === synced.current) return;

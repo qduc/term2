@@ -88,10 +88,13 @@ export function createDirectConfigSettings(
   const requested = ModelSelectionSchema.parse(patch.model ?? agent.modelSelection);
   const provider = getProvider(requested.provider);
   if (!provider?.createStreamedModel) {
-    throw new Error(`Provider '${requested.provider}' does not expose an application streamed model.`);
+    // Asking for such a model is refused here. A session whose own provider is gone (deleted from settings) still
+    // opens, as legacy resumes it: its next turn fails when the model is resolved, with this same message.
+    if (patch.model !== undefined)
+      throw new Error(`Provider '${requested.provider}' does not expose an application streamed model.`);
   }
   // The source registry owns provider aliases; catalogs do not restrict custom model IDs.
-  agent.modelSelection = { provider: provider.id, model: requested.model };
+  agent.modelSelection = { provider: provider?.id ?? requested.provider, model: requested.model };
   if (patch.model !== undefined) {
     sources.set('agent.modelSelection', 'cli');
     sources.set('agent.modelSelection.provider', 'cli');

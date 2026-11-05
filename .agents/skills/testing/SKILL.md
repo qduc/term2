@@ -31,11 +31,11 @@ production build lacks `act`.
 
 ## Rules
 
-- **Never commit a unit test.** A `*.test.ts(x)` or `*.spec.ts(x)` under `source/`,
+- **Never commit a unit test.** A `*.test.ts(x)` or `*.spec.ts(x)` under `tests/`,
   `scripts/` or `docs/` that the default Vitest config would pick up is rejected unless
   it is one of the guards listed in `scripts/check-no-unit-tests.mjs`. Adding a guard
   needs the user's approval.
-- **Temporary tests are fine.** Write them next to the code so the default config finds
+- **Temporary tests are fine.** Write them under `tests/` so the default config finds
   them, run them, then delete them before committing. Don't `git add -A` with one in the
   tree.
 - **The other tiers stay and run in CI.** Change them when behavior changes. Add to them
@@ -92,7 +92,7 @@ and `68ef50ff` (local-only evidence), not a result file to resume appending.
   cause from that alone. A separate fixed harness defect missed an already
   captured HTTP request when no later PTY event woke its waiter; test HTTP-only
   wakeup and an unmet-predicate timeout, not just terminal output.
-- **Direct settings e2e teardown:** `source/direct-settings.e2e.test.ts` fails
+- **Direct settings e2e teardown:** `tests/cli/settings.e2e.test.ts` fails
   intermittently with `ENOTEMPTY: directory not empty, rmdir
   '<tmp>/term2-tool-rows-e2e-*/home'` (or `home/.local`) and no assertion
   failure. It reproduced on unmodified `main` `d7bf2ff` in 3 of 6 isolated runs
@@ -173,7 +173,7 @@ branches; do not infer that remote source `42724797` has those capabilities.
 
 ## Prompt and instruction changes
 
-Prompt text under `source/prompts/` is product behavior. When trimming a prompt, show
+Prompt text under `rewrite/src/session/prompts/` is product behavior. When trimming a prompt, show
 that its non-obvious content survives. For example, run the assembled prompt for the
 affected model and confirm the text is present, or run a non-interactive turn that
 depends on it.

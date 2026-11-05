@@ -101,7 +101,6 @@ Inherited output defaults use the same catalog model ceiling as the root factory
 
 ```sh
 node --test tools/supervised-term2/supervisor.test.mjs
-pnpm test source/services/agent-runtime/request-input-limit.test.ts
 pnpm test:provider-black-box
 ```
 

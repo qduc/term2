@@ -2,8 +2,10 @@
 
 This folder holds term2-next, which is term2: its production entry is
 `src/app/cli.ts`, built by `pnpm build` to `dist/rewrite/src/app/cli.js` and
-started by the package's `dist/cli.js` (#86). Legacy `source/` is no longer
-built as a CLI; nothing in `source/` imports this folder.
+started by the package's `dist/cli.js` (#86). All production code lives in
+`src/`: legacy code the CLI no longer reached was deleted (#88) and the rest of
+the old `source/` tree was moved into these layers (#87). Tests live in the
+root `tests/` folder, laid out by the same layer names.
 
 ## Layers
 
@@ -14,9 +16,7 @@ Every file under `src/` is reached from `src/app/cli.ts`; the reachability
 check below enforces it, and its allowlist names the five exceptions with
 reasons. `session/adopted/` is the one adopted folder left: it keeps the old
 session-fact validator for the offline v3 conversation migration and is not
-reached from the CLI. "May depend on" governs imports between these layers;
-which `src/` files may also import `source/` is a separate, named list in
-`scripts/check-layers.mjs`.
+reached from the CLI.
 
 | Layer       | Job                                                           | May depend on                  |
 | ----------- | ------------------------------------------------------------- | ------------------------------ |
@@ -28,9 +28,16 @@ which `src/` files may also import `source/` is a separate, named list in
 | `tools/`    | Tool contracts: schema, approval policy and execute function  | model, config                  |
 | `model/`    | Providers behind one streaming interface, item format         | nothing                        |
 | `config/`   | Settings reader contract                                      | nothing                        |
+| `shared/`   | Helpers every layer may import (utils, contracts, types)      | nothing (see below)            |
 | `app/`      | Composition root: the only place concrete layers are wired    | everything                     |
 
-## Rules that make it different from `source/`
+Code moved in from `source/` (#87) did not all fit the table. Its crossing
+edges, including those from `shared/` files that are not yet pure, are listed
+one per line in `scripts/layer-allowlist.json`. `check-layers.mjs` fails on a
+crossing edge that is not listed, and on any import from outside `src/`; it
+prints listed edges that no longer exist so the list only shrinks.
+
+## Rules that make it different from the old engine
 
 - **One log.** A session stores a single append-only JSONL log of native facts
   (`session/facts.ts`). History, status, the pending interaction, the queue and
@@ -59,9 +66,9 @@ wall-clock on a loaded 7-core box.
 | Only `session/` reads the log (`app/`, `clients/` ask the live session) | `check-layers.mjs` (log-reader guard) | every commit | in the above |
 | One projection: wire events are built only in `protocol/` | `check-rules.mjs` (one recorded exception: deferred web server) | every commit | 2.4 s |
 | Names are jobs (no service/adapter/orchestrator file or folder) | `check-rules.mjs` | every commit | in the above |
-| No new unused runtime exports (69 old ones recorded in `rule-baseline.json`; the list only shrinks) | `check-rules.mjs` | every commit | in the above |
+| No new unused runtime exports (470 old ones recorded in `rule-baseline.json`; the list only shrinks) | `check-rules.mjs` | every commit | in the above |
 | Every file is reached from `app/cli.ts` | `check-reachability.mjs` | every commit | 1.2 s |
-| Files stay under 500 lines; legacy edges only shrink | `check-complexity.mjs` | every commit | 0.15 s |
+| Files stay under 500 lines; allowlisted layer edges only shrink | `check-complexity.mjs` | every commit | 0.15 s |
 | A message's path stays short and runs through the production direct files | `bench/hops.mts` | every commit | 5.8 s |
 | The engine waits instead of calling up | layer table above (no upward import); the callbacks that still write facts (audit F1) are **not** checked | every commit | - |
 | One log: no second state to keep in sync | only the log-reader half is checked; the duplicate-reducer half (audit H1) is **not** | every commit | - |
@@ -72,7 +79,7 @@ A check that has a false positive or flakes is fixed or deleted the same day; ne
 
 ## Shared JSON transport contract
 
-`source/utils/json-value.ts` owns `JsonValue` and `isJsonValue` for workflow,
+`rewrite/src/shared/utils/json-value.ts` owns `JsonValue` and `isJsonValue` for workflow,
 sandbox-host and scripted tool-return consumers. The type and validator are
 transport primitives, not workflow policy: importing the workflow domain from
 these tool leaves inverted ownership. Workflow and host type modules retain
@@ -105,8 +112,8 @@ socket attach to the same host the same way.
    accepted.
 5. `engine/turn-model.ts` asks for the model through the registry the app
    built (`app/application-models.ts`, wrapped by
-   `app/generation-guard.ts`). `model/provider.ts` streams from the source
-   provider in `source/providers/`, retrying through `model/retry.ts`.
+   `app/generation-guard.ts`). `model/provider.ts` streams from the
+   provider in `model/providers/`, retrying through `model/retry.ts`.
 6. On the way back, each accepted fact and live delta reaches the host as a
    `DirectSessionUpdate`. `host/in-process-direct-attachment.ts` keeps one
    `DirectProjection` per session (`protocol/projection.ts`); it turns
@@ -130,7 +137,7 @@ The point of this rewrite is that a person can follow it. Three checks in CI,
 with budgets in `scripts/complexity-budget.json`, and one review step keep that
 measurable:
 
-- `scripts/check-complexity.mjs` fails when the source-edge allowlist grows, or
+- `scripts/check-complexity.mjs` fails when the layer-edge allowlist grows, or
   when a file passes 500 lines. The line limit is a prompt to look for a second
   job, not a target: split along a real seam, or, when a file reads better
   whole, give it a ceiling with a one-line reason. When something gets smaller,
@@ -148,7 +155,7 @@ measurable:
   `session/session.ts`, `session/conversation-turn.ts`, `engine/turn.ts`,
   `engine/turn-model.ts`, `app/generation-guard.ts`,
   `app/application-models.ts`, `model/provider.ts`, and four
-  `source/providers/` files. `app/` appears below `engine/` because the engine
+  `model/providers/` files. `app/` appears below `engine/` because the engine
   calls the model registry the app injected, not because `engine/` imports
   `app/`.
 - At the end of each phase, a fresh reader gets only this README and each
@@ -156,47 +163,21 @@ measurable:
   waits. Whatever they get wrong gets fixed in the structure or the docs before
   the next phase starts.
 
-## Porting: completeness and parity
+## Parity
 
-`parity/` holds the two checks that gate the port of `source/` onto these
-layers. The full plan, including the task breakdown, lives in the "term2 port
-plan" doc.
+`parity/run.mjs` runs each scenario in `parity/scenarios/` against a CLI
+build, with a scripted fake provider, and compares exit code, output, every
+provider request and the workspace files against `parity/goldens/`. The goldens
+were recorded from the old engine and are never edited to make a run pass.
 
-- `parity/inventory.mjs` extracts every feature of the current architecture
-  (CLI flags and subcommands, slash commands, tools, settings, providers, hook
-  events, gateway routes, persisted log events) and checks them against the
-  tracker `parity/features.json`. It fails on an untracked feature, a vanished
-  one not marked `dropped`, or a `ported` entry no scenario proves. `--write`
-  adds new features as `todo`.
-- `parity/run.mjs` runs each scenario in `parity/scenarios/` against a CLI
-  build, with a scripted fake provider, and compares exit code, output, every
-  provider request and the workspace files against `parity/goldens/`. Goldens
-  are recorded only from the old architecture.
+The feature tracker that gated the port (`parity/inventory.mjs` and
+`parity/features.json`) was retired at the flip (#87): it extracted features
+from `source/`, which no longer exists. Its last state, including the dropped
+and deferred entries described below, is in git history.
 
-The layer guard follows imports from `src/session/adopted/` and the direct
-files named in `check-layers.mjs` into `source/`, and checks every reached
-source layer against the table above. Existing dependency
-edges within `source/` that cross those rules are recorded one edge per line in
-`scripts/source-edge-allowlist.json`; the guard rejects newly added edges and
-prints stale entries for cleanup. It also reports reached source files missing
-from the map. Only `session/adopted/` and that named list may import
-`source/`, and `source/` cannot import from `rewrite/`.
-
-Concrete source-tool assembly lives in `app/source-tools.ts`: it binds source
-run-code to a concrete nested approval owner and session access/policy state.
-The native `tools/` contracts do not construct those upper-layer owners.
-
-Source mappings describe jobs, not directory names: the input React context is
-client state, provider-management policy is model-owned, the plan-mode
-interceptor is tool policy, and the provider-picker integration fixture is app
-composition. The source-edge list still records legacy coupling: provider-picker
-readiness reaches provider auth/registry through `utils/ai/provider-credentials`,
-model-picker metadata imports setting keys, and rewind display metadata imports
-the store's authoritative target type. These exact existing edges (plus the
-picker's provider-policy seam and legacy gateway's interceptor installation) are
-grandfathered, not evidence that clients or shared helpers have unrestricted
-model/config/Session access. Every reached target's closure is still checked;
-new source edges and reverse `source/` → `rewrite/` imports remain prohibited.
+`app/source-tools.ts` binds run-code to a concrete nested approval owner and
+session access/policy state. The native `tools/` contracts do not construct
+those upper-layer owners.
 
 The CLI is `node dist/cli.js ["<prompt>"]` (the `term2` bin), with no fallback
 to the old engine. It stores native conversation logs in its own directory
@@ -210,7 +191,6 @@ authorizes the session owner. An empty `{}` POST is read-only discovery, not a
 keyed mutation. Discovery does not activate the v2 hydration or mutation gates.
 
 ```sh
-node rewrite/parity/inventory.mjs
 node rewrite/parity/run.mjs check --cli dist/cli.js          # the built CLI against the goldens
 TERM2_TEST_CLI=dist/rewrite/src/app/cli.js pnpm test:integration   # CLI-level suite, as the CI lanes run it
 ```
@@ -219,8 +199,7 @@ TERM2_TEST_CLI=dist/rewrite/src/app/cli.js pnpm test:integration   # CLI-level s
 
 These use the root project's TypeScript options and dependencies, so run
 `pnpm install` at the repository root first. The build keeps repository-relative
-paths beneath `dist/`; imports of `source/` therefore resolve to the emitted
-`source/` tree beside `rewrite/`.
+paths beneath `dist/` (`dist/rewrite/src/...`).
 
 ```sh
 pnpm exec tsc -p rewrite/tsconfig.json                 # production typecheck
@@ -239,10 +218,10 @@ interaction the probe waits for. Isolate the probe's settings directory too:
 `disableFilePersistence` disables writes, not loading existing settings.
 
 The build script emits the TypeScript tree and copies the runtime assets just as
-the root build does: prompts come from `source/prompts/` and provider presets
-from `source/providers/provider-presets.json`.
+the root build does: prompts come from `rewrite/src/session/prompts/` and provider presets
+from `rewrite/src/model/providers/provider-presets.json`.
 The production build config also explicitly includes
-`source/utils/worker-cwd-preload.cts`. `workerBootstrapExecArgv` locates its
+`rewrite/src/shared/utils/worker-cwd-preload.cts`. `workerBootstrapExecArgv` locates its
 emitted `.cjs` through a URL, not a static import, so transitive compilation
 alone misses it. Without that entry, built `run_code` workers fail at startup
 before executing any tool, even though the CLI and provider turn can complete.
@@ -253,22 +232,22 @@ Owner decisions on 2026-11-01 narrow current parity work to everyday Bare use
 (including `--lite`), control socket, Discord and SSH. Goldens stay unchanged;
 mentor-only catalog entries needed by Bare remain. Shared or ambiguous settings
 and dependencies stay until their consumers are traced. These scope decisions
-are not permission to delete code or change the legacy CLI before the flip.
+were made before the flip.
 
-"Dropped" below means no further parity work: the inventory marks the feature
-`dropped`, and no scenario has to prove it. It does not mean term2-next lacks
+"Dropped" below means no further parity work: the retired inventory marked the
+feature `dropped`, and no scenario has to prove it. It does not mean term2-next lacks
 the code. Each dropped feature is still wired in production, as noted, and
 behaves as it does today.
 
 - **MCP servers — dropped from parity work, still wired.** The headless run
   (`app/launch-headless.ts`) and the TUI (`app/launch-tui.tsx`)
   connect the configured servers through `app/application-mcp.ts` and
-  `app/mcp.ts`, which drive the source MCP manager, and offer their tools
+  `app/mcp.ts`, which drive the MCP manager in `tools/mcp/`, and offer their tools
   through `app/tool-surface.ts`. Fixing gaps against legacy would need the
   catalog binding, connection lifecycle and approval policy together.
 - **Plan, pair, mentor and orchestrator profiles/modes, and
   `run_agent_workflow` — dropped from parity work.** `--profile` still selects
-  any of them through `source/services/profiles/`, and the TUI's `/plan`,
+  any of them through `config/profiles/`, and the TUI's `/plan`,
   `/mentor` and `/orchestrator` commands still switch them; parity for their prompts, settings and workflow execution
   is not being checked. Bare, `--lite`, subagent `ask_orchestrator` and the
   retained mentor catalog are kept.
@@ -279,7 +258,7 @@ behaves as it does today.
   `/sandbox` command and the tool surface's `allowUnsandboxed` posture
   (`app/tool-surface.ts`) remain, and `term2 serve` and `term2 acp` warn when
   the sandbox is unavailable. A real return needs shell policy in
-  `source/utils/shell/sandbox/`, approval rules and the sandboxed code-host
+  `rewrite/src/shared/utils/shell/sandbox/`, approval rules and the sandboxed code-host
   lifecycle together. Shared settings remain.
 - **Web server/browser and canonical v2 wire — deferred, not dropped.** Retain
   candidate server/browser code, branches and the vendored wire artifact; gates
@@ -290,46 +269,22 @@ behaves as it does today.
   branch/tool/approval browser paths, reconnect replay limits and aggregate cost
   contract established. Reconnect replay is protocol-demanding, not a UI-only
   plug-in. Run the existing real-browser plain-text turn exercise once at M6's
-  end, not per commit; no web repair work is authorized now. Deferred inventory
-  entries remain incomplete and block the default flip, just like `todo`.
+  end, not per commit; no web repair work is authorized now. The flip went
+  ahead with web still deferred.
 
 The traced direct control/Discord runtime uses the in-process host and direct
-protocol plus shared `source/services/control-socket/` and
-`source/services/discord/` modules, not the HTTP server or ACP backend. The CLI
-still statically imports `source/gateway/serve-args.ts` and
-`source/acp-v2/serve-args.ts`; preserve those modules while the imports exist.
-This bounded trace does not authorize deleting the whole gateway/ACP trees or
-legacy dependencies. Existing source integration tests do not by themselves
-prove direct integration; no live SSH fixture was identified in that trace.
+protocol plus the `clients/control-socket/` and `clients/discord/` modules,
+not the HTTP server or ACP backend. The CLI
+still statically imports `rewrite/src/host/gateway/serve-args.ts` and
+`rewrite/src/clients/acp-v2/serve-args.ts`; preserve those modules while the imports exist.
+No live SSH fixture was identified in that trace.
 
-## Local nine-golden scores
+## Build receipts
 
-Build both CLIs, then run the read-only score command (optional argument selects
-another checkout root):
-
-```sh
-pnpm build
-node rewrite/scripts/build.mjs
-node scripts/golden-scores.mjs /path/to/term2
-```
-
-The reporter checks both `.term2-build-provenance.json` receipts before running
-any scenarios and again before printing `direct: N/9` and `old CLI: N/9`.
-After the single nine-scenario pass per CLI, it repeats `subagent-batch` 24 times
-per CLI at six parallel and prints the loaded totals. A single mismatch fails;
-failed occurrences are never retried or outvoted. Exit 0 requires both 9/9 and
-24/24; 1 means a real mismatch; 2 means no trustworthy score (missing/stale build
-or runner failure). It never records goldens.
-Both normal build commands capture HEAD and SHA256 hashes of actual owned
-source/config/build inputs, including untracked files, and final output bytes;
-mtime and the old version-only `build-info.json` are not freshness evidence.
-The direct build now clears its generated output first. Old builds without
-receipts must be rebuilt. A commit, dirty input edit or output replacement
-requires rebuilding the affected CLI, even if timestamps are unchanged.
-
-Input coverage is deliberately conservative (whole source/build-script trees,
-root package/lock/config files, and native source/config/scripts for direct).
-Receipts assume installed dependencies follow the package/lock files, not
-hand-edited `node_modules`; owned input/output symlinks are refused. Before/after
-checks catch observed concurrent changes, not an edit-and-revert racing a read;
-run builds and scores without concurrent edits in that checkout.
+`pnpm build` writes a `.term2-build-provenance.json` receipt: HEAD and SHA256
+hashes of the owned source/config/build inputs, including untracked files, and
+of the final output bytes. mtime and the version-only `build-info.json` are not
+freshness evidence. A commit, dirty input edit or output replacement requires a
+rebuild, even if timestamps are unchanged. Receipts assume installed
+dependencies follow the package/lock files, not hand-edited `node_modules`;
+owned input/output symlinks are refused.

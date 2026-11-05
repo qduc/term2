@@ -11,7 +11,7 @@ description: >-
 
 ## Objective
 
-When a new setting is added to `source/services/settings/settings-schema.ts`, it
+When a new setting is added to `rewrite/src/config/settings/settings-schema.ts`, it
 must be wired through six mandatory touchpoints and up to four optional ones to
 appear correctly in the interactive `/settings` UI menu. A setting that is only
 added to the Zod schema and `DEFAULT_SETTINGS` will be invisible or
@@ -21,7 +21,7 @@ undifferentiated in the UI. This skill is the complete checklist.
 
 ### 1. `SETTING_KEYS`
 
-**File:** `source/services/settings/settings-schema.ts` (~line 747)
+**File:** `rewrite/src/config/settings/settings-schema.ts` (~line 747)
 
 Add `MY_SETTING: 'section.mySetting'` to the constant object. Every downstream
 consumer imports from this set. Forgetting this entry makes the setting
@@ -36,7 +36,7 @@ export const SETTING_KEYS = {
 
 ### 2. `DEFAULT_SETTINGS`
 
-**File:** `source/services/settings/settings-schema.ts` (~line 1021)
+**File:** `rewrite/src/config/settings/settings-schema.ts` (~line 1021)
 
 Add the default value under the appropriate section object. Missing this causes
 the setting to be `undefined` until explicitly set.
@@ -49,7 +49,7 @@ the setting to be `undefined` until explicitly set.
 
 ### 3. `SettingsWithSources` interface
 
-**File:** `source/services/settings/settings-schema.ts` (~line 586)
+**File:** `rewrite/src/config/settings/settings-schema.ts` (~line 586)
 
 Add `mySetting: SettingWithSource<T>` to the matching section. Missing this
 causes TypeScript build errors in `formatSettingsSummary` and related tests.
@@ -62,7 +62,7 @@ causes TypeScript build errors in `formatSettingsSummary` and related tests.
 
 ### 4. Label and description
 
-**File:** `source/services/settings/settings-ui-metadata.ts`
+**File:** `rewrite/src/config/settings/settings-ui-metadata.ts`
 
 Add a short human-readable name to `SETTING_LABELS` (an unlabelled key falls
 back to a humanized key, which is rarely what a user would call it). Give the
@@ -79,7 +79,7 @@ human units.
 
 ### 5. Visibility: a tab or advanced
 
-**File:** `source/hooks/settings-completion-config.ts`
+**File:** `rewrite/src/clients/hooks/settings-completion-config.ts`
 
 A setting listed in a `CATEGORY_KEYS` array (`models`, `providers`, `context`,
 `safety`, `tools`, `ui`, `hooks`) appears in that browse tab, at that position
@@ -99,7 +99,7 @@ explain why; timeouts, caps, thresholds, and transport details stay advanced.
 
 ### 6. `RUNTIME_MODIFIABLE_SETTINGS`
 
-**File:** `source/services/settings/settings-schema.ts` (~line 879)
+**File:** `rewrite/src/config/settings/settings-schema.ts` (~line 879)
 
 Add `SETTING_KEYS.MY_SETTING` to this Set if the setting should be changeable
 without restart. Omit it if the setting is startup-only. The UI will still
@@ -125,25 +125,24 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   user would search with that appear in neither the label nor the description
   (`cost` for the run cost limit).
 
-- **`SETTING_ENV_VARIABLES`** — `source/services/settings/settings-env.ts`. Add
+- **`SETTING_ENV_VARIABLES`** — `rewrite/src/config/settings/settings-env.ts`. Add
   the variable name if the setting is also read from the environment in
   `buildEnvOverrides`, so the menu can name what overrides a saved value.
 
-- **`applyRuntimeSettingChange`** — `source/services/runtime-setting-router.ts`
-  (~line 69). Add an `if (key === 'section.mySetting') { … }` branch only if
-  changing the setting has a live side effect (e.g., reconfiguring a service,
-  updating a trim threshold). Many settings don't need this — they take effect
-  on the next LLM request or next session.
+- **Live side effects** — there is no per-key runtime router any more.
+  `/settings` writes go through `rewrite/src/app/launch-tui-settings.ts`, and the
+  session rebuilds its tools from the saved settings (see that file's header).
+  Add per-key handling there only if a change needs more than that rebuild.
+  Many settings don't — they take effect on the next LLM request or next session.
 
-- **`formatSettingsSummary`** — `source/utils/settings-command.ts` (~line 62).
+- **`formatSettingsSummary`** — `rewrite/src/shared/utils/settings-command.ts` (~line 62).
   Add an entry to the `entries` array only if the setting should appear in the
   plain-text `/settings` slash-command summary. The interactive menu
   (touchpoints 4–6) is the primary surface.
 
-- **Tests** — `source/hooks/settings-completion-logic.test.ts` (category
-  mapping), `source/components/menu/SettingsSelectionMenu.test.tsx` (menu
-  rendering), `source/utils/settings-command.test.ts` (summary formatting). Add
-  coverage for category assignment and menu visibility.
+- **Tests** — unit tests are not committed (see the `testing` skill). Cover a
+  new menu surface through the CLI-level e2e suites under `tests/clients/` and
+  `tests/cli/`, or verify it by hand in the TUI.
 
 ## Workflow
 

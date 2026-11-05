@@ -43,7 +43,7 @@ scenario is the one whose CLI never reached the state it waits for.
 ## Suite ownership
 
 - `scripts/provider-black-box/provider-contract.test.ts` obtains models through
-  `source/providers/registry.ts`; do not bypass the registry by constructing
+  `rewrite/src/model/providers/registry.ts`; do not bypass the registry by constructing
   transport classes directly.
 - `scripts/provider-black-box/provider-cli.blackbox.ts` exercises the shipped
   `dist/cli.js` with isolated settings, filesystem state, stdout/stderr files,
@@ -58,7 +58,7 @@ scenario is the one whose CLI never reached the state it waits for.
   Interactive ready/idle waits use `child.waitForIdleInput()`, not a prompt
   glyph. Both the legacy and direct CLIs publish an incrementing generation to
   `TERM2_HARNESS_IDLE_PATH` when the composer owns the keyboard and no turn is
-  in flight (`source/lib/harness-input-idle.ts`). Text submission uses
+  in flight (`rewrite/src/shared/lib/harness-input-idle.ts`). Text submission uses
   `writePtyTextAndSubmit()`, which waits for the CLI's companion composer-state
   acknowledgment before sending Enter; fixed sleeps and PTY echo do not prove
   Ink consumed the text. A PTY-stripped `❯` is not a readiness signal, and

@@ -23,9 +23,9 @@ description: >
 > via `pnpm test`, and every `jest.*` call below maps to `vi.*`. Skip the "Ink v4"
 > and Jest-configuration material entirely.
 >
-> Render through `renderInAct` from `source/test-helpers/ink-testing.tsx`, not
-> bare `render` — 59 test files use it against a handful that do not. See the
-> `testing` skill for commands and the `NODE_ENV=test` / `act` trap.
+> The old `renderInAct` helper went away with legacy `source/` (#88); term2's
+> tests now drive the built CLI. See the `testing` skill for commands and the
+> `NODE_ENV=test` / `act` trap.
 
 React Ink uses its own renderer (not the DOM), so standard React Testing Library
 **does not work**. Always use `ink-testing-library` instead.

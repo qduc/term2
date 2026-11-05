@@ -6,14 +6,17 @@ Term2 is a terminal AI assistant built with React (Ink), TypeScript, Node.js,
 and an application-owned agent runtime. It supports interactive conversations,
 non-interactive runs, shell execution, file changes, and approval prompts.
 
-Application code lives under `source/`. The important boundaries are:
+Application code lives under `rewrite/src/`, one folder per layer; tests live
+under `tests/`, laid out by the same layer names. `rewrite/README.md` gives the
+layer table, the import rules and how a message travels. The important entry
+points are:
 
-- `cli.tsx` assembles the app; `app.tsx` owns the interactive Ink UI;
-  `non-interactive.ts` runs the conversation system without that UI.
-- `agent.ts` defines the agent and registers tools.
-- `source/services/conversation/conversation-service.ts` is the public
-  conversation facade.
-- `source/prompts/prompt-constructor.ts` assembles prompts; `prompt-profiles.ts`
+- `rewrite/src/app/cli.ts` parses the command line and starts the TUI, a
+  headless run, ACP or the server; `pnpm build` emits it to
+  `dist/rewrite/src/app/cli.js`, which the `term2` bin (`dist/cli.js`) imports.
+- `rewrite/src/app/application.ts` wires the layers together; `rewrite/src/session/`
+  owns a conversation's append-only log and `rewrite/src/engine/` runs the turn.
+- `rewrite/src/session/prompts/prompt-constructor.ts` assembles prompts; `prompt-profiles.ts`
   maps models to base profiles. Prompts and tool descriptions are product behavior.
 
 ## Current constraints and trade-offs
@@ -38,7 +41,7 @@ other agents' uncommitted work. The [isolation procedure](docs/agent-context.md#
 covers integration and cleanup.
 
 UI components use `useTheme()` for colours and `useSkin()` for layout. Skins live
-under `source/skins/<name>/`; component colour literals bypass this boundary.
+under `rewrite/src/clients/skins/<name>/`; component colour literals bypass this boundary.
 
 ## Evidence and institutional knowledge
 

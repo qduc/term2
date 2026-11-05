@@ -218,6 +218,7 @@ async function runCommand(
     | 'model-picker'
     | 'approval-shortcut'
     | 'approval-shortcut-history'
+    | 'bare-clear-history'
     | 'quit-hint' = false,
   withUsage = false,
   expectedDraft?: string,
@@ -279,6 +280,9 @@ async function runCommand(
       // Sandbox off and GREEN commands: both run without an approval prompt.
       sandbox: { enabled: false },
       shell: { autoApproveMode: 'off' },
+      // Pair is a dropped profile (#149), but one the settings already name still runs; leaving it is the one
+      // switch out of a non-Bare profile that next can still make.
+      ...(exerciseMenu === 'bare-clear-history' ? { app: { activeProfileId: 'builtin:pair' } } : {}),
     }),
   );
 
@@ -317,7 +321,7 @@ async function runCommand(
     expect(identity.version).toBe(`${manifest.version}-dev+${identity.commit.slice(0, 7)}`);
   await session.waitForOutput(`v${identity.version}`, 30_000);
   await session.waitForOutput('term²', 30_000);
-  await session.waitForOutput('BARE', 30_000);
+  await session.waitForOutput(exerciseMenu === 'bare-clear-history' ? 'PAIR' : 'BARE', 30_000);
   await session.waitForOutput('mockprov', 30_000);
   await session.waitForOutput('mock-alpha', 30_000);
 
@@ -522,6 +526,40 @@ async function runCommand(
     expect(JSON.parse(fs.readFileSync(path.join(settingsDir, 'settings.json'), 'utf8')).shell.autoApproveMode).toBe(
       'off',
     );
+    return;
+  }
+  if (exerciseMenu === 'bare-clear-history') {
+    // Legacy mode-commands: /bare with history asks before it clears, defaulting to No.
+    let offset = session.getVisibleOutput().length;
+    const since = () => session!.getVisibleOutput().slice(offset);
+    const waitSince = async (predicate: () => boolean) => {
+      const deadline = Date.now() + 30_000;
+      while (!predicate() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 25));
+      expect(predicate()).toBe(true);
+    };
+    await submit('/bare');
+    await waitSince(() => since().includes('Clear session and switch to Bare mode?'));
+    expect(since()).toContain('Switching to Bare mode requires clearing the current session.');
+    await waitSince(() => since().includes('❯ No'));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    offset = session.getVisibleOutput().length;
+    session.write('\r');
+    // Declining closes the prompt and keeps the profile.
+    await waitSince(() => since().includes('/ commands'));
+    expect(since()).not.toContain('Clear session and switch');
+    expect(since()).toContain('Pair │');
+    offset = session.getVisibleOutput().length;
+    await submit('/bare');
+    await waitSince(() => since().includes('❯ No'));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    offset = session.getVisibleOutput().length;
+    session.write('\x1b[A');
+    await waitSince(() => since().includes('❯ Yes'));
+    offset = session.getVisibleOutput().length;
+    session.write('\r');
+    await waitSince(() => since().includes('BARE'));
+    // Confirming clears the conversation, then switches.
+    expect(since()).not.toContain('hello');
     return;
   }
   if (exerciseMenu === 'approval-shortcut') {
@@ -770,6 +808,11 @@ it.skip('Shift+Tab confirms a clear before changing mode with history', async ()
 // Plan mode is an accepted difference: plan is a dropped profile and next's Shift+Tab does nothing (#149).
 it.skip('Shift+Tab toggles Plan and Bare without changing approval or draft', { timeout: TIMEOUT_MS }, () =>
   runCommand('', '', undefined, 'approval-shortcut'),
+);
+
+// Replaces the Shift+Tab clear test above: /bare out of a settings-named Pair profile with history.
+it('/bare confirms a clear before leaving a non-Bare profile with history', { timeout: TIMEOUT_MS }, () =>
+  runCommand('', '', 'hello', 'bare-clear-history'),
 );
 
 it('/providers opens the legacy provider manager', { timeout: TIMEOUT_MS }, () =>

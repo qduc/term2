@@ -6,7 +6,7 @@ Evidence harness for rewrite/docs/menu-port-report.md, not a test suite.
   python3 rewrite/scripts/menu-compare/screen.py run <legacy|next> <cols> <rows> <scenario>
   python3 rewrite/scripts/menu-compare/screen.py compare <cols> <rows> [scenario ...]
 
-Captures are cached under .cache/menu-compare/, keyed by the CLI's built output (dist, minus build-info),
+Captures are cached under .cache/menu-compare/, keyed by the CLI's built output (dist, minus build metadata),
 the lockfile, the Node version, the capture code (MODELS through run()), the scenario's own steps and seed,
 the size and the FULL mode. Legacy is the
 oracle and rarely rebuilds, so later compares reuse its captures; an unchanged next build reruns for free.
@@ -436,7 +436,11 @@ CACHE_DIR = os.path.join(REPO, '.cache', 'menu-compare')
 _BUILD_KEYS = {}
 
 
-def _tree_hash(root, skip=('build-info.json',)):
+# Build metadata that records the commit, not the code: hashing it would miss the cache after every commit.
+BUILD_METADATA = ('build-info.json', '.term2-build-provenance.json')
+
+
+def _tree_hash(root, skip=BUILD_METADATA):
     digest = hashlib.sha256()
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames.sort()

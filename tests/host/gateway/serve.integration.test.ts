@@ -11,6 +11,8 @@ import { createGatewayAssertion } from '../../../src/host/server-assertion.js';
 import { getDefaultShellSandboxRunner } from '../../../src/shared/utils/shell/sandbox/shell-sandbox-runner.js';
 import { resolveSettingsDirectory } from '../../../src/config/settings/settings-path.js';
 import { createTestChildEnv } from '../../helpers/terminal-e2e.js';
+import type { WireEvent } from '../../../src/protocol/wire.js';
+import { readFacts } from '../../../src/session/log.js';
 
 // The launcher is exercised as a real child process: pair with a pre-shared
 // BFF key, admit a dynamic workspace, run one turn against a settings-defined
@@ -25,7 +27,7 @@ import { integrationCliPath as cliPath } from '../../helpers/integration-cli.js'
 /**
  * Minimal OpenAI-compatible provider double: the /models path serves a fixed
  * list and chat completions answer with a one-frame SSE completion, enough
- * for one full real ConversationService turn.
+ * for one full native Session turn.
  */
 async function startModelMock(modelIds: string[]): Promise<{ baseUrl: string; close: () => Promise<void> }> {
   const server = http.createServer((req, res) => {
@@ -107,23 +109,36 @@ function openEventStream(
   socketPath: string,
   sessionId: string,
 ): {
-  events: () => Array<{ id: number; type: string; payload: Record<string, any> }>;
-  waitFor: (
-    predicate: (event: { type: string; payload: Record<string, any> }) => boolean,
-    timeoutMs: number,
-  ) => Promise<void>;
+  events: () => readonly WireEvent[];
+  waitFor: (predicate: (event: WireEvent) => boolean, timeoutMs: number) => Promise<WireEvent>;
   close: () => void;
 } {
   const assertion = sign('user-1', 'events_connect', { sessionId });
-  const frames: Array<{ id: number; type: string; payload: Record<string, any> }> = [];
+  const frames: WireEvent[] = [];
+  const listeners = new Set<() => void>();
+  let failure: Error | undefined;
+  const changed = () => listeners.forEach((listener) => listener());
+  const fail = (error: Error) => {
+    failure = error;
+    changed();
+  };
   const req = http.request(
     {
       socketPath,
       method: 'GET',
-      path: `/private/agent/v1/sessions/${sessionId}/events?after=0`,
+      path: `/private/agent/v1/sessions/${sessionId}/events?format=direct&after=0`,
       headers: { 'x-term2-assertion': assertion, accept: 'text/event-stream' },
     },
     (res) => {
+      try {
+        expect(res.statusCode).toBe(200);
+        expect(res.headers['content-type']).toContain('text/event-stream');
+        expect(res.headers['x-term2-event-format']).toBe('direct-wire-v1');
+      } catch (error) {
+        fail(error as Error);
+        res.destroy();
+        return;
+      }
       let buffer = '';
       res.on('data', (chunk: Buffer | string) => {
         buffer += String(chunk);
@@ -132,25 +147,46 @@ function openEventStream(
           const frame = buffer.slice(0, separator);
           buffer = buffer.slice(separator + 2);
           const dataLine = frame.split('\n').find((line) => line.startsWith('data:'));
-          if (dataLine) frames.push(JSON.parse(dataLine.slice('data:'.length).trim()));
+          if (dataLine) {
+            try {
+              frames.push(JSON.parse(dataLine.slice('data:'.length).trim()) as WireEvent);
+            } catch (error) {
+              fail(error as Error);
+              res.destroy();
+              return;
+            }
+            changed();
+          }
           separator = buffer.indexOf('\n\n');
         }
       });
+      res.on('error', fail);
+      res.on('end', () => fail(new Error('Event stream ended before the awaited event')));
     },
   );
-  req.on('error', () => undefined);
+  req.on('error', fail);
   req.end();
   return {
     events: () => [...frames],
-    waitFor: async (predicate, timeoutMs) => {
-      const deadline = Date.now() + timeoutMs;
-      while (Date.now() < deadline) {
-        const found = frames.find(predicate);
-        if (found) return;
-        await new Promise((resolve) => setTimeout(resolve, 50));
-      }
-      throw new Error(`event not received within ${timeoutMs}ms; saw: ${JSON.stringify(frames.map((f) => f.type))}`);
-    },
+    waitFor: (predicate, timeoutMs) =>
+      new Promise((resolve, reject) => {
+        const check = () => {
+          const found = frames.find(predicate);
+          if (!found && !failure) return;
+          clearTimeout(timer);
+          listeners.delete(check);
+          if (found) resolve(found);
+          else reject(failure);
+        };
+        const timer = setTimeout(() => {
+          listeners.delete(check);
+          reject(
+            new Error(`event not received within ${timeoutMs}ms; saw: ${JSON.stringify(frames.map((f) => f.type))}`),
+          );
+        }, timeoutMs);
+        listeners.add(check);
+        check();
+      }),
     close: () => req.destroy(),
   };
 }
@@ -249,14 +285,12 @@ describe('term2 serve (child process)', () => {
       expect(stderr).toContain('GATEWAY_READY');
     }
 
-    // State layout: manifest + sha256 derived at startup, replay DB, and the    // always-wired persistence coordinator root. No trust file: pairing off.
-    const manifestRaw = fs.readFileSync(path.join(stateDir, 'manifest.json'), 'utf-8');
-    expect(JSON.parse(manifestRaw)).toMatchObject({ version: 1, grants: [] });
-    expect(fs.readFileSync(path.join(stateDir, 'manifest.sha256'), 'utf-8').trim()).toBe(
-      createHash('sha256').update(manifestRaw).digest('hex'),
-    );
+    // Native state never creates the retired gateway manifest or persistence root.
+    // Grants and conversation logs are created only when admitted below.
+    expect(fs.existsSync(path.join(stateDir, 'manifest.json'))).toBe(false);
+    expect(fs.existsSync(path.join(stateDir, 'manifest.sha256'))).toBe(false);
+    expect(fs.existsSync(path.join(stateDir, 'gateway-data'))).toBe(false);
     expect(fs.existsSync(path.join(stateDir, 'replay.sqlite'))).toBe(true);
-    expect(fs.existsSync(path.join(stateDir, 'gateway-data'))).toBe(true);
     expect(fs.existsSync(path.join(stateDir, 'trusted-clients.json'))).toBe(false);
     expect(fs.statSync(stateDir).mode & 0o777).toBe(0o700);
     expect(fs.statSync(socketPath).mode & 0o777).toBe(0o660);
@@ -289,14 +323,38 @@ describe('term2 serve (child process)', () => {
     );
     const workspaceId = selected.workspaceId as string;
     expect(workspaceId).toBeTruthy();
+    const grantsPath = path.join(stateDir, 'direct-workspace-grants.json');
+    expect(JSON.parse(fs.readFileSync(grantsPath, 'utf-8'))).toEqual({
+      version: 1,
+      grants: [
+        {
+          workspaceId,
+          ownerUserId: 'user-1',
+          label: selected.displayName,
+          root: workspace,
+          access: 'read',
+          grantVersion: selected.binding.grantVersion,
+        },
+      ],
+    });
+    expect(fs.statSync(grantsPath).mode & 0o777).toBe(0o600);
 
-    // Persistence is wired, so session_create must answer the BFF body shape
-    // ({ session }) — not the legacy { sessionId, ... } shape.
+    // The public create response and the native log must identify the same owner and grant.
     const created = await rpc('POST', '/private/agent/v1/sessions', { workspaceId }, 'session_create', { workspaceId });
     const sessionId = created.session?.id as string;
     expect(sessionId).toBeTruthy();
+    const logPath = path.join(stateDir, 'conversations', `${sessionId}.jsonl`);
+    expect(readFacts(logPath)[0]).toMatchObject({
+      type: 'session_started',
+      id: sessionId,
+      workspace,
+      model: { provider: 'mockprov', model: 'serve-mock-model' },
+      binding: { client: 'user-1', id: workspaceId },
+    });
 
     const stream = openEventStream(socketPath, sessionId);
+    disposables.push(stream.close);
+    await stream.waitFor((event) => event.type === 'configuration' && event.sessionId === sessionId, 45_000);
     const submitted = await rpc(
       'POST',
       `/private/agent/v1/sessions/${sessionId}/messages`,
@@ -305,14 +363,27 @@ describe('term2 serve (child process)', () => {
       { sessionId },
     );
     expect(submitted.accepted).toBe(true);
+    expect(submitted.turnId).toBeTruthy();
 
-    await stream.waitFor((event) => event.type === 'turn_completed', 45_000);
-    const completed = stream.events().find((event) => event.type === 'turn_completed')!;
-    expect(completed.payload.outcome).toBe('completed');
-    const seen = stream.events().map((event) => event.type);
-    expect(seen).toContain('session_created');
-    expect(seen).toContain('user_message_accepted');
-    expect(seen).toContain('assistant_started');
+    const completed = await stream.waitFor(
+      (event) => event.type === 'turn_ended' && event.turnId === submitted.turnId,
+      45_000,
+    );
+    expect(completed).toMatchObject({
+      sessionId,
+      payload: { outcome: 'completed', finalText: 'mock gateway turn' },
+    });
+    expect(stream.events()).toContainEqual(
+      expect.objectContaining({
+        type: 'turn_started',
+        sessionId,
+        turnId: submitted.turnId,
+        payload: expect.objectContaining({
+          foreground: true,
+          admission: expect.objectContaining({ kind: 'started', clientRequestId: 'serve-req-1' }),
+        }),
+      }),
+    );
     stream.close();
 
     // Bounded shutdown: clean exit code and the socket file removed.
@@ -328,6 +399,21 @@ describe('term2 serve (child process)', () => {
     expect(exit.code).toBe(0);
     expect(fs.existsSync(socketPath)).toBe(false);
     expect(stdout + stderr).not.toContain('PAIRING OTP');
+    const facts = readFacts(logPath);
+    expect(facts).toContainEqual(
+      expect.objectContaining({
+        type: 'turn_started',
+        turnId: submitted.turnId,
+        submission: expect.objectContaining({ clientRequestId: 'serve-req-1' }),
+      }),
+    );
+    expect(facts).toContainEqual(
+      expect.objectContaining({
+        type: 'turn_ended',
+        turnId: submitted.turnId,
+        outcome: 'completed',
+      }),
+    );
   }, 180_000);
 
   it('pairs by OTP on stderr, registers the BFF key, and admits sessions under the paired kid', async () => {

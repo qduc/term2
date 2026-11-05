@@ -107,6 +107,13 @@ and `68ef50ff` (local-only evidence), not a result file to resume appending.
   tests must isolate persisted config/task storage and inherited `XDG_STATE_HOME`.
   macOS fixtures also exposed `/tmp` canonicalization, Linux-only XDG paths,
   `/dev/full` assumptions, Yoga headless startup and wrapped terminal text.
+- **Native serve fixture migration:** a failure reading `manifest.json` just after
+  `GATEWAY_READY` is before turn execution or SIGTERM. The native launcher persists
+  dynamic grants in `direct-workspace-grants.json` and Sessions in `conversations/`,
+  not the retired manifest or `gateway-data`. Its SSE tests must negotiate
+  `format=direct` and assert native events; an unqualified request returns HTTP 400.
+  Check stream status/format before awaiting events so negotiation failures do not
+  masquerade as turn timeouts.
 - **Lint scope:** broad lint in the shared primary checkout scanned untracked
   `.cache`, `.coord`, `.term2` and `packages` artifacts. Local-only runs at
   `99e31c51` and `207f6427` classified all 9,431 errors plus three warnings as

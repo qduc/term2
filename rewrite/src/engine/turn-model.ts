@@ -212,7 +212,7 @@ export class TurnModel {
     const request: ModelRequest = {
       model: this.spec.model,
       instructions: this.spec.instructions,
-      input: [...history],
+      input: fromLastReplacementBoundary(history),
       tools: this.spec.tools,
       ...(this.spec.reasoning !== undefined ? { reasoning: this.spec.reasoning } : {}),
       ...(this.spec.temperature !== undefined ? { temperature: this.spec.temperature } : {}),
@@ -477,4 +477,18 @@ function delay(ms: number, signal: AbortSignal): Promise<void> {
     };
     signal.addEventListener('abort', abort, { once: true });
   });
+}
+
+/** Legacy projectModelRequestHistory: an OpenAI compaction item or local summary
+ * replaces everything before it, so the model request starts at the last one. */
+function fromLastReplacementBoundary(history: readonly Item[]): Item[] {
+  for (let index = history.length - 1; index >= 0; index--) {
+    const item = history[index]!;
+    if (
+      item.type === 'summary' ||
+      (item.type === 'provider_opaque' && item.provider === 'openai' && item.item.type === 'compaction')
+    )
+      return history.slice(index);
+  }
+  return [...history];
 }

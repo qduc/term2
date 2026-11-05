@@ -20,6 +20,10 @@ import { findWebSocketClosedEarly } from '../../../source/providers/websocket-cl
 import { AmbiguousModelOutcomeError } from '../../../source/services/retry/retry-errors.js';
 import { isRetryRecoveryBudgetExhaustedError } from '../../../source/services/retry/retry-recovery-budget.js';
 
+/** Legacy's ProviderContextOverflowError text (source/services/agent-runtime/request-input-limit.ts). */
+const PROVIDER_CONTEXT_OVERFLOW =
+  'Provider rejected context capacity. Work is retained. Compact or choose a model with verified larger capacity before resuming.';
+
 export type ModelRecoveryEvidence =
   | 'request_unsent'
   | 'provider_state_rejected'
@@ -99,7 +103,11 @@ export function toModelFailure(error: unknown, signal?: AbortSignal, scope?: Fai
     (isModelError(error) ? error.retryable : upstream.retryable || isNetworkProtocolError(error));
   const portable: ModelError = {
     kind,
-    message: kind === 'context_overflow' ? `provider_context_overflow: ${message}` : message,
+    // Legacy replaces the provider's capacity text with its own recovery sentence.
+    message:
+      kind === 'context_overflow'
+        ? `provider_context_overflow: ${isModelError(error) ? message : PROVIDER_CONTEXT_OVERFLOW}`
+        : message,
     retryable,
     ...(upstream.retryAfterMs !== undefined
       ? { retryAfterMs: upstream.retryAfterMs }

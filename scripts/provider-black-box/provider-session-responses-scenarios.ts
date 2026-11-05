@@ -5,6 +5,9 @@ import { testCliPath } from '../../source/test-helpers/terminal-e2e.js';
 // within each group remain sequential, with their original assertions/deadlines.
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { usesDirectComposer } from '../../source/test-helpers/direct-composer.js';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Socket } from 'node:net';
@@ -230,7 +233,7 @@ export function registerResponsesContinuityScenarios(): void {
       const requests = normalRequests(server.requests);
       expect(requests).toHaveLength(2);
       const result = toolResultText(requests[1]!);
-      expect(result).toContain('session-search-fixture');
+      expect(result).toContain(SESSION_SEARCH_FIXTURE_ID);
       expect(result).toContain('No healthy model in agent.balancedModel pool');
       expect(result).not.toContain('timed out');
     });
@@ -473,6 +476,10 @@ function assertApprovalResume(
   expect(terminalIds).toContain(TOOL_RESUMED_RESPONSE_ID);
 }
 
+const direct = usesDirectComposer([process.env.TERM2_TEST_CLI ?? '']);
+// The offline migration (next's route to this legacy log) accepts only UUID ids.
+const SESSION_SEARCH_FIXTURE_ID = direct ? '0f2e6c8a-7a51-4c1e-9d3b-5e8f4a2b6c10' : 'session-search-fixture';
+
 async function createWorkspace(
   server: ResponsesFixtureServer,
   providerCase: ProviderTransportCase,
@@ -488,12 +495,17 @@ async function createWorkspace(
     prepare: async (root, paths) => {
       if (mode === 'session-search') {
         await mkdir(paths.conversationsDir, { recursive: true });
+        // Next keeps its own store: it gets the same log through the offline migration, which
+        // needs a v3 log with a UUID id and the session's configuration.
+        const legacyDir = direct ? join(root, 'legacy-conversations') : paths.conversationsDir;
+        await mkdir(legacyDir, { recursive: true });
         const events = [
           {
             type: 'session_init',
-            id: 'session-search-fixture',
+            id: SESSION_SEARCH_FIXTURE_ID,
             createdAt: '2026-10-04T00:00:00.000Z',
             projectPath: root,
+            ...(direct ? { provider: providerCase.provider, model: MODEL, activeProfileId: 'builtin:bare' } : {}),
           },
           { type: 'user_message', message: { id: 'u', sender: 'user', text: 'prior diagnostic' } },
           {
@@ -508,10 +520,25 @@ async function createWorkspace(
           },
         ];
         await writeFile(
-          join(paths.conversationsDir, 'session-search-fixture.jsonl'),
-          events.map((event, seq) => JSON.stringify({ v: 1, seq, ts: '2026-10-04T00:00:00.000Z', event })).join('\n') +
-            '\n',
+          join(legacyDir, `${SESSION_SEARCH_FIXTURE_ID}.jsonl`),
+          events
+            .map((event, seq) =>
+              JSON.stringify({ v: direct ? 3 : 1, seq: seq + (direct ? 1 : 0), ts: '2026-10-04T00:00:00.000Z', event }),
+            )
+            .join('\n') + '\n',
         );
+        if (direct) {
+          const { stdout } = await promisify(execFile)(process.execPath, [
+            join(process.cwd(), 'scripts/migrate-conversations.mjs'),
+            '--source-copy',
+            legacyDir,
+            '--destination',
+            paths.conversationsDir,
+            '--provenance',
+            join(root, 'migration-private', 'map.json'),
+          ]).catch((error: { stdout?: string }) => ({ stdout: error.stdout ?? '' }));
+          expect(JSON.parse(stdout).codes).toEqual({ MIGRATED: 1 });
+        }
         // An unavailable optional index must still allow canonical browsing.
         await writeFile(join(root, 'session-index.db'), 'unavailable fixture index');
       }

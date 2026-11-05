@@ -1,4 +1,4 @@
-import type { Term2HookScope } from '../../session/hooks/hook-contracts.js';
+import type { ToolExecutionScope as Term2HookScope } from '../../tools/types.js';
 import type { ApplicationRunEvent } from '../../shared/contracts/application-stream.js';
 import type { ApplicationAgent, NestedApprovalLedger } from '../../shared/contracts/nested-run-driver.js';
 import type { ProviderInput, ProviderInputItem } from '../../shared/contracts/provider-input.js';

@@ -1,5 +1,5 @@
 import { extractAiSdkUpstreamProvider } from '../../model/providers/ai-sdk-streamed-model.js';
-import { isOpenAICompaction } from '../../session/conversation/conversation-state-projector.js';
+import { isOpenAICompaction } from '../../model/history-projection.js';
 import type { ProviderInputItem } from '../../shared/contracts/provider-input.js';
 import type {
   StreamedModelToolResultPart,

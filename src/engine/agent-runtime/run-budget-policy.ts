@@ -5,7 +5,7 @@ import { EventQueue, outputPush } from './run-segment-events.js';
 import type { RunState } from './run-state.js';
 
 /** Pure disposition of existing evidence; sensors, thresholds and grants remain in RunBudget. */
-export function budgetDisposition(
+function budgetDisposition(
   escalation: RunState['runBudgetEscalation'],
   wrapUp: boolean | undefined,
   pending: boolean,

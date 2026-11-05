@@ -1,4 +1,6 @@
-import { isLocalContextSummary, type ProviderInputItem } from '../../shared/contracts/provider-input.js';
+import type { ProviderInputItem } from '../../shared/contracts/provider-input.js';
+import { lastReplacementBoundaryIndex } from '../../model/history-projection.js';
+export { isOpenAICompaction, projectModelRequestHistory } from '../../model/history-projection.js';
 import type { StateSnapshot } from '../logging/conversation-log-events.js';
 import {
   dropUnpairedFunctionCalls,
@@ -35,33 +37,6 @@ const clone = <T>(value: T): T => {
   } catch {
     return JSON.parse(JSON.stringify(value)) as T;
   }
-};
-
-export const isOpenAICompaction = (item: unknown): boolean => {
-  if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
-  const record = item as Record<string, unknown>;
-  if (record.type === 'provider_opaque' && record.provider === 'openai') {
-    const payload = record.item as Record<string, unknown> | undefined;
-    return payload?.type === 'compaction';
-  }
-  const marker = record.providerOpaque;
-  return (
-    record.type === 'compaction' &&
-    !!marker &&
-    typeof marker === 'object' &&
-    !Array.isArray(marker) &&
-    (marker as Record<string, unknown>).provider === 'openai'
-  );
-};
-
-const isContextReplacementBoundary = (item: unknown): boolean =>
-  isOpenAICompaction(item) || isLocalContextSummary(item);
-
-const lastReplacementBoundaryIndex = (history: readonly unknown[]): number => {
-  for (let index = history.length - 1; index >= 0; index--) {
-    if (isContextReplacementBoundary(history[index])) return index;
-  }
-  return -1;
 };
 
 const warningsFromReconciliation = (result: {
@@ -147,15 +122,6 @@ const collectRemovedToolCallIds = (original: readonly unknown[], filtered: reado
   }
   return removed;
 };
-
-/**
- * Lossy projection used only when constructing a model request. Durable
- * snapshots/imports retain genuine pre-boundary user turns for navigation.
- */
-export function projectModelRequestHistory(history: readonly unknown[]): ProviderInputItem[] {
-  const boundary = lastReplacementBoundaryIndex(history);
-  return clone((boundary < 0 ? [...history] : history.slice(boundary)) as ProviderInputItem[]);
-}
 
 export function projectSnapshot(input: {
   history: readonly unknown[];

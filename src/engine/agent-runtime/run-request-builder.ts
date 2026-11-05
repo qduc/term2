@@ -1,5 +1,5 @@
 import { getCatalogModel } from '../../model/providers/model-catalog/catalog.js';
-import { projectModelRequestHistory } from '../../session/conversation/conversation-state-projector.js';
+import { projectModelRequestHistory } from '../../model/history-projection.js';
 import type {
   ContextCompactionSessionState,
   StreamedModelTurnInput,

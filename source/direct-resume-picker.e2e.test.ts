@@ -256,7 +256,7 @@ it.each([160])(
     while (Date.now() - started < 30_000 && !session.getVisibleOutput().slice(offset).includes('PREVIOUS-ANSWER'))
       await new Promise((resolve) => setTimeout(resolve, 25));
     expect(session.getVisibleOutput().slice(offset)).toContain('PREVIOUS-ANSWER');
-    expect(session.getVisibleOutput().slice(offset)).toContain('codex/gpt-6.1-terra');
+    expect(session.getVisibleOutput().slice(offset)).toContain('Codex/gpt-6.1-terra');
   },
 );
 

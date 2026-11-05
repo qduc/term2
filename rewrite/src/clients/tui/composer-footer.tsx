@@ -4,7 +4,7 @@ import { Text } from 'ink';
 import { useSkin } from './presentation/skins/SkinContext.js';
 import { GLYPH_WARNING, useTheme } from './presentation/components/theme.js';
 import type { MenuHint, StatusSegmentView, StatusView } from './presentation/skins/types.js';
-import type { TuiIntegration } from './integration.js';
+import type { TuiIntegration, TuiStatusInfo } from './integration.js';
 import type { TuiState } from './state.js';
 
 function formatCompactTokens(tokens: number): string {
@@ -32,6 +32,16 @@ const formatStatusBarTokens = (tokens: number): string =>
 /** Legacy StatusBar's `formatStatusBarRate` (`48.2t/s`). */
 const formatStatusBarRate = (tps: number, approximate: boolean): string =>
   formatTokensPerSecond(tps, approximate).replace(' tok/s', 't/s');
+
+/**
+ * Legacy writes the provider as its registry label (`OpenAI/gpt-x`). The label only replaces the id it was read
+ * for, so a status read that lags the projected model never renames another provider's model.
+ */
+function providerModelText(model: string, provider: TuiStatusInfo['provider']): string {
+  return provider && model.startsWith(`${provider.id}/`)
+    ? `${provider.label}${model.slice(provider.id.length)}`
+    : model;
+}
 
 /**
  * The bar the old terminal shows under the composer: profile, provider/model, effort and approval mode, then
@@ -107,7 +117,7 @@ export function directStatusView(
       separator: 'group',
       tier: 3,
     },
-    { id: 'provider-model', text: state.model, tone: 'accent', separator: 'group' },
+    { id: 'provider-model', text: providerModelText(state.model, info.provider), tone: 'accent', separator: 'group' },
     {
       id: 'reasoning',
       text: info.effort && info.effort !== 'default' ? ` · ${info.effort}` : '',

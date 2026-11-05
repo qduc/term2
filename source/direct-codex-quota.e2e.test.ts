@@ -131,8 +131,8 @@ it.each(['expiry', 'configuration', 'secondary'] as const)(
       }
       if (clearBy !== 'secondary') {
         const updates = terminal.getVisibleOutput().slice(mark);
-        expect(updates).toContain('Bare │ codex/');
-        expect(updates.slice(updates.lastIndexOf('Bare │ codex/'))).not.toContain('7D 37%');
+        expect(updates).toContain('Bare │ Codex/');
+        expect(updates.slice(updates.lastIndexOf('Bare │ Codex/'))).not.toContain('7D 37%');
       }
       const logs = fs
         .readdirSync(path.join(root, 'conversations'))

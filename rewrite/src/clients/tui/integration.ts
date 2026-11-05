@@ -27,6 +27,8 @@ export type TuiStatusInfo = {
   readonly contextWindow?: number;
   readonly effort: string | undefined;
   readonly approval: 'off' | 'advisory' | 'auto' | 'always';
+  /** The active provider's id and the registry label legacy's status bar shows for it (`openai` → `OpenAI`). */
+  readonly provider?: { readonly id: string; readonly label: string };
 };
 
 /** Legacy `PathEntry` (source/services/file-service.ts). */

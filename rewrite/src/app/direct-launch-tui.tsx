@@ -19,6 +19,7 @@ import { shouldDetectBackground } from '../../../source/theme/resolve-theme.js';
 import { SettingsThemeProvider, useTheme as useSourceTheme } from '../../../source/theme/ThemeContext.js';
 import { getInkRenderOptions } from '../../../source/utils/ink-render-options.js';
 import { getProfileLabel } from '../../../source/services/profiles/labels.js';
+import { getProvider } from '../../../source/providers/registry.js';
 import type { WireSnapshot } from '../protocol/direct-wire.js';
 import { useTerminalFocusNotifier } from '../../../source/hooks/use-terminal-focus-notifier.js';
 import { useSetting } from '../../../source/hooks/use-setting.js';
@@ -141,6 +142,10 @@ function DirectTui({
           contextWindow: app.contextWindow(latest.current.model) ?? undefined,
           effort: current.get('agent.reasoningEffort'),
           approval: current.get('shell.autoApproveMode'),
+          provider: {
+            id: latest.current.model.provider,
+            label: getProvider(latest.current.model.provider)?.label || latest.current.model.provider,
+          },
         };
       },
       ...createDirectTuiCommands({

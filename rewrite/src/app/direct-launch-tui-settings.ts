@@ -1,3 +1,4 @@
+import { isDroppedProfile } from './dropped-profiles.js';
 /**
  * `/settings`, the mode commands, `/sandbox` and `/auto-approve`. They all write
  * the session's own settings, which save through the app's settings owner what legacy saves. A session's tools read a copy of those once it has
@@ -68,10 +69,6 @@ function settingsBrowse(
 const BARE_ENABLED_DETAIL = ' - minimal prompt; AGENTS.md read on demand; other tools via run_code';
 const APPROVAL_MODES = ['off', 'advisory', 'auto', 'always'];
 const PROFILE_KEY = 'app.activeProfileId';
-const MODE_DETAILS: Readonly<Record<string, string>> = {
-  mentor: ' - using simplified mentor prompt and ask_mentor tool',
-  orchestrator: ' - tool-backed work must use subagents',
-};
 /** The Session owns these, so a value the settings command saved is also sent to it. */
 const SELECTION_KEYS = new Set(['agent.modelSelection', 'agent.reasoningEffort']);
 
@@ -152,37 +149,11 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
   };
 
   return {
-    planTarget(connection: TuiConnection): string {
-      const { settings } = detailsOf(connection.sessionId);
-      return resolveActiveProfile(settings).identity.id === 'builtin:plan' ? BARE_PROFILE_ID : 'builtin:plan';
-    },
-    planNeedsClear(connection: TuiConnection): boolean {
-      const { settings } = detailsOf(connection.sessionId);
-      const target = resolveActiveProfile(settings).identity.id === 'builtin:plan' ? BARE_PROFILE_ID : 'builtin:plan';
-      return latest().messages.length > 0 && planProfileTransition(settings, target).class === 'structural';
-    },
-    /** `/plan`, `/bare`, `/mentor` and `/orchestrator`. A mode that is on turns back to Bare. */
-    toggle(connection: TuiConnection, mode: string, planGoal?: string): Promise<CommandResult> {
-      const { settings } = detailsOf(connection.sessionId);
-      const target = `builtin:${mode === 'lite' ? 'bare' : mode}`;
-      const on = resolveActiveProfile(settings).identity.id === target;
-      const goal = planGoal ?? (on ? BARE_PROFILE_ID : target);
-      // Legacy mode-commands.ts: Shift+Tab's cycleAppModes and createModeToggleCommand's lines.
-      if (mode === 'plan')
-        return switchProfile(connection, goal, '/plan', {
-          done:
-            goal === BARE_PROFILE_ID
-              ? 'Switched to Bare mode'
-              : 'Switched to Plan mode - read-only research/planning mode',
-        });
-      if (target === BARE_PROFILE_ID)
-        return switchProfile(connection, goal, `/${mode}`, {
-          noop: 'Bare mode is already active',
-          done: `Bare mode enabled${BARE_ENABLED_DETAIL}`,
-        });
-      const label = mode.charAt(0).toUpperCase() + mode.slice(1);
-      return switchProfile(connection, goal, `/${mode}`, {
-        done: `${label} mode ${on ? 'disabled' : `enabled${MODE_DETAILS[mode] ?? ''}`}`,
+    /** `/bare` and `/lite` (legacy mode-commands.ts). The plan, mentor and orchestrator modes are dropped (#149). */
+    toggle(connection: TuiConnection, mode: 'bare' | 'lite'): Promise<CommandResult> {
+      return switchProfile(connection, BARE_PROFILE_ID, `/${mode}`, {
+        noop: 'Bare mode is already active',
+        done: `Bare mode enabled${BARE_ENABLED_DETAIL}`,
       });
     },
 
@@ -191,7 +162,10 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
         return Promise.resolve({
           message: 'Use /profile <name or full profile ID>.',
         });
-      return switchProfile(connection, id.includes(':') ? id : `builtin:${id}`, `/profile ${id}`);
+      const target = id.includes(':') ? id : `builtin:${id}`;
+      // A dropped profile (#149) is refused exactly as an unknown one is (the resolver's own error).
+      if (isDroppedProfile(target)) return Promise.reject(new Error(`Missing parent or Profile '${target}'`));
+      return switchProfile(connection, target, `/profile ${id}`);
     },
 
     async settings(connection: TuiConnection, args: string): Promise<CommandResult> {

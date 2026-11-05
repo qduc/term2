@@ -1,3 +1,4 @@
+import { isDroppedProfile } from './dropped-profiles.js';
 /**
  * The data the ported legacy menus (clients/tui/menus/) read, served from the
  * same legacy services their source counterparts called. Session settings are
@@ -112,7 +113,6 @@ const RECENT_CONVERSATIONS = 10;
 const PROFILE_DETAILS: Record<string, string> = {
   bare: 'Default: shell-only, short prompt; other tools via run_code',
 };
-const DROPPED_PROFILES = new Set(['plan', 'pair', 'mentor', 'orchestrator']);
 
 /** Legacy PROFILE_OPTIONS without the profiles next dropped. */
 const PROFILE_OPTIONS = builtinProfiles
@@ -120,7 +120,7 @@ const PROFILE_OPTIONS = builtinProfiles
     const shortId = profile.id.includes(':') ? profile.id.split(':').at(-1)! : profile.id;
     return { id: `builtin:${shortId}`, shortId, displayName: profile.name, detail: PROFILE_DETAILS[shortId] ?? '' };
   })
-  .filter((option) => !DROPPED_PROFILES.has(option.shortId));
+  .filter((option) => !isDroppedProfile(option.shortId));
 
 type MenuOptions = {
   readonly app: Pick<DirectApplication, 'liveSettings' | 'skills' | 'listWorkspaceSessions'>;

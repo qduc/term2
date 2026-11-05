@@ -358,13 +358,7 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
   };
 
   return {
-    planNeedsClear: configuration.planNeedsClear,
-    planTarget: configuration.planTarget,
     printUsage: () => printUsage(latest()),
-    clearAndTogglePlan(connection) {
-      const target = configuration.planTarget(connection);
-      return clearThen(connection, (next) => configuration.toggle(next, 'plan', target));
-    },
     clearAndSwitch(connection, profileId) {
       return clearThen(connection, (next) => configuration.profile(next, profileId));
     },
@@ -395,11 +389,8 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
           return configuration.autoApprove(connection, argument);
         case 'settings':
           return configuration.settings(connection, rest.join(' '));
-        case 'plan':
         case 'bare':
         case 'lite':
-        case 'mentor':
-        case 'orchestrator':
           return configuration.toggle(connection, name);
         case 'profile':
           // Legacy's bare /profile reopens its menu: the command puts its trigger back in the input.

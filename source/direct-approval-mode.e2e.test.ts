@@ -293,7 +293,8 @@ async function runCommand(
     const lines = session.getVisibleOutput().split('\n');
     const hintRows = lines.filter((row) => row.trimStart().startsWith('/ commands'));
     expect(hintRows).toHaveLength(1);
-    expect(hintRows[0]?.trimEnd()).toBe('  / commands │ @ paths │ ! shell │ Shift+Tab plan');
+    // Legacy's last hint, `Shift+Tab plan`, named Plan mode: a dropped profile in next (#149).
+    expect(hintRows[0]?.trimEnd()).toBe('  / commands │ @ paths │ ! shell');
     expect(lines.some((row) => row.startsWith(' output │'))).toBe(false);
     return;
   }

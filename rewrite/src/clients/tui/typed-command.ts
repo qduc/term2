@@ -7,7 +7,8 @@
 import { LEGACY_COMMANDS } from './menus/legacy-commands.js';
 
 /** Typed commands this client still runs by their exact name although legacy's table does not list them. */
-const OTHER_COMMANDS = new Set(['plan', 'mentor', 'orchestrator', 'sandbox', 'mcp', 'mcp-login']);
+// /plan, /mentor and /orchestrator switched to dropped profiles (#149), so they resolve like any unknown name.
+const OTHER_COMMANDS = new Set(['sandbox', 'mcp', 'mcp-login']);
 
 export type TypedCommand =
   | { readonly kind: 'message' }

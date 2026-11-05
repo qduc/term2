@@ -8,14 +8,14 @@ import { WELCOME } from './replace-session.js';
 export const isShiftTab = (input: string, key: Key): boolean => (key.shift && key.tab) || input === '\x1b[Z';
 
 /**
- * Toggles the Plan profile through `/plan`; a second press while one is in flight is ignored. When the switch has to
- * clear the conversation first, the user confirms it (y, or n/Esc to cancel) before anything changes.
+ * Legacy Shift+Tab cycled into Plan mode. Plan is a dropped profile (#149), so Shift+Tab does nothing here; this hook
+ * keeps the confirmation `/profile` needs when switching to or from Bare with history: the user confirms (y, or n/Esc
+ * to cancel) before the conversation is cleared and the profile changes.
  */
-export function usePlanToggle(
+export function useProfileClearConfirm(
   integration: TuiIntegration,
   connection: TuiConnection,
   confirmation: Pick<ReturnType<typeof useSendConfirmation>, 'hold'>,
-  turnActive: boolean,
   setNotice: (text: string | null) => void,
   beginNewConversation?: (lines: readonly string[] | null) => void,
 ) {
@@ -51,23 +51,7 @@ export function usePlanToggle(
       label,
       enable,
     );
-  const toggle = () => {
-    const { planNeedsClear, clearAndTogglePlan, planTarget } = integration;
-    const confirmPlan = () => {
-      const label = planTarget?.(connection) === 'builtin:plan' ? 'Plan' : 'Bare';
-      confirmSwitch(label, true, `${label} mode enabled`, () => clearAndTogglePlan!(connection));
-    };
-    if (!turnActive && planNeedsClear?.(connection) && clearAndTogglePlan) return confirmPlan();
-    // Legacy cycleAppModes asks the same during a turn, when the switch is to or from Bare with history.
-    run(() =>
-      integration.command(connection, '/plan').then((result) => {
-        if (result.confirmClear && clearAndTogglePlan) confirmPlan();
-        return result;
-      }),
-    );
-  };
   return {
-    toggle,
     /** A command's `confirmClear` (legacy /profile to or from Bare with history). */
     confirmClear(request: { readonly profileId: string; readonly enable: boolean; readonly line: string }) {
       const { clearAndSwitch } = integration;

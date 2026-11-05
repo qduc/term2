@@ -14,7 +14,7 @@ import type { InteractionInputHandler } from './interaction-input.js';
 import { runBangShell } from './bang-shell.js';
 import { useInterrupt } from './interrupt.js';
 import { useQueuePaused } from './queue-paused.js';
-import { isCtrlG, isCtrlO, isCtrlT, isShiftTab, usePlanToggle } from './shift-tab.js';
+import { isCtrlG, isCtrlO, isCtrlT, isShiftTab, useProfileClearConfirm } from './shift-tab.js';
 import { resolveTypedCommand } from './typed-command.js';
 import { REWIND_COMMAND, rewindItems, runRewindCommand } from './menus/rewind-command.js';
 import { cleanImageMarkers, wireAttachments } from './draft.js';
@@ -210,14 +210,7 @@ export function TuiSession({
       setNotice(error instanceof Error ? error.message : String(error)),
     );
   });
-  const planToggle = usePlanToggle(
-    integration,
-    connection,
-    confirmation,
-    Boolean(state.activeTurnId),
-    setNotice,
-    beginNewConversation,
-  );
+  const profileClear = useProfileClearConfirm(integration, connection, confirmation, setNotice, beginNewConversation);
   const composerFilter = useComposerFilter({
     composerActive,
     outputExpanded: viewport.expanded,
@@ -243,7 +236,8 @@ export function TuiSession({
     if (composerActive && key.escape && handoffFlow.escape()) return;
     if (composerActive && key.escape && !viewport.expanded && queue.index < 0 && !editing && interruptConfirm.press())
       return;
-    if (composerActive && isShiftTab(input, key)) return planToggle.toggle();
+    // Legacy's Shift+Tab entered Plan mode, a dropped profile (#149): the key is consumed and does nothing.
+    if (composerActive && isShiftTab(input, key)) return;
     // Legacy use-app-keyboard-shortcuts: Ctrl+O and Ctrl+T replace the draft with the menu command.
     if (composerActive && isCtrlO(input, key)) return replaceInput('/model ');
     if (composerActive && isCtrlT(input, key)) return replaceInput('/effort ');
@@ -356,7 +350,7 @@ export function TuiSession({
           // Legacy adds command output (/usage) as a system message, like /help.
           if (result.transcript) viewport.appendCommandOutput(result.transcript, true);
           if (result.menu) menuStack.openMenu(result.menu);
-          if (result.confirmClear) planToggle.confirmClear(result.confirmClear);
+          if (result.confirmClear) profileClear.confirmClear(result.confirmClear);
           if (result.draft) {
             restoreDraft(result.draft);
             return;

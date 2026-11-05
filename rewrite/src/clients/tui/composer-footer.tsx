@@ -284,7 +284,7 @@ const IDLE_HINTS: ReadonlyArray<MenuHint> = [
   ['/', 'commands'],
   ['@', 'paths'],
   ['!', 'shell'],
-  ['Shift+Tab', 'plan'],
+  // Legacy's last hint, `Shift+Tab plan`, named Plan mode: a dropped profile (#149), so next doesn't offer it.
 ];
 const TURN_IN_FLIGHT_HINTS: ReadonlyArray<MenuHint> = [
   ['⏎', 'steer', 'accent'],

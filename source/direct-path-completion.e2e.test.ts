@@ -148,7 +148,8 @@ it(
     await session!.waitForOutput('src/', 30_000);
     session!.write('\t');
     await until(() => composer(idlePath) === 'src/', 'the directory replaced the @query and gained a slash');
-    await session!.waitForOutput('Shift+Tab plan', 30_000);
+    // The composer hints return once the path menu closes (legacy's last hint, Shift+Tab plan, is dropped: #149).
+    await session!.waitForOutput('@ paths │ ! shell', 30_000);
   },
 );
 

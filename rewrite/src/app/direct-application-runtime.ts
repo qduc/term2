@@ -1,9 +1,11 @@
+import { runnableProfile } from './dropped-profiles.js';
 /** Assembles one Session's runtime from the real tool surface. Runs no provider and no tool. */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { isDeepStrictEqual } from 'node:util';
 import { LocalExecutionContext } from './tool-contract.js';
 import { installationVersion } from '../../../source/providers/fetch/logging-middleware.js';
 import { getProfileMetadata } from '../../../source/services/profiles/active-profile.js';
+import { BARE_PROFILE_ID } from '../../../source/services/profiles/index.js';
 import { planProfileTransition } from '../../../source/services/profiles/profile-transition.js';
 import { RUNTIME_MODIFIABLE_SETTINGS } from '../../../source/services/settings/settings-schema.js';
 import { buildEnvOverrides, SettingsService } from '../../../source/services/settings/settings-service.js';
@@ -138,7 +140,11 @@ function sessionSettings(
   keepLoadTimeMigrations(settings, defaults);
   // The latest configuration, where there is one, outranks the session's start fact.
   const stored = configuration?.profile ?? metadata?.profile;
-  const profile = stored && !profileExplicit ? stored.id : defaults.get('app.activeProfileId');
+  // A dropped profile (#149), from saved settings, a resumed session or --profile, runs Bare.
+  const profile = runnableProfile(
+    stored && !profileExplicit ? stored.id : defaults.get('app.activeProfileId'),
+    BARE_PROFILE_ID,
+  );
   settings.set('app.activeProfileId', profile, { persist: false });
   settings.set('agent.modelSelection', model, { persist: false });
   const reasoning =

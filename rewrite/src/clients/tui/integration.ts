@@ -340,10 +340,6 @@ export interface TuiIntegration {
   readonly menus?: TuiMenus;
   /** Run an explicit user shell command in the selected workspace, without a model turn. */
   shell?(sessionId: string, command: string): Promise<ShellResult>;
-  planNeedsClear?(connection: TuiConnection): boolean;
-  /** The profile Shift+Tab switches to. */
-  planTarget?(connection: TuiConnection): string;
-  clearAndTogglePlan?(connection: TuiConnection): Promise<{ message?: string }>;
   /** A confirmed `confirmClear`: a new session, then the profile switch. */
   clearAndSwitch?(connection: TuiConnection, profileId: string): Promise<{ message?: string }>;
   /** Legacy printUsage: the usage summary written to stdout as a conversation is left for a new one. */

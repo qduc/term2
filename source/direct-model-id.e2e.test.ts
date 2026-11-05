@@ -76,7 +76,7 @@ async function launch(env: NodeJS.ProcessEnv, args: string[]) {
     cols: 120,
     rows: 32,
   });
-  await session.waitForOutput('/ commands │ @ paths │ ! shell │ Shift+Tab plan', 60_000);
+  await session.waitForOutput('/ commands │ @ paths │ ! shell', 60_000);
 }
 
 async function exitCli() {

@@ -502,6 +502,27 @@ def cached_run(cli, cols, rows, name):
 _CAPTURE_CODE = hashlib.sha256(_capture_code().encode()).hexdigest()
 
 
+# Accepted differences (#65's closed list) that touch every screen. Each entry: the legacy-only text, cut from
+# legacy's captures (with its styles) before comparing. Plan mode is a dropped profile (#149), so next doesn't
+# advertise it in the composer hints.
+ACCEPTED_LEGACY_ONLY = [' │ Shift+Tab plan']
+
+
+def accept_differences(cap):
+    """Legacy's capture without the accepted legacy-only text, so the rest of each row still compares."""
+    lines, styles = [], []
+    for line, spans in zip(cap['lines'], cap['styles']):
+        for text in ACCEPTED_LEGACY_ONLY:
+            cut = line.find(text)
+            if cut >= 0:
+                line = line[:cut].rstrip()
+                if isinstance(spans, list):
+                    spans = [[a, min(b, len(line)), *rest] for a, b, *rest in spans if a < len(line)]
+        lines.append(line)
+        styles.append(spans)
+    return {**cap, 'lines': lines, 'styles': styles}
+
+
 def menu_region(cap, notice=False):
     """The bottom area from the composer divider down, without trailing blank rows.
 
@@ -544,7 +565,8 @@ def compare(cols, rows, names):
                for name in names}
     for name in names:
         notice = SEED.get(name, {}).get('notice', False)
-        a = full_region(futures[name][0].result()) if FULL else menu_region(futures[name][0].result(), notice)
+        legacy = accept_differences(futures[name][0].result())
+        a = full_region(legacy) if FULL else menu_region(legacy, notice)
         b = full_region(futures[name][1].result()) if FULL else menu_region(futures[name][1].result(), notice)
         same_text = a['lines'] == b['lines']
         same_style = a['styles'] == b['styles']

@@ -1,5 +1,5 @@
 {
-  "maxLayerEdges": 268,
+  "maxLayerEdges": 266,
   "maxLines": 500,
   "fileCeilings": {
     "src/model/provider.ts": {
@@ -64,10 +64,6 @@
     },
     "src/app/agent.ts": {
       "lines": 877,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
-    },
-    "src/app/lib/agent-configuration.ts": {
-      "lines": 544,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/app/lib/agent-factory.ts": {

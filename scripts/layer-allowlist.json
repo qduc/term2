@@ -63,8 +63,6 @@
   "engine/agent-runtime/context-compaction/local-context-compactor.ts -> session/prompts/context-compaction.ts (engine -> session)",
   "engine/agent-runtime/executor.ts -> session/conversation/conversation-events.ts (engine -> session)",
   "engine/agent-runtime/tool-invocation-context.ts -> session/approval/approval-replay.ts (engine -> session)",
-  "engine/lib/agent-chat-service.ts -> app/lib/agent-configuration.ts (engine -> app)",
-  "engine/lib/agent-chat-service.ts -> session/conversation-agent-client.ts (engine -> session)",
   "engine/lib/subagent-bridge.ts -> session/approval/tool-ownership-registry.ts (engine -> session)",
   "engine/lib/subagent-bridge.ts -> session/conversation/conversation-events.ts (engine -> session)",
   "engine/lib/subagent-bridge.ts -> session/conversation/session-browser.ts (engine -> session)",

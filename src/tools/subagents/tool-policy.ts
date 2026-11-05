@@ -34,6 +34,7 @@ import {
   type FeatureSelection,
 } from '../assembly/feature-selection.js';
 import { createApplyPatchToolDefinition } from '../file/apply-patch.js';
+import { resolveAncillaryModelTier } from '../../engine/agent-runtime/model-resolver.js';
 import { extractPatchPaths } from '../file/upstream-apply-patch.js';
 import { createSearchReplaceToolDefinition } from '../file/search-replace.js';
 import { createCreateFileToolDefinition } from '../file/create-file.js';
@@ -1266,6 +1267,7 @@ export class SubagentToolFactory {
           this.#toolPolicy.wrapWriteToolWithScope(
             this.#toolPolicy.wrapWriteTool(
               createApplyPatchToolDefinition({
+                resolveHealingModel: () => resolveAncillaryModelTier('chore', this.#settings),
                 patchHealing: (path, diff, content, diagnosis, model, key, healingDeps) =>
                   healPatchOperation(path, diff, content, diagnosis, model, key, {
                     ...healingDeps,
@@ -1291,6 +1293,7 @@ export class SubagentToolFactory {
           this.#toolPolicy.wrapWriteToolWithScope(
             this.#toolPolicy.wrapWriteTool(
               createSearchReplaceToolDefinition({
+                resolveHealingModel: () => resolveAncillaryModelTier('chore', this.#settings),
                 editHealing: (params, content, model, key, healingDeps) =>
                   healSearchReplaceParams(params, content, model, key, {
                     ...healingDeps,

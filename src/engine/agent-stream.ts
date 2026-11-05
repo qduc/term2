@@ -10,6 +10,7 @@
 import type { ContinuationHandle } from '../shared/contracts/continuation-handle.js';
 import type { ApplicationRunEvent } from '../shared/contracts/application-stream.js';
 import type { RunTerminationCause } from '../shared/contracts/run-termination.js';
+export { selectAgentStreamItems } from '../shared/utils/ai/stream-items.js';
 
 const APPLICATION_STREAM = Symbol('application-stream');
 
@@ -40,38 +41,6 @@ export interface AgentStream {
   runCostRecords?: unknown[];
   /** Logical run outcome, even when the provider returned a valid response. */
   terminalCause?: RunTerminationCause;
-}
-
-/** Select provider items from the current run, falling back to full history. */
-export function selectAgentStreamItems(stream: Pick<AgentStream, 'output' | 'newItems' | 'history'>): unknown[] {
-  const output = projectProviderItems(Array.isArray(stream.output) ? stream.output : []);
-  const newItems = projectProviderItems(Array.isArray(stream.newItems) ? stream.newItems : []);
-  const history = Array.isArray(stream.history) ? stream.history : [];
-  return newItems.length > 0 ? newItems : output.length > 0 ? output : history;
-}
-
-function projectProviderItems(items: readonly unknown[]): unknown[] {
-  return items.flatMap((item) => {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
-    const event = item as Record<string, unknown>;
-    if (event.type === 'item' && event.item && typeof event.item === 'object') return [event.item];
-    if (
-      event.type === 'text_delta' ||
-      event.type === 'reasoning_started' ||
-      event.type === 'reasoning_delta' ||
-      event.type === 'model_attempt_rollback' ||
-      event.type === 'codex_rate_limits' ||
-      event.type === 'tool_call_streaming_delta' ||
-      event.type === 'context_compaction_started' ||
-      event.type === 'context_compaction_completed' ||
-      event.type === 'usage_update' ||
-      event.type === 'cost_update' ||
-      event.type === 'run_budget'
-    ) {
-      return [];
-    }
-    return [item];
-  });
 }
 
 /**

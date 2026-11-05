@@ -2,10 +2,9 @@ import { z } from 'zod';
 import * as fs from 'fs/promises';
 import { resolveWorkspacePath, relaxedNumber } from '../utils.js';
 import type { ScriptedToolDefinition, FormatCommandMessage } from '../types.js';
-import { isSessionReadGranted } from '../../session/approval/session-read-access.js';
+import { isSessionReadGranted } from './read-access.js';
 import type { ISettingsService } from '../../shared/service-interfaces.js';
-import type { SessionAccessState } from '../../session/session/session-access-state.js';
-import type { NestedToolCompatibilityState } from '../../session/session/nested-tool-compatibility-state.js';
+import type { FileReadAccessPort, NestedReadAccessPort } from '../access-port.js';
 import {
   getOutputText,
   normalizeToolArguments,
@@ -168,9 +167,9 @@ export const createReadFileToolDefinition = (
     allowOutsideWorkspace?: boolean;
     orchestratorMode?: boolean;
     /** Root clients receive this handle-owned capability. */
-    sessionAccess?: SessionAccessState;
+    sessionAccess?: FileReadAccessPort;
     /** Isolated legacy protocol for nested tools only. */
-    nestedCompatibility?: NestedToolCompatibilityState;
+    nestedCompatibility?: NestedReadAccessPort;
     /** YOLO (autoApproveMode 'always') read bypass. */
     settingsService?: ISettingsService;
     /** Optional override for the result byte cap (tests). */

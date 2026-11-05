@@ -3,11 +3,12 @@ import { getActiveWorkspaceRoot } from '../../tools/workspace/active-workspace-r
 import path from 'node:path';
 import type { ISettingsService } from '../../shared/service-interfaces.js';
 import { requestsDockerHostControl } from '../../shared/utils/shell/sandbox/docker-host-control.js';
+import type { FileReadAccessPort, FileEditAccessPort, ShellAccessPort } from '../../tools/access-port.js';
 
 export type DockerHostControlGrant = 'once' | 'session' | 'project';
 
 /** Session-bound read and Docker state; project Docker grants stay in settings. */
-export class SessionAccessState {
+export class SessionAccessState implements FileReadAccessPort, FileEditAccessPort, ShellAccessPort {
   readonly #readFolders = new Set<string>();
   readonly #editFiles = new Set<string>();
   readonly #editFolders = new Set<string>();

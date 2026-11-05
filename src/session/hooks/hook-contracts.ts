@@ -1,3 +1,5 @@
+import type { ToolExecutionScope, ToolExecutionSubagentScope } from '../../tools/types.js';
+
 const TERM2_HOOK_SCHEMA_VERSION = 1 as const;
 
 export type Term2HookSchemaVersion = typeof TERM2_HOOK_SCHEMA_VERSION;
@@ -18,12 +20,9 @@ export const TERM2_HOOK_EVENT_NAMES = [
 
 export type Term2HookEventName = (typeof TERM2_HOOK_EVENT_NAMES)[number];
 
-export type Term2HookScope = 'root' | { readonly subagent: Term2SubagentScope };
+export type Term2HookScope = ToolExecutionScope;
 
-export interface Term2SubagentScope {
-  readonly agentId: string;
-  readonly role: string;
-}
+export type Term2SubagentScope = ToolExecutionSubagentScope;
 
 /**
  * The fields shared by every public hook event.  IDs are opaque to hook

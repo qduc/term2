@@ -1,5 +1,6 @@
 import type { SessionSettingsInitialized } from '../../config/settings/session-runtime-settings.js';
 import type { ProviderInputItem } from '../../shared/contracts/provider-input.js';
+import type { DurableGoal } from '../../shared/contracts/durable-goal.js';
 import type { NormalizedUsage } from '../../shared/utils/ai/token-usage.js';
 import type { CommandMessage } from '../../tools/types.js';
 import type { SubagentResult } from '../../tools/subagents/types.js';
@@ -82,13 +83,7 @@ export interface SettingsChangedEvent {
   value: unknown;
 }
 
-export type GoalStatus = 'active' | 'achieved' | 'abandoned';
-export interface DurableGoal {
-  id: string;
-  outcome: string;
-  successCriteria?: string;
-  status: GoalStatus;
-}
+export type { DurableGoal, GoalStatus } from '../../shared/contracts/durable-goal.js';
 export interface GoalChangedEvent {
   type: 'goal_changed';
   version: 1;

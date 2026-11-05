@@ -25,6 +25,19 @@ import { SessionIndexService } from './session-index/session-index-service.js';
 import { SessionIndexWorkerClient } from './session-index/session-index-worker-client.js';
 import type { CanonicalBrowseRequest } from './session-index/session-index-worker.js';
 import { SNIPPET_CHARS, scoreText, termsFor } from './session-search-helpers.js';
+import type {
+  Kind,
+  SessionBrowserPort,
+  SessionListInput,
+  SessionSearchInput,
+  SessionReadInput,
+} from '../../tools/session-browser/session-browser-port.js';
+export type {
+  Kind,
+  SessionListInput,
+  SessionSearchInput,
+  SessionReadInput,
+} from '../../tools/session-browser/session-browser-port.js';
 export { MAX_SESSION_BROWSER_CHARS } from '../../tools/session-browser/limits.js';
 const DEFAULT_INDEX_CHARS = 12_000;
 const DEFAULT_READ_CHARS = 12_000;
@@ -33,7 +46,6 @@ const DEFAULT_READ_LIMIT = 20;
 const SAFE_SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 
 export type SessionBrowserContext = { projectPath: string; sshHost?: string; currentSessionId?: string };
-export type Kind = 'user' | 'assistant' | 'reasoning' | 'system' | 'tool' | 'subagent';
 export type ProjectedMessage = { index: number; kind: Kind; text: string; toolName?: string };
 // A record as one read sees it: `fullTextChars` is set only when `itemMaxChars`
 // cut `text` to a preview prefix.
@@ -82,20 +94,6 @@ type ReadSnapshot = {
   previousDependency?: { sessionId: string; sourceVersion: string };
 };
 
-export type SessionListInput = { limit?: number; maxChars?: number };
-export type SessionSearchInput = { query: string; kinds?: Kind[]; limit?: number; maxChars?: number };
-export type SessionReadInput = {
-  id: string;
-  cursor?: string;
-  from?: 'end';
-  index?: number;
-  before?: number;
-  kinds?: Kind[];
-  itemMaxChars?: number;
-  limit?: number;
-  maxChars?: number;
-};
-
 /** The conversation store the canonical backend reads; defaults to the legacy conversations directory. */
 export interface SessionBrowserStore {
   browse(projectPath: string, sshHost?: string, idPrefix?: string): BrowseConversationsForProjectResult;
@@ -124,7 +122,7 @@ export interface SessionBrowserOptions {
   cursorPrefix?: 'c' | 'f';
 }
 
-export class SessionBrowser {
+export class SessionBrowser implements SessionBrowserPort {
   readonly #cursorStates = new Map<string, CursorState>();
   readonly #cursorHandles = new Map<string, string>();
   #readSnapshot: ReadSnapshot | null = null;

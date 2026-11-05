@@ -1,12 +1,12 @@
-import { toTierModelPoolEntries } from '../../../engine/agent-runtime/model-resolver.js';
-import { getProfileLabel } from '../../../config/profiles/labels.js';
+import { toTierModelPoolEntries } from '../../../../../engine/agent-runtime/model-resolver.js';
+import { getProfileLabel } from '../../../../../config/profiles/labels.js';
 import React, { FC, useEffect, useRef } from 'react';
 import { Box, measureElement, type DOMElement } from 'ink';
 import { useTerminalColumns } from '../../hooks/use-terminal-columns.js';
 import { createRequire } from 'node:module';
 import { useSetting } from '../../hooks/use-setting.js';
-import { getProvider } from '../../../model/providers/index.js';
-import type { ISettingsService } from '../../../shared/service-interfaces.js';
+import { getProvider } from '../../../../../model/providers/index.js';
+import type { ISettingsService } from '../../../../../shared/service-interfaces.js';
 import type { ModeBadge } from '../theme.js';
 import { useSkin } from '../../skins/SkinContext.js';
 
@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
  */
 export const resolveDisplayVersion = (load: (specifier: string) => unknown = require): string => {
   // The build (dist/src/...) and the source tree place this module at different depths.
-  for (const specifier of ['../../../../build-info.json', '../../../../dist/build-info.json']) {
+  for (const specifier of ['../../../../../../build-info.json', '../../../../../../dist/build-info.json']) {
     try {
       const buildInfo = load(specifier) as { version?: string };
       if (buildInfo.version) return buildInfo.version;
@@ -29,7 +29,7 @@ export const resolveDisplayVersion = (load: (specifier: string) => unknown = req
     }
   }
   // The build emits this file below dist/, one level deeper than the source tree.
-  for (const specifier of ['../../../../package.json', '../../../../../package.json']) {
+  for (const specifier of ['../../../../../../package.json', '../../../../../../../package.json']) {
     try {
       const manifest = load(specifier) as { version?: string };
       if (manifest.version) return manifest.version;

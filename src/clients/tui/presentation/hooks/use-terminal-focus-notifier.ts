@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useInput } from 'ink';
-import { sendNotification } from '../notification-service.js';
-import type { LoggingService } from '../../session/logging/logging-service.js';
-import type { SettingsService } from '../../config/settings/settings-service.js';
-import type { TerminalWriter } from '../../shared/types/terminal.js';
+import { sendNotification } from '../../../notification-service.js';
+import type { LoggingService } from '../../../../session/logging/logging-service.js';
+import type { SettingsService } from '../../../../config/settings/settings-service.js';
+import type { TerminalWriter } from '../../../../shared/types/terminal.js';
 
 interface UseTerminalFocusNotifierOptions {
   stdout: TerminalWriter;

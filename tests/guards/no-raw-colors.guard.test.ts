@@ -14,15 +14,12 @@ import path from 'node:path';
  *  - a removed `COLOR_*` / `TOOL_STATUS_COLOR` / `MODE_BADGE_*` constant: a static
  *    colour that bypasses the active theme entirely.
  *
- * Palettes themselves live in `src/clients/theme/`, which is the one place hex
+ * Palettes themselves live in `src/clients/tui/presentation/theme/`, where hex
  * literals belong.
  */
 
 const sourceRoot = path.resolve(import.meta.dirname, '../../src');
-// The TUI keeps a ported copy of the palettes beside its presentation components.
-const themeDirectories = new Set(
-  ['clients/theme', 'clients/tui/presentation/theme'].map((dir) => path.join(sourceRoot, dir)),
-);
+const themeDirectories = new Set([path.join(sourceRoot, 'clients/tui/presentation/theme')]);
 
 const NAMED_COLORS =
   'black|red|green|yellow|blue|magenta|cyan|white|gray|grey|blackBright|redBright|greenBright|yellowBright|blueBright|magentaBright|cyanBright|whiteBright';
@@ -86,9 +83,9 @@ describe('findThemeViolations', () => {
     const line = "presentation: { label: 'STD', color: 'white' },";
     expect(findThemeViolations(line, { ui: true })).toHaveLength(1);
     expect(findThemeViolations(line, { ui: false })).toEqual([]);
-    expect(isUiSource('clients/components/message/ChatMessage.tsx')).toBe(true);
-    expect(isUiSource('clients/hooks/use-setting.ts')).toBe(true);
-    expect(isUiSource('clients/skins/rail/index.ts')).toBe(true);
+    expect(isUiSource('clients/tui/presentation/components/message/CommandMessage.tsx')).toBe(true);
+    expect(isUiSource('clients/tui/menus/use-setting.ts')).toBe(true);
+    expect(isUiSource('clients/tui/presentation/skins/rail/index.ts')).toBe(true);
     expect(isUiSource('config/profiles/registry.ts')).toBe(false);
   });
 

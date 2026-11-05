@@ -2,8 +2,8 @@ import { z } from 'zod';
 import envPaths from 'env-paths';
 import path from 'node:path';
 import { ModelSelectionSchema, type ModelSelection } from './model-selection.js';
-import { THEME_SETTING_VALUES, type ThemeSetting } from '../../clients/theme/resolve-theme.js';
-import { SKIN_NAMES, type SkinName } from '../../clients/skins/names.js';
+import { THEME_SETTING_VALUES, type ThemeSetting } from '../../clients/tui/presentation/theme/resolve-theme.js';
+import { SKIN_NAMES, type SkinName } from '../../clients/tui/presentation/skins/names.js';
 import {
   normalizeProviderIdentifier,
   resolveProviderId,

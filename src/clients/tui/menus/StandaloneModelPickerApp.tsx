@@ -1,11 +1,17 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { Box, Text, useInput } from 'ink';
 import ModelSelectionMenu from './ModelSelectionMenu.js';
-import { useStandaloneModelPicker } from '../../hooks/use-standalone-model-picker.js';
+import { useStandaloneModelPicker } from './use-standalone-model-picker.js';
 import type { SettingsService } from '../../../config/settings/settings-service.js';
 import type { ILoggingService } from '../../../shared/service-interfaces.js';
 import type { ModelFetcher } from '../../../model/models/model-catalog-session.js';
-import { useTheme } from '../theme.js';
+import { useTheme } from '../presentation/components/theme.js';
+import { getAllProviders, getProvider } from '../../../model/providers/index.js';
+import {
+  getAvailableProviderIds,
+  hasProviderCredentials,
+  resolveProviderCredentials,
+} from '../../../shared/utils/ai/provider-credentials.js';
 
 export type StandaloneModelPickerSelection = { modelId: string; provider: string };
 
@@ -48,6 +54,20 @@ function StandaloneModelPickerApp({
   onDone,
 }: StandaloneModelPickerAppProps) {
   const theme = useTheme();
+  // The pre-session host uses the same renderer as the composer, without
+  // installing a second model menu or a second skin/theme context.
+  const menuSettings = useMemo(
+    () => ({
+      get: (key: string) => settingsService.getDynamic(key),
+      onChange: settingsService.onChange.bind(settingsService),
+      providers: getAllProviders,
+      providerLabel: (id: string) => getProvider(id)?.label,
+      availableProviderIds: (ids: string[]) => getAvailableProviderIds(settingsService, ids),
+      hasProviderCredentials: (id: string) => hasProviderCredentials(settingsService, id),
+      unavailableReason: (id: string) => resolveProviderCredentials(settingsService, id).unavailableReason,
+    }),
+    [settingsService],
+  );
   const models = useStandaloneModelPicker({
     loggingService,
     settingsService,
@@ -132,7 +152,7 @@ function StandaloneModelPickerApp({
         </Text>
       ))}
       <ModelSelectionMenu
-        settingsService={settingsService}
+        settingsService={menuSettings}
         items={models.filteredModels}
         selectedIndex={models.selectedIndex}
         query={models.query}

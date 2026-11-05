@@ -1,7 +1,7 @@
 import { backgroundModeFromRgb, parseOsc11Response, type BackgroundMode } from './resolve-theme.js';
 
 const OSC11_QUERY = '\u001B]11;?\u001B\\';
-/** Primary Device Attributes: every terminal answers it, so it marks "the replies are done". */
+/** Primary Device Attributes marks "the replies are done" for terminals answering DA1. */
 const DA1_QUERY = '\u001B[c';
 const DA1_REPLY = /\u001B\[\?[\d;]*c/;
 

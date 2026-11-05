@@ -1,5 +1,5 @@
 {
-  "maxLayerEdges": 270,
+  "maxLayerEdges": 241,
   "maxLines": 500,
   "fileCeilings": {
     "src/model/provider.ts": {
@@ -15,12 +15,12 @@
       "reason": "Verbatim copy of legacy source/components/message/command-message-helpers.ts, the parsers and labels CommandMessage and its renderers share."
     },
     "src/clients/tui/menus/menu-controller.ts": {
-      "lines": 846,
-      "reason": "Verbatim port of src/clients/components/input/menu-controller.ts (the legacy menu stack); kept whole so it stays diffable against the legacy oracle."
+      "lines": 849,
+      "reason": "Canonical menu stack controller, consolidated from the two copies with MCP editor return-point handling retained. The editor/stack transition rules remain together."
     },
     "src/clients/tui/menus/use-provider-selection.ts": {
       "lines": 926,
-      "reason": "Verbatim port of src/clients/hooks/use-provider-selection.ts (the legacy /providers manager state machine); kept whole so it stays diffable against the legacy oracle."
+      "reason": "Canonical /providers manager state machine; the app supplies provider data through the menu integration boundary. Phase transitions and their draft state remain together."
     },
     "src/clients/tui/menus/use-subagent-pool-selection.ts": {
       "lines": 748,
@@ -74,20 +74,12 @@
       "lines": 673,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "src/clients/components/input/menu-controller.ts": {
-      "lines": 849,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
-    },
     "src/clients/control-socket/control-socket.ts": {
       "lines": 889,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/clients/discord/discord-bridge.ts": {
       "lines": 1275,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
-    },
-    "src/clients/hooks/use-provider-selection.ts": {
-      "lines": 901,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/config/profiles/resolver.ts": {

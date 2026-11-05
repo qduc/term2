@@ -1,5 +1,5 @@
 import type { SlashCommand } from '../slash-commands.js';
-import { SETTINGS_RESET_TRIGGER, SETTINGS_TRIGGER } from '../../clients/components/input/triggers.js';
+import { SETTINGS_RESET_TRIGGER, SETTINGS_TRIGGER } from '../../clients/tui/menus/triggers.js';
 import type {
   SettingsService,
   SettingsWithSources,

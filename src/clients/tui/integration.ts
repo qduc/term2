@@ -139,7 +139,7 @@ export interface TuiModelSettings {
   providerItems(): MenuProviderSelectionItem[];
 }
 
-/** Legacy `SettingCompletionItem` (src/clients/hooks/settings-completion-config.ts). */
+/** Settings menu item (src/config/settings/settings-completion-config.ts). */
 export type SettingCompletionItem = {
   key: string;
   label: string;
@@ -158,7 +158,7 @@ export type SettingValueSuggestion = { value: string; description?: string };
 /**
  * The legacy settings-menu library: schema metadata, list building, filtering,
  * value suggestions and value parsing, from src/config/settings,
- * src/clients/hooks/settings-completion-{config,logic}.ts, src/shared/utils/value-suggestions.ts
+ * src/config/settings/settings-completion-{config,logic}.ts, src/shared/utils/value-suggestions.ts
  * and src/shared/utils/settings-command.ts. All pure except
  * `fetchLiveSettingValueSuggestions`, which legacy also calls only when a
  * value frame opens, never per render.

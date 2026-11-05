@@ -1,8 +1,7 @@
 /**
- * Legacy src/clients/commands/rewind-command.ts for `/rewind`, `/undo` and `/retry`. parseArgs and the
- * action's messages are copied; the action is async here because next reads its rewind targets over the
- * wire, and it returns the turn to rewind instead of rewinding, so the session runs that with its own
- * native rewind once the command's input is settled.
+ * Parses `/rewind`, `/undo` and `/retry` with their retained argument grammar and messages.
+ * The action reads targets asynchronously over the wire and returns the selected turn rather
+ * than rewinding directly, so the session applies the rewind once command input is settled.
  */
 import type { WireRewindTarget } from '../../../protocol/wire.js';
 import type { RewindDisposition, RewindItem } from './menu-types.js';

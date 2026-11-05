@@ -1,6 +1,6 @@
 import { THEME_NAMES, type ThemeName } from './palettes.js';
 
-/** What `ui.theme` may hold: a concrete theme, or `auto` to pick one for the terminal. */
+/** What `ui.theme` may hold: a concrete palette, or `auto` to pick one for the terminal. */
 export type ThemeSetting = 'auto' | ThemeName;
 export const THEME_SETTING_VALUES = ['auto', ...THEME_NAMES] as const;
 

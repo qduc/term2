@@ -4,11 +4,6 @@ import {
   FAVORITES_TAB_ID,
   MODEL_TAB_LABELS,
   MODEL_TABS,
-  getAllProviders,
-  getAvailableProviderIds,
-  getProvider,
-  hasProviderCredentials,
-  resolveProviderCredentials,
   serializeFavorite,
   type ModelInfo,
   type ModelSettings as SettingsService,
@@ -45,7 +40,16 @@ type Props = {
   canSwitchProvider?: boolean;
   providerSwitchDisabledMessage?: string;
   credentialRevision?: number;
-  settingsService: SettingsService;
+  settingsService: Pick<
+    SettingsService,
+    | 'get'
+    | 'onChange'
+    | 'providers'
+    | 'providerLabel'
+    | 'availableProviderIds'
+    | 'hasProviderCredentials'
+    | 'unavailableReason'
+  >;
   /** Set of `provider/modelId` strings for the favorited-state marker, shown on every tab. */
   favoriteKeys?: Set<string>;
   /** Map of `provider/modelId` -> nickname, rendered on rows on every tab. */
@@ -85,10 +89,7 @@ const ModelSelectionMenu: FC<Props> = ({
   const isUnified = provider == null;
   const showProviderColumn = isFavoritesTab || isUnified;
   const providerLabels = useMemo(
-    () =>
-      new Map(
-        items.map((item) => [item.provider, getProvider(settingsService, item.provider)?.label ?? item.provider]),
-      ),
+    () => new Map(items.map((item) => [item.provider, settingsService.providerLabel(item.provider) ?? item.provider])),
     [items, settingsService],
   );
   const providerColumnWidth = Math.max(0, ...Array.from(providerLabels.values(), (label) => label.length)) + 2;
@@ -110,20 +111,15 @@ const ModelSelectionMenu: FC<Props> = ({
   const openAIApiKey = useSetting(settingsService, 'agent.openai.apiKey');
   const openRouterApiKey = useSetting(settingsService, 'agent.openrouter.apiKey');
   const tabItems = useMemo(() => {
-    const sorted = getAllProviders(settingsService);
-    const availableIds = new Set(
-      getAvailableProviderIds(
-        settingsService,
-        sorted.map((p) => p.id),
-      ),
-    );
+    const sorted = settingsService.providers();
+    const availableIds = new Set(settingsService.availableProviderIds(sorted.map((p) => p.id)));
     const providerTabs = sorted
       .filter((p) => availableIds.has(p.id) || p.id === provider)
       .map((p) => ({
         id: p.id,
         label: p.label,
-        hasCredentials: hasProviderCredentials(settingsService, p.id),
-        unavailableReason: resolveProviderCredentials(settingsService, p.id).unavailableReason,
+        hasCredentials: settingsService.hasProviderCredentials(p.id),
+        unavailableReason: settingsService.unavailableReason(p.id),
       }));
     // Pinned leftmost, ahead of every real provider: pure presentation, no
     // credential check (it never fails to load — there's nothing to load).

@@ -1,5 +1,5 @@
 import React from 'react';
-import type { StandaloneModelPickerOutcome } from '../../clients/components/menu/StandaloneModelPickerApp.js';
+import type { StandaloneModelPickerOutcome } from '../../clients/tui/menus/StandaloneModelPickerApp.js';
 import type { ILoggingService } from '../../shared/service-interfaces.js';
 import type { SettingsService } from '../../config/settings/settings-service.js';
 import type { ModelFetcher } from './model-catalog-session.js';
@@ -95,9 +95,9 @@ export async function runModelPickerHost(options: ModelPickerHostOptions): Promi
   const [{ render }, { SettingsThemeProvider }, { SettingsSkinProvider }, { default: StandaloneModelPickerApp }] =
     await Promise.all([
       import('ink'),
-      import('../../clients/theme/ThemeContext.js'),
-      import('../../clients/skins/SkinContext.js'),
-      import('../../clients/components/menu/StandaloneModelPickerApp.js'),
+      import('../../clients/tui/presentation/theme/ThemeContext.js'),
+      import('../../clients/tui/presentation/skins/SkinContext.js'),
+      import('../../clients/tui/menus/StandaloneModelPickerApp.js'),
     ]);
 
   let outcome: StandaloneModelPickerOutcome = { status: 'cancelled' };

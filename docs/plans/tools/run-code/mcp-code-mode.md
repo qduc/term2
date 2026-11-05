@@ -192,6 +192,13 @@ login → reconnect → callable tool, plus silent refresh and both sides of the
 
 ## User-facing surface (2026-09-18)
 
+This section records the original surface. The direct TUI's current `/mcp` is
+the status command in `src/app/launch-tui-commands.ts`; `/mcp-login <server>`
+uses the app-owned MCP connection. It does not mount the former management
+menu. The unused legacy configuration controller was removed with the duplicate
+UI tree; the canonical menu controller retains MCP frame return-point semantics,
+not a server-editing renderer.
+
 A UX review after Milestone 2 found the feature had been built so the **agent** could
 see everything and the **user** could see nothing. Two fixes, both shipped:
 
@@ -205,7 +212,7 @@ see everything and the **user** could see nothing. Two fixes, both shipped:
   and stays silent for healthy servers.
 - **No management view existed.** `/mcp` opens an interactive server list with state, tool
   count, provenance and errors. It can inspect and reconnect every server, and add, edit, or
-  delete user-level entries through `McpConfigController`; edits preserve unrelated JSON and
+  delete user-level entries through the former configuration controller; edits preserve unrelated JSON and
   reconcile the live `McpConnectionManager` without replacing the script-visible tool source.
   Project entries remain read-only because their definitions belong to the repository.
 

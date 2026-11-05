@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
 import type { ModelSettings } from './model-catalog.js';
 
-/** Copied from src/clients/hooks/use-setting.ts over the session's model settings handle. */
+/** Setting subscription over the session's model settings handle. */
 
 /**
  * Hook to subscribe to a specific setting value.
  * Updates the component whenever the setting changes.
  */
-export function useSetting(settingsService: ModelSettings, key: string): unknown {
+export function useSetting(settingsService: Pick<ModelSettings, 'get' | 'onChange'>, key: string): unknown {
   const [value, setValue] = useState<unknown>(() => settingsService.get(key));
 
   useEffect(() => {

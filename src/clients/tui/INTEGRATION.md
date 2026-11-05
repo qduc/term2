@@ -42,6 +42,16 @@ cursor-aware replacement rather than clearing the entire draft.
 
 ## Internal ownership
 
+`presentation/` and `menus/` are the canonical presentation and menu trees.
+The launcher, banner and pre-session model picker share their theme/skin contexts;
+settings-backed providers resolve live preferences without a second context bridge.
+`menus/input-context.tsx` exposes only the controller-owned editor and menu state;
+queue/image state remains in the session composer. `MenuControllerImpl` retains
+MCP frames' explicit-open and editor return-point rules, even though the current
+registry has no MCP renderer (the app's `/mcp` command owns its command interface).
+Settings list metadata and search logic live in `config/settings/`, supplied by
+the app through `TuiMenus.settings.lib`, not by importing configuration into menus.
+
 `index.tsx` retains the unkeyed terminal interrupt gesture and cross-session notices;
 `session.tsx` owns the keyed session, ordered commands, modal routing and the shared
 composer/editor-footer activation condition. Moving the session component does not

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 
-// Copied from src/clients/hooks/settings-completion-logic.ts.
+// Shared selection bounds for menu lists.
 export function clampIndex(currentIndex: number, arrayLength: number): number {
   if (arrayLength === 0) {
     return 0;

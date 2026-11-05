@@ -1,5 +1,5 @@
-import { SETTING_KEYS } from '../../config/settings/settings-service.js';
-import { getAllSettingDescriptions } from '../../config/settings/settings-ui-metadata.js';
+import { SETTING_KEYS } from './settings-service.js';
+import { getAllSettingDescriptions } from './settings-ui-metadata.js';
 
 export type SettingCompletionItem = {
   key: string;

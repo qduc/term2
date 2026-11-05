@@ -1,29 +1,33 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ModelInfo } from '../../model/model-service.js';
-import type { ILoggingService, ISettingsService } from '../../shared/service-interfaces.js';
+import type { ModelInfo } from '../../../model/model-service.js';
+import type { ILoggingService, ISettingsService } from '../../../shared/service-interfaces.js';
 import {
   ModelCatalogSession,
   orderedProviderIds,
   type ModelFetcher,
-} from '../../model/models/model-catalog-session.js';
-import { getProviderIds } from '../../model/providers/index.js';
-import { resolveProviderCredentials } from '../../shared/utils/ai/provider-credentials.js';
-import { getFavoriteModelInfos, serializeFavorite, toggleFavoriteModel } from '../../model/models/model-favorites.js';
+} from '../../../model/models/model-catalog-session.js';
+import { getProviderIds } from '../../../model/providers/index.js';
+import { resolveProviderCredentials } from '../../../shared/utils/ai/provider-credentials.js';
+import {
+  getFavoriteModelInfos,
+  serializeFavorite,
+  toggleFavoriteModel,
+} from '../../../model/models/model-favorites.js';
 import {
   commitNicknameEdit,
   getNicknameEntries,
   getNicknameLabels,
   getNicknameModelInfos,
   removeNicknameTarget,
-} from '../../model/models/model-nicknames.js';
+} from '../../../model/models/model-nicknames.js';
 import {
   nextModelTab,
   pinnedModelsForTab,
   previousModelTab,
   selectModelsForTab,
   type ModelTab,
-} from '../../model/models/model-tabs.js';
-import { filterUnifiedModels, mergeUnifiedModels } from '../../model/models/unified-model-catalog.js';
+} from '../../../model/models/model-tabs.js';
+import { filterUnifiedModels, mergeUnifiedModels } from '../../../model/models/unified-model-catalog.js';
 import type { NicknameDraftState } from './use-model-selection.js';
 
 /**

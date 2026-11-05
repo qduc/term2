@@ -83,7 +83,8 @@ for (const [cols, rows] of [
       await waitForHarnessComposerValue(idle, '/help', { timeoutMs: 60_000 });
       terminal.write('\r');
       // Help must be emitted in full without keyboard paging, even on a short terminal.
-      await terminal.waitForOutput('Shift+Tab: switch Standard/Plan', 30_000);
+      // The last help line (legacy's begins `Shift+Tab: switch Standard/Plan · `, dropped with Plan: #149).
+      await terminal.waitForOutput('@: complete paths · !: shell', 30_000);
       const helpOutput = terminal.getOutput();
       expect(helpOutput.lastIndexOf('Keyboard shortcuts')).toBeGreaterThan(helpOutput.lastIndexOf('/help —'));
       // Legacy's command table, except /undo, as the slash menu lists it.

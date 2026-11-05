@@ -502,10 +502,10 @@ def cached_run(cli, cols, rows, name):
 _CAPTURE_CODE = hashlib.sha256(_capture_code().encode()).hexdigest()
 
 
-# Accepted differences (#65's closed list) that touch every screen. Each entry: the legacy-only text, cut from
-# legacy's captures (with its styles) before comparing. Plan mode is a dropped profile (#149), so next doesn't
-# advertise it in the composer hints.
-ACCEPTED_LEGACY_ONLY = [' │ Shift+Tab plan']
+# Accepted differences (#65's closed list) that touch many screens. Each entry is legacy-only text, removed from
+# legacy's captures (its styles removed and the cells after it shifted left) before comparing. Plan mode is a dropped
+# profile (#149), so next advertises it neither in the composer hints nor in /help.
+ACCEPTED_LEGACY_ONLY = [' │ Shift+Tab plan', 'Shift+Tab: switch Standard/Plan · ']
 
 
 def accept_differences(cap):
@@ -514,14 +514,25 @@ def accept_differences(cap):
     for line, spans in zip(cap['lines'], cap['styles']):
         for text in ACCEPTED_LEGACY_ONLY:
             cut = line.find(text)
-            if cut >= 0:
-                line = line[:cut].rstrip()
-                if isinstance(spans, list):
-                    spans = [[a, min(b, len(line)), *rest] for a, b, *rest in spans if a < len(line)]
+            if cut < 0:
+                continue
+            end = cut + len(text)
+            line = (line[:cut] + line[end:]).rstrip()
+            if isinstance(spans, list):
+                kept = []
+                for a, b, *rest in spans:
+                    if b <= cut:
+                        kept.append([a, b, *rest])
+                    elif a >= end:
+                        kept.append([a - len(text), b - len(text), *rest])
+                    elif a < cut:  # straddles the start: keep the part before it
+                        kept.append([a, cut, *rest])
+                    elif b > end:  # straddles the end: keep the part after it, shifted
+                        kept.append([cut, b - len(text), *rest])
+                spans = [[a, min(b, len(line)), *rest] for a, b, *rest in kept if a < len(line)]
         lines.append(line)
         styles.append(spans)
     return {**cap, 'lines': lines, 'styles': styles}
-
 
 def menu_region(cap, notice=False):
     """The bottom area from the composer divider down, without trailing blank rows.

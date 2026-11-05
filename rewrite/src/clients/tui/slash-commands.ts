@@ -9,5 +9,6 @@ export function helpText(): string {
   const commandLines = LEGACY_COMMANDS.filter(({ name }) => name !== 'undo')
     .map(({ name, description }) => `/${name} — ${description}`)
     .join('\n');
-  return `Commands\n${commandLines}\n\nKeyboard shortcuts\nCtrl+C: clear draft or interrupt; press again to exit\nCtrl+O: choose model · Ctrl+T: choose reasoning effort\nShift+Tab: switch Standard/Plan · @: complete paths · !: shell`;
+  // Legacy's last line starts `Shift+Tab: switch Standard/Plan · `: Plan is a dropped profile (#149).
+  return `Commands\n${commandLines}\n\nKeyboard shortcuts\nCtrl+C: clear draft or interrupt; press again to exit\nCtrl+O: choose model · Ctrl+T: choose reasoning effort\n@: complete paths · !: shell`;
 }

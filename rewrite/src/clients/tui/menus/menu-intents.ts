@@ -83,3 +83,17 @@ export function settingsIntentHandlers(options: {
     },
   };
 }
+
+/** Legacy app.tsx's intent host: a saved model selection finishes first-run setup. */
+export function withFirstRunCompletion(handlers: IntentHandlers, complete: () => void): IntentHandlers {
+  const apply = handlers['apply-settings'];
+  if (!apply) return handlers;
+  return {
+    ...handlers,
+    'apply-settings': async (request) => {
+      const result = await apply(request);
+      if (result?.ok && request.intent.changes.some((change) => change.key === 'agent.modelSelection')) complete();
+      return result;
+    },
+  };
+}

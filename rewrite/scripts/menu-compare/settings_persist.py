@@ -49,6 +49,9 @@ CASES = {
     'profile-pick': (['/profile ', '<down>', '<enter>', '<sleep>'], {}),
     'bare-toggle': (['/bare ', '<enter>', '<sleep>'], {}),
     'shift-tab-plan': (['<stab>', '<sleep>'], {}),
+    # Legacy's first-run gate: the main provider has no credentials, so a provider and then a model are picked.
+    'first-run': (['<sleep>', '<enter>', '<sleep>', '<down>', '<enter>', '<sleep>'], {'settings': {'agent': {
+        'retryAttempts': 0, 'modelSelection': {'model': 'gpt-x', 'provider': 'openai'}}}}),
     'resume-other': (['/resume ', '<sleep>', '<enter>', '<sleep>'], {'sessions': [['saved question']], 'settings': {'agent': {
         'retryAttempts': 0, 'modelSelection': {'model': 'mock-alpha', 'provider': 'mockprov'}}}}),
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Message, TuiState } from './state.js';
 import { useTerminalSize } from './terminal.js';
 import { useTranscriptViewport } from './viewport.js';
@@ -55,10 +55,18 @@ export function useCommandTranscriptViewport(
   active: boolean,
   header?: ReactNode,
   historyRevision?: number,
-  options: { readonly transitionNotice?: string } = {},
+  options: { readonly transitionNotice?: string; readonly redrawKey?: string } = {},
 ) {
   const { columns, rows } = useTerminalSize();
   const transcript = useCommandTranscript(state);
+  // A changed redraw key repaints the transcript like a history change does.
+  const [redraws, setRedraws] = useState(0);
+  const drawnKey = useRef(options.redrawKey);
+  useEffect(() => {
+    if (drawnKey.current === options.redrawKey) return;
+    drawnKey.current = options.redrawKey;
+    setRedraws((count) => count + 1);
+  }, [options.redrawKey]);
   // A session switch's notice ("Resumed conversation: <id>") follows the replayed history, where legacy adds
   // it: once, on the switched-to session's mount (its connection already carries the snapshot).
   useEffect(() => {
@@ -70,7 +78,7 @@ export function useCommandTranscriptViewport(
     rows - headerHeight,
     active,
     header,
-    historyRevision,
+    (historyRevision ?? 0) + redraws,
   );
   const last = transcript.state.timeline?.at(-1)?.id ?? transcript.state.messages.at(-1)?.id;
   return {

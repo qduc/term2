@@ -15,8 +15,10 @@ import { MenuSurface } from './MenuSurface.js';
 import { InputProvider } from './input-context.js';
 import { MENU_RULE_IDS, useMenuWiring, type MenuActions } from './menu-wiring.js';
 import { legacySlashCommands } from './legacy-commands.js';
-import { createIntentHost, settingsIntentHandlers } from './menu-intents.js';
+import { createIntentHost, settingsIntentHandlers, withFirstRunCompletion } from './menu-intents.js';
 import { installSettingsLibrary } from './settings-lib.js';
+import { useFirstRunSetupGate, type FirstRunSetupGate } from './use-first-run-setup.js';
+import { FirstRunSetupPrompt } from './FirstRunSetupPrompt.js';
 
 type Composer = {
   readonly value: string;
@@ -54,6 +56,10 @@ export function useMenuStack(options: {
     controller.setTriggerRegistry(createDefaultTriggerRegistry(commands, MENU_RULE_IDS, menus.schema));
   }, [controller, commands, menus]);
   const open = Boolean(menus) && snapshot.stack.length > 0;
+  const firstRunSettings = useMemo(() => menus?.models.settings(sessionId), [menus, sessionId]);
+  const firstRun = useFirstRunSetupGate({ settings: firstRunSettings, controller });
+  const completeFirstRun = useRef(firstRun.completeModelSelection);
+  completeFirstRun.current = firstRun.completeModelSelection;
   if (menus) installSettingsLibrary(menus.settings.lib);
   // Legacy app.tsx's intent host, limited to the ported menus' intents: the controller hands committed intents
   // to the session's commands.
@@ -63,11 +69,14 @@ export function useMenuStack(options: {
     if (!menus) return;
     controller.setIntentHost(
       createIntentHost({
-        ...settingsIntentHandlers({
-          command: (text) => latestActions.current.command(text),
-          notice: (text) => latestActions.current.notice(text),
-          settings: () => menus.settings.service(sessionId),
-        }),
+        ...withFirstRunCompletion(
+          settingsIntentHandlers({
+            command: (text) => latestActions.current.command(text),
+            notice: (text) => latestActions.current.notice(text),
+            settings: () => menus.settings.service(sessionId),
+          }),
+          () => completeFirstRun.current(),
+        ),
         // A menu's composed text runs as if typed and submitted: legacy's slash dispatch and its fallback to a turn.
         'submit-prompt': ({ intent }) => latestActions.current.runCommand(intent.text),
         rewind: ({ intent }) => latestActions.current.rewind(intent.item, intent.disposition),
@@ -162,8 +171,17 @@ export function useMenuStack(options: {
         controller.applyEditorEdit({ type: 'move-cursor', cursor });
     },
     // Always mounted, as legacy's ApplicationInputSurface kept its menu hooks mounted across opens.
+    /** Legacy's first-run gate: normal chat waits until a provider and model are set. */
+    firstRunActive: firstRun.active,
     view: menus ? (
       <InputProvider controller={controller} menus={menus} sessionId={sessionId}>
+        {firstRun.active && firstRun.phase ? (
+          <FirstRunSetupPrompt
+            phase={firstRun.phase}
+            provider={firstRun.provider}
+            providerLabel={firstRunSettings?.providerLabel(firstRun.provider)}
+          />
+        ) : null}
         <MenuStackView
           open={open}
           enabled={enabled}
@@ -171,6 +189,7 @@ export function useMenuStack(options: {
           actions={actions}
           controller={controller}
           onSkillSelected={setPendingSkill}
+          firstRun={firstRun}
         />
       </InputProvider>
     ) : null,
@@ -184,9 +203,16 @@ function MenuStackView(props: {
   readonly actions: MenuActions;
   readonly controller: MenuControllerImpl;
   readonly onSkillSelected: (name: string) => void;
+  readonly firstRun: FirstRunSetupGate;
 }): React.ReactElement | null {
-  const { open, enabled, commands, actions, controller, onSkillSelected } = props;
-  const services = useMenuWiring({ commands, actions, onSkillSelected });
+  const { open, enabled, commands, actions, controller, onSkillSelected, firstRun } = props;
+  const wired = useMenuWiring({ commands, actions, onSkillSelected });
+  // Legacy BottomArea: the provider menu reports a pick only during setup; a model without credentials asks for it.
+  const services = {
+    ...wired,
+    ...(firstRun.active ? { onProviderSelected: firstRun.onProviderSelected } : {}),
+    onUnavailableModelSelected: firstRun.requestSetup,
+  };
   const { stack } = controller.getSnapshot();
   if (!open) return null;
   return (

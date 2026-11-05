@@ -30,7 +30,19 @@ export type TerminalSession = {
   dispose: () => void;
 };
 
-const CHILD_ENV_KEYS = ['PATH', 'SHELL', 'TMPDIR', 'TEMP', 'TMP', 'LANG', 'LC_ALL', 'CI', 'NODE_ENV'];
+// TERM2_TEST_OWNER marks the worker's children for workspace-process-sweep.ts.
+const CHILD_ENV_KEYS = [
+  'PATH',
+  'SHELL',
+  'TMPDIR',
+  'TEMP',
+  'TMP',
+  'LANG',
+  'LC_ALL',
+  'CI',
+  'NODE_ENV',
+  'TERM2_TEST_OWNER',
+];
 
 /** Build a child environment without leaking ambient credentials or service URLs. */
 export function createTestChildEnv(overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {

@@ -14,7 +14,11 @@ export default defineConfig({
     environment: 'node',
     globals: false,
     globalSetup: ['./tests/helpers/vitest-cache-global-setup.ts'],
-    setupFiles: ['./tests/helpers/vitest-network-guard.ts', './tests/helpers/vitest-cache-isolation.ts'],
+    setupFiles: [
+      './tests/helpers/vitest-network-guard.ts',
+      './tests/helpers/vitest-cache-isolation.ts',
+      './tests/helpers/workspace-process-sweep.ts',
+    ],
     restoreMocks: true,
     testTimeout: 10_000,
     hookTimeout: 10_000,

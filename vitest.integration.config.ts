@@ -26,6 +26,7 @@ export default defineConfig({
       './tests/helpers/vitest-network-guard.ts',
       './tests/helpers/vitest-cache-isolation.ts',
       './tests/helpers/cli-compile-cache-setup.ts',
+      './tests/helpers/workspace-process-sweep.ts',
     ],
     restoreMocks: true,
     testTimeout: 10_000,

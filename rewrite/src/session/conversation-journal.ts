@@ -41,6 +41,7 @@ export class ConversationJournal {
       failed(error: ModelError): void;
     },
   ) {
+    this.openedAt = this.facts.length;
     for (const fact of this.facts) {
       this.#folded = foldFact(this.#folded, fact);
       if (changesRootHistory(fact)) ++this.#historyRevision;
@@ -139,9 +140,12 @@ export class ConversationJournal {
 
     return true;
   };
-  readonly liveReplay = () => replay(this.facts, { recoverQueue: false });
+  /** How many facts were already accepted when this process opened the Session (zero for a new one). */
+  readonly openedAt: number;
+  readonly liveReplay = () => replay(this.facts, { recoverQueue: false, openedAt: this.openedAt });
   /** Use only after the sole handle reader has drained all execution cleanup. */
-  readonly settledReplay = () => replay(this.facts, { recoverQueue: false, rootSettlement: 'live' });
+  readonly settledReplay = () =>
+    replay(this.facts, { recoverQueue: false, rootSettlement: 'live', openedAt: this.openedAt });
   readonly recover = (): boolean => {
     if (this.#recoveryMaterialized) return !this.#failure;
     const recovered = replay(this.facts);

@@ -85,6 +85,12 @@ export function sourceToolSpec(definition: AnyToolDefinition): ToolSpec {
   };
 }
 
+/**
+ * Parsed input that failed the tool's schema. Legacy's wrapped execute answers it with its schema diagnostic as an
+ * ordinary result, and its approval wrapper never asks for it; the arguments stay as sent for display.
+ */
+const invalidInputs = new WeakSet<object>();
+
 function parseInput(definition: AnyToolDefinition, raw: unknown): unknown {
   const schema =
     definition.canonicalParameters ??
@@ -93,7 +99,12 @@ function parseInput(definition: AnyToolDefinition, raw: unknown): unknown {
     typeof raw === 'string' && definition.parseModelArguments
       ? definition.parseModelArguments(raw)
       : (JSON.parse(normalizeToolInput(raw, schema, definition.argumentParsing ?? 'repair')) as unknown);
-  return schema ? schema.parse(parsed) : parsed;
+  if (!schema) return parsed;
+  const result = schema.safeParse(parsed);
+  if (result.success) return result.data;
+  if (typeof parsed !== 'object' || parsed === null) throw result.error;
+  invalidInputs.add(parsed);
+  return parsed;
 }
 
 function invocationFor(context: ToolContext, sessionId: string): Invocation & { context: { sessionId: string } } {
@@ -274,15 +285,25 @@ function adaptTool(definition: AnyToolDefinition, options: SourceToolOptions, ow
     parallelSafe:
       typeof definition.parallelSafe === 'function'
         ? (input, context) =>
+            !invalidInputs.has(input as object) &&
             (definition.parallelSafe as (p: unknown, c: unknown) => boolean | Promise<boolean>)(
               input,
               invocationFor(context, options.sessionId),
             )
         : definition.parallelSafe,
     parse: (raw) => parseInput(definition, raw),
-    approval: (input, context) => approvalFor(definition, input, context, options),
+    approval: async (input, context) =>
+      invalidInputs.has(input as object) ? { kind: 'none' } : approvalFor(definition, input, context, options),
     async execute(input, context) {
       context.signal.throwIfAborted();
+      if (invalidInputs.has(input as object)) {
+        const output = resultText(
+          await definition.execute(input, invocationFor(context, options.sessionId), {
+            toolCall: { callId: `direct:${randomUUID()}` },
+          }),
+        );
+        return { output, isError: !isSuccessOutput(output) };
+      }
       const rejection = await options.checkInterceptors?.(definition.name, input);
       if (rejection) return { output: rejection, isError: true };
       const answer = await questionAnswer(definition, input, context);
@@ -366,3 +387,16 @@ export function createSourceToolRegistry(
     },
   };
 }
+
+// Legacy's session browser runs over the native store; the app adapts only its storage (native-session-browser*.ts).
+export { SessionBrowser } from '../../../source/services/conversation/session-browser.js';
+export type {
+  SessionBrowserContext,
+  SessionBrowserStore,
+} from '../../../source/services/conversation/session-browser.js';
+export {
+  extractDisplayOutput,
+  INTERRUPTED_SYSTEM_MESSAGE,
+} from '../../../source/services/conversation/conversation-replay.js';
+export { RESTART_UNOBSERVED_TOOL_RESULT } from '../../../source/services/tool-execution-ledger.js';
+export type { RestoredState } from '../../../source/services/conversation/conversation-replay.js';

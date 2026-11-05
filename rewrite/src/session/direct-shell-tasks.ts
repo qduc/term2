@@ -64,7 +64,7 @@ export function directShellTasks(
         .list()
         .filter((task) => task.kind === 'shell')
         .map(state),
-    cancel: (id) => !!shell(id) && tasks.requestStop(id).ok,
+    cancel: (id) => !!shell(id) && tasks.requestStop(id, 'model').ok,
     output: (id, chunk) => {
       const task = shell(id);
       if (!task || task.parentTurnId !== parent.turnId || task.parentExecutionId !== parent.parentExecutionId)

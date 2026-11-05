@@ -171,6 +171,7 @@ export function snapshotDirectState(
         }),
     goalProposal: previous?.goalProposal ?? null,
     notices: previous?.notices ?? [],
+    ...(previous?.retry ? { retry: previous.retry } : {}),
     lastError: runtimeDirectError(state) ?? state.terminal?.error ?? null,
     terminal: state.terminal
       ? {

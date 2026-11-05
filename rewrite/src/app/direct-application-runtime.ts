@@ -32,11 +32,12 @@ import { prepareDirectConfiguration } from './direct-config-runtime.js';
 import { createDirectConfigSettings, type DirectAppConfiguration } from './direct-config-settings.js';
 import { readDirectInputPreviewConfiguration } from './direct-input-preview.js';
 import { createDirectSessionMemory, directMainMemoryEnabled } from './direct-memory.js';
-import { runPolicy } from './direct-application-policy.js';
+import { contextMilestones, runPolicy } from './direct-application-policy.js';
 import { createDirectVerificationOperations } from './direct-verifier.js';
 import { withGenerationGuard } from './generation-guard.js';
 import { SessionSettingsService } from './settings.js';
-import { createNativeSearchTool } from './native-search.js';
+import { createNativeSessionBrowser } from './native-session-browser.js';
+import { nativeBrowserId } from './native-session-browser-store.js';
 import type { AgentSurface, ProfileSelection, ToolSurfaceOptions } from './tool-contract.js';
 
 export type DirectRuntimeOptions = {
@@ -181,6 +182,7 @@ function sameModelOnly(next: ModelRef, previous: ModelRef): void {
 /** Each tool graph has its own check-in tools, and all of them act on this one Session. */
 function bindCheckIns(surface: AgentSurface, port: DirectContextPort): void {
   surface.runtime.bindTaskCheckIn((target, policy) => port.configureTaskCheckIn(target, policy));
+  surface.runtime.bindGoal(port);
 }
 
 export function createDirectRuntimes(
@@ -220,6 +222,20 @@ export function createDirectRuntimes(
         ...suppliedSurfaceOptions,
         ...(!suppliedSurfaceOptions.remote
           ? { localExecutionContext: new LocalExecutionContext(context.workspace.root) }
+          : {}),
+        // Legacy gives only an interactive local client a session browser (cli.tsx).
+        ...(suppliedSurfaceOptions.sessionBrowser === true &&
+        options.conversationsDir &&
+        context.workspace.target === 'local'
+          ? {
+              sessionBrowserSource: createNativeSessionBrowser(
+                options.conversationsDir,
+                context.workspace,
+                context.binding,
+                // The live part: after a rollover it is the newest log, as the briefing names its predecessor.
+                () => installed.bound?.port.backingSessionId ?? context.id,
+              ),
+            }
           : {}),
       };
       const promptMemoryEnabled = context.workspace.target === 'local' && directMainMemoryEnabled(settings);
@@ -275,7 +291,8 @@ export function createDirectRuntimes(
         const { bound } = installed;
         if (!bound) throw new Error('This session has not finished starting.');
         return prepareSessionRollover({
-          previousSessionId: bound.port.backingSessionId,
+          // The bare id the session browser reads it by, as legacy names its sessions.
+          previousSessionId: nativeBrowserId(bound.port.backingSessionId),
           request,
           signal,
           taskInventory: () =>
@@ -386,11 +403,6 @@ export function createDirectRuntimes(
         // one real guidance/global context here instead of appending a duplicate.
         const capabilities: DirectContextCapabilities = {
           ...sessionMemory,
-          ...(surfaceOptions.sessionBrowser === true && options.conversationsDir && context.workspace.target === 'local'
-            ? {
-                sessionSearch: createNativeSearchTool(options.conversationsDir, context.workspace, context.binding),
-              }
-            : {}),
           ...(hooks ? { hooks } : {}),
           ...(verification
             ? {
@@ -415,9 +427,10 @@ export function createDirectRuntimes(
           }),
           // Only a client with a person behind it can answer these.
           unattended: !interactive,
-          proposeGoal: interactive,
           nativeToolSlots: surface.runtime.nativeToolSlots,
           modelRollover: surfaceOptions.sessionBrowser === true && surface.runtime.nativeToolSlots.sessions,
+          contextMilestones: contextMilestones(settings, () => port.backingSessionId),
+          warn: (message, fields) => logger.warn(message, fields),
         };
         installed = { ...installed, bound: { port, capabilities } };
         return capabilities;

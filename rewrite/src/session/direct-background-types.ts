@@ -79,7 +79,13 @@ export type DirectBackgroundFact =
     }
   | { readonly type: 'task_started'; readonly task: DirectTaskDescriptor; readonly mode: DirectTaskMode }
   | { readonly type: 'task_backgrounded'; readonly taskId: DirectTaskId; readonly at: number }
-  | { readonly type: 'task_stop_requested'; readonly taskId: DirectTaskId; readonly at: number }
+  | {
+      readonly type: 'task_stop_requested';
+      readonly taskId: DirectTaskId;
+      readonly at: number;
+      /** Who asked. Legacy tells the model only about a user's stop; older logs lack it and mean the user. */
+      readonly by?: 'model' | 'user';
+    }
   | {
       readonly type: 'task_finished';
       readonly taskId: DirectTaskId;

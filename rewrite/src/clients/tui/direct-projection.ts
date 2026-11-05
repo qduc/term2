@@ -256,11 +256,16 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
             // Legacy loads memory into context without a line on screen.
             notice.kind !== 'memory_global_snapshot',
         )
-        .map((notice) => (notice.kind === 'history_replaced' ? notice.message : `${notice.kind}: ${notice.message}`)),
+        .map((notice) =>
+          notice.kind === 'history_replaced' || notice.kind === 'context_compaction' || notice.kind === 'retrying'
+            ? notice.message
+            : `${notice.kind}: ${notice.message}`,
+        ),
       ...(snapshot.terminal?.notice ? [snapshot.terminal.notice] : []),
     ],
     usage: usageText(snapshot.usage),
     codexQuota: snapshot.codexQuota,
+    ...(snapshot.retry ? { retry: snapshot.retry } : {}),
     speed: snapshot.lastSpeed,
     lastUsage: snapshot.lastUsage,
     sessionUsage: snapshot.usage,

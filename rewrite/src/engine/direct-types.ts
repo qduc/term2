@@ -31,8 +31,8 @@ import type {
   DirectCompactionResult,
   DirectCompactionStart,
   DirectCompactionRequest,
-  DirectContextEstimate,
 } from './direct-recovery-compaction.js';
+import type { DirectContextEstimate } from './direct-context-estimate.js';
 import type {
   ModelRequestCost,
   RunBudget,
@@ -99,7 +99,7 @@ export type TurnResult =
       readonly terminalCause?: 'goal_check_unresolved' | 'completion_verification_blocked' | 'budget_exhausted';
       readonly notice?: string;
     }
-  | { readonly kind: 'failed'; readonly error: ModelError };
+  | { readonly kind: 'failed'; readonly error: ModelError; readonly notice?: string };
 export type InteractionRequest = ToolInteractionRequest & {
   readonly requestId: InteractionRequestId;
   readonly turnId: TurnId;
@@ -125,6 +125,18 @@ export type TurnDeps = {
   ) =>
     | { readonly request: ModelRequest; readonly tools?: ToolRegistry }
     | Promise<{ readonly request: ModelRequest; readonly tools?: ToolRegistry }>;
+  /**
+   * Session rollover milestone reminders due at a request boundary, from the last completed provider input tokens
+   * (undefined when this turn has none yet). `settle` hands the turn's last value on to the next turn.
+   */
+  readonly contextMilestones?: {
+    observe(lastInputTokens: number | undefined): readonly string[];
+    settle(lastInputTokens: number | undefined): void;
+  };
+  /** Session-wide hold after a blocked or failed automatic compaction (legacy agent-client), across turns. */
+  readonly compactionHold?: { rearmAt?: number };
+  /** The application log, for the legacy warnings a turn writes (compaction blocked or failed). */
+  readonly warn?: (message: string, fields: Readonly<Record<string, unknown>>) => void;
   readonly normalStop?: (context: {
     readonly turnId: TurnId;
     readonly signal: AbortSignal;
@@ -179,6 +191,16 @@ export type TurnCompactionEvent =
     };
 export type TurnEvent =
   | { readonly type: 'codex_quota'; readonly quota: import('../model/index.js').CodexWeeklyQuota | null }
+  /** Live-only: a retry the user is told about, with its backoff. */
+  | {
+      readonly type: 'retrying';
+      readonly attempt: number;
+      readonly maxRetries: number;
+      readonly delayMs: number;
+      readonly error: ModelError;
+      readonly toolName: 'turn' | 'conversation';
+      readonly retryType: 'upstream' | 'connection_interrupted';
+    }
   | TurnCompactionEvent
   /** Live-only progress. The actual physical request scopes reused provider IDs. */
   | (ToolCallArgumentProgress & { readonly turnId: TurnId; readonly modelStep: number })
@@ -207,7 +229,8 @@ export type TurnEvent =
       readonly evidence: RunBudgetEvent;
       readonly snapshot: RunBudgetSnapshot;
     }
-  | { readonly type: 'text_delta'; readonly delta: string; readonly modelStep?: number }
+  /** `withdrawn` takes back this model step's partial text before a retry. */
+  | { readonly type: 'text_delta'; readonly delta: string; readonly modelStep?: number; readonly withdrawn?: true }
   | { readonly type: 'reasoning_delta'; readonly delta: string }
   | { readonly type: 'item'; readonly item: Item; readonly executionId?: ExecutionId; readonly modelStep?: number }
   | {

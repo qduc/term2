@@ -22,6 +22,13 @@ const validateCompactionSchema: FactSchema = (fact, check) => {
 const validateTaskLifecycleSchema: FactSchema = (fact, check: FactValidation) => {
   check.text(fact['taskId'], 'taskId');
   if (typeof fact['at'] !== 'number' || !Number.isFinite(fact['at']) || fact['at'] < 0) check.fail('at');
+  if (
+    fact['type'] === 'task_stop_requested' &&
+    fact['by'] !== undefined &&
+    fact['by'] !== 'model' &&
+    fact['by'] !== 'user'
+  )
+    check.fail('by');
   if (fact['type'] === 'task_finished') {
     const result = check.object(fact['result'], 'result');
     if (!['completed', 'cancelled', 'failed', 'budget_exhausted', 'interrupted'].includes(result['kind'] as string))
@@ -404,8 +411,8 @@ export const nativeSchemas: Record<string, FactSchema> = {
       check.resolution(decision);
     } else if (value['kind'] !== 'cancelled' && value['kind'] !== 'interrupted') check.fail('resolution.kind');
   },
-  text_delta: () => {
-    /* Envelope/modelStep validation only, unchanged. */
+  text_delta: (fact, check) => {
+    if ('withdrawn' in fact && fact['withdrawn'] !== true) check.fail('withdrawn');
   },
   usage: () => {
     /* Envelope/modelStep validation only, unchanged. */

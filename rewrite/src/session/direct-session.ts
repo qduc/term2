@@ -200,6 +200,7 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
       for await (const event of turn.events) {
         if (
           event.type === 'codex_quota' ||
+          event.type === 'retrying' ||
           event.type === 'reasoning_delta' ||
           event.type === 'tool_progress' ||
           event.type === 'tool_call_streaming_delta'

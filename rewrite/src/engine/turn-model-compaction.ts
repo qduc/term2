@@ -1,22 +1,35 @@
 /** Compaction proposal and summary lifecycle; TurnModel retains root request recovery. */
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
-import type { Item, Model, ModelError, ModelEvent, ModelRequest, Usage } from '../model/index.js';
+import type { Item, ItemId, Model, ModelError, ModelEvent, ModelRequest, Usage } from '../model/index.js';
 import type { DirectCompactionResult, DirectCompactionRequest } from './direct-recovery-compaction.js';
-import { compactDirectHistory, estimateDirectContext } from './direct-recovery-compaction.js';
+import { compactDirectHistory } from './direct-recovery-compaction.js';
+import { estimateDirectContext } from './direct-context-estimate.js';
 import type { TurnCompactionEvent, TurnDeps, TurnSpec } from './direct-types.js';
 import { NativeBudgetExhausted, type TurnBudgetControl } from './turn-budget.js';
+import { recoveryDelay } from './direct-recovery.js';
 import { TurnEvents, cancelled } from './turn-events.js';
 
 type Done = Extract<ModelEvent, { type: 'done' }>;
 export class CompactionWrapUp extends Error {}
-export type CompactionAttemptResult = DirectCompactionResult | { readonly kind: 'unavailable' | 'wrap_up' };
+/** Blocked outcomes legacy's agent client logs; hard-fit refusals fail the turn instead. */
+const LOGGED_BLOCKS: ReadonlySet<string> = new Set([
+  'no_complete_cold_turn',
+  'opaque_context',
+  'summary_input_too_large',
+  'non_reducing',
+]);
+
+class CompactionHardFit extends Error {}
+export type CompactionAttemptResult = DirectCompactionResult | { readonly kind: 'unavailable' | 'wrap_up' | 'failed' };
 
 /** Owns private summary work and accepts only a durable history replacement. */
 export class TurnCompaction {
   #state: TurnSpec['compactionState'];
   #lastInputTokens: number | undefined;
-  #blockedUntilEstimatedTokens: number | undefined;
+  #noticeOrdinal = 0;
+  /** Legacy tells a run once that local compaction cannot shorten its history yet. */
+  #coldTurnNoticed = false;
 
   constructor(
     readonly spec: TurnSpec,
@@ -34,18 +47,45 @@ export class TurnCompaction {
     this.#state = spec.compactionState;
   }
 
+  /** Legacy admits each rollover milestone reminder as a "[Mode Notice]" user message before the request. */
+  async milestones(history: Item[]): Promise<boolean> {
+    const reminders = this.deps.contextMilestones?.observe(this.#lastInputTokens) ?? [];
+    for (const reminder of reminders) await this.#notice(history, reminder);
+    return reminders.length > 0;
+  }
+
+  async #notice(history: Item[], text: string): Promise<void> {
+    const item: Item = {
+      type: 'summary',
+      id: `${this.spec.turnId}:notice:${++this.#noticeOrdinal}` as ItemId,
+      text: `[Mode Notice] ${text}`,
+      replaces: [],
+    };
+    await this.events.publish({ type: 'item', item });
+    history.push(item);
+  }
+
+  /** A reminder defers compaction while the measured request still fits the catalog window (legacy agent-client). */
+  canDefer(request: ModelRequest): boolean {
+    const contextWindow = this.deps.models.resolve(request.model).catalogContextWindow;
+    if (contextWindow === undefined) return false;
+    const estimate = estimateDirectContext(request, contextWindow);
+    return (
+      estimate.hardFitTokens + Math.max(0, (this.#lastInputTokens ?? 0) - estimate.renderedInputTokens) <= contextWindow
+    );
+  }
+
+  /** The turn ended: hand its last completed input tokens to the next turn's reminders. */
+  settleMilestones(): void {
+    this.deps.contextMilestones?.settle(this.#lastInputTokens);
+  }
+
   recordInputTokens(inputTokens: number | undefined): void {
     this.#lastInputTokens = inputTokens;
   }
 
   async compact(request: ModelRequest, history: Item[], manual = false): Promise<CompactionAttemptResult> {
     if (!this.deps.compaction) return { kind: 'unavailable' };
-    if (!manual && this.#blockedUntilEstimatedTokens !== undefined) {
-      const estimate = estimateDirectContext(request);
-      if (estimate.renderedInputTokens < this.#blockedUntilEstimatedTokens) {
-        return { kind: 'deferred', reason: 'hysteresis', estimate };
-      }
-    }
     const sourceLength = history.length;
     let attempt: { compactionId: string; started: number; accepted: boolean } | undefined;
     let outcomeChosen = false;
@@ -68,7 +108,11 @@ export class TurnCompaction {
       ref: model.ref,
       contextWindow: model.contextWindow,
       stream: (summary, signal) =>
-        this.#summary(model, summary, history, signal, request.instructions, (record) => requests.push(record)),
+        retrySummary(
+          () => this.#summary(model, summary, history, signal, request.instructions, (record) => requests.push(record)),
+          this.deps.recovery?.maxTransientRetries ?? 0,
+          signal,
+        ),
       ...(model.compact
         ? {
             compact: async (native: ModelRequest, signal: AbortSignal) => {
@@ -109,6 +153,9 @@ export class TurnCompaction {
         signal: this.signal,
         ...this.#state,
         lastCompletedInputTokens: this.#lastInputTokens,
+        ...(this.deps.compactionHold?.rearmAt !== undefined
+          ? { blockedRearmAtEstimatedTokens: this.deps.compactionHold.rearmAt }
+          : {}),
         ...(manual ? { manual: true } : {}),
         onStarted: async (evidence) => {
           const started = {
@@ -128,21 +175,26 @@ export class TurnCompaction {
       if (result.kind !== 'compacted') {
         if (result.kind === 'blocked') {
           await failed({ kind: 'blocked', reason: result.reason });
-          if (!manual && attempt?.accepted) {
-            if (result.reason === 'non_reducing' || result.reason === 'result_still_too_large') {
-              throw new Error(
-                `Automatic context compaction could not make enough room (${result.reason}); use /compact or start a new conversation.`,
-              );
-            }
-            const measured = Math.max(result.estimate.renderedInputTokens, this.#lastInputTokens ?? 0);
-            this.#blockedUntilEstimatedTokens =
-              result.estimate.renderedInputTokens +
-              Math.max(1_000, Math.ceil(result.estimate.renderedInputTokens * 0.1));
-            this.#state = {
-              ...this.#state,
-              rearmAtEstimatedTokens: measured + Math.max(1_000, Math.ceil(measured * 0.1)),
-            };
+          // Legacy fails the turn only when the history cannot fit at all; a summary that did not reduce
+          // leaves the request uncompacted.
+          if (!manual && (result.reason === 'single_turn_too_large' || result.reason === 'result_still_too_large'))
+            throw new CompactionHardFit(hardFitMessage(result.reason));
+          if (!manual && result.reason === 'no_complete_cold_turn' && !this.#coldTurnNoticed) {
+            this.#coldTurnNoticed = true;
+            await this.#notice(history, NO_COLD_TURN_NOTICE);
           }
+          if (!manual && result.rearmAtEstimatedTokens !== undefined && this.deps.compactionHold)
+            this.deps.compactionHold.rearmAt = result.rearmAtEstimatedTokens;
+          if (!manual && LOGGED_BLOCKS.has(result.reason))
+            this.deps.warn?.('Local context compaction blocked; continuing with uncompacted history', {
+              provider: request.model.provider,
+              model: request.model.model,
+              reason: result.reason,
+              renderedInputTokens: result.estimate.renderedInputTokens,
+              ...(result.rearmAtEstimatedTokens !== undefined
+                ? { rearmAtEstimatedTokens: result.rearmAtEstimatedTokens }
+                : {}),
+            });
         }
         return result;
       }
@@ -167,7 +219,7 @@ export class TurnCompaction {
         checkpointReceipts: result.checkpointReceipts,
       };
       this.#lastInputTokens = undefined;
-      this.#blockedUntilEstimatedTokens = undefined;
+      if (this.deps.compactionHold) this.deps.compactionHold.rearmAt = undefined;
       this.acceptedReplacement();
       if (attempt?.accepted) {
         outcomeChosen = true;
@@ -195,7 +247,28 @@ export class TurnCompaction {
           : { kind: 'failed', error: toModelError(error) },
       );
       if (error instanceof CompactionWrapUp) return { kind: 'wrap_up' };
-      throw error;
+      // Legacy logs a failed automatic attempt, holds off further attempts and continues with the full context.
+      // Cancellation, budgets, a hard-fit refusal and a provider context overflow still end the turn.
+      if (
+        manual ||
+        this.signal.aborted ||
+        error instanceof NativeBudgetExhausted ||
+        error instanceof CompactionHardFit ||
+        toModelError(error).kind === 'context_overflow'
+      )
+        throw error;
+      if (this.deps.compactionHold) {
+        const contextWindow = this.deps.compaction.contextWindow ?? model.catalogContextWindow;
+        const ceiling = this.deps.compaction.maxRequestInputTokens ?? contextWindow ?? 64_000;
+        this.deps.compactionHold.rearmAt =
+          estimateDirectContext(request, contextWindow).renderedInputTokens + Math.max(1_000, Math.ceil(ceiling * 0.1));
+      }
+      this.deps.warn?.('Automatic local context compaction failed; continuing with uncompacted history', {
+        provider: request.model.provider,
+        model: request.model.model,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return { kind: 'failed' };
     }
   }
 
@@ -255,6 +328,49 @@ export class TurnCompaction {
       });
     }
   }
+}
+
+/**
+ * Legacy runs a summary request like any model run, so a retryable failure is retried up to agent.retryAttempts
+ * with backoff, even after part of the response arrived. The summary is private text, so it is held until the
+ * request completes and a retry never repeats any of it.
+ */
+async function* retrySummary(
+  attempt: () => AsyncGenerator<ModelEvent>,
+  maxRetries: number,
+  signal: AbortSignal,
+): AsyncGenerator<ModelEvent> {
+  for (let retry = 1; ; retry++) {
+    const events: ModelEvent[] = [];
+    try {
+      for await (const event of attempt()) events.push(event);
+      yield* events;
+      return;
+    } catch (error) {
+      const failure = toModelError(error);
+      const interrupted =
+        (error as { recoveryEvidence?: unknown } | null)?.recoveryEvidence === 'connection_interrupted';
+      const transient = failure.retryable && ['network', 'rate_limit', 'provider'].includes(failure.kind);
+      if (signal.aborted || retry > maxRetries || !(transient || interrupted)) throw error;
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(resolve, recoveryDelay(retry, failure.retryAfterMs));
+        signal.addEventListener('abort', () => (clearTimeout(timer), reject(cancelled())), { once: true });
+      });
+    }
+  }
+}
+
+const NO_COLD_TURN_NOTICE =
+  'Local compaction cannot shorten this history yet: it needs an older completed turn or settled tool rounds and preserves all user requests. ' +
+  'Continue the current work; keep outputs concise and save durable progress. If session_rollover is available, consider it at a safe idle boundary; live background work survives rollover, so do not wait for it solely to rotate. Do not repeat completed work or manufacture user turns to force compaction.';
+
+/** Legacy's ContextCompactionHardFitError text. */
+function hardFitMessage(reason: 'single_turn_too_large' | 'result_still_too_large'): string {
+  const cause =
+    reason === 'single_turn_too_large'
+      ? 'The protected recent conversation is too large to fit the configured context window'
+      : 'The compacted conversation is still too large to fit the configured context window';
+  return `${cause}. Compaction did not reduce the existing context. In the interactive app, if this session has a finalized assistant reply, /handoff can copy that latest completed reply into a fresh session. Otherwise, start a fresh session and include the current session ID plus a short summary of the unfinished request.`;
 }
 
 function toModelError(error: unknown): ModelError {

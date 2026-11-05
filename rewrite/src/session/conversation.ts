@@ -4,7 +4,7 @@ import { ConversationBackground } from './conversation-background.js';
 import { ConversationCommands } from './conversation-commands.js';
 import { ConversationJournal, modelError, nextConversationTurnId } from './conversation-journal.js';
 import { failedTurn, ownConversationTurn, terminalFact, type OwnedConversationTurn } from './conversation-turn.js';
-import { prepareConversationNotice, completedConversationTurn } from './conversation-notice.js';
+import { prepareConversationNotice } from './conversation-notice.js';
 /**
  * The direct conversation owns the engine reader and the durable writer. An
  * engine envelope is accepted only after its fact has committed. Public events
@@ -200,6 +200,10 @@ function conversation(
     dispatchHeld: !!active || !!completionHeld || !!commands.owner || closed || !!journal.failure,
   });
   const questionCancel = new QuestionCancelNotice();
+  // Legacy's agent client holds off automatic compaction after a blocked or failed attempt, across turns,
+  // and drops that hold when the conversation is cleared or rolled over to a new backing session.
+  const compactionHold: { rearmAt?: number } = {};
+  let compactionHoldSession: string | undefined;
   const boundary = (turnId: TurnId): readonly Item[] => {
     if (!active || active.turnId !== turnId || active.cancelled || commands.owner || closed || journal.failure)
       return [];
@@ -209,8 +213,9 @@ function conversation(
         ? planDirectTiming(journal.context.latestHumanInputAt, journal.queueState.records, plan.effect.modelInput)
             .modelInput
         : [];
-    if (!commit(plan.facts)) throw new Error(journal.failure!.message);
-    return input;
+    const notices = background!.inject(turnId);
+    if (!commit([...plan.facts, ...notices.facts])) throw new Error(journal.failure!.message);
+    return [...input, ...notices.items];
   };
   const start = (
     request: TurnRequest,
@@ -265,6 +270,11 @@ function conversation(
     const turnContinuity = generation.continuity;
     try {
       const runNested = background!.nested(turnDeps, turnId, request.submission?.origin);
+      const backingSession = deps.rotationBoundary?.().sessionId ?? id;
+      if (compactionHoldSession !== backingSession) {
+        compactionHoldSession = backingSession;
+        delete compactionHold.rearmAt;
+      }
       const handle = (planned?.compaction ? startCompaction : startTurn)(
         {
           ...settings,
@@ -281,6 +291,11 @@ function conversation(
           takeSteering: boundary,
           prepareRequest: capabilities!.prepareRequest,
           normalStop: capabilities!.normalStop,
+          ...(generation.supplied?.contextMilestones
+            ? { contextMilestones: generation.supplied.contextMilestones }
+            : {}),
+          compactionHold,
+          ...(generation.supplied?.warn ? { warn: generation.supplied.warn } : {}),
           runNested,
           subagents: background!.subagentPort,
           shellTasks: (parent) => background!.shellTaskPort(parent, request.submission?.origin),
@@ -290,13 +305,6 @@ function conversation(
         capabilities: capabilities!,
         publishNotice: deps.publishNotice,
         released: () => {
-          if (
-            !journal.failure &&
-            completedConversationTurn(journal.facts, turnId) &&
-            (notice || planned?.retryNotice)
-          ) {
-            turnContinuity?.state?.reconcilePrefix([...modelHistory, ...sentInput], [...rawHistory, ...modelInput]);
-          }
           if (active?.turnId === turnId) active = null;
         },
       });
@@ -373,9 +381,11 @@ function conversation(
           !!completionHeld ||
           !!journal.queueState.active ||
           (!journal.queueState.pause && journal.queueState.pending.length > 0),
+        journal.openedAt,
       );
     },
-    acceptedHistory: () => replay(facts, { recoverQueue: false, recoverActiveTurn: false }).history,
+    acceptedHistory: () =>
+      replay(facts, { recoverQueue: false, recoverActiveTurn: false, openedAt: journal.openedAt }).history,
     rolloverAtBoundary: (turnId) => directRolloverAtBoundary(facts, turnId),
     context: () => structuredClone(journal.context),
     setGoal(generation, goal, source = 'user') {

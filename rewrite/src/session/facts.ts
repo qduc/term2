@@ -99,7 +99,14 @@ export type DirectTurnFact =
       readonly submission?: SubmissionMetadata;
     }
   /** Written but not fsynced. Replay turns unsuperseded deltas into an assistant message. */
-  | { readonly type: 'text_delta'; readonly turnId: TurnId; readonly delta: string; readonly modelStep?: number }
+  | {
+      readonly type: 'text_delta';
+      readonly turnId: TurnId;
+      readonly delta: string;
+      readonly modelStep?: number;
+      /** The model step's partial text was withdrawn before a retry (legacy run-loop rollback). */
+      readonly withdrawn?: true;
+    }
   | {
       readonly type: 'item';
       readonly display?: false;

@@ -20,6 +20,11 @@ export type ReplayOptions = {
   readonly recoverActiveTurn?: boolean;
   /** Live means the handle has drained: absent durable admission proves no body ran. */
   readonly rootSettlement?: 'restart' | 'live';
+  /**
+   * How many facts an earlier process wrote before this one opened the Session. Like legacy, a turn cancelled
+   * live drops the step it was in, but one cancelled before a resume keeps its calls with unobserved results.
+   */
+  readonly openedAt?: number;
 };
 /** Accepted evidence only. Missing outcome stays unobserved, even after root recovery. */
 export type ReplayedCompaction = {
@@ -73,7 +78,7 @@ export function replay(facts: readonly Fact[], options: ReplayOptions = {}): Rep
   // The options shape the result (queue recovery, root settlement), so a held result is served only to the same options.
   const key = `${options.recoverQueue !== false}|${options.recoverActiveTurn !== false}|${
     options.rootSettlement ?? ''
-  }`;
+  }|${options.openedAt ?? 0}`;
   if (kept && kept.length === facts.length && kept.key === key) return kept.result;
   foldCache.delete(facts); // A fold that throws mid-way must not be resumed.
   const fold = kept && kept.length <= facts.length ? kept.fold : createReplayFold();

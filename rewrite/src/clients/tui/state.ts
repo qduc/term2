@@ -114,6 +114,12 @@ export type TuiState = {
   readonly notices: readonly string[];
   readonly usage?: string;
   readonly codexQuota?: { readonly usedPercent: number; readonly resetAt: number };
+  readonly retry?: {
+    readonly id: number;
+    readonly attempt: number;
+    readonly maxRetries: number;
+    readonly delayMs: number;
+  };
   /** The last model request's settled rate, shown with `lastUsage` as legacy's footer does. */
   readonly speed?: { readonly tps: number; readonly approximate: boolean };
   /** The last model request's usage: legacy's status bar shows this request, not session totals. */

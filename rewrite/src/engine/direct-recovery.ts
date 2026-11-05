@@ -41,6 +41,8 @@ export type DirectRecoveryContext = {
    * responses only when completed tool pairs remain in full history.
    */
   readonly hasCurrentRequestOutput?: boolean;
+  /** The failed request's output is text only, which a retry may withdraw. */
+  readonly withdrawableOutput?: boolean;
   readonly tools: {
     readonly completed: number;
     readonly allCompleted: boolean;
@@ -61,6 +63,9 @@ export type DirectRecoveryDecision =
         | 'retry_limit'
         | 'recovery_budget';
       readonly admission?: RetryRecoveryAdmission;
+      readonly notice?: DirectRetryNotice;
+      /** Legacy's "Could not reach …" count once transient retries are used up. */
+      readonly exhaustedAfter?: number;
     }
   | {
       readonly kind: 'retry';
@@ -75,7 +80,18 @@ export type DirectRecoveryDecision =
       /** The next dispatch is already charged; adapters must not charge it twice. */
       readonly dispatchClaimed: true;
       readonly admission: RetryRecoveryAdmission;
+      readonly notice?: DirectRetryNotice;
+      /** Withdraw the failed request's partial text before retrying. */
+      readonly withdraw?: true;
     };
+
+/** A retry the user is told about (legacy's session-level "retrying k/N in Ns"). */
+export type DirectRetryNotice = {
+  readonly attempt: number;
+  readonly maxRetries: number;
+  readonly delayMs: number;
+  readonly retryType: 'upstream' | 'connection_interrupted';
+};
 
 type RecoveryKind = Extract<DirectRecoveryDecision, { kind: 'retry' }>['recovery'];
 type RecoveryChoice =
@@ -99,6 +115,7 @@ export class DirectRecovery {
   readonly budget: RetryRecoveryBudget;
   readonly #options: DirectRecoveryOptions;
   #transientRetries = 0;
+  #silentRetries = 0;
   #modelRetries = 0;
   #tierFallbacks = 0;
   #transportDowngrades = 0;
@@ -114,6 +131,7 @@ export class DirectRecovery {
   responseAccepted(): void {
     this.budget.noteModelResponseCompleted();
     this.#transientRetries = 0;
+    this.#silentRetries = 0;
     this.#modelRetries = 0;
   }
 
@@ -122,8 +140,25 @@ export class DirectRecovery {
     if (context.cancelled || context.failure.error.kind === 'cancelled') return stop('cancelled');
     if (!context.fullHistoryAvailable) return stop('history_unavailable');
     if (!context.tools.allCompleted) return stop('unsettled_tools');
+    const interrupted = context.failure.evidence === 'connection_interrupted';
+    const output = context.hasCurrentRequestOutput ?? context.hasCommittedOutput;
+    // Legacy's run loop retries a cut stream silently, rolling back this request's partial text; its session layer
+    // refuses once output was committed.
+    if (
+      interrupted &&
+      (!output || context.withdrawableOutput) &&
+      this.#silentRetries < this.#options.maxTransientRetries
+    ) {
+      const attempt = ++this.#silentRetries;
+      const admission = this.budget.describeAdmission({ automaticReplayRequired: false });
+      const retry = transientRetry(attempt, recoveryDelay(attempt, undefined, this.#options.random), admission);
+      return { ...retry, recovery: 'chain', ...(output ? { withdraw: true as const } : {}) };
+    }
+    if (interrupted && output && context.withdrawableOutput) return stop('committed_output');
+    if (interrupted) this.#silentRetries = 0;
     const choice = chooseRecovery(context);
     if (!choice) return stop(context.hasCommittedOutput ? 'committed_output' : 'unrecoverable');
+    if (choice.kind === 'transient') return this.#transient(context);
     if (!this.#withinLimit(choice.kind)) return stop('retry_limit');
 
     this.budget.noteRetryableFailure();
@@ -140,11 +175,24 @@ export class DirectRecovery {
       this.budget.claimPhysicalAttempt();
     }
     const attempt = this.#advance(choice.kind);
+    const delayMs = recoveryDelay(attempt, context.failure.error.retryAfterMs, this.#options.random);
+    const notice =
+      interrupted && choice.kind === 'chain'
+        ? {
+            notice: {
+              attempt,
+              maxRetries: this.#options.maxTransientRetries,
+              delayMs,
+              retryType: 'connection_interrupted' as const,
+            },
+          }
+        : {};
     return {
+      ...notice,
       kind: 'retry',
       recovery: choice.kind,
       attempt,
-      delayMs: recoveryDelay(attempt, context.failure.error.retryAfterMs, this.#options.random),
+      delayMs,
       inputMode: choice.kind === 'service_tier' ? 'delta' : 'full_history',
       disableChaining: choice.kind !== 'service_tier',
       useStandardServiceTier: choice.kind === 'service_tier',
@@ -153,6 +201,38 @@ export class DirectRecovery {
       dispatchClaimed: true,
       admission,
     };
+  }
+
+  /**
+   * Legacy's effective schedule for a request that failed before any output: its run loop retries silently up to
+   * agent.retryAttempts times, then its session layer retries the turn with a "retrying k/N" notice, at most
+   * agent.retryAttempts times and while the recovery budget admits a replay. Each session retry restarts the
+   * silent ones. Its provider SDK also retries the HTTP request before this layer sees a failure.
+   */
+  #transient(context: DirectRecoveryContext): DirectRecoveryDecision {
+    const max = this.#options.maxTransientRetries;
+    const retryAfterMs = context.failure.error.retryAfterMs;
+    const random = this.#options.random;
+    if (this.#silentRetries < max) {
+      const attempt = ++this.#silentRetries;
+      const admission = this.budget.describeAdmission({ automaticReplayRequired: false });
+      return transientRetry(attempt, recoveryDelay(attempt, retryAfterMs, random), admission);
+    }
+    this.#silentRetries = 0;
+    const attempt = this.#transientRetries + 1;
+    if (attempt > max) return { ...stop('retry_limit'), exhaustedAfter: attempt };
+    this.#transientRetries = attempt;
+    this.budget.noteRetryableFailure();
+    const notice = {
+      attempt,
+      maxRetries: max,
+      delayMs: recoveryDelay(attempt, retryAfterMs, random),
+      retryType: 'upstream' as const,
+    };
+    const admission = this.budget.describeAdmission({ automaticReplayRequired: true });
+    if (!this.budget.claimAutomaticReplay() || !this.budget.claimPhysicalAttempt())
+      return { ...stop('recovery_budget'), admission, notice, exhaustedAfter: this.budget.physicalAttempts };
+    return { ...transientRetry(attempt, notice.delayMs, admission), automaticReplay: true, notice };
   }
 
   #withinLimit(kind: RecoveryKind): boolean {
@@ -168,6 +248,41 @@ export class DirectRecovery {
     if (kind === 'transport') return ++this.#transportDowngrades;
     return ++this.#transientRetries;
   }
+}
+
+function transientRetry(
+  attempt: number,
+  delayMs: number,
+  admission: RetryRecoveryAdmission,
+): Extract<DirectRecoveryDecision, { kind: 'retry' }> {
+  return {
+    kind: 'retry',
+    recovery: 'transient',
+    attempt,
+    delayMs,
+    inputMode: 'full_history',
+    disableChaining: true,
+    useStandardServiceTier: false,
+    downgradeTransport: false,
+    automaticReplay: false,
+    dispatchClaimed: true,
+    admission,
+  };
+}
+
+/** A turn that ran out of transient retries, with legacy's "Could not reach" notice. */
+export class RetriesExhausted extends Error {
+  constructor(readonly failure: unknown, readonly notice: string) {
+    super(failure instanceof Error ? failure.message : String(failure));
+  }
+}
+
+/** Legacy's retry_exhausted line (initial-turn-recovery-handler.ts, conversation-event-handler.ts). */
+export function exhaustedNotice(provider: string, attempts: number): string {
+  return (
+    `Could not reach ${provider} after ${attempts} attempts. No model response was received.` +
+    '\n\nType /retry-turn to try again, or send a new message to move on.'
+  );
 }
 
 function chooseRecovery(context: DirectRecoveryContext): RecoveryChoice | undefined {

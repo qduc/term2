@@ -60,6 +60,8 @@ export type DirectCompactionInput = {
   readonly lastCompletedInputTokens?: number;
   readonly rearmAtEstimatedTokens?: number;
   readonly rearmAtRenderedTokens?: number;
+  /** Legacy's client-wide hold after a blocked or failed automatic attempt; replaces the checkpoint rearm while set. */
+  readonly blockedRearmAtEstimatedTokens?: number;
   /** Host-recorded receipt previews from the last accepted local checkpoint. */
   readonly checkpointReceipts?: readonly string[];
   readonly manual?: boolean;
@@ -87,6 +89,8 @@ export type DirectCompactionResult =
         | 'result_still_too_large';
       readonly estimate: DirectContextEstimate;
       readonly usage?: readonly Usage[];
+      /** Where legacy rearms after this block (local-context-compactor rearmAtTokens). */
+      readonly rearmAtEstimatedTokens?: number;
     }
   | {
       readonly kind: 'compacted';
@@ -160,34 +164,35 @@ export async function compactDirectHistory(input: DirectCompactionInput): Promis
         );
   const measured = Math.max(estimate.renderedInputTokens, input.lastCompletedInputTokens ?? 0);
   if (!input.manual && softTrigger !== undefined && measured < softTrigger) return { kind: 'not_needed', estimate };
-  if (
-    !input.manual &&
-    input.rearmAtRenderedTokens !== undefined &&
-    estimate.renderedInputTokens < input.rearmAtRenderedTokens
-  ) {
-    return { kind: 'deferred', reason: 'hysteresis', estimate };
-  }
-  if (
-    !input.manual &&
+  const hold = input.blockedRearmAtEstimatedTokens;
+  const checkpointHold =
     input.rearmAtEstimatedTokens !== undefined &&
     measured < input.rearmAtEstimatedTokens &&
-    (softTrigger === undefined || estimate.renderedInputTokens < softTrigger)
-  ) {
+    (softTrigger === undefined || estimate.renderedInputTokens < softTrigger);
+  if (
+    !input.manual &&
+    ((input.rearmAtRenderedTokens !== undefined && estimate.renderedInputTokens < input.rearmAtRenderedTokens) ||
+      (hold !== undefined ? measured < hold : checkpointHold))
+  )
     return { kind: 'deferred', reason: 'hysteresis', estimate };
-  }
-  if (!input.manual) await start();
-  input.signal.throwIfAborted();
+  const step = softTrigger === undefined ? undefined : Math.max(1_000, Math.ceil(softTrigger * 0.1));
+  const rearmed = step === undefined ? {} : { rearmAtEstimatedTokens: measured + step };
+  const started = async (): Promise<void> => {
+    if (!input.manual) await start();
+    input.signal.throwIfAborted();
+  };
+  const useNative = input.settings.mode !== 'local' && !!input.model.compact;
   // An explicit native choice never silently substitutes local summarization.
+  if (useNative || input.settings.mode === 'native') await started();
   if (input.settings.mode === 'native' && !input.model.compact)
     return { kind: 'blocked', reason: 'native_unavailable', estimate };
-  const useNative = input.settings.mode !== 'local' && !!input.model.compact;
   const operation = useNative
     ? {
         history: await input.model.compact!(selfContained(input.request), input.signal),
         usage: [] as Usage[],
         checkpointReceipts: input.checkpointReceipts ?? [],
       }
-    : await compactLocally(input, policy.hardInputLimit ?? softTrigger ?? Infinity, estimate);
+    : await compactLocally(input, localUsableTokens(input, policy), estimate, started, rearmed);
   input.signal.throwIfAborted();
   if ('kind' in operation) return operation;
   const after = estimateDirectContext({ ...input.request, input: operation.history }, input.contextWindow);
@@ -196,12 +201,12 @@ export async function compactDirectHistory(input: DirectCompactionInput): Promis
     isDeepStrictEqual(operation.history, input.request.input) ||
     after.renderedInputTokens >= estimate.renderedInputTokens
   ) {
-    return { kind: 'blocked', reason: 'non_reducing', estimate, usage: operation.usage };
+    return { kind: 'blocked', reason: 'non_reducing', estimate, usage: operation.usage, ...rearmed };
   }
   if (!hasCompleteDirectToolPairs(operation.history))
     throw new Error('Compaction returned orphaned tool calls/results');
   if (policy.hardInputLimit !== undefined && after.renderedInputTokens > policy.hardInputLimit) {
-    return { kind: 'blocked', reason: 'result_still_too_large', estimate, usage: operation.usage };
+    return { kind: 'blocked', reason: 'result_still_too_large', estimate, usage: operation.usage, ...rearmed };
   }
   const retained = new Set(operation.history.map((item) => item.id));
   return {
@@ -254,15 +259,36 @@ type LocalOperation =
   | { history: readonly Item[]; usage: readonly Usage[]; checkpointReceipts: readonly string[] }
   | Extract<DirectCompactionResult, { kind: 'blocked' }>;
 
+/**
+ * Legacy's local planning budget (local-context-compactor.ts): the input ceiling, else a planning scale from the
+ * window, configured caps or trigger, less what the instructions and tools take in every request.
+ */
+function localUsableTokens(input: DirectCompactionInput, policy: ReturnType<typeof resolveModelContextPolicy>): number {
+  const window =
+    input.contextWindow ??
+    input.maxRequestInputTokens ??
+    input.settings.compactThresholdTokens ??
+    policy.softTrigger ??
+    Infinity;
+  const fixed = estimateDirectContext({ ...input.request, input: [] }, input.contextWindow).renderedInputTokens;
+  return (policy.hardInputLimit ?? window) - fixed;
+}
+
+/** Like legacy, a history that cannot fit or has no complete cold turn is refused before the attempt is announced. */
 async function compactLocally(
   input: DirectCompactionInput,
   usable: number,
   estimate: DirectContextEstimate,
+  started: () => Promise<void>,
+  rearmed: { readonly rearmAtEstimatedTokens?: number },
 ): Promise<LocalOperation> {
+  if (usable <= 0) return { kind: 'blocked', reason: 'single_turn_too_large', estimate };
   const plan = planTail(input.request.input, usable);
-  if (typeof plan === 'string') return { kind: 'blocked', reason: plan, estimate };
+  if (plan === 'no_complete_cold_turn') return { kind: 'blocked', reason: plan, estimate, ...rearmed };
+  await started();
+  if (typeof plan === 'string') return { kind: 'blocked', reason: plan, estimate, ...rearmed };
   if (plan.cold.some((item) => item.type === 'provider_opaque' && item.item.type === 'compaction')) {
-    return { kind: 'blocked', reason: 'opaque_context', estimate };
+    return { kind: 'blocked', reason: 'opaque_context', estimate, ...rearmed };
   }
   const summaryOutputCap = Math.max(
     256,
@@ -304,7 +330,7 @@ async function compactLocally(
         maxOutputTokens: summaryOutputCap,
       });
       if (estimateDirectContext(summaryRequest, input.contextWindow).renderedInputTokens > summaryInputLimit) {
-        return { kind: 'blocked', reason: 'summary_input_too_large', estimate, usage };
+        return { kind: 'blocked', reason: 'summary_input_too_large', estimate, usage, ...rearmed };
       }
       summaryText = await generateSummary(input.model, summaryRequest, input.signal, (record) =>
         onUsage(record, index + 1),

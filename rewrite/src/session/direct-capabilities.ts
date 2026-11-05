@@ -10,7 +10,7 @@ import {
   type DirectContextState,
   type DirectContextFact,
 } from './direct-context.js';
-import { createDirectGoalCheckTool, createDirectProposeGoalTool } from './direct-goal.js';
+import { createDirectGoalCheckTool } from './direct-goal.js';
 import { createDirectGoalStopPolicy, type DirectGoalHistoryItem } from './direct-goal-stop.js';
 import { createDirectGoalVerifier } from './direct-goal-verification.js';
 import type { DirectMemoryCapability, DirectAutomaticMemoryNotice } from './direct-memory.js';
@@ -39,9 +39,6 @@ export type DirectContextCapabilities = {
   readonly unattended?: boolean;
   /** Effective source settings, re-read for each advisory tick. */
   readonly backgroundCheckIns?: () => import('./direct-background-check-ins.js').DirectBackgroundCheckInSettings;
-  readonly proposeGoal?: boolean;
-  /** App-owned native search; Session only registers it under the profile's sessions slot. */
-  readonly sessionSearch?: Tool;
   /** Source assembly names before native slots; refreshed on configuration. */
   readonly nativeToolSlots?: {
     readonly beforeMemory: readonly string[];
@@ -49,6 +46,9 @@ export type DirectContextCapabilities = {
     readonly beforeGoal: readonly string[];
     readonly sessions: boolean;
   };
+  /** Rollover milestone reminders for this session's root turns; a successor session gets fresh ones. */
+  readonly contextMilestones?: import('../engine/index.js').TurnDeps['contextMilestones'];
+  readonly warn?: import('../engine/index.js').TurnDeps['warn'];
   /** Model-facing rollover availability is distinct from native rollover control. */
   readonly modelRollover?: boolean;
   readonly automaticMemory?: (input: {
@@ -98,51 +98,8 @@ export function bindDirectCapabilities(options: {
       capabilities.memory,
     );
     const bound: Tool[] = [...(capabilities.memory?.tools ?? [])];
-    if (capabilities.nativeToolSlots?.sessions && capabilities.sessionSearch) bound.push(capabilities.sessionSearch);
     // Visibility is stable across goal changes; execution rejects an inactive goal.
     bound.push(createDirectGoalCheckTool({ requestGoal, readGoal: () => options.read().goal }));
-    if (capabilities.proposeGoal && !requestGoal.goal && !requestGoal.proposalMade) {
-      bound.push(
-        createDirectProposeGoalTool({
-          readGoal: () => options.read().goal,
-          commit: (generation, facts) => (turnId ? write(turnId, generation, facts) : false),
-          async approve(goal, context) {
-            if (!context.interact) return { approved: false, source: 'system' };
-            const before = options.facts().length;
-            const decision = await context.interact({
-              kind: 'approval',
-              toolName: 'propose_goal',
-              input: { goal },
-              summary: `Create durable goal: ${goal.outcome}`,
-              presentation: { requiresExplicitUser: true, goalId: goal.id },
-            });
-            // Only an accepted closure for THIS proposal and real user source
-            // can grant it. Headless policy answers retain system provenance.
-            const facts = options.facts().slice(before);
-            const opened = facts.find(
-              (fact) =>
-                fact.type === 'interaction_opened' &&
-                fact.request.toolName === 'propose_goal' &&
-                fact.request.presentation?.goalId === goal.id,
-            );
-            const closed =
-              opened?.type === 'interaction_opened'
-                ? facts.find(
-                    (fact) => fact.type === 'interaction_closed' && fact.requestId === opened.request.requestId,
-                  )
-                : undefined;
-            return {
-              approved:
-                decision.kind === 'allow' &&
-                closed?.type === 'interaction_closed' &&
-                closed.resolution.kind === 'allow' &&
-                closed.resolutionSource === 'user',
-              source: closed?.type === 'interaction_closed' ? closed.resolutionSource ?? 'system' : 'system',
-            };
-          },
-        }),
-      );
-    }
     if (capabilities.modelRollover !== false && options.canRollover?.())
       bound.push(
         createDirectRolloverTool((request) =>

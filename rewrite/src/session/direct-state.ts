@@ -243,6 +243,12 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
     case 'text_delta': {
       const modelStep = fact.modelStep ?? 1;
       const id = directDraftId(fact.turnId, fact.modelStep);
+      if (fact.withdrawn)
+        return {
+          ...state,
+          drafts: state.drafts.filter((draft) => draft.id !== id),
+          messages: state.messages.filter((message) => message.id !== id),
+        };
       const existing = state.drafts.find((draft) => draft.id === id);
       const draft = { id, turnId: fact.turnId, modelStep, text: (existing?.text ?? '') + fact.delta };
       return {

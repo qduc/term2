@@ -63,6 +63,8 @@ export type DirectSubagentToolsOptions = {
   readonly withAnswer: <T>(answer: string, operation: () => Promise<T>) => Promise<T>;
   readonly targetInvocation?: AgentFactoryDeps['withToolInvocation'];
   readonly remoteUnavailable: ReadonlySet<string>;
+  /** The parent's session browser; legacy provisions it to the librarian only. */
+  readonly sessionBrowser?: AgentFactoryDeps['sessionBrowser'];
 };
 
 // Named source roles grant workspace reads independently of the parent's prompt
@@ -212,6 +214,7 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
       toolPolicy: policy,
       skillsService,
       readOnly: options.readOnly || planMode,
+      ...(options.sessionBrowser ? { sessionBrowser: options.sessionBrowser } : {}),
     });
     // Reviewer remains evidence-only: its sole delegated path is another
     // native explorer branch, not inherited workspace or arbitrary agent tools.

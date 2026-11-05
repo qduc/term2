@@ -6,6 +6,7 @@ import { TurnEvents, cancelled } from './turn-events.js';
 import { TurnTools } from './turn-tools.js';
 import { NativeBudgetExhausted, TurnBudgetControl } from './turn-budget.js';
 import { TurnModel, toModelError } from './turn-model.js';
+import { RetriesExhausted } from './direct-recovery.js';
 
 export type { TurnSpec, TurnResult, TurnEvent, TurnHandle } from './direct-types.js';
 
@@ -197,12 +198,15 @@ async function drive(
       ? { kind: 'cancelled' }
       : error instanceof NativeBudgetExhausted
       ? { kind: 'interrupted', terminalCause: 'budget_exhausted', notice: error.message }
+      : error instanceof RetriesExhausted
+      ? { kind: 'failed', error: toModelError(error.failure), notice: error.notice }
       : { kind: 'failed', error: toModelError(error) };
     model.clear();
     controller.abort();
     events.cancel();
   } finally {
     if (signal.aborted || result.kind !== 'completed') model.clear();
+    if (result.kind !== 'cancelled' && result.kind !== 'failed') model.settleMilestones();
     // Release before cleanup: a tool may own a still-gated child it must join.
     deps.onTurnBoundary?.({ turnId: spec.turnId, kind: 'ended' });
     // Session cannot go idle while root/scripted descendants still have bodies.

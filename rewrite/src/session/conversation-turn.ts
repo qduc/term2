@@ -333,6 +333,7 @@ export function factFor(
         turnId,
         delta: event.delta,
         ...(event.modelStep !== undefined ? { modelStep: event.modelStep } : {}),
+        ...(event.withdrawn ? { withdrawn: true as const } : {}),
       };
     case 'item':
       return {

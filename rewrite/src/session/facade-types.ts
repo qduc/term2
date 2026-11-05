@@ -187,6 +187,7 @@ export type DirectSessionUpdate =
         | DirectArgumentStream
         | DirectBranchTransient
         | { readonly type: 'codex_quota'; readonly quota: import('../model/index.js').CodexWeeklyQuota | null }
+        | Extract<import('../engine/index.js').TurnEvent, { readonly type: 'retrying' }>
         | { readonly type: 'reasoning_delta'; readonly delta: string }
         | { readonly type: 'tool_progress'; readonly executionId: ExecutionId; readonly chunk: string };
     }

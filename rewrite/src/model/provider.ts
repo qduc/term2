@@ -36,6 +36,7 @@ import type {
 } from '../../../source/services/service-interfaces.js';
 import type { ProviderDefinition } from '../../../source/providers/registry.js';
 import { getProvider } from '../../../source/providers/index.js';
+import { extractAiSdkUpstreamProvider } from '../../../source/providers/ai-sdk-streamed-model.js';
 import { StreamingSpeedTracker } from '../../../source/utils/streaming/streaming-speed-tracker.js';
 import { getModelContextWindow } from '../../../source/providers/model-catalog/catalog.js';
 import { MODEL_CATALOG } from '../../../source/providers/model-catalog/catalog.generated.js';
@@ -393,9 +394,11 @@ async function* modelEvents(
             completionTokens: event.usage.outputTokens,
             reasoningTokens: streamedReasoning ? undefined : event.usage.reasoningTokens,
           });
+          // Legacy application-run-loop: the upstream an aggregator reports rides on the request's usage.
+          const upstreamProvider = extractAiSdkUpstreamProvider(event.providerMetadata);
           yield {
             type: 'usage',
-            usage: toUsage(event.usage),
+            usage: { ...toUsage(event.usage), ...(upstreamProvider ? { upstreamProvider } : {}) },
             ...(measured && measured.decodeWindowMs == null
               ? { speed: { tps: measured.tps, approximate: measured.approximate } }
               : {}),

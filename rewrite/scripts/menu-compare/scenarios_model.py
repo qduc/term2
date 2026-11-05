@@ -73,3 +73,16 @@ SEED = {
     'model-nick-replace-ok': NICKS,
     'model-failing': FAILING,
 }
+
+# OpenRouter's status-bar label names the upstream provider its last request was routed to: `OpenRouter (Anthropic)/…`.
+# The base URL is an env-only setting: a settings-file value is dropped when the file is rewritten at launch.
+_OPENROUTER = {'settings': {'agent': {'retryAttempts': 0, 'openrouter': {'apiKey': 'test-key'},
+                                      'modelSelection': {'model': 'mock-alpha', 'provider': 'openrouter'}}},
+               'env': {'OPENROUTER_BASE_URL': '$BASE'}, 'upstream': 'Anthropic', 'ready': 'mock-alpha'}
+SCENARIOS['openrouter-upstream'] = ['hello', '<enter>', '<sleep>']
+# OpenRouter always reports usage. (With none, next shows `↑0 ↓0` where legacy shows no token figures.)
+SEED['openrouter-upstream'] = dict(_OPENROUTER, replies=[{'text': 'routed'}],
+                                   usage={'prompt_tokens': 1200, 'completion_tokens': 80})
+# Before any request there is no upstream to name.
+SCENARIOS['openrouter-idle'] = []
+SEED['openrouter-idle'] = dict(_OPENROUTER)

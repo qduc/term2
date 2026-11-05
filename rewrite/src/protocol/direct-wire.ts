@@ -25,6 +25,8 @@ export type WireUsage = {
   readonly inputTokens: number;
   readonly outputTokens: number;
   readonly cachedInputTokens: number;
+  /** An aggregator's upstream provider for this request; legacy's status bar shows it as `OpenRouter (<name>)`. */
+  readonly upstreamProvider?: string;
 };
 export type WireGrant =
   | 'allow-remember'

@@ -67,6 +67,8 @@ class Provider(BaseHTTPRequestHandler):
     # {'prompt_tokens': n, 'completion_tokens': n, 'cached': n?}: sent in a final usage chunk after every reply
     # (SEED['usage']); None sends no usage.
     usage = None
+    # An aggregator's routing (SEED['upstream']): every chunk names this upstream provider, as OpenRouter's do.
+    upstream = None
 
     def log_message(self, *args):
         pass
@@ -111,6 +113,8 @@ class Provider(BaseHTTPRequestHandler):
         def event(delta, finish=None):
             chunk = {'id': 'r', 'object': 'chat.completion.chunk', 'model': 'mock-alpha',
                      'choices': [{'index': 0, 'delta': delta, 'finish_reason': finish}]}
+            if state.upstream:
+                chunk['provider'] = state.upstream
             self.wfile.write(b'data: ' + json.dumps(chunk).encode() + b'\n\n')
 
         if reply.get('empty'):  # a stream with no response at all
@@ -206,6 +210,8 @@ def scratch_env(root, base_url, seed):
     settings['providers'] = settings['providers'] + seed.get('extra_providers', [])
     with open(os.path.join(settings_dir, 'settings.json'), 'w') as f:
         json.dump(settings, f)
+    # Extra environment, '$BASE' standing for the fake provider's URL (OPENROUTER_BASE_URL for an OpenRouter scenario).
+    env.update({key: value.replace('$BASE', base_url) for key, value in seed.get('env', {}).items()})
     for rel, content in seed.get('files', {}).items():
         path = os.path.join(workspace, rel)
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -416,9 +422,10 @@ def run(cli, cols, rows, name):
         provider.usage = seed.get('usage')
         provider.posts = 0
         provider.routes = [dict(route, posts=0) for route in seed.get('routes', [])]
+        provider.upstream = seed.get('upstream')
         term = Term(cli, cols, rows, env, cwd)
         try:
-            term.wait_for('mockprov', 45)
+            term.wait_for(seed.get('ready', 'mockprov'), 45)
             term.pump(quiet=1.0, limit=10)
             for step in scenario:
                 term.send(step)

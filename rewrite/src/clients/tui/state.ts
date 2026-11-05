@@ -132,6 +132,7 @@ export type TuiState = {
     readonly inputTokens: number;
     readonly outputTokens: number;
     readonly cachedInputTokens: number;
+    readonly upstreamProvider?: string;
   };
   /** The session's cumulative usage, which legacy's footer shows after an in-app /resume. */
   readonly sessionUsage?: TuiState['lastUsage'];

@@ -37,10 +37,11 @@ const formatStatusBarRate = (tps: number, approximate: boolean): string =>
  * Legacy writes the provider as its registry label (`OpenAI/gpt-x`). The label only replaces the id it was read
  * for, so a status read that lags the projected model never renames another provider's model.
  */
-function providerModelText(model: string, provider: TuiStatusInfo['provider']): string {
-  return provider && model.startsWith(`${provider.id}/`)
-    ? `${provider.label}${model.slice(provider.id.length)}`
-    : model;
+function providerModelText(model: string, provider: TuiStatusInfo['provider'], upstream?: string): string {
+  if (!provider || !model.startsWith(`${provider.id}/`)) return model;
+  // Legacy StatusBar: OpenRouter names the provider the last request was routed to, `OpenRouter (Anthropic)/…`.
+  const label = provider.id === 'openrouter' && upstream ? `${provider.label} (${upstream})` : provider.label;
+  return `${label}${model.slice(provider.id.length)}`;
 }
 
 /**
@@ -117,7 +118,12 @@ export function directStatusView(
       separator: 'group',
       tier: 3,
     },
-    { id: 'provider-model', text: providerModelText(state.model, info.provider), tone: 'accent', separator: 'group' },
+    {
+      id: 'provider-model',
+      text: providerModelText(state.model, info.provider, state.lastUsage?.upstreamProvider),
+      tone: 'accent',
+      separator: 'group',
+    },
     {
       id: 'reasoning',
       text: info.effort && info.effort !== 'default' ? ` · ${info.effort}` : '',

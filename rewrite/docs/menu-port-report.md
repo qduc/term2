@@ -51,11 +51,27 @@ it, not the legacy-vs-next verdicts: a scenario that already differs from legacy
 the fix changes its screen (item 11's `bg-read` did). Capture next for the scenario set on both builds and diff
 the captured lines; with the cache, the second build costs only next's runs.
 
-**Lost-line trap (open, #145).** At the exit confirmation after `/help`, next loses help's last line. A `RAW=`
-trace shows why: legacy clears and reprints the whole transcript when the notice appears, while next erases 9
-rows upward (`ESC[2K ESC[1A` x8) for a live frame shorter than that, with no static rewrite, so the erase
-reaches into committed scrollback. Next's frame also ends with one more blank row than legacy's. Look for the
-extra row in the live region's height before changing the commit logic.
+**Lost-line trap (fixed, #145).** At the exit confirmation after `/help`, next lost help's last line. A `RAW=`
+trace showed the cause in Ink 7.0.1: its full-clear redraw writes the frame without a trailing newline but
+records it as `frame + "\n"`, so the next ordinary redraw erased one row above the frame. Next commits `/help`
+while its frame still overflows, so it took that path; legacy's frame kept overflowing and repainted by full
+clear, so it never showed. `patches/ink@7.0.1.patch` records what was written, for both CLIs.
+
+**Scenarios on another provider.** A seed's `env` adds environment variables, `$BASE` standing for the fake
+provider's URL, and `ready` names the text to wait for at launch. `upstream` makes every reply chunk name an
+upstream provider, as OpenRouter's do (`openrouter-upstream`). OpenRouter's base URL must come from
+`OPENROUTER_BASE_URL`: it is an env-only setting, and launch rewrites the settings file without it. (Legacy
+reads the file before that rewrite and so honours a file value for one launch; next does not.)
+
+**Timing-sensitive branches.** `bg-continue` races the background explorer's completion against the parent's
+reply. When the child finishes first, legacy folds the two calls into "Delegated to 1 subagent, ran 1 tool
+call" and draws no completion row; both CLIs draw the same transcript when the reply comes first. Under a full
+parallel sweep `bg-spec-shell` and `t-markdown` (a `t/s` reading) can also differ; rerun them alone before
+treating a change as a regression.
+
+**Known gap: no usage reported.** When a provider streams no usage, next's status bar shows `↑0 ↓0 · Ctx 0k`
+where legacy shows no token figures; next's usage type has no "not reported" state. Real OpenRouter and
+OpenAI-compatible streams report usage, so scenarios seed it.
 
 ## Result
 

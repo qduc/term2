@@ -51,8 +51,8 @@
       "reason": "Snapshot projection of every wire fact kind; candidate 2's retry and child tool-state fields are a few lines each in the same switch."
     },
     "rewrite/src/protocol/direct-wire.ts": {
-      "lines": 505,
-      "reason": "The wire type catalogue; candidate 2 adds the task's live tool state fields beside the others."
+      "lines": 507,
+      "reason": "The wire type catalogue; candidate 2 adds the task's live tool state fields beside the others, and usage carries OpenRouter's upstream provider."
     },
     "rewrite/src/session/conversation.ts": {
       "lines": 510,

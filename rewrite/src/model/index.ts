@@ -136,6 +136,8 @@ export type Usage = {
   readonly inputTokens: number;
   readonly outputTokens: number;
   readonly cachedInputTokens: number;
+  /** The provider an aggregator routed this request to (OpenRouter's `provider`), when it reports one. */
+  readonly upstreamProvider?: string;
 };
 
 export type StopReason = 'end_turn' | 'tool_use' | 'max_tokens' | 'refusal';

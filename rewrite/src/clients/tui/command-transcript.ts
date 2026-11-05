@@ -10,13 +10,16 @@ export function useCommandTranscript(state: TuiState): {
   append(text: string, plain?: boolean | 'system', shell?: Message['localShell']): void;
   count: number;
 } {
-  const [entries, setEntries] = useState<readonly { message: Message; after?: string; before?: string; idle?: true }[]>(
-    [],
-  );
+  const [entries, setEntries] = useState<
+    readonly { message: Message; after?: string; before: readonly string[]; idle?: true }[]
+  >([]);
   const append = (text: string, plain: boolean | 'system' = false, shell?: Message['localShell']) => {
     const after = state.timeline?.at(-1)?.id;
-    // A cancelled turn can drop its last row (an unstarted call); the row before it keeps the place.
-    const before = state.timeline?.at(-2)?.id;
+    // A cancelled turn can drop its last rows (its in-flight step); the nearest earlier row still shown keeps the place.
+    const before = (state.timeline ?? [])
+      .slice(-8, -1)
+      .map((item) => item.id)
+      .reverse();
     setEntries((previous) => [
       ...previous,
       {
@@ -49,8 +52,11 @@ export function useCommandTranscript(state: TuiState): {
           ? undefined
           : state.messages.find((message) => message.replacesDraftId === entry.after)?.id;
       const found = timeline.findIndex((item) => item.id === entry.after || item.id === replacement);
-      const fallback =
-        found < 0 && entry.before !== undefined ? timeline.findIndex((item) => item.id === entry.before) : -1;
+      let fallback = -1;
+      for (const id of found < 0 ? entry.before : []) {
+        fallback = timeline.findIndex((item) => item.id === id);
+        if (fallback >= 0) break;
+      }
       const anchor = entry.after === undefined ? undefined : found >= 0 ? found : fallback;
       // Legacy's rewind truncates its message list, system lines included: a line whose anchor left the
       // history (rewound or retried away) goes with it.

@@ -119,7 +119,10 @@ export function appendReplayItem(turn: ActiveReplayTurn, fact: Extract<Fact, { t
   else if (executionId !== undefined) throw new Error(`replay: executionId on non-tool item ${item.id}`);
   // A result written without a step (a call cancelled before it started) belongs to its call's step.
   const modelStep = fact.modelStep ?? (item.type === 'tool_result' ? callStep(turn, item.callId) : undefined);
-  if (item.type === 'tool_result' && turn.cancelRequested) turn.lateSteps.add(modelStep);
+  // A call the cancel stopped before it started (an approval interrupted with Escape) leaves its step finished:
+  // legacy keeps the step's completed calls and drops only the unstarted ones (dropUnstartedReplayCalls).
+  if (item.type === 'tool_result' && turn.cancelRequested && item.output !== INTERRUPTED_BEFORE_START)
+    turn.lateSteps.add(modelStep);
   slots.push(slot);
   stepSlot(turn, modelStep, slot);
 }

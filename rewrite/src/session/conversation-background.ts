@@ -52,6 +52,7 @@ export class ConversationBackground {
               ? fact.request.taskId
               : fact.taskId;
           const previous = this.journal.taskStates.find((task) => task.taskId === taskId);
+          // A foreground child's stop and result are its parent's to see, never a new orchestrator turn.
           const notice =
             previous &&
             !this.admission.closed &&

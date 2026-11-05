@@ -211,6 +211,10 @@ export const nativeSchemas: Record<string, FactSchema> = {
       check.fail('request.risk');
     }
     if ('presentation' in request) check.object(request['presentation'], 'request.presentation');
+    if ('grants' in request) {
+      const grants = request['grants'];
+      if (!Array.isArray(grants) || grants.some((grant) => typeof grant !== 'string')) check.fail('request.grants');
+    }
     check.hasInput(request);
   },
   interaction_closed: (fact, check) => {

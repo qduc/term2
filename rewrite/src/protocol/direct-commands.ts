@@ -173,12 +173,17 @@ async function answerInteraction(
   operations: DirectCommandCapabilities,
   provenance?: WireAnswerProvenance,
 ): Promise<AnswerResult> {
+  // A scoped grant is an allow carrying the exact scope; Session accepts only one the request offered.
   if (decision.kind === 'grant')
-    return requireOperation(operations.grant, 'scoped approval grants').call(
-      operations,
-      requestId,
-      decision.grant,
-      decision.stopAfterApprovalResolution,
+    return session.answer(
+      requestId as InteractionRequestId,
+      {
+        kind: 'allow',
+        grant: decision.grant,
+        ...(decision.stopAfterApprovalResolution !== undefined
+          ? { stopAfterApprovalResolution: decision.stopAfterApprovalResolution }
+          : {}),
+      },
       provenance,
     );
   if (decision.kind === 'answers') {

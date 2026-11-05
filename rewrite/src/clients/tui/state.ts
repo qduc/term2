@@ -65,6 +65,11 @@ export type InteractionView = {
   readonly acceptsText?: boolean;
   readonly questions?: readonly WireQuestion[];
   readonly supportedGrants?: readonly WireGrant[];
+  /** The raw request, for the ported legacy approval prompt (approval-host.tsx). */
+  readonly toolName?: string;
+  readonly input?: JsonValue;
+  readonly summary?: string;
+  readonly presentation?: { readonly [key: string]: JsonValue };
 };
 
 export type QueueItem = {

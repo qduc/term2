@@ -3,16 +3,9 @@
  * Session integration supplies them; absence always returns unavailable, never success.
  */
 import type { DirectTaskControlResult } from '../session/direct-background-types.js';
-import type { WireNotice, WireContent, WireGrant, WireAnswerProvenance } from './direct-wire.js';
+import type { WireNotice, WireContent } from './direct-wire.js';
 
 export type DirectCommandCapabilities = {
-  /** Must validate the target and exact scope durably; never translate to ordinary allow. */
-  grant?(
-    requestId: string,
-    grant: WireGrant,
-    stopAfterApprovalResolution?: boolean,
-    provenance?: WireAnswerProvenance,
-  ): Promise<import('../session/direct-types.js').AnswerResult>;
   controlTask?(
     taskId: string,
     action: 'cancel' | 'check_in' | 'foreground' | 'background',

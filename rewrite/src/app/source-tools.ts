@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { withTrimConfig } from '../../../source/utils/output/output-trim.js';
-import { normalizeToolInput } from '../../../source/lib/tool-invoke.js';
+import { normalizeToolInput, runToolInputDiagnostics } from '../../../source/lib/tool-invoke.js';
 import { isCancellationError, isHarnessInvariantError } from '../../../source/lib/harness-invariant-error.js';
 import type { ToolApprovalPolicyRegistry } from '../../../source/services/approval/tool-approval-policy-registry.js';
 import {
@@ -11,6 +11,12 @@ import {
 } from '../../../source/services/approval/nested-approval-owner.js';
 import { isDockerHostControlShellApproval } from '../../../source/services/approval/shell-sandbox-approval.js';
 import type { SessionAccessState } from '../../../source/services/session/session-access-state.js';
+import {
+  DOCKER_HOST_CONTROL_APPROVE_ANSWERS,
+  supportsFolderSessionRead,
+} from '../../../source/contracts/conversation.js';
+import { applyApprovalGrant } from '../../../source/services/approval/approval-grant-executor.js';
+import { resolveSessionReadFolder } from '../../../source/services/approval/session-read-grant-target.js';
 import { shouldBypassToolApproval } from '../../../source/services/approval/shell-auto-approval-resolver.js';
 import type { ISettingsService } from '../../../source/services/service-interfaces.js';
 import { ASK_USER_NO_ANSWER_RESULT } from '../../../source/tools/agent/ask-user-constants.js';
@@ -85,27 +91,32 @@ export function sourceToolSpec(definition: AnyToolDefinition): ToolSpec {
   };
 }
 
-/**
- * Parsed input that failed the tool's schema. Legacy's wrapped execute answers it with its schema diagnostic as an
- * ordinary result, and its approval wrapper never asks for it; the arguments stay as sent for display.
- */
-const invalidInputs = new WeakSet<object>();
-
 function parseInput(definition: AnyToolDefinition, raw: unknown): unknown {
   const schema =
     definition.canonicalParameters ??
     (isZodToolParameterSchema(definition.parameters) ? definition.parameters : undefined);
-  const parsed =
-    typeof raw === 'string' && definition.parseModelArguments
-      ? definition.parseModelArguments(raw)
-      : (JSON.parse(normalizeToolInput(raw, schema, definition.argumentParsing ?? 'repair')) as unknown);
-  if (!schema) return parsed;
-  const result = schema.safeParse(parsed);
-  if (result.success) return result.data;
-  if (typeof parsed !== 'object' || parsed === null) throw result.error;
-  invalidInputs.add(parsed);
-  return parsed;
+  let parsed: unknown = raw;
+  try {
+    parsed =
+      typeof raw === 'string' && definition.parseModelArguments
+        ? definition.parseModelArguments(raw)
+        : (JSON.parse(normalizeToolInput(raw, schema, definition.argumentParsing ?? 'repair')) as unknown);
+    return schema ? schema.parse(parsed) : parsed;
+  } catch (error) {
+    if (!schema || !(error instanceof z.ZodError || error instanceof SyntaxError)) throw error;
+    // Legacy wrapToolInvoke: invalid input never asks for approval; execute returns the schema diagnostic,
+    // which the tool's own formatter draws as a failed row. Keep the arguments for that row.
+    const diagnostic = runToolInputDiagnostics(definition.name, schema, parsed);
+    const input = parsed && typeof parsed === 'object' ? parsed : { input: parsed };
+    invalidInputs.set(input, diagnostic);
+    return input;
+  }
 }
+
+/** Parsed-but-invalid inputs and their legacy diagnostic, between parse and execute of the same call. */
+const invalidInputs = new WeakMap<object, string>();
+const invalidInput = (input: unknown): string | undefined =>
+  input && typeof input === 'object' ? invalidInputs.get(input) : undefined;
 
 function invocationFor(context: ToolContext, sessionId: string): Invocation & { context: { sessionId: string } } {
   return { context: { sessionId }, signal: context.signal, [DIRECT_CONTEXT]: context };
@@ -142,17 +153,34 @@ async function approvalFor(
     const invocation = invocationFor(context, options.sessionId);
     return (await definition.needsApproval(input, invocation)) ? { kind: 'none', batched: true } : { kind: 'none' };
   }
+  const docker = dockerApproval(definition.name, input, options);
   return {
     kind: 'ask',
-    summary: dockerApproval(definition.name, input, options)
+    summary: docker
       ? `${definition.name}: Docker host control (this call only)`
       : `${definition.name} (this call only)`,
     detail: JSON.stringify(input),
+    // The session grants legacy's prompt offers for this call (ApprovalPrompt's folder and Docker options).
+    ...(docker
+      ? { grants: [...DOCKER_HOST_CONTROL_APPROVE_ANSWERS] }
+      : supportsFolderSessionRead(definition.name) && resolveSessionReadFolder(definition.name, input)
+      ? { grants: ['allow-folder-session'] }
+      : {}),
   };
+}
+
+/** The session grants legacy's prompt offers for a script child's request (its answer strings). */
+function nestedGrants(snapshot: NestedApprovalSnapshot): string[] {
+  const { approval, toolName } = snapshot;
+  if (approval.dockerHostControl) return [...DOCKER_HOST_CONTROL_APPROVE_ANSWERS];
+  if (approval.outsideWorkspaceEdit) return ['allow-edit-file-session', 'allow-edit-folder-session'];
+  return approval.deniedRead && supportsFolderSessionRead(toolName) ? ['allow-folder-session'] : [];
 }
 
 function approvalAnswer(decision: InteractionDecision, snapshot: NestedApprovalSnapshot): string {
   if (decision.kind !== 'allow') return 'n';
+  // Legacy's child approval owner applies (or, for edit grants, refuses) the session grant itself.
+  if (decision.grant) return decision.grant;
   if (snapshot.approval.deniedRead) return 'allow-once';
   return snapshot.approval.dockerHostControl ? 'docker-allow-once' : 'y';
 }
@@ -167,6 +195,7 @@ function nestedInteraction(snapshot: NestedApprovalSnapshot) {
       ? `${snapshot.toolName}: Docker host control (this call only)`
       : `${snapshot.toolName} (this call only)`,
     detail: snapshot.approval.argumentsText,
+    grants: nestedGrants(snapshot),
     presentation: {
       scope: 'once',
       workspaceRoot: snapshot.approval.workspaceRoot,
@@ -285,31 +314,33 @@ function adaptTool(definition: AnyToolDefinition, options: SourceToolOptions, ow
     parallelSafe:
       typeof definition.parallelSafe === 'function'
         ? (input, context) =>
-            !invalidInputs.has(input as object) &&
+            invalidInput(input) === undefined &&
             (definition.parallelSafe as (p: unknown, c: unknown) => boolean | Promise<boolean>)(
               input,
               invocationFor(context, options.sessionId),
             )
         : definition.parallelSafe,
     parse: (raw) => parseInput(definition, raw),
-    approval: async (input, context) =>
-      invalidInputs.has(input as object) ? { kind: 'none' } : approvalFor(definition, input, context, options),
+    approval: (input, context) =>
+      invalidInput(input) !== undefined
+        ? Promise.resolve({ kind: 'none' })
+        : approvalFor(definition, input, context, options),
     async execute(input, context) {
       context.signal.throwIfAborted();
-      if (invalidInputs.has(input as object)) {
-        const output = resultText(
-          await definition.execute(input, invocationFor(context, options.sessionId), {
-            toolCall: { callId: `direct:${randomUUID()}` },
-          }),
-        );
-        return { output, isError: !isSuccessOutput(output) };
-      }
+      const diagnostic = invalidInput(input);
+      if (diagnostic !== undefined)
+        return { output: diagnostic, isError: true, display: displayFor(definition, input, diagnostic, randomUUID()) };
       const rejection = await options.checkInterceptors?.(definition.name, input);
       if (rejection) return { output: rejection, isError: true };
       const answer = await questionAnswer(definition, input, context);
       context.signal.throwIfAborted();
-      // A direct allow means one execution only, including the separate Docker capability.
-      if (dockerApproval(definition.name, input, options)) {
+      // A chosen session grant is applied by legacy's own grant executor; a plain allow means one execution
+      // only, including the separate Docker capability.
+      const grant = context.approvalGrant;
+      if (grant) {
+        const access = { sessionId: options.sessionId, sessionAccess: options.sessionAccess };
+        applyApprovalGrant(access, { answer: grant, toolName: definition.name, rawArguments: input });
+      } else if (dockerApproval(definition.name, input, options)) {
         const command = (input as { command: string }).command;
         options.sessionAccess.grantDocker(command, context.workspace.root, 'once');
       }

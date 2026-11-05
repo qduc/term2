@@ -126,6 +126,10 @@ export class TurnModel {
         // Respect upstream Retry-After without sleeping past the existing
         // recovery envelope or inventing a shorter permitted retry delay.
         if (remaining !== undefined && retry.delayMs >= remaining) throw error;
+        // Legacy observes only its model-behavior retries; transport retries stay silent (SDK-level).
+        const { attempt, maxRetries, delayMs } = retry;
+        if (retry.recovery === 'model_behavior')
+          await this.events.publish({ type: 'model_retrying', attempt, maxRetries, delayMs });
         await delay(retry.delayMs, this.signal);
       }
     }

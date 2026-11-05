@@ -10,6 +10,32 @@ import type {
 } from '../tools/index.js';
 import type { DirectOrigin } from './facade-types.js';
 
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+/** Legacy source/services/background-task-activity.ts BackgroundTaskObservation (the wire carries it as is). */
+export type DirectTaskObservation =
+  | {
+      readonly kind:
+        | 'request_dispatched'
+        | 'response_started'
+        | 'text_received'
+        | 'approval_requested'
+        | 'question_asked'
+        | 'shell_started'
+        | 'shell_output_received'
+        | 'stop_requested'
+        | 'settled';
+      readonly at: number;
+    }
+  | {
+      readonly kind: 'tool_input_received';
+      readonly at: number;
+      readonly toolName: string;
+      readonly argumentCharCount: number;
+    }
+  | { readonly kind: 'tool_started'; readonly at: number; readonly toolName: string }
+  | { readonly kind: 'tool_completed'; readonly at: number; readonly toolName?: string }
+  | { readonly kind: 'retrying'; readonly at: number; readonly attempt: number; readonly maxRetries: number };
+
 export type DirectTaskId = string & { readonly __brand: 'DirectTaskId' };
 export type DirectTaskMode = 'foreground' | 'background';
 export type DirectTaskResult<Value = unknown> =
@@ -34,6 +60,8 @@ export type DirectTaskDescriptor = {
   readonly sourceCallId?: string;
   readonly origin?: DirectOrigin;
   readonly startedAt: number;
+  /** A continued run's start count (2, 3 ...) under its kept ID; absent on its first run. */
+  readonly epoch?: number;
 };
 export type DirectOrchestratorQuestion = { readonly messageId: string; readonly question: string };
 export type DirectQuestionResolution =
@@ -106,6 +134,8 @@ export type DirectBackgroundProgress = {
   readonly kind: 'text' | 'tool_progress' | 'activity';
   readonly chunk: string;
   readonly executionId?: ExecutionId;
+  /** Legacy BackgroundTaskObservation for the manager's "Last activity" row. */
+  readonly observation?: DirectTaskObservation;
 };
 /**
  * Supplied by the owning Session, never a second log. accept must synchronously
@@ -119,7 +149,9 @@ export type DirectBackgroundSink = {
   /** Notify Session to poison its writer and cancel other owned work. Must not throw. */
   failed(error: ModelError): void;
 };
-export type DirectTaskStart = Omit<DirectTaskDescriptor, 'taskId' | 'sessionId' | 'startedAt'> & {
+export type DirectTaskStart = Omit<DirectTaskDescriptor, 'taskId' | 'sessionId' | 'startedAt' | 'epoch'> & {
+  /** A settled task's ID, restarted by its continuation. */
+  readonly taskId?: DirectTaskId;
   readonly mode: DirectTaskMode;
   /** Linked only while foreground-owned; transfer detaches this signal. */
   readonly parentSignal?: AbortSignal;
@@ -130,6 +162,8 @@ export type DirectTaskContext = {
   readonly task: DirectTaskDescriptor;
   readonly signal: AbortSignal;
   progress(chunk: string, kind?: DirectBackgroundProgress['kind'], executionId?: ExecutionId): void;
+  /** Record what legacy's activity tracker would observe (a tool start, a retry, an approval ...). */
+  observe(observation: DistributiveOmit<NonNullable<DirectBackgroundProgress['observation']>, 'at'>): void;
   /** No decision reaches the operation until Session has accepted its closure. */
   interact(request: DirectTaskInteractionInput): Promise<InteractionDecision>;
   /** Pauses the exact child call until its orchestrator replies or the task stops. */

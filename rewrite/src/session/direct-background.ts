@@ -11,6 +11,7 @@ import type {
   DirectBackgroundSink,
   DirectTaskContext,
   DirectTaskControlResult,
+  DirectBackgroundProgress,
   DirectTaskDescriptor,
   DirectTaskHandle,
   DirectTaskId,
@@ -32,6 +33,8 @@ type Entry = {
   mode: DirectTaskMode;
   status: 'running' | 'cancelling' | DirectTaskResult['kind'];
   lastActivityAt: number;
+  /** Legacy observes the first streamed text as response_started, later text as text_received. */
+  sawText?: boolean;
   completedAt?: number;
   outcome?: DirectTaskResult;
   detachParent?: () => void;
@@ -76,12 +79,15 @@ export class DirectBackgroundTasks {
     this.#assertOpen();
     this.#validateName(request.name);
     if (request.parentSignal?.aborted) throw directTaskAbortError();
-    const entry = this.#createEntry(request);
+    const previous = request.taskId ? this.#entries.get(request.taskId) : undefined;
+    const entry = this.#createEntry(request, previous);
+    this.#entries.delete(entry.task.taskId);
     this.#entries.set(entry.task.taskId, entry);
     try {
       this.#accept({ type: 'task_started', task: entry.task, mode: entry.mode });
     } catch (error) {
       this.#entries.delete(entry.task.taskId);
+      if (previous) this.#entries.set(entry.task.taskId, previous);
       throw error;
     }
     this.#linkParent(entry, request.parentSignal);
@@ -204,6 +210,7 @@ export class DirectBackgroundTasks {
     if (entry.outcome || entry.status === 'cancelling') return { ok: false, code: 'not_active' };
     this.#accept({ type: 'task_stop_requested', taskId: entry.task.taskId, at: this.#now(), by });
     entry.status = 'cancelling';
+    this.#context(entry).observe({ kind: 'stop_requested' });
     // Close waits explicitly; do not rely on throwing from an AbortSignal listener.
     this.#interactions.cancelTask(entry.task.taskId);
     this.#questions.cancel(entry.task.taskId);
@@ -241,9 +248,11 @@ export class DirectBackgroundTasks {
     this.#sink.failed(this.#failure);
   }
 
-  #createEntry(request: DirectTaskStart): Entry {
-    const taskId = (request.kind === 'subagent' ? createCodenameRunId() : randomUUID()) as DirectTaskId;
-    if (this.#entries.has(taskId)) throw new Error('Task ID collision.');
+  #createEntry(request: DirectTaskStart, previous: Entry | undefined): Entry {
+    if (request.taskId && !previous?.outcome) throw new Error('Only a settled task can be continued.');
+    const taskId =
+      request.taskId ?? ((request.kind === 'subagent' ? createCodenameRunId() : randomUUID()) as DirectTaskId);
+    if (!previous && this.#entries.has(taskId)) throw new Error('Task ID collision.');
     const startedAt = this.#now();
     const task: DirectTaskDescriptor = structuredClone({
       taskId,
@@ -260,6 +269,7 @@ export class DirectBackgroundTasks {
       sourceCallId: request.sourceCallId,
       origin: request.origin,
       startedAt,
+      ...(previous ? { epoch: (previous.task.epoch ?? 1) + 1 } : {}),
     });
     let resolve!: Entry['resolve'];
     let releaseForeground!: () => void;
@@ -313,7 +323,11 @@ export class DirectBackgroundTasks {
     await entry.kickoff;
     let result: DirectTaskResult;
     try {
-      result = entry.controller.signal.aborted ? { kind: 'cancelled' } : await operation(this.#context(entry));
+      const context = this.#context(entry);
+      // Legacy's first observation of a started task.
+      if (!entry.controller.signal.aborted)
+        context.observe({ kind: entry.task.kind === 'shell' ? 'shell_started' : 'request_dispatched' });
+      result = entry.controller.signal.aborted ? { kind: 'cancelled' } : await operation(context);
     } catch (error) {
       const failure = directTaskError(error);
       const aborted = error instanceof Error && error.name === 'AbortError';
@@ -338,8 +352,47 @@ export class DirectBackgroundTasks {
       progress: (chunk, kind = 'text', executionId) => {
         if (entry.controller.signal.aborted || entry.outcome || this.#failure) return;
         const at = this.#now();
+        // Legacy's activity tracker: shell output, or the child's first and later streamed text.
+        const observed =
+          entry.task.kind === 'shell'
+            ? kind === 'tool_progress'
+              ? 'shell_output_received'
+              : undefined
+            : kind === 'text'
+            ? entry.sawText
+              ? 'text_received'
+              : 'response_started'
+            : undefined;
+        if (observed && entry.task.kind !== 'shell') entry.sawText = true;
         try {
-          this.#sink.publish({ type: 'task_progress', taskId: entry.task.taskId, at, kind, chunk, executionId });
+          this.#sink.publish({
+            type: 'task_progress',
+            taskId: entry.task.taskId,
+            at,
+            kind,
+            chunk,
+            executionId,
+            ...(observed ? { observation: { kind: observed, at } } : {}),
+          });
+          entry.lastActivityAt = at;
+        } catch (error) {
+          this.poison(error);
+          throw error;
+        }
+      },
+      observe: (observation) => {
+        if (entry.controller.signal.aborted || entry.outcome || this.#failure) return;
+        const at = this.#now();
+        if (observation.kind === 'request_dispatched') entry.sawText = false;
+        try {
+          this.#sink.publish({
+            type: 'task_progress',
+            taskId: entry.task.taskId,
+            at,
+            kind: 'activity',
+            chunk: '',
+            observation: { ...observation, at } as NonNullable<DirectBackgroundProgress['observation']>,
+          });
           entry.lastActivityAt = at;
         } catch (error) {
           this.poison(error);
@@ -348,6 +401,7 @@ export class DirectBackgroundTasks {
       },
       askOrchestrator: (question) => {
         if (entry.controller.signal.aborted) return Promise.reject(directTaskAbortError());
+        this.#context(entry).observe({ kind: 'question_asked' });
         if (entry.outcome || this.#failure || entry.task.kind !== 'subagent' || entry.mode !== 'background')
           return Promise.reject(new Error('Task cannot ask its orchestrator.'));
         return this.#questions.ask(entry.task.taskId, question);

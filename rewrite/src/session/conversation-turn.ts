@@ -299,13 +299,23 @@ const lostTerminal: TurnResult = {
   error: { kind: 'provider', message: 'turn ended without a terminal event', retryable: false },
 };
 
+/** A scoped grant is never a plain allow: it must be one the request itself offered. */
+export function grantOffered(
+  request: { readonly grants?: readonly string[] },
+  decision: { readonly grant?: unknown },
+): boolean {
+  return (
+    decision.grant === undefined || (typeof decision.grant === 'string' && !!request.grants?.includes(decision.grant))
+  );
+}
+
 function validDecision(request: InteractionRequest, decision: InteractionDecision): boolean {
   if (!decision || typeof decision !== 'object') return false;
   if (decision.stopAfterApprovalResolution !== undefined && typeof decision.stopAfterApprovalResolution !== 'boolean')
     return false;
   if (request.kind === 'question') return decision.kind === 'answer' && typeof decision.answer === 'string';
   return (
-    decision.kind === 'allow' ||
+    (decision.kind === 'allow' && grantOffered(request, decision)) ||
     (decision.kind === 'deny' && (decision.reason === undefined || typeof decision.reason === 'string'))
   );
 }

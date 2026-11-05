@@ -29,6 +29,14 @@
     "rewrite/src/clients/tui/session.tsx": {
       "lines": 527,
       "reason": "The session wires the composer to the ported legacy menu stack (useMenuStack, double-Escape) and routes every report into the transcript as legacy's addSystemMessage does; that wiring closes over submit, rewind and the viewport, declared later in the same component, so moving it out would add ref plumbing rather than a job seam. The composer's JSX also sits inside ComposerWidth (legacy InputBox's width-0 first frame), which only wraps it, and the command path routes a legacy clear-and-switch confirmation to the plan-toggle hook. The approval panel's Escape adds legacy's Stopped line through the viewport (one prop). The menu stack's first-run setup prompt sits under the live divider as legacy BottomArea places it (one line; the gate itself lives in menus/use-first-run-setup.ts)."
+    },
+    "rewrite/src/clients/tui/approval-prompt.tsx": {
+      "lines": 1145,
+      "reason": "Verbatim port of legacy source/components/prompt/ApprovalPrompt.tsx (every approval and ask_user layout and key path); only its data access changed, so it matches legacy by construction."
+    },
+    "rewrite/src/engine/turn-tools.ts": {
+      "lines": 513,
+      "reason": "One per-call Execution record carries a call's planning, admission, interaction answers and settlement; the chosen approval grant rides it like the batch-asked answer, so splitting would pass that record across files."
     }
   },
   "messagePath": {

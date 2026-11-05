@@ -576,7 +576,7 @@ export class ExecutionSubagentRunner {
   }
 }
 
-function buildDiffStat(
+export function buildDiffStat(
   filesChanged: string[],
   diffDeltas: Map<string, { added: number; deleted: number }>,
 ): DiffStatEntry[] {
@@ -607,7 +607,7 @@ const MAX_FINAL_TEXT_CHARS = 40_000;
 const SUBAGENT_RESULT_DIR = path.join(SANDBOX_TEMP_DIR, 'subagent-result');
 let subagentResultTempDirPromise: Promise<string> | undefined;
 
-async function truncateResultText(
+export async function truncateResultText(
   text: string,
 ): Promise<Pick<SubagentResult, 'finalText' | 'finalTextTruncated' | 'finalTextArtifactPath'>> {
   if (text.length <= MAX_FINAL_TEXT_CHARS) return { finalText: text };

@@ -182,7 +182,7 @@ export function directTaskNotice(
   result?: DirectTaskState['result'],
   at?: number,
 ): DirectBackgroundNotice {
-  const id = `task:${task.taskId}:${action}`;
+  const id = `task:${task.taskId}:${action}${task.epoch ? `#${task.epoch}` : ''}`;
   if (action !== 'finished')
     return legacyNotice(id, 'control', task.taskId, { kind: 'user_control', action, details: controlDetails(task) });
   if (result && task.kind === 'subagent')
@@ -223,7 +223,8 @@ export function directCheckInNotice(
   activity: DirectTaskActivityDetails = {},
 ): DirectBackgroundNotice {
   const task = event.details;
-  return legacyNotice(`check_in:${event.target.id}:${event.checkInIndex}`, 'check_in', event.target.id, {
+  const epoch = task.epoch ? `#${task.epoch}` : '';
+  return legacyNotice(`check_in:${event.target.id}${epoch}:${event.checkInIndex}`, 'check_in', event.target.id, {
     kind: 'check_in',
     checkInIndex: event.checkInIndex,
     elapsedMs: event.elapsedMs,
@@ -285,6 +286,7 @@ function subagentCompletion(
     role: task.role ?? 'agent',
     status: result.kind,
     ...(error ? { error } : {}),
-    formattedResult: lines.join('\n'),
+    // The host's legacy formatting carries Worktree, Validation, Diff stat and Files changed.
+    formattedResult: result.value?.report ?? lines.join('\n'),
   };
 }

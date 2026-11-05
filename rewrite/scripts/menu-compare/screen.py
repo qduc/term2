@@ -52,6 +52,9 @@ class Provider(BaseHTTPRequestHandler):
     # {'tool': name, 'args': {...}}; 'hold' keeps the stream open after the text. Set from the scenario's SEED['replies'].
     replies = [{'text': 'done'}]
     posts = 0
+    # [{'match': text, 'replies': [...]}]: requests whose user messages contain `match` (a subagent's task) take
+    # their own reply list, so a parent and a child agent do not race for one (SEED['routes']).
+    routes = []
     # {'prompt_tokens': n, 'completion_tokens': n, 'cached': n?}: sent in a final usage chunk after every reply
     # (SEED['usage']); None sends no usage.
     usage = None
@@ -70,10 +73,26 @@ class Provider(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self.path.endswith('/chat/completions'):
             return self.do_GET()
-        self.rfile.read(int(self.headers.get('content-length', 0)))
+        body = json.loads(self.rfile.read(int(self.headers.get('content-length', 0))) or b'{}')
         state = type(self)
-        reply = state.replies[min(state.posts, len(state.replies) - 1)]
-        state.posts += 1
+        users = ' '.join(str(m.get('content')) for m in body.get('messages', []) if m.get('role') == 'user')
+        route = next((r for r in state.routes if r['match'] in users), None)
+        if route is not None:
+            reply = route['replies'][min(route['posts'], len(route['replies']) - 1)]
+            route['posts'] += 1
+        else:
+            reply = state.replies[min(state.posts, len(state.replies) - 1)]
+            state.posts += 1
+        if 'status' in reply:  # a failed request, e.g. {'status': 503, 'retry_after': seconds}
+            failure = json.dumps({'error': {'message': 'Service unavailable', 'type': 'server_error'}}).encode()
+            self.send_response(reply['status'])
+            self.send_header('content-type', 'application/json')
+            if 'retry_after' in reply:
+                self.send_header('retry-after', str(reply['retry_after']))
+            self.send_header('content-length', str(len(failure)))
+            self.end_headers()
+            self.wfile.write(failure)
+            return
         # 'wait': seconds before the response starts, so a scenario can see the turn waiting for the model.
         time.sleep(reply.get('wait', 0))
         self.send_response(200)
@@ -85,10 +104,21 @@ class Provider(BaseHTTPRequestHandler):
                      'choices': [{'index': 0, 'delta': delta, 'finish_reason': finish}]}
             self.wfile.write(b'data: ' + json.dumps(chunk).encode() + b'\n\n')
 
+        if reply.get('empty'):  # a stream with no response at all
+            self.wfile.write(b'data: [DONE]\n\n')
+            return
+        # '$RUNID' in a call's args is the last run ID the request shows (a continue_run_id).
+        run_ids = re.findall(r'"runId":"([\w-]+)"', ' '.join(str(m.get('content')) for m in body.get('messages', [])))
+
+        def arguments(c):
+            text = c['raw_args'] if 'raw_args' in c else json.dumps(c['args'])
+            return text.replace('$RUNID', run_ids[-1]) if run_ids else text
+
         if 'tool' in reply or 'calls' in reply:
-            # 'calls': several tool calls in one reply, each {'tool': name, 'args': {...}}.
+            time.sleep(reply.get('delay', 0))  # lets a scenario type a draft before the approval opens
+            # 'calls': several tool calls in one reply, each {'tool': name, 'args': {...}} ('raw_args': sent as is).
             calls = [{'index': i, 'id': f'call{state.posts}-{i}', 'type': 'function',
-                      'function': {'name': c['tool'], 'arguments': json.dumps(c['args'])}}
+                      'function': {'name': c['tool'], 'arguments': arguments(c)}}
                      for i, c in enumerate(reply.get('calls', [reply]))]
             event({'role': 'assistant', 'tool_calls': calls})
             if reply.get('hold'):  # keep the call streaming ("Calling tool")
@@ -98,6 +128,8 @@ class Provider(BaseHTTPRequestHandler):
         else:
             # 'chunks': stream the text in that many pieces, 'delay' seconds apart (default one piece).
             text, pieces = reply['text'], max(1, reply.get('chunks', 1))
+            if pieces == 1:
+                time.sleep(reply.get('delay', 0))  # an open stream with no output yet
             size = -(-len(text) // pieces)
             for i in range(0, len(text), size):
                 event({'role': 'assistant', 'content': text[i:i + size]} if i == 0 else {'content': text[i:i + size]})
@@ -370,6 +402,7 @@ def run(cli, cols, rows, name):
         provider.replies = seed.get('replies', [{'text': 'done'}])
         provider.usage = seed.get('usage')
         provider.posts = 0
+        provider.routes = [dict(route, posts=0) for route in seed.get('routes', [])]
         term = Term(cli, cols, rows, env, cwd)
         try:
             term.wait_for('mockprov', 45)

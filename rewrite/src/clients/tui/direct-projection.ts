@@ -1,3 +1,4 @@
+import { noticeRows } from './notice-rows.js';
 import type {
   WireInteraction,
   WireMessage,
@@ -138,6 +139,11 @@ function interactionView(interaction: WireInteraction, callId: string | undefine
     acceptsText: true,
     questions: interaction.questions,
     supportedGrants: interaction.supportedGrants,
+    toolName: interaction.toolName,
+    input: interaction.input,
+    summary: interaction.summary,
+    ...(interaction.presentation ? { presentation: interaction.presentation } : {}),
+    ...(callId ? { callId } : {}),
   };
 }
 
@@ -207,11 +213,16 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
   }
   const before = lastLists.get(snapshot.sessionId);
   const stableMessages = sameList(before?.messages, messages, shallowEqual) as Message[];
-  const stableTools = sameList(before?.tools, snapshot.tools.map(toolView), (a, b) => a === b) as ToolView[];
+  const notices = noticeRows(snapshot, snapshot.timeline);
+  const stableTools = sameList(
+    before?.tools,
+    [...snapshot.tools.map(toolView), ...notices.tools],
+    (a, b) => a === b,
+  ) as ToolView[];
   const stableTimeline = (
-    snapshot.timeline
-      ? sameList(before?.timeline as typeof snapshot.timeline | undefined, snapshot.timeline, shallowEqual)
-      : snapshot.timeline
+    notices.timeline
+      ? sameList(before?.timeline as typeof notices.timeline | undefined, notices.timeline, shallowEqual)
+      : notices.timeline
   ) as typeof snapshot.timeline;
   lastLists.set(snapshot.sessionId, { messages: stableMessages, tools: stableTools, timeline: stableTimeline });
   return {

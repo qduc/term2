@@ -6,10 +6,23 @@ import type {
   WireConfigureRequest,
   WireContent,
   WireDecision,
+  WireGrant,
   WireOrigin,
   WireQuestionAnswer,
 } from './direct-wire.js';
 import { DirectProtocolError } from './direct-errors.js';
+
+const WIRE_GRANTS: readonly WireGrant[] = [
+  'allow-remember',
+  'unsandboxed-once',
+  'allow-folder-session',
+  'allow-edit-file-session',
+  'allow-edit-folder-session',
+  'docker-allow-once',
+  'docker-allow-session',
+  'docker-allow-project',
+];
+export const isWireGrant = (value: string): value is WireGrant => (WIRE_GRANTS as readonly string[]).includes(value);
 
 type ObjectValue = Record<string, unknown>;
 const invalid = (message: string): never => {
@@ -64,20 +77,7 @@ function decision(raw: unknown): WireDecision {
       if (value.reason !== undefined || value.answer !== undefined) invalid('Grant has no answer/reason');
       return {
         kind: 'grant',
-        grant: choice(
-          value.grant,
-          [
-            'allow-remember',
-            'unsandboxed-once',
-            'allow-folder-session',
-            'allow-edit-file-session',
-            'allow-edit-folder-session',
-            'docker-allow-once',
-            'docker-allow-session',
-            'docker-allow-project',
-          ],
-          'grant',
-        ),
+        grant: choice(value.grant, WIRE_GRANTS, 'grant'),
         ...stop,
       };
     case 'allow':

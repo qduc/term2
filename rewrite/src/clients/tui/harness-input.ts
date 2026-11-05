@@ -7,8 +7,6 @@ let generation = 0;
 let lastComposerValue: string | null = null;
 let composerRevision = 0;
 let approvalRevision = 0;
-let sessionValue = '';
-let entryText: string | null = null;
 
 /** Publish opt-in native composer acknowledgments in the harness's idle/composer file format. */
 export function useHarnessInput(active: boolean, processing: boolean, value: string, mounted = true): void {
@@ -19,8 +17,7 @@ export function useHarnessInput(active: boolean, processing: boolean, value: str
     // Legacy's input box holds its value whenever it is drawn; a draft restored into a hidden composer
     // (a rewind before its frame) is published when the composer mounts and can take keys.
     if (mounted) {
-      sessionValue = value;
-      publishComposer(path, entryText ?? value);
+      publishComposer(path, value);
     }
 
     const idle = active && !processing;
@@ -31,17 +28,6 @@ export function useHarnessInput(active: boolean, processing: boolean, value: str
     generation += 1;
     writeAtomically(path, `${generation}\n`);
   }, [active, processing, value, mounted]);
-}
-
-/**
- * Legacy types an approval's rejection reason (or an answer) in the composer; next's interaction panel editor
- * stands in for it while open (null hands the composer value back).
- */
-export function publishHarnessEntryText(text: string | null): void {
-  const path = process.env['TERM2_HARNESS_IDLE_PATH'];
-  if (!path) return;
-  entryText = text;
-  publishComposer(path, text ?? sessionValue);
 }
 
 /** Legacy ApprovalPrompt's opt-in signal: published after the prompt's input handler is in place. */

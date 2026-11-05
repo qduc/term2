@@ -8,6 +8,7 @@ import type {
   DirectTaskInteractionResolution,
 } from './direct-background-types.js';
 import { directTaskAbortError, directTaskError } from './direct-background-types.js';
+import { grantOffered } from './conversation-turn.js';
 
 type Pending = {
   readonly request: DirectTaskInteraction;
@@ -145,7 +146,8 @@ function validDecision(request: DirectTaskInteraction, decision: InteractionDeci
   if (decision.stopAfterApprovalResolution !== undefined && typeof decision.stopAfterApprovalResolution !== 'boolean')
     return false;
   if (decision.kind === 'deny' && decision.reason !== undefined && typeof decision.reason !== 'string') return false;
-  if (request.kind === 'approval') return decision.kind === 'allow' || decision.kind === 'deny';
+  if (request.kind === 'approval')
+    return (decision.kind === 'allow' && grantOffered(request, decision)) || decision.kind === 'deny';
   return (
     (decision.kind === 'answer' && typeof decision.answer === 'string') ||
     (decision.kind === 'deny' && decision.stopAfterApprovalResolution === true)

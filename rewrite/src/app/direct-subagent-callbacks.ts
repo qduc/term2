@@ -2,11 +2,15 @@
  * authority or lifecycle is created here; result/status presentation uses accepted
  * task snapshots and actual execution evidence supplied by the tool surface.
  */
+import type { ResolvedAgentDefinition } from '../../../source/services/agent-runtime/resolved-agent.js';
 import type { AgentFactoryDeps } from '../../../source/lib/agent-factory.js';
 import type { ResolvedSubagentLaunch } from '../../../source/lib/subagent-bridge.js';
 import type { AgentSpec } from '../../../source/services/agent-runtime/types.js';
 import { SubagentPoolEntrySchema } from '../../../source/services/settings/settings-schema.js';
 import type { SubagentResult, SubagentRunHandle, SubagentRunStatus } from '../../../source/services/subagents/types.js';
+import { buildDiffStat, truncateResultText } from '../../../source/services/subagents/execution-runner.js';
+import type { ValidationCapture } from '../../../source/services/subagents/tool-policy.js';
+import { buildTurnBudgetExhaustedFinalText, formatSubagentResult } from '../../../source/services/subagents/utils.js';
 import type { Item } from '../model/index.js';
 import type { NestedRunResult, SubagentTaskState, ToolContext } from '../tools/index.js';
 import type { ProfileSelection } from './tool-contract.js';
@@ -21,10 +25,20 @@ export type Launch = {
   authorizedWorktreePath?: string;
   mentorConsultation?: boolean;
   mentorModel?: { provider: string; model: string; reasoningEffort?: string };
+  /** run_code's successful AgentSpec boundary definition; legacy launches it without resolving again. */
+  resolvedDefinition?: ResolvedAgentDefinition;
 };
 export type ExecutionEvidence = {
   readonly filesChanged: readonly string[];
   readonly toolCounts: Map<string, number>;
+  /** The child's turn budget, for legacy's budget-stop text. */
+  readonly maxTurns?: number;
+  readonly worktreePath?: string;
+  /** A background child's diff and validation capture, as legacy's execution-runner keeps them. */
+  readonly diffDeltas?: Map<string, { added: number; deleted: number }>;
+  readonly validation?: ValidationCapture;
+  /** The background result, settled once (its truncation saves one artifact). */
+  settled?: Promise<SubagentResult>;
 };
 type DelegationCallbacks = Pick<
   AgentFactoryDeps,
@@ -63,6 +77,7 @@ export function createDirectDelegationCallbacks(
       throw new Error('Native script delegation requires a successful host AgentSpec boundary');
     return {
       agent_spec: value.spec,
+      resolvedDefinition: value.definition,
       worktree: params.worktree ?? value.worktree,
       authorizedWorktreePath: params.authorizedWorktreePath ?? value.authorizedWorktreePath,
       name: params.name,
@@ -100,6 +115,8 @@ export function createDirectDelegationCallbacks(
       const task = await controls().wait(runId, context.signal);
       if (!task) throw new Error(`Unknown subagent run: ${runId}`);
       if (!task.result) throw new Error(`Subagent run has no accepted terminal result: ${runId}`);
+      const settled = executionEvidence.get(task.taskId)?.settled;
+      if (settled) return settled;
       const result = task.result.value as NestedRunResult | undefined;
       if (result?.outcome && Array.isArray(result.items))
         return projectResult(
@@ -149,11 +166,9 @@ export function projectResult(result: NestedRunResult, role: string, evidence?: 
   if (result.outcome.kind === 'background')
     throw new Error('Expected a subagent result, received background admission');
   const status = result.outcome.kind === 'budget_exhausted' ? 'interrupted' : result.outcome.kind;
-  return {
-    agentId: runId,
-    role,
-    status,
-    finalText: result.items
+  // Legacy extractFinalText: the child's last assistant text.
+  const lastText =
+    result.items
       .filter((item): item is Extract<Item, { type: 'assistant_message' }> => item.type === 'assistant_message')
       .map((item) =>
         item.content
@@ -161,7 +176,25 @@ export function projectResult(result: NestedRunResult, role: string, evidence?: 
           .map((part) => part.text)
           .join(''),
       )
-      .join('\n'),
+      .filter((text) => text.length > 0)
+      .at(-1) ?? '';
+  const toolCalls = tools.reduce((total, [, count]) => total + count, 0);
+  // Legacy nested-runner: a budget stop reports its partial text under the budget header, and a failure after
+  // tool work is contained with the partial findings.
+  const finalText =
+    result.outcome.kind === 'budget_exhausted'
+      ? buildTurnBudgetExhaustedFinalText({ maxTurns: evidence?.maxTurns, partialText: lastText })
+      : result.outcome.kind === 'failed' && toolCalls > 0
+      ? lastText
+        ? `${lastText}\n\n[Subagent stopped due to error: ${result.outcome.error.message}]`
+        : `[Subagent stopped due to error after ${toolCalls} tool action(s): ${result.outcome.error.message}]`
+      : lastText;
+  return {
+    agentId: runId,
+    role,
+    status,
+    finalText,
+    ...(evidence?.worktreePath ? { worktreePath: evidence.worktreePath } : {}),
     filesChanged: [...new Set(evidence?.filesChanged ?? [])],
     toolsUsed: tools.map(([toolName, count]) => ({ toolName, count })),
     ...(result.outcome.kind === 'failed' ? { error: result.outcome.error.message } : {}),
@@ -170,6 +203,30 @@ export function projectResult(result: NestedRunResult, role: string, evidence?: 
       ? { terminalCause: result.outcome.terminalCause }
       : {}),
   };
+}
+
+/** Legacy execution-runner's background result: diff stat and validation evidence, the 40k final-text
+ * cap, and no final text on an error. */
+async function projectBackgroundResult(
+  result: NestedRunResult,
+  role: string,
+  evidence: ExecutionEvidence,
+): Promise<SubagentResult> {
+  const projected = projectResult(result, role, evidence);
+  const diffStat = buildDiffStat([...evidence.filesChanged], evidence.diffDeltas ?? new Map());
+  const validation = evidence.validation?.value;
+  return {
+    ...projected,
+    ...(projected.status === 'failed' ? { finalText: '' } : await truncateResultText(projected.finalText)),
+    ...(diffStat.length > 0 ? { diffStat } : {}),
+    ...(validation ? { validation } : {}),
+  };
+}
+
+/** The completion notice's result text, legacy's formatSubagentResult over the settled background result. */
+export function backgroundReport(role: string, evidence: ExecutionEvidence) {
+  return async (result: NestedRunResult): Promise<string> =>
+    formatSubagentResult(await (evidence.settled = projectBackgroundResult(result, role, evidence)));
 }
 
 /** Status is a Session snapshot, never a second tool-owned lifecycle projection. */

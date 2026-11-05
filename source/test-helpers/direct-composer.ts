@@ -11,7 +11,7 @@ export function usesDirectComposer(args: readonly string[]): boolean {
 }
 /**
  * Read the latest complete full Ink render's active single-line editor.
- * Ordinary composers are the default; value waits may opt into approval reasons.
+ * Only the ordinary composer matches.
  * Offsets index the decoded JS string, not bytes or source revision/generation counts.
  * A cursor is not proof of keyboard ownership: callers still need their independent
  * response/command boundary, and text submission requires a fresh exact value render.
@@ -21,7 +21,6 @@ export function usesDirectComposer(args: readonly string[]): boolean {
  */
 export function readDirectComposer(
   output: string,
-  allowApprovalReason = false,
 ): { start: number; end: number; value: string; idle: boolean } | null {
   const start = output.lastIndexOf(BEGIN_FRAME);
   if (start < 0) return null;
@@ -59,37 +58,6 @@ export function readDirectComposer(
       statusIndex -= 1;
     }
   }
-  // A value acknowledgement may belong to the active approval reason editor,
-  // not the inactive ordinary composer. Never expose this surface as idle.
-  if (
-    allowApprovalReason &&
-    lines.some((line) => MODEL_STATUS.exec(stripVTControlCharacters(line))?.[1] === 'awaiting_interaction')
-  ) {
-    const panel = lines.findIndex((line) => /^│ Allow this action\? *│$/.test(stripVTControlCharacters(line)));
-    const reason = lines.findIndex(
-      (line, index) =>
-        index > panel &&
-        /^│ Why\? \(or Esc to (?:cancel|go back)\) · Enter without a reason *│$/.test(stripVTControlCharacters(line)),
-    );
-    if (panel >= 0 && reason > panel) {
-      const row = lines[reason + 1] ?? '';
-      const cursor = /\x1b\[7m \x1b\[27m/.exec(row);
-      const following = stripVTControlCharacters(lines[reason + 2] ?? '');
-      if (
-        cursor &&
-        /^│ /.test(stripVTControlCharacters(row)) &&
-        /^ *│$/.test(stripVTControlCharacters(row.slice(cursor.index + cursor[0].length))) &&
-        /^│ Ctrl\+G return to composer *│$/.test(following)
-      ) {
-        return {
-          start,
-          end: end + END_FRAME.length,
-          value: stripVTControlCharacters(row.slice(0, cursor.index)).slice(2),
-          idle: false,
-        };
-      }
-    }
-  }
   return null;
 }
 
@@ -104,7 +72,7 @@ export async function waitForDirectComposer(
   const startedAt = Date.now();
   while (Date.now() - startedAt < options.timeoutMs) {
     if (terminal.hasExited()) throw new Error('PTY child exited before direct composer readiness.');
-    const frame = readDirectComposer(terminal.getOutput(), options.value !== undefined);
+    const frame = readDirectComposer(terminal.getOutput());
     if (
       frame &&
       frame.start >= (options.after ?? 0) &&

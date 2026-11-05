@@ -71,6 +71,8 @@ export type DirectRecoveryDecision =
       readonly kind: 'retry';
       readonly recovery: 'transient' | 'chain' | 'model_behavior' | 'service_tier' | 'transport';
       readonly attempt: number;
+      /** This recovery kind's retry limit. */
+      readonly maxRetries: number;
       readonly delayMs: number;
       readonly inputMode: 'full_history' | 'delta';
       readonly disableChaining: boolean;
@@ -151,7 +153,12 @@ export class DirectRecovery {
     ) {
       const attempt = ++this.#silentRetries;
       const admission = this.budget.describeAdmission({ automaticReplayRequired: false });
-      const retry = transientRetry(attempt, recoveryDelay(attempt, undefined, this.#options.random), admission);
+      const retry = transientRetry(
+        attempt,
+        this.#options.maxTransientRetries,
+        recoveryDelay(attempt, undefined, this.#options.random),
+        admission,
+      );
       return { ...retry, recovery: 'chain', ...(output ? { withdraw: true as const } : {}) };
     }
     if (interrupted && output && context.withdrawableOutput) return stop('committed_output');
@@ -192,6 +199,7 @@ export class DirectRecovery {
       kind: 'retry',
       recovery: choice.kind,
       attempt,
+      maxRetries: this.#limit(choice.kind),
       delayMs,
       inputMode: choice.kind === 'service_tier' ? 'delta' : 'full_history',
       disableChaining: choice.kind !== 'service_tier',
@@ -216,7 +224,7 @@ export class DirectRecovery {
     if (this.#silentRetries < max) {
       const attempt = ++this.#silentRetries;
       const admission = this.budget.describeAdmission({ automaticReplayRequired: false });
-      return transientRetry(attempt, recoveryDelay(attempt, retryAfterMs, random), admission);
+      return transientRetry(attempt, max, recoveryDelay(attempt, retryAfterMs, random), admission);
     }
     this.#silentRetries = 0;
     const attempt = this.#transientRetries + 1;
@@ -232,14 +240,25 @@ export class DirectRecovery {
     const admission = this.budget.describeAdmission({ automaticReplayRequired: true });
     if (!this.budget.claimAutomaticReplay() || !this.budget.claimPhysicalAttempt())
       return { ...stop('recovery_budget'), admission, notice, exhaustedAfter: this.budget.physicalAttempts };
-    return { ...transientRetry(attempt, notice.delayMs, admission), automaticReplay: true, notice };
+    return { ...transientRetry(attempt, max, notice.delayMs, admission), automaticReplay: true, notice };
   }
 
   #withinLimit(kind: RecoveryKind): boolean {
-    if (kind === 'model_behavior') return this.#modelRetries < (this.#options.maxModelRetries ?? 2);
-    if (kind === 'service_tier') return this.#tierFallbacks < 1;
-    if (kind === 'transport') return this.#transportDowngrades < 1;
-    return this.#transientRetries < this.#options.maxTransientRetries;
+    const used =
+      kind === 'model_behavior'
+        ? this.#modelRetries
+        : kind === 'service_tier'
+        ? this.#tierFallbacks
+        : kind === 'transport'
+        ? this.#transportDowngrades
+        : this.#transientRetries;
+    return used < this.#limit(kind);
+  }
+
+  #limit(kind: RecoveryKind): number {
+    if (kind === 'model_behavior') return this.#options.maxModelRetries ?? 2;
+    if (kind === 'service_tier' || kind === 'transport') return 1;
+    return this.#options.maxTransientRetries;
   }
 
   #advance(kind: RecoveryKind): number {
@@ -252,6 +271,7 @@ export class DirectRecovery {
 
 function transientRetry(
   attempt: number,
+  maxRetries: number,
   delayMs: number,
   admission: RetryRecoveryAdmission,
 ): Extract<DirectRecoveryDecision, { kind: 'retry' }> {
@@ -259,6 +279,7 @@ function transientRetry(
     kind: 'retry',
     recovery: 'transient',
     attempt,
+    maxRetries,
     delayMs,
     inputMode: 'full_history',
     disableChaining: true,

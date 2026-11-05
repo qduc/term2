@@ -5,10 +5,12 @@ import type { AgentFactoryDeps } from '../../../source/lib/agent-factory.js';
 import { getCatalogModel } from '../../../source/providers/model-catalog/catalog.js';
 import { resolveOutputAllocation } from '../../../source/services/agent-runtime/model-context-policy.js';
 import { adaptLegacyDefinition } from '../../../source/services/agent-runtime/legacy-adapter.js';
-import {
-  createRootAgentAuthoritySnapshot,
-  resolveAgentSpecForChild,
-} from '../../../source/services/agent-runtime/permission-boundary.js';
+import { resolveAgent } from '../../../source/services/agent-runtime/agent-resolver.js';
+import { agentSpecToConfig } from '../../../source/services/agent-runtime/agent-spec.js';
+import type { AgentSpec } from '../../../source/services/agent-runtime/types.js';
+import { createRootBudget } from '../../../source/services/agent-runtime/execution-budget.js';
+import type { ResolvedAgentDefinition } from '../../../source/services/agent-runtime/resolved-agent.js';
+import type { ISubagentClient } from '../../../source/services/subagents/subagent-client-types.js';
 import { ToolApprovalPolicyRegistry } from '../../../source/services/approval/tool-approval-policy-registry.js';
 import type { ExecutionContext } from '../../../source/services/execution-context.js';
 import { withActiveWorkspaceRoot } from '../../../source/services/workspace/active-workspace-root.js';
@@ -21,20 +23,25 @@ import {
   buildInstructions,
   loadRoleDefinition,
   resolveSubagentSearchViaShell,
-  ROLE_MAX_TURNS_DEFAULT,
 } from '../../../source/services/subagents/role-loader.js';
 import { SubagentRolePoolSelector } from '../../../source/services/subagents/subagent-role-pool-selector.js';
-import { SubagentToolFactory, SubagentToolPolicy } from '../../../source/services/subagents/tool-policy.js';
+import {
+  SubagentToolFactory,
+  SubagentToolPolicy,
+  type ValidationCapture,
+} from '../../../source/services/subagents/tool-policy.js';
 import type {
   SubagentResult,
   SubagentDefinition,
   SubagentRunHandle,
 } from '../../../source/services/subagents/types.js';
 import { SUBAGENT_ROLES } from '../../../source/services/subagents/types.js';
+import { DirectSubagentSessions } from './direct-subagent-sessions.js';
 import {
-  deriveAuthorizedWorktreeScope,
-  pinWorkerWorktree,
-} from '../../../source/services/subagents/worker-worktree.js';
+  SUBAGENT_RUN_NAME_PATTERN,
+  SubagentRegistryError,
+} from '../../../source/services/subagents/subagent-async-registry.js';
+import { pinWorkerWorktree } from '../../../source/services/subagents/worker-worktree.js';
 import type { AnyToolDefinition } from '../../../source/tools/types.js';
 import type { ItemId, ReasoningEffort } from '../model/index.js';
 import type { DirectNestedAuthority } from '../session/direct-branches.js';
@@ -44,6 +51,7 @@ import type { NestedRunRequest, Tool, ToolContext, Workspace } from '../tools/in
 import type { ProfileSelection } from './tool-contract.js';
 import {
   createDirectDelegationCallbacks,
+  backgroundReport,
   projectResult,
   type Launch,
   type ExecutionEvidence,
@@ -65,7 +73,43 @@ export type DirectSubagentToolsOptions = {
   readonly remoteUnavailable: ReadonlySet<string>;
   /** The parent's session browser; legacy provisions it to the librarian only. */
   readonly sessionBrowser?: AgentFactoryDeps['sessionBrowser'];
+  /** Legacy SubagentToolPolicy's advisory model client for a worker's YELLOW shell commands. */
+  readonly advisoryClient?: ISubagentClient;
 };
+
+/** Legacy subagent-bridge toManagerDefinition: a resolved definition with its own root budget. */
+function managerDefinition(value: ResolvedAgentDefinition): SubagentDefinition {
+  const budget = createRootBudget({
+    maxChildren: value.limits.maxChildren,
+    maxDepth: value.limits.maxDepth,
+    maxConcurrency: value.limits.maxConcurrency,
+    maxTokens: value.limits.maxTokens,
+  });
+  return { ...adaptLegacyDefinition(value, budget), isRootExecution: true };
+}
+
+/** Legacy subagent-manager #resolveAgentSpec: run_subagent's own agent_spec, with no parent ceiling. */
+function resolveRunSubagentSpec(
+  spec: AgentSpec,
+  deps: Pick<ProfileSelection, 'settings' | 'logger'> & { skillsService?: SkillsService },
+): ResolvedAgentDefinition {
+  if (spec.budget) {
+    const unsupported = Object.keys(spec.budget).filter((key) => key !== 'maxTurns' && key !== 'maxTokens');
+    if (unsupported.length > 0)
+      throw new Error(`Unsupported AgentSpec budget fields in delegated runs: ${unsupported.join(', ')}`);
+    for (const key of ['maxTurns', 'maxTokens'] as const) {
+      const value = spec.budget[key];
+      if (value !== undefined && (!Number.isInteger(value) || value <= 0))
+        throw new Error(`AgentSpec budget.${key} must be a positive integer.`);
+    }
+  }
+  const definition = resolveAgent(agentSpecToConfig(spec), deps);
+  if (definition.resolutionErrors.length > 0)
+    throw new Error(
+      `Agent specification rejected: ${definition.resolutionErrors.map((error) => error.message).join('; ')}`,
+    );
+  return definition;
+}
 
 // Named source roles grant workspace reads independently of the parent's prompt
 // profile. AgentSpec children still inherit the parent's effective-tool ceiling.
@@ -90,6 +134,14 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
   // native Tool.execute entries, never model-requested tool_call items.
   const preparedEvidence = new WeakMap<NestedRunRequest, ExecutionEvidence>();
   const executionEvidence = new Map<string, ExecutionEvidence>();
+  const sessions = new DirectSubagentSessions<SubagentDefinition>(
+    (code, message) => new SubagentRegistryError(code as never, message),
+    () => settings.get('subagent.asyncMessageCap') ?? 50,
+  );
+  const preparedSessions = new WeakMap<
+    NestedRunRequest,
+    { readonly key: string | undefined; readonly definition: SubagentDefinition }
+  >();
   const current = (): ToolContext => {
     const context = scope.getStore();
     if (!context) throw new Error('Subagent operation has no admitted direct tool execution');
@@ -107,46 +159,24 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
     params: Launch,
     mode: 'foreground' | 'background',
   ): Promise<NestedRunRequest & { readonly input: string }> => {
-    current();
-    if (params.continue_run_id)
-      throw new Error('Continuing a prior subagent run is not available in the native Session');
+    const prior = sessions.prior(params, mode, current().subagents);
     const planMode = resolveActiveEnforcement(settings).denials.has('filesystem-mutation');
     let definition: SubagentDefinition;
     let task: string;
     let authorizedPath: string | undefined;
-    if (params.agent_spec) {
-      const worktrees = deriveAuthorizedWorktreeScope({
-        homeRoot: options.workspace.root,
-        isRemote: options.executionContext.isRemote(),
-        readOnly: options.readOnly,
-        planMode,
-      });
-      const parent = createRootAgentAuthoritySnapshot({
-        effectiveTools: options.graph().map((tool) => tool.name),
-        limits: { maxTurns: settings.get('agent.maxTurns') ?? ROLE_MAX_TURNS_DEFAULT },
-        readOnly: options.readOnly,
-        planMode,
-        filesystemScope: {
-          read: ['**'],
-          write: options.readOnly || planMode ? [] : ['**'],
-        },
-        worktreeScope: worktrees,
-        worktreePaths: worktrees.authorizedPaths,
-      });
-      const bounded = resolveAgentSpecForChild(params.agent_spec, {
-        settings,
-        logger,
-        parent: parent.parent,
-        readOnly: options.readOnly,
-        planMode,
-        worktree: params.worktree,
-      });
-      if (!bounded.ok) throw new Error(bounded.errors.map((error) => error.message).join('; '));
-      definition = { ...adaptLegacyDefinition(bounded.definition), role: 'agent', isScriptGeneric: true };
-      task = bounded.spec.goal;
-      authorizedPath = bounded.authorizedWorktreePath;
-      if (params.authorizedWorktreePath !== undefined && params.authorizedWorktreePath !== authorizedPath)
-        throw new Error('Resolved AgentSpec worktree identity changed before admission');
+    if (prior?.definition) {
+      // Legacy: a continuation keeps the definition and model it ran with; no second pool draw.
+      definition = prior.definition;
+      task = params.task ?? params.agent_spec?.goal ?? '';
+      authorizedPath = params.authorizedWorktreePath;
+    } else if (params.agent_spec) {
+      // run_code's boundary already resolved a script child; run_subagent's own spec resolves once here.
+      const resolved =
+        params.resolvedDefinition ??
+        resolveRunSubagentSpec(params.agent_spec, { settings, logger, skillsService: options.skillsService });
+      definition = { ...managerDefinition(resolved), role: 'agent', isScriptGeneric: true };
+      task = params.agent_spec.goal;
+      authorizedPath = params.authorizedWorktreePath;
     } else {
       if (!params.role || !params.task) throw new Error('Subagent launch requires a role/task or agent_spec');
       const loaded = loadRoleDefinition(params.role, settings);
@@ -169,19 +199,17 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
           reasoningEffort: params.mentorModel.reasoningEffort ?? settings.get('agent.mentorReasoningEffort'),
         };
     }
-    if (
-      options.executionContext.isRemote() &&
-      (definition.filesystemScope !== undefined || definition.role === 'librarian')
-    )
-      throw new Error('Native SSH subagents do not provide local memory or local filesystem-scope validation');
-    if (definition.canWrite && (options.readOnly || planMode)) throw new Error('This session cannot delegate writes');
-    if (definition.canWrite && !params.worktree)
-      throw new Error('Write-capable subagents require an existing worktree');
+    // Legacy launches a writer without a worktree (in the workspace) and in a read-only session (its factory
+    // then offers no writes); plan mode is refused earlier by the plan-mode interceptor.
+    if (definition.canWrite && planMode) throw new Error('This session cannot delegate writes');
     // Children retain their admission root even if the parent later changes its lease.
     let executionContext = options.executionContext.isRemote()
       ? options.executionContext
       : new LocalExecutionContext(options.executionContext.getCwd());
     let workspace = Object.freeze({ ...options.workspace, root: executionContext.getCwd() });
+    let worktreePath: string | undefined;
+    // Legacy's runners settle a failed pin as a failed run (empty result, the pin error), not a launch refusal.
+    let pinFailure: string | undefined;
     if (params.worktree) {
       const pinned = await pinWorkerWorktree({
         name: params.worktree,
@@ -190,9 +218,12 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
         isRemote: executionContext.isRemote(),
         authorizedPath,
       });
-      if (!pinned.ok) throw new Error(pinned.error);
-      executionContext = pinned.executionContext;
-      workspace = Object.freeze({ ...workspace, root: pinned.worktreePath });
+      if (!pinned.ok) pinFailure = pinned.error;
+      else {
+        executionContext = pinned.executionContext;
+        workspace = Object.freeze({ ...workspace, root: pinned.worktreePath });
+        worktreePath = pinned.worktreePath;
+      }
     }
     current();
     let skillsService = workspace.root === options.workspace.root ? options.skillsService : undefined;
@@ -206,6 +237,7 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
       logger,
       sessionContextService: sessionContext,
       executionContext,
+      ...(options.advisoryClient ? { agentClient: options.advisoryClient } : {}),
     });
     const factory = new SubagentToolFactory({
       settings,
@@ -220,6 +252,9 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
     // native explorer branch, not inherited workspace or arbitrary agent tools.
     factory.setExplorerRunner(async (question) => run({ role: 'explorer', task: question }));
     const filesChanged: string[] = [];
+    // Legacy's background runner captures diffs and validation; its foreground runner passes neither.
+    const diffDeltas = mode === 'background' ? new Map<string, { added: number; deleted: number }>() : undefined;
+    const validation: ValidationCapture | undefined = mode === 'background' ? {} : undefined;
     const searchViaShell = resolveSubagentSearchViaShell(settings, definition.canRunShell);
     const parentNames = new Set(options.graph().map((tool) => tool.name));
     const askOrchestrator =
@@ -231,10 +266,22 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
           }
         : undefined;
     const definitions = factory
-      .buildToolDefinitions(definition, filesChanged, task, searchViaShell, true, undefined, undefined, askOrchestrator)
+      .buildToolDefinitions(
+        definition,
+        filesChanged,
+        task,
+        searchViaShell,
+        // Legacy prompts only for a foreground child; a background child's tools never ask (execution-runner).
+        mode === 'foreground',
+        diffDeltas,
+        validation,
+        askOrchestrator,
+      )
       .filter(
         (tool) =>
-          (parentNames.has(tool.name) ||
+          // Legacy gives a named role its whole factory set; a script child keeps its parent's ceiling.
+          (!definition.isScriptGeneric ||
+            parentNames.has(tool.name) ||
             (!definition.isScriptGeneric && definition.canRead && WORKSPACE_READ_TOOLS.has(tool.name)) ||
             (askOrchestrator && tool.name === 'ask_orchestrator') ||
             (definition.role === 'reviewer' && tool.name === 'run_explorer')) &&
@@ -286,7 +333,14 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
       checkInterceptors: options.checkInterceptors,
     });
     children.set(registry, policies);
-    const evidence: ExecutionEvidence = { filesChanged, toolCounts: new Map() };
+    const evidence: ExecutionEvidence = {
+      filesChanged,
+      toolCounts: new Map(),
+      maxTurns: definition.maxTurns,
+      ...(worktreePath ? { worktreePath } : {}),
+      ...(diffDeltas ? { diffDeltas } : {}),
+      ...(validation ? { validation } : {}),
+    };
     const countedTools = new WeakMap<Tool, Tool>();
     const counted = (tool: Tool): Tool => {
       let adapted = countedTools.get(tool);
@@ -309,17 +363,20 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
       },
       available: (context: Pick<ToolContext, 'workspace' | 'settings'>) => registry.available(context).map(counted),
     };
-    // Preserve the source child policy: explicit role allocation wins; otherwise
-    // inherit the configured setting with the same catalog default clamp.
+    // Preserve the source child policy: explicit role allocation wins. Legacy's background runner otherwise
+    // inherits the configured setting with the catalog default clamp; its foreground runner sends none.
     const maxOutputTokens =
       definition.maxTokens ??
-      resolveOutputAllocation(
-        getCatalogModel(definition.provider, definition.model),
-        settings.get('agent.maxOutputTokens'),
-        settings.getSource?.('agent.maxOutputTokens') === 'default',
-      );
+      (mode === 'foreground'
+        ? undefined
+        : resolveOutputAllocation(
+            getCatalogModel(definition.provider, definition.model),
+            settings.get('agent.maxOutputTokens'),
+            settings.getSource?.('agent.maxOutputTokens') === 'default',
+          ));
     const request: NestedRunRequest & { readonly input: string } = Object.freeze({
       mode,
+      ...(prior?.runId ? { runId: prior.runId } : {}),
       ...(params.name ? { name: params.name } : {}),
       role: definition.role,
       // Original caller field for the native task producer; never reconstruct from label or history.
@@ -334,6 +391,7 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
         skillsService,
       ),
       items: Object.freeze([
+        ...(prior?.history ?? []),
         { type: 'user_message' as const, id: randomUUID() as ItemId, content: [{ type: 'text' as const, text: task }] },
       ]),
       toolNames: Object.freeze(wrapped.map((tool) => tool.name)),
@@ -346,9 +404,18 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
     });
     authorities.set(
       request,
-      Object.freeze({ request, workspace, tools: countedRegistry, role: definition.role, label: task }),
+      Object.freeze({
+        request,
+        workspace,
+        tools: countedRegistry,
+        role: definition.role,
+        label: task,
+        ...(pinFailure !== undefined ? { failure: pinFailure } : {}),
+        ...(mode === 'background' ? { report: backgroundReport(definition.role, evidence) } : {}),
+      }),
     );
     preparedEvidence.set(request, evidence);
+    preparedSessions.set(request, { key: prior?.key, definition });
     return request;
   };
   const run = async (params: Launch): Promise<SubagentResult> => {
@@ -363,10 +430,18 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
   const start = async (params: Launch): Promise<SubagentRunHandle> => {
     const context = current();
     const request = await prepare(params, 'background');
+    // Legacy SubagentAsyncRegistry.startRun name admission: same codes and text, which the async tool returns.
+    const name = params.name;
+    if (name !== undefined && !SUBAGENT_RUN_NAME_PATTERN.test(name))
+      throw new SubagentRegistryError('invalid_name', `Invalid async subagent name: ${name}`);
+    if (name !== undefined && context.subagents?.list().some((task) => task.name === name && !task.result))
+      throw new SubagentRegistryError('name_in_use', `Async subagent name is already active: ${name}`);
     const result = await context.runNested(request);
     if (result.outcome.kind !== 'background')
       throw new Error(`Subagent admission did not return a background task: ${result.outcome.kind}`);
     executionEvidence.set(result.outcome.runId, preparedEvidence.get(request)!);
+    const session = preparedSessions.get(request)!;
+    sessions.record(result.outcome.runId, request.role ?? 'agent', session.key, request.items, session.definition);
     return {
       runId: result.outcome.runId,
       ...(params.name ? { name: params.name } : {}),

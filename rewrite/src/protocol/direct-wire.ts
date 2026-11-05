@@ -69,7 +69,7 @@ export type WireInteraction = {
   readonly risk?: 'low' | 'medium' | 'high';
   readonly presentation?: { readonly [key: string]: JsonValue };
   readonly questions?: readonly WireQuestion[];
-  /** Only explicitly supported grants may be offered; empty under the M2 contract. */
+  /** Only grants the tool request itself offers; Session rejects any other. */
   readonly supportedGrants: readonly WireGrant[];
 };
 export type WireMessage = {
@@ -299,11 +299,41 @@ export type WireTask = {
     | 'interrupted';
   readonly startedAt?: number;
   readonly lastActivityAt?: number;
+  /** Legacy's last observation of the live task (BackgroundTaskObservation); presentation owns the wording. */
+  readonly lastObservation?: WireTaskObservation;
+  /** Legacy's live tool tracking for a subagent: its newest call, last tool name and per-tool starts. */
+  readonly lastTool?: { readonly label: string; readonly state: 'running' | 'success' | 'failed' };
+  readonly lastToolName?: string;
+  readonly toolCounts?: readonly { readonly toolName: string; readonly count: number }[];
   readonly completedAt?: number;
   readonly text?: string;
   readonly progress?: string;
   readonly result?: WireTaskResult;
 };
+/** Legacy source/services/background-task-activity.ts BackgroundTaskObservation, as wire data. */
+export type WireTaskObservation =
+  | {
+      readonly kind:
+        | 'request_dispatched'
+        | 'response_started'
+        | 'text_received'
+        | 'approval_requested'
+        | 'question_asked'
+        | 'shell_started'
+        | 'shell_output_received'
+        | 'stop_requested'
+        | 'settled';
+      readonly at: number;
+    }
+  | {
+      readonly kind: 'tool_input_received';
+      readonly at: number;
+      readonly toolName: string;
+      readonly argumentCharCount: number;
+    }
+  | { readonly kind: 'tool_started'; readonly at: number; readonly toolName: string }
+  | { readonly kind: 'tool_completed'; readonly at: number; readonly toolName?: string }
+  | { readonly kind: 'retrying'; readonly at: number; readonly attempt: number; readonly maxRetries: number };
 /** Public task descriptor ownership; does not imply the parent foreground still runs. */
 export type WireTaskOwner = Pick<
   WireTask,

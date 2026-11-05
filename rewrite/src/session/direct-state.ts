@@ -362,7 +362,10 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
     }
     case 'usage':
       return { ...state, usage: addUsage(state.usage, fact.usage), lastUsage: fact.usage, lastSpeed: fact.speed };
-    case 'turn_ended':
+    case 'turn_ended': {
+      const dropped = (tool: DirectDisplayTool) =>
+        fact.outcome === 'cancelled' && tool.turnId === fact.turnId && tool.unstarted === true;
+      const droppedIds = new Set(state.tools.filter(dropped).map((tool) => tool.executionId as string));
       return {
         ...state,
         status: fact.outcome === 'interrupted' ? 'interrupted' : 'idle',
@@ -371,8 +374,12 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
         pendingInteractions: state.pendingInteractions.filter(
           (request) => 'taskId' in request || request.turnId !== fact.turnId,
         ),
+        // The dropped rows leave the timeline too, or a client's transcript order stops at the missing tool.
+        timeline: droppedIds.size
+          ? state.timeline.filter((entry) => entry.kind !== 'tool' || !droppedIds.has(entry.id))
+          : state.timeline,
         tools: state.tools
-          .filter((tool) => !(fact.outcome === 'cancelled' && tool.turnId === fact.turnId && tool.unstarted))
+          .filter((tool) => !dropped(tool))
           .map((tool) =>
             tool.turnId === fact.turnId && tool.status === 'started'
               ? { ...tool, status: 'unknown', phase: 'unknown' }
@@ -397,6 +404,7 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
           },
         ],
       };
+    }
     default:
       return state;
   }

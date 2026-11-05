@@ -13,6 +13,10 @@ export type DirectNestedAuthority = {
   readonly tools: ToolRegistry;
   readonly role: string;
   readonly label: string;
+  /** A launch failure legacy settles as a failed run (a background worktree pin). */
+  readonly failure?: string;
+  /** Formats the settled result for the completion notice (legacy's formatSubagentResult). */
+  readonly report?: (result: NestedRunResult) => Promise<string>;
 };
 export type DirectNestedAuthorizer = (
   request: NestedRunRequest,
@@ -35,9 +39,11 @@ export function createDirectBranchDriver(options: {
 }): DirectSubagentDriver {
   return {
     async execute(request: NestedRunRequest, context: DirectSubagentContext): Promise<NestedRunResult> {
-      const branchId = context.runId;
+      // A continued run's branch is new; its ID carries the run's epoch.
+      const branchId = context.task.epoch ? `${context.runId}#${context.task.epoch}` : context.runId;
       const turnId = `branch-${branchId}` as TurnId;
       context.signal.throwIfAborted();
+      if (options.authority.failure !== undefined) throw new Error(options.authority.failure);
       const local: Fact[] = [{ type: 'turn_started', turnId, input: request.items }];
       options.accept({
         type: 'branch_started',
@@ -70,9 +76,20 @@ export function createDirectBranchDriver(options: {
       let terminal: TurnResult | undefined;
       let readFailure: unknown;
       const items: Item[] = [];
+      // Legacy execution-runner: a child launched in the background never asks. A call that still needs an
+      // answer ends its run, settled as completed with what it produced (no approval, no denial).
+      let settledOnInteraction = false;
+      const toolNames = new Map<string, string>();
       try {
         for await (const { token, event } of handle.events) {
+          if (event.type === 'interaction_required' && request.mode === 'background') {
+            settledOnInteraction = true;
+            handle.accept(token);
+            handle.cancel();
+            continue;
+          }
           if (event.type === 'interaction_required') {
+            context.observe({ kind: 'approval_requested' });
             try {
               const decision = context.interact(event.request);
               // interact synchronously appends the task-owned open before yielding.
@@ -142,6 +159,23 @@ export function createDirectBranchDriver(options: {
               parentTurnId: options.parentTurnId,
               rootTurnId: options.rootTurnId,
             });
+          // Legacy's activity tracker (subagent-async-registry): what the manager's "Last activity" row names.
+          if (event.type === 'tool_call_streaming_delta')
+            context.observe({
+              kind: 'tool_input_received',
+              toolName: event.toolName ?? 'tool',
+              argumentCharCount: event.argumentCharCount,
+            });
+          else if (event.type === 'model_retrying')
+            context.observe({ kind: 'retrying', attempt: event.attempt, maxRetries: event.maxRetries });
+          else if (event.type === 'tool_called') context.observe({ kind: 'tool_started', toolName: event.toolName });
+          else if (event.type === 'item' && event.item.type === 'tool_call')
+            toolNames.set(event.item.callId, event.item.toolName);
+          else if (event.type === 'item' && event.item.type === 'tool_result') {
+            // Every call's result, including one the engine answered without running (an unknown tool).
+            const toolName = toolNames.get(event.item.callId);
+            context.observe({ kind: 'tool_completed', ...(toolName ? { toolName } : {}) });
+          }
           if (event.type === 'tool_progress' || event.type === 'text_delta')
             context.progress(
               event.type === 'text_delta' ? event.delta : event.chunk,
@@ -185,6 +219,7 @@ export function createDirectBranchDriver(options: {
             ? { kind: 'budget_exhausted' }
             : { kind: 'interrupted', ...(cause !== undefined ? { terminalCause: cause } : {}) };
       } else outcome = terminal;
+      if (settledOnInteraction) outcome = { kind: 'completed' };
       // Accepted physical starts, including scripted leaves, are execution
       // evidence. Provider call names and offered declarations are not usage.
       const counts = new Map<string, number>();
@@ -193,7 +228,9 @@ export function createDirectBranchDriver(options: {
         counts.set(fact.toolName, (counts.get(fact.toolName) ?? 0) + 1);
       }
       const toolUseCounts = [...counts].map(([toolName, count]) => ({ toolName, count }));
-      return { items: produced, outcome, toolsUsed: [...counts.keys()], toolUseCounts };
+      const result: NestedRunResult = { items: produced, outcome, toolsUsed: [...counts.keys()], toolUseCounts };
+      const report = await options.authority.report?.({ ...result, runId: context.runId });
+      return report === undefined ? result : { ...result, report };
     },
   };
 }

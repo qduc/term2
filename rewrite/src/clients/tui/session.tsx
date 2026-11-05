@@ -8,7 +8,7 @@ import { useTheme } from './presentation/components/theme.js';
 import { useSkin } from './presentation/skins/SkinContext.js';
 import { terminalPreferenceDefaults } from '../../host/terminal-preference-defaults.js';
 import { useClient } from './use-client.js';
-import { ShellTaskPanel, Activity, LiveNotices, interruptedNotice, useLiveStreamingSpeed } from './views.js';
+import { Activity, LiveNotices, interruptedNotice, useLiveStreamingSpeed } from './views.js';
 import { PendingQueue, PendingQueueEdit } from './pending-queue.js';
 import type { InteractionInputHandler } from './interaction-input.js';
 import { runBangShell } from './bang-shell.js';
@@ -29,6 +29,8 @@ import { BOUNDARY_ROWS, useNewConversationHeader } from './new-conversation.js';
 import { useMenuStack } from './menus/menu-host.js';
 import { ComposerFooter, ComposerWidth, useComposerFilter, useFooterUsage } from './composer-parts.js';
 import { SessionPanels } from './session-panels.js';
+import { ApprovalHost, promptRequest } from './approval-host.js';
+import { TasksPanel } from './tasks-panel.js';
 import { useSessionRewind } from './session-rewind.js';
 import { useEscapeKey } from './use-escape-key.js';
 import { useShellMode } from './shell-mode.js';
@@ -79,8 +81,7 @@ export function TuiSession({
   const { columns, rows } = useTerminalSize();
   const liveTps = useLiveStreamingSpeed(state);
   const footerState = useFooterUsage(state, resumed);
-  const [interactionOpen, setInteractionOpen] = useState(false);
-  const [dismissedInteractionId, setDismissedInteractionId] = useState<string | null>(null);
+  const [answeredId, setAnsweredId] = useState<string | null>(null);
   const [taskOpen, setTaskOpen] = useState(false);
   const [budgetOpen, setBudgetOpen] = useState(false);
   // Legacy's addSystemMessage: every command result and hint is a transcript line, never a live notice.
@@ -110,14 +111,15 @@ export function TuiSession({
     cancelQueueEdit,
     submitQueueEdit,
   } = useSessionComposer(state, preferences.historySize, setNotice);
-  // Snapshot-derived ownership leaves no gap for decision keys to land in the composer; Ctrl+G picks background requests.
-  const rootInteraction = state.interactions.find((item) => item.turnId === state.activeTurnId && !item.taskId);
+  // Snapshot-derived ownership leaves no gap for decision keys to land in the composer.
+  const prompt = promptRequest(state, answeredId);
   const panelOpen = taskOpen || budgetOpen;
-  const foregroundInteraction =
-    !interactionOpen && !panelOpen && rootInteraction?.id !== dismissedInteractionId ? rootInteraction : undefined;
-  const interactionActive = interactionOpen || Boolean(foregroundInteraction);
+  const shown = !panelOpen ? prompt : undefined;
+  const foregroundInteraction = shown?.interaction;
+  const interactionActive = Boolean(foregroundInteraction);
   const confirmation = useSendConfirmation(interactionActive);
   const interactionInput = useRef<InteractionInputHandler | null>(null);
+  const approvalInterrupt = useRef<(() => boolean) | null>(null);
   const viewportActive = !interactionActive && !panelOpen && !confirmation.pending;
   const sessionHeader = useNewConversationHeader(header, newConversation, columns);
   const viewport = useCommandTranscriptViewport(
@@ -224,6 +226,7 @@ export function TuiSession({
   });
   useInterrupt({
     interrupt,
+    approvalInterrupt: foregroundInteraction ? approvalInterrupt : null,
     connection,
     confirmation,
     state,
@@ -245,10 +248,9 @@ export function TuiSession({
     if (composerActive && isCtrlO(input, key)) return replaceInput('/model ');
     if (composerActive && isCtrlT(input, key)) return replaceInput('/effort ');
     if (composerActive && key.escape && viewport.expanded) return viewport.collapse();
-    // Legacy BackgroundTaskManager opens only when there is live work to manage.
+    // Legacy's Ctrl+G is only the background task manager, and it opens only when there is live work to manage.
     const liveTasks = state.tasks.some((task) => task.status === 'running' || task.status === 'awaiting_interaction');
-    if (isCtrlG(input, key) && !busy && state.interactions.length) setInteractionOpen(true);
-    else if (isCtrlG(input, key) && !busy && liveTasks) setTaskOpen(true);
+    if (isCtrlG(input, key) && !busy && liveTasks) setTaskOpen(true);
     if (key.ctrl && input === 'b' && state.budgets.length && !busy) setBudgetOpen(true);
     if (key.meta && key.return && state.activeTurnId && !busy && !editing)
       void submit(editor.value, images, 'follow_up');
@@ -416,27 +418,21 @@ export function TuiSession({
         </Text>
       ) : null}
       <Box flexDirection="column" paddingX={2} marginTop={viewport.bottomMargin}>
-        <Activity state={state} dialogInteractionId={foregroundInteraction?.id} liveTps={liveTps} />
+        <Activity
+          state={{ ...state, interactions: state.interactions.filter((item) => item.id !== answeredId) }}
+          dialogInteractionId={foregroundInteraction?.id}
+          liveTps={liveTps}
+        />
         <SessionPanels
           {...{
             connection,
             interactionInput,
             budgetOpen,
-            taskOpen,
             state,
-            interactionActive,
-            foregroundInteraction,
             columns,
-            cancelInput,
           }}
           onNotice={setNotice}
-          onStopped={() => viewport.appendCommandOutput('Stopped', 'system')}
           closeBudget={() => setBudgetOpen(false)}
-          closeTask={() => setTaskOpen(false)}
-          closeInteraction={() => {
-            setDismissedInteractionId(rootInteraction?.id ?? null);
-            setInteractionOpen(false);
-          }}
         />
         <LiveNotices connectionError={connError} />
         <LiveNotices historyError={editor.historyError} />
@@ -447,77 +443,90 @@ export function TuiSession({
             <Text color={theme.warning}>Press Esc again to interrupt</Text>
           </Box>
         ) : null}
-        <ShellTaskPanel state={state} />
-        {/* Legacy keeps the queue list in the input surface, which a menu or the paused prompt replaces. */}
-        {queuePaused.prompt ??
-          (menuStack.open ? null : (
-            <PendingQueue
-              items={queue.items}
-              selectedId={queue.selectedId}
-              editingId={editing?.id ?? null}
-              notice={queue.notice}
-            />
-          ))}
-        <PendingQueueEdit editingId={editing?.id ?? null} items={queue.items} />
-        {menuStack.view}
-        {/* Legacy BottomArea puts a confirmation prompt in the composer's place. */}
-        {confirmation.prompt ?? handoffFlow.prompt}
-        {handoffFlow.promptLabel && !menuStack.open ? (
-          <Text color={theme.accent}>{handoffFlow.promptLabel}</Text>
-        ) : null}
-        {menuStack.owns || rewindHidden || confirmation.prompt || handoffFlow.prompt || queuePaused.shown ? null : (
-          <ComposerWidth columns={columns} fullWidth={menuStack.handingBack}>
-            {(width) => (
-              <InputFrame>
-                <PromptMarker mode={shell.active ? 'shell' : 'input'} />
-                {menuStack.closedEmpty ? (
-                  // A menu closed empty (Esc) on this render: draw the empty input legacy's editor shows, and mount
-                  // the input once the hand-back has cleared the composer.
-                  <Text inverse> </Text>
-                ) : (
-                  <MultilineInput
-                    key={editor.inputKey}
-                    value={editor.value}
-                    onChange={(value) => shell.change(value) || changeInput(value)}
-                    onSubmit={(value, submittedImages = []) => {
-                      if (
-                        !shell.submit(value, submittedImages.length > 0, (command) => submit(command, submittedImages))
-                      )
-                        void submit(value, submittedImages);
-                    }}
-                    onBoundaryArrow={(direction) => {
-                      if (shell.active) return;
-                      if (direction === 'up' && !editor.value && !editing && queue.open()) return;
-                      const entry = editor.navigate(direction, {
-                        text: editor.value,
-                        attachments: wireAttachments(images, otherParts, originalParts),
-                      });
-                      if (entry) restoreDraft(entry, entry.cursor);
-                    }}
-                    onCursorChange={(offset) => {
-                      editor.cursorChanged(offset);
-                      menuStack.cursorChanged(offset);
-                    }}
-                    cursorOverride={editor.cursorOverride}
-                    width={width}
-                    maxHeight={Math.max(1, rows - 8)}
-                    pasteThreshold={preferences.pasteThreshold}
-                    isActive={composerActive}
-                    images={images}
-                    onImagesChange={onImagesChange}
-                    enableImagePaste
-                    onPasteError={(reason) => setNotice(`Image paste failed: ${reason}`)}
-                    ignoreInput={(input, key) => {
-                      if (queue.key(input, key)) return true;
-                      if (editing && key.escape) return cancelQueueEdit();
-                      return shell.key(input, key) || composerFilter(input, key);
-                    }}
-                  />
-                )}
-              </InputFrame>
-            )}
-          </ComposerWidth>
-        )}
+        <ApprovalHost
+          request={shown}
+          activeTurnId={state.activeTurnId}
+          {...{ connection, cancelInput, setNotice, changeInput, replaceInput, editorValue: editor.value }}
+          inputHandler={interactionInput}
+          interrupt={approvalInterrupt}
+          onStopped={() => viewport.appendCommandOutput('Stopped', 'system')}
+          hide={setAnsweredId}
+          panel={<TasksPanel {...{ state, connection }} manager={[taskOpen, setTaskOpen]} gap={!shown} />}
+        />
+        <Box flexDirection="column" display={foregroundInteraction || taskOpen ? 'none' : 'flex'}>
+          {/* Legacy keeps the queue list in the input surface, which a menu or the paused prompt replaces. */}
+          {queuePaused.prompt ??
+            (menuStack.open ? null : (
+              <PendingQueue
+                items={queue.items}
+                selectedId={queue.selectedId}
+                editingId={editing?.id ?? null}
+                notice={queue.notice}
+              />
+            ))}
+          <PendingQueueEdit editingId={editing?.id ?? null} items={queue.items} />
+          {menuStack.view}
+          {/* Legacy BottomArea puts a confirmation prompt in the composer's place. */}
+          {confirmation.prompt ?? handoffFlow.prompt}
+          {handoffFlow.promptLabel && !menuStack.open ? (
+            <Text color={theme.accent}>{handoffFlow.promptLabel}</Text>
+          ) : null}
+          {menuStack.owns || rewindHidden || confirmation.prompt || handoffFlow.prompt || queuePaused.shown ? null : (
+            <ComposerWidth columns={columns} fullWidth={menuStack.handingBack}>
+              {(width) => (
+                <InputFrame>
+                  <PromptMarker mode={shell.active ? 'shell' : 'input'} />
+                  {menuStack.closedEmpty ? (
+                    // A menu closed empty (Esc) on this render: draw the empty input legacy's editor shows, and mount
+                    // the input once the hand-back has cleared the composer.
+                    <Text inverse> </Text>
+                  ) : (
+                    <MultilineInput
+                      key={editor.inputKey}
+                      value={editor.value}
+                      onChange={(value) => shell.change(value) || changeInput(value)}
+                      onSubmit={(value, submittedImages = []) => {
+                        if (
+                          !shell.submit(value, submittedImages.length > 0, (command) =>
+                            submit(command, submittedImages),
+                          )
+                        )
+                          void submit(value, submittedImages);
+                      }}
+                      onBoundaryArrow={(direction) => {
+                        if (shell.active) return;
+                        if (direction === 'up' && !editor.value && !editing && queue.open()) return;
+                        const entry = editor.navigate(direction, {
+                          text: editor.value,
+                          attachments: wireAttachments(images, otherParts, originalParts),
+                        });
+                        if (entry) restoreDraft(entry, entry.cursor);
+                      }}
+                      onCursorChange={(offset) => {
+                        editor.cursorChanged(offset);
+                        menuStack.cursorChanged(offset);
+                      }}
+                      cursorOverride={editor.cursorOverride}
+                      width={width}
+                      maxHeight={Math.max(1, rows - 8)}
+                      pasteThreshold={preferences.pasteThreshold}
+                      isActive={composerActive}
+                      images={images}
+                      onImagesChange={onImagesChange}
+                      enableImagePaste
+                      onPasteError={(reason) => setNotice(`Image paste failed: ${reason}`)}
+                      ignoreInput={(input, key) => {
+                        if (queue.key(input, key)) return true;
+                        if (editing && key.escape) return cancelQueueEdit();
+                        return shell.key(input, key) || composerFilter(input, key);
+                      }}
+                    />
+                  )}
+                </InputFrame>
+              )}
+            </ComposerWidth>
+          )}
+        </Box>
         <ComposerFooter
           integration={integration}
           state={footerState}

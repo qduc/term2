@@ -130,7 +130,9 @@ async function startProvider(replies: Reply[], withUsage = false): Promise<strin
   return `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}/v1`;
 }
 
-it('approves a foreground shell call from the legacy approval prompt', { timeout: TIMEOUT_MS }, async () => {
+// Legacy's approval prompt owns input: Ctrl+G does nothing (there is no numbered /answer fallback) and the
+// prompt itself approves the call.
+it('Ctrl+G leaves a foreground approval on its prompt', { timeout: TIMEOUT_MS }, async () => {
   root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-approval-fallback-e2e-')));
   const home = path.join(root, 'home');
   const workspace = path.join(root, 'workspace');
@@ -187,8 +189,10 @@ it('approves a foreground shell call from the legacy approval prompt', { timeout
   };
   await submit('request approval');
   await session.waitForOutput('Allow once', 60_000);
-  // Legacy's prompt highlights Allow once; Enter takes it.
+  session.write('\x07');
   await new Promise((resolve) => setTimeout(resolve, 500));
+  expect(session.getVisibleOutput()).toContain('Allow this action?');
+  expect(session.getVisibleOutput()).not.toContain('/answer 1 <choice number>');
   session.write('\r');
   await session.waitForOutput('APPROVAL_FINISHED', 30_000);
   expect(fs.readFileSync(marker, 'utf8')).toBe('approved');

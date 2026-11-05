@@ -416,14 +416,24 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
           (event.payload.messages ?? []).map((item) => ({ kind: 'message', id: item.id })),
         ),
       };
-    case 'task_changed':
+    case 'task_changed': {
+      // A lifecycle change keeps the live tool tracking; a (re)start begins it afresh.
+      const previous = state.tasks.find((task) => task.id === event.payload.task.id);
+      const { lastTool, lastToolName, toolCounts } = event.payload.change === 'task_started' ? {} : previous ?? {};
+      const task = {
+        ...event.payload.task,
+        ...(lastTool ? { lastTool } : {}),
+        ...(lastToolName ? { lastToolName } : {}),
+        ...(toolCounts ? { toolCounts } : {}),
+      };
       return {
         ...state,
-        tasks: replace(state.tasks, event.payload.task),
+        tasks: replace(state.tasks, task),
         ...(event.payload.task.result
           ? { pendingInteractions: state.pendingInteractions.filter((item) => item.taskId !== event.payload.task.id) }
           : {}),
       };
+    }
     case 'task_progress':
       return {
         ...state,
@@ -432,6 +442,7 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
             ? {
                 ...task,
                 lastActivityAt: event.payload.at,
+                ...(event.payload.observation ? { lastObservation: event.payload.observation } : {}),
                 progress: (task.progress ?? '') + event.payload.chunk,
                 ...(event.payload.kind === 'text' ? { text: (task.text ?? '') + event.payload.chunk } : {}),
               }

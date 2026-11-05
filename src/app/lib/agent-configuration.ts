@@ -6,7 +6,7 @@ import type { ExecutionContext } from '../../tools/execution-context.js';
 import type { ListWorktreesSync } from '../../tools/workspace/worktree-inventory.js';
 import type { ToolInterceptorRegistry } from '../../session/lib/tool-interceptor-registry.js';
 import type { AskUserAnswerStore } from '../../shared/lib/ask-user-answer-store.js';
-import type { SubagentBridge } from '../../engine/lib/subagent-bridge.js';
+import type { SubagentBridge } from '../../delegation/runtime/subagent-bridge.js';
 import type { AgentFactoryDeps } from './agent-factory.js';
 import { buildAgent } from './agent-factory.js';
 import { createEditorImpl } from '../../shared/lib/editor-impl.js';
@@ -24,7 +24,7 @@ import type { SessionBrowser } from '../../session/conversation/session-browser.
 import type { SessionRolloverRequest, SessionRolloverRequestOutcome } from '../../shared/contracts/session-rollover.js';
 import { ToolApprovalPolicyRegistry } from '../../session/approval/tool-approval-policy-registry.js';
 import type { NestedApprovalOwner } from '../../session/approval/nested-approval-owner.js';
-import { bindRunCodeNestedApprovalOwner } from '../../tools/system/run-code/run-code.js';
+import { bindRunCodeNestedApprovalOwner } from '../../delegation/run-code/run-code-tool.js';
 import type { McpToolSource } from '../../tools/mcp/mcp-tool-source.js';
 import { TurnStableMcpToolSource } from '../../tools/mcp/turn-stable-mcp-tool-source.js';
 import type { DurableGoal } from '../../session/logging/conversation-log-events.js';

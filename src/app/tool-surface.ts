@@ -18,7 +18,7 @@ import { installPlanModeInterceptor } from '../tools/plan-mode-interceptor.js';
 import { SessionAccessState } from '../session/session/session-access-state.js';
 import { SkillsService } from '../tools/skills/skills-service.js';
 import { bindRunCodeRegistry } from '../tools/system/run-code/run-code.js';
-import { TOOL_NAME_DESCRIBE } from '../tools/system/run-code/run-code-runtime.js';
+import { TOOL_NAME_DESCRIBE } from '../tools/system/run-code/script-surface.js';
 import type { AnyToolDefinition } from '../tools/types.js';
 import { InvalidatableShellChildRegistry } from '../shared/utils/shell/shell-child-registry.js';
 import type { ProviderInputItem } from '../shared/contracts/provider-input.js';
@@ -26,9 +26,9 @@ import type { ToolContextSeed } from '../engine/index.js';
 import type { Workspace } from '../tools/index.js';
 import type { Item, ItemId, ModelRegistry, ReasoningEffort } from '../model/index.js';
 import { createProviderRegistry } from '../model/provider.js';
-import { createDirectSubagentTools } from './subagent-tools.js';
+import { createDirectSubagentTools } from '../delegation/index.js';
 import { createDirectShellTools } from './shell-tools.js';
-import { createSourceToolRegistry, executeSourceChild, sourceToolSpec } from './source-tools.js';
+import { createSourceToolRegistry, executeSourceChild, sourceToolSpec, sourceToolContext } from './source-tools.js';
 import type { AgentSurface, ProfileSelection, ToolSurfaceOptions } from './tool-contract.js';
 import { SSH_LOCAL_ONLY_TOOLS } from './remote-tools.js';
 import { renderDurableGoalContext } from '../session/goal.js';
@@ -93,24 +93,34 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
   let baseGraph: AnyToolDefinition[] = [];
   // Legacy reads only list/search/read; the native browser has no lifecycle of its own.
   const sessionBrowser = remote ? undefined : (options.sessionBrowserSource as AgentFactoryDeps['sessionBrowser']);
+  const checkInterceptors = async (name: string, params: unknown) => {
+    for (const interceptor of interceptors) {
+      const rejection = await interceptor(name, params);
+      if (rejection) return rejection;
+    }
+    return null;
+  };
   const delegation = createDirectSubagentTools({
     selection,
-    trimConfig: options.trimConfig,
     workspace,
     executionContext,
     skillsService,
-    sessionAccess,
-    sessionId,
     readOnly,
     graph: () => sourceGraph,
-    checkInterceptors: async (name, params) => {
-      for (const interceptor of interceptors) {
-        const rejection = await interceptor(name, params);
-        if (rejection) return rejection;
-      }
-      return null;
-    },
-    withAnswer: (answer, operation) => answers.run(answer, operation),
+    toolContext: sourceToolContext,
+    createExecutionContext: (root) => new LocalExecutionContext(root),
+    createRegistry: (definitions, { executionContext: childContext, policies: childPolicies }) =>
+      createSourceToolRegistry(definitions, {
+        withWorkspace: (operation) =>
+          childContext.isRemote() ? operation() : withActiveWorkspaceRoot(() => childContext.getCwd(), operation),
+        policies: childPolicies,
+        settings,
+        trimConfig: options.trimConfig,
+        sessionAccess,
+        sessionId,
+        withAnswer: (answer, operation) => answers.run(answer, operation),
+        checkInterceptors,
+      }),
     targetInvocation,
     remoteUnavailable: SSH_LOCAL_ONLY_TOOLS,
     sessionBrowser,

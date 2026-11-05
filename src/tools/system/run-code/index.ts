@@ -1,7 +1,6 @@
 export {
   bindRunCodeRegistry,
   createRunCodeToolDefinition,
-  getRunCodeAgentSpecAuthority,
   TOOL_NAME_RUN_CODE,
   isDirectlyCallable,
   type CreateRunCodeToolOptions,
@@ -19,7 +18,7 @@ export {
   type RunCodeExecutionCall,
   type RunCodeExecutionMetadata,
 } from './run-code-execution.js';
-export { type RunCodeRuntimeInput, type RunCodeRuntimeOptions, type RunCodeRuntimeResult } from './run-code-runtime.js';
+export { type RunCodeRuntimeInput, type RunCodeRuntimeResult, type RunCodeRuntimePort } from './runtime-port.js';
 export {
   type ScriptedReturnContract,
   type ScriptedReturnValidation,

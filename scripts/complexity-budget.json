@@ -1,5 +1,5 @@
 {
-  "maxLayerEdges": 241,
+  "maxLayerEdges": 116,
   "maxLines": 500,
   "fileCeilings": {
     "src/model/provider.ts": {
@@ -39,8 +39,8 @@
       "reason": "One per-call Execution record carries a call's planning, admission, interaction answers and settlement; the chosen approval grant rides it like the batch-asked answer, so splitting would pass that record across files."
     },
     "src/app/tool-surface.ts": {
-      "lines": 518,
-      "reason": "Builds one agent's tool surface; candidate 2 joins the session browser (solo/tools) and the worker advisory client (solo/approvals), each one wiring line in the same builder."
+      "lines": 525,
+      "reason": "Builds one agent's tool surface, including session-browser and worker advisory binding. Delegation owns preparation; its injected registry/context ports close over this same surface's workspace, answers and interceptors, so their composition stays here."
     },
     "src/engine/turn-model.ts": {
       "lines": 511,
@@ -63,7 +63,7 @@
       "reason": "The replay fold; candidate 2 keeps both cancelled-turn settlings (a3's unstarted calls and tools' in-flight step), which run on the same fold state."
     },
     "src/app/agent.ts": {
-      "lines": 877,
+      "lines": 810,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/app/lib/agent-configuration.ts": {
@@ -107,15 +107,11 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/engine/agent-runtime/permission-boundary.ts": {
-      "lines": 659,
+      "lines": 660,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/engine/agent-runtime/scope-resolver.ts": {
       "lines": 717,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
-    },
-    "src/engine/lib/subagent-bridge.ts": {
-      "lines": 659,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/engine/retry/retry-error-classification.ts": {
@@ -231,8 +227,8 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/tools/agent/run-subagent.ts": {
-      "lines": 577,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
+      "lines": 579,
+      "reason": "Inherited source schema/presentation module; launcher request typing now derives from its own schema rather than importing the engine's policy types."
     },
     "src/tools/file/apply-patch.ts": {
       "lines": 878,
@@ -266,40 +262,44 @@
       "lines": 694,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "src/tools/subagents/execution-runner.ts": {
-      "lines": 634,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
-    },
-    "src/tools/subagents/nested-runner.ts": {
-      "lines": 988,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
-    },
-    "src/tools/subagents/subagent-async-registry.ts": {
-      "lines": 1038,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
-    },
-    "src/tools/subagents/subagent-notification-store.ts": {
-      "lines": 602,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
-    },
-    "src/tools/subagents/tool-policy.ts": {
-      "lines": 1444,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
-    },
-    "src/tools/system/run-code/run-code-agent-capability.ts": {
-      "lines": 529,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
-    },
-    "src/tools/system/run-code/run-code-runtime.ts": {
-      "lines": 1194,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
-    },
     "src/tools/system/run-code/run-code.ts": {
-      "lines": 665,
+      "lines": 552,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/tools/system/shell.ts": {
       "lines": 1465,
+      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
+    },
+    "src/delegation/runtime/subagent-bridge.ts": {
+      "lines": 659,
+      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
+    },
+    "src/delegation/subagents/execution-runner.ts": {
+      "lines": 634,
+      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
+    },
+    "src/delegation/subagents/nested-runner.ts": {
+      "lines": 981,
+      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
+    },
+    "src/delegation/subagents/subagent-async-registry.ts": {
+      "lines": 1023,
+      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
+    },
+    "src/session/session/subagent-notification-store.ts": {
+      "lines": 602,
+      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
+    },
+    "src/delegation/subagents/tool-policy.ts": {
+      "lines": 1450,
+      "reason": "Inherited source child capability factory/policy, moved to delegation with import formatting and explicit healing-model injection; runner authority and safety policy are unchanged."
+    },
+    "src/delegation/run-code/run-code-agent-capability.ts": {
+      "lines": 529,
+      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
+    },
+    "src/delegation/run-code/run-code-runtime.ts": {
+      "lines": 1169,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     }
   },

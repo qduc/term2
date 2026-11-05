@@ -1,24 +1,5 @@
-import type { AgentConfig, AgentLimits, AgentSpec, AgentSpecToolName } from './types.js';
-
-/** Workspace-readable tools used when a task-shaped invocation omits tools. */
-export const DEFAULT_AGENT_SPEC_TOOLS = [
-  'read_file',
-  'grep',
-  'glob',
-  'read_code_outline',
-  'code_context_search',
-] as const;
-
-/** Tools that the shared subagent capability factory can provision on demand. */
-export const AGENT_SPEC_TOOL_NAMES = [
-  ...DEFAULT_AGENT_SPEC_TOOLS,
-  'web_search',
-  'web_fetch',
-  'shell',
-  'apply_patch',
-  'search_replace',
-  'create_file',
-] as const satisfies readonly AgentSpecToolName[];
+import type { AgentConfig, AgentLimits, AgentSpec } from './types.js';
+import { DEFAULT_AGENT_SPEC_TOOLS } from '../../tools/agent/agent-spec-tools.js';
 
 /** Existing preset prompts use 200 as a generous max-turn tripwire. */
 export const AGENT_SPEC_DEFAULT_MAX_TURNS = 200;

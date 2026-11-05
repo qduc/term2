@@ -1,46 +1,12 @@
 import type { NormalizedUsage } from '../../shared/utils/ai/token-usage.js';
 import type { BackgroundTaskObservation } from '../background-task-activity.js';
 import type { ModelRequestCost } from '../../shared/cost/model-cost.js';
-import type { ExecutionBudget } from '../../engine/agent-runtime/execution-budget.js';
 import type { RunTerminationCause } from '../../shared/contracts/run-termination.js';
-import type { AgentSpec } from '../../engine/agent-runtime/types.js';
 
 export const SUBAGENT_ROLES = ['explorer', 'worker', 'mentor', 'librarian', 'reviewer'] as const;
 export type SupportedSubagentRole = (typeof SUBAGENT_ROLES)[number];
 export type Phase1AsyncSubagentRole = 'explorer' | 'mentor';
 export type SubagentRole = SupportedSubagentRole | string;
-
-export interface SubagentRequest {
-  role: SubagentRole;
-  task: string;
-  /** Generic per-invocation configuration; when present the named role is only a lifecycle label. */
-  agentSpec?: AgentSpec;
-  /** Resolved once at launch and reused for every asynchronous segment. */
-  resolvedDefinition?: SubagentDefinition;
-  /** Optional ergonomic alias, unique only while the asynchronous run is active. */
-  name?: string;
-  /** Parent tool/run cancellation signal. */
-  signal?: AbortSignal;
-  /** SDK serialized run state for resuming a delegated agent-tool run (nested approvals). */
-  resumeState?: string;
-  /** Name of the tool that invoked the subagent, if any. */
-  parentTool?: string;
-  /** Execution-tree budget for tracking aggregate resource usage. */
-  executionBudget?: ExecutionBudget;
-  /** Continue a completed async session. */
-  continueRunId?: string;
-  /**
-   * Pin a worker into an existing git worktree by directory basename or branch
-   * name (same resolution as `enter_worktree`). Parent session root is unchanged.
-   * Worker only.
-   */
-  worktree?: string;
-  /**
-   * Expected real path of the worktree if authorized by the root agent snapshot.
-   * If provided, `pinWorkerWorktree` ensures the worktree still resolves to this exact path.
-   */
-  authorizedWorktreePath?: string;
-}
 
 /** Narrow per-segment callbacks supplied by the logical async-run owner. */
 export interface SubagentSegmentControl {
@@ -94,58 +60,6 @@ export type SubagentCancelAcknowledgement =
       code: 'not_active';
       target: string;
     };
-
-export interface SubagentDefinition {
-  role: SubagentRole;
-  name: string;
-  instructions: string;
-  canRead: boolean;
-  canWrite: boolean;
-  canSearchWeb: boolean;
-  canRunShell: boolean;
-  maxTurns: number;
-  model: string;
-  provider: string;
-  reasoningEffort: string;
-  /** Maximum tokens cap passed to the provider model settings. */
-  maxTokens?: number;
-  description?: string;
-  /**
-   * Optional allowlist of tool names. When set, SubagentToolFactory
-   * only provisions tools whose names appear in this list for legacy
-   * definitions. Undefined/empty retains the legacy coarse-flag behavior;
-   * script-generic definitions always use an exact list, including empty.
-   */
-  tools?: string[];
-  /** Generic AgentSpec child: provision only exact script-resolved tool names. */
-  isScriptGeneric?: boolean;
-  /**
-   * Resolved fine-grained filesystem scopes.
-   * Undefined = no restriction (legacy coarse-flag behavior).
-   * Defined = scope patterns must be enforced at tool invocation time.
-   */
-  filesystemScope?: {
-    read: string[];
-    write: string[];
-  };
-  /**
-   * Resolved fine-grained network host scopes.
-   * Undefined = no restriction (legacy coarse-flag behavior).
-   * Defined = host patterns must be enforced at tool invocation time.
-   */
-  networkScope?: string[];
-  /**
-   * Execution-tree budget for nested agent limits.
-   * Undefined = no budget tracking (root-level execution).
-   */
-  executionBudget?: ExecutionBudget;
-  /**
-   * Whether this definition represents a root (top-level) execution.
-   * Root executions do NOT consume a child slot in the budget;
-   * only actual nested agent runs do. Defaults to false.
-   */
-  isRootExecution?: boolean;
-}
 
 /** Per-file line-change evidence captured automatically from write tools. */
 export interface DiffStatEntry {
@@ -204,7 +118,7 @@ export interface SubagentResult {
   validation?: ValidationEvidence;
   /**
    * Absolute path of the worktree this worker was pinned into, when
-   * {@link SubagentRequest.worktree} resolved successfully.
+   * the launch request's worktree resolved successfully.
    */
   worktreePath?: string;
 }

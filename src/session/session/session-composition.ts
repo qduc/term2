@@ -70,7 +70,7 @@ import {
   SubagentNotificationStore,
   type BackgroundSubagentNotificationPort,
   type BackgroundSubagentTaskPort,
-} from '../../tools/subagents/subagent-notification-store.js';
+} from './subagent-notification-store.js';
 import {
   BackgroundTaskControl,
   type BackgroundTaskControlDetails,

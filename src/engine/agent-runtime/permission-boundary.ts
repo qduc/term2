@@ -1,6 +1,7 @@
 import path from 'node:path';
 import type { ILoggingService, ISettingsService } from '../../shared/service-interfaces.js';
-import { AGENT_SPEC_TOOL_NAMES, agentSpecToConfig } from './agent-spec.js';
+import { agentSpecToConfig } from './agent-spec.js';
+import { AGENT_SPEC_TOOL_NAMES } from '../../tools/agent/agent-spec-tools.js';
 import { resolveAgent } from './agent-resolver.js';
 import type { ResolvedAgentDefinition } from './resolved-agent.js';
 import type { ResolvedFilesystemScope, ResolvedNetworkScope } from './scope-resolver.js';

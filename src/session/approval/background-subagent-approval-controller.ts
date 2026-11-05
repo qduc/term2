@@ -9,7 +9,7 @@ import {
   type BackgroundSubagentApprovalSnapshot,
 } from './background-subagent-approval-queue.js';
 import type { PendingApprovalContext } from './approval-state.js';
-import type { BackgroundSubagentApprovalPause } from '../../tools/subagents/foreground-subagent-lease.js';
+import type { BackgroundSubagentApprovalPause } from '../../tools/subagents/control-contract.js';
 import type { ToolOwnershipRegistry } from './tool-ownership-registry.js';
 import type { SessionIdSource } from '../session/session-identity.js';
 

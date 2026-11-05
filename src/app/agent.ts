@@ -51,7 +51,7 @@ import type {
   SubagentRunHandle,
   SubagentRunStatus,
 } from '../tools/subagents/types.js';
-import type { ResolvedSubagentLaunch } from '../engine/lib/subagent-bridge.js';
+import type { ResolvedSubagentLaunch } from '../delegation/runtime/subagent-bridge.js';
 import type {
   CancelRunParams,
   GetSubagentResultParams,
@@ -61,7 +61,6 @@ import type {
   SendMessageAcknowledgement,
   CancelRunAcknowledgement,
 } from '../tools/agent/run-subagent-async.js';
-import os from 'os';
 import fs from 'fs';
 import path from 'path';
 import type { ISettingsService, ILoggingService } from '../shared/service-interfaces.js';
@@ -77,13 +76,15 @@ import { createDurableGoal } from '../session/conversation/durable-goal.js';
 import { resolveAncillaryModelTier } from '../engine/agent-runtime/model-resolver.js';
 import { createRunAgentWorkflowToolDefinition } from '../tools/run-agent-workflow.js';
 import { createWorktreeToolDefinitions } from '../tools/system/worktree.js';
-import { createRunCodeToolDefinition } from '../tools/system/run-code/index.js';
+import { createRunCodeToolDefinition } from '../delegation/index.js';
 import type { AgentRuntime } from '../engine/agent-runtime/agent-runtime.js';
-import type { WorkflowLimits } from '../engine/agent-runtime/workflow/workflow-types.js';
+import type { WorkflowLimits } from '../delegation/workflow/workflow-types.js';
+import { WorkflowEvaluatorImpl } from '../delegation/index.js';
 import { createRootAgentAuthoritySnapshot } from '../engine/agent-runtime/permission-boundary.js';
-import { deriveAuthorizedWorktreeScope } from '../tools/subagents/worker-worktree.js';
+import { deriveAuthorizedWorktreeScope } from '../delegation/subagents/worker-worktree.js';
 import type { ListWorktreesSync } from '../tools/workspace/worktree-inventory.js';
-import { getProjectTreeForPrompt } from '../shared/utils/project-tree.js';
+import { getEnvInfo, getAgentsInstructions } from '../session/prompts/environment.js';
+export { getEnvInfo, getAgentsInstructions } from '../session/prompts/environment.js';
 import { MemoryCapabilityBuilder } from '../tools/memory/memory-capabilities.js';
 import { resolveDisabledCapabilities } from '../config/tool-toggles.js';
 import type { ShellChildRegistry } from '../shared/utils/shell/shell-child-registry.js';
@@ -97,82 +98,6 @@ import type { DurableGoal } from '../session/logging/conversation-log-events.js'
 import { renderDurableGoalContext } from '../session/prompts/durable-goal-context.js';
 
 const BASE_PROMPT_PATH = path.join(import.meta.dirname, '../session/prompts');
-
-export function getEnvInfo(
-  settingsService: ISettingsService,
-  executionContext?: ExecutionContext,
-  minimal = false,
-): string {
-  const isRemote = !!executionContext?.isRemote();
-  // This process's own OS/shell are the controller's, not the remote host's —
-  // asserting them as fact over SSH tells the model the wrong platform outright.
-  const shellPath = isRemote ? undefined : settingsService.get('app.shellPath') || 'unknown';
-  const cwd = executionContext?.getCwd() || process.cwd();
-  const osType = isRemote ? undefined : os.type();
-  const osRelease = isRemote ? undefined : os.release();
-  const osPlatform = isRemote ? undefined : os.platform();
-
-  const now = new Date().toISOString().slice(0, 10);
-
-  // State the home directory explicitly. Without it a model asked about a path
-  // outside cwd has to guess what `~` resolves to, and weaker models guess the
-  // container default (/root), producing paths that cannot exist on this host.
-  // Remote sessions run against another machine's home, which this process
-  // cannot know, so only claim it for local ones.
-  const home = isRemote ? '' : `; home (\`~\`): ${os.homedir()}`;
-
-  const hostLine = isRemote
-    ? "Host: remote via SSH — OS/shell are the remote machine's, not this controller's, and are unknown here; use commands (e.g. `uname -a`) if you need them"
-    : `OS: ${osType} ${osRelease} (${osPlatform}); shell: ${shellPath}`;
-
-  if (minimal) {
-    // Bare keeps the environment line short: no top-level tree
-    return `${hostLine}; cwd (you're already here, don't \`cd\` to it): ${cwd}${home}; date: ${now}`;
-  }
-
-  // For remote sessions, we might not be able to list top-level entries efficiently or at all easily here synchronously
-  // We'll skip top-level entries for now if remote, or maybe we can't get them sync.
-  // getProjectTreeForPrompt is sync and uses fs.readdirSync. This won't work for remote.
-  // So if remote, we skip that part.
-  let topLevel = '';
-  if (!executionContext?.isRemote()) {
-    topLevel = `${getProjectTreeForPrompt(cwd)}`;
-  }
-
-  return `${hostLine}; cwd (you're already here, don't \`cd\` to it): ${cwd}${home}; date: ${now}\n${topLevel}\n\n`;
-}
-
-export function getAgentsInstructions(cwd: string): string {
-  // A global AGENTS.md may live at ~/.agents/AGENTS.md and applies to every
-  // project; the project-root AGENTS.md (if present) takes precedence and is
-  // appended after it so project-specific guidance stays closest to the model.
-  const globalAgentsPath = path.join(os.homedir(), '.agents', 'AGENTS.md');
-  const agentsPath = path.join(cwd, 'AGENTS.md');
-
-  const parts: string[] = [];
-
-  try {
-    if (fs.existsSync(globalAgentsPath)) {
-      const globalContents = fs.readFileSync(globalAgentsPath, 'utf-8').trim();
-      if (globalContents) {
-        parts.push(`\n\nGlobal AGENTS.md contents (~/.agents/AGENTS.md):\n${globalContents}`);
-      }
-    }
-  } catch {
-    // Ignore an unreadable global AGENTS.md; the project file still applies.
-  }
-
-  if (fs.existsSync(agentsPath)) {
-    try {
-      const contents = fs.readFileSync(agentsPath, 'utf-8').trim();
-      parts.push(`\n\nAGENTS.md contents:\n${contents}`);
-    } catch (e: any) {
-      parts.push(`\n\nFailed to read AGENTS.md: ${e.message}`);
-    }
-  }
-
-  return parts.join('');
-}
 
 export interface AgentDefinition {
   name: string;
@@ -760,11 +685,14 @@ export const getAgentDefinition = (
   }
 
   if (hasCapability('subagents') && settingsService.get('enable_agent_workflow') && agentRuntime) {
+    const evaluator = new WorkflowEvaluatorImpl({
+      runtime: agentRuntime,
+      parentTools: tools.map((tool) => tool.name),
+      limits: settingsService.getDynamic('agentWorkflow') as WorkflowLimits,
+    });
     tools.push(
       createRunAgentWorkflowToolDefinition({
-        runtime: agentRuntime,
-        parentTools: tools.map((tool) => tool.name),
-        limits: settingsService.getDynamic('agentWorkflow') as WorkflowLimits,
+        evaluate: (input) => evaluator.evaluate(input),
       }),
     );
   }

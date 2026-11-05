@@ -23,6 +23,7 @@ reached from the CLI.
 | `clients/`  | Render the protocol (TUI, headless, ACP, control, Discord)    | host, protocol                 |
 | `host/`     | Transport and access: in-process host, HTTP server, auth      | protocol, session, config      |
 | `protocol/` | The one public event and command format, one projection       | session and everything below   |
+| `delegation/` | Child agents, roles/pools, runners and workflow execution   | session and everything below   |
 | `session/`  | One durable conversation: append-only log and its replay      | engine, model, tools, config   |
 | `engine/`   | The turn loop: waits for answers, compacts, recovers          | model, tools, config           |
 | `tools/`    | Tool contracts: schema, approval policy and execute function  | model, config                  |
@@ -36,6 +37,12 @@ edges, including those from `shared/` files that are not yet pure, are listed
 one per line in `scripts/layer-allowlist.json`. `check-layers.mjs` fails on a
 crossing edge that is not listed, and on any import from outside `src/`; it
 prints listed edges that no longer exist so the list only shrinks.
+
+`delegation/` sits between protocol and session; session does not import it.
+The app injects its concrete launcher/evaluator implementations into tools.
+Tool-facing schemas/results/control ports stay in tools, while resolved child
+definitions, execution-tree budgets and session-running policy stay above it.
+See [the delegation public interface](../../src/delegation/README.md).
 
 ## Rules that make it different from the old engine
 

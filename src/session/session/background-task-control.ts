@@ -9,11 +9,8 @@ import type {
   SubagentRunHandle,
   SubagentRunStatus,
 } from '../../tools/subagents/types.js';
-import type { ForegroundSubagentCandidate } from '../../tools/subagents/nested-runner.js';
-import type {
-  BackgroundSubagentNotificationPort,
-  BackgroundSubagentTaskTool,
-} from '../../tools/subagents/subagent-notification-store.js';
+import type { ForegroundSubagentCandidate } from '../../tools/subagents/control-contract.js';
+import type { BackgroundSubagentNotificationPort, BackgroundSubagentTaskTool } from './subagent-notification-store.js';
 import {
   BACKGROUND_SHELL_QUIET_AFTER_MS,
   BACKGROUND_SUBAGENT_QUIET_AFTER_MS,

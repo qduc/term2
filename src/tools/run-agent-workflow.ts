@@ -1,7 +1,4 @@
 import { z } from 'zod';
-import type { AgentRuntime } from '../engine/agent-runtime/agent-runtime.js';
-import { WorkflowEvaluatorImpl } from '../engine/agent-runtime/workflow/workflow-evaluator.js';
-import type { WorkflowLimits } from '../engine/agent-runtime/workflow/workflow-types.js';
 import type { ToolDefinition } from './types.js';
 import { createBaseMessage, getCallIdFromItem, normalizeToolArguments } from './format-helpers.js';
 
@@ -17,9 +14,8 @@ const description = `Run bounded, disposable JavaScript orchestration in an isol
 Children inherit only parent capabilities: workspace read interfaces are interchangeable; any parent editor capability admits apply_patch, search_replace, and create_file; web_search and web_fetch require the exact matching parent capability. Existing filesystem/network scope policy remains enforced. Interactive approvals (including ask_user), nested agents, unsandboxed operations, unsafe shell commands, out-of-scope writes, and locked writes are not available: operations are rejected rather than suspending/resuming a workflow. Limits cover total timeout/cancellation, run count, concurrency, source bytes, returned-output bytes, and cumulative console bytes. The result includes admission-ordered run summaries with stable runId, requested name, and resolved name/provider/model when available, plus duration, usage, and error metadata.`;
 
 export function createRunAgentWorkflowToolDefinition(deps: {
-  runtime: Pick<AgentRuntime, 'agent'>;
-  parentTools: readonly string[];
-  limits?: Partial<WorkflowLimits>;
+  /** Host-owned evaluation, including authority, cancellation and limits. */
+  evaluate(input: { code: string; signal?: AbortSignal }): Promise<unknown>;
 }): ToolDefinition<typeof schema, 'run_agent_workflow'> {
   return {
     name: 'run_agent_workflow',
@@ -28,7 +24,7 @@ export function createRunAgentWorkflowToolDefinition(deps: {
     needsApproval: () => false,
     execute: async ({ code }, context) => {
       const signal = (context as { signal?: AbortSignal } | undefined)?.signal;
-      return JSON.stringify(await new WorkflowEvaluatorImpl({ ...deps }).evaluate({ code, signal }));
+      return JSON.stringify(await deps.evaluate({ code, signal }));
     },
     formatCommandMessage: (item, index, argumentsById) => {
       const callId = getCallIdFromItem(item);

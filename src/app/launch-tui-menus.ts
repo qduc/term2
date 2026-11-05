@@ -37,7 +37,7 @@ import {
   SUBAGENT_POOL_SETTING_KEYS,
   getSubagentPoolEntryShape,
   getSubagentPoolRoleLabel,
-} from '../tools/subagents/subagent-pool-config.js';
+} from '../config/settings/subagent-pool-config.js';
 import { getWorkspaceEntries, getWorkspaceEntriesMeta, refreshWorkspaceEntries } from './file-service.js';
 import { copyToClipboard } from '../shared/utils/clipboard.js';
 import type { LoggingService } from '../session/logging/logging-service.js';

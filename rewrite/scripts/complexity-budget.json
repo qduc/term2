@@ -19,7 +19,7 @@
       "reason": "The session decides which surface owns input (composer, pickers, the ported approval prompt); that routing closes over submit and the composer state declared in the same component, so moving it out would add ref plumbing rather than a job seam."
     },
     "rewrite/src/engine/turn-tools.ts": {
-      "lines": 506,
+      "lines": 513,
       "reason": "One per-call Execution record carries a call's planning, admission, interaction answers and settlement; the chosen approval grant rides it like the batch-asked answer, so splitting would pass that record across files."
     }
   },

@@ -301,6 +301,10 @@ export type WireTask = {
   readonly lastActivityAt?: number;
   /** Legacy's last observation of the live task (BackgroundTaskObservation); presentation owns the wording. */
   readonly lastObservation?: WireTaskObservation;
+  /** Legacy's live tool tracking for a subagent: its newest call, last tool name and per-tool starts. */
+  readonly lastTool?: { readonly label: string; readonly state: 'running' | 'success' | 'failed' };
+  readonly lastToolName?: string;
+  readonly toolCounts?: readonly { readonly toolName: string; readonly count: number }[];
   readonly completedAt?: number;
   readonly text?: string;
   readonly progress?: string;

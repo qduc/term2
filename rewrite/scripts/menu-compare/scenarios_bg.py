@@ -176,3 +176,9 @@ SEED['bg-badjson-manage']['routes'] = [{'match': 'SUBTASK', 'replies': [
 SCENARIOS['bg-empty-manage'] = SCENARIOS['bg-retry-manage']
 SEED['bg-empty-manage'] = dict(SEED['bg-retry-manage'])
 SEED['bg-empty-manage']['routes'] = [{'match': 'SUBTASK', 'replies': [{'empty': True}, {'text': 'child done', 'delay': 30}]}]
+
+# The root's own unknown tool and bad JSON: legacy shows each as a failed tool row.
+SCENARIOS['root-badtool'] = ['go', '<enter>', '<sleep>']
+SEED['root-badtool'] = {'replies': [{'tool': 'frobnicate', 'args': {}}, {'text': 'done'}]}
+SCENARIOS['root-badjson'] = ['go', '<enter>', '<sleep>']
+SEED['root-badjson'] = {'replies': [{'tool': 'read_file', 'raw_args': '{"path": "x', 'args': {}}, {'text': 'done'}]}

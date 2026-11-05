@@ -10,7 +10,7 @@ import { TaskManager, taskActivity, terminalTextWidth, truncateTerminalText } fr
 import type { TuiConnection } from './integration.js';
 import { controlTask } from './commands.js';
 import { useTerminalSize } from './terminal.js';
-import { useTheme } from './presentation/components/theme.js';
+import { TOOL_STATUS_GLYPH, useTheme } from './presentation/components/theme.js';
 import { useSkin } from './presentation/skins/SkinContext.js';
 
 const NARROW_LABEL_LIMIT = 24;
@@ -37,6 +37,8 @@ type PanelTask = {
   readonly startedAt?: number;
   /** Legacy's control-task activity phase; a foreground transfer candidate has none (plain `Running`). */
   readonly phase?: string;
+  /** Legacy's newest call of a live subagent (its `└` row). */
+  readonly lastTool?: NonNullable<TaskView['wire']>['lastTool'];
 };
 type Row = { readonly key: string; readonly placement: 'foreground' | 'background'; readonly task: PanelTask };
 
@@ -67,6 +69,7 @@ function panelRow(view: TaskView): Row {
       role: wire?.role ?? view.role ?? '',
       text: (kind === 'shell' ? wire?.label : wire?.input ?? wire?.label) ?? view.label,
       ...(wire?.name ? { name: wire.name } : {}),
+      ...(kind === 'subagent' && wire?.lastTool ? { lastTool: wire.lastTool } : {}),
       status,
       ...(wire?.result?.error?.message ? { error: wire.result.error.message } : {}),
       ...(wire?.startedAt !== undefined ? { startedAt: wire.startedAt } : {}),
@@ -194,19 +197,29 @@ const TaskRows: FC<{ readonly state: TuiState; readonly gap: boolean }> = ({ sta
     const timer = setInterval(() => setTick((tick) => tick + 1), 1000);
     return () => clearInterval(timer);
   }, [visible.length]);
-  if (visible.length === 0) return null;
+  // Legacy BottomArea keeps its bottom margin while any task is listed, a settled one past its grace included.
+  if (visible.length === 0) return rows.length > 0 && gap ? <Text> </Text> : null;
   const activeCount = visible.filter((row) => !isTerminal(row.task)).length;
   return (
     <Box flexDirection="column" marginBottom={gap ? 1 : 0}>
       <TaskPanel header={`Tasks · ${activeCount} active · ^G manage`}>
         {visible.map(({ key, placement, task }) => {
           const row = formatFirstLine(task, placement, columns, now);
+          const tool = isTerminal(task) ? undefined : task.lastTool;
+          const toolStatus = tool ? (tool.state === 'success' ? 'completed' : tool.state) : undefined;
           return (
             <Box key={key} flexDirection="column">
               <Text>
                 <Text color={theme.textSubtle}>• </Text>
                 <Text color={theme.accentAlt}>{row.badge}</Text> <Text>{row.identity}</Text> · <Text>{row.phase}</Text>
               </Text>
+              {tool && toolStatus ? (
+                <Text color={theme.textMuted}>
+                  {'  └ '}
+                  <Text color={theme.toolStatus[toolStatus]}>{TOOL_STATUS_GLYPH[toolStatus]}</Text>{' '}
+                  {truncateTerminalText(firstLine(tool.label).replaceAll(/\s+/g, ' '), Math.max(1, columns - 6))}
+                </Text>
+              ) : null}
             </Box>
           );
         })}

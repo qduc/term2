@@ -213,7 +213,14 @@ export class TurnTools {
     try {
       this.#check();
       if (this.stopped) return errorResult('Tool execution stopped after interaction resolution');
-      if (plan.result) return plan.result;
+      // Legacy records a call answered at once (unknown tool, bad input) as started and finished.
+      const immediate = plan.result;
+      if (immediate)
+        return await this.#physical(
+          execution,
+          async () => immediate,
+          (r) => r,
+        );
       if (plan.approval?.kind === 'deny') return errorResult(plan.approval.reason);
       if (plan.approval?.kind === 'question') execution.answer = plan.decision;
       if (plan.decision?.kind === 'allow' && plan.decision.grant) execution.grant = plan.decision.grant;

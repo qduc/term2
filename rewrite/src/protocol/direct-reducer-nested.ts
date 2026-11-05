@@ -1,4 +1,5 @@
 /** Scoped subagent presentation and the id-keyed replace both use. */
+import { formatToolCommand } from './direct-json.js';
 import type { WireEvent, WireSnapshot } from './direct-wire.js';
 
 type Identified = { readonly id: string };
@@ -27,9 +28,32 @@ export function nestedPresentation(state: WireSnapshot, event: Extract<WireEvent
     case 'tool_progress':
       task = { ...task, progress: (task.progress ?? '') + child.payload.chunk };
       break;
-    case 'tool_finished':
-      task = { ...task, progress: (task.progress ?? '') + child.payload.output };
+    case 'tool_started': {
+      // Legacy's registry counts each start by name; its panel shows the newest call's label.
+      const { toolName, input } = child.payload.tool;
+      const counts = task.toolCounts ?? [];
+      const known = counts.some((entry) => entry.toolName === toolName);
+      task = {
+        ...task,
+        lastToolName: toolName,
+        lastTool: { label: formatToolCommand(toolName, input), state: 'running' },
+        toolCounts: known
+          ? counts.map((entry) => (entry.toolName === toolName ? { ...entry, count: entry.count + 1 } : entry))
+          : [...counts, { toolName, count: 1 }],
+      };
       break;
+    }
+    case 'tool_finished': {
+      // The finished row is the call's command message; a call with none (an unknown tool) reads as done.
+      const message = commandMessage(child.payload.display);
+      const label = typeof message?.command === 'string' ? message.command : task.lastTool?.label ?? '';
+      task = {
+        ...task,
+        progress: (task.progress ?? '') + child.payload.output,
+        ...(label ? { lastTool: { label, state: failed(message, child.payload.isError) ? 'failed' : 'success' } } : {}),
+      };
+      break;
+    }
   }
   return {
     ...state,
@@ -43,6 +67,18 @@ export function nestedPresentation(state: WireSnapshot, event: Extract<WireEvent
         }
       : {}),
   };
+}
+
+/** As the tool row draws it: a message's own success, else the result's error flag; no message reads as done. */
+function failed(message: Record<string, unknown> | undefined, isError: boolean): boolean {
+  if (!message) return false;
+  return typeof message['success'] === 'boolean' ? !message['success'] : isError;
+}
+function commandMessage(display: unknown): Record<string, unknown> | undefined {
+  const record = (value: unknown) =>
+    value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+  const messages = Array.isArray(display) ? display : record(display)?.['messages'];
+  return Array.isArray(messages) ? record(messages[0]) : undefined;
 }
 
 /** What the user reads for a provider-history edit; the reason names the operation that caused it. */

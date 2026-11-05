@@ -179,8 +179,14 @@ function DetailsView({ task }: { readonly task: TaskView }): React.ReactElement 
           ) : null}
           {wire?.model ? <Text>Model: {wire.model.model}</Text> : null}
           {wire?.model ? <Text>Provider: {wire.model.provider}</Text> : null}
-          {wire?.result?.toolUseCounts?.length ? (
-            <Text>Tools: {formatToolCounts(wire.result.toolUseCounts)}</Text>
+          {wire?.lastObservation?.kind === 'retrying' ? (
+            <Text>
+              Retries: {wire.lastObservation.attempt} of {wire.lastObservation.maxRetries}
+            </Text>
+          ) : null}
+          {wire?.lastToolName ? <Text>Last tool: {wire.lastToolName}</Text> : null}
+          {(wire?.toolCounts ?? wire?.result?.toolUseCounts)?.length ? (
+            <Text>Tools: {formatToolCounts(wire?.toolCounts ?? wire?.result?.toolUseCounts ?? [])}</Text>
           ) : null}
           {wire?.text ? <Text wrap="wrap">Current: {wire.text}</Text> : null}
         </>

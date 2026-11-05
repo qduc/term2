@@ -22,9 +22,13 @@ async function productionSources(directory: string): Promise<string[]> {
 }
 
 it('proves the application run loop constructs a native stream for processStreamEvents', async () => {
-  const source = await readFile('src/engine/agent-runtime/application-run-loop.ts', 'utf8');
-  expect(source).toContain('createAgentStream');
-  expect(source).not.toContain('adaptAgentStream');
+  const loop = await readFile('src/engine/agent-runtime/application-run-loop.ts', 'utf8');
+  const segments = await readFile('src/engine/agent-runtime/run-segments.ts', 'utf8');
+  expect(loop).toContain('new RunSegments(');
+  expect(loop).toContain('this.#segments.open(');
+  expect(segments).toContain('const stream = createAgentStream(');
+  expect(segments).toContain('lastResponseId: state.responseId ?? null');
+  for (const source of [loop, segments]) expect(source).not.toContain('adaptAgentStream');
 });
 
 it('keeps runtime streams on the native application event protocol', async () => {

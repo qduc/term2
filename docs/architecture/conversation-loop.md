@@ -9,16 +9,16 @@ become accepted conversation history and recovery evidence.
 ## The central control path
 
 `#runTurn` awaits request preparation, model exchange and tool settlement in
-sequence. `#recordResponse` produces the requested tool plan. With no tool calls,
+sequence. `RunResponseRecorder.record` produces the requested tool plan. With no tool calls,
 `#finishTurn` applies the existing completion policy and either finishes or makes
 continuation explicit. Session recovery returns to this same loop.
 
 ```text
 repeat:
-    prepareRequest()
-    response = await askModel()
-    calls = recordResponse(response)
-    await executeTools(response, calls)
+    await builder.prepareBoundary()
+    response = await exchange.askModel(build = builder.build)
+    calls = recorder.record(response)
+    await toolRound.execute(response, calls)
     if calls are empty and finishTurn() says done:
         return
 ```
@@ -32,7 +32,11 @@ illustrative `recordResponse` step or presentation consumption.
 | Boundary | Concrete symbols | Responsibility |
 | --- | --- | --- |
 | Conversation | `ConversationAdapter.submitMessage`, `TurnCoordinator`, `LiveRun` | Admit executable input, own one live turn, expose status and commands, and apply retained queue/pause rules. |
-| Execution | `ApplicationRunLoop.#runTurn`, `#prepareRequest`, `#askModel`, `#executeTools`, `#finishTurn` | Advance the model–tool cycle, await addressed decisions and apply selected recovery. |
+| Execution | `ApplicationRunLoop.#runTurn`, `#finishTurn`, `RunToolRound.execute` | Advance the model–tool cycle, await addressed decisions and apply selected recovery. |
+| Request construction | `RunRequestBuilder.prepareBoundary`, `build`, `ReadyModelRequest` | Admit steering, apply compaction and budget checks, then construct each attempt with scoped preparation/admission, cost and abort handles. |
+| Model exchange | `ModelExchangeRequest.askModel` | Resolve the model, build each attempt, dispatch/consume its stream, roll back provisional output and retry; never execute tools. |
+| Runtime recording | `RunResponseRecorder.record`, `toolContext` | Record response identity, usage/cost, native reasoning and tool facts into request-local views before publication/execution. |
+| Segment lifecycle | `RunSegments.open`, `settle`, `withinRepairDeadline` | Own cancellation, event-view generations and pause-aware segment settlement without advancing turns. |
 | Session acceptance bridge | `ApplicationTurnSession`, `SessionTurnAdapter.#acceptEvent`, `#acceptSegment` | Route runtime facts into Record before observation; no caller-managed persistence flags or continuity publication sequence. |
 | Accepted conversation | `ConversationRecord.acceptObservedItem`, `markDispatched`, `acceptSegment`, `recover` | Own provider history, tool evidence, persistence selection, private recovery baselines and reconstruction; synchronously notify provider context. |
 | Presentation | `SessionTurnAdapter.#consume`, `SessionStreamProcessor.process`, `TurnProjectionState`, `SessionToolTracker` | Project events, deduplicate rendered commands/starts, accumulate usage and retain presentation caches. |
@@ -84,6 +88,46 @@ suspension need those views. Their existence is not evidence of competing
 acceptance authority, but changing their synchronization still requires care.
 Nested/subagent histories have their own callers; this boundary does not claim a
 repository-wide elimination of `ConversationStore`.
+
+## Run-loop public interface and internal ownership
+
+`application-run-loop.ts` retains the public `ApplicationRunLoop`, its option and
+session/dependency type exports, `normalizeApplicationInput`, `toModelTools` and
+`MaxTurnsExceededError`. Public type definitions live in `run-loop-contracts.ts`;
+request input/tool projection lives in `run-input.ts`. Existing callers do not
+need to know those internal paths.
+
+- `runTurn(session)` drives root turns through bounded session operations.
+  `startStream(agent, input, options)` and `continueRunStream(handle, options)`
+  expose nested/legacy event views of the same advancement loop. Continuation
+  refresh preserves accounting and approvals while checking provider provenance.
+- `openTurn`/`closeTurn`, `steer`/`retractSteer`/`editSteer` retain the mailbox's
+  FIFO request-boundary admission semantics. `abort` cancels the logical turn;
+  `abortSegment` cancels its current view without discarding eligible injections.
+- `grantRunBudgetExtension` grants against the paused/live run's existing budget.
+  `budgetDisposition` in `run-budget-policy.ts` is the near-pure evidence-to-action
+  policy; `RunBudget` still owns thresholds, sensors and finite grants. The loop
+  still owns waiting for an addressed budget/approval answer. There is no new
+  guard, threshold, escalation default or recovery policy.
+
+The boundary builder does not advance the turn: it can await the loop's budget
+decision lane, then refresh the resumed view before continuing preparation.
+`build` returns `ReadyModelRequest`, including the exact provider request, unique
+cost identity, generation guard, request-only abort/cleanup and a scoped admission
+wrapper. The exchange invokes that wrapper around physical dispatch and stream
+consumption, keeping `ApplicationRequestPreparation.run` alive for the complete
+request. Model resolution precedes per-attempt construction, including retries;
+retry attempts do not repeat logical-boundary compaction or increment turn count.
+
+`RunResponseRecorder` is not a second session acceptance owner. It maintains the
+runtime's local history/input views and publishes through `EventQueue`, whose
+synchronous acceptance callback still reaches `ConversationRecord` before stream
+observers. Native reasoning and cost normalization are isolated in
+`run-native-reasoning.ts` and `run-cost-records.ts`. Cost events remain live-only,
+not replayable history items. Tool settlement remains in `ToolCallExecution`;
+`RunToolRound` owns the per-response approval/settlement workflow and the recorder
+supplies its evidence callbacks. No request construction or provider retry moves
+into the session adapter.
 
 ## Caller obligations removed
 

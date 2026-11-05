@@ -106,10 +106,6 @@
       "lines": 543,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "src/engine/agent-runtime/application-run-loop.ts": {
-      "lines": 2593,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
-    },
     "src/engine/agent-runtime/context-compaction/local-context-compactor.ts": {
       "lines": 543,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."

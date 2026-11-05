@@ -13,11 +13,7 @@ export function useHarnessInput(active: boolean, processing: boolean, value: str
     const path = process.env['TERM2_HARNESS_IDLE_PATH'];
     if (!path) return;
 
-    if (value !== lastComposerValue) {
-      lastComposerValue = value;
-      composerRevision += 1;
-      writeAtomically(`${path}.composer`, `${JSON.stringify({ revision: composerRevision, value })}\n`);
-    }
+    publishValue(path, value);
 
     const idle = active && !processing;
     if (idle === lastIdle) return;
@@ -27,6 +23,24 @@ export function useHarnessInput(active: boolean, processing: boolean, value: str
     generation += 1;
     writeAtomically(path, `${generation}\n`);
   }, [active, processing, value]);
+}
+
+/**
+ * Publish an approval reason or answer editor's value. Legacy types these into its one composer
+ * input, so the harness acknowledges them the same way; this never publishes idle.
+ */
+export function useHarnessEditorValue(active: boolean, value: string): void {
+  useEffect(() => {
+    const path = process.env['TERM2_HARNESS_IDLE_PATH'];
+    if (path && active) publishValue(path, value);
+  }, [active, value]);
+}
+
+function publishValue(path: string, value: string): void {
+  if (value === lastComposerValue) return;
+  lastComposerValue = value;
+  composerRevision += 1;
+  writeAtomically(`${path}.composer`, `${JSON.stringify({ revision: composerRevision, value })}\n`);
 }
 
 function writeAtomically(path: string, payload: string): void {

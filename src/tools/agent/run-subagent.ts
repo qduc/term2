@@ -10,11 +10,10 @@ import {
   safeJsonParse,
 } from '../format-helpers.js';
 import type { NestedSubagentResult, SubagentResult, SubagentRunHandle } from '../subagents/types.js';
-import { SUBAGENT_RUN_NAME_PATTERN, SubagentRegistryError } from '../subagents/subagent-async-registry.js';
+import { SUBAGENT_RUN_NAME_PATTERN, SubagentRegistryError } from '../subagents/launch-contract.js';
 import { isAbortLike, formatSubagentResult } from '../subagents/utils.js';
 import { relaxedNumber } from '../utils.js';
-import type { AgentSpec } from '../../engine/agent-runtime/types.js';
-import { AGENT_SPEC_TOOL_NAMES } from '../../engine/agent-runtime/agent-spec.js';
+import { AGENT_SPEC_TOOL_NAMES } from './agent-spec-tools.js';
 
 function getRunSubagentDescription(backgroundEnabled: boolean): string {
   return (
@@ -89,6 +88,9 @@ export const agentSpecSchema = z
       .describe('Only enforced per-invocation budgets are accepted.'),
   })
   .strict();
+
+/** Input contract for the injected launcher; runtime resolution stays host-side. */
+type AgentSpec = z.infer<typeof agentSpecSchema>;
 
 const backgroundFields = {
   name: z

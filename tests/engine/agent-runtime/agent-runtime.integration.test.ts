@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { adaptLegacyRole, adaptLegacyDefinition } from '../../../src/engine/agent-runtime/legacy-adapter.js';
+import { adaptLegacyRole, adaptLegacyDefinition } from '../../../src/delegation/runtime/legacy-adapter.js';
 import { resolveAgent } from '../../../src/engine/agent-runtime/agent-resolver.js';
 import type { ISettingsService, ILoggingService } from '../../../src/shared/service-interfaces.js';
 import type {
@@ -9,7 +9,7 @@ import type {
   ResolvedAgentPermissions,
 } from '../../../src/engine/agent-runtime/types.js';
 import type { ResolvedAgentDefinition } from '../../../src/engine/agent-runtime/resolved-agent.js';
-import type { SubagentDefinition } from '../../../src/tools/subagents/types.js';
+import type { SubagentDefinition } from '../../../src/delegation/subagents/types.js';
 
 function logger(): ILoggingService {
   return {

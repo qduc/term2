@@ -14,8 +14,10 @@ import type {
   ForegroundShellLeaseDetails,
   ForegroundShellTransferResult,
 } from '../tools/shell/background-shell-registry.js';
-import type { BackgroundSubagentApprovalPauseSink } from '../tools/subagents/foreground-subagent-lease.js';
-import type { ForegroundSubagentCandidate } from '../tools/subagents/nested-runner.js';
+import type {
+  BackgroundSubagentApprovalPauseSink,
+  ForegroundSubagentCandidate,
+} from '../tools/subagents/control-contract.js';
 import type { NestedToolCompatibilityState } from './session/nested-tool-compatibility-state.js';
 import type { ToolApprovalPolicyRegistry } from './approval/tool-approval-policy-registry.js';
 import type { NestedApprovalOwner } from './approval/nested-approval-owner.js';

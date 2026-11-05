@@ -6,7 +6,7 @@ import {
   SUBAGENT_POOL_SETTING_KEYS,
   getSubagentPoolEntryShape,
   getSubagentPoolRoleLabel,
-} from '../../../tools/subagents/subagent-pool-config.js';
+} from '../../../config/settings/subagent-pool-config.js';
 
 const STOP_CHAR_REGEX = /[\s,;:()[\]{}<>]/;
 export const SETTINGS_TRIGGER = '/settings ';

@@ -120,8 +120,10 @@ source OAuth prompts and catalogue diagnostics. They do not open a conversation;
 
 ## Tools and delegation
 
-`subagent-tools.ts` owns child admission, preparation, invocation scope and
-Session launch authority. `subagent-callbacks.ts` adapts source delegation
+`src/delegation/direct/subagent-tools.ts` owns child preparation, invocation scope and
+prepared Session launch authority. Its injected app ports adapt physical tool
+contexts, local execution contexts and source registries. Session retains durable
+admission and billing remains app-owned. Delegation's `subagent-callbacks.ts` adapts source delegation
 callbacks and projects accepted task status/results with actual execution evidence;
 it does not introduce a task lifecycle registry or grant child authority.
 
@@ -165,10 +167,10 @@ run-code runtime, the same owner used by tool assembly.
 `configure_task_check_in` preserves the source's synchronous `target` callback
 contract and maps seconds to native scheduler milliseconds. Returning a Promise
 here serializes as `{}` in the source tool, while an `id` parameter loses named
-aliases; the adapter derives its parameter type from `AgentFactoryDeps` to keep
+aliases; the adapter uses `ConfigureTaskCheckInParams` from the tool schema to keep
 that boundary explicit.
 
-`createDirectSubagentTools` in `subagent-tools.ts` exposes source callback
+`createDirectSubagentTools` in `src/delegation/direct/subagent-tools.ts` exposes source callback
 contracts over Session's admitted nested requests and task controls:
 
 - Built-in roles use the session pool selector once per spawn; custom role
@@ -184,7 +186,7 @@ contracts over Session's admitted nested requests and task controls:
   causes are preserved. An interruption with no supplied cause stays
   unclassified: the adapter must not invent a provider-continuation cause or
   imply an approval pause. Native task lifecycle remains Session-owned.
-- The source prompt builder in `src/tools/subagents/role-loader.ts` omits
+- The source prompt builder in `src/delegation/subagents/role-loader.ts` omits
   local memory guidance and context for remote execution. Those optional memory
   sections must not be dereferenced on the remote path.
 

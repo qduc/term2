@@ -11,4 +11,5 @@ The legacy path this file used to describe (`app.tsx`, `ConversationOrchestrator
 `ConversationService`, `ConversationAdapter`, `QueueController`) was deleted at
 the flip (#88); git history keeps it. `src/engine/agent-runtime/`
 (`ApplicationRunLoop`) survives as the loop the mentor and nested subagent
-runners in `src/tools/subagents/` construct directly.
+runners in `src/delegation/subagents/` construct directly. The native launcher
+policy lives in `src/delegation/direct/` and uses session-owned branch/task ports.

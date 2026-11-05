@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createShellToolDefinition, type BackgroundShellExecutionResult } from '../../../../src/tools/system/shell.js';
 import { presentBareShell } from '../../../../src/tools/system/bare-shell.js';
-import { createRunCodeToolDefinition } from '../../../../src/tools/system/run-code/run-code.js';
+import { createRunCodeToolDefinition } from '../../../../src/delegation/run-code/run-code-tool.js';
 import { buildAgentTools, type AgentFactoryDeps } from '../../../../src/app/lib/agent-factory.js';
 import { createEditorImpl } from '../../../../src/shared/lib/editor-impl.js';
 import { createMockSettingsService } from '../../../helpers/settings-service.mock.js';

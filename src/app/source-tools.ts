@@ -15,7 +15,8 @@ import { shouldBypassToolApproval } from '../session/approval/shell-auto-approva
 import type { ISettingsService } from '../shared/service-interfaces.js';
 import { ASK_USER_NO_ANSWER_RESULT } from '../shared/tools/agent/ask-user-constants.js';
 import { coerceToText, isSuccessOutput } from '../tools/format-helpers.js';
-import { bindRunCodeNestedApprovalOwner, getRunCodeExecutionResult } from '../tools/system/run-code/run-code.js';
+import { getRunCodeExecutionResult } from '../tools/system/run-code/run-code.js';
+import { bindRunCodeNestedApprovalOwner } from '../delegation/index.js';
 import { isZodToolParameterSchema, type AnyToolDefinition } from '../tools/types.js';
 import type { ToolSpec } from '../model/index.js';
 import type {

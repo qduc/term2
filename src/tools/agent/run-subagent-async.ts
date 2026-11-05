@@ -13,7 +13,7 @@ import type {
   SubagentRunStatus,
   SubagentSteerAcknowledgement,
 } from '../subagents/types.js';
-import { SUBAGENT_RUN_NAME_PATTERN, SubagentRegistryError } from '../subagents/subagent-async-registry.js';
+import { SUBAGENT_RUN_NAME_PATTERN, SubagentRegistryError } from '../subagents/launch-contract.js';
 import { isAbortLike, truncatePreview, formatSubagentResult } from '../subagents/utils.js';
 import {
   BACKGROUND_SUBAGENT_QUIET_AFTER_MS,

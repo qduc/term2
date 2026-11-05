@@ -1,5 +1,5 @@
 import type { BackgroundCheckInDueEvent } from '../conversation/conversation-events.js';
-import type { BackgroundTask } from '../../tools/subagents/subagent-notification-store.js';
+import type { BackgroundTask } from './subagent-notification-store.js';
 import type { SubagentRunStatus } from '../../tools/subagents/types.js';
 import type { BackgroundShellJob } from '../../tools/shell/background-shell-registry.js';
 import { truncatePreview } from '../../tools/subagents/utils.js';

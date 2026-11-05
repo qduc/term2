@@ -20,10 +20,11 @@ const LAYER_DEPENDENCIES = {
   tools: ['model', 'config'],
   engine: ['model', 'tools', 'config'],
   session: ['engine', 'model', 'tools', 'config'],
-  protocol: ['session', 'engine', 'model', 'tools', 'config'],
+  delegation: ['session', 'engine', 'model', 'tools', 'config'],
+  protocol: ['delegation', 'session', 'engine', 'model', 'tools', 'config'],
   host: ['protocol', 'session', 'config'],
   clients: ['host', 'protocol'],
-  app: ['clients', 'host', 'protocol', 'session', 'engine', 'tools', 'model', 'config'],
+  app: ['clients', 'host', 'protocol', 'delegation', 'session', 'engine', 'tools', 'model', 'config'],
 };
 
 // Imports are collected from static ES module syntax, including re-exports and dynamic imports.

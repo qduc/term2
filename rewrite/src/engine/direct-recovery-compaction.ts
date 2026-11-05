@@ -282,7 +282,15 @@ async function compactLocally(
   started: () => Promise<void>,
   rearmed: { readonly rearmAtEstimatedTokens?: number },
 ): Promise<LocalOperation> {
-  if (usable <= 0) return { kind: 'blocked', reason: 'single_turn_too_large', estimate };
+  if (usable <= 0) {
+    // Legacy: with no room at all, the history's own eligibility names the reason (often no complete cold turn).
+    const eligibility = planTail(input.request.input, Infinity);
+    return {
+      kind: 'blocked',
+      reason: typeof eligibility === 'string' ? eligibility : 'single_turn_too_large',
+      estimate,
+    };
+  }
   const plan = planTail(input.request.input, usable);
   if (plan === 'no_complete_cold_turn') return { kind: 'blocked', reason: plan, estimate, ...rearmed };
   await started();

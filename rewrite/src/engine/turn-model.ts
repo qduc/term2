@@ -496,13 +496,13 @@ export class TurnModel {
   }
 }
 
-/** Legacy projectModelRequestHistory: an OpenAI compaction item or local summary
- * replaces everything before it, so the model request starts at the last one. */
+/** Legacy projectModelRequestHistory: an OpenAI compaction item or local summary replaces everything before it,
+ * so the model request starts at the last one. A turn's "[Mode Notice]" summary (`<turn>:notice:<n>`) replaces nothing. */
 function fromLastReplacementBoundary(history: readonly Item[]): Item[] {
   for (let index = history.length - 1; index >= 0; index--) {
     const item = history[index]!;
     if (
-      item.type === 'summary' ||
+      (item.type === 'summary' && !item.id.includes(':notice:')) ||
       (item.type === 'provider_opaque' && item.provider === 'openai' && item.item.type === 'compaction')
     )
       return history.slice(index);

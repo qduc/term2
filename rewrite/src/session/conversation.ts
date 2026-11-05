@@ -264,7 +264,7 @@ function conversation(
     );
     // Legacy's Responses chain never sends the outputs of a segment that a
     // cancelled question ended; the next request chains from that response.
-    if (hasHumanInput) generation.continuity?.state?.skipCancelledQuestion(rawHistory, ASK_USER_NO_ANSWER_RESULT);
+    if (hasHumanInput) generation.continuity?.state?.skipCancelledQuestion(modelHistory, ASK_USER_NO_ANSWER_RESULT);
     // Old detached branches keep the exact generation that admitted their root.
     const turnDeps = generation.runtime;
     const turnContinuity = generation.continuity;

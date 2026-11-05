@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import Database from 'better-sqlite3';
 import { resolveSettingsDirectory } from './services/settings/settings-path.js';
 import { createTestChildEnv } from './test-helpers/terminal-e2e.js';
+import { usesDirectComposer } from './test-helpers/direct-composer.js';
 
 import { writeMockCliSettings } from './test-helpers/mock-cli-settings.js';
 
@@ -227,6 +228,42 @@ function readSavedHistory(file: string): SavedHistory {
     return event.entries.map(eventOf);
   });
   return { format, records };
+}
+
+/** The native CLI reads only its own store: seed the same session start (and first prompt) in its format. */
+function writeNativeSeed(
+  directory: string,
+  uuid: string,
+  seed: { workspace: string; model?: { provider: string; model: string }; prompt?: string },
+): string {
+  const id = `conv_${uuid}`;
+  const at = '2026-05-28T14:40:16.000Z';
+  const facts: unknown[] = [
+    {
+      type: 'session_started',
+      id,
+      workspace: seed.workspace,
+      workspaceIdentity: { root: seed.workspace, target: 'local', access: 'read_write' },
+      model: seed.model ?? { model: 'gpt-4o', provider: 'openai' },
+      profile: {
+        id: 'builtin:bare',
+        version: '2.0.0',
+        digest: '4ea566d1d75c03e6bb87743862f1016d5680568f77d6ebff267cb1e7b3d19ea4',
+      },
+      appVersion: '0.40.0',
+    },
+  ];
+  if (seed.prompt !== undefined) {
+    facts.push({
+      type: 'turn_started',
+      turnId: `${id}-turn-1`,
+      input: [{ type: 'user_message', id: 'user-msg-1', content: [{ type: 'text', text: seed.prompt }] }],
+    });
+    facts.push({ type: 'turn_ended', turnId: `${id}-turn-1`, outcome: 'completed' });
+  }
+  const text = facts.map((fact, index) => JSON.stringify({ v: 2, seq: index + 1, at, fact })).join('\n') + '\n';
+  fs.writeFileSync(path.join(directory, `${id}.jsonl`), text, 'utf8');
+  return text;
 }
 
 /** Native planned calls/results are item facts; tool_started/finished are physical work only.
@@ -1418,7 +1455,6 @@ fs.createWriteStream = (filename, options) => {
           },
         },
       };
-      fs.writeFileSync(filePath, JSON.stringify(initEnvelope) + '\n' + JSON.stringify(userEnvelope) + '\n', 'utf-8');
 
       // Create a second mock conversation from a different project path
       const otherConvId = 'b22d4fae-7dec-11d0-a765-00a0c91e6bf6';
@@ -1434,12 +1470,18 @@ fs.createWriteStream = (filename, options) => {
           projectPath: '/Users/qduc/src/other-project',
         },
       };
-      fs.writeFileSync(otherFilePath, JSON.stringify(otherInitEnvelope) + '\n', 'utf-8');
+      if (process.env.TERM2_TEST_CLI) {
+        writeNativeSeed(conversationsDir, convId, { workspace: process.cwd(), prompt: 'hello this is a test prompt' });
+        writeNativeSeed(conversationsDir, otherConvId, { workspace: '/Users/qduc/src/other-project' });
+      } else {
+        fs.writeFileSync(filePath, JSON.stringify(initEnvelope) + '\n' + JSON.stringify(userEnvelope) + '\n', 'utf-8');
+        fs.writeFileSync(otherFilePath, JSON.stringify(otherInitEnvelope) + '\n', 'utf-8');
 
-      // Also touch the files so listConversations gets mtime
-      const now = new Date();
-      fs.utimesSync(filePath, now, now);
-      fs.utimesSync(otherFilePath, now, now);
+        // Also touch the files so listConversations gets mtime
+        const now = new Date();
+        fs.utimesSync(filePath, now, now);
+        fs.utimesSync(otherFilePath, now, now);
+      }
 
       const stdout = execFileSync('node', [cliPath(), '--resume', 'ls'], {
         env: createTestChildEnv({
@@ -1476,10 +1518,13 @@ fs.createWriteStream = (filename, options) => {
           projectPath: process.cwd(),
         },
       };
-      fs.writeFileSync(filePath, JSON.stringify(initEnvelope) + '\n', 'utf-8');
-
-      const now = new Date();
-      fs.utimesSync(filePath, now, now);
+      if (process.env.TERM2_TEST_CLI) {
+        writeNativeSeed(conversationsDir, convId, { workspace: process.cwd() });
+      } else {
+        fs.writeFileSync(filePath, JSON.stringify(initEnvelope) + '\n', 'utf-8');
+        const now = new Date();
+        fs.utimesSync(filePath, now, now);
+      }
 
       const stdout = execFileSync('node', [cliPath(), '--resume', 'list'], {
         env: createTestChildEnv({
@@ -1521,21 +1566,24 @@ fs.createWriteStream = (filename, options) => {
 
     it('CLI --resume does not suggest --fork for a conversation from another project', async () => {
       const conversationId = 'c22d4fae-7dec-11d0-a765-00a0c91e6bf6';
-      fs.writeFileSync(
-        path.join(conversationsDir, `${conversationId}.jsonl`),
-        `${JSON.stringify({
-          v: 1,
-          seq: 1,
-          ts: '2026-05-28T14:40:16.000Z',
-          event: {
-            type: 'session_init',
-            id: conversationId,
-            createdAt: '2026-05-28T14:40:16.000Z',
-            projectPath: '/another/project',
-          },
-        })}\n`,
-        'utf8',
-      );
+      if (process.env.TERM2_TEST_CLI)
+        writeNativeSeed(conversationsDir, conversationId, { workspace: '/another/project' });
+      else
+        fs.writeFileSync(
+          path.join(conversationsDir, `${conversationId}.jsonl`),
+          `${JSON.stringify({
+            v: 1,
+            seq: 1,
+            ts: '2026-05-28T14:40:16.000Z',
+            event: {
+              type: 'session_init',
+              id: conversationId,
+              createdAt: '2026-05-28T14:40:16.000Z',
+              projectPath: '/another/project',
+            },
+          })}\n`,
+          'utf8',
+        );
 
       const { status, stderr } = await spawnCli(
         [cliPath(), '--resume', conversationId],
@@ -2297,10 +2345,20 @@ fs.createWriteStream = (filename, options) => {
           path.join(resolveSettingsDirectory({ homeDir: testDir }), 'settings.json'),
           'utf8',
         );
-        const resumeId = 'saved-standard';
-        const resumePath = path.join(conversationsDir, `${resumeId}.jsonl`);
-        const savedHistory = selection.endsWith('-resume')
-          ? [
+        // The native store holds only conv_<uuid> logs; its seed is the same saved session and prompt.
+        const native = Boolean(process.env.TERM2_TEST_CLI);
+        const resumeId = native ? '5a7ed000-0000-4000-8000-000000000001' : 'saved-standard';
+        const resumePath = path.join(conversationsDir, `${native ? `conv_${resumeId}` : resumeId}.jsonl`);
+        const savedHistory = !selection.endsWith('-resume')
+          ? ''
+          : native
+          ? writeNativeSeed(conversationsDir, resumeId, {
+              // A native start always records its model; legacy's saved init has none and uses the configured one.
+              workspace: repo,
+              model: { provider: 'mockprov', model: 'mock-alpha' },
+              prompt: 'SAVED_STANDARD_HISTORY_SENTINEL',
+            })
+          : [
               {
                 v: 3,
                 seq: 1,
@@ -2326,9 +2384,8 @@ fs.createWriteStream = (filename, options) => {
               },
             ]
               .map((event) => JSON.stringify(event))
-              .join('\n') + '\n'
-          : '';
-        if (savedHistory) fs.writeFileSync(resumePath, savedHistory);
+              .join('\n') + '\n';
+        if (savedHistory && !native) fs.writeFileSync(resumePath, savedHistory);
         try {
           const result = await spawnCli(
             [
@@ -2432,9 +2489,11 @@ fs.createWriteStream = (filename, options) => {
       },
     );
 
-    it.each(['pair', 'bare', 'full', 'standard'])(
+    it.for(['pair', 'bare', 'full', 'standard'])(
       'headless %s completion in an unsupported workspace reports missing verification',
-      async (profile) => {
+      async (profile, { skip }) => {
+        // Legacy-only: the pair profile is dropped on next (accepted difference).
+        if (profile === 'pair' && usesDirectComposer([process.env.TERM2_TEST_CLI ?? ''])) skip();
         const mock = await startModelMock(['mock-alpha'], (n) =>
           n === 1
             ? [

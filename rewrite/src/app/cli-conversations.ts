@@ -2,6 +2,7 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { readDirectSessionStart } from '../session/direct-session-start.js';
+import { readDirectListDetails } from '../session/direct-list-preview.js';
 import { withNativeCatalogue, type NativeCatalogueEntry } from './native-catalogue.js';
 import { resolveDirectRemoteConnection } from './direct-remote-config.js';
 import type { SessionOptions } from './cli-args.js';
@@ -41,8 +42,11 @@ function recent(directory: string, selected: Selection): readonly NativeCatalogu
   );
 }
 
+/** A resume refusal the CLI prints as is, without its `error ` prefix, as legacy cli.tsx does. */
+export class ResumeRefusal extends Error {}
+
 function notFound(reference: string): Error {
-  return new Error(
+  return new ResumeRefusal(
     `No conversation found to resume (${displaySessionId(
       reference,
     )}).\nRun "term2 --resume ls" to list available conversations.`,
@@ -68,27 +72,40 @@ export async function resolveNativeResume(directory: string, options: SessionOpt
     }
     lineage = readDirectSessionStart(directory, reference);
     if (!belongsTo(lineage, selected)) {
-      throw new Error(
-        `Conversation ${displaySessionId(reference)} belongs to a different project path or SSH workspace.\n` +
-          `Resume it from that project directory with: term2 --resume ${displaySessionId(reference)}`,
-      );
+      // Legacy cli.tsx's project_mismatch lines, naming the reference as typed.
+      const { metadata } = lineage;
+      const target = metadata.workspaceIdentity?.target ?? (metadata.binding?.client === 'ssh' ? 'unknown' : 'local');
+      const lines = [
+        `Error: Conversation ${requested} belongs to a different project path (${metadata.workspace}).`,
+        `Resume it from that project directory with: term2 --resume ${requested}`,
+        `Current project path: ${selected.root ?? 'unknown'}`,
+      ];
+      if (target !== 'local' || selected.target !== 'local') {
+        lines.push(
+          `Conversation SSH Host: ${target === 'local' ? 'none' : target}`,
+          `Current SSH Host: ${selected.target === 'local' ? 'none' : selected.target}`,
+        );
+      }
+      throw new ResumeRefusal(lines.join('\n'));
     }
   }
   return { ...options, resumeId: lineage.logicalSessionId };
 }
 
-export async function listNativeConversations(directory: string, options: SessionOptions): Promise<string> {
+/** Rows for legacy's `--resume ls` listing (source/utils/resume-list.ts formats them), from the native catalogue. */
+export async function listNativeConversations(directory: string, options: SessionOptions) {
   const conversations = recent(directory, await selection(options)).slice(0, 10);
-  const lines = ['Recent Conversations (last 10):'];
-  for (const lineage of conversations) {
-    lines.push(
-      `\n${displaySessionId(lineage.id)}  ${lineage.updated}`,
-      `  ${lineage.messages} message${lineage.messages === 1 ? '' : 's'} | model: ${
-        lineage.model
-      } | mode: ${lineage.profile.replace(/^builtin:/, '')}`,
-      `  term2 --resume ${displaySessionId(lineage.id)}`,
-    );
-  }
-  if (conversations.length === 0) lines.push('No conversations found for this project.');
-  return `${lines.join('\n')}\n`;
+  const details = readDirectListDetails(
+    directory,
+    conversations.map((lineage) => lineage.id),
+  );
+  return conversations.map((lineage) => ({
+    id: displaySessionId(lineage.id),
+    updatedAt: lineage.updated,
+    ...details.get(lineage.id),
+    ...(lineage.target === 'local' ? {} : { sshHost: lineage.target, projectPath: lineage.workspace }),
+    activeProfileId: lineage.profile,
+    model: lineage.model,
+    messageCount: lineage.displayed ?? lineage.messages,
+  }));
 }

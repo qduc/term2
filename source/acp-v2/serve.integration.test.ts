@@ -10,6 +10,7 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
 import * as acp from '@agentclientprotocol/sdk/experimental/v2';
 import { resolveSettingsDirectory } from '../services/settings/settings-path.js';
 import { createTestChildEnv } from '../test-helpers/terminal-e2e.js';
+import { usesDirectComposer } from '../test-helpers/direct-composer.js';
 
 // The launcher is exercised as a real child process because its contract is a
 // stdio one: stdout must carry nothing but JSON-RPC, and the process must exit 0
@@ -25,6 +26,10 @@ import { createTestChildEnv } from '../test-helpers/terminal-e2e.js';
 
 const projectRoot = fileURLToPath(new URL('../..', import.meta.url));
 import { integrationCliPath } from '../test-helpers/integration-cli.js';
+
+// Legacy-only on next: ACP is not supported there (accepted difference).
+const acpUnsupported = usesDirectComposer([process.env.TERM2_TEST_CLI ?? '']);
+const ACP_UNSUPPORTED = 'ACP is an accepted difference on next';
 
 const packageVersion: string = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8')).version;
 
@@ -118,7 +123,8 @@ afterAll(async () => {
 });
 
 describe('term2 acp (child process)', () => {
-  it('serves initialize, a session turn and an EOF shutdown over real stdio', async () => {
+  it('serves initialize, a session turn and an EOF shutdown over real stdio', async ({ skip }) => {
+    skip(acpUnsupported, ACP_UNSUPPORTED);
     const tempHome = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'acp-home-')));
     const stateHome = path.join(tempHome, 'state');
     const conversationsDir = path.join(tempHome, 'conversations');
@@ -431,7 +437,8 @@ describe('term2 acp permission round trips (child process)', () => {
     );
   }, 180_000);
 
-  it('rejects the call without writing and keeps stdout protocol-only', async () => {
+  it('rejects the call without writing and keeps stdout protocol-only', async ({ skip }) => {
+    skip(acpUnsupported, ACP_UNSUPPORTED);
     const { stdoutText, exit } = await runAcpChild(
       async () => ({ outcome: { outcome: 'cancelled' } }),
       async (session) => {

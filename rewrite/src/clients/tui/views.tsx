@@ -174,7 +174,23 @@ function StreamingStatus({ state }: { readonly state: TuiState }): React.ReactEl
     return () => clearInterval(timer);
   }, []);
   const rate = toolRunning ? null : liveRate.current;
-  const phase = toolRunning ? 'tool_call' : rate != null && rate > 0 ? 'generating' : 'processing';
+  // Legacy BottomArea: a retry backoff shows its countdown until it ends.
+  const retry = state.retry;
+  const retryUntil = useRef<{ id: number; until: number } | undefined>(undefined);
+  if (retry && retryUntil.current?.id !== retry.id)
+    retryUntil.current = { id: retry.id, until: Date.now() + retry.delayMs };
+  const retrySeconds =
+    retry && retryUntil.current
+      ? Math.max(0, Math.ceil((retryUntil.current.until - Math.max(now, Date.now())) / 1000))
+      : 0;
+  const phase =
+    retry && retrySeconds > 0
+      ? 'retrying'
+      : toolRunning
+      ? 'tool_call'
+      : rate != null && rate > 0
+      ? 'generating'
+      : 'processing';
   const stepKey = phase === 'tool_call' ? `tool_call:${activeTool?.name ?? ''}` : phase;
   useEffect(() => {
     start.current = Date.now();
@@ -188,7 +204,8 @@ function StreamingStatus({ state }: { readonly state: TuiState }): React.ReactEl
   return (
     <WorkingIndicator
       phase={phase}
-      elapsedSeconds={elapsed}
+      elapsedSeconds={phase === 'retrying' ? retrySeconds : elapsed}
+      {...(phase === 'retrying' && retry ? { retry: { attempt: retry.attempt, maxRetries: retry.maxRetries } } : {})}
       tokensPerSecond={rate ?? undefined}
       toolName={activeTool?.name}
       argumentChars={undefined}
@@ -279,15 +296,6 @@ export function Activity({
       {state.budgets.length ? <Text>Pending budget decisions: {state.budgets.length} · Ctrl+B</Text> : null}
       {state.goal ? <Text>Goal: {state.goal}</Text> : null}
       {state.verification ? <Text>Verification: {state.verification}</Text> : null}
-      {state.lastError ? (
-        <Text color={theme.danger}>
-          {/^(?:\d{3} )?WebSocket connection closed before a terminal response event\. \(code=1006(?:\s|\))/.test(
-            state.lastError,
-          )
-            ? 'Connection to the model dropped. /retry to try again.'
-            : `Error: ${state.lastError}`}
-        </Text>
-      ) : null}
       {liveTasks.length ? (
         <TaskPanel header={`Tasks · ${liveTasks.length} active · /tasks manage`}>
           {liveTasks.map((task) => (
@@ -334,6 +342,17 @@ export function Activity({
       {liveNotices(state.notices).map((notice) => (
         <Text key={notice}>{notice}</Text>
       ))}
+      {/* Legacy prints the error after the retry and exhaustion lines that led to it. */}
+      {state.lastError ? (
+        <Text color={theme.danger}>
+          {/^(?:\d{3} )?WebSocket connection closed before a terminal response event\. \(code=1006(?:\s|\))/.test(
+            state.lastError,
+          )
+            ? 'Connection to the model dropped. /retry to try again.'
+            : // Legacy conversation-orchestrator appendBotError.
+              `Error: ${state.lastError}\n\nUse /retry-turn to try again.`}
+        </Text>
+      ) : null}
     </Box>
   );
 }

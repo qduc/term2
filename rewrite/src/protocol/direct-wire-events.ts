@@ -71,6 +71,13 @@ export type WireSnapshot = {
   readonly lastUsage?: WireUsage;
   readonly lastSpeed?: { readonly tps: number; readonly approximate: boolean };
   readonly codexQuota?: import('../model/index.js').CodexWeeklyQuota;
+  /** Live backoff before a retry the user is told about; cleared by the next output or terminal. */
+  readonly retry?: {
+    readonly id: number;
+    readonly attempt: number;
+    readonly maxRetries: number;
+    readonly delayMs: number;
+  };
   readonly reasoning: string;
   readonly reasoningIdentity?: {
     readonly messageId: string;

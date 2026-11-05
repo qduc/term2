@@ -3,6 +3,7 @@
  */
 import { historyReplacedMessage, nestedPresentation, replace } from './direct-reducer-nested.js';
 import { completedFinalText } from './direct-turn-results.js';
+import { COMPACTING, COMPACTION_NOTICE, compactionOutcome, ENDS_RETRY, retrying } from './direct-reducer-notices.js';
 import type { WireCommandReceipt, WireEvent, WireMessage, WireSnapshot } from './direct-wire.js';
 
 function timeline(
@@ -74,7 +75,8 @@ function delta(state: WireSnapshot, event: Extract<WireEvent, { type: 'text_delt
 /** Reject cross-session input; seq only advances on actual durable event references. */
 export function reduceWireEvent(state: WireSnapshot, event: WireEvent): WireSnapshot {
   if (event.sessionId !== state.sessionId) throw new Error('Wire event belongs to a different session');
-  const next = reducePayload(state, event);
+  const reduced = reducePayload(state, event);
+  const next = reduced.retry && ENDS_RETRY.has(event.type) ? { ...reduced, retry: undefined } : reduced;
   return event.seq === null ? next : { ...next, seq: Math.max(next.seq ?? 0, event.seq) };
 }
 function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
@@ -257,12 +259,15 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
           event.payload,
         ],
       };
-    // Lifecycle evidence is a public audit event, not transcript, usage, cost or
-    // terminal state. Retain it on the stream; the snapshot has no duplicate field.
+    // Lifecycle evidence is otherwise a public audit event. An automatic compaction also shows legacy's
+    // live lines (conversation-event-handler.ts): the started line is replaced by its outcome.
     case 'compaction_started':
+      return event.payload.trigger === 'automatic'
+        ? { ...state, notices: [...state.notices, { kind: COMPACTION_NOTICE, message: COMPACTING }] }
+        : state;
     case 'compaction_completed':
     case 'compaction_failed':
-      return state;
+      return compactionOutcome(state, event);
     case 'session_rotated': {
       if (event.payload.logicalSessionId !== state.sessionId)
         throw new Error('Session rotation belongs to a different logical session');
@@ -461,18 +466,7 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
     // Presentation only: these DTOs still require actual Session producers. They do
     // not authorize retries, discard public history, or complete a parent turn.
     case 'retrying':
-      return {
-        ...state,
-        notices: [
-          ...state.notices,
-          {
-            kind: 'retrying',
-            message: `Retry ${event.payload.toolName ?? 'model'} (${event.payload.attempt}${
-              event.payload.maxRetries !== undefined ? `/${event.payload.maxRetries}` : ''
-            }) in ${event.payload.delayMs}ms: ${event.payload.error.message}`,
-          },
-        ],
-      };
+      return retrying(state, event);
     case 'compacted':
       return {
         ...state,

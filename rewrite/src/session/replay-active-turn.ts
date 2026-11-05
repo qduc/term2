@@ -119,6 +119,16 @@ export function appendReplayDelta(
   fact: Extract<Fact, { type: 'text_delta' }>,
   slots: Slot[],
 ): void {
+  if (fact.withdrawn) {
+    const withdrawn = turn.partials.get(fact.modelStep);
+    if (withdrawn) {
+      slots.splice(slots.indexOf(withdrawn.slot), 1);
+      const own = turn.stepSlots.get(fact.modelStep) ?? [];
+      own.splice(own.indexOf(withdrawn.slot), 1);
+    }
+    turn.partials.delete(fact.modelStep);
+    return;
+  }
   if (fact.delta.length === 0) return;
   let partial = turn.partials.get(fact.modelStep);
   if (!partial) {

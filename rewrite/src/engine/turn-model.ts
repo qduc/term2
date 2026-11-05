@@ -1,7 +1,16 @@
 /** The sole direct model boundary: preparation, recovery and accepted continuity. */
+import { delay, recoveryFailure, toModelError } from './turn-model-errors.js';
+export { toModelError } from './turn-model-errors.js';
 import type { Item, ItemId, ModelError, ModelEvent, ModelRequest, Usage } from '../model/index.js';
 import type { DirectManualCompactionOutcome, TurnDeps, TurnSpec } from './direct-types.js';
-import { DirectRecovery, type DirectRecoveryDecision, type DirectRecoveryFailure } from './direct-recovery.js';
+import {
+  DirectRecovery,
+  exhaustedNotice,
+  RetriesExhausted,
+  type DirectRecoveryDecision,
+  type DirectRecoveryFailure,
+  type DirectRetryNotice,
+} from './direct-recovery.js';
 import { DirectContinuity, selfContained } from './direct-recovery-continuity.js';
 import { hasCompleteDirectToolPairs } from './direct-recovery-history.js';
 import { CompactionWrapUp, TurnCompaction } from './turn-model-compaction.js';
@@ -22,6 +31,8 @@ export class TurnModel {
   #mainRequests = 0;
   #hasOutput = false;
   #requestHasOutput = false;
+  /** The last failed request's text-only output, which legacy's run loop withdraws before a retry. */
+  #withdrawable: { modelStep: number; start: number; count: number; hadOutput: boolean } | undefined;
   #interruptTextStream?: () => void;
   readonly #compaction: TurnCompaction;
   #standardTier = false;
@@ -96,10 +107,18 @@ export class TurnModel {
           freshStartAllowed: pairs,
           hasCommittedOutput: this.#hasOutput,
           hasCurrentRequestOutput: this.#requestHasOutput,
+          withdrawableOutput: this.#withdrawable !== undefined,
           tools: { completed: this.tools.completed, allCompleted: true, completedPairsInHistory: pairs },
         });
-        if (!decision || decision.kind === 'stop') throw error;
+        if (decision.notice) await this.#retryNotice(decision.notice, error);
+        // Legacy's failed turn keeps no partial assistant text in later requests either.
+        if (decision.kind === 'stop') await this.#withdraw(history);
+        if (decision.kind === 'stop')
+          throw decision.exhaustedAfter === undefined
+            ? error
+            : new RetriesExhausted(error, exhaustedNotice(this.spec.model.provider, decision.exhaustedAfter));
         retry = decision;
+        if (retry.withdraw) await this.#withdraw(history);
         this.#standardTier ||= retry.useStandardServiceTier;
         this.#downgraded ||= retry.downgradeTransport;
         if (retry.downgradeTransport) this.#continuity.breakChaining();
@@ -145,6 +164,29 @@ export class TurnModel {
         await delay(decision.delayMs, this.signal);
       }
     }
+  }
+
+  /** Legacy's run loop rolls back a failed attempt's partial text before retrying it. */
+  async #withdraw(history: Item[]): Promise<void> {
+    const withdrawn = this.#withdrawable;
+    if (!withdrawn) return;
+    this.#withdrawable = undefined;
+    history.splice(withdrawn.start, withdrawn.count);
+    this.#hasOutput = withdrawn.hadOutput;
+    await this.events.publish({ type: 'text_delta', delta: '', modelStep: withdrawn.modelStep, withdrawn: true });
+  }
+
+  /** Legacy's session-level retry notice; live only, like its system message. */
+  async #retryNotice(notice: DirectRetryNotice, error: unknown): Promise<void> {
+    await this.events.publish({
+      type: 'retrying',
+      attempt: notice.attempt,
+      maxRetries: notice.maxRetries,
+      delayMs: notice.delayMs,
+      error: toModelError(error),
+      toolName: notice.retryType === 'upstream' ? 'turn' : 'conversation',
+      retryType: notice.retryType,
+    });
   }
 
   /** Request interruption only while a text-only response is actively streaming. */
@@ -290,6 +332,9 @@ export class TurnModel {
 
   async #stream(request: ModelRequest, history: Item[], modelStep: number): Promise<{ calls: RootCall[]; done: Done }> {
     this.#requestHasOutput = false;
+    this.#withdrawable = undefined;
+    const hadOutput = this.#hasOutput;
+    let textOnly = true;
     const calls: RootCall[] = [];
     const items: Item[] = [];
     let text = '';
@@ -338,6 +383,7 @@ export class TurnModel {
             break;
           case 'tool_call_streaming_delta':
             hasToolOutput = true;
+            textOnly = false;
             await this.events.publish({ ...event, turnId: this.spec.turnId, modelStep });
             // Progress already shown to the caller is physical output evidence,
             // even though it is not a completed/admitted tool or history item.
@@ -345,6 +391,7 @@ export class TurnModel {
             this.#requestHasOutput = true;
             break;
           case 'item': {
+            textOnly = false;
             if (event.item.type === 'tool_call') hasToolOutput = true;
             const call = event.item.type === 'tool_call' ? this.tools.root(event.item, modelStep) : undefined;
             await this.events.publish({
@@ -425,6 +472,8 @@ export class TurnModel {
           content: [{ type: 'text', text }],
         });
       // Every retained item/delta already has its own durable Session receipt.
+      if (outcome !== 'completed' && textOnly && !interrupted && items.length > 0)
+        this.#withdrawable = { modelStep, start: history.length, count: items.length, hadOutput };
       history.push(...items);
       this.budget.record({
         requestId: `${this.spec.turnId}:model:${modelStep}`,
@@ -436,40 +485,4 @@ export class TurnModel {
       });
     }
   }
-}
-
-/** Consume live adapter cause/evidence before the serializable error projection. */
-function recoveryFailure(error: unknown): DirectRecoveryFailure {
-  const live = error as { cause?: unknown; recoveryEvidence?: DirectRecoveryFailure['evidence'] } | null;
-  return { error: toModelError(error), cause: live?.cause, evidence: live?.recoveryEvidence };
-}
-
-/** Error.message is non-enumerable; raw causes and provider frames never persist. */
-export function toModelError(error: unknown): ModelError {
-  const { kind, message, retryable, retryAfterMs } = (error ?? {}) as Partial<ModelError>;
-  if (typeof kind === 'string' && typeof message === 'string')
-    return {
-      kind,
-      message,
-      retryable: retryable === true,
-      ...(typeof retryAfterMs === 'number' ? { retryAfterMs } : {}),
-    };
-  return { kind: 'provider', message: error instanceof Error ? error.message : String(error), retryable: false };
-}
-
-function delay(ms: number, signal: AbortSignal): Promise<void> {
-  if (signal.aborted) return Promise.reject(cancelled());
-  return new Promise((resolve, reject) => {
-    const finish = (): void => {
-      signal.removeEventListener('abort', abort);
-      resolve();
-    };
-    const timer = setTimeout(finish, ms);
-    const abort = (): void => {
-      clearTimeout(timer);
-      signal.removeEventListener('abort', abort);
-      reject(cancelled());
-    };
-    signal.addEventListener('abort', abort, { once: true });
-  });
 }

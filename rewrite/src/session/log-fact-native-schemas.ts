@@ -410,8 +410,8 @@ export const nativeSchemas: Record<string, FactSchema> = {
       check.resolution(decision);
     } else if (value['kind'] !== 'cancelled' && value['kind'] !== 'interrupted') check.fail('resolution.kind');
   },
-  text_delta: () => {
-    /* Envelope/modelStep validation only, unchanged. */
+  text_delta: (fact, check) => {
+    if ('withdrawn' in fact && fact['withdrawn'] !== true) check.fail('withdrawn');
   },
   usage: () => {
     /* Envelope/modelStep validation only, unchanged. */

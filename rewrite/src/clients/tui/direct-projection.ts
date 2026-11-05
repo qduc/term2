@@ -213,13 +213,16 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
     notices: [
       // A history edit already reads as a sentence; the raw kind label is internal.
       ...snapshot.notices.map((notice) =>
-        notice.kind === 'history_replaced' ? notice.message : `${notice.kind}: ${notice.message}`,
+        notice.kind === 'history_replaced' || notice.kind === 'context_compaction' || notice.kind === 'retrying'
+          ? notice.message
+          : `${notice.kind}: ${notice.message}`,
       ),
       ...(snapshot.terminal?.notice ? [snapshot.terminal.notice] : []),
     ],
     usage: usageText(snapshot.usage),
     contextUsedTokens: snapshot.lastUsage?.inputTokens,
     codexQuota: snapshot.codexQuota,
+    ...(snapshot.retry ? { retry: snapshot.retry } : {}),
     speed: snapshot.lastSpeed,
     usageTotals: {
       inputTokens: snapshot.usage.inputTokens,

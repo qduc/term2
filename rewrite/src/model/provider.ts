@@ -124,8 +124,8 @@ function lazyModel(
           settingsService: factorySettings(deps.settings, transport),
           loggingService: deps.logger,
           sessionContextService: sessionContext,
-          // Disable both provider-local RetryingModel and SDK retries. retry.ts is
-          // the dispatch gate. Engine-injected recovery means exactly one attempt.
+          // No provider RetryingModel: the engine owns retries. The SDK keeps legacy's
+          // pre-response retries of one HTTP request (same posts and backoff).
           retryAttempts: 0,
           contextCompactionSessionState: compaction,
         }),
@@ -215,8 +215,7 @@ function factorySettings(settings: ISettingsService, transport: string): ISettin
     get(target, property) {
       const value = Reflect.get(target, property, target);
       if (property === 'get' || property === 'getDynamic') {
-        return (key: string): unknown =>
-          key === 'agent.retryAttempts' ? 0 : key === 'agent.transport' ? transport : value.call(target, key);
+        return (key: string): unknown => (key === 'agent.transport' ? transport : value.call(target, key));
       }
       return typeof value === 'function' ? value.bind(target) : value;
     },

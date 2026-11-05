@@ -81,6 +81,9 @@ export class DirectProjection {
         const task = this.#state.tasks.find((task) => task.id === progress.taskId);
         const { type: _type, ...payload } = progress;
         events = [this.#event('task_progress', payload, null, task?.turnId ?? null)];
+      } else if (update.event.type === 'retrying') {
+        const { type: _type, ...retry } = update.event;
+        events = [this.#event('retrying', retry, null, this.#state.activeTurnId)];
       } else if (update.event.type === 'codex_quota') {
         events = [this.#event('codex_quota', { quota: update.event.quota }, null, this.#state.activeTurnId)];
       } else if (update.event.type === 'reasoning_delta') {
@@ -368,6 +371,7 @@ export class DirectProjection {
         ];
       case 'text_delta': {
         const step = fact.modelStep ?? 1;
+        if (fact.withdrawn) return []; // it leaves with the next state snapshot
         return [
           this.#event(
             'text_delta',

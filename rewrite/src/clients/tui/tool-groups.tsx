@@ -6,6 +6,7 @@ import {
   type GroupableMessage,
 } from './presentation/components/message/command-grouping.js';
 import type { ToolView } from './state.js';
+import { isUnknownToolCall } from './tool-view.js';
 import type { JsonValue } from '../../protocol/direct-wire.js';
 
 export type ToolGroup = { readonly members: GroupableMessage[]; readonly status: CommandGroupMessage['status'] };
@@ -23,7 +24,9 @@ function groupable(tool: ToolView): GroupableMessage {
     (message): message is Record<string, JsonValue> =>
       typeof message === 'object' && message !== null && !Array.isArray(message) && message.sender === 'command',
   );
-  const failed = tool.status === 'rejected' || (tool.status === 'failed' && first !== undefined);
+  // An unknown tool counts as failed (#136 item 14, a confirmed legacy bug), as its row draws it.
+  const unknown = !first && isUnknownToolCall(tool);
+  const failed = tool.status === 'rejected' || (tool.status === 'failed' && (first !== undefined || unknown));
   return {
     id: tool.id,
     sender: 'command',
@@ -31,7 +34,7 @@ function groupable(tool: ToolView): GroupableMessage {
       ? 'unknown'
       : tool.status === 'rejected'
       ? 'failed'
-      : tool.status === 'failed' && !first
+      : tool.status === 'failed' && !first && !unknown
       ? 'completed'
       : tool.status,
     ...(failed ? { success: false } : typeof first?.success === 'boolean' ? { success: first.success } : {}),

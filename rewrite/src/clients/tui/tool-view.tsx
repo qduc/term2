@@ -25,20 +25,23 @@ export function ToolCall({
   const message = commandMessages(tool.display)[0];
   // A call the user denied never ran, so no command message was published; legacy draws it as a rejected row.
   const denied = !message && tool.status === 'failed' && tool.detail?.startsWith(DENIED_PREFIX) === true;
-  // Legacy draws a call that never produced a command message (an unknown tool) from its arguments alone,
-  // as a finished row: there is no result message to mark it failed.
+  // An unknown tool never ran, so it published no command message either. Legacy draws it as a finished ✓ row,
+  // a confirmed legacy bug (#136 item 14, accepted-differences): next draws it failed, with the result text.
+  const unknown = !message && !denied && isUnknownToolCall(tool);
+  // Any other call without a command message is drawn from its arguments alone, as a finished row, as in legacy.
   const status = tool.outcomeUnknown
     ? 'unknown'
     : tool.status === 'rejected'
     ? 'failed'
-    : tool.status === 'failed' && !message && !denied
+    : tool.status === 'failed' && !message && !denied && !unknown
     ? 'completed'
     : tool.status;
-  const output = typeof message?.output === 'string' ? message.output : message || denied ? tool.detail ?? '' : '';
+  const output =
+    typeof message?.output === 'string' ? message.output : message || denied || unknown ? tool.detail ?? '' : '';
   const success =
     typeof message?.success === 'boolean'
       ? message.success
-      : (message || denied) && (tool.status === 'failed' || tool.status === 'rejected')
+      : (message || denied || unknown) && (tool.status === 'failed' || tool.status === 'rejected')
       ? false
       : undefined;
   const row = (
@@ -59,6 +62,11 @@ export function ToolCall({
     />
   );
   return age ? <LiveToolAgeContext.Provider value={age}>{row}</LiveToolAgeContext.Provider> : row;
+}
+
+/** The engine's result for a call to a tool the turn did not offer (`engine/turn-tools.ts`). */
+export function isUnknownToolCall(tool: ToolView): boolean {
+  return tool.status === 'failed' && tool.detail?.startsWith(`Unknown tool: ${tool.name}`) === true;
 }
 
 /** The result text legacy's runner records for a denied call. */

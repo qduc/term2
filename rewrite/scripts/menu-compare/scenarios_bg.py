@@ -182,3 +182,7 @@ SCENARIOS['root-badtool'] = ['go', '<enter>', '<sleep>']
 SEED['root-badtool'] = {'replies': [{'tool': 'frobnicate', 'args': {}}, {'text': 'done'}]}
 SCENARIOS['root-badjson'] = ['go', '<enter>', '<sleep>']
 SEED['root-badjson'] = {'replies': [{'tool': 'read_file', 'raw_args': '{"path": "x', 'args': {}}, {'text': 'done'}]}
+# A known tool name the profile doesn't offer (Bare has no create_file): legacy's row claims "✓ Created"
+# although nothing ran (#136 item 14, a confirmed legacy bug next fixes; see accepted-differences).
+SCENARIOS['root-unoffered-create'] = ['go', '<enter>', '<sleep>']
+SEED['root-unoffered-create'] = {'replies': [{'tool': 'create_file', 'args': {'path': 'note.txt', 'content': 'hello\n'}}, {'text': 'done'}]}

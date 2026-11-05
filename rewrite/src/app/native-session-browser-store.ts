@@ -4,7 +4,7 @@
  * exactly as legacy does. Ids are shown bare (no `conv_` prefix), as legacy shows its session ids.
  */
 import { statSync } from 'node:fs';
-import type { DirectPublicState } from '../session/direct-state.js';
+import type { DirectPublicState } from '../session/state.js';
 import {
   directWriterLockHeld,
   replayNativeLineage,

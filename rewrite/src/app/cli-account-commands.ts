@@ -22,7 +22,7 @@ import type {
   DirectModelBackend,
   DirectOAuthBackend,
   DirectProviderBackend,
-} from './direct-host-config-settings.js';
+} from './host-config-settings.js';
 import { CREDENTIAL_SETTINGS } from './credential-settings.js';
 
 const errorMessage = (error: unknown): string => (error instanceof Error ? error.message : String(error));

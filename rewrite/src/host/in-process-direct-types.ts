@@ -1,8 +1,8 @@
 /** Direct in-process host boundary. `Principal` and `WorkspaceGrant` live in index.ts. */
 import type { DirectSession, DirectSessionState, DirectSessionStore } from '../session/facade-types.js';
 import type { Principal, WorkspaceGrant } from './index.js';
-import type { WireCommand, WireCommandResult, WireEvent, WireSnapshot } from '../protocol/direct-wire.js';
-import type { DirectCommandCapabilities } from '../protocol/direct-capabilities.js';
+import type { WireCommand, WireCommandResult, WireEvent, WireSnapshot } from '../protocol/wire.js';
+import type { DirectCommandCapabilities } from '../protocol/capabilities.js';
 
 export type { Principal, WorkspaceGrant } from './index.js';
 export interface DirectConnection {

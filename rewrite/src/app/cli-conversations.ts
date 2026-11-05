@@ -1,10 +1,10 @@
 /** Read-only CLI discovery. Native logical lineages are the only history source. */
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { readDirectSessionStart } from '../session/direct-session-start.js';
-import { readDirectListDetails } from '../session/direct-list-preview.js';
+import { readDirectSessionStart } from '../session/session-start.js';
+import { readDirectListDetails } from '../session/list-preview.js';
 import { withNativeCatalogue, type NativeCatalogueEntry } from './native-catalogue.js';
-import { resolveDirectRemoteConnection } from './direct-remote-config.js';
+import { resolveDirectRemoteConnection } from './remote-config.js';
 import type { SessionOptions } from './cli-args.js';
 import { displaySessionId, storedSessionId } from '../protocol/session-id.js';
 

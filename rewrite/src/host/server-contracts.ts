@@ -2,7 +2,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { DirectHost, DirectConnection, Principal, WorkspaceGrant } from './in-process-direct-types.js';
 export type { Principal } from './in-process-direct-types.js';
-import type { WireCommand, WireSnapshot } from '../protocol/direct-wire.js';
+import type { WireCommand, WireSnapshot } from '../protocol/wire.js';
 
 export const ASSERTION_PURPOSES = [
   'workspace_list',

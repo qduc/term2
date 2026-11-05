@@ -1,5 +1,5 @@
 import * as acp from '@agentclientprotocol/sdk/experimental/v2';
-import type { WireInteraction, WireQuestion, WireQuestionAnswer } from '../../protocol/direct-wire.js';
+import type { WireInteraction, WireQuestion, WireQuestionAnswer } from '../../protocol/wire.js';
 
 import type { AcpAnswer } from './contract.js';
 

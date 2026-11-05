@@ -1,5 +1,5 @@
 import * as acp from '@agentclientprotocol/sdk/experimental/v2';
-import type { WireContent } from '../../protocol/direct-wire.js';
+import type { WireContent } from '../../protocol/wire.js';
 
 export type PromptInput = { readonly text: string; readonly attachments: readonly WireContent[] };
 

@@ -6,7 +6,7 @@ import type {
   WireSnapshot,
   WireTool,
   WireToolResult,
-} from '../../protocol/direct-wire.js';
+} from '../../protocol/wire.js';
 
 /** Surface a missing direct contract as an explicit ACP error, not fake success. */
 export class MissingAcpWireContract extends acp.RequestError {

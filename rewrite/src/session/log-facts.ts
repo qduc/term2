@@ -1,9 +1,9 @@
 /** Native payload validation; envelope sequencing and the only writer stay in log.ts. */
-import { isDirectQueueFactType, parseDirectQueueFact, directContentSchema } from './direct-queue-decode.js';
-import { isDirectContextFactType, parseDirectContextFact } from './direct-context.js';
-import { isDirectCommandFactType, parseDirectCommandFact } from './direct-command-receipts.js';
-import { isDirectNotificationFactType, parseDirectNotificationFact } from './direct-notifications.js';
-import { parseDirectConfigurationFact } from './direct-configuration.js';
+import { isDirectQueueFactType, parseDirectQueueFact, directContentSchema } from './queue-decode.js';
+import { isDirectContextFactType, parseDirectContextFact } from './context.js';
+import { isDirectCommandFactType, parseDirectCommandFact } from './command-receipts.js';
+import { isDirectNotificationFactType, parseDirectNotificationFact } from './notifications.js';
+import { parseDirectConfigurationFact } from './configuration.js';
 import { nativeSchemas } from './log-fact-native-schemas.js';
 
 function objectRecord(value: unknown, fail: (field: string) => never, field: string): Record<string, unknown> {

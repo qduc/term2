@@ -1,11 +1,5 @@
 /** Headless public types. Intent is expressed only through the direct wire contract. */
-import type {
-  WireContent,
-  WireDecision,
-  WireInteraction,
-  WireOrigin,
-  WireSubmission,
-} from '../../protocol/direct-wire.js';
+import type { WireContent, WireDecision, WireInteraction, WireOrigin, WireSubmission } from '../../protocol/wire.js';
 
 export type HeadlessIo = {
   readonly stdout: { write(text: string): unknown };

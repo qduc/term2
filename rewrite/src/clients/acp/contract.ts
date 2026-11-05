@@ -1,5 +1,5 @@
 import type * as acp from '@agentclientprotocol/sdk/experimental/v2';
-import type { WireAnswerProvenance, WireDecision } from '../../protocol/direct-wire.js';
+import type { WireAnswerProvenance, WireDecision } from '../../protocol/wire.js';
 import type { DirectHost, Principal, WorkspaceGrant } from '../../host/in-process-direct-types.js';
 
 /** Preserve whether an answer came from a client action or a local failure fallback. */

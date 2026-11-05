@@ -1,6 +1,6 @@
 /** Public failures are deliberately redacted; never expose provider errors, paths or secrets. */
 import type { ServerResult } from './server-contracts.js';
-import type { WireCommandResult } from '../protocol/direct-wire.js';
+import type { WireCommandResult } from '../protocol/wire.js';
 
 export class ServerHttpError extends Error {
   constructor(

@@ -13,7 +13,7 @@ import type {
   ToolRegistry,
   ShellTaskStart,
 } from '../tools/index.js';
-import type { TurnDeps, TurnSpec } from './direct-types.js';
+import type { TurnDeps, TurnSpec } from './types.js';
 import { NativeBudgetExhausted, type TurnBudgetControl } from './turn-budget.js';
 import { TurnEvents, cancelled } from './turn-events.js';
 import { TurnToolInteractions } from './turn-tool-interactions.js';

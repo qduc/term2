@@ -3,16 +3,16 @@ import { randomUUID } from 'node:crypto';
 import type { TurnId } from '../engine/index.js';
 import type { Item } from '../model/index.js';
 import type { Fact } from './facts.js';
-import type { TurnRequest, ConversationDeps, StartedConversationTurn } from './direct-types.js';
-import type { DirectCommandRequest, DirectCommandOutcome, DirectCommandResult } from './direct-command-types.js';
-import type { DirectPreparedConfiguration } from './direct-configuration.js';
+import type { TurnRequest, ConversationDeps, StartedConversationTurn } from './types.js';
+import type { DirectCommandRequest, DirectCommandOutcome, DirectCommandResult } from './command-types.js';
+import type { DirectPreparedConfiguration } from './configuration.js';
 import type { CommandAdmission, CommandOwner } from './conversation-command-admission.js';
 import type { ConversationJournal } from './conversation-journal.js';
 import type { ConversationGeneration, PreparedConversationGeneration } from './conversation-generation.js';
-import { parseDirectSessionRotation } from './direct-session-rotation.js';
-import { submitDirectQueue } from './direct-queue.js';
-import { directPreviewConfiguration } from './direct-preview.js';
-import { planDirectCommandFinish } from './direct-command-receipts.js';
+import { parseDirectSessionRotation } from './session-rotation.js';
+import { submitDirectQueue } from './queue.js';
+import { directPreviewConfiguration } from './preview.js';
+import { planDirectCommandFinish } from './command-receipts.js';
 
 export async function runConversationRollover(
   request: Omit<DirectCommandRequest, 'operation'> & {
@@ -98,7 +98,7 @@ export async function runConversationRollover(
     let seed:
       | { turnId: TurnId; input: readonly Item[]; submission: NonNullable<TurnRequest['submission']> }
       | undefined;
-    let handoff: import('./direct-session-rotation.js').DirectSessionRotationFact['handoff'];
+    let handoff: import('./session-rotation.js').DirectSessionRotationFact['handoff'];
     if (preparedRollover.handoff !== undefined) {
       const clientRequestId = `rollover:${randomUUID()}`;
       const messageId = randomUUID();

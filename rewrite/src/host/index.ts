@@ -3,8 +3,8 @@
  *
  * Hands clients a `DirectConnection` to one session. The in-process host
  * (`in-process-direct.ts`, contracts in `in-process-direct-types.ts`) holds the
- * session store the app built with `session/direct-store.ts` and disposes it on
- * shutdown. It sends each wire command to `protocol/direct-commands.ts`.
+ * session store the app built with `session/store.ts` and disposes it on
+ * shutdown. It sends each wire command to `protocol/commands.ts`.
  * `in-process-direct-attachment.ts` keeps one projection per session and fans
  * its wire events out, in order, to every connection to that session. The TUI,
  * the headless client, ACP and the control socket all connect through it.

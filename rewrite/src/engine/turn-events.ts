@@ -1,5 +1,5 @@
 /** A single-consumer channel: only the delivered event's receipt releases its producer. */
-import type { AcceptedTurnEvent, TurnEvent, TurnResult } from './direct-types.js';
+import type { AcceptedTurnEvent, TurnEvent, TurnResult } from './types.js';
 
 type Receipt = {
   delivered: boolean;

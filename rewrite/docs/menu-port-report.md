@@ -3,7 +3,7 @@
 The legacy menu stack and its menu sessions were copied into `rewrite/src/clients/tui/menus/`.
 The stack is MenuStackHost, MenuSurface, menu-controller, menu-bindings and the trigger rules.
 The sessions are Model, Settings, SettingsValue, Resume, Rewind, Profile, Provider, Slash, Path, Skills, Copy, SubagentPool and MenuContainer.
-Only their data access was changed: it now goes through `TuiIntegration` (`clients/tui/integration.ts`), which `rewrite/src/app/direct-launch-tui-menus.ts` implements.
+Only their data access was changed: it now goes through `TuiIntegration` (`clients/tui/integration.ts`), which `rewrite/src/app/launch-tui-menus.ts` implements.
 The rewritten pickers were deleted: model, settings, effort, resume, rewind, and the picker host.
 
 ## How this was measured
@@ -92,7 +92,7 @@ None of the 8 and 13 others is a real difference. They fall into two groups:
 The first-run settings artifact is fixed, so the 16 settings and subagent-pool branches are identical now.
 - After a first run the settings file was already byte-identical on both CLIs, apart from the scratch path and port. Both write the full file at launch. So the write was not the cause.
 - The cause was that each next session re-read that file through a fresh `SettingsService`. Legacy's ancillary migration (`agent.mentorReasoningEffort` → `agent.smartReasoningEffort`) then ran on a key the launch never had. Legacy's one service migrates only when it loads the file at launch, so it shows `(default)` until its next launch.
-- Now a session keeps the launch service's values for the four migration targets (`keepLoadTimeMigrations`, `direct-application-runtime.ts`). `settings-second-run` stays identical.
+- Now a session keeps the launch service's values for the four migration targets (`keepLoadTimeMigrations`, `application-runtime.ts`). `settings-second-run` stays identical.
 
 Typed commands now resolve as legacy's do (`typed-*`, all identical, notice row included). An exact name in any case, or a unique prefix, runs that command. Several matches give `Ambiguous command /x: …`. No match gives `Unknown command /x. Did you mean …?`. Text such as `/tmp/x` is sent as a message. `/tasks`, `/steer`, `/followup` and `/exit` were next-only aliases (of Ctrl+G, Enter, Alt+Enter and `/quit`) and are gone. A command's notice and `/usage` output now use legacy's system-message colour.
 

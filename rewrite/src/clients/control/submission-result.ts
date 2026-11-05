@@ -2,7 +2,7 @@
  * Missing answer evidence stays pending; stage/outcome, never array disappearance,
  * settles queued work that never obtained a turn.
  */
-import type { WireAdmission, WireSnapshot, WireSubmissionRecord } from '../../protocol/direct-wire.js';
+import type { WireAdmission, WireSnapshot, WireSubmissionRecord } from '../../protocol/wire.js';
 import type { BridgeOutcome, ControlBridgeResult, ControlMutationReceipt } from './transport.js';
 
 /** Keep original admission identity/delivery, including a replayed rejection. */

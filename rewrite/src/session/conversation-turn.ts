@@ -11,12 +11,12 @@ import type {
 } from '../engine/index.js';
 import type { Item, ModelError } from '../model/index.js';
 import type { Fact, DirectTurnFact, DirectHistoryFact } from './facts.js';
-import type { Turn, TurnRequest, AnswerResult, AnswerProvenance, ConversationDeps } from './direct-types.js';
-import type { bindDirectCapabilities } from './direct-capabilities.js';
+import type { Turn, TurnRequest, AnswerResult, AnswerProvenance, ConversationDeps } from './types.js';
+import type { bindDirectCapabilities } from './capabilities.js';
 import { ConversationJournal, modelError } from './conversation-journal.js';
-import { isDirectHumanOrigin } from './direct-origin.js';
-import { directPreviewConfiguration } from './direct-preview.js';
-import { planDirectTiming } from './direct-time-gap.js';
+import { isDirectHumanOrigin } from './origin.js';
+import { directPreviewConfiguration } from './preview.js';
+import { planDirectTiming } from './time-gap.js';
 
 /** Accept raw admission and memory facts before engine construction; timing is model-only. */
 export function admitConversationTurn(

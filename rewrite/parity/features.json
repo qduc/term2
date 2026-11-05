@@ -1198,7 +1198,7 @@
       "status": "in_progress",
       "source": "source/services/settings/settings-schema.ts",
       "parity": [],
-      "note": "bbcfd57f current implementation trace: createDirectRuntimes passes this setting to backgroundCheckIns in rewrite/src/app/direct-application-runtime.ts. No named candidate behavioral scenario was established in this bounded reconciliation; parity remains empty. Wiring is not covered behavior or compile-derived proof.",
+      "note": "bbcfd57f current implementation trace: createDirectRuntimes passes this setting to backgroundCheckIns in rewrite/src/app/application-runtime.ts. No named candidate behavioral scenario was established in this bounded reconciliation; parity remains empty. Wiring is not covered behavior or compile-derived proof.",
       "measurement": {
         "revision": "97591a7d7e41548f9ae3b8dc65763de8cc0f8c32",
         "verdict": "works",
@@ -1209,7 +1209,7 @@
       "status": "in_progress",
       "source": "source/services/settings/settings-schema.ts",
       "parity": [],
-      "note": "bbcfd57f current implementation trace: createDirectRuntimes passes this setting to backgroundCheckIns in rewrite/src/app/direct-application-runtime.ts. No named candidate behavioral scenario was established in this bounded reconciliation; parity remains empty. Wiring is not covered behavior or compile-derived proof.",
+      "note": "bbcfd57f current implementation trace: createDirectRuntimes passes this setting to backgroundCheckIns in rewrite/src/app/application-runtime.ts. No named candidate behavioral scenario was established in this bounded reconciliation; parity remains empty. Wiring is not covered behavior or compile-derived proof.",
       "measurement": {
         "revision": "97591a7d7e41548f9ae3b8dc65763de8cc0f8c32",
         "verdict": "works",
@@ -1300,7 +1300,7 @@
       "status": "in_progress",
       "source": "source/services/settings/settings-schema.ts",
       "parity": [],
-      "note": "bbcfd57f current implementation trace: verificationOperations and createDirectRuntimes read this setting in rewrite/src/app/direct-application-runtime.ts. No named candidate behavioral scenario was established in this bounded reconciliation; parity remains empty. Wiring is not covered behavior or compile-derived proof.",
+      "note": "bbcfd57f current implementation trace: verificationOperations and createDirectRuntimes read this setting in rewrite/src/app/application-runtime.ts. No named candidate behavioral scenario was established in this bounded reconciliation; parity remains empty. Wiring is not covered behavior or compile-derived proof.",
       "measurement": {
         "revision": "97591a7d7e41548f9ae3b8dc65763de8cc0f8c32",
         "verdict": "works",
@@ -1736,7 +1736,7 @@
         "verdict": "absent",
         "evidence": "m6-inventory-measure-evidence/setting-agent-probe-result.json#setting:agent.sessionRollover.enabled"
       },
-      "note": "solo/tools: next ports legacy's ContextMilestoneReminder (rewrite/src/app/direct-application-policy.ts contextMilestones, engine hook in turn-model-compaction.ts). agent.sessionRollover.enabled turns the reminders off; default true as in legacy. Evidence: side-by-side pty captures with a fake provider (milestones [3000, 6000] over four turns; a mid-turn milestone after a tool call plus a reconsideration at 60,000 with autoBrief false; reminders across a session_rollover; a resume, where both engines drop the saved reminders): every provider request byte-equal after id/time masking. No parity scenario covers it."
+      "note": "solo/tools: next ports legacy's ContextMilestoneReminder (rewrite/src/app/application-policy.ts contextMilestones, engine hook in turn-model-compaction.ts). agent.sessionRollover.enabled turns the reminders off; default true as in legacy. Evidence: side-by-side pty captures with a fake provider (milestones [3000, 6000] over four turns; a mid-turn milestone after a tool call plus a reconsideration at 60,000 with autoBrief false; reminders across a session_rollover; a resume, where both engines drop the saved reminders): every provider request byte-equal after id/time masking. No parity scenario covers it."
     },
     "setting:agent.sessionRollover.milestones": {
       "status": "in_progress",
@@ -2522,7 +2522,7 @@
       "status": "in_progress",
       "source": "source/services/settings/settings-schema.ts",
       "parity": [],
-      "note": "bbcfd57f current implementation trace: verificationOperations selects this setting in rewrite/src/app/direct-application-runtime.ts. No named candidate behavioral scenario was established in this bounded reconciliation; parity remains empty. Wiring is not covered behavior or compile-derived proof.",
+      "note": "bbcfd57f current implementation trace: verificationOperations selects this setting in rewrite/src/app/application-runtime.ts. No named candidate behavioral scenario was established in this bounded reconciliation; parity remains empty. Wiring is not covered behavior or compile-derived proof.",
       "measurement": {
         "revision": "97591a7d7e41548f9ae3b8dc65763de8cc0f8c32",
         "verdict": "works",

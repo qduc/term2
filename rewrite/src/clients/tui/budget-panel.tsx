@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
-import type { WireBudgetDecision, WireBudgetRequest } from '../../protocol/direct-wire.js';
+import type { WireBudgetDecision, WireBudgetRequest } from '../../protocol/wire.js';
 
 /** User-owned resolution of a specific Session budget request; no automatic grants. */
 export function BudgetPanel({

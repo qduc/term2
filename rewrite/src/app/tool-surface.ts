@@ -29,13 +29,13 @@ import type { ToolContextSeed } from '../engine/index.js';
 import type { Workspace } from '../tools/index.js';
 import type { Item, ItemId, ModelRegistry, ReasoningEffort } from '../model/index.js';
 import { createProviderRegistry } from '../model/provider.js';
-import { createDirectSubagentTools } from './direct-subagent-tools.js';
-import { createDirectShellTools } from './direct-shell-tools.js';
+import { createDirectSubagentTools } from './subagent-tools.js';
+import { createDirectShellTools } from './shell-tools.js';
 import { createSourceToolRegistry, executeSourceChild, sourceToolSpec } from './source-tools.js';
 import type { AgentSurface, ProfileSelection, ToolSurfaceOptions } from './tool-contract.js';
-import { SSH_LOCAL_ONLY_TOOLS } from './direct-remote-tools.js';
-import { renderDurableGoalContext } from '../session/direct-goal.js';
-import type { DirectContextPort } from '../session/direct-capabilities.js';
+import { SSH_LOCAL_ONLY_TOOLS } from './remote-tools.js';
+import { renderDurableGoalContext } from '../session/goal.js';
+import type { DirectContextPort } from '../session/capabilities.js';
 
 type ToolInterceptor = Parameters<Parameters<typeof installPlanModeInterceptor>[0]['addToolInterceptor']>[0];
 

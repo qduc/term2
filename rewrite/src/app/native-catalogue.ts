@@ -8,10 +8,10 @@ import {
   type NativeCatalogueScope,
   type NativeIndexer,
 } from '../session/native-catalogue.js';
-import { contentText, publicContent } from '../protocol/direct-public.js';
+import { contentText, publicContent } from '../protocol/public.js';
 
 export { nativeCataloguePath, nativeSearchScope, replayNativeLineage };
-export { directWriterLockHeld } from '../session/direct-writer-lock.js';
+export { directWriterLockHeld } from '../session/writer-lock.js';
 export type { NativeCatalogueEntry, NativeCatalogueScope, NativeIndexer };
 
 /** The user's message count holds only non-blank messages. */

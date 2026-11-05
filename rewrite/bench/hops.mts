@@ -174,7 +174,7 @@ assert.ok(files.length > 0, 'stack trace named no repository files');
 // The path must be the production direct one (the bench-only bridge files are deleted).
 for (const required of [
   'rewrite/src/host/in-process-direct.ts',
-  'rewrite/src/session/direct-session.ts',
+  'rewrite/src/session/session.ts',
   'rewrite/src/app/generation-guard.ts',
 ])
   assert.ok(

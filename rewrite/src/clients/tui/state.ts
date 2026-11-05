@@ -8,7 +8,7 @@ import type {
   WireSnapshot,
   WireTask,
   WireToolResult,
-} from '../../protocol/direct-wire.js';
+} from '../../protocol/wire.js';
 
 /** Client display state. This is a view model, not a wire or persistence format. */
 export type Message = {

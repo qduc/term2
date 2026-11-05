@@ -2,12 +2,12 @@
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import type { Item, ItemId, Model, ModelError, ModelEvent, ModelRequest, Usage } from '../model/index.js';
-import type { DirectCompactionResult, DirectCompactionRequest } from './direct-recovery-compaction.js';
-import { compactDirectHistory } from './direct-recovery-compaction.js';
-import { estimateDirectContext } from './direct-context-estimate.js';
-import type { TurnCompactionEvent, TurnDeps, TurnSpec } from './direct-types.js';
+import type { DirectCompactionResult, DirectCompactionRequest } from './recovery-compaction.js';
+import { compactDirectHistory } from './recovery-compaction.js';
+import { estimateDirectContext } from './context-estimate.js';
+import type { TurnCompactionEvent, TurnDeps, TurnSpec } from './types.js';
 import { NativeBudgetExhausted, type TurnBudgetControl } from './turn-budget.js';
-import { recoveryDelay } from './direct-recovery.js';
+import { recoveryDelay } from './recovery.js';
 import { TurnEvents, cancelled } from './turn-events.js';
 
 type Done = Extract<ModelEvent, { type: 'done' }>;

@@ -1,8 +1,8 @@
 /** Validates the durable rotation/priority-handoff protocol; never mutates provider history. */
 import type { TurnId } from '../engine/index.js';
 import type { Fact } from './facts.js';
-import type { DirectQueueState } from './direct-queue-types.js';
-import type { DirectCommandReceipts } from './direct-command-types.js';
+import type { DirectQueueState } from './queue-types.js';
+import type { DirectCommandReceipts } from './command-types.js';
 
 const controlHandoff = (
   origin: { readonly kind?: string; readonly id?: string; readonly source?: string } | undefined,

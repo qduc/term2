@@ -1,6 +1,6 @@
 import * as acp from '@agentclientprotocol/sdk/experimental/v2';
 import type { DirectConnection } from '../../host/in-process-direct-types.js';
-import type { WireBudgetRequest, WireCommand, WireEvent, WireInteraction } from '../../protocol/direct-wire.js';
+import type { WireBudgetRequest, WireCommand, WireEvent, WireInteraction } from '../../protocol/wire.js';
 import type { AcpLogger, EmitUpdate, PromptExecution, PromptOutcome } from './contract.js';
 import { errorMessage } from './contract.js';
 import { AcpRenderer, MissingAcpWireContract, terminalOutcome } from './render.js';

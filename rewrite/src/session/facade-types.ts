@@ -5,15 +5,10 @@
 import type { InteractionDecision, InteractionRequest, InteractionRequestId, TurnId } from '../engine/index.js';
 import type { ContentPart, ModelError, ModelRef, Usage } from '../model/index.js';
 import type { ExecutionId, Workspace } from '../tools/index.js';
-import type { DirectContextState } from './direct-context.js';
-import type { DirectTaskState, DirectBackgroundProgress, DirectTaskControlResult } from './direct-background-types.js';
-import type {
-  DirectQueueState,
-  DirectQueueEdit,
-  DirectQueueMutation,
-  DirectQueueSubmission,
-} from './direct-queue-types.js';
-import type { AnswerResult, AnswerProvenance } from './direct-types.js';
+import type { DirectContextState } from './context.js';
+import type { DirectTaskState, DirectBackgroundProgress, DirectTaskControlResult } from './background-types.js';
+import type { DirectQueueState, DirectQueueEdit, DirectQueueMutation, DirectQueueSubmission } from './queue-types.js';
+import type { AnswerResult, AnswerProvenance } from './types.js';
 import type { Fact, TurnOutcomeName } from './facts.js';
 
 export type DirectOrigin =
@@ -118,7 +113,7 @@ export type DirectSessionState = {
   readonly backingSessionId: string;
   readonly workspace: Workspace;
   readonly model: ModelRef;
-  readonly configuration?: import('./direct-configuration.js').DirectConfigurationState;
+  readonly configuration?: import('./configuration.js').DirectConfigurationState;
   readonly status: 'idle' | 'running' | 'awaiting_interaction' | 'interrupted' | 'closed';
   readonly activeTurnId: TurnId | null;
   readonly drafts: readonly DirectDraft[];
@@ -138,8 +133,8 @@ export type DirectSessionState = {
   readonly lastUsage?: Usage;
   readonly lastSpeed?: { readonly tps: number; readonly approximate: boolean };
   readonly codexQuota?: import('../model/index.js').CodexWeeklyQuota;
-  readonly commands: import('./direct-command-types.js').DirectCommandReceipts;
-  readonly notifications: import('./direct-notifications.js').DirectNotificationState;
+  readonly commands: import('./command-types.js').DirectCommandReceipts;
+  readonly notifications: import('./notifications.js').DirectNotificationState;
   readonly requestCosts: readonly import('./facts.js').DirectRequestCostFact[];
   readonly pendingBudgets: readonly Extract<Fact, { readonly type: 'budget_opened' }>[];
   readonly timeline: readonly DirectTimelineEntry[];
@@ -148,7 +143,7 @@ export type DirectSessionState = {
   readonly queue: DirectQueueState;
   readonly turnResults: readonly {
     readonly turnId: TurnId;
-    readonly finalWindow?: import('./direct-final.js').DirectFinalWindow;
+    readonly finalWindow?: import('./final.js').DirectFinalWindow;
     readonly outcome: TurnOutcomeName;
     readonly messages: readonly DirectMessage[];
     readonly terminalCause?: string;
@@ -169,7 +164,7 @@ export type DirectArgumentStream = {
 };
 export type DirectBranchTransient = DirectArgumentStream & {
   readonly branchId: string;
-  readonly taskId: import('./direct-background-types.js').DirectTaskId;
+  readonly taskId: import('./background-types.js').DirectTaskId;
   readonly parentTurnId: TurnId;
   readonly rootTurnId: TurnId;
 };
@@ -181,7 +176,7 @@ export type DirectSessionUpdate =
       readonly event:
         | {
             readonly type: 'automatic_memory_notice';
-            readonly notice: import('./direct-memory.js').DirectAutomaticMemoryNotice;
+            readonly notice: import('./memory.js').DirectAutomaticMemoryNotice;
           }
         | DirectBackgroundProgress
         | DirectArgumentStream
@@ -206,25 +201,25 @@ export type DirectCancelTarget = { readonly kind: 'foreground' } | { readonly ki
 export interface DirectSession {
   readonly id: string;
   snapshotInputPreview(
-    request: import('./direct-preview.js').DirectPreviewRequest,
-  ): import('./direct-preview.js').DirectPreviewSnapshot;
+    request: import('./preview.js').DirectPreviewRequest,
+  ): import('./preview.js').DirectPreviewSnapshot;
   /** Accepted provider history at the current cut; read it in the same tick as `capture` to pair with its state. */
   acceptedHistory(): readonly import('../model/index.js').Item[];
   /** Current native mutation revision, not the event position or durable sequence. */
   commandRevision(): string;
   /** Stable invocation identity and durable outcome; admission is not completion. */
   command(
-    request: import('./direct-command-types.js').DirectCommandRequest,
-  ): Promise<import('./direct-command-types.js').DirectCommandResult>;
+    request: import('./command-types.js').DirectCommandRequest,
+  ): Promise<import('./command-types.js').DirectCommandResult>;
   /** Drain one current notice batch into a real silent root turn; duplicate keys return the original admission. */
   drainBackgroundNotifications(
     clientRequestId: string,
-  ): Promise<import('./direct-notifications.js').DirectNotificationDrainResult>;
+  ): Promise<import('./notifications.js').DirectNotificationDrainResult>;
   configureTaskCheckIn(
     target: string,
-    policy: import('./direct-background-check-ins.js').DirectBackgroundCheckInPolicy,
-  ): ReturnType<import('./direct-background-check-ins.js').DirectBackgroundCheckIns['configure']>;
-  rewindTargets(): readonly import('./direct-command-types.js').DirectRewindTarget[];
+    policy: import('./background-check-ins.js').DirectBackgroundCheckInPolicy,
+  ): ReturnType<import('./background-check-ins.js').DirectBackgroundCheckIns['configure']>;
+  rewindTargets(): readonly import('./command-types.js').DirectRewindTarget[];
   submit(request: DirectSubmission): Promise<DirectAdmission>;
   submitWithDelivery(request: DirectQueueSubmission, expectedSteerTurnId?: TurnId): Promise<DirectAdmission>;
   editQueue(messageId: string, edit: DirectQueueEdit): Promise<DirectQueueMutation>;
@@ -234,12 +229,12 @@ export interface DirectSession {
   abort(expectedTurnId: TurnId, discardQueue?: boolean, returnSteers?: boolean): DirectAbortResult;
   answerBudget(
     requestId: InteractionRequestId,
-    decision: import('../engine/direct-types.js').BudgetDecision,
+    decision: import('../engine/types.js').BudgetDecision,
     provenance?: AnswerProvenance,
   ): AnswerResult;
   setGoal(
     expectedGeneration: number,
-    goal: import('./direct-goal.js').DurableGoal | undefined,
+    goal: import('./goal.js').DurableGoal | undefined,
     source?: 'user' | 'launcher',
   ): boolean;
   answer(requestId: InteractionRequestId, decision: InteractionDecision, provenance?: AnswerProvenance): AnswerResult;

@@ -1,8 +1,8 @@
 /** Direct wire-backed control port. Owns a single read attachment, never the
  * conversation, engine, durable admission policy or runtime completion loop.
  */
-import type { WireCommandResult, WireSnapshot } from '../../protocol/direct-wire.js';
-import { reduceWireEvent } from '../../protocol/direct-reducer.js';
+import type { WireCommandResult, WireSnapshot } from '../../protocol/wire.js';
+import { reduceWireEvent } from '../../protocol/reducer.js';
 import type { BridgeInput, BridgeOutcome, ControlMutationReceipt, ControlTopic } from './transport.js';
 import type { ControlSubmission, DirectControlPortOptions, DirectControlSessionPort } from './types.js';
 import { ControlCompletions, type ControlDelivery } from './completions.js';

@@ -4,7 +4,7 @@
  * wire, and it returns the turn to rewind instead of rewinding, so the session runs that with its own
  * native rewind once the command's input is settled.
  */
-import type { WireRewindTarget } from '../../../protocol/direct-wire.js';
+import type { WireRewindTarget } from '../../../protocol/wire.js';
 import type { RewindDisposition, RewindItem } from './menu-types.js';
 
 /** The turn a bare invocation acts on, which is what distinguishes the aliases. */

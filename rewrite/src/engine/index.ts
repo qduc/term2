@@ -8,7 +8,7 @@
  * at most the unaccepted tail. When a tool needs approval or an answer, the
  * turn emits an interaction request and waits in memory for the session to
  * answer it; it does not call up into a UI. `startCompaction` and the
- * `direct-recovery*` files own compaction and recovery from model failures.
+ * `recovery*` files own compaction and recovery from model failures.
  * A subagent is a nested turn run through the same loop.
  * Depends on: model, tools, config.
  */
@@ -28,5 +28,5 @@ export type {
   TurnHandle,
   TurnResult,
   TurnSpec,
-} from './direct-types.js';
+} from './types.js';
 export { startTurn, startCompaction } from './turn.js';

@@ -2,9 +2,9 @@
  * No adopted runtime and no fallback. Reconnect cursors require a real Session replay seam.
  */
 import type { DirectSession } from '../session/facade-types.js';
-import type { WireCommand } from '../protocol/direct-wire.js';
-import { applyDirectCommand } from '../protocol/direct-commands.js';
-import { DirectProtocolError } from '../protocol/direct-errors.js';
+import type { WireCommand } from '../protocol/wire.js';
+import { applyDirectCommand } from '../protocol/commands.js';
+import { DirectProtocolError } from '../protocol/errors.js';
 import { directReplayView } from './in-process-direct-replay.js';
 import type { DirectEventQueue } from './in-process-direct-queue.js';
 import { DirectAttachment } from './in-process-direct-attachment.js';
@@ -70,7 +70,7 @@ export function createDirectInProcessHost(deps: DirectHostDeps): DirectHost {
       snapshot: view.snapshot,
       ...('replay' in view ? { replay: view.replay } : {}),
       events: view.events,
-      async send(command: WireCommand): Promise<import('../protocol/direct-wire.js').WireCommandResult> {
+      async send(command: WireCommand): Promise<import('../protocol/wire.js').WireCommandResult> {
         if (closed || disposed || view.events.closed)
           return { ok: false, code: 'closed', message: 'Connection is closed.' };
         try {

@@ -1,10 +1,10 @@
 /** Session HTTP operations use only the attached direct connection and typed protocol commands. */
-import type { WireAdmission, WireCommand } from '../protocol/direct-wire.js';
+import type { WireAdmission, WireCommand } from '../protocol/wire.js';
 import type { ServerHostDependencies, ServerResult, ServerSessionRequest } from './server-contracts.js';
 import type { PrivateRoute } from './server-routes.js';
 import { commandFailure, publicError, unavailable } from './server-errors.js';
 import type { ServerInteractions } from './server-interactions.js';
-import { parseWireCommand } from '../protocol/direct-parse.js';
+import { parseWireCommand } from '../protocol/parse.js';
 import { projectServerSession } from './server-projection.js';
 import { invokeServerCommand, projectServerNativeCommand, safeNativeCommandResult } from './server-commands.js';
 import { AGENT_WIRE_V2_RUNTIME_AVAILABLE, encodeAgentConfigureResultV2 } from './server-wire-v2.js';
@@ -245,7 +245,7 @@ export async function handleSessionRoute(
 /** Budget decisions go through the non-tool answer capability with authenticated user provenance. */
 async function resolveBudget(
   input: ServerSessionRequest,
-  budget: import('../protocol/direct-wire.js').WireBudgetRequest,
+  budget: import('../protocol/wire.js').WireBudgetRequest,
   direct: boolean,
   interactions: ServerInteractions,
 ): Promise<ServerResult> {

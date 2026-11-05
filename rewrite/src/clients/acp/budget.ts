@@ -1,5 +1,5 @@
 import * as acp from '@agentclientprotocol/sdk/experimental/v2';
-import type { WireAnswerProvenance, WireBudgetDecision, WireBudgetRequest } from '../../protocol/direct-wire.js';
+import type { WireAnswerProvenance, WireBudgetDecision, WireBudgetRequest } from '../../protocol/wire.js';
 
 type BudgetAnswer = { readonly decision: WireBudgetDecision; readonly provenance: WireAnswerProvenance };
 const stop = (source: 'user' | 'system'): BudgetAnswer => ({ decision: { kind: 'stop' }, provenance: { source } });

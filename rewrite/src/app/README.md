@@ -27,25 +27,25 @@ separate and remains enabled. This is startup policy, not a runtime toggle.
 `SettingsService`. The settings owner retains its directory, logger,
 and persistence policies.
 
-`createDirectRuntimes` in `direct-application-runtime.ts` builds session-owned
+`createDirectRuntimes` in `application-runtime.ts` builds session-owned
 settings and tool generations. `createDirectConfigSettings` in
-`direct-config-settings.ts` produces a read-only, source-schema-validated settings
+`config-settings.ts` produces a read-only, source-schema-validated settings
 snapshot; it does not persist selection changes. Its
 `prepareDirectSessionConfigurationCommand` validates HTTP selection intent,
 retains request identity and expected revision, and rejects unknown or empty
 mutations. Reasoning effort has three validators, each reading a source-owned
 list rather than its own copy: HTTP configuration uses the output object of the
 source agent settings preprocess schema, while the `--reasoning` flag
-(`cli.ts`) and the TUI's `/effort` command (`direct-launch-tui-commands.ts`)
+(`cli.ts`) and the TUI's `/effort` command (`launch-tui-commands.ts`)
 check against `VALID_REASONING_EFFORTS`.
 
-`DirectGlobalConfiguration` in `direct-host-config-settings.ts` implements the
+`DirectGlobalConfiguration` in `host-config-settings.ts` implements the
 host's public `SettingsProjection` rather than maintaining another projection
 type. Reads redact values through `safeValue`; writes enforce the allowlist,
 revision, and persistence result before returning a new projection. The public
 value union is not permission to serialize arbitrary settings objects.
 
-`createDirectTuiSettings` in `direct-launch-tui-settings.ts` prevents structural
+`createDirectTuiSettings` in `launch-tui-settings.ts` prevents structural
 profile changes once wire messages exist. Wire history has no system-message
 role to exclude. Its `/auto-approve` and `/sandbox` commands save the applied
 preference through `DirectApplication.saveApprovalPreference`, using the global
@@ -120,8 +120,8 @@ source OAuth prompts and catalogue diagnostics. They do not open a conversation;
 
 ## Tools and delegation
 
-`direct-subagent-tools.ts` owns child admission, preparation, invocation scope and
-Session launch authority. `direct-subagent-callbacks.ts` adapts source delegation
+`subagent-tools.ts` owns child admission, preparation, invocation scope and
+Session launch authority. `subagent-callbacks.ts` adapts source delegation
 callbacks and projects accepted task status/results with actual execution evidence;
 it does not introduce a task lifecycle registry or grant child authority.
 
@@ -147,7 +147,7 @@ owns its original graph. Replacement rebinds the script registry. Memory leaves 
 actual surface offers `run_code`; otherwise the leaves remain directly callable. The source
 tool spec keeps `description` live: `run_code` binds its catalog after initial
 surface assembly, and a copied string silently omits native memory leaves.
-`direct-config-memory.ts` re-adapts the captured leaves on configuration even
+`config-memory.ts` re-adapts the captured leaves on configuration even
 when none is top-level. Late source-leaf adaptation retains the raw approval
 policy and interceptors registered by `buildAgentTools`; it must not re-register
 the wrapped `needsApproval` interrupt marker as the authorization predicate.
@@ -159,7 +159,7 @@ tools remain absent and no second store read occurs; Session substitutes its one
 accepted guidance/global-context snapshot at `planDirectInstructions`, so a
 populated index and the empty-index wording are both resolved from the real
 snapshot rather than guessed.
-MCP capture in `direct-mcp-source.ts` reserves the executable `describe` name from the
+MCP capture in `mcp-source.ts` reserves the executable `describe` name from the
 run-code runtime, the same owner used by tool assembly.
 
 `configure_task_check_in` preserves the source's synchronous `target` callback
@@ -168,7 +168,7 @@ here serializes as `{}` in the source tool, while an `id` parameter loses named
 aliases; the adapter derives its parameter type from `AgentFactoryDeps` to keep
 that boundary explicit.
 
-`createDirectSubagentTools` in `direct-subagent-tools.ts` exposes source callback
+`createDirectSubagentTools` in `subagent-tools.ts` exposes source callback
 contracts over Session's admitted nested requests and task controls:
 
 - Built-in roles use the session pool selector once per spawn; custom role
@@ -195,7 +195,7 @@ provider execution, approval/reconnect behavior, or continuation parity.
 
 Native subagent task IDs use the source codename vocabulary so model-targeted
 handles remain pronounceable; they are still the Session's canonical task IDs,
-not aliases layered over UUIDs. `direct-subagent-tools.ts` inherits output
+not aliases layered over UUIDs. `subagent-tools.ts` inherits output
 allocation through the same configured-setting/catalog policy as the source
 runner; an explicit role allocation still wins. `itemToInput` canonicalizes
 text-only assistant context without rewriting accepted Items or live deltas.

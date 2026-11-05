@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import envPaths from 'env-paths';
-import type { WireContent } from '../../protocol/direct-wire.js';
+import type { WireContent } from '../../protocol/wire.js';
 
 export type HistoryEntry = { readonly text: string; readonly attachments: readonly WireContent[] };
 /** Direct TUI history is separate from the live CLI's history and conversations. */

@@ -1,7 +1,7 @@
 /** Translate pinned HTTP command IDs to stable native invocation keys. Session remains the only
  * acceptance/receipt authority; this adapter never retries effects, caches outcomes or allocates IDs.
  */
-import type { WireCommand, WireCommandReceipt, WireCommandResult } from '../protocol/direct-wire.js';
+import type { WireCommand, WireCommandReceipt, WireCommandResult } from '../protocol/wire.js';
 import type { CommandBody, ServerResult, ServerSessionRequest } from './server-contracts.js';
 import { commandFailure, publicError, unavailable } from './server-errors.js';
 

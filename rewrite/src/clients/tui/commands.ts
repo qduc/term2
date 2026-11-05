@@ -8,7 +8,7 @@ import type {
   WireBudgetDecision,
   WireDecision,
   WireSubmission,
-} from '../../protocol/direct-wire.js';
+} from '../../protocol/wire.js';
 
 export class WireCommandFailure extends Error {
   constructor(readonly code: string, message: string) {

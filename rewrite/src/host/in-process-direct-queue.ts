@@ -1,5 +1,5 @@
 /** Per-connection delivery only. It never acknowledges execution or backpressures Session. */
-import type { WireEvent } from '../protocol/direct-wire.js';
+import type { WireEvent } from '../protocol/wire.js';
 
 type Waiting = { resolve(value: IteratorResult<WireEvent>): void; reject(error: Error): void };
 export class DirectEventQueue implements AsyncIterable<WireEvent> {

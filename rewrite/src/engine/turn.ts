@@ -1,14 +1,14 @@
 /** Direct advancement; Session is the only writer and event-acceptance authority. */
 import type { Item, ItemId } from '../model/index.js';
 import type { NestedRunRequest, ToolRegistry } from '../tools/index.js';
-import type { TurnDeps, TurnHandle, TurnResult, TurnSpec } from './direct-types.js';
+import type { TurnDeps, TurnHandle, TurnResult, TurnSpec } from './types.js';
 import { TurnEvents, cancelled } from './turn-events.js';
 import { TurnTools } from './turn-tools.js';
 import { NativeBudgetExhausted, TurnBudgetControl } from './turn-budget.js';
 import { TurnModel, toModelError } from './turn-model.js';
-import { RetriesExhausted } from './direct-recovery.js';
+import { RetriesExhausted } from './recovery.js';
 
-export type { TurnSpec, TurnResult, TurnEvent, TurnHandle } from './direct-types.js';
+export type { TurnSpec, TurnResult, TurnEvent, TurnHandle } from './types.js';
 
 /** Lazy, single-consumer model/tool/model run with per-event durable acceptance. */
 export function startTurn(spec: TurnSpec, deps: TurnDeps): TurnHandle {

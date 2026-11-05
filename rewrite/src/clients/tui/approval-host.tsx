@@ -8,7 +8,7 @@
 import React, { useRef, useState, type MutableRefObject } from 'react';
 import { Box, Text } from 'ink';
 import { MultilineInput } from 'ink-prompt';
-import { ASK_USER_NO_ANSWER_RESULT, type WireDecision, type WireGrant } from '../../protocol/direct-wire.js';
+import { ASK_USER_NO_ANSWER_RESULT, type WireDecision, type WireGrant } from '../../protocol/wire.js';
 import type { TuiConnection } from './integration.js';
 import type { InteractionView, TuiState } from './state.js';
 import { answerInteraction } from './commands.js';

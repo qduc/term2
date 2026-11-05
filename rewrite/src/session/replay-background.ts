@@ -1,8 +1,8 @@
 /** Owns task/branch audit streams and physical-request accounting across root rotations. */
 import type { TurnId } from '../engine/index.js';
 import type { Fact, DirectTurnFact } from './facts.js';
-import type { DirectBackgroundFact } from './direct-background-types.js';
-import { projectDirectBackground } from './direct-background-replay.js';
+import type { DirectBackgroundFact } from './background-types.js';
+import { projectDirectBackground } from './background-replay.js';
 import type { ReplayedConversation, ReplayedBranch } from './replay.js';
 
 type RequestCost = Extract<Fact, { type: 'request_cost_recorded' }>;

@@ -1,7 +1,7 @@
 /** Execution-owned interaction receipts; TurnTools retains scheduling and stop selection. */
 import type { InteractionDecision, InteractionRequestId, ToolInteractionRequest, ExecutionId } from '../tools/index.js';
 import type { ToolCallId } from '../model/index.js';
-import type { InteractionRequest, TurnDeps, TurnSpec } from './direct-types.js';
+import type { InteractionRequest, TurnDeps, TurnSpec } from './types.js';
 import type { TurnBudgetControl } from './turn-budget.js';
 import { TurnEvents, cancelled } from './turn-events.js';
 

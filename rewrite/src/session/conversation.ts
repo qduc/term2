@@ -16,20 +16,20 @@ import type { TurnId } from '../engine/index.js';
 import { startCompaction, startTurn } from '../engine/index.js';
 import type { Item, ModelError } from '../model/index.js';
 import { ConversationGeneration, type PreparedConversationGeneration } from './conversation-generation.js';
-import { bindDirectCapabilities } from './direct-capabilities.js';
-import type { DirectPreparedConfiguration } from './direct-configuration.js';
-import { type DirectContextFact } from './direct-context.js';
-import { planDirectTiming } from './direct-time-gap.js';
-import { parseDirectOrigin } from './direct-origin.js';
-import type { DirectQueueEffect } from './direct-queue-types.js';
-import { planDirectQueue, submitDirectQueue } from './direct-queue.js';
-import { directRolloverAtBoundary } from './direct-rollover.js';
-import { DirectRunBudgets } from './direct-run-budget.js';
-import type { Conversation, ConversationDeps, StartedConversationTurn, TurnRequest } from './direct-types.js';
+import { bindDirectCapabilities } from './capabilities.js';
+import type { DirectPreparedConfiguration } from './configuration.js';
+import { type DirectContextFact } from './context.js';
+import { planDirectTiming } from './time-gap.js';
+import { parseDirectOrigin } from './origin.js';
+import type { DirectQueueEffect } from './queue-types.js';
+import { planDirectQueue, submitDirectQueue } from './queue.js';
+import { directRolloverAtBoundary } from './rollover.js';
+import { DirectRunBudgets } from './run-budget.js';
+import type { Conversation, ConversationDeps, StartedConversationTurn, TurnRequest } from './types.js';
 import type { Fact, FactLine, SessionStartedFact } from './facts.js';
 import { replay } from './replay.js';
 
-export type { AnswerResult, Conversation, ConversationDeps, Turn, TurnRequest } from './direct-types.js';
+export type { AnswerResult, Conversation, ConversationDeps, Turn, TurnRequest } from './types.js';
 
 /** Writes session_started before any engine can be constructed. */
 export function createConversation(
@@ -228,7 +228,7 @@ function conversation(
       readonly compaction?: true;
       readonly retryNotice?: { readonly messageId: Item['id']; readonly text: string };
       readonly queuedFollowUp?: boolean;
-      readonly compactionState?: import('../engine/direct-types.js').TurnCompactionState;
+      readonly compactionState?: import('../engine/types.js').TurnCompactionState;
       readonly history?: readonly Item[];
     },
   ): StartedConversationTurn => {

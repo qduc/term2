@@ -46,11 +46,11 @@
       "lines": 511,
       "reason": "One model step with its recovery loop; candidate 2 joins the replacement-boundary projection with legacy's retry notices and model_retrying observation, which share the loop's state."
     },
-    "rewrite/src/protocol/direct-projection.ts": {
+    "rewrite/src/protocol/projection.ts": {
       "lines": 503,
       "reason": "Snapshot projection of every wire fact kind; candidate 2's retry and child tool-state fields are a few lines each in the same switch."
     },
-    "rewrite/src/protocol/direct-wire.ts": {
+    "rewrite/src/protocol/wire.ts": {
       "lines": 507,
       "reason": "The wire type catalogue; candidate 2 adds the task's live tool state fields beside the others, and usage carries OpenRouter's upstream provider."
     },

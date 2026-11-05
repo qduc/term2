@@ -4,7 +4,7 @@
 aligned with the updated contract commit `0a27e134` (typed delivery,
 structured questions/answers, base64 images, admission identity, cursor replay
 and nested output). It consumes only `DirectConnection` from
-`host/in-process-direct-types.ts` and `protocol/direct-wire.ts`; it never
+`host/in-process-direct-types.ts` and `protocol/wire.ts`; it never
 imports Session, Engine or adopted code, and never opens conversation storage.
 
 ## App wiring
@@ -125,13 +125,13 @@ imports Session, Engine or adopted code, and never opens conversation storage.
 iterator, cancellation and background notice/task drain scheduling. It does not
 own legacy JSON accumulation or approval policy state.
 
-`createHeadlessOutput` in `direct-output.ts` owns streamed/final text
+`createHeadlessOutput` in `output.ts` owns streamed/final text
 reconciliation, legacy request IDs, deferred tool-start/usage records, output
 errors and terminal diagnostics. `endTurn` reports whether an accepted final
 window was available; only the driver chooses the resulting run outcome. Output
 state remains run-local, including across silent delivery turns.
 
-`createHeadlessAnswerer` in `direct-approvals.ts` deduplicates snapshot/live
+`createHeadlessAnswerer` in `approvals.ts` deduplicates snapshot/live
 interaction requests and sends the policy decision. A false result means a
 failed answer with best-effort cancellation, not a terminal outcome.
 `decideHeadlessApproval` remains exported from `direct.ts` for existing callers.
@@ -155,7 +155,7 @@ app can map SIGINT/SIGTERM to their signal exit codes rather than ordinary error
 
 ## Remaining shared contract gaps
 
-- **Host assembly:** `app/direct-launch-headless.ts` runs every headless
+- **Host assembly:** `app/launch-headless.ts` runs every headless
   prompt through this client on a connection from `createDirectInProcessHost`
   (`host/in-process-direct.ts`). The host delivers the attach snapshot and
   ordered live events atomically, acks commands without implying completion,
@@ -170,7 +170,7 @@ app can map SIGINT/SIGTERM to their signal exit codes rather than ordinary error
   root-tree costs, ordered result items and terminal cause; command messages
   already emitted live are excluded. Legacy cost IDs/tier/unpriced presentation
   and zero-cache omission stay at this projection boundary; coverage limits are
-  documented in `protocol/direct-mapping.md` rather than added to the old DTO.
+  documented in `protocol/mapping.md` rather than added to the old DTO.
   Version-2 terminal windows are projected read-only from the accepted prefix
   when a preceding `turn_started` exists (not marked `legacyDerived`); otherwise
   the explicit `legacy_final_window_unavailable` path remains. Provider history,

@@ -1,5 +1,5 @@
 /** Pinned task lifecycle and parent identity from accepted task evidence only. */
-import type { WireEvent, WireTaskOwner } from '../protocol/direct-wire.js';
+import type { WireEvent, WireTaskOwner } from '../protocol/wire.js';
 import { missing, text, type CanonicalEventCandidate, type CanonicalEventContext } from './server-event-values.js';
 
 /** Use the accepted change kind, never a running snapshot, as lifecycle evidence. Numeric task

@@ -23,7 +23,7 @@ import {
 } from '../../../source/utils/home-directory-start-guard.js';
 import type { AcpArgs } from '../../../source/acp-v2/serve-args.js';
 import type { ServeArgs } from '../../../source/gateway/serve-args.js';
-import type { DirectLaunchBase } from './direct-launch-types.js';
+import type { DirectLaunchBase } from './launch-types.js';
 import type { InteractivePickerRequest } from '../../../source/services/models/model-resolution.js';
 import { HARNESS_IDLE_ENV } from '../../../source/lib/harness-input-idle.js';
 import { formatResumeList } from '../../../source/utils/resume-list.js';
@@ -37,7 +37,7 @@ import {
   runDirectHeadlessOnHost,
   type DirectHeadlessRequest,
   type DirectLaunchRequest,
-} from './direct-launch.js';
+} from './launch.js';
 import type { HeadlessIo } from '../clients/headless/index.js';
 import {
   CONTROL_USAGE,

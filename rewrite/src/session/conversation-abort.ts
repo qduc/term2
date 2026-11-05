@@ -2,8 +2,8 @@
 import type { TurnId } from '../engine/index.js';
 import type { Fact } from './facts.js';
 import type { DirectAbortResult } from './facade-types.js';
-import type { DirectQueueEnvironment } from './direct-queue-types.js';
-import { directQueuePending, planDirectQueue } from './direct-queue.js';
+import type { DirectQueueEnvironment } from './queue-types.js';
+import { directQueuePending, planDirectQueue } from './queue.js';
 import type { ConversationJournal } from './conversation-journal.js';
 import type { OwnedConversationTurn } from './conversation-turn.js';
 

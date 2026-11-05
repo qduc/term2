@@ -3,7 +3,7 @@ import path from 'node:path';
 import { ExecutionContext } from '../../../source/services/execution-context.js';
 import type { InteractionDecision, InteractionRequest, ToolContextSeed } from '../engine/index.js';
 import type { Item, ReasoningEffort, ToolSpec } from '../model/index.js';
-import type { DirectRemoteWorkspace } from './direct-remote.js';
+import type { DirectRemoteWorkspace } from './remote.js';
 import type { LoggingService } from '../../../source/services/logging/logging-service.js';
 import type { ProviderRegistryDeps } from '../model/provider.js';
 import type { ToolRegistry, Workspace } from '../tools/index.js';
@@ -77,12 +77,10 @@ export type AgentSurface = {
     /** Only accepts this surface's host-prepared child requests. App checks billing separately. */
     resolveNestedAuthority(
       request: import('../tools/index.js').NestedRunRequest,
-    ): import('../session/direct-branches.js').DirectNestedAuthority;
-    bindTaskCheckIn(
-      configure: import('../session/direct-capabilities.js').DirectContextPort['configureTaskCheckIn'],
-    ): void;
+    ): import('../session/branches.js').DirectNestedAuthority;
+    bindTaskCheckIn(configure: import('../session/capabilities.js').DirectContextPort['configureTaskCheckIn']): void;
     /** The Session goal behind legacy's interactive propose_goal script tool. */
-    bindGoal(port: Pick<import('../session/direct-capabilities.js').DirectContextPort, 'read' | 'commit'>): void;
+    bindGoal(port: Pick<import('../session/capabilities.js').DirectContextPort, 'read' | 'commit'>): void;
     readonly tools: ToolRegistry;
     readonly toolContext: ToolContextSeed;
     readonly maxParallelToolCalls: number;

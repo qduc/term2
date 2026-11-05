@@ -1,6 +1,6 @@
 /** Native fact-family schemas; shared validation primitives remain in log-facts.ts. */
 import type { FactSchema, FactValidation } from './log-facts.js';
-import { validDirectQueueOrigin, directContentSchema } from './direct-queue-decode.js';
+import { validDirectQueueOrigin, directContentSchema } from './queue-decode.js';
 import {
   validateBudgetEvidence,
   validateCompactionFact,

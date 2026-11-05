@@ -15,12 +15,12 @@ import type {
   WireCommandResult,
   WireEvent,
   WireTask,
-} from '../../protocol/direct-wire.js';
-import { createHeadlessAnswerer } from './direct-approvals.js';
-import { createHeadlessOutput } from './direct-output.js';
+} from '../../protocol/wire.js';
+import { createHeadlessAnswerer } from './approvals.js';
+import { createHeadlessOutput } from './output.js';
 import type { DirectHeadlessOptions, DirectHeadlessOutcome, DirectHeadlessResult } from './types.js';
 
-export { decideHeadlessApproval } from './direct-approvals.js';
+export { decideHeadlessApproval } from './approvals.js';
 
 const DEFAULT_BACKGROUND_WAIT_MS = 60 * 60 * 1000;
 const MAX_BACKGROUND_WAIT_MS = 24 * 60 * 60 * 1000;

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import fc from 'fast-check';
 import { createLog, openLog, readFactLines } from '../../rewrite/src/session/log.ts';
-import { captureDirectFinalWindow, recoverDirectFinalWindow } from '../../rewrite/src/session/direct-final.ts';
+import { captureDirectFinalWindow, recoverDirectFinalWindow } from '../../rewrite/src/session/final.ts';
 
 // Decode embedded provider JSON once, while also inspecting literal ref framing.
 function storedStrings(value, out = []) {

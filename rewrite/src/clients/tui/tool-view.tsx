@@ -2,7 +2,7 @@ import React, { useContext } from 'react';
 import { LiveToolAgeContext, LiveToolAgesContext } from './live-tool-age.js';
 import CommandMessage from './presentation/components/message/CommandMessage.js';
 import type { ToolView } from './state.js';
-import type { JsonValue } from '../../protocol/direct-wire.js';
+import type { JsonValue } from '../../protocol/wire.js';
 
 /**
  * One tool row, drawn by legacy's own CommandMessage so labels, bold, colours and layout match by

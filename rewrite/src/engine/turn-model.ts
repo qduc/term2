@@ -2,7 +2,7 @@
 import { delay, recoveryFailure, toModelError } from './turn-model-errors.js';
 export { toModelError } from './turn-model-errors.js';
 import type { Item, ItemId, ModelError, ModelEvent, ModelRequest, Usage } from '../model/index.js';
-import type { DirectManualCompactionOutcome, TurnDeps, TurnSpec } from './direct-types.js';
+import type { DirectManualCompactionOutcome, TurnDeps, TurnSpec } from './types.js';
 import {
   DirectRecovery,
   exhaustedNotice,
@@ -10,11 +10,11 @@ import {
   type DirectRecoveryDecision,
   type DirectRecoveryFailure,
   type DirectRetryNotice,
-} from './direct-recovery.js';
-import { DirectContinuity, selfContained } from './direct-recovery-continuity.js';
-import { hasCompleteDirectToolPairs } from './direct-recovery-history.js';
+} from './recovery.js';
+import { DirectContinuity, selfContained } from './recovery-continuity.js';
+import { hasCompleteDirectToolPairs } from './recovery-history.js';
 import { CompactionWrapUp, TurnCompaction } from './turn-model-compaction.js';
-import { enforceDirectInputLimit } from './direct-recovery-compaction.js';
+import { enforceDirectInputLimit } from './recovery-compaction.js';
 import { NativeBudgetExhausted, type TurnBudgetControl } from './turn-budget.js';
 import { TurnEvents, cancelled } from './turn-events.js';
 import { TurnTools, type RootCall } from './turn-tools.js';

@@ -2,7 +2,7 @@
  * These are projection rules, not new admission or execution limits.
  */
 import type { AgentEventType } from '@qduc/agent-wire';
-import type { WireEvent, WireTask } from '../protocol/direct-wire.js';
+import type { WireEvent, WireTask } from '../protocol/wire.js';
 import { ServerHttpError } from './server-errors.js';
 
 export type CanonicalEventContext = {

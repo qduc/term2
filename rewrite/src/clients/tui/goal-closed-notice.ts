@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
-import type { WireEvent } from '../../protocol/direct-wire.js';
-import { formatGoalClosedByCheck } from '../../protocol/direct-json.js';
+import type { WireEvent } from '../../protocol/wire.js';
+import { formatGoalClosedByCheck } from '../../protocol/json.js';
 import type { TuiState } from './state.js';
 
 /**

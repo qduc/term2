@@ -36,7 +36,7 @@ which `src/` files may also import `source/` is a separate, named list in
   (`session/facts.ts`). History, status, the pending interaction, the queue and
   retry eligibility are all replayed from it (`session/replay.ts`), so there is
   no second journal to keep in sync.
-- **One projection.** `protocol/direct-projection.ts` turns session updates
+- **One projection.** `protocol/projection.ts` turns session updates
   into wire events once per session, and every client attached to that session
   reads the same events, so no client keeps its own event translator.
 - **The engine waits instead of calling up.** An approval or question is an
@@ -87,16 +87,16 @@ client's submit to the provider's HTTP request. The TUI, ACP and the control
 socket attach to the same host the same way.
 
 1. `app/cli.ts` parses the command line and hands a headless run to
-   `app/direct-launch-headless.ts`. It resolves the workspace (local or SSH),
+   `app/launch-headless.ts`. It resolves the workspace (local or SSH),
    connects the configured MCP servers, builds the direct application
-   (`app/direct-application.ts`, which owns the in-process host), creates or
+   (`app/application.ts`, which owns the in-process host), creates or
    connects to the session through that host, and starts the headless client
    on the resulting connection.
 2. The client (`clients/headless/direct.ts`) sends a `submit` `WireCommand` on
    its `DirectConnection` (`host/in-process-direct.ts`).
-3. The host passes the command to `protocol/direct-commands.ts`
+3. The host passes the command to `protocol/commands.ts`
    (`applyDirectCommand`), the only wire-to-domain translation, which calls
-   `submit` on the live `DirectSession` (`session/direct-session.ts`).
+   `submit` on the live `DirectSession` (`session/session.ts`).
 4. The session's `Conversation` (`session/conversation.ts`) appends the
    admission facts and starts an engine turn with `startTurn`
    (`engine/turn.ts`). `session/conversation-turn.ts` is the only reader of that
@@ -104,22 +104,22 @@ socket attach to the same host the same way.
    `accept(token)`, and the turn does not advance past an event until it is
    accepted.
 5. `engine/turn-model.ts` asks for the model through the registry the app
-   built (`app/direct-application-models.ts`, wrapped by
+   built (`app/application-models.ts`, wrapped by
    `app/generation-guard.ts`). `model/provider.ts` streams from the source
    provider in `source/providers/`, retrying through `model/retry.ts`.
 6. On the way back, each accepted fact and live delta reaches the host as a
    `DirectSessionUpdate`. `host/in-process-direct-attachment.ts` keeps one
-   `DirectProjection` per session (`protocol/direct-projection.ts`); it turns
+   `DirectProjection` per session (`protocol/projection.ts`); it turns
    the update into `WireEvent`s, which every connection to that session
    receives in order.
 
 **Where an approval waits.** When a tool needs approval, the engine emits
 `interaction_required` and waits in memory. `conversation-turn.ts` appends the
 pending interaction, so the session status and the client's snapshot show it.
-The client replies with an `answer` command, which `direct-commands.ts` turns
+The client replies with an `answer` command, which `commands.ts` turns
 into an answer on the session, and `conversation-turn.ts` passes it to the
 waiting turn with `TurnHandle.answer`. Headless decides with the policy in
-`clients/headless/direct-approvals.ts`: without `--auto-approve` it denies;
+`clients/headless/approvals.ts`: without `--auto-approve` it denies;
 with it, it allows everything except medium- or high-risk shell commands. The
 TUI asks the user. If the process dies while it waits, reopening the
 session records that turn as interrupted; nothing resumes on its own.
@@ -144,10 +144,10 @@ measurable:
   when the provider's HTTP request goes out, starting at the client's submit.
   It fails when that chain gets longer (hops) or touches more files. Today it is
   14 hops through 14 files, each layer once: `clients/headless/direct.ts`,
-  `host/in-process-direct.ts`, `protocol/direct-commands.ts`,
-  `session/direct-session.ts`, `session/conversation-turn.ts`, `engine/turn.ts`,
+  `host/in-process-direct.ts`, `protocol/commands.ts`,
+  `session/session.ts`, `session/conversation-turn.ts`, `engine/turn.ts`,
   `engine/turn-model.ts`, `app/generation-guard.ts`,
-  `app/direct-application-models.ts`, `model/provider.ts`, and four
+  `app/application-models.ts`, `model/provider.ts`, and four
   `source/providers/` files. `app/` appears below `engine/` because the engine
   calls the model registry the app injected, not because `engine/` imports
   `app/`.
@@ -264,9 +264,9 @@ the code. Each dropped feature is still wired in production, as noted, and
 behaves as it does today.
 
 - **MCP servers — dropped from parity work, still wired.** The headless run
-  (`app/direct-launch-headless.ts`) and the TUI (`app/direct-launch-tui.tsx`)
-  connect the configured servers through `app/direct-application-mcp.ts` and
-  `app/direct-mcp.ts`, which drive the source MCP manager, and offer their tools
+  (`app/launch-headless.ts`) and the TUI (`app/launch-tui.tsx`)
+  connect the configured servers through `app/application-mcp.ts` and
+  `app/mcp.ts`, which drive the source MCP manager, and offer their tools
   through `app/tool-surface.ts`. Fixing gaps against legacy would need the
   catalog binding, connection lifecycle and approval policy together.
 - **Plan, pair, mentor and orchestrator profiles/modes, and
@@ -276,7 +276,7 @@ behaves as it does today.
   is not being checked. Bare, `--lite`, subagent `ask_orchestrator` and the
   retained mentor catalog are kept.
 - **ACP — dropped from parity work, still wired.** `term2 acp` dispatches to
-  `app/direct-launch-acp.ts`, with `clients/acp/` as the adapter for session
+  `app/launch-acp.ts`, with `clients/acp/` as the adapter for session
   attachment, rendering and permission/question mapping.
 - **Sandbox execution — dropped from parity work, still present.** The TUI's
   `/sandbox` command and the tool surface's `allowUnsandboxed` posture

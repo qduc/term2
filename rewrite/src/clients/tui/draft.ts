@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { ImageRef } from 'ink-prompt';
-import type { WireContent } from '../../protocol/direct-wire.js';
+import type { WireContent } from '../../protocol/wire.js';
 
 /** Convert direct wire attachments to editor images, retaining non-image parts separately. */
 export function restoreAttachments(parts: readonly WireContent[]): { images: ImageRef[]; other: WireContent[] } {

@@ -3,7 +3,7 @@
  */
 import os from 'node:os';
 import process from 'node:process';
-import type { JsonValue, WireInteraction, WireSnapshot } from '../../protocol/direct-wire.js';
+import type { JsonValue, WireInteraction, WireSnapshot } from '../../protocol/wire.js';
 import { projectControlPhase, type ControlTopic } from './transport.js';
 import type { DirectControlPortOptions } from './types.js';
 import { controlCommands } from './command-results.js';

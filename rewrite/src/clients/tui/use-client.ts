@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { randomUUID } from 'node:crypto';
 import type { DirectConnection, DirectReplayConnection } from '../../host/in-process-direct-types.js';
-import type { WireEvent, WireSnapshot } from '../../protocol/direct-wire.js';
-import { reduceWireEvent } from '../../protocol/direct-reducer.js';
-import { projectSnapshot } from './direct-projection.js';
+import type { WireEvent, WireSnapshot } from '../../protocol/wire.js';
+import { reduceWireEvent } from '../../protocol/reducer.js';
+import { projectSnapshot } from './projection.js';
 import type { TuiState } from './state.js';
 
 type ClientConnection = DirectConnection | DirectReplayConnection;

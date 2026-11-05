@@ -1,21 +1,21 @@
-import { withNotice } from './direct-input-notice.js';
-import { planDirectTiming } from './direct-time-gap.js';
+import { withNotice } from './input-notice.js';
+import { planDirectTiming } from './time-gap.js';
 /** Pure direct-log projection: no writes, dispatch, provider calls or restored authority. */
 import type { TurnId } from '../engine/index.js';
 import type { Item } from '../model/index.js';
-import type { DirectCommandReceipts } from './direct-command-types.js';
-import { parseDirectConfigurationFact } from './direct-configuration.js';
+import type { DirectCommandReceipts } from './command-types.js';
+import { parseDirectConfigurationFact } from './configuration.js';
 import {
   initialDirectContextState,
   isDirectContextFactType,
   parseDirectContextFact,
   startsDirectHumanWindow,
-} from './direct-context.js';
-import { directPersonalMemoryItem, type DirectMemoryFact } from './direct-memory.js';
-import type { DirectNotificationState } from './direct-notifications.js';
+} from './context.js';
+import { directPersonalMemoryItem, type DirectMemoryFact } from './memory.js';
+import type { DirectNotificationState } from './notifications.js';
 import { foldFact } from './fold-fact.js';
-import { isDirectQueueFactType } from './direct-queue-decode.js';
-import { DirectQueueReplay } from './direct-queue-replay.js';
+import { isDirectQueueFactType } from './queue-decode.js';
+import { DirectQueueReplay } from './queue-replay.js';
 import type { Fact, TurnOutcomeName } from './facts.js';
 import {
   appendReplayDelta,

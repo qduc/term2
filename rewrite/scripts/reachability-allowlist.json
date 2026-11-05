@@ -2,6 +2,6 @@
   "rewrite/src/protocol/index.ts": "Layer map: the README's fresh-reader check reads each layer's index.ts. Production imports the layer's files directly, so nothing imports this index.",
   "rewrite/src/session/adopted/conversation-log.ts": "The offline v3 conversation migration (scripts/conversation-migration/v3-input.mjs) imports validateSessionFact from its emitted module; production no longer writes adopted facts.",
   "rewrite/src/session/adopted/network.ts": "Network facts validated by session/adopted/conversation-log.ts for the v3 migration.",
-  "rewrite/src/session/direct-import.ts": "Offline v3 conversation migration (scripts/conversation-migration/migration-command.mjs) imports its emitted module; no CLI command reaches it.",
+  "rewrite/src/session/import.ts": "Offline v3 conversation migration (scripts/conversation-migration/migration-command.mjs) imports its emitted module; no CLI command reaches it.",
   "rewrite/src/session/index.ts": "Layer map: the README's fresh-reader check reads each layer's index.ts. Production imports the layer's files directly, so nothing imports this index."
 }

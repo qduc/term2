@@ -1,15 +1,15 @@
-import { withNotice } from './direct-input-notice.js';
-import type { PreparedDirectRequest } from '../engine/direct-recovery-continuity.js';
+import { withNotice } from './input-notice.js';
+import type { PreparedDirectRequest } from '../engine/recovery-continuity.js';
 import type { Item, ModelRequest } from '../model/index.js';
-import type { bindDirectCapabilities } from './direct-capabilities.js';
-import { directPreviewConfiguration, directPreviewOccurrences } from './direct-preview.js';
-import type { Conversation } from './direct-types.js';
+import type { bindDirectCapabilities } from './capabilities.js';
+import { directPreviewConfiguration, directPreviewOccurrences } from './preview.js';
+import type { Conversation } from './types.js';
 import type { Fact } from './facts.js';
 import { replay } from './replay.js';
 /** Accepted configuration generations: validate before durable acceptance, then install once. */
-import { DirectContinuity, type DirectContinuityBinding } from '../engine/direct-recovery-continuity.js';
-import { parseDirectConfigurationFact, type DirectPreparedConfiguration } from './direct-configuration.js';
-import type { ConversationDeps, TurnRequest } from './direct-types.js';
+import { DirectContinuity, type DirectContinuityBinding } from '../engine/recovery-continuity.js';
+import { parseDirectConfigurationFact, type DirectPreparedConfiguration } from './configuration.js';
+import type { ConversationDeps, TurnRequest } from './types.js';
 
 export type PreparedConversationGeneration = {
   readonly configurationFact: ReturnType<typeof parseDirectConfigurationFact>;

@@ -17,13 +17,13 @@ import {
   createDirectRollingLog,
   readDirectLogLineage,
   readDirectLogLineages,
-} from '../rewrite/src/session/direct-rolling-log.js';
-import { createDirectSessionStore, type DirectLocalStore } from '../rewrite/src/session/direct-store.js';
+} from '../rewrite/src/session/rolling-log.js';
+import { createDirectSessionStore, type DirectLocalStore } from '../rewrite/src/session/store.js';
 import { listNativeConversations, resolveNativeResume } from '../rewrite/src/app/cli-conversations.js';
 import { parseCommandLine } from '../rewrite/src/app/cli-args.js';
 import { displaySessionId } from '../rewrite/src/protocol/session-id.js';
 import type { SessionStartedFact } from '../rewrite/src/session/facts.js';
-import type { DirectSessionRotationFact } from '../rewrite/src/session/direct-session-rotation.js';
+import type { DirectSessionRotationFact } from '../rewrite/src/session/session-rotation.js';
 
 const model = { provider: 'fixture', model: 'no-provider' };
 const profile = { id: 'bare', version: '1', digest: 'isolation-fixture' };

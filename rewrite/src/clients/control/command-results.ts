@@ -1,7 +1,7 @@
 /** Read native command ownership without granting execution or inventing IDs.
  * A finished command receipt is not a completed model turn or physical cleanup.
  */
-import type { WireCommandReceipt, WireNativeCommandOutcome, WireSnapshot } from '../../protocol/direct-wire.js';
+import type { WireCommandReceipt, WireNativeCommandOutcome, WireSnapshot } from '../../protocol/wire.js';
 
 type NegativeOutcome = Extract<WireNativeCommandOutcome, { readonly kind: 'rejected' }>;
 type FinishedOutcome = Exclude<WireNativeCommandOutcome, { readonly kind: 'rejected' | 'interrupted' }>;

@@ -36,14 +36,13 @@ const parse = (file) => ts.createSourceFile(file, texts.get(file), ts.ScriptTarg
 const lineOf = (sf, node) => sf.getLineAndCharacterOfPosition(node.getStart()).line + 1;
 
 // 1. WireEvent construction.
-const eventsText = fs.readFileSync(path.join(src, 'protocol/direct-wire-events.ts'), 'utf8');
+const eventsText = fs.readFileSync(path.join(src, 'protocol/wire-events.ts'), 'utf8');
 const payloads = eventsText.slice(
   eventsText.indexOf('export type WireEventPayloads'),
   eventsText.indexOf('export type WireEventType'),
 );
 const wireTypes = new Set([...payloads.matchAll(/^ {2}([a-z_]+):/gm)].map((match) => match[1]));
-if (wireTypes.size < 20)
-  problems.push('rule-check: could not read WireEventPayloads from protocol/direct-wire-events.ts');
+if (wireTypes.size < 20) problems.push('rule-check: could not read WireEventPayloads from protocol/wire-events.ts');
 const wireAllowed = new Set(baseline.wireEventOutsideProtocol.map((entry) => `${entry.file} ${entry.type}`));
 for (const file of files) {
   const name = rel(file);
@@ -131,14 +130,14 @@ const leafReducers = new Set([
   'reduceDirectBackground',
 ]);
 const leafModules = new Set([
-  'direct-command-receipts',
-  'direct-notifications',
-  'direct-context',
-  'direct-queue-state',
-  'direct-queue',
-  'direct-background-replay',
+  'command-receipts',
+  'notifications',
+  'context',
+  'queue-state',
+  'queue',
+  'background-replay',
 ]);
-const foldAllowed = new Set(['session/fold-fact.ts', 'session/direct-queue-replay.ts', 'session/direct-queue.ts']);
+const foldAllowed = new Set(['session/fold-fact.ts', 'session/queue-replay.ts', 'session/queue.ts']);
 const fromLeafModule = (specifier) =>
   specifier !== undefined &&
   ts.isStringLiteralLike(specifier) &&

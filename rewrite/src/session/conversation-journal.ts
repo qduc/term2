@@ -4,15 +4,15 @@ import type { ModelError } from '../model/index.js';
 import type { ConversationLog } from './log.js';
 import type { Fact, FactLine } from './facts.js';
 import { isDirectTaskFact, isDirectQueueFact } from './facts.js';
-import { initialDirectContextState } from './direct-context.js';
-import { createDirectQueueState } from './direct-queue.js';
-import { recoverDirectBackground } from './direct-background-replay.js';
+import { initialDirectContextState } from './context.js';
+import { createDirectQueueState } from './queue.js';
+import { recoverDirectBackground } from './background-replay.js';
 import { foldFact, type FoldState } from './fold-fact.js';
-import type { DirectTaskState } from './direct-background-types.js';
-import { recoverDirectCommands } from './direct-command-receipts.js';
-import type { DirectCommandReceipts } from './direct-command-types.js';
-import type { DirectNotificationState } from './direct-notifications.js';
-import type { bindDirectCapabilities } from './direct-capabilities.js';
+import type { DirectTaskState } from './background-types.js';
+import { recoverDirectCommands } from './command-receipts.js';
+import type { DirectCommandReceipts } from './command-types.js';
+import type { DirectNotificationState } from './notifications.js';
+import type { bindDirectCapabilities } from './capabilities.js';
 import { replay } from './replay.js';
 
 /** One synchronous durable boundary shared by root, command and background acceptance. */

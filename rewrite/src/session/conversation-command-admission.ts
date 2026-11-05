@@ -1,9 +1,9 @@
 import type { TurnId } from '../engine/index.js';
-import type { TurnCompactionState } from '../engine/direct-types.js';
+import type { TurnCompactionState } from '../engine/types.js';
 import type { Item } from '../model/index.js';
 import type { Fact } from './facts.js';
-import type { Turn, TurnRequest, StartedConversationTurn } from './direct-types.js';
-import type { DirectQueueEnvironment } from './direct-queue-types.js';
+import type { Turn, TurnRequest, StartedConversationTurn } from './types.js';
+import type { DirectQueueEnvironment } from './queue-types.js';
 
 /** The foreground owner exposes admission capabilities, never writable runtime state. */
 export type CommandAdmission = {
@@ -29,7 +29,7 @@ export type CommandAdmission = {
 };
 export type CommandOwner = {
   readonly commandId: string;
-  readonly kind: import('./direct-command-types.js').DirectCommandOperation['kind'];
+  readonly kind: import('./command-types.js').DirectCommandOperation['kind'];
   readonly abort: AbortController;
   done?: Promise<unknown>;
 };

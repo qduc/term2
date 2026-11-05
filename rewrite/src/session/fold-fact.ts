@@ -9,15 +9,15 @@
  * were before the fact), then queue, then tasks. Queue records keep origin and content across stages, so a
  * caller that has already applied the queue step itself may pass `queueRecords` instead of a `queue` slice.
  */
-import type { DirectTaskState } from './direct-background-types.js';
-import { reduceDirectBackground } from './direct-background-replay.js';
-import { isDirectCommandFactType, reduceDirectCommandReceipts } from './direct-command-receipts.js';
-import type { DirectCommandFact, DirectCommandReceipts } from './direct-command-types.js';
-import { reduceDirectContext, type DirectContextState } from './direct-context.js';
-import { isDirectNotificationFactType, reduceDirectNotifications } from './direct-notifications.js';
-import type { DirectNotificationFact, DirectNotificationState } from './direct-notifications.js';
-import { reduceDirectQueue } from './direct-queue-state.js';
-import type { DirectQueueRecord, DirectQueueState } from './direct-queue-types.js';
+import type { DirectTaskState } from './background-types.js';
+import { reduceDirectBackground } from './background-replay.js';
+import { isDirectCommandFactType, reduceDirectCommandReceipts } from './command-receipts.js';
+import type { DirectCommandFact, DirectCommandReceipts } from './command-types.js';
+import { reduceDirectContext, type DirectContextState } from './context.js';
+import { isDirectNotificationFactType, reduceDirectNotifications } from './notifications.js';
+import type { DirectNotificationFact, DirectNotificationState } from './notifications.js';
+import { reduceDirectQueue } from './queue-state.js';
+import type { DirectQueueRecord, DirectQueueState } from './queue-types.js';
 import { isDirectQueueFact, isDirectTaskFact, type Fact } from './facts.js';
 
 export interface FoldState {

@@ -3,7 +3,7 @@
  * historical agent-wire envelope still needs enrichment; x-term2-event-format is explicit.
  */
 import type { DirectConnection, DirectReplayConnection } from './in-process-direct-types.js';
-import type { WireEvent } from '../protocol/direct-wire.js';
+import type { WireEvent } from '../protocol/wire.js';
 import type { AgentWireV2Envelope } from './server-wire-v2.js';
 import type { ServerResult } from './server-contracts.js';
 

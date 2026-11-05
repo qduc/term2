@@ -10,7 +10,7 @@ export type { TuiIntegration } from './integration.js';
 export type { TuiState, ViewUpdate, Message, ToolView, InteractionView, QueueItem, TaskView } from './state.js';
 export { updateView } from './state.js';
 export { submitText, cancelForeground, answerInteraction, directSlashCommand } from './commands.js';
-export { projectSnapshot } from './direct-projection.js';
+export { projectSnapshot } from './projection.js';
 
 /**
  * Direct TUI surface. The app owns the connection and supplies host/config actions;

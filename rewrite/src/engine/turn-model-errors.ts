@@ -1,6 +1,6 @@
 /** Error projection and backoff for the direct model boundary. */
 import type { ModelError } from '../model/index.js';
-import type { DirectRecoveryFailure } from './direct-recovery.js';
+import type { DirectRecoveryFailure } from './recovery.js';
 import { cancelled } from './turn-events.js';
 
 /** Error.message is non-enumerable; raw causes and provider frames never persist. */

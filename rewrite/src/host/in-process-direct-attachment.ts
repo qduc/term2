@@ -1,7 +1,7 @@
 /** One atomic Session attachment and one projection, shared by all host connections. */
 import type { DirectSession, DirectSessionUpdate } from '../session/facade-types.js';
-import { DirectProjection } from '../protocol/direct-projection.js';
-import { DirectProtocolError } from '../protocol/direct-errors.js';
+import { DirectProjection } from '../protocol/projection.js';
+import { DirectProtocolError } from '../protocol/errors.js';
 import { DirectEventQueue } from './in-process-direct-queue.js';
 
 export class DirectAttachment {

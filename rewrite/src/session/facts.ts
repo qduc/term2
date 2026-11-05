@@ -14,13 +14,13 @@ import type {
   InteractionRequest,
   InteractionRequestId,
 } from '../engine/index.js';
-import type { DirectBackgroundFact } from './direct-background-types.js';
-import type { DirectQueueFact } from './direct-queue-types.js';
-import type { DirectContextFact } from './direct-context.js';
-import type { DirectNotificationFact } from './direct-notifications.js';
-import type { DirectCommandFact } from './direct-command-types.js';
-import type { BudgetDecision } from '../engine/direct-types.js';
-import type { ModelRequestCost, RunBudgetEvent, RunBudgetSnapshot } from '../engine/direct-recovery-budget.js';
+import type { DirectBackgroundFact } from './background-types.js';
+import type { DirectQueueFact } from './queue-types.js';
+import type { DirectContextFact } from './context.js';
+import type { DirectNotificationFact } from './notifications.js';
+import type { DirectCommandFact } from './command-types.js';
+import type { BudgetDecision } from '../engine/types.js';
+import type { ModelRequestCost, RunBudgetEvent, RunBudgetSnapshot } from '../engine/recovery-budget.js';
 import type { StopReason } from '../model/index.js';
 import type { ToolResult } from '../tools/index.js';
 import type { DirectBinding, DirectOrigin } from './facade-types.js';
@@ -82,7 +82,7 @@ export type DirectTurnFact =
       readonly display?: false;
       /** Actual command-owned auxiliary invocation, not a human or background-notice admission. */
       readonly maintenance?: { readonly kind: 'compaction'; readonly commandId: string };
-      readonly requestConfiguration?: import('./direct-preview.js').DirectPreviewConfiguration;
+      readonly requestConfiguration?: import('./preview.js').DirectPreviewConfiguration;
       /** Resolved request-only notice for retry; input remains the user's raw content. */
       readonly requestNotice?: string;
       /** Notice retained in provider history while the submitted payload remains unchanged. */
@@ -150,7 +150,7 @@ export type DirectTurnFact =
       readonly type: 'turn_ended';
       readonly turnId: TurnId;
       /** Read-side public projection only. Never serialized in the version-2 log. */
-      readonly finalWindow?: import('./direct-final.js').DirectFinalWindow;
+      readonly finalWindow?: import('./final.js').DirectFinalWindow;
       readonly outcome: TurnOutcomeName;
       readonly error?: ModelError;
       readonly terminalCause?: 'goal_check_unresolved' | 'completion_verification_blocked' | 'budget_exhausted';
@@ -229,7 +229,7 @@ export type Fact =
   | DirectBranchFact
   | DirectRequestCostFact
   | DirectCommandFact
-  | import('./direct-configuration.js').DirectConfigurationFact
+  | import('./configuration.js').DirectConfigurationFact
   | DirectNotificationFact
   | DirectQueueFact
   | DirectBackgroundFact

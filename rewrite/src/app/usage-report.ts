@@ -6,7 +6,7 @@ import {
   summarizeModelUsage,
 } from '../../../source/services/cost/model-cost.js';
 import { formatSessionUsageBreakdown } from '../clients/tui/presentation/utils/ai/token-usage.js';
-import type { WireSnapshot } from '../protocol/direct-wire.js';
+import type { WireSnapshot } from '../protocol/wire.js';
 
 /** The session's counts, as legacy's accumulators hold them (reset on /clear, rollover and resume). */
 function totals(snapshot: WireSnapshot | undefined) {

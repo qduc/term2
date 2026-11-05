@@ -1,12 +1,12 @@
 /** Pure direct-log projection: no writes, dispatch, provider calls or restored authority. */
 import type { TurnId } from '../engine/index.js';
 import type { Item } from '../model/index.js';
-import type { DirectTaskState } from './direct-background-types.js';
-import type { DirectCommandReceipts } from './direct-command-types.js';
-import type { DirectContextState } from './direct-context.js';
-import type { DirectNotificationState } from './direct-notifications.js';
-import type { DirectQueueState } from './direct-queue-types.js';
-import type { ReplayedConversation as NativeReplayedConversation } from './direct-types.js';
+import type { DirectTaskState } from './background-types.js';
+import type { DirectCommandReceipts } from './command-types.js';
+import type { DirectContextState } from './context.js';
+import type { DirectNotificationState } from './notifications.js';
+import type { DirectQueueState } from './queue-types.js';
+import type { ReplayedConversation as NativeReplayedConversation } from './types.js';
 import type { DirectCompactionFact, DirectHistoryFact, Fact } from './facts.js';
 import { createReplayFold, type ReplayFold } from './replay-fold.js';
 

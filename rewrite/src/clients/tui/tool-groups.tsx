@@ -7,7 +7,7 @@ import {
 } from './presentation/components/message/command-grouping.js';
 import type { ToolView } from './state.js';
 import { isUnknownToolCall } from './tool-view.js';
-import type { JsonValue } from '../../protocol/direct-wire.js';
+import type { JsonValue } from '../../protocol/wire.js';
 
 export type ToolGroup = { readonly members: GroupableMessage[]; readonly status: CommandGroupMessage['status'] };
 /** A group's summary hangs on its first tool; every other member is `null` (drawn by the summary). */

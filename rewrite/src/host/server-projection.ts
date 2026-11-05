@@ -1,5 +1,5 @@
 /** Encode the direct public read model for the private HTTP client; never replay provider history. */
-import type { WireSnapshot, WireTool } from '../protocol/direct-wire.js';
+import type { WireSnapshot, WireTool } from '../protocol/wire.js';
 import type { Principal, ServerSessionPresentation, SessionMetadata } from './server-contracts.js';
 import { ServerHttpError } from './server-errors.js';
 import type { ServerInteractions } from './server-interactions.js';

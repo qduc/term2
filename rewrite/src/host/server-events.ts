@@ -2,8 +2,8 @@
  * or tool identity is synthesized here. The caller supplies only authoritative replay-cut context
  * when a direct payload does not itself carry the immutable data needed by the pinned DTO.
  */
-import type { WireAdmission, WireEvent } from '../protocol/direct-wire.js';
-import { legacyCommandMessages } from '../protocol/direct-json.js';
+import type { WireAdmission, WireEvent } from '../protocol/wire.js';
+import { legacyCommandMessages } from '../protocol/json.js';
 import type { ServerInteractions } from './server-interactions.js';
 import { taskCandidate, taskIdentity } from './server-task-events.js';
 import {

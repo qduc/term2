@@ -3,7 +3,7 @@
  */
 import { useCallback, useRef, useState } from 'react';
 import type { ImageRef } from 'ink-prompt';
-import type { WireContent } from '../../protocol/direct-wire.js';
+import type { WireContent } from '../../protocol/wire.js';
 import type { QueueItem, TuiState } from './state.js';
 import { primaryDraft, restoreAttachments, wireAttachments } from './draft.js';
 import {

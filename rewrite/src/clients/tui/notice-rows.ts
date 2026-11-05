@@ -4,7 +4,7 @@
  * `background_shell_notification` row) goes above the reply they start. Next delivers those notices as a
  * silent turn, so the rows are drawn from the delivery and the snapshot's tasks, placed before that turn.
  */
-import type { JsonValue, WireSnapshot, WireTask } from '../../protocol/direct-wire.js';
+import type { JsonValue, WireSnapshot, WireTask } from '../../protocol/wire.js';
 import type { ToolView } from './state.js';
 
 type Timeline = NonNullable<WireSnapshot['timeline']>;

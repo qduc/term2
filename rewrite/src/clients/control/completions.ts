@@ -3,7 +3,7 @@
  * enter the protocol and this table never writes Session/domain state.
  */
 import { setImmediate } from 'node:timers';
-import type { WireAdmission, WireEvent, WireSnapshot } from '../../protocol/direct-wire.js';
+import type { WireAdmission, WireEvent, WireSnapshot } from '../../protocol/wire.js';
 import type { BridgeOutcome } from './transport.js';
 import { submissionOutcome } from './submission-result.js';
 

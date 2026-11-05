@@ -4,17 +4,17 @@ import type { TurnHandle, TurnId, TurnDeps } from '../engine/index.js';
 import type { Item, ModelError } from '../model/index.js';
 import type { Fact } from './facts.js';
 import type { DirectOrigin } from './facade-types.js';
-import type { Conversation, ConversationDeps } from './direct-types.js';
+import type { Conversation, ConversationDeps } from './types.js';
 import type { CommandAdmission } from './conversation-command-admission.js';
 import { ConversationJournal } from './conversation-journal.js';
 import { ConversationGeneration } from './conversation-generation.js';
-import { DirectRunBudgets } from './direct-run-budget.js';
-import { DirectBackgroundTasks } from './direct-background.js';
-import { directShellTasks } from './direct-shell-tasks.js';
-import { DirectBackgroundCheckIns } from './direct-background-check-ins.js';
-import { DirectTaskActivity } from './direct-task-activity.js';
-import { DirectSubagents } from './direct-subagent.js';
-import { createDirectBranchDriver } from './direct-branches.js';
+import { DirectRunBudgets } from './run-budget.js';
+import { DirectBackgroundTasks } from './background.js';
+import { directShellTasks } from './shell-tasks.js';
+import { DirectBackgroundCheckIns } from './background-check-ins.js';
+import { DirectTaskActivity } from './task-activity.js';
+import { DirectSubagents } from './subagent.js';
+import { createDirectBranchDriver } from './branches.js';
 import { factFor } from './conversation-turn.js';
 import {
   directCheckInNotice,
@@ -23,7 +23,7 @@ import {
   directQuestionNotice,
   directShellOutputNotice,
   pendingDirectNotifications,
-} from './direct-notifications.js';
+} from './notifications.js';
 
 export class ConversationBackground {
   readonly tasks: DirectBackgroundTasks;

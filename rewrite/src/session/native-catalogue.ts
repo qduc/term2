@@ -8,8 +8,8 @@ import {
   readDirectLogHeaderLine,
   readDirectLogLineage,
   type DirectLogLineage,
-} from './direct-rolling-log.js';
-import { initialDirectState, reduceDirectFact, type DirectPublicState } from './direct-state.js';
+} from './rolling-log.js';
+import { initialDirectState, reduceDirectFact, type DirectPublicState } from './state.js';
 import { readFactLinesFrom } from './log.js';
 import type { Workspace } from '../tools/index.js';
 import type { DirectBinding } from './facade-types.js';

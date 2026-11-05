@@ -4,14 +4,14 @@ import type { CommandAdmission, CommandOwner } from './conversation-command-admi
 import { ConversationGeneration, type PreparedConversationGeneration } from './conversation-generation.js';
 import { ConversationJournal } from './conversation-journal.js';
 import { runConversationRollover } from './conversation-rollover.js';
-import { listDirectRewindTargets, planDirectHistoryCommand } from './direct-command-history.js';
-import { planDirectCommandFinish, planDirectCommandStart } from './direct-command-receipts.js';
-import type { DirectCommandOutcome, DirectCommandResult } from './direct-command-types.js';
-import type { DirectPreparedConfiguration } from './direct-configuration.js';
-import { captureDirectCommandHistory } from './direct-history-capture.js';
-import { directPreviewConfiguration } from './direct-preview.js';
-import { directAcceptedRolloverAt, directRolloverAtBoundary } from './direct-rollover.js';
-import type { Conversation, ConversationDeps, StartedConversationTurn } from './direct-types.js';
+import { listDirectRewindTargets, planDirectHistoryCommand } from './command-history.js';
+import { planDirectCommandFinish, planDirectCommandStart } from './command-receipts.js';
+import type { DirectCommandOutcome, DirectCommandResult } from './command-types.js';
+import type { DirectPreparedConfiguration } from './configuration.js';
+import { captureDirectCommandHistory } from './history-capture.js';
+import { directPreviewConfiguration } from './preview.js';
+import { directAcceptedRolloverAt, directRolloverAtBoundary } from './rollover.js';
+import type { Conversation, ConversationDeps, StartedConversationTurn } from './types.js';
 
 export class ConversationCommands {
   owner: CommandOwner | null = null;

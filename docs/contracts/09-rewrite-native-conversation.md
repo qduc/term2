@@ -132,7 +132,7 @@ at the same append-before-publication boundary as other context transitions.
 
 ## Human receipt timing
 
-`direct-time-gap.ts` derives model-only timing from accepted queue `receivedAt`
+`time-gap.ts` derives model-only timing from accepted queue `receivedAt`
 and structured human origin at `turn_started` and `queue_steered`. One pure
 projection serves live input and replay. The context clock retains the latest
 arrival (not dispatch time), so priority steers cannot move it backwards.

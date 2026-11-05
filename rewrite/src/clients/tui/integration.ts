@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
-import type { WireEvent, WireSnapshot } from '../../protocol/direct-wire.js';
+import type { WireEvent, WireSnapshot } from '../../protocol/wire.js';
 import type { DirectConnection, DirectReplayConnection } from '../../host/in-process-direct-types.js';
 
-import type { WireContent } from '../../protocol/direct-wire.js';
+import type { WireContent } from '../../protocol/wire.js';
 import type { CopySelection } from './menus/menu-types.js';
 
 export type TuiConnection = DirectConnection | DirectReplayConnection;

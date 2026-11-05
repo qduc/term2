@@ -9,7 +9,7 @@ import type {
   WireQuestion,
   WireQuestionAnswer,
   WireSnapshot,
-} from '../protocol/direct-wire.js';
+} from '../protocol/wire.js';
 import type { PendingInteractionDto } from '@qduc/agent-wire';
 import type { InteractionResolveBody } from './server-contracts.js';
 import { ServerHttpError } from './server-errors.js';

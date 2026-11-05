@@ -1,5 +1,5 @@
 /** Plain-output formatting shared by the old headless CLI and this client. */
-import type { WireEventPayloads, WireInteraction, WireTool } from '../../protocol/direct-wire.js';
+import type { WireEventPayloads, WireInteraction, WireTool } from '../../protocol/wire.js';
 
 const safePreview = (value: unknown, maxLength = 500): string => {
   try {

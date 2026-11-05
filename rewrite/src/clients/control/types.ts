@@ -1,6 +1,6 @@
 /** Composition inputs for the direct control adapter. None may access an old runtime. */
 import type { DirectConnection } from '../../host/in-process-direct-types.js';
-import type { WireSnapshot, WireSubmission } from '../../protocol/direct-wire.js';
+import type { WireSnapshot, WireSubmission } from '../../protocol/wire.js';
 import type { ControlSessionPort, ControlSocketServer } from './transport.js';
 
 export interface ControlSessionMetadata {

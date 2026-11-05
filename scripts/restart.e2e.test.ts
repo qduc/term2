@@ -331,7 +331,7 @@ it.each(['runner', 'missing-entry', 'cleanup', 'lock', 'writer-close', 'native-e
         const cli = restartEntry(root);
         if (process.env.TERM2_TEST_CLI) {
           // The same faults at next's own seams: exit observer, session shutdown, writer lock.
-          const tui = join(root, 'direct-dist/rewrite/src/app/direct-launch-tui.js');
+          const tui = join(root, 'direct-dist/rewrite/src/app/launch-tui.js');
           await patchFixtureModule(
             cli,
             'void main(process.argv.slice(2))',
@@ -350,7 +350,7 @@ it.each(['runner', 'missing-entry', 'cleanup', 'lock', 'writer-close', 'native-e
             await patchFixtureModule(
               tui,
               'await app.close();',
-              "await app.close();\nif (pending.plan) globalThis.fixtureLock = (await import('../session/direct-writer-lock.js')).acquireDirectWriterLock(process.getBuiltinModule('node:path').join(conversationsDir, `${pending.plan.sessionId}.jsonl`));",
+              "await app.close();\nif (pending.plan) globalThis.fixtureLock = (await import('../session/writer-lock.js')).acquireDirectWriterLock(process.getBuiltinModule('node:path').join(conversationsDir, `${pending.plan.sessionId}.jsonl`));",
             );
           if (fault === 'writer-close')
             await patchFixtureModule(
@@ -360,7 +360,7 @@ it.each(['runner', 'missing-entry', 'cleanup', 'lock', 'writer-close', 'native-e
             );
           if (fault === 'native-exec')
             await patchFixtureModule(
-              join(root, 'direct-dist/rewrite/src/app/direct-launch-tui-restart.js'),
+              join(root, 'direct-dist/rewrite/src/app/launch-tui-restart.js'),
               'process.execve?.(process.execPath,',
               `process.execve?.(${JSON.stringify(join(root, 'missing-node'))},`,
             );

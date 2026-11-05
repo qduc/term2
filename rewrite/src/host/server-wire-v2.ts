@@ -27,7 +27,7 @@ import type {
   WireConfiguration,
   WireEvent,
   WireModel,
-} from '../protocol/direct-wire.js';
+} from '../protocol/wire.js';
 import type { ServerInteractions } from './server-interactions.js';
 import { canonicalCandidate, canonicalCommandMessageCandidates, type CanonicalEventContext } from './server-events.js';
 import { ServerHttpError } from './server-errors.js';

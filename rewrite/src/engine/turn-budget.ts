@@ -1,8 +1,8 @@
 /** Run-local accounting and non-tool check-ins; Session owns durable decisions. */
 import type { Item, ItemId, ModelRef, Usage } from '../model/index.js';
 import type { InteractionRequestId } from '../tools/index.js';
-import type { BudgetDecision, TurnDeps, TurnSpec } from './direct-types.js';
-import { directBudgetAction, RunBudget, type ModelRequestCost, type RunBudgetEvent } from './direct-recovery-budget.js';
+import type { BudgetDecision, TurnDeps, TurnSpec } from './types.js';
+import { directBudgetAction, RunBudget, type ModelRequestCost, type RunBudgetEvent } from './recovery-budget.js';
 import { parseUsdMicros } from '../../../source/services/cost/model-cost.js';
 import { TurnEvents, cancelled } from './turn-events.js';
 

@@ -1,10 +1,10 @@
 import type { TurnId } from '../engine/index.js';
 import type { Item } from '../model/index.js';
-import type { bindDirectCapabilities } from './direct-capabilities.js';
-import type { TurnRequest } from './direct-types.js';
+import type { bindDirectCapabilities } from './capabilities.js';
+import type { TurnRequest } from './types.js';
 import type { Fact } from './facts.js';
 import { ConversationGeneration } from './conversation-generation.js';
-import { withNotice } from './direct-input-notice.js';
+import { withNotice } from './input-notice.js';
 import type { ConversationJournal } from './conversation-journal.js';
 import { admitConversationTurn } from './conversation-turn.js';
 

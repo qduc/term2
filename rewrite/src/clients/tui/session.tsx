@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { Box, Text, useApp, useInput } from 'ink';
 import { MultilineInput, type ImageRef } from 'ink-prompt';
 import type { TuiProps } from './integration.js';
-import type { WireContent, WireEvent, WireSubmission } from '../../protocol/direct-wire.js';
+import type { WireContent, WireEvent, WireSubmission } from '../../protocol/wire.js';
 import { useTheme } from './presentation/components/theme.js';
 import { useSkin } from './presentation/skins/SkinContext.js';
 import { terminalPreferenceDefaults } from '../../host/terminal-preference-defaults.js';

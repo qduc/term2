@@ -39,7 +39,23 @@ The masks cover only:
 - timestamps;
 - the scratch path;
 - the fake provider's port;
-- durations.
+- durations;
+- generated subagent run ids (`western-mantis-118`).
+
+Accepted differences that would touch every screen are cut from legacy's captures before comparing
+(`ACCEPTED_LEGACY_ONLY` in `screen.py`): the composer hint `│ Shift+Tab plan` and the `/help` prefix
+`Shift+Tab: switch Standard/Plan · `, both Plan mode, a dropped profile (#149).
+
+**Checking a fix, not parity.** To see what a change does to next, compare next's own screens before and after
+it, not the legacy-vs-next verdicts: a scenario that already differs from legacy keeps saying `differs` when
+the fix changes its screen (item 11's `bg-read` did). Capture next for the scenario set on both builds and diff
+the captured lines; with the cache, the second build costs only next's runs.
+
+**Lost-line trap (open, #145).** At the exit confirmation after `/help`, next loses help's last line. A `RAW=`
+trace shows why: legacy clears and reprints the whole transcript when the notice appears, while next erases 9
+rows upward (`ESC[2K ESC[1A` x8) for a live frame shorter than that, with no static rewrite, so the erase
+reaches into committed scrollback. Next's frame also ends with one more blank row than legacy's. Look for the
+extra row in the live region's height before changing the commit logic.
 
 ## Result
 

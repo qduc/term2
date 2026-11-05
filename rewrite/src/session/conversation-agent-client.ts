@@ -1,0 +1,211 @@
+import type { ModelSelection } from '../config/settings/model-selection.js';
+import type { ProviderInput, ProviderInputItem } from '../shared/contracts/provider-input.js';
+import type { JsonSchemaDefinition } from '../shared/contracts/model-types.js';
+import type { ContinuationHandle } from '../shared/contracts/continuation-handle.js';
+import type { ReasoningEffortSetting } from '../shared/contracts/conversation.js';
+import type { ApplicationRunEvent } from '../shared/contracts/application-stream.js';
+import type { ConversationEvent } from './conversation/conversation-events.js';
+import type { AgentStream } from '../engine/agent-stream.js';
+import type { ProviderHistorySnapshot } from './conversation/conversation-store.js';
+import type { SteerOutcome } from '../engine/agent-runtime/application-run-loop.js';
+import type { SubagentCancelAcknowledgement, SubagentRunStatus } from '../tools/subagents/types.js';
+import type { BackgroundShellJob } from '../tools/shell/background-shell-registry.js';
+import type {
+  ForegroundShellLeaseDetails,
+  ForegroundShellTransferResult,
+} from '../tools/shell/background-shell-registry.js';
+import type { BackgroundSubagentApprovalPauseSink } from '../tools/subagents/foreground-subagent-lease.js';
+import type { ForegroundSubagentCandidate } from '../tools/subagents/nested-runner.js';
+import type { NestedToolCompatibilityState } from './session/nested-tool-compatibility-state.js';
+import type { ToolApprovalPolicyRegistry } from './approval/tool-approval-policy-registry.js';
+import type { NestedApprovalOwner } from './approval/nested-approval-owner.js';
+import type { NormalizedUsage } from '../shared/utils/ai/token-usage.js';
+import type { ModelRequestCost } from '../shared/cost/model-cost.js';
+import type { RunBudgetEvent } from '../engine/agent-runtime/run-budget.js';
+import type { RetryRecoveryBudget } from '../engine/retry/retry-recovery-budget.js';
+import type {
+  SessionRolloverConsumption,
+  SessionRolloverRequest,
+  SessionRolloverRequestOutcome,
+} from '../shared/contracts/session-rollover.js';
+import type { ProviderRetryInfo } from '../model/providers/retrying-model.js';
+
+export type AgentClientRunOptions = {
+  /** Shared automatic retry/recovery capability for this logical turn. */
+  recoveryBudget?: RetryRecoveryBudget;
+  previousResponseId?: string | null;
+  /** Skip previous_response_id and transport history compression for this attempt. */
+  disableChainingForAttempt?: boolean;
+  sessionId?: string;
+  /** Stable root prompt-cache affinity, independent of a rolled-over sessionId. */
+  promptCacheKey?: string;
+  /** Immutable, out-of-band authoritative history for provider compatibility seams. */
+  providerHistorySnapshot?: ProviderHistorySnapshot;
+  /** Provider continuity epoch frozen while this request is planned. */
+  providerContinuityLineage?: number;
+  /** Internal public-hook correlation for the logical foreground turn. */
+  hookTurnId?: string;
+  /**
+   * End the continuation once the approved tool's result is recorded, without
+   * a further model call. See `ApplicationRunLoopOptions.stopAfterApprovalResolution`.
+   */
+  stopAfterApprovalResolution?: boolean;
+  /** Observational run-budget/stall evidence; delivery policy belongs to the caller. */
+  onRunBudgetEvent?: (event: RunBudgetEvent) => void;
+};
+
+export type AgentClientChatOptions = {
+  model?: string;
+  provider?: string;
+  reasoningEffort?: ReasoningEffortSetting | null;
+  instructions?: string;
+  maxTokens?: number;
+  signal?: AbortSignal;
+};
+
+export type AgentClientChatResult = {
+  text: string;
+  usage?: NormalizedUsage;
+  costRecords?: ModelRequestCost[];
+};
+
+export type AgentClientChatJsonOptions = AgentClientChatOptions & {
+  outputType: JsonSchemaDefinition;
+};
+
+export type ToolInterceptor = (name: string, params: unknown, toolCallId?: string) => Promise<string | null>;
+
+export interface ShellAutoApprovalAgentClient {
+  chat(message: string, options?: AgentClientChatOptions): Promise<string>;
+  chatDetailed?(message: string, options?: AgentClientChatOptions): Promise<AgentClientChatResult>;
+  chatJson?(message: string, options: AgentClientChatJsonOptions): Promise<unknown>;
+}
+
+export interface AskUserAnswerSink {
+  setAskUserAnswer(callId: string, answer: string): void;
+}
+
+export interface SubagentEventSinkHost {
+  setSubagentEventSink(sink: ((event: ConversationEvent) => void | PromiseLike<void>) | null): void | PromiseLike<void>;
+  /**
+   * Optional conversation-scoped sink that stays attached across turns, so
+   * background (async) subagent activity is still observed while idle.
+   */
+  setBackgroundSubagentEventSink?(sink: ((event: ConversationEvent) => void) | null): void;
+  /** Conversation-scoped lifecycle sink for root background shell jobs. */
+  setBackgroundShellEventSink?(sink: ((event: ConversationEvent) => void) | null): void;
+  /** Session-owned queue/control sink for adopted subagent approval pauses. */
+  setBackgroundSubagentApprovalPauseSink?(sink: BackgroundSubagentApprovalPauseSink | null): void;
+  answerBackgroundSubagentQuestion?(runId: string, messageId: string, answer: string): boolean;
+  /** Optional hook to cancel live async subagent runs when the parent turn ends. */
+  cancelSubagentRuns?(): void;
+}
+
+/** Session acceptance, presentation and policy operations; the runtime owns execution. */
+export interface ConversationTurnSession {
+  readonly approvalBatch?: true;
+  readonly abortPendingModelReads?: true;
+  readonly recordBudgetStopCause?: true;
+  onDetachedModelRead?(operation: Promise<unknown>): void;
+  prepare(signal: AbortSignal): Promise<{ input: ProviderInput; options: AgentClientRunOptions } | undefined>;
+  beginSegment(stream: AgentStream): void;
+  acceptEvent(event: ApplicationRunEvent): void;
+  acceptToolDispatch(callId: string): void;
+  onModelDispatch?(input: { readonly requestId: string; readonly providerId?: string; readonly model: string }): void;
+  beforeToolDispatch?(callId: string): Promise<void>;
+  isFatalError?(error: unknown): boolean;
+  acceptSegment(stream: AgentStream): void;
+  consume(stream: AgentStream): Promise<void>;
+  interrupted(stream: AgentStream): Promise<AgentClientRunOptions>;
+  completed(stream: AgentStream): Promise<void>;
+  recover(error: unknown): Promise<boolean>;
+}
+
+export interface ConversationAgentClient extends ShellAutoApprovalAgentClient {
+  runTurn(session: ConversationTurnSession): Promise<void>;
+  /** Current automatic personal data; captured only when admitting human input. */
+  resolvePersonalContext?(): string;
+  setBackgroundSubagentEventSink?(sink: ((event: ConversationEvent) => void) | null): void;
+  answerBackgroundSubagentQuestion?(runId: string, messageId: string, answer: string): boolean;
+  startStream(userInput: ProviderInput, options?: AgentClientRunOptions): Promise<AgentStream>;
+  /**
+   * Memory summaries relevant to a user message, as a block for the user turn.
+   * `exclude` lists `recallKey`s already in the conversation.
+   */
+  continueRunStream(state: ContinuationHandle, options?: AgentClientRunOptions): Promise<AgentStream>;
+  abort(): void;
+  /**
+   * Mark where a turn begins and ends. Without them the client sees only
+   * streams, and a turn's first stream is indistinguishable from a retry of its
+   * last — so a steer cannot survive the gaps between them.
+   */
+  openTurn?(): void;
+  closeTurn?(): void;
+  /** Grant one finite extension to the active staged run budget. */
+  grantRunBudgetExtension?(): { granted: boolean; extensionsGranted: number };
+  /** Admit a user message into the running turn at its next request boundary. */
+  steer?(items: readonly ProviderInputItem[], options?: { id?: string }): Promise<SteerOutcome>;
+  /** Drop a still-waiting steer. False when it was already admitted. */
+  retractSteer?(id: string): boolean;
+  /** Replace a waiting steer's items in place, keeping its position. */
+  editSteer?(id: string, items: readonly ProviderInputItem[]): boolean;
+  setModelSelection(selection: ModelSelection): void;
+  addToolInterceptor(interceptor: ToolInterceptor): () => void;
+  requestSessionRollover?(request: SessionRolloverRequest): SessionRolloverRequestOutcome;
+  consumeSessionRolloverRequest?(): SessionRolloverConsumption;
+  /** Reset only the root request/agent context; retained background clients live on. */
+  rolloverRootContext?(): void;
+  /** Re-snapshot pinned global instructions when the retained root starts a new session. */
+  resetMemoryContextForNewSession?(): void;
+  /** Conversation-scoped lifecycle sink for root background shell jobs. */
+  setBackgroundShellEventSink?(sink: ((event: ConversationEvent) => void) | null): void;
+
+  /**
+   * Cancel conversation-bound background (async) subagent runs. Only an
+   * explicit user interrupt, conversation disposal, or shutdown may call this;
+   * ordinary turn aborts must not.
+   */
+  cancelBackgroundRuns?(): void;
+  /** Cancel root shell jobs without ending the conversation session. */
+  cancelBackgroundShellJobs?(): void;
+  /** Cancel and settle root shell jobs during session shutdown. */
+  disposeBackgroundShellJobs?(): Promise<void>;
+
+  /** Narrow background-task controls; registries remain owned by the root client. */
+  getBackgroundSubagentStatus?(runId: string): SubagentRunStatus;
+  listBackgroundSubagentStatuses?(): SubagentRunStatus[];
+  requestBackgroundSubagentStop?(runId: string): SubagentCancelAcknowledgement;
+  /** Foreground candidates that may be transferred without restarting. */
+  listForegroundSubagentCandidates?(): ForegroundSubagentCandidate[];
+  /** Atomically adopts one foreground child into the background registry. */
+  moveForegroundSubagent?(
+    runId: string,
+  ): { runId: string; role: string; name?: string; status: 'running'; task: string } | undefined;
+  /** Exact compatibility state shared with nested execution. */
+  getNestedToolCompatibilityState?(): NestedToolCompatibilityState | undefined;
+  getApprovalPolicyRegistry?(): ToolApprovalPolicyRegistry;
+  setNestedApprovalOwner?(owner: NestedApprovalOwner | undefined): void;
+  /** Cancel and await adopted leases before detaching background sinks. */
+  disposeBackgroundSubagents?(): Promise<void>;
+  getBackgroundShellJob?(jobId: string): BackgroundShellJob<unknown> | undefined;
+  listBackgroundShellJobs?(): BackgroundShellJob<unknown>[];
+  getBackgroundShellOutputTail?(jobId: string, maxBytes?: number): string | undefined;
+  requestBackgroundShellStop?(jobId: string): boolean;
+  /** The currently running root shell call that can be detached from its turn. */
+  getForegroundShellTransferCandidate?(): ForegroundShellLeaseDetails | undefined;
+  /** Atomically adopts a root shell call into the session background registry. */
+  moveForegroundShellToBackground?(callId: string): ForegroundShellTransferResult | undefined;
+
+  clearConversations?(): void;
+  getProvider?(): string;
+  supportsConversationChaining?(): boolean;
+  setProvider?(provider: string): void;
+  setReasoningEffort?(effort?: ReasoningEffortSetting): void;
+  setRetryCallback?(callback: (info?: ProviderRetryInfo) => void): void;
+  setTemperature?(temperature?: number): void;
+  /**
+   * Force the next request to the standard (non-flex) service tier. The
+   * override is one-shot: it is consumed by the next request it applies to.
+   */
+  useStandardServiceTierForNextRequest?(): void;
+}

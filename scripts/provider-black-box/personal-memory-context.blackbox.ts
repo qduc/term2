@@ -1,12 +1,12 @@
-import { testCliPath } from '../../source/test-helpers/terminal-e2e.js';
+import { testCliPath } from '../../tests/helpers/terminal-e2e.js';
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { expect, it } from 'vitest';
 import { startFakeProviderHttpServer } from './fake-provider-http-server.js';
 import { startFakeCodexServer } from '../fake-codex-server-lib.js';
-import { FileMemoryStore } from '../../source/services/memory/memory-store.js';
-import { projectScopeKey } from '../../source/utils/project-scope.js';
+import { FileMemoryStore } from '../../rewrite/src/tools/memory/memory-store.js';
+import { projectScopeKey } from '../../rewrite/src/shared/utils/project-scope.js';
 import { createIsolatedWorkspaceLease, writePtyTextAndSubmit, type PtyChildDriver } from './provider-test-harness.js';
 
 // Actual built CLI + persisted sessions + exact provider frames. No backend cache simulation.

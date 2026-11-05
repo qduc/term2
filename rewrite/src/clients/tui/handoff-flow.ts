@@ -1,4 +1,4 @@
-// Copied from legacy source/services/handoff/handoff-flow-reducer.ts.
+// Copied from legacy rewrite/src/shared/handoff/handoff-flow-reducer.ts.
 export type HandoffStage =
   | 'entering_message'
   | 'confirm_model'

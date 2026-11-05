@@ -5,8 +5,8 @@ import {
   decodeLogEnvelope,
   expandSessionFactBatchEnvelope,
   resolveEnvelopeIdentities,
-} from '../../dist/source/services/conversation/conversation-decoder.js';
-import { replayEvents } from '../../dist/source/services/conversation/conversation-replay.js';
+} from '../../dist/rewrite/src/session/conversation/conversation-decoder.js';
+import { replayEvents } from '../../dist/rewrite/src/session/conversation/conversation-replay.js';
 import { validPersistedEvent } from './v3-input-validation.mjs';
 import { validateSessionFact } from '../../dist/rewrite/src/session/adopted/conversation-log.js';
 

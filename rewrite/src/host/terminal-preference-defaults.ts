@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS } from '../../../source/services/settings/settings-schema.js';
+import { DEFAULT_SETTINGS } from '../config/settings/settings-schema.js';
 
 /** Canonical defaults for terminal clients without effective session preferences. */
 export function terminalPreferenceDefaults(): {

@@ -8,8 +8,8 @@
 import { appendFile } from 'node:fs/promises';
 import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
-import { getProfileLabel } from '../../../source/services/profiles/labels.js';
-import { defaultServeStateDir } from '../../../source/gateway/serve-args.js';
+import { getProfileLabel } from '../config/profiles/labels.js';
+import { defaultServeStateDir } from '../host/gateway/serve-args.js';
 import { createDirectServerHost, createServerAuthentication } from '../host/server.js';
 import { SqliteReplayLedger } from '../host/server-auth.js';
 import type { Principal } from '../host/in-process-direct-types.js';

@@ -2,8 +2,8 @@
 import { readFile } from 'node:fs/promises';
 import { homedir, userInfo } from 'node:os';
 import { join } from 'node:path';
-import { resolveSSHHost } from '../../../source/utils/ssh-config-parser.js';
-import type { SSHConfig } from '../../../source/services/ssh-service.js';
+import { resolveSSHHost } from '../shared/utils/ssh-config-parser.js';
+import type { SSHConfig } from '../tools/ssh-service.js';
 import type { Workspace } from '../tools/index.js';
 
 export type DirectRemoteRequest = {

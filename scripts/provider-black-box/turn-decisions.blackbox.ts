@@ -2,7 +2,7 @@ import { createServer, type ServerResponse } from 'node:http';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { expect, it } from 'vitest';
-import { readHarnessApprovalReady } from '../../source/lib/harness-input-idle.js';
+import { readHarnessApprovalReady } from '../../rewrite/src/shared/lib/harness-input-idle.js';
 import { createIsolatedWorkspaceLease, writePtyTextAndSubmit } from './provider-test-harness.js';
 
 it('resumes repeated questions once per decision and settles cancellation before the next turn', async () => {

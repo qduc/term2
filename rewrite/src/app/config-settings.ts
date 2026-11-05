@@ -1,16 +1,16 @@
 /** Isolated, source-schema-validated settings for one prepared runtime generation. */
 import { z } from 'zod';
-import { getProfileMetadata } from '../../../source/services/profiles/active-profile.js';
-import { canonicalProfileId, legacyModeFromProfileId } from '../../../source/services/profiles/legacy-adapter.js';
+import { getProfileMetadata } from '../config/profiles/active-profile.js';
+import { canonicalProfileId, legacyModeFromProfileId } from '../shared/profiles/legacy-adapter.js';
 import {
   SettingsSchema,
   AgentSettingsSchema,
   type SettingKey,
   type SettingValue,
-} from '../../../source/services/settings/settings-schema.js';
-import { ModelSelectionSchema } from '../../../source/services/settings/model-selection.js';
-import { getProvider } from '../../../source/providers/index.js';
-import type { ISettingsService } from '../../../source/services/service-interfaces.js';
+} from '../config/settings/settings-schema.js';
+import { ModelSelectionSchema } from '../config/settings/model-selection.js';
+import { getProvider } from '../model/providers/index.js';
+import type { ISettingsService } from '../shared/service-interfaces.js';
 import type { DirectCommandConfiguration } from '../session/command-types.js';
 
 /** App preparation accepts selection intent. Native/protocol ingress must retain

@@ -1,34 +1,34 @@
-import { executeShellCommand } from '../../../source/utils/shell/execute-shell.js';
-import { formatShellExecutionOutput } from '../../../source/utils/shell/shell-output.js';
+import { executeShellCommand } from '../shared/utils/shell/execute-shell.js';
+import { formatShellExecutionOutput } from '../shared/utils/shell/shell-output.js';
 /** The interactive terminal client on the direct host. The app owns the connection and replaces it across sessions. */
 import fs from 'node:fs';
 import { homedir } from 'node:os';
 import { stderr, stdin, stdout } from 'node:process';
 import { createInterface } from 'node:readline/promises';
-import { collectProviderModels } from '../../../source/services/models/model-listing.js';
-import { resolveActiveProfile } from '../../../source/services/profiles/active-profile.js';
+import { collectProviderModels } from '../model/models/model-listing.js';
+import { resolveActiveProfile } from '../config/profiles/active-profile.js';
 import React, { useMemo, useRef, useState, type ReactNode } from 'react';
 import { Box, render } from 'ink';
-import Banner from '../../../source/components/layout/Banner.js';
-import { SettingsSkinProvider, useSkin as useSourceSkin } from '../../../source/skins/SkinContext.js';
+import Banner from '../clients/components/layout/Banner.js';
+import { SettingsSkinProvider, useSkin as useSourceSkin } from '../clients/skins/SkinContext.js';
 import { SkinProvider as DirectSkinProvider } from '../clients/tui/presentation/skins/SkinContext.js';
 import { getSkin as getDirectSkin } from '../clients/tui/presentation/skins/registry.js';
 import { ThemeProvider as DirectThemeProvider } from '../clients/tui/presentation/theme/ThemeContext.js';
-import { detectTerminalBackground } from '../../../source/theme/detect-terminal-background.js';
-import { shouldDetectBackground } from '../../../source/theme/resolve-theme.js';
-import { SettingsThemeProvider, useTheme as useSourceTheme } from '../../../source/theme/ThemeContext.js';
-import { getInkRenderOptions } from '../../../source/utils/ink-render-options.js';
-import { getProfileLabel } from '../../../source/services/profiles/labels.js';
-import { getProvider } from '../../../source/providers/registry.js';
+import { detectTerminalBackground } from '../clients/theme/detect-terminal-background.js';
+import { shouldDetectBackground } from '../clients/theme/resolve-theme.js';
+import { SettingsThemeProvider, useTheme as useSourceTheme } from '../clients/theme/ThemeContext.js';
+import { getInkRenderOptions } from '../shared/utils/ink-render-options.js';
+import { getProfileLabel } from '../config/profiles/labels.js';
+import { getProvider } from '../model/providers/registry.js';
 import type { WireSnapshot } from '../protocol/wire.js';
-import { useTerminalFocusNotifier } from '../../../source/hooks/use-terminal-focus-notifier.js';
-import { useSetting } from '../../../source/hooks/use-setting.js';
-import type { LoggingService } from '../../../source/services/logging/logging-service.js';
+import { useTerminalFocusNotifier } from '../clients/hooks/use-terminal-focus-notifier.js';
+import { useSetting } from '../clients/hooks/use-setting.js';
+import type { LoggingService } from '../session/logging/logging-service.js';
 import {
   confirmHomeDirectoryStart,
   HOME_DIRECTORY_START_WARNING,
   shouldWarnOnHomeDirectoryStart,
-} from '../../../source/utils/home-directory-start-guard.js';
+} from '../shared/utils/home-directory-start-guard.js';
 import { Tui, type TuiIntegration } from '../clients/tui/index.js';
 import type { DirectConnection } from '../host/in-process-direct-types.js';
 import { createDirectApplication, type DirectApplication } from './application.js';
@@ -39,7 +39,7 @@ import { printUsage } from './usage-report.js';
 import { createDirectTuiMenus } from './launch-tui-menus.js';
 import { performRestart, type DirectRestartPlan } from './launch-tui-restart.js';
 import type { DirectLaunchRequest } from './launch-types.js';
-import type { ISettingsService } from '../../../source/services/service-interfaces.js';
+import type { ISettingsService } from '../shared/service-interfaces.js';
 import { INTERACTIVE_TERMINAL_REQUIRED } from './launch.js';
 import { openDirectApplicationMcp } from './application-mcp.js';
 import type { DirectMcp } from './mcp.js';

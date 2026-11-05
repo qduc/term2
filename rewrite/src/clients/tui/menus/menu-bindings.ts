@@ -20,22 +20,6 @@
  * recorded decision rather than silently reverting it.
  */
 
-/** Every event/command id a menu interaction may advertise a key for. */
-const MENU_COMMAND_VOCABULARY = [
-  'move',
-  'accept',
-  'escape',
-  'input',
-  'tab',
-  'left',
-  'right',
-  'backspace',
-  'delete',
-  'refresh',
-  'favorite',
-  'nickname',
-] as const;
-
 export type MenuCommandId =
   | 'move'
   | 'accept'
@@ -110,13 +94,6 @@ const MODEL_MENU_TAIL_BINDINGS: MenuBindingTable = [
   { key: 'ctrl+f', action: 'favorite', commands: ['favorite'] },
   { key: 'ctrl+r', action: 'refresh model list', commands: ['refresh'] },
   { key: 'esc', action: 'cancel', commands: ['escape'] },
-];
-
-const MODEL_MENU_BINDINGS: MenuBindingTable = [
-  ...MODEL_MENU_CORE_BINDINGS,
-  ...MODEL_MENU_TAB_BINDINGS,
-  ...MODEL_MENU_NICKNAME_BINDINGS,
-  ...MODEL_MENU_TAIL_BINDINGS,
 ];
 
 /** Model picker, legacy per-provider tab mode (←→ switches provider tabs). */

@@ -96,7 +96,7 @@ describe('provider black-box harness', () => {
       process.env.TERM2_HARNESS_IDLE_PATH = workspace.paths.idlePath;
       try {
         const { publishHarnessInputState, resetHarnessInputIdleForTests } = await import(
-          '../../source/lib/harness-input-idle.js'
+          '../../rewrite/src/shared/lib/harness-input-idle.js'
         );
         resetHarnessInputIdleForTests();
         publishHarnessInputState({ owner: 'input', processing: false });

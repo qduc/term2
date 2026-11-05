@@ -1,5 +1,3 @@
-import { terminalTextWidth, truncateTerminalText } from './task-manager.js';
-import { useTerminalSize } from './terminal.js';
 import React, { useEffect, useRef, useState } from 'react';
 import { StreamingSpeedTracker } from './presentation/utils/streaming/streaming-speed-tracker.js';
 import { Box, Text } from 'ink';
@@ -291,7 +289,6 @@ export function Activity({
   readonly liveTps?: number | null;
 }): React.ReactElement {
   const theme = useTheme();
-  const { TaskPanel } = useSkin();
   return (
     <Box flexDirection="column">
       {/* Legacy hides the working indicator while an approval prompt owns the turn. */}

@@ -1,4 +1,4 @@
-/** Copied from source/utils/ai/model-settings.ts with SETTING_KEYS inlined. */
+/** Copied from rewrite/src/shared/utils/ai/model-settings.ts with SETTING_KEYS inlined. */
 
 export type ModelSettingConfig = {
   modelKey: string;
@@ -10,8 +10,6 @@ export type ModelSettingConfig = {
    */
   pool?: boolean;
 };
-
-const MODEL_CMD_TRIGGER = '/model ';
 
 const MODEL_SETTING_CONFIGS: ModelSettingConfig[] = [
   {

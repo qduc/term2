@@ -3,8 +3,8 @@
  * ones. Sessions retain their turn/tool observers; the app owns the public root
  * lifetime, including empty resumes and /clear. Client disconnect is not shutdown.
  */
-import { createRootHookRuntime } from '../../../source/services/hooks/hook-composition.js';
-import type { Term2SessionMode } from '../../../source/services/hooks/hook-contracts.js';
+import { createRootHookRuntime } from '../session/hooks/hook-composition.js';
+import type { Term2SessionMode } from '../session/hooks/hook-contracts.js';
 import { createDirectHooks } from '../session/hooks.js';
 import type { DirectRuntimeContext } from '../session/store.js';
 import type { ProfileSelection } from './tool-contract.js';

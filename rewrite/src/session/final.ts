@@ -1,6 +1,6 @@
 /** Public terminal evidence from the accepted root audit, never from UI state or provider history. */
-import type { Item as PublicAssistantItem } from '../../../source/contracts/conversation-items.js';
-import type { CommandMessage } from '../../../source/tools/types.js';
+import type { Item as PublicAssistantItem } from '../shared/contracts/conversation-items.js';
+import type { CommandMessage } from '../tools/types.js';
 import type { TurnId } from '../engine/index.js';
 import type { ModelRequestCost } from '../engine/recovery-budget.js';
 import type { Item, Usage } from '../model/index.js';

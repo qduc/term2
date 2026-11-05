@@ -2,7 +2,7 @@ import { createServer, type Server } from 'node:http';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { SettingsService } from '../../source/services/settings/settings-service.js';
+import { SettingsService } from '../../rewrite/src/config/settings/settings-service.js';
 import {
   createIsolatedWorkspaceLease,
   exitInteractive,

@@ -3,7 +3,7 @@ import type { InteractionRequestId, TurnId } from '../engine/index.js';
 import type { ModelError } from '../model/index.js';
 import type { ConversationLog } from './log.js';
 import type { Fact, FactLine } from './facts.js';
-import { isDirectTaskFact, isDirectQueueFact } from './facts.js';
+import { isDirectTaskFact } from './facts.js';
 import { initialDirectContextState } from './context.js';
 import { createDirectQueueState } from './queue.js';
 import { recoverDirectBackground } from './background-replay.js';

@@ -2,8 +2,8 @@
 import {
   isSandboxNetworkHost,
   isSandboxNetworkPort,
-} from '../../../../source/utils/shell/sandbox/sandbox-network-validation.js';
-import type { NetworkApprovalAnswer } from '../../../../source/utils/shell/sandbox/sandbox-network-approval.js';
+} from '../../shared/utils/shell/sandbox/sandbox-network-validation.js';
+import type { NetworkApprovalAnswer } from '../../shared/utils/shell/sandbox/sandbox-network-approval.js';
 
 export type NetworkRequestFact = {
   readonly type: 'session_network_requested';

@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { posix } from 'node:path';
-import type { ISSHService, SSHCommandOptions, SSHCommandResult } from '../../../source/services/service-interfaces.js';
-import { quoteShellArg } from '../../../source/services/ssh-service.js';
+import type { ISSHService, SSHCommandOptions, SSHCommandResult } from '../shared/service-interfaces.js';
+import { quoteShellArg } from '../tools/ssh-service.js';
 import type { Workspace } from '../tools/index.js';
 
 type Scope = { readonly access: 'read' | 'write' | 'shell' | 'none'; readonly signal: AbortSignal };

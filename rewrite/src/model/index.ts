@@ -6,7 +6,7 @@
  * Depends on: nothing.
  */
 
-import type { RetryRecoveryBudget } from '../../../source/services/retry/retry-recovery-budget.js';
+import type { RetryRecoveryBudget } from '../engine/retry/retry-recovery-budget.js';
 
 export { ModelFailure } from './failure.js';
 export type { ModelRecoveryEvidence } from './failure.js';

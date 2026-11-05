@@ -4,13 +4,13 @@
  * chaining needs a real endpoint and account, so without one the Session sends
  * full history, which is always correct.
  */
-import { getActiveCodexAccount } from '../../../source/providers/codex-auth.js';
-import { getSessionAccount } from '../../../source/providers/oauth-session-account.js';
+import { getActiveCodexAccount } from '../model/providers/codex-auth.js';
+import { getSessionAccount } from '../model/providers/oauth-session-account.js';
 import { readRunBudgetPolicy } from '../engine/recovery-budget.js';
 import { DirectContinuity } from '../engine/recovery-continuity.js';
 import type { ModelRef } from '../model/index.js';
 import type { DirectConversationRuntime } from '../session/store.js';
-import { ContextMilestoneReminder } from '../../../source/services/agent-runtime/context-compaction/context-milestone-reminder.js';
+import { ContextMilestoneReminder } from '../engine/agent-runtime/context-compaction/context-milestone-reminder.js';
 import type { ProfileSelection } from './tool-contract.js';
 
 type RuntimeDeps = DirectConversationRuntime['deps'];

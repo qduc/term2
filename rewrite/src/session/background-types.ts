@@ -11,7 +11,7 @@ import type {
 import type { DirectOrigin } from './facade-types.js';
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
-/** Legacy source/services/background-task-activity.ts BackgroundTaskObservation (the wire carries it as is). */
+/** Legacy rewrite/src/tools/background-task-activity.ts BackgroundTaskObservation (the wire carries it as is). */
 export type DirectTaskObservation =
   | {
       readonly kind:

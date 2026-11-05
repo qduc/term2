@@ -4,7 +4,7 @@
  * Colours are not constants here any more. They come from the active theme, so
  * a component asks `useTheme()` for a *meaning* (`theme.danger`, `theme.textSubtle`)
  * and the user's `ui.theme` setting decides what that looks like. Palettes live
- * in `source/theme/palettes.ts`; do not write a hex literal or a named terminal
+ * in `rewrite/src/clients/theme/palettes.ts`; do not write a hex literal or a named terminal
  * colour (`'green'`, `'gray'`) in a component — `no-raw-colors.guard.test.ts`
  * enforces it.
  *

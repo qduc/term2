@@ -3,14 +3,14 @@ import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { Item, ItemId, Model, ModelRef, ModelRequest, Usage } from '../model/index.js';
 import { ModelFailure } from '../model/failure.js';
-import { resolveModelContextPolicy } from '../../../source/services/agent-runtime/model-context-policy.js';
+import { resolveModelContextPolicy } from './agent-runtime/model-context-policy.js';
 import { DEFAULT_ASSUMED_CONTEXT_WINDOW } from '../model/index.js';
 import {
   CONTEXT_COMPACTION_INSTRUCTIONS,
   CONTEXT_COMPACTION_REQUEST,
   buildContextCompactionInput,
   wrapContextSummary,
-} from '../../../source/prompts/context-compaction.js';
+} from '../session/prompts/context-compaction.js';
 import { hasCompleteDirectToolPairs } from './recovery-history.js';
 import { selfContained } from './recovery-continuity.js';
 import { toolReceipts } from './compaction-receipts.js';
@@ -246,7 +246,7 @@ export function enforceDirectInputLimit(
   if (policy.hardInputLimit === undefined) return;
   const estimated = estimateDirectContext(request, input.contextWindow).renderedInputTokens;
   if (estimated <= policy.hardInputLimit) return;
-  // Legacy's RequestInputLimitError text (source/services/agent-runtime/request-input-limit.ts);
+  // Legacy's RequestInputLimitError text (rewrite/src/engine/agent-runtime/request-input-limit.ts);
   // the `request_input_limit: ` prefix carries its code to clients.
   const text =
     policy.limitSource === 'model_capacity'

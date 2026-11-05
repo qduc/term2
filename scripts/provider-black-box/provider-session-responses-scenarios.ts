@@ -1,4 +1,4 @@
-import { testCliPath } from '../../source/test-helpers/terminal-e2e.js';
+import { testCliPath } from '../../tests/helpers/terminal-e2e.js';
 // Each entry file registers one scenario group. Vitest's default file isolation
 // evaluates this module separately for each group: the active fixture resources
 // and afterEach cleanup below are never shared across concurrent files. Cases

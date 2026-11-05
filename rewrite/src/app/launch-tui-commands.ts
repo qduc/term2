@@ -1,8 +1,7 @@
 import { printUsage, sessionUsage } from './usage-report.js';
-import { VALID_REASONING_EFFORTS } from '../../../source/services/models/reasoning-effort.js';
+import { VALID_REASONING_EFFORTS } from '../model/models/reasoning-effort.js';
 import { resetSession } from '../clients/tui/commands.js';
-import { loadProviderItems } from '../../../source/providers/provider-service.js';
-import { parseModelProviderArg } from '../../../source/utils/ai/model-provider-arg.js';
+import { parseModelProviderArg } from '../shared/utils/ai/model-provider-arg.js';
 /**
  * The slash commands no wire command covers by itself. Each one is either a real
  * host or wire operation here, or it fails visibly. The TUI sends `/compact`, `/retry-*`,
@@ -13,14 +12,14 @@ import { parseModelProviderArg } from '../../../source/utils/ai/model-provider-a
  * transient state a cursor covers.
  */
 import { randomUUID } from 'node:crypto';
-import { createDurableGoal, formatGoalStatus } from '../../../source/services/conversation/durable-goal.js';
-import { composeHandoffMessage } from '../../../source/services/handoff/handoff-flow-reducer.js';
-import { formatMcpStatus } from '../../../source/services/mcp/mcp-status.js';
+import { createDurableGoal, formatGoalStatus } from '../session/conversation/durable-goal.js';
+import { composeHandoffMessage } from '../shared/handoff/handoff-flow-reducer.js';
+import { formatMcpStatus } from '../tools/mcp/mcp-status.js';
 import type { DirectMcp } from './mcp.js';
-import { injectSkillIntoTurn } from '../../../source/types/user-turn.js';
+import { injectSkillIntoTurn } from '../shared/types/user-turn.js';
 import { helpText } from '../clients/tui/slash-commands.js';
-import { copyToClipboard } from '../../../source/utils/clipboard.js';
-import { buildCopySelections } from '../../../source/utils/copy-selections.js';
+import { copyToClipboard } from '../shared/utils/clipboard.js';
+import { buildCopySelections } from '../shared/utils/copy-selections.js';
 import { isControlSocketName } from '../clients/control/index.js';
 import type { DirectConnection } from '../host/in-process-direct-types.js';
 import { previewConfirmation, receiptNotice, sendNativeCommand, submitText } from '../clients/tui/commands.js';

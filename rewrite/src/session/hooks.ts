@@ -9,8 +9,8 @@ import type {
   Term2Status,
   Term2StatusChangeReason,
   Term2ApprovalResolutionSource,
-} from '../../../source/services/hooks/hook-contracts.js';
-import type { HookLifecyclePort } from '../../../source/services/hooks/hook-service.js';
+} from './hooks/hook-contracts.js';
+import type { HookLifecyclePort } from './hooks/hook-service.js';
 import type { FactLine } from './facts.js';
 import type { ModelRef } from '../model/index.js';
 import type { ExecutionId } from '../tools/index.js';

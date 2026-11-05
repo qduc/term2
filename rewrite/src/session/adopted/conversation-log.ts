@@ -7,16 +7,16 @@
 import {
   validateSettingsBaseline,
   type SessionSettingsInitialized,
-} from '../../../../source/services/settings/session-runtime-settings.js';
+} from '../../config/settings/session-runtime-settings.js';
 import { validateNetworkFact, type NetworkFact } from './network.js';
 import type { ModelRef } from '../../model/index.js';
 import type { Workspace } from '../../tools/index.js';
 import {
   sanitizePendingInteractionDto,
   type PendingInteractionDto,
-} from '../../../../source/gateway/interaction-protocol.js';
-import type { LogEvent } from '../../../../source/services/logging/conversation-log-events.js';
-import { decodeLogEnvelope } from '../../../../source/services/conversation/conversation-decoder.js';
+} from '../../shared/gateway/interaction-protocol.js';
+import type { LogEvent } from '../logging/conversation-log-events.js';
+import { decodeLogEnvelope } from '../conversation/conversation-decoder.js';
 
 export type { PendingInteractionDto };
 export type SessionBinding = {

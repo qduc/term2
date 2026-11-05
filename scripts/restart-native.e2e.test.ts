@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 import { connect } from 'node:net';
 import { createInterface } from 'node:readline';
 import { expect, it } from 'vitest';
-import { listControlAdvertisements } from '../source/services/control-socket/control-socket.js';
+import { listControlAdvertisements } from '../rewrite/src/clients/control-socket/control-socket.js';
 import { createIsolatedWorkspaceLease, writePtyTextAndSubmit } from './provider-black-box/provider-test-harness.js';
 
 const productionEnv = {

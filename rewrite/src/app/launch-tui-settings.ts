@@ -11,21 +11,17 @@
 import { isDroppedProfile } from './dropped-profiles.js';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { resolveActiveProfile } from '../../../source/services/profiles/active-profile.js';
+import { resolveActiveProfile } from '../config/profiles/active-profile.js';
 import {
   BARE_PROFILE_ID,
   isLegacyModeSettingKey,
   profileIdFromLegacyModeSetting,
-} from '../../../source/services/profiles/legacy-adapter.js';
-import { planProfileTransition } from '../../../source/services/profiles/profile-transition.js';
-import { SETTING_KEYS } from '../../../source/services/settings/settings-service.js';
-import {
-  CATEGORY_KEYS,
-  HIDDEN_SETTINGS,
-  SETTINGS_CATEGORIES,
-} from '../../../source/hooks/settings-completion-config.js';
-import { getSettingMetadata } from '../../../source/services/settings/settings-ui-metadata.js';
-import { createSettingsCommand, parseSettingValue } from '../../../source/utils/settings-command.js';
+} from '../shared/profiles/legacy-adapter.js';
+import { planProfileTransition } from '../config/profiles/profile-transition.js';
+import { SETTING_KEYS } from '../config/settings/settings-service.js';
+import { CATEGORY_KEYS, HIDDEN_SETTINGS, SETTINGS_CATEGORIES } from '../clients/hooks/settings-completion-config.js';
+import { getSettingMetadata } from '../config/settings/settings-ui-metadata.js';
+import { createSettingsCommand, parseSettingValue } from '../shared/utils/settings-command.js';
 import { receiptNotice, sendNativeCommand } from '../clients/tui/commands.js';
 import type { TuiConnection, TuiIntegration } from '../clients/tui/integration.js';
 import type { WireConfigureRequest, WireSnapshot } from '../protocol/wire.js';

@@ -1,6 +1,6 @@
 /** Re-adapt one Session's existing memory leaves, without a second memory lifetime. */
-import { isDirectlyCallable, TOOL_NAME_RUN_CODE } from '../../../source/tools/system/run-code/index.js';
-import type { AnyToolDefinition } from '../../../source/tools/types.js';
+import { isDirectlyCallable, TOOL_NAME_RUN_CODE } from '../tools/system/run-code/index.js';
+import type { AnyToolDefinition } from '../tools/types.js';
 import type { DirectContextCapabilities } from '../session/capabilities.js';
 import type { AgentSurface } from './tool-contract.js';
 

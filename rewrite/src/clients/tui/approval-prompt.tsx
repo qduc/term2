@@ -31,7 +31,7 @@ const FOLDER_SESSION_READ_TOOLS = new Set(['read_file', 'grep', 'glob']);
 const supportsFolderSessionRead = (toolName: string | undefined): boolean =>
   typeof toolName === 'string' && FOLDER_SESSION_READ_TOOLS.has(toolName);
 
-/** source/services/approval/session-read-grant-target.ts, without glob pattern resolution (tools/ is outside this layer). */
+/** rewrite/src/session/approval/session-read-grant-target.ts, without glob pattern resolution (tools/ is outside this layer). */
 function resolveSessionReadFolder(toolName: string | undefined, args: unknown): string | null {
   const record = args && typeof args === 'object' ? (args as Record<string, unknown>) : null;
   const rawPath = typeof record?.path === 'string' ? record.path.trim() : '';

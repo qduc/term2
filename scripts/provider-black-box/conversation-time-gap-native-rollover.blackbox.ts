@@ -3,8 +3,8 @@ import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { expect, it } from 'vitest';
-import { callDiscordControl } from '../../source/services/discord/discord-bridge.js';
-import { listControlAdvertisements } from '../../source/services/control-socket/control-socket.js';
+import { callDiscordControl } from '../../rewrite/src/clients/discord/discord-bridge.js';
+import { listControlAdvertisements } from '../../rewrite/src/clients/control-socket/control-socket.js';
 import { createIsolatedWorkspaceLease, type PtyChildDriver } from './provider-test-harness.js';
 
 it.each(['missing', 'invalid', 'missing-middle'] as const)(

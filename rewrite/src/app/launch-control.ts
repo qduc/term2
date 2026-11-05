@@ -3,7 +3,7 @@
  * clients. Discord talks only to a control socket, so it needs no host here.
  */
 import { stderr, stdout } from 'node:process';
-import { installationVersion } from '../../../source/providers/fetch/logging-middleware.js';
+import { installationVersion } from '../model/providers/fetch/logging-middleware.js';
 import {
   createSessionDiscordSend,
   runControlCommand,

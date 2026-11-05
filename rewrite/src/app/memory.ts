@@ -1,14 +1,11 @@
 /** Local memory composition; Session remains the only context/admission owner. */
-import { AutomaticMemoryCanary } from '../../../source/services/memory/automatic-memory-canary.js';
-import {
-  MemoryCapabilityBuilder,
-  type MemoryCapabilitySubject,
-} from '../../../source/services/memory/memory-capabilities.js';
-import { resolveActiveProfile } from '../../../source/services/profiles/active-profile.js';
-import type { ISettingsService } from '../../../source/services/service-interfaces.js';
-import { resolveDisabledCapabilities } from '../../../source/services/tool-toggles.js';
-import { isDirectlyCallable, TOOL_NAME_RUN_CODE } from '../../../source/tools/system/run-code/index.js';
-import type { AnyToolDefinition } from '../../../source/tools/types.js';
+import { AutomaticMemoryCanary } from '../tools/memory/automatic-memory-canary.js';
+import { MemoryCapabilityBuilder, type MemoryCapabilitySubject } from '../tools/memory/memory-capabilities.js';
+import { resolveActiveProfile } from '../config/profiles/active-profile.js';
+import type { ISettingsService } from '../shared/service-interfaces.js';
+import { resolveDisabledCapabilities } from '../config/tool-toggles.js';
+import { isDirectlyCallable, TOOL_NAME_RUN_CODE } from '../tools/system/run-code/index.js';
+import type { AnyToolDefinition } from '../tools/types.js';
 import type { DirectContextCapabilities, DirectContextPort } from '../session/capabilities.js';
 import { createDirectAutomaticMemory, createDirectMemoryCapability } from '../session/memory.js';
 import type { ToolSpec } from '../model/index.js';

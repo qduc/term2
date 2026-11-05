@@ -1,6 +1,6 @@
 /** Read the same effective settings and profile labels as the source input planner. */
-import type { ISettingsService } from '../../../source/services/service-interfaces.js';
-import { getProfileLabel } from '../../../source/services/profiles/labels.js';
+import type { ISettingsService } from '../shared/service-interfaces.js';
+import { getProfileLabel } from '../config/profiles/labels.js';
 import type { ModelRef } from '../model/index.js';
 import type { DirectInputPreviewConfiguration } from './input-preview-types.js';
 

@@ -1,5 +1,5 @@
 /** Actual configure preparation. Session alone accepts/persists/installs a generation. */
-import { getProfileMetadata } from '../../../source/services/profiles/active-profile.js';
+import { getProfileMetadata } from '../config/profiles/active-profile.js';
 import type { ModelRef } from '../model/index.js';
 import { createProviderRegistry } from '../model/provider.js';
 import type { DirectContextCapabilities } from '../session/capabilities.js';

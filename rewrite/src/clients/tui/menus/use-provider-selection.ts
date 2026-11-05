@@ -7,7 +7,7 @@ import type {
   MenuProviderItem as ProviderSelectionItem,
 } from '../integration.js';
 
-/** Copied from source/providers/provider-service.ts. */
+/** Copied from rewrite/src/model/providers/provider-service.ts. */
 export type ProviderSelectionPhase =
   | 'list'
   | 'accounts'

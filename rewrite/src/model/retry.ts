@@ -1,11 +1,8 @@
 /** Shared dispatch gate. Engine-owned requests never retry inside this adapter. */
 import type { ModelEvent, ModelRequest } from './index.js';
 import { ModelFailure, toModelFailure, type FailureScope } from './failure.js';
-import {
-  RetryRecoveryBudget,
-  RetryRecoveryBudgetExhaustedError,
-} from '../../../source/services/retry/retry-recovery-budget.js';
-import { computeUpstreamRetryDelayMs } from '../../../source/services/retry/upstream-retry-policy.js';
+import { RetryRecoveryBudget, RetryRecoveryBudgetExhaustedError } from '../engine/retry/retry-recovery-budget.js';
+import { computeUpstreamRetryDelayMs } from '../engine/retry/upstream-retry-policy.js';
 
 /**
  * With injected recovery, make exactly one physical attempt: the engine must

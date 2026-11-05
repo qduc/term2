@@ -1,33 +1,30 @@
 #!/usr/bin/env node
-import '../../../source/env-setup.js';
+import '../config/env-setup.js';
 
 import { readdir } from 'node:fs/promises';
 import { stdin, stdout, stderr } from 'node:process';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import envPaths from 'env-paths';
-import { getAllProviders, getProviderIds } from '../../../source/providers/index.js';
-import { installationVersion } from '../../../source/providers/fetch/logging-middleware.js';
-import { LoggingService } from '../../../source/services/logging/logging-service.js';
-import {
-  VALID_REASONING_EFFORTS,
-  type ModelSettingsReasoningEffort,
-} from '../../../source/services/models/reasoning-effort.js';
-import { resolveProfile } from '../../../source/services/profiles/resolver.js';
-import { BARE_PROFILE_ID, canonicalProfileId } from '../../../source/services/profiles/legacy-adapter.js';
-import { SessionContextService } from '../../../source/services/session/session-context-service.js';
-import { buildEnvOverrides } from '../../../source/services/settings/settings-service.js';
+import { getAllProviders, getProviderIds } from '../model/providers/index.js';
+import { installationVersion } from '../model/providers/fetch/logging-middleware.js';
+import { LoggingService } from '../session/logging/logging-service.js';
+import { VALID_REASONING_EFFORTS, type ModelSettingsReasoningEffort } from '../model/models/reasoning-effort.js';
+import { resolveProfile } from '../config/profiles/resolver.js';
+import { BARE_PROFILE_ID, canonicalProfileId } from '../shared/profiles/legacy-adapter.js';
+import { SessionContextService } from '../session/session/session-context-service.js';
+import { buildEnvOverrides } from '../config/settings/settings-service.js';
 import {
   HOME_DIRECTORY_START_WARNING,
   shouldWarnOnHomeDirectoryStart,
-} from '../../../source/utils/home-directory-start-guard.js';
-import type { AcpArgs } from '../../../source/acp-v2/serve-args.js';
-import type { ServeArgs } from '../../../source/gateway/serve-args.js';
+} from '../shared/utils/home-directory-start-guard.js';
+import type { AcpArgs } from '../clients/acp-v2/serve-args.js';
+import type { ServeArgs } from '../host/gateway/serve-args.js';
 import type { DirectLaunchBase } from './launch-types.js';
-import type { InteractivePickerRequest } from '../../../source/services/models/model-resolution.js';
-import { HARNESS_IDLE_ENV } from '../../../source/lib/harness-input-idle.js';
-import { formatResumeList } from '../../../source/utils/resume-list.js';
-import { isControlSocketName } from '../../../source/services/control-socket/control-socket.js';
+import type { InteractivePickerRequest } from '../model/models/model-resolution.js';
+import { HARNESS_IDLE_ENV } from '../shared/lib/harness-input-idle.js';
+import { formatResumeList } from '../shared/utils/resume-list.js';
+import { isControlSocketName } from '../clients/control-socket/control-socket.js';
 import { createSettingsService, type SettingsService } from './settings.js';
 import { runLogin, runListModelsCommand } from './cli-account-commands.js';
 import { listNativeConversations, resolveNativeResume, ResumeRefusal } from './cli-conversations.js';
@@ -188,7 +185,7 @@ async function applyModelOverrides(
     return 'Error: --provider requires --model; provider-only selection is not supported.';
   }
 
-  const picker = pickerEligible ? await import('../../../source/services/models/model-picker-host.js') : undefined;
+  const picker = pickerEligible ? await import('../model/models/model-picker-host.js') : undefined;
 
   // A bare -m opens the picker itself (old cli.tsx); Escape keeps the configured model.
   if (options.model === '') {
@@ -206,7 +203,7 @@ async function applyModelOverrides(
 
   const modelFlag = options.model?.trim();
   if (!modelFlag) return null;
-  const { resolveModelFlag } = await import('../../../source/services/models/model-resolution.js');
+  const { resolveModelFlag } = await import('../model/models/model-resolution.js');
   // The picker replaces the readline fallback and the hard no_match error, as the current CLI does.
   const interactivePicker =
     picker === undefined
@@ -323,7 +320,7 @@ async function runInteractive(options: SessionOptions): Promise<number> {
     loggingServiceOptions: { sessionContextService: sessionContext },
   });
   const logger = settings.getLoggingService();
-  // The picker gate of source/services/models/model-picker-host.tsx: TTY on both ends, no --json, no harness marker.
+  // The picker gate of rewrite/src/model/models/model-picker-host.tsx: TTY on both ends, no --json, no harness marker.
   const pickerEligible = Boolean(stdin.isTTY && stdout.isTTY) && !options.output.json && !process.env[HARNESS_IDLE_ENV];
   const modelError = await applyModelOverrides(options, settings, logger, pickerEligible);
   if (modelError !== null) {

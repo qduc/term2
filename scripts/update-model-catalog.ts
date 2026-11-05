@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Regenerate source/providers/model-catalog/catalog.generated.ts from a
+ * Regenerate rewrite/src/model/providers/model-catalog/catalog.generated.ts from a
  * @earendil-works/pi-ai checkout.
  *
  * Usage:
@@ -19,13 +19,13 @@ import {
   generateCatalogSource,
   VENDORED_PI_PROVIDERS,
   type PiProviderData,
-} from '../source/providers/model-catalog/generate-catalog.js';
+} from '../rewrite/src/model/providers/model-catalog/generate-catalog.js';
 
 const require = createRequire(import.meta.url);
 
 // This file lives at <root>/scripts/update-model-catalog.ts.
 const repoRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
-const outputPath = join(repoRoot, 'source', 'providers', 'model-catalog', 'catalog.generated.ts');
+const outputPath = join(repoRoot, 'rewrite', 'src', 'model', 'providers', 'model-catalog', 'catalog.generated.ts');
 
 /** Format generated TypeScript through prettier so the artifact stays lint-clean. */
 async function formatTypeScript(source: string): Promise<string> {

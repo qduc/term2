@@ -7,7 +7,7 @@ import type {
   StreamedModelTurnInput,
   StreamedModelTurnOutput,
   StreamedModelUsage,
-} from '../../../source/contracts/streamed-model-turn.js';
+} from '../shared/contracts/streamed-model-turn.js';
 import type { Item, ItemId, StopReason, ToolCallId, ToolSpec, Usage } from './index.js';
 
 export function toolDefinition(tool: ToolSpec): StreamedModelToolDefinition {
@@ -117,7 +117,7 @@ export function itemToInput(item: Item): StreamedModelTurnInput {
   }
 }
 
-/** The opening of legacy's compaction checkpoint wrapper (source/prompts/context-compaction.ts). */
+/** The opening of legacy's compaction checkpoint wrapper (rewrite/src/session/prompts/context-compaction.ts). */
 const COMPACTION_CHECKPOINT_PREFIX = '[Compacted Conversation Context';
 
 export function outputToItem(

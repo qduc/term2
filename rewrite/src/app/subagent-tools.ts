@@ -1,48 +1,37 @@
 /** Source delegation contracts over the owning Session's native branch/task ports. */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
-import type { AgentFactoryDeps } from '../../../source/lib/agent-factory.js';
-import { getCatalogModel } from '../../../source/providers/model-catalog/catalog.js';
-import { resolveOutputAllocation } from '../../../source/services/agent-runtime/model-context-policy.js';
-import { adaptLegacyDefinition } from '../../../source/services/agent-runtime/legacy-adapter.js';
-import { resolveAgent } from '../../../source/services/agent-runtime/agent-resolver.js';
-import { agentSpecToConfig } from '../../../source/services/agent-runtime/agent-spec.js';
-import type { AgentSpec } from '../../../source/services/agent-runtime/types.js';
-import { createRootBudget } from '../../../source/services/agent-runtime/execution-budget.js';
-import type { ResolvedAgentDefinition } from '../../../source/services/agent-runtime/resolved-agent.js';
-import type { ISubagentClient } from '../../../source/services/subagents/subagent-client-types.js';
-import { ToolApprovalPolicyRegistry } from '../../../source/services/approval/tool-approval-policy-registry.js';
-import type { ExecutionContext } from '../../../source/services/execution-context.js';
-import { withActiveWorkspaceRoot } from '../../../source/services/workspace/active-workspace-root.js';
+import type { AgentFactoryDeps } from './lib/agent-factory.js';
+import { getCatalogModel } from '../model/providers/model-catalog/catalog.js';
+import { resolveOutputAllocation } from '../engine/agent-runtime/model-context-policy.js';
+import { adaptLegacyDefinition } from '../engine/agent-runtime/legacy-adapter.js';
+import { resolveAgent } from '../engine/agent-runtime/agent-resolver.js';
+import { agentSpecToConfig } from '../engine/agent-runtime/agent-spec.js';
+import type { AgentSpec } from '../engine/agent-runtime/types.js';
+import { createRootBudget } from '../engine/agent-runtime/execution-budget.js';
+import type { ResolvedAgentDefinition } from '../engine/agent-runtime/resolved-agent.js';
+import type { ISubagentClient } from '../tools/subagents/subagent-client-types.js';
+import { ToolApprovalPolicyRegistry } from '../session/approval/tool-approval-policy-registry.js';
+import type { ExecutionContext } from '../tools/execution-context.js';
+import { withActiveWorkspaceRoot } from '../tools/workspace/active-workspace-root.js';
 import { LocalExecutionContext } from './tool-contract.js';
-import { resolveActiveEnforcement } from '../../../source/services/profiles/active-profile.js';
-import type { SessionAccessState } from '../../../source/services/session/session-access-state.js';
-import { SubagentPoolEntrySchema } from '../../../source/services/settings/settings-schema.js';
-import { SkillsService } from '../../../source/services/skills/skills-service.js';
+import { resolveActiveEnforcement } from '../config/profiles/active-profile.js';
+import type { SessionAccessState } from '../session/session/session-access-state.js';
+import { SubagentPoolEntrySchema } from '../config/settings/settings-schema.js';
+import { SkillsService } from '../tools/skills/skills-service.js';
 import {
   buildInstructions,
   loadRoleDefinition,
   resolveSubagentSearchViaShell,
-} from '../../../source/services/subagents/role-loader.js';
-import { SubagentRolePoolSelector } from '../../../source/services/subagents/subagent-role-pool-selector.js';
-import {
-  SubagentToolFactory,
-  SubagentToolPolicy,
-  type ValidationCapture,
-} from '../../../source/services/subagents/tool-policy.js';
-import type {
-  SubagentResult,
-  SubagentDefinition,
-  SubagentRunHandle,
-} from '../../../source/services/subagents/types.js';
-import { SUBAGENT_ROLES } from '../../../source/services/subagents/types.js';
+} from '../tools/subagents/role-loader.js';
+import { SubagentRolePoolSelector } from '../tools/subagents/subagent-role-pool-selector.js';
+import { SubagentToolFactory, SubagentToolPolicy, type ValidationCapture } from '../tools/subagents/tool-policy.js';
+import type { SubagentResult, SubagentDefinition, SubagentRunHandle } from '../tools/subagents/types.js';
+import { SUBAGENT_ROLES } from '../tools/subagents/types.js';
 import { DirectSubagentSessions } from './subagent-sessions.js';
-import {
-  SUBAGENT_RUN_NAME_PATTERN,
-  SubagentRegistryError,
-} from '../../../source/services/subagents/subagent-async-registry.js';
-import { pinWorkerWorktree } from '../../../source/services/subagents/worker-worktree.js';
-import type { AnyToolDefinition } from '../../../source/tools/types.js';
+import { SUBAGENT_RUN_NAME_PATTERN, SubagentRegistryError } from '../tools/subagents/subagent-async-registry.js';
+import { pinWorkerWorktree } from '../tools/subagents/worker-worktree.js';
+import type { AnyToolDefinition } from '../tools/types.js';
 import type { ItemId, ReasoningEffort } from '../model/index.js';
 import type { DirectNestedAuthority } from '../session/branches.js';
 import type { DirectContextPort } from '../session/capabilities.js';

@@ -1,11 +1,11 @@
 /** Root goal data and tools. Session supplies all state and accepts every write. */
 import { z } from 'zod';
-import { createDurableGoal, MAX_GOAL_FIELD_LENGTH } from '../../../source/services/conversation/durable-goal.js';
-import { GOAL_CHANGED_PROBLEM, GOAL_CHECK_DESCRIPTION } from '../../../source/tools/agent/goal-check.js';
-import { goalCheckParameters } from '../../../source/services/conversation/durable-goal-stop-check.js';
-import { renderDurableGoalContext } from '../../../source/prompts/durable-goal-context.js';
-import type { DurableGoal } from '../../../source/services/logging/conversation-log-events.js';
-import type { Tool, ToolContext } from '../tools/index.js';
+import { createDurableGoal, MAX_GOAL_FIELD_LENGTH } from './conversation/durable-goal.js';
+import { GOAL_CHANGED_PROBLEM, GOAL_CHECK_DESCRIPTION } from '../tools/agent/goal-check.js';
+import { goalCheckParameters } from './conversation/durable-goal-stop-check.js';
+import { renderDurableGoalContext } from './prompts/durable-goal-context.js';
+import type { DurableGoal } from './logging/conversation-log-events.js';
+import type { Tool } from '../tools/index.js';
 
 export { createDurableGoal, renderDurableGoalContext, MAX_GOAL_FIELD_LENGTH };
 export type { DurableGoal };
@@ -28,7 +28,6 @@ export type DirectGoalWrite = (
   facts: readonly DirectGoalFact[],
 ) => boolean | Promise<boolean>;
 
-const field = z.string().trim().min(1).max(MAX_GOAL_FIELD_LENGTH);
 // Keep the model-facing contract (including field guidance) identical to source.
 export const directGoalCheckSchema = goalCheckParameters;
 export type DirectGoalCheck = z.infer<typeof directGoalCheckSchema>;

@@ -6,7 +6,7 @@ import {
   type DiscordSend,
   type DiscordSendInput,
   type DiscordSendResult,
-} from '../../../../source/services/discord/discord-outbound.js';
+} from '../discord/discord-outbound.js';
 import type { ControlSocketServer } from './transport.js';
 
 type SendBinding = Pick<ControlSocketServer, 'binding' | 'discordSendEnabled'>;

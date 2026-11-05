@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import {
   composeSessionRolloverBrief,
   type SessionRolloverTaskInventoryEntry,
-} from '../../../source/services/session-rollover/session-rollover-brief.js';
+} from '../shared/session-rollover/session-rollover-brief.js';
 import type { DirectRolloverRequest } from '../session/command-types.js';
 import type { DirectPreparedConfiguration } from '../session/configuration.js';
 import type { DirectPreparedRollover } from '../session/session-rotation.js';

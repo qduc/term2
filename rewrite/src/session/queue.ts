@@ -4,7 +4,7 @@
  * then releases the effect. A plan alone never admits input or runs anything.
  */
 import { directQueueContentKey, directQueueOriginKey, validDirectQueueOrigin } from './queue-decode.js';
-import { STEERING_NOTICE } from '../../../source/prompts/steering-notice.js';
+import { STEERING_NOTICE } from './prompts/steering-notice.js';
 import type { TurnId } from '../engine/index.js';
 import type { ContentPart, Item, ItemId } from '../model/index.js';
 import type { DirectAdmission } from './facade-types.js';

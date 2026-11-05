@@ -1,5 +1,5 @@
 /**
- * The menu half of source/context/InputContext.tsx. Legacy menu hooks read the
+ * The menu half of rewrite/src/clients/context/InputContext.tsx. Legacy menu hooks read the
  * controller-owned editor through `useInputContext()`; this keeps that contract
  * so the hooks copy unchanged. Queue/image composer state stays with the native
  * session composer, which mirrors its draft into the controller.

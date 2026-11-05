@@ -1,7 +1,7 @@
 /** Read-only input to the app preview adapter. The owning Session supplies one cut. */
 import type { ContentPart, Item } from '../model/index.js';
-import type { InputSurgeDecision, InputSurgeInputKind } from '../../../source/services/input-surge-guard.js';
-import type { LargeUncachedInputDecision } from '../../../source/services/large-uncached-input-guard.js';
+import type { InputSurgeDecision, InputSurgeInputKind } from '../session/input-surge-guard.js';
+import type { LargeUncachedInputDecision } from '../session/large-uncached-input-guard.js';
 
 export type DirectInputPreviewRequest = {
   readonly text: string;

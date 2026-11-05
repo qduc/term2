@@ -6,9 +6,9 @@ on:
       - main
     paths:
       - 'website/**'
-      - 'source/services/settings/**'
+      - 'rewrite/src/config/settings/**'
       - 'rewrite/src/app/cli-args.ts'
-      - 'source/gateway/serve-args.ts'
+      - 'rewrite/src/host/gateway/serve-args.ts'
       - '.github/workflows/docs.yml'
   workflow_dispatch:
 

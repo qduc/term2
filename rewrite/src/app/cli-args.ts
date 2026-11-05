@@ -4,11 +4,11 @@
  * validation messages follow the current CLI (source/cli.tsx).
  */
 import { join } from 'node:path';
-import { resolveSettingsDirectory } from '../../../source/services/settings/settings-path.js';
-import { parseServeArgs, type ServeArgs } from '../../../source/gateway/serve-args.js';
-import { parseAcpArgs, type AcpArgs } from '../../../source/acp-v2/serve-args.js';
-import { createDurableGoal } from '../../../source/services/conversation/durable-goal.js';
-import type { DurableGoal } from '../../../source/services/logging/conversation-log-events.js';
+import { resolveSettingsDirectory } from '../config/settings/settings-path.js';
+import { parseServeArgs, type ServeArgs } from '../host/gateway/serve-args.js';
+import { parseAcpArgs, type AcpArgs } from '../clients/acp-v2/serve-args.js';
+import { createDurableGoal } from '../session/conversation/durable-goal.js';
+import type { DurableGoal } from '../session/logging/conversation-log-events.js';
 
 export type OutputOptions = { readonly json: boolean; readonly quiet: boolean; readonly showReasoning: boolean };
 /**
@@ -144,7 +144,7 @@ const CONTROL_COMMANDS = new Set(['list', 'status', 'get', 'submit', 'steer', 'i
 export const CONTROL_USAGE =
   'Usage: term2 control list [--status] | status <name> [--json] | get <name> <topic> [--json] | submit|steer <name> --id <id> | interrupt <name> | wait-turn <name> --message-id <id>\n';
 
-// Copied from source/services/discord/discord-command.ts, whose module pulls in the old bridge runtime.
+// Copied from rewrite/src/clients/discord/discord-command.ts, whose module pulls in the old bridge runtime.
 export const DISCORD_HELP = `Discord bridge (candidate) — attach existing opted-in terminal sessions.
 
 Usage:

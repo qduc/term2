@@ -251,8 +251,8 @@ function conversation(
     const snapshot = planned?.accepted
       ? { history: planned.history!, compactionState: planned.compactionState }
       : liveReplay();
-    const { input, notice: _notice, submission: _submission, previewMode: _previewMode, ...settings } = request;
-    const { notice, modelInput, rawHistory, modelHistory, sentInput } = prepareConversationNotice(
+    const { input: _input, notice: _notice, submission: _submission, previewMode: _previewMode, ...settings } = request;
+    const { modelHistory, sentInput } = prepareConversationNotice(
       turnId,
       request,
       planned,

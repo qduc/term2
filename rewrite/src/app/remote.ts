@@ -1,7 +1,7 @@
 import { posix } from 'node:path';
-import { ExecutionContext } from '../../../source/services/execution-context.js';
-import type { ISSHService } from '../../../source/services/service-interfaces.js';
-import { quoteShellArg, SSHService } from '../../../source/services/ssh-service.js';
+import { ExecutionContext } from '../tools/execution-context.js';
+import type { ISSHService } from '../shared/service-interfaces.js';
+import { quoteShellArg, SSHService } from '../tools/ssh-service.js';
 import type { Workspace } from '../tools/index.js';
 import { directRemoteTarget, type DirectRemoteConnection } from './remote-config.js';
 import { DirectRemoteTools } from './remote-tools.js';

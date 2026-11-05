@@ -16,15 +16,7 @@ type Props = {
 };
 
 /** Modal surfaces share input ownership; the session retains their state and routing. */
-export function SessionPanels({
-  connection,
-  interactionInput,
-  onNotice: setNotice,
-  budgetOpen,
-  state,
-  columns,
-  closeBudget,
-}: Props): React.ReactElement {
+export function SessionPanels({ connection, budgetOpen, state, closeBudget }: Props): React.ReactElement {
   return (
     <>
       {budgetOpen ? (

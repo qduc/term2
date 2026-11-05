@@ -4,7 +4,7 @@ import {
   formatUsdMicros,
   summarizeCost,
   summarizeModelUsage,
-} from '../../../source/services/cost/model-cost.js';
+} from '../shared/cost/model-cost.js';
 import { formatSessionUsageBreakdown } from '../clients/tui/presentation/utils/ai/token-usage.js';
 import type { WireSnapshot } from '../protocol/wire.js';
 

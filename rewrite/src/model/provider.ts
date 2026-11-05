@@ -1,7 +1,7 @@
 import { DEFAULT_ASSUMED_CONTEXT_WINDOW } from './index.js';
 import { stringArray } from './provider-settings.js';
 import { weeklyQuota } from './provider-quota.js';
-import { observeProviderRequestDispatch } from '../../../source/providers/request-dispatch.js';
+import { observeProviderRequestDispatch } from './providers/request-dispatch.js';
 /**
  * Real providers behind `ModelRegistry`, without the adopted adapter. The only
  * place that sees provider shapes: `Item` converts here and nowhere else.
@@ -27,19 +27,19 @@ import type {
   StreamedModelTurn,
   StreamedModelTurnEvent,
   StreamedModelTurnRequest,
-} from '../../../source/contracts/streamed-model-turn.js';
+} from '../shared/contracts/streamed-model-turn.js';
 import type {
   ILoggingService,
   ISessionContextService,
   ISettingsService,
   SessionTrafficContext,
-} from '../../../source/services/service-interfaces.js';
-import type { ProviderDefinition } from '../../../source/providers/registry.js';
-import { getProvider } from '../../../source/providers/index.js';
-import { extractAiSdkUpstreamProvider } from '../../../source/providers/ai-sdk-streamed-model.js';
-import { StreamingSpeedTracker } from '../../../source/utils/streaming/streaming-speed-tracker.js';
-import { getModelContextWindow } from '../../../source/providers/model-catalog/catalog.js';
-import { MODEL_CATALOG } from '../../../source/providers/model-catalog/catalog.generated.js';
+} from '../shared/service-interfaces.js';
+import type { ProviderDefinition } from './providers/registry.js';
+import { getProvider } from './providers/index.js';
+import { extractAiSdkUpstreamProvider } from './providers/ai-sdk-streamed-model.js';
+import { StreamingSpeedTracker } from '../shared/utils/streaming/streaming-speed-tracker.js';
+import { getModelContextWindow } from './providers/model-catalog/catalog.js';
+import { MODEL_CATALOG } from './providers/model-catalog/catalog.generated.js';
 import { ModelFailure, toModelFailure } from './failure.js';
 import { physicalModelStream } from './retry.js';
 import { codexCompact } from './provider-compact.js';

@@ -2,11 +2,14 @@ import { afterEach, expect, it } from 'vitest';
 import OpenAI from 'openai';
 import { once } from 'node:events';
 import { WebSocket as NodeWebSocket, WebSocketServer } from 'ws';
-import { CodexResponsesTransport, CodexResponsesWSModel } from '../source/providers/codex-responses-model.js';
-import { OpenAIResponsesWSModelWithPromptCacheKey } from '../source/providers/openai-responses-model.js';
-import { readWebSocketDispatch } from '../source/providers/websocket-request-dispatch.js';
-import { CodexProvider } from '../source/providers/codex.provider.js';
-import { RetryingModel } from '../source/providers/retrying-model.js';
+import {
+  CodexResponsesTransport,
+  CodexResponsesWSModel,
+} from '../rewrite/src/model/providers/codex-responses-model.js';
+import { OpenAIResponsesWSModelWithPromptCacheKey } from '../rewrite/src/model/providers/openai-responses-model.js';
+import { readWebSocketDispatch } from '../rewrite/src/model/providers/websocket-request-dispatch.js';
+import { CodexProvider } from '../rewrite/src/model/providers/codex.provider.js';
+import { RetryingModel } from '../rewrite/src/model/providers/retrying-model.js';
 import {
   startFakeCodexHttpServer,
   startFakeCodexServer,

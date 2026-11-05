@@ -136,6 +136,7 @@ function projectNegativeReceipt(receipt: WireCommandReceipt): ServerResult {
             clientRequestId: receipt.request.commandId,
           });
       }
+    // falls through
     default:
       return unavailable('negative durable command outcome');
   }

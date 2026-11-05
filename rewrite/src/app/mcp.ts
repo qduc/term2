@@ -1,9 +1,9 @@
 /** Real direct MCP connections, with no Session/runtime, log or credential store of their own. */
 import { isAbsolute } from 'node:path';
-import { loadMcpConfig } from '../../../source/services/mcp/mcp-config.js';
-import { McpConnectionManager } from '../../../source/services/mcp/mcp-connection-manager.js';
-import type { McpServerSnapshot } from '../../../source/services/mcp/mcp-tool-source.js';
-import type { McpStatusView } from '../../../source/services/mcp/mcp-status.js';
+import { loadMcpConfig } from '../tools/mcp/mcp-config.js';
+import { McpConnectionManager } from '../tools/mcp/mcp-connection-manager.js';
+import type { McpServerSnapshot } from '../tools/mcp/mcp-tool-source.js';
+import type { McpStatusView } from '../tools/mcp/mcp-status.js';
 import type { Workspace } from '../tools/index.js';
 import { captureDirectMcpSource, type DirectMcpRequestScope } from './mcp-source.js';
 import type { DirectMcpOAuth } from './mcp-auth.js';

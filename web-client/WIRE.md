@@ -233,7 +233,7 @@ or create a cursor. Snapshot hydration and incremental corrections use the same
 `nativeState.requestCosts`, already upserted by that actual request identity.
 Branch subsets remain views of root receipts; no branch summary is added again.
 
-Arithmetic follows `source/services/cost/model-cost.ts#summarizeCost`: sum signed
+Arithmetic follows `rewrite/src/shared/cost/model-cost.ts#summarizeCost`: sum signed
 supplied USD micros (zero/credits included), count priced (`usdMicros` present)
 and unpriced receipts, and label pricing `unavailable` if none are priced,
 `partial` if some are unpriced, otherwise `estimated` if any supplied price is

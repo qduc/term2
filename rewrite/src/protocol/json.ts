@@ -2,9 +2,9 @@
  * terminal window is exposed separately through WireTerminal.finalWindow; this
  * module does not claim the complete legacy ConversationEvent schema.
  */
-import type { CommandMessage } from '../../../source/tools/types.js';
-import type { ModelRequestCost } from '../../../source/services/cost/model-cost.js';
-import { getModelPricing } from '../../../source/services/cost/pricing.js';
+import type { CommandMessage } from '../tools/types.js';
+import type { ModelRequestCost } from '../shared/cost/model-cost.js';
+import { getModelPricing } from '../model/cost/pricing.js';
 import type {
   CommandMessageEvent,
   CostUpdateEvent,
@@ -17,13 +17,13 @@ import type {
   ToolDispatchedEvent,
   ToolStartedEvent,
   UsageUpdateEvent,
-} from '../../../source/services/conversation/conversation-events.js';
+} from '../session/conversation/conversation-events.js';
 import type { WireBudgetEvidence, WireEvent, WireFinalWindow, WireUsage } from './wire.js';
 
 // Retained presentation helpers cross the source boundary here, never in clients.
-export { formatGoalClosedByCheck } from '../../../source/services/conversation/durable-goal.js';
+export { formatGoalClosedByCheck } from '../session/conversation/durable-goal.js';
 /** Legacy's one-line tool label (the task panel's newest-call row). */
-export { formatToolCommand } from '../../../source/utils/conversation/conversation-utils.js';
+export { formatToolCommand } from '../shared/utils/conversation/conversation-utils.js';
 
 /** Copy the actual text chunk. fullText is supplied only by a caller that has
  * observed this message's stream from its first delta; no transcript is treated

@@ -1,11 +1,11 @@
-import { testCliPath } from '../source/test-helpers/terminal-e2e.js';
+import { testCliPath } from '../tests/helpers/terminal-e2e.js';
 import { createServer } from 'node:http';
 import { connect } from 'node:net';
 import { createInterface } from 'node:readline';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { expect, it } from 'vitest';
-import { listControlAdvertisements } from '../source/services/control-socket/control-socket.js';
+import { listControlAdvertisements } from '../rewrite/src/clients/control-socket/control-socket.js';
 import {
   HANG_BACKSTOP_MS,
   READINESS_TIMEOUT_MS,

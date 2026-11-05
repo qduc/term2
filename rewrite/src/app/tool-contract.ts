@@ -1,10 +1,10 @@
 /** Shared assembly result owned by the direct app, implemented in tool-surface.ts. */
 import path from 'node:path';
-import { ExecutionContext } from '../../../source/services/execution-context.js';
+import { ExecutionContext } from '../tools/execution-context.js';
 import type { InteractionDecision, InteractionRequest, ToolContextSeed } from '../engine/index.js';
 import type { Item, ReasoningEffort, ToolSpec } from '../model/index.js';
 import type { DirectRemoteWorkspace } from './remote.js';
-import type { LoggingService } from '../../../source/services/logging/logging-service.js';
+import type { LoggingService } from '../session/logging/logging-service.js';
 import type { ProviderRegistryDeps } from '../model/provider.js';
 import type { ToolRegistry, Workspace } from '../tools/index.js';
 /** App settings generations share the concrete logger whose configuration they update. */
@@ -16,25 +16,25 @@ export type ToolSurfaceOptions = {
    * Capture ONCE per surface generation; never connect or close the manager here. */
   readonly mcp?: {
     captureRequest(): {
-      readonly source: import('../../../source/services/mcp/mcp-tool-source.js').McpToolSource;
+      readonly source: import('../tools/mcp/mcp-tool-source.js').McpToolSource;
       approvalPolicy(
         builtInNames: ReadonlySet<string>,
       ): Pick<
-        import('../../../source/services/approval/non-interactive-approval-policy.js').NonInteractiveApprovalPolicyDeps,
+        import('../session/approval/non-interactive-approval-policy.js').NonInteractiveApprovalPolicyDeps,
         'mcpAllowlist' | 'isMcpTool' | 'isMcpAllowed'
       >;
     };
   };
   /** App-owned local home/lease shared across configured generations. Must match
    * the authorized workspace home; SSH always uses its connected adapter. */
-  readonly localExecutionContext?: import('../../../source/services/execution-context.js').ExecutionContext;
+  readonly localExecutionContext?: import('../tools/execution-context.js').ExecutionContext;
   readonly autoApprove?: boolean;
   readonly interactive?: boolean;
   /** The client owns a session browser, making model-requested rollover available. */
   readonly sessionBrowser?: boolean;
   /** The client's browser behind legacy's session_list/search/read script tools; local only. */
   readonly sessionBrowserSource?: Pick<
-    import('../../../source/services/conversation/session-browser.js').SessionBrowser,
+    import('../session/conversation/session-browser.js').SessionBrowser,
     'list' | 'search' | 'read'
   >;
   /** Already-authorized workspace. Defaults only to the existing local CLI cwd.
@@ -50,7 +50,7 @@ export type ToolSurfaceOptions = {
    * Never enables source memory tools; it only keeps the source prompt truthful. */
   readonly promptMemoryEnabled?: boolean;
   readonly allowUnsandboxed?: boolean;
-  readonly discordSend?: import('../../../source/services/discord/discord-outbound.js').DiscordSend;
+  readonly discordSend?: import('../clients/discord/discord-outbound.js').DiscordSend;
   readonly isDiscordInputEnabled?: () => boolean;
 };
 export type AgentSurface = {
@@ -73,7 +73,7 @@ export type AgentSurface = {
     /** Adapt native-owned source leaves against this SAME surface's policy/lifecycle context. */
     /** Withdraw the previous native leaf offering before building a replacement capability snapshot. */
     resetAdaptedTools(): void;
-    adaptTool(definition: import('../../../source/tools/types.js').AnyToolDefinition): import('../tools/index.js').Tool;
+    adaptTool(definition: import('../tools/types.js').AnyToolDefinition): import('../tools/index.js').Tool;
     /** Only accepts this surface's host-prepared child requests. App checks billing separately. */
     resolveNestedAuthority(
       request: import('../tools/index.js').NestedRunRequest,

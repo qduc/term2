@@ -2,15 +2,15 @@
  * authority or lifecycle is created here; result/status presentation uses accepted
  * task snapshots and actual execution evidence supplied by the tool surface.
  */
-import type { ResolvedAgentDefinition } from '../../../source/services/agent-runtime/resolved-agent.js';
-import type { AgentFactoryDeps } from '../../../source/lib/agent-factory.js';
-import type { ResolvedSubagentLaunch } from '../../../source/lib/subagent-bridge.js';
-import type { AgentSpec } from '../../../source/services/agent-runtime/types.js';
-import { SubagentPoolEntrySchema } from '../../../source/services/settings/settings-schema.js';
-import type { SubagentResult, SubagentRunHandle, SubagentRunStatus } from '../../../source/services/subagents/types.js';
-import { buildDiffStat, truncateResultText } from '../../../source/services/subagents/execution-runner.js';
-import type { ValidationCapture } from '../../../source/services/subagents/tool-policy.js';
-import { buildTurnBudgetExhaustedFinalText, formatSubagentResult } from '../../../source/services/subagents/utils.js';
+import type { ResolvedAgentDefinition } from '../engine/agent-runtime/resolved-agent.js';
+import type { AgentFactoryDeps } from './lib/agent-factory.js';
+import type { ResolvedSubagentLaunch } from '../engine/lib/subagent-bridge.js';
+import type { AgentSpec } from '../engine/agent-runtime/types.js';
+import { SubagentPoolEntrySchema } from '../config/settings/settings-schema.js';
+import type { SubagentResult, SubagentRunHandle, SubagentRunStatus } from '../tools/subagents/types.js';
+import { buildDiffStat, truncateResultText } from '../tools/subagents/execution-runner.js';
+import type { ValidationCapture } from '../tools/subagents/tool-policy.js';
+import { buildTurnBudgetExhaustedFinalText, formatSubagentResult } from '../tools/subagents/utils.js';
 import type { Item } from '../model/index.js';
 import type { NestedRunResult, SubagentTaskState, ToolContext } from '../tools/index.js';
 import type { ProfileSelection } from './tool-contract.js';

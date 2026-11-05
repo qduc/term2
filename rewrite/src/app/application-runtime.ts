@@ -2,11 +2,11 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { isDeepStrictEqual } from 'node:util';
 import { LocalExecutionContext } from './tool-contract.js';
-import { installationVersion } from '../../../source/providers/fetch/logging-middleware.js';
-import { getProfileMetadata } from '../../../source/services/profiles/active-profile.js';
-import { planProfileTransition } from '../../../source/services/profiles/profile-transition.js';
-import { RUNTIME_MODIFIABLE_SETTINGS } from '../../../source/services/settings/settings-schema.js';
-import { buildEnvOverrides, SettingsService } from '../../../source/services/settings/settings-service.js';
+import { installationVersion } from '../model/providers/fetch/logging-middleware.js';
+import { getProfileMetadata } from '../config/profiles/active-profile.js';
+import { planProfileTransition } from '../config/profiles/profile-transition.js';
+import { RUNTIME_MODIFIABLE_SETTINGS } from '../config/settings/settings-schema.js';
+import { buildEnvOverrides, SettingsService } from '../config/settings/settings-service.js';
 import type { ModelRef } from '../model/index.js';
 import { createProviderRegistry } from '../model/provider.js';
 import type { DirectBackgroundTasks } from '../session/background.js';
@@ -15,7 +15,7 @@ import type { DirectBinding } from '../session/facade-types.js';
 import type { DirectPreparedConfiguration } from '../session/configuration.js';
 import type { DirectRolloverPreparer } from '../session/session-rotation.js';
 import type { DirectVerificationOperations } from '../session/goal-verification.js';
-import { DEFAULT_BUDGETS } from '../../../source/services/completion-verification/contracts.js';
+import { DEFAULT_BUDGETS } from '../engine/completion-verification/contracts.js';
 import type { DirectConversationRuntime, DirectRuntimeContext } from '../session/store.js';
 import { createToolSurface } from './tool-surface.js';
 import type { DirectHookRuntime } from './application-hooks.js';
@@ -87,7 +87,7 @@ export type DirectSessionSettings = SettingsService;
 /** The settings a new session continues from, carried through the store's creation call. */
 const continuedSettings = new AsyncLocalStorage<DirectSessionSettings>();
 
-/** Targets of source/services/settings/ancillary-settings-migration.ts. */
+/** Targets of rewrite/src/config/settings/ancillary-settings-migration.ts. */
 const ANCILLARY_MIGRATION_TARGETS = [
   'agent.smartReasoningEffort',
   'agent.balancedReasoningEffort',

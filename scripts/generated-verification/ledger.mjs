@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import fc from 'fast-check';
-import { ToolExecutionLedger } from '../../source/services/tool-execution-ledger.ts';
+import { ToolExecutionLedger } from '../../rewrite/src/session/tool-execution-ledger.ts';
 import {
   projectModelRequestHistory,
   projectProviderHistory,
-} from '../../source/services/conversation/conversation-state-projector.ts';
+} from '../../rewrite/src/session/conversation/conversation-state-projector.ts';
 
 const call = (id, args) => ({ type: 'function_call', call_id: id, name: 'probe', arguments: JSON.stringify(args) });
 const result = (id, output) => ({ type: 'function_call_output', call_id: id, output });

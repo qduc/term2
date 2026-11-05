@@ -37,7 +37,7 @@ type Props = MenuComponentProps<Extract<MenuFrame, { kind: 'settings' }>> & {
 // from the current editor, so only this push-time frame construction differs
 // from the unseeded path.
 const pushChildEffect = (
-  // source/services/subagents/subagent-pool-config.ts, supplied by the app.
+  // rewrite/src/tools/subagents/subagent-pool-config.ts, supplied by the app.
   schema: TuiSettingsSchema,
   frame: Extract<MenuFrame, { kind: 'settings' }>,
   key: string,

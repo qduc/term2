@@ -1,8 +1,4 @@
-import type {
-  MenuModelInfo as ModelInfo,
-  MenuPathEntry as PathCompletionItem,
-  MenuSkillInfo as SkillInfo,
-} from '../integration.js';
+import type { MenuModelInfo as ModelInfo, MenuPathEntry as PathCompletionItem } from '../integration.js';
 
 export type Insertion = { nextValue: string; nextCursor: number };
 
@@ -45,22 +41,4 @@ export const computeModelInsertion = (args: {
   const insertion = includeProvider ? `${resolvedModelId} --provider=${currentProvider}` : resolvedModelId;
   const nextValue = `${before}${insertion}${appendTrailingSpace ? ' ' : ''}`;
   return { nextValue, nextCursor: nextValue.length };
-};
-
-const computeSkillInsertion = (args: {
-  selection: SkillInfo | undefined;
-  triggerIndex: number | null;
-  value: string;
-  cursorOffset: number;
-  appendTrailingSpace: boolean;
-}): Insertion | null => {
-  const { selection, triggerIndex, value, cursorOffset, appendTrailingSpace } = args;
-  if (!selection || triggerIndex === null) return null;
-  const safeCursor = Math.min(cursorOffset, value.length);
-  const before = value.slice(0, triggerIndex);
-  const after = value.slice(safeCursor);
-  const suffix = appendTrailingSpace && (after.length === 0 || !/^\s/.test(after)) ? ' ' : '';
-  const nextValue = `${before}${selection.name}${suffix}${after}`;
-  const nextCursor = before.length + selection.name.length + suffix.length;
-  return { nextValue, nextCursor };
 };

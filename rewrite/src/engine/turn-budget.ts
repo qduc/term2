@@ -3,7 +3,7 @@ import type { Item, ItemId, ModelRef, Usage } from '../model/index.js';
 import type { InteractionRequestId } from '../tools/index.js';
 import type { BudgetDecision, TurnDeps, TurnSpec } from './types.js';
 import { directBudgetAction, RunBudget, type ModelRequestCost, type RunBudgetEvent } from './recovery-budget.js';
-import { parseUsdMicros } from '../../../source/services/cost/model-cost.js';
+import { parseUsdMicros } from '../shared/cost/model-cost.js';
 import { TurnEvents, cancelled } from './turn-events.js';
 
 /** Native branch admission is exhausted, not a provider failure or successful completion. */

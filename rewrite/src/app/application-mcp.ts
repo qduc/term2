@@ -1,8 +1,8 @@
 /** Local app-owned MCP lifetime and catalog-triggered generation replacement. */
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { openInBrowser } from '../../../source/lib/oauth-loopback.js';
-import { McpOAuthStore } from '../../../source/services/mcp/mcp-oauth-store.js';
+import { openInBrowser } from '../shared/lib/oauth-loopback.js';
+import { McpOAuthStore } from '../tools/mcp/mcp-oauth-store.js';
 import type { DirectCommandOutcome } from '../session/command-types.js';
 import type { DirectSession, DirectSessionState } from '../session/facade-types.js';
 import { createDirectMcp, createDirectMcpOAuth, type DirectMcp } from './mcp.js';

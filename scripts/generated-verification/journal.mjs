@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fc from 'fast-check';
-import { buildToolLedgerFromJournalEvents } from '../../source/services/conversation/journal-to-ledger.ts';
-import { normalizeRunItems } from '../../source/services/conversation/run-item-normalizer.ts';
+import { buildToolLedgerFromJournalEvents } from '../../rewrite/src/session/conversation/journal-to-ledger.ts';
+import { normalizeRunItems } from '../../rewrite/src/session/conversation/run-item-normalizer.ts';
 
 const unit = fc.record({
   newTurn: fc.boolean(),

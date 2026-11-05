@@ -1,31 +1,22 @@
 /** App composition over source definitions, concrete approval owners and native tool capabilities. */
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { withTrimConfig } from '../../../source/utils/output/output-trim.js';
-import { normalizeToolInput, runToolInputDiagnostics } from '../../../source/lib/tool-invoke.js';
-import { isCancellationError, isHarnessInvariantError } from '../../../source/lib/harness-invariant-error.js';
-import type { ToolApprovalPolicyRegistry } from '../../../source/services/approval/tool-approval-policy-registry.js';
-import {
-  NestedApprovalOwner,
-  type NestedApprovalSnapshot,
-} from '../../../source/services/approval/nested-approval-owner.js';
-import { isDockerHostControlShellApproval } from '../../../source/services/approval/shell-sandbox-approval.js';
-import type { SessionAccessState } from '../../../source/services/session/session-access-state.js';
-import {
-  DOCKER_HOST_CONTROL_APPROVE_ANSWERS,
-  supportsFolderSessionRead,
-} from '../../../source/contracts/conversation.js';
-import { applyApprovalGrant } from '../../../source/services/approval/approval-grant-executor.js';
-import { resolveSessionReadFolder } from '../../../source/services/approval/session-read-grant-target.js';
-import { shouldBypassToolApproval } from '../../../source/services/approval/shell-auto-approval-resolver.js';
-import type { ISettingsService } from '../../../source/services/service-interfaces.js';
-import { ASK_USER_NO_ANSWER_RESULT } from '../../../source/tools/agent/ask-user-constants.js';
-import { coerceToText, isSuccessOutput } from '../../../source/tools/format-helpers.js';
-import {
-  bindRunCodeNestedApprovalOwner,
-  getRunCodeExecutionResult,
-} from '../../../source/tools/system/run-code/run-code.js';
-import { isZodToolParameterSchema, type AnyToolDefinition } from '../../../source/tools/types.js';
+import { withTrimConfig } from '../shared/utils/output/output-trim.js';
+import { normalizeToolInput, runToolInputDiagnostics } from '../shared/lib/tool-invoke.js';
+import { isCancellationError, isHarnessInvariantError } from '../shared/lib/harness-invariant-error.js';
+import type { ToolApprovalPolicyRegistry } from '../session/approval/tool-approval-policy-registry.js';
+import { NestedApprovalOwner, type NestedApprovalSnapshot } from '../session/approval/nested-approval-owner.js';
+import { isDockerHostControlShellApproval } from '../session/approval/shell-sandbox-approval.js';
+import type { SessionAccessState } from '../session/session/session-access-state.js';
+import { DOCKER_HOST_CONTROL_APPROVE_ANSWERS, supportsFolderSessionRead } from '../shared/contracts/conversation.js';
+import { applyApprovalGrant } from '../session/approval/approval-grant-executor.js';
+import { resolveSessionReadFolder } from '../session/approval/session-read-grant-target.js';
+import { shouldBypassToolApproval } from '../session/approval/shell-auto-approval-resolver.js';
+import type { ISettingsService } from '../shared/service-interfaces.js';
+import { ASK_USER_NO_ANSWER_RESULT } from '../shared/tools/agent/ask-user-constants.js';
+import { coerceToText, isSuccessOutput } from '../tools/format-helpers.js';
+import { bindRunCodeNestedApprovalOwner, getRunCodeExecutionResult } from '../tools/system/run-code/run-code.js';
+import { isZodToolParameterSchema, type AnyToolDefinition } from '../tools/types.js';
 import type { ToolSpec } from '../model/index.js';
 import type {
   ApprovalRequirement,
@@ -420,14 +411,8 @@ export function createSourceToolRegistry(
 }
 
 // Legacy's session browser runs over the native store; the app adapts only its storage (native-session-browser*.ts).
-export { SessionBrowser } from '../../../source/services/conversation/session-browser.js';
-export type {
-  SessionBrowserContext,
-  SessionBrowserStore,
-} from '../../../source/services/conversation/session-browser.js';
-export {
-  extractDisplayOutput,
-  INTERRUPTED_SYSTEM_MESSAGE,
-} from '../../../source/services/conversation/conversation-replay.js';
-export { RESTART_UNOBSERVED_TOOL_RESULT } from '../../../source/services/tool-execution-ledger.js';
-export type { RestoredState } from '../../../source/services/conversation/conversation-replay.js';
+export { SessionBrowser } from '../session/conversation/session-browser.js';
+export type { SessionBrowserContext, SessionBrowserStore } from '../session/conversation/session-browser.js';
+export { extractDisplayOutput, INTERRUPTED_SYSTEM_MESSAGE } from '../session/conversation/conversation-replay.js';
+export { RESTART_UNOBSERVED_TOOL_RESULT } from '../session/tool-execution-ledger.js';
+export type { RestoredState } from '../session/conversation/conversation-replay.js';

@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
-import { normalizeApplicationInput } from '../../dist/source/services/agent-runtime/application-run-loop.js';
-import { getProfileMetadata } from '../../dist/source/services/profiles/active-profile.js';
-import { profileIdFromLegacyMode } from '../../dist/source/services/profiles/legacy-adapter.js';
+import { normalizeApplicationInput } from '../../dist/rewrite/src/engine/agent-runtime/application-run-loop.js';
+import { getProfileMetadata } from '../../dist/rewrite/src/config/profiles/active-profile.js';
+import { profileIdFromLegacyMode } from '../../dist/rewrite/src/shared/profiles/legacy-adapter.js';
 import { itemToInput } from '../../dist/rewrite/src/model/provider-items.js';
 import { validateFact } from '../../dist/rewrite/src/session/log-facts.js';
 import { replay } from '../../dist/rewrite/src/session/replay.js';

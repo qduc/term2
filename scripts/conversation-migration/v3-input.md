@@ -37,7 +37,7 @@ Absent deltas have `{ status: 'absent' }`. The paired `.json` is never opened:
 
 `v3-input-validation.mjs` supplements the legacy decoder; it does not change
 runtime loading or replay. The persisted `Item` union in
-`source/contracts/conversation-items.ts` is closed: assistant turns and durable
+`rewrite/src/shared/contracts/conversation-items.ts` is closed: assistant turns and durable
 journal items accept only reasoning, assistant text, tool calls, tool results and
 explicit provider-opaque items, with their required fields. An unknown normalized
 item type is corruption, not a new provider extension. A provider-opaque item
@@ -46,11 +46,11 @@ metadata survive verbatim, even when they resemble unknown normalized variants.
 
 Snapshots on undo, accepted input, retry, rewind, assistant turns and compaction
 validate `StateSnapshot` and `SavedToolExecution` in
-`source/services/logging/conversation-log-events.ts` and
-`source/services/tool-execution-ledger.ts`: provider history is an array of objects,
+`rewrite/src/session/logging/conversation-log-events.ts` and
+`rewrite/src/session/tool-execution-ledger.ts`: provider history is an array of objects,
 response identity is string-or-null, and every ledger entry has its required
 identities, status and start timestamp. `ProviderInputItem` in
-`source/contracts/provider-input.ts` is deliberately open: unknown provider wire
+`rewrite/src/shared/contracts/provider-input.ts` is deliberately open: unknown provider wire
 types, roles, content and extra fields are lawful. Only its application-owned
 metadata shapes (`providerOpaque`, `providerData`, `contextSummary` and personal
 memory context) are checked. Ledger `arguments`, `output` and `historyItems`

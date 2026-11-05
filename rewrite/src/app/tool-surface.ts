@@ -1,30 +1,27 @@
-import { withActiveWorkspaceRoot } from '../../../source/services/workspace/active-workspace-root.js';
+import { withActiveWorkspaceRoot } from '../tools/workspace/active-workspace-root.js';
 /** Direct executable assembly: source tool leaves and policy, without the legacy runtime. */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
-import { buildAgent, buildAgentTools, type AgentFactoryDeps } from '../../../source/lib/agent-factory.js';
-import { createEditorImpl } from '../../../source/lib/editor-impl.js';
-import { getCatalogModel } from '../../../source/providers/model-catalog/catalog.js';
-import { resolveRequestOutput } from '../../../source/services/agent-runtime/model-context-policy.js';
-import { NonInteractiveApprovalPolicy } from '../../../source/services/approval/non-interactive-approval-policy.js';
-import { ToolApprovalPolicyRegistry } from '../../../source/services/approval/tool-approval-policy-registry.js';
-import {
-  isAutoApprovableTool,
-  ShellAutoApprovalResolver,
-} from '../../../source/services/approval/shell-auto-approval-resolver.js';
-import type { ConversationRecord } from '../../../source/services/conversation/conversation-record.js';
-import type { ShellAutoApprovalAgentClient } from '../../../source/services/conversation-agent-client.js';
-import type { ExecutionContext } from '../../../source/services/execution-context.js';
+import { buildAgent, buildAgentTools, type AgentFactoryDeps } from './lib/agent-factory.js';
+import { createEditorImpl } from '../shared/lib/editor-impl.js';
+import { getCatalogModel } from '../model/providers/model-catalog/catalog.js';
+import { resolveRequestOutput } from '../engine/agent-runtime/model-context-policy.js';
+import { NonInteractiveApprovalPolicy } from '../session/approval/non-interactive-approval-policy.js';
+import { ToolApprovalPolicyRegistry } from '../session/approval/tool-approval-policy-registry.js';
+import { isAutoApprovableTool, ShellAutoApprovalResolver } from '../session/approval/shell-auto-approval-resolver.js';
+import type { ConversationRecord } from '../session/conversation/conversation-record.js';
+import type { ShellAutoApprovalAgentClient } from '../session/conversation-agent-client.js';
+import type { ExecutionContext } from '../tools/execution-context.js';
 import { LocalExecutionContext } from './tool-contract.js';
-import { primeActiveProfileNoticeIfActive } from '../../../source/services/mode-notices.js';
-import { installPlanModeInterceptor } from '../../../source/services/plan-mode-interceptor.js';
-import { SessionAccessState } from '../../../source/services/session/session-access-state.js';
-import { SkillsService } from '../../../source/services/skills/skills-service.js';
-import { bindRunCodeRegistry } from '../../../source/tools/system/run-code/run-code.js';
-import { TOOL_NAME_DESCRIBE } from '../../../source/tools/system/run-code/run-code-runtime.js';
-import type { AnyToolDefinition } from '../../../source/tools/types.js';
-import { InvalidatableShellChildRegistry } from '../../../source/utils/shell/shell-child-registry.js';
-import type { ProviderInputItem } from '../../../source/contracts/provider-input.js';
+import { primeActiveProfileNoticeIfActive } from '../session/mode-notices.js';
+import { installPlanModeInterceptor } from '../tools/plan-mode-interceptor.js';
+import { SessionAccessState } from '../session/session/session-access-state.js';
+import { SkillsService } from '../tools/skills/skills-service.js';
+import { bindRunCodeRegistry } from '../tools/system/run-code/run-code.js';
+import { TOOL_NAME_DESCRIBE } from '../tools/system/run-code/run-code-runtime.js';
+import type { AnyToolDefinition } from '../tools/types.js';
+import { InvalidatableShellChildRegistry } from '../shared/utils/shell/shell-child-registry.js';
+import type { ProviderInputItem } from '../shared/contracts/provider-input.js';
 import type { ToolContextSeed } from '../engine/index.js';
 import type { Workspace } from '../tools/index.js';
 import type { Item, ItemId, ModelRegistry, ReasoningEffort } from '../model/index.js';

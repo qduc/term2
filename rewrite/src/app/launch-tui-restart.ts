@@ -1,7 +1,7 @@
 /** `/restart`: hand this session to a freshly loaded process, once nothing here can write to it. */
 import fs from 'node:fs';
 import path from 'node:path';
-import { createRestartPlan } from '../../../source/utils/process-restart.js';
+import { createRestartPlan } from '../shared/utils/process-restart.js';
 import { acquireDirectWriterLock } from '../session/writer-lock.js';
 import type { WireCommand, WireCommandResult, WireSnapshot } from '../protocol/wire.js';
 import type { DirectApplication } from './application.js';

@@ -19,7 +19,7 @@ bounded shutdown (`runAcp` in `source/acp-v2/serve.ts`).
 term2 acp [--provider <provider>] [--model <model>] [--effort <effort>]
 ```
 
-Those are the only flags (`parseAcpArgs` in `source/acp-v2/serve-args.ts`):
+Those are the only flags (`parseAcpArgs` in `rewrite/src/clients/acp-v2/serve-args.ts`):
 any other flag is rejected as an unknown option, and any non-flag token as an
 unexpected argument. In particular `--auto-approve`
 exits with status 1, writes nothing to stdout, and prints a diagnostic to
@@ -111,7 +111,7 @@ target outside it requires an approval — `allow-edit-file-session` /
 snapshot leaves it unset; see `createProductionRuntimeFactory` in
 `source/gateway/runtime-factory.ts`). A shell call that asks for
 `sandbox: "unsandboxed"` is silently downgraded to the sandboxed default
-(`source/tools/system/shell.ts`); if the sandbox itself is unavailable, the
+(`rewrite/src/tools/system/shell.ts`); if the sandbox itself is unavailable, the
 shell tool refuses the unsandboxed fallback and the call fails.
 
 ## Tool approvals: `session/request_permission`

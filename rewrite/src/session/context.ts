@@ -1,10 +1,6 @@
 /** Context planning and pure replay projection. This is not a Session or a writer. */
 import { z } from 'zod';
-import {
-  proposalSchema,
-  decisionSchema,
-  reportSchema,
-} from '../../../source/services/completion-verification/contracts.js';
+import { proposalSchema, decisionSchema, reportSchema } from '../engine/completion-verification/contracts.js';
 import { directRolloverFactSchema, type DirectRolloverFact } from './rollover.js';
 import { directSessionRotationSchema, type DirectSessionRotationFact } from './session-rotation.js';
 import type { Fact } from './facts.js';
@@ -20,7 +16,7 @@ import {
   type DirectGoalState,
 } from './goal.js';
 import { type DirectGoalReminderFact } from './goal-stop.js';
-import { DIRECT_MEMORY_GUIDANCE_MARKER } from '../../../source/prompts/memory-prompt-marker.js';
+import { DIRECT_MEMORY_GUIDANCE_MARKER } from './prompts/memory-prompt-marker.js';
 import {
   reduceDirectVerification,
   directVerificationLimitsSchema,

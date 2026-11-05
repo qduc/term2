@@ -68,7 +68,7 @@ export function publicMessage(
   item: Item,
   turnId: string,
   modelStep?: number,
-  executionId?: string,
+  _executionId?: string,
 ): WireMessage | null {
   if (item.type === 'user_message' || item.type === 'assistant_message') {
     const content = publicContent(item.content);

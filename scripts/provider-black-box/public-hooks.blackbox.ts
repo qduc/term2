@@ -1,4 +1,4 @@
-import { testCliPath } from '../../source/test-helpers/terminal-e2e.js';
+import { testCliPath } from '../../tests/helpers/terminal-e2e.js';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';

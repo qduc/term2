@@ -3,7 +3,6 @@ import type { Item, ItemId } from '../model/index.js';
 import type { Fact } from './facts.js';
 import type { DirectCommandSnapshot } from './command-types.js';
 import { createDirectQueueState, directQueueSteeredInput } from './queue.js';
-import { isDirectQueueFact } from './facts.js';
 import { foldFact } from './fold-fact.js';
 
 /** Capture retained raw admissions/context and root execution identity after physical drain. */

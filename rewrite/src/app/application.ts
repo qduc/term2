@@ -4,9 +4,9 @@
  * Sessions, so a client disconnecting never stops work another client can see.
  */
 import { randomUUID } from 'node:crypto';
-import { getModelContextWindow } from '../../../source/providers/model-catalog/catalog.js';
-import { SkillsService, type SkillInfo } from '../../../source/services/skills/skills-service.js';
-import { SettingsService, type DurableWriteResult } from '../../../source/services/settings/settings-service.js';
+import { getModelContextWindow } from '../model/providers/model-catalog/catalog.js';
+import { SkillsService, type SkillInfo } from '../tools/skills/skills-service.js';
+import { SettingsService, type DurableWriteResult } from '../config/settings/settings-service.js';
 import { createDirectInProcessHost } from '../host/in-process-direct.js';
 import type { DirectHost, Principal } from '../host/in-process-direct-types.js';
 import type { HeadlessApprovalDecider } from '../clients/headless/index.js';

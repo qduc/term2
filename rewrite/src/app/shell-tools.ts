@@ -1,16 +1,13 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import type { AgentFactoryDeps } from '../../../source/lib/agent-factory.js';
+import type { AgentFactoryDeps } from './lib/agent-factory.js';
 import type {
   BackgroundShellRegistryPort,
   BackgroundShellJob,
   BackgroundShellLaunchOptions,
-} from '../../../source/services/shell/background-shell-registry.js';
-import type { BackgroundShellExecutionResult } from '../../../source/tools/system/shell.js';
-import { BackgroundShellOutputStore } from '../../../source/services/shell/background-shell-output-store.js';
-import {
-  BackgroundShellWatches,
-  type BackgroundShellWatchesPort,
-} from '../../../source/services/shell/background-shell-watches.js';
+} from '../tools/shell/background-shell-registry.js';
+import type { BackgroundShellExecutionResult } from '../tools/system/shell.js';
+import { BackgroundShellOutputStore } from '../tools/shell/background-shell-output-store.js';
+import { BackgroundShellWatches, type BackgroundShellWatchesPort } from '../tools/shell/background-shell-watches.js';
 import type { ShellTaskPort, ShellTaskState } from '../tools/index.js';
 import { sourceToolContext } from './source-tools.js';
 

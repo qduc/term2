@@ -5,5 +5,5 @@
     "outDir": "../dist",
     "rootDir": ".."
   },
-  "include": ["src/**/*", "../source/utils/worker-cwd-preload.cts", "../source/services/hooks/index.ts"]
+  "include": ["src/**/*"]
 }

@@ -30,7 +30,7 @@ export const determineActiveMenu = (
   value: string,
   cursorOffset: number,
   commands: SlashCommand[] = [],
-  // source/services/settings/settings-ui-metadata.ts, supplied by the app.
+  // rewrite/src/config/settings/settings-ui-metadata.ts, supplied by the app.
   isKnownSettingKey: (key: string) => boolean = () => false,
 ): ActiveMenu => {
   const commandCompletions = getCommandCompletions(commands);

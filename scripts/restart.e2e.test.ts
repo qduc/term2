@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { cp, mkdir, readFile, readdir, symlink, writeFile } from 'node:fs/promises';
 import { join, resolve, relative } from 'node:path';
 import { expect, it } from 'vitest';
-import { listControlAdvertisements } from '../source/services/control-socket/control-socket.js';
+import { listControlAdvertisements } from '../rewrite/src/clients/control-socket/control-socket.js';
 import {
   HANG_BACKSTOP_MS,
   READINESS_TIMEOUT_MS,

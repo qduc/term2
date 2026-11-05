@@ -10,10 +10,10 @@ import {
   proposalSchema,
   type VerificationReport,
   type VerificationRequest,
-} from '../../../source/services/completion-verification/contracts.js';
-import { VERIFIER_VERSION } from '../../../source/services/completion-verification/verifier.js';
-import { readVerificationFile, verificationGit } from '../../../source/services/completion-verification/workspace.js';
-import { parseUsdMicros } from '../../../source/services/cost/model-cost.js';
+} from '../engine/completion-verification/contracts.js';
+import { VERIFIER_VERSION } from '../engine/completion-verification/verifier.js';
+import { readVerificationFile, verificationGit } from '../engine/completion-verification/workspace.js';
+import { parseUsdMicros } from '../shared/cost/model-cost.js';
 import type {
   Item,
   ItemId,

@@ -1,5 +1,5 @@
 /**
- * Legacy source/commands/rewind-command.ts for `/rewind`, `/undo` and `/retry`. parseArgs and the
+ * Legacy rewrite/src/clients/commands/rewind-command.ts for `/rewind`, `/undo` and `/retry`. parseArgs and the
  * action's messages are copied; the action is async here because next reads its rewind targets over the
  * wire, and it returns the turn to rewind instead of rewinding, so the session runs that with its own
  * native rewind once the command's input is settled.

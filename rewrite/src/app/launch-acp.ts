@@ -4,9 +4,9 @@
  * no unsandboxed escape, and approvals go through `session/request_permission`.
  */
 import fs from 'node:fs';
-import { getAllProviders, getProviderIds } from '../../../source/providers/index.js';
-import { installationVersion } from '../../../source/providers/fetch/logging-middleware.js';
-import { resolveModelFlag } from '../../../source/services/models/model-resolution.js';
+import { getAllProviders, getProviderIds } from '../model/providers/index.js';
+import { installationVersion } from '../model/providers/fetch/logging-middleware.js';
+import { resolveModelFlag } from '../model/models/model-resolution.js';
 import { createAcpBackend, createStdioAcpIo, serveAcp, type AcpIo, type AcpWorkspaces } from '../clients/acp/index.js';
 import { createDirectApplication, type DirectApplication } from './application.js';
 import { createLocalAuthority, LOCAL_PRINCIPAL, localGrant } from './application-workspaces.js';

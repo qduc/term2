@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { randomUUID } from 'node:crypto';
 import { Box, Text, useApp, useInput } from 'ink';
 import { MultilineInput, type ImageRef } from 'ink-prompt';
 import type { TuiProps } from './integration.js';
@@ -98,11 +97,8 @@ export function TuiSession({
     rewindDraft,
     onImagesChange,
     otherParts,
-    setOtherParts,
     originalParts,
-    setOriginalParts,
     editing,
-    setEditing,
     editor,
     replaceInput,
     changeInput,

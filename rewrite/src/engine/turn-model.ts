@@ -1,14 +1,13 @@
 /** The sole direct model boundary: preparation, recovery and accepted continuity. */
 import { delay, recoveryFailure, toModelError } from './turn-model-errors.js';
 export { toModelError } from './turn-model-errors.js';
-import type { Item, ItemId, ModelError, ModelEvent, ModelRequest, Usage } from '../model/index.js';
+import type { Item, ItemId, ModelEvent, ModelRequest, Usage } from '../model/index.js';
 import type { DirectManualCompactionOutcome, TurnDeps, TurnSpec } from './types.js';
 import {
   DirectRecovery,
   exhaustedNotice,
   RetriesExhausted,
   type DirectRecoveryDecision,
-  type DirectRecoveryFailure,
   type DirectRetryNotice,
 } from './recovery.js';
 import { DirectContinuity, selfContained } from './recovery-continuity.js';

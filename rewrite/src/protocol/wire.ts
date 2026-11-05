@@ -306,7 +306,7 @@ export type WireTask = {
   readonly progress?: string;
   readonly result?: WireTaskResult;
 };
-/** Legacy source/services/background-task-activity.ts BackgroundTaskObservation, as wire data. */
+/** Legacy rewrite/src/tools/background-task-activity.ts BackgroundTaskObservation, as wire data. */
 export type WireTaskObservation =
   | {
       readonly kind:

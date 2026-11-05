@@ -7,10 +7,6 @@ import type { TuiSettingsSchema } from '../integration.js';
 const STOP_CHAR_REGEX = /[\s,;:()[\]{}<>]/;
 const SETTINGS_TRIGGER = '/settings ';
 export const SETTINGS_RESET_TRIGGER = '/settings reset ';
-const AUTO_APPROVE_TRIGGER = '/auto-approve ';
-const EFFORT_TRIGGER = '/effort ';
-const SKILLS_TRIGGER = '/skills ';
-const RESUME_TRIGGER = '/resume ';
 export const PROFILE_TRIGGER = '/profile ';
 
 const whitespaceRegex = /\s/;

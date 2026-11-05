@@ -15,38 +15,34 @@ import {
   isSecretSetting,
   isStringSetting,
   isUsdMicrosSetting,
-} from '../../../source/services/settings/settings-ui-metadata.js';
-import { SETTING_KEYS } from '../../../source/services/settings/settings-schema.js';
-import { SETTING_ENV_VARIABLES } from '../../../source/services/settings/settings-env.js';
-import { SETTINGS_CATEGORIES } from '../../../source/hooks/settings-completion-config.js';
+} from '../config/settings/settings-ui-metadata.js';
+import { SETTING_KEYS } from '../config/settings/settings-schema.js';
+import { SETTING_ENV_VARIABLES } from '../config/settings/settings-env.js';
+import { SETTINGS_CATEGORIES } from '../clients/hooks/settings-completion-config.js';
 import {
   buildSettingsList,
   filterSettingsByCategory,
   filterSettingsByQuery,
   getSettingCategory,
-} from '../../../source/hooks/settings-completion-logic.js';
+} from '../clients/hooks/settings-completion-logic.js';
 import {
   buildSettingValueSuggestions,
   fetchLiveSettingValueSuggestions,
   filterSettingValueSuggestionsByQuery,
   mergeSettingValueSuggestions,
-} from '../../../source/utils/value-suggestions.js';
-import { parseSettingValueForKey } from '../../../source/utils/settings-command.js';
+} from '../shared/utils/value-suggestions.js';
+import { parseSettingValueForKey } from '../shared/utils/settings-command.js';
 import { isDeepStrictEqual } from 'node:util';
 import {
   SUBAGENT_POOL_SETTING_KEYS,
   getSubagentPoolEntryShape,
   getSubagentPoolRoleLabel,
-} from '../../../source/services/subagents/subagent-pool-config.js';
-import {
-  getWorkspaceEntries,
-  getWorkspaceEntriesMeta,
-  refreshWorkspaceEntries,
-} from '../../../source/services/file-service.js';
-import { copyToClipboard } from '../../../source/utils/clipboard.js';
-import type { LoggingService } from '../../../source/services/logging/logging-service.js';
+} from '../tools/subagents/subagent-pool-config.js';
+import { getWorkspaceEntries, getWorkspaceEntriesMeta, refreshWorkspaceEntries } from './file-service.js';
+import { copyToClipboard } from '../shared/utils/clipboard.js';
+import type { LoggingService } from '../session/logging/logging-service.js';
 
-import type { ISettingsService } from '../../../source/services/service-interfaces.js';
+import type { ISettingsService } from '../shared/service-interfaces.js';
 import {
   PROVIDER_TYPES,
   getProviderLabel,
@@ -55,33 +51,30 @@ import {
   validateWizardUrl,
   loadProviderItems,
   type CustomProviderDraft,
-} from '../../../source/providers/provider-service.js';
-import { ProviderManagementSession } from '../../../source/services/providers/provider-management-session.js';
-import {
-  resolveProviderId,
-  resolveProviderName,
-} from '../../../source/services/settings/custom-provider-normalization.js';
+} from '../model/providers/provider-service.js';
+import { ProviderManagementSession } from '../model/providers/provider-management-session.js';
+import { resolveProviderId, resolveProviderName } from '../config/settings/custom-provider-normalization.js';
 import {
   isOAuthAccountProvider,
   listOAuthAccounts,
   oauthLoginCommand,
   removeOAuthAccount,
   setActiveOAuthAccount,
-} from '../../../source/providers/oauth-accounts.js';
-import { getSessionAccount } from '../../../source/providers/oauth-session-account.js';
-import { PROVIDER_PRESETS } from '../../../source/providers/provider-presets.js';
-import { getAllProviders, getProvider, getProviderIds } from '../../../source/providers/index.js';
-import { filterModels } from '../../../source/services/model-service.js';
-import { getFavoriteModelInfos, toggleFavoriteModel } from '../../../source/services/models/model-favorites.js';
-import { ModelCatalogSession, orderedProviderIds } from '../../../source/services/models/model-catalog-session.js';
+} from '../model/providers/oauth-accounts.js';
+import { getSessionAccount } from '../model/providers/oauth-session-account.js';
+import { PROVIDER_PRESETS } from '../model/providers/provider-presets.js';
+import { getAllProviders, getProvider, getProviderIds } from '../model/providers/index.js';
+import { filterModels } from '../model/model-service.js';
+import { getFavoriteModelInfos, toggleFavoriteModel } from '../model/models/model-favorites.js';
+import { ModelCatalogSession, orderedProviderIds } from '../model/models/model-catalog-session.js';
 import {
   commitNicknameEdit,
   getNicknameEntries,
   getNicknameLabels,
   getNicknameModelInfos,
   removeNicknameTarget,
-} from '../../../source/services/models/model-nicknames.js';
-import { RUNTIME_MODIFIABLE_SETTINGS } from '../../../source/services/settings/settings-schema.js';
+} from '../model/models/model-nicknames.js';
+import { RUNTIME_MODIFIABLE_SETTINGS } from '../config/settings/settings-schema.js';
 import {
   getAvailableProviderIds,
   getProviderCredentialSettingKey,
@@ -90,7 +83,7 @@ import {
   isProviderDisabled,
   resolveProviderCredentials,
   setProviderDisabled,
-} from '../../../source/utils/ai/provider-credentials.js';
+} from '../shared/utils/ai/provider-credentials.js';
 import type {
   MenuConversationEntry,
   MenuSettingsService,
@@ -100,10 +93,10 @@ import type {
 } from '../clients/tui/integration.js';
 import type { DirectApplication } from './application.js';
 
-import { canonicalProfileId, profileIdFromLegacyMode } from '../../../source/services/profiles/legacy-adapter.js';
-import { builtinProfiles } from '../../../source/services/profiles/registry.js';
-import { resolveActiveProfile } from '../../../source/services/profiles/active-profile.js';
-import { getProfileLabel } from '../../../source/services/profiles/labels.js';
+import { canonicalProfileId, profileIdFromLegacyMode } from '../shared/profiles/legacy-adapter.js';
+import { builtinProfiles } from '../config/profiles/registry.js';
+import { resolveActiveProfile } from '../config/profiles/active-profile.js';
+import { getProfileLabel } from '../config/profiles/labels.js';
 import { displaySessionId } from '../protocol/session-id.js';
 
 /** Legacy listRecentConversations' limit (source/app.tsx listSavedConversations). */

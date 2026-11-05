@@ -14,7 +14,7 @@ import type { MenuModelCatalog, MenuModelInfo as ModelInfo, TuiModelSettings } f
 export type { MenuModelInfo as ModelInfo } from '../integration.js';
 export type ModelSettings = TuiModelSettings;
 
-// --- source/services/models/model-favorites.ts (pure part)
+// --- rewrite/src/model/models/model-favorites.ts (pure part)
 export const FAVORITES_TAB_ID = '__favorites__';
 export function serializeFavorite(provider: string, modelId: string): string {
   return `${provider}/${modelId}`;
@@ -24,7 +24,7 @@ export const getFavoriteModelInfos = (settingsService: ModelSettings): ModelInfo
 export const toggleFavoriteModel = (settingsService: ModelSettings, provider: string, modelId: string): boolean =>
   settingsService.toggleFavorite(provider, modelId);
 
-// --- source/services/models/model-nicknames.ts
+// --- rewrite/src/model/models/model-nicknames.ts
 export const getNicknameEntries = (settingsService: ModelSettings) => settingsService.nicknameEntries();
 export const getNicknameLabels = (settingsService: ModelSettings) => settingsService.nicknameLabels();
 export const getNicknameModelInfos = (settingsService: ModelSettings) => settingsService.nicknameModelInfos();
@@ -35,7 +35,7 @@ export const commitNicknameEdit = (
 export const removeNicknameTarget = (settingsService: ModelSettings, target: { provider: string; modelId: string }) =>
   settingsService.removeNickname(target);
 
-// --- source/services/models/model-tabs.ts
+// --- rewrite/src/model/models/model-tabs.ts
 export const MODEL_TABS = ['favorites', 'nicknames', 'all'] as const;
 export type ModelTab = (typeof MODEL_TABS)[number];
 export const MODEL_TAB_LABELS: Record<ModelTab, string> = {
@@ -72,7 +72,7 @@ export function selectModelsForTab(
   return [...models];
 }
 
-// --- source/utils/ai/model-provider-arg.ts
+// --- rewrite/src/shared/utils/ai/model-provider-arg.ts
 export function parseModelProviderArg(value: string): { modelId: string; provider: string | undefined } {
   const trimmed = value.trim();
   const providerMatch = trimmed.match(/\s+--provider=(.+)$/);
@@ -90,7 +90,7 @@ export function parseModelProviderArg(value: string): { modelId: string; provide
   };
 }
 
-// --- source/utils/ai/provider-credentials.ts and source/providers/index.ts
+// --- rewrite/src/shared/utils/ai/provider-credentials.ts and rewrite/src/model/providers/index.ts
 export const getProviderCredentialSettingKey = (settingsService: ModelSettings, providerId: string) =>
   settingsService.credentialSettingKey(providerId);
 export const getProviderIdForCredentialSettingKey = (settingsService: ModelSettings, key: string | undefined) =>
@@ -110,7 +110,7 @@ export const getProvider = (settingsService: ModelSettings, providerId: string) 
 };
 export const loadProviderItems = (settingsService: ModelSettings) => settingsService.providerItems();
 
-// --- source/services/models/model-catalog-session.ts
+// --- rewrite/src/model/models/model-catalog-session.ts
 export const orderedProviderIds = (settingsService: ModelSettings, providerIds: string[]): string[] =>
   settingsService.orderedProviderIds(providerIds);
 /** The session's catalog session; the app owns fetching, caching and failure suppression. */
@@ -139,7 +139,7 @@ export class ModelCatalogSession implements MenuModelCatalog {
   }
 }
 
-// --- source/utils/subsequence-filter.ts
+// --- rewrite/src/shared/utils/subsequence-filter.ts
 export const isSubsequenceMatch = (query: string, target: string): boolean => {
   const q = query.toLowerCase();
   const t = target.toLowerCase();
@@ -150,7 +150,7 @@ export const isSubsequenceMatch = (query: string, target: string): boolean => {
   return qi === q.length;
 };
 
-// --- source/services/models/unified-model-catalog.ts
+// --- rewrite/src/model/models/unified-model-catalog.ts
 // Model IDs use punctuation as word separators (for example, gpt-6.1-sol:batch).
 // Keep fuzzy matches available, but prefer whole words, then literal substrings.
 function modelMatchTier(settingsService: ModelSettings, model: ModelInfo, query: string): number {

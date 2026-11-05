@@ -1,6 +1,6 @@
 /** What `cli.ts` hands the direct application after parsing. No Session or engine authority crosses here. */
-import type { AcpArgs } from '../../../source/acp-v2/serve-args.js';
-import type { ServeArgs } from '../../../source/gateway/serve-args.js';
+import type { AcpArgs } from '../clients/acp-v2/serve-args.js';
+import type { ServeArgs } from '../host/gateway/serve-args.js';
 import type { DurableGoal } from '../session/goal.js';
 import type { HeadlessIo } from '../clients/headless/index.js';
 import type { ProfileSelection } from './tool-contract.js';

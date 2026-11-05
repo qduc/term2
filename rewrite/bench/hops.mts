@@ -160,12 +160,11 @@ for (const file of sequence.slice(sequence.indexOf(START))) {
   else files.push(file);
 }
 const distinct = [...new Set(files)];
-const sourceFiles = distinct.filter((file) => file.startsWith('source/'));
-const layerOf = (file: string) => /^rewrite\/src\/([^/]+)\//.exec(file)?.[1] ?? 'source';
+const layerOf = (file: string) => /^rewrite\/src\/([^/]+)\//.exec(file)?.[1] ?? 'other';
 const layers = files.map(layerOf).filter((layer, index, all) => layer !== all[index - 1]);
 
 console.log(
-  `message path: ${files.length} hops through ${distinct.length} files (${sourceFiles.length} in source/); ` +
+  `message path: ${files.length} hops through ${distinct.length} files; ` +
     `${sequence.length} file transitions before folding`,
 );
 console.log(`layers: ${layers.join(' -> ')}`);

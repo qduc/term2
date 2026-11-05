@@ -1,7 +1,7 @@
 /** Explicit app-owned MCP OAuth authority. Reuses the existing credential writer. */
-import { runMcpOAuthLogin, type McpOAuthLoginResult } from '../../../source/services/mcp/mcp-oauth-login.js';
-import { normalizeMcpServerUrl, type McpOAuthStore } from '../../../source/services/mcp/mcp-oauth-store.js';
-import type { McpOAuthTarget } from '../../../source/services/mcp/mcp-connection-manager.js';
+import { runMcpOAuthLogin, type McpOAuthLoginResult } from '../tools/mcp/mcp-oauth-login.js';
+import { normalizeMcpServerUrl, type McpOAuthStore } from '../tools/mcp/mcp-oauth-store.js';
+import type { McpOAuthTarget } from '../tools/mcp/mcp-connection-manager.js';
 
 export type DirectMcpOAuth = {
   /** Supplied by the app credential owner; never constructed at a default path here. */

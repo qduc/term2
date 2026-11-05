@@ -5,7 +5,7 @@ export default defineConfig({
     include: ['scripts/provider-black-box/**/*.test.ts', 'scripts/provider-black-box/**/*.blackbox.ts'],
     environment: 'node',
     globalSetup: ['./scripts/provider-black-box/global-setup.ts'],
-    setupFiles: ['./source/test-helpers/cli-compile-cache-setup.ts'],
+    setupFiles: ['./tests/helpers/cli-compile-cache-setup.ts'],
     // Stateful PTY scenarios launch built CLI process trees. GitHub-hosted
     // runners otherwise schedule enough files together to starve an idle CLI
     // before its fake-provider request reaches the harness. Keep local runs

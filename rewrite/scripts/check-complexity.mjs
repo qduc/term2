@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Keep the rewrite's size visible: allowlisted source edges may only shrink, and
+// Keep the tree's size visible: allowlisted layer-crossing edges may only shrink, and
 // long files need a recorded reason. Budgets live in complexity-budget.json.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -8,17 +8,17 @@ import { fileURLToPath } from 'node:url';
 const scripts = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(scripts, '../..');
 const budget = JSON.parse(fs.readFileSync(path.join(scripts, 'complexity-budget.json'), 'utf8'));
-const edges = JSON.parse(fs.readFileSync(path.join(scripts, 'source-edge-allowlist.json'), 'utf8'));
+const edges = JSON.parse(fs.readFileSync(path.join(scripts, 'layer-allowlist.json'), 'utf8'));
 
 const problems = [];
 const hints = [];
 
-if (edges.length > budget.maxSourceEdges)
+if (edges.length > budget.maxLayerEdges)
   problems.push(
-    `source-edge-allowlist.json has ${edges.length} edges (budget ${budget.maxSourceEdges}). ` +
-      'Route the new dependency through an existing adapter instead of allowlisting it.',
+    `layer-allowlist.json has ${edges.length} edges (budget ${budget.maxLayerEdges}). ` +
+      'Route the new dependency through a layer that may own it instead of allowlisting it.',
   );
-else if (edges.length < budget.maxSourceEdges) hints.push(`lower maxSourceEdges to ${edges.length}`);
+else if (edges.length < budget.maxLayerEdges) hints.push(`lower maxLayerEdges to ${edges.length}`);
 
 const files = [];
 const walk = (dir) => {
@@ -60,6 +60,6 @@ if (problems.length) {
   process.exit(1);
 }
 console.log(
-  `complexity check passed (${edges.length} source edges, ${files.length} files, ` +
+  `complexity check passed (${edges.length} layer edges, ${files.length} files, ` +
     `${Object.keys(budget.fileCeilings).length} over ${budget.maxLines} lines)`,
 );

@@ -1,6 +1,6 @@
 import { withNotice } from './input-notice.js';
 import type { PreparedDirectRequest } from '../engine/recovery-continuity.js';
-import type { Item, ModelRequest } from '../model/index.js';
+import type { ModelRequest } from '../model/index.js';
 import type { bindDirectCapabilities } from './capabilities.js';
 import { directPreviewConfiguration, directPreviewOccurrences } from './preview.js';
 import type { Conversation } from './types.js';

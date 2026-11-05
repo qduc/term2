@@ -31,7 +31,7 @@ const tiers = [
 function owner(tier, file) {
   if (tier === 'guards') return 'test';
   if (tier === 'integration')
-    return /^source\/cli(?:-headless)?\.integration\.test\.ts$/.test(file) ? 'test' : 'integration';
+    return /^tests\/cli\/cli(?:-headless)?\.integration\.test\.ts$/.test(file) ? 'test' : 'integration';
   if (tier === 'e2e') return 'e2e';
   if (file.endsWith('/provider-session-stateless.blackbox.ts')) return 'integration';
   if (/\/(?:provider-ordinary-safety|reference-approval)\.blackbox\.ts$/.test(file)) return 'test';

@@ -3,7 +3,7 @@ title: Settings Reference
 description: Complete reference of term2 configuration settings, defaults, runtime modifiability, and environment variables.
 ---
 
-> **Auto-generated Reference:** This page is generated directly by evaluating `DEFAULT_SETTINGS`, schema definitions, and metadata from `source/services/settings/`. Run `pnpm --dir website build` to re-extract settings.
+> **Auto-generated Reference:** This page is generated directly by evaluating `DEFAULT_SETTINGS`, schema definitions, and metadata from `rewrite/src/config/settings/`. Run `pnpm --dir website build` to re-extract settings.
 
 term2 settings can be configured via:
 1. **Interactive Settings Menu**: Run `/settings` or `/settings <key>` in the interactive TUI.

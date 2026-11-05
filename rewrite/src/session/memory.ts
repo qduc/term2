@@ -3,12 +3,9 @@ import type {
   MemoryCapability,
   MemoryCapabilityBuilder,
   MemoryCapabilitySubject,
-} from '../../../source/services/memory/memory-capabilities.js';
-import type {
-  AutomaticMemoryCanary,
-  AutomaticMemoryReceipt,
-} from '../../../source/services/memory/automatic-memory-canary.js';
-import { personalMemoryNotice } from '../../../source/services/conversation/personal-memory-context.js';
+} from '../tools/memory/memory-capabilities.js';
+import type { AutomaticMemoryCanary, AutomaticMemoryReceipt } from '../tools/memory/automatic-memory-canary.js';
+import { personalMemoryNotice } from '../shared/conversation/personal-memory-context.js';
 import type { Item, ItemId } from '../model/index.js';
 import type { Tool } from '../tools/index.js';
 

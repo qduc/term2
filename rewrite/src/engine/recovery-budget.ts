@@ -5,7 +5,7 @@ import {
   readRunBudgetPolicy,
   type RunBudgetEvent,
   type RunBudgetPolicy,
-} from '../../../source/services/agent-runtime/run-budget.js';
+} from './agent-runtime/run-budget.js';
 
 export { RunBudget, clampRunBudgetPolicy, readRunBudgetPolicy };
 export type {
@@ -14,8 +14,8 @@ export type {
   RunBudgetEvidence,
   RunBudgetSnapshot,
   ToolStallObservation,
-} from '../../../source/services/agent-runtime/run-budget.js';
-export type { ModelRequestCost } from '../../../source/services/cost/model-cost.js';
+} from './agent-runtime/run-budget.js';
+export type { ModelRequestCost } from '../shared/cost/model-cost.js';
 
 export type DirectBudgetAction = 'observe' | 'pause' | 'wrap_up';
 

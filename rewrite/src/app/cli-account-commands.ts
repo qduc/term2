@@ -1,21 +1,17 @@
 /** Account/catalog subcommands, independent of conversation launch and signal ownership. */
 import { stdin, stdout, stderr } from 'node:process';
-import { SessionContextService } from '../../../source/services/session/session-context-service.js';
-import { buildEnvOverrides } from '../../../source/services/settings/settings-service.js';
+import { SessionContextService } from '../session/session/session-context-service.js';
+import { buildEnvOverrides } from '../config/settings/settings-service.js';
 import { createSettingsService, type SettingsService } from './settings.js';
 
-import type { ILoggingService } from '../../../source/services/service-interfaces.js';
-import { getProviderIds } from '../../../source/providers/index.js';
-import { loadProviderItems } from '../../../source/providers/provider-service.js';
-import {
-  listOAuthAccounts,
-  removeOAuthAccount,
-  setActiveOAuthAccount,
-} from '../../../source/providers/oauth-accounts.js';
-import { loginToCodex } from '../../../source/providers/codex-auth.js';
-import { loginToGrok } from '../../../source/providers/grok-auth.js';
-import { ModelCatalogSession } from '../../../source/services/models/model-catalog-session.js';
-import { getAvailableProviderIds, resolveProviderCredentials } from '../../../source/utils/ai/provider-credentials.js';
+import type { ILoggingService } from '../shared/service-interfaces.js';
+import { getProviderIds } from '../model/providers/index.js';
+import { loadProviderItems } from '../model/providers/provider-service.js';
+import { listOAuthAccounts, removeOAuthAccount, setActiveOAuthAccount } from '../model/providers/oauth-accounts.js';
+import { loginToCodex } from '../model/providers/codex-auth.js';
+import { loginToGrok } from '../model/providers/grok-auth.js';
+import { ModelCatalogSession } from '../model/models/model-catalog-session.js';
+import { getAvailableProviderIds, resolveProviderCredentials } from '../shared/utils/ai/provider-credentials.js';
 import type {
   CredentialDescription,
   DirectCredentialBackend,
@@ -47,7 +43,7 @@ function oauthLoginIo(providerLabel: string) {
 /** Run provider authentication without creating or opening a conversation. */
 export async function runLogin(provider: 'grok' | 'codex'): Promise<number> {
   if (provider === 'grok') {
-    const { loginToGrok } = await import('../../../source/providers/grok-auth.js');
+    const { loginToGrok } = await import('../model/providers/grok-auth.js');
     try {
       const tokens = await loginToGrok(oauthLoginIo('Grok'));
       console.log(`Logged in to Grok${tokens.email ? ` as ${tokens.email}` : ''}.`);
@@ -57,7 +53,7 @@ export async function runLogin(provider: 'grok' | 'codex'): Promise<number> {
       return 1;
     }
   }
-  const { loginToCodex } = await import('../../../source/providers/codex-auth.js');
+  const { loginToCodex } = await import('../model/providers/codex-auth.js');
   try {
     await loginToCodex(oauthLoginIo('Codex'));
     console.log('Logged in to Codex.');
@@ -70,7 +66,7 @@ export async function runLogin(provider: 'grok' | 'codex'): Promise<number> {
 
 /** List the source model catalogue with its persisted app settings and diagnostics. */
 export async function runListModelsCommand(search: string | null, refresh: boolean): Promise<number> {
-  const { runListModels } = await import('../../../source/services/models/model-listing.js');
+  const { runListModels } = await import('../model/models/model-listing.js');
   const listingSettings = createSettingsService({
     env: buildEnvOverrides(),
     loggingServiceOptions: { sessionContextService: new SessionContextService() },

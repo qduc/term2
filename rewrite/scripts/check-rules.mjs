@@ -2,7 +2,8 @@
 // Static checks for the rules in rewrite/README.md that no other script covers. Parse-only, no build, well under a second.
 // Every failure names file:line and the rule, so the author can fix it alone.
 //   1. One projection: a WireEvent (the {sessionId, seq, turnId, type, payload} envelope) is only built in protocol/.
-//   2. Names are jobs: no file or folder under src/ is called service, adapter or orchestrator.
+//   2. Names are jobs: no file or folder under src/ is called service, adapter or orchestrator
+//      (paths moved in from source/ are recorded in rule-baseline.json; the list only shrinks).
 //   3. No new unused runtime exports: an exported function/const/class must be named somewhere else in src/ or bench/.
 //      Existing ones are recorded in rule-baseline.json (reason: still to delete or wire); the list only shrinks.
 //   4. One fold: only session/fold-fact.ts imports the leaf fact reducers (queue replay and the queue barrel are its legs).
@@ -72,10 +73,14 @@ for (const file of files) {
   visit(sf);
 }
 
-// 2. Names are jobs.
+// 2. Names are jobs. Paths moved in from source/ with such names are recorded in rule-baseline.json; the list only shrinks.
+const namedPaths = new Set(baseline.jobNameExceptions);
 for (const file of files)
-  if (/service|adapter|orchestrator/i.test(rel(file)))
+  if (/service|adapter|orchestrator/i.test(rel(file)) && !namedPaths.has(rel(file)))
     problems.push(`${rel(file)}:1: path names a layer or file service/adapter/orchestrator (rule: names are jobs)`);
+for (const name of namedPaths)
+  if (!files.some((file) => rel(file) === name))
+    problems.push(`rule-baseline.json jobNameExceptions names missing ${name}`);
 
 // 3. Unused runtime exports.
 const counts = new Map();

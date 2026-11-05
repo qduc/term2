@@ -1,4 +1,4 @@
-import { testCliPath } from '../../source/test-helpers/terminal-e2e.js';
+import { testCliPath } from '../../tests/helpers/terminal-e2e.js';
 import { appendFileSync, createWriteStream, existsSync, rmSync, unlinkSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -7,14 +7,14 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { finished } from 'node:stream/promises';
 import type { Writable } from 'node:stream';
 import { stripVTControlCharacters } from 'node:util';
-import { resolveSettingsDirectory } from '../../source/services/settings/settings-path.js';
+import { resolveSettingsDirectory } from '../../rewrite/src/config/settings/settings-path.js';
 import {
   HARNESS_IDLE_ENV,
   readHarnessComposerState,
   readHarnessIdleGeneration,
   waitForHarnessComposerValue,
   waitForHarnessIdleGeneration,
-} from '../../source/lib/harness-input-idle.js';
+} from '../../rewrite/src/shared/lib/harness-input-idle.js';
 
 const openWorkspaceRoots = new Set<string>();
 

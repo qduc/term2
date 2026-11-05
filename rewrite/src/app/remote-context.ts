@@ -1,5 +1,5 @@
 import { posix } from 'node:path';
-import { quoteShellArg } from '../../../source/services/ssh-service.js';
+import { quoteShellArg } from '../tools/ssh-service.js';
 import type { DirectRemoteWorkspace } from './remote.js';
 
 export type DirectRemoteProjectContext = {

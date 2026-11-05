@@ -8,7 +8,6 @@ import type {
   AgentAcceptedEnvelopeV2,
   AgentBranchV2,
   AgentChangeTypeV2,
-  AgentConfigurationV2,
   AgentConfigureCommandResultV2,
   AgentConfigureOutcomeV2,
   AgentConfigureReceiptV2,
@@ -17,7 +16,6 @@ import type {
   AgentEventEnvelopeV2,
   AgentLiveChangeTypeV2,
   AgentLiveEnvelopeV2,
-  AgentReasoningV2,
 } from '@qduc/agent-wire';
 import { AGENT_CHANGE_TYPES_V2, AGENT_LIVE_CHANGE_TYPES_V2 } from '@qduc/agent-wire';
 import type {

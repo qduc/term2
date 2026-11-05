@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Build term2 (rewrite/ with its adopted source/ dependencies) into dist/, the package's only output.
+// Build term2 (rewrite/src) into dist/, the package's only output.
 // `pnpm build` wraps this in scripts/build-with-rollback.mjs to keep the previous dist/ recoverable.
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -21,13 +21,9 @@ const result = spawnSync('pnpm', ['exec', 'tsc', '-p', 'rewrite/tsconfig.build.j
 if (result.error) throw result.error;
 if (result.status !== 0) process.exit(result.status ?? 1);
 
-const emittedSource = path.join(dist, 'source');
-fs.mkdirSync(path.join(emittedSource, 'providers'), { recursive: true });
-fs.cpSync(path.join(repo, 'source/prompts'), path.join(emittedSource, 'prompts'), { recursive: true });
-fs.copyFileSync(
-  path.join(repo, 'source/providers/provider-presets.json'),
-  path.join(emittedSource, 'providers/provider-presets.json'),
-);
+// Runtime assets tsc does not emit, copied to the same place under dist/.
+for (const asset of ['rewrite/src/session/prompts', 'rewrite/src/model/providers/provider-presets.json'])
+  fs.cpSync(path.join(repo, asset), path.join(dist, asset), { recursive: true });
 // package.json bin.term2. A static import keeps argv[1] (used by restart) on this file.
 fs.writeFileSync(path.join(dist, 'cli.js'), "#!/usr/bin/env node\nimport './rewrite/src/app/cli.js';\n", {
   mode: 0o755,

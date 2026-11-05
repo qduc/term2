@@ -389,6 +389,8 @@ export interface TuiProps {
   readonly connection: TuiConnection;
   readonly header?: ReactNode;
   readonly headerHeight?: number;
+  /** A change repaints the transcript, as legacy's MessageList does when the display mode changes. */
+  readonly redrawKey?: string;
   readonly integration: TuiIntegration;
   readonly retainedSnapshot?: WireSnapshot;
   readonly onSnapshot?: (snapshot: WireSnapshot) => void;

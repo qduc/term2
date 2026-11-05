@@ -120,9 +120,20 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
       .sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''));
   };
 
+  // Legacy's resume applies the conversation's model, effort and profile through its configuration service,
+  // which saves them; the switch to a resumed session does the same once that session is open.
+  const resumed = new Set<string>();
+  const saveResumedSelection = (sessionId: string) => {
+    const settings = app.liveSettings(sessionId);
+    if (!settings) return;
+    for (const key of ['agent.modelSelection', 'agent.reasoningEffort', 'app.activeProfileId'])
+      settings.setDynamic(key, settings.getDynamic(key));
+  };
+
   const resume = async (sessionId: string | undefined): Promise<CommandResult> => {
     if (sessionId && sessionId !== 'ls') {
       // legacy app.tsx resumeConversation; legacy ids are bare UUIDs, and either form resumes
+      resumed.add(storedSessionId(sessionId));
       return { sessionId: storedSessionId(sessionId), message: `Resumed conversation: ${displaySessionId(sessionId)}` };
     }
     // Legacy's bare /resume puts its trigger in the input, which opens the resume menu.
@@ -427,6 +438,7 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
       // Native rollover rotates the backing log, not this attached logical Session.
       if (sessionId === latest().sessionId) return;
       const next = await host.connect(principal, sessionId);
+      if (resumed.delete(sessionId)) saveResumedSelection(sessionId);
       // The session has really changed by now, so the client follows it even if control cannot.
       const failure = await bridge.rebind(sessionId).then(
         () => undefined,

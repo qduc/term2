@@ -269,6 +269,11 @@ class Term:
             os.waitpid(self.pid, 0)
         except OSError:
             pass
+        # Each run opens a pty; a long compare runs out of them unless the master side is closed.
+        try:
+            os.close(self.fd)
+        except OSError:
+            pass
 
 
 MASKS = [

@@ -42,6 +42,7 @@ export function TuiSession({
   connection,
   header,
   headerHeight,
+  redrawKey,
   integration,
   retainedSnapshot,
   onSnapshot,
@@ -125,7 +126,7 @@ export function TuiSession({
     viewportActive,
     sessionHeader,
     historyRevision,
-    { transitionNotices: [...(newConversation ?? []), ...(transitionNotice ? [transitionNotice] : [])] },
+    { transitionNotices: [...(newConversation ?? []), ...(transitionNotice ? [transitionNotice] : [])], redrawKey },
   );
   appendSystem.current = (text) => viewport.appendCommandOutput(text, true);
   goalClosed.current = useGoalClosedNotice(state, setNotice);

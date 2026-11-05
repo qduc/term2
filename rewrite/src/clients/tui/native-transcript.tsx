@@ -243,7 +243,7 @@ export function useNativeTranscript(
     () => (
       <Box key={epoch}>
         <Static style={staticStyle} items={header ? [{ key: 'header', header }, ...rows] : [...rows]}>
-          {(row, index) => {
+          {(row) => {
             if (row.header) return <Box key={row.key}>{row.header}</Box>;
             const group = row.tool ? groups.get(row.tool.id) : undefined;
             if (group === null) return <Box key={row.key} />;

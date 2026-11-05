@@ -14,14 +14,6 @@
       "lines": 965,
       "reason": "Verbatim copy of legacy source/components/message/command-message-helpers.ts, the parsers and labels CommandMessage and its renderers share."
     },
-    "src/clients/tui/menus/menu-controller.ts": {
-      "lines": 849,
-      "reason": "Canonical menu stack controller, consolidated from the two copies with MCP editor return-point handling retained. The editor/stack transition rules remain together."
-    },
-    "src/clients/tui/menus/use-provider-selection.ts": {
-      "lines": 926,
-      "reason": "Canonical /providers manager state machine; the app supplies provider data through the menu integration boundary. Phase transitions and their draft state remain together."
-    },
     "src/clients/tui/menus/use-subagent-pool-selection.ts": {
       "lines": 748,
       "reason": "Port of source/hooks/use-subagent-pool-selection.ts with only imports changed; kept whole so it stays diffable against the legacy oracle."

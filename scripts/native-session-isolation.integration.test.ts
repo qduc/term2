@@ -100,7 +100,7 @@ async function healthySurvives(): Promise<void> {
       .sort(),
   ).toEqual([healthy, rotated].sort());
   expect((await store.list()).sessions.map((session) => session.id).sort()).toEqual([healthy, rotated].sort());
-  const listing = await listNativeConversations(directory, options());
+  const listing = (await listNativeConversations(directory, options())).map((row) => row.id);
   expect(listing).toContain(displaySessionId(healthy));
   expect(listing).toContain(displaySessionId(rotated));
   expect(listing).not.toContain(displaySessionId(successor));
@@ -250,21 +250,25 @@ it('indexes a new first line once its creation artifact is completed', async () 
   const line = JSON.stringify({ v: 2, seq: 1, at: new Date().toISOString(), fact: metadata(id) }) + '\n';
   const split = Math.floor(line.length / 2);
   writeFileSync(logPath(id), line.slice(0, split));
-  expect(await listNativeConversations(directory, options())).not.toContain(displaySessionId(id));
+  expect((await listNativeConversations(directory, options())).map((row) => row.id)).not.toContain(
+    displaySessionId(id),
+  );
   expect(warnings).not.toHaveBeenCalled();
   appendFileSync(logPath(id), line.slice(split));
-  expect(await listNativeConversations(directory, options())).toContain(displaySessionId(id));
+  expect((await listNativeConversations(directory, options())).map((row) => row.id)).toContain(displaySessionId(id));
   expect(warnings).not.toHaveBeenCalled();
 });
 it('invalidates a previously indexed session whose first line becomes incomplete', async () => {
   const id = newId();
   seed(id);
-  expect(await listNativeConversations(directory, options())).toContain(displaySessionId(id));
+  expect((await listNativeConversations(directory, options())).map((row) => row.id)).toContain(displaySessionId(id));
   const original = readFileSync(logPath(id), 'utf8');
   writeFileSync(logPath(id), original.slice(0, Math.floor(original.length / 2)));
-  expect(await listNativeConversations(directory, options())).not.toContain(displaySessionId(id));
+  expect((await listNativeConversations(directory, options())).map((row) => row.id)).not.toContain(
+    displaySessionId(id),
+  );
   writeFileSync(logPath(id), original);
-  expect(await listNativeConversations(directory, options())).toContain(displaySessionId(id));
+  expect((await listNativeConversations(directory, options())).map((row) => row.id)).toContain(displaySessionId(id));
 });
 it.each(['foreign entry', 'symlink', 'nonregular log'])('retains global namespace refusal for %s', async (kind) => {
   if (kind === 'foreign entry') writeFileSync(path.join(directory, 'foreign.txt'), 'foreign');

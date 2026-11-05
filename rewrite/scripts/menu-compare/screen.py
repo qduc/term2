@@ -6,12 +6,21 @@ Evidence harness for rewrite/docs/menu-port-report.md, not a test suite.
   python3 rewrite/scripts/menu-compare/screen.py run <legacy|next> <cols> <rows> <scenario>
   python3 rewrite/scripts/menu-compare/screen.py compare <cols> <rows> [scenario ...]
 
+Captures are cached under .cache/menu-compare/, keyed by the CLI's built output (dist, minus build-info),
+the lockfile, the Node version, the capture code (MODELS through run()), the scenario's own steps and seed,
+the size and the FULL mode. Legacy is the
+oracle and rarely rebuilds, so later compares reuse its captures; an unchanged next build reruns for free.
+CACHE=0 ignores the cache; REFRESH=1 reruns and overwrites (use it to resample a capture suspected flaky).
+JOBS=n runs n scenarios at once (default: the CPU count).
+
 Each scenario is a list of key steps (scenarios.py). Both CLIs get a fresh
 scratch HOME/XDG_* tree, the same settings file and a fake OpenAI-compatible
 provider that only lists models. The captured screen keeps per-cell colour and
 attributes; masks hide the version string, ids, paths, ports and durations.
 """
+import hashlib
 import json
+import subprocess
 import os
 import pty
 import re
@@ -180,6 +189,8 @@ def scratch_env(root, base_url, seed):
         'DISABLE_LOGGING': '1',
         'CI': 'false',
         'FORCE_COLOR': '3',
+        # Shared across runs (it only caches compiled bytecode, never app state): faster CLI boots.
+        'NODE_COMPILE_CACHE': os.path.join(REPO, '.cache', 'menu-compare', 'node-compile-cache'),
     }
     settings_dir = os.path.join(env['XDG_STATE_HOME'], 'term2-nodejs')
     os.makedirs(settings_dir)
@@ -421,6 +432,70 @@ def run(cli, cols, rows, name):
         shutil.rmtree(root, ignore_errors=True)
 
 
+CACHE_DIR = os.path.join(REPO, '.cache', 'menu-compare')
+_BUILD_KEYS = {}
+
+
+def _tree_hash(root, skip=('build-info.json',)):
+    digest = hashlib.sha256()
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames.sort()
+        for name in sorted(filenames):
+            if name in skip:
+                continue
+            path = os.path.join(dirpath, name)
+            digest.update(os.path.relpath(path, root).encode() + b'\0')
+            with open(path, 'rb') as f:
+                digest.update(f.read())
+    return digest.hexdigest()
+
+
+def build_key(cli):
+    """Everything outside the harness that decides what a CLI draws: its build, dependencies and Node."""
+    if cli not in _BUILD_KEYS:
+        dist = os.path.join(REPO, 'dist') if cli == 'legacy' else os.path.join(REPO, 'rewrite', 'dist')
+        digest = hashlib.sha256()
+        digest.update(cli.encode() + _tree_hash(dist).encode())
+        with open(os.path.join(REPO, 'pnpm-lock.yaml'), 'rb') as f:
+            digest.update(f.read())
+        digest.update(subprocess.run(['node', '--version'], capture_output=True, text=True).stdout.encode())
+        _BUILD_KEYS[cli] = digest.hexdigest()
+    return _BUILD_KEYS[cli]
+
+
+def _capture_code():
+    """The harness code a capture depends on: this file from MODELS through run(). Edits to the comparison and
+    reporting below, or new scenarios, keep earlier captures valid."""
+    with open(os.path.abspath(__file__)) as f:
+        source = f.read()
+    return source[source.index('\nMODELS = '):source.index('\nCACHE_DIR = ')]
+
+
+def cached_run(cli, cols, rows, name):
+    """run(), reusing an earlier capture of the same build, harness, scenario, size and mode."""
+    if os.environ.get('CACHE') == '0':
+        return run(cli, cols, rows, name)
+    mode = 'full' if FULL and not FULL_SCREEN else 'screen' if FULL_SCREEN else 'menu'
+    scenario = repr((SCENARIOS[name], SEED.get(name)))
+    key = hashlib.sha256(
+        f'{build_key(cli)}|{_CAPTURE_CODE}|{scenario}|{cols}x{rows}|{mode}'.encode()
+    ).hexdigest()
+    path = os.path.join(CACHE_DIR, cli, key[:2], f'{key}.json')
+    if not os.environ.get('REFRESH') and os.path.exists(path):
+        with open(path) as f:
+            return json.load(f)
+    cap = run(cli, cols, rows, name)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = f'{path}.{os.getpid()}.tmp'
+    with open(tmp, 'w') as f:
+        json.dump(cap, f)
+    os.replace(tmp, path)
+    return cap
+
+
+_CAPTURE_CODE = hashlib.sha256(_capture_code().encode()).hexdigest()
+
+
 def menu_region(cap, notice=False):
     """The bottom area from the composer divider down, without trailing blank rows.
 
@@ -455,8 +530,11 @@ def compare(cols, rows, names):
     results = {}
     # JOBS=n runs n scenarios at once (both CLIs of a scenario run side by side as well).
     from concurrent.futures import ThreadPoolExecutor
-    pool = ThreadPoolExecutor(max_workers=2 * max(1, int(os.environ.get('JOBS', '1'))))
-    futures = {name: (pool.submit(run, 'legacy', cols, rows, name), pool.submit(run, 'next', cols, rows, name))
+    if os.environ.get('CACHE') != '0':
+        for cli in CLIS:  # once, before the workers start: concurrent misses would each hash both trees
+            build_key(cli)
+    pool = ThreadPoolExecutor(max_workers=2 * max(1, int(os.environ.get('JOBS', str(os.cpu_count() or 1)))))
+    futures = {name: (pool.submit(cached_run, 'legacy', cols, rows, name), pool.submit(cached_run, 'next', cols, rows, name))
                for name in names}
     for name in names:
         notice = SEED.get(name, {}).get('notice', False)

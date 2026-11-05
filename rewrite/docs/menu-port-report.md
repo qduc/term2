@@ -22,6 +22,15 @@ python3 rewrite/scripts/menu-compare/screen.py compare 80 24 settings  # named s
 python3 rewrite/scripts/menu-compare/screen.py run next 100 34 model   # print one capture
 ```
 
+**Speed.** A run is mostly waiting for the screen to settle (CLI boot, the quiet period after each step,
+`<sleep>`), not CPU, so `compare` runs `JOBS` scenarios at once (default: the CPU count). Captures are cached in
+`.cache/menu-compare/`, keyed by the CLI's build output, the lockfile, the Node version, the capture code in
+`screen.py` and the scenario's own steps and seed. Legacy is the oracle and rarely rebuilds, so a compare of a
+new next build only runs next; rerunning an unchanged build, adding a scenario, or editing the comparison code
+reuses every earlier capture. A timing-sensitive scenario (for example `t-walk`) can capture differently from run
+to run; the cache freezes one sample, so resample a suspect with `REFRESH=1` (rerun and overwrite) and use
+`CACHE=0` when you want the old behaviour. `run` never uses the cache.
+
 The scenarios live in `scenarios_*.py`.
 A branch is **identical** when every screen row is equal after masking, both text and cell styles.
 The masks cover only:

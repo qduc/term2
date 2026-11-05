@@ -1,8 +1,9 @@
 /** Codex native compaction through legacy's compactHistory. Legacy keeps that output verbatim. */
 import { randomUUID } from 'node:crypto';
 import type { Item, ItemId, Model, ModelRef } from './index.js';
-import { toModelFailure } from './failure.js';
+import { ModelFailure, toModelFailure } from './failure.js';
 import { itemToInput, withConversationTiming } from './provider-items.js';
+import { foreignCompactionRefusal } from './history-compatibility.js';
 
 export function codexCompact(
   ref: ModelRef,
@@ -17,6 +18,8 @@ export function codexCompact(
   return async (request, signal, onDispatched) => {
     const transport = request.downgradeTransport ? 'http' : settings.get('agent.transport') ?? 'websocket';
     try {
+      const refusal = foreignCompactionRefusal(request.input, ref.provider);
+      if (refusal) throw new ModelFailure({ kind: 'invalid_request', retryable: false, message: refusal });
       const turn = await turnModel(transport);
       if (!turn.compactHistory) throw new Error('Codex compact endpoint is unavailable');
       signal.throwIfAborted();

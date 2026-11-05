@@ -54,3 +54,26 @@ fallback request. A retry consumes an identical pending notice; if a saved notic
 also contains different request-specific text, that equality check can leave the
 profile notice pending for the next input. The raw-input/notice split is necessary:
 reconstructing only raw history on retry previously lost the original mode notice.
+
+A `text_delta` with `withdrawn: true` removes the failed attempt from provider
+replay but ends only its live draft in `reduceDirectFact`; the accepted display
+message and timeline slot remain. Derived `presentation.withdrawn: true` marks
+that display-only attempt for both native snapshots and ordinary wire message
+updates. It is not a stopped-turn notice or a completed final answer, including
+a successful retry that returns no text. The existing withdrawal fact, not new
+persisted metadata, reconstructs this provenance on reopen. Headless answer
+finalization, public turn results and nested completion adapters exclude this
+message update; nested progress keeps the already-observed deltas. This follows the [#143 coordinator ruling](https://github.com/qduc/term2/issues/143#issuecomment-6650991397):
+a quiet retry does not erase text the user saw or feed it back to the model.
+The next attempt has a different model-step draft ID, so its final message does
+not overwrite the failed attempt's display slot. Snapshot synchronization and
+reopening must retain the same display, not silently prune it after live deltas.
+This does not change retry eligibility or terminal-partial provider-history rules
+from [approved M1 D7](https://github.com/qduc/term2/issues/76#issuecomment-6541016291).
+
+A cumulative PTY transcript can pass while a later redraw removes the text.
+The Responses quiet-retry fixture holds its successful terminal frame until the
+latest complete render shows both attempts. After settlement, retained rows may
+move into Ink Static scrollback rather than each redraw. A fresh CLI resume
+checks retained display; retry/follow-up model inputs and the log separately
+prove exclusion and durable withdrawal.

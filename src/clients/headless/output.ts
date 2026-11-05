@@ -189,7 +189,7 @@ export function createHeadlessOutput(options: DirectHeadlessOptions, storedId: s
         case 'message': {
           if (!forTurn) break;
           const message = event.payload.message;
-          if (message.role !== 'assistant' || message.draft === true) break;
+          if (message.role !== 'assistant' || message.draft === true || message.presentation?.withdrawn === true) break;
           finalText = message.text;
           const key = event.payload.replacesDraftId ?? message.id;
           const streamed = streamedByMessage.get(key) ?? 0;

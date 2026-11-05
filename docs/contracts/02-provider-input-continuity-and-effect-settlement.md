@@ -24,6 +24,16 @@ The evidence below records that baseline; ownership references describe the curr
 | C2.6d | Before input planning, refuse a provider switch when reconciled history contains a foreign opaque `compaction` checkpoint whose portable source coverage is unknown. Do not send a silently truncated request; preserve same-provider native continuity and ordinary switches without a foreign compaction checkpoint. | A foreign adapter's safe-to-drop compaction item may be the only surviving provider history for earlier turns after native compaction. |
 | C2.7 | A retry that omits `previous_response_id` must send self-contained full history. A caller-supplied chained delta is never retried without its anchor by the run loop or the Codex adapter. | Follow-up turns look amnesiac: the model sees only the newest sentence ("This.") and asks for context it already had. |
 
+### Native Codex continuation boundary
+
+The native engine's accepted continuation can contain only new tool results;
+their matching calls are held by the explicit `previousResponseId`. In
+`CodexResponsesWSModel`, the Luna preparation path must preserve that delta,
+not run the self-contained-history orphan filter over it. Unanchored history
+and `disableChaining` recovery still require local call/result pairs. Socket
+affinity checks still reject a delta on a replacement connection before dispatch;
+the engine owns rebuilding a complete request from retained history.
+
 ## 2. Owners
 
 - **Enforcement:** `ToolCallExecution` (the ephemeral ordered response plan and

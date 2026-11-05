@@ -41,6 +41,7 @@ import { StreamingSpeedTracker } from '../shared/utils/streaming/streaming-speed
 import { getModelContextWindow } from './providers/model-catalog/catalog.js';
 import { MODEL_CATALOG } from './providers/model-catalog/catalog.generated.js';
 import { ModelFailure, toModelFailure } from './failure.js';
+import { foreignCompactionRefusal } from './history-compatibility.js';
 import { physicalModelStream } from './retry.js';
 import { codexCompact } from './provider-compact.js';
 import {
@@ -258,6 +259,8 @@ function toProviderRequest(
   },
 ): StreamedModelTurnRequest {
   const { provider, ref, context, compaction } = scope;
+  const refusal = foreignCompactionRefusal(request.input, ref.provider);
+  if (refusal) throw new ModelFailure({ kind: 'invalid_request', retryable: false, message: refusal });
   const continuation = resolveContinuation(request, scope);
   let providerOptions: Record<string, unknown> | undefined = request.providerOptions
     ? { ...request.providerOptions }

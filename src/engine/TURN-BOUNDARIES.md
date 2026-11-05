@@ -11,6 +11,12 @@ uses the same model-step, budget, recovery and dispatch boundary without gaining
 root tool authority. A replacement changes history only after the `history_replaced`
 event is accepted; only then does it clear continuity and retain compaction state.
 
+Provider-prefix selection treats a summary as a replacement only when its `replaces`
+list is nonempty. Budget evidence, goal-repair reminders and mode notices all use
+empty lists: they add context without dropping prior user input or completed tool
+evidence. Inferring replacement from an item's ID previously cut history at budget
+and normal-stop notices, breaking resume and the worker's post-verification chain.
+
 `TurnTools` owns provider-order scheduling, execution admission and selected-stop
 policy. `TurnToolInteractions` owns only execution-scoped interaction publication,
 durable readiness and matching answer waits. It cannot select or start work; that

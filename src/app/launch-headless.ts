@@ -18,6 +18,7 @@ export function runDirectHeadlessOnHost(request: DirectHeadlessRequest): DirectH
     let target: DirectSessionTarget | null = null;
     let mcp: DirectMcp | undefined;
     let profileMetadata: Readonly<Record<string, unknown>> = {};
+    let profileName = '';
     try {
       const opened = await openDirectSessionTarget(request.ssh, request.lite === true, stop.signal);
       target = opened;
@@ -43,9 +44,7 @@ export function runDirectHeadlessOnHost(request: DirectHeadlessRequest): DirectH
         hooks: { root: fs.realpathSync(process.cwd()), mode: 'non-interactive' },
         onSurface(surface, profile) {
           profileMetadata = profile;
-          // `--quiet` suppresses non-error diagnostics. Later event lines already
-          // honor it; this announcement is written before that run starts.
-          if (!request.quiet) io.stderr.write(`Profile: ${surface.profileName}\n`);
+          profileName = surface.profileName;
         },
       });
       application = app;
@@ -53,10 +52,14 @@ export function runDirectHeadlessOnHost(request: DirectHeadlessRequest): DirectH
       // The old CLI prints this under --quiet too. It is the fork's identity, not a diagnostic.
       if (sessionId !== resumeId)
         io.stderr.write(`Forked conversation ${displaySessionId(resumeId!)} → ${displaySessionId(sessionId!)}\n`);
+      if (sessionId !== undefined && request.resumeConfiguration)
+        await app.applyLaunchConfiguration(sessionId, request.resumeConfiguration);
       const connection =
         sessionId === undefined
           ? await app.host.createSession(app.principal, opened.grant)
           : await app.host.connect(app.principal, sessionId);
+      // Announce once, after any explicit resumed selection has been accepted.
+      if (!request.quiet) io.stderr.write(`Profile: ${profileName}\n`);
       if (request.goal) await app.setGoal(connection.sessionId, request.goal, 'launcher');
       active = true;
       const { outcome } = await runDirectHeadless(connection, {

@@ -57,6 +57,33 @@ function outputText(output: string): string {
   return typeof parsed === 'string' ? parsed : JSON.stringify(parsed);
 }
 
+/** Imported transcript observations retain their saved kind; this is display data, never execution authority. */
+function importedMessage(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const message = value as Record<string, unknown>;
+  if (typeof message.id !== 'string') return undefined;
+  switch (message.sender) {
+    case 'user':
+    case 'bot':
+    case 'system':
+    case 'reasoning':
+      return typeof message.text === 'string' ? message : undefined;
+    case 'command':
+      return typeof message.command === 'string' &&
+        (message.output === undefined || typeof message.output === 'string') &&
+        (message.toolName === undefined || typeof message.toolName === 'string')
+        ? message
+        : undefined;
+    case 'subagent':
+      return typeof message.task === 'string' &&
+        (message.finalText === undefined || typeof message.finalText === 'string')
+        ? message
+        : undefined;
+    default:
+      return undefined;
+  }
+}
+
 /**
  * Public timeline slots in order, as the legacy saved messages a TUI session would have persisted. Legacy reads
  * a session whose turn has not settled (the live one too) as interrupted: its unfinished tools get the restart
@@ -70,7 +97,13 @@ function savedMessages(state: DirectPublicState, reasoning: ReadonlyMap<string, 
   for (const slot of state.timeline) {
     if (slot.kind === 'message') {
       const message = messages.get(slot.id);
-      if (!message || message.role === 'tool') continue;
+      if (!message) continue;
+      const imported = message.transcriptObservation && importedMessage(message.presentation?.sourceMessage);
+      if (imported) {
+        saved.push(imported);
+        continue;
+      }
+      if (message.role === 'tool') continue;
       const text = message.content.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('');
       saved.push({ sender: message.role === 'assistant' ? 'bot' : message.role, text });
     } else if (slot.kind === 'tool') {

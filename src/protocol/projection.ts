@@ -1,9 +1,9 @@
-import { rotationConfiguration, branchSnapshots, projectItem } from './projection-parts.js';
+import { rotationConfiguration, branchSnapshots, projectItem, projectTextDelta } from './projection-parts.js';
 /** One translation from accepted direct Session updates to wire events.
  * Session alone commits/answers; this class only maintains the public read model.
  */
 import type { DirectSessionState, DirectSessionUpdate } from '../session/facade-types.js';
-import { directDraftId, initialDirectState } from '../session/state.js';
+import { initialDirectState } from '../session/state.js';
 import { contextFactEvent } from './context.js';
 import type { DirectQueueState } from '../session/queue-types.js';
 import { createDirectQueueState, directQueueSteeredInput } from '../session/queue-state.js';
@@ -372,18 +372,8 @@ export class DirectProjection {
             turnId,
           ),
         ];
-      case 'text_delta': {
-        const step = fact.modelStep ?? 1;
-        if (fact.withdrawn) return []; // it leaves with the next state snapshot
-        return [
-          this.#event(
-            'text_delta',
-            { delta: fact.delta, modelStep: step, messageId: directDraftId(fact.turnId, fact.modelStep) },
-            seq,
-            turnId,
-          ),
-        ];
-      }
+      case 'text_delta':
+        return projectTextDelta(fact, seq, this.#state, this.#event.bind(this));
       case 'item':
         return projectItem(fact, seq, this.#event.bind(this), this.#toolIdentity.bind(this));
       case 'tool_started':

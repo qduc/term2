@@ -63,7 +63,7 @@ timeline with call/start-only slots. No new event, sequence or journal is needed
 | --- | --- |
 | session_started | configuration |
 | turn_started | ONE turn_started, including optional admission and all input messages |
-| text_delta | text_delta with exact draft ID and numeric model step |
+| text_delta | text_delta with exact draft ID and numeric model step; withdrawal seals the retained display message with `presentation.withdrawn: true`, not a final answer |
 | item user/assistant | message; completed assistant replaces its own draft |
 | item reasoning | reasoning with accepted summary/message ID and optional model step |
 | item tool_call | tool_called, keyed by execution occurrence |

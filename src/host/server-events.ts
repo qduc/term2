@@ -274,7 +274,9 @@ function nestedCandidate(
       return { type: 'subagent_command_message', payload: { ...candidate.payload, ...identity } };
     }
     case 'message':
-      return child.payload.message.role === 'assistant' && !child.payload.message.draft
+      return child.payload.message.role === 'assistant' &&
+        !child.payload.message.draft &&
+        child.payload.message.presentation?.withdrawn !== true
         ? { type: 'subagent_text_turn', payload: { ...identity, text: text(child.payload.message.text, 16_384) } }
         : null;
     case 'interaction_opened':

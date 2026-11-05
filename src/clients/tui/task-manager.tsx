@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { useTheme } from './presentation/components/theme.js';
 import { useSkin } from './presentation/skins/SkinContext.js';
@@ -223,11 +223,8 @@ export function TaskManager({
   const selectedRow = rows[selectedIndex];
   const selectedForeground = selectedRow && isForeground(selectedRow) ? selectedRow : undefined;
   const selected = selectedRow && !isForeground(selectedRow) ? selectedRow : undefined;
-  // Legacy openManager: ^G with no live task opens nothing.
-  const empty = rows.length === 0;
-  useEffect(() => {
-    if (empty) onClose();
-  }, [empty, onClose]);
+  // Initial opening requires live work in SessionView. Once open, legacy keeps
+  // the empty manager's input ownership until the user closes it.
 
   const act = (id: string, action: 'cancel' | 'background', done: () => void, failure: string) => {
     if (pending.current) return;
@@ -304,7 +301,6 @@ export function TaskManager({
     setFeedback(null);
   });
 
-  if (empty) return null;
   const rowText = (task: TaskView, index: number) => {
     const marker = index === selectedIndex ? '❯' : ' ';
     const kind = task.wire?.kind === 'shell' ? 'Shell' : roleOf(task);

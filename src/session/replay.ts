@@ -22,7 +22,8 @@ export type ReplayOptions = {
   readonly rootSettlement?: 'restart' | 'live';
   /**
    * How many facts an earlier process wrote before this one opened the Session. Like legacy, a turn cancelled
-   * live drops the step it was in, but one cancelled before a resume keeps its calls with unobserved results.
+   * live drops the step it was in, but one cancelled before a resume keeps its unsuperseded text deltas and
+   * its calls with unobserved results.
    */
   readonly openedAt?: number;
 };

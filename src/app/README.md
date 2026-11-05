@@ -61,6 +61,19 @@ recovery and schema/default migrations as well as explicit preference saves.
 CLI profile/model/reasoning overrides still opt out of persistence. Headless,
 ACP and serve startup persistence policy is unchanged.
 
+On CLI resume or fork, resolved explicit model/provider and reasoning flags are
+passed separately from launch defaults. `applyLaunchConfiguration` opens the target
+and submits a native idle-only configure command before the client connects.
+The accepted selection is durable in that session (only the copied session for a
+fork). A scoped launcher context authorizes the explicitly selected model and
+keeps the runtime's settings writes out of the global defaults; ordinary interactive
+configuration still saves normally. No explicit fields, or model/effort fields equal to restored selection intent,
+means no configure command. This keeps restart replay byte-identical; reasoning
+intent equality is distinct from equality of its model-resolved effective value.
+Explicit reasoning wins over a model suffix, which wins over saved reasoning;
+a model-only override retains the saved reasoning intent. Ordinary resume retains
+the accepted effective request, including cold-catalog reasoning and temperature.
+
 `cli.ts` is the process entrypoint: the Discord bridge's numeric
 or numeric-string `process.exitCode` is normalized to the numeric `main` result.
 

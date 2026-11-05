@@ -41,6 +41,7 @@ import { getModelContextWindow } from '../../../source/providers/model-catalog/c
 import { MODEL_CATALOG } from '../../../source/providers/model-catalog/catalog.generated.js';
 import { ModelFailure, toModelFailure } from './failure.js';
 import { physicalModelStream } from './retry.js';
+import { codexCompact } from './provider-compact.js';
 import {
   itemToInput,
   withConversationTiming,
@@ -143,6 +144,8 @@ function lazyModel(
     capabilities,
     contextWindow: catalogContextWindow ?? DEFAULT_ASSUMED_CONTEXT_WINDOW,
     ...(catalogContextWindow !== undefined ? { catalogContextWindow } : {}),
+    // Legacy uses Codex's compact endpoint for native compaction; other providers compact locally.
+    ...(ref.provider === 'codex' ? { compact: codexCompact(ref, deps.settings, turnModel) } : {}),
     async *stream(request, signal, onDispatched) {
       const transport = request.downgradeTransport ? 'http' : deps.settings.get('agent.transport') ?? 'websocket';
       try {

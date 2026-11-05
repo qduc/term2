@@ -5,6 +5,7 @@ import { MultilineInput } from 'ink-prompt';
 import type { WireDecision } from '../../protocol/direct-wire.js';
 import type { InteractionView } from './state.js';
 import { Questions } from './questions.js';
+import { useHarnessEntry } from './harness-input.js';
 
 /** Keyboard-operated request picker; all decisions remain pinned to request IDs. */
 export function InteractionPanel({
@@ -28,6 +29,7 @@ export function InteractionPanel({
   const [requestId, setRequestId] = useState<string | null>(initialRequestId ?? null);
   const [entry, setEntry] = useState<'answer' | 'reason' | null>(null);
   const [text, setText] = useState('');
+  useHarnessEntry(entry !== null, text);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const pending = useRef(false);

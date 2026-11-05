@@ -18,14 +18,13 @@ type RuntimeDeps = DirectConversationRuntime['deps'];
  * Only OpenAI and Codex chain responses. Both URLs are the ones their clients
  * use. A Codex response chain belongs to one account, and a running process stays
  * pinned to the first account it authenticates as. Before that first request the
- * pin is whichever account is selected. No account means CLI credentials this
- * app cannot name, so chaining stays off.
+ * pin is whichever account is selected. No account means the Codex CLI's own
+ * credentials; legacy chains on those too, so they bind as one `cli` account.
  */
 function continuityEndpoint({ provider }: ModelRef): string | undefined {
   if (provider === 'openai') return `openai:${process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1'}`;
   if (provider !== 'codex') return undefined;
-  const account = getSessionAccount('codex') ?? getActiveCodexAccount()?.id;
-  if (!account) return undefined;
+  const account = getSessionAccount('codex') ?? getActiveCodexAccount()?.id ?? 'cli';
   return `codex:${process.env.CODEX_BASE_URL || 'https://chatgpt.com/backend-api/codex'}:${account}`;
 }
 

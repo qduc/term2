@@ -13,11 +13,7 @@ export function useHarnessInput(active: boolean, processing: boolean, value: str
     const path = process.env['TERM2_HARNESS_IDLE_PATH'];
     if (!path) return;
 
-    if (value !== lastComposerValue) {
-      lastComposerValue = value;
-      composerRevision += 1;
-      writeAtomically(`${path}.composer`, `${JSON.stringify({ revision: composerRevision, value })}\n`);
-    }
+    publishComposer(path, value);
 
     const idle = active && !processing;
     if (idle === lastIdle) return;
@@ -27,6 +23,21 @@ export function useHarnessInput(active: boolean, processing: boolean, value: str
     generation += 1;
     writeAtomically(path, `${generation}\n`);
   }, [active, processing, value]);
+}
+
+/** Legacy types approval reasons and answers in its one composer; the panel's entry reports the same way. */
+export function useHarnessEntry(active: boolean, value: string): void {
+  useEffect(() => {
+    const path = process.env['TERM2_HARNESS_IDLE_PATH'];
+    if (path && active) publishComposer(path, value);
+  }, [active, value]);
+}
+
+function publishComposer(path: string, value: string): void {
+  if (value === lastComposerValue) return;
+  lastComposerValue = value;
+  composerRevision += 1;
+  writeAtomically(`${path}.composer`, `${JSON.stringify({ revision: composerRevision, value })}\n`);
 }
 
 function writeAtomically(path: string, payload: string): void {

@@ -2,6 +2,10 @@
   "maxSourceEdges": 521,
   "maxLines": 500,
   "fileCeilings": {
+    "rewrite/src/model/provider.ts": {
+      "lines": 503,
+      "reason": "lazyModel is the one place a provider's streamed model becomes a Model; its native compact entry (body in provider-compact.ts) belongs beside stream."
+    },
     "rewrite/src/clients/tui/presentation/components/message/CommandMessage.tsx": {
       "lines": 1018,
       "reason": "Verbatim copy of legacy source/components/message/CommandMessage.tsx: tool rows match legacy by construction; splitting it would reintroduce a rewrite to prove. Four lines are the port exception that reads a live render's measured elapsed time (live-tool-age.ts)."

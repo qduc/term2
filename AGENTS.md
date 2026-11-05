@@ -6,9 +6,9 @@ Term2 is a terminal AI assistant built with React (Ink), TypeScript, Node.js,
 and an application-owned agent runtime. It supports interactive conversations,
 non-interactive runs, shell execution, file changes, and approval prompts.
 
-Application code lives under `src/`, one folder per layer; tests live
-under `tests/`, laid out by the same layer names. `docs/architecture/layers.md` gives the
-layer table, the import rules and how a message travels. The important entry
+Application code lives under `src/`, one folder per layer; tests live under
+`tests/`, laid out by the same layer names. `docs/architecture/layers.md` gives
+the layer table, the import rules and how a message travels. The important entry
 points are:
 
 - `src/app/cli.ts` parses the command line and starts the TUI, a

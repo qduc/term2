@@ -1,8 +1,8 @@
-# term2-next (rewrite)
+# Source layers
 
-This folder holds term2-next, which is term2: its production entry is
-`src/app/cli.ts`, built by `pnpm build` to `dist/src/app/cli.js` and
-started by the package's `dist/cli.js` (#86). All production code lives in
+This describes term2's source tree, `src/`, which began as the term2-next
+rewrite. Its production entry is `src/app/cli.ts`, built by `pnpm build` to
+`dist/src/app/cli.js` and started by the package's `dist/cli.js` (#86). All production code lives in
 `src/`: legacy code the CLI no longer reached was deleted (#88) and the rest of
 the old `source/` tree was moved into these layers (#87). Tests live in the
 root `tests/` folder, laid out by the same layer names.

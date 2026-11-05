@@ -91,6 +91,9 @@ class Provider(BaseHTTPRequestHandler):
                       'function': {'name': c['tool'], 'arguments': json.dumps(c['args'])}}
                      for i, c in enumerate(reply.get('calls', [reply]))]
             event({'role': 'assistant', 'tool_calls': calls})
+            if reply.get('hold'):  # keep the call streaming ("Calling tool")
+                self.wfile.flush()
+                time.sleep(reply['hold'])
             event({}, 'tool_calls')
         else:
             # 'chunks': stream the text in that many pieces, 'delay' seconds apart (default one piece).

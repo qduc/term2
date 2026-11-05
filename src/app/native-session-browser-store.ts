@@ -70,7 +70,19 @@ function savedMessages(state: DirectPublicState, reasoning: ReadonlyMap<string, 
   for (const slot of state.timeline) {
     if (slot.kind === 'message') {
       const message = messages.get(slot.id);
-      if (!message || message.role === 'tool') continue;
+      if (!message) continue;
+      const source = (message.presentation as Record<string, unknown> | undefined)?.sourceMessage as
+        | Record<string, unknown>
+        | undefined;
+      if (source && typeof source.sender === 'string') {
+        saved.push(source);
+        continue;
+      }
+      if (message.role === 'tool') {
+        const text = message.content.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('');
+        saved.push({ sender: 'command', command: message.id, output: text });
+        continue;
+      }
       const text = message.content.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('');
       saved.push({ sender: message.role === 'assistant' ? 'bot' : message.role, text });
     } else if (slot.kind === 'tool') {

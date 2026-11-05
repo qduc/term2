@@ -2,6 +2,8 @@ import { executeShellCommand } from '../shared/utils/shell/execute-shell.js';
 import { formatShellExecutionOutput } from '../shared/utils/shell/shell-output.js';
 /** The interactive terminal client on the direct host. The app owns the connection and replaces it across sessions. */
 import fs from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import type { ModelRef } from '../model/index.js';
 import { homedir } from 'node:os';
 import { stderr, stdin, stdout } from 'node:process';
 import { createInterface } from 'node:readline/promises';
@@ -254,6 +256,17 @@ async function runTui(
       sessionId === undefined
         ? await app.host.createSession(app.principal, target.grant)
         : await app.host.connect(app.principal, sessionId);
+    if (sessionId !== undefined && request.modelExplicit) {
+      const explicitModel = selection.settings.get('agent.modelSelection') as ModelRef;
+      const current = initial.snapshot.model;
+      if (current.model !== explicitModel.model || current.provider !== explicitModel.provider) {
+        await initial.send({
+          type: 'configure',
+          commandId: randomUUID(),
+          configuration: { model: explicitModel },
+        });
+      }
+    }
     // Read the opened session, not the launch defaults: resume may restore a different profile. Legacy (cli.tsx)
     // announces it before "Resumed conversation", and both before refusing a non-interactive terminal.
     const { profileId } = await app.sessionConfiguration(initial.sessionId);

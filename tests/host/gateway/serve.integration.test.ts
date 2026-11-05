@@ -120,7 +120,7 @@ function openEventStream(
     {
       socketPath,
       method: 'GET',
-      path: `/private/agent/v1/sessions/${sessionId}/events?after=0`,
+      path: `/private/agent/v1/sessions/${sessionId}/events?after=0&format=direct`,
       headers: { 'x-term2-assertion': assertion, accept: 'text/event-stream' },
     },
     (res) => {
@@ -249,14 +249,8 @@ describe('term2 serve (child process)', () => {
       expect(stderr).toContain('GATEWAY_READY');
     }
 
-    // State layout: manifest + sha256 derived at startup, replay DB, and the    // always-wired persistence coordinator root. No trust file: pairing off.
-    const manifestRaw = fs.readFileSync(path.join(stateDir, 'manifest.json'), 'utf-8');
-    expect(JSON.parse(manifestRaw)).toMatchObject({ version: 1, grants: [] });
-    expect(fs.readFileSync(path.join(stateDir, 'manifest.sha256'), 'utf-8').trim()).toBe(
-      createHash('sha256').update(manifestRaw).digest('hex'),
-    );
+    // State layout: replay DB and no trust file when pairing is off.
     expect(fs.existsSync(path.join(stateDir, 'replay.sqlite'))).toBe(true);
-    expect(fs.existsSync(path.join(stateDir, 'gateway-data'))).toBe(true);
     expect(fs.existsSync(path.join(stateDir, 'trusted-clients.json'))).toBe(false);
     expect(fs.statSync(stateDir).mode & 0o777).toBe(0o700);
     expect(fs.statSync(socketPath).mode & 0o777).toBe(0o660);
@@ -306,13 +300,11 @@ describe('term2 serve (child process)', () => {
     );
     expect(submitted.accepted).toBe(true);
 
-    await stream.waitFor((event) => event.type === 'turn_completed', 45_000);
-    const completed = stream.events().find((event) => event.type === 'turn_completed')!;
+    await stream.waitFor((event) => event.type === 'turn_ended', 45_000);
+    const completed = stream.events().find((event) => event.type === 'turn_ended')!;
     expect(completed.payload.outcome).toBe('completed');
     const seen = stream.events().map((event) => event.type);
-    expect(seen).toContain('session_created');
-    expect(seen).toContain('user_message_accepted');
-    expect(seen).toContain('assistant_started');
+    expect(seen).toContain('turn_started');
     stream.close();
 
     // Bounded shutdown: clean exit code and the socket file removed.

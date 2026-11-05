@@ -44,7 +44,13 @@ export class DirectAttachment {
     if (this.#closed) throw new DirectProtocolError('closed', 'Session attachment is closed.');
     const events = new DirectEventQueue(() => this.#queues.delete(events));
     this.#queues.add(events);
-    return { snapshot: this.#projection.snapshot, events };
+    const projection = this.#projection;
+    return {
+      get snapshot() {
+        return projection.snapshot;
+      },
+      events,
+    };
   }
   #update(update: DirectSessionUpdate): void {
     if (this.#closed || this.#failure) return;

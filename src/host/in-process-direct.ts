@@ -67,7 +67,9 @@ export function createDirectInProcessHost(deps: DirectHostDeps): DirectHost {
     let closed = false;
     const result = {
       sessionId: attached.session.id,
-      snapshot: view.snapshot,
+      get snapshot() {
+        return view.snapshot;
+      },
       ...('replay' in view ? { replay: view.replay } : {}),
       events: view.events,
       async send(command: WireCommand): Promise<import('../protocol/wire.js').WireCommandResult> {

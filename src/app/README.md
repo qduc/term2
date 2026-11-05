@@ -67,7 +67,9 @@ and submits a native idle-only configure command before the client connects.
 The accepted selection is durable in that session (only the copied session for a
 fork). A scoped launcher context authorizes the explicitly selected model and
 keeps the runtime's settings writes out of the global defaults; ordinary interactive
-configuration still saves normally. No explicit fields means no configure command.
+configuration still saves normally. No explicit fields, or model/effort fields equal to restored selection intent,
+means no configure command. This keeps restart replay byte-identical; reasoning
+intent equality is distinct from equality of its model-resolved effective value.
 Explicit reasoning wins over a model suffix, which wins over saved reasoning;
 a model-only override retains the saved reasoning intent. Ordinary resume retains
 the accepted effective request, including cold-catalog reasoning and temperature.

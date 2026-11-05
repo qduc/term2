@@ -537,6 +537,20 @@ it(
       reasoning_effort: 'medium',
     });
     const sourceBeforeFork = fs.readFileSync(path.join(conversations, sourceFile), 'utf8');
+    // Explicitly repeating accepted intent (also how /restart relaunches) must
+    // not append configure receipts or alter the accepted effective request.
+    session = spawnTerminal(
+      'node',
+      [builtCli, '--resume', sourceId, '--provider', 'mockprov', '--model', 'mock-beta', '--reasoning', 'medium'],
+      { cwd: workspace, env, cols: 160, rows: 40 },
+    );
+    await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 30_000 });
+    session.write('/quit');
+    await waitForHarnessComposerValue(idlePath, '/quit', { timeoutMs: 30_000 });
+    session.write('\r');
+    await session.waitForExit(30_000);
+    expect(fs.readFileSync(path.join(conversations, sourceFile), 'utf8')).toBe(sourceBeforeFork);
+    fs.rmSync(idlePath, { force: true });
 
     session = spawnTerminal(
       'node',

@@ -1457,6 +1457,20 @@ export function registerResilienceScenarios(group: 'transport' | 'continuity'): 
           'try the switched provider headlessly',
         );
 
+        // The switch-back picker loads catalogs too; keep its OpenAI discovery
+        // local instead of letting the dummy credential reach the public API.
+        const catalogDir = join(workspace.paths.cacheDir, 'models');
+        await mkdir(catalogDir, { recursive: true });
+        await writeFile(
+          join(catalogDir, 'openai.json'),
+          JSON.stringify({
+            version: 3,
+            provider: 'openai',
+            timestamp: Date.now(),
+            models: [{ id: COMPACTION_ROUTE.model, provider: 'openai' }],
+          }),
+        );
+
         const switched = await startInteractive(
           workspace,
           {

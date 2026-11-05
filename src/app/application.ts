@@ -207,6 +207,21 @@ export async function createDirectApplication(options: DirectApplicationOptions)
       if (Object.keys(configuration).length === 0) return;
       await authority.authorize(LOCAL_PRINCIPAL, { kind: 'write', sessionId });
       const session = await sessions.open(sessionId);
+      const current = stateOf(session).model;
+      const record = runtimes.get(session.id);
+      if (!record) throw new Error('Session configuration runtime is unavailable.');
+      // Restart carries the current selection as CLI flags. Equal selection intent
+      // is not a change: preserve both the log and the accepted effective request.
+      // In particular, compare effort intent, not its model-resolved effective value.
+      if (
+        configuration.profileId === undefined &&
+        configuration.temperature === undefined &&
+        (configuration.model === undefined ||
+          (configuration.model.provider === current.provider && configuration.model.model === current.model)) &&
+        (configuration.reasoning === undefined ||
+          configuration.reasoning === record.configurationSettings.get('agent.reasoningEffort'))
+      )
+        return;
       const result = await runtimes.launching(session.id, configuration, () =>
         session.command({
           commandId: randomUUID(),

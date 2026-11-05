@@ -21,7 +21,7 @@ import { resolveSettingsDirectory } from '../../rewrite/src/config/settings/sett
 
 // Runs the built terminal UI (`pnpm build` output, as CI does before test:e2e) in a real pty against
 // an OpenAI-compatible chat-completions double, and reads what the terminal rendered.
-const projectRoot = fileURLToPath(new URL('..', import.meta.url));
+const projectRoot = fileURLToPath(new URL('../..', import.meta.url));
 const builtCli = testCliPath(path.join(projectRoot, 'rewrite', 'dist', 'rewrite', 'src', 'app', 'cli.js'));
 const TIMEOUT_MS = 120_000;
 

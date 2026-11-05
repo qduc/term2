@@ -11,7 +11,7 @@ import {
   waitForHarnessIdleGeneration,
 } from '../../rewrite/src/shared/lib/harness-input-idle.js';
 
-const cli = testCliPath(fileURLToPath(new URL('../dist/rewrite/src/app/cli.js', import.meta.url)));
+const cli = testCliPath(fileURLToPath(new URL('../../dist/rewrite/src/app/cli.js', import.meta.url)));
 
 for (const [cols, rows] of [
   [119, 40],

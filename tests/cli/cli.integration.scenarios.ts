@@ -13,7 +13,7 @@ import { writeMockCliSettings } from '../helpers/mock-cli-settings.js';
 
 import { integrationCliPath as cliPath } from '../helpers/integration-cli.js';
 
-const projectRoot = fileURLToPath(new URL('..', import.meta.url));
+const projectRoot = fileURLToPath(new URL('../..', import.meta.url));
 
 function expectedToolLine(command: string): string {
   const preview = command.length > 80 ? `${command.slice(0, 80)}…` : command;

@@ -11,7 +11,7 @@ import { getProviderIds } from '../../rewrite/src/model/providers/index.js';
 // Built direct CLI, loopback provider. A background child can't ask the user, so a call that needs approval ends
 // its run. Legacy reports that run as "completed" with an empty result, which hides the stop from the model: a
 // confirmed legacy bug (#136 item 11, #150). Next reports a failed run that names the call.
-const projectRoot = fileURLToPath(new URL('..', import.meta.url));
+const projectRoot = fileURLToPath(new URL('../..', import.meta.url));
 const builtCli = testCliPath(path.join(projectRoot, 'rewrite', 'dist', 'rewrite', 'src', 'app', 'cli.js'));
 
 let session: TerminalSession | null = null;

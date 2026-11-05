@@ -10,7 +10,10 @@ import { SessionIndexDatabase } from '../../../../rewrite/src/session/conversati
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const databaseTsPath = path.join(__dirname, 'session-index-database.ts');
+const databaseTsPath = path.join(
+  __dirname,
+  '../../../../rewrite/src/session/conversation/session-index/session-index-database.ts',
+);
 
 let dir = '';
 let dbPath = '';

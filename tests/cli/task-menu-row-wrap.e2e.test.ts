@@ -13,7 +13,7 @@ import {
 } from '../../rewrite/src/shared/lib/harness-input-idle.js';
 import { resolveSettingsDirectory } from '../../rewrite/src/config/settings/settings-path.js';
 
-const projectRoot = fileURLToPath(new URL('..', import.meta.url));
+const projectRoot = fileURLToPath(new URL('../..', import.meta.url));
 const builtCli = testCliPath(path.join(projectRoot, 'dist', 'cli.js'));
 const TIMEOUT_MS = 120_000;
 const COLS = 80;

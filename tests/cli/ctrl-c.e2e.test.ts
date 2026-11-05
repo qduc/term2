@@ -9,7 +9,7 @@ import { resolveSettingsDirectory } from '../../rewrite/src/config/settings/sett
 
 // Built direct CLI. An idle composer matches the old CLI: the first Ctrl+C asks,
 // the second within the confirm window exits 0, and an empty session prints no resume hint.
-const cli = testCliPath(fileURLToPath(new URL('../dist/rewrite/src/app/cli.js', import.meta.url)));
+const cli = testCliPath(fileURLToPath(new URL('../../dist/rewrite/src/app/cli.js', import.meta.url)));
 
 let session: TerminalSession | null = null;
 let root = '';

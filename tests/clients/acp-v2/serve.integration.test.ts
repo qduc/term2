@@ -23,7 +23,7 @@ import { createTestChildEnv } from '../../helpers/terminal-e2e.js';
 // settings.json pointed at a loopback double — because the in-process
 // registerProvider seam cannot reach into another process.
 
-const projectRoot = fileURLToPath(new URL('../..', import.meta.url));
+const projectRoot = fileURLToPath(new URL('../../..', import.meta.url));
 import { integrationCliPath } from '../../helpers/integration-cli.js';
 
 const packageVersion: string = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8')).version;

@@ -10,7 +10,7 @@ import { resolveSettingsDirectory } from '../../rewrite/src/config/settings/sett
 import { getProviderIds } from '../../rewrite/src/model/providers/index.js';
 
 // Built direct CLI, loopback provider. Proves `-m provider/model` reaches the provider as the bare id.
-const projectRoot = fileURLToPath(new URL('..', import.meta.url));
+const projectRoot = fileURLToPath(new URL('../..', import.meta.url));
 const builtCli = testCliPath(path.join(projectRoot, 'rewrite', 'dist', 'rewrite', 'src', 'app', 'cli.js'));
 
 let session: TerminalSession | null = null;

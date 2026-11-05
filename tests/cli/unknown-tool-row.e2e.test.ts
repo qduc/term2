@@ -11,7 +11,7 @@ import { getProviderIds } from '../../rewrite/src/model/providers/index.js';
 // Built direct CLI, loopback provider. A call to a tool the turn didn't offer never runs; legacy still draws it as a
 // green "✓" row. That is a confirmed legacy bug (#136 item 14, #150): next draws it as a failed "✗" row with the
 // result text the model received.
-const projectRoot = fileURLToPath(new URL('..', import.meta.url));
+const projectRoot = fileURLToPath(new URL('../..', import.meta.url));
 const builtCli = testCliPath(path.join(projectRoot, 'rewrite', 'dist', 'rewrite', 'src', 'app', 'cli.js'));
 
 let session: TerminalSession | null = null;

@@ -15,7 +15,7 @@ import type { ProviderDefinition } from '../../model/providers/registry.js';
 import { SkillsService } from '../../tools/skills/skills-service.js';
 import type { PostExecutePauseCapability } from '../../tools/types.js';
 import type { SessionAccessState } from '../../session/session/session-access-state.js';
-import type { ApplicationAgent } from '../../engine/agent-runtime/application-run-loop.js';
+import type { ApplicationAgent } from '../../shared/contracts/nested-run-driver.js';
 import type { BackgroundShellRegistry } from '../../tools/shell/background-shell-registry.js';
 import type { BackgroundShellOutputBundle } from '../../tools/shell/background-shell-watches.js';
 import type { BackgroundShellExecutionResult } from '../../tools/system/shell.js';

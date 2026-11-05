@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import type { ProviderInputItem } from '../../shared/contracts/provider-input.js';
 import type { RunTerminationCause } from '../../shared/contracts/run-termination.js';
-import type { ApplicationAgent, NormalStopDecision } from '../../engine/agent-runtime/application-run-loop.js';
+import type { ApplicationAgent } from '../../shared/contracts/nested-run-driver.js';
+import type { NormalStopDecision } from '../../shared/contracts/run-loop-outcomes.js';
 import { TOOL_NAME_GOAL_CHECK } from '../../tools/tool-names.js';
 import type { DurableGoal } from '../logging/conversation-log-events.js';
 import { MAX_GOAL_FIELD_LENGTH } from './durable-goal.js';

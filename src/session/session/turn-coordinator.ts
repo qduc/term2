@@ -14,7 +14,7 @@ import type { HookLifecyclePort } from '../hooks/hook-service.js';
 import type { HookEventFactory } from '../hooks/hook-event-factory.js';
 import type { SessionIdSource } from './session-identity.js';
 import { AutomaticMemoryFinalizer } from './automatic-memory-finalizer.js';
-import type { SteerOutcome } from '../../engine/agent-runtime/application-run-loop.js';
+import type { SteerOutcome } from '../../shared/contracts/run-loop-outcomes.js';
 import { isClassifiedCancellation } from '../../engine/retry/provider-failure-classification.js';
 import type { AutomaticMemoryCanary } from '../../tools/memory/automatic-memory-canary.js';
 

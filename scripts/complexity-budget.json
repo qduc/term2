@@ -1,5 +1,5 @@
 {
-  "maxLayerEdges": 270,
+  "maxLayerEdges": 268,
   "maxLines": 500,
   "fileCeilings": {
     "src/model/provider.ts": {
@@ -107,7 +107,7 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/engine/agent-runtime/application-run-loop.ts": {
-      "lines": 2593,
+      "lines": 2569,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/engine/agent-runtime/context-compaction/local-context-compactor.ts": {
@@ -279,7 +279,7 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/tools/subagents/execution-runner.ts": {
-      "lines": 634,
+      "lines": 569,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/tools/subagents/nested-runner.ts": {

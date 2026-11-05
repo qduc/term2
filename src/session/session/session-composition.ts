@@ -1,5 +1,5 @@
 import { resolveOutputAllocation } from '../../engine/agent-runtime/model-context-policy.js';
-import { AgentChatFailure } from '../../engine/lib/agent-chat-service.js';
+import { AgentChatFailure } from '../../shared/contracts/agent-chat-failure.js';
 import type { ModelRequestCost } from '../../shared/cost/model-cost.js';
 import type { ILoggingService, ISessionContextService, ISettingsService } from '../../shared/service-interfaces.js';
 import type { ProviderInputItem } from '../../shared/contracts/provider-input.js';
@@ -12,7 +12,7 @@ import {
   type LocalCompactionOutcome,
 } from '../../engine/agent-runtime/context-compaction/local-context-compactor.js';
 import { estimateContext, type ContextEstimate } from '../../engine/agent-runtime/context-compaction/index.js';
-import type { SteerOutcome } from '../../engine/agent-runtime/application-run-loop.js';
+import type { SteerOutcome } from '../../shared/contracts/run-loop-outcomes.js';
 import { ConversationRecord } from '../conversation/conversation-record.js';
 import {
   createCheckpointSourceDigest,

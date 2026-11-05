@@ -1,6 +1,7 @@
 import { getCatalogModel } from '../../model/providers/model-catalog/catalog.js';
 import { resolveOutputAllocation } from '../agent-runtime/model-context-policy.js';
-import { ApplicationRunLoop, type ApplicationAgent } from '../agent-runtime/application-run-loop.js';
+import { ApplicationRunLoop } from '../agent-runtime/application-run-loop.js';
+import type { ApplicationAgent } from '../../shared/contracts/nested-run-driver.js';
 import { getProvider } from '../../model/providers/index.js';
 import type { ReasoningEffortSetting } from '../../shared/contracts/conversation.js';
 import type { JsonSchemaDefinition } from '../../shared/contracts/model-types.js';
@@ -20,14 +21,7 @@ import { normalizeUsage } from '../../shared/utils/ai/token-usage.js';
 import type { ProviderInputItem } from '../../shared/contracts/provider-input.js';
 import type { NestedModelBinding } from '../../shared/contracts/nested-run-driver.js';
 import { waitForAbortableRead } from '../../shared/contracts/abort-aware-wait.js';
-
-/** A failed dispatched helper still owns its request accounting. */
-export class AgentChatFailure extends Error {
-  constructor(readonly costRecords: readonly ModelRequestCost[], cause: unknown) {
-    super(cause instanceof Error ? cause.message : String(cause), { cause });
-    this.name = cause instanceof Error ? cause.name : 'AgentChatFailure';
-  }
-}
+import { AgentChatFailure } from '../../shared/contracts/agent-chat-failure.js';
 
 export interface AgentChatServiceDeps {
   agentConfig: AgentConfiguration;

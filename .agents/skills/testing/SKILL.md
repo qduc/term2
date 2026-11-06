@@ -148,6 +148,26 @@ and `68ef50ff` (local-only evidence), not a result file to resume appending.
   even though completed job text had cleared `read_file`; observe the model request,
   not an unrelated transient field. Headless approval-required results do not prove a
   bypass; an interactive approval claim needs an interactive owner.
+- **term2-next parity (rewrite, 2026-11):** a 98/98 e2e suite and 9/9 goldens
+  stayed green while menus lost styling, ten commands were invented and steering
+  changed. The e2e asserted strings written for next on ANSI-stripped output, and
+  the goldens ran headless, so neither ever ran legacy. Only a side-by-side diff
+  against legacy (cells including colours) counts as parity evidence; see the #65
+  acceptance criteria.
+- **Empty-store fixtures hide data-size costs:** the composer footer read every
+  conversation `.jsonl` on every render. With a 465 MB store that meant about 1 s
+  key echo and 150% CPU. PTY probes using an empty temp store never showed it. Run
+  latency checks against a copy of a realistically sized store, and profile the
+  real session (`--cpu-prof`) before theorising about terminal rendering.
+- **Timing reds under load:** a direct/provider measure at load 19.5 on 7 cores
+  gave 8 + 25 reds that mostly passed when re-run on a calm box; CI was green.
+  Ctrl+U input timing recurred under load. Record host load and re-run the same
+  case on a calm box, comparing base and candidate under matching conditions.
+  A passing rerun does not explain the earlier failure, and a fixed load cutoff
+  cannot establish its cause or waive a failed gate.
+- **PTY relaunch lock race:** relaunching before the previous PTY child had exited
+  raced the personal-memory lock and flaked CI. The harness must wait for child
+  exit before relaunching; don't paper over it with retries.
 
 ### Local-only boundary lessons reviewed for reconciliation
 

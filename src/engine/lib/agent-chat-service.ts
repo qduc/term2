@@ -1,6 +1,6 @@
 import { getCatalogModel } from '../../model/providers/model-catalog/catalog.js';
 import { resolveOutputAllocation } from '../agent-runtime/model-context-policy.js';
-import { ApplicationRunLoop, type ApplicationAgent } from '../agent-runtime/application-run-loop.js';
+import { ApplicationRunLoop } from '../agent-runtime/application-run-loop.js';
 import { getProvider } from '../../model/providers/index.js';
 import type { ReasoningEffortSetting } from '../../shared/contracts/conversation.js';
 import type { JsonSchemaDefinition } from '../../shared/contracts/model-types.js';
@@ -18,7 +18,7 @@ import type { AgentClientChatOptions, AgentClientChatResult } from '../../sessio
 import type { ModelRequestCost } from '../../shared/cost/model-cost.js';
 import { normalizeUsage } from '../../shared/utils/ai/token-usage.js';
 import type { ProviderInputItem } from '../../shared/contracts/provider-input.js';
-import type { NestedModelBinding } from '../../shared/contracts/nested-run-driver.js';
+import type { ApplicationAgent, NestedModelBinding } from '../../shared/contracts/nested-run-driver.js';
 import { waitForAbortableRead } from '../../shared/contracts/abort-aware-wait.js';
 
 /** A failed dispatched helper still owns its request accounting. */

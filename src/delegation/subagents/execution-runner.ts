@@ -1,5 +1,5 @@
 import { resolveOutputAllocation } from '../../engine/agent-runtime/model-context-policy.js';
-import type { ApplicationAgent } from '../../engine/agent-runtime/application-run-loop.js';
+import type { ApplicationAgent } from '../../shared/contracts/nested-run-driver.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../../shared/service-interfaces.js';
 import type { ExecutionContext } from '../../tools/execution-context.js';
 import type { SubagentRequest, SubagentDefinition, SubagentResult, SubagentSegmentControl } from './types.js';

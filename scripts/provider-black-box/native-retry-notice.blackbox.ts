@@ -3,6 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { expect, it } from 'vitest';
 import { createIsolatedWorkspaceLease, writePtyTextAndSubmit } from './provider-test-harness.js';
+import { readHarnessComposerState } from '../../src/shared/lib/harness-input-idle.js';
 
 it.skipIf(process.platform !== 'linux')(
   'repeats a retry without duplicating its notice and chains the following turn',
@@ -84,6 +85,7 @@ it.skipIf(process.platform !== 'linux')(
         response.write(`data: ${JSON.stringify(frame)}\n\n`);
       response.end();
     };
+    let phase = 'initial turn';
     try {
       const idle = await child.waitForIdleInput();
       await child.write('FIRST_NOTICE_INPUT');
@@ -101,6 +103,7 @@ it.skipIf(process.platform !== 'linux')(
       complete(0);
       await child.waitForVisibleOutput('NOTICE_DONE_0');
       const nextIdle = await child.waitForIdleInput({ after: idle });
+      phase = 'first retry';
       await writePtyTextAndSubmit(child, '/retry-turn');
       await child.waitForState(() => requests.length === 2);
       const retried = JSON.stringify(requests[1]!.input);
@@ -111,6 +114,7 @@ it.skipIf(process.platform !== 'linux')(
       complete(1);
       await child.waitForVisibleOutput('NOTICE_DONE_1');
       const retryIdle = await child.waitForIdleInput({ after: nextIdle });
+      phase = 'second retry';
       await writePtyTextAndSubmit(child, '/retry-turn');
       await child.waitForState(() => requests.length === 3);
       expect(requests[2]!.input).toEqual(requests[0]!.input);
@@ -118,6 +122,7 @@ it.skipIf(process.platform !== 'linux')(
       complete(2);
       await child.waitForVisibleOutput('NOTICE_DONE_2');
       const secondRetryIdle = await child.waitForIdleInput({ after: retryIdle });
+      phase = 'following turn';
       await writePtyTextAndSubmit(child, 'SECOND_NOTICE_INPUT');
       await child.waitForState(() => requests.length === 4);
       expect(JSON.stringify(requests[3]!.input)).toContain('SECOND_NOTICE_INPUT');
@@ -126,6 +131,23 @@ it.skipIf(process.platform !== 'linux')(
       complete(3);
       await child.waitForVisibleOutput('NOTICE_DONE_3');
       await child.waitForIdleInput({ after: secondRetryIdle });
+    } catch (error) {
+      // Revision numbers alone cannot tell whether a timed-out input was cleared, changed or never consumed.
+      // This fixture has only synthetic input and credentials; keep its failure snapshot bounded.
+      try {
+        const composer = readHarnessComposerState(lease.paths.idlePath);
+        console.error('Native retry notice failure state:', {
+          phase,
+          composer: composer && { revision: composer.revision, value: composer.value.slice(-500) },
+          idleGeneration: child.readIdleGeneration(),
+          requestCount: requests.length,
+          pendingResponseCount: pending.filter((response) => !response.writableEnded).length,
+          visibleOutputTail: child.readVisible().slice(-4_000),
+        });
+      } catch {
+        // Diagnostics are best-effort: preserve the original failure if a snapshot cannot be read.
+      }
+      throw error;
     } finally {
       await child.cleanup();
       await lease.cleanup();

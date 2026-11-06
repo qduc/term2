@@ -4,7 +4,8 @@ import { join, resolve } from 'node:path';
 import { expect, it } from 'vitest';
 import { createIsolatedWorkspaceLease, writePtyTextAndSubmit } from './provider-test-harness.js';
 
-it('answers a multi-question interaction without dispatching partial answers', async () => {
+// Accepted difference (#149): the direct CLI has no question-capable Pair profile.
+it.skip('answers a multi-question interaction without dispatching partial answers', async () => {
   const requests: Record<string, unknown>[] = [];
   const pending: ServerResponse[] = [];
   const server = createServer(async (request, response) => {

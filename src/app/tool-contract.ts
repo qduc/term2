@@ -79,7 +79,7 @@ export type AgentSurface = {
       request: import('../tools/index.js').NestedRunRequest,
     ): import('../session/branches.js').DirectNestedAuthority;
     bindTaskCheckIn(configure: import('../session/capabilities.js').DirectContextPort['configureTaskCheckIn']): void;
-    /** The Session goal behind legacy's interactive propose_goal script tool. */
+    /** The Session goal read by the root goal_check tool. */
     bindGoal(port: Pick<import('../session/capabilities.js').DirectContextPort, 'read' | 'commit'>): void;
     readonly tools: ToolRegistry;
     readonly toolContext: ToolContextSeed;

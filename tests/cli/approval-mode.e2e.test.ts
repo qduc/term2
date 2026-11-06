@@ -731,8 +731,8 @@ it('Enter on an arrow-picked command runs it', { timeout: TIMEOUT_MS }, () =>
   runCommand('/usage', '', undefined, 'pick-enter'),
 );
 
-// /bare out of a settings-named Pair profile with history.
-it('/bare confirms a clear before leaving a non-Bare profile with history', { timeout: TIMEOUT_MS }, () =>
+// Accepted difference (#149): Pair is no longer a selectable direct CLI profile.
+it.skip('/bare confirms a clear before leaving a non-Bare profile with history', { timeout: TIMEOUT_MS }, () =>
   runCommand('', '', 'hello', 'bare-clear-history'),
 );
 

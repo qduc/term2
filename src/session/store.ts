@@ -47,6 +47,9 @@ export type DirectSessionStoreOptions = {
   readonly directory: string;
   /** Obtain a CURRENT grant. Stored identity is a comparison hint, never authority. */
   readonly resolveWorkspace: (root: string, identity?: Workspace) => Workspace | Promise<Workspace>;
+  /** App-owned retired-profile fallback for restore validation only. Never changes stored facts.
+   * Omitted means exact identity/version/digest restoration, as before. */
+  readonly restoreProfile?: (stored: SessionStartedFact['profile']) => SessionStartedFact['profile'];
   /** App assembles models/tools/settings. Construction must not run a provider or tool. */
   readonly createRuntime: (
     context: DirectRuntimeContext,
@@ -173,9 +176,11 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
       if (runtime.deps.toolContext && !sameWorkspace(runtime.deps.toolContext.workspace, context.workspace)) {
         throw new Error('direct tool runtime workspace does not match Session authority');
       }
+      const storedProfile = context.configuration?.profile ?? context.metadata?.profile;
+      const expectedProfile = storedProfile ? options.restoreProfile?.(storedProfile) ?? storedProfile : undefined;
       if (
         context.metadata &&
-        (!sameProfile(runtime.profile, context.configuration?.profile ?? context.metadata.profile) ||
+        (!sameProfile(runtime.profile, expectedProfile!) ||
           runtime.request.reasoning !==
             (context.configuration ? context.configuration.configuration.reasoning : context.metadata.reasoning) ||
           (context.configuration && runtime.request.temperature !== context.configuration.configuration.temperature))

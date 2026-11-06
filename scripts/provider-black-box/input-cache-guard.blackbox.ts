@@ -51,7 +51,7 @@ it.skipIf(process.platform !== 'linux')('confirms a large uncached request after
       process.env.TERM2_TEST_CLI ? resolve(process.env.TERM2_TEST_CLI) : join(process.cwd(), 'dist/cli.js'),
       '--lite',
       '--profile',
-      'pair',
+      'bare',
     ],
     env: {
       PATH: `${join(lease.root, 'bin')}:${process.env.PATH ?? ''}`,

@@ -4,6 +4,9 @@
  * Sessions, so a client disconnecting never stops work another client can see.
  */
 import { randomUUID } from 'node:crypto';
+import { getProfileMetadata } from '../config/profiles/active-profile.js';
+import { BARE_PROFILE_ID } from '../shared/profiles/legacy-adapter.js';
+import { isDroppedProfile } from './dropped-profiles.js';
 import { getModelContextWindow } from '../model/providers/model-catalog/catalog.js';
 import { SkillsService, type SkillInfo } from '../tools/skills/skills-service.js';
 import { SettingsService, type DurableWriteResult } from '../config/settings/settings-service.js';
@@ -126,6 +129,11 @@ export async function createDirectApplication(options: DirectApplicationOptions)
     directory: options.conversationsDir,
     resolveWorkspace: (root, identity) => authority.resolveStored(root, identity),
     createRuntime: (context) => runtimes.create(context),
+    restoreProfile: (stored) => {
+      if (!isDroppedProfile(stored.id)) return stored;
+      const bare = getProfileMetadata(BARE_PROFILE_ID);
+      return { id: bare.activeProfileId, version: bare.activeProfileVersion, digest: bare.activeProfileDigest };
+    },
   });
   const refresh = options.mcpCatalog
     ? createDirectMcpRefresh(options.mcpCatalog, (message) => selection.logger.warn(message))

@@ -13,7 +13,7 @@ import type {
   SubagentCancelAcknowledgement,
   SubagentSteerAcknowledgement,
 } from '../../tools/subagents/types.js';
-import { buildDiffStat, truncateResultText } from '../subagents/execution-runner.js';
+import { buildDiffStat, truncateResultText } from '../subagent-result.js';
 import type { ValidationCapture } from '../subagents/tool-policy.js';
 import { buildTurnBudgetExhaustedFinalText, formatSubagentResult } from '../../tools/subagents/utils.js';
 import type { Item } from '../../model/index.js';

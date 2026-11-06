@@ -23,6 +23,7 @@ export function nestedPresentation(state: WireSnapshot, event: Extract<WireEvent
       task = { ...task, text: (task.text ?? '') + child.payload.delta };
       break;
     case 'message':
+      if (child.payload.message.presentation?.withdrawn === true) break;
       task = { ...task, text: child.payload.message.text };
       break;
     case 'tool_progress':

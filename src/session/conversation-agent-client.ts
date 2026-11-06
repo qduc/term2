@@ -7,7 +7,7 @@ import type { ApplicationRunEvent } from '../shared/contracts/application-stream
 import type { ConversationEvent } from './conversation/conversation-events.js';
 import type { AgentStream } from '../engine/agent-stream.js';
 import type { ProviderHistorySnapshot } from './conversation/conversation-store.js';
-import type { SteerOutcome } from '../engine/agent-runtime/application-run-loop.js';
+import type { SteerOutcome } from '../engine/agent-runtime/run-loop-contracts.js';
 import type { SubagentCancelAcknowledgement, SubagentRunStatus } from '../tools/subagents/types.js';
 import type { BackgroundShellJob } from '../tools/shell/background-shell-registry.js';
 import type {

@@ -76,7 +76,11 @@ export function snapshotDirectState(
       ...(item.presentation ? { presentation: structuredClone(item.presentation) } : {}),
       ...(correlated.turnId ? { turnId: correlated.turnId } : {}),
       ...(correlated.modelStep !== undefined ? { modelStep: correlated.modelStep } : {}),
-      ...(draft ? { draft: true, turnId: draft.turnId, modelStep: draft.modelStep } : {}),
+      ...(item.presentation?.withdrawn === true
+        ? { draft: false }
+        : draft
+        ? { draft: true, turnId: draft.turnId, modelStep: draft.modelStep }
+        : {}),
       id: item.id,
       role: item.role,
       content,

@@ -35,6 +35,8 @@ export type FetchModelsDeps = {
   now?: () => number;
   ttlMs?: number;
   discovery?: ScopedModelDiscovery;
+  /** Network boundary shared by catalog callers; an explicit argument takes precedence. */
+  fetchImpl?: FetchFn;
 };
 
 type FetchFn = typeof fetch;
@@ -222,7 +224,7 @@ function writeDiskCache(
 export async function fetchModels(
   deps: FetchModelsDeps,
   providerOverride?: string,
-  fetchImpl: FetchFn = fetch,
+  fetchImpl: FetchFn | undefined = deps.fetchImpl,
 ): Promise<ModelInfo[]> {
   const { settingsService, loggingService } = deps;
   const provider = providerOverride || settingsService.get('agent.modelSelection').provider;

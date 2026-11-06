@@ -92,6 +92,15 @@ and `68ef50ff` (local-only evidence), not a result file to resume appending.
   cause from that alone. A separate fixed harness defect missed an already
   captured HTTP request when no later PTY event woke its waiter; test HTTP-only
   wakeup and an unmet-predicate timeout, not just terminal output.
+- **Identical menu redraws:** first-run setup closes/reopens its model picker
+  after Escape. With an empty filter, Ink can coalesce those transitions into
+  an unchanged frame and emit no new `Filter:` bytes. A new-output wait then
+  times out despite a live picker. Type a throwaway query before Escape and
+  assert a fresh, line-terminated empty filter, then finish model selection.
+  This observes reset/recovery rather than requiring an identical repaint;
+  a no-reopen mutation must fail at the reset assertion. A controlled
+  hook/controller/Ink probe reproduced this mechanism; the original full-CLI
+  CI timing was not reproduced locally.
 - **Direct settings e2e teardown:** `tests/cli/settings.e2e.test.ts` fails
   intermittently with `ENOTEMPTY: directory not empty, rmdir
   '<tmp>/term2-tool-rows-e2e-*/home'` (or `home/.local`) and no assertion

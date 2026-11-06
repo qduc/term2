@@ -202,6 +202,7 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
       snapshot.activeTurnId !== null && (message.turnId === undefined || message.turnId === snapshot.activeTurnId);
     const interrupted =
       !(message.draft && live) &&
+      message.presentation?.withdrawn !== true &&
       message.role === 'assistant' &&
       message.turnId !== undefined &&
       message.modelStep !== undefined &&

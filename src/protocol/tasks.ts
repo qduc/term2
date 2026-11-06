@@ -90,7 +90,9 @@ export function publicTask(task: DirectTaskState): WireTask {
     startedAt: task.startedAt,
     lastActivityAt: task.lastActivityAt,
     ...(task.completedAt !== undefined ? { completedAt: task.completedAt } : {}),
-    ...(result ? { result, ...(result.output !== undefined ? { text: result.output } : {}) } : {}),
+    // An explicit empty terminal projection clears earlier transient text when
+    // this descriptor is synchronized over a live task.
+    ...(result ? { result, text: result.output } : {}),
   };
 }
 /** Carry accepted descriptor ownership without publishing workspace or private result data. */
@@ -186,12 +188,13 @@ export function taskFactEvent(fact: DirectBackgroundFact, state: WireSnapshot, s
       break;
     case 'task_finished': {
       const result = publicTaskResult(fact.result);
+      // Streamed progress is not a settled result, including an empty retry.
       next = {
         ...task,
         status: result.kind,
         completedAt: fact.at,
         result,
-        ...(result.output !== undefined ? { text: result.output } : {}),
+        text: result.output,
       };
       break;
     }

@@ -54,6 +54,7 @@ export function createHeadlessOutput(options: DirectHeadlessOptions, storedId: s
   let finalText = '';
   let streamedText = '';
   let completedText = '';
+  let terminalText: string | undefined;
   /** Per-message streamed length, so a completed message writes only its missing suffix. */
   const streamedByMessage = new Map<string, number>();
   /** Exact text observed from this message's first delta in the current target turn. */
@@ -105,11 +106,14 @@ export function createHeadlessOutput(options: DirectHeadlessOptions, storedId: s
     resetTurn(): void {
       finalText = '';
       streamedText = '';
+      terminalText = undefined;
       streamedByMessage.clear();
+      streamedTextByMessage.clear();
     },
     completeTurn(): void {
-      // JSON takes the accepted final window; plain keeps streamed/last-message behavior.
-      if (output !== 'json') completedText = finalText || streamedText || completedText;
+      // Progress already written to stdout is not the accepted answer. In
+      // particular, an empty retry must not fall back to its withdrawn attempt.
+      if (output !== 'json') completedText = terminalText ?? (finalText || streamedText || completedText);
     },
     finish(): string {
       if (output === 'plain') io.stdout.write('\n');
@@ -189,7 +193,7 @@ export function createHeadlessOutput(options: DirectHeadlessOptions, storedId: s
         case 'message': {
           if (!forTurn) break;
           const message = event.payload.message;
-          if (message.role !== 'assistant' || message.draft === true) break;
+          if (message.role !== 'assistant' || message.draft === true || message.presentation?.withdrawn === true) break;
           finalText = message.text;
           const key = event.payload.replacesDraftId ?? message.id;
           const streamed = streamedByMessage.get(key) ?? 0;
@@ -293,6 +297,9 @@ export function createHeadlessOutput(options: DirectHeadlessOptions, storedId: s
       else io.stderr.write(`${notice}\n`);
     },
     endTurn(event: Extract<WireEvent, { type: 'turn_ended' }>): boolean {
+      terminalText =
+        event.payload.finalWindow?.record.finalText ??
+        (event.payload.finalText !== undefined ? event.payload.finalText ?? '' : undefined);
       if (output === 'json') {
         for (const pending of pendingLegacyToolStarts.values()) {
           const record = legacyToolStarted(pending);

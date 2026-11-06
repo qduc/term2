@@ -153,6 +153,12 @@ export function captureDirectFinalWindow(
     if (fact.type === 'tool_started') executions.set(fact.executionId, fact.toolName);
     if (fact.type === 'tool_finished')
       for (const message of directPublicCommandMessages(fact.result.display)) commands.set(message.id, message);
+    if (fact.type === 'text_delta' && fact.withdrawn) {
+      const partial = partials.get(fact.modelStep);
+      if (partial !== undefined) items.delete(partial);
+      partials.delete(fact.modelStep);
+      continue;
+    }
     if (fact.type === 'text_delta' && fact.delta) {
       if (fact.modelStep !== undefined && completedSteps.has(fact.modelStep)) continue;
       // The symbol is an internal ordering slot, never a public identity/cursor.

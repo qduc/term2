@@ -462,8 +462,8 @@ export async function runDirectHeadless(
           return result('blocked', 2);
         }
         if (outcome === 'completed') {
-          // JSON already took the accepted final window's finalText; plain output
-          // preserves its streamed/last-message behavior.
+          // Both formats use accepted terminal text for completion; already
+          // streamed progress remains visible even when its attempt was withdrawn.
           presentation.completeTurn();
           if (background === null) {
             background = { deadline: Date.now() + backgroundWaitTimeoutMs, nextDrainAt: 0, drainRequestId: null };

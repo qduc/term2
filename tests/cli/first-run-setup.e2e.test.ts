@@ -119,11 +119,13 @@ it.each(['unreachable', 'catalog'] as const)(
         .toContain('Filter:');
       if (discovery === 'unreachable') {
         await session.waitForOutput('Some providers failed: ollama');
-        // Escape must not leave setup stranded without an input surface.
+        // Give Escape a visible reset to assert: closing/reopening an empty
+        // picker may produce an identical frame, which Ink need not repaint.
+        await press('discard-this-filter', 'Filter: discard-this-filter');
         const offset = session.getVisibleOutput().length;
         session.write('\x1b');
-        await waitForOutputAfter(offset, (output) => output.includes('Filter:'), 'model filter after Escape');
-        await press('dummy-model', 'dummy-model');
+        await waitForOutputAfter(offset, (output) => /Filter: *\r?\n/.test(output), 'empty model filter after Escape');
+        await press('dummy-model', 'Filter: dummy-model');
       } else {
         await session.waitForOutput('fixture-model');
         expect(requests).toContain('/v1/models');

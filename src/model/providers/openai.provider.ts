@@ -4,7 +4,7 @@ import {
   OpenAIResponsesWSModelWithPromptCacheKey,
 } from './openai-responses-model.js';
 import { registerProvider } from './registry.js';
-import type { ProviderDeps, ProviderFetch } from './registry.js';
+import { createOpenAIModelCatalog } from './openai-model-catalog.js';
 import { createProviderFetch } from './fetch/composer.js';
 import { NULL_SESSION_CONTEXT_SERVICE } from '../../session/session/session-context-service.js';
 import type { StreamedModelTurn } from '../../shared/contracts/streamed-model-turn.js';
@@ -28,7 +28,6 @@ export {
   OpenAIResponsesWSModelWithPromptCacheKey,
 } from './openai-responses-model.js';
 
-const OPENAI_MODELS_URL = 'https://api.openai.com/v1/models';
 const OPENAI_CAPABILITIES = {
   supportsFlexServiceTier: true,
   supportsConversationChaining: true,
@@ -64,38 +63,6 @@ export function createRetryAwareFetch(
     if (Number.isInteger(retryCount) && retryCount > 0) onRetry();
     return baseFetch(url, init);
   }) as typeof fetch;
-}
-
-async function fetchOpenAIModels(
-  deps: ProviderDeps,
-  fetchImpl: ProviderFetch = fetch,
-): Promise<Array<{ id: string; name?: string }>> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-  const apiKey = deps.settingsService.get('agent.openai.apiKey') || process.env.OPENAI_API_KEY;
-  if (apiKey) {
-    headers.Authorization = `Bearer ${apiKey}`;
-  }
-
-  const response = await fetchImpl(OPENAI_MODELS_URL, { headers, ...(deps.signal ? { signal: deps.signal } : {}) });
-  if (!response.ok) {
-    throw new Error(`OpenAI models request failed (${response.status})`);
-  }
-
-  const body = await response.json();
-  const raw = body?.data || [];
-
-  if (!Array.isArray(raw)) return [];
-
-  return raw
-    .map((item: any) => {
-      const id = item?.id || item?.model || '';
-      const name = item?.name || item?.display_name || item?.description;
-      return id ? { id, name } : null;
-    })
-    .filter(Boolean)
-    .reverse() as Array<{ id: string; name?: string }>;
 }
 
 // Register OpenAI provider
@@ -161,7 +128,7 @@ registerProvider(
       if (cacheKey) streamedModels.set(cacheKey, { fingerprint, model: selectedModel });
       return selectedModel;
     },
-    fetchModels: fetchOpenAIModels,
+    fetchModels: createOpenAIModelCatalog(),
     clearConversations: undefined, // No conversation state to clear
     sensitiveSettingKeys: [],
     capabilities: OPENAI_CAPABILITIES,

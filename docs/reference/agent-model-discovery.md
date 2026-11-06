@@ -39,13 +39,35 @@ Discovery is not authorization to invoke a model. Credential presence is not a
 reachability check or proof of model-specific tool compatibility. Existing user
 provider/model choices and approval rules still apply.
 
+## Catalog transport boundary
+
+Built-in OpenAI discovery follows `OPENAI_BASE_URL`, just like inference; without
+an override it requests `https://api.openai.com/v1/models`. Base path prefixes
+are retained and trailing slashes are normalized before appending `/models`.
+An invalid explicit endpoint fails discovery rather than retrying production.
+
+`createOpenAIModelCatalog({ baseURL, fetchImpl })` supplies an isolated catalog
+adapter for embedding or verification. Its per-call fetch argument takes
+precedence over the factory transport. `FetchModelsDeps.fetchImpl` also flows
+through `ModelCatalogSession` to the provider; the existing explicit third
+argument of `fetchModels` still takes precedence. When neither caller supplies a
+transport, the provider retains its own factory/default transport; the service
+does not replace it with global fetch. The production defaults remain
+the global fetch implementation and the provider's configured endpoint.
+
+Verification should use a fresh registry-scoped `discovery` cache and a local
+HTTP fixture with synthetic credentials. The legacy cache remains keyed by
+provider, not endpoint: changing an endpoint does not invalidate an already warm
+catalog. This transport seam does not change cache policy or inference routing.
+
 ## Usage and recency scope
 
 Where the agent also has sessions capability and runs locally, the existing
 session index supplies metadata scoped to the current Git project (including its
-worktrees), excluding other projects and SSH contexts. No new telemetry store is
-created. The current directory is resolved at query time, including after a
-worktree switch. Remote sessions or agents without sessions capability get
+worktrees), excluding other projects and SSH contexts. `projectScopeKey`
+normalizes Git worktrees to their shared project; `history.scope` is a display
+directory, not the normalized comparison key. No new telemetry store is created.
+The current directory is resolved at query time, including after a worktree switch. Remote sessions or agents without sessions capability get
 `history.status: unavailable` and null counts/timestamps.
 
 `sessionCount` counts saved sessions associated with each recorded provider/model.
@@ -72,31 +94,6 @@ concurrent catalog loads. A local HTTP test aborts an in-flight model-list reque
 through the runtime cancellation signal. Tests do not contact live providers or
 invoke a model. Cancellation propagates; this change does not invent a provider
 request timeout or change existing model-service caching/refresh policy.
-
-Typecheck, lint (31 existing warnings), build, focused integration and 28 static
-guard checks passed. A fresh built-CLI Orca/DeepSeek verifier has exercised the
-tool through `run_code` against the actual configured catalog, compared usage
-and recency, and identified `orca` plus both DeepSeek V4.1 Flash IDs. The verifier
-was given the user need and read-only review authority, not helper-call steps.
-The original live verifier accepted. Its durable session reference is
-`non-interactive-7ee21712-b2e9-4501-8c8d-87f443dc167a` (Orca, CLI resolved the
-selected Flash alias to `deepseek/deepseek-v4.1-flash-1017`). It reported 638
-models/86,280 characters on a broad call and distinct usage/recency orderings.
-Its claim that cross-worktree history is excluded is incorrect: the index filters
-by `projectScopeKey`, which normalizes Git worktrees to their shared project.
-`history.scope` is a display directory, not the normalized comparison key.
-
-Post-optimization real-use verification accepted the new build. Durable trace:
-`non-interactive-9180bce4-7de4-4adb-ae5d-abb836427637` (Orca/DeepSeek V4.1 Flash
-1017). In six tool-call rounds it observed provider-only status for nine providers,
-name mode without history, the two valid Orca Flash IDs, compact pages 1 and 2 of
-171 Orca models, and recent-model ordering from available project history. The
-parent independently inspected the trace and reran checks against the artifact:
-typecheck, lint, three focused integrations, 28 static guards, and the complete
-provider black-box suite (215 passed, one skipped, including build). Both fresh
-agents were read-only and made no discovered-model invocation; the selected
-verifier itself incurred normal Orca inference usage. No author intervention
-occurred during either live run. Independent runtime checks did not repeat tests.
 
 Generic child `agent_spec.tools` does not accept `list_models`; this
 increment serves the root dispatcher, not recursive dispatch capability.
@@ -125,23 +122,21 @@ overlap changes from 1 to 3 on broad calls. Name output decreases from 60,333 to
 These timings locate waiting/serialization costs under controlled injected I/O,
 not CPU bottlenecks or real network percentiles. The first sample includes more
 warmup; all samples are retained rather than presenting it as steady-state.
-Decision: keep, supported by operation counts and integration guardrails.
 
-`python3 /home/qduc/.agents/skills/profiling/scripts/compare_runs.py` on the retained
-name-mode samples reports median 78.47 → 21.61ms (56.86ms lower; 72.5% in this
-fixture), with non-overlapping ranges. This is not a production-latency promise.
+The retained name-mode samples have medians of 78.47ms before and 21.61ms after
+(56.86ms lower; 72.5% in this fixture), with non-overlapping ranges. This is not a
+production-latency promise.
 
-### Independent finding dispositions
+### Behavioral limits
 
-- Route oversized results: compact pages, names opt-in, explicit continuation.
-- Accept exact-ID empty result: provider-only discovery now exposes valid IDs
+- Oversized results use compact pages, names opt-in, explicit continuation.
+- Exact-ID empty results are expected: provider-only discovery now exposes valid IDs
   cheaply; exact IDs remain case-sensitive and unknown IDs are documented.
-- Accept transient index unavailability: explicit unavailable/null values preserve
-  truth. No hidden retry or stale cache is added to imply unavailable history is known.
-- Narrow request containment: propagate existing runtime cancellation; do not invent
+- Transient index unavailability uses explicit unavailable/null values. No hidden retry or stale cache is added to imply unavailable history is known.
+- Request containment: propagate existing runtime cancellation; do not invent
   a timeout from synthetic latency measurements. An endpoint that never responds
   still needs caller cancellation or its own transport policy.
-- Narrow nested access: root dispatcher is the consumer in this increment; child
+- Nested access: root dispatcher is the consumer in this increment; child
   agent-spec tool allowlists and recursive delegation authority are unchanged.
-- Route relevant test gaps: name mode, history overrides, concurrency, query
+- Integration coverage: name mode, history overrides, concurrency, query
   prefiltering, pages, and real network cancellation now have integration evidence.

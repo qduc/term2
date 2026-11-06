@@ -210,7 +210,10 @@ export function createDirectRuntimes(
       }
       const settings = sessionSettings(options, context);
       const selection = { settings, logger, sessionContext };
-      const trimConfig = { maxCharacters: 40_000, maxLines: 1_000 };
+      const trimConfig = {
+        maxCharacters: settings.get('shell.maxOutputChars'),
+        maxLines: settings.get('shell.maxOutputLines'),
+      };
       const stopTrimUpdates = settings.onChange((key) => {
         if (key === 'shell.maxOutputChars') trimConfig.maxCharacters = settings.get('shell.maxOutputChars');
         if (key === 'shell.maxOutputLines') trimConfig.maxLines = settings.get('shell.maxOutputLines');

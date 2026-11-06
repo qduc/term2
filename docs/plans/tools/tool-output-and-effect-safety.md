@@ -82,6 +82,15 @@ Keep small positive limits and delimiter/blank-line boundaries in real-executor
 checks, alongside the character-cap and nonzero-exit controls. The shell-specific
 formatter owns strict line retention without changing other tools' trim policy.
 
+The direct application's shared trim scope must also start from the resolved
+session settings, not wait for a settings-change event. Shell-only checks miss
+this because shell reads its own limits; `run_code`'s outer character trim can
+also hide the stale shared character cap. Check a non-shell multiline result
+and a direct file read's full-output artifact: outer truncation alone can drop
+data without saving it. Keep the scripted-read 100 KB cap and `run_code`'s
+separate final-output cap intact, and check overlapping sessions with different
+limits rather than changing a process-global trim default.
+
 ## Milestone 1 — bounded tool results
 
 Status: **done.**

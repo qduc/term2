@@ -63,6 +63,12 @@ scenario is the one whose CLI never reached the state it waits for.
   acknowledgment before sending Enter; fixed sleeps and PTY echo do not prove
   Ink consumed the text. A PTY-stripped `❯` is not a readiness signal, and
   first-run/menu ownership must not count as idle.
+  A confirmation-held draft can already appear in the composer-state file while
+  the prompt still owns the keys. When dismissing confirmation, capture the idle
+  generation before the dismissal and await a newer generation before editing or
+  submitting the restored draft. A matching value with `afterRevision: 0` is not
+  an input-listener handoff. A cache-guard trace showed this stale value returning
+  before the confirmation unmounted; buffered input happened to make that run pass.
 - `scripts/provider-black-box/provider-capability-matrix.ts` and
   `provider-session-capability-manifest.ts` own the test-side capability rows,
   typed lifecycle ledgers, and aggregate accounting.

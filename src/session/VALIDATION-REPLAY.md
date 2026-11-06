@@ -16,6 +16,24 @@ interaction/budget closure, then interrupted terminal; branch recovery remains
 wrapped in its recorded branch identity. Missing results remain outcome-unknown,
 never evidence that an effect did not occur.
 
+Terminal failures retain the final attempt's unsuperseded text deltas. Reopened
+cancellations retain those fragments too, without changing the live policy that
+drops the unfinished model step or the separate recovery rules for tool calls.
+This is the resumed-provider-history contract in [M1 D7 and the R4/R5 acceptance
+rows](https://github.com/qduc/term2/issues/76#issuecomment-6541016291), not a claim
+that a partial response completed. `TurnModel.run` must not withdraw text merely
+because recovery stops: that erased the truncated stream's final attempt before
+replay could retain it. `settleCancelledReplayStep` restores only the surviving
+delta slot on reopen, including when a cached fold was first projected live.
+
+An actual retry's `withdrawn: true` marker remains authoritative. It must not be
+reversed to repair terminal text loss, and an accepted assistant item still
+supersedes its deltas. [The retry-screen parity
+decision](https://github.com/qduc/term2/issues/143#issuecomment-6650991397) concerns
+showing provisional output while keeping it out of model history; it does not
+authorize withdrawing an unretried terminal attempt. Compare follow-up model
+input as well as stdout when diagnosing these two independent behaviors.
+
 Personal-memory snapshots must materialize before their associated unchanged
 human item, just as `planDirectHumanContext` does during live admission. Match
 by admission ID whether the snapshot fact or human slot arrives first, and attach

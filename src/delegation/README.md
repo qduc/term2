@@ -42,6 +42,26 @@ approval is still unavailable inside workflows; denied capabilities reject
 rather than pausing. Script/workflow time, admission, concurrency, output and
 console limits are unchanged by the ownership move.
 
+## Shared result policy
+
+`subagent-result.ts` owns `buildDiffStat` and `truncateResultText` for the
+native background callbacks and compatibility execution runner. Keeping these
+helpers outside the runner lets both paths share result policy without importing
+compatibility execution just to format a result. Tool-facing result types remain
+in `tools/subagents/types.ts`.
+
+`buildDiffStat` preserves first-seen file order, deduplicates path strings, and
+looks up counts by the literal path before its resolved path; missing counts are
+zero. `truncateResultText` preserves text through 40,000 JavaScript string code
+units. Longer text retains that prefix and a reference to the complete UTF-8
+artifact under `SANDBOX_TEMP_DIR/subagent-result`. Directory creation requests
+mode `0700` and is memoized, including a rejected creation promise.
+
+Native background settlement still owns the failed-result empty text and caches
+the settled result for notification and retrieval, so those consumers share one
+artifact. This module does not own child execution, failure classification or
+settlement.
+
 ## Compatibility runners
 
 `subagents/subagent-manager.ts` retains its facade API and top-level lifecycle

@@ -267,8 +267,8 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/delegation/subagents/execution-runner.ts": {
-      "lines": 634,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
+      "lines": 568,
+      "reason": "Compatibility one-shot execution; shared result formatting and artifact storage live in delegation/subagent-result.ts."
     },
     "src/delegation/subagents/nested-runner.ts": {
       "lines": 981,

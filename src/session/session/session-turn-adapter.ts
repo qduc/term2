@@ -1,5 +1,5 @@
 import type { ProviderInputItem } from '../../shared/contracts/provider-input.js';
-import type { SteerOutcome } from '../../engine/agent-runtime/application-run-loop.js';
+import type { SteerOutcome } from '../../engine/agent-runtime/run-loop-contracts.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import type { UserTurn } from '../../shared/types/user-turn.js';
 import type { InitialTurnRunOptions } from './turn-attempt-factory.js';

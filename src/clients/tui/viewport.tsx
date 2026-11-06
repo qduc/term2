@@ -48,6 +48,7 @@ export function useTranscriptViewport(
   active: boolean,
   header?: React.ReactNode,
   historyRevision = 0,
+  showReasoning = true,
 ) {
   const { stdout } = useStdout();
   const [epoch, setEpoch] = useState(0);
@@ -60,11 +61,13 @@ export function useTranscriptViewport(
     lines: string[];
     activeTurnId: string | null;
     expanded: boolean;
+    showReasoning: boolean;
     committed: readonly unknown[] | null;
   }>({
     lines: [],
     activeTurnId: null,
     expanded: false,
+    showReasoning,
     committed: null,
   });
   // Legacy draws a streamed reply live before it commits; a reply the throttled frame never drew is held for one
@@ -110,6 +113,7 @@ export function useTranscriptViewport(
   // Never print a throttled active-turn frame after its turn has settled.
   const lines =
     frame.expanded !== expanded ||
+    frame.showReasoning !== showReasoning ||
     (!expanded && frame.committed !== committed) ||
     (!state.activeTurnId && frame.activeTurnId)
       ? []
@@ -119,7 +123,13 @@ export function useTranscriptViewport(
       <ThemeProvider theme={theme}>
         <SkinProvider skin={skin}>
           <LiveToolAgesContext.Provider value={ages}>
-            <Transcript state={shown} messages={shown.messages} columns={columns} live expanded={all} />
+            <Transcript
+              state={showReasoning ? shown : { ...shown, reasoning: {} }}
+              messages={shown.messages}
+              columns={columns}
+              live
+              expanded={all}
+            />
           </LiveToolAgesContext.Provider>
         </SkinProvider>
       </ThemeProvider>,
@@ -141,11 +151,11 @@ export function useTranscriptViewport(
       const next = renderLive(state, new Map(), false);
       clearTerminalForRedraw(stdout);
       setEpoch((current) => current + 1);
-      setFrame({ lines: next, activeTurnId: state.activeTurnId, expanded: false, committed: NO_ROWS });
+      setFrame({ lines: next, activeTurnId: state.activeTurnId, expanded: false, showReasoning, committed: NO_ROWS });
     }, 0);
     return () => clearTimeout(pending);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [historyRevision, stdout]);
+  }, [historyRevision, stdout, showReasoning]);
   const [offset, setOffset] = useState(0);
   const [helpOffset, setHelpOffset] = useState(0);
   const [helpLines, setHelpLines] = useState<string[]>([]);
@@ -204,16 +214,17 @@ export function useTranscriptViewport(
       // An identical frame must not re-render the whole session.
       setFrame((previous) =>
         previous.expanded === expanded &&
+        previous.showReasoning === showReasoning &&
         previous.committed === committed &&
         previous.activeTurnId === shown.activeTurnId &&
         previous.lines.length === next.length &&
         previous.lines.every((line, index) => line === next[index])
           ? previous
-          : { lines: next, activeTurnId: shown.activeTurnId, expanded, committed },
+          : { lines: next, activeTurnId: shown.activeTurnId, expanded, showReasoning, committed },
       );
     }, wait);
     return () => clearTimeout(pending);
-  }, [state, tail, columns, theme, skin, expanded, committed, clock]);
+  }, [state, tail, columns, theme, skin, expanded, showReasoning, committed, clock]);
   const maxOffset = Math.max(0, lines.length - height);
   const visibleOffset = Math.min(offset, maxOffset);
   useInput(
@@ -263,7 +274,7 @@ export function useTranscriptViewport(
     redraw,
     paged: expanded,
     // The live text has been drawn for the current committed rows (false right after a remount, until its render).
-    frameReady: frame.committed === committed,
+    frameReady: frame.committed === committed && frame.showReasoning === showReasoning,
     text: lines.slice(start, end).join('\n'),
     start,
     end,

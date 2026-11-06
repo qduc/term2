@@ -83,6 +83,7 @@ export function useCommandTranscriptViewport(
   header?: ReactNode,
   historyRevision?: number,
   options: { readonly transitionNotices?: readonly string[]; readonly redrawKey?: string } = {},
+  showReasoning = true,
 ) {
   const { columns, rows } = useTerminalSize();
   const transcript = useCommandTranscript(state);
@@ -106,6 +107,7 @@ export function useCommandTranscriptViewport(
     active,
     header,
     (historyRevision ?? 0) + redraws,
+    showReasoning,
   );
   return {
     ...viewport,

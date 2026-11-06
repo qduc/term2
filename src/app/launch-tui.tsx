@@ -180,6 +180,7 @@ function DirectTui({
       }
       headerHeight={headerHeight}
       redrawKey={displayMode}
+      showReasoning={displayMode === 'standard'}
       integration={integration}
       onLiveEvent={(event) => {
         if (event.sessionId !== connection.sessionId) return;

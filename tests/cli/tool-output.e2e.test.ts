@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { testCliPath, spawnTerminal, createTestChildEnv, type TerminalSession } from '../helpers/terminal-e2e.js';
 import {
   HARNESS_IDLE_ENV,
+  readHarnessIdleGeneration,
   waitForHarnessComposerValue,
   waitForHarnessIdleGeneration,
 } from '../../src/shared/lib/harness-input-idle.js';
@@ -209,10 +210,10 @@ it(
     };
 
     await submit('tidy the workspace');
-    await session.waitForOutput('Locating the unique workspace fixture', 60_000);
-    expect(session.getVisibleOutput()).toContain('Locating the unique workspace fixture');
-    await session.waitForOutput('with more streamed detail', 30_000);
+    // The default concise mode hides reasoning without suppressing its streaming activity/rate.
     await session.waitForOutput('tok/s', 30_000);
+    expect(session.getVisibleOutput()).not.toContain('Locating the unique workspace fixture');
+    expect(session.getVisibleOutput()).not.toContain('with more streamed detail');
     const liveFrame = session.getVisibleOutput().slice(session.getVisibleOutput().lastIndexOf('▌ term²'));
     expect(liveFrame).toMatch(/Generating · \d+s/);
     expect(liveFrame).toContain('tok/s');
@@ -392,3 +393,100 @@ it('collapses failed shell probes, and Ctrl+O opens the model menu as in legacy'
   expect(afterCtrlO).not.toContain('fatal: probe-one');
   expect(afterCtrlO).not.toContain('error: probe-two');
 });
+
+it.each([undefined, 'concise', 'standard'] as const)(
+  'reasoning follows display mode %s and an idle mode change in the built terminal',
+  { timeout: TIMEOUT_MS },
+  async (initialMode) => {
+    root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-reasoning-display-')));
+    const home = path.join(root, 'home');
+    const workspace = path.join(root, 'workspace');
+    fs.mkdirSync(home);
+    fs.mkdirSync(workspace);
+    fs.mkdirSync(path.join(root, 'runtime'), { mode: 0o700 });
+    const baseUrl = await startProvider([
+      { reasoning: 'REASONING_FIRST_SENTINEL', text: 'ANSWER_FIRST_SENTINEL' },
+      { reasoning: 'REASONING_SECOND_SENTINEL', text: 'ANSWER_SECOND_SENTINEL' },
+    ]);
+    const idlePath = path.join(home, 'input-idle');
+    const env = {
+      HOME: home,
+      XDG_CONFIG_HOME: path.join(home, '.config'),
+      XDG_STATE_HOME: path.join(home, '.local', 'state'),
+      XDG_CACHE_HOME: path.join(home, '.cache'),
+      XDG_DATA_HOME: path.join(home, '.local', 'share'),
+      XDG_RUNTIME_DIR: path.join(root, 'runtime'),
+      TERM2_CONFIG_DIR: path.join(home, '.term2'),
+      TERM2_CACHE_DIR: path.join(home, '.cache', 'term2'),
+      TERM2_CONVERSATIONS_DIR: path.join(root, 'conversations'),
+      DISABLE_LOGGING: '1',
+      [HARNESS_IDLE_ENV]: idlePath,
+      CI: 'false',
+    };
+    const settingsDir = resolveSettingsDirectory({ homeDir: home, env: createTestChildEnv(env) });
+    fs.mkdirSync(settingsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(settingsDir, 'settings.json'),
+      JSON.stringify({
+        agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
+        providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl, apiKey: 'test-key' }],
+        ...(initialMode ? { ui: { displayMode: initialMode } } : {}),
+      }),
+    );
+    session = spawnTerminal('node', [builtCli], { cwd: workspace, env, cols: 100, rows: 32 });
+    await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
+    const submit = async (text: string) => {
+      session!.write(text);
+      await waitForHarnessComposerValue(idlePath, text, { timeoutMs: 30_000 });
+      session!.write('\r');
+      await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
+    };
+    const turn = async (label: 'FIRST' | 'SECOND', shown: boolean) => {
+      const offset = session!.getVisibleOutput().length;
+      const idle = readHarnessIdleGeneration(idlePath);
+      await submit(`answer ${label.toLowerCase()}`);
+      // No answer is sent yet. A measured rate proves the client consumed the two reasoning deltas.
+      await vi.waitFor(() => expect(session!.getVisibleOutput().slice(offset)).toContain('tok/s'), {
+        timeout: 30_000,
+      });
+      const reasoning = `REASONING_${label}_SENTINEL`;
+      if (shown) {
+        await session!.waitForOutput(reasoning, 30_000);
+        await session!.waitForOutput('with more streamed detail', 30_000);
+      } else {
+        expect(session!.getVisibleOutput().slice(offset)).not.toContain(reasoning);
+        expect(session!.getVisibleOutput().slice(offset)).not.toContain('with more streamed detail');
+      }
+      expect(finishReasoning).toBeTypeOf('function');
+      finishReasoning!();
+      finishReasoning = undefined;
+      await session!.waitForOutput(`ANSWER_${label}_SENTINEL`, 30_000);
+      await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 30_000 });
+      const output = session!.getVisibleOutput().slice(offset);
+      if (!shown) expect(output).not.toContain(reasoning);
+      expect(output.slice(output.lastIndexOf(`ANSWER_${label}_SENTINEL`))).not.toContain(reasoning);
+    };
+    await turn('FIRST', initialMode === 'standard');
+    const nextMode = initialMode === 'standard' ? 'concise' : 'standard';
+    // Use the actual settings menu: select the key, enter its value, then dismiss the list.
+    session.write('/settings ');
+    await waitForHarnessComposerValue(idlePath, '/settings ', { timeoutMs: 30_000 });
+    await session.waitForOutput('type search', 30_000);
+    session.write('ui.displayMode');
+    await waitForHarnessComposerValue(idlePath, '/settings ui.displayMode', { timeoutMs: 30_000 });
+    session.write('\r');
+    await waitForHarnessComposerValue(idlePath, '/settings ui.displayMode ', { timeoutMs: 30_000 });
+    session.write(nextMode);
+    await waitForHarnessComposerValue(idlePath, `/settings ui.displayMode ${nextMode}`, { timeoutMs: 30_000 });
+    session.write('\r');
+    await waitForHarnessComposerValue(idlePath, '/settings ui.displayMode', { timeoutMs: 30_000 });
+    session.write('\x1b');
+    await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
+    await turn('SECOND', nextMode === 'standard');
+    expect(providerRequests).toHaveLength(2);
+    session.write('\x03');
+    await session.waitForOutput('Press Ctrl+C again to exit', 30_000);
+    session.write('\x03');
+    expect((await session.waitForExit(30_000)).exitCode).toBe(0);
+  },
+);

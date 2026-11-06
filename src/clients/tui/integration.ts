@@ -389,6 +389,8 @@ export interface TuiProps {
   readonly headerHeight?: number;
   /** A change repaints the transcript, as legacy's MessageList does when the display mode changes. */
   readonly redrawKey?: string;
+  /** Whether live reasoning text is visible; the app hides it in concise mode. */
+  readonly showReasoning?: boolean;
   readonly integration: TuiIntegration;
   readonly retainedSnapshot?: WireSnapshot;
   readonly onSnapshot?: (snapshot: WireSnapshot) => void;

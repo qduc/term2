@@ -1,5 +1,7 @@
 import { afterEach, expect, it } from 'vitest';
 import fs from 'node:fs';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
@@ -466,3 +468,128 @@ it.each([160])('a failed resume leaves the composer usable at %i columns', { tim
   await send('/help');
   await session.waitForOutput('/retry-tool — Retry the last tool call', 30_000);
 });
+
+it(
+  'applies explicit CLI resume selection durably without changing defaults or the fork source',
+  { timeout: TIMEOUT_MS },
+  async () => {
+    root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-resume-selection-')));
+    const home = path.join(root, 'home');
+    const workspace = path.join(root, 'w');
+    const conversations = path.join(root, 'conversations');
+    fs.mkdirSync(home);
+    fs.mkdirSync(workspace);
+    const baseUrl = await startProvider([]);
+    const idlePath = path.join(home, 'idle');
+    const env = createTestChildEnv({
+      HOME: home,
+      XDG_CONFIG_HOME: path.join(home, '.config'),
+      XDG_STATE_HOME: path.join(home, '.local', 'state'),
+      XDG_CACHE_HOME: path.join(home, '.cache'),
+      XDG_DATA_HOME: path.join(home, '.local', 'share'),
+      XDG_RUNTIME_DIR: path.join(root, 'runtime'),
+      TERM2_CONFIG_DIR: path.join(home, '.term2'),
+      TERM2_CACHE_DIR: path.join(home, '.cache', 'term2'),
+      TERM2_CONVERSATIONS_DIR: conversations,
+      DISABLE_LOGGING: '1',
+      [HARNESS_IDLE_ENV]: idlePath,
+      CI: 'false',
+    });
+    const settingsDir = resolveSettingsDirectory({ homeDir: home, env });
+    fs.mkdirSync(settingsDir, { recursive: true });
+    const settingsFile = path.join(settingsDir, 'settings.json');
+    const defaults = { modelSelection: { model: 'mock-alpha', provider: 'mockprov' }, reasoningEffort: 'low' };
+    fs.writeFileSync(
+      settingsFile,
+      JSON.stringify({
+        agent: { ...defaults, retryAttempts: 0, completionVerification: false },
+        providers: ['mockprov', 'otherprov'].map((name) => ({
+          name,
+          type: 'openai-compatible',
+          baseUrl,
+          apiKey: 'test-key',
+        })),
+        sandbox: { enabled: false },
+      }),
+    );
+    const run = async (...args: string[]) => {
+      await promisify(execFile)('node', [builtCli, ...args], { cwd: workspace, env, timeout: 30_000 });
+      return requestBodies.at(-1);
+    };
+    expect(await run('seed conversation')).toMatchObject({ model: 'mock-alpha', reasoning_effort: 'low' });
+    const sourceFile = fs.readdirSync(conversations).find((file) => file.endsWith('.jsonl'))!;
+    const sourceId = sourceFile.slice(0, -6);
+    expect(
+      await run(
+        '--resume',
+        sourceId,
+        '--provider',
+        'mockprov',
+        '--model',
+        'mock-beta:high',
+        '--reasoning',
+        'medium',
+        'explicit selection',
+      ),
+    ).toMatchObject({ model: 'mock-beta', reasoning_effort: 'medium' });
+    expect(await run('--resume', sourceId, 'saved selection')).toMatchObject({
+      model: 'mock-beta',
+      reasoning_effort: 'medium',
+    });
+    const sourceBeforeFork = fs.readFileSync(path.join(conversations, sourceFile), 'utf8');
+    // Explicitly repeating accepted intent (also how /restart relaunches) must
+    // not append configure receipts or alter the accepted effective request.
+    session = spawnTerminal(
+      'node',
+      [builtCli, '--resume', sourceId, '--provider', 'mockprov', '--model', 'mock-beta', '--reasoning', 'medium'],
+      { cwd: workspace, env, cols: 160, rows: 40 },
+    );
+    await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 30_000 });
+    session.write('/quit');
+    await waitForHarnessComposerValue(idlePath, '/quit', { timeoutMs: 30_000 });
+    session.write('\r');
+    await session.waitForExit(30_000);
+    expect(fs.readFileSync(path.join(conversations, sourceFile), 'utf8')).toBe(sourceBeforeFork);
+    fs.rmSync(idlePath, { force: true });
+
+    session = spawnTerminal(
+      'node',
+      [builtCli, '--resume', sourceId, '--fork', '--provider', 'otherprov', '--model', 'mock-alpha:low'],
+      { cwd: workspace, env, cols: 160, rows: 40 },
+    );
+    const idle = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 30_000 });
+    session.write('forked selection');
+    await waitForHarnessComposerValue(idlePath, 'forked selection', { timeoutMs: 30_000 });
+    session.write('\r');
+    await session.waitForOutput('done', 30_000);
+    await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 30_000 });
+    expect(requestBodies.at(-1)).toMatchObject({ model: 'mock-alpha', reasoning_effort: 'low' });
+    session.write('/quit');
+    await waitForHarnessComposerValue(idlePath, '/quit', { timeoutMs: 30_000 });
+    session.write('\r');
+    await session.waitForExit(30_000);
+    expect(fs.readFileSync(path.join(conversations, sourceFile), 'utf8')).toBe(sourceBeforeFork);
+    const forkFile = fs.readdirSync(conversations).find((file) => file.endsWith('.jsonl') && file !== sourceFile)!;
+    const forkFacts = fs
+      .readFileSync(path.join(conversations, forkFile), 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line).fact);
+    expect(forkFacts.filter((fact) => fact?.type === 'configuration_changed').at(-1)?.configuration.model).toEqual({
+      provider: 'otherprov',
+      model: 'mock-alpha',
+    });
+    expect(await run('--resume', forkFile.slice(0, -6), 'saved fork selection')).toMatchObject({
+      model: 'mock-alpha',
+      reasoning_effort: 'low',
+    });
+    expect(
+      await run('--resume', sourceId, '--model', 'mock-alpha', '--provider', 'mockprov', 'retain effort'),
+    ).toMatchObject({ model: 'mock-alpha', reasoning_effort: 'medium' });
+    expect(await run('--resume', sourceId, '--reasoning', 'high', 'effort only')).toMatchObject({
+      model: 'mock-alpha',
+      reasoning_effort: 'high',
+    });
+    expect(JSON.parse(fs.readFileSync(settingsFile, 'utf8')).agent).toMatchObject(defaults);
+  },
+);

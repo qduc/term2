@@ -1,7 +1,5 @@
 /** One headless run as a client of the direct host. `cli.ts` owns signals, through the returned handle. */
 import fs from 'node:fs';
-import { randomUUID } from 'node:crypto';
-import type { ModelRef } from '../model/index.js';
 import { openDirectApplicationMcp } from './application-mcp.js';
 import type { DirectMcp } from './mcp.js';
 import { runDirectHeadless } from '../clients/headless/index.js';
@@ -20,6 +18,7 @@ export function runDirectHeadlessOnHost(request: DirectHeadlessRequest): DirectH
     let target: DirectSessionTarget | null = null;
     let mcp: DirectMcp | undefined;
     let profileMetadata: Readonly<Record<string, unknown>> = {};
+    let profileName = '';
     try {
       const opened = await openDirectSessionTarget(request.ssh, request.lite === true, stop.signal);
       target = opened;
@@ -41,14 +40,11 @@ export function runDirectHeadlessOnHost(request: DirectHeadlessRequest): DirectH
         ...(request.profileExplicit !== undefined ? { profileExplicit: request.profileExplicit } : {}),
         surface: () => ({ autoApprove, interactive: false, ...opened.surface, ...(mcp ? { mcp } : {}) }),
         authority: opened.authority,
-        ...(request.modelExplicit ? { authorizeModel: () => undefined } : {}),
         ...(opened.binding ? { sessionBinding: opened.binding } : {}),
         hooks: { root: fs.realpathSync(process.cwd()), mode: 'non-interactive' },
         onSurface(surface, profile) {
           profileMetadata = profile;
-          // `--quiet` suppresses non-error diagnostics. Later event lines already
-          // honor it; this announcement is written before that run starts.
-          if (!request.quiet) io.stderr.write(`Profile: ${surface.profileName}\n`);
+          profileName = surface.profileName;
         },
       });
       application = app;
@@ -56,21 +52,14 @@ export function runDirectHeadlessOnHost(request: DirectHeadlessRequest): DirectH
       // The old CLI prints this under --quiet too. It is the fork's identity, not a diagnostic.
       if (sessionId !== resumeId)
         io.stderr.write(`Forked conversation ${displaySessionId(resumeId!)} → ${displaySessionId(sessionId!)}\n`);
+      if (sessionId !== undefined && request.resumeConfiguration)
+        await app.applyLaunchConfiguration(sessionId, request.resumeConfiguration);
       const connection =
         sessionId === undefined
           ? await app.host.createSession(app.principal, opened.grant)
           : await app.host.connect(app.principal, sessionId);
-      if (sessionId !== undefined && request.modelExplicit) {
-        const explicitModel = selection.settings.get('agent.modelSelection') as ModelRef;
-        const current = connection.snapshot.model;
-        if (current.model !== explicitModel.model || current.provider !== explicitModel.provider) {
-          await connection.send({
-            type: 'configure',
-            commandId: randomUUID(),
-            configuration: { model: explicitModel },
-          });
-        }
-      }
+      // Announce only the restored/configured selection, once.
+      if (!request.quiet) io.stderr.write(`Profile: ${profileName}\n`);
       if (request.goal) await app.setGoal(connection.sessionId, request.goal, 'launcher');
       active = true;
       const { outcome } = await runDirectHeadless(connection, {

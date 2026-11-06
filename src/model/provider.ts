@@ -43,14 +43,7 @@ import { MODEL_CATALOG } from './providers/model-catalog/catalog.generated.js';
 import { ModelFailure, toModelFailure } from './failure.js';
 import { physicalModelStream } from './retry.js';
 import { codexCompact } from './provider-compact.js';
-import {
-  itemToInput,
-  withConversationTiming,
-  toolDefinition,
-  outputToItem,
-  toUsage,
-  stopReason,
-} from './provider-items.js';
+import { historyToInput, toolDefinition, outputToItem, toUsage, stopReason } from './provider-items.js';
 import type {
   Model,
   ModelError,
@@ -326,7 +319,7 @@ function toProviderRequest(
 
   return {
     instructions: request.instructions,
-    input: request.input.flatMap((item) => withConversationTiming(item, itemToInput(item))),
+    input: historyToInput(request.input, ref.provider),
     tools: request.tools.map(toolDefinition),
     ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
     ...(request.reasoning ? { reasoning: { effort: request.reasoning, summary: 'auto' as const } } : {}),

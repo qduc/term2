@@ -12,6 +12,7 @@ import { isDirectCommandFactType, recoverDirectCommands } from './command-receip
 import { isDirectNotificationFactType } from './notifications.js';
 import { withNotice } from './input-notice.js';
 import { INTERRUPTED_BEFORE_START } from './replay-active-turn.js';
+import { withdrawDisplayDraft } from './state-messages.js';
 
 export type DirectDisplayTool = DirectToolDisplay & {
   /** A model call is not evidence that its physical body started. */
@@ -243,12 +244,7 @@ export function reduceDirectFact(state: DirectPublicState, fact: Fact, seq = 0):
     case 'text_delta': {
       const modelStep = fact.modelStep ?? 1;
       const id = directDraftId(fact.turnId, fact.modelStep);
-      if (fact.withdrawn)
-        return {
-          ...state,
-          drafts: state.drafts.filter((draft) => draft.id !== id),
-          messages: state.messages.filter((message) => message.id !== id),
-        };
+      if (fact.withdrawn) return withdrawDisplayDraft(state, id);
       const existing = state.drafts.find((draft) => draft.id === id);
       const draft = { id, turnId: fact.turnId, modelStep, text: (existing?.text ?? '') + fact.delta };
       return {

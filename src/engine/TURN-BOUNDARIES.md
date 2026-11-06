@@ -11,6 +11,15 @@ uses the same model-step, budget, recovery and dispatch boundary without gaining
 root tool authority. A replacement changes history only after the `history_replaced`
 event is accepted; only then does it clear continuity and retain compaction state.
 
+Provider-prefix selection treats a summary as a replacement only when its `replaces`
+list is nonempty. Budget evidence, goal-repair reminders and mode notices use empty
+lists: they add context without dropping prior user input or completed tool evidence.
+Item IDs are identities, not replacement authority; even a turn ID beginning with
+`compact_` can produce these ordinary notices. Local compaction installs its entire
+checkpoint and retained tail through `history_replaced`, so an empty-replaces
+checkpoint needs no ID-based fallback on live requests or replay. Native OpenAI
+opaque compaction items retain their separate provider-owned replacement boundary.
+
 `TurnTools` owns provider-order scheduling, execution admission and selected-stop
 policy. `TurnToolInteractions` owns only execution-scoped interaction publication,
 durable readiness and matching answer waits. It cannot select or start work; that

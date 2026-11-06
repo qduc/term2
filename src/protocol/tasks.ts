@@ -186,8 +186,10 @@ export function taskFactEvent(fact: DirectBackgroundFact, state: WireSnapshot, s
       break;
     case 'task_finished': {
       const result = publicTaskResult(fact.result);
+      // Streamed progress is not a settled result, including an empty retry.
+      const { text: _text, ...settled } = task;
       next = {
-        ...task,
+        ...settled,
         status: result.kind,
         completedAt: fact.at,
         result,

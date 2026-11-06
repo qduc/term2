@@ -131,3 +131,33 @@ export function projectItem(
   if (item.type !== 'assistant_message') return [event('message', { message }, seq, turnId)];
   return [event('message', { message, replacesDraftId: directDraftId(turnId, fact.modelStep) }, seq, turnId)];
 }
+
+/** Withdrawal settles display only; it is not an accepted model answer. */
+export function projectTextDelta(
+  fact: Extract<Fact, { type: 'text_delta' }>,
+  seq: number,
+  state: WireSnapshot,
+  event: EventFactory,
+): readonly WireEvent[] {
+  const messageId = directDraftId(fact.turnId, fact.modelStep);
+  if (fact.withdrawn) {
+    const message = state.messages.find((item) => item.id === messageId);
+    return message
+      ? [
+          event(
+            'message',
+            {
+              message: {
+                ...message,
+                draft: false,
+                presentation: { ...message.presentation, withdrawn: true },
+              },
+            },
+            seq,
+            fact.turnId,
+          ),
+        ]
+      : [];
+  }
+  return [event('text_delta', { delta: fact.delta, modelStep: fact.modelStep ?? 1, messageId }, seq, fact.turnId)];
+}

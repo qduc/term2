@@ -3,10 +3,12 @@ import type { DirectSessionState } from '../session/facade-types.js';
 import { contentText, publicContent, publicTerminal } from './public.js';
 import type { WireMessage, WireTerminal, WireTurnResult } from './wire.js';
 
-/** A streamed draft is not an accepted completed assistant answer. */
+/** Neither a streamed draft nor a withdrawn attempt is an accepted completed assistant answer. */
 export function completedFinalText(outcome: WireTerminal['outcome'], messages: readonly WireMessage[]): string | null {
   return outcome === 'completed'
-    ? messages.filter((message) => message.role === 'assistant' && !message.draft).at(-1)?.text ?? null
+    ? messages
+        .filter((message) => message.role === 'assistant' && !message.draft && message.presentation?.withdrawn !== true)
+        .at(-1)?.text ?? null
     : null;
 }
 /** Use the native historical result window, not the current turn or queue disappearance. */
@@ -28,7 +30,11 @@ export function publicTurnResults(state: DirectSessionState, known: readonly Wir
         content,
         text: contentText(content),
         ...(item.presentation ? { presentation: structuredClone(item.presentation) } : {}),
-        ...(draft ? { draft: true, modelStep: draft.modelStep } : {}),
+        ...(item.presentation?.withdrawn === true
+          ? { draft: false }
+          : draft
+          ? { draft: true, modelStep: draft.modelStep }
+          : {}),
       };
     });
     return {

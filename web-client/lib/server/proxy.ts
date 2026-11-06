@@ -40,7 +40,7 @@ export function validateOpaqueId(value: unknown, name: string): string {
 
 export function validateEventCursor(value: string | null): string | null {
   if (value === null || value === '') return null;
-  if (!/^\d{1,15}$/.test(value)) throw new LocalValidationError('Invalid cursor');
+  if (!/^\d{1,16}$/.test(value) || !Number.isSafeInteger(Number(value)) || Number(value) < 1) throw new LocalValidationError('Invalid cursor');
   return value;
 }
 

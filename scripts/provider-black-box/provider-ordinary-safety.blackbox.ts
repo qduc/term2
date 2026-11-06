@@ -1,3 +1,4 @@
+import { testCliPath } from '../../tests/helpers/terminal-e2e.js';
 import { mkdir, writeFile, readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
@@ -9,6 +10,14 @@ import {
   exitInteractive,
 } from './provider-test-harness.js';
 
+/**
+ * The store names a headless session `conv_<uuid>` and resumes by the bare UUID.
+ * The recovery text must name the retained session.
+ */
+const resumeLocator = async (lease: IsolatedWorkspaceLease): Promise<string> => {
+  const [log] = (await readdir(lease.paths.conversationsDir)).filter((name) => name.endsWith('.jsonl'));
+  return `--resume ${log!.replace(/^conv_/, '').replace(/\.jsonl$/, '')} `;
+};
 let server: FakeProviderHttpServer | undefined;
 let workspace: IsolatedWorkspaceLease | undefined;
 let scenarioOptions: { scenario: 'success' | 'tool-fragments' | 'context-overflow'; protocol: 'chat-completions' };
@@ -87,7 +96,7 @@ it('pauses before dispatch on a known small model with fresh defaults', async ()
   });
   expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(2);
   expect(result.stdout).toContain('context_paused');
-  expect(result.stdout).toContain('--resume non-interactive-');
+  expect(result.stdout).toContain(await resumeLocator(lease));
   expect(server!.requests).toHaveLength(0);
 });
 
@@ -107,7 +116,7 @@ it.each([undefined, 'warn'] as const)(
     expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(2);
     expect(result.stdout).toContain('context_paused');
     expect(result.stdout).toContain('request_input_limit');
-    expect(result.stdout).toContain('--resume non-interactive-');
+    expect(result.stdout).toContain(await resumeLocator(lease));
     expect(server!.requests).toHaveLength(0);
     const logs = (await readdir(lease.paths.conversationsDir)).filter((name) => name.endsWith('.jsonl'));
     expect(logs).toHaveLength(1);
@@ -126,7 +135,7 @@ it('parks an unattended critical budget under explicit contain without auto-gran
   expect(result.timedOut).toBe(false);
   expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(2);
   expect(result.stdout).toContain('run_budget_paused');
-  expect(result.stdout).toContain('--resume non-interactive-');
+  expect(result.stdout).toContain(await resumeLocator(lease));
   expect(server!.requests).toHaveLength(1);
   const logs = (await readdir(lease.paths.conversationsDir)).filter((name) => name.endsWith('.jsonl'));
   expect(logs).toHaveLength(1);
@@ -159,7 +168,7 @@ it('retains unknown-model work after structured provider overflow without retryi
   expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(2);
   expect(result.stdout).toContain('context_paused');
   expect(result.stdout).toContain('provider_context_overflow');
-  expect(result.stdout).toContain('--resume non-interactive-');
+  expect(result.stdout).toContain(await resumeLocator(lease));
   expect(server!.requests).toHaveLength(1);
   const logs = (await readdir(lease.paths.conversationsDir)).filter((name) => name.endsWith('.jsonl'));
   expect(await readFile(join(lease.paths.conversationsDir, logs[0]!), 'utf8')).toContain('retain this request');
@@ -170,7 +179,7 @@ it('completes a tiny small-model request with real fresh and reloaded settings',
   for (let i = 0; i < 2; i++) {
     const result = await lease.runCli({
       cwd: lease.root,
-      cliPath: join(process.cwd(), 'dist/cli.js'),
+      cliPath: testCliPath(join(process.cwd(), 'dist/cli.js')),
       args: ['tiny ordinary request', '--provider', 'fixture-provider', '--model', 'rekaai/reka-edge'],
       env: {
         NODE_ENV: 'production',

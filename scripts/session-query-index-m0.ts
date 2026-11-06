@@ -221,7 +221,7 @@ async function benchmark(
     tailFixture: { id: string; fact: string; finalRecord: string };
   };
   process.env.TERM2_CONVERSATIONS_DIR = path.join(corpus, 'conversations');
-  const { SessionBrowser } = await import('../source/services/conversation/session-browser.js');
+  const { SessionBrowser } = await import('../src/session/conversation/session-browser.js');
   const currentId = idFor(
     Number(fs.readdirSync(process.env.TERM2_CONVERSATIONS_DIR).filter((file) => file.endsWith('.jsonl')).length) - 2,
   );
@@ -230,9 +230,7 @@ async function benchmark(
   let initialBuild: { durationMs: number; dbSizeBytes: number; replayedCount: number } | null = null;
   if (backendChoice === 'indexed') {
     const dbPath = path.join(corpus, 'session-index.db');
-    const { SessionIndexService } = await import(
-      '../source/services/conversation/session-index/session-index-service.js'
-    );
+    const { SessionIndexService } = await import('../src/session/conversation/session-index/session-index-service.js');
     indexService = new SessionIndexService({
       conversationsDir: process.env.TERM2_CONVERSATIONS_DIR,
       dbPath,

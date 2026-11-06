@@ -1,0 +1,23 @@
+import { readFileSync } from 'node:fs';
+import { describe, expect, it } from 'vitest';
+
+const source = (name: string): string => readFileSync(new URL(`../../src/${name}`, import.meta.url), 'utf8');
+
+describe('run_code product/runtime dependency boundary', () => {
+  it('keeps the runtime and lifecycle contract independent of the outer tool module', () => {
+    expect(source('delegation/run-code/run-code-runtime.ts')).not.toMatch(
+      /(?:from|import\()\s*['"].*run-code\.js['"]|import\s+['"].*run-code\.js['"]/,
+    );
+    expect(source('tools/system/run-code/run-code-runtime-contract.ts')).not.toMatch(/run-code\.js/);
+    expect(source('tools/system/run-code/run-code-runtime-contract.ts')).not.toMatch(/run-code-runtime\.js/);
+  });
+
+  it('keeps the outer definition free of the removed inline lifecycle', () => {
+    const runCode = source('tools/system/run-code/run-code.ts');
+
+    expect(runCode).not.toContain('__term2_legacy_run_code_path__');
+    expect(runCode).not.toMatch(/SandboxedCodeHostImpl|CapabilityHandler|pendingReceiptByCallId/);
+    expect(runCode).not.toMatch(/createRunCodeExecution|emitRunCodeCompletionTelemetry|normalizeToolParameters/);
+    expect(runCode).not.toMatch(/nestedApprovalOwner\.request|approvalRegistry\.evaluate/);
+  });
+});

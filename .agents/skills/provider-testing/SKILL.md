@@ -13,14 +13,13 @@ Run it with:
 pnpm test:provider-black-box
 ```
 
-This command builds `dist/` first, then runs the dedicated configuration in `vitest.provider-black-box.config.ts`. It is intentionally separate from ordinary `pnpm test` because it launches the built CLI in isolated child processes.
+This command builds the CLI into `dist/` first (`pnpm build`), then runs the dedicated configuration in `vitest.provider-black-box.config.ts`. It is intentionally separate from ordinary `pnpm test` because it launches the built CLI in isolated child processes.
 
 Global setup primes a disposable Node compile cache with `dist/cli.js --help`
 before starting the workers. Only compiled bytecode is shared: every scenario
 still starts fresh processes and isolated application state. The cache is
 removed on teardown and is disabled for V8 coverage or
-`NODE_DISABLE_COMPILE_CACHE=1`. Direct Vitest invocations still require a prior
-build. Integration launchers similarly share one emitted CLI build prepared by
+`NODE_DISABLE_COMPILE_CACHE=1`. Direct Vitest invocations still require both CLI builds first (`pnpm build` and `node scripts/build.mjs`). Native receipt-rollover and retry-notice restart/silent scenarios explicitly run the direct CLI; other scenarios retain their configured legacy or overridden CLI. Integration launchers similarly share one emitted CLI build prepared by
 their global setup; they do not reuse a running application.
 
 Compare timing with a recent run on a similarly loaded host; a fixed healthy
@@ -44,7 +43,7 @@ scenario is the one whose CLI never reached the state it waits for.
 ## Suite ownership
 
 - `scripts/provider-black-box/provider-contract.test.ts` obtains models through
-  `source/providers/registry.ts`; do not bypass the registry by constructing
+  `src/model/providers/registry.ts`; do not bypass the registry by constructing
   transport classes directly.
 - `scripts/provider-black-box/provider-cli.blackbox.ts` exercises the shipped
   `dist/cli.js` with isolated settings, filesystem state, stdout/stderr files,
@@ -57,13 +56,19 @@ scenario is the one whose CLI never reached the state it waits for.
   stateful PTY, isolated-workspace, restart, and temporary-environment lifecycle.
   Keep it asynchronous; synchronous child execution can deadlock the fake server.
   Interactive ready/idle waits use `child.waitForIdleInput()`, not a prompt
-  glyph. The shipped CLI publishes an incrementing generation to
+  glyph. Both the legacy and direct CLIs publish an incrementing generation to
   `TERM2_HARNESS_IDLE_PATH` when the composer owns the keyboard and no turn is
-  in flight (`source/lib/harness-input-idle.ts`). Text submission uses
+  in flight (`src/shared/lib/harness-input-idle.ts`). Text submission uses
   `writePtyTextAndSubmit()`, which waits for the CLI's companion composer-state
   acknowledgment before sending Enter; fixed sleeps and PTY echo do not prove
   Ink consumed the text. A PTY-stripped `❯` is not a readiness signal, and
   first-run/menu ownership must not count as idle.
+  A confirmation-held draft can already appear in the composer-state file while
+  the prompt still owns the keys. When dismissing confirmation, capture the idle
+  generation before the dismissal and await a newer generation before editing or
+  submitting the restored draft. A matching value with `afterRevision: 0` is not
+  an input-listener handoff. A cache-guard trace showed this stale value returning
+  before the confirmation unmounted; buffered input happened to make that run pass.
 - `scripts/provider-black-box/provider-capability-matrix.ts` and
   `provider-session-capability-manifest.ts` own the test-side capability rows,
   typed lifecycle ledgers, and aggregate accounting.
@@ -84,7 +89,7 @@ scenario is the one whose CLI never reached the state it waits for.
 
 CI uses `scripts/run-ci-lane.mjs` to distribute the complete tier inventories
 across the same four jobs. Each lane schedules its files through isolated Vitest
-projects using the original tier configurations and one two-worker queue.
+projects using the original tier configurations and one three-worker queue.
 Integration CLI launchers and provider suites use the job's freshly built,
 built CLI; standalone integration runs still prepare a private build. E2E
 retains its source and built-entry coverage. Discovery assigns new files automatically.
@@ -94,6 +99,7 @@ test, and unhandled failures. The published local provider command above retains
 
 ## Adding or changing a scenario
 
+- Native goal fixtures select v2 `fact` envelopes and native receipt wording from the explicit direct executable, never as fallback after a failed legacy assertion. Preserve goal identity, reminder bounds, active-goal state and blocked terminal-cause checks. An interrupted native turn is input-ready only when the latest active ordinary composer has its send footer; interrupted status alone does not prove readiness.
 - Assert semantic wire fields, roles, ordering, IDs, native reasoning/options,
   and authoritative completion/error events rather than full JSON snapshots.
 - Keep fixtures minimal, deterministic, harmless, and derived from sanitized

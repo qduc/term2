@@ -2,7 +2,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    include: ['source/**/*.{test,spec}.{ts,tsx}', 'scripts/**/*.test.ts', 'docs/**/*.test.ts'],
+    include: ['tests/**/*.{test,spec}.{ts,tsx}', 'scripts/**/*.test.ts', 'docs/**/*.test.ts'],
     // During the evidence-driven development experiment the only committed
     // files in this tier are the static repository guards listed in
     // scripts/check-no-unit-tests.mjs; the unit suite was removed (tag
@@ -17,8 +17,8 @@ export default defineConfig({
     exclude: ['**/node_modules/**', '**/*.e2e.*', '**/*.integration.*', 'scripts/provider-black-box/**'],
     environment: 'node',
     globals: false,
-    globalSetup: ['./source/test-helpers/vitest-cache-global-setup.ts'],
-    setupFiles: ['./source/test-helpers/vitest-network-guard.ts', './source/test-helpers/vitest-cache-isolation.ts'],
+    globalSetup: ['./tests/helpers/vitest-cache-global-setup.ts'],
+    setupFiles: ['./tests/helpers/vitest-network-guard.ts', './tests/helpers/vitest-cache-isolation.ts'],
     restoreMocks: true,
     testTimeout: 10_000,
     hookTimeout: 10_000,

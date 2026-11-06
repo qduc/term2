@@ -1,0 +1,69 @@
+import React, { FC } from 'react';
+import { Box, Text } from 'ink';
+import type { SlashCommand } from './slash-command-types.js';
+import { MenuContainer, MenuFooter, SelectionMarker } from './MenuContainer.js';
+import { useTheme } from '../presentation/components/theme.js';
+import { SLASH_MENU_BINDINGS, bindingHints } from './menu-bindings.js';
+
+type Props = {
+  commands: SlashCommand[];
+  selectedIndex: number;
+  filter: string;
+  scrollOffset?: number;
+};
+
+/**
+ * Width of the `/name` label column, sized to the longest command so short
+ * names leave room for the description instead of padding it out, and capped
+ * so one long name cannot eat the row. Computed from the full list (not the
+ * filter) so the column does not jitter while typing. The label text
+ * truncates rather than wrapping: the description carries the meaning.
+ */
+const SLASH_COMMAND_LABEL_MAX_WIDTH = 20;
+
+const SEPARATOR_COLUMN_WIDTH = 3;
+
+const SlashCommandMenu: FC<Props> = ({ commands, selectedIndex, filter, scrollOffset = 0 }) => {
+  const theme = useTheme();
+  const filteredCommands = commands.filter((cmd) => cmd.name.toLowerCase().includes(filter.toLowerCase()));
+  const labelColumnWidth = Math.min(
+    Math.max(...commands.map((cmd) => cmd.name.length + 1), 8),
+    SLASH_COMMAND_LABEL_MAX_WIDTH,
+  );
+
+  return (
+    <MenuContainer
+      items={filteredCommands}
+      selectedIndex={selectedIndex}
+      scrollOffset={scrollOffset}
+      title="Commands"
+      fallbackText="No matching commands"
+      footer={<MenuFooter hints={bindingHints(SLASH_MENU_BINDINGS)} />}
+      renderItem={(cmd, _index, isSelected) => (
+        // flexWrap + minWidth is the narrow-terminal plan: while the
+        // description has at least half the row it sits beside the label and
+        // continuation lines align under it; below that it drops to its own
+        // full-width line instead of squeezing into per-character fragments.
+        <Box key={cmd.name} width="100%" flexDirection="row" flexWrap="wrap">
+          <SelectionMarker selected={isSelected} />
+          <Box width={labelColumnWidth} flexShrink={0}>
+            <Text color={isSelected ? theme.accent : undefined} bold={isSelected} wrap="truncate">
+              /{cmd.name}
+            </Text>
+          </Box>
+          <Box width={SEPARATOR_COLUMN_WIDTH} flexShrink={0}>
+            <Text color={theme.textSubtle} wrap="truncate">
+              {' '}
+              -
+            </Text>
+          </Box>
+          <Box flexGrow={1} flexShrink={1} flexBasis={0} minWidth="50%">
+            <Text color={isSelected ? theme.text : theme.textSubtle}>{cmd.description}</Text>
+          </Box>
+        </Box>
+      )}
+    />
+  );
+};
+
+export default SlashCommandMenu;

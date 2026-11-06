@@ -1,3 +1,4 @@
+import { testCliPath } from '../../tests/helpers/terminal-e2e.js';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -58,13 +59,19 @@ describe('assembled provider CLI black-box', () => {
       const after = await readFile(join(dir, logs[0]!), 'utf8');
       expect(after.startsWith(before)).toBe(true);
       expect(after).toContain('Recall the animal');
-      const latestInit = (text: string) =>
-        text
+      // The store: session metadata lives in session_started, the effort in each turn's configuration.
+      const latestInit = (text: string) => {
+        const rows = text
           .trim()
           .split('\n')
-          .map((line) => JSON.parse(line))
-          .filter((envelope) => envelope.event.type === 'session_init')
-          .at(-1).event;
+          .map((line) => JSON.parse(line));
+        const facts = rows.map((row) => row.fact);
+        return {
+          forkedFrom: facts.find((fact) => fact.type === 'session_started')?.forkedFrom,
+          reasoningEffort: facts.filter((fact) => fact.type === 'turn_started').at(-1)?.requestConfiguration
+            .reasoningEffort,
+        };
+      };
       expect(latestInit(after).reasoningEffort).toBe('high');
       expect((await readdir(dir)).filter((name) => name.endsWith('.jsonl'))).toEqual(logs);
       for (const line of resumed.stdout.trim().split('\n')) expect(() => JSON.parse(line)).not.toThrow();
@@ -131,6 +138,7 @@ describe('assembled provider CLI black-box', () => {
           join(workspace.root, 'handoff.txt'),
           '--lock',
           join(workspace.root, 'worker.lock'),
+          ...(process.env.TERM2_TEST_CLI ? ['--entry', testCliPath(join(process.cwd(), 'dist/cli.js'))] : []),
           '--',
           '--provider',
           'fixture-provider',
@@ -303,7 +311,8 @@ describe('assembled provider CLI black-box', () => {
         await writeFile(
           join(settingsDir, 'settings.json'),
           JSON.stringify({
-            agent: { modelSelection: { model: 'fixture', provider: 'fixture-provider' } },
+            // This scenario tests error reporting, not the separate retry policy.
+            agent: { retryAttempts: 0, modelSelection: { model: 'fixture', provider: 'fixture-provider' } },
             app: { liteMode: true },
             providers: [
               {
@@ -319,6 +328,7 @@ describe('assembled provider CLI black-box', () => {
       },
     });
     expect(result.timedOut).toBe(false);
+    expect(server!.requests).toHaveLength(1);
     expect(result.exitCode).not.toBe(0);
     expect(result.stdout).not.toContain('hello');
   });

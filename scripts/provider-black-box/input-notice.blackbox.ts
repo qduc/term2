@@ -2,6 +2,7 @@ import { createServer, type ServerResponse } from 'node:http';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { expect, it } from 'vitest';
+import { readHarnessComposerState } from '../../src/shared/lib/harness-input-idle.js';
 import { createIsolatedWorkspaceLease, writePtyTextAndSubmit } from './provider-test-harness.js';
 
 it.skipIf(process.platform !== 'linux')('retries the original pasted image and chains the following turn', async () => {
@@ -99,7 +100,34 @@ it.skipIf(process.platform !== 'linux')('retries the original pasted image and c
     complete(0);
     await child.waitForVisibleOutput('NOTICE_DONE_0');
     const nextIdle = await child.waitForIdleInput({ after: idle });
-    await writePtyTextAndSubmit(child, '/retry-turn');
+    // Sample only this fixture's composer; atomic snapshots may skip intermediate revisions.
+    const started = Date.now();
+    const timeline: { ms: number; state: ReturnType<typeof readHarnessComposerState> }[] = [];
+    const sample = () => {
+      const state = readHarnessComposerState(lease.paths.idlePath);
+      if (JSON.stringify(state) !== JSON.stringify(timeline.at(-1)?.state))
+        timeline.push({ ms: Date.now() - started, state });
+    };
+    sample();
+    const sampler = setInterval(sample, 10);
+    try {
+      const afterRevision = child.readComposerRevision();
+      await child.write('/retry-turn');
+      try {
+        await child.waitForComposerValue('/retry-turn', { afterRevision });
+      } catch (error) {
+        sample();
+        throw new Error(
+          `Retry composer acknowledgement failed; sampled timeline (10ms, intermediate revisions may be missed): ${JSON.stringify(
+            timeline,
+          )}; final: ${JSON.stringify(readHarnessComposerState(lease.paths.idlePath))}`,
+          { cause: error },
+        );
+      }
+      await child.write('\r');
+    } finally {
+      clearInterval(sampler);
+    }
     await child.waitForState(() => requests.length === 2);
     const retried = JSON.stringify(requests[1]!.input);
     expect(retried.match(/FIRST_NOTICE_INPUT/g)).toHaveLength(1);

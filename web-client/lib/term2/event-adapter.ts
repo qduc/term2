@@ -1,8 +1,12 @@
+import { applyNativeState } from './native-state';
 import {
   parsePendingInteraction,
   parseProjection,
   Term2ProtocolError,
   type AgentEventEnvelope,
+  type AgentChangeV2,
+  type Term2AcceptedChange,
+  type Term2LiveChange,
   type InteractionProjection,
   type PendingInteraction,
   type SessionProjection,
@@ -17,7 +21,7 @@ function text(value: unknown, max = MAX_VIEW_TEXT): string {
   return typeof value === 'string' ? value.slice(0, max) : '';
 }
 function id(value: unknown): string {
-  if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{1,256}$/u.test(value))
+  if (typeof value !== 'string' || value.length === 0 || /[\u0000-\u001f\u007f]/u.test(value))
     throw new Term2ProtocolError('Missing opaque event identity');
   return value;
 }
@@ -25,7 +29,7 @@ function payloadId(payload: Record<string, unknown>, key: string): string {
   return id(payload[key]);
 }
 function turn(view: Term2SessionView, turnId: string): Term2TurnView {
-  const existing = view.turns.find((item) => item.turnId === turnId);
+  const existing = view.turns.find((item) => item.turnId === turnId) ?? view.retiredTurns?.find(item => item.turnId === turnId);
   if (existing) return existing;
   const created: Term2TurnView = {
     turnId,
@@ -44,6 +48,22 @@ function command(view: Term2TurnView, callId: string, toolName = 'Tool'): Term2C
   const created: Term2Command = { callId, toolName, status: 'pending' };
   view.commands.push(created);
   return created;
+}
+/** Every real command message stays visible, even several messages for one call.
+ * Reuse a running placeholder only once; never key result multiplicity by callId alone. */
+function commandMessage(commands: Term2Command[], payload: Readonly<Record<string, unknown>>): Term2Command {
+  const callId = payloadId(payload, 'callId');
+  const message = payload.message;
+  const messageId = message && typeof message === 'object' && !Array.isArray(message)
+    ? id((message as Record<string, unknown>).id) : undefined;
+  const existing = (messageId === undefined ? undefined : commands.find(item => item.messageId === messageId)) ??
+    commands.find(item => item.callId === callId && item.messageId === undefined && ['pending', 'running'].includes(item.status));
+  const actualName = typeof payload.toolName === 'string' ? payload.toolName : commands.find(item => item.callId === callId)?.toolName;
+  if (!actualName) throw new Term2ProtocolError('Command result has no accepted tool name');
+  const entry: Term2Command = existing ?? { callId, toolName: actualName, status: 'pending' };
+  if (messageId !== undefined) entry.messageId = messageId;
+  if (!existing) commands.push(entry);
+  return entry;
 }
 function turnForCommand(view: Term2SessionView, turnId: string): Term2TurnView {
   const sameTurn = view.turns.find((item) => item.turnId === turnId && item.role === 'assistant');
@@ -76,7 +96,7 @@ function tokenCount(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 function turnForActivity(view: Term2SessionView, turnId: string): Term2TurnView {
-  const existing = view.turns.find((item) => item.turnId === turnId && item.role === 'assistant');
+  const existing = view.turns.find((item) => item.turnId === turnId && item.role === 'assistant') ?? view.retiredTurns?.find(item => item.turnId === turnId && item.role === 'assistant');
   if (existing) return existing;
   const userIndex = view.turns.findIndex((item) => item.turnId === turnId && item.role === 'user');
   const following = userIndex >= 0 ? view.turns[userIndex + 1] : undefined;
@@ -271,25 +291,157 @@ function replaceInteraction(view: Term2SessionView, interaction: InteractionProj
       : view.status;
 }
 
+/** Install one accepted boundary atomically. Sparse native seq values are checkpoints,
+ * not a count of projected changes. Live changes cannot advance that checkpoint. */
 export function applyTerm2Event(previous: Term2SessionView, event: AgentEventEnvelope): Term2SessionView {
   if (event.sessionId !== previous.sessionId) throw new Term2ProtocolError('Event belongs to another session');
-  if (event.id <= previous.lastAppliedSequence) return previous;
-  if (event.id !== previous.lastAppliedSequence + 1) throw new Term2ProtocolError('Term2 event sequence gap');
+  if (event.kind === 'accepted' && event.seq <= previous.lastAppliedSequence) return previous;
+  let next = previous;
+  if (event.kind === 'live') {
+    for (const change of event.changes) next = routeChange(next, change, view => applyLiveChange(view, change));
+    return { ...next, lastAppliedSequence: previous.lastAppliedSequence };
+  }
+  // Narrowing by envelope kind uses the authoritative accepted Extract, never
+  // the general (accepted-or-live) change union as accepted admission.
+  for (const change of event.changes) {
+    next = routeChange(next, change, view => applyAcceptedChange(view, change));
+    if (change.type === 'request_cost_recorded' && next.branches) {
+      next = { ...next, branches: Object.fromEntries(Object.entries(next.branches).map(([key, branch]) => {
+        const requestCosts = next.nativeState?.requestCosts?.filter(item => item.turnId === branch.identity.turnId);
+        return [key, { ...branch, view: { ...branch.view, nativeState: { ...branch.view.nativeState, requestCosts } } }];
+      })) };
+    }
+  }
+  return { ...next, lastAppliedSequence: event.seq };
+}
+
+function routeChange(previous: Term2SessionView, change: AgentChangeV2, apply: (view: Term2SessionView) => Term2SessionView): Term2SessionView {
+  if (!change.branch) return apply(previous);
+  const identity = change.branch;
+  const existing = previous.branches?.[identity.branchId];
+  const branchView = apply(existing?.view ?? {
+    ...emptyTerm2SessionView(previous.sessionId),
+    nativeState: { requestCosts: previous.nativeState?.requestCosts?.filter(item => item.turnId === identity.turnId) },
+  });
+  return { ...previous, reloadRequired: previous.reloadRequired || branchView.reloadRequired,
+    branches: { ...previous.branches, [identity.branchId]: { identity, view: branchView } },
+  };
+}
+
+function applyLiveChange(previous: Term2SessionView, event: Term2LiveChange): Term2SessionView {
+  if (event.type === 'turn_failed') {
+    payloadId(event.payload, 'turnId');
+    if (event.payload.outcome !== 'failed' || typeof event.payload.reason !== 'string' ||
+        (event.payload.finalText !== undefined && typeof event.payload.finalText !== 'string'))
+      throw new Term2ProtocolError('Invalid transient failed lifecycle');
+  }
+  return { ...previous, liveChanges: [...(previous.liveChanges ?? []), event] };
+}
+
+function cloneTurns(turns: Term2TurnView[]): Term2TurnView[] {
+  return turns.map(item => ({
+    ...item,
+    commands: item.commands.map(entry => ({ ...entry })),
+    subagents: item.subagents?.map(card => ({ ...card, commands: card.commands.map(entry => ({ ...entry })) })),
+  }));
+}
+
+/** Drop only connection-local UI observations, never accepted summaries, native
+ * tool results or provider history. Live frames have no recovery cursor. */
+export function clearTerm2LiveEvidence(view: Term2SessionView): Term2SessionView {
+  return { ...view, liveChanges: undefined,
+    ...(view.branches ? { branches: Object.fromEntries(Object.entries(view.branches).map(([key, branch]) => [key, { ...branch, view: clearTerm2LiveEvidence(branch.view) }])) } : {}),
+  };
+}
+
+/** Transient lifecycle affects presentation only. Accepted state/checkpoint stay
+ * intact; dropping connection-local observations removes this overlay. */
+export function presentTerm2SessionView(view: Term2SessionView): Term2SessionView {
+  const failure = view.liveChanges?.slice().reverse().find(change => change.type === 'turn_failed');
+  const payload = failure?.payload;
+  return { ...view,
+    ...(payload ? {
+      status: 'error' as const,
+      error: typeof payload.reason === 'string' ? payload.reason : 'Live runtime failure; refresh for current accepted state.',
+      turns: view.turns.map(turn => turn.turnId !== payload.turnId ? turn : {
+        ...turn, status: 'failed' as const, transientFailure: true, transientStatus: undefined,
+        error: typeof payload.reason === 'string' ? payload.reason : undefined,
+        ...(typeof payload.finalText === 'string' ? { text: payload.finalText } : {}),
+      }),
+    } : {}),
+    ...(view.branches ? { branches: Object.fromEntries(Object.entries(view.branches).map(([key, branch]) => [key, { ...branch, view: presentTerm2SessionView(branch.view) }])) } : {}),
+  };
+}
+
+function applyAcceptedChange(previous: Term2SessionView, event: Term2AcceptedChange): Term2SessionView {
   const view: Term2SessionView = {
     ...previous,
-    turns: previous.turns.map((item) => ({
-      ...item,
-      commands: item.commands.map((entry) => ({ ...entry })),
-      subagents: item.subagents?.map((card) => ({
-        ...card,
-        commands: card.commands.map((entry) => ({ ...entry })),
-      })),
-    })),
+    turns: cloneTurns(previous.turns),
+    retiredTurns: previous.retiredTurns ? cloneTurns(previous.retiredTurns) : undefined,
     error: null,
-    lastAppliedSequence: event.id,
+    // New native accepted lifecycle supersedes a prior live failure observation.
+    liveChanges: ['assistant_started', 'turn_completed', 'turn_failed', 'turn_aborted', 'session_rotated', 'history_replaced'].includes(event.type)
+      ? previous.liveChanges?.filter(change => change.type !== 'turn_failed') : previous.liveChanges,
   };
-  const payload = event.payload;
+  const payload: Readonly<Record<string, unknown>> = event.payload;
   switch (event.type) {
+    case 'tool_called': {
+      const native = payload.tool;
+      if (!native || typeof native !== 'object' || Array.isArray(native)) throw new Term2ProtocolError('Missing accepted tool call');
+      const tool = native as Readonly<Record<string, unknown>>;
+      const executionId = id(tool.executionId);
+      const turnId = id(tool.turnId);
+      const toolName = id(tool.toolName);
+      if (tool.status !== 'called' || !('input' in tool)) throw new Term2ProtocolError('Invalid accepted tool call');
+      let item = view.turns.find(item => item.turnId === turnId);
+      if (!item) { item = { turnId, role: 'assistant', text: '', reasoning: '', status: 'unknown', commands: [] }; view.turns.push(item); }
+      const entry = command(item, executionId, toolName);
+      entry.nativeTool = tool;
+      entry.toolName = toolName;
+      entry.argumentsText = typeof tool.input === 'string' ? tool.input : JSON.stringify(tool.input);
+      // Called is pending, not a physical start or a foreground status change.
+      break;
+    }
+    case 'message': {
+      view.nativeState = applyNativeState(previous.nativeState, event);
+      // Native message/draft IDs select replacement and actual turnId selects
+      // presentation. No adjacency, content match or synthetic assistant turn.
+      const incoming = view.nativeState.messages!.find(entry => entry.message === payload.message)!;
+      const replacedId = incoming.replacesDraftId ?? incoming.message.replacesDraftId;
+      const affected = [incoming, ...(previous.nativeState?.messages ?? []).filter(entry =>
+        entry.message.id === incoming.message.id || entry.message.id === replacedId)];
+      const owners = new Set(affected.flatMap(({ message }) => message.turnId === undefined ? [] : [message.turnId]));
+      for (const turnId of owners) {
+        const messages = view.nativeState.messages?.filter(entry => entry.message.turnId === turnId).map(entry => entry.message) ?? [];
+        let item = view.turns.find(item => item.turnId === turnId);
+        if (!item && messages.some(message => message.role !== 'tool')) {
+          item = { turnId, role: 'assistant', text: '', reasoning: '', status: 'unknown', commands: [] };
+          view.turns.push(item);
+        }
+        if (!item) continue;
+        item.role = 'assistant';
+        const users = messages.filter(message => message.role === 'user');
+        item.userText = users.length ? users.map(message => message.text).join('') : undefined;
+        item.text = messages.filter(message => message.role === 'assistant').map(message => message.text).join('');
+      }
+      break;
+    }
+    case 'task_changed':
+      view.nativeState = applyNativeState(previous.nativeState, event);
+      if (previous.rootEvidence) view.rootEvidence = { ...previous.rootEvidence, tasks: view.nativeState.tasks };
+      // at/change are retained evidence, not a cursor/clock or a foreground terminal.
+      view.nativeChanges = [...(previous.nativeChanges ?? []), event];
+      break;
+    case 'cost':
+    case 'request_cost_recorded':
+    case 'goal':
+    case 'goal_proposed':
+    case 'verification':
+    case 'notice':
+    case 'background_notice_enqueued':
+    case 'background_notices_delivered':
+      view.nativeState = applyNativeState(previous.nativeState, event);
+      break;
     case 'session_created':
       view.status = 'connected';
       break;
@@ -329,6 +481,10 @@ export function applyTerm2Event(previous: Term2SessionView, event: AgentEventEnv
       turn(view, payloadId(payload, 'turnId')).text += text(payload.delta);
       view.status = 'running';
       break;
+    case 'reasoning':
+      // Native messageId/modelStep is not a v1 turn identity. Preserve it exactly.
+      view.nativeChanges = [...(previous.nativeChanges ?? []), event];
+      break;
     case 'reasoning_delta':
       turn(view, payloadId(payload, 'turnId')).reasoning += text(payload.delta);
       view.status = 'running';
@@ -343,11 +499,16 @@ export function applyTerm2Event(previous: Term2SessionView, event: AgentEventEnv
       break;
     }
     case 'command_message': {
-      const item = turnForCommand(view, payloadId(payload, 'turnId'));
-      const entry = command(item, payloadId(payload, 'callId'), text(payload.toolName, 256) || 'Tool');
+      view.nativeChanges = [...(previous.nativeChanges ?? []), event];
+      const turnId = payloadId(payload, 'turnId');
+      const callId = payloadId(payload, 'callId');
+      const item = view.turns.find(item => item.turnId === turnId);
       const status = payload.status;
       if (!['pending', 'running', 'completed', 'failed', 'aborted'].includes(String(status)))
         throw new Term2ProtocolError('Invalid command status');
+      // Keep an unmatched result as exact evidence, not a guessed Tool card.
+      if (!item?.commands.some(entry => entry.callId === callId)) break;
+      const entry = commandMessage(item.commands, payload);
       entry.status = status as Term2Command['status'];
       if (payload.output !== undefined) entry.output = text(payload.output);
       if (payload.error !== undefined) entry.error = text(payload.error, 10_000);
@@ -390,6 +551,7 @@ export function applyTerm2Event(previous: Term2SessionView, event: AgentEventEnv
       break;
     }
     case 'usage_update': {
+      view.nativeChanges = [...(previous.nativeChanges ?? []), event];
       const item = turnForActivity(view, payloadId(payload, 'turnId'));
       // Sessions replayed from before the M4 fix only carry the nested shape,
       // and that shape had only inputTokens/outputTokens — no totalTokens.
@@ -556,17 +718,47 @@ export function applyTerm2Event(previous: Term2SessionView, event: AgentEventEnv
       }
       break;
     }
+    case 'queue_changed':
+    case 'task_progress':
+    case 'automatic_memory_notice':
+    case 'command_started':
+    case 'command_finished':
+    case 'configuration':
+    case 'tool_progress':
+    case 'tool_call_streaming_delta':
+      view.nativeChanges = [...(previous.nativeChanges ?? []), event];
+      break;
+    case 'session_rotated':
+      // Native rotation replaces ROOT provider context, not tasks/queue/costs.
+      // Keep native evidence and branches; do not invent a reset/usage event.
+      // Keep measured usage/task cards, not predecessor root text/reasoning/tools.
+      view.retiredTurns = [...(previous.retiredTurns ?? []), ...previous.turns.map(item => ({ ...item, text: '', userText: undefined, reasoning: '', commands: [] }))];
+      view.hydration = undefined;
+      if (previous.nativeState) view.nativeState = { ...previous.nativeState, messages: undefined };
+      view.turns = [];
+      view.pendingInteraction = null;
+      view.nativeChanges = [...(previous.nativeChanges ?? []), event];
+      break;
+    case 'history_replaced':
+      // Transcript shape belongs to the session projection, not the event DTO.
+      // Force hydration from a real accepted cut rather than guessing messages.
+      view.nativeChanges = [...(previous.nativeChanges ?? []), event];
+      view.reloadRequired = true;
+      break;
     case 'context_compaction_started': {
+      view.nativeChanges = [...(previous.nativeChanges ?? []), event];
       const item = turnForActivity(view, payloadId(payload, 'turnId'));
       item.transientStatus = 'compacting context…';
       break;
     }
     case 'context_compaction_completed': {
+      view.nativeChanges = [...(previous.nativeChanges ?? []), event];
       const item = turnForActivity(view, payloadId(payload, 'turnId'));
       item.transientStatus = undefined;
       break;
     }
     case 'context_compaction_failed': {
+      view.nativeChanges = [...(previous.nativeChanges ?? []), event];
       const item = turnForActivity(view, payloadId(payload, 'turnId'));
       item.transientStatus = 'compaction failed';
       break;

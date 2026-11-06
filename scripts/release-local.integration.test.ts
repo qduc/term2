@@ -103,13 +103,16 @@ execFileSync(process.execPath, ['scripts/write-build-info.mjs'], { stdio: 'inher
       };
       await writeFile(path.join(cwd, 'package.json'), JSON.stringify(pkg));
       await writeFile(path.join(cwd, 'CHANGELOG.md'), '# Changelog\n\n## [0.0.0] - 2026-10-27\n');
-      await writeFile(path.join(cwd, '.gitignore'), 'dist/\n*.tgz\n');
+      await writeFile(path.join(cwd, '.gitignore'), 'node_modules/\ndist/\n*.tgz\n');
       await writeFile(path.join(cwd, 'dist/cli.js'), '// fixture payload\n');
       const commit = async (message: string) => {
         await ok('git', 'add', '.');
         await ok('git', '-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', 'commit', '-qm', message);
       };
       await ok('git', 'init', '-q', '-b', 'main');
+      // Match a prepared release checkout: pnpm can auto-install before running
+      // scripts, so create and commit its lockfile before testing clean tagged builds.
+      await ok('pnpm', 'install', '--offline');
       await commit('fixture base');
       const origin = path.join(fixture, 'origin.git');
       await ok('git', 'clone', '--quiet', '--bare', cwd, origin);

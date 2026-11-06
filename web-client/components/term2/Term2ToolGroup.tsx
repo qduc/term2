@@ -12,13 +12,15 @@ import { Term2CommandCard } from './Term2CommandCard';
 export function Term2ToolGroup({ commands }: { commands: Term2Command[] }) {
   const [userOpen, setUserOpen] = useState<boolean | null>(null);
   if (commands.length === 0) return null;
-  const running = commands.filter((c) => c.status === 'running' || c.status === 'pending').length;
+  const running = commands.filter((c) => c.status === 'running').length;
+  const pending = commands.filter((c) => c.status === 'pending').length;
   const failed = commands.filter((c) => c.status === 'failed').length;
-  const open = userOpen ?? running > 0;
+  const open = userOpen ?? (running > 0 || pending > 0);
   const summary =
     running > 0
-      ? `Working · ${commands.length - running} of ${commands.length} tool calls done`
-      : `Used ${commands.length} ${commands.length === 1 ? 'tool' : 'tools'}`;
+      ? `${running} running tool entries · ${pending} pending start`
+      : pending > 0 ? `${pending} accepted tool calls pending start`
+      : `${commands.length} tool/result ${commands.length === 1 ? 'entry' : 'entries'}`;
   return (
     <section aria-label="Tool calls" className="text-sm">
       <button
@@ -43,8 +45,8 @@ export function Term2ToolGroup({ commands }: { commands: Term2Command[] }) {
       </button>
       {open && (
         <div className="t2-enter mt-1 space-y-px rounded-xl border border-black/[0.06] bg-zinc-50/60 p-1 dark:border-white/[0.06] dark:bg-white/[0.02]">
-          {commands.map((command) => (
-            <Term2CommandCard key={command.callId} command={command} />
+          {commands.map((command, index) => (
+            <Term2CommandCard key={command.messageId ?? index} command={command} />
           ))}
         </div>
       )}

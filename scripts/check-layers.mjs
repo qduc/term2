@@ -1,0 +1,111 @@
+#!/usr/bin/env node
+// Enforce the layer graph over the whole production tree (src).
+// Each top-level folder of src is a layer. A layer may import itself, the
+// layers listed in LAYER_DEPENDENCIES and shared/ (pure helpers every layer may use).
+// Edges that predate the guard are listed one per line in layer-allowlist.json;
+// a new crossing edge fails, and a listed edge that no longer exists is reported.
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const scripts = path.dirname(fileURLToPath(import.meta.url));
+const repo = path.resolve(scripts, '..');
+const rewriteSrc = path.join(repo, 'src');
+const allowlistPath = path.join(scripts, 'layer-allowlist.json');
+
+const LAYER_DEPENDENCIES = {
+  shared: [],
+  config: [],
+  model: [],
+  tools: ['model', 'config'],
+  engine: ['model', 'tools', 'config'],
+  session: ['engine', 'model', 'tools', 'config'],
+  delegation: ['session', 'engine', 'model', 'tools', 'config'],
+  protocol: ['delegation', 'session', 'engine', 'model', 'tools', 'config'],
+  host: ['protocol', 'session', 'config'],
+  clients: ['host', 'protocol'],
+  app: ['clients', 'host', 'protocol', 'delegation', 'session', 'engine', 'tools', 'model', 'config'],
+};
+
+// Imports are collected from static ES module syntax, including re-exports and dynamic imports.
+const IMPORT = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?|\brequire\s*\(\s*)['"]([^'"]+)['"]/g;
+
+function* files(dir) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) yield* files(full);
+    else if (/\.(?:ts|tsx|cts|mts|js|mjs|cjs)$/.test(entry.name)) yield full;
+  }
+}
+
+function resolveImport(importer, specifier) {
+  if (!specifier.startsWith('.')) return null;
+  const unresolved = path.resolve(path.dirname(importer), specifier);
+  const candidates = [unresolved, unresolved.replace(/\.(?:m|c)?jsx?$/, '')];
+  for (const base of [...candidates]) candidates.push(...['.ts', '.tsx', '.cts', '.mts'].map((ext) => base + ext));
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) return candidate;
+    for (const ext of ['.ts', '.tsx']) {
+      const index = path.join(candidate, `index${ext}`);
+      if (fs.existsSync(index)) return index;
+    }
+  }
+  return null;
+}
+
+const relative = (file) => path.relative(rewriteSrc, file).split(path.sep).join('/');
+const layerOf = (file) => relative(file).split('/')[0];
+
+let allowlist;
+try {
+  allowlist = new Set(JSON.parse(fs.readFileSync(allowlistPath, 'utf8')));
+} catch (error) {
+  console.error(`cannot read ${path.relative(repo, allowlistPath)}: ${error.message}`);
+  process.exit(1);
+}
+
+const problems = new Set();
+const crossing = new Set();
+for (const importer of files(rewriteSrc)) {
+  const fromLayer = layerOf(importer);
+  if (!LAYER_DEPENDENCIES[fromLayer]) problems.add(`${relative(importer)}: ${fromLayer}/ is not a layer`);
+  const text = fs.readFileSync(importer, 'utf8');
+  for (const [, specifier] of text.matchAll(IMPORT)) {
+    const target = resolveImport(importer, specifier);
+    if (!target) continue;
+    if (!target.startsWith(rewriteSrc + path.sep)) {
+      problems.add(`${relative(importer)} imports ${path.relative(repo, target)} outside src`);
+      continue;
+    }
+    const toLayer = layerOf(target);
+    if (toLayer === fromLayer || toLayer === 'shared' || LAYER_DEPENDENCIES[fromLayer]?.includes(toLayer)) continue;
+    const edge = `${relative(importer)} -> ${relative(target)} (${fromLayer} -> ${toLayer})`;
+    crossing.add(edge);
+    if (!allowlist.has(edge))
+      problems.add(`${relative(importer)}: ${fromLayer}/ may not import ${toLayer}/ (${relative(target)})`);
+  }
+}
+for (const edge of allowlist) if (!crossing.has(edge)) console.log(`stale allowlist entry: ${edge}`);
+
+// Only session/ reads the log. app/ and clients/ ask the live session (store.metadata, session.acceptedHistory)
+// so a metadata call never re-parses a log the session already holds in memory.
+const LOG_READERS =
+  /\b(readDirectLogLineages?|readFactLines\w*|readFacts|discoverDirectLogs|readDirectLogHeaderLine|readDirectResumeTitle|readDirectResumeUpdatedAt)\b/;
+for (const file of files(rewriteSrc)) {
+  const name = relative(file);
+  if (!/^(app|clients)\//.test(name)) continue;
+  const text = fs.readFileSync(file, 'utf8');
+  const hit = LOG_READERS.exec(text);
+  if (hit)
+    problems.add(
+      `${name}:${
+        text.slice(0, hit.index).split('\n').length
+      }: app/ and clients/ may not read session logs; ask the session`,
+    );
+}
+
+if (problems.size) {
+  console.error([...problems].sort().join('\n'));
+  process.exit(1);
+}
+console.log(`layer check passed (${allowlist.size} allowlisted crossing edges)`);

@@ -6,9 +6,9 @@ on:
       - main
     paths:
       - 'website/**'
-      - 'source/services/settings/**'
-      - 'source/cli.tsx'
-      - 'source/gateway/serve-args.ts'
+      - 'src/config/settings/**'
+      - 'src/app/cli-args.ts'
+      - 'src/host/gateway/serve-args.ts'
       - '.github/workflows/docs.yml'
   workflow_dispatch:
 

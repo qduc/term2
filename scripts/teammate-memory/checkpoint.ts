@@ -7,8 +7,8 @@ import type {
   StreamedModelTurnEvent,
   StreamedModelTurnRequest,
   StreamedModelUsage,
-} from '../../source/contracts/streamed-model-turn.js';
-import type { ProviderDefinition } from '../../source/providers/registry.js';
+} from '../../src/shared/contracts/streamed-model-turn.js';
+import type { ProviderDefinition } from '../../src/model/providers/registry.js';
 
 type Arm = 'A' | 'B';
 type Preflight = {
@@ -186,8 +186,8 @@ async function main() {
   }
   const output = join(root, 'checkpoint-run');
   await mkdir(output); // One-shot: a partial or complete run must never be overwritten or replayed.
-  const { getProvider } = await import('../../source/providers/registry.js');
-  await import('../../source/providers/index.js');
+  const { getProvider } = await import('../../src/model/providers/registry.js');
+  await import('../../src/model/providers/index.js');
   const provider = getProvider('codex');
   if (!provider) throw new Error('Codex provider unavailable');
   const results = await runCheckpointPair(pair, {

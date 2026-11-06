@@ -140,7 +140,11 @@ it.each(['stale', 'inconclusive'] as const)('keeps a goal active when verificati
     const changes = history
       .trim()
       .split('\n')
-      .map((line) => JSON.parse(line).event)
+      .map((line) => {
+        const row = JSON.parse(line);
+        expect(row.v).toBe(2);
+        return row.fact;
+      })
       .filter((event) => event.type === 'goal_changed');
     expect(changes).toHaveLength(1);
     expect(changes[0].goal).toMatchObject({

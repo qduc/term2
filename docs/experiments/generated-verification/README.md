@@ -39,6 +39,17 @@ or obtain human agreement to defer them. Independently verify high-risk fixes.
 
 ## Current scope
 
+- `native-log.single-source` (`--target native`): generated identity-specific
+  tool bodies and escaped arguments through actual log create/read/reopen and
+  continuation segments, including ordinary/structured provider results, user
+  input echoes, reasoning/opaque metadata, identical/framed/distinct display,
+  terminal reconstruction after history replacement, and torn tails. Checks
+  exact hydrated facts and every large semantic string leaf in generated
+  same-turn facts against physical string leaves (including ref framing).
+  `text_delta`/full `history_replaced` remain approved literal exceptions.
+  This bounded vocabulary is not exhaustive schema coverage or a process-kill/
+  CLI/provider journey; focused controls are still required.
+
 - `history.pair-projection`: structured, unique Responses-style call IDs, JSON
   arguments, arbitrary result text, missing results and an orphan result.
   `projectProviderHistory` promises non-mutation and idempotence;
@@ -98,6 +109,6 @@ are tracked in [PLAN.md](PLAN.md).
 
 The ledger rollout evidence and limits are in [LEDGER-PLAN.md](LEDGER-PLAN.md).
 The remaining hotspot rollout is tracked in [HOTSPOTS-PLAN.md](HOTSPOTS-PLAN.md).
-The default now samples ten properties (10,000 cases total); `--target history`
+The default now samples eleven properties (11,000 cases total); `--target history`
 samples the three history properties. A recorded replay can report fewer cases
 because it continues from a shrunk path, not a fresh full seed run.

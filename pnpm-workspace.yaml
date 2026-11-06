@@ -10,3 +10,7 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - ink-prompt
   - '@qduc/web-fetch@0.1.4'
+
+patchedDependencies:
+  ink-prompt@0.4.3: patches/ink-prompt@0.4.3.patch
+  ink@7.0.1: patches/ink@7.0.1.patch

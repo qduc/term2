@@ -22,10 +22,16 @@ ran without a root authority snapshot.
   (`getSkillCatalog({ loadVia: 'shell' })`). The sandbox is the write boundary
   for Bare's edits. This was the user's rule, applied after the first review.
 - Bare gains `run_code` for what the shell cannot do. The model-facing tools
-  are `shell`, `goal_check`, and `run_code`, plus `session_rollover` in
-  interactive sessions (prohibited inside scripts, no shell equivalent; kept
-  by user decision, as Lite had it); web, memory, sessions, and MCP are
-  script-only `tools.*` members.
+  are `shell`, `goal_check`, and `run_code`, plus interactive `session_rollover`
+  (prohibited inside scripts). The frozen provider surface does not retain
+  `ask_mentor`, `ask_user`, or local `enter_worktree`/`exit_worktree` for Bare.
+  Compared with the earlier retained-tool proposal, in-session worktree leasing,
+  structured questions, and mentor access are withheld. Frozen old excludes these
+  Bare capabilities in both interactive and batch mode, so this is not a loss
+  relative to that executable. Supervisor notes 44–45 restore its contract;
+  re-pinning it is an owner decision,
+  not a new mode or flag. Web, memory,
+  sessions, and MCP are script-only `tools.*` members.
 - Bare gains `background-tasks`. `presentBareShell()` adds the `background` and
   `monitor` shell options only when a background job registry exists
   (interactive roots), and the job get/cancel tools are script-only.
@@ -49,21 +55,21 @@ memory, and sessions not yet included.
 
 ## Measured at merge time (fixture provider, chat-completions, headless)
 
-| Surface | Tool JSON chars | System chars |
-| --- | --- | --- |
-| Lite on `da1d4ad2` | 19,368 | 6,685 |
-| Bare on `da1d4ad2` | 6,328 | 2,857 |
-| Bare after merge, headless (no background registry) | 8,242 | 2,866 |
-| Standard (unchanged) | 29,506 | 17,908 |
+| Surface                                             | Tool JSON chars | System chars |
+| --------------------------------------------------- | --------------- | ------------ |
+| Lite on `da1d4ad2`                                  | 19,368          | 6,685        |
+| Bare on `da1d4ad2`                                  | 6,328           | 2,857        |
+| Bare after merge, headless (no background registry) | 8,242           | 2,866        |
+| Standard (unchanged)                                | 29,506          | 17,908       |
 
 These are request-size measurements only. They say nothing about task quality.
 
 ## Known gaps
 
-- **`ask_user`:** Bare has no `user-interaction` capability, and scripts cannot call
-  `ask_user` (`RUN_CODE_PROHIBITED_TOOLS`). Interactive Lite users lose the
-  question prompt; Bare asks in plain text. This was chosen to keep Bare's direct
-  surface minimal; `turn-decisions.blackbox.ts` now runs under Standard.
+- **Retained Bare tools:** The note 38 add-back of structured questions,
+  mentor access, and local worktree leasing is withheld by note 44's frozen
+  provider-surface contract. Use ordinary text questions; these tools remain
+  available only in profiles whose unchanged capability blocks include them.
 - **File tools:** Bare has no read, search, or edit tools, neither direct nor in
   `run_code`. This is intended: the shell does all three. Edits lose the
   editor diff display and edit-matching repair, and an outside-workspace

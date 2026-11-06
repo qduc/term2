@@ -1,3 +1,4 @@
+import { parseAgentConfigureResultV2 } from '@qduc/agent-wire';
 import fs from 'fs';
 import http from 'http';
 import https from 'https';
@@ -34,6 +35,9 @@ const OPAQUE_ID = /^[A-Za-z0-9_-]{1,256}$/u;
 const INTERNAL_PREFIX = '/private/agent/v1/';
 const SAFE_ERROR_CODES = new Set([
   'gateway_unavailable',
+  'protocol_upgrade_required',
+  'agent_wire_v2_unavailable',
+  'hydration_unavailable',
   'not_found',
   'workspace_forbidden',
   'validation_error',
@@ -82,6 +86,10 @@ const SAFE_ERROR_CODES = new Set([
 
 const SAFE_ERROR_MESSAGES = Object.freeze({
   gateway_unavailable: 'Agent gateway unavailable',
+  protocol_upgrade_required:
+    'Upgrade the browser and BFF together and use format=agent-wire-v2; config mutations require clientRequestId and the original expectedRevision. Do not auto-key, rebase or retry the old request',
+  agent_wire_v2_unavailable: 'agent-wire-v2 is gated until the shared artifact and consumer migration are combined',
+  hydration_unavailable: 'Native accepted hydration is unavailable',
   not_found: 'Resource not found',
   workspace_forbidden: 'Workspace is not available',
   validation_error: 'Invalid request',
@@ -97,7 +105,7 @@ const SAFE_ERROR_MESSAGES = Object.freeze({
   cursor_compacted: 'Event cursor requires reload',
   projection_too_large: 'Session projection is too large',
   invalid_cursor: 'Invalid cursor',
-  protocol_conflict: 'Cursor values disagree',
+  protocol_conflict: 'Protocol values disagree',
   request_too_large: 'Request is too large',
   attachments_not_enabled: 'Attachments are not available',
   cursor_invalid: 'Invalid cursor',
@@ -137,7 +145,8 @@ export class Term2GatewayError extends Error {
   ) {
     const normalizedCode = code === 'settings_forbidden' ? 'settings_not_allowed' : code;
     const safeCode = SAFE_ERROR_CODES.has(normalizedCode) ? normalizedCode : 'gateway_unavailable';
-    super(SAFE_ERROR_MESSAGES[safeCode]);
+    const conflict = safeCode === 'workspace_forbidden' ? workspaceConflictDetails(details) : undefined;
+    super(conflict ? workspaceConflictMessage(conflict) : SAFE_ERROR_MESSAGES[safeCode]);
     this.name = 'Term2GatewayError';
     this.code = safeCode;
     this.statusCode =
@@ -146,6 +155,28 @@ export class Term2GatewayError extends Error {
     this.requestId = requestId;
     this.details = details;
   }
+}
+
+// Only owner-authorized selection conflicts carry these two bounded values.
+// Never forward upstream messages, paths, owner IDs or arbitrary details.
+function workspaceConflictDetails(details) {
+  if (
+    (details?.existingAccess === 'read' || details?.existingAccess === 'read_write') &&
+    ['persisted', 'static', 'memory'].includes(details?.grantStorage)
+  ) {
+    return { existingAccess: details.existingAccess, grantStorage: details.grantStorage };
+  }
+  return undefined;
+}
+
+function workspaceConflictMessage({ existingAccess, grantStorage }) {
+  const change =
+    grantStorage === 'persisted'
+      ? 'To change access, the operator must stop the server, back up direct-workspace-grants.json in its effective state directory, remove only this root’s grant record, restart, and select the root again. Old sessions will no longer be accessible through that grant.'
+      : grantStorage === 'static'
+        ? 'This is a startup-supplied grant, not an editable persisted grant. Ask the operator to review the startup configuration; deleting persisted records cannot change it.'
+        : 'This grant is in memory only. The operator must restart the host and select the root again; old sessions will lose their grant.';
+  return `This root is already granted with ${existingAccess} access. Select that access to reuse it. ${change} See docs/contracts/14-agent-wire-v2-server.md, “Same-root access conflict”.`;
 }
 
 function assertPurpose(purpose) {
@@ -289,7 +320,9 @@ function normalizeGatewayError(statusCode, body, requestId) {
     details:
       hasSafeCode && code === 'settings_conflict' && source?.details && typeof source.details === 'object'
         ? source.details
-        : undefined,
+        : code === 'workspace_forbidden'
+          ? workspaceConflictDetails(source?.details)
+          : undefined,
   });
 }
 
@@ -502,6 +535,7 @@ export class Term2GatewayClient {
     rpcPath,
     body,
     query = '',
+    preserveConfigureResult = false,
     correlationId = randomUUID(),
   } = {}) {
     this.#assertEnabled();
@@ -513,7 +547,7 @@ export class Term2GatewayClient {
     // endpoint GET, but never send session_read upstream as GET.
     const upstreamMethod = purpose === 'session_read' ? 'POST' : method;
     const options = this.#requestOptions({ method: upstreamMethod, rpcPath, query, assertion, body, correlationId });
-    return this.#send(options, body, { correlationId, stream: false });
+    return this.#send(options, body, { correlationId, stream: false, configureSessionId: preserveConfigureResult && purpose === 'session_update' ? sessionId : undefined });
   }
 
   async request(args = {}) {
@@ -539,7 +573,7 @@ export class Term2GatewayClient {
       });
     assertOpaqueId(workspaceId, 'workspace ID');
     assertOpaqueId(sessionId, 'session ID');
-    if (typeof query !== 'string' || !/^$|\?after=\d{1,15}$/u.test(query))
+    if (typeof query !== 'string' || !/^(?:|\?after=\d{1,16}|\?format=agent-wire-v2(?:&after=\d{1,16})?)$/u.test(query))
       throw new Term2GatewayError('validation_error', 'Invalid gateway operation', {
         statusCode: 400,
         retryable: false,
@@ -553,7 +587,7 @@ export class Term2GatewayClient {
     return this.#retryAfterPairing(() => this.#streamOnce(args));
   }
 
-  #send(options, body, { correlationId, stream, signal }) {
+  #send(options, body, { correlationId, stream, signal, configureSessionId }) {
     return new Promise((resolve, reject) => {
       let settled = false;
       const timeoutMs = stream ? this.gatewayConfig.streamTimeoutMs : this.gatewayConfig.requestTimeoutMs;
@@ -620,6 +654,16 @@ export class Term2GatewayClient {
                 : null;
             } catch {
               /* safe generic mapping */
+            }
+            if (configureSessionId && parsed?.schemaVersion === 2) {
+              try {
+                parseAgentConfigureResultV2(parsed, configureSessionId);
+                settled = true;
+                if (timer) clearTimeout(timer);
+                cleanupAbortListener();
+                resolve({ statusCode: response.statusCode, headers: response.headers, body: parsed });
+                return;
+              } catch { /* malformed native results use the existing safe failure path */ }
             }
             if (response.statusCode >= 200 && response.statusCode < 300) {
               settled = true;

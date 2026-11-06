@@ -1,10 +1,13 @@
+import { testCliPath } from '../../tests/helpers/terminal-e2e.js';
 // Each entry file registers one scenario group. Vitest's default file isolation
 // evaluates this module separately for each group: the active fixture resources
 // and afterEach cleanup below are never shared across concurrent files. Cases
 // within each group remain sequential, with their original assertions/deadlines.
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { promisify, stripVTControlCharacters } from 'node:util';
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Socket } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -46,6 +49,7 @@ type FixtureMode =
   | 'native-error'
   | 'incomplete'
   | 'abnormal-close'
+  | 'abnormal-close-retry'
   | 'runaway-output';
 
 interface ProviderTransportCase {
@@ -84,6 +88,7 @@ interface ResponsesFixtureServer {
     predicate: (requests: readonly CapturedResponsesRequest[]) => boolean,
     timeoutMs?: number,
   ): Promise<void>;
+  releaseRetry(): void;
   close(): Promise<void>;
 }
 
@@ -229,7 +234,7 @@ export function registerResponsesContinuityScenarios(): void {
       const requests = normalRequests(server.requests);
       expect(requests).toHaveLength(2);
       const result = toolResultText(requests[1]!);
-      expect(result).toContain('session-search-fixture');
+      expect(result).toContain(SESSION_SEARCH_FIXTURE_ID);
       expect(result).toContain('No healthy model in agent.balancedModel pool');
       expect(result).not.toContain('timed out');
     });
@@ -414,7 +419,75 @@ export function registerResponsesFailureScenarios(): void {
         await runFailureScenario(providerCase, 'abnormal-close');
       },
     );
+
+    it.each(providerTransportCases.filter(({ transport }) => transport === 'websocket'))(
+      '$provider websocket keeps a failed attempt visible during quiet retry without replaying it',
+      async (providerCase) => {
+        await runQuietRetryScenario(providerCase);
+      },
+    );
   });
+}
+
+function latestCompleteFrame(output: string): string {
+  // Erased PTY frames are not evidence that a message remains on screen.
+  const begin = output.lastIndexOf('\x1b[?2026h');
+  const end = output.indexOf('\x1b[?2026l', begin);
+  return begin < 0 || end < 0 ? '' : stripVTControlCharacters(output.slice(begin, end));
+}
+
+async function runQuietRetryScenario(providerCase: ProviderTransportCase): Promise<void> {
+  const server = await startResponsesFixtureServer({ mode: 'abnormal-close-retry' });
+  activeServer = server;
+  const workspace = await createWorkspace(server, providerCase, 'abnormal-close-retry', 1);
+  activeWorkspace = workspace;
+  const child = await startCli(workspace);
+  activeChild = child;
+  const idle = await child.waitForIdleInput();
+  await writePrompt(child, 'exercise quiet retry');
+  await waitForRequests(server, child, (requests) => normalRequests(requests).length === 2);
+  const snapshot = await child.waitForState((state) => {
+    const frame = latestCompleteFrame(state.output);
+    return frame.includes('PARTIAL') && frame.includes('RECOVERED');
+  }, 10_000);
+  const frame = latestCompleteFrame(snapshot.output);
+  expect(frame.match(/PARTIAL/g)).toHaveLength(1);
+  expect(frame).not.toMatch(/retrying|error|failed|Stopped/i);
+  const retry = normalRequests(server.requests)[1]!;
+  expect(retry.body.previous_response_id).toBeUndefined();
+  expect(JSON.stringify(retry.body.input)).not.toContain('PARTIAL');
+  expect(server.served.filter((item) => item.closedAbnormally)).toHaveLength(1);
+  expect(server.served.some((item) => item.terminalType === 'response.completed')).toBe(false);
+
+  server.releaseRetry();
+  const settledIdle = await child.waitForIdleInput({ after: idle });
+  await writePrompt(child, 'follow up after quiet retry');
+  await waitForRequests(server, child, (requests) => normalRequests(requests).length === 3);
+  expect(JSON.stringify(normalRequests(server.requests)[2]!.body.input)).not.toContain('PARTIAL');
+  await child.waitForIdleInput({ after: settledIdle });
+  const files = (await readdir(workspace.paths.conversationsDir)).filter((file) => file.endsWith('.jsonl'));
+  expect(files).toHaveLength(1);
+  const facts = (await readFile(join(workspace.paths.conversationsDir, files[0]!), 'utf8'))
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line).fact);
+  expect(facts.filter((fact) => fact.type === 'text_delta' && fact.withdrawn)).toHaveLength(1);
+  expect(facts.filter((fact) => fact.type === 'turn_ended').map((fact) => fact.outcome)).toEqual([
+    'completed',
+    'completed',
+  ]);
+  await child.terminate({ timeoutMs: 2_000 });
+  // Settled rows move into Ink Static scrollback and need not appear in every
+  // redraw. A new CLI must reconstruct the accepted display from the log.
+  const resumed = await startCli(workspace, ['--resume', files[0]!.slice(0, -'.jsonl'.length)]);
+  activeChild = resumed;
+  await resumed.waitForIdleInput();
+  await resumed.waitForVisibleOutput('PARTIAL');
+  expect(resumed.getVisibleOutput()).toContain('RECOVERED');
+  expect(resumed.getVisibleOutput()).toContain('FOLLOWUP');
+  expect(resumed.getVisibleOutput()).not.toContain('Stopped');
+  expect(normalRequests(server.requests)).toHaveLength(3);
+  await resumed.terminate({ timeoutMs: 2_000 });
 }
 
 async function runFailureScenario(
@@ -431,7 +504,7 @@ async function runFailureScenario(
   await child.waitForIdleInput();
   await writePrompt(child, `exercise ${mode}`);
   await waitForRequests(server, child, (requests) => normalRequests(requests).length >= 1);
-  const failureSignal = mode === 'native-error' ? /error|failed/i : /PARTIAL|error|failed|closed/i;
+  const failureSignal = mode === 'native-error' ? /error|failed/i : /PARTIAL|error|failed|closed|dropped/i;
   await child.waitForState(
     (snapshot) => failureSignal.test(snapshot.visibleOutput) && !snapshot.visibleOutput.includes('SUCCESS'),
     10_000,
@@ -472,6 +545,9 @@ function assertApprovalResume(
   expect(terminalIds).toContain(TOOL_RESUMED_RESPONSE_ID);
 }
 
+// The offline migration (the route to this legacy log) accepts only UUID ids.
+const SESSION_SEARCH_FIXTURE_ID = '0f2e6c8a-7a51-4c1e-9d3b-5e8f4a2b6c10';
+
 async function createWorkspace(
   server: ResponsesFixtureServer,
   providerCase: ProviderTransportCase,
@@ -487,12 +563,19 @@ async function createWorkspace(
     prepare: async (root, paths) => {
       if (mode === 'session-search') {
         await mkdir(paths.conversationsDir, { recursive: true });
+        // The store gets this log through the offline migration, which needs a v3 log with a
+        // UUID id and the session's configuration.
+        const legacyDir = join(root, 'legacy-conversations');
+        await mkdir(legacyDir, { recursive: true });
         const events = [
           {
             type: 'session_init',
-            id: 'session-search-fixture',
+            id: SESSION_SEARCH_FIXTURE_ID,
             createdAt: '2026-10-04T00:00:00.000Z',
             projectPath: root,
+            provider: providerCase.provider,
+            model: MODEL,
+            activeProfileId: 'builtin:bare',
           },
           { type: 'user_message', message: { id: 'u', sender: 'user', text: 'prior diagnostic' } },
           {
@@ -507,10 +590,21 @@ async function createWorkspace(
           },
         ];
         await writeFile(
-          join(paths.conversationsDir, 'session-search-fixture.jsonl'),
-          events.map((event, seq) => JSON.stringify({ v: 1, seq, ts: '2026-10-04T00:00:00.000Z', event })).join('\n') +
-            '\n',
+          join(legacyDir, `${SESSION_SEARCH_FIXTURE_ID}.jsonl`),
+          events
+            .map((event, seq) => JSON.stringify({ v: 3, seq: seq + 1, ts: '2026-10-04T00:00:00.000Z', event }))
+            .join('\n') + '\n',
         );
+        const { stdout } = await promisify(execFile)(process.execPath, [
+          join(process.cwd(), 'scripts/migrate-conversations.mjs'),
+          '--source-copy',
+          legacyDir,
+          '--destination',
+          paths.conversationsDir,
+          '--provenance',
+          join(root, 'migration-private', 'map.json'),
+        ]).catch((error: { stdout?: string }) => ({ stdout: error.stdout ?? '' }));
+        expect(JSON.parse(stdout).codes).toEqual({ MIGRATED: 1 });
         // An unavailable optional index must still allow canonical browsing.
         await writeFile(join(root, 'session-index.db'), 'unavailable fixture index');
       }
@@ -526,7 +620,7 @@ async function createWorkspace(
             openai: { apiKey: 'fixture-key' },
             codex: {
               websocketFirstFrameTimeoutMs: 2_000,
-              websocketInterFrameTimeoutMs: 2_000,
+              websocketInterFrameTimeoutMs: mode === 'abnormal-close-retry' ? DEFAULT_TIMEOUT_MS : 2_000,
             },
           },
           app: { liteMode: mode !== 'nested-shell' },
@@ -551,13 +645,13 @@ async function createWorkspace(
   });
 }
 
-async function startCli(workspace: IsolatedWorkspaceLease): Promise<PtyChildDriver> {
+async function startCli(workspace: IsolatedWorkspaceLease, args: readonly string[] = []): Promise<PtyChildDriver> {
   return workspace.start({
     command: process.execPath,
     // --lite is required: workspace.root is also HOME, and the CLI home-directory
     // start guard blocks interactive non-lite starts when cwd === homedir.
     // Settings app.liteMode is loaded later and does not bypass that guard.
-    args: [join(process.cwd(), 'dist/cli.js'), '--lite'],
+    args: [testCliPath(join(process.cwd(), 'dist/cli.js')), '--lite', ...args],
     cwd: workspace.root,
     cols: 120,
     rows: 40,
@@ -669,6 +763,10 @@ async function startResponsesFixtureServer(options: {
   const sockets = new Set<Socket>();
   const clients = new Set<WebSocket>();
   let websocketConnectionCount = 0;
+  let releaseRetry!: () => void;
+  const retryReleased = new Promise<void>((resolve) => {
+    releaseRetry = resolve;
+  });
   const httpServer = createServer(async (request, response) => {
     sockets.add(request.socket);
     request.socket.once('close', () => sockets.delete(request.socket));
@@ -679,7 +777,7 @@ async function startResponsesFixtureServer(options: {
       body: await readJsonBody(request),
     } satisfies CapturedResponsesRequest;
     requests.push(captured);
-    await serveResponse(options.mode, captured, response, undefined, served);
+    await serveResponse(options.mode, captured, response, undefined, served, false, retryReleased);
   });
   const webSocketServer = new WebSocketServer({ noServer: true });
 
@@ -707,7 +805,15 @@ async function startResponsesFixtureServer(options: {
         body: parseJsonMessage(raw),
       } satisfies CapturedResponsesRequest;
       requests.push(captured);
-      void serveResponse(options.mode, captured, undefined, client, served, options.retainWebSocket === true);
+      void serveResponse(
+        options.mode,
+        captured,
+        undefined,
+        client,
+        served,
+        options.retainWebSocket === true,
+        retryReleased,
+      );
     });
   });
 
@@ -729,6 +835,7 @@ async function startResponsesFixtureServer(options: {
     },
     requests,
     served,
+    releaseRetry,
     waitForRequests: async (predicate, timeoutMs = DEFAULT_TIMEOUT_MS) => {
       const startedAt = Date.now();
       while (!predicate(requests)) {
@@ -741,6 +848,7 @@ async function startResponsesFixtureServer(options: {
     close: async () => {
       if (closePromise) return closePromise;
       closePromise = (async () => {
+        releaseRetry();
         for (const client of clients) {
           try {
             client.close(1001, 'fixture shutdown');
@@ -767,6 +875,7 @@ async function serveResponse(
   webSocket: WebSocket | undefined,
   served: ServedResponse[],
   retainWebSocket = false,
+  retryReleased?: Promise<void>,
 ): Promise<void> {
   const pushFrames = (frames: readonly Record<string, unknown>[], abnormalClose = false) =>
     sendFrames(httpResponse, webSocket, frames, abnormalClose, retainWebSocket);
@@ -807,11 +916,42 @@ async function serveResponse(
     return;
   }
 
-  if (mode === 'incomplete' || mode === 'abnormal-close') {
+  if (mode === 'abnormal-close-retry' && normalIndex > 0) {
+    const responseId = `resp-recovered-${normalIndex}`;
+    const text = normalIndex === 1 ? 'RECOVERED' : 'FOLLOWUP';
+    if (normalIndex === 1) {
+      // Hold the successful terminal frame until the test observes both attempts
+      // in the current render. No timing sleep or cumulative-output oracle.
+      await sendFrames(
+        undefined,
+        webSocket,
+        [createdFrame(responseId), { type: 'response.output_text.delta', delta: text }],
+        false,
+        true,
+      );
+      await retryReleased;
+      if (webSocket?.readyState !== webSocket?.OPEN) return;
+      await pushFrames([
+        { type: 'response.output_text.done', text },
+        { type: 'response.output_item.done', item: messageOutput(text) },
+        completedFrame(responseId, [messageOutput(text)]),
+      ]);
+    } else {
+      await pushFrames([
+        createdFrame(responseId),
+        ...messageFrames(text),
+        completedFrame(responseId, [messageOutput(text)]),
+      ]);
+    }
+    served.push({ request, terminalType: 'response.completed', responseId, closedAbnormally: false });
+    return;
+  }
+
+  if (mode === 'incomplete' || mode === 'abnormal-close' || mode === 'abnormal-close-retry') {
     const responseId = `resp-${mode}`;
     const frames = [createdFrame(responseId), { type: 'response.output_text.delta', delta: 'PARTIAL' }];
-    await pushFrames(frames, mode === 'abnormal-close');
-    served.push({ request, closedAbnormally: mode === 'abnormal-close' });
+    await pushFrames(frames, mode !== 'incomplete');
+    served.push({ request, closedAbnormally: mode !== 'incomplete' });
     return;
   }
 

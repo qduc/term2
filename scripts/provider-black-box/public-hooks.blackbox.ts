@@ -1,3 +1,4 @@
+import { testCliPath } from '../../tests/helpers/terminal-e2e.js';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,7 +17,7 @@ afterEach(async () => {
   server = undefined;
 });
 
-const BUILT_CLI = fileURLToPath(new URL('../../dist/cli.js', import.meta.url));
+const BUILT_CLI = testCliPath(fileURLToPath(new URL('../../dist/cli.js', import.meta.url)));
 
 async function writeFixtureSettings(paths: IsolatedWorkspacePaths, options: { trustedProjectRoots?: string[] } = {}) {
   await mkdir(paths.logDir, { recursive: true });

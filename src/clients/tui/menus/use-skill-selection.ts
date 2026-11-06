@@ -1,0 +1,87 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useInputContext } from './input-context.js';
+import { useSelection } from './use-selection.js';
+import type { MenuSkillInfo as SkillInfo } from '../integration.js';
+
+/** Case-insensitive match over skill name and description. */
+const filterSkills = (skills: SkillInfo[], query: string): SkillInfo[] => {
+  if (!query) return skills;
+  const lowerQuery = query.toLowerCase();
+  return skills.filter(
+    (s) => s.name.toLowerCase().includes(lowerQuery) || s.description.toLowerCase().includes(lowerQuery),
+  );
+};
+
+export const useSkillSelection = () => {
+  const { mode, input, cursorOffset, triggerIndex, controller, menus } = useInputContext();
+
+  const controllerFrame = controller.getSnapshot().stack.at(-1);
+  const isControllerOpen = controllerFrame?.kind === 'skills';
+  const isOpen = isControllerOpen || mode === 'skill_selection';
+  const activeTriggerIndex = isControllerOpen ? controllerFrame.binding.replacement.start : triggerIndex;
+
+  // skillsService.getAvailableSkills(), served by the app.
+  const allSkills = useMemo(() => menus.skills.list(), [menus]);
+
+  const query = useMemo(() => {
+    if (!isOpen) return '';
+    if (isControllerOpen) return controllerFrame.binding.query;
+    if (triggerIndex === null) return '';
+    const end = Math.min(cursorOffset, input.length);
+    return input.slice(triggerIndex, end);
+  }, [isOpen, isControllerOpen, controllerFrame, triggerIndex, input, cursorOffset]);
+
+  const filteredSkills = useMemo(() => filterSkills(allSkills, query), [allSkills, query]);
+
+  const { selectedIndex, setSelectedIndex, moveUp, moveDown, moveHome, moveEnd, pageUp, pageDown, getSelectedItem } =
+    useSelection(filteredSkills);
+
+  const MAX_VISIBLE_ITEMS = 10;
+  const [scrollOffset, setScrollOffset] = useState(0);
+
+  useEffect(() => {
+    setScrollOffset(0); // eslint-disable-line react-hooks/set-state-in-effect
+  }, [query]);
+
+  useEffect(() => {
+    if (selectedIndex < scrollOffset) {
+      setScrollOffset(selectedIndex); // eslint-disable-line react-hooks/set-state-in-effect
+    } else if (selectedIndex >= scrollOffset + MAX_VISIBLE_ITEMS) {
+      setScrollOffset(selectedIndex - MAX_VISIBLE_ITEMS + 1);
+    }
+  }, [selectedIndex, scrollOffset]);
+
+  const open = useCallback(
+    (startIndex: number) => {
+      if (mode === 'skill_selection') return;
+      const editor = controller.getSnapshot().editor;
+      controller.replaceText(editor.text, Math.max(editor.cursor, startIndex));
+      setSelectedIndex(0);
+    },
+    [mode, controller, setSelectedIndex],
+  );
+
+  const close = useCallback(() => {
+    if (mode === 'skill_selection') {
+      controller.close();
+    }
+  }, [mode, controller]);
+
+  return {
+    isOpen,
+    open,
+    close,
+    query,
+    triggerIndex: activeTriggerIndex,
+    skills: filteredSkills,
+    selectedIndex,
+    scrollOffset,
+    moveUp,
+    moveDown,
+    moveHome,
+    moveEnd,
+    pageUp,
+    pageDown,
+    getSelectedItem,
+  };
+};

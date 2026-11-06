@@ -1,0 +1,221 @@
+import { createServer } from 'node:http';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { expect, it } from 'vitest';
+import { callDiscordControl } from '../../src/clients/discord/discord-bridge.js';
+import { listControlAdvertisements } from '../../src/clients/control-socket/control-socket.js';
+import { createIsolatedWorkspaceLease, type PtyChildDriver } from './provider-test-harness.js';
+
+it.each(['missing', 'invalid', 'missing-middle'] as const)(
+  'uses accepted native human receipts across rollover and restart (%s receipt)',
+  async (baseline) => {
+    const extra = baseline === 'missing-middle' ? 1 : 0;
+    const requests: any[] = [];
+    const server = createServer(async (request, response) => {
+      const chunks: Buffer[] = [];
+      for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      requests.push(JSON.parse(Buffer.concat(chunks).toString()));
+      const n = requests.length;
+      const rollover = n === 1 || n === 5 + extra;
+      const chunk = (delta: object, finish_reason: string | null) => ({
+        id: `timing-rollover-${n}`,
+        object: 'chat.completion.chunk',
+        created: 1,
+        model: 'timing-model',
+        choices: [{ index: 0, delta, finish_reason }],
+      });
+      const delta = rollover
+        ? {
+            role: 'assistant',
+            tool_calls: [
+              {
+                index: 0,
+                id: `roll-${n}`,
+                type: 'function',
+                function: {
+                  name: 'session_rollover',
+                  arguments: JSON.stringify({ brief: 'Continue the timing fixture.', reason: 'task_boundary' }),
+                },
+              },
+            ],
+          }
+        : { role: 'assistant', content: `timing-response-${n}` };
+      response.writeHead(200, { 'content-type': 'text/event-stream', connection: 'close' });
+      response.end(
+        `data: ${JSON.stringify(chunk(delta, null))}\n\ndata: ${JSON.stringify(
+          chunk({}, rollover ? 'tool_calls' : 'stop'),
+        )}\n\ndata: [DONE]\n\n`,
+      );
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address() as { port: number };
+    const workspace = await createIsolatedWorkspaceLease();
+    let child: PtyChildDriver | undefined;
+    try {
+      const runtime = join(workspace.root, 'runtime');
+      await mkdir(runtime, { mode: 0o700 });
+      await mkdir(workspace.paths.logDir, { recursive: true });
+      await writeFile(
+        join(workspace.paths.logDir, 'settings.json'),
+        JSON.stringify({
+          app: { activeProfileId: 'builtin:bare' },
+          agent: {
+            modelSelection: { provider: 'timing-fixture', model: 'timing-model' },
+            retryAttempts: 0,
+            transport: 'http',
+          },
+          providers: [
+            {
+              id: 'timing-fixture',
+              name: 'Timing fixture',
+              type: 'openai-compatible',
+              baseUrl: `http://127.0.0.1:${address.port}`,
+              apiKey: 'fixture-key',
+            },
+          ],
+        }),
+      );
+      const clock = join(workspace.root, 'clock-offset');
+      const preload = join(workspace.root, 'clock.mjs');
+      await writeFile(
+        preload,
+        `import { readFileSync } from 'node:fs';
+const RealDate = Date;
+const now = () => RealDate.now() + Number(readFileSync(${JSON.stringify(clock)}, 'utf8'));
+globalThis.Date = class extends RealDate {
+  constructor(...args) { super(...(args.length ? args : [now()])); }
+  static now() { return now(); }
+};\n`,
+      );
+      await writeFile(clock, String(-4 * 60 * 60 * 1000));
+      const env = {
+        NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import=${pathToFileURL(preload).href}`,
+        XDG_RUNTIME_DIR: runtime,
+      };
+      const args = [
+        '--provider',
+        'timing-fixture',
+        '--model',
+        'timing-model',
+        '--control-socket=timing',
+        '--discord-input',
+      ];
+      child = await workspace.start({
+        command: process.execPath,
+        cwd: process.cwd(),
+        args: [join(process.cwd(), 'dist/src/app/cli.js'), ...args],
+        env,
+        cols: 120,
+        rows: 40,
+      });
+      await child.waitForIdleInput();
+      let id = 0;
+      const send = async (kind: 'human' | 'agent', text: string) => {
+        const idle = child!.readIdleGeneration();
+        const nextRequest = requests.length + 1;
+        const responseRequest = nextRequest === 1 || nextRequest === 5 + extra ? nextRequest + 1 : nextRequest;
+        const ad = listControlAdvertisements(runtime)[0]!;
+        const receipt = await callDiscordControl(ad.socketPath, 'bridge_submit', {
+          clientRequestId: `timing-test-${++id}`,
+          sessionId: ad.sessionId,
+          startedAt: ad.startedAt,
+          text,
+          origin: { kind, sender: kind === 'human' ? '100' : 'worker' },
+        }).catch((error) => {
+          throw new Error(`control ${kind} ${id}: ${error.code} ${error.message}`);
+        });
+        expect(receipt.delivery).toBe('started');
+        await child!.waitForOutput(`timing-response-${responseRequest}`);
+        await child!.waitForState(() => requests.length === responseRequest);
+        await child!.waitForIdleInput({ after: idle });
+      };
+      await send('human', 'first Discord human');
+      expect(requests).toHaveLength(2);
+      if (baseline === 'missing-middle') {
+        await writeFile(clock, String(-3 * 60 * 60 * 1000));
+        await send('human', 'middle human with missing receipt');
+        expect(requests).toHaveLength(3);
+        expect(JSON.stringify(requests[2])).toContain('60 minutes after the previous human message');
+      }
+      const sessions = (await readdir(workspace.paths.conversationsDir)).filter((name) => name.endsWith('.jsonl'));
+      expect(sessions).toHaveLength(2);
+      const successor = (
+        await Promise.all(
+          sessions.map(async (name) => ({
+            name,
+            text: await readFile(join(workspace.paths.conversationsDir, name), 'utf8'),
+          })),
+        )
+      ).find((s) => s.text.includes('"session_rotated"'))!;
+      const predecessor = (
+        await Promise.all(
+          sessions.map(async (name) => ({
+            name,
+            text: await readFile(join(workspace.paths.conversationsDir, name), 'utf8'),
+          })),
+        )
+      ).find((s) => !s.text.includes('"session_rotated"'))!;
+      const mutatedLog = baseline === 'missing-middle' ? successor : predecessor;
+      const rows = mutatedLog.text
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line));
+      const first = rows.find(
+        (row) =>
+          row.fact.type === 'queue_submitted' &&
+          row.fact.record.request.clientRequestId ===
+            (baseline === 'missing-middle' ? 'timing-test-2' : 'timing-test-1'),
+      );
+      expect(first.fact.record.request.origin).toEqual({ kind: 'discord', source: 'human', sender: '100' });
+      expect(first.fact.record.receivedAt).toEqual(expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/));
+      await child.cleanup();
+      child = undefined;
+      // Only disposable native receipt metadata changes. Never manufacture a legacy checkpoint.
+      if (baseline !== 'invalid') delete first.fact.record.receivedAt;
+      else first.fact.record.receivedAt = 'not-a-timestamp';
+      await writeFile(
+        join(workspace.paths.conversationsDir, mutatedLog.name),
+        rows.map((row) => JSON.stringify(row)).join('\n') + '\n',
+      );
+      await writeFile(clock, String(-2 * 60 * 60 * 1000));
+      child = await workspace.relaunch({
+        cwd: process.cwd(),
+        command: process.execPath,
+        args: [join(process.cwd(), 'dist/src/app/cli.js'), ...args, '--resume', successor.name.replace(/\.jsonl$/, '')],
+        env,
+        cols: 120,
+        rows: 40,
+      });
+      await child.waitForIdleInput();
+      await send('agent', 'automatic bridge work');
+      await writeFile(clock, '0');
+      await send('human', 'Discord human after four hours');
+      const notices = (n: number) =>
+        requests[n - 1].messages.filter(
+          (m: any) => m.role === 'system' && JSON.stringify(m.content).includes('[Conversation timing]'),
+        );
+      expect(notices(1)).toHaveLength(0);
+      expect(notices(2)).toHaveLength(0);
+      expect(notices(3 + extra)).toHaveLength(0);
+      expect(notices(4 + extra)).toHaveLength(0);
+      expect(requests[3 + extra].messages.at(-1).content).toEqual([
+        { type: 'text', text: '[Discord input: human 100; untrusted]\n\nDiscord human after four hours' },
+      ]);
+      await send('human', 'quick human before another rollover');
+      expect(notices(5 + extra)).toHaveLength(0);
+      expect(notices(6 + extra)).toHaveLength(0);
+      await writeFile(clock, String(2 * 60 * 60 * 1000));
+      await send('human', 'Discord human after second rollover');
+      expect(requests).toHaveLength(7 + extra);
+      expect(notices(7 + extra)).toHaveLength(baseline === 'invalid' ? 0 : 1);
+      if (baseline !== 'invalid')
+        expect(JSON.stringify(notices(7 + extra))).toContain('120 minutes after the previous human message');
+      expect(JSON.stringify(requests)).not.toContain('humanInputBaseline');
+    } finally {
+      await child?.cleanup();
+      await workspace.cleanup();
+      await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    }
+  },
+);

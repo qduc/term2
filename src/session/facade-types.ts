@@ -1,0 +1,270 @@
+/** Direct host boundary: the session contracts the host and app use.
+ * Admission is not completion; capture is an atomic snapshot/subscription cut.
+ * M3/M4 extend this facade when their actual domain capabilities land.
+ */
+import type { InteractionDecision, InteractionRequest, InteractionRequestId, TurnId } from '../engine/index.js';
+import type { ContentPart, ModelError, ModelRef, Usage } from '../model/index.js';
+import type { ExecutionId, Workspace } from '../tools/index.js';
+import type { DirectContextState } from './context.js';
+import type { DirectTaskState, DirectBackgroundProgress, DirectTaskControlResult } from './background-types.js';
+import type { DirectQueueState, DirectQueueEdit, DirectQueueMutation, DirectQueueSubmission } from './queue-types.js';
+import type { AnswerResult, AnswerProvenance } from './types.js';
+import type { Fact, TurnOutcomeName } from './facts.js';
+
+export type DirectOrigin =
+  | {
+      readonly kind: 'discord';
+      readonly source: 'human' | 'agent' | 'reaction';
+      readonly sender: string;
+      readonly discordMessageId?: string;
+      readonly relayedBy?: string;
+    }
+  | { readonly kind: 'control'; readonly source?: 'orchestrator'; readonly id?: string }
+  | { readonly kind: 'cli' | 'acp' | 'api'; readonly id?: string }
+  | {
+      readonly kind: 'tui';
+      readonly id?: string;
+      readonly skill?: { readonly name: string; readonly request: string };
+    };
+export type DirectBinding = { readonly client: string; readonly id: string };
+export type DirectSubmission = {
+  readonly clientRequestId: string;
+  readonly content: readonly ContentPart[];
+  readonly origin?: DirectOrigin;
+};
+export type DirectAdmission =
+  | {
+      readonly kind: 'started' | 'queued' | 'steering';
+      readonly clientRequestId: string;
+      readonly messageId: string;
+      readonly turnId?: TurnId;
+    }
+  | {
+      readonly kind: 'duplicate';
+      readonly clientRequestId: string;
+      readonly original: Exclude<DirectAdmission, { readonly kind: 'duplicate' }>;
+    }
+  | { readonly kind: 'rejected'; readonly clientRequestId: string; readonly reason: string };
+export type TranscriptJson =
+  | null
+  | boolean
+  | number
+  | string
+  | readonly TranscriptJson[]
+  | { readonly [key: string]: TranscriptJson };
+export type DirectMessage = {
+  readonly id: string;
+  readonly turnId?: TurnId;
+  readonly role: 'user' | 'assistant' | 'system' | 'tool';
+  readonly content: readonly ContentPart[];
+  /** Display-only JSON data; never provider context or restored authority. */
+  readonly presentation?: Readonly<Record<string, TranscriptJson>>;
+};
+export type DirectToolDisplay = {
+  readonly executionId: ExecutionId;
+  readonly turnId: TurnId;
+  readonly callId: string;
+  readonly parentExecutionId?: string;
+  readonly toolName: string;
+  readonly input: unknown;
+  readonly status: 'started' | 'completed' | 'unknown';
+  readonly output?: string;
+  readonly isError?: boolean;
+  readonly providerOutput?: readonly Readonly<Record<string, unknown>>[];
+  readonly display?: unknown;
+};
+/** First accepted display observation, in log order. A tool slot names an actual
+ * execution, including an unnamed result when call/start metadata is absent. */
+export type DirectTimelineEntry = {
+  readonly seq: number;
+  readonly kind: 'message' | 'tool' | 'reasoning' | 'task';
+  readonly id: string;
+  readonly turnId?: TurnId;
+  readonly modelStep?: number;
+};
+export type DirectAbortResult =
+  | {
+      readonly kind: 'aborted';
+      readonly turnId: TurnId;
+      readonly discardedMessageIds: readonly string[];
+      readonly returnedSteers?: readonly {
+        readonly messageId: string;
+        readonly clientRequestId: string;
+        readonly content: readonly ContentPart[];
+      }[];
+    }
+  | {
+      readonly kind: 'no_op';
+      readonly turnId: TurnId;
+      /** Accepted root terminal is evidence; a cancellation request is not settlement. */
+      readonly status: 'terminal_accepted' | 'cancellation_requested' | 'not_current';
+      readonly reason?: string;
+    }
+  | { readonly kind: 'not_admitting'; readonly reason?: string };
+export type DirectDraft = {
+  readonly id: string;
+  readonly turnId: TurnId;
+  readonly modelStep: number;
+  readonly text: string;
+};
+export type DirectSessionState = {
+  readonly id: string;
+  /** Current physical log; public id and all attached owners stay logical/stable. */
+  readonly backingSessionId: string;
+  readonly workspace: Workspace;
+  readonly model: ModelRef;
+  readonly configuration?: import('./configuration.js').DirectConfigurationState;
+  readonly status: 'idle' | 'running' | 'awaiting_interaction' | 'interrupted' | 'closed';
+  readonly activeTurnId: TurnId | null;
+  readonly drafts: readonly DirectDraft[];
+  readonly reasoning: string;
+  readonly terminal: {
+    readonly turnId: TurnId;
+    readonly outcome: TurnOutcomeName;
+    readonly error?: ModelError;
+    readonly terminalCause?: 'goal_check_unresolved' | 'completion_verification_blocked' | 'budget_exhausted';
+    readonly notice?: string;
+  } | null;
+  readonly messages: readonly DirectMessage[];
+  readonly tools: readonly DirectToolDisplay[];
+  readonly pendingInteractions: readonly InteractionRequest[];
+  readonly admissions: readonly DirectAdmission[];
+  readonly usage: Usage;
+  readonly lastUsage?: Usage;
+  readonly lastSpeed?: { readonly tps: number; readonly approximate: boolean };
+  readonly codexQuota?: import('../model/index.js').CodexWeeklyQuota;
+  readonly commands: import('./command-types.js').DirectCommandReceipts;
+  readonly notifications: import('./notifications.js').DirectNotificationState;
+  readonly requestCosts: readonly import('./facts.js').DirectRequestCostFact[];
+  readonly pendingBudgets: readonly Extract<Fact, { readonly type: 'budget_opened' }>[];
+  readonly timeline: readonly DirectTimelineEntry[];
+  readonly context: DirectContextState;
+  readonly tasks: readonly DirectTaskState[];
+  readonly queue: DirectQueueState;
+  readonly turnResults: readonly {
+    readonly turnId: TurnId;
+    readonly finalWindow?: import('./final.js').DirectFinalWindow;
+    readonly outcome: TurnOutcomeName;
+    readonly messages: readonly DirectMessage[];
+    readonly terminalCause?: string;
+    readonly notice?: string;
+  }[];
+};
+/** Position is a private live publication ordinal, never a durable fact sequence. */
+/** Live argument bytes retain real branch ancestry and never acquire an execution ID. */
+export type DirectArgumentStream = {
+  readonly type: 'tool_call_streaming_delta';
+  readonly turnId: TurnId;
+  readonly modelStep: number;
+  readonly argumentCharCount: number;
+  readonly toolName?: string;
+  readonly callId?: import('../model/index.js').ToolCallId;
+  readonly itemId?: string;
+  readonly callIndex?: number;
+};
+export type DirectBranchTransient = DirectArgumentStream & {
+  readonly branchId: string;
+  readonly taskId: import('./background-types.js').DirectTaskId;
+  readonly parentTurnId: TurnId;
+  readonly rootTurnId: TurnId;
+};
+export type DirectSessionUpdate =
+  | { readonly type: 'fact'; readonly position: number; readonly seq: number; readonly at: string; readonly fact: Fact }
+  | {
+      readonly type: 'transient';
+      readonly position: number;
+      readonly event:
+        | {
+            readonly type: 'automatic_memory_notice';
+            readonly notice: import('./memory.js').DirectAutomaticMemoryNotice;
+          }
+        | DirectBackgroundProgress
+        | DirectArgumentStream
+        | DirectBranchTransient
+        | { readonly type: 'codex_quota'; readonly quota: import('../model/index.js').CodexWeeklyQuota | null }
+        | Extract<import('../engine/index.js').TurnEvent, { readonly type: 'retrying' }>
+        | { readonly type: 'reasoning_delta'; readonly delta: string }
+        | { readonly type: 'tool_progress'; readonly executionId: ExecutionId; readonly chunk: string };
+    }
+  | { readonly type: 'state'; readonly position: number; readonly state: DirectSessionState };
+export type DirectSessionCapture = {
+  readonly state: DirectSessionState;
+  readonly position: number;
+  readonly seq: number;
+  unsubscribe(): void;
+};
+/** Reconnect applies replay only, not current state followed by old facts. */
+export type DirectSessionReplayCapture = DirectSessionCapture & {
+  readonly replay: readonly Extract<DirectSessionUpdate, { readonly type: 'fact' }>[];
+};
+export type DirectCancelTarget = { readonly kind: 'foreground' } | { readonly kind: 'task'; readonly id: string };
+export interface DirectSession {
+  readonly id: string;
+  snapshotInputPreview(
+    request: import('./preview.js').DirectPreviewRequest,
+  ): import('./preview.js').DirectPreviewSnapshot;
+  /** Accepted provider history at the current cut; read it in the same tick as `capture` to pair with its state. */
+  acceptedHistory(): readonly import('../model/index.js').Item[];
+  /** Current native mutation revision, not the event position or durable sequence. */
+  commandRevision(): string;
+  /** Stable invocation identity and durable outcome; admission is not completion. */
+  command(
+    request: import('./command-types.js').DirectCommandRequest,
+  ): Promise<import('./command-types.js').DirectCommandResult>;
+  /** Drain one current notice batch into a real silent root turn; duplicate keys return the original admission. */
+  drainBackgroundNotifications(
+    clientRequestId: string,
+  ): Promise<import('./notifications.js').DirectNotificationDrainResult>;
+  configureTaskCheckIn(
+    target: string,
+    policy: import('./background-check-ins.js').DirectBackgroundCheckInPolicy,
+  ): ReturnType<import('./background-check-ins.js').DirectBackgroundCheckIns['configure']>;
+  rewindTargets(): readonly import('./command-types.js').DirectRewindTarget[];
+  submit(request: DirectSubmission): Promise<DirectAdmission>;
+  submitWithDelivery(request: DirectQueueSubmission, expectedSteerTurnId?: TurnId): Promise<DirectAdmission>;
+  editQueue(messageId: string, edit: DirectQueueEdit): Promise<DirectQueueMutation>;
+  retractQueue(messageId: string): Promise<DirectQueueMutation>;
+  resumeQueue(): Promise<DirectQueueMutation>;
+  discardQueue(): Promise<DirectQueueMutation>;
+  abort(expectedTurnId: TurnId, discardQueue?: boolean, returnSteers?: boolean): DirectAbortResult;
+  answerBudget(
+    requestId: InteractionRequestId,
+    decision: import('../engine/types.js').BudgetDecision,
+    provenance?: AnswerProvenance,
+  ): AnswerResult;
+  setGoal(
+    expectedGeneration: number,
+    goal: import('./goal.js').DurableGoal | undefined,
+    source?: 'user' | 'launcher',
+  ): boolean;
+  answer(requestId: InteractionRequestId, decision: InteractionDecision, provenance?: AnswerProvenance): AnswerResult;
+  /** Request task stop; acceptance does not mean cleanup has settled. */
+  requestTaskStop(taskId: string): DirectTaskControlResult;
+  /** Cancels the selected run, not this Session/connection; cleanup retains admission ownership. */
+  cancel(target?: DirectCancelTarget): void;
+  /** Listener receives updates strictly after the returned position, in publication order. */
+  capture(listener: (update: DirectSessionUpdate) => void): DirectSessionCapture;
+  /** Atomic accepted facts (fromSeq, seq], then listener strictly after position. */
+  captureFrom(fromSeq: number, listener: (update: DirectSessionUpdate) => void): DirectSessionReplayCapture;
+  /** Releases the owned runtime/store handle, not a persisted domain-close operation. */
+  close(): Promise<void>;
+}
+export interface DirectSessionStore {
+  create(workspace: Workspace, model: ModelRef, binding?: DirectBinding): Promise<DirectSession>;
+  /** Read/replay only; one writable live Session per id per host; never restarts tools. */
+  open(id: string, binding?: DirectBinding): Promise<DirectSession>;
+  list(cursor?: string): Promise<{
+    readonly sessions: readonly {
+      readonly id: string;
+      readonly workspace: Workspace;
+      readonly model: ModelRef;
+      /** First user message, shortened; absent before any turn. */
+      readonly title?: string;
+      /** When the last accepted fact was written. */
+      readonly updatedAt?: string;
+      readonly messageCount?: number;
+    }[];
+    readonly cursor?: string;
+  }>;
+  close(): Promise<void>;
+}

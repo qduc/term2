@@ -14,6 +14,5 @@ eval/*
 pnpm-lock.yaml
 website/**
 web-client/**
-# Written by rewrite/parity scripts; their own formatting is canonical.
-rewrite/parity/features.json
-rewrite/parity/goldens/
+# Written by parity scripts; their own formatting is canonical.
+parity/goldens/

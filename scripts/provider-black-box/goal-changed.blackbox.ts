@@ -115,7 +115,11 @@ it('does not credit a goal check to a replacement goal', async () => {
     const changes = history
       .trim()
       .split('\n')
-      .map((line) => JSON.parse(line).event)
+      .map((line) => {
+        const row = JSON.parse(line);
+        expect(row.v).toBe(2);
+        return row.fact;
+      })
       .filter((event) => event.type === 'goal_changed');
     expect(changes).toHaveLength(2);
     expect(changes[0].goal).toMatchObject({ outcome: 'Original goal', status: 'active' });

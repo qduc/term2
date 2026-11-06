@@ -19,7 +19,7 @@ the review the draft is waiting on.
 
 ## 1. Contract
 
-The seam is the active-workspace fallback shared by `ExecutionContext`,
+The legacy seam is the active-workspace fallback shared by unpinned `ExecutionContext`,
 worktree admission, and safety or filesystem consumers that cannot receive an
 `ExecutionContext` directly. A leased root changes sandbox write authority,
 command-safety project membership, approval/read defaults, and path completion
@@ -29,9 +29,9 @@ not merge them.
 
 | # | Invariant | User-visible harm it prevents |
 | --- | --- | --- |
-| C9.1 | A successful parent workspace lease publishes its root to the active-root fallback; rejected admission does not publish a root. | Commands, file completion, approvals, or sandbox writes continue describing the previous checkout after a worktree switch, or a rejected request retargets the session. |
-| C9.2 | Consumers that default their root derive the currently leased root, including sandbox write allowlisting and command path-risk classification. | A command is classified against the main checkout while it runs in a leased worktree, or writes are allowed in the wrong checkout. |
-| C9.3 | A child `ExecutionContext.pin` does not publish or retarget the parent fallback. | A concurrent child changes the parent session's command-safety, completion, approval, or write authority. |
+| C9.1 | A successful unpinned local workspace lease publishes its root to the active-root fallback; rejected admission does not publish a root. | Commands, file completion, approvals, or sandbox writes continue describing the previous checkout after a worktree switch, or a rejected request retargets the session. |
+| C9.2 | Legacy consumers that default their root derive the published lease, including sandbox write allowlisting and command path-risk classification. | A command is classified against the main checkout while it runs in a leased worktree, or writes are allowed in the wrong checkout. |
+| C9.3 | A session or child `ExecutionContext.pin` does not publish or retarget the parent fallback. | A concurrent child changes the parent session's command-safety, completion, approval, or write authority. |
 | C9.4 | Entry resolves only against the runtime-issued worktree list and refuses ambiguous or unavailable candidates. | An invented, stale, or ambiguous name silently selects the wrong directory or a missing checkout. |
 | C9.5 | Parent root transitions refuse while jobs run beneath the old root. | A running background job keeps writing to the old root while the parent appears to have switched, producing split or corrupted work. |
 | C9.6 | A workspace lease never calls `process.chdir`. | A process-global cwd mutation retargets unrelated background jobs and every caller that relies on the process cwd. |
@@ -43,6 +43,23 @@ capability:
 > production publishers by convention. `publishActiveWorkspaceRoot` remains an
 > exported test/reset escape hatch, so code does not enforce an uncallable
 > single-writer capability.
+
+### Native session-local scope
+
+The direct application uses `ExecutionContext.pin(home)` for both roots and
+children. The pin owns an immutable home plus an optional local lease; entry and
+exit never publish a global root, and exit restores that home rather than
+`process.cwd()`. Configured tool generations share the Session's context, while
+children snapshot the current root at admission. The legacy publication clauses
+C9.1/C9.2 and historical default-root audit below apply only to unpinned contexts.
+
+Source shell sandbox configuration and file tools receive the pin's explicit cwd.
+Legacy command-safety helpers that still default through
+`getActiveWorkspaceRoot()` do not follow a direct Session's lease. In particular,
+reads in a sibling worktree outside process cwd can require extra approval rather
+than receive project-local classification. This is an accepted limitation, not a
+claim that the fallback represents every concurrent Session. Do not restore
+process-wide publication to suppress those prompts.
 
 ## 2. Owners
 
@@ -75,15 +92,16 @@ capability:
 
 ## 4. Identities and state crossing the boundary
 
-- The parent session's home root is `process.cwd()` (or the remote directory
-  in remote mode); an active local workspace is an absolute leased path.
+- An unpinned context's home is `process.cwd()`; a pinned context's home is the
+  root supplied to `pin`, and a remote context's home is its remote directory.
+  An active local workspace is an absolute leased path.
 - `activeRoot` is the process-local fallback state. It is read dynamically by
   default arguments and helpers, rather than captured when a module is loaded.
 - A runtime-issued `GitWorktree` record supplies the path, branch, and
   availability/prunable state used by admission. A directory or branch name is
   an input selector, not an authority to supply an arbitrary path.
-- `ExecutionContext.pin(root)` stores a child-local root without publishing it;
-  `enterWorkspace(root)` stores and publishes the parent root.
+- `ExecutionContext.pin(root)` stores a session/child-local home without publishing
+  it; `enterWorkspace(root)` updates the lease and only unpinned contexts publish.
 
 ### Verified default-root consumers
 
@@ -129,7 +147,8 @@ The exact admission settlement union is:
 `entered | already_active | not_found | ambiguous | unavailable | busy`
 
 `entered` is the only successful transition and is followed by
-`ExecutionContext.enterWorkspace`, which publishes the selected root.
+`ExecutionContext.enterWorkspace`, which updates the lease and publishes the
+selected root only for unpinned contexts.
 `already_active` is a successful no-op. The other outcomes reject or defer
 admission and do not publish a new root.
 
@@ -158,13 +177,17 @@ publication unchanged.
 - `enter_worktree` and `exit_worktree` return explicit human-readable messages
   derived from their typed outcome; busy messages include the running job IDs
   and commands.
-- The active root is observable through `getActiveWorkspaceRoot()` and through
-  the selected root in `ExecutionContext.getCwd()` and `getActiveWorkspace()`.
+- A published legacy lease is observable through `getActiveWorkspaceRoot()`.
+  For a pinned context, inspect `getCwd()`, `getHomeWorkspace()` and
+  `getActiveWorkspace()` on that specific context; the global fallback is not
+  its authority.
 - Sandbox configuration exposes its effective `filesystem.allowWrite` list;
   command safety exposes the structured `SafetyStatus` classification.
 - A diagnosis showing completion entries, allow-write paths, or path-risk
-  results from the home checkout after an accepted lease indicates a C9.1/C9.2
-  publication/defaulting violation. A child pin changing those values indicates
+  results from the home checkout after an accepted unpinned lease indicates a
+  C9.1/C9.2 publication/defaulting violation. Pinned contexts instead require
+  checking the explicit root passed to each consumer, subject to the native
+  classifier limitation above. A child pin changing those values indicates
   C9.3. A process cwd change indicates C9.6.
 
 ## 7. Public boundary under test

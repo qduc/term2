@@ -1,12 +1,10 @@
 {
   "extends": "./tsconfig.json",
-  "exclude": [
-    "node_modules",
-    "dist",
-    "source/**/*.test.ts",
-    "source/**/*.test.tsx",
-    "source/**/*.integration.scenarios.ts",
-    "source/**/*.spec.ts",
-    "source/**/*.spec.tsx"
-  ]
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "./dist",
+    "rootDir": ".",
+    "types": ["node"]
+  },
+  "include": ["src/**/*"]
 }

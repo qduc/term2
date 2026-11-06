@@ -96,8 +96,8 @@ runs:
         new ssh2.Client();
         createRequire(require.resolve('ssh2'))('cpu-features')();
         NODE
-    # apt took 12–21s: an index refresh, then dpkg reading its file database.
-    # The archives for this exact image extract to the same files instead.
+    # Cache package archives, then extract them only under RUNNER_TEMP.
+    # Do not install host configuration or execute package maintainer scripts.
     - name: Restore shell sandbox packages
       id: sandbox-debs
       if: inputs.ripgrep == 'true'
@@ -105,29 +105,24 @@ runs:
       with:
         path: ~/.term2-ci/sandbox-debs
         key: test-sandbox-debs-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.image.outputs.image }}-${{ steps.image.outputs.version }}
-    - name: Install shell sandbox prerequisites
+    - name: Prepare shell sandbox prerequisites without host configuration changes
       if: inputs.ripgrep == 'true'
       shell: bash
       run: |
         debs="$HOME/.term2-ci/sandbox-debs"
-        extract() {
-          local deb socat_version
-          compgen -G "$debs/*.deb" >/dev/null || return 1
-          for deb in "$debs"/*.deb; do sudo dpkg-deb -x "$deb" / || return 1; done
-          # bubblewrap's only maintainer script applies the sysctl file it ships.
-          sudo sysctl --quiet --pattern '^kernel\.unprivileged_userns_clone$' --system || :
-          rg --version && bwrap --version && socat_version="$(socat -V)" || return 1
-          grep -m1 'socat version' <<<"$socat_version"
-        }
+        root="$RUNNER_TEMP/term2-sandbox-tools"
         if ! compgen -G "$debs/*.deb" >/dev/null; then
           sudo apt-get update
           mkdir -p "$debs"
-          (cd "$debs" && apt-get download ripgrep bubblewrap socat) || :
+          (cd "$debs" && apt-get download ripgrep bubblewrap socat)
         fi
-        # A failed download, or a shared library missing from a new image,
-        # falls back to apt. Removing the archives keeps them out of the cache.
-        if ! extract; then
-          rm -rf "$debs"
-          sudo apt-get update
-          sudo apt-get install -y ripgrep bubblewrap socat
-        fi
+        mkdir -p "$root"
+        for deb in "$debs"/*.deb; do dpkg-deb -x "$deb" "$root"; done
+        export PATH="$root/usr/bin:$PATH"
+        "$root/usr/bin/rg" --version
+        "$root/usr/bin/bwrap" --version
+        socat_version="$("$root/usr/bin/socat" -V)"
+        grep -m1 'socat version' <<<"$socat_version"
+        echo "$root/usr/bin" >> "$GITHUB_PATH"
+        # Missing packages/libraries or unavailable namespaces must fail CI.
+        # Never apply sysctl settings, install with apt, or disable sandbox tests.

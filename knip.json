@@ -1,10 +1,9 @@
 {
   "$schema": "https://unpkg.com/knip@5/overview/configuration-schema.json",
   "entry": [
-    "source/cli.tsx",
-    "source/services/hooks/index.ts",
-    "source/utils/worker-cwd-preload.cts",
-    "source/scripts/**/*.ts",
+    "src/app/cli.ts",
+    "src/session/hooks/index.ts",
+    "src/shared/utils/worker-cwd-preload.cts",
     "scripts/*.ts",
     "scripts/*.mjs",
     "scripts/nested-approval/*.ts",
@@ -14,14 +13,7 @@
     "scripts/provider-black-box/*.mjs",
     "vitest*.config.ts"
   ],
-  "project": ["source/**/*.{ts,tsx,cts}", "scripts/**/*.{ts,tsx,mjs}", "vitest*.config.ts"],
-  "ignore": [
-    "scripts/experiments/**",
-    "scripts/provider-black-box/fixtures/**",
-    "source/services/mcp/test-fixtures/**",
-    "eval/**",
-    "website/**",
-    "tools/**"
-  ],
+  "project": ["src/**/*.{ts,tsx,cts}", "tests/**/*.{ts,tsx}", "scripts/**/*.{ts,tsx,mjs}", "vitest*.config.ts"],
+  "ignore": ["scripts/experiments/**", "scripts/provider-black-box/fixtures/**", "eval/**", "website/**", "tools/**"],
   "ignoreDependencies": ["minimal", "@earendil-works/pi-ai"]
 }

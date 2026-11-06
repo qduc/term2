@@ -31,11 +31,11 @@ production build lacks `act`.
 
 ## Rules
 
-- **Never commit a unit test.** A `*.test.ts(x)` or `*.spec.ts(x)` under `source/`,
+- **Never commit a unit test.** A `*.test.ts(x)` or `*.spec.ts(x)` under `tests/`,
   `scripts/` or `docs/` that the default Vitest config would pick up is rejected unless
   it is one of the guards listed in `scripts/check-no-unit-tests.mjs`. Adding a guard
   needs the user's approval.
-- **Temporary tests are fine.** Write them next to the code so the default config finds
+- **Temporary tests are fine.** Write them under `tests/` so the default config finds
   them, run them, then delete them before committing. Don't `git add -A` with one in the
   tree.
 - **The other tiers stay and run in CI.** Change them when behavior changes. Add to them
@@ -92,6 +92,24 @@ and `68ef50ff` (local-only evidence), not a result file to resume appending.
   cause from that alone. A separate fixed harness defect missed an already
   captured HTTP request when no later PTY event woke its waiter; test HTTP-only
   wakeup and an unmet-predicate timeout, not just terminal output.
+- **Identical menu redraws:** first-run setup closes/reopens its model picker
+  after Escape. With an empty filter, Ink can coalesce those transitions into
+  an unchanged frame and emit no new `Filter:` bytes. A new-output wait then
+  times out despite a live picker. Type a throwaway query before Escape and
+  assert a fresh, line-terminated empty filter, then finish model selection.
+  This observes reset/recovery rather than requiring an identical repaint;
+  a no-reopen mutation must fail at the reset assertion. A controlled
+  hook/controller/Ink probe reproduced this mechanism; the original full-CLI
+  CI timing was not reproduced locally.
+- **Direct settings e2e teardown:** `tests/cli/settings.e2e.test.ts` fails
+  intermittently with `ENOTEMPTY: directory not empty, rmdir
+  '<tmp>/term2-tool-rows-e2e-*/home'` (or `home/.local`) and no assertion
+  failure. It reproduced on unmodified `main` `d7bf2ff` in 3 of 6 isolated runs
+  (2026-11-04). `afterEach` calls `session.dispose()`, which kills the PTY
+  without awaiting child exit, then `rmSync`s the root while the child may still
+  write under HOME; `maxRetries` does not cover it. Treat the signature as this
+  teardown race, not a product regression; a likely fix (untested) is to await child exit
+  before removing the root.
 - **Build/host isolation:** suites that replace `dist` in one worktree must run
   sequentially; overlapping builds produced transient missing-module errors.
   Missing `dist/cli.js` is setup failure, not behavioral red proof. Child-process
@@ -164,7 +182,7 @@ branches; do not infer that remote source `42724797` has those capabilities.
 
 ## Prompt and instruction changes
 
-Prompt text under `source/prompts/` is product behavior. When trimming a prompt, show
+Prompt text under `src/session/prompts/` is product behavior. When trimming a prompt, show
 that its non-obvious content survives. For example, run the assembled prompt for the
 affected model and confirm the text is present, or run a non-interactive turn that
 depends on it.

@@ -3,13 +3,14 @@ import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { expect, it } from 'vitest';
-import { callDiscordControl } from '../../source/services/discord/discord-bridge.js';
-import { listControlAdvertisements } from '../../source/services/control-socket/control-socket.js';
+import { callDiscordControl } from '../../src/clients/discord/discord-bridge.js';
+import { listControlAdvertisements } from '../../src/clients/control-socket/control-socket.js';
 import { createIsolatedWorkspaceLease, type PtyChildDriver } from './provider-test-harness.js';
 
 it.each(['retained', 'legacy', 'invalid'] as const)(
   'retains the human clock across rollover and resumed successor for Discord input (%s baseline)',
   async (baseline) => {
+    // The human-clock metadata is the accepted receipt's receivedAt.
     const requests: any[] = [];
     const server = createServer(async (request, response) => {
       const chunks: Buffer[] = [];
@@ -105,6 +106,8 @@ globalThis.Date = class extends RealDate {
       let id = 0;
       const send = async (kind: 'human' | 'agent', text: string) => {
         const idle = child!.readIdleGeneration();
+        const nextRequest = requests.length + 1;
+        const responseRequest = nextRequest === 1 || nextRequest === 5 ? nextRequest + 1 : nextRequest;
         const ad = listControlAdvertisements(runtime)[0]!;
         const receipt = await callDiscordControl(ad.socketPath, 'bridge_submit', {
           clientRequestId: `timing-test-${++id}`,
@@ -116,6 +119,8 @@ globalThis.Date = class extends RealDate {
           throw new Error(`control ${kind} ${id}: ${error.code} ${error.message}`);
         });
         expect(receipt.delivery).toBe('started');
+        await child!.waitForOutput(`timing-response-${responseRequest}`);
+        await child!.waitForState(() => requests.length === responseRequest);
         await child!.waitForIdleInput({ after: idle });
       };
       await send('human', 'first Discord human');
@@ -129,20 +134,38 @@ globalThis.Date = class extends RealDate {
             text: await readFile(join(workspace.paths.conversationsDir, name), 'utf8'),
           })),
         )
-      ).find((s) => s.text.includes('"rolloverFrom"'))!;
-      const predecessor = (
-        await Promise.all(sessions.map(async (name) => readFile(join(workspace.paths.conversationsDir, name), 'utf8')))
-      ).find((s) => !s.includes('"rolloverFrom"'))!;
-      const firstAt = predecessor
+      ).find((s) => s.text.includes('"session_rotated"'))!;
+      const { name: predecessorName, text: predecessor } = (
+        await Promise.all(
+          sessions.map(async (name) => ({
+            name,
+            text: await readFile(join(workspace.paths.conversationsDir, name), 'utf8'),
+          })),
+        )
+      ).find((s) => !s.text.includes('"session_rotated"'))!;
+      const predecessorRows = predecessor
         .split('\n')
         .filter(Boolean)
-        .map((line) => JSON.parse(line))
-        .find((row) => row.event.type === 'user_message').event.message.humanInputAt;
+        .map((line) => JSON.parse(line));
+      const firstAt = predecessorRows.find(
+        (row) => row.fact.type === 'queue_submitted' && row.fact.record.request.clientRequestId === 'timing-test-1',
+      ).fact.record.receivedAt;
+      expect(firstAt).toEqual(expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/));
       await child.cleanup();
       child = undefined;
       // Old successors have no checkpoint; malformed optional metadata fails closed.
       // Only disposable fixture logs are edited, never application-owned live state.
       if (baseline !== 'retained') {
+        const first = predecessorRows.find(
+          (row) => row.fact.type === 'queue_submitted' && row.fact.record.request.clientRequestId === 'timing-test-1',
+        );
+        if (baseline === 'legacy') delete first.fact.record.receivedAt;
+        else first.fact.record.receivedAt = 'not-a-timestamp';
+        await writeFile(
+          join(workspace.paths.conversationsDir, predecessorName),
+          predecessorRows.map((row) => JSON.stringify(row)).join('\n') + '\n',
+        );
+      } else if (baseline !== 'retained') {
         const rows = successor.text
           .trim()
           .split('\n')

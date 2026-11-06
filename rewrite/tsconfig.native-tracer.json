@@ -1,9 +1,0 @@
-{
-  "extends": "./tsconfig.json",
-  "compilerOptions": {
-    "noEmit": false,
-    "outDir": "./bench-dist",
-    "rootDir": ".."
-  },
-  "include": ["bench/native-tracer/**/*.ts"]
-}

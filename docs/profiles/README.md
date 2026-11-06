@@ -110,7 +110,10 @@ for scope, opt-out and privacy; no profile switch is required.
 Bare carries no tool for what the shell can do: file reads, search, edits, and
 skill loading all go through the shell, so the sandbox is Bare's write boundary.
 The model-facing tools are the shell, `goal_check` (root sessions), `run_code`, and,
-in interactive sessions, `session_rollover`, which scripts cannot call. Web, memory,
+in interactive sessions, `session_rollover`, which scripts cannot call.
+The frozen provider surface omits Bare's proposed `ask_mentor`, `ask_user`,
+and `enter_worktree`/`exit_worktree` add-backs; see [the merge decision](lite-bare-merge.md).
+Web, memory,
 sessions, MCP, and background-job tools have no shell equivalent; they are
 script-only `tools.*` members of `run_code`, listed by name, and the model calls
 `tools.describe(name)` for a schema. Script calls keep the same approval prompts

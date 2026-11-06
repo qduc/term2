@@ -1,0 +1,108 @@
+diff --git a/dist/components/MultilineInput/index.js b/dist/components/MultilineInput/index.js
+index 2855a945825bfea3dba1f504895271689b9baf23..04c80bee2436372ba93d1abb5025d03bfcbf5cb5 100644
+--- a/dist/components/MultilineInput/index.js
++++ b/dist/components/MultilineInput/index.js
+@@ -16,6 +16,7 @@ export const MultilineInputCore = ({ value, onChange, placeholder, showCursor =
+         formatPastePlaceholder,
+     });
+     const isSyncingFromProps = useRef(false);
++    const previousValue = useRef(value);
+     const onCursorChangeRef = useRef(onCursorChange);
+     useEffect(() => {
+         onCursorChangeRef.current = onCursorChange;
+@@ -26,10 +27,13 @@ export const MultilineInputCore = ({ value, onChange, placeholder, showCursor =
+         }
+     }, [textInput.cursorOffset]);
+     useEffect(() => {
+-        if (value !== undefined && value !== textInput.value) {
++        // Cursor-only changes must not overwrite edits awaiting onChange.
++        const valueChanged = previousValue.current !== value;
++        previousValue.current = value;
++        if (valueChanged && value !== undefined && value !== textInput.value) {
+             isSyncingFromProps.current = true;
+         }
+-        textInput.syncExternalState({ value, cursorOffset: cursorOverride });
++        textInput.syncExternalState({ value: valueChanged ? value : undefined, cursorOffset: cursorOverride });
+     }, [value, cursorOverride]);
+     const onChangeRef = useRef(onChange);
+     useEffect(() => {
+@@ -59,7 +63,7 @@ export const MultilineInputCore = ({ value, onChange, placeholder, showCursor =
+     if (showPlaceholder) {
+         return _jsx("div", { style: { opacity: 0.5 }, children: placeholder });
+     }
+-    const terminalHeight = useTerminalHeight();
++    const terminalHeight = useTerminalHeight(maxHeight);
+     const defaultMaxHeight = Math.max(1, Math.floor(terminalHeight * 0.8));
+     const effectiveMaxHeight = maxHeight ?? defaultMaxHeight;
+     return (_jsx(TextRenderer, { buffer: textInput.buffer, cursor: textInput.cursor, width: width, showCursor: showCursor, blockState: textInput.blockState, maxHeight: effectiveMaxHeight }));
+@@ -148,11 +152,15 @@ export const MultilineInput = ({ value, onChange, onSubmit, placeholder, showCur
+         onCursorChangeRef.current?.(textInput.cursorOffset);
+     }, [textInput.cursorOffset]);
+     const isSyncingFromProps = useRef(false);
++    const previousValue = useRef(value);
+     useEffect(() => {
+-        if (value !== undefined && value !== textInput.value) {
++        // Cursor-only changes must not overwrite edits awaiting onChange.
++        const valueChanged = previousValue.current !== value;
++        previousValue.current = value;
++        if (valueChanged && value !== undefined && value !== textInput.value) {
+             isSyncingFromProps.current = true;
+         }
+-        textInput.syncExternalState({ value, cursorOffset: cursorOverride });
++        textInput.syncExternalState({ value: valueChanged ? value : undefined, cursorOffset: cursorOverride });
+     }, [value, cursorOverride]);
+     const onChangeRef = useRef(onChange);
+     useEffect(() => {
+@@ -240,7 +248,7 @@ export const MultilineInput = ({ value, onChange, onSubmit, placeholder, showCur
+     if (showPlaceholder && !isPasting) {
+         return (_jsx(Box, { children: _jsx(Text, { dimColor: true, children: placeholder }) }));
+     }
+-    const terminalHeight = useTerminalHeight();
++    const terminalHeight = useTerminalHeight(maxHeight);
+     const defaultMaxHeight = Math.max(1, Math.floor(terminalHeight * 0.8));
+     const effectiveMaxHeight = maxHeight ?? defaultMaxHeight;
+     return (_jsxs(Box, { flexDirection: "column", children: [_jsx(TextRenderer, { buffer: textInput.buffer, cursor: textInput.cursor, width: terminalWidth, showCursor: showCursor, blockState: textInput.blockState, maxHeight: effectiveMaxHeight }), isPasting && (_jsx(Box, { children: _jsx(Text, { dimColor: true, children: "Reading clipboard..." }) }))] }));
+diff --git a/dist/hooks/useTerminalHeight.js b/dist/hooks/useTerminalHeight.js
+index 582408bc1f7fab149c26a319827374fdf4b6bc98..e22b7698d6ac5c58434276bfe9508758c7822b6e 100644
+--- a/dist/hooks/useTerminalHeight.js
++++ b/dist/hooks/useTerminalHeight.js
+@@ -12,7 +12,8 @@ export function useTerminalHeight(propHeight, debounceMs = 100) {
+     const [terminalHeight, setTerminalHeight] = useState(stdout?.rows ?? 24);
+     const debounceTimer = useRef(null);
+     useEffect(() => {
+-        if (!stdout)
++        // An explicit height is the return value, so the stream is unused.
++        if (!stdout || propHeight != null)
+             return;
+         const onResize = () => {
+             // Cancel any pending debounce timer
+@@ -34,6 +35,6 @@ export function useTerminalHeight(propHeight, debounceMs = 100) {
+                 debounceTimer.current = null;
+             }
+         };
+-    }, [stdout, debounceMs]);
++    }, [stdout, debounceMs, propHeight]);
+     return propHeight ?? terminalHeight;
+ }
+diff --git a/dist/hooks/useTerminalWidth.js b/dist/hooks/useTerminalWidth.js
+index ab821fe70b2f077f22d056959e0d0b61bf91a852..87fb0a85b32fa18f36a8dce4abe2fb857d5b8b66 100644
+--- a/dist/hooks/useTerminalWidth.js
++++ b/dist/hooks/useTerminalWidth.js
+@@ -12,7 +12,8 @@ export function useTerminalWidth(propWidth, debounceMs = 100) {
+     const [terminalWidth, setTerminalWidth] = useState(stdout?.columns ?? 80);
+     const debounceTimer = useRef(null);
+     useEffect(() => {
+-        if (!stdout)
++        // An explicit width is the return value, so the stream is unused.
++        if (!stdout || propWidth != null)
+             return;
+         const onResize = () => {
+             // Cancel any pending debounce timer
+@@ -34,6 +35,6 @@ export function useTerminalWidth(propWidth, debounceMs = 100) {
+                 debounceTimer.current = null;
+             }
+         };
+-    }, [stdout, debounceMs]);
++    }, [stdout, debounceMs, propWidth]);
+     return propWidth ?? terminalWidth;
+ }

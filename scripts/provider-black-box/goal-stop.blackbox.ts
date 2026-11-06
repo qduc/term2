@@ -132,7 +132,17 @@ it('bounds missing goal checks and keeps blocked and deferred goals active', asy
     const events = history
       .trim()
       .split('\n')
-      .map((line) => JSON.parse(line).event);
+      .map((line) => {
+        const row = JSON.parse(line);
+        expect(row.v).toBe(2);
+        return row.fact;
+      });
+    const reminders = events.filter((event) => event.type === 'goal_stop_reminded');
+    expect(reminders).toHaveLength(2);
+    expect(reminders.every((event) => event.reason === 'missing_check')).toBe(true);
+    expect(
+      events.filter((event) => event.type === 'turn_ended' && event.terminalCause === 'goal_check_unresolved'),
+    ).toHaveLength(1);
     const changes = events.filter((event) => event.type === 'goal_changed');
     expect(changes).toHaveLength(1);
     expect(blockedOutputs[0]!.output).toContain(`[goal ${changes[0].goal.id}]`);

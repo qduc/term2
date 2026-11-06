@@ -1,9 +1,27 @@
 import { createServer } from 'node:http';
 import { cp, mkdir, readFile, readdir, symlink, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
-import ts from 'typescript';
+import { join, resolve, relative } from 'node:path';
 import { expect, it } from 'vitest';
-import { createIsolatedWorkspaceLease, writePtyTextAndSubmit } from './provider-black-box/provider-test-harness.js';
+import {
+  compiledIdentifier,
+  patchCompiledModule as patchFixtureModule,
+} from '../tests/helpers/patch-compiled-module.js';
+import { listControlAdvertisements } from '../src/clients/control-socket/control-socket.js';
+import {
+  HANG_BACKSTOP_MS,
+  READINESS_TIMEOUT_MS,
+  createIsolatedWorkspaceLease,
+  writePtyTextAndSubmit,
+} from './provider-black-box/provider-test-harness.js';
+
+// The real entry module (its anchors are patched below) in a private copy of the build tree.
+function restartEntry(root: string): string {
+  return join(
+    root,
+    'direct-dist',
+    relative(resolve('dist'), resolve(process.env.TERM2_TEST_CLI ?? 'dist/src/app/cli.js')),
+  );
+}
 
 it.skipIf(process.platform !== 'linux' || !process.execve)(
   'reloads changed compiled core in the same PTY process, retaining history and an empty latest leaf',
@@ -51,6 +69,7 @@ it.skipIf(process.platform !== 'linux' || !process.execve)(
       },
       prepare: async (root, paths) => {
         await mkdir(join(root, 'work'));
+        await mkdir(join(root, 'runtime'), { mode: 0o700 });
         await mkdir(join(root, '.term2/hooks'), { recursive: true });
         await writeFile(
           join(root, '.term2/hooks/restart.mjs'),
@@ -60,7 +79,8 @@ export default function register(term2) { for (const type of ['session.start', '
           )}, JSON.stringify({type,pid:process.pid,sessionId:event.sessionId,herdr:process.env.HERDR_PANE_ID,approval:process.env.SHELL_AUTO_APPROVE_MODE,sandbox:process.env.SANDBOX_ENABLED}) + '\\n')); }`,
         );
 
-        await cp(resolve('dist'), join(root, 'dist'), { recursive: true });
+        // Restart faults may delete the entry. Never mutate the runner's shared build.
+        await cp(resolve('dist'), join(root, 'direct-dist'), { recursive: true });
         await cp(resolve('package.json'), join(root, 'package.json'));
         await symlink(resolve('node_modules'), join(root, 'node_modules'), 'dir');
         await mkdir(paths.logDir, { recursive: true });
@@ -80,16 +100,18 @@ export default function register(term2) { for (const type of ['session.start', '
               modelSelection: { model: 'fixture', provider: 'fixture-provider' },
               completionVerification: false,
             },
+            shell: { timeout: 23456 },
             memory: { enabled: false },
           }),
         );
       },
     });
     try {
-      const entry = join(workspace.root, 'dist/cli.js');
+      const entry = restartEntry(workspace.root);
       const child = await workspace.start({
         command: process.execPath,
-        args: [entry, '--profile', 'bare'],
+        args: [entry, '--profile', 'bare', '--control-socket=reload'],
+        env: { XDG_RUNTIME_DIR: join(workspace.root, 'runtime') },
         cwd: join(workspace.root, 'work'),
         cols: 180,
         rows: 50,
@@ -107,10 +129,10 @@ export default function register(term2) { for (const type of ['session.start', '
         };
       };
       const before = await identity();
-      const activeLeaf = async () =>
-        (await readdir(workspace.paths.conversationsDir))
-          .find((file) => file.endsWith('.lock'))!
-          .replace(/\.lock$/, '');
+      const initialSettings = JSON.parse(await readFile(join(workspace.paths.logDir, 'settings.json'), 'utf8'));
+      // Native writer authority is SQLite, not a legacy .lock sidecar. Read the
+      // actual control binding; it follows /clear and survives exec via restart args.
+      const activeLeaf = async () => listControlAdvertisements(join(workspace.root, 'runtime'))[0]!.sessionId;
       const original = await activeLeaf();
       const beforeFirstTurn = child.readIdleGeneration();
       await writePtyTextAndSubmit(child, 'history-before-restart');
@@ -118,30 +140,33 @@ export default function register(term2) { for (const type of ['session.start', '
       await child.waitForIdleInput({ after: beforeFirstTurn });
       // Compile a changed real command module to the current entry's build tree.
       // The old process already imported A; only a fresh core can show B.
-      const source = (await readFile(resolve('source/commands/quit-command.ts'), 'utf8')).replace(
+      // Change a real command diagnostic that /help reaches, after the running process has imported it.
+      await patchFixtureModule(
+        join(workspace.root, 'direct-dist/src/clients/tui/menus/legacy-commands.js'),
         'Exit the application',
         'Changed compiled core B',
       );
-      const built = ts.transpileModule(source, {
-        compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 },
-      });
-      await writeFile(join(workspace.root, 'dist/commands/quit-command.js'), built.outputText);
       await writePtyTextAndSubmit(child, '/auto-approve advisory');
       await expect
         .poll(
           async () =>
             JSON.parse(await readFile(join(workspace.paths.logDir, 'settings.json'), 'utf8')).shell?.autoApproveMode,
-          { timeout: 5000 },
+          { timeout: READINESS_TIMEOUT_MS },
         )
         .toBe('advisory');
-      await writePtyTextAndSubmit(child, '/sandbox');
-      await child.waitForVisibleOutput('Shell sandbox mode disabled');
+      // Sandbox execution (and its /sandbox command) is an accepted difference: legacy only.
+      const savedSettings = JSON.parse(await readFile(join(workspace.paths.logDir, 'settings.json'), 'utf8'));
+      expect(savedSettings.providers).toEqual(initialSettings.providers);
+      expect(savedSettings.agent).toEqual(initialSettings.agent);
+      expect(savedSettings.app).toEqual(initialSettings.app);
+      expect(savedSettings.memory).toEqual(initialSettings.memory);
+      expect(savedSettings.shell.timeout).toBe(23456);
       await writePtyTextAndSubmit(child, '/restart');
       await child.waitForVisibleOutput('Restart recovery command:');
       // Exec resets the idle counter, so the old generation is not an after token.
       await child.waitForState((snapshot) => snapshot.visibleOutput.includes('Resumed conversation'));
       await child.waitForIdleInput();
-      await expect.poll(() => child.readComposerRevision(), { timeout: 5000 }).toBe(1);
+      await expect.poll(() => child.readComposerRevision(), { timeout: READINESS_TIMEOUT_MS }).toBe(1);
       expect(await identity()).toEqual(before);
       expect(await activeLeaf()).toBe(original);
       await writePtyTextAndSubmit(child, '/help');
@@ -152,10 +177,16 @@ export default function register(term2) { for (const type of ['session.start', '
       expect(JSON.stringify(requests[1])).toContain('history-before-restart');
       await child.waitForIdleInput({ after: turnIdle });
       await writePtyTextAndSubmit(child, '/clear');
-      await child.waitForVisibleOutput('Welcome to term²!');
-      await expect.poll(activeLeaf, { timeout: 5000 }).not.toBe(original);
+      await expect.poll(activeLeaf, { timeout: READINESS_TIMEOUT_MS }).not.toBe(original);
       const latest = await activeLeaf();
       expect(latest).not.toBe(original);
+      const emptyLeaf = await readFile(join(workspace.paths.conversationsDir, `${latest}.jsonl`), 'utf8');
+      expect(
+        emptyLeaf
+          .trim()
+          .split('\n')
+          .map((line) => JSON.parse(line).fact.type),
+      ).toEqual(['session_started']);
       const resumeCount = child.getVisibleOutput().split('Resumed conversation:').length;
       await writePtyTextAndSubmit(child, '/restart');
       await child.waitForState(
@@ -163,7 +194,7 @@ export default function register(term2) { for (const type of ['session.start', '
       );
       await child.waitForIdleInput();
       // A functional command is also an input/raw-mode check after the second exec.
-      await expect.poll(() => child.readComposerRevision(), { timeout: 5000 }).toBe(1);
+      await expect.poll(() => child.readComposerRevision(), { timeout: READINESS_TIMEOUT_MS }).toBe(1);
       const helpOutputOffset = child.getVisibleOutput().length;
       const beforeHelpRevision = child.readComposerRevision();
       await writePtyTextAndSubmit(child, '/help');
@@ -176,7 +207,11 @@ export default function register(term2) { for (const type of ['session.start', '
       await child.waitForComposerValue('', { afterRevision: beforeHelpRevision, timeoutMs: 5000 });
       expect(await identity()).toEqual(before);
       expect(await activeLeaf()).toBe(latest);
-      expect(await readFile(join(workspace.paths.conversationsDir, `${latest}.jsonl`), 'utf8')).toContain(latest);
+      const afterRestart = await readFile(join(workspace.paths.conversationsDir, `${latest}.jsonl`), 'utf8');
+      expect(afterRestart).toContain(latest);
+      // Native resumes the empty leaf without appending a fact.
+      expect(afterRestart).toBe(emptyLeaf);
+      expect(requests).toHaveLength(2);
       await writePtyTextAndSubmit(child, '/quit');
       expect((await child.waitForExit()).exitCode).toBe(0);
       const hooks = (await readFile(join(workspace.root, 'hook-events.jsonl'), 'utf8'))
@@ -193,13 +228,13 @@ export default function register(term2) { for (const type of ['session.start', '
       ]);
       expect(new Set(hooks.map((event) => event.pid))).toEqual(new Set([Number(before.pid)]));
       expect(hooks.every((event) => event.herdr === 'restart-owned-fixture')).toBe(true);
-      expect(hooks[2]).toMatchObject({ approval: 'advisory', sandbox: 'false' });
+      expect(hooks[2]).toMatchObject({ approval: 'advisory' });
     } finally {
       await workspace.cleanup();
       await new Promise<void>((done, reject) => server.close((error) => (error ? reject(error) : done())));
     }
   },
-  60_000,
+  HANG_BACKSTOP_MS,
 );
 
 it.each(['runner', 'missing-entry', 'cleanup', 'lock', 'writer-close', 'native-exec'] as const)(
@@ -217,6 +252,8 @@ it.each(['runner', 'missing-entry', 'cleanup', 'lock', 'writer-close', 'native-e
       prepare: async (root, paths) => {
         await mkdir(join(root, 'work'));
         await cp(resolve('dist'), join(root, 'dist'), { recursive: true });
+        // Restart faults may delete the entry. Never mutate the runner's shared build.
+        await cp(resolve('dist'), join(root, 'direct-dist'), { recursive: true });
         await cp(resolve('package.json'), join(root, 'package.json'));
         await symlink(resolve('node_modules'), join(root, 'node_modules'), 'dir');
         await mkdir(paths.logDir, { recursive: true });
@@ -236,38 +273,46 @@ it.each(['runner', 'missing-entry', 'cleanup', 'lock', 'writer-close', 'native-e
             memory: { enabled: false },
           }),
         );
-        const cli = join(root, 'dist/cli.js');
-        let code = (await readFile(cli, 'utf8')).replace(
-          'const controlArgv',
-          `process.on('exit', code => fs.writeFileSync(${JSON.stringify(
+        const cli = restartEntry(root);
+        // The same faults at next's own seams: exit observer, session shutdown, writer lock.
+        const tui = join(root, 'direct-dist/src/app/launch-tui.js');
+        const pending = await compiledIdentifier(tui, 'pending');
+        await patchFixtureModule(
+          cli,
+          'void main(process.argv.slice(2))',
+          `process.on('exit', code => process.getBuiltinModule('node:fs').writeFileSync(${JSON.stringify(
             join(root, 'node-exit-code'),
-          )}, String(code)));\nconst controlArgv`,
+          )}, String(code)));\nvoid main(process.argv.slice(2))`,
         );
         if (fault === 'cleanup')
-          code = code.replace(
-            'await conversationService.shutdown();',
-            "if (restartPlan) throw new Error('fixture cleanup failure');\nawait conversationService.shutdown();",
+          await patchFixtureModule(
+            tui,
+            'await app.close();',
+            `if (${pending}.plan) throw new Error('fixture cleanup failure');\nawait app.close();`,
           );
         if (fault === 'lock')
-          code = code.replace(
-            'await logWriter.close();',
-            "await logWriter.close();\nif (restartPlan) fs.writeFileSync(getConversationLockPath(logWriter.sessionId), 'fixture lock unlink failure');",
+          // Hold the session's writer lock past shutdown, as a leaked writer would.
+          await patchFixtureModule(
+            tui,
+            'await app.close();',
+            `await app.close();\nif (${pending}.plan) globalThis.fixtureLock = (await import('../session/writer-lock.js')).acquireDirectWriterLock(process.getBuiltinModule('node:path').join(conversationsDir, \`\${${pending}.plan.sessionId}.jsonl\`));`,
           );
         if (fault === 'writer-close')
-          code = code.replace(
-            'await logWriter.close();',
-            "await logWriter.close();\nif (restartPlan) throw new Error('fixture writer close failure');",
+          await patchFixtureModule(
+            tui,
+            'await app.close();',
+            `await app.close();\nif (${pending}.plan) throw new Error('fixture writer close failure');`,
           );
         if (fault === 'native-exec')
-          code = code.replace(
-            'process.execve(process.execPath,',
-            `process.execve(${JSON.stringify(join(root, 'missing-node'))},`,
+          await patchFixtureModule(
+            join(root, 'direct-dist/src/app/launch-tui-restart.js'),
+            'process.execve?.(process.execPath,',
+            `process.execve?.(${JSON.stringify(join(root, 'missing-node'))},`,
           );
-        await writeFile(cli, code);
       },
     });
     try {
-      const entry = join(workspace.root, 'dist/cli.js');
+      const entry = restartEntry(workspace.root);
       const child = await workspace.start({
         command: process.execPath,
         args: [...(fault === 'runner' ? ['--trace-warnings'] : []), entry, '--profile', 'bare'],
@@ -295,7 +340,8 @@ it.each(['runner', 'missing-entry', 'cleanup', 'lock', 'writer-close', 'native-e
         expect(await readFile(join(workspace.root, 'node-exit-code'), 'utf8')).toBe('1');
         const logs = (await readdir(workspace.paths.conversationsDir)).filter((file) => file.endsWith('.jsonl'));
         expect(logs).toHaveLength(1);
-        expect(await readFile(join(workspace.paths.conversationsDir, logs[0]!), 'utf8')).toContain('init');
+        // term2-next's own store starts with a session_started fact, legacy's with session_init.
+        expect(await readFile(join(workspace.paths.conversationsDir, logs[0]!), 'utf8')).toContain('session_started');
         expect(child.getVisibleOutput()).not.toContain('Resumed conversation:');
         expect(child.getVisibleOutput()).toContain('Restart recovery command:');
       }
@@ -303,5 +349,5 @@ it.each(['runner', 'missing-entry', 'cleanup', 'lock', 'writer-close', 'native-e
       await workspace.cleanup();
     }
   },
-  30_000,
+  HANG_BACKSTOP_MS,
 );

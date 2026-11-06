@@ -91,6 +91,7 @@ it.skipIf(process.platform !== 'linux')('confirms a large uncached request after
       response.write(`data: ${JSON.stringify(frame)}\n\n`);
     response.end();
   };
+  let phase = 'initial cache setup';
   try {
     const idle = await child.waitForIdleInput();
     await writePtyTextAndSubmit(child, 'FIRST_CACHE_INPUT');
@@ -109,8 +110,6 @@ it.skipIf(process.platform !== 'linux')('confirms a large uncached request after
       await child.write('\u007f');
       await child.waitForComposerValue('SECOND_CACHE_INPUT'.slice(0, remaining), { afterRevision: 0 });
     }
-    await child.write('\u001b[Z');
-    await child.waitForVisibleOutput('Plan');
     await child.write('\u0016');
     await child.waitForVisibleOutput('Paste text #1');
     await child.waitForVisibleOutput('cache miss risk');
@@ -118,21 +117,30 @@ it.skipIf(process.platform !== 'linux')('confirms a large uncached request after
     await child.write('\r');
     await child.waitForVisibleOutput('Large request');
     expect(requests).toHaveLength(2);
+    const heldIdle = child.readIdleGeneration();
     await child.write('n');
+    // The held draft was already published while confirmation owned the keys.
+    // Wait for the remounted composer's listener, not that stale value alone.
+    await child.waitForIdleInput({ after: heldIdle });
     await child.waitForComposerValue('LARGE_DRAFT_START' + 'x'.repeat(270_000) + 'LARGE_DRAFT_END', {
       afterRevision: 0,
     });
     expect(requests).toHaveLength(2);
+    phase = 'second large-request prompt';
     const confirmationMarker = child.getOutput().length;
     await child.write('\r');
     await child.waitForState((state) => state.output.slice(confirmationMarker).includes('Large request'));
+    phase = 'third request after confirmation';
     await child.write('y');
     await child.waitForState(() => requests.length === 3);
-    expect(JSON.stringify(requests[2]!.input).match(/Plan Mode is ON/g)).toHaveLength(1);
+    expect(JSON.stringify(requests[2]!.input).match(/Plan Mode is ON/g) ?? []).toHaveLength(0);
     expect(JSON.stringify(requests[2]!.input).match(/LARGE_DRAFT_START/g)).toHaveLength(1);
     expect(JSON.stringify(requests[2]!.input)).toContain('LARGE_DRAFT_START' + 'x'.repeat(270_000) + 'LARGE_DRAFT_END');
     complete(2);
     await child.waitForVisibleOutput('NOTICE_DONE_2');
+  } catch (error) {
+    console.error('Input cache guard failed', { phase, requestCount: requests.length });
+    throw error;
   } finally {
     await child.cleanup();
     await lease.cleanup();

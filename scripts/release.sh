@@ -328,7 +328,7 @@ assert_release_commit() {
 # HEAD and the release files are unchanged since the last passing gate. Keyed
 # to HEAD so any new commit (and its tree) invalidates it; the stamp lives in
 # the git dir so it never shows up as a dirty worktree file. Limitation: it
-# does not cover untracked files under source/, which tsc/eslint would see.
+# does not cover untracked files under src/, which tsc/eslint would see.
 validation_stamp_file() {
     local git_dir
     git_dir=$(git rev-parse --git-dir 2>/dev/null) || return 1

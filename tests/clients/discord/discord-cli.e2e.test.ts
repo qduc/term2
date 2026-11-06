@@ -95,15 +95,7 @@ it.each(
       const nativeFetch = globalThis.fetch;
       globalThis.fetch = (url, options) => {
         if (!String(url).startsWith('https://discord.com/api/v10/')) throw new Error('Unexpected REST egress');
-        const timeoutMs = Number(process.env.TERM2_DISCORD_TEST_REQUEST_TIMEOUT_MS);
-        const signal =
-          timeoutMs > 0
-            ? AbortSignal.any([options?.signal, AbortSignal.timeout(timeoutMs)].filter(Boolean))
-            : options?.signal;
-        return nativeFetch(
-          'http://127.0.0.1:${port}' + String(url).slice('https://discord.com/api/v10'.length),
-          signal ? { ...options, signal } : options,
-        );
+        return nativeFetch('http://127.0.0.1:${port}' + String(url).slice('https://discord.com/api/v10'.length), options);
       };
     `,
       { mode: 0o600 },
@@ -119,7 +111,6 @@ it.each(
       TMPDIR: root,
       TERM2_DISCORD_BOT_TOKEN: 'OFFLINE_CLI_TOKEN',
       TERM2_DISCORD_GATEWAY: 'off',
-      TERM2_DISCORD_TEST_REQUEST_TIMEOUT_MS: '1000',
       ...(process.env.TERM2_TEST_NODE_COMPILE_CACHE
         ? { NODE_COMPILE_CACHE: process.env.TERM2_TEST_NODE_COMPILE_CACHE }
         : {}),

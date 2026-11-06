@@ -3,7 +3,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { FileMemoryStore } from '../../source/services/memory/memory-store.js';
+import { FileMemoryStore } from '../../src/tools/memory/memory-store.js';
 
 const SNAPSHOT = 'a1142650';
 const BUDGET = 800;

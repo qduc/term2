@@ -58,6 +58,15 @@ area — it records why several obvious-looking moves were rejected.
 
 The load-bearing decisions, in the code:
 
+The runtime decomposition keeps these decisions unchanged: `RunBudget` owns
+sensors/thresholds and finite grants, `budgetDisposition` in
+`src/engine/agent-runtime/run-budget-policy.ts` selects the existing evidence
+disposition, and `ApplicationRunLoop.#waitForBudget` owns suspension. Run state
+and approval callbacks now live in `run-state.ts`; segment pause/resume accounting
+and the public extension grant delegate live in `run-segments.ts`. Request,
+response and tool owners evaluate evidence at the same boundaries; none adds a
+new threshold, reset, extension or escalation default.
+
 - **Extensions are charged in the run loop**, in `state.approve` for a
   `run_budget_interaction`, not in the UI. Every unattended path that answers
   a check-in — the continuation applier — is bounded because of this.

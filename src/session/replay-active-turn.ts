@@ -1,0 +1,302 @@
+/** Active root reconstruction, including physical tool-occurrence identity and repair. */
+import type { ExecutionId, TurnId } from '../engine/index.js';
+import type { Item, ItemId } from '../model/index.js';
+import type { ToolResult } from '../tools/index.js';
+import type { Fact } from './facts.js';
+
+const OUTCOME_UNOBSERVED =
+  "Outcome unobserved: the session restarted before this operation's result was recorded. " +
+  'Its effect may or may not have occurred. Verify the current state before any retry, and ' +
+  'do not re-run non-idempotent operations blindly.';
+
+/** Live result for a root call a cancelled turn never started. */
+export const INTERRUPTED_BEFORE_START = 'Tool execution was interrupted before it started.';
+
+const LIVE_OUTCOME_UNOBSERVED =
+  "Outcome unobserved: the turn ended before this operation's result was recorded. " +
+  'Its effect may or may not have occurred. Verify the current state before any retry, and ' +
+  'do not re-run non-idempotent operations blindly.';
+
+type Call = Extract<Item, { type: 'tool_call' }>;
+type Start = Extract<Fact, { type: 'tool_started' }>;
+type Slot = { item: Item | null; original?: Item | null };
+type Partial = { readonly slot: Slot; readonly deltas: string[]; readonly id: ItemId };
+type Occurrence = {
+  readonly call: Call;
+  readonly key: string;
+  executionId?: ExecutionId;
+  settled: boolean;
+  /** Provider-history slots of the call and its result, so a cancelled turn can drop unstarted calls. */
+  readonly slots: Slot[];
+};
+type Execution = { start?: Start; result?: ToolResult; occurrence?: Occurrence };
+
+export type ActiveReplayTurn = {
+  readonly turnId: TurnId;
+  readonly partials: Map<number | undefined, Partial>;
+  readonly calls: Occurrence[];
+  readonly executions: Map<ExecutionId, Execution>;
+  readonly interactions: Map<string, Extract<Fact, { type: 'interaction_opened' }>>;
+  readonly closedInteractions: Set<string>;
+  readonly responses: Set<number>;
+  readonly budgets: Map<string, Extract<Fact, { type: 'budget_opened' }>>;
+  readonly closedBudgets: Set<string>;
+  /** Each model step's provider slots, so a cancelled turn can drop the step it was in. */
+  readonly stepSlots: Map<number | undefined, Slot[]>;
+  /** Steps whose tool results arrived after the cancel was requested. */
+  readonly lateSteps: Set<number | undefined>;
+  cancelRequested: boolean;
+};
+
+export function createActiveReplayTurn(turnId: TurnId): ActiveReplayTurn {
+  return {
+    turnId,
+    partials: new Map(),
+    calls: [],
+    executions: new Map(),
+    interactions: new Map(),
+    closedInteractions: new Set(),
+    responses: new Set(),
+    budgets: new Map(),
+    closedBudgets: new Set(),
+    stepSlots: new Map(),
+    lateSteps: new Set(),
+    cancelRequested: false,
+  };
+}
+
+function stepSlot(turn: ActiveReplayTurn, modelStep: number | undefined, slot: Slot): void {
+  const own = turn.stepSlots.get(modelStep) ?? [];
+  own.push(slot);
+  turn.stepSlots.set(modelStep, own);
+}
+
+function callStep(turn: ActiveReplayTurn, callId: string): number | undefined {
+  for (const [step, own] of turn.stepSlots) {
+    if (own.some(({ item }) => item?.type === 'tool_call' && item.callId === callId)) return step;
+  }
+  return undefined;
+}
+
+/**
+ * Legacy keeps a cancelled turn's finished model steps and the user's input. Live, it drops the step the turn was
+ * in (a response still streaming, or tools still running at the cancel); after a resume it shows that step's calls
+ * again with unobserved results, as it does for any unsettled call, and retains unsuperseded text deltas.
+ * Idempotent: a fold is finished many times.
+ */
+export function settleCancelledReplayStep(turn: ActiveReplayTurn, resumed: boolean): void {
+  for (const [step, own] of turn.stepSlots) {
+    if (step === undefined || (turn.responses.has(step) && !turn.lateSteps.has(step))) continue;
+    for (const slot of own) {
+      if (slot.original === undefined) slot.original = slot.item;
+      const item = slot.original;
+      if (resumed && turn.partials.get(step)?.slot === slot) {
+        slot.item = item;
+        continue;
+      }
+      slot.item =
+        !resumed || !item || (item.type !== 'tool_call' && item.type !== 'tool_result')
+          ? null
+          : item.type === 'tool_result'
+          ? {
+              type: 'tool_result',
+              id: item.id,
+              callId: item.callId,
+              output: OUTCOME_UNOBSERVED,
+              isError: false,
+              ...(item.toolType ? { toolType: item.toolType } : {}),
+            }
+          : item;
+    }
+  }
+}
+
+export function appendReplayItem(turn: ActiveReplayTurn, fact: Extract<Fact, { type: 'item' }>, slots: Slot[]): void {
+  const { item, executionId } = fact;
+  if (item.type === 'assistant_message') {
+    const partial = turn.partials.get(fact.modelStep);
+    if (partial) partial.slot.item = null;
+    turn.partials.delete(fact.modelStep);
+  }
+  const slot: Slot = { item };
+  if (item.type === 'tool_call') recordCall(turn, item, executionId, slot);
+  else if (item.type === 'tool_result') recordResult(turn, item, executionId, slot);
+  else if (executionId !== undefined) throw new Error(`replay: executionId on non-tool item ${item.id}`);
+  // A result written without a step (a call cancelled before it started) belongs to its call's step.
+  const modelStep = fact.modelStep ?? (item.type === 'tool_result' ? callStep(turn, item.callId) : undefined);
+  // A call the cancel stopped before it started (an approval interrupted with Escape) leaves its step finished:
+  // legacy keeps the step's completed calls and drops only the unstarted ones (dropUnstartedReplayCalls).
+  if (item.type === 'tool_result' && turn.cancelRequested && item.output !== INTERRUPTED_BEFORE_START)
+    turn.lateSteps.add(modelStep);
+  slots.push(slot);
+  stepSlot(turn, modelStep, slot);
+}
+
+/**
+ * Legacy discards the calls a cancelled turn never started (an approval
+ * interrupted with Escape): neither the call nor a result reaches the model.
+ */
+export function dropUnstartedReplayCalls(turn: ActiveReplayTurn): void {
+  for (const occurrence of turn.calls) {
+    if (occurrence.executionId === undefined || turn.executions.get(occurrence.executionId)?.start) continue;
+    const result = occurrence.slots.at(-1)?.item;
+    if (result?.type !== 'tool_result' || result.output !== INTERRUPTED_BEFORE_START) continue;
+    for (const slot of occurrence.slots) slot.item = null;
+  }
+}
+
+export function appendReplayDelta(
+  turn: ActiveReplayTurn,
+  fact: Extract<Fact, { type: 'text_delta' }>,
+  slots: Slot[],
+): void {
+  if (fact.withdrawn) {
+    const withdrawn = turn.partials.get(fact.modelStep);
+    if (withdrawn) {
+      slots.splice(slots.indexOf(withdrawn.slot), 1);
+      const own = turn.stepSlots.get(fact.modelStep) ?? [];
+      own.splice(own.indexOf(withdrawn.slot), 1);
+    }
+    turn.partials.delete(fact.modelStep);
+    return;
+  }
+  if (fact.delta.length === 0) return;
+  let partial = turn.partials.get(fact.modelStep);
+  if (!partial) {
+    const step = fact.modelStep === undefined ? '' : `-model-${fact.modelStep}`;
+    partial = { slot: { item: null }, deltas: [], id: `${turn.turnId}${step}-partial` as ItemId };
+    turn.partials.set(fact.modelStep, partial);
+    slots.push(partial.slot);
+    stepSlot(turn, fact.modelStep, partial.slot);
+  }
+  partial.deltas.push(fact.delta);
+}
+
+export function finishReplayText(turn: ActiveReplayTurn): void {
+  for (const partial of turn.partials.values())
+    partial.slot.item = {
+      type: 'assistant_message',
+      id: partial.id,
+      content: [{ type: 'text', text: partial.deltas.join('') }],
+    };
+}
+
+export function recordReplayStart(turn: ActiveReplayTurn, start: Start): void {
+  const execution = turn.executions.get(start.executionId) ?? {};
+  if (execution.start) throw new Error(`replay: duplicate start for ${start.executionId}`);
+  if (start.parentExecutionId !== undefined) {
+    if (!turn.executions.get(start.parentExecutionId)?.start)
+      throw new Error(`replay: missing parent start for ${start.executionId}`);
+    if (execution.occurrence) validateRootCall(start, execution.occurrence.call);
+  } else {
+    const occurrence =
+      execution.occurrence ??
+      turn.calls.find(
+        (call) =>
+          call.executionId === undefined &&
+          !call.settled &&
+          call.call.callId === start.callId &&
+          call.call.toolName === start.toolName,
+      );
+    if (occurrence) {
+      validateRootCall(start, occurrence.call);
+      occurrence.executionId = start.executionId;
+      execution.occurrence = occurrence;
+    }
+  }
+  execution.start = start;
+  turn.executions.set(start.executionId, execution);
+}
+
+export function hasUnsettledReplayRoots(turn: ActiveReplayTurn): boolean {
+  return (
+    turn.calls.some((call) => !call.settled) ||
+    [...turn.executions.values()].some(
+      (execution) => execution.start && execution.start.parentExecutionId === undefined && !execution.occurrence,
+    )
+  );
+}
+
+/** Only drained live settlement can infer non-execution from an absent durable start.
+ * Reopen keeps the conservative restart fallback; accepted results always win. */
+export function recoverReplayRoots(turn: ActiveReplayTurn, settlement: 'restart' | 'live' = 'restart'): Fact[] {
+  const facts: Fact[] = [];
+  const occurrences = [...turn.calls];
+  for (const [executionId, execution] of turn.executions) {
+    const start = execution.start;
+    if (!start || start.parentExecutionId !== undefined || execution.occurrence) continue;
+    const call: Call = {
+      type: 'tool_call',
+      id: `${executionId}:call` as ItemId,
+      callId: start.callId as Call['callId'],
+      toolName: start.toolName,
+      input: start.input,
+    };
+    occurrences.push({ call, key: `${executionId}:recovery`, executionId, settled: false, slots: [] });
+    facts.push({ type: 'item', turnId: turn.turnId, executionId, item: call });
+  }
+  for (const occurrence of occurrences) {
+    if (occurrence.settled) continue;
+    const { executionId, call } = occurrence;
+    const execution = executionId === undefined ? undefined : turn.executions.get(executionId);
+    const known = execution?.result;
+    const missing =
+      settlement === 'restart'
+        ? OUTCOME_UNOBSERVED
+        : execution?.start
+        ? LIVE_OUTCOME_UNOBSERVED
+        : INTERRUPTED_BEFORE_START;
+    const item: Item = {
+      type: 'tool_result',
+      id: `${executionId ?? occurrence.key}:result` as ItemId,
+      callId: call.callId,
+      output: known?.output ?? missing,
+      isError: known?.isError ?? true,
+      ...(known?.providerOutput === undefined ? {} : { providerOutput: known.providerOutput }),
+      ...(call.toolType === undefined ? {} : { toolType: call.toolType }),
+    };
+    facts.push({ type: 'item', turnId: turn.turnId, item, ...(executionId === undefined ? {} : { executionId }) });
+  }
+  return facts;
+}
+
+function recordCall(turn: ActiveReplayTurn, call: Call, executionId?: ExecutionId, slot?: Slot): void {
+  const occurrence: Occurrence = {
+    call,
+    key: `${turn.turnId}:legacy:${turn.calls.length + 1}`,
+    executionId,
+    settled: false,
+    slots: slot ? [slot] : [],
+  };
+  if (executionId !== undefined) {
+    const execution = turn.executions.get(executionId) ?? {};
+    if (execution.occurrence) throw new Error(`replay: duplicate call for ${executionId}`);
+    if (execution.start) validateRootCall(execution.start, call);
+    execution.occurrence = occurrence;
+    turn.executions.set(executionId, execution);
+  }
+  turn.calls.push(occurrence);
+}
+
+function recordResult(
+  turn: ActiveReplayTurn,
+  result: Extract<Item, { type: 'tool_result' }>,
+  executionId?: ExecutionId,
+  slot?: Slot,
+): void {
+  const occurrence =
+    executionId === undefined
+      ? turn.calls.find((call) => !call.settled && call.call.callId === result.callId)
+      : turn.executions.get(executionId)?.occurrence;
+  if (!occurrence || occurrence.settled || occurrence.call.callId !== result.callId)
+    throw new Error(`replay: unmatched or duplicate result for ${executionId ?? result.callId}`);
+  occurrence.settled = true;
+  if (slot) occurrence.slots.push(slot);
+}
+
+function validateRootCall(start: Start, call: Call): void {
+  if (start.parentExecutionId !== undefined)
+    throw new Error(`replay: nested execution ${start.executionId} cannot be a provider root call`);
+  if (start.callId !== call.callId || start.toolName !== call.toolName)
+    throw new Error(`replay: start/call mismatch for ${start.executionId}`);
+}

@@ -5,10 +5,10 @@ import {
   decodeLogEnvelope,
   expandSessionFactBatchEnvelope,
   resolveEnvelopeIdentities,
-} from '../../rewrite/dist/source/services/conversation/conversation-decoder.js';
-import { replayEvents } from '../../rewrite/dist/source/services/conversation/conversation-replay.js';
+} from '../../dist/src/session/conversation/conversation-decoder.js';
+import { replayEvents } from '../../dist/src/session/conversation/conversation-replay.js';
 import { validPersistedEvent } from './v3-input-validation.mjs';
-import { validateSessionFact } from '../../rewrite/dist/rewrite/src/session/adopted/conversation-log.js';
+import { validateSessionFact } from '../../dist/src/session/adopted/conversation-log.js';
 
 // These adjuncts are v3 facts owned by the adopted Session, not the legacy
 // LogEvent union. Reuse its strict schema rather than the permissive decoder.

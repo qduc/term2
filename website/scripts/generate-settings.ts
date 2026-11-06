@@ -5,9 +5,9 @@ import {
   DEFAULT_SETTINGS,
   SETTING_KEYS,
   RUNTIME_MODIFIABLE_SETTINGS,
-} from '../../source/services/settings/settings-schema.js';
-import { getSettingMetadata } from '../../source/services/settings/settings-ui-metadata.js';
-import { resolveSettingAtPath, unwrapSchema } from '../../source/services/settings/setting-schema-utils.js';
+} from '../../src/config/settings/settings-schema.js';
+import { getSettingMetadata } from '../../src/config/settings/settings-ui-metadata.js';
+import { resolveSettingAtPath, unwrapSchema } from '../../src/config/settings/setting-schema-utils.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const targetDocPath = path.join(__dirname, '../src/content/docs/reference/settings.md');
@@ -190,7 +190,7 @@ title: Settings Reference
 description: Complete reference of term2 configuration settings, defaults, runtime modifiability, and environment variables.
 ---
 
-> **Auto-generated Reference:** This page is generated directly by evaluating \`DEFAULT_SETTINGS\`, schema definitions, and metadata from \`source/services/settings/\`. Run \`pnpm --dir website build\` to re-extract settings.
+> **Auto-generated Reference:** This page is generated directly by evaluating \`DEFAULT_SETTINGS\`, schema definitions, and metadata from \`src/config/settings/\`. Run \`pnpm --dir website build\` to re-extract settings.
 
 term2 settings can be configured via:
 1. **Interactive Settings Menu**: Run \`/settings\` or \`/settings <key>\` in the interactive TUI.

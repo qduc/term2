@@ -186,7 +186,7 @@ SANDBOX_SHELL="${SHELL:-/bin/bash}"
 
 # ------------------------------------------------------------------
 # Build filtered environment (mirrors createSandboxEnvironment in
-# source/utils/shell/sandbox/sandbox-env.ts)
+# src/shared/utils/shell/sandbox/sandbox-env.ts)
 #
 # Layer 1: Only allow known-safe env keys into the child process.
 # ------------------------------------------------------------------

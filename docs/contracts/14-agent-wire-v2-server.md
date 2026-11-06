@@ -58,7 +58,7 @@ old grant's sessions is acceptable before proceeding; otherwise keep the existin
 access. There is no in-place access migration or browser revoke control.
 
 1. Identify the running direct server's effective state directory from its launch
-   arguments and environment. `prepareStateDir` in `direct-launch-serve.ts` uses
+   arguments and environment. `prepareStateDir` in `launch-serve.ts` uses
    an explicit nondefault `--state-dir` (canonicalized). When the requested path
    equals `defaultServeStateDir`, it substitutes the sibling `gateway-next` leaf:
    `$XDG_STATE_HOME/term2-nodejs/gateway-next`, or, with XDG_STATE_HOME unset,
@@ -94,13 +94,13 @@ while stopped, but it must not be restored alongside a new grant for the same
 root; duplicate roots/IDs fail startup. This is not a promise of session migration.
 
 Only dynamic records are saved by `saveDynamicGrants` and reloaded by
-`loadDynamicGrants` in `direct-host-config-workspace-grants.ts`. Startup-supplied
+`loadDynamicGrants` in `host-config-workspace-grants.ts`. Startup-supplied
 `staticGrants` are not in that file and cannot be changed by this procedure;
 consult the embedding operator's startup configuration instead. The direct
 `launchServe` composition supplies no static grants. An embedded authority
 without `stateDirectory` has only in-memory dynamic grants; restarting clears
 those, not any static inputs. `bindDirectSessionAccess` in
-`direct-host-config-access.ts` establishes the old-session limitation above.
+`host-config-access.ts` establishes the old-session limitation above.
 
 ## Versions and negotiation
 

@@ -38,9 +38,9 @@ export default tseslint.config(
       // Standalone Next.js app with its own toolchain and tsconfig; root
       // project-aware linting does not apply to it.
       'web-client/**',
-      // Interface-only rewrite skeleton with its own tsconfig and checks
-      // (rewrite/README.md); it is outside the root tsconfig project.
-      'rewrite/**',
+      // Build and check tooling, like scripts/ above; src is linted.
+      'bench/**',
+      'parity/**',
     ],
   },
   eslint.configs.recommended,
@@ -96,31 +96,27 @@ export default tseslint.config(
       'react-hooks/refs': 'off',
       'react-hooks/purity': 'off',
       'react-hooks/error-boundaries': 'warn',
+      'react-hooks/preserve-manual-memoization': 'warn',
     },
   },
   // Production code is held to a higher standard: unused vars are an error.
-  // Test files under source/ are excluded by the test override below.
+  // Test files are excluded by the test override below.
   {
-    files: ['source/**/*.{ts,tsx}'],
+    files: ['src/**/*.{ts,tsx}'],
     rules: {
       '@typescript-eslint/no-unused-vars': ['error', noUnusedVarsOptions],
     },
   },
   {
-    files: ['source/services/**/*.{ts,tsx}'],
-    ignores: ['**/*.test.{ts,tsx}', 'source/services/conversation/conversation-state-projector.ts'],
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: ['src/session/conversation/conversation-state-projector.ts'],
     rules: {
       'no-restricted-imports': [
         'error',
         {
-          paths: [
+          patterns: [
             {
-              name: '../tool-execution-ledger.js',
-              importNames: ['reconcileHistoryWithToolLedger'],
-              message: 'Use conversation-state-projector instead of reconciling conversation history manually.',
-            },
-            {
-              name: './tool-execution-ledger.js',
+              group: ['**/tool-execution-ledger.js'],
               importNames: ['reconcileHistoryWithToolLedger'],
               message: 'Use conversation-state-projector instead of reconciling conversation history manually.',
             },
@@ -132,20 +128,10 @@ export default tseslint.config(
   // Tests often need mocks, stubs, and partially implemented interfaces, so
   // unused vars stay as a warning here (overriding the production error).
   {
-    files: ['**/*.test.{ts,tsx}', '**/*.spec.{ts,tsx}', 'source/cli.integration.scenarios.ts'],
+    files: ['**/*.test.{ts,tsx}', '**/*.spec.{ts,tsx}', 'tests/cli/cli.integration.scenarios.ts'],
     rules: {
       '@typescript-eslint/no-unused-vars': ['off', noUnusedVarsOptions],
       'no-empty': 'off',
-    },
-  },
-  // Standalone .mjs scripts that tests spawn as real child processes. They run
-  // in Node, not in the app bundle, so they need Node globals.
-  {
-    files: ['source/**/test-fixtures/*.mjs'],
-    languageOptions: {
-      globals: {
-        ...globals.node,
-      },
     },
   },
   // WS11 ratchet: only cleaned production modules are currently protected.
@@ -153,29 +139,23 @@ export default tseslint.config(
   // permissive until their explicit-any cleanup is complete.
   {
     files: [
-      'source/components/message/ChatMessage.tsx',
-      'source/components/message/MessageList.tsx',
-      'source/components/message/SubagentActivityMessage.tsx',
-      'source/components/prompt/ApprovalPrompt.tsx',
-      'source/providers/ai-sdk-message-normalizer.ts',
-      'source/providers/ai-sdk-streamed-model.ts',
-      'source/providers/provider-service.ts',
-      'source/services/conversation/conversation-orchestrator.types.ts',
-      'source/services/rtk-service.ts',
-      'source/services/session/post-execute-pause-capability.ts',
-      'source/services/settings/custom-provider-normalization.ts',
-      'source/services/settings/settings-env.ts',
-      'source/services/settings/settings-merger.ts',
-      'source/services/settings/settings-persistence.ts',
-      'source/tools/agent/ask-orchestrator.ts',
-      'source/tools/file/glob.ts',
-      'source/tools/file/grep.ts',
-      'source/tools/run-agent-workflow.ts',
-      'source/tools/system/shell.ts',
-      'source/tools/types.ts',
-      'source/utils/shell/command-safety/find-helpers.ts',
-      'source/utils/shell/command-safety/index.ts',
-      'source/utils/shell/command-safety/utils.ts',
+      'src/model/providers/ai-sdk-message-normalizer.ts',
+      'src/model/providers/ai-sdk-streamed-model.ts',
+      'src/model/providers/provider-service.ts',
+      'src/session/session/post-execute-pause-capability.ts',
+      'src/config/settings/custom-provider-normalization.ts',
+      'src/config/settings/settings-env.ts',
+      'src/config/settings/settings-merger.ts',
+      'src/config/settings/settings-persistence.ts',
+      'src/tools/agent/ask-orchestrator.ts',
+      'src/tools/file/glob.ts',
+      'src/tools/file/grep.ts',
+      'src/tools/run-agent-workflow.ts',
+      'src/tools/system/shell.ts',
+      'src/tools/types.ts',
+      'src/shared/utils/shell/command-safety/find-helpers.ts',
+      'src/shared/utils/shell/command-safety/index.ts',
+      'src/shared/utils/shell/command-safety/utils.ts',
     ],
     rules: {
       '@typescript-eslint/no-explicit-any': 'error',

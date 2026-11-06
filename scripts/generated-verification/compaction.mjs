@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fc from 'fast-check';
-import { planLocalCompaction } from '../../source/services/agent-runtime/context-compaction/index.ts';
-import { projectModelRequestHistory } from '../../source/services/conversation/conversation-state-projector.ts';
+import { planLocalCompaction } from '../../src/engine/agent-runtime/context-compaction/index.ts';
+import { projectModelRequestHistory } from '../../src/session/conversation/conversation-state-projector.ts';
 
 const turn = fc.record({
   user: fc.string(),

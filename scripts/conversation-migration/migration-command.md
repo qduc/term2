@@ -2,7 +2,7 @@
 
 `scripts/migrate-conversations.mjs` is a standalone Node entry point, **not** the
 product CLI. It imports no app, settings resolver, provider or runtime legacy
-fallback. Build the compiled native dependencies using `node rewrite/scripts/build.mjs`.
+fallback. Build the compiled native dependencies using `node scripts/build.mjs`.
 The production converter is loaded lazily from `./v3-to-native.mjs`; absence or
 rejection produces `CONVERSION_FAILED`, never an invented production conversion.
 Command-only synthetic controls do not establish converter fidelity or

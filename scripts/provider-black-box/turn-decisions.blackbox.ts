@@ -2,7 +2,7 @@ import { createServer, type ServerResponse } from 'node:http';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { expect, it } from 'vitest';
-import { readHarnessApprovalReady } from '../../source/lib/harness-input-idle.js';
+import { readHarnessApprovalReady } from '../../src/shared/lib/harness-input-idle.js';
 import { createIsolatedWorkspaceLease, writePtyTextAndSubmit } from './provider-test-harness.js';
 
 it('resumes repeated questions once per decision and settles cancellation before the next turn', async () => {
@@ -136,9 +136,11 @@ it('resumes repeated questions once per decision and settles cancellation before
     await writePtyTextAndSubmit(child, 'AFTER_CANCELLED_QUESTION');
     await child.waitForState(() => requests.length === 5);
     expect(JSON.stringify(requests[4]!.input)).toContain('AFTER_CANCELLED_QUESTION');
-    // The old CLI sends only the successor input here; the settled answer
-    // is verified in its conversation log below, not assumed to be in the request.
+    // A real Responses server refuses the successor input alone, so the settled no-answer output goes first. The
+    // answer is verified in the conversation log below as well.
+    expect(requests[4]!.previous_response_id).toBe('question-response-3');
     expect(requests[4]!.input).toEqual([
+      { type: 'function_call_output', call_id: 'cancelled-question', output: 'User did not provide an answer.' },
       { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'AFTER_CANCELLED_QUESTION' }] },
     ]);
     complete(4, [message('QUESTION_SUCCESSOR_DONE')]);

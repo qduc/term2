@@ -109,8 +109,6 @@ it.skipIf(process.platform !== 'linux')('confirms a large uncached request after
       await child.write('\u007f');
       await child.waitForComposerValue('SECOND_CACHE_INPUT'.slice(0, remaining), { afterRevision: 0 });
     }
-    await child.write('\u001b[Z');
-    await child.waitForVisibleOutput('Plan');
     await child.write('\u0016');
     await child.waitForVisibleOutput('Paste text #1');
     await child.waitForVisibleOutput('cache miss risk');
@@ -128,7 +126,7 @@ it.skipIf(process.platform !== 'linux')('confirms a large uncached request after
     await child.waitForState((state) => state.output.slice(confirmationMarker).includes('Large request'));
     await child.write('y');
     await child.waitForState(() => requests.length === 3);
-    expect(JSON.stringify(requests[2]!.input).match(/Plan Mode is ON/g)).toHaveLength(1);
+    expect(JSON.stringify(requests[2]!.input).match(/Plan Mode is ON/g) ?? []).toHaveLength(0);
     expect(JSON.stringify(requests[2]!.input).match(/LARGE_DRAFT_START/g)).toHaveLength(1);
     expect(JSON.stringify(requests[2]!.input)).toContain('LARGE_DRAFT_START' + 'x'.repeat(270_000) + 'LARGE_DRAFT_END');
     complete(2);

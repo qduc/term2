@@ -14,17 +14,16 @@
 import { execFileSync } from 'node:child_process';
 
 export const GUARDS = new Set([
-  'source/compatibility-retirement.guard.test.ts',
-  'source/contracts/model-contract-retirement.test.ts',
-  'source/core/core-boundary.test.ts',
-  'source/no-manual-stdout-sync.guard.test.ts',
-  'source/services/application-stream-boundary.test.ts',
-  'source/theme/no-raw-colors.guard.test.ts',
-  'source/tools/system/run-code/run-code-runtime-boundary.test.ts',
+  'tests/guards/compatibility-retirement.guard.test.ts',
+  'tests/guards/model-contract-retirement.test.ts',
+  'tests/guards/no-manual-stdout-sync.guard.test.ts',
+  'tests/guards/application-stream-boundary.test.ts',
+  'tests/guards/no-raw-colors.guard.test.ts',
+  'tests/guards/run-code-runtime-boundary.test.ts',
 ]);
 
 export function isUnitTest(file) {
-  if (!/^(source|scripts|docs)\//.test(file)) return false;
+  if (!/^(tests|scripts|docs)\//.test(file)) return false;
   if (file.startsWith('scripts/provider-black-box/')) return false;
   if (/\.(e2e|integration)\./.test(file)) return false;
   return /\.(test|spec)\.(ts|tsx|js|jsx|mjs|cjs)$/.test(file);

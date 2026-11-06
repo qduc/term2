@@ -49,7 +49,7 @@ export function getGatewayConfig() {
     tlsCertPath: process.env.TERM2_GATEWAY_TLS_CERT,
     tlsKeyPath: process.env.TERM2_GATEWAY_TLS_KEY,
     tlsCaPath: process.env.TERM2_GATEWAY_TLS_CA,
-    // The gateway's DEFAULT_SERVE_ISSUER (source/gateway/serve-args.ts) is the
+    // The gateway's DEFAULT_SERVE_ISSUER (src/host/gateway/serve-args.ts) is the
     // legacy name 'chatforge-bff'; match it so a default `term2 serve --pairing`
     // works without extra flags. Override with TERM2_GATEWAY_ISSUER when the
     // gateway is started with --issuer.

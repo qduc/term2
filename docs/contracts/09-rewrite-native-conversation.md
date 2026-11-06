@@ -4,7 +4,7 @@ Status: **implementation-owned refactor boundary (2026-11-01).**
 
 The rewrite session is a durable, single-writer conversation boundary. Its public
 surface is `createConversation` and `openConversation` in
-`rewrite/src/session/conversation.ts`; callers do not receive the writer or an
+`src/session/conversation.ts`; callers do not receive the writer or an
 engine acceptance token.
 
 ## Ownership
@@ -132,7 +132,7 @@ at the same append-before-publication boundary as other context transitions.
 
 ## Human receipt timing
 
-`direct-time-gap.ts` derives model-only timing from accepted queue `receivedAt`
+`time-gap.ts` derives model-only timing from accepted queue `receivedAt`
 and structured human origin at `turn_started` and `queue_steered`. One pure
 projection serves live input and replay. The context clock retains the latest
 arrival (not dispatch time), so priority steers cannot move it backwards.

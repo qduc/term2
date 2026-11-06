@@ -55,7 +55,7 @@ fail-closed parsing, no global/Standard additions and no subagent grant.
 
 ## Direct headless path generation limits (2026-10-31)
 
-Owner: `withGenerationGuard` in `rewrite/src/app/run.ts`, reusing the existing
+Owner: `withGenerationGuard` in `src/app/generation-guard.ts`, reusing the existing
 `GenerationGuard` and `GenerationStreamDeadlines` unchanged. Recovery owner: the
 user, through the failed turn and a later follow-up. Scope: requests on the M1
 direct executable only; the old run loop keeps its own instance. Class: inactivity

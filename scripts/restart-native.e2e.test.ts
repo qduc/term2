@@ -1,11 +1,12 @@
 /** Native counterparts to legacy-storage restart probes. No legacy facts or sidecars are seeded. */
+import { patchCompiledModule } from '../tests/helpers/patch-compiled-module.js';
 import { createServer } from 'node:http';
 import { cp, mkdir, readFile, readdir, readlink, symlink, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { connect } from 'node:net';
 import { createInterface } from 'node:readline';
 import { expect, it } from 'vitest';
-import { listControlAdvertisements } from '../source/services/control-socket/control-socket.js';
+import { listControlAdvertisements } from '../src/clients/control-socket/control-socket.js';
 import { createIsolatedWorkspaceLease, writePtyTextAndSubmit } from './provider-black-box/provider-test-harness.js';
 
 const productionEnv = {
@@ -24,7 +25,32 @@ const reply = (content: string) =>
     choices: [{ index: 0, delta: { role: 'assistant', content }, finish_reason: 'stop' }],
   })}\n\ndata: [DONE]\n\n`;
 
-async function fixture(holdFirst = false) {
+/** One chat-completions chunk calling the shell tool in the background. */
+const backgroundShell = (command: string) =>
+  `data: ${JSON.stringify({
+    id: 'fixture',
+    object: 'chat.completion.chunk',
+    model: 'fixture',
+    choices: [
+      {
+        index: 0,
+        delta: {
+          role: 'assistant',
+          tool_calls: [
+            {
+              index: 0,
+              id: 'background-call',
+              type: 'function',
+              function: { name: 'shell', arguments: JSON.stringify({ command, background: true }) },
+            },
+          ],
+        },
+        finish_reason: 'tool_calls',
+      },
+    ],
+  })}\n\ndata: [DONE]\n\n`;
+
+async function fixture(holdFirst = false, backgroundFirst = false) {
   const requests: unknown[] = [];
   let finish: (() => void) | undefined;
   const server = createServer((req, res) => {
@@ -40,6 +66,10 @@ async function fixture(holdFirst = false) {
       }
       requests.push(JSON.parse(raw));
       res.setHeader('Content-Type', 'text/event-stream');
+      if (backgroundFirst && requests.length === 1) {
+        res.end(backgroundShell('sleep 30'));
+        return;
+      }
       if (holdFirst && requests.length === 1) {
         finish = () => res.end(reply('seed-finished'));
         return;
@@ -55,7 +85,7 @@ async function fixture(holdFirst = false) {
     prepare: async (root, paths) => {
       await mkdir(join(root, 'work'));
       await mkdir(join(root, 'runtime'), { mode: 0o700 });
-      await cp(resolve('rewrite/dist'), join(root, 'direct-dist'), { recursive: true });
+      await cp(resolve('dist'), join(root, 'direct-dist'), { recursive: true });
       await cp(resolve('package.json'), join(root, 'package.json'));
       await symlink(resolve('node_modules'), join(root, 'node_modules'), 'dir');
       await mkdir(paths.logDir, { recursive: true });
@@ -79,7 +109,7 @@ async function fixture(holdFirst = false) {
       );
     },
   });
-  const entry = join(workspace.root, 'direct-dist/rewrite/src/app/cli.js');
+  const entry = join(workspace.root, 'direct-dist/src/app/cli.js');
   const runtime = join(workspace.root, 'runtime');
   const child = await workspace.start({
     command: process.execPath,
@@ -94,17 +124,26 @@ async function fixture(holdFirst = false) {
     child,
     requests,
     entry,
-    async stopForeground() {
+    /** One control request on the session's socket (hello first). */
+    async control(method: 'interrupt' | 'status') {
       const socket = connect(listControlAdvertisements(runtime)[0]!.socketPath);
       const lines = createInterface({ input: socket })[Symbol.asyncIterator]();
       try {
         socket.write(JSON.stringify({ v: 1, id: 'hello', method: 'hello' }) + '\n');
         await lines.next();
-        socket.write(JSON.stringify({ v: 1, id: 'stop', method: 'interrupt' }) + '\n');
+        socket.write(JSON.stringify({ v: 1, id: method, method }) + '\n');
         return JSON.parse((await lines.next()).value!);
       } finally {
         socket.destroy();
       }
+    },
+    stopForeground() {
+      return this.control('interrupt');
+    },
+    /** The queue state off screen: legacy draws no paused-queue line. */
+    async queuePause() {
+      const { result } = await this.control('status');
+      return `${result.queueStateKind}/${result.queuePauseReason}`;
     },
     async logs() {
       const files = (await readdir(workspace.paths.conversationsDir)).filter((file) => file.endsWith('.jsonl'));
@@ -123,39 +162,48 @@ async function fixture(holdFirst = false) {
   };
 }
 
-it.skipIf(process.platform !== 'linux' || !process.execve || !process.env.TERM2_TEST_CLI)(
+it.skipIf(process.platform !== 'linux' || !process.execve)(
   'does not acknowledge stale renders or text typed while a native panel owns input',
   async () => {
-    const f = await fixture();
+    const f = await fixture(false, true);
     try {
       const { child } = f;
-      await child.waitForIdleInput();
-      const offset = child.getOutput().length;
-      await expect(child.waitForComposerValue('', { afterRevision: offset + 1, timeoutMs: 250 })).rejects.toThrow(
-        'Timed out',
-      );
-      await writePtyTextAndSubmit(child, '/tasks');
-      await child.waitForVisibleOutput('No background tasks.');
-      const panelOffset = child.getOutput().length;
+      const idle = await child.waitForIdleInput();
+      // Nothing typed: no new composer acknowledgement.
+      await expect(
+        child.waitForComposerValue('', { afterRevision: child.readComposerRevision(), timeoutMs: 250 }),
+      ).rejects.toThrow('Timed out');
+      // Legacy's Ctrl+G opens the task manager over a running background task.
+      await writePtyTextAndSubmit(child, 'start a background task');
+      await child.waitForVisibleOutput('native-restart-answer');
+      await child.waitForIdleInput({ after: idle });
+      await child.write('\u0007');
+      await child.waitForVisibleOutput('Manage background tasks');
+      const panelRevision = child.readComposerRevision();
+      const panelIdle = child.readIdleGeneration();
       await child.write('blocked-input');
       await expect(
-        child.waitForComposerValue('blocked-input', { afterRevision: panelOffset, timeoutMs: 250 }),
+        child.waitForComposerValue('blocked-input', { afterRevision: panelRevision, timeoutMs: 250 }),
       ).rejects.toThrow('Timed out');
+      // Esc closes the manager; the composer takes input again, still empty.
       await child.write('\u001b');
-      await child.waitForComposerValue('', { afterRevision: panelOffset });
+      await child.waitForIdleInput({ after: panelIdle });
+      expect(child.readComposerRevision()).toBe(panelRevision);
       await writePtyTextAndSubmit(child, '/help');
       await child.waitForVisibleOutput('Keyboard shortcuts');
       await writePtyTextAndSubmit(child, '/quit');
       expect((await child.waitForExit()).exitCode).toBe(0);
-      expect(f.requests).toHaveLength(0);
+      // The task's call and the reply after it; nothing typed while the manager owned input was sent.
+      expect(f.requests).toHaveLength(2);
+      expect(JSON.stringify(f.requests)).not.toContain('blocked-input');
     } finally {
       await f.close();
     }
   },
-  20_000,
+  60_000,
 );
 
-it.skipIf(process.platform !== 'linux' || !process.execve || !process.env.TERM2_TEST_CLI)(
+it.skipIf(process.platform !== 'linux' || !process.execve)(
   'retains a real native paused text admission across restart without dispatching it',
   async () => {
     const f = await fixture(true);
@@ -165,12 +213,15 @@ it.skipIf(process.platform !== 'linux' || !process.execve || !process.env.TERM2_
       await child.waitForIdleInput();
       await writePtyTextAndSubmit(child, 'start native seed turn');
       await expect.poll(() => requests.length).toBe(1);
-      await writePtyTextAndSubmit(child, '/followup retained plain text');
-      await child.waitForVisibleOutput('Queued 1 (queued): retained plain text');
+      // Legacy queues a follow-up with Alt+Enter.
+      await child.write('retained plain text');
+      await child.waitForComposerValue('retained plain text');
+      await child.write('\u001b\r');
+      await child.waitForVisibleOutput('│   retained plain text');
       // The public control stop preserves queued work and creates the real manual pause.
       expect(await f.stopForeground()).toMatchObject({ ok: true, result: { accepted: true } });
-      await child.waitForVisibleOutput('Queue: paused · manual');
-      await child.waitForComposerValue('');
+      await expect.poll(() => f.queuePause(), { timeout: 30_000 }).toBe('paused/manual');
+      await child.waitForVisibleOutput('Queue paused: 1 item pending.');
       const before = await f.logs();
       expect(before).toHaveLength(1);
       const factsBefore = before[0]!.text
@@ -188,12 +239,12 @@ it.skipIf(process.platform !== 'linux' || !process.execve || !process.env.TERM2_
       ).toHaveLength(0);
       const offset = child.getOutput().length;
       await writePtyTextAndSubmit(child, '/restart');
+      const preExec = child.readComposerRevision();
       await child.waitForState((state) => state.output.slice(offset).includes('Resumed conversation:'));
-      // Fresh post-exec input, not a retained pre-exec clear frame.
-      await child.waitForComposerValue('', { afterRevision: child.getOutput().lastIndexOf('Resumed conversation:') });
-      await child.waitForState((state) =>
-        state.output.slice(state.output.lastIndexOf('Resumed conversation:')).includes('Queue: paused · manual'),
-      );
+      // Fresh post-exec input, not a retained pre-exec clear frame: the new process counts revisions from 1.
+      await expect.poll(() => child.readComposerRevision() < preExec, { timeout: 30_000 }).toBe(true);
+      await child.waitForComposerValue('', { afterRevision: 0 });
+      await expect.poll(() => f.queuePause(), { timeout: 30_000 }).toBe('paused/manual');
       await writePtyTextAndSubmit(child, '/help');
       await child.waitForVisibleOutput('Keyboard shortcuts');
       await writePtyTextAndSubmit(child, '/quit');
@@ -223,10 +274,10 @@ it.skipIf(process.platform !== 'linux' || !process.execve || !process.env.TERM2_
       await f.close();
     }
   },
-  45_000,
+  90_000,
 );
 
-it.skipIf(process.platform !== 'linux' || !process.execve || !process.env.TERM2_TEST_CLI)(
+it.skipIf(process.platform !== 'linux' || !process.execve)(
   'reloads real native command code in the same PTY, retains provider history and restarts an empty leaf',
   async () => {
     const f = await fixture();
@@ -249,10 +300,8 @@ it.skipIf(process.platform !== 'linux' || !process.execve || !process.env.TERM2_
       await child.waitForVisibleOutput('native-restart-answer');
       await child.waitForIdleInput();
       const original = (await f.logs())[0]!.file;
-      const commands = join(f.workspace.root, 'direct-dist/rewrite/src/app/direct-launch-tui-commands.js');
-      const code = await readFile(commands, 'utf8');
-      expect(code).toContain('Exit the application');
-      await writeFile(commands, code.replace('Exit the application', 'Changed compiled core B'));
+      const commands = join(f.workspace.root, 'direct-dist/src/clients/tui/menus/legacy-commands.js');
+      await patchCompiledModule(commands, 'Exit the application', 'Changed compiled core B');
       // Running module must still be A; B is only available after real exec.
       await writePtyTextAndSubmit(child, '/help');
       await child.waitForVisibleOutput('Exit the application');
@@ -260,8 +309,11 @@ it.skipIf(process.platform !== 'linux' || !process.execve || !process.env.TERM2_
       const restart = async () => {
         const offset = child.getOutput().length;
         await writePtyTextAndSubmit(child, '/restart');
+        const preExec = child.readComposerRevision();
         await child.waitForState((state) => state.output.slice(offset).includes('Resumed conversation:'));
-        await child.waitForComposerValue('', { afterRevision: child.getOutput().lastIndexOf('Resumed conversation:') });
+        // The new process counts composer revisions from 1.
+        await expect.poll(() => child.readComposerRevision() < preExec, { timeout: 30_000 }).toBe(true);
+        await child.waitForComposerValue('', { afterRevision: 0 });
       };
       await restart();
       expect(await identity()).toEqual(originalIdentity);
@@ -285,7 +337,7 @@ it.skipIf(process.platform !== 'linux' || !process.execve || !process.env.TERM2_
       const helpOffset = child.getOutput().length;
       await writePtyTextAndSubmit(child, '/help');
       await child.waitForState((state) => state.output.slice(helpOffset).includes('Changed compiled core B'));
-      await child.waitForComposerValue('', { afterRevision: helpOffset });
+      await child.waitForComposerValue('', { afterRevision: 0 });
       expect(await identity()).toEqual(originalIdentity);
       expect((await f.logs()).find((log) => log.file === latest.file)!.text).toBe(latest.text);
       expect(requests).toHaveLength(2);

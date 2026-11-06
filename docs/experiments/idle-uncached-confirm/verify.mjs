@@ -23,7 +23,7 @@ const result = spawnSync(
     `
 const assert = require('node:assert/strict');
 const { LargeUncachedInputGuard } = require(${JSON.stringify(
-      resolve(here, '../../../source/services/large-uncached-input-guard.ts'),
+      resolve(here, '../../../rewrite/src/session/large-uncached-input-guard.ts'),
     )});
 const idle = 300000;
 const make = () => { const g = new LargeUncachedInputGuard({largePromptTokenThreshold: 1}); g.recordSuccessfulInput({provider:'p',model:'m',now:1,input:''}); return g; };

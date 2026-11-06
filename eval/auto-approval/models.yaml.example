@@ -1,7 +1,0 @@
-openai:
-  - gpt-4o
-  - gpt-4o-mini
-
-openrouter:
-  - anthropic/claude-3.5-sonnet
-  - openai/gpt-4o-mini

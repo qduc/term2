@@ -1,4 +1,4 @@
-import { testCliPath } from '../../source/test-helpers/terminal-e2e.js';
+import { testCliPath } from '../../tests/helpers/terminal-e2e.js';
 import { appendFileSync, createWriteStream, existsSync, rmSync, unlinkSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -7,14 +7,14 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { finished } from 'node:stream/promises';
 import type { Writable } from 'node:stream';
 import { stripVTControlCharacters } from 'node:util';
-import { resolveSettingsDirectory } from '../../source/services/settings/settings-path.js';
+import { resolveSettingsDirectory } from '../../src/config/settings/settings-path.js';
 import {
   HARNESS_IDLE_ENV,
   readHarnessComposerState,
   readHarnessIdleGeneration,
   waitForHarnessComposerValue,
   waitForHarnessIdleGeneration,
-} from '../../source/lib/harness-input-idle.js';
+} from '../../src/shared/lib/harness-input-idle.js';
 
 const openWorkspaceRoots = new Set<string>();
 
@@ -36,6 +36,10 @@ process.on('exit', () => {
 // duplicates that flake independently.
 export const DEFAULT_TIMEOUT_MS = 40_000;
 const DEFAULT_WRITE_TIMEOUT_MS = 5_000;
+/** Ceiling for readiness waits (composer ack, first request): they track host load, so bound only a real hang. */
+export const READINESS_TIMEOUT_MS = DEFAULT_TIMEOUT_MS;
+/** Per-test budget for multi-step PTY scenarios: several readiness waits in sequence, so it must exceed one ceiling. */
+export const HANG_BACKSTOP_MS = 5 * READINESS_TIMEOUT_MS;
 const DEFAULT_TERMINATE_GRACE_MS = 500;
 const DEFAULT_TERMINATE_TIMEOUT_MS = 2_000;
 const ROOT_REMOVAL_MAX_RETRIES = 5;
@@ -48,13 +52,39 @@ const PYTHON_PTY_CHILD = [
   'fcntl.ioctl(0, termios.TIOCSWINSZ, size)',
   'os.execvp(sys.argv[1], sys.argv[1:])',
 ].join('; ');
+// The bridge reaps the PTY child during ordinary teardown. If the bridge itself
+// dies unexpectedly, it cannot guarantee child cleanup; that rare path is accepted.
+// A detached grandchild can retain the PTY past cleanup and may outlive the test.
 const PYTHON_PTY_BRIDGE = [
-  'import pty',
-  'import sys',
+  'import os, pty, signal, sys',
+  'child_pid = None',
+  'pending_signals = []',
+  'def forward(signum, frame):',
+  '    target = signal.SIGKILL if signum == signal.SIGUSR1 else signum',
+  '    if child_pid is None:',
+  '        pending_signals.append(target)',
+  '        return',
+  '    try:',
+  '        os.killpg(child_pid, target)',
+  '    except ProcessLookupError:',
+  '        pass',
+  'for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP, signal.SIGUSR1):',
+  '    signal.signal(sig, forward)',
+  'original_fork = pty.fork',
+  'def fork():',
+  '    global child_pid',
+  '    pid, fd = original_fork()',
+  '    if pid:',
+  '        child_pid = pid',
+  '        for sig in pending_signals:',
+  '            forward(sig, None)',
+  '        pending_signals.clear()',
+  '    return pid, fd',
+  'pty.fork = fork',
   `status = pty.spawn([sys.executable, '-c', ${JSON.stringify(PYTHON_PTY_CHILD)}, *sys.argv[1:]])`,
-  'print("ACTUAL_CHILD_WAIT_STATUS=" + str(status), file=sys.stderr, flush=True)',
-  'sys.exit(status)',
-].join('; ');
+  'code = os.waitstatus_to_exitcode(status)',
+  'sys.exit(code if code >= 0 else 128 - code)',
+].join('\n');
 
 const ROOT_REMOVAL_OPTIONS = {
   recursive: true,
@@ -81,7 +111,7 @@ const REAPED_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
 
 /** Synchronous by necessity — `exit` listeners cannot await. */
 function reapLiveTerminals(): void {
-  for (const terminal of liveTerminals) signalChild(terminal, 'SIGKILL', true);
+  for (const terminal of liveTerminals) signalChild(terminal, 'SIGUSR1', true);
   liveTerminals.clear();
 }
 
@@ -653,12 +683,27 @@ function createPtyChild(options: {
     if (terminationPromise) return terminationPromise;
     const attempt = (async () => {
       if (exitState) return exitState;
-      signalChild(terminal, signal, true);
+      signalChild(terminal, signal === 'SIGKILL' ? 'SIGUSR1' : signal, true);
       try {
         return await waitForExit(graceMs);
       } catch {
-        signalChild(terminal, 'SIGKILL', true);
-        return await waitForExit(timeoutMs);
+        signalChild(terminal, 'SIGUSR1', true);
+        try {
+          return await waitForExit(timeoutMs);
+        } catch (error) {
+          if (
+            !(error instanceof Error) ||
+            error.message !== `Timed out waiting for PTY child exit after ${timeoutMs}ms.`
+          )
+            throw error;
+          // A detached process can keep the slave open after the child exits.
+          console.error(`PTY bridge ${terminal.pid} did not exit after child termination; closing PTY.`);
+          signalChild(terminal, 'SIGKILL', true);
+          terminal.stdin?.destroy();
+          terminal.stdout?.destroy();
+          terminal.stderr?.destroy();
+          return await exitPromise;
+        }
       }
     })();
     terminationPromise = attempt;
@@ -763,7 +808,7 @@ function createPtyChild(options: {
         )}.`,
       );
     },
-    waitForComposerValue: async (value, { afterRevision, timeoutMs = DEFAULT_WRITE_TIMEOUT_MS } = {}) => {
+    waitForComposerValue: async (value, { afterRevision, timeoutMs = READINESS_TIMEOUT_MS } = {}) => {
       if (!idlePath) {
         throw new Error(`${HARNESS_IDLE_ENV} is required to wait for composer input.`);
       }
@@ -775,7 +820,7 @@ function createPtyChild(options: {
     waitForExit,
     terminate,
     kill: (signal = 'SIGTERM') => {
-      signalChild(terminal, signal, true);
+      signalChild(terminal, signal === 'SIGKILL' ? 'SIGUSR1' : signal, true);
     },
     cleanup,
     dispose: cleanup,
@@ -812,7 +857,7 @@ export async function writePtyTextAndSubmit(
 ): Promise<void> {
   const afterRevision = child.readComposerRevision();
   await child.write(text, timeoutMs);
-  await child.waitForComposerValue(text, { afterRevision, timeoutMs });
+  await child.waitForComposerValue(text, { afterRevision });
   await child.write('\r', timeoutMs);
 }
 

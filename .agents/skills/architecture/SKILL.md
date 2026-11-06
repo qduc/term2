@@ -24,9 +24,9 @@ Keep policy in the policy modules:
 
 | Concern | Owner |
 | --- | --- |
-| Approval decisions | `services/approval/` |
-| Retry classification, recovery decisions | `services/retry/` |
-| Provider transport details | `providers/` or `lib/` |
+| Approval decisions | `src/session/approval/` |
+| Retry classification, recovery decisions | `src/engine/retry/` |
+| Provider transport details | `src/model/providers/` |
 
 Do not add a new `Runner`, `Driver`, `Coordinator`, `Manager`, or `Handler` just to shorten a file. Add a module only when it owns a stable concept, hides real decisions, or has more than one meaningful caller.
 
@@ -34,7 +34,7 @@ Do not collapse unrelated policy, transport, persistence, and UI behavior into o
 
 ## Entry points
 
-When changing behavior, enter through the public boundary for that feature and follow dependencies inward. Avoid starting from low-level helpers unless the bug is already isolated there. Tests are colocated with production files and are usually the fastest way to discover the intended contract.
+When changing behavior, enter through the public boundary for that feature and follow dependencies inward. Avoid starting from low-level helpers unless the bug is already isolated there. Tests live under `tests/`, laid out by layer, and are usually the fastest way to discover the intended contract.
 
 Tests should target the owning interface. Avoid tests that require knowing every internal helper unless the helper is itself the owner of a policy or invariant.
 
@@ -49,5 +49,5 @@ These are not derivable from reading the code:
 - `subagent-manager.ts` is a **compatibility facade**. It emits top-level lifecycle events and delegates through the composition root in `runtime.ts`. Do not add execution, prompt, cache, or tool-policy logic back to it. Strategy-specific execution belongs in `mentor-runner.ts` (persistent mentor history, provider continuity), `execution-runner.ts` (one-shot explorer/worker/librarian), or `nested-runner.ts` (cached `Agent.asTool()` instances, approval interruption/resume).
 - Role frontmatter, prompt selection, environment context, and tool guidance belong in `role-loader.ts`. Capability construction and write/shell safety policy belong in `tool-policy.ts`. Wiring and the nested role-tool cache stay in `runtime.ts`.
 - New providers must be registered through the provider registry.
-- New tools must be registered in `agent.ts`.
-- `services/session/session-composition.ts` is the single composition root for the session path (moved out of `services/conversation/` in a refactor).
+- New tools must be registered in `src/app/agent.ts`; the tool surface (`src/app/tool-surface.ts`) builds them from there.
+- `src/app/application.ts` is the composition root; `src/session/session/session-composition.ts` composes the subagent session path.

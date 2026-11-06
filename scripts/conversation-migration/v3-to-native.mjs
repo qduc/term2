@@ -1,10 +1,10 @@
 import { isDeepStrictEqual } from 'node:util';
-import { normalizeApplicationInput } from '../../rewrite/dist/source/services/agent-runtime/application-run-loop.js';
-import { getProfileMetadata } from '../../rewrite/dist/source/services/profiles/active-profile.js';
-import { profileIdFromLegacyMode } from '../../rewrite/dist/source/services/profiles/legacy-adapter.js';
-import { itemToInput } from '../../rewrite/dist/rewrite/src/model/provider-items.js';
-import { validateFact } from '../../rewrite/dist/rewrite/src/session/log-facts.js';
-import { replay } from '../../rewrite/dist/rewrite/src/session/replay.js';
+import { normalizeApplicationInput } from '../../dist/src/engine/agent-runtime/application-run-loop.js';
+import { getProfileMetadata } from '../../dist/src/config/profiles/active-profile.js';
+import { profileIdFromLegacyMode } from '../../dist/src/shared/profiles/legacy-adapter.js';
+import { itemToInput } from '../../dist/src/model/provider-items.js';
+import { validateFact } from '../../dist/src/session/log-facts.js';
+import { replay } from '../../dist/src/session/replay.js';
 
 const uuid = /^(?:conv_)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 const efforts = new Set(['none', 'minimal', 'low', 'medium', 'high', 'xhigh']);
@@ -88,7 +88,8 @@ export function convertValidatedV3(input, options = {}) {
     const modelName = state.model ?? fallback.model;
     const derivedProfile = state.activeProfileId === undefined && state.appMode !== undefined;
     if (derivedProfile && !object(state.appMode)) refuse('missing-configuration');
-    const profileId = state.activeProfileId ?? (derivedProfile ? profileIdFromLegacyMode(state.appMode) : fallback.profileId);
+    const profileId =
+      state.activeProfileId ?? (derivedProfile ? profileIdFromLegacyMode(state.appMode) : fallback.profileId);
     const workspace = state.projectPath ?? fallback.workspace;
     if (![provider, modelName, profileId, workspace].every(text)) refuse('missing-configuration');
     if (!workspace.startsWith('/')) refuse('unsupported-workspace');
@@ -278,9 +279,12 @@ export function convertValidatedV3(input, options = {}) {
         remappedObservationIdentityCount,
         restorationTurnCount: 1,
         continuationBroken: true,
-        fallbackFieldCount: [state.provider, state.model, derivedProfile ? profileId : state.activeProfileId, state.projectPath].filter(
-          (value) => value === undefined,
-        ).length,
+        fallbackFieldCount: [
+          state.provider,
+          state.model,
+          derivedProfile ? profileId : state.activeProfileId,
+          state.projectPath,
+        ].filter((value) => value === undefined).length,
         replayWarningCount: state.replayWarnings?.length ?? 0,
       },
     };

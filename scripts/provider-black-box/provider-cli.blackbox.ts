@@ -1,4 +1,4 @@
-import { testCliPath } from '../../source/test-helpers/terminal-e2e.js';
+import { testCliPath } from '../../tests/helpers/terminal-e2e.js';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -59,13 +59,19 @@ describe('assembled provider CLI black-box', () => {
       const after = await readFile(join(dir, logs[0]!), 'utf8');
       expect(after.startsWith(before)).toBe(true);
       expect(after).toContain('Recall the animal');
-      const latestInit = (text: string) =>
-        text
+      // The store: session metadata lives in session_started, the effort in each turn's configuration.
+      const latestInit = (text: string) => {
+        const rows = text
           .trim()
           .split('\n')
-          .map((line) => JSON.parse(line))
-          .filter((envelope) => envelope.event.type === 'session_init')
-          .at(-1).event;
+          .map((line) => JSON.parse(line));
+        const facts = rows.map((row) => row.fact);
+        return {
+          forkedFrom: facts.find((fact) => fact.type === 'session_started')?.forkedFrom,
+          reasoningEffort: facts.filter((fact) => fact.type === 'turn_started').at(-1)?.requestConfiguration
+            .reasoningEffort,
+        };
+      };
       expect(latestInit(after).reasoningEffort).toBe('high');
       expect((await readdir(dir)).filter((name) => name.endsWith('.jsonl'))).toEqual(logs);
       for (const line of resumed.stdout.trim().split('\n')) expect(() => JSON.parse(line)).not.toThrow();

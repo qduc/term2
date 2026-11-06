@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { relative } from 'node:path';
+import { relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // Keep the existing four check names and runner count. Discover through each
@@ -10,7 +10,14 @@ const listOnly = process.argv.includes('--list');
 if (!lanes.includes(lane)) throw new Error(`Expected a CI lane: ${lanes.join(', ')}`);
 // Keep the reported plan and every Vitest project on the same worker count.
 const maxWorkers = 3;
-const env = { ...process.env, CI: '1', NODE_ENV: 'test' };
+const env = {
+  ...process.env,
+  CI: '1',
+  NODE_ENV: 'test',
+  // The lanes drive term2's real entry module. Tests still branch on this variable while
+  // their legacy-only expectations remain (#88 removes them).
+  TERM2_TEST_CLI: resolve('dist/src/app/cli.js'),
+};
 // Dependencies are installed and verified by the setup action. Invoke the
 // locked executable directly; pnpm exec may relink dependencies before a run.
 const vitest = fileURLToPath(new URL('../node_modules/vitest/vitest.mjs', import.meta.url));
@@ -24,7 +31,7 @@ const tiers = [
 function owner(tier, file) {
   if (tier === 'guards') return 'test';
   if (tier === 'integration')
-    return /^source\/cli(?:-headless)?\.integration\.test\.ts$/.test(file) ? 'test' : 'integration';
+    return /^tests\/cli\/cli(?:-headless)?\.integration\.test\.ts$/.test(file) ? 'test' : 'integration';
   if (tier === 'e2e') return 'e2e';
   if (file.endsWith('/provider-session-stateless.blackbox.ts')) return 'integration';
   if (/\/(?:provider-ordinary-safety|reference-approval)\.blackbox\.ts$/.test(file)) return 'test';
@@ -46,17 +53,14 @@ const plan = tiers.map(([tier, config]) => {
 });
 console.log(JSON.stringify({ lane, maxWorkers, plan }, null, 2));
 if (!listOnly) {
-  if (lane === 'provider-black-box') {
-    const build = spawnSync(process.execPath, ['rewrite/scripts/build.mjs'], { env, stdio: 'inherit' });
-    if (build.status !== 0 || build.error)
-      throw new Error(`Direct CLI build failed: ${build.error?.message ?? build.signal ?? build.status}`);
-  }
+  const build = spawnSync(process.execPath, ['scripts/build.mjs'], { env, stdio: 'inherit' });
+  if (build.status !== 0 || build.error)
+    throw new Error(`CLI build failed: ${build.error?.message ?? build.signal ?? build.status}`);
   const result = spawnSync(process.execPath, [vitest, 'run', '--config', 'vitest.ci.config.ts', '--reporter=verbose'], {
     env: {
       ...env,
       TERM2_CI_PLAN: JSON.stringify(plan),
       TERM2_CI_MAX_WORKERS: String(maxWorkers),
-      TERM2_CI_PREBUILT_CLI: '1',
     },
     stdio: 'inherit',
   });

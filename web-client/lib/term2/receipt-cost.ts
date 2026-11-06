@@ -14,7 +14,7 @@ export interface ReceiptCostSummary {
  * Branch views select the same root charges and must never be added to this set.
  * No usage/catalog lookup, native-aggregate reconciliation, or accepted state write.
  *
- * Arithmetic follows source/services/cost/model-cost.ts#summarizeCost. Its runtime
+ * Arithmetic follows src/shared/cost/model-cost.ts#summarizeCost. Its runtime
  * import is not Turbopack-compatible (.js -> .ts dependency), and even a type-only
  * import checks BigInt literals against the browser's ES2017 target. No source
  * runtime or type dependency is pulled into this browser module.

@@ -1,4 +1,4 @@
-/** Content receipts for the two local CLI builds. Not release/signing metadata.
+/** Content receipt for the local CLI build. Not release/signing metadata.
  * Hash actual files (including untracked inputs), not mtimes or Git's index. */
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
@@ -6,9 +6,9 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 const receiptName = '.term2-build-provenance.json';
-const outputs = { direct: 'rewrite/dist', old: 'dist' };
-const commonInputs = ['source', 'scripts', 'package.json', 'pnpm-lock.yaml', 'tsconfig.json', 'tsconfig.build.json'];
-const directInputs = ['rewrite/src', 'rewrite/scripts', 'rewrite/tsconfig.json', 'rewrite/tsconfig.build.json'];
+const outputs = { direct: 'dist' };
+const commonInputs = ['scripts', 'package.json', 'pnpm-lock.yaml', 'tsconfig.json'];
+const directInputs = ['src', 'tsconfig.build.json'];
 
 /** Stable path+content digest. Refuse links rather than miss a compiler-read target. */
 function digest(root, entries, exclude = '') {

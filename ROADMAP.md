@@ -42,11 +42,11 @@ The following core milestones have been fully implemented, verified, and merged:
 | **Provider OAuth Independence** | Shared PKCE flow (`oauth-pkce.ts`), dedicated credential store, access-token-only CLI import, and multi-account switcher in `/providers`. | [`docs/plans/providers/provider-oauth-independence.md`](./docs/plans/providers/provider-oauth-independence.md) |
 | **Service Seam Contracts** | 12 formal boundary contracts governing turn lifecycles, provider continuity, child identity, settings resolution, and runtime guards. | [`docs/contracts/`](./docs/contracts/README.md) |
 | **Context Compaction** | Provider-neutral request-boundary compaction (`/compact`) and OpenAI server-side `context_management`, preserving architectural facts and hot-tail tool integrity. | [`docs/plans/context-and-memory/provider-neutral-context-compaction.md`](./docs/plans/context-and-memory/provider-neutral-context-compaction.md) |
-| **Operating Modes** | Standard, Plan (read-only), Lite (no-codebase ingestion), Mentor (dual-model advisory), and Orchestrator modes. | [`source/agent.ts`](./source/agent.ts) |
+| **Operating Modes** | Standard, Plan (read-only), Lite (no-codebase ingestion), Mentor (dual-model advisory), and Orchestrator modes. | [`src/app/agent.ts`](./src/app/agent.ts) |
 | **Subagent Swarms** | 4-tier configurable subagent roles (`explorer`, `worker`, `mentor`, `librarian`) mapped to smart, balanced, cheap, and chore model tiers. | [`README.md`](./README.md) |
-| **Sandboxing & Auto-Approval** | Read/write sandboxing policies (`standard`, `strict`) paired with hybrid heuristic & LLM auto-approval for safe, fatigue-free terminal workflows. | [`source/utils/shell/sandbox/`](./source/utils/shell/sandbox/) |
+| **Sandboxing & Auto-Approval** | Read/write sandboxing policies (`standard`, `strict`) paired with hybrid heuristic & LLM auto-approval for safe, fatigue-free terminal workflows. | [`src/shared/utils/shell/sandbox/`](./src/shared/utils/shell/sandbox/) |
 | **Time-Travel & Queue Editing** | Interactive rewind/undo/retry with discard preview (`/rewind`), session persistence/forking (`--resume`, `--fork`), and mid-turn prompt queuing (`Alt+Enter`). | [`docs/plans/terminal-ui/queue-editing.md`](./docs/plans/terminal-ui/queue-editing.md) |
-| **Remote SSH Workspaces** | Native remote command execution and codebase modification over SSH agent channels. | [`source/services/ssh/`](./source/services/ssh/) |
+| **Remote SSH Workspaces** | Native remote command execution and codebase modification over SSH agent channels. | [`src/tools/ssh-service.ts`](./src/tools/ssh-service.ts) |
 | **Grok Responses Integration** | Full Responses API support with encrypted reasoning round-tripping and status bar credit usage tracking. | [`docs/plans/providers/grok-responses-and-credits.md`](./docs/plans/providers/grok-responses-and-credits.md) |
 
 ---

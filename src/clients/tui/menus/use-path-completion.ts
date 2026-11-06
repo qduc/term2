@@ -1,0 +1,219 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type {
+  MenuLogger as ILoggingService,
+  MenuPathEntry as PathEntry,
+  MenuWorkspaceEntriesMeta as WorkspaceEntriesMeta,
+  TuiMenus,
+} from '../integration.js';
+import { filterPathEntries } from './path-completion-filter.js';
+import { useInputContext } from './input-context.js';
+import { useSelection } from './use-selection.js';
+
+export type PathCompletionItem = PathEntry;
+
+const MAX_RESULTS = 100;
+
+type UsePathCompletionDeps = {
+  loggingService?: ILoggingService;
+  getWorkspaceEntries?: TuiMenus['paths']['entries'];
+  refreshWorkspaceEntries?: TuiMenus['paths']['refresh'];
+  getWorkspaceEntriesMeta?: TuiMenus['paths']['meta'];
+};
+
+// Builds an accurate warning for whichever truncation actually occurred. The
+// total-entry limit is the only cap on the workspace listing, so any warning
+// must be specific to that cause.
+const buildWorkspaceLimitWarning = (
+  meta: Pick<WorkspaceEntriesMeta, 'truncatedByTotalLimit' | 'limit'>,
+): string | null => {
+  if (meta.truncatedByTotalLimit) {
+    return `Path completion is limited to ${meta.limit} entries because this repo is too large. Showing a best-effort breadth-first sample.`;
+  }
+  return null;
+};
+
+export const usePathCompletion = (deps?: UsePathCompletionDeps) => {
+  const { mode, input, triggerIndex, cursorOffset, controller, menus } = useInputContext();
+  // file-service.ts and the logging service, served by the app (TuiMenus).
+  const logger = deps?.loggingService ?? menus.logger;
+  const loadWorkspaceEntries = deps?.getWorkspaceEntries ?? menus.paths.entries;
+  const reloadWorkspaceEntries = deps?.refreshWorkspaceEntries ?? menus.paths.refresh;
+  const loadWorkspaceEntriesMeta = deps?.getWorkspaceEntriesMeta ?? menus.paths.meta;
+
+  // Logging is a side effect only; an unstable logger reference must not cause
+  // workspace loading effects to re-run on every render.
+  const loggerRef = useRef(logger);
+  loggerRef.current = logger;
+
+  const controllerFrame = controller.getSnapshot().stack.at(-1);
+  const isControllerOpen = controllerFrame?.kind === 'path';
+  const isOpen = isControllerOpen || mode === 'path_completion';
+
+  // While the path graph is controller-owned, the binding is the source of
+  // truth for both the query and the replacement start. Keep the legacy
+  // triggerIndex projection for callers that still use this hook directly.
+  const activeTriggerIndex = isControllerOpen ? controllerFrame.binding.replacement.start : triggerIndex;
+
+  // Derive query from input + triggerIndex + cursorOffset
+  const query = useMemo(() => {
+    if (!isOpen) return '';
+    if (isControllerOpen) return controllerFrame.binding.query;
+    if (triggerIndex === null) return '';
+    // Assuming trigger is '@', the query is after that
+    // Safety check to ensure we don't slice weirdly
+    if (triggerIndex >= input.length) return '';
+    const end = Math.min(cursorOffset, input.length);
+    // +1 to skip the '@' or whatever trigger char
+    // Wait, InputBox passed the query. `findPathTrigger` logic:
+    // if char === '@', query = text.slice(index + 1, cursor)
+    return input.slice(triggerIndex + 1, end);
+  }, [isOpen, isControllerOpen, controllerFrame, triggerIndex, input, cursorOffset]);
+
+  const [entries, setEntries] = useState<PathEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
+
+  const syncWorkspaceWarning = useCallback((meta: WorkspaceEntriesMeta) => {
+    const warningText = buildWorkspaceLimitWarning(meta);
+    setWarning(warningText);
+
+    if (!warningText) {
+      return;
+    }
+
+    const details = {
+      limit: meta.limit,
+      totalEntries: meta.totalEntries,
+      truncatedByTotalLimit: meta.truncatedByTotalLimit,
+    };
+    const currentLogger = loggerRef.current;
+    if (currentLogger) {
+      currentLogger.warn('Path completion truncated the workspace listing', details);
+    } else {
+      console.warn('[use-path-completion] Path completion truncated the workspace listing', details);
+    }
+  }, []);
+
+  const loadEntries = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    setWarning(null);
+    try {
+      const paths = await loadWorkspaceEntries();
+      setEntries(paths);
+      syncWorkspaceWarning(loadWorkspaceEntriesMeta());
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message);
+      setWarning(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [loadWorkspaceEntries, loadWorkspaceEntriesMeta, syncWorkspaceWarning]);
+
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    loadEntries().catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      const currentLogger = loggerRef.current;
+      if (currentLogger) {
+        currentLogger.error('Failed to load workspace entries', {
+          error: message,
+        });
+      } else {
+        console.error('[use-path-completion] Failed to load workspace entries', message);
+      }
+    });
+  }, [loadEntries]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  const filteredEntries = useMemo(() => {
+    return filterPathEntries(entries, query, MAX_RESULTS);
+  }, [entries, query]);
+
+  const { selectedIndex, setSelectedIndex, moveUp, moveDown, moveHome, moveEnd, pageUp, pageDown, getSelectedItem } =
+    useSelection(filteredEntries);
+
+  const [scrollOffset, setScrollOffset] = useState(0);
+
+  // Reset scroll to top when query changes (filtering)
+  useEffect(() => {
+    setScrollOffset(0); // eslint-disable-line react-hooks/set-state-in-effect
+  }, [query]);
+
+  // Auto-scroll to keep selected item visible
+  useEffect(() => {
+    const maxHeight = 10;
+    if (selectedIndex < scrollOffset) {
+      setScrollOffset(selectedIndex); // eslint-disable-line react-hooks/set-state-in-effect
+    } else if (selectedIndex >= scrollOffset + maxHeight) {
+      setScrollOffset(selectedIndex - maxHeight + 1);
+    }
+  }, [selectedIndex, scrollOffset]);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    setWarning(null);
+    try {
+      const paths = await reloadWorkspaceEntries();
+      setEntries(paths);
+      syncWorkspaceWarning(loadWorkspaceEntriesMeta());
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message);
+      setWarning(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [reloadWorkspaceEntries, loadWorkspaceEntriesMeta, syncWorkspaceWarning]);
+
+  const open = useCallback(
+    (startIndex: number, _initialQuery = '') => {
+      // Preserve selection when already open to avoid resetting on re-renders
+      if (mode === 'path_completion') return;
+      const editor = controller.getSnapshot().editor;
+      controller.replaceText(editor.text, Math.max(editor.cursor, startIndex + 1));
+      setSelectedIndex(0);
+      setScrollOffset(0);
+      // initialQuery is ignored because we derive it
+      // Refresh in background to avoid stale entries; don't block open
+      refresh().catch(() => {});
+    },
+    [mode, controller, setSelectedIndex, refresh],
+  );
+
+  const close = useCallback(() => {
+    if (mode === 'path_completion') {
+      controller.close();
+      setSelectedIndex(0);
+      setScrollOffset(0);
+    }
+  }, [mode, controller, setSelectedIndex]);
+
+  // updateQuery removed
+
+  return {
+    isOpen,
+    triggerIndex: activeTriggerIndex, // Compatibility projection for legacy callers
+    query,
+    entries,
+    filteredEntries,
+    selectedIndex,
+    scrollOffset,
+    loading,
+    error,
+    warning,
+    open,
+    close,
+    moveUp,
+    moveDown,
+    moveHome,
+    moveEnd,
+    pageUp,
+    pageDown,
+    getSelectedItem,
+    refresh,
+  };
+};

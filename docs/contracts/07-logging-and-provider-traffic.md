@@ -21,7 +21,7 @@ evaluator lane are accepted behavior, now characterized by green tests.
 
 ### Direct CLI startup privacy
 
-The direct CLI (`rewrite/src/app/cli.ts`) must resolve stored
+The direct CLI (`src/app/cli.ts`) must resolve stored
 `logging.disableLogging` before opening diagnostic file sinks, including
 provider/evaluator traffic and opt-in `TERM2_RAW_TRAFFIC` sidecars. Its four
 bootstrap sites (headless, interactive, model listing, shared ACP/server) use

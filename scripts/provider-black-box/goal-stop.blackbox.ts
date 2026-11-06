@@ -3,9 +3,6 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { expect, it } from 'vitest';
 import { createIsolatedWorkspaceLease, writePtyTextAndSubmit } from './provider-test-harness.js';
-import { usesDirectComposer } from '../../source/test-helpers/direct-composer.js';
-
-const direct = usesDirectComposer([process.env.TERM2_TEST_CLI ?? '']);
 
 it('bounds missing goal checks and keeps blocked and deferred goals active', async () => {
   const requests: Record<string, unknown>[] = [];
@@ -106,9 +103,7 @@ it('bounds missing goal checks and keeps blocked and deferred goals active', asy
     const blockedOutputs = outputs(4, 'blocked-check');
     expect(blockedOutputs).toHaveLength(1);
     expect(blockedOutputs[0]!.output).toMatch(
-      direct
-        ? /^Self-check recorded: \[goal [^\]]+\] \[generation \d+\] blocked\. Return control and state exactly what input or capability is needed\.$/
-        : /^Self-check recorded: \[goal [^\]]+\] blocked\. Control returns to the user\./,
+      /^Self-check recorded: \[goal [^\]]+\] blocked\. Control returns to the user\./,
     );
     complete(4, [message('BLOCKED_DONE')]);
     await child.waitForVisibleOutput('BLOCKED_DONE');
@@ -121,9 +116,7 @@ it('bounds missing goal checks and keeps blocked and deferred goals active', asy
     const deferredOutputs = outputs(6, 'deferred-check');
     expect(deferredOutputs).toHaveLength(1);
     expect(deferredOutputs[0]!.output).toMatch(
-      direct
-        ? /^Self-check recorded: \[goal [^\]]+\] \[generation \d+\] deferred\. The goal remains active\. Finish the latest user request and end the turn\.$/
-        : /^Self-check recorded: \[goal [^\]]+\] deferred\. The durable goal stays active and unchanged\./,
+      /^Self-check recorded: \[goal [^\]]+\] deferred\. The durable goal stays active and unchanged\./,
     );
     complete(6, [message('DEFERRED_DONE')]);
     await child.waitForVisibleOutput('DEFERRED_DONE');
@@ -141,17 +134,15 @@ it('bounds missing goal checks and keeps blocked and deferred goals active', asy
       .split('\n')
       .map((line) => {
         const row = JSON.parse(line);
-        if (direct) expect(row.v).toBe(2);
-        return direct ? row.fact : row.event;
+        expect(row.v).toBe(2);
+        return row.fact;
       });
-    if (direct) {
-      const reminders = events.filter((event) => event.type === 'goal_stop_reminded');
-      expect(reminders).toHaveLength(2);
-      expect(reminders.every((event) => event.reason === 'missing_check')).toBe(true);
-      expect(
-        events.filter((event) => event.type === 'turn_ended' && event.terminalCause === 'goal_check_unresolved'),
-      ).toHaveLength(1);
-    }
+    const reminders = events.filter((event) => event.type === 'goal_stop_reminded');
+    expect(reminders).toHaveLength(2);
+    expect(reminders.every((event) => event.reason === 'missing_check')).toBe(true);
+    expect(
+      events.filter((event) => event.type === 'turn_ended' && event.terminalCause === 'goal_check_unresolved'),
+    ).toHaveLength(1);
     const changes = events.filter((event) => event.type === 'goal_changed');
     expect(changes).toHaveLength(1);
     expect(blockedOutputs[0]!.output).toContain(`[goal ${changes[0].goal.id}]`);

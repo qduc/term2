@@ -6,7 +6,6 @@
  * dies with it. It has to be a separate process because the behavior under
  * test is process teardown.
  */
-import { writeFile } from 'node:fs/promises';
 import { createIsolatedWorkspaceLease } from './provider-test-harness.js';
 
 const childScript = process.argv[2];
@@ -14,10 +13,13 @@ const pidPath = process.argv[3];
 if (!childScript || !pidPath) throw new Error('usage: provider-reaper-owner.ts <child-script> <pid-path>');
 
 const workspace = await createIsolatedWorkspaceLease();
-const child = await workspace.start({ command: process.execPath, args: [childScript, 'hang'] });
+const child = await workspace.start({
+  command: process.execPath,
+  args: [childScript, 'pid-and-hang'],
+  env: { TERM2_HARNESS_CHILD_PID_PATH: pidPath },
+});
 await child.waitForVisibleOutput('hanging', 10_000);
 
-await writeFile(pidPath, `${child.pid}\n`, 'utf8');
 process.stdout.write('owner ready\n');
 
 // Deliberately no cleanup: an interrupted run never reaches afterEach either.

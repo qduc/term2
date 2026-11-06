@@ -1,8 +1,9 @@
 import { spawn } from 'node:child_process';
+import { resolve } from 'node:path';
 
 /**
- * `pnpm test:provider-black-box` entry point: build both CLI entries, then run the
- * black-box configuration against the shipped CLI.
+ * `pnpm test:provider-black-box` entry point: build the CLI, then run the
+ * black-box configuration against it (TERM2_TEST_CLI, as run-ci-lane sets it).
  *
  * Two flags exist to keep a broken build from looking like a hang. The suite
  * drives the built CLI through a PTY and waits on its output, so when the CLI
@@ -20,23 +21,17 @@ import { spawn } from 'node:child_process';
  *   full failure list.
  */
 
-const run = (command, args) =>
+const run = (command, args, env = process.env) =>
   new Promise((resolve) => {
-    const child = spawn(command, args, { stdio: 'inherit', shell: process.platform === 'win32' });
+    const child = spawn(command, args, { stdio: 'inherit', shell: process.platform === 'win32', env });
     child.once('close', (code) => resolve(code ?? 1));
     child.once('error', () => resolve(1));
   });
 const build = await run('pnpm', ['build']);
 if (build !== 0) process.exit(build);
-const directBuild = await run(process.execPath, ['rewrite/scripts/build.mjs']);
-if (directBuild !== 0) process.exit(directBuild);
-const tests = await run('pnpm', [
-  'exec',
-  'vitest',
-  'run',
-  '--config',
-  'vitest.provider-black-box.config.ts',
-  '--reporter=verbose',
-  '--bail=1',
-]);
+const tests = await run(
+  'pnpm',
+  ['exec', 'vitest', 'run', '--config', 'vitest.provider-black-box.config.ts', '--reporter=verbose', '--bail=1'],
+  { ...process.env, TERM2_TEST_CLI: resolve('dist/src/app/cli.js') },
+);
 process.exit(tests);

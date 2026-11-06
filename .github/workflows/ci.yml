@@ -102,7 +102,7 @@ jobs:
           ripgrep: 'true'
       - name: Reject committed unit tests
         run: pnpm check:no-unit-tests
-      - name: Run guards, CLI integration and safety provider cases
+      - name: Run guards, CLI integration, safety and responses provider cases
         run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs test
       - name: Upload built CLI for port checks
         uses: actions/upload-artifact@v4
@@ -187,7 +187,7 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha }}
       - uses: ./.github/actions/setup-tests
-      - name: Run E2E and Responses provider cases
+      - name: Run E2E process cases
         run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs e2e
 
   provider-black-box:

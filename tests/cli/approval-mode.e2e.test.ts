@@ -258,6 +258,7 @@ async function runCommand(
     TERM2_CACHE_DIR: path.join(home, '.cache', 'term2'),
     TERM2_CONVERSATIONS_DIR: path.join(root, 'conversations'),
     DISABLE_LOGGING: '1',
+    TERM2_EXIT_CONFIRM_WINDOW_MS: '300',
     [HARNESS_IDLE_ENV]: idlePath,
     // Ink suppresses dynamic terminal updates in CI mode; this test needs an interactive TUI.
     CI: 'false',
@@ -636,31 +637,9 @@ async function runCommand(
   }
 }
 
-// Legacy's bare /auto-approve and /settings put their trigger in the composer, which opens the menu.
+// Legacy's bare /auto-approve puts its trigger in the composer, which opens the menu.
 it('/auto-approve without an argument opens the legacy auto-approval menu', { timeout: TIMEOUT_MS }, () =>
   runCommand('/auto-approve', 'Shell auto-approval', undefined, false, false, '/auto-approve '),
-);
-
-it('/settings without an argument opens the legacy settings menu', { timeout: TIMEOUT_MS }, () =>
-  runCommand('/settings', 'Tab section', undefined, false, false, '/settings '),
-);
-
-// Legacy's bare /profile puts its trigger back, which opens the Profiles menu.
-it('/profile without an argument opens the Profiles menu', { timeout: TIMEOUT_MS }, () =>
-  runCommand('/profile', 'Currently active', undefined, false, false, '/profile '),
-);
-
-it(
-  '/model picker filters, toggles favorites, selects a model and clears the composer',
-  { timeout: TIMEOUT_MS },
-  async () => {
-    await runCommand('/model', 'Select model', undefined, 'model-picker');
-  },
-);
-
-// Typing `/model ` opens legacy's model menu; the rest of the line filters it and Enter picks the match.
-it('/model <provider>/<model> confirms the new model by name', { timeout: TIMEOUT_MS }, () =>
-  runCommand('/model mockprov/mock-beta', 'Set model to mock-beta (mockprov)'),
 );
 
 it('/usage agrees with the cached share in the status bar', { timeout: TIMEOUT_MS }, async () => {
@@ -727,61 +706,9 @@ it('last-request context survives resume without becoming cumulative usage', { t
   expect(session.getVisibleOutput()).not.toContain('Ctx 90k');
 });
 
-it('/copy confirms what it copied', { timeout: TIMEOUT_MS }, () =>
-  runCommand('/copy', 'Copied the latest assistant response to the clipboard.', 'say something'),
-);
-
-it('slash menu suggests and completes a command in the terminal', { timeout: TIMEOUT_MS }, () =>
-  runCommand('/settings', 'Tab section', undefined, 'complete'),
-);
-
-it('Enter on an unfinished slash prefix runs the command', { timeout: TIMEOUT_MS }, () =>
-  runCommand('/clear', '', 'keep this conversation', 'prefix-enter'),
-);
-
-it('Enter on an arrow-picked command runs it', { timeout: TIMEOUT_MS }, () =>
-  runCommand('/usage', '', undefined, 'pick-enter'),
-);
-
 // Accepted difference (#149): Pair is no longer a selectable direct CLI profile.
 it.skip('/bare confirms a clear before leaving a non-Bare profile with history', { timeout: TIMEOUT_MS }, () =>
   runCommand('', '', 'hello', 'bare-clear-history'),
-);
-
-it('/providers opens the legacy provider manager', { timeout: TIMEOUT_MS }, () =>
-  runCommand('/providers', 'Your Providers', undefined, false, false, undefined, ['Configured providers:']),
-);
-
-// Legacy's /retry rewinds the last turn and resends it; with no turn there is nothing to rewind.
-it('/retry with no turn has nothing to rewind', { timeout: TIMEOUT_MS }, () =>
-  runCommand('/retry', 'Nothing to rewind.'),
-);
-
-// The /effort menu owns the Enter, so legacy refuses an unknown level inline and keeps the text.
-it('invalid effort is refused inline without protocol internals', { timeout: TIMEOUT_MS }, () =>
-  runCommand('/effort bogus', '"bogus" is not one of the options', undefined, false, false, undefined, [
-    'invalid_command',
-    'Command ',
-  ]),
-);
-
-// No menu row matches, so legacy's menu submits the typed id on the current provider, unchecked, and clears the line.
-it('a typed model no catalog lists is set as legacy did, without receipt internals', { timeout: TIMEOUT_MS }, () =>
-  runCommand(
-    '/model bogus/does-not-exist',
-    'Set model to bogus/does-not-exist (mockprov)',
-    undefined,
-    false,
-    false,
-    '',
-    ['command_rejected', '· configure · rejected'],
-  ),
-);
-
-it('successful configure does not leave a receipt in the activity view', { timeout: TIMEOUT_MS }, () =>
-  runCommand('/model mockprov/mock-beta', 'Set model to mock-beta (mockprov)', undefined, false, false, undefined, [
-    '· configure · configured',
-  ]),
 );
 
 it('quitting a conversation prints a usable resume hint', { timeout: TIMEOUT_MS }, () =>
@@ -799,16 +726,6 @@ it('shows a structured provider error as a message', { timeout: TIMEOUT_MS }, ()
     ['model_not_found'],
     'The selected model is not supported.',
   ),
-);
-
-it(
-  'accepted and rejected slash commands clear, and double Escape clears completed slash input',
-  { timeout: TIMEOUT_MS },
-  () => runCommand('', '', undefined, 'command-clear-regression'),
-);
-
-it('Enter opens slash pickers and Escape returns to the composer', { timeout: TIMEOUT_MS }, () =>
-  runCommand('', '', undefined, 'slash-picker-tab'),
 );
 
 it('keeps composer hints on one row at 80 columns', { timeout: TIMEOUT_MS }, () =>

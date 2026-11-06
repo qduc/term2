@@ -43,6 +43,7 @@ const CHILD_ENV_KEYS = [
   'CI',
   'NODE_ENV',
   'TERM2_TEST_OWNER',
+  'TERM2_EXIT_CONFIRM_WINDOW_MS',
 ];
 
 /** Build a child environment without leaking ambient credentials or service URLs. */

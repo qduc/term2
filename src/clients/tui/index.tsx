@@ -30,7 +30,8 @@ export function Tui(props: TuiProps): React.ReactElement {
       return;
     }
     // Retain the terminal's two-second interrupt/confirm gesture.
-    exitArmedUntil.current = now + 2000;
+    const exitConfirmWindowMs = Number(process.env.TERM2_EXIT_CONFIRM_WINDOW_MS) || 2000;
+    exitArmedUntil.current = now + exitConfirmWindowMs;
     interrupt.current();
   });
   // Keep transition notices above the keyed per-session component.

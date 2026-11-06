@@ -5,6 +5,11 @@ continuity/recovery, root stream acceptance and the native model-call boundary. 
 public constructor and `run`, `compact`, and `clear` methods are the engine-facing
 contract used by `turn.ts`.
 
+Only a selected recovery retry can carry a live retry notice. A denied replay
+keeps its terminal error and exhaustion notice without announcing another
+dispatch. Publishing the retry notice before checking the stop decision previously
+showed a retry that could not run after the shared recovery budget refused it.
+
 `TurnCompaction` owns a private compaction proposal and its auxiliary summary/native
 requests. It receives the root-owned auxiliary preparation callback so summary work
 uses the same model-step, budget, recovery and dispatch boundary without gaining

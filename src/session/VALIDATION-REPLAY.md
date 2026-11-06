@@ -26,6 +26,11 @@ because recovery stops: that erased the truncated stream's final attempt before
 replay could retain it. `settleCancelledReplayStep` restores only the surviving
 delta slot on reopen, including when a cached fold was first projected live.
 
+The same policy applies to nested turns. Later shared-role launches inherit a
+failed run's unsuperseded partial alongside its accepted assistant and tool
+history. Retention does not change the failed outcome or the parent's failure
+notification.
+
 An actual retry's `withdrawn: true` marker remains authoritative. It must not be
 reversed to repair terminal text loss, and an accepted assistant item still
 supersedes its deltas. [The retry-screen parity

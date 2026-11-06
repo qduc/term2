@@ -110,8 +110,7 @@ export class TurnModel {
           tools: { completed: this.tools.completed, allCompleted: true, completedPairsInHistory: pairs },
         });
         if (decision.notice) await this.#retryNotice(decision.notice, error);
-        // Legacy's failed turn keeps no partial assistant text in later requests either.
-        if (decision.kind === 'stop') await this.#withdraw(history);
+        // A terminal attempt keeps its accepted partial text. Only a selected retry withdraws it.
         if (decision.kind === 'stop')
           throw decision.exhaustedAfter === undefined
             ? error

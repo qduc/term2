@@ -57,7 +57,6 @@ export type DirectRecoveryDecision =
         | 'retry_limit'
         | 'recovery_budget';
       readonly admission?: RetryRecoveryAdmission;
-      readonly notice?: DirectRetryNotice;
       /** Legacy's "Could not reach …" count once transient retries are used up. */
       readonly exhaustedAfter?: number;
     }
@@ -233,7 +232,7 @@ export class DirectRecovery {
     };
     const admission = this.budget.describeAdmission({ automaticReplayRequired: true });
     if (!this.budget.claimAutomaticReplay() || !this.budget.claimPhysicalAttempt())
-      return { ...stop('recovery_budget'), admission, notice, exhaustedAfter: this.budget.physicalAttempts };
+      return { ...stop('recovery_budget'), admission, exhaustedAfter: this.budget.physicalAttempts };
     return { ...transientRetry(attempt, max, notice.delayMs, admission), automaticReplay: true, notice };
   }
 

@@ -109,12 +109,12 @@ export class TurnModel {
           withdrawableOutput: this.#withdrawable !== undefined,
           tools: { completed: this.tools.completed, allCompleted: true, completedPairsInHistory: pairs },
         });
-        if (decision.notice) await this.#retryNotice(decision.notice, error);
         // A terminal attempt keeps its accepted partial text. Only a selected retry withdraws it.
         if (decision.kind === 'stop')
           throw decision.exhaustedAfter === undefined
             ? error
             : new RetriesExhausted(error, exhaustedNotice(this.spec.model.provider, decision.exhaustedAfter));
+        if (decision.notice) await this.#retryNotice(decision.notice, error);
         retry = decision;
         if (retry.withdraw) await this.#withdraw(history);
         this.#standardTier ||= retry.useStandardServiceTier;

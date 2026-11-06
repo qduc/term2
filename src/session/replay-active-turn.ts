@@ -81,7 +81,8 @@ function callStep(turn: ActiveReplayTurn, callId: string): number | undefined {
 /**
  * Legacy keeps a cancelled turn's finished model steps and the user's input. Live, it drops the step the turn was
  * in (a response still streaming, or tools still running at the cancel); after a resume it shows that step's calls
- * again with unobserved results, as it does for any unsettled call. Idempotent: a fold is finished many times.
+ * again with unobserved results, as it does for any unsettled call, and retains unsuperseded text deltas.
+ * Idempotent: a fold is finished many times.
  */
 export function settleCancelledReplayStep(turn: ActiveReplayTurn, resumed: boolean): void {
   for (const [step, own] of turn.stepSlots) {
@@ -89,6 +90,10 @@ export function settleCancelledReplayStep(turn: ActiveReplayTurn, resumed: boole
     for (const slot of own) {
       if (slot.original === undefined) slot.original = slot.item;
       const item = slot.original;
+      if (resumed && turn.partials.get(step)?.slot === slot) {
+        slot.item = item;
+        continue;
+      }
       slot.item =
         !resumed || !item || (item.type !== 'tool_call' && item.type !== 'tool_result')
           ? null

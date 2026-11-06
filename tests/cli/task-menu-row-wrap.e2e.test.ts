@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { stripVTControlCharacters } from 'node:util';
 import { testCliPath, spawnTerminal, createTestChildEnv, type TerminalSession } from '../helpers/terminal-e2e.js';
 import {
   HARNESS_IDLE_ENV,
@@ -131,8 +132,15 @@ async function waitUntil(check: () => boolean, message: string, timeoutMs = 30_0
 }
 
 function currentMenu(): string {
-  const output = session?.getVisibleOutput() ?? '';
-  return output.slice(output.lastIndexOf('Manage background tasks'));
+  // PTY output accumulates erased frames. Use only the latest complete Ink render,
+  // never an older menu or a partially written frame, for presence and absence checks.
+  const output = session?.getOutput() ?? '';
+  const begin = output.lastIndexOf('\x1b[?2026h');
+  const end = output.indexOf('\x1b[?2026l', begin);
+  if (begin < 0 || end < 0) return '';
+  const frame = stripVTControlCharacters(output.slice(begin, end));
+  const menu = frame.lastIndexOf('Manage background tasks');
+  return menu < 0 ? '' : frame.slice(menu);
 }
 
 function expectTwoActiveRows(menu: string): void {
@@ -258,7 +266,11 @@ it(
     );
     expect(fs.readFileSync(firstDone, 'utf8')).toBe('one');
     expect(fs.readFileSync(secondDone, 'utf8')).toBe('two');
-    await waitUntil(() => !currentMenu().includes('[Shell'), 'settled task rows removed', 30_000);
+    await waitUntil(
+      () => currentMenu().includes('Manage background tasks') && !currentMenu().includes('[Shell'),
+      'settled task rows removed while the manager stays open',
+      30_000,
+    );
     expect(session.getVisibleOutput()).not.toContain('Task is no longer transferable');
 
     session.write('\x1b');

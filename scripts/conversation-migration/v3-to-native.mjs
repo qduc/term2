@@ -5,8 +5,8 @@ import { profileIdFromLegacyMode } from '../../dist/src/shared/profiles/legacy-a
 import { itemToInput } from '../../dist/src/model/provider-items.js';
 import { validateFact } from '../../dist/src/session/log-facts.js';
 import { replay } from '../../dist/src/session/replay.js';
+import { nativeIdForSource } from './source-identity.mjs';
 
-const uuid = /^(?:conv_)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 const efforts = new Set(['none', 'minimal', 'low', 'medium', 'high', 'xhigh']);
 const notice =
   'Imported v3 conversation: one interrupted context-restoration wrapper, not a historical execution. ' +
@@ -75,9 +75,12 @@ export function convertValidatedV3(input, options = {}) {
     // Clone at the boundary: neither adapters nor returned facts can mutate input.
     const state = globalThis.structuredClone(input.restoredState);
     const envelopes = input.envelopes;
-    const match = typeof state.id === 'string' && uuid.exec(state.id);
-    if (!match) refuse('unsupported-source-id');
-    const id = `conv_${match[1]}`;
+    // Preserve the converter's pre-existing native-prefixed UUID input support,
+    // without widening the standalone command's accepted filename namespace.
+    const sourceId =
+      typeof state.id === 'string' && /^conv_[0-9a-f-]{36}$/.test(state.id) ? state.id.slice(5) : state.id;
+    const id = nativeIdForSource(sourceId);
+    if (!id) refuse('unsupported-source-id');
     const turnId = `${id}-v3-restoration`;
     if (state.sshHost !== undefined) refuse('unsupported-remote-identity');
     if (!envelopes.length || envelopes.some((entry) => !iso(entry.ts)) || !iso(state.createdAt))

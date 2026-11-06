@@ -15,9 +15,11 @@ There is no success `status` field. **Success entries are private conversation
 data**, not safe logging metadata. Only `fidelity` is a safe aggregate report:
 counts and booleans. Conversion does not mutate the reader result.
 
-The source ID must be a lowercase UUID, optionally prefixed `conv_`; the native
-ID is `conv_` followed by that same UUID. Other historical IDs fail
-`unsupported-source-id`. Native item, notice and restoration-turn IDs are derived
+A lowercase UUID, optionally prefixed `conv_`, keeps its existing native ID.
+Legacy headless IDs of the exact form `non-interactive-<lowercase UUID>` map to a
+deterministic UUIDv8 derived from the versioned `term2:v3-headless:v1` namespace
+and the complete source ID. They cannot be confused with a bare UUID by simply
+stripping the headless prefix. Other historical IDs fail `unsupported-source-id`. Native item, notice and restoration-turn IDs are derived
 from it, without clock/randomness. Original canonical ISO envelope timestamps
 and `createdAt` are required; noncanonical instants fail `invalid-timestamp`.
 

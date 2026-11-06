@@ -4,7 +4,8 @@ import console from 'node:console';
 import { Buffer } from 'node:buffer';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
-import { preparePaths, readProvenance, writeProvenance, syncPath, UUID } from './command-provenance.mjs';
+import { preparePaths, readProvenance, writeProvenance, syncPath } from './command-provenance.mjs';
+import { nativeIdForSource } from './source-identity.mjs';
 
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const nonempty = (value) => typeof value === 'string' && value.length > 0;
@@ -215,7 +216,8 @@ export async function runMigration(options, synthetic = {}) {
         code('INPUT_FAILED');
         continue;
       }
-      if (!UUID.test(oldId)) {
+      const nativeId = nativeIdForSource(oldId);
+      if (!nativeId) {
         counts.failed++;
         code('UNSUPPORTED_ID');
         continue;
@@ -245,7 +247,7 @@ export async function runMigration(options, synthetic = {}) {
       if (!record) {
         let occupied = false;
         try {
-          fs.lstatSync(join(paths.native, `conv_${oldId}.jsonl`));
+          fs.lstatSync(join(paths.native, `${nativeId}.jsonl`));
           occupied = true;
         } catch (error) {
           if (error.code !== 'ENOENT') occupied = true;
@@ -292,7 +294,7 @@ export async function runMigration(options, synthetic = {}) {
       try {
         convert ??= synthetic.convert ?? (await import('./v3-to-native.mjs')).convertValidatedV3;
         converted = await convert(input);
-        if (converted.id !== `conv_${oldId}`) throw new Error('mismatched ID');
+        if (converted.id !== nativeId) throw new Error('mismatched ID');
         // Real encoding/replay in private scratch, not a second native encoder.
         scratch = fs.mkdtempSync(join(paths.privateDirectory, '.encode-'));
         const stage = join(scratch, 'native');

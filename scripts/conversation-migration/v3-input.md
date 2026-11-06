@@ -15,8 +15,11 @@ It has no CLI, provider, network, discovery, output-writing, or repair responsib
   `restoredState` is authoritative `replayEvents(..., { finalization: 'reopened' })`
   output, including undo/retry/interrupted-turn semantics. Consumers must not
   reconstruct replay or invent output facts here. All envelope timestamps survive.
-- `{ status: 'skipped-locked' }`: a paired `<basename>.lock` exists, regardless of
-  its type, contents, age, or ownership. Nothing reads or removes that lock.
+- `{ status: 'skipped-locked' }`: a paired lock is live or its ownership cannot
+  be proved stale. A stable regular lock of at most 4 KiB is read without following
+  symlinks. Only a valid same-host positive PID for which signal 0 returns ESRCH
+  is stale; foreign-host, live, malformed, nonregular and uncertain locks still
+  refuse the input. The reader never removes or changes a source lock.
 - `{ status: 'failed', error: { code, file?, line? } }`: fixed safe classifications,
   file role (`canonical` or `deltas`) and one-based physical line when applicable.
   No raw exception, path, ID, event contents, or source-provided kind is exposed.

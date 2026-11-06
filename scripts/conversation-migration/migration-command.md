@@ -30,8 +30,9 @@ there or remove its permanent `conv_locks` SQLite databases.
 
 Source access is read-only through `readV3Conversation(path)` (see `v3-input.md`).
 The command does not create source directories, repair, chmod, move, delete or
-rewrite source files, sidecars, or locks. Ordinary lock files, lock directories and
-dangling lock symlinks all skip the log. Source directories must stay quiescent and
+rewrite source files, sidecars, or locks. A stable same-host lock naming a demonstrably dead process no longer blocks
+reading the copy. Live or uncertain locks, foreign-host locks, malformed lock
+files, directories and symlinks still skip the log. No lock is removed or repaired. Source directories must stay quiescent and
 their ancestors must not be concurrently renamed/replaced; these checks are not
 a malicious-concurrent-filesystem snapshot or protection against changes that occur
 entirely between observations.
@@ -78,11 +79,16 @@ interface. The provenance **does** contain private paths and exact IDs; do not l
 ## Durable intent, receipt and exact identity mapping
 
 `command-provenance.mjs` stores format `term2-offline-migration-1`, binding canonical
-source and destination directory paths. `records[oldUuid]` contains the exact
-`conv_<sameUuid>` ID, canonical SHA-256, present-deltas SHA-256 (or null), native
+source and destination directory paths. `records[sourceId]` contains the exact derived native ID, canonical SHA-256, present-deltas SHA-256 (or null), native
 initial-prefix byte length/SHA-256, accepted final sequence, and `pending` or
-`complete`. Only lowercase, exact UUID spellings are supported; no fallback names,
-case normalization, random ID mapping or source-derived path traversal is allowed.
+`complete`. Lowercase UUID sources retain `conv_<sameUuid>`. Legacy
+`non-interactive-<lowercase UUID>` sources use a deterministic UUIDv8 from the
+SHA-256 digest of `term2:v3-headless:v1`, a NUL separator, and the complete source
+ID (first 16 bytes, with UUID version/variant bits set). The versioned mapping is
+shared by conversion and receipt validation. Existing UUID receipts remain valid.
+No fallback names, case normalization, random mapping or source-derived path
+traversal is allowed. Existing target collisions still fail as `FOREIGN_TARGET`;
+no mapping may adopt or overwrite another source's output.
 The ignored `.json` and an accepted empty queue sidecar are deliberately not authority hashes.
 
 The per-private-directory `acquireDirectWriterLock` on `command-authority` serializes

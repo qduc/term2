@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { hostname } from 'node:os';
+import process from 'node:process';
 import {
   decodeLogEnvelope,
   expandSessionFactBatchEnvelope,
@@ -60,6 +62,47 @@ const same = (a, b) =>
   a === null
     ? b === null
     : b !== null && ['dev', 'ino', 'mode', 'size', 'mtimeNs', 'ctimeNs'].every((key) => a[key] === b[key]);
+
+/** Only a stable, valid same-host lock whose process is demonstrably gone is stale. */
+function sourceLocked(name) {
+  const before = stat(name);
+  if (before === null) return false;
+  if (!before.isFile() || before.size > 4096n) return true;
+  try {
+    const fd = fs.openSync(name, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+    let bytes;
+    try {
+      if (!same(before, fs.fstatSync(fd, { bigint: true }))) return true;
+      const buffer = Buffer.alloc(4097);
+      const length = fs.readSync(fd, buffer, 0, buffer.length, 0);
+      if (length > 4096) return true;
+      bytes = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(buffer.subarray(0, length));
+      if (!same(before, fs.fstatSync(fd, { bigint: true }))) return true;
+    } finally {
+      fs.closeSync(fd);
+    }
+    if (!same(before, stat(name))) return true;
+    const lock = JSON.parse(bytes);
+    if (
+      !Number.isSafeInteger(lock?.pid) ||
+      lock.pid <= 0 ||
+      lock.pid > 2147483647 ||
+      lock.host !== hostname() ||
+      typeof lock.startedAt !== 'string' ||
+      !Number.isFinite(Date.parse(lock.startedAt))
+    )
+      return true;
+    try {
+      process.kill(lock.pid, 0);
+      return true;
+    } catch (error) {
+      // EPERM and every unknown error remain owned/uncertain. Never remove the source lock.
+      return error.code !== 'ESRCH';
+    }
+  } catch {
+    return true;
+  }
+}
 
 function validate(raw, file, line) {
   if (!raw || raw.v !== 3) fail('not-v3', file, line);
@@ -172,7 +215,7 @@ export function readV3Conversation(inputPath) {
     if (!safeId(id)) fail('invalid-basename');
     const stem = canonical.slice(0, -6);
     const lock = `${stem}.lock`;
-    const locked = () => stat(lock) !== null;
+    const locked = () => sourceLocked(lock);
     if (locked()) return { status: 'skipped-locked' };
     const deltas = `${stem}.deltas`;
     const before = stat(canonical);

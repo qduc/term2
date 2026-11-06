@@ -3,8 +3,8 @@ import * as fs from 'node:fs';
 import process from 'node:process';
 import { dirname, join, resolve, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { nativeIdForSource } from './source-identity.mjs';
 
-export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const HASH = /^[0-9a-f]{64}$/;
 
 // Resolve missing leaves without following even an existing directory symlink.
@@ -103,8 +103,8 @@ export function readProvenance(paths) {
     throw new Error('foreign map');
   for (const [id, record] of Object.entries(state.records)) {
     if (
-      !UUID.test(id) ||
-      record?.id !== `conv_${id}` ||
+      !nativeIdForSource(id) ||
+      record?.id !== nativeIdForSource(id) ||
       !['pending', 'complete'].includes(record.status) ||
       !sourceValid(record.source) ||
       !Number.isSafeInteger(record.bytes) ||

@@ -1,4 +1,4 @@
-import { clearModelCache, fetchModels, type ModelInfo } from '../model-service.js';
+import { clearModelCache, fetchModels, type ModelInfo, type FetchModelsDeps } from '../model-service.js';
 import { getProviderIds } from '../providers/index.js';
 import type { ILoggingService, ISettingsService } from '../../shared/service-interfaces.js';
 import { getAvailableProviderIds, isProviderDisabled } from '../../shared/utils/ai/provider-credentials.js';
@@ -19,23 +19,21 @@ export class ModelCatalogSession {
   readonly #settingsService: ISettingsService;
   readonly #loggingService: ILoggingService;
   readonly #fetcher: ModelFetcher;
+  readonly #clearCache: (provider: string) => void;
   readonly #modelsByProvider = new Map<string, ModelInfo[]>();
   readonly #failedProviders = new Set<string>();
   readonly #requestIds = new Map<string, number>();
   #generation = 0;
 
-  constructor(deps: {
-    settingsService: ISettingsService;
-    loggingService: ILoggingService;
-    fetcher?: ModelFetcher;
-    signal?: AbortSignal;
-    cacheDir?: string;
-    now?: () => number;
-    ttlMs?: number;
-  }) {
+  constructor(deps: FetchModelsDeps & { fetcher?: ModelFetcher }) {
     this.#settingsService = deps.settingsService;
     this.#loggingService = deps.loggingService;
     this.#fetcher = deps.fetcher ?? ((provider) => fetchModels(deps, provider));
+    this.#clearCache = deps.discovery
+      ? (provider) => {
+          deps.discovery!.cache.delete(provider);
+        }
+      : (provider) => clearModelCache(provider, { cacheDir: deps.cacheDir });
   }
 
   getCached(provider: string): ModelInfo[] | undefined {
@@ -81,7 +79,7 @@ export class ModelCatalogSession {
     this.#failedProviders.delete(provider);
     this.#modelsByProvider.delete(provider);
     this.#requestIds.set(provider, (this.#requestIds.get(provider) ?? 0) + 1);
-    clearModelCache(provider);
+    this.#clearCache(provider);
   }
 
   nextProvider(current: string | null, direction: 'next' | 'prev'): string | undefined {

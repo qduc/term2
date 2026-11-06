@@ -611,16 +611,19 @@ established by them.
 
 ```sh
 pnpm typecheck
-NODE_ENV=test pnpm exec vitest run --reporter=minimal --config vitest.integration.config.ts source/services/discord/discord-bridge.integration.test.ts
+pnpm build
+NODE_ENV=test pnpm exec vitest run --reporter=minimal --config vitest.integration.config.ts tests/clients/discord/discord-journal.integration.test.ts
 pnpm test:provider-black-box
 ```
 
 The command above selects only the Discord integration file under pnpm (no `--`
 separator). The other commands are separate, broader checks.
 
-The Discord integration fixture uses a loopback fake Discord HTTP API, real Unix sockets,
-real ConversationService/Orchestrator/AgentClient and a provider-boundary fixture.
-No tokens, production provider calls or external Discord traffic.
+The focused journal fixture uses the current bridge, real Unix discovery/RPC and
+private journal files with a loopback fake Discord HTTP API. It checks retained
+send evidence beyond 512 notifications and admission at the 16 MiB byte budget,
+including restart, reconciliation and draining already accepted sends. It does
+not exercise session inference or live Discord. Only a synthetic token is used.
 
 After independent review and authorized bot/channel access, verify **on mobile**:
 

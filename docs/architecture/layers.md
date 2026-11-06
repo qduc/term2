@@ -190,6 +190,11 @@ The CLI is `node dist/cli.js ["<prompt>"]` (the `term2` bin), with no fallback
 to the old engine. It stores native conversation logs in its own directory
 (`conversations-next`) and does not read old conversations; the offline
 `scripts/migrate-conversations.mjs` copies v3 conversations into native logs.
+The CLI refuses the reserved legacy directory, including symlink aliases and
+not-yet-created stores. Filename checks alone cannot protect an empty legacy store;
+custom native stores elsewhere remain supported, even when named `conversations`.
+On macOS and Windows, alternate-case spellings of that reserved path are also
+refused, including on case-sensitive volumes.
 `bench/m1-direct.mjs` covers the headless path.
 
 For direct HTTP session configuration, the BFF's `session_update` assertion binds

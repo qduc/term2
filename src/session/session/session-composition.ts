@@ -12,7 +12,7 @@ import {
   type LocalCompactionOutcome,
 } from '../../engine/agent-runtime/context-compaction/local-context-compactor.js';
 import { estimateContext, type ContextEstimate } from '../../engine/agent-runtime/context-compaction/index.js';
-import type { SteerOutcome } from '../../engine/agent-runtime/application-run-loop.js';
+import type { SteerOutcome } from '../../engine/agent-runtime/run-loop-contracts.js';
 import { ConversationRecord } from '../conversation/conversation-record.js';
 import {
   createCheckpointSourceDigest,

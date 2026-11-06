@@ -9,6 +9,8 @@ import type {
   StreamedModelUsage,
 } from '../shared/contracts/streamed-model-turn.js';
 import type { Item, ItemId, StopReason, ToolCallId, ToolSpec, Usage } from './index.js';
+import { ModelFailure } from './failure.js';
+import { foreignCompactionRefusal } from './history-compatibility.js';
 
 export function toolDefinition(tool: ToolSpec): StreamedModelToolDefinition {
   return tool.modelTool
@@ -28,8 +30,15 @@ export function toolDefinition(tool: ToolSpec): StreamedModelToolDefinition {
 
 // ---------- Item -> provider input ----------
 
+/** Refuse lossy native compaction before translating either stream or compact input. */
+export function historyToInput(history: readonly Item[], provider: string): StreamedModelTurnInput[] {
+  const refusal = foreignCompactionRefusal(history, provider);
+  if (refusal) throw new ModelFailure({ kind: 'invalid_request', retryable: false, message: refusal });
+  return history.flatMap((item) => withConversationTiming(item, itemToInput(item)));
+}
+
 /** Expand app-owned timing beside its user item only at the provider boundary. */
-export function withConversationTiming(item: Item, input: StreamedModelTurnInput): readonly StreamedModelTurnInput[] {
+function withConversationTiming(item: Item, input: StreamedModelTurnInput): readonly StreamedModelTurnInput[] {
   return item.type === 'user_message' && item.conversationTiming
     ? [{ type: 'message', role: 'system', content: [{ type: 'text', text: item.conversationTiming }] }, input]
     : [input];

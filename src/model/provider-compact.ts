@@ -2,14 +2,14 @@
 import { randomUUID } from 'node:crypto';
 import type { Item, ItemId, Model, ModelRef } from './index.js';
 import { toModelFailure } from './failure.js';
-import { itemToInput, withConversationTiming } from './provider-items.js';
+import { historyToInput } from './provider-items.js';
 
 export function codexCompact(
   ref: ModelRef,
   settings: { get(key: 'agent.transport'): string | undefined },
   turnModel: (transport: string) => Promise<{
     compactHistory?(request: {
-      readonly input: readonly ReturnType<typeof itemToInput>[];
+      readonly input: ReturnType<typeof historyToInput>;
       readonly signal?: AbortSignal;
     }): Promise<{ readonly history: readonly unknown[] }>;
   }>,
@@ -17,12 +17,13 @@ export function codexCompact(
   return async (request, signal, onDispatched) => {
     const transport = request.downgradeTransport ? 'http' : settings.get('agent.transport') ?? 'websocket';
     try {
+      const input = historyToInput(request.input, ref.provider);
       const turn = await turnModel(transport);
       if (!turn.compactHistory) throw new Error('Codex compact endpoint is unavailable');
       signal.throwIfAborted();
       onDispatched?.();
       const { history } = await turn.compactHistory({
-        input: request.input.flatMap((item) => withConversationTiming(item, itemToInput(item))),
+        input,
         signal,
       });
       if (history.length === 0) throw new Error('Codex compact endpoint returned an empty history');

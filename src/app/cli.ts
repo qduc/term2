@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import '../config/env-setup.js';
 
+import { readlinkSync, realpathSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { stdin, stdout, stderr } from 'node:process';
 import { homedir } from 'node:os';
@@ -64,11 +65,44 @@ function homeGuardApplies(options: SessionOptions, hasPrompt: boolean): boolean 
   return !options.lite && options.resumeId === null && options.ssh === null && (!hasPrompt || options.autoApprove);
 }
 
+/** Resolves aliases even when the store or a symlink's target does not exist yet. */
+function resolvedStorePath(filename: string): string {
+  // Keep `..` until filesystem resolution: it may follow a symlinked component.
+  const supplied = path.isAbsolute(filename) ? filename : `${process.cwd()}${path.sep}${filename}`;
+  const root = path.parse(supplied).root;
+  const absolute = root + supplied.slice(root.length).replace(process.platform === 'win32' ? /[\\/]+$/ : /\/+$/, '');
+  try {
+    return realpathSync.native(absolute);
+  } catch (error) {
+    if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
+    let link: string | undefined;
+    try {
+      link = readlinkSync(absolute);
+    } catch (linkError) {
+      if (!(linkError instanceof Error && 'code' in linkError && ['ENOENT', 'EINVAL'].includes(String(linkError.code))))
+        throw linkError;
+    }
+    if (link !== undefined) {
+      return resolvedStorePath(path.isAbsolute(link) ? link : `${path.dirname(absolute)}${path.sep}${link}`);
+    }
+    const parent = path.dirname(absolute);
+    if (parent === absolute) throw error;
+    return path.join(resolvedStorePath(parent), path.basename(absolute));
+  }
+}
+
 function conversationsDirectory(): string {
-  return (
-    process.env['TERM2_CONVERSATIONS_DIR'] ??
-    path.join(path.dirname(path.join(envPaths('term2').data, 'conversations')), 'conversations-next')
-  );
+  const data = envPaths('term2').data;
+  const directory = resolvedStorePath(process.env['TERM2_CONVERSATIONS_DIR'] ?? path.join(data, 'conversations-next'));
+  // Missing paths have no canonical spelling yet. Protect case aliases on the
+  // platforms whose usual filesystems are case-insensitive, conservatively even on sensitive volumes.
+  const comparable = (filename: string) =>
+    process.platform === 'darwin' || process.platform === 'win32' ? filename.toLowerCase() : filename;
+  if (comparable(directory) === comparable(resolvedStorePath(path.join(data, 'conversations')))) {
+    throw new Error('The legacy conversations directory is read-only; use a separate native conversations directory');
+  }
+  // All consumers must use the same identity that was checked above.
+  return directory;
 }
 
 /**

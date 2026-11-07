@@ -1,6 +1,7 @@
 import { stdout } from 'node:process';
 import {
   formatModelUsageBreakdown,
+  formatSessionCost,
   formatUsdMicros,
   summarizeCost,
   summarizeModelUsage,
@@ -40,13 +41,6 @@ export function sessionUsage(snapshot: WireSnapshot): string {
  */
 export function printUsage(snapshot: WireSnapshot | undefined): void {
   const { tokens, models, cost } = totals(snapshot);
-  const costLine =
-    cost.state === 'exact'
-      ? `Cost ${formatUsdMicros(cost.knownUsdMicros)}`
-      : cost.state === 'estimated'
-      ? `Est ${formatUsdMicros(cost.knownUsdMicros)}`
-      : cost.state === 'partial'
-      ? `Est ${formatUsdMicros(cost.knownUsdMicros)}+`
-      : null;
+  const costLine = formatSessionCost(cost);
   stdout.write(`\n${[tokens, models, costLine].filter(Boolean).join('\n')}\n`);
 }

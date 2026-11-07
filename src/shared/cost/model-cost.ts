@@ -223,6 +223,59 @@ export function resolveBillableTokens(usage: NormalizedUsage | null | undefined)
   return { uncachedInputTokens, cachedInputTokens, cacheWriteTokens, outputTokens };
 }
 
+function toMicros(dollarsPerMTok: number, tokens: number): number {
+  // tokens/1e6 * dollarsPerMTok * 1e6 micros = tokens * dollarsPerMTok micros.
+  // Scale the rate by 1000 and divide back so only the final rounding is a
+  // fractional operation.
+  const scaled = dollarsPerMTok * 1000;
+  return Math.round((tokens * scaled) / 1000);
+}
+
+/**
+ * Compute the cost record for one completed model request. Provider-reported
+ * charges win over catalog estimates; unsupported inputs produce typed
+ * unpriced records rather than guesses.
+ */
+export function computeModelCost(input: ModelCostInput): ModelRequestCost {
+  const base = {
+    requestId: input.requestId,
+    provider: input.provider,
+    model: input.model,
+    serviceTier: input.serviceTier,
+    outcome: input.outcome,
+    ...(input.usage ? { usage: input.usage } : {}),
+  };
+
+  const providerUsdMicros =
+    input.providerUsdMicros !== undefined ? input.providerUsdMicros : parseUsdMicros(input.providerUsd);
+  if (providerUsdMicros !== undefined) {
+    return { ...base, usdMicros: providerUsdMicros, source: 'provider' };
+  }
+
+  const tokens = resolveBillableTokens(input.usage);
+  if (tokens === 'missing') return { ...base, unpricedReason: 'missing_usage' };
+  if (tokens === 'ambiguous') return { ...base, unpricedReason: 'ambiguous_usage' };
+
+  const lookup = input.getPrice(input.provider, input.model, input.serviceTier);
+  if (!lookup.found) return { ...base, unpricedReason: lookup.reason };
+
+  const { price } = lookup;
+  if (!isValidCatalogPrice(price)) return { ...base, unpricedReason: 'unknown_model' };
+  const uncachedMicros = toMicros(price.inputPerMTok, tokens.uncachedInputTokens);
+  const cachedMicros = price.cacheReadPerMTok != null ? toMicros(price.cacheReadPerMTok, tokens.cachedInputTokens) : 0;
+  const cacheWriteMicros =
+    price.cacheWritePerMTok != null ? toMicros(price.cacheWritePerMTok, tokens.cacheWriteTokens) : 0;
+  const outputMicros = toMicros(price.outputPerMTok, tokens.outputTokens);
+
+  return {
+    ...base,
+    usdMicros: uncachedMicros + cachedMicros + cacheWriteMicros + outputMicros,
+    source: 'catalog',
+    ...(input.pricingVersion ? { pricingVersion: input.pricingVersion } : {}),
+    ...(lookup.pricedFromProvider ? { pricedFromProvider: lookup.pricedFromProvider } : {}),
+  };
+}
+
 /** Produce the session coverage summary from the accumulated request records. */
 export function summarizeCost(records: readonly ModelRequestCost[]): SessionCostSummary {
   let knownUsdMicros = 0;
@@ -288,6 +341,20 @@ function formatModelCost(cost: SessionCostSummary): string {
       return `Estimated cost ${formatUsdMicros(cost.knownUsdMicros)}+`;
     case 'unavailable':
       return 'Cost unavailable';
+  }
+}
+
+/** Compact coverage-aware footer text; unavailable cost is omitted rather than shown as $0.00. */
+export function formatSessionCost(cost: SessionCostSummary): string | undefined {
+  switch (cost.state) {
+    case 'exact':
+      return `Cost ${formatUsdMicros(cost.knownUsdMicros)}`;
+    case 'estimated':
+      return `Est ${formatUsdMicros(cost.knownUsdMicros)}`;
+    case 'partial':
+      return `Est ${formatUsdMicros(cost.knownUsdMicros)}+`;
+    case 'unavailable':
+      return undefined;
   }
 }
 

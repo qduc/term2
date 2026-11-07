@@ -1,15 +1,16 @@
 # Session Cost in the Status Bar
 
-Status: **implemented.** `source/services/cost/` (`model-cost.ts`, `pricing.ts`,
-`pricing-overlay.ts`, `subscription-providers.ts`) owns the accounting, and `StatusBar`
-renders a `SessionCostSummary` slot with `exact`/`partial`/`unavailable` states
-(`source/components/layout/StatusBar.tsx:119-122`). The **Resume here** notes below
-describe the pre-implementation state and are retained for their design constraints,
-not as a description of current behavior.
+Status: **implemented.** `src/shared/cost/model-cost.ts` owns the arithmetic,
+coverage rules, accumulation and compact formatting; `src/model/cost/` owns catalog
+lookup, tier overlay and subscription classification. The native engine prices each
+completed request as it is recorded (`src/engine/turn-budget.ts`), and the TUI footer
+summarizes the accepted `requestCosts` into `exact`/`estimated`/`partial`/`unavailable`
+coverage (`src/clients/tui/projection.ts`). The **Resume here** notes below describe the
+pre-implementation state and are retained for their design constraints, not as a
+description of current behavior.
 
 Scope: provider completion accounting, the application run loop, foreground and
-subagent session accounting, conversation persistence/replay, `/usage`, and the Ink
-status bar.
+subagent session accounting, conversation persistence/replay, `/usage`, and the Ink footer.
 
 Related: [historical post-refactor-provider-boundary-audit-findings.md](https://github.com/qduc/term2/blob/1cc5a0a91e164215edbcbb4291ffb0c0c1726cc2/docs/plans/post-refactor-provider-boundary-audit-findings.md),
 `docs/plans/context-and-memory/openai-context-compaction.md`.

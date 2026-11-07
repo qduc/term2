@@ -14,7 +14,7 @@ import { DirectContinuity, selfContained } from './recovery-continuity.js';
 import { hasCompleteDirectToolPairs } from './recovery-history.js';
 import { CompactionWrapUp, TurnCompaction } from './turn-model-compaction.js';
 import { enforceDirectInputLimit } from './recovery-compaction.js';
-import { NativeBudgetExhausted, type TurnBudgetControl } from './turn-budget.js';
+import { NativeBudgetExhausted, serviceTierForRequest, type TurnBudgetControl } from './turn-budget.js';
 import { TurnEvents, cancelled } from './turn-events.js';
 import { TurnTools, type RootCall } from './turn-tools.js';
 
@@ -485,7 +485,7 @@ export class TurnModel {
       this.budget.record({
         requestId: `${this.spec.turnId}:model:${modelStep}`,
         model: request.model,
-        serviceTier: request.useStandardServiceTier ? 'standard' : undefined,
+        serviceTier: serviceTierForRequest(request),
         usage,
         costUsd: done?.costUsd,
         outcome: this.signal.aborted || interrupted ? 'cancelled' : outcome,

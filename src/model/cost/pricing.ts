@@ -54,7 +54,11 @@
  * result (`pricedFromProvider`) so the cost record says whose price it used;
  * gateways do resell at their own margins, so a flagged charge is an estimate.
  */
-import { MODEL_CATALOG, type GeneratedCatalogModel } from '../providers/model-catalog/catalog.generated.js';
+import {
+  CATALOG_META,
+  MODEL_CATALOG,
+  type GeneratedCatalogModel,
+} from '../providers/model-catalog/catalog.generated.js';
 import { findModelMatches, lookupModel } from '../providers/model-catalog/catalog.js';
 import {
   isValidCatalogPrice,
@@ -64,6 +68,7 @@ import {
 } from '../../shared/cost/model-cost.js';
 import { TIER_PRICING_OVERLAY, type OverlayTier } from './pricing-overlay.js';
 
+const CATALOG_PRICING_VERSION = `catalog:v${CATALOG_META.schemaVersion}@${CATALOG_META.source}`;
 const OVERLAY_PRICING_VERSION = 'term2-overlay:v1';
 
 function normalizeId(id: string): string {
@@ -129,7 +134,12 @@ export function getModelPricing(provider: string, model: string, tier: ServiceTi
   return { found: false, reason: catalog[providerId] ? 'unknown_model' : 'unknown_provider' };
 }
 
-/** Catalog provenance string recorded on overlay-priced requests. */
-export function getOverlayPricingVersion(): string {
-  return OVERLAY_PRICING_VERSION;
+/** Catalog provenance string recorded on catalog-priced requests. */
+export function getCatalogPricingVersion(): string {
+  return CATALOG_PRICING_VERSION;
+}
+
+/** Provenance of the rates a request in this tier is priced from. */
+export function getModelPricingVersion(tier: ServiceTier): string {
+  return tier === 'flex' || tier === 'batch' ? OVERLAY_PRICING_VERSION : getCatalogPricingVersion();
 }

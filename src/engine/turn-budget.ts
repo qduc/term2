@@ -3,13 +3,36 @@ import type { Item, ItemId, ModelRef, Usage } from '../model/index.js';
 import type { InteractionRequestId } from '../tools/index.js';
 import type { BudgetDecision, TurnDeps, TurnSpec } from './types.js';
 import { directBudgetAction, RunBudget, type ModelRequestCost, type RunBudgetEvent } from './recovery-budget.js';
-import { parseUsdMicros } from '../shared/cost/model-cost.js';
+import { computeModelCost } from '../shared/cost/model-cost.js';
+import { getModelPricing, getModelPricingVersion } from '../model/cost/pricing.js';
+import { isSubscriptionProvider } from '../model/cost/subscription-providers.js';
 import { TurnEvents, cancelled } from './turn-events.js';
 
 /** Native branch admission is exhausted, not a provider failure or successful completion. */
 export class NativeBudgetExhausted extends Error {}
 
 type Pending = { ready: boolean; resolve(value: BudgetDecision): void; reject(error: Error): void };
+
+function recordValue(value: unknown, key: string): unknown {
+  return value !== null && typeof value === 'object' ? (value as Record<string, unknown>)[key] : undefined;
+}
+
+/**
+ * Billing tier of the request as dispatched. A request that did not ask for a
+ * non-standard tier is standard; an unrecognized explicit tier fails closed so
+ * it is never priced at another tier's rate.
+ */
+export function serviceTierForRequest(request: {
+  readonly useStandardServiceTier?: boolean;
+  readonly providerOptions?: Readonly<Record<string, unknown>>;
+}): ModelRequestCost['serviceTier'] {
+  if (request.useStandardServiceTier) return 'standard';
+  const options = request.providerOptions;
+  const raw = options?.service_tier ?? recordValue(options?.extraBody, 'service_tier');
+  if (raw === undefined || raw === 'default' || raw === 'standard') return 'standard';
+  if (raw === 'flex' || raw === 'batch') return raw;
+  return 'unknown';
+}
 
 export class TurnBudgetControl {
   readonly state: RunBudget | undefined;
@@ -50,12 +73,16 @@ export class TurnBudgetControl {
     outcome: ModelRequestCost['outcome'];
     serviceTier?: ModelRequestCost['serviceTier'];
   }): void {
-    const usdMicros = parseUsdMicros(input.costUsd);
-    const record: ModelRequestCost = {
+    const serviceTier = input.serviceTier ?? 'standard';
+    // Subscriptions have no per-token rate to look up. A provider-reported
+    // charge still wins; otherwise the request stays unpriced instead of
+    // inventing a Codex/Grok dollar amount from catalog rates.
+    const subscription = isSubscriptionProvider(input.model.provider);
+    const record = computeModelCost({
       requestId: input.requestId,
       provider: input.model.provider,
       model: input.model.model,
-      serviceTier: input.serviceTier ?? 'unknown',
+      serviceTier,
       outcome: input.outcome,
       ...(input.usage
         ? {
@@ -67,10 +94,10 @@ export class TurnBudgetControl {
             },
           }
         : {}),
-      ...(usdMicros !== undefined
-        ? { usdMicros, source: 'provider' as const }
-        : { unpricedReason: input.usage ? ('unknown_model' as const) : ('missing_usage' as const) }),
-    };
+      ...(input.costUsd !== undefined ? { providerUsd: input.costUsd } : {}),
+      getPrice: subscription ? () => ({ found: false, reason: 'unknown_provider' }) : getModelPricing,
+      pricingVersion: getModelPricingVersion(serviceTier),
+    });
     this.#costs.set(input.requestId, record);
     this.deps.budget?.onRequestCost?.(record, { turnId: this.spec.turnId });
   }

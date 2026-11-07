@@ -6,7 +6,7 @@ import type { DirectCompactionResult, DirectCompactionRequest } from './recovery
 import { compactDirectHistory } from './recovery-compaction.js';
 import { estimateDirectContext } from './context-estimate.js';
 import type { TurnCompactionEvent, TurnDeps, TurnSpec } from './types.js';
-import { NativeBudgetExhausted, type TurnBudgetControl } from './turn-budget.js';
+import { NativeBudgetExhausted, serviceTierForRequest, type TurnBudgetControl } from './turn-budget.js';
 import { recoveryDelay } from './recovery.js';
 import { TurnEvents, cancelled } from './turn-events.js';
 
@@ -138,7 +138,7 @@ export class TurnCompaction {
                   outcome: signal.aborted ? 'cancelled' : outcome,
                 };
                 requests.push(record);
-                this.budget.record(record);
+                this.budget.record({ ...record, serviceTier: serviceTierForRequest(prepared) });
               }
             },
           }
@@ -334,7 +334,7 @@ export class TurnCompaction {
       onRequest(record);
       this.budget.record({
         ...record,
-        serviceTier: prepared.request.useStandardServiceTier ? 'standard' : undefined,
+        serviceTier: serviceTierForRequest(prepared.request),
       });
     }
   }

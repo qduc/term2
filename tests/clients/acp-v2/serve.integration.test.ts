@@ -146,6 +146,7 @@ type ChildSession = {
 const runAcpChild = async (
   permission: ((params: acp.RequestPermissionRequest) => Promise<acp.RequestPermissionResponse>) | undefined,
   body: (session: ChildSession) => Promise<void>,
+  sandboxUnavailable = false,
 ): Promise<{
   stdoutText: string;
   stderr: string;
@@ -156,6 +157,8 @@ const runAcpChild = async (
   const conversationsDir = path.join(tempHome, 'conversations');
   const workspace = path.join(tempHome, 'workspace');
   fs.mkdirSync(workspace, { recursive: true });
+  const emptyPath = path.join(tempHome, 'empty-path');
+  fs.mkdirSync(emptyPath);
   const workspaceFile = path.join(workspace, 'probe.txt');
   disposables.push(() => rmSync(tempHome, { recursive: true, force: true }));
 
@@ -169,7 +172,7 @@ const runAcpChild = async (
     JSON.stringify(
       {
         agent: { modelSelection: { provider: 'acpmock', model: 'acp-mock-model' }, retryAttempts: 0 },
-        sandbox: { enabled: false },
+        sandbox: { enabled: sandboxUnavailable },
         providers: [{ name: 'acpmock', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
       },
       null,
@@ -189,6 +192,7 @@ const runAcpChild = async (
         TERM2_CONVERSATIONS_DIR: conversationsDir,
         TERM2_TEST_DB_DIR: conversationsDir,
         DISABLE_LOGGING: '1',
+        ...(sandboxUnavailable ? { PATH: emptyPath } : {}),
       }),
       stdio: ['pipe', 'pipe', 'pipe'],
     },
@@ -357,6 +361,39 @@ describe('term2 acp permission round trips (child process)', () => {
       });
       expect(result.exit, result.stderr).toEqual({ code: 0, signal: null });
       for (const line of result.stdoutText.trim().split('\n')) expect(JSON.parse(line).jsonrpc).toBe('2.0');
+    },
+    180_000,
+  );
+  it.skipIf(process.platform !== 'linux')(
+    'refuses an approved unsandboxed escape when sandbox dependencies are unavailable',
+    async () => {
+      const result = await runAcpChild(
+        async () => ({ outcome: { outcome: 'selected', optionId: 'approve' } }),
+        async (session) => {
+          await session.context.request(acp.methods.agent.session.prompt, {
+            sessionId: session.sessionId,
+            prompt: [{ type: 'text', text: 'run the tool' }],
+          });
+          expect(
+            await waitFor(
+              () =>
+                session.updates.some(
+                  ({ update }) => update.sessionUpdate === 'state_update' && update.state === 'idle',
+                ),
+              15_000,
+            ),
+          ).toBe(true);
+          expect(session.permissionRequests).toHaveLength(1);
+          expect(session.permissionRequests[0]!.options.map((option) => option.optionId)).not.toContain(
+            'unsandboxed-once',
+          );
+          expect(fs.existsSync(session.workspaceFile)).toBe(false);
+          expect(JSON.stringify(session.updates)).toContain('Sandbox blocked this command');
+        },
+        true,
+      );
+      expect(result.stderr).toContain('shell sandbox unavailable');
+      expect(result.exit, result.stderr).toEqual({ code: 0, signal: null });
     },
     180_000,
   );

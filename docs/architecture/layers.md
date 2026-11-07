@@ -36,15 +36,12 @@ Both `config/` (pure schemas and profile definitions) and `shared/` (pure helper
 
 ### Known exceptions
 
-The scheduled architecture cleanup (#181) reduced allowlisted crossing edges from 116 down to the 7 documented in [Phase 3 of the architecture cleanup plan](../plans/engineering/architecture-cleanup.md#phase-3-the-seven-real-design-problems-ports-when-touched). These remaining edges represent design seams addressed on a pay-as-you-go basis when those components are next touched:
-
-1. `clients/tui/presentation/components/layout/Banner.tsx` → `engine/agent-runtime/model-resolver.ts`, `model/providers/index.ts` (Phase 3.1: UI resolves models directly)
-2. `clients/tui/presentation/hooks/use-terminal-focus-notifier.ts` → `app/settings-service.ts`, `session/logging/logging-service.ts` (Phase 3.2: client hook reaches concrete services)
-3. `engine/agent-runtime/context-compaction/index.ts` → `session/conversation/conversation-state-projector.ts` (Phase 3.3: compaction needs session history projection)
-4. `engine/retry/retry-contracts.ts` → `session/conversation/conversation-events.ts` (Phase 3.4: engine retry contract names session event type)
-5. `shared/lib/chained-input-filter.ts` → `session/conversation/run-item-normalizer.ts` (Phase 3.5: shared helper calls session normalization)
-
-Every crossing edge is listed in `scripts/layer-allowlist.json`. `check-layers.mjs` fails on any unallowlisted edge, and prints listed edges that no longer exist so the list only shrinks.
+The scheduled architecture cleanup (#181) reduced allowlisted crossing edges from 116 down to the 7 in
+[Phase 3 of the architecture cleanup plan](../plans/engineering/architecture-cleanup.md#phase-3-the-seven-real-design-problems-ports-when-touched),
+addressed pay-as-you-go when those components are next touched. Each edge and its reason, which names its
+Phase 3 row and what removes it, live in `scripts/layer-allowlist.json` rather than here, so the reason sits
+next to the entry it justifies. `node scripts/gate-exceptions.mjs layer-direction` prints them.
+`check-layers.mjs` fails on any unlisted edge and prints listed edges that no longer exist.
 
 `delegation/` sits between protocol and session; session does not import it.
 The app injects its concrete launcher/evaluator implementations into tools.
@@ -81,10 +78,10 @@ wall-clock on a loaded 7-core box.
 | Only `session/` reads the log (`app/`, `clients/` ask the live session) | `check-layers.mjs` (log-reader guard) | every commit | in the above |
 | One projection: wire events are built only in `protocol/` | `check-rules.mjs` (one recorded exception: deferred web server) | every commit | 2.4 s |
 | Names are jobs (no service/adapter/orchestrator file or folder) | `check-rules.mjs` | every commit | in the above |
-| No new unused runtime exports (recorded in `rule-baseline.json`, reported by `scripts/arch-report.mjs`; the list only shrinks) | `check-rules.mjs` | every commit | in the above |
+| No new unused runtime exports (recorded in `rule-baseline.json`, reported by `scripts/arch-report.mjs`) | `check-rules.mjs` | every commit | in the above |
 | Every file is reached from `app/cli.ts` | `check-reachability.mjs` | every commit | 1.2 s |
-| Files stay under 500 lines; allowlisted layer edges only shrink | `check-complexity.mjs` | every commit | 0.15 s |
-| Baselines and ceilings do not grow against merge base | `check-baselines.mjs` | every commit | 0.2 s |
+| Files stay under 500 lines unless a ceiling records why; layer edges stay within budget | `check-complexity.mjs` | every commit | 0.15 s |
+| A new exception or raised ceiling carries a reason, and the reviewer is shown each one | `check-baselines.mjs` | every commit | 0.2 s |
 | Root directory contains only allowlisted files | `check-root.mjs` | every commit | 0.05 s |
 | A message's path stays short and runs through the production direct files | `bench/hops.mts` | every commit | 5.8 s |
 | The engine waits instead of calling up | layer table above (no upward import); the callbacks that still write facts (audit F1) are **not** checked | every commit | - |
@@ -93,6 +90,36 @@ wall-clock on a loaded 7-core box.
 | A fresh reader can explain how a message travels from this README and the `index.ts` files | queue job `measure-fresh-reader-review`, each milestone | per milestone | minutes |
 
 A check that has a false positive or flakes is fixed or deleted the same day; never retry it through.
+
+## When a gate fails
+
+A gate's number is a prompt for judgement, not a target. Agents follow the signal a gate gives, so a gate that
+only says "too many" teaches them to satisfy the number: split a file into pieces that only make sense together,
+rename `*-service` to `*-manager`, or hide an import. Each failure therefore prints, once per rule, why the rule
+exists, the usual fix, the moves that only satisfy the number, and how to record a deviation. That text lives in
+`scripts/gates/rules.mjs`, the one place to change it.
+
+When a gate fails, in order:
+
+1. **Fix the violation** if the rule's reason applies here. It usually does.
+2. **Record a deviation** if you judge the rule wrong for this case: add the entry to the rule's exception file as
+   an object with a `reason` (or, for a long file, a ceiling with a reason). Write the reason for someone who was
+   not there: what you weighed, why the fix would cost more, and what would let the entry go. Read precedent
+   first with `node scripts/gate-exceptions.mjs <rule>`.
+3. **Ask the user** for rules with no exception route (`log-readers`, `one-fold`), for raising the global line
+   limit, and for adding a unit-test guard.
+
+`check-baselines.mjs` enforces the second step against the merge base. A new exception passes only with a reason
+that is not empty, short or a placeholder; a bare legacy-style string fails; a raised ceiling must rewrite its
+reason; `maxLayerEdges` may rise only by the number of reasoned edges added. Every accepted deviation is printed
+and written to the CI step summary under "Recorded gate deviations". A reviewer reads each one and rejects the
+change if the reason does not hold; a reason the gate accepts is not thereby a good one.
+
+Entries written as bare strings predate per-entry reasons. They are grandfathered with one shared reason per list
+(`LEGACY_REASONS` in `scripts/gates/rules.mjs`) and cannot grow; give one a reason when you touch it.
+
+This replaced a rule that no baseline could grow. That rule kept the lists shrinking, but it left no honest route
+when a rule was wrong for a case, so the only way to green was to game the number.
 
 ## Shared JSON transport contract
 
@@ -227,7 +254,7 @@ paths beneath `dist/` (`dist/src/...`).
 pnpm exec tsc -p tsconfig.build.json --noEmit         # production typecheck
 node scripts/check-layers.mjs                  # production dependency direction
 node scripts/check-reachability.mjs            # every src file is reached from app/cli.ts
-node scripts/check-complexity.mjs              # size budgets only shrink
+node scripts/check-complexity.mjs              # long files carry a recorded reason
 node --import tsx bench/hops.mts               # one message's path stays short
 node scripts/build.mjs                         # production build
 node bench/m1-direct.mjs                       # headless behaviour against the built CLI

@@ -51,6 +51,11 @@ under `src/clients/tui/presentation/skins/<name>/`; component colour literals by
 Every large module must have a maintained public-interface document throughout
 its life; update it as the interface evolves.
 
+When a repository gate fails, read the reason it prints before changing code: fix
+the violation, or record a deviation with a reason a reviewer can judge, as
+[When a gate fails](docs/architecture/layers.md#when-a-gate-fails) describes.
+Changing code only to satisfy the gate's number is not a fix.
+
 When verification fails, consult the recurring failure notes in the `testing`
 skill and relevant area docs. Historical matches are leads, not proof that a
 failure is pre-existing: compare the signature and environment, inspect intervening

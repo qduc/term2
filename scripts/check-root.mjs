@@ -4,23 +4,21 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { exceptionKeys, failureMap, reportAndExit } from './gates/rules.mjs';
 
 const scripts = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(scripts, '..');
 const allowlistPath = path.join(scripts, 'root-allowlist.json');
 
-const allowlist = new Set(JSON.parse(fs.readFileSync(allowlistPath, 'utf8')));
+const { map: failures, add } = failureMap();
+const problem = add('root-files');
+const allowlist = exceptionKeys(JSON.parse(fs.readFileSync(allowlistPath, 'utf8')), 'file', problem);
 const rootFiles = fs
   .readdirSync(repo, { withFileTypes: true })
   .filter((e) => e.isFile() && !e.name.endsWith('.prove-bak'))
   .map((e) => e.name);
 
-const problems = [];
-for (const file of rootFiles) {
-  if (!allowlist.has(file)) {
-    problems.push(`root file not on allowlist: ${file} (path outside root allowlist)`);
-  }
-}
+for (const file of rootFiles) if (!allowlist.has(file)) problem(`root file not on allowlist: ${file}`);
 
 for (const allowed of allowlist) {
   if (!fs.existsSync(path.join(repo, allowed))) {
@@ -28,9 +26,4 @@ for (const allowed of allowlist) {
   }
 }
 
-if (problems.length) {
-  console.error(problems.join('\n'));
-  process.exit(1);
-}
-
-console.log(`root allowlist check passed (${allowlist.size} allowlisted root files)`);
+reportAndExit(failures, `root allowlist check passed (${allowlist.size} allowlisted root files)`);

@@ -1,9 +1,30 @@
 [
-  "clients/tui/presentation/components/layout/Banner.tsx -> engine/agent-runtime/model-resolver.ts (clients -> engine)",
-  "clients/tui/presentation/components/layout/Banner.tsx -> model/providers/index.ts (clients -> model)",
-  "clients/tui/presentation/hooks/use-terminal-focus-notifier.ts -> app/settings-service.ts (clients -> app)",
-  "clients/tui/presentation/hooks/use-terminal-focus-notifier.ts -> session/logging/logging-service.ts (clients -> session)",
-  "engine/agent-runtime/context-compaction/index.ts -> session/conversation/conversation-state-projector.ts (engine -> session)",
-  "engine/retry/retry-contracts.ts -> session/conversation/conversation-events.ts (engine -> session)",
-  "shared/lib/chained-input-filter.ts -> session/conversation/run-item-normalizer.ts (shared -> session)"
+  {
+    "edge": "clients/tui/presentation/components/layout/Banner.tsx -> engine/agent-runtime/model-resolver.ts (clients -> engine)",
+    "reason": "Plan Phase 3.1: the banner resolves the model label itself. Goes when app/ computes model and provider labels and passes them as props or protocol state."
+  },
+  {
+    "edge": "clients/tui/presentation/components/layout/Banner.tsx -> model/providers/index.ts (clients -> model)",
+    "reason": "Plan Phase 3.1: the banner resolves the provider label itself. Goes with the edge above, when app/ passes the labels in."
+  },
+  {
+    "edge": "clients/tui/presentation/hooks/use-terminal-focus-notifier.ts -> app/settings-service.ts (clients -> app)",
+    "reason": "Plan Phase 3.2: the hook reads concrete settings. Goes when app/ injects a settings reader (shared/service-interfaces.ts) through TUI context."
+  },
+  {
+    "edge": "clients/tui/presentation/hooks/use-terminal-focus-notifier.ts -> session/logging/logging-service.ts (clients -> session)",
+    "reason": "Plan Phase 3.2: the hook logs through the concrete logger. Goes when app/ injects ILoggingService through TUI context."
+  },
+  {
+    "edge": "engine/agent-runtime/context-compaction/index.ts -> session/conversation/conversation-state-projector.ts (engine -> session)",
+    "reason": "Plan Phase 3.3: compaction needs session's projection of model history. Goes when the compactor takes a historyProjector and session passes projectModelRequestHistory."
+  },
+  {
+    "edge": "engine/retry/retry-contracts.ts -> session/conversation/conversation-events.ts (engine -> session)",
+    "reason": "Plan Phase 3.4 (type-only import): the retry contract names a session event type. Goes when engine defines its own RetryNotice and session's union includes it."
+  },
+  {
+    "edge": "shared/lib/chained-input-filter.ts -> session/conversation/run-item-normalizer.ts (shared -> session)",
+    "reason": "Plan Phase 3.5: a shared helper used by model/ and engine/ calls session normalization. Goes when the normalizer moves down (if pure) or is injected."
+  }
 ]

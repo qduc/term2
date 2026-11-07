@@ -10,7 +10,7 @@ const repo = path.resolve(scripts, '..');
 
 // 1. Allowlisted layer edges
 const edgesPath = path.join(scripts, 'layer-allowlist.json');
-const edges = JSON.parse(fs.readFileSync(edgesPath, 'utf8'));
+const edges = JSON.parse(fs.readFileSync(edgesPath, 'utf8')).map((e) => (typeof e === 'string' ? e : e.edge));
 const pairs = new Set();
 for (const edge of edges) {
   const m = edge.match(/^(\S+) -> (\S+) \((\S+) -> (\S+)\)$/);

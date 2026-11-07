@@ -7,6 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { exceptionKeys, failureMap, reportAndExit } from './gates/rules.mjs';
 
 const scripts = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(scripts, '..');
@@ -56,25 +57,26 @@ function resolveImport(importer, specifier) {
 const relative = (file) => path.relative(rewriteSrc, file).split(path.sep).join('/');
 const layerOf = (file) => relative(file).split('/')[0];
 
+const { map: failures, add } = failureMap();
+const direction = add('layer-direction');
 let allowlist;
 try {
-  allowlist = new Set(JSON.parse(fs.readFileSync(allowlistPath, 'utf8')));
+  allowlist = exceptionKeys(JSON.parse(fs.readFileSync(allowlistPath, 'utf8')), 'edge', direction);
 } catch (error) {
   console.error(`cannot read ${path.relative(repo, allowlistPath)}: ${error.message}`);
   process.exit(1);
 }
 
-const problems = new Set();
 const crossing = new Set();
 for (const importer of files(rewriteSrc)) {
   const fromLayer = layerOf(importer);
-  if (!LAYER_DEPENDENCIES[fromLayer]) problems.add(`${relative(importer)}: ${fromLayer}/ is not a layer`);
+  if (!LAYER_DEPENDENCIES[fromLayer]) direction(`${relative(importer)}: ${fromLayer}/ is not a layer`);
   const text = fs.readFileSync(importer, 'utf8');
   for (const [, specifier] of text.matchAll(IMPORT)) {
     const target = resolveImport(importer, specifier);
     if (!target) continue;
     if (!target.startsWith(rewriteSrc + path.sep)) {
-      problems.add(`${relative(importer)} imports ${path.relative(repo, target)} outside src`);
+      direction(`${relative(importer)} imports ${path.relative(repo, target)} outside src`);
       continue;
     }
     const toLayer = layerOf(target);
@@ -88,7 +90,7 @@ for (const importer of files(rewriteSrc)) {
     const edge = `${relative(importer)} -> ${relative(target)} (${fromLayer} -> ${toLayer})`;
     crossing.add(edge);
     if (!allowlist.has(edge))
-      problems.add(`${relative(importer)}: ${fromLayer}/ may not import ${toLayer}/ (${relative(target)})`);
+      direction(`${relative(importer)}: ${fromLayer}/ may not import ${toLayer}/ (edge: "${edge}")`);
   }
 }
 for (const edge of allowlist) if (!crossing.has(edge)) console.log(`stale allowlist entry: ${edge}`);
@@ -103,15 +105,7 @@ for (const file of files(rewriteSrc)) {
   const text = fs.readFileSync(file, 'utf8');
   const hit = LOG_READERS.exec(text);
   if (hit)
-    problems.add(
-      `${name}:${
-        text.slice(0, hit.index).split('\n').length
-      }: app/ and clients/ may not read session logs; ask the session`,
-    );
+    add('log-readers')(`${name}:${text.slice(0, hit.index).split('\n').length}: calls ${hit[1]} outside session/`);
 }
 
-if (problems.size) {
-  console.error([...problems].sort().join('\n'));
-  process.exit(1);
-}
-console.log(`layer check passed (${allowlist.size} allowlisted crossing edges)`);
+reportAndExit(failures, `layer check passed (${allowlist.size} allowlisted crossing edges)`);

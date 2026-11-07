@@ -1115,13 +1115,16 @@ render components from source keep the development build.
 
 ### Results
 
-Medians (p25–p75), interleaved:
+Medians (p25–p75), interleaved. The first three rows were measured again after
+the checksum fix (see [Verification](#verification-1)); the earlier figures, before it,
+were 434 → 328, 432 → 333 and 436 → 324 ms. The other rows predate the fix, which
+costs a few milliseconds.
 
 | Condition | n | `4fa084c` | Candidate | Change |
 | --- | ---: | ---: | ---: | ---: |
-| Node 24, `NODE_ENV=test`, warm cache | 30 | 434 ms (428–445) | 328 ms (316–336) | −24% |
-| Node 24, `NODE_ENV` unset, warm cache | 30 | 432 ms (421–442) | 333 ms (320–345) | −23% |
-| Node 22, `NODE_ENV=test`, warm cache | 20 | 436 ms (429–446) | 324 ms (317–335) | −26% |
+| Node 24, `NODE_ENV=test`, warm cache | 30 | 460 ms (445–468) | 332 ms (321–341) | −28% |
+| Node 24, `NODE_ENV` unset, warm cache | 30 | 445 ms (436–460) | 338 ms (329–346) | −24% |
+| Node 22, `NODE_ENV=test`, warm cache | 20 | 462 ms (442–470) | 339 ms (332–359) | −27% |
 | Node 24, `NODE_DISABLE_COMPILE_CACHE=1` | 20 | 501 ms | 501 ms | none |
 | `dist/cli.js --help`, warm cache | 20 | 147 ms | 125 ms | −15% |
 
@@ -1165,8 +1168,44 @@ Probes of the built CLI:
   took precedence, and `NODE_DISABLE_COMPILE_CACHE` wrote nothing.
 - **Bad or stale caches:** a cache of random bytes, or one truncated to 64 bytes,
   was rejected, deleted and rewritten. Touching the bundle gave it a new cache
-  file.
+  file. Both probes damaged only what V8 checks itself; see the independent
+  verification below.
 - **Node 20:** 20.19.5 fails at startup with `No such built-in module: node:sqlite`,
   on `4fa084c` too. `engines` says `>=20`, but term2 has not started on Node 20
   since it began requiring `node:sqlite`.
+
+The lanes again on the checksum fix (`f32c6b3`): test 161 of 161; integration
+179 passed, 1 skipped and the same two root-only failures; provider-black-box
+206 passed, 5 skipped; e2e 161 passed, 1 skipped, 1 failed. The failure,
+`approval-mode.e2e.test.ts` › "keeps all composer hints at 120 columns", read
+the screen before the frame arrived. It failed on `4fa084c` as well (3 of 12
+beside four busy loops; 2 of 12 for the candidate) and now waits for the hint
+text: 12 of 12 under the same load. The `testing` skill records the trap.
+
+**Independent verification: rejected, then (see below).** A separate agent
+verified `f546d89` against `4fa084c`. It reproduced the speed-up (426 → 329 ms,
+437 → 336 ms, n=12), confirmed strict mode, the `import.meta` mapping, all 879
+markers, dynamic imports and stack positions from the vm script and the
+`require()` fallback, no stderr on Node 24 or 22, file modes, and 3 rounds of
+12 concurrent cold starts sharing one cache. It rejected the change for two
+cache-validation defects:
+
+- **A cache damaged past its header crashed every start.** Flipping 4,000 bytes
+  in the middle of the file left V8's header and length checks satisfied; V8
+  then died with `unreachable code` and exit 133 on each start, before the
+  loader could delete the file. Node's own compile cache catches the same damage
+  with a hash. The author's probes had damaged only the header or the length.
+- **A cache could run another bundle's code.** The key was the bundle's size and
+  mtime. Two copies of the bundle with a same-length text change and the same
+  mtime (as mtime-normalising packaging produces) shared a cache, and the second
+  printed the first's help text.
+
+`f32c6b3` keys the file by the bundle's CRC32 and prefixes each file with a
+CRC32 of its data, checked before V8 sees it. With the verifier's own steps, the
+damaged cache was deleted and rewritten and the CLI printed its version (exit 0,
+twice); the edited bundle printed its own text and got its own file.
+
+It also found, on `main` too, that the bundler rewrites `import.meta.url` inside
+the session-index worker's eval'd bootstrap string, where the replacement helper
+does not exist. That is outside this change and was left for a separate task.
 

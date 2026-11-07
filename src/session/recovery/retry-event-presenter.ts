@@ -1,5 +1,5 @@
-import type { ClassifiedFailure } from './retry-contracts.js';
-import type { ConversationEvent } from '../../session/conversation/conversation-events.js';
+import type { ClassifiedFailure } from '../../engine/retry/retry-contracts.js';
+import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { describeError } from '../../model/error-helpers.js';
 import { classifyProviderFailure } from '../../model/failure/provider-failure-classification.js';
 

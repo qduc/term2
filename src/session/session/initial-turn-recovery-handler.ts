@@ -1,13 +1,13 @@
 import type { ConversationRecord } from '../conversation/conversation-record.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
-import { stripMemoryRecall } from '../prompts/memory-recall-notice.js';
+import { stripMemoryRecall } from '../../engine/prompts/memory-recall-notice.js';
 import type { ILoggingService } from '../../shared/service-interfaces.js';
 import type { AgentStream } from '../../engine/agent-stream.js';
 import type { GenerationGuard } from '../generation-guard.js';
 import type { DefaultConversationRecoveryPolicy } from '../../engine/retry/recovery-policy.js';
-import type { DefaultRecoveryExecutor } from '../../engine/retry/recovery-executor.js';
-import type { DefaultRetryClassifier } from '../../engine/retry/retry-classifier.js';
-import type { RetryEventPresenter } from '../../engine/retry/retry-event-presenter.js';
+import type { DefaultRecoveryExecutor } from '../recovery/recovery-executor.js';
+import type { DefaultRetryClassifier } from '../recovery/retry-classifier.js';
+import type { RetryEventPresenter } from '../recovery/retry-event-presenter.js';
 import type { ClassifiedFailure, NextRunInstruction, RecoveryState } from '../../engine/retry/retry-contracts.js';
 import { describeError } from '../../model/error-helpers.js';
 import {

@@ -16,8 +16,8 @@
       "reason": "Terminal UI root components, hooks, layout, and session rendering; to be partitioned into submodules as the TUI matures."
     },
     "src/clients/tui/menus": {
-      "files": 69,
-      "reason": "Interactive modal and settings menus for the TUI client; cohesive menu implementations sharing the picker and option contracts."
+      "files": 70,
+      "reason": "Interactive modal and settings menus share picker and option contracts. Includes use-menu-interaction.ts, added on main to register all twelve menu handlers in the render commit; duplicating that layout-effect contract risks reviving the input race. Keep it with its callers and lower this ceiling when a cohesive menu group moves together."
     },
     "src/delegation/subagents": {
       "files": 16,

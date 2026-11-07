@@ -290,6 +290,7 @@ describe('term2 acp permission round trips (child process)', () => {
         const request = session.permissionRequests[0]!;
         expect(request.sessionId).toBe(session.sessionId);
         expect(request.subject?.type).toBe('tool_call');
+        expect(request.options.map((option) => option.optionId)).toEqual(expect.arrayContaining(['approve', 'reject']));
         expect(request.options.map((option) => option.optionId)).not.toContain('unsandboxed-once');
         expect(fs.readFileSync(session.workspaceFile, 'utf8')).toBe('written\n');
       },
@@ -342,6 +343,11 @@ describe('term2 acp permission round trips (child process)', () => {
           ),
         ).toBe(true);
         expect(session.permissionRequests).toHaveLength(receivesRequest ? 1 : 0);
+        if (receivesRequest) {
+          expect(session.permissionRequests[0]!.options.map((option) => option.optionId)).toEqual(
+            expect.arrayContaining(['approve', 'reject']),
+          );
+        }
         expect(fs.existsSync(session.workspaceFile)).toBe(false);
         expect(
           session.updates.some(

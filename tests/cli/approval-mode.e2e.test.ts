@@ -299,6 +299,9 @@ async function runCommand(
   });
   const idle = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
   if (exerciseMenu === 'hint-80' || exerciseMenu === 'hint-120') {
+    // Idle is published from a React effect; the frame can still be on its way through the PTY.
+    // Under load the rows were read before it arrived (no hint row), on main as well.
+    await session.waitForOutput('/ commands');
     const lines = session.getVisibleOutput().split('\n');
     const hintRows = lines.filter((row) => row.trimStart().startsWith('/ commands'));
     expect(hintRows).toHaveLength(1);

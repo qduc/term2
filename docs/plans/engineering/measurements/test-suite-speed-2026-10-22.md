@@ -923,17 +923,9 @@ and isolated timings, not from subtraction.
 
 ### Remaining costs, not changed
 
-- **React development build in test children.** They set `NODE_ENV=test`,
-  which `config/env-setup.ts` keeps (settings and OAuth code branch on it), so
-  e2e launches render with `react-reconciler.development` (about 36 ms self per
-  launch); users get the production build. Changing it is an owner decision
-  about which build the suites exercise.
-- **Lazily compiled code is never cached.** Node writes the entry's V8 code
-  cache right after compiling it: the cache was byte-identical after `--help`
-  and after a full TUI start (1.7 MB for the 17.7 MB base bundle), so every
-  launch recompiles each function it calls (58 ms charged to esbuild's `__init`
-  at base). Caching it would need a loader that writes the cache after startup,
-  such as `vm.Script#createCachedData`; not attempted.
+- **React development build in test children** and **lazily compiled code is
+  never cached**: both fixed later; see
+  [Startup follow-ups](#startup-follow-ups-2026-11-07).
 - `string-width`: about 15 ms to initialize (`Intl.Segmenter`) and 20 ms in
   Ink's `widestLine` on the non-ASCII glyphs of the first frame.
 - zod: about 75 ms self, mostly constructing and applying the settings and
@@ -1059,3 +1051,179 @@ Limits:
 - No hosted CI run is included.
 - Timings are local samples from one container.
 - Most probes ran on Node 22 only.
+
+## Startup follow-ups (2026-11-07)
+
+Follow-ups to [CLI cold start](#cli-cold-start-2026-11-07) at the user's request,
+against `main` at `4fa084c`. The time-to-idle harness is the one under
+[Method](#method), rewritten as a scratch script (not committed), with a PTY that
+answers DA1. Node 24.22.1 (CI installs 24.21.0) and Node 22.23.4, on a different
+4-vCPU container from the earlier sections, so compare rows only within a table.
+
+### No regression on `main`
+
+The handoff for [PR #192](https://github.com/qduc/term2/pull/192) flagged that
+merged `main` reached idle 60–80 ms later than the candidate had at `7020c91`; those
+figures came from runs in different sessions. Interleaved
+on one harness (n=20 each), there is no gap:
+
+| Builds compared | Medians |
+| --- | --- |
+| `7020c91`, `c543ea2` (`main` before the merge) | 687, 674 ms |
+| `c5be057` (the branch before the merge), `4fa084c` (merged) | 559, 564 ms |
+| `4fa084c` with a PTY answering DA1, and with a silent one | 555, 564 ms |
+
+The difference came from session-to-session drift, which the earlier sections
+already saw in the base (701–763 ms).
+
+### Lazily compiled code is now cached
+
+Node's compile cache serializes a script right after compiling it. With a fresh
+cache, the bundle's entry was 1.5 MB whether the process stopped at `--help` or
+at an idle TUI, even after `module.flushCompileCache()`. `dist/src/app/cli.js` is
+now a loader (`scripts/bundle-loader.mjs`) that compiles the bundle, emitted as
+CommonJS beside it (`cli.bundle.cjs`), with `vm.Script` and serializes it after
+startup. That cache is 4.7 MB, and producing it takes about 38 ms of main-thread
+time, so the loader writes it only when no settled cache exists; `src/app/README.md`
+("Startup loading") describes the policy.
+
+A prototype split the gain. Loading a CommonJS copy through `vm.Script` with a cache
+written right after compiling took 527 ms, against 531 ms for the ES module bundle
+with Node's cache; writing the cache after startup took it to 404 ms (n=30).
+
+Bundling straight to CommonJS fails on Ink's and yoga's top-level awaits, so the
+build still bundles to an ES module, then transforms that to CommonJS. Two
+details of that step:
+
+- **Markers:** the transform drops the `// dist/` module markers
+  that `tests/helpers/patch-compiled-module.ts` uses, so they cross as legal
+  comments.
+- **Dynamic imports:** a `vm.Script` reaches them through
+  `vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER`. Its first use
+  emits a one-time ExperimentalWarning, and the alternative, a callback, requires
+  `--experimental-vm-modules`. The loader takes that first import itself and drops
+  only that warning.
+
+### React production build
+
+The bundle pins `react`, `react-reconciler` and `scheduler` to their production
+builds, so test children (`NODE_ENV=test`) render with the build users run. The
+bundle shrank from 10.98 to 10.21 MB. Alone, against `4fa084c`, n=40: 551 → 536 ms
+with `NODE_ENV=test` and 563 → 537 ms with it unset, so most of the saving is the
+smaller bundle rather than React's development checks. The Vitest suites that
+render components from source keep the development build.
+
+### Results
+
+Medians (p25–p75), interleaved. The first three rows were measured again after
+the checksum fix (see [Verification](#verification-1)); the earlier figures, before it,
+were 434 → 328, 432 → 333 and 436 → 324 ms. The other rows predate the fix, which
+costs a few milliseconds.
+
+| Condition | n | `4fa084c` | Candidate | Change |
+| --- | ---: | ---: | ---: | ---: |
+| Node 24, `NODE_ENV=test`, warm cache | 30 | 460 ms (445–468) | 332 ms (321–341) | −28% |
+| Node 24, `NODE_ENV` unset, warm cache | 30 | 445 ms (436–460) | 338 ms (329–346) | −24% |
+| Node 22, `NODE_ENV=test`, warm cache | 20 | 462 ms (442–470) | 339 ms (332–359) | −27% |
+| Node 24, `NODE_DISABLE_COMPILE_CACHE=1` | 20 | 501 ms | 501 ms | none |
+| `dist/cli.js --help`, warm cache | 20 | 147 ms | 125 ms | −15% |
+
+The cache is now worth about 175 ms of a 500 ms start, against about 70 ms
+before. Without it the two builds start alike.
+
+`node scripts/run-ci-lane.mjs e2e`, alternating `4fa084c`, candidate,
+`4fa084c`, candidate, nothing else running; each run passed 162 and skipped 1:
+
+| e2e lane | `4fa084c` | Candidate | Change |
+| --- | ---: | ---: | ---: |
+| Vitest duration | 73.09 s, 72.38 s | 65.03 s, 66.40 s | about −10% |
+| Summed case time | 209.9 s, 207.5 s | 186.4 s, 189.9 s | about −10% |
+
+The suites prime with `--help`, which writes the smaller exit-time cache. The first
+launch in a lane that lives past 2 s writes the settled one for the rest.
+
+### Verification
+
+On the candidate, Node 24.22.1, pnpm 11.7.0, as root with `bubblewrap` and `socat`:
+
+| Check | Result |
+| --- | --- |
+| `node scripts/run-ci-lane.mjs test` | 161 of 161 passed |
+| `node scripts/run-ci-lane.mjs integration` | 179 passed, 1 skipped, 2 failed: the root-only `logging-failures` cases (see [Verification](#verification)) |
+| `node scripts/run-ci-lane.mjs e2e` | 162 passed, 1 skipped, three runs |
+| `node scripts/run-ci-lane.mjs provider-black-box` | 206 passed, 5 skipped |
+| `tsc` (both configs), every `check-*` script, `check-no-unit-tests`, Prettier, eslint | passed |
+| The `port` job: parity, `bench/hops.mts`, `bench/m1-direct.mjs` | 9 of 9 goldens; within budget; 33 of 33 rows |
+
+Probes of the built CLI:
+
+- **Same output as `4fa084c`:** `--help`, `--version`, `--resume ls`,
+  `control --help`, `discord --help`, a bad flag, a bad model and a bad provider
+  gave the same output and exit code, apart from `--help` printing each run's own
+  settings path.
+- **Writing the cache:** `--help` wrote an `.exit` cache with mode 600, and a
+  second run left it alone. A TUI that stayed up past 2 s wrote a 4.7 MB
+  `.settled` cache. Its PTY output contained no warning.
+- **Where the cache goes:** `TERM2_CACHE_DIR` was honoured, `NODE_COMPILE_CACHE`
+  took precedence, and `NODE_DISABLE_COMPILE_CACHE` wrote nothing.
+- **Bad or stale caches:** a cache of random bytes, or one truncated to 64 bytes,
+  was rejected, deleted and rewritten. Touching the bundle gave it a new cache
+  file. Both probes damaged only what V8 checks itself; see the independent
+  verification below.
+- **Node 20:** 20.19.5 fails at startup with `No such built-in module: node:sqlite`,
+  on `4fa084c` too. `engines` says `>=20`, but term2 has not started on Node 20
+  since it began requiring `node:sqlite`.
+
+The lanes again on the checksum fix (`f32c6b3`): test 161 of 161; integration
+179 passed, 1 skipped and the same two root-only failures; provider-black-box
+206 passed, 5 skipped; e2e 161 passed, 1 skipped, 1 failed. The failure,
+`approval-mode.e2e.test.ts` › "keeps all composer hints at 120 columns", read
+the screen before the frame arrived. It failed on `4fa084c` as well (3 of 12
+beside four busy loops; 2 of 12 for the candidate) and now waits for the hint
+text: 12 of 12 under the same load. The `testing` skill records the trap.
+
+**Independent verification: rejected, then accepted.** A separate agent
+verified `f546d89` against `4fa084c`. It reproduced the speed-up (426 → 329 ms,
+437 → 336 ms, n=12), confirmed strict mode, the `import.meta` mapping, all 879
+markers, dynamic imports and stack positions from the vm script and the
+`require()` fallback, no stderr on Node 24 or 22, file modes, and 3 rounds of
+12 concurrent cold starts sharing one cache. It rejected the change for two
+cache-validation defects:
+
+- **A cache damaged past its header crashed every start.** Flipping 4,000 bytes
+  in the middle of the file left V8's header and length checks satisfied; V8
+  then died with `unreachable code` and exit 133 on each start, before the
+  loader could delete the file. Node's own compile cache catches the same damage
+  with a hash. The author's probes had damaged only the header or the length.
+- **A cache could run another bundle's code.** The key was the bundle's size and
+  mtime. Two copies of the bundle with a same-length text change and the same
+  mtime (as mtime-normalising packaging produces) shared a cache, and the second
+  printed the first's help text.
+
+`f32c6b3` keys the file by the bundle's CRC32 and prefixes each file with a
+CRC32 of its data, checked before V8 sees it. With the verifier's own steps, the
+damaged cache was deleted and rewritten and the CLI printed its version (exit 0,
+twice); the edited bundle printed its own text and got its own file.
+
+It also found, on `main` too, that the bundler rewrites `import.meta.url` inside
+the session-index worker's eval'd bootstrap string, where the replacement helper
+does not exist. That is outside this change and was left for a separate task.
+
+**Re-verification: accepted.** The same agent verified `92d24fc` with the
+`f32c6b3` build:
+
+- **The crash (D1):** its damaged-cache reproduction exited 0 three times with
+  empty stderr, where it had exited 133. It added a cache whose data was damaged
+  under a matching checksum, which V8 rejected and the loader rewrote, and an
+  empty and a 2-byte file, which both started normally.
+- **The shared cache (D2):** running the two bundles a, b, a, b printed A, B,
+  A, B, with one cache file each.
+- **Starting:** 12 concurrent cold starts left one cache file. Node 22 wrote and
+  reused its cache without stderr. It measured 436 → 311 ms (n=10).
+- **Tests:** e2e passed 162 and skipped 1. The two composer-hint cases passed 8
+  of 8 beside four busy loops.
+- **Not verified by either of us:** how long the settled-cache write blocks the
+  TUI (the prototype measured about 38 ms to serialize and 5 ms to write, once
+  per bundle), real `web_fetch`, sandbox and hook turns end to end, Windows,
+  and Nix or bun installs.
+

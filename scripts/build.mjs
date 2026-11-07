@@ -26,8 +26,9 @@ if (result.status !== 0) process.exit(result.status ?? 1);
 for (const asset of ['src/session/prompts', 'src/model/providers/provider-presets.json'])
   fs.cpSync(path.join(repo, asset), path.join(dist, asset), { recursive: true });
 // package.json bin.term2. Importing the entry (rather than spawning it) keeps argv[1], used by
-// restart, on this file. Enabling Node's compile cache first lets an installed term2 reuse the
-// entry bundle's V8 bytecode across starts (about 110 ms of each start without it). The cache is
+// restart, on this file. Enabling Node's compile cache first gives the entry's loader
+// (scripts/bundle-loader.mjs) a directory for the bundle's V8 code cache (about 175 of 500 ms to an
+// idle TUI), and caches the loader and other ES modules as before. The cache is
 // per user, beside term2's other caches: Node's default under os.tmpdir() adopts an existing
 // directory even when another user created it writable. Node < 22.1 has no such API and starts
 // as before; a cache that cannot be created is skipped, and NODE_COMPILE_CACHE and

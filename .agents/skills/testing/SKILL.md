@@ -91,7 +91,10 @@ CPU. The attribution and measurements are in
   prime it with `prepareCliCompileCache()`, and `createTestChildEnv()` forwards
   `TERM2_TEST_NODE_COMPILE_CACHE` as `NODE_COMPILE_CACHE`. A hand-built child
   environment (`env -i` in `first-run-setup.e2e.test.ts`, the Discord CLI e2e)
-  must pass it on itself: ~150–200 ms per launch.
+  must pass it on itself: ~175 ms of a ~500 ms launch. The entry's loader keeps
+  the bundle's V8 code cache in the same directory (`term2-bundle/`); the `--help`
+  priming writes a partial one, and the first launch that lives past 2 s writes
+  the full one (see `src/app/README.md`, "Startup loading").
 - **Drive PTYs through the shared bridges.** `spawnTerminal()`
   (`tests/helpers/terminal-e2e.ts`) and the provider harness answer the TUI's
   Device Attributes query with `PYTHON_DA1_RESPONDER`. A bridge without it makes
@@ -268,6 +271,13 @@ and `68ef50ff` (local-only evidence), not a result file to resume appending.
 - **PTY relaunch lock race:** relaunching before the previous PTY child had exited
   raced the personal-memory lock and flaked CI. The harness must wait for child
   exit before relaunching; don't paper over it with retries.
+- **Idle is not "frame on screen" (fixed 2026-11-07):** the harness idle file is
+  written from a React effect, so the frame can still be in flight through the
+  PTY bridge. `approval-mode.e2e.test.ts` › "keeps all composer hints at 120
+  columns" read the screen right after idle and failed under load with
+  `expected [] to have a length of 1` (no hint row), 3 of 12 on `main` and 2 of 12
+  on the candidate beside four busy loops. Wait for the text you will assert on
+  (`waitForOutput`) before reading `getVisibleOutput()` after an idle wait.
 
 ### Local-only boundary lessons reviewed for reconciliation
 

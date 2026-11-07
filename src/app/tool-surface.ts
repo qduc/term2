@@ -9,7 +9,6 @@ import { resolveRequestOutput } from '../engine/agent-runtime/model-context-poli
 import { NonInteractiveApprovalPolicy } from '../session/approval/non-interactive-approval-policy.js';
 import { ToolApprovalPolicyRegistry } from '../session/approval/tool-approval-policy-registry.js';
 import { isAutoApprovableTool, ShellAutoApprovalResolver } from '../session/approval/shell-auto-approval-resolver.js';
-import type { ConversationRecord } from '../session/conversation/conversation-record.js';
 import type { ShellAutoApprovalAgentClient } from '../session/conversation-agent-client.js';
 import type { ExecutionContext } from '../tools/execution-context.js';
 import { LocalExecutionContext } from './tool-contract.js';
@@ -215,7 +214,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
   // call in history and caches per call id; `auto` mode may approve from it.
   let advisoryHistory: ProviderInputItem[] = [];
   const advisor = new ShellAutoApprovalResolver({
-    record: { getHistory: () => advisoryHistory } as unknown as ConversationRecord,
+    record: { getHistory: () => advisoryHistory },
     agentClient,
     logger,
     settingsService: settings,

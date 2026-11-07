@@ -55,31 +55,6 @@ export function getConversationsDirForTest(): string {
   return getConversationsDir();
 }
 
-/** Read one session's canonical log and sidecar with stable event identities. */
-export function readConversationLogEnvelopes(id: string): PersistedLogEnvelope[] | null {
-  if (!SAFE_SESSION_ID.test(id)) return null;
-  const filePath = path.join(getConversationsDir(), id + '.jsonl');
-  try {
-    if (!fs.existsSync(filePath)) return null;
-    return readEnvelopes(filePath);
-  } catch {
-    return null;
-  }
-}
-
-/** Explicit-root variant used by the isolated rewrite session adapter. */
-export function readConversationLogEnvelopesFromDirectory(
-  id: string,
-  directory: string,
-): PersistedLogEnvelope[] | null {
-  if (!SAFE_SESSION_ID.test(id)) return null;
-  const root = path.resolve(directory);
-  const filePath = path.resolve(root, `${id}.jsonl`);
-  if (path.dirname(filePath) !== root) return null;
-  if (!fs.existsSync(filePath)) return null;
-  return readEnvelopes(filePath);
-}
-
 export function setConversationsDirForTest(dir: string | null): void {
   conversationsDirOverride = dir;
 }
@@ -224,10 +199,6 @@ function conversationMatchesProject(
   }
 
   return true;
-}
-
-export function generateId(): string {
-  return crypto.randomUUID();
 }
 
 function decodeEnvelopeLines(content: string): PersistedLogEnvelope[] {

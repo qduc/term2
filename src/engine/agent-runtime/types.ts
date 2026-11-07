@@ -281,3 +281,8 @@ export interface AgentHandle {
   readonly limits: AgentLimits;
   run<T = string>(input: RunInput): Promise<RunResult<T>>;
 }
+
+/** Host-supplied launcher for workflow agents; execution remains in the live session. */
+export interface AgentLauncher {
+  agent(config: AgentConfig): AgentHandle;
+}

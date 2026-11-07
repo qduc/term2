@@ -28,18 +28,6 @@ export function latestPersonalMemoryContext(history: readonly ProviderInputItem[
   return undefined;
 }
 
-/** Capture only changed context at human admission; replay never reads today's store. */
-export function withPersonalMemoryContext(
-  item: ProviderInputItem,
-  history: readonly ProviderInputItem[],
-  resolve?: () => string,
-): ProviderInputItem {
-  if (!resolve || item.role !== 'user' || typeof item.humanInputAt !== 'string') return item;
-  const snapshot = resolve();
-  const previous = latestPersonalMemoryContext(history) ?? '';
-  return snapshot === previous ? item : { ...item, personalMemoryContext: snapshot };
-}
-
 /** Native compaction can hide the old snapshot: retain its comparison state, not a new notice. */
 export function carryPersonalMemoryContext(
   previous: readonly ProviderInputItem[],

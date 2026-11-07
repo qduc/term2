@@ -1,34 +1,20 @@
-import type { ISettingsService } from '../../shared/service-interfaces.js';
-import { SessionReadAccess } from '../approval/session-read-access.js';
-import { DockerHostControlGrants } from '../../tools/shell/sandbox/docker-host-control-grants.js';
-import { DeniedReadStore, ExecutionOverrideStore } from '../../tools/shell/sandbox/denied-read-stores.js';
+import type { SessionReadAccess } from '../approval/session-read-access.js';
+import type { DockerHostControlGrants } from '../../tools/shell/sandbox/docker-host-control-grants.js';
+import type { DeniedReadStore, ExecutionOverrideStore } from '../../tools/shell/sandbox/denied-read-stores.js';
 import type { NestedReadAccessPort, NestedShellAccessPort } from '../../tools/access-port.js';
-
 /**
- * Explicit state for the legacy nested-tool approval protocol. Nested tools do
+ * Optional compatibility capability supplied by a nested-tool host.
+ * This contract retains no state or runtime implementation. Nested tools do
  * not receive the root post-execute capability, but their execute and approval
  * paths must share this one session-owned instance.
  */
-export class NestedToolCompatibilityState implements NestedReadAccessPort, NestedShellAccessPort {
-  readonly deniedReads = new DeniedReadStore();
-  readonly executionOverrides = new ExecutionOverrideStore();
-  readonly readAccess = new SessionReadAccess();
+export interface NestedToolCompatibilityState extends NestedReadAccessPort, NestedShellAccessPort {
+  readonly deniedReads: DeniedReadStore;
+  readonly executionOverrides: ExecutionOverrideStore;
+  readonly readAccess: SessionReadAccess;
   readonly docker: DockerHostControlGrants;
 
-  constructor(settings: ISettingsService) {
-    this.docker = new DockerHostControlGrants();
-    this.docker.configure(settings);
-  }
-
   /** Nested-only equivalent of the root read capability. */
-  allowsRead(sessionId: string, targetPath: string, baseDir?: string): boolean {
-    return this.readAccess.allows(sessionId, targetPath, baseDir);
-  }
-
-  clear(sessionId: string): void {
-    this.deniedReads.clear();
-    this.executionOverrides.clear();
-    this.readAccess.clear(sessionId);
-    this.docker.clearSession(sessionId);
-  }
+  allowsRead(sessionId: string, targetPath: string, baseDir?: string): boolean;
+  clear(sessionId: string): void;
 }

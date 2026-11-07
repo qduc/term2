@@ -2,12 +2,6 @@ import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { expect, it } from 'vitest';
 
-const canonicalConsumers = [
-  'src/session/stream-event-processor.ts',
-  'src/session/session/session-stream-processor.ts',
-  'src/engine/agent-stream.ts',
-];
-
 async function productionSources(directory: string): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true });
   const files: string[] = [];
@@ -20,24 +14,6 @@ async function productionSources(directory: string): Promise<string[]> {
   }
   return files;
 }
-
-it('proves the application run loop constructs a native stream for processStreamEvents', async () => {
-  const loop = await readFile('src/engine/agent-runtime/application-run-loop.ts', 'utf8');
-  const segments = await readFile('src/engine/agent-runtime/run-segments.ts', 'utf8');
-  expect(loop).toContain('new RunSegments(');
-  expect(loop).toContain('this.#segments.open(');
-  expect(segments).toContain('const stream = createAgentStream(');
-  expect(segments).toContain('lastResponseId: state.responseId ?? null');
-  for (const source of [loop, segments]) expect(source).not.toContain('adaptAgentStream');
-});
-
-it('keeps runtime streams on the native application event protocol', async () => {
-  const sources = await Promise.all(canonicalConsumers.map((file) => readFile(file, 'utf8')));
-  for (const source of sources) {
-    expect(source).not.toMatch(/raw_model_stream_event|run_item_stream_event/);
-    expect(source).not.toMatch(/data\??\.event|event\??\.event/);
-  }
-});
 
 it('forbids retired SDK stream envelopes throughout production source', async () => {
   const violations: string[] = [];

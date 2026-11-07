@@ -2,7 +2,6 @@ import { isModelBehaviorError } from '../../shared/contracts/model-errors.js';
 export { isTransientRetryableError } from './retry-error-classification.js';
 
 export const MAX_HALLUCINATION_RETRIES = 2;
-export const MAX_SUBAGENT_MODEL_RETRIES = 2;
 
 export const isRecoverableModelError = (error: unknown): boolean => {
   if (!isModelBehaviorError(error)) {
@@ -92,48 +91,5 @@ export const decideRecoverableModelRetry = (
     retryType,
     attempt: attemptCount + 1,
     maxRetries,
-  };
-};
-
-export const decideRetry = (
-  error: unknown,
-  attemptCount: number,
-  hadStream: boolean,
-  streamHistoryLength: number,
-  maxRetries: number = MAX_HALLUCINATION_RETRIES,
-): RetryDecision => {
-  const decision = decideRecoverableModelRetry(error, attemptCount, maxRetries);
-  if (decision.kind === 'no_retry') {
-    return { kind: 'no_retry' };
-  }
-
-  const { message, toolName, retryType, attempt } = decision;
-
-  return {
-    kind: 'retry',
-    message,
-    retryEvent: {
-      type: 'retry',
-      toolName: retryType === 'hallucination' ? toolName : 'model',
-      attempt,
-      maxRetries,
-      errorMessage: message,
-      retryType,
-    },
-    logPayload: {
-      toolName,
-      retryType,
-      attempt,
-      maxRetries,
-      errorMessage: message,
-    },
-    attempt,
-    hadStream,
-    shouldInjectErrorContext: hadStream && streamHistoryLength === 0,
-    errorContextMessage: `[System: Previous attempt failed with error: ${message}. Please retry with corrected output.]`,
-    nextRunOptions: {
-      retries: { hallucinationRetryCount: attempt },
-      skipUserMessage: hadStream,
-    },
   };
 };

@@ -1,9 +1,11 @@
 {
+  "src/app/native-session-browser-worker.ts": "Worker entry loaded by new URL in native-session-browser.ts and started by node:worker_threads; the source import walker does not follow URL-based worker entry points.",
   "src/model/providers/model-catalog/generate-catalog.ts": "Dev tool: scripts/update-model-catalog.ts (pnpm catalog:update) regenerates catalog.generated.ts with it.",
   "src/protocol/index.ts": "Layer map: the README's fresh-reader check reads each layer's index.ts. Production imports the layer's files directly, so nothing imports this index.",
   "src/session/adopted/conversation-log.ts": "The offline v3 conversation migration (scripts/conversation-migration/v3-input.mjs) imports validateSessionFact from its emitted module; production no longer writes adopted facts.",
   "src/session/adopted/interaction-protocol.ts": "Reached only from session/adopted/, the offline v3 conversation migration listed above.",
   "src/session/adopted/network.ts": "Network facts validated by session/adopted/conversation-log.ts for the v3 migration.",
+  "src/session/conversation/session-index/session-index-worker.ts": "Worker entry loaded by new URL in session-index-worker-client.ts and session-browser.ts; node:worker_threads executes this file outside the CLI import graph.",
   "src/session/hooks/index.ts": "Public type surface of the package export ./hooks (package.json exports); hook authors import it, the CLI does not.",
   "src/session/import.ts": "Offline v3 conversation migration (scripts/conversation-migration/migration-command.mjs) imports its emitted module; no CLI command reaches it.",
   "src/session/index.ts": "Layer map: the README's fresh-reader check reads each layer's index.ts. Production imports the layer's files directly, so nothing imports this index.",

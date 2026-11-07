@@ -1,44 +1,7 @@
-import type { ISettingsService } from '../../shared/service-interfaces.js';
 import type { ResolvedAgentDefinition } from '../../engine/agent-runtime/resolved-agent.js';
-import type { SubagentDefinition, SupportedSubagentRole } from '../subagents/types.js';
-import { loadRoleDefinition } from '../subagents/role-loader.js';
+import type { SubagentDefinition } from '../subagents/types.js';
+
 import type { ExecutionBudget } from '../../engine/agent-runtime/execution-budget.js';
-
-/**
- * Adapt a legacy subagent role into a ResolvedAgentDefinition.
- * This preserves existing role behavior by loading the trusted host preset
- * and converting to the new internal shape.
- */
-export function adaptLegacyRole(
-  role: SupportedSubagentRole | string,
-  settings: ISettingsService,
-): ResolvedAgentDefinition {
-  const def: SubagentDefinition = loadRoleDefinition(role, settings);
-
-  return {
-    name: def.name,
-    legacyRole: def.role,
-    instructions: def.instructions,
-    model: { provider: def.provider, model: def.model },
-    permissions: {
-      canRead: def.canRead,
-      canWrite: def.canWrite,
-      canRunShell: def.canRunShell,
-      canSearchWeb: def.canSearchWeb,
-      canUseNestedAgents: false,
-    },
-    limits: {
-      maxTurns: def.maxTurns,
-    },
-    tools: [],
-    skillInstructions: '',
-    // Legacy roles have undefined scopes (no fine-grained restriction —
-    // they continue to use their existing coarse behavior).
-    filesystemScope: undefined,
-    networkScope: undefined,
-    resolutionErrors: [],
-  };
-}
 
 /**
  * Convert a ResolvedAgentDefinition back to the legacy SubagentDefinition

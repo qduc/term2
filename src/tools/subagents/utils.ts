@@ -1,6 +1,4 @@
 import type { SubagentResult } from './types.js';
-import { MaxTurnsExceededError } from './max-turns-error.js';
-import { isMaxTurnsError } from '../conversation-utils.js';
 
 // Diagnostic text can describe cancellation or contain it in a path without
 // representing a stop. Application-owned cancellation producers carry identity.
@@ -12,29 +10,6 @@ export function isAbortLike(_message: string | undefined, obj?: unknown): boolea
   )
     return true;
   return false;
-}
-
-/**
- * True when a run ended because its turn budget was spent.
- *
- * Subagent settlement treats this as a containment stop (report partial work),
- * not as a crash. Main-agent recovery still uses {@link isMaxTurnsError} on the
- * message string for the human check-in prompt.
- */
-export function isMaxTurnsExceededError(error: unknown): boolean {
-  if (error instanceof MaxTurnsExceededError) return true;
-  if (error && typeof error === 'object' && (error as { name?: string }).name === 'MaxTurnsExceededError') {
-    return true;
-  }
-  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
-  return isMaxTurnsError(message);
-}
-
-export function extractMaxTurnsLimit(error: unknown): number | undefined {
-  if (error instanceof MaxTurnsExceededError) return error.maxTurns;
-  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
-  const match = /Max turns \((\d+)\) exceeded/.exec(message);
-  return match ? Number(match[1]) : undefined;
 }
 
 /**
@@ -96,108 +71,6 @@ export function extractFinalText(result: any): string {
   }
 
   return '';
-}
-
-/** Preserve completed tool evidence when a nested run cannot produce its own final synthesis. */
-export async function extractPartialToolEvidence(result: any): Promise<string> {
-  if (!Array.isArray(result?.history)) return '';
-
-  const toolNames = new Map<string, string>();
-  const sections: string[] = [];
-  for (const entry of result.history) {
-    const item = entry?.rawItem ?? entry;
-    if (!item || typeof item !== 'object') continue;
-    if (item.type === 'function_call' && typeof item.callId === 'string' && typeof item.name === 'string') {
-      toolNames.set(item.callId, item.name);
-      continue;
-    }
-    if (item.type !== 'function_call_result' || typeof item.output !== 'string') continue;
-    const name =
-      typeof item.name === 'string'
-        ? item.name
-        : typeof item.callId === 'string'
-        ? toolNames.get(item.callId) ?? 'unknown tool'
-        : 'unknown tool';
-    sections.push(`### ${name}\n${item.output}`);
-  }
-  if (sections.length === 0) return '';
-
-  const fullText = `Recovered completed tool outputs:\n\n${sections.join('\n\n')}`;
-  const { boundToolResultText } = await import('../../shared/utils/output/bound-tool-result.js');
-  return (await boundToolResultText({ fullText })).text;
-}
-
-export function aggregateToolUsage(toolCounts: Map<string, number>): Array<{ toolName: string; count: number }> {
-  return Array.from(toolCounts.entries()).map(([toolName, count]) => ({ toolName, count }));
-}
-
-export function aggregateContextToolUsage(
-  toolCounts: Record<string, number>,
-): Array<{ toolName: string; count: number }> {
-  return Object.entries(toolCounts).map(([toolName, count]) => ({ toolName, count }));
-}
-
-export async function safeEmit<E>(
-  logger: any,
-  onEvent: ((event: E) => void | PromiseLike<void>) | undefined,
-  // NoInfer: the sink decides the event type, so a malformed literal is a
-  // type error instead of silently widening E.
-  event: NoInfer<E>,
-  options: { propagate?: boolean } = {},
-): Promise<void> {
-  try {
-    await onEvent?.(event);
-  } catch (error: any) {
-    logger.debug('Subagent event emit failed', { error: error?.message });
-    if (options.propagate) throw error;
-  }
-}
-
-/**
- * Combines multiple abort signals into one signal that aborts when any source
- * aborts. Returns undefined when no signals are provided. When only one signal
- * is provided it is returned directly. The returned cleanup function removes
- * any listeners that were added to the source signals.
- */
-export function createCompositeAbortSignal(
-  ...signals: (AbortSignal | undefined | null)[]
-): { signal: AbortSignal; cleanup: () => void } | undefined {
-  const validSignals = signals.filter((signal): signal is AbortSignal => signal != null);
-  if (validSignals.length === 0) {
-    return undefined;
-  }
-
-  const anyAborted = validSignals.some((signal) => signal.aborted);
-  if (anyAborted) {
-    const controller = new AbortController();
-    controller.abort();
-    return { signal: controller.signal, cleanup: () => {} };
-  }
-
-  if (validSignals.length === 1) {
-    return { signal: validSignals[0], cleanup: () => {} };
-  }
-
-  const controller = new AbortController();
-  const listeners = new Map<AbortSignal, () => void>();
-
-  const cleanup = (): void => {
-    for (const [signal, listener] of listeners) {
-      signal.removeEventListener('abort', listener);
-    }
-    listeners.clear();
-  };
-
-  for (const signal of validSignals) {
-    const listener = (): void => {
-      controller.abort();
-      cleanup();
-    };
-    signal.addEventListener('abort', listener, { once: true });
-    listeners.set(signal, listener);
-  }
-
-  return { signal: controller.signal, cleanup };
 }
 
 const MAX_PREVIEW_LENGTH = 300;
@@ -283,10 +156,4 @@ export function formatSubagentResult(result: SubagentResult): string {
   }
 
   return lines.join('\n') || `Status: ${result.status}`;
-}
-
-export function createAbortError(message = 'The subagent run was aborted.'): Error {
-  const error = new Error(message);
-  error.name = 'AbortError';
-  return error;
 }

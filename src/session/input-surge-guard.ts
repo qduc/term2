@@ -79,7 +79,7 @@ export const collectInputSurgeStats = (input: unknown): InputSurgeStats => {
   };
 };
 
-export const collectDuplicateToolCallResultPairs = (input: unknown): { pairs: number; maxCopies: number } => {
+const collectDuplicateToolCallResultPairs = (input: unknown): { pairs: number; maxCopies: number } => {
   const items = Array.isArray(input) ? input : [input];
   const calls = new Map<string, number>();
   const results = new Map<string, number>();

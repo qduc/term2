@@ -25,7 +25,7 @@ import {
 import { getModelDefaultReasoningLevel, getProviderDefaultReasoningLevel } from '../../model/model-service.js';
 import type { ToolApprovalPolicyRegistry } from '../../session/approval/tool-approval-policy-registry.js';
 import { shouldBypassToolApproval } from '../../session/approval/shell-auto-approval-resolver.js';
-import type { AgentRuntime } from '../../engine/agent-runtime/agent-runtime.js';
+import type { AgentLauncher } from '../../engine/agent-runtime/types.js';
 import {
   isZodToolParameterSchema,
   type AnyToolDefinition,
@@ -47,7 +47,7 @@ import type { DurableGoal } from '../../session/logging/conversation-log-events.
 import { ModelSelectionSchema, type ModelSelection } from '../../config/settings/model-selection.js';
 import type { AgentSpec } from '../../engine/agent-runtime/types.js';
 import type { NestedSubagentResult, SubagentRunHandle } from '../../tools/subagents/types.js';
-import type { ResolvedSubagentLaunch } from '../../delegation/runtime/subagent-bridge.js';
+import type { ResolvedSubagentLaunch } from '../../delegation/direct/subagent-callbacks.js';
 
 export interface AgentFactoryDeps {
   driverFactory?: NestedRunDriverFactory;
@@ -113,7 +113,7 @@ export interface AgentFactoryDeps {
   /** Bind policy callbacks and physical bodies to their actual source leaf and invocation. */
   withToolInvocation?: <T>(toolName: string, context: unknown, operation: () => Promise<T>) => Promise<T>;
   /** Optional lazy bridge to the production one-shot agent runtime. */
-  getAgentRuntime?: () => Pick<AgentRuntime, 'agent'> | null;
+  getAgentRuntime?: () => AgentLauncher | null;
   /** Root-session-only policy capability for explicitly opted-in definitions. */
   postExecutePauseCapability?: PostExecutePauseCapability;
   /** Optional pre-body gate for physical calls made by a script, never root calls. */

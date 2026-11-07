@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { adaptLegacyRole, adaptLegacyDefinition } from '../../../src/delegation/runtime/legacy-adapter.js';
+import { adaptLegacyDefinition } from '../../../src/delegation/runtime/legacy-adapter.js';
 import { resolveAgent } from '../../../src/engine/agent-runtime/agent-resolver.js';
 import type { ISettingsService, ILoggingService } from '../../../src/shared/service-interfaces.js';
 import type {
@@ -39,44 +39,7 @@ function settings(values: Record<string, unknown> = {}): ISettingsService {
   };
 }
 
-describe('AgentRuntime integration: legacy roles resolve through boundary', () => {
-  it('explorer role adapts and round-trips through resolveAgent', () => {
-    // 1. Adapt legacy explorer role
-    const legacyResolved = adaptLegacyRole('explorer', settings());
-
-    // 2. Convert back to SubagentDefinition
-    const legacyDef = adaptLegacyDefinition(legacyResolved);
-
-    // 3. Verify the definition can drive execution
-    expect(legacyDef.role).toBe('explorer');
-    expect(legacyDef.canRead).toBe(true);
-    expect(legacyDef.canWrite).toBe(false);
-    expect(legacyDef.canSearchWeb).toBe(true); // researcher role was folded in
-    // explorer has shell (read-only wrapped by tool policy)
-    expect(legacyDef.canRunShell).toBe(true);
-  });
-
-  it('worker role adapts with full write + shell authority', () => {
-    const resolved = adaptLegacyRole('worker', settings());
-    const legacyDef = adaptLegacyDefinition(resolved);
-
-    expect(legacyDef.role).toBe('worker');
-    expect(legacyDef.canRead).toBe(true);
-    expect(legacyDef.canWrite).toBe(true);
-    expect(legacyDef.canRunShell).toBe(true);
-    expect(legacyDef.canSearchWeb).toBe(false);
-  });
-
-  it('mentor role adapts with no authority', () => {
-    const resolved = adaptLegacyRole('mentor', settings());
-    const legacyDef = adaptLegacyDefinition(resolved);
-
-    expect(legacyDef.canRead).toBe(false);
-    expect(legacyDef.canWrite).toBe(false);
-    expect(legacyDef.canRunShell).toBe(false);
-    expect(legacyDef.canSearchWeb).toBe(false);
-  });
-
+describe('Agent resolution and host definition boundary', () => {
   it('custom AgentConfig with tools and permissions resolves correctly', () => {
     const config: AgentConfig = {
       instructions: 'Test agent',

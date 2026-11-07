@@ -212,7 +212,6 @@ export type StreamedModelToolDefinition = StreamedModelFunctionTool | StreamedMo
  * to via `partId`; the run loop separates distinct parts with this string in
  * both the streamed text and the committed history, so they never run together.
  */
-export const ASSISTANT_TEXT_PART_SEPARATOR = '\n\n';
 
 /** Provider evidence for an argument stream; absent identity is not inferred. */
 export interface StreamedModelToolArgumentScope {

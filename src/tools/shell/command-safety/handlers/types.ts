@@ -1,5 +1,6 @@
 import type { Command, Word, Redirect, WordPart } from 'unbash';
-import { SafetyStatus } from '../constants.js';
+
+import type { SafetyStatus } from '../constants.js';
 
 /**
  * Result from a command handler

@@ -40,13 +40,14 @@ The layer rules, file size, names, reachability and the exception lists are chec
 
 Every conversation, every client and every child agent runs on one path. Clients (TUI, headless, ACP, control socket, Discord) attach to the in-process host, and a turn runs through `protocol/commands.ts`, the live session (`session/session.ts`, `session/conversation.ts`), `session/conversation-turn.ts` and `engine/turn.ts`. `conversation-turn.ts` appends each turn event's facts to the log before the turn advances, and every view is replayed from that log (`session/replay.ts`). "How a message travels" in `layers.md` is the path; [`architecture-overview.md`](../../../docs/architecture/architecture-overview.md) maps it. Child agents are launched by `src/delegation/direct/` and run as session branches (`session/branches.ts`) through `startNestedTurn` in the same `engine/turn.ts`.
 
-## Legacy code that never runs
+## Retained shared policy
 
-The pre-rewrite subagent engine is still in `src/` but is not executed in production: nothing constructs its entry points, and the built bundle (`dist/src/app/cli.bundle.cjs`) contains none of it. That covers `delegation/subagents/subagent-manager.ts` and its three runners (`execution-runner.ts`, `mentor-runner.ts`, `nested-runner.ts`), `delegation/runtime/subagent-bridge.ts` and `compose-agent-runtime.ts`, `app/lib/agent-configuration.ts`, `ApplicationRunLoop` and most of `engine/agent-runtime/`, `createSessionRuntime` and nearly all of `session/session/`, and `ConversationRecord`. It is reachable only through type-only imports, which is why the reachability gate misses it (#196). Deleting it is tracked in #197.
-
-- Do not fix bugs or add behavior there; a fix there changes nothing a user runs. If a bug seems to live there, the live owner is on the path above.
-- Before reusing anything from these folders, check that it is live: search the built bundle for the symbol after `pnpm build`. Some neighbours are live, notably the policy files listed under "Known constraints" and the resolvers, budgets and `generation-guard.ts` in `engine/agent-runtime/`.
-- `docs/architecture/conversation-core.md` and `conversation-loop.md` describe this dead runtime. Read them only for its design rationale.
+The unused pre-rewrite runtime was removed in #197. The direct launcher still uses
+role loading, tool policy, role-pool selection and worker worktree helpers in
+`delegation/subagents/`, and live resolvers, budgets and the generation guard in
+`engine/agent-runtime/`. Their folder names do not imply a second execution path.
+The old conversation-core, conversation-loop and assistant-output-recovery architecture
+documents are explicitly archived; use the live overview and layers instead.
 
 ## Entry points
 
@@ -63,6 +64,6 @@ For where in the lifecycle something breaks, read `reference/runtime-path.md` in
 These are not derivable from reading the code:
 
 - Child agents are launched by `src/delegation/direct/` (`createDirectSubagentTools`), through session-owned branch and task ports. See `src/delegation/README.md`.
-- Role frontmatter, prompt selection, environment context, and tool guidance belong in `role-loader.ts`. Capability construction and write/shell safety policy belong in `tool-policy.ts`. Role-pool selection belongs in `subagent-role-pool-selector.ts`, and worker worktrees in `worker-worktree.ts`. These live in `src/delegation/subagents/` beside the dead legacy runners, but the live launcher uses them.
+- Role frontmatter, prompt selection, environment context, and tool guidance belong in `role-loader.ts`. Capability construction and write/shell safety policy belong in `tool-policy.ts`. Role-pool selection belongs in `subagent-role-pool-selector.ts`, and worker worktrees in `worker-worktree.ts`. These live in `src/delegation/subagents/` and are used by the live launcher.
 - New providers must be registered through the provider registry (`src/model/providers/index.ts`).
 - New tools are defined in `src/app/agent.ts`; the tool surface (`src/app/tool-surface.ts`, through `app/lib/agent-factory.ts`) builds them from there.

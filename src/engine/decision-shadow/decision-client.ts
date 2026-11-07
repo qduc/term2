@@ -78,19 +78,6 @@ function normalizeDecisionResponse(response: unknown): DecisionClientResponse {
   };
 }
 
-export function withDecisionResponseMetadata(
-  error: unknown,
-  code: DecisionEvaluationErrorCode,
-  response: Pick<DecisionClientResponse, 'resolvedModel' | 'costUsdMicros'>,
-): DecisionEvaluationError {
-  if (error instanceof DecisionEvaluationError) return error;
-  return new DecisionEvaluationError(
-    error instanceof Error ? error.message : 'Invalid decision response',
-    code,
-    response,
-  );
-}
-
 export function readDecisionErrorMetadata(error: unknown): {
   readonly resolvedModel?: string;
   readonly costUsdMicros?: number;

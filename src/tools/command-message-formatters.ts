@@ -10,10 +10,6 @@ export const registerToolFormatters = (
   }
 };
 
-export const getToolFormatter = (toolName: string): FormatCommandMessage | undefined => {
-  return toolFormatters.get(toolName);
-};
-
 export const clearToolFormatters = (): void => {
   toolFormatters.clear();
 };

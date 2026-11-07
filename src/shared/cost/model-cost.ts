@@ -11,6 +11,19 @@
  * arithmetic; each model request is rounded exactly once, then integers are
  * added.
  */
+/**
+ * Provider-neutral model-request cost accounting.
+ *
+ * Owns pricing arithmetic, coverage rules, formatting, and accumulation for
+ * the session-cost feature. This module is pure and deterministic: it has no
+ * settings/provider imports, never performs network access, and returns typed
+ * unpriced results rather than throwing or guessing for unsupported inputs.
+ *
+ * Costs are accumulated and persisted as integer USD micros (1/1_000_000 of a
+ * USD). Provider decimal charges are converted without binary floating-point
+ * arithmetic; each model request is rounded exactly once, then integers are
+ * added.
+ */
 import { addTokenUsage, formatUsageLine, type NormalizedUsage } from '../utils/ai/token-usage.js';
 
 /** Where a request's USD charge came from. */
@@ -208,59 +221,6 @@ export function resolveBillableTokens(usage: NormalizedUsage | null | undefined)
   if (uncachedInputTokens === undefined || outputTokens === undefined) return 'ambiguous';
 
   return { uncachedInputTokens, cachedInputTokens, cacheWriteTokens, outputTokens };
-}
-
-function toMicros(dollarsPerMTok: number, tokens: number): number {
-  // tokens/1e6 * dollarsPerMTok * 1e6 micros = tokens * dollarsPerMTok micros.
-  // Scale the rate by 1000 and divide back so only the final rounding is a
-  // fractional operation.
-  const scaled = dollarsPerMTok * 1000;
-  return Math.round((tokens * scaled) / 1000);
-}
-
-/**
- * Compute the cost record for one completed model request. Provider-reported
- * charges win over catalog estimates; unsupported inputs produce typed
- * unpriced records rather than guesses.
- */
-export function computeModelCost(input: ModelCostInput): ModelRequestCost {
-  const base = {
-    requestId: input.requestId,
-    provider: input.provider,
-    model: input.model,
-    serviceTier: input.serviceTier,
-    outcome: input.outcome,
-    ...(input.usage ? { usage: input.usage } : {}),
-  };
-
-  const providerUsdMicros =
-    input.providerUsdMicros !== undefined ? input.providerUsdMicros : parseUsdMicros(input.providerUsd);
-  if (providerUsdMicros !== undefined) {
-    return { ...base, usdMicros: providerUsdMicros, source: 'provider' };
-  }
-
-  const tokens = resolveBillableTokens(input.usage);
-  if (tokens === 'missing') return { ...base, unpricedReason: 'missing_usage' };
-  if (tokens === 'ambiguous') return { ...base, unpricedReason: 'ambiguous_usage' };
-
-  const lookup = input.getPrice(input.provider, input.model, input.serviceTier);
-  if (!lookup.found) return { ...base, unpricedReason: lookup.reason };
-
-  const { price } = lookup;
-  if (!isValidCatalogPrice(price)) return { ...base, unpricedReason: 'unknown_model' };
-  const uncachedMicros = toMicros(price.inputPerMTok, tokens.uncachedInputTokens);
-  const cachedMicros = price.cacheReadPerMTok != null ? toMicros(price.cacheReadPerMTok, tokens.cachedInputTokens) : 0;
-  const cacheWriteMicros =
-    price.cacheWritePerMTok != null ? toMicros(price.cacheWritePerMTok, tokens.cacheWriteTokens) : 0;
-  const outputMicros = toMicros(price.outputPerMTok, tokens.outputTokens);
-
-  return {
-    ...base,
-    usdMicros: uncachedMicros + cachedMicros + cacheWriteMicros + outputMicros,
-    source: 'catalog',
-    ...(input.pricingVersion ? { pricingVersion: input.pricingVersion } : {}),
-    ...(lookup.pricedFromProvider ? { pricedFromProvider: lookup.pricedFromProvider } : {}),
-  };
 }
 
 /** Produce the session coverage summary from the accumulated request records. */

@@ -8,15 +8,6 @@ export const getString = (record: UnknownRecord | undefined, key: string): strin
   return typeof value === 'string' ? value : undefined;
 };
 
-export const getMethod = <TArgs extends unknown[], TResult>(
-  target: unknown,
-  key: string,
-): ((...args: TArgs) => TResult) | null => {
-  const record = asRecord(target);
-  const candidate = record?.[key];
-  return typeof candidate === 'function' ? (candidate.bind(record) as (...args: TArgs) => TResult) : null;
-};
-
 export const getCallIdFromObject = (value: unknown): string | undefined => {
   const record = asRecord(value);
   const rawItem = asRecord(record?.rawItem);

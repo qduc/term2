@@ -26,7 +26,7 @@ export function directShellTasks(
           mode: request.mode,
           parentTurnId: parent.turnId,
           parentExecutionId: parent.parentExecutionId,
-          parentSignal: parent.signal,
+          parentSignal: request.parentSignal ? AbortSignal.any([parent.signal, request.parentSignal]) : parent.signal,
           origin,
           cleanup: request.cleanup,
         },

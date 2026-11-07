@@ -268,10 +268,6 @@
       "reason": "Pre-rewrite helper function \"withAbortSignal\" in delegation/run-code/run-code-runtime.ts; scheduled for complete removal alongside legacy runtime in #197."
     },
     {
-      "export": "delegation/runtime/executor.ts mapSubagentResultToRunResult",
-      "reason": "Pre-rewrite helper function \"mapSubagentResultToRunResult\" in delegation/runtime/executor.ts; scheduled for complete removal alongside legacy runtime in #197."
-    },
-    {
       "export": "delegation/subagents/role-loader.ts ROLE_MAX_TURNS_DEFAULT",
       "reason": "Pre-rewrite constant or variable \"ROLE_MAX_TURNS_DEFAULT\" in delegation/subagents/role-loader.ts; scheduled for complete removal alongside legacy runtime in #197."
     },
@@ -290,10 +286,6 @@
     {
       "export": "engine/agent-runtime/agent-spec.ts AGENT_SPEC_DEFAULT_MAX_TURNS",
       "reason": "Pre-rewrite constant or variable \"AGENT_SPEC_DEFAULT_MAX_TURNS\" in engine/agent-runtime/agent-spec.ts; scheduled for complete removal alongside legacy runtime in #197."
-    },
-    {
-      "export": "engine/agent-runtime/context-compaction/index.ts resolveCompactionThreshold",
-      "reason": "Pre-rewrite helper function \"resolveCompactionThreshold\" in engine/agent-runtime/context-compaction/index.ts; scheduled for complete removal alongside legacy runtime in #197."
     },
     {
       "export": "engine/agent-runtime/model-resolver.ts getTierModelPoolEntries",
@@ -348,26 +340,6 @@
       "reason": "Pre-rewrite helper function \"setWorkspaceRoot\" in engine/agent-runtime/scope-resolver.ts; scheduled for complete removal alongside legacy runtime in #197."
     },
     {
-      "export": "engine/agent-runtime/structured-output.ts validateAgainstSchema",
-      "reason": "Pre-rewrite helper function \"validateAgainstSchema\" in engine/agent-runtime/structured-output.ts; scheduled for complete removal alongside legacy runtime in #197."
-    },
-    {
-      "export": "engine/agent-runtime/structured-output.ts validateSchemaKeywords",
-      "reason": "Pre-rewrite helper function \"validateSchemaKeywords\" in engine/agent-runtime/structured-output.ts; scheduled for complete removal alongside legacy runtime in #197."
-    },
-    {
-      "export": "engine/agent-runtime/text-attachment.ts serializeAttachment",
-      "reason": "Pre-rewrite helper function \"serializeAttachment\" in engine/agent-runtime/text-attachment.ts; scheduled for complete removal alongside legacy runtime in #197."
-    },
-    {
-      "export": "engine/agent-runtime/text-attachment.ts validateAttachment",
-      "reason": "Pre-rewrite helper function \"validateAttachment\" in engine/agent-runtime/text-attachment.ts; scheduled for complete removal alongside legacy runtime in #197."
-    },
-    {
-      "export": "engine/agent-stream.ts isAgentStream",
-      "reason": "Internal engine helper function \"isAgentStream\" in engine/agent-stream.ts used within its file; export keyword retained pending Phase 3 module cleanup."
-    },
-    {
       "export": "engine/completion-verification/contracts.ts budgetsSchema",
       "reason": "Internal engine constant or variable \"budgetsSchema\" in engine/completion-verification/contracts.ts used within its file; export keyword retained pending Phase 3 module cleanup."
     },
@@ -398,22 +370,6 @@
     {
       "export": "engine/decision-shadow/decision-client.ts readDecisionErrorMetadata",
       "reason": "Pre-existing unused export \"readDecisionErrorMetadata\" in engine/decision-shadow/decision-client.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
-    },
-    {
-      "export": "engine/decision-shadow/failure-triage.ts FAILURE_CATEGORIES",
-      "reason": "Internal engine constant or variable \"FAILURE_CATEGORIES\" in engine/decision-shadow/failure-triage.ts used within its file; export keyword retained pending Phase 3 module cleanup."
-    },
-    {
-      "export": "engine/decision-shadow/failure-triage.ts FAILURE_TRIAGE_PROMPT_VERSION",
-      "reason": "Internal engine constant or variable \"FAILURE_TRIAGE_PROMPT_VERSION\" in engine/decision-shadow/failure-triage.ts used within its file; export keyword retained pending Phase 3 module cleanup."
-    },
-    {
-      "export": "engine/decision-shadow/failure-triage.ts RETRY_CHOICES",
-      "reason": "Internal engine constant or variable \"RETRY_CHOICES\" in engine/decision-shadow/failure-triage.ts used within its file; export keyword retained pending Phase 3 module cleanup."
-    },
-    {
-      "export": "engine/decision-shadow/failure-triage.ts evaluateFailureTriage",
-      "reason": "Pre-existing unused export \"evaluateFailureTriage\" in engine/decision-shadow/failure-triage.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "engine/inject-warning-into-tool-output.ts buildRunBudgetWarning",
@@ -466,10 +422,6 @@
     {
       "export": "engine/prompts/memory-recall-notice.ts withMemoryRecall",
       "reason": "Pre-existing unused export \"withMemoryRecall\" in engine/prompts/memory-recall-notice.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
-    },
-    {
-      "export": "engine/retry/in-loop-model-retry.ts computeInLoopBackoffDelayMs",
-      "reason": "Internal engine helper function \"computeInLoopBackoffDelayMs\" in engine/retry/in-loop-model-retry.ts used within its file; export keyword retained pending Phase 3 module cleanup."
     },
     {
       "export": "host/gateway/serve-args.ts DEFAULT_SERVE_AUDIENCE",
@@ -880,14 +832,6 @@
       "reason": "Internal session constant or variable \"isNetworkIdentity\" in session/adopted/network.ts used within its file; export keyword retained pending Phase 3 module cleanup."
     },
     {
-      "export": "session/approval/approval-decision-policy.ts ManualApprovalDecisionPolicy",
-      "reason": "Pre-existing unused export \"ManualApprovalDecisionPolicy\" in session/approval/approval-decision-policy.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
-    },
-    {
-      "export": "session/approval/session-read-access.ts sessionReadAccess",
-      "reason": "Pre-existing unused export \"sessionReadAccess\" in session/approval/session-read-access.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
-    },
-    {
       "export": "session/approval/tool-approval-policy-registry.ts toolApprovalPolicyRegistry",
       "reason": "Pre-existing unused export \"toolApprovalPolicyRegistry\" in session/approval/tool-approval-policy-registry.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
@@ -1032,14 +976,6 @@
       "reason": "Internal session constant or variable \"directGoalCheckSchema\" in session/goal.ts used within its file; export keyword retained pending Phase 3 module cleanup."
     },
     {
-      "export": "session/hooks/hook-contracts.ts TERM2_HOOK_EVENT_NAMES",
-      "reason": "Internal session constant or variable \"TERM2_HOOK_EVENT_NAMES\" in session/hooks/hook-contracts.ts used within its file; export keyword retained pending Phase 3 module cleanup."
-    },
-    {
-      "export": "session/hooks/hook-contracts.ts isTerm2HookEvent",
-      "reason": "Pre-existing unused export \"isTerm2HookEvent\" in session/hooks/hook-contracts.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
-    },
-    {
       "export": "session/hooks/hook-discovery.ts discoverHookFiles",
       "reason": "Pre-existing unused export \"discoverHookFiles\" in session/hooks/hook-discovery.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
@@ -1050,10 +986,6 @@
     {
       "export": "session/hooks/hook-editor-shim.ts HOOK_TSCONFIG_FILENAME",
       "reason": "Internal session constant or variable \"HOOK_TSCONFIG_FILENAME\" in session/hooks/hook-editor-shim.ts used within its file; export keyword retained pending Phase 3 module cleanup."
-    },
-    {
-      "export": "session/hooks/hook-event-factory.ts summarizeHookValue",
-      "reason": "Pre-existing unused export \"summarizeHookValue\" in session/hooks/hook-event-factory.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "session/hooks/hook-module-loader.ts HookModuleLoadError",
@@ -1070,10 +1002,6 @@
     {
       "export": "session/import.ts importDirectSession",
       "reason": "Pre-existing unused export \"importDirectSession\" in session/import.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
-    },
-    {
-      "export": "session/input-surge-approval.ts issueInputSurgeApproval",
-      "reason": "Pre-existing unused export \"issueInputSurgeApproval\" in session/input-surge-approval.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "session/input-surge-guard.ts collectInputSurgeStats",
@@ -1128,44 +1056,12 @@
       "reason": "Internal session helper function \"summarizeReceivedTraffic\" in session/logging/provider-traffic.ts used within its file; export keyword retained pending Phase 3 module cleanup."
     },
     {
-      "export": "session/openai-root-checkpoint-lifecycle-observer.ts DefaultOpenAIRootCheckpointLifecycleObserver",
-      "reason": "Pre-existing unused export \"DefaultOpenAIRootCheckpointLifecycleObserver\" in session/openai-root-checkpoint-lifecycle-observer.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
-    },
-    {
       "export": "session/prompts/prompt-profiles.ts PROMPT_PROFILES",
       "reason": "Internal session constant or variable \"PROMPT_PROFILES\" in session/prompts/prompt-profiles.ts used within its file; export keyword retained pending Phase 3 module cleanup."
     },
     {
       "export": "session/replay-fold.ts replayProjection",
       "reason": "Internal session helper function \"replayProjection\" in session/replay-fold.ts used within its file; export keyword retained pending Phase 3 module cleanup."
-    },
-    {
-      "export": "session/session/pending-interaction-state.ts getAskUserQuestions",
-      "reason": "Pre-rewrite helper function \"getAskUserQuestions\" in session/session/pending-interaction-state.ts; scheduled for complete removal alongside legacy runtime in #197."
-    },
-    {
-      "export": "session/session/session-composition.ts buildSessionRuntime",
-      "reason": "Pre-rewrite helper function \"buildSessionRuntime\" in session/session/session-composition.ts; scheduled for complete removal alongside legacy runtime in #197."
-    },
-    {
-      "export": "session/session/session-composition.ts computePublicStatus",
-      "reason": "Pre-rewrite helper function \"computePublicStatus\" in session/session/session-composition.ts; scheduled for complete removal alongside legacy runtime in #197."
-    },
-    {
-      "export": "session/session/session-composition.ts createConversationSession",
-      "reason": "Pre-rewrite constant or variable \"createConversationSession\" in session/session/session-composition.ts; scheduled for complete removal alongside legacy runtime in #197."
-    },
-    {
-      "export": "session/session/session-composition.ts createSessionRuntimeInternals",
-      "reason": "Pre-rewrite helper function \"createSessionRuntimeInternals\" in session/session/session-composition.ts; scheduled for complete removal alongside legacy runtime in #197."
-    },
-    {
-      "export": "session/session/session-input-planner.ts combineHistoryAndDraftBytes",
-      "reason": "Pre-rewrite constant or variable \"combineHistoryAndDraftBytes\" in session/session/session-input-planner.ts; scheduled for complete removal alongside legacy runtime in #197."
-    },
-    {
-      "export": "session/session/subagent-notification-store.ts BACKGROUND_TASK_RECENT_RETENTION_MS",
-      "reason": "Pre-rewrite constant or variable \"BACKGROUND_TASK_RECENT_RETENTION_MS\" in session/session/subagent-notification-store.ts; scheduled for complete removal alongside legacy runtime in #197."
     },
     {
       "export": "session/state.ts directSubmittedTurn",
@@ -1238,10 +1134,6 @@
     {
       "export": "shared/lib/harness-input-idle.ts waitForHarnessIdleGeneration",
       "reason": "Pre-existing unused export \"waitForHarnessIdleGeneration\" in shared/lib/harness-input-idle.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
-    },
-    {
-      "export": "shared/lib/input-owner.ts deriveInputOwner",
-      "reason": "Internal shared constant or variable \"deriveInputOwner\" in shared/lib/input-owner.ts used within its file; export keyword retained pending Phase 3 module cleanup."
     },
     {
       "export": "shared/lib/oauth-loopback.ts interpretCallbackParams",
@@ -1596,28 +1488,12 @@
       "reason": "Internal tools helper function \"redactSecrets\" in tools/memory/distiller/secret-redaction.ts used within its file; export keyword retained pending Phase 3 module cleanup."
     },
     {
-      "export": "tools/message.ts isBotMessage",
-      "reason": "Pre-existing unused export \"isBotMessage\" in tools/message.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
-    },
-    {
-      "export": "tools/message.ts isResultToolEvent",
-      "reason": "Pre-existing unused export \"isResultToolEvent\" in tools/message.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
-    },
-    {
-      "export": "tools/message.ts isSubagentActivityMessage",
-      "reason": "Pre-existing unused export \"isSubagentActivityMessage\" in tools/message.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
-    },
-    {
       "export": "tools/session-rollover/session-rollover-tool.ts sessionRolloverParameters",
       "reason": "Internal tools constant or variable \"sessionRolloverParameters\" in tools/session-rollover/session-rollover-tool.ts used within its file; export keyword retained pending Phase 3 module cleanup."
     },
     {
       "export": "tools/shell/background-shell-output-store.ts BackgroundShellOutputStoreError",
       "reason": "Internal tools class \"BackgroundShellOutputStoreError\" in tools/shell/background-shell-output-store.ts used within its file; export keyword retained pending Phase 3 module cleanup."
-    },
-    {
-      "export": "tools/shell/background-shell-registry.ts BackgroundShellRegistryDisposedError",
-      "reason": "Internal tools class \"BackgroundShellRegistryDisposedError\" in tools/shell/background-shell-registry.ts used within its file; export keyword retained pending Phase 3 module cleanup."
     },
     {
       "export": "tools/shell/background-shell-watches.ts BackgroundShellWatchesError",
@@ -1660,46 +1536,6 @@
       "reason": "Pre-existing unused export \"resetSandboxDeniedReadStoresForTest\" in tools/shell/sandbox/denied-read-stores.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
-      "export": "tools/shell/sandbox/docker-host-control-grants.ts clearDockerHostControlSession",
-      "reason": "Pre-existing unused export \"clearDockerHostControlSession\" in tools/shell/sandbox/docker-host-control-grants.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
-    },
-    {
-      "export": "tools/shell/sandbox/docker-host-control-grants.ts configureDockerHostControlGrants",
-      "reason": "Pre-existing unused export \"configureDockerHostControlGrants\" in tools/shell/sandbox/docker-host-control-grants.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
-    },
-    {
-      "export": "tools/shell/sandbox/docker-host-control-grants.ts consumeDockerHostControlDenial",
-      "reason": "Pre-existing unused export \"consumeDockerHostControlDenial\" in tools/shell/sandbox/docker-host-control-grants.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
-    },
-    {
-      "export": "tools/shell/sandbox/docker-host-control-grants.ts consumeDockerHostControlOnce",
-      "reason": "Pre-existing unused export \"consumeDockerHostControlOnce\" in tools/shell/sandbox/docker-host-control-grants.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
-    },
-    {
-      "export": "tools/shell/sandbox/docker-host-control-grants.ts grantDockerHostControl",
-      "reason": "Pre-existing unused export \"grantDockerHostControl\" in tools/shell/sandbox/docker-host-control-grants.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
-    },
-    {
-      "export": "tools/shell/sandbox/docker-host-control-grants.ts hasDockerHostControlProject",
-      "reason": "Pre-existing unused export \"hasDockerHostControlProject\" in tools/shell/sandbox/docker-host-control-grants.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
-    },
-    {
-      "export": "tools/shell/sandbox/docker-host-control-grants.ts hasDockerHostControlSession",
-      "reason": "Pre-existing unused export \"hasDockerHostControlSession\" in tools/shell/sandbox/docker-host-control-grants.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
-    },
-    {
-      "export": "tools/shell/sandbox/docker-host-control-grants.ts recordDockerHostControlDenial",
-      "reason": "Pre-existing unused export \"recordDockerHostControlDenial\" in tools/shell/sandbox/docker-host-control-grants.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
-    },
-    {
-      "export": "tools/shell/sandbox/docker-host-control-grants.ts requiresDockerHostControlApproval",
-      "reason": "Pre-existing unused export \"requiresDockerHostControlApproval\" in tools/shell/sandbox/docker-host-control-grants.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
-    },
-    {
-      "export": "tools/shell/sandbox/docker-host-control-grants.ts resetDockerHostControlGrantsForTests",
-      "reason": "Pre-existing unused export \"resetDockerHostControlGrantsForTests\" in tools/shell/sandbox/docker-host-control-grants.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
-    },
-    {
       "export": "tools/shell/sandbox/sandbox-network-approval.ts registerSandboxNetworkApprovalHandler",
       "reason": "Pre-existing unused export \"registerSandboxNetworkApprovalHandler\" in tools/shell/sandbox/sandbox-network-approval.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
@@ -1730,18 +1566,6 @@
     {
       "export": "tools/shell/sandbox/shell-sandbox-runner.ts AnthropicShellSandboxRunner",
       "reason": "Internal tools class \"AnthropicShellSandboxRunner\" in tools/shell/sandbox/shell-sandbox-runner.ts used within its file; export keyword retained pending Phase 3 module cleanup."
-    },
-    {
-      "export": "tools/subagents/codename-run-id.ts CODENAME_RUN_ID_PATTERN",
-      "reason": "Internal tools constant or variable \"CODENAME_RUN_ID_PATTERN\" in tools/subagents/codename-run-id.ts used within its file; export keyword retained pending Phase 3 module cleanup."
-    },
-    {
-      "export": "tools/subagents/codename-run-id.ts codenameRunIdSpace",
-      "reason": "Pre-existing unused export \"codenameRunIdSpace\" in tools/subagents/codename-run-id.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
-    },
-    {
-      "export": "tools/subagents/codename-run-id.ts parseCodenameRunId",
-      "reason": "Pre-existing unused export \"parseCodenameRunId\" in tools/subagents/codename-run-id.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "tools/system/run-code/mcp-script-surface.ts mcpMemberName",
@@ -1866,10 +1690,6 @@
       "reason": "Winston-based rotating daily log file writer and session event logger; to be renamed to session-logger.ts in Phase 3."
     },
     {
-      "path": "session/session/session-turn-adapter.ts",
-      "reason": "Pre-rewrite session turn translator; dead code awaiting scheduled deletion with the legacy session runtime in #197."
-    },
-    {
       "path": "shared/service-interfaces.ts",
       "reason": "Interface definitions for app logging, settings, and provider services; to be decomposed into domain interfaces in Phase 3."
     },
@@ -1972,14 +1792,6 @@
       "reason": "Session-level tool and execution capability permission verification rules."
     },
     {
-      "file": "session/codename-run-id.ts",
-      "reason": "Session turn identifier generation mapping run IDs to human-readable codenames."
-    },
-    {
-      "file": "tools/subagents/codename-run-id.ts",
-      "reason": "Subagent tool helper formatting child agent execution identifiers for display."
-    },
-    {
       "file": "protocol/command-receipts.ts",
       "reason": "Protocol wire envelope types for command execution status notifications."
     },
@@ -2034,10 +1846,6 @@
     {
       "file": "engine/agent-runtime/generation-guard.ts",
       "reason": "Engine-level generation budget and runaway detector; scheduled to be cleaned up or merged in #197."
-    },
-    {
-      "file": "session/generation-guard.ts",
-      "reason": "Session-level generation token counter guarding asynchronous provider state transitions."
     },
     {
       "file": "protocol/json.ts",

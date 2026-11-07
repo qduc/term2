@@ -193,34 +193,3 @@ export const shouldSampleLog = ({
 
   return randomValue <= sampleRate;
 };
-
-export const createInvalidToolCallDiagnostic = ({
-  toolName,
-  toolCallId,
-  rawPayload,
-  normalizedToolCall,
-  validationErrors,
-  traceId,
-  retryContext,
-}: {
-  toolName: string;
-  toolCallId: string;
-  rawPayload: string;
-  normalizedToolCall: Record<string, unknown>;
-  validationErrors: string[];
-  traceId: string;
-  retryContext: Record<string, unknown>;
-}): Record<string, unknown> => {
-  return {
-    eventType: 'tool_call.parse_failed',
-    errorCode: 'INVALID_TOOL_CALL_FORMAT',
-    errorMessage: 'Invalid tool call argument payload',
-    toolName,
-    toolCallId,
-    traceId,
-    rawPayloadSnippet: rawPayload.slice(0, 500),
-    normalizedToolCall,
-    validationErrors,
-    retryContext,
-  };
-};

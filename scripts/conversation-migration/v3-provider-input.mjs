@@ -1,49 +1,18 @@
-import { z } from 'zod';
-import type { ProviderInput, ProviderInputItem } from '../../shared/contracts/provider-input.js';
-import type {
-  StreamedModelMessagePart,
-  StreamedModelProviderOptions,
-  StreamedModelToolDefinition,
-  StreamedModelToolResultPart,
-  StreamedModelTurnInput,
-} from '../../model/streamed-model-turn.js';
-import { formatConversationTimeGap } from '../../shared/conversation/conversation-time-gap.js';
-import { personalMemoryNotice } from '../../shared/conversation/personal-memory-context.js';
-import type { ToolRegistry } from '../../tools/types.js';
-import { isZodToolParameterSchema } from '../../tools/types.js';
-/** The provider-facing tool catalog, shared by normal and prefix-preserving summary requests. */
-export function toModelTools(tools: ToolRegistry): StreamedModelToolDefinition[] {
-  return tools.map((tool) =>
-    tool.modelTool
-      ? {
-          type: tool.modelTool.type,
-          name: tool.name,
-          description: tool.description,
-          format: tool.modelTool.format,
-        }
-      : {
-          type: 'function' as const,
-          name: tool.name,
-          description: tool.description,
-          parameters: isJsonSchema(tool.parameters) ? tool.parameters : z.toJSONSchema(tool.parameters),
-        },
-  );
+// Frozen v3 provider-input projection moved from the removed runtime (#197).
+// Offline conversion only; the live engine does not use this compatibility policy.
+import { humanArrivalNotice } from '../../dist/src/shared/conversation/conversation-time-gap.js';
+import { personalMemoryNotice } from '../../dist/src/shared/conversation/personal-memory-context.js';
+function formatConversationTimeGap(value) {
+  if (!value || typeof value !== 'object') return null;
+  return humanArrivalNotice(value.previousReceivedAt, value.receivedAt);
 }
-
-function isJsonSchema(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !isZodToolParameterSchema(value);
-}
-
 /**
- * The canonical application projection used for both model requests and
- * continuation-prefix comparisons. Keep this at the application boundary so
- * callers never need to inspect opaque continuation state.
+ * Project validated v3 history using its historical provider-input encoding.
+ * Kept solely for offline migration; rejects unsupported legacy content.
  */
-export function normalizeApplicationInput(
-  input: ProviderInput | readonly ProviderInputItem[],
-): StreamedModelTurnInput[] {
+export function normalizeApplicationInput(input) {
   if (typeof input === 'string') return [{ type: 'message', role: 'user', content: [{ type: 'text', text: input }] }];
-  const items = (Array.isArray(input) ? input : [input]) as readonly ProviderInputItem[];
+  const items = Array.isArray(input) ? input : [input];
   return items.flatMap((item) => {
     const notice = item.role === 'user' ? formatConversationTimeGap(item.conversationTimeGap) : null;
     return [
@@ -59,81 +28,13 @@ export function normalizeApplicationInput(
     ];
   });
 }
-
-export function normalizeInput(input: ProviderInput): StreamedModelTurnInput[] {
-  return normalizeApplicationInput(input);
+function asRecord(value) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? value : undefined;
 }
-
-export function normalizeHistory(input: ProviderInput): ProviderInputItem[] {
-  if (typeof input === 'string') return [{ type: 'message', role: 'user', content: input }];
-  return Array.isArray(input) ? [...input] : [input];
-}
-
-export function mergeChainedCompactionHistory(
-  sessionHistory: readonly ProviderInputItem[],
-  deltaHistory: readonly ProviderInputItem[],
-): { kind: 'ready'; history: ProviderInputItem[] } | { kind: 'skipped'; reason: 'user_mismatch' } {
-  const firstDeltaItem = deltaHistory[0];
-  const normalizedDelta = normalizeApplicationInput(deltaHistory);
-  if (normalizedDelta[0]?.type === 'tool_result') {
-    // A tool-only continuation needs a complete snapshot with still-open
-    // producing calls. Normalize supported legacy/custom forms for comparison,
-    // retain original provider items, and validate every later call/receipt.
-    const pending = new Map<string, string>();
-    const seenCalls = new Set<string>();
-    for (const item of [...normalizeApplicationInput(sessionHistory), ...normalizedDelta]) {
-      if (item.type === 'tool_call') {
-        if (!item.id || seenCalls.has(item.id)) return { kind: 'skipped', reason: 'user_mismatch' };
-        seenCalls.add(item.id);
-        pending.set(item.id, item.toolType ?? 'function');
-      } else if (item.type === 'tool_result') {
-        if (!item.id || pending.get(item.id) !== (item.toolType ?? 'function'))
-          return { kind: 'skipped', reason: 'user_mismatch' };
-        pending.delete(item.id);
-      }
-    }
-    return { kind: 'ready', history: [...sessionHistory, ...deltaHistory] };
-  }
-  if (!firstDeltaItem || firstDeltaItem.type !== 'message' || firstDeltaItem.role !== 'user') {
-    return { kind: 'skipped', reason: 'user_mismatch' };
-  }
-  let latestUserIndex = -1;
-  for (let index = sessionHistory.length - 1; index >= 0; index--) {
-    const item = sessionHistory[index];
-    if (item.type === 'message' && item.role === 'user') {
-      latestUserIndex = index;
-      break;
-    }
-  }
-  if (latestUserIndex < 0) return { kind: 'skipped', reason: 'user_mismatch' };
-  const latestSessionUser = sessionHistory[latestUserIndex];
-  const normalizedDeltaUser = normalizeApplicationInput([firstDeltaItem]);
-  const normalizedSessionUser = normalizeApplicationInput([latestSessionUser]);
-  if (JSON.stringify(normalizedDeltaUser) !== JSON.stringify(normalizedSessionUser)) {
-    return { kind: 'skipped', reason: 'user_mismatch' };
-  }
-  return {
-    kind: 'ready',
-    history: [
-      ...sessionHistory.slice(0, latestUserIndex),
-      firstDeltaItem,
-      ...sessionHistory.slice(latestUserIndex + 1),
-      ...deltaHistory.slice(1),
-    ],
-  };
-}
-
-type UnknownRecord = Record<string, unknown>;
-
-function asRecord(value: unknown): UnknownRecord | undefined {
-  return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as UnknownRecord) : undefined;
-}
-
-function unsupportedInput(description: string): never {
+function unsupportedInput(description) {
   throw new Error(`Unsupported restored input ${description}`);
 }
-
-function normalizeTextPart(value: unknown, description: string): { type: 'text'; text: string } {
+function normalizeTextPart(value, description) {
   if (typeof value === 'string') return { type: 'text', text: value };
   const record = asRecord(value);
   if (
@@ -145,8 +46,7 @@ function normalizeTextPart(value: unknown, description: string): { type: 'text';
   }
   return { type: 'text', text: record.text };
 }
-
-function normalizeMessageImage(record: UnknownRecord): StreamedModelMessagePart {
+function normalizeMessageImage(record) {
   const image = record.image ?? record.image_url;
   const detail = typeof record.detail === 'string' ? record.detail : undefined;
   if (image === undefined) return { type: 'image', ...(detail ? { detail } : {}) };
@@ -156,25 +56,19 @@ function normalizeMessageImage(record: UnknownRecord): StreamedModelMessagePart 
     return { type: 'image', image: { id: reference.id }, ...(detail ? { detail } : {}) };
   unsupportedInput('message image reference');
 }
-
-function normalizeMessagePart(value: unknown): StreamedModelMessagePart {
+function normalizeMessagePart(value) {
   const record = asRecord(value);
   if (record?.type === 'image' || record?.type === 'input_image') return normalizeMessageImage(record);
   return normalizeTextPart(value, record?.type ? `message content: ${record.type}` : 'message content');
 }
-
-function normalizeMessageContent(value: unknown): StreamedModelMessagePart[] {
+function normalizeMessageContent(value) {
   if (value === undefined || value === null) return [{ type: 'text', text: '' }];
-  return (Array.isArray(value) ? value : [value]).map((part) => normalizeMessagePart(part)!);
+  return (Array.isArray(value) ? value : [value]).map((part) => normalizeMessagePart(part));
 }
-
-function isTextMessagePart(
-  part: StreamedModelMessagePart,
-): part is Extract<StreamedModelMessagePart, { type: 'text' }> {
+function isTextMessagePart(part) {
   return part.type === 'text';
 }
-
-function normalizeToolImagePart(record: UnknownRecord): Extract<StreamedModelToolResultPart, { type: 'image' }> {
+function normalizeToolImagePart(record) {
   const rawImage = record.image ?? record.image_url;
   const detail = typeof record.detail === 'string' ? record.detail : undefined;
   if (rawImage === undefined) return { type: 'image', ...(detail ? { detail } : {}) };
@@ -194,8 +88,7 @@ function normalizeToolImagePart(record: UnknownRecord): Extract<StreamedModelToo
   if (!normalized) unsupportedInput('tool image reference');
   return { type: 'image', image: normalized, ...(detail ? { detail } : {}) };
 }
-
-function normalizeToolFilePart(record: UnknownRecord): Extract<StreamedModelToolResultPart, { type: 'file' }> {
+function normalizeToolFilePart(record) {
   const rawFile = record.file ?? record.file_id ?? record.file_url;
   const outerFilename = typeof record.filename === 'string' ? record.filename : undefined;
   if (typeof rawFile === 'string') return { type: 'file', file: rawFile };
@@ -215,22 +108,19 @@ function normalizeToolFilePart(record: UnknownRecord): Extract<StreamedModelTool
   }
   unsupportedInput('tool file reference');
 }
-
-function normalizeToolResultPart(value: unknown): StreamedModelToolResultPart {
+function normalizeToolResultPart(value) {
   const record = asRecord(value);
   if (record?.type === 'image' || record?.type === 'input_image') return normalizeToolImagePart(record);
   if (record?.type === 'file' || record?.type === 'input_file') return normalizeToolFilePart(record);
   return normalizeTextPart(value, record?.type ? `tool result part: ${record.type}` : 'tool result part');
 }
-
-function normalizeToolResultOutput(value: unknown): string | StreamedModelToolResultPart[] {
+function normalizeToolResultOutput(value) {
   if (typeof value === 'string') return value;
   if (value === undefined || value === null) return '';
   if (!Array.isArray(value)) unsupportedInput('tool result output');
   return value.map(normalizeToolResultPart);
 }
-
-function normalizeReasoningText(value: unknown): string {
+function normalizeReasoningText(value) {
   if (value === undefined || value === null) return '';
   if (typeof value === 'string') return value;
   const parts = Array.isArray(value) ? value : [value];
@@ -248,16 +138,12 @@ function normalizeReasoningText(value: unknown): string {
     })
     .join('');
 }
-
 /** True when the adapter marked this item as provider-native and opaque. */
-function isProviderOpaque(
-  item: ProviderInputItem,
-): item is ProviderInputItem & { providerOpaque: { provider: string; sourceProvider?: string } } {
+function isProviderOpaque(item) {
   const marker = item.providerOpaque;
   return typeof marker?.provider === 'string' && marker.provider.length > 0;
 }
-
-function normalizeInputItem(item: ProviderInputItem): StreamedModelTurnInput[] {
+function normalizeInputItem(item) {
   if (item.type === 'provider_opaque' && typeof item.provider === 'string' && item.provider.length > 0) {
     const payload = asRecord(item.item);
     if (payload) {
@@ -291,7 +177,7 @@ function normalizeInputItem(item: ProviderInputItem): StreamedModelTurnInput[] {
         id: String(item.callId ?? item.call_id ?? ''),
         name: String(item.name ?? ''),
         arguments: String(item.type === 'custom_tool_call' ? item.input ?? '' : item.arguments ?? '{}'),
-        ...(item.type === 'custom_tool_call' ? { toolType: 'custom' as const } : {}),
+        ...(item.type === 'custom_tool_call' ? { toolType: 'custom' } : {}),
         ...(item.providerData ? { providerMetadata: item.providerData } : {}),
       },
     ];
@@ -306,12 +192,12 @@ function normalizeInputItem(item: ProviderInputItem): StreamedModelTurnInput[] {
         type: 'tool_result',
         id: String(item.callId ?? item.call_id ?? item.tool_call_id ?? ''),
         output: normalizeToolResultOutput(item.output),
-        ...(item.type === 'custom_tool_call_output' ? { toolType: 'custom' as const } : {}),
+        ...(item.type === 'custom_tool_call_output' ? { toolType: 'custom' } : {}),
       },
     ];
   }
   if (item.type === 'reasoning') {
-    const providerMetadata: StreamedModelProviderOptions | undefined = item.providerData;
+    const providerMetadata = item.providerData;
     return [
       {
         type: 'reasoning',

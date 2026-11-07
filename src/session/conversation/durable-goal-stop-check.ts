@@ -1,6 +1,5 @@
 import type { ProviderInputItem } from '../../shared/contracts/provider-input.js';
 import type { RunTerminationCause } from '../../shared/contracts/run-termination.js';
-import type { NormalStopDecision } from '../../engine/agent-runtime/run-loop-contracts.js';
 import type { ApplicationAgent } from '../../tools/nested-run-driver.js';
 import { TOOL_NAME_GOAL_CHECK } from '../../tools/tool-names.js';
 import type { DurableGoal } from '../logging/conversation-log-events.js';
@@ -371,3 +370,17 @@ function goalStopResult(decision: GoalStopDecision, goalMarkedAchieved: boolean 
   }
   return { action: 'stop', diagnostics };
 }
+
+export type NormalStopDecision =
+  | {
+      readonly action: 'stop';
+      readonly terminalCause?: RunTerminationCause;
+      readonly notice?: string;
+      readonly diagnostics?: Readonly<Record<string, unknown>>;
+    }
+  | {
+      readonly action: 'continue';
+      readonly reminder: string;
+      readonly repairDeadline?: number;
+      readonly diagnostics?: Readonly<Record<string, unknown>>;
+    };

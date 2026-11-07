@@ -8,7 +8,7 @@ import {
   type SavedToolExecution,
 } from '../tool-execution-ledger.js';
 
-export enum ProjectionWarningCode {
+enum ProjectionWarningCode {
   CompletedToolHistoryInserted = 'completed_tool_history_inserted',
   IncompleteToolHistoryDropped = 'incomplete_tool_history_dropped',
   OrphanToolResultDropped = 'orphan_tool_result_dropped',
@@ -138,20 +138,5 @@ export function projectSnapshot(input: {
     toolLedger: clone([...(input.toolLedger ?? [])]),
     ...(input.model ? { model: input.model } : {}),
     ...(input.provider ? { provider: input.provider } : {}),
-  };
-}
-
-export function projectImportedState(input: {
-  history: readonly unknown[];
-  previousResponseId: string | null;
-  toolLedger?: readonly SavedToolExecution[];
-  coveredToolOccurrences?: ReadonlySet<string>;
-}): ImportedStateProjection {
-  const projected = projectProviderHistory(input);
-  return {
-    history: projected.history,
-    previousResponseId: input.previousResponseId,
-    toolLedger: clone([...(input.toolLedger ?? [])]),
-    warnings: projected.warnings,
   };
 }

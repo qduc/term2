@@ -83,7 +83,7 @@ export type SubagentRunContext = {
   lastValidation?: ValidationCapture;
 };
 
-export function getSubagentRunContext(context: unknown): SubagentRunContext | undefined {
+function getSubagentRunContext(context: unknown): SubagentRunContext | undefined {
   const candidate = (context as ToolInvocationContext<SubagentRunContext> | undefined)?.context;
   if (
     candidate &&

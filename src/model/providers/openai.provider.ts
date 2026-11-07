@@ -6,7 +6,7 @@ import {
 import { registerProvider } from './registry.js';
 import { createOpenAIModelCatalog } from './openai-model-catalog.js';
 import { createProviderFetch } from './fetch/composer.js';
-import { NULL_SESSION_CONTEXT_SERVICE } from '../../session/session/session-context-service.js';
+import { NULL_SESSION_CONTEXT_SERVICE } from '../traffic-context.js';
 import type { StreamedModelTurn } from '../streamed-model-turn.js';
 
 const streamedModels = new WeakMap<object, { fingerprint: string; model: StreamedModelTurn }>();

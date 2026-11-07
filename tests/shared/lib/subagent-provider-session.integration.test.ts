@@ -1,6 +1,6 @@
 import { it, expect } from 'vitest';
 import { SubagentBridge as ProductionSubagentBridge } from '../../../src/delegation/runtime/subagent-bridge.js';
-import { SessionContextService } from '../../../src/session/session/session-context-service.js';
+import { SessionContextService } from '../../../src/model/traffic-context.js';
 import { ToolOwnershipRegistry } from '../../../src/session/approval/tool-ownership-registry.js';
 import { createOpencodeSessionInjector } from '../../../src/model/providers/opencode-session.js';
 import { SubagentAsyncRegistry } from '../../../src/delegation/subagents/subagent-async-registry.js';

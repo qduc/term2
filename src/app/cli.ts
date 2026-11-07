@@ -14,7 +14,7 @@ import { VALID_REASONING_EFFORTS, type ModelSettingsReasoningEffort } from '../m
 import { isDroppedProfile } from './dropped-profiles.js';
 import { resolveProfile } from '../config/profiles/resolver.js';
 import { BARE_PROFILE_ID, canonicalProfileId } from '../shared/profiles/legacy-adapter.js';
-import { SessionContextService } from '../session/session/session-context-service.js';
+import { SessionContextService } from '../model/traffic-context.js';
 import { buildEnvOverrides } from '../config/settings/settings-service.js';
 import {
   HOME_DIRECTORY_START_WARNING,

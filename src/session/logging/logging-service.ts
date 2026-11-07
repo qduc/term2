@@ -16,7 +16,7 @@ import {
 import { truncateLogText, sanitizeLogMetadata } from '../../shared/utils/output/log-truncation.js';
 import { ProviderTraffic, ProviderTrafficArtifactStore } from './provider-traffic.js';
 import type { ISessionContextService, LogMetadataContract } from '../../shared/service-interfaces.js';
-import { NULL_SESSION_CONTEXT_SERVICE } from '../session/session-context-service.js';
+import { NULL_SESSION_CONTEXT_SERVICE } from '../../model/traffic-context.js';
 
 const LOG_RETENTION_DAYS = 7;
 const LOG_DIRECTORY_MAX_BYTES = 512 * 1024 * 1024;

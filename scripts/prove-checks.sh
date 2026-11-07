@@ -21,4 +21,6 @@ seed "app/ reads a session log" src/app/settings.ts $'\nexport const seededReade
 seed "engine imports app (layer direction)" src/engine/turn.ts $'\nimport "../app/settings.js";\n' node scripts/check-layers.mjs
 seed "file never reached from app/cli.ts" src/app/seeded-dead.ts $'export const dead = 1;\n' node scripts/check-reachability.mjs
 seed "file over 500 lines" src/app/seeded-big.ts "$(for i in $(seq 520); do echo "export const v$i = $i;"; done)" node scripts/check-complexity.mjs
+seed "allowlist grew" scripts/layer-allowlist.json $'\n"src/engine/turn.ts -> src/app/settings.ts (engine -> app)"\n' node scripts/check-baselines.mjs
+seed "unallowlisted root file" seeded-root-file.md $'seeded\n' node scripts/check-root.mjs
 exit $fail

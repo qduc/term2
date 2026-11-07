@@ -52,6 +52,7 @@
     "dev": "tsc -p tsconfig.build.json --watch",
     "typecheck": "tsc --noEmit",
     "test": "cross-env NODE_ENV=test node scripts/run-test.mjs",
+    "arch:report": "node scripts/arch-report.mjs",
     "check:no-unit-tests": "node scripts/check-no-unit-tests.mjs",
     "test:e2e": "cross-env NODE_ENV=test TERM2_TEST_CLI=dist/src/app/cli.js vitest run --reporter=minimal --config vitest.e2e.config.ts",
     "test:integration": "cross-env NODE_ENV=test TERM2_TEST_CLI=dist/src/app/cli.js vitest run --reporter=minimal --config vitest.integration.config.ts",

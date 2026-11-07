@@ -38,7 +38,10 @@ under `.worktrees/` because sibling checkouts fall outside the shell sandbox's
 write scope. Each worktree needs its own `pnpm install`; symlinked `node_modules`
 previously broke command resolution. Keep the primary branch in place and preserve
 other agents' uncommitted work. The [isolation procedure](docs/agent-context.md#parallel-work-isolation)
-covers integration and cleanup.
+covers integration and cleanup. Reports, manifests, and evidence for a task in
+flight go in `.handoff/` (or under the task's experiment folder), never in the
+repository root, which is governed by an allowlist check.
+
 
 UI components use `useTheme()` for colours and `useSkin()` for layout. Skins live
 under `src/clients/tui/presentation/skins/<name>/`; component colour literals bypass this boundary.

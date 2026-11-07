@@ -103,6 +103,8 @@ jobs:
           node scripts/check-reachability.mjs
           node scripts/check-complexity.mjs
           node scripts/check-rules.mjs
+          node scripts/check-baselines.mjs
+          node scripts/check-root.mjs
           node --unhandled-rejections=strict --import tsx bench/hops.mts
       - name: Check the headless path
         run: node bench/m1-direct.mjs

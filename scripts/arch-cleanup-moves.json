@@ -1,0 +1,66 @@
+{
+  "1 delete dead AgentChatService (keep AgentChatFailure)": {
+    "engine/lib/agent-chat-service.ts": "CUT:app/lib/agent-configuration.ts|session/conversation-agent-client.ts"
+  },
+  "2 retry/failure vocabulary -> model; run contracts -> tools": {
+    "engine/retry/retry-errors.ts": "model",
+    "engine/retry/retry-error-classification.ts": "model",
+    "engine/retry/upstream-retry-policy.ts": "model",
+    "engine/retry/retry-recovery-budget.ts": "model",
+    "engine/retry/provider-failure-classification.ts": "model",
+    "engine/retry/chain-recovery-fingerprint.ts": "model",
+    "engine/retry/conversation-retry-policy.ts": "model",
+    "shared/contracts/streamed-model-turn.ts": "model",
+    "shared/utils/error-helpers.ts": "model",
+    "shared/contracts/nested-run-driver.ts": "tools",
+    "shared/contracts/application-stream.ts": "tools",
+    "shared/contracts/conversation.ts": "tools",
+    "shared/gateway/interaction-protocol.ts": "session"
+  },
+  "3 recovery policy up, compaction leaves down (engine/session)": {
+    "engine/retry/recovery-executor.ts": "session",
+    "engine/retry/retry-classifier.ts": "session",
+    "engine/retry/retry-event-presenter.ts": "session",
+    "session/prompts/context-compaction.ts": "engine",
+    "session/approval/approval-replay.ts": "engine",
+    "session/conversation/conversation-message-projection.ts": "engine",
+    "session/prompts/steering-notice.ts": "engine",
+    "session/prompts/memory-recall-notice.ts": "engine"
+  },
+  "4 UI wiring -> app": {
+    "model/models/model-picker-host.tsx": "app",
+    "clients/tui/menus/StandaloneModelPickerApp.tsx": "app",
+    "clients/tui/menus/use-standalone-model-picker.ts": "app",
+    "clients/acp-v2/serve-args.ts": "app",
+    "shared/utils/settings-command.ts": "app",
+    "shared/utils/value-suggestions.ts": "app",
+    "tools/discord-send.ts": "app"
+  },
+  "5 session context -> model": {
+    "session/session/session-context-service.ts": "model"
+  },
+  "6 shared files to their owner": {
+    "shared/utils/shell/": "tools",
+    "shared/utils/shell/shell-output.ts": "shared",
+    "shared/utils/shell/temp-dir.ts": "shared",
+    "shared/utils/streaming/extract-command-messages.ts": "session",
+    "shared/utils/resume-list.ts": "session",
+    "shared/lib/editor-impl.ts": "tools",
+    "shared/lib/tool-invoke.ts": "tools",
+    "shared/utils/conversation/conversation-utils.ts": "tools",
+    "shared/utils/inject-warning-into-tool-output.ts": "engine",
+    "shared/lib/tool-selection-policy.ts": "model",
+    "shared/utils/ai/provider-credentials.ts": "model",
+    "shared/types/message.ts": "tools",
+    "shared/profiles/legacy-adapter.ts": "config"
+  },
+  "7 config = pure schema; settings service -> app": {
+    "config/settings/settings-service.ts": "app",
+    "config/settings/settings-completion-config.ts": "app",
+    "config/settings/settings-completion-logic.ts": "app",
+    "config/profiles/profile-transition.ts": "app",
+    "config/profiles/index.ts": "CUT:config/profiles/profile-transition.ts",
+    "clients/tui/presentation/skins/names.ts": "config",
+    "config/settings/settings-schema.ts": "CUT:clients/tui/presentation/theme/resolve-theme.ts"
+  }
+}

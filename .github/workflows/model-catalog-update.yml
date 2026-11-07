@@ -1,13 +1,9 @@
 name: Update model catalog
 
-# Weekly refresh of the vendored model catalog. Checks out the latest pi-ai
-# source from the upstream main branch, generates provider data into a
-# throwaway directory, points PI_AI_DATA_DIR at it, and regenerates
-# src/model/providers/model-catalog/catalog.generated.ts via
-# `pnpm catalog:update`, runs typechecking and repository guards, and opens or
-# force-updates one predictable automation PR. Reuses the full CI matrix at the
-# pushed commit, then merges that exact head on success. The workflow exits
-# cleanly (green no-op) when a run produces no catalog changes.
+# Weekly refresh of the OpenRouter catalog from its public models endpoint.
+# Native-provider entries retain their existing snapshots. Regenerates the
+# catalog via `pnpm catalog:update`, validates it, and opens or updates one
+# automation PR. Reuses the full CI matrix before merging the exact head.
 on:
   schedule:
     # 06:00 UTC every Friday.
@@ -54,22 +50,68 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Generate only pi-ai's provider JSON: no dependency install or lockfile
-      # changes are needed. Node 24 can run the upstream TypeScript generator.
-      - name: Generate provider data from pi-ai main
-        id: pi-ai
+      # Adapt OpenRouter's response to the existing generator's provider-data
+      # format. Preserve native-provider snapshots: router prices and limits
+      # must not be presented as authoritative native-provider metadata.
+      - name: Fetch OpenRouter model data
         run: |
           set -euo pipefail
-          TMP_DIR="$(mktemp -d "$RUNNER_TEMP/pi-ai.XXXXXX")"
-          git clone --depth 1 --branch main https://github.com/earendil-works/pi.git "$TMP_DIR/repo"
-          PI_AI_SHA="$(git -C "$TMP_DIR/repo" rev-parse HEAD)"
-          cd "$TMP_DIR/repo/packages/ai"
-          node catalog/generate.ts --strict --data-only
-          echo "PI_AI_DATA_DIR=$TMP_DIR/repo/packages/ai/src/providers/data" >> "$GITHUB_ENV"
-          echo "pi-ai-ref=$PI_AI_SHA" >> "$GITHUB_OUTPUT"
+          DATA_DIR="$(mktemp -d "$RUNNER_TEMP/openrouter.XXXXXX")"
+          curl --fail --silent --show-error https://openrouter.ai/api/v1/models -o "$DATA_DIR/models.json"
+          OPENROUTER_DATA_DIR="$DATA_DIR" pnpm exec tsx --eval '
+            import { readFileSync, writeFileSync } from "node:fs";
+            import { MODEL_CATALOG } from "./src/model/providers/model-catalog/catalog.generated.ts";
+            const dir = process.env.OPENROUTER_DATA_DIR;
+            const payload = JSON.parse(readFileSync(`${dir}/models.json`, "utf8"));
+            if (!Array.isArray(payload.data) || payload.data.length === 0) {
+              throw new Error("OpenRouter returned no model data");
+            }
+            const models = {};
+            const rate = (value) => value == null || value === "" ? undefined : Number(value) * 1_000_000;
+            for (const model of payload.data) {
+              if (typeof model.id !== "string" || !Number.isFinite(model.context_length) || model.context_length <= 0) {
+                throw new Error("Invalid OpenRouter model metadata");
+              }
+              models[model.id] = {
+                contextWindow: model.context_length,
+                ...(model.top_provider?.max_completion_tokens > 0
+                  ? { maxTokens: model.top_provider.max_completion_tokens } : {}),
+                cost: {
+                  input: rate(model.pricing?.prompt),
+                  output: rate(model.pricing?.completion),
+                  cacheRead: rate(model.pricing?.input_cache_read),
+                  cacheWrite: rate(model.pricing?.input_cache_write),
+                },
+              };
+            }
+            for (const [provider, entries] of Object.entries(MODEL_CATALOG)) {
+              if (provider === "openrouter") continue;
+              const preserved = Object.fromEntries(Object.entries(entries).map(([id, entry]) => [id, {
+                contextWindow: entry.contextWindow,
+                maxTokens: entry.maxTokens,
+                cost: {
+                  input: entry.inputPricePerMTok,
+                  output: entry.outputPricePerMTok,
+                  cacheRead: entry.cacheReadPricePerMTok,
+                  cacheWrite: entry.cacheWritePricePerMTok,
+                },
+              }]));
+              const file = provider === "codex" ? "openai-codex" : provider;
+              writeFileSync(`${dir}/${file}.json`, JSON.stringify({ chat: preserved }));
+            }
+            writeFileSync(`${dir}/openrouter.json`, JSON.stringify({ chat: models }));
+          '
+          echo "PI_AI_DATA_DIR=$DATA_DIR" >> "$GITHUB_ENV"
 
       - name: Regenerate the model catalog
-        run: pnpm catalog:update
+        run: |
+          pnpm catalog:update
+          # The generator accepts pi-ai-shaped data, but this refresh uses
+          # OpenRouter directly and retains the other providers from the snapshot.
+          sed -i \
+            -e 's/from @earendil-works\/pi-ai data/from OpenRouter data and preserved native-provider snapshots/' \
+            -e "s/source: 'pi-ai@unknown'/source: 'https:\/\/openrouter.ai\/api\/v1\/models (native providers preserved)'/" \
+            src/model/providers/model-catalog/catalog.generated.ts
 
       - name: Check for generated catalog changes
         id: changes
@@ -98,13 +140,13 @@ jobs:
 
           BRANCH="chore/model-catalog-update"
           BASE="${GITHUB_REF_NAME}"
-          PI_AI_REF="${{ steps.pi-ai.outputs.pi-ai-ref }}"
-          PR_TITLE="chore: update model catalog (pi-ai ${PI_AI_REF:0:7})"
+          PR_TITLE="chore: update model catalog (OpenRouter)"
           PR_BODY="Automated weekly model-catalog refresh.
 
           Regenerates \`src/model/providers/model-catalog/catalog.generated.ts\` from the
-          pi-ai \`main\` at commit \`${PI_AI_REF}\` via its strict data-only
-          model generator and \`pnpm catalog:update\`. Typechecking and repository guards ran in the
+          OpenRouter models endpoint (https://openrouter.ai/api/v1/models) via
+          \`pnpm catalog:update\`, preserving existing native-provider snapshots.
+          Typechecking and repository guards ran in the
           \`Update model catalog\` workflow."
 
           git config user.name "github-actions[bot]"

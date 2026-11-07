@@ -6,7 +6,7 @@
 import { join } from 'node:path';
 import { resolveSettingsDirectory } from '../config/settings/settings-path.js';
 import { parseServeArgs, type ServeArgs } from '../host/gateway/serve-args.js';
-import { parseAcpArgs, type AcpArgs } from '../clients/acp-v2/serve-args.js';
+import { parseAcpArgs, type AcpArgs } from './serve-args.js';
 import { createDurableGoal } from '../session/conversation/durable-goal.js';
 import type { DurableGoal } from '../session/logging/conversation-log-events.js';
 

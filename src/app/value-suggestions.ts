@@ -1,12 +1,12 @@
-import { scoreSubsequence } from './subsequence-filter.js';
+import { scoreSubsequence } from '../shared/utils/subsequence-filter.js';
 import {
   getSettingMetadata,
   isSecretSetting,
   isStringSetting,
   isNumberSetting,
   isBooleanSetting,
-} from '../../config/settings/settings-ui-metadata.js';
-import { fetchDecisionModels, isDecisionModelKey } from '../../model/models/decision-model-listing.js';
+} from '../config/settings/settings-ui-metadata.js';
+import { fetchDecisionModels, isDecisionModelKey } from '../model/models/decision-model-listing.js';
 
 export { isSecretSetting, isStringSetting, isNumberSetting };
 

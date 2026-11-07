@@ -1,8 +1,8 @@
 import React from 'react';
-import type { StandaloneModelPickerOutcome } from '../../clients/tui/menus/StandaloneModelPickerApp.js';
-import type { ILoggingService } from '../../shared/service-interfaces.js';
-import type { SettingsService } from '../../config/settings/settings-service.js';
-import type { ModelFetcher } from './model-catalog-session.js';
+import type { StandaloneModelPickerOutcome } from './StandaloneModelPickerApp.js';
+import type { ILoggingService } from '../shared/service-interfaces.js';
+import type { SettingsService } from '../config/settings/settings-service.js';
+import type { ModelFetcher } from '../model/models/model-catalog-session.js';
 
 export type ModelPickerHostResult = StandaloneModelPickerOutcome;
 
@@ -95,9 +95,9 @@ export async function runModelPickerHost(options: ModelPickerHostOptions): Promi
   const [{ render }, { SettingsThemeProvider }, { SettingsSkinProvider }, { default: StandaloneModelPickerApp }] =
     await Promise.all([
       import('ink'),
-      import('../../clients/tui/presentation/theme/ThemeContext.js'),
-      import('../../clients/tui/presentation/skins/SkinContext.js'),
-      import('../../clients/tui/menus/StandaloneModelPickerApp.js'),
+      import('../clients/tui/presentation/theme/ThemeContext.js'),
+      import('../clients/tui/presentation/skins/SkinContext.js'),
+      import('./StandaloneModelPickerApp.js'),
     ]);
 
   let outcome: StandaloneModelPickerOutcome = { status: 'cancelled' };

@@ -1,9 +1,9 @@
 import { z } from 'zod';
 import { discordEmoji } from '../shared/discord/discord-reactions.js';
 import type { DiscordSend } from '../clients/discord/discord-outbound.js';
-import type { ScriptedToolDefinition } from './types.js';
-import { createBaseMessage, getOutputText, isSuccessOutput } from './format-helpers.js';
-import { TOOL_NAME_DISCORD_SEND } from './tool-names.js';
+import type { ScriptedToolDefinition } from '../tools/types.js';
+import { createBaseMessage, getOutputText, isSuccessOutput } from '../tools/format-helpers.js';
+import { TOOL_NAME_DISCORD_SEND } from '../tools/tool-names.js';
 
 const requestId = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
 export const discordSendParameters = z.discriminatedUnion('action', [

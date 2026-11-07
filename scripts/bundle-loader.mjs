@@ -103,5 +103,12 @@ function runWithCodeCache(compileCacheDir, mainContextLoader) {
   const bundleModule = { exports: {} };
   script
     .runInThisContext()
-    .call(bundleModule.exports, bundleModule.exports, requireFromBundle, bundleModule, bundleFile, path.dirname(bundleFile));
+    .call(
+      bundleModule.exports,
+      bundleModule.exports,
+      requireFromBundle,
+      bundleModule,
+      bundleFile,
+      path.dirname(bundleFile),
+    );
 }

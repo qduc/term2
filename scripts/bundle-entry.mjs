@@ -48,11 +48,14 @@ export async function bundleEntry(dist) {
     name: 'react-production-build',
     setup(b) {
       const selector = "process.env.NODE_ENV === 'production'";
-      b.onLoad({ filter: /[\\/]node_modules[\\/](react|react-reconciler|scheduler)[\\/][^\\/]+\.js$/ }, async (args) => {
-        const code = await fs.promises.readFile(args.path, 'utf8');
-        if (!code.includes(selector)) return undefined;
-        return { contents: code.replaceAll(selector, 'true'), loader: 'js' };
-      });
+      b.onLoad(
+        { filter: /[\\/]node_modules[\\/](react|react-reconciler|scheduler)[\\/][^\\/]+\.js$/ },
+        async (args) => {
+          const code = await fs.promises.readFile(args.path, 'utf8');
+          if (!code.includes(selector)) return undefined;
+          return { contents: code.replaceAll(selector, 'true'), loader: 'js' };
+        },
+      );
     },
   };
   const devtoolsStub = path.join(dist, '.devtools-stub.js');

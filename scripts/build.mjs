@@ -27,8 +27,8 @@ for (const asset of ['src/session/prompts', 'src/model/providers/provider-preset
   fs.cpSync(path.join(repo, asset), path.join(dist, asset), { recursive: true });
 // package.json bin.term2. Importing the entry (rather than spawning it) keeps argv[1], used by
 // restart, on this file. Enabling Node's compile cache first gives the entry's loader
-// (scripts/bundle-loader.mjs) a directory for the bundle's V8 code cache, which saves about 200 ms of
-// each start, and caches the loader and other ES modules as before. The cache is
+// (scripts/bundle-loader.mjs) a directory for the bundle's V8 code cache (about 175 of 500 ms to an
+// idle TUI), and caches the loader and other ES modules as before. The cache is
 // per user, beside term2's other caches: Node's default under os.tmpdir() adopts an existing
 // directory even when another user created it writable. Node < 22.1 has no such API and starts
 // as before; a cache that cannot be created is skipped, and NODE_COMPILE_CACHE and

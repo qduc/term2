@@ -503,10 +503,9 @@ export function wrapNeedsApproval(
     });
   }
 
-  // (params, context) order matches ToolDefinition.needsApproval and the
-  // ApplicationRunLoop's `needsApproval(params, toolContext)` call. The SDK
-  // convention was (context, args); shipping that here silently swapped the
-  // loop's arguments, so the wrapper schema-validated the loop's options bag
+  // (params, context) order matches ToolDefinition.needsApproval. The SDK
+  // convention was (context, args); shipping that here once silently swapped
+  // the caller's arguments, so the wrapper schema-validated the options bag
   // and every wrapped tool reported "no approval needed".
   return async (params, context) => {
     if (options?.checkInterceptors) {

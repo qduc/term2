@@ -15,6 +15,7 @@ const isCleanup = (event: TurnEvent): boolean =>
   event.type === 'compaction_completed' ||
   event.type === 'compaction_failed' ||
   event.type === 'tool_execution_finished' ||
+  event.type === 'request_cost' ||
   (event.type === 'item' && event.item.type === 'tool_result');
 
 export class TurnEvents {

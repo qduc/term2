@@ -482,7 +482,7 @@ export class TurnModel {
       if (outcome !== 'completed' && textOnly && !interrupted && items.length > 0)
         this.#withdrawable = { modelStep, start: history.length, count: items.length, hadOutput };
       history.push(...items);
-      this.budget.record({
+      await this.budget.record({
         requestId: `${this.spec.turnId}:model:${modelStep}`,
         model: request.model,
         serviceTier: serviceTierForRequest(request),

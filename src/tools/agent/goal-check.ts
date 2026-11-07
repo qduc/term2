@@ -72,9 +72,10 @@ export const formatGoalCheckCommandMessage: FormatCommandMessage = (item, index,
  *
  * Execution validates and acknowledges the report, naming the goal it judged —
  * the goal snapshotted when the producing request was built, refusing when the
- * session goal has changed since; the stop decision is made from the turn history by `decideGoalStop`. The tool holds no state and has no
- * write path of its own: an achieved check closes the goal only at the stop
- * seam (`createGoalStopPolicy`), once it is known to be the turn's last word.
+ * session goal has changed since; the stop decision is made from the turn history by
+ * `createDirectGoalStopPolicy` (`session/goal-stop.ts`). The tool holds no state
+ * and has no write path of its own: an achieved check closes the goal only at the
+ * stop seam, once it is known to be the turn's last word.
  */
 export function createGoalCheckToolDefinition(deps: {
   getGoal: () => DurableGoal | undefined;

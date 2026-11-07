@@ -44,7 +44,7 @@
       "reason": "Root session directory holds loose session lifecycle, queue, and stream files; burndown planned in #197 and Phase 3."
     },
     "src/session/conversation": {
-      "files": 20,
+      "files": 19,
       "reason": "Conversation replay, journal index, and session browsing logic; scheduled for unification with direct store in Phase 3."
     },
     "src/tools": {
@@ -218,7 +218,7 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/tools/tool-invoke.ts": {
-      "lines": 559,
+      "lines": 558,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/tools/shell/execute-shell.ts": {

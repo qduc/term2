@@ -135,7 +135,7 @@ export function getModelPricing(provider: string, model: string, tier: ServiceTi
 }
 
 /** Catalog provenance string recorded on catalog-priced requests. */
-export function getCatalogPricingVersion(): string {
+function getCatalogPricingVersion(): string {
   return CATALOG_PRICING_VERSION;
 }
 

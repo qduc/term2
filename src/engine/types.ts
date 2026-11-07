@@ -56,8 +56,6 @@ export type TurnBudget = {
   readonly state?: RunBudget;
   /** Other accepted run/child costs; engine merges by stable requestId. */
   readonly costRecords?: (turnId: TurnId) => readonly ModelRequestCost[];
-  /** Publish actual request accounting to the owning run/tree accumulator. */
-  readonly onRequestCost?: (record: ModelRequestCost, context: { readonly turnId: TurnId }) => void;
   readonly wrapUpOnCritical?: boolean;
   /** Exact effect evidence, never inferred from a tool name or an error. */
   readonly toolEffect?: (name: string, input: unknown) => 'mutating' | undefined;
@@ -224,6 +222,11 @@ export type TurnEvent =
       readonly costUsd?: number | string;
     }
   | { readonly type: 'budget_observed'; readonly evidence: RunBudgetEvent }
+  /**
+   * One settled physical request's accounting, emitted only for a budgeted run. A physical outcome: the
+   * request was paid for whether or not the turn survives, so it is delivered after cancellation too.
+   */
+  | { readonly type: 'request_cost'; readonly record: ModelRequestCost }
   | {
       readonly type: 'budget_required';
       readonly requestId: InteractionRequestId;

@@ -63,6 +63,8 @@ for edge in \
   expect_fail "runtime file linked only by $edge" \
     'unreached from src/app/cli.ts: src/app/seeded-type-dead\.ts' node scripts/check-reachability.mjs
 done
+seed "engine callback writes the log" src/session/conversation.ts $'\nexport const seededCallback = (journal: ConversationJournal): Pick<import("../engine/index.js").TurnDeps, "onTurnBoundary"> => ({ onTurnBoundary: () => void journal.commit([]) });\n' '\[engine-callback-writes\].*|TurnDeps.onTurnBoundary writes' node scripts/check-engine-callbacks.mjs
+seed "run-budget callback writes through a port (audit F1 shape)" src/session/run-budget.ts $'\nexport const seededCost = (accept: (fact: DirectRequestCostFact) => void): Pick<TurnBudgetOptions, "toolEffect"> => ({ toolEffect: () => { accept({} as DirectRequestCostFact); return undefined; } });\ntype TurnBudgetOptions = NonNullable<TurnDeps["budget"]>;\n' 'TurnBudget.toolEffect writes' node scripts/check-engine-callbacks.mjs
 seed "file over 500 lines" src/app/seeded-big.ts "$(for i in $(seq 520); do echo "export const v$i = $i;"; done)" '\[file-size\]' node scripts/check-complexity.mjs
 seed "unallowlisted root file" seeded-root-file.md $'seeded\n' '\[root-files\]' node scripts/check-root.mjs
 seed "failure explains the rule" src/app/seeded-service.ts $'export const seeded = 1;\n' 'Why this rule exists: .*pattern a file is' node scripts/check-rules.mjs
@@ -111,6 +113,12 @@ backups+=("new:src/tools/seeded-dup.ts")
 json scripts/rule-baseline.json "d.duplicateBasenames.push({file:'app/seeded-dup.ts',reason:'Seeded by prove-checks: duplicate file allowed for testing reasons.'},{file:'tools/seeded-dup.ts',reason:'Seeded by prove-checks: duplicate file allowed for testing reasons.'})"
 expect_pass "reasoned duplicate basenames are accepted and shown to reviewer" 'duplicate-basenames' \
   bash -c 'node scripts/check-rules.mjs && node scripts/check-baselines.mjs'
+
+backup src/session/conversation.ts scripts/rule-baseline.json
+printf '\nexport const seededCallback = (journal: ConversationJournal): Pick<import("../engine/index.js").TurnDeps, "onTurnBoundary"> => ({ onTurnBoundary: () => void journal.commit([]) });\n' >> src/session/conversation.ts
+json scripts/rule-baseline.json "d.engineCallbackWrites.push({callback:'TurnDeps.onTurnBoundary',reason:'Seeded by prove-checks: the boundary write is its own receipt and lands at a settled boundary.'})"
+expect_pass "reasoned engine-callback writer is accepted and shown to the reviewer" 'engine-callback-writes' \
+  bash -c 'node scripts/check-engine-callbacks.mjs && node scripts/check-baselines.mjs'
 
 rm -f "$out"
 exit $fail

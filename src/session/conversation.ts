@@ -63,19 +63,17 @@ function conversation(
   let nextTurnId = nextConversationTurnId(facts);
   let queueSettings: Omit<TurnRequest, 'input' | 'submission'> | undefined;
   let completionHeld: TurnId | null = null;
-  const runBudgets = new DirectRunBudgets(
-    deps.budget,
-    (fact) => {
-      if (!commit([fact])) throw new Error(journal.failure!.message);
-    },
-    facts,
-  );
+  const runBudgets = new DirectRunBudgets(deps.budget, facts);
   let background: ConversationBackground | undefined;
   let capabilities: ReturnType<typeof bindDirectCapabilities> | undefined;
   let closed = false;
 
   const journal = new ConversationJournal(deps.log, facts, {
-    accepted: (line) => capabilities?.accepted(line),
+    accepted: (line) => {
+      // Every committed cost fact, root or branch, counts toward its run tree's budget.
+      if (line.fact.type === 'request_cost_recorded') runBudgets.retain(line.fact);
+      capabilities?.accepted(line);
+    },
     status: (...args) => capabilities?.status(...args),
     failed(error) {
       background?.poison(error);
@@ -307,6 +305,7 @@ function conversation(
         },
       );
       const turn = ownConversationTurn(turnId, handle, journal, {
+        requestCost: (record) => runBudgets.costFact(turnId, record),
         capabilities: capabilities!,
         publishNotice: deps.publishNotice,
         released: () => {

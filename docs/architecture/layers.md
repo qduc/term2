@@ -85,7 +85,7 @@ wall-clock on a loaded 7-core box.
 | A new exception or raised ceiling carries a reason, and the reviewer is shown each one | `check-baselines.mjs` | every commit | 0.2 s |
 | Root directory contains only allowlisted files | `check-root.mjs` | every commit | 0.05 s |
 | A message's path stays short and runs through the production direct files | `bench/hops.mts` | every commit | 5.8 s |
-| The engine waits instead of calling up | layer table above (no upward import); the callbacks that still write facts (audit F1) are **not** checked | every commit | - |
+| The engine waits instead of calling up | layer table above (no upward import); `check-engine-callbacks.mjs` for the callbacks that write facts (audit F1): every `TurnDeps`/`TurnBudget` callback that reaches the session writer must be recorded in `rule-baseline.json` (`engineCallbackWrites`) with a reason. It follows calls it can resolve to a body, interface members into the object literals and classes that implement them, and port signatures named `commit*`/`accept*`/`append`; a write reached only through a value the checker cannot resolve is not seen | every commit | 10 s |
 | One log: no second state to keep in sync | only the log-reader half is checked; the duplicate-reducer half (audit H1) is **not** | every commit | - |
 | Speed stays within 1.2x of legacy on a large session | queue job, run on each candidate at load under 9 | per candidate | minutes |
 | A fresh reader can explain how a message travels from this README and the `index.ts` files | queue job `measure-fresh-reader-review`, each milestone | per milestone | minutes |

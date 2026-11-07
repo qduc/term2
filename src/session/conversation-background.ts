@@ -156,6 +156,10 @@ export class ConversationBackground {
           if (!this.journal.commit([fact])) throw new Error(this.journal.failure!.message);
           this.activity.accepted(fact);
         },
+        acceptCost: (turnId, record) => {
+          if (!this.journal.commit([this.runBudgets.costFact(turnId, record)]))
+            throw new Error(this.journal.failure!.message);
+        },
         factFor,
         handles: this.branchHandles,
         publish: turnDeps.publishBranch,

@@ -4,9 +4,9 @@ import type { SubagentDefinition } from '../subagents/types.js';
 import type { ExecutionBudget } from '../../engine/agent-runtime/execution-budget.js';
 
 /**
- * Convert a ResolvedAgentDefinition back to the legacy SubagentDefinition
- * shape. Used when the new runtime creates an agent that must execute through
- * the existing SubagentManager / ExecutionSubagentRunner infrastructure.
+ * Convert a ResolvedAgentDefinition back to the SubagentDefinition shape that
+ * the role and tool-policy helpers in `delegation/subagents/` still read. The
+ * direct launcher (`delegation/direct/subagent-tools.ts`) is the only caller.
  */
 export function adaptLegacyDefinition(resolved: ResolvedAgentDefinition, budget?: ExecutionBudget): SubagentDefinition {
   return {

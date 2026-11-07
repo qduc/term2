@@ -3,6 +3,7 @@ import { startNestedTurn } from '../engine/turn.js';
 import type { TurnDeps, TurnEvent, TurnHandle, TurnId, TurnResult } from '../engine/index.js';
 import type { ExecutionId, NestedRunRequest, NestedRunResult, ToolRegistry, Workspace } from '../tools/index.js';
 import type { Item } from '../model/index.js';
+import type { ModelRequestCost } from '../engine/recovery-budget.js';
 import type { DirectBranchFact, DirectTurnFact, DirectHistoryFact, Fact } from './facts.js';
 import type { DirectSubagentContext, DirectSubagentDriver } from './subagent.js';
 import { replay } from './replay.js';
@@ -30,6 +31,11 @@ export function createDirectBranchDriver(options: {
   readonly rootTurnId: TurnId;
   readonly authority: DirectNestedAuthority;
   readonly accept: (fact: DirectBranchFact) => void;
+  /**
+   * Commits a branch request's cost as a top-level `request_cost_recorded` fact (not a `branch_event`), so the
+   * run tree's accounting and replay read root and branch costs the same way.
+   */
+  readonly acceptCost: (turnId: TurnId, record: ModelRequestCost) => void;
   readonly factFor: (
     turnId: TurnId,
     event: Exclude<TurnEvent, { type: 'turn_ended' }>,
@@ -99,6 +105,12 @@ export function createDirectBranchDriver(options: {
             } catch {
               handle.cancel();
             }
+            continue;
+          }
+          if (event.type === 'request_cost') {
+            // Physical spend: recorded even after the branch is aborted, like any other cleanup outcome.
+            options.acceptCost(turnId, event.record);
+            handle.accept(token);
             continue;
           }
           if (event.type === 'budget_required') {

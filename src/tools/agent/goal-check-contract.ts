@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { MAX_GOAL_FIELD_LENGTH, type DurableGoal } from '../../shared/contracts/durable-goal.js';
 
 /** The self-check wire contract, consumed by both the tool and the session stop policy. */
-export const GOAL_CHECK_STATUSES = ['achieved', 'blocked', 'not_achieved', 'deferred'] as const;
+const GOAL_CHECK_STATUSES = ['achieved', 'blocked', 'not_achieved', 'deferred'] as const;
 export type GoalCheckStatus = (typeof GOAL_CHECK_STATUSES)[number];
 
 export const goalCheckParameters = z.object({
@@ -53,7 +53,7 @@ export function validateGoalCheck(raw: unknown, goal: DurableGoal | undefined): 
 }
 
 /** Only this successful result prefix carries a recorded goal identity to the stop policy. */
-export const GOAL_CHECK_RECORDED_PREFIX = 'Self-check recorded:';
+const GOAL_CHECK_RECORDED_PREFIX = 'Self-check recorded:';
 
 /** Serialize the identity actually judged, rather than the goal current at stop time. */
 export function formatRecordedGoalCheck(goalId: string, text: string): string {

@@ -56,11 +56,14 @@ uses session-owned branch and task ports. See [`src/delegation/README.md`](../..
 
 ## When a behavior exists on both paths
 
-Some policies exist once per path. For example, the `[Conversation timing]` notice for
-a gap between human messages is built by `session/time-gap.ts` on the foreground path
-and by `shared/conversation/conversation-time-gap.ts` in the delegation runtime. The
-two handle invalid timestamps differently. Before changing such a behavior, find its
-twin, and say in the change which path you changed and why the other may differ.
+Some behaviors run on both paths. Put the policy in one module both may import, and
+leave each path only what differs in its data. For example, the `[Conversation timing]`
+notice for a gap between human messages: its clock and notice rules live in
+`shared/conversation/conversation-time-gap.ts` (`advanceHumanClock`,
+`humanArrivalNotice`). The foreground's `session/time-gap.ts` only decides which queue
+inputs are human and reads their receipts, and the delegation runtime reads stamps from
+history. Before changing such a behavior, check whether the other path has its own copy;
+if it does, unify it or say in the change why the two must differ.
 
 ## Where to go next
 

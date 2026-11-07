@@ -105,13 +105,17 @@ unmeasured.
 
 ## Human-arrival timing
 
-This section was written for the pre-rewrite root conversation, and
-`src/shared/conversation/conversation-time-gap.ts` still implements it for the
-runtime session. The foreground path has its own implementation,
-`src/session/time-gap.ts` (`planDirectTiming`), which derives timing from accepted
-queue evidence and treats a malformed human receipt as poisoning the clock rather
-than as no evidence. The rules below were not re-verified against the foreground
-implementation; read `planDirectTiming` before relying on them there.
+The clock and notice rules live once, in
+`src/shared/conversation/conversation-time-gap.ts` (`advanceHumanClock`,
+`humanArrivalNotice`), and both turn paths use them. The paths differ only in where
+evidence comes from. The foreground (`src/session/time-gap.ts`, `planDirectTiming`)
+reads receipts from accepted queue records, so it can see a human message with no
+receipt, which breaks a known clock. In the runtime session, a user item without a
+stamp is automatic input (`withHumanInputTime` strips it), so it is skipped. On both
+paths a malformed receipt poisons the clock and no later notice is produced. The
+details below were written for the pre-rewrite root conversation; the receipt sources
+they name (durable pending queue, Discord origins, rollover baselines) were not
+re-verified against the foreground path.
 
 Submissions retain a host-observed `humanInputAt` on the
 user turn, including through the durable pending queue. At a gap of at least

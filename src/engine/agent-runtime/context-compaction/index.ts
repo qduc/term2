@@ -1,4 +1,4 @@
-import { projectConversationMessage } from '../../../session/conversation/conversation-message-projection.js';
+import { projectConversationMessage } from '../../conversation-message-projection.js';
 import { projectModelRequestHistory } from '../../../session/conversation/conversation-state-projector.js';
 import type { ProviderInputItem } from '../../../shared/contracts/provider-input.js';
 

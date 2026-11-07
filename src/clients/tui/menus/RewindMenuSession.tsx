@@ -4,6 +4,7 @@ import { useSelection } from './use-selection.js';
 import { getRewindScrollOffset } from './use-rewind-selection.js';
 import type { MenuComponentProps } from './menu-registry.js';
 import type { MenuEffect, MenuEvent, MenuFrame, MenuInteraction } from './menu-types.js';
+import { useMenuInteraction } from './use-menu-interaction.js';
 
 type Props = MenuComponentProps<Extract<MenuFrame, { kind: 'rewind' }>>;
 
@@ -68,10 +69,7 @@ export function RewindMenuSession({ frame, active, interactions }: Props) {
     };
   }, [frame.id, selection]);
 
-  useEffect(() => {
-    if (!active) return;
-    return interactions.register(frame.id, interaction);
-  }, [active, frame.id, interaction, interactions]);
+  useMenuInteraction(interactions, frame.id, active, interaction);
 
   return (
     <RewindMenu

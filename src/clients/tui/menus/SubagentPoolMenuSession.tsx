@@ -9,6 +9,7 @@ const SETTING_KEYS = { AGENT_MENTOR_POOL: 'agent.mentorPool' } as const;
 import type { MenuComponentProps } from './menu-registry.js';
 import type { MenuEffect, MenuEvent, MenuFrame, MenuInteraction } from './menu-types.js';
 import { applyMenuEditorEvent } from './menu-editor.js';
+import { useMenuInteraction } from './use-menu-interaction.js';
 
 type Props = MenuComponentProps<Extract<MenuFrame, { kind: 'subagent_pool' }>>;
 
@@ -102,10 +103,7 @@ export function SubagentPoolMenuSession({ frame, active, controller, interaction
     };
   }, [controller, frame.id, frame.settingKey, pool]);
 
-  useEffect(() => {
-    if (!active) return;
-    return interactions.register(frame.id, interaction);
-  }, [active, frame.id, interaction, interactions]);
+  useMenuInteraction(interactions, frame.id, active, interaction);
 
   if (!active) return null;
   if (pool.phase === 'edit_model') {

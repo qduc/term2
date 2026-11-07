@@ -5,6 +5,7 @@ import ProviderSelectionMenu from './ProviderSelectionMenu.js';
 import type { MenuComponentProps } from './menu-registry.js';
 import type { MenuEffect, MenuEvent, MenuFrame, MenuInteraction } from './menu-types.js';
 import { applyMenuEditorEvent } from './menu-editor.js';
+import { useMenuInteraction } from './use-menu-interaction.js';
 
 type Props = MenuComponentProps<Extract<MenuFrame, { kind: 'providers' }>>;
 
@@ -87,10 +88,7 @@ export function ProviderMenuSession({ frame, active, controller, interactions, s
     };
   }, [controller, providers]);
 
-  useEffect(() => {
-    if (!active) return;
-    return interactions.register(frame.id, interaction);
-  }, [active, frame.id, interaction, interactions]);
+  useMenuInteraction(interactions, frame.id, active, interaction);
 
   if (!active) return null;
 

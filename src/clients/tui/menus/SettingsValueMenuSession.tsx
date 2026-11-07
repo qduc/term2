@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Box, Text } from 'ink';
 import SettingsValueSelectionMenu from './SettingsValueSelectionMenu.js';
 import {
@@ -16,6 +16,7 @@ import type { MenuComponentProps } from './menu-registry.js';
 import type { MenuEffect, MenuFrame, MenuInteraction } from './menu-types.js';
 import { applyMenuEditorEvent } from './menu-editor.js';
 import { useTheme } from '../presentation/components/theme.js';
+import { useMenuInteraction } from './use-menu-interaction.js';
 
 type SettingsValueState = ReturnType<typeof useSettingsValueCompletion>;
 
@@ -170,10 +171,7 @@ export function SettingsValueMenuSession({ frame, active, controller, interactio
     };
   }, [controller, frame, isChoice, resolveTypedOrSelectedValue, settingsService, settingsValue]);
 
-  useEffect(() => {
-    if (!active) return;
-    return interactions.register(frame.id, interaction);
-  }, [active, frame.id, interaction, interactions]);
+  useMenuInteraction(interactions, frame.id, active, interaction);
 
   if (!active) return null;
 

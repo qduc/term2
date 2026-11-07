@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import SlashCommandMenu from './SlashCommandMenu.js';
 import type { useSlashCommands } from './use-slash-commands.js';
 import type { MenuComponentProps } from './menu-registry.js';
 import type { MenuController, MenuEffect, MenuFrame, MenuInteraction } from './menu-types.js';
 import { applyMenuEditorEvent } from './menu-editor.js';
+import { useMenuInteraction } from './use-menu-interaction.js';
 
 type SlashState = ReturnType<typeof useSlashCommands>;
 
@@ -67,10 +68,7 @@ export function SlashMenuSession({ frame, active, controller, interactions, serv
     [controller, slash],
   );
 
-  useEffect(() => {
-    if (!active) return;
-    return interactions.register(frame.id, interaction);
-  }, [active, frame.id, interaction, interactions]);
+  useMenuInteraction(interactions, frame.id, active, interaction);
 
   if (!active) return null;
   return (

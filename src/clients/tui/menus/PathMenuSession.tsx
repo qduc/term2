@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import PathSelectionMenu from './PathSelectionMenu.js';
 import { computePathInsertion } from './insertions.js';
 import type { PathCompletionItem } from './use-path-completion.js';
 import type { MenuComponentProps } from './menu-registry.js';
 import type { MenuEffect, MenuFrame, MenuInteraction } from './menu-types.js';
 import { applyMenuEditorEvent } from './menu-editor.js';
+import { useMenuInteraction } from './use-menu-interaction.js';
 
 type PathState = ReturnType<typeof import('./use-path-completion.js').usePathCompletion>;
 
@@ -70,10 +71,7 @@ export function PathMenuSession({ frame, active, controller, interactions, servi
     [controller, frame, path],
   );
 
-  useEffect(() => {
-    if (!active) return;
-    return interactions.register(frame.id, interaction);
-  }, [active, frame.id, interaction, interactions]);
+  useMenuInteraction(interactions, frame.id, active, interaction);
 
   if (!active) return null;
   return (

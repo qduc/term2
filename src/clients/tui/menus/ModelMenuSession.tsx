@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Box, Text } from 'ink';
 import ModelSelectionMenu from './ModelSelectionMenu.js';
 import { computeModelInsertion } from './insertions.js';
@@ -12,6 +12,7 @@ import {
   type ModelSettings as SettingsService,
 } from './model-catalog.js';
 import { useTheme } from '../presentation/components/theme.js';
+import { useMenuInteraction } from './use-menu-interaction.js';
 
 type ModelsState = ReturnType<typeof useModelSelection>;
 
@@ -194,10 +195,7 @@ export function ModelMenuSession({ frame, active, controller, interactions, serv
     };
   }, [controller, frame, services.onUnavailableModelSelected, settingsService]);
 
-  useEffect(() => {
-    if (!active) return;
-    return interactions.register(frame.id, interaction);
-  }, [active, frame.id, interaction, interactions]);
+  useMenuInteraction(interactions, frame.id, active, interaction);
 
   if (!active) return null;
   return (

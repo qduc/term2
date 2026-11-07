@@ -10,20 +10,21 @@
 // The cache lives in the directory Node's own compile cache uses (dist/cli.js enables it, as do
 // NODE_COMPILE_CACHE and the test suites), so it follows the same opt-outs and per-user location.
 // That directory is already specific to the Node version, architecture and V8 flags; the file name
-// identifies the bundle. Without that directory, or on a Node without the vm loader constant, the
-// bundle is required as an ordinary CommonJS module.
+// identifies the bundle by content. Without that directory, or on a Node without the vm loader
+// constant or zlib.crc32, the bundle is required as an ordinary CommonJS module.
 import fs from 'node:fs';
 import module from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
+import zlib from 'node:zlib';
 
 const bundleFile = fileURLToPath(new URL('./cli.bundle.cjs', import.meta.url));
 const requireFromBundle = module.createRequire(bundleFile);
 const compileCacheDir = module.getCompileCacheDir?.();
 const mainContextLoader = vm.constants?.USE_MAIN_CONTEXT_DEFAULT_LOADER;
 
-if (!compileCacheDir || !mainContextLoader) requireFromBundle(bundleFile);
+if (!compileCacheDir || !mainContextLoader || typeof zlib.crc32 !== 'function') requireFromBundle(bundleFile);
 else runWithCodeCache(compileCacheDir, mainContextLoader);
 
 function runWithCodeCache(compileCacheDir, mainContextLoader) {
@@ -31,29 +32,33 @@ function runWithCodeCache(compileCacheDir, mainContextLoader) {
   const SETTLED_AFTER_MS = 2000;
   // Each bundle's caches stay until this many newer files exist (a few MB each).
   const KEEP_FILES = 8;
-  // One descriptor for both, so a rebuild in between cannot pair one file's identity with another's bytes.
-  const fd = fs.openSync(bundleFile, 'r');
-  let source, size, mtimeMs;
-  try {
-    ({ size, mtimeMs } = fs.fstatSync(fd));
-    source = fs.readFileSync(fd, 'utf8');
-  } finally {
-    fs.closeSync(fd);
-  }
-  // V8 checks a cache's version and flags but only the length of its source; a cache for other
-  // bytes of the same length would run the wrong bytecode. The bundle's mtime changes when it does.
+  // V8 checks a cache's version and flags but only the length of its source, and only the header of
+  // its data. Bytecode for other source of the same length runs as if it were this bundle's, and a
+  // cache damaged past its header crashes V8 on every start. So the file name carries a checksum of
+  // the bundle, and each file starts with a checksum of its data, checked before V8 sees it (about
+  // 6 ms for both). Node's own compile cache checks the same two things.
+  const bytes = fs.readFileSync(bundleFile);
+  const source = bytes.toString('utf8');
   const dir = path.join(compileCacheDir, 'term2-bundle');
-  const stem = path.join(dir, `${size.toString(36)}-${Math.round(mtimeMs * 1000).toString(36)}`);
+  const stem = path.join(dir, `${bytes.length.toString(36)}-${zlib.crc32(bytes).toString(36)}`);
   // `settled` was written after startup; `exit` by a process that ended sooner (--help, a headless
   // run), which still beats no cache. A settled cache is not rewritten.
   let tier;
   let cachedData;
   for (const candidate of ['settled', 'exit']) {
+    let file;
     try {
-      cachedData = fs.readFileSync(`${stem}.${candidate}`);
+      file = fs.readFileSync(`${stem}.${candidate}`);
+    } catch {
+      continue;
+    }
+    const data = file.subarray(4);
+    if (file.length > 4 && file.readUInt32BE(0) === zlib.crc32(data)) {
+      cachedData = data;
       tier = candidate;
       break;
-    } catch {}
+    }
+    fs.rmSync(`${stem}.${candidate}`, { force: true });
   }
   const options = { filename: bundleFile, importModuleDynamically: mainContextLoader };
   // Line 1 of the bundle is empty, so the wrapper keeps every line and column of stack traces.
@@ -72,7 +77,9 @@ function runWithCodeCache(compileCacheDir, mainContextLoader) {
       const data = script.createCachedData();
       fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
       const tmp = `${stem}.${process.pid}.tmp`;
-      fs.writeFileSync(tmp, data, { mode: 0o600 });
+      const header = Buffer.alloc(4);
+      header.writeUInt32BE(zlib.crc32(data));
+      fs.writeFileSync(tmp, Buffer.concat([header, data]), { mode: 0o600 });
       fs.renameSync(tmp, `${stem}.${name}`);
       const files = fs
         .readdirSync(dir)

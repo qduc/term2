@@ -1,6 +1,6 @@
 ---
 name: testing
-description: Which test tiers exist in this repo during the evidence-driven development experiment, the commands that run them, the rule against committing unit tests, and the standards an integration or e2e test is held to. Use before writing or changing any test and after making code changes to decide what to run. For how to prove a change works, use the `verification` skill.
+description: Which test tiers exist in this repo during the evidence-driven development experiment, the commands that run them, the rule against committing unit tests, the standards an integration or e2e test is held to, and how to keep those slow tiers fast. Use before writing or changing any test and after making code changes to decide what to run. For how to prove a change works, use the `verification` skill.
 ---
 
 # Testing
@@ -68,6 +68,68 @@ explicit finite timeout and wait for the completion notification rather than pol
 - Deterministic and independent: no real provider network, no shared fixed temp paths,
   no writes into the repository tree, runnable in any order.
 - Mock only at external boundaries (provider fixtures, the network guard).
+
+## Keeping the slow tiers fast
+
+Every integration, e2e and provider test pays its cost on every CI run, and these
+tiers spend most of it waiting, not computing. On base `8a4617c` the e2e lane
+summed 579 s of test time on three workers while the 4-vCPU runner sat at 160%
+CPU. The attribution and measurements are in
+`docs/plans/test-suite-speed-2026-10-22.md`, "E2E lane root causes". When you
+write or change a test in these tiers:
+
+- **Count built-CLI launches.** A launch to an idle composer measured about
+  0.55 s locally, more on hosted runners; ~236 launches were 42% of that lane's
+  time. Within one test, check the steps of one journey in one session rather
+  than relaunching per check, and relaunch only when the claim is about a
+  restart. Tests still never share a session.
+- **Launch the built JavaScript with plain `node`.** `--import tsx` on the
+  bundle took `--help` from 0.5 s to 4.1 s.
+- **Keep the V8 compile cache.** The e2e, integration and provider global setups
+  prime it with `prepareCliCompileCache()`, and `createTestChildEnv()` forwards
+  `TERM2_TEST_NODE_COMPILE_CACHE` as `NODE_COMPILE_CACHE`. A hand-built child
+  environment (`env -i` in `first-run-setup.e2e.test.ts`, the Discord CLI e2e)
+  must pass it on itself: ~150–200 ms per launch.
+- **Drive PTYs through the shared bridges.** `spawnTerminal()`
+  (`tests/helpers/terminal-e2e.ts`) and the provider harness answer the TUI's
+  Device Attributes query with `PYTHON_DA1_RESPONDER`. A bridge without it makes
+  every launch and restart wait out `detectTerminalBackground()`'s 150 ms
+  backstop (`DEFAULT_DETECTION_TIMEOUT_MS`).
+- **Copy `dist/` with `copyBuiltCli()`, and only when the test needs its own
+  copy.** `fs.promises.cp` took 1.15 s idle and over 3 s under load;
+  `copyBuiltCli()` (synchronous, skipping maps and declarations) takes
+  0.08–0.13 s.
+- **Wait for a condition, not a duration.** A generous timeout on
+  `waitForOutput()`, `expect.poll()`, `waitForDirectComposer()` or
+  `waitForHarnessIdleGeneration()` costs nothing when the test passes; a fixed
+  sleep costs its full length on every run. Where the product publishes a
+  harness signal under `TERM2_HARNESS_IDLE_PATH` (idle generation, `.composer`
+  revision, `.approval` readiness), prefer it to matching screen text.
+- **Sleep only to observe that nothing happened,** and say in a comment why that
+  length is enough. About 60 s of such windows remain in the e2e lane; they are
+  the next thing to replace with a deterministic quiescence signal, so don't
+  add more without need.
+- **Don't wait out a product deadline in real time.** Speed up the clock the
+  guard reads, from the child's `--import` preload. `discord-cli.e2e.test.ts`
+  divides `AbortSignal.timeout` and the one-second `timers/promises` sleep by 5
+  (republished with `syncBuiltinESMExports()`), so the bridge's own 10 s REST
+  deadline still decides the boundary, in 2 s. Don't add a production override
+  just so a test runs faster: the guard ledger
+  (`docs/plans/approvals-and-sandbox/guard-ledger.md`) records which guards have
+  one, and the Discord bridge has none.
+- **Size fixture pauses to what the assertion needs, and write the arithmetic
+  down.** The `/usage` fixture in `approval-mode.e2e.test.ts` must stream slowly
+  enough to stay under the status bar's 500 tok/s plausibility cap
+  (`MAX_PLAUSIBLE_DECODE_TPS`). 73 tokens over 400 ms keeps the same ~250 ms
+  margin that 731 tokens over 1.7 s did.
+- **Keep wait predicates cheap.** Waits poll every 20–25 ms for the whole test,
+  and workers share the CPU. `getVisibleOutput()` re-strips ANSI only when the
+  output grew; don't re-process the whole session on every poll.
+- **Attribute a slow lane's time before changing it.** If CPU time is far below
+  summed test time, the tests are waiting, and more workers or split files only
+  repack the waiting. A temporary Vitest setup file that recorded each CLI
+  spawn and each test-file `setTimeout` found the causes above; `node
+  --cpu-prof` on the built CLI shows where startup goes.
 
 ## Recurring verification traps
 

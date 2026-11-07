@@ -91,7 +91,10 @@ CPU. The attribution and measurements are in
   prime it with `prepareCliCompileCache()`, and `createTestChildEnv()` forwards
   `TERM2_TEST_NODE_COMPILE_CACHE` as `NODE_COMPILE_CACHE`. A hand-built child
   environment (`env -i` in `first-run-setup.e2e.test.ts`, the Discord CLI e2e)
-  must pass it on itself: ~150–200 ms per launch.
+  must pass it on itself: ~175 ms of a ~500 ms launch. The entry's loader keeps
+  the bundle's V8 code cache in the same directory (`term2-bundle/`); the `--help`
+  priming writes a partial one, and the first launch that lives past 2 s writes
+  the full one (see `src/app/README.md`, "Startup loading").
 - **Drive PTYs through the shared bridges.** `spawnTerminal()`
   (`tests/helpers/terminal-e2e.ts`) and the provider harness answer the TUI's
   Device Attributes query with `PYTHON_DA1_RESPONDER`. A bridge without it makes

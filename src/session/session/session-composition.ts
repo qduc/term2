@@ -1,5 +1,5 @@
 import { resolveOutputAllocation } from '../../engine/agent-runtime/model-context-policy.js';
-import { AgentChatFailure } from '../../engine/lib/agent-chat-service.js';
+import { AgentChatFailure } from '../../engine/lib/agent-chat-failure.js';
 import type { ModelRequestCost } from '../../shared/cost/model-cost.js';
 import type { ILoggingService, ISessionContextService, ISettingsService } from '../../shared/service-interfaces.js';
 import type { ProviderInputItem } from '../../shared/contracts/provider-input.js';

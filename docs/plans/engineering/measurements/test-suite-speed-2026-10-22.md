@@ -1182,7 +1182,7 @@ the screen before the frame arrived. It failed on `4fa084c` as well (3 of 12
 beside four busy loops; 2 of 12 for the candidate) and now waits for the hint
 text: 12 of 12 under the same load. The `testing` skill records the trap.
 
-**Independent verification: rejected, then (see below).** A separate agent
+**Independent verification: rejected, then accepted.** A separate agent
 verified `f546d89` against `4fa084c`. It reproduced the speed-up (426 → 329 ms,
 437 → 336 ms, n=12), confirmed strict mode, the `import.meta` mapping, all 879
 markers, dynamic imports and stack positions from the vm script and the
@@ -1208,4 +1208,22 @@ twice); the edited bundle printed its own text and got its own file.
 It also found, on `main` too, that the bundler rewrites `import.meta.url` inside
 the session-index worker's eval'd bootstrap string, where the replacement helper
 does not exist. That is outside this change and was left for a separate task.
+
+**Re-verification: accepted.** The same agent verified `92d24fc` with the
+`f32c6b3` build:
+
+- **The crash (D1):** its damaged-cache reproduction exited 0 three times with
+  empty stderr, where it had exited 133. It added a cache whose data was damaged
+  under a matching checksum, which V8 rejected and the loader rewrote, and an
+  empty and a 2-byte file, which both started normally.
+- **The shared cache (D2):** running the two bundles a, b, a, b printed A, B,
+  A, B, with one cache file each.
+- **Starting:** 12 concurrent cold starts left one cache file. Node 22 wrote and
+  reused its cache without stderr. It measured 436 → 311 ms (n=10).
+- **Tests:** e2e passed 162 and skipped 1. The two composer-hint cases passed 8
+  of 8 beside four busy loops.
+- **Not verified by either of us:** how long the settled-cache write blocks the
+  TUI (the prototype measured about 38 ms to serialize and 5 ms to write, once
+  per bundle), real `web_fetch`, sandbox and hook turns end to end, Windows,
+  and Nix or bun installs.
 

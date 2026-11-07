@@ -1,5 +1,5 @@
-import { OpenAICompatibleError, OpenRouterError } from '../../model/providers/common/provider-errors.js';
-import { describeError, isAbortLikeError } from '../../shared/utils/error-helpers.js';
+import { OpenAICompatibleError, OpenRouterError } from '../providers/common/provider-errors.js';
+import { describeError, isAbortLikeError } from '../error-helpers.js';
 import { isNetworkProtocolError, isTransientRetryableError } from './retry-error-classification.js';
 import { classifyUpstreamRetryableError } from './upstream-retry-policy.js';
 

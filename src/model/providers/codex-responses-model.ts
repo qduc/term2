@@ -10,7 +10,7 @@ import type {
   StreamedModelTurnEvent,
   StreamedModelTurnInput,
   StreamedModelTurnRequest,
-} from '../../shared/contracts/streamed-model-turn.js';
+} from '../streamed-model-turn.js';
 import { toCodexResponsesInput } from './codex-turn-converter.js';
 import { sanitizeHeaders } from '../../shared/utils/header-sanitizer.js';
 import type {
@@ -25,9 +25,9 @@ import {
   isOrphanedChainedToolOutputError,
   OrphanedChainedToolOutputError,
 } from '../../shared/lib/chained-input-filter.js';
-import { AmbiguousModelOutcomeError, ConversationStateNoProgressError } from '../../engine/retry/retry-errors.js';
-import { isClassifiedCancellation } from '../../engine/retry/provider-failure-classification.js';
-import { fingerprintChainRequest } from '../../engine/retry/chain-recovery-fingerprint.js';
+import { AmbiguousModelOutcomeError, ConversationStateNoProgressError } from '../failure/retry-errors.js';
+import { isClassifiedCancellation } from '../failure/provider-failure-classification.js';
+import { fingerprintChainRequest } from '../failure/chain-recovery-fingerprint.js';
 import { ChainedWireState, type ChainedWireStateKey, type ChainedRequestToken } from './chained-wire-state.js';
 import { LunaResponsesLiteWireProtocol } from './luna-responses-lite-wire-protocol.js';
 import { captureProviderRequest, type ProviderRequestCapture } from './provider-request-capture.js';
@@ -677,7 +677,7 @@ import {
   isPreviousResponseNotFoundError,
   isRetryableTransportError,
   isWebSocketConnectionLimitReachedError,
-} from '../../engine/retry/retry-error-classification.js';
+} from '../failure/retry-error-classification.js';
 
 type DiagnosticLogger = {
   debug?: (message: string, meta?: Record<string, unknown>) => void;

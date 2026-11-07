@@ -6,7 +6,7 @@ import type {
   LLMAdvisoryConfidence,
   LLMAdvisoryRiskLevel,
   ReasoningEffortSetting,
-} from '../../shared/contracts/conversation.js';
+} from '../../tools/conversation.js';
 import { classifyCommandDetailed, SafetyStatus } from '../../shared/utils/shell/command-safety/index.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../../shared/service-interfaces.js';
 import {

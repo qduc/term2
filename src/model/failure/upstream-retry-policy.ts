@@ -7,11 +7,7 @@
  * /retry command flow.
  */
 import { APIConnectionError, APIConnectionTimeoutError, InternalServerError, RateLimitError } from 'openai';
-import {
-  OpenAICompatibleError,
-  OpenRouterError,
-  LongRetryDelayError,
-} from '../../model/providers/common/provider-errors.js';
+import { OpenAICompatibleError, OpenRouterError, LongRetryDelayError } from '../providers/common/provider-errors.js';
 
 export type UpstreamRetryClassification = {
   retryable: boolean;

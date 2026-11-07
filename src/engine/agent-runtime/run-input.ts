@@ -6,7 +6,7 @@ import type {
   StreamedModelToolDefinition,
   StreamedModelToolResultPart,
   StreamedModelTurnInput,
-} from '../../shared/contracts/streamed-model-turn.js';
+} from '../../model/streamed-model-turn.js';
 import { formatConversationTimeGap } from '../../shared/conversation/conversation-time-gap.js';
 import { personalMemoryNotice } from '../../shared/conversation/personal-memory-context.js';
 import type { ToolRegistry } from '../../tools/types.js';

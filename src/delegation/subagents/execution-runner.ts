@@ -1,11 +1,11 @@
 import { resolveOutputAllocation } from '../../engine/agent-runtime/model-context-policy.js';
-import type { ApplicationAgent } from '../../shared/contracts/nested-run-driver.js';
+import type { ApplicationAgent } from '../../tools/nested-run-driver.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../../shared/service-interfaces.js';
 import type { ExecutionContext } from '../../tools/execution-context.js';
 import type { SubagentRequest, SubagentDefinition, SubagentResult, SubagentSegmentControl } from './types.js';
 import { SubagentToolFactory, type ValidationCapture } from './tool-policy.js';
 import { SubagentSession } from './subagent-session.js';
-import { MAX_SUBAGENT_MODEL_RETRIES } from '../../engine/retry/conversation-retry-policy.js';
+import { MAX_SUBAGENT_MODEL_RETRIES } from '../../model/failure/conversation-retry-policy.js';
 import {
   isAbortLike,
   aggregateToolUsage,

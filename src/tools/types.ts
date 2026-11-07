@@ -1,8 +1,8 @@
 import type { z, ZodTypeAny } from 'zod';
 import type { ProhibitedToolName } from './tool-names.js';
 import type { ApprovalPresentationCapability } from './tool-capabilities.js';
-import type { DeniedReadMetadata, PostExecuteDecision } from '../shared/contracts/conversation.js';
-import type { StreamedModelCustomToolFormat } from '../shared/contracts/streamed-model-turn.js';
+import type { DeniedReadMetadata, PostExecuteDecision } from './conversation.js';
+import type { StreamedModelCustomToolFormat } from '../model/streamed-model-turn.js';
 import type { DurableGoal } from '../shared/contracts/durable-goal.js';
 
 /** Physical tool execution scope, also projected unchanged into public hook events. */

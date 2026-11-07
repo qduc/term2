@@ -19,11 +19,11 @@ export function createPostExecutePausePolicy<Params>(options: {
   ) => {
     toolName: string;
     argumentsText: string;
-    deniedRead?: import('../../shared/contracts/conversation.js').DeniedReadMetadata;
+    deniedRead?: import('../../tools/conversation.js').DeniedReadMetadata;
   } | null;
   resolve?: (
     context: Parameters<PostExecutePolicy<Params>>[0],
-    decision: import('../../shared/contracts/conversation.js').PostExecuteDecision,
+    decision: import('../../tools/conversation.js').PostExecuteDecision,
   ) => Promise<unknown> | unknown;
 }): PostExecutePolicy<Params> {
   return async (context) => {

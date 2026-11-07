@@ -17,7 +17,7 @@ import { GROK_RESPONSES_OPAQUE_TAG } from './provider-opaque-compatibility.js';
 import { applyClientResponseNormalization, type CostTrailerCapture } from './openai-compatible-response-normalizer.js';
 import { RetryingModel } from './retrying-model.js';
 import { GrokTokenManager } from './grok-auth.js';
-import type { StreamedModelTurn } from '../../shared/contracts/streamed-model-turn.js';
+import type { StreamedModelTurn } from '../streamed-model-turn.js';
 
 /**
  * Grok subscription access goes through the CLI chat proxy, not the metered

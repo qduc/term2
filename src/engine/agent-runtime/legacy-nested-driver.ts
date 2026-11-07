@@ -1,4 +1,4 @@
-import type { NestedRunDriverFactory } from '../../shared/contracts/nested-run-driver.js';
+import type { NestedRunDriverFactory } from '../../tools/nested-run-driver.js';
 import { ApplicationRunLoop } from './application-run-loop.js';
 
 /** Each nested invocation owns a fresh loop and its continuation state. */

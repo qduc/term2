@@ -4,7 +4,7 @@ import {
   OpenRouterError,
   LongRetryDelayError,
   findReauthenticationRequiredError,
-} from '../../model/providers/common/provider-errors.js';
+} from '../providers/common/provider-errors.js';
 import { classifyUpstreamRetryableError, getRetryAfterMs } from './upstream-retry-policy.js';
 import type { ILoggingService } from '../../shared/service-interfaces.js';
 import { AmbiguousModelOutcomeError } from './retry-errors.js';

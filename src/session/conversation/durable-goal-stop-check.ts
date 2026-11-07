@@ -1,7 +1,7 @@
 import type { ProviderInputItem } from '../../shared/contracts/provider-input.js';
 import type { RunTerminationCause } from '../../shared/contracts/run-termination.js';
 import type { NormalStopDecision } from '../../engine/agent-runtime/run-loop-contracts.js';
-import type { ApplicationAgent } from '../../shared/contracts/nested-run-driver.js';
+import type { ApplicationAgent } from '../../tools/nested-run-driver.js';
 import { TOOL_NAME_GOAL_CHECK } from '../../tools/tool-names.js';
 import type { DurableGoal } from '../logging/conversation-log-events.js';
 import { validateGoalCheck, GOAL_CHECK_RECORDED_PREFIX } from '../../tools/agent/goal-check-contract.js';

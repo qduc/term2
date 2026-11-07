@@ -1,4 +1,4 @@
-import type { ConversationTerminal } from '../../shared/contracts/conversation.js';
+import type { ConversationTerminal } from '../../tools/conversation.js';
 import type { PostExecutePendingRegistry } from './post-execute-pending-registry.js';
 
 export type LiveRunState<Event, Result> =

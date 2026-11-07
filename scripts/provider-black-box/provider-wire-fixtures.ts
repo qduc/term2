@@ -1,4 +1,4 @@
-import type { StreamedModelTurnRequest } from '../../src/shared/contracts/streamed-model-turn.js';
+import type { StreamedModelTurnRequest } from '../../src/model/streamed-model-turn.js';
 
 export const fixturePrompt = 'fixture prompt';
 export const fixtureTool = {

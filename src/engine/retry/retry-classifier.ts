@@ -1,5 +1,5 @@
 import { RequestInputLimitError } from '../agent-runtime/request-input-limit.js';
-import { decideRetry } from './conversation-retry-policy.js';
+import { decideRetry } from '../../model/failure/conversation-retry-policy.js';
 import {
   isMissingServerToolOutputError,
   isPreviousResponseNotFoundError,
@@ -7,21 +7,21 @@ import {
   isRetryableTransportError,
   isTransientRetryableError,
   isWebSocketConnectionLimitReachedError,
-} from './retry-error-classification.js';
-import { classifyUpstreamRetryableError } from './upstream-retry-policy.js';
+} from '../../model/failure/retry-error-classification.js';
+import { classifyUpstreamRetryableError } from '../../model/failure/upstream-retry-policy.js';
 import type { ClassificationContext, ClassifiedFailure } from './retry-contracts.js';
 import {
   AmbiguousModelOutcomeError,
   ConversationStateNoProgressError,
   getZeroFrameAmbiguousTimeout,
-} from './retry-errors.js';
+} from '../../model/failure/retry-errors.js';
 import { extractHistoryLength } from '../../session/stream-snapshot.js';
 import type { ConversationAgentClient } from '../../session/conversation-agent-client.js';
 import {
   isMissingChainedToolOutputError,
   isOrphanedChainedToolOutputError,
 } from '../../shared/lib/chained-input-filter.js';
-import { isRetryRecoveryBudgetExhaustedError } from './retry-recovery-budget.js';
+import { isRetryRecoveryBudgetExhaustedError } from '../../model/failure/retry-recovery-budget.js';
 import { streamHasCommittedOutput } from '../agent-stream.js';
 import { UnsentWebSocketRequestError } from '../../model/providers/websocket-request-dispatch.js';
 import {

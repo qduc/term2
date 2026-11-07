@@ -3,22 +3,16 @@ import type {
   StreamedModelTurn,
   StreamedModelTurnEvent,
   StreamedModelTurnRequest,
-} from '../../shared/contracts/streamed-model-turn.js';
+} from '../streamed-model-turn.js';
 import type { ILoggingService } from '../../shared/service-interfaces.js';
-import { describeError, isAbortLikeError } from '../../shared/utils/error-helpers.js';
+import { describeError, isAbortLikeError } from '../error-helpers.js';
 import {
   isNetworkProtocolError,
   isTerminatedError,
   isTransientRetryableError,
-} from '../../engine/retry/retry-error-classification.js';
-import {
-  classifyUpstreamRetryableError,
-  computeUpstreamRetryDelayMs,
-} from '../../engine/retry/upstream-retry-policy.js';
-import {
-  RetryRecoveryBudgetExhaustedError,
-  type RetryRecoveryBudget,
-} from '../../engine/retry/retry-recovery-budget.js';
+} from '../failure/retry-error-classification.js';
+import { classifyUpstreamRetryableError, computeUpstreamRetryDelayMs } from '../failure/upstream-retry-policy.js';
+import { RetryRecoveryBudgetExhaustedError, type RetryRecoveryBudget } from '../failure/retry-recovery-budget.js';
 
 /** A provider-level retry about to back off for `delayMs` before attempt `attempt` of `maxRetries`. */
 export type ProviderRetryInfo = { attempt: number; maxRetries: number; delayMs: number };

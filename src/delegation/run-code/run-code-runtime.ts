@@ -1,4 +1,4 @@
-import { isDeniedReadApproveAnswer, type PostExecuteDecision } from '../../shared/contracts/conversation.js';
+import { isDeniedReadApproveAnswer, type PostExecuteDecision } from '../../tools/conversation.js';
 import { appendFileSync } from 'node:fs';
 import { lstat } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';

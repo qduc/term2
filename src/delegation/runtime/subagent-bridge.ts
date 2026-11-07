@@ -1,4 +1,4 @@
-import type { NestedRunDriverFactory, NestedModelBinding } from '../../shared/contracts/nested-run-driver.js';
+import type { NestedRunDriverFactory, NestedModelBinding } from '../../tools/nested-run-driver.js';
 import { randomUUID } from 'node:crypto';
 import { SubagentManager } from '../subagents/subagent-manager.js';
 import type { ConversationEvent, ConversationEventSink } from '../../session/conversation/conversation-events.js';

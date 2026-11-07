@@ -1,8 +1,5 @@
 import type { ProviderInputItem } from '../../shared/contracts/provider-input.js';
-import type {
-  StreamedModelProviderOptions,
-  StreamedModelTurnInput,
-} from '../../shared/contracts/streamed-model-turn.js';
+import type { StreamedModelProviderOptions, StreamedModelTurnInput } from '../../model/streamed-model-turn.js';
 import { type AgentStream } from '../agent-stream.js';
 import { EventQueue, outputPush } from './run-segment-events.js';
 import type { RunState } from './run-state.js';

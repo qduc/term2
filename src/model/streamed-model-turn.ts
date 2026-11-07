@@ -1,5 +1,5 @@
-import type { JsonSchemaDefinition } from './model-types.js';
-import type { RetryRecoveryBudget } from '../../engine/retry/retry-recovery-budget.js';
+import type { JsonSchemaDefinition } from '../shared/contracts/model-types.js';
+import type { RetryRecoveryBudget } from './failure/retry-recovery-budget.js';
 
 /** Provider-owned options and metadata retained at characterized protocol boundaries. */
 export type StreamedModelProviderOptions = Readonly<Record<string, unknown>>;

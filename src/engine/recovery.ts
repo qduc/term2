@@ -1,7 +1,7 @@
 /** Recovery admission only: the direct engine remains the sole request driver. */
 import type { ModelError } from '../model/index.js';
-import { RetryRecoveryBudget, type RetryRecoveryAdmission } from './retry/retry-recovery-budget.js';
-import { AmbiguousModelOutcomeError, getZeroFrameAmbiguousTimeout } from './retry/retry-errors.js';
+import { RetryRecoveryBudget, type RetryRecoveryAdmission } from '../model/failure/retry-recovery-budget.js';
+import { AmbiguousModelOutcomeError, getZeroFrameAmbiguousTimeout } from '../model/failure/retry-errors.js';
 
 export { RetryRecoveryBudget };
 export type { RetryRecoveryAdmission };

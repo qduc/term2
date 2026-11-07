@@ -1,4 +1,4 @@
-import type { StreamedModelTurn } from '../../shared/contracts/streamed-model-turn.js';
+import type { StreamedModelTurn } from '../../model/streamed-model-turn.js';
 import { ConversationStore } from '../../session/conversation/conversation-store.js';
 import type { SavedToolExecution } from '../../session/tool-execution-ledger.js';
 import type { ProviderInputItem } from '../../shared/contracts/provider-input.js';

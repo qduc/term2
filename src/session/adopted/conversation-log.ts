@@ -11,10 +11,7 @@ import {
 import { validateNetworkFact, type NetworkFact } from './network.js';
 import type { ModelRef } from '../../model/index.js';
 import type { Workspace } from '../../tools/index.js';
-import {
-  sanitizePendingInteractionDto,
-  type PendingInteractionDto,
-} from '../../shared/gateway/interaction-protocol.js';
+import { sanitizePendingInteractionDto, type PendingInteractionDto } from './interaction-protocol.js';
 import type { LogEvent } from '../logging/conversation-log-events.js';
 import { decodeLogEnvelope } from '../conversation/conversation-decoder.js';
 

@@ -1,6 +1,6 @@
-import type { NestedRunDriverFactory, NestedModelBinding } from '../../shared/contracts/nested-run-driver.js';
+import type { NestedRunDriverFactory, NestedModelBinding } from '../../tools/nested-run-driver.js';
 import type { DiscordSend } from '../../clients/discord/discord-outbound.js';
-import type { ReasoningEffortSetting } from '../../shared/contracts/conversation.js';
+import type { ReasoningEffortSetting } from '../../tools/conversation.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../../shared/service-interfaces.js';
 import type { ExecutionContext } from '../../tools/execution-context.js';
 import type { ListWorktreesSync } from '../../tools/workspace/worktree-inventory.js';
@@ -15,7 +15,7 @@ import type { ProviderDefinition } from '../../model/providers/registry.js';
 import { SkillsService } from '../../tools/skills/skills-service.js';
 import type { PostExecutePauseCapability } from '../../tools/types.js';
 import type { SessionAccessState } from '../../session/session/session-access-state.js';
-import type { ApplicationAgent } from '../../shared/contracts/nested-run-driver.js';
+import type { ApplicationAgent } from '../../tools/nested-run-driver.js';
 import type { BackgroundShellRegistry } from '../../tools/shell/background-shell-registry.js';
 import type { BackgroundShellOutputBundle } from '../../tools/shell/background-shell-watches.js';
 import type { BackgroundShellExecutionResult } from '../../tools/system/shell.js';

@@ -1,10 +1,10 @@
-import type { ApprovalDescriptor } from '../../shared/contracts/conversation.js';
+import type { ApprovalDescriptor } from '../../tools/conversation.js';
 import type { ProviderInputItem } from '../../shared/contracts/provider-input.js';
 import type { ShellAutoApprovalAgentClient } from '../conversation-agent-client.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../../shared/service-interfaces.js';
 import { classifyCommandDetailed } from '../../shared/utils/shell/command-safety/index.js';
 import { TOOL_NAME_PROPOSE_GOAL } from '../../tools/tool-names.js';
-import { CHECK_IN_TOOL_NAME } from '../../shared/contracts/conversation.js';
+import { CHECK_IN_TOOL_NAME } from '../../tools/conversation.js';
 import { SafetyStatus } from '../../shared/utils/shell/command-safety/constants.js';
 import { evaluateShellAutoApprovalAdvisories } from './shell-auto-approval-evaluator.js';
 import { getTierModelPool } from '../../engine/agent-runtime/model-resolver.js';

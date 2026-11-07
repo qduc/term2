@@ -1,4 +1,4 @@
-import type { ContextCompactionSessionState, StreamedModelTurn } from '../../shared/contracts/streamed-model-turn.js';
+import type { ContextCompactionSessionState, StreamedModelTurn } from '../streamed-model-turn.js';
 import OpenAI from 'openai';
 import { randomUUID } from 'node:crypto';
 import { CodexResponsesModel, CodexResponsesTransport, CodexResponsesWSModel } from './codex-responses-model.js';

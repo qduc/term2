@@ -8,7 +8,7 @@ import type { DefaultRecoveryExecutor } from '../../engine/retry/recovery-execut
 import type { RetryEventPresenter } from '../../engine/retry/retry-event-presenter.js';
 import type { ClassifiedFailure, RetryCounts, RecoveryState } from '../../engine/retry/retry-contracts.js';
 import type { TurnProjectionState } from './turn-projection-state.js';
-import { classifyProviderFailure } from '../../engine/retry/provider-failure-classification.js';
+import { classifyProviderFailure } from '../../model/failure/provider-failure-classification.js';
 import { skipsAutomaticReplayClaim } from '../../engine/retry/committed-tool-continuation.js';
 import type { SessionIdSource } from './session-identity.js';
 import { resolveSessionId } from './session-identity.js';

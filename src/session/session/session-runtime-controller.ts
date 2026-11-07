@@ -1,5 +1,5 @@
 import type { ModelSelection } from '../../config/settings/model-selection.js';
-import type { ReasoningEffortSetting } from '../../shared/contracts/conversation.js';
+import type { ReasoningEffortSetting } from '../../tools/conversation.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import { getMethod } from '../interruption-info.js';
 import type { SessionLifecycle } from './session-lifecycle.js';

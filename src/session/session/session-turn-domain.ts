@@ -12,16 +12,16 @@ import type { InitialTurnRunOptions, TurnAttemptFactory } from './turn-attempt-f
 import type { InitialInputPreparer } from './initial-input-preparer.js';
 import type { InitialTurnRecoveryHandler } from './initial-turn-recovery-handler.js';
 import type { ConversationRecord } from '../conversation/conversation-record.js';
-import type { ApplicationRunEvent } from '../../shared/contracts/application-stream.js';
+import type { ApplicationRunEvent } from '../../tools/application-stream.js';
 import type { StreamAccumulator } from '../stream-event-processor.js';
 import type { TurnOutcome } from './turn-status-machine.js';
-import type { ConversationTerminal } from '../../shared/contracts/conversation.js';
+import type { ConversationTerminal } from '../../tools/conversation.js';
 
 import type { ApprovalDecisionPolicy } from '../approval/approval-decision-policy.js';
 import { ShellAutoApprovalDecisionPolicy } from '../approval/approval-decision-policy.js';
 import type { SessionInputPlanner } from './session-input-planner.js';
 import type { ApprovalFlowCoordinator, ContinuationPlan } from '../approval/approval-flow-coordinator.js';
-import { isClassifiedCancellation } from '../../engine/retry/provider-failure-classification.js';
+import { isClassifiedCancellation } from '../../model/failure/provider-failure-classification.js';
 import { extractUsage, type NormalizedUsage } from '../../shared/utils/ai/token-usage.js';
 import type { ContinuationPlanApplier } from './continuation-plan-applier.js';
 import type { ContinuationRecoveryHandler } from './continuation-recovery-handler.js';
@@ -42,7 +42,7 @@ import { extractFinalizationSnapshot } from '../stream-snapshot.js';
 import { lastOpenAICompaction } from '../conversation/conversation-record-stream.js';
 import type { HookLifecyclePort } from '../hooks/hook-service.js';
 import type { HookEventFactory } from '../hooks/hook-event-factory.js';
-import type { RetryRecoveryBudget } from '../../engine/retry/retry-recovery-budget.js';
+import type { RetryRecoveryBudget } from '../../model/failure/retry-recovery-budget.js';
 import type { ToolApprovalPolicyRegistry } from '../approval/tool-approval-policy-registry.js';
 import type { SessionIdSource } from './session-identity.js';
 import { resolvePromptCacheKey, resolveSessionId } from './session-identity.js';

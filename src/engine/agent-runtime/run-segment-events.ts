@@ -1,4 +1,4 @@
-import type { ApplicationRunEvent } from '../../shared/contracts/application-stream.js';
+import type { ApplicationRunEvent } from '../../tools/application-stream.js';
 import { type AgentStream } from '../agent-stream.js';
 import type { RunState } from './run-state.js';
 /** Synchronous acceptance always precedes asynchronous stream publication. */

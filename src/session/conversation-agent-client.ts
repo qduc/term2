@@ -2,8 +2,8 @@ import type { ModelSelection } from '../config/settings/model-selection.js';
 import type { ProviderInput, ProviderInputItem } from '../shared/contracts/provider-input.js';
 import type { JsonSchemaDefinition } from '../shared/contracts/model-types.js';
 import type { ContinuationHandle } from '../shared/contracts/continuation-handle.js';
-import type { ReasoningEffortSetting } from '../shared/contracts/conversation.js';
-import type { ApplicationRunEvent } from '../shared/contracts/application-stream.js';
+import type { ReasoningEffortSetting } from '../tools/conversation.js';
+import type { ApplicationRunEvent } from '../tools/application-stream.js';
 import type { ConversationEvent } from './conversation/conversation-events.js';
 import type { AgentStream } from '../engine/agent-stream.js';
 import type { ProviderHistorySnapshot } from './conversation/conversation-store.js';
@@ -24,7 +24,7 @@ import type { NestedApprovalOwner } from './approval/nested-approval-owner.js';
 import type { NormalizedUsage } from '../shared/utils/ai/token-usage.js';
 import type { ModelRequestCost } from '../shared/cost/model-cost.js';
 import type { RunBudgetEvent } from '../engine/agent-runtime/run-budget.js';
-import type { RetryRecoveryBudget } from '../engine/retry/retry-recovery-budget.js';
+import type { RetryRecoveryBudget } from '../model/failure/retry-recovery-budget.js';
 import type {
   SessionRolloverConsumption,
   SessionRolloverRequest,

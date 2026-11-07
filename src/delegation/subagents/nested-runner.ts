@@ -3,7 +3,7 @@ import type {
   ApplicationAgent,
   AgentModelSettings,
   NestedModelBinding,
-} from '../../shared/contracts/nested-run-driver.js';
+} from '../../tools/nested-run-driver.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { ApprovalLedger, type ToolInvocationContext } from '../../engine/agent-runtime/tool-invocation-context.js';
@@ -51,7 +51,7 @@ import {
   type ForegroundSubagentApprovalCallback,
 } from './foreground-subagent-lease.js';
 import { pinWorkerWorktree } from './worker-worktree.js';
-import { classifyPoolEntryFailure } from '../../engine/retry/provider-failure-classification.js';
+import { classifyPoolEntryFailure } from '../../model/failure/provider-failure-classification.js';
 import { streamHasCommittedOutput } from '../../engine/agent-stream.js';
 
 export type CachedRoleTool = {

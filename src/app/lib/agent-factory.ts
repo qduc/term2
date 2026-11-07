@@ -1,10 +1,10 @@
-import type { NestedRunDriverFactory, NestedModelBinding } from '../../shared/contracts/nested-run-driver.js';
+import type { NestedRunDriverFactory, NestedModelBinding } from '../../tools/nested-run-driver.js';
 import type { DiscordSend } from '../../clients/discord/discord-outbound.js';
 import { resolveModelContextPolicy, resolveOutputAllocation } from '../../engine/agent-runtime/model-context-policy.js';
 import { getRunCodeExecutionResult, RUN_CODE_EXECUTION_RESULT } from '../../tools/system/run-code/run-code.js';
 import { z } from 'zod';
-import type { ApplicationAgent } from '../../shared/contracts/nested-run-driver.js';
-import type { ReasoningEffortSetting } from '../../shared/contracts/conversation.js';
+import type { ApplicationAgent } from '../../tools/nested-run-driver.js';
+import type { ReasoningEffortSetting } from '../../tools/conversation.js';
 import { getAgentDefinition } from '../agent.js';
 import { getProvider, type ProviderDefinition } from '../../model/providers/index.js';
 import { createEditorImpl } from '../../shared/lib/editor-impl.js';

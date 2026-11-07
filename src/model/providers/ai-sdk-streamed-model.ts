@@ -20,7 +20,7 @@ import type {
   StreamedModelTurnEvent,
   StreamedModelTurnOutput,
   StreamedModelProviderOptions,
-} from '../../shared/contracts/streamed-model-turn.js';
+} from '../streamed-model-turn.js';
 
 const MAX_TRIVIAL_WHITESPACE_LENGTH = 4;
 

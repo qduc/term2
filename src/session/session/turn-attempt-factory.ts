@@ -7,7 +7,7 @@ import { normalizeUserTurn } from '../../shared/types/user-turn.js';
 import type { InputSurgeApproval } from '../input-surge-approval.js';
 import type { SessionLifecycle } from './session-lifecycle.js';
 import { TurnAttempt } from './turn-attempt.js';
-import type { RetryRecoveryBudget } from '../../engine/retry/retry-recovery-budget.js';
+import type { RetryRecoveryBudget } from '../../model/failure/retry-recovery-budget.js';
 
 export type InitialTurnRunOptions = {
   skipUserMessage?: boolean;

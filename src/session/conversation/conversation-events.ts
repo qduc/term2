@@ -1,15 +1,15 @@
 import type { CommandMessage } from '../../tools/types.js';
 import type { NormalizedUsage } from '../../shared/utils/ai/token-usage.js';
-import type { ApprovalDescriptor, LLMAdvisory } from '../../shared/contracts/conversation.js';
+import type { ApprovalDescriptor, LLMAdvisory } from '../../tools/conversation.js';
 import type { ModelRequestCost } from '../../shared/cost/model-cost.js';
 import type { SubagentResult } from '../../tools/subagents/types.js';
 import type { PersistedAssistantTurnItem } from './conversation-persistence-types.js';
-import type { CodexRateLimitInfo } from '../../shared/contracts/streamed-model-turn.js';
+import type { CodexRateLimitInfo } from '../../model/streamed-model-turn.js';
 import type { RunBudgetEvent } from '../../engine/agent-runtime/run-budget.js';
 import type { RunTerminationCause } from '../../shared/contracts/run-termination.js';
 import type { InjectedMemory, MemoryRecallProvenance } from '../../tools/memory/memory-capabilities.js';
 import type { BackgroundTaskActivity, BackgroundTaskObservation } from '../../tools/background-task-activity.js';
-export type { CodexRateLimitInfo, CodexRateLimitWindow } from '../../shared/contracts/streamed-model-turn.js';
+export type { CodexRateLimitInfo, CodexRateLimitWindow } from '../../model/streamed-model-turn.js';
 
 export type ConversationEvent =
   | MemoryInjectedEvent

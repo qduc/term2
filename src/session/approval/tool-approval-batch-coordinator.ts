@@ -1,5 +1,5 @@
 import type { ConversationEvent } from '../conversation/conversation-events.js';
-import type { ConversationTerminal } from '../../shared/contracts/conversation.js';
+import type { ConversationTerminal } from '../../tools/conversation.js';
 import { createApprovalRequiredTerminal } from '../conversation/conversation-result-builder.js';
 import type { ApprovalDecisionPolicy } from './approval-decision-policy.js';
 import type { ApprovalFlowCoordinator } from './approval-flow-coordinator.js';
@@ -9,7 +9,7 @@ import {
   isAutoApprovableTool,
   extractToolTargetPaths,
 } from './shell-auto-approval-resolver.js';
-import { supportsFolderSessionRead } from '../../shared/contracts/conversation.js';
+import { supportsFolderSessionRead } from '../../tools/conversation.js';
 import { resolveSessionReadFolder } from './session-read-grant-target.js';
 import type { ContinuationPlanApplier } from '../session/continuation-plan-applier.js';
 import type { TurnProjectionState } from '../session/turn-projection-state.js';

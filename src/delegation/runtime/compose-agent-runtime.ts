@@ -1,5 +1,5 @@
 import { createLegacyNestedRunDriver } from '../../engine/agent-runtime/legacy-nested-driver.js';
-import type { NestedRunDriverFactory, NestedModelBinding } from '../../shared/contracts/nested-run-driver.js';
+import type { NestedRunDriverFactory, NestedModelBinding } from '../../tools/nested-run-driver.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../../shared/service-interfaces.js';
 import type { ExecutionContext } from '../../tools/execution-context.js';
 import type { ConversationEvent } from '../../session/conversation/conversation-events.js';

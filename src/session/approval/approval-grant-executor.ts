@@ -5,7 +5,7 @@ import {
   isDockerHostControlApproveAnswer,
   isReadFileSessionApproveAnswer,
   supportsFolderSessionRead,
-} from '../../shared/contracts/conversation.js';
+} from '../../tools/conversation.js';
 import { getActiveWorkspaceRoot } from '../../tools/workspace/active-workspace-root.js';
 import { isDockerHostControlShellApproval } from './shell-sandbox-approval.js';
 import { resolveSessionReadFolder } from './session-read-grant-target.js';
@@ -16,7 +16,7 @@ import { getToolInfoFromInterruption } from '../interruption-info.js';
 import { parseToolCallArguments } from '../tool-call-arguments.js';
 import { extractToolTargetPaths } from './shell-auto-approval-resolver.js';
 import { resolveOutsideWorkspaceEdit } from './approval-descriptor.js';
-import type { PendingApproval } from '../../shared/contracts/conversation.js';
+import type { PendingApproval } from '../../tools/conversation.js';
 
 export type ApprovalGrantExecutorDeps = {
   sessionId: string;

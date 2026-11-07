@@ -1,5 +1,5 @@
-import { AmbiguousModelOutcomeError } from '../retry/retry-errors.js';
-import type { StreamedModelTurnOutput } from '../../shared/contracts/streamed-model-turn.js';
+import { AmbiguousModelOutcomeError } from '../../model/failure/retry-errors.js';
+import type { StreamedModelTurnOutput } from '../../model/streamed-model-turn.js';
 
 export type GenerationGuardCode =
   | 'text_characters'

@@ -2,7 +2,7 @@
  * App-only advisory projection over the owning Session's native request snapshot.
  * No log reads, mirrored history, writes, provider calls or admission authority.
  */
-import type { StreamedModelTurnInput } from '../shared/contracts/streamed-model-turn.js';
+import type { StreamedModelTurnInput } from '../model/streamed-model-turn.js';
 import { InputSurgeGuard } from '../session/input-surge-guard.js';
 import { getSerializedInputBytes, LargeUncachedInputGuard } from '../session/large-uncached-input-guard.js';
 import { itemToInput } from '../model/provider-items.js';

@@ -10,7 +10,7 @@ import '../../src/model/providers/index.js';
 import { createOpenAICompatibleProviderDefinition } from '../../src/model/providers/openai-compatible.provider.js';
 import { RetryingModel } from '../../src/model/providers/retrying-model.js';
 import { classifyInLoopModelRetry } from '../../src/engine/retry/in-loop-model-retry.js';
-import { isTransientRetryableError } from '../../src/engine/retry/retry-error-classification.js';
+import { isTransientRetryableError } from '../../src/model/failure/retry-error-classification.js';
 import type { ILoggingService, ISettingsService } from '../../src/shared/service-interfaces.js';
 import { startFakeProviderHttpServer, type FakeProviderHttpServer } from './fake-provider-http-server.js';
 import { readFixtureEnvelope } from './fixture-envelope.js';

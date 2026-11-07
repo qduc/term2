@@ -8,7 +8,7 @@ import {
   resolveThinkingBudget,
 } from './ai-sdk-provider-settings.js';
 import { createAiSdkStreamedModel } from './ai-sdk-streamed-model.js';
-import type { StreamedModelTurn, StreamedModelTurnRequest } from '../../shared/contracts/streamed-model-turn.js';
+import type { StreamedModelTurn, StreamedModelTurnRequest } from '../streamed-model-turn.js';
 
 type AiSdkAnthropicModelLike = LanguageModelV3;
 

@@ -333,6 +333,12 @@ async function runCommand(
     session.write('/model ');
     await waitForHarnessComposerValue(idlePath, '/model ', { timeoutMs: 60_000 });
     await session.waitForOutput('Select model', 30_000);
+    await step('\x1b[B', '❯   mock-beta');
+    await step('\x06', '❯ ★ mock-beta');
+    await step('\x0e', 'Nickname for mock-beta:');
+    await step('nova', 'Nickname for mock-beta: nova');
+    await step('\r', '❯ ★ mock-beta — aka "nova"');
+    await step('\x06', '❯   mock-beta — aka "nova"');
     await step('luna', 'Filter: luna');
     await session.waitForOutput('aka "luna"', 30_000);
     await step('\x7f', 'Filter: lun');

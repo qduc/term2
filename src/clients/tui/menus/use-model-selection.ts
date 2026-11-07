@@ -212,12 +212,20 @@ export const useModelSelection = (deps: { settingsService: ModelSettings }) => {
   filteredModelsRef.current = filteredModels;
   selectedIndexRef.current = selectedIndex;
 
+  const previousResultsRef = useRef({ filteredModels, query, provider: parsedQuery.provider, modelTab });
+
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect */
+    const previous = previousResultsRef.current;
+    previousResultsRef.current = { filteredModels, query, provider: parsedQuery.provider, modelTab };
+    const sameView =
+      previous.query === query && previous.provider === parsedQuery.provider && previous.modelTab === modelTab;
+    const previouslySelected = previous.filteredModels[selectedIndexRef.current];
+
     // Keep the selection and viewport together when results change.
     // Opening the picker still preselects the current model.
-    setScrollOffset(0);
     if (filteredModels.length === 0) {
+      setScrollOffset(0);
       setSelectedIndex(0);
       return;
     }
@@ -243,10 +251,18 @@ export const useModelSelection = (deps: { settingsService: ModelSettings }) => {
       }
     }
 
-    // Retaining a lower selection would make auto-scroll undo the reset.
+    if (sameView && previouslySelected) {
+      const index = filteredModels.findIndex(
+        (model) => model.provider === previouslySelected.provider && model.id === previouslySelected.id,
+      );
+      setSelectedIndex(index >= 0 ? index : Math.min(selectedIndexRef.current, filteredModels.length - 1));
+      return;
+    }
+
+    setScrollOffset(0);
     setSelectedIndex(0);
     /* eslint-enable react-hooks/set-state-in-effect */
-  }, [filteredModels, loading, modelSettingConfig, settingsService]);
+  }, [filteredModels, loading, modelSettingConfig, settingsService, query, parsedQuery.provider, modelTab]);
 
   // Auto-scroll to keep selected item visible
   useEffect(() => {

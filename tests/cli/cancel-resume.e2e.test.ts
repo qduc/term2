@@ -18,6 +18,8 @@ import { resolveSettingsDirectory } from '../../src/config/settings/settings-pat
 const projectRoot = fileURLToPath(new URL('../..', import.meta.url));
 const builtCli = testCliPath(path.join(projectRoot, 'dist', 'src', 'app', 'cli.js'));
 const TIMEOUT_MS = 120_000;
+const EXIT_CONFIRM_WINDOW_MS = '300';
+const EXIT_CONFIRM_WAIT_MS = 350;
 
 let session: TerminalSession | null = null;
 let root = '';
@@ -98,6 +100,7 @@ it(
       TERM2_CACHE_DIR: path.join(home, '.cache', 'term2'),
       TERM2_CONVERSATIONS_DIR: path.join(root, 'conversations'),
       DISABLE_LOGGING: '1',
+      TERM2_EXIT_CONFIRM_WINDOW_MS: EXIT_CONFIRM_WINDOW_MS,
       [HARNESS_IDLE_ENV]: idlePath,
       // Ink suppresses dynamic terminal updates in CI mode; this test needs an interactive TUI.
       CI: 'false',
@@ -133,8 +136,8 @@ it(
     await waitForHarnessComposerValue(idlePath, 'half typed', { timeoutMs: 30_000 });
     session.write('\x03');
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
-    // Every Ctrl+C arms legacy's two-second exit, so the stopping one waits it out.
-    await new Promise((resolve) => setTimeout(resolve, 2100));
+    // Every Ctrl+C arms the exit confirmation window, so the stopping one waits it out.
+    await new Promise((resolve) => setTimeout(resolve, EXIT_CONFIRM_WAIT_MS));
     session.write('\x03');
     idle = await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
     await session.waitForOutput('Stopped', 30_000);
@@ -144,15 +147,15 @@ it(
     expect(stoppedFrame.match(/Stopped/g)).toHaveLength(1);
     expect(stoppedFrame).not.toContain('Cancellation requested');
     expect(stoppedFrame).toMatch(/^ {0,8}Stopped\s*$/m);
-    // (A further Ctrl+C inside two seconds would exit the app, so let that window pass.)
-    await new Promise((resolve) => setTimeout(resolve, 2500));
+    // (A further Ctrl+C inside the confirm window would exit the app, so let that window pass.)
+    await new Promise((resolve) => setTimeout(resolve, EXIT_CONFIRM_WAIT_MS));
     await send('second question');
     await session.waitForOutput('SECOND-REPLY', 30_000);
     let screen = session.getVisibleOutput();
     expect(screen.lastIndexOf('SECOND-REPLY'), 'the reply shows after the stopped partial text').toBeGreaterThan(
       screen.lastIndexOf('PARTIAL-ANSWER'),
     );
-    await new Promise((resolve) => setTimeout(resolve, 2500));
+    await new Promise((resolve) => setTimeout(resolve, EXIT_CONFIRM_WAIT_MS));
     session.write('\x03');
     await session.waitForOutput('Press Ctrl+C again to exit', 30_000);
     session.write('\x03');
@@ -269,6 +272,7 @@ it.each(['esc', 'ctrl-c', 'editing', 'only-steers'] as const)(
       TERM2_CACHE_DIR: path.join(home, '.cache', 'term2'),
       TERM2_CONVERSATIONS_DIR: path.join(root, 'conversations'),
       DISABLE_LOGGING: '1',
+      TERM2_EXIT_CONFIRM_WINDOW_MS: EXIT_CONFIRM_WINDOW_MS,
       [HARNESS_IDLE_ENV]: idlePath,
       CI: 'false',
     };
@@ -339,8 +343,8 @@ it.each(['esc', 'ctrl-c', 'editing', 'only-steers'] as const)(
       // Legacy's first Ctrl+C clears the draft; the second stops the turn.
       session.write('\x03');
       await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 5_000 });
-      // That Ctrl+C armed legacy's two-second exit; the stopping one waits it out.
-      await new Promise((resolve) => setTimeout(resolve, 2100));
+      // That Ctrl+C armed the exit confirmation window; the stopping one waits it out.
+      await new Promise((resolve) => setTimeout(resolve, EXIT_CONFIRM_WAIT_MS));
     }
     const cancelAt = Date.now();
     session.write(mode === 'ctrl-c' ? '\x03' : '\x1b');
@@ -495,6 +499,7 @@ it.skipIf(process.platform !== 'linux')(
       TERM2_CACHE_DIR: path.join(home, '.cache', 'term2'),
       TERM2_CONVERSATIONS_DIR: path.join(root, 'conversations'),
       DISABLE_LOGGING: '1',
+      TERM2_EXIT_CONFIRM_WINDOW_MS: EXIT_CONFIRM_WINDOW_MS,
       [HARNESS_IDLE_ENV]: idlePath,
       // Ink suppresses dynamic terminal updates in CI mode; this test needs an interactive TUI.
       CI: 'false',
@@ -524,7 +529,7 @@ it.skipIf(process.platform !== 'linux')(
     session.write('\x03');
     await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
     await session.waitForOutput('Stopped', 30_000);
-    await new Promise((resolve) => setTimeout(resolve, 2500));
+    await new Promise((resolve) => setTimeout(resolve, EXIT_CONFIRM_WAIT_MS));
     await send('/quit');
     await session.waitForExit(30_000);
     const id = fs

@@ -6,14 +6,12 @@ import path from 'node:path';
 import { testCliPath, spawnTerminal, type TerminalSession } from '../helpers/terminal-e2e.js';
 import { HARNESS_IDLE_ENV, waitForHarnessIdleGeneration } from '../../src/shared/lib/harness-input-idle.js';
 
-// tsx cold-starts the whole app through an on-demand transform; inside CI's
-// full-suite run that competes with dozens of vitest workers for every core,
-// so first paint can take minutes rather than seconds. The budget is large
-// on purpose; a real failure now dumps the child's visible output instead of
-// failing blind.
-const STARTUP_TIMEOUT_MS = 240_000;
+// The built entry is plain JavaScript: launch it with node alone. Loading it through
+// `--import tsx` transformed the 17 MB bundle on every start (about 3.5 s each).
+// The budgets only bound a real hang; a failure dumps the child's visible output.
+const STARTUP_TIMEOUT_MS = 60_000;
 const EXIT_TIMEOUT_MS = 45_000;
-const TEST_TIMEOUT_MS = 600_000;
+const TEST_TIMEOUT_MS = 180_000;
 
 let session: TerminalSession | null = null;
 let tempHome = '';
@@ -45,7 +43,7 @@ it.sequential.each(['lite', 'bare'])(
     const idlePath = path.join(tempHome, 'input-idle');
     session = spawnTerminal(
       'node',
-      ['--import', 'tsx', testCliPath('dist/cli.js'), ...(profile === 'lite' ? ['--lite'] : ['--profile', 'bare'])],
+      [testCliPath('dist/cli.js'), ...(profile === 'lite' ? ['--lite'] : ['--profile', 'bare'])],
       {
         cwd: process.cwd(),
         env: {

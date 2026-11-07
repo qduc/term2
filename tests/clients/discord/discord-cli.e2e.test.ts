@@ -12,6 +12,9 @@ import { sendDiscord } from '../../../src/clients/discord/discord-outbound.js';
 
 // Cold start of the built CLI tracks host load; bound only a real hang. The test budget below must exceed one wait.
 const READINESS_MS = 40_000;
+// The bridge's 10s REST deadline becomes 2s: still well past the 150ms "not exited yet" check below.
+// Its 1s poll sleep becomes 200ms.
+const REST_CLOCK_SPEEDUP = 5;
 const cleanup: Array<() => void | Promise<void>> = [];
 afterEach(async () => {
   for (const close of cleanup.splice(0).reverse()) await close();
@@ -89,9 +92,17 @@ it.each(
       preload,
       `
       import https from 'node:https';
+      import timers from 'node:timers/promises';
       import {syncBuiltinESMExports} from 'node:module';
       https.request = () => { throw new Error('Unexpected HTTPS egress'); };
+      // The bridge's own timers still decide every boundary; only their external clocks run
+      // ${REST_CLOCK_SPEEDUP}x faster: a held request ends through its AbortSignal.timeout in 2s instead
+      // of 10s, and the runner's one-second REST poll sleep (as in the integration runner tests) is 200ms.
+      const sleep = timers.setTimeout;
+      timers.setTimeout = (ms, ...args) => sleep(ms === 1000 ? ms / ${REST_CLOCK_SPEEDUP} : ms, ...args);
       syncBuiltinESMExports();
+      const realTimeout = AbortSignal.timeout.bind(AbortSignal);
+      AbortSignal.timeout = (ms) => realTimeout(ms / ${REST_CLOCK_SPEEDUP});
       const nativeFetch = globalThis.fetch;
       globalThis.fetch = (url, options) => {
         if (!String(url).startsWith('https://discord.com/api/v10/')) throw new Error('Unexpected REST egress');
@@ -111,6 +122,9 @@ it.each(
       TMPDIR: root,
       TERM2_DISCORD_BOT_TOKEN: 'OFFLINE_CLI_TOKEN',
       TERM2_DISCORD_GATEWAY: 'off',
+      ...(process.env.TERM2_TEST_NODE_COMPILE_CACHE
+        ? { NODE_COMPILE_CACHE: process.env.TERM2_TEST_NODE_COMPILE_CACHE }
+        : {}),
     };
     writeMockCliSettings(root, env);
     function launch() {

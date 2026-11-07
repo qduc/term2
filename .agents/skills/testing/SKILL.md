@@ -101,15 +101,21 @@ and `68ef50ff` (local-only evidence), not a result file to resume appending.
   a no-reopen mutation must fail at the reset assertion. A controlled
   hook/controller/Ink probe reproduced this mechanism; the original full-CLI
   CI timing was not reproduced locally.
-- **Direct settings e2e teardown:** `tests/cli/settings.e2e.test.ts` fails
-  intermittently with `ENOTEMPTY: directory not empty, rmdir
+- **Direct e2e teardown race (fixed 2026-11-07):** `tests/cli/settings.e2e.test.ts`
+  failed intermittently with `ENOTEMPTY: directory not empty, rmdir
   '<tmp>/term2-tool-rows-e2e-*/home'` (or `home/.local`) and no assertion
-  failure. It reproduced on unmodified `main` `d7bf2ff` in 3 of 6 isolated runs
-  (2026-11-04). `afterEach` calls `session.dispose()`, which kills the PTY
-  without awaiting child exit, then `rmSync`s the root while the child may still
-  write under HOME; `maxRetries` does not cover it. Treat the signature as this
-  teardown race, not a product regression; a likely fix (untested) is to await child exit
-  before removing the root.
+  failure; it reproduced on unmodified `main` `d7bf2ff` in 3 of 6 isolated runs
+  (2026-11-04), and `tool-output.e2e.test.ts` hit the same signature on
+  `8a4617c` plus local changes (its throwing `afterEach` then left
+  `providerRequests` unreset, failing the next case by count). `dispose()` in
+  `tests/helpers/terminal-e2e.ts` killed only the Python PTY bridge, which merely
+  hangs the CLI up; the CLI outlived it and could still write under HOME while
+  `afterEach` ran `rmSync`. `dispose()` now SIGKILLs the CLI's process group via
+  `killPtyChildren()` first (Linux). A probe measured the CLI surviving ~15 ms
+  after the old teardown and 0 ms after the new one; 5 repeated runs of
+  settings, tool-output and approval-mode e2e then passed. If the signature
+  returns, look for a writer outside the CLI's process group (shell commands run
+  in their own groups).
 - **Build/host isolation:** suites that replace `dist` in one worktree must run
   sequentially; overlapping builds produced transient missing-module errors.
   Missing `dist/cli.js` is setup failure, not behavioral red proof. Child-process

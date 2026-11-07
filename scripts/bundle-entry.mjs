@@ -47,7 +47,19 @@ export async function bundleEntry(dist) {
     legalComments: 'none',
     // Native addons and packages that load their own files beside them (binaries, workers,
     // prebuilt bindings) stay ordinary node_modules imports.
-    external: ['*.node', 'better-sqlite3', 'ssh2', 'cpu-features', 'koffi', 'jiti', '@anthropic-ai/sandbox-runtime'],
+    // @qduc/web-fetch is reached only through web_fetch's dynamic import(), yet bundled it put about
+    // 5 MB (jsdom, parse5, domino, ...) in front of every start: each launch read, decoded and
+    // compiled it before any code ran. Loaded from node_modules, it costs only the first fetch.
+    external: [
+      '*.node',
+      'better-sqlite3',
+      'ssh2',
+      'cpu-features',
+      'koffi',
+      'jiti',
+      '@anthropic-ai/sandbox-runtime',
+      '@qduc/web-fetch',
+    ],
     alias: { 'react-devtools-core': devtoolsStub },
     plugins: [ownLocations],
     // CommonJS dependencies expect require, __filename and __dirname. `define` maps only their free

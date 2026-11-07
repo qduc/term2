@@ -1,4 +1,4 @@
-import { testCliPath } from '../../tests/helpers/terminal-e2e.js';
+import { PYTHON_DA1_RESPONDER, testCliPath } from '../../tests/helpers/terminal-e2e.js';
 import { appendFileSync, createWriteStream, existsSync, rmSync, unlinkSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -81,7 +81,12 @@ const PYTHON_PTY_BRIDGE = [
   '        pending_signals.clear()',
   '    return pid, fd',
   'pty.fork = fork',
-  `status = pty.spawn([sys.executable, '-c', ${JSON.stringify(PYTHON_PTY_CHILD)}, *sys.argv[1:]])`,
+  PYTHON_DA1_RESPONDER,
+  'def read_master(fd):',
+  '    data = os.read(fd, 1024)',
+  '    answer_da1(fd, data)',
+  '    return data',
+  `status = pty.spawn([sys.executable, '-c', ${JSON.stringify(PYTHON_PTY_CHILD)}, *sys.argv[1:]], read_master)`,
   'code = os.waitstatus_to_exitcode(status)',
   'sys.exit(code if code >= 0 else 128 - code)',
 ].join('\n');
@@ -545,9 +550,17 @@ function createPtyChild(options: {
     resolveExit = resolve;
   });
 
+  // Output only grows: strip the whole session again only once new bytes arrived, not per chunk or poll.
+  let visibleLength = 0;
+  const currentVisibleOutput = (): string => {
+    if (visibleLength !== output.length) {
+      visibleOutput = stripVTControlCharacters(output);
+      visibleLength = output.length;
+    }
+    return visibleOutput;
+  };
   const appendOutput = (chunk: Buffer | string): void => {
     output += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
-    visibleOutput = stripVTControlCharacters(output);
   };
 
   // Preserve UTF-8 characters split across arbitrary PTY pipe chunks.
@@ -573,7 +586,7 @@ function createPtyChild(options: {
 
   const snapshot = (): ChildSnapshot => ({
     output,
-    visibleOutput,
+    visibleOutput: currentVisibleOutput(),
     exit: exitState,
   });
 
@@ -753,11 +766,11 @@ function createPtyChild(options: {
   return {
     pid: terminal.pid,
     read: () => output,
-    readVisible: () => visibleOutput,
+    readVisible: currentVisibleOutput,
     readOutput: () => output,
-    readVisibleOutput: () => visibleOutput,
+    readVisibleOutput: currentVisibleOutput,
     getOutput: () => output,
-    getVisibleOutput: () => visibleOutput,
+    getVisibleOutput: currentVisibleOutput,
     write,
     waitForOutput: (needle, timeoutMs) =>
       waitForState((value) => value.visibleOutput.includes(needle), timeoutMs).then(() => undefined),
@@ -797,7 +810,7 @@ function createPtyChild(options: {
       const outcome = await Promise.race([idleWait, exitWait]);
       if (outcome.kind === 'idle') return outcome.generation;
       if (outcome.kind === 'exited') {
-        const tail = tailOfVisibleOutput(visibleOutput);
+        const tail = tailOfVisibleOutput(currentVisibleOutput());
         throw new Error(
           `PTY child exited before publishing composer idle (code=${outcome.exit.exitCode}, signal=${outcome.exit.signal}).\nchild visible output (tail):\n${tail}`,
         );

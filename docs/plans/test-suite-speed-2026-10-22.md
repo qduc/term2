@@ -673,3 +673,69 @@ because of that inconsistency. Raw timestamps and snapshots are retained;
 mutable workflow `updated_at` values are recorded separately from job elapsed
 time. The approximately one-minute complete feedback target was not achieved;
 see the closeout above for the final verified measurements.
+
+## E2E lane root causes (2026-11-07)
+
+Base `8a4617c`. The `e2e` job's Vitest run took 202.8 s in
+[CI run 42229119681](https://github.com/qduc/term2/actions/runs/42229119681):
+579 s of summed test time on three workers, while `/usr/bin/time` reported 160%
+CPU on the 4-vCPU runner. The lane was waiting, not computing. A local
+4-vCPU baseline matched that shape: 171.9 s Vitest, 493 s summed, 254 s CPU.
+[PR #179](https://github.com/qduc/term2/pull/179) split slow files and tuned one
+window; this follow-up instead attributed the time and removed its causes.
+
+Attribution came from a temporary Vitest setup file (not committed) that
+recorded, per test, each built-CLI spawn and every `setTimeout` issued from a
+test file. Of the 499 s summed in that run: CLI cold start about 42% (~236
+launches), test-file sleeps 15%, restart fixtures copying `dist/` 11%, Discord
+REST deadlines 8%.
+
+| Cause | Change | Evidence |
+| --- | --- | --- |
+| The PTY bridges never answered Device Attributes, so `detectTerminalBackground()` waited its 150 ms backstop on every launch and restart | `PYTHON_DA1_RESPONDER` (`tests/helpers/terminal-e2e.ts`), shared by the provider harness, answers DA1 only. Without an OSC 11 reply the detected background stays unknown, as before | Composer idle 715 → 575 ms. About 80 ms of the saving reappears as the first transcript render waiting on `RENDER_INTERVAL_MS` (120 ms), which is product pacing |
+| The e2e tier had no V8 compile cache; integration and provider tiers did | `tests/helpers/e2e-cli-global-setup.ts` primes it. Hand-built child environments (Discord, first run) pass it on | ~150–200 ms per launch |
+| `cli.e2e` and `first-run-setup` launched the built JavaScript through `--import tsx` | Plain `node` | `--help` 0.5 s → 4.1 s with tsx on the 17.7 MB bundle |
+| Restart fixtures copied `dist/` with `fs.promises.cp`; the failure cases also made an unused `root/dist` copy | `copyBuiltCli()` (`fs.cpSync`, skipping maps and declarations), one copy | 1.15 s idle (over 3 s loaded) → 0.08–0.13 s per copy; local restart failure cases ~6–10 s → ~2 s |
+| Discord `*-timeout` cases waited the bridge's real 10 s REST deadline, then 1 s poll sleeps | The test preload runs those external clocks 5× faster (`AbortSignal.timeout`, `timers/promises` 1 s sleep), as `discord-command.integration.test.ts` already stretches its sleep. The guard ledger records no production threshold override for this bridge, so none was added | File 67.7 s → 21.5 s locally |
+| Fixtures paused to make a rate visible: the status bar hides rates above 500 tok/s (`MAX_PLAUSIBLE_DECODE_TPS`) | `/usage` fixture: 73 tokens over 400 ms instead of 731 over 1.7 s, keeping the ~240 ms margin. Reasoning deltas 250 ms apart instead of 1.2 s. Codex quota expiry 8 s → 4 s | Each check still needs the rate or expiry it asserted |
+| `@qduc/web-fetch` (jsdom, parse5, domino, …) was bundled although only `web_fetch`'s dynamic `import()` reaches it | External in `scripts/bundle-entry.mjs` | Entry 17.7 → 10.8 MB; `--help` median 362 → 323 ms (20 interleaved runs, warm cache). The library still resolved from the bundle's directory and converted a loopback page |
+| Both PTY helpers re-stripped the whole session output on every poll or chunk | Memoized by output length | Less worker CPU |
+
+Measured on this host with `node scripts/run-ci-lane.mjs e2e`:
+
+| Revision | Vitest duration | Summed test time | Result |
+| --- | ---: | ---: | --- |
+| Base `8a4617c` | 171.9 s | 492.7 s | 199 passed |
+| Startup, restart copy, tsx and Discord deadline fixes | 122.4 s | 343.1 s | 199 passed |
+| Plus fixture pauses, web-fetch external and output memo | 109.8 s | 307.9 s | 199 passed |
+| Final, plus the teardown fix and Discord poll clock | 110.1 s | 307.3 s | 199 passed |
+
+A full four-lane run then hit the teardown race recorded in the `testing` skill
+(`ENOTEMPTY`) in `tool-output.e2e.test.ts`. `dispose()` now kills the CLI's
+process group; see that skill entry for the mechanism and evidence. In the same
+four-lane run, `test` and `integration` had 15 failures (bubblewrap-sandboxed
+`cli-headless` cases, a Discord image stall and permission-injected logging
+failures). The unmodified base reproduced exactly those 15 in this container:
+it lacks `bwrap` and `socat` and runs as root, which bypasses `chmod`. The
+provider lane passed all 202 cases.
+
+Considered and not done:
+
+- **Splitting files or adding workers.** That changes packing, not the cost of
+  each test.
+- **A product override of the Discord REST deadline.** It contradicts the
+  ledger's stance; the test controls the external clock instead.
+- **Shortening the 2 s Ctrl+C/Escape confirmation windows for tests.** The
+  same tests that wait a window out also double-press inside it. A short window
+  would buy about 4 s of wall time at the cost of flakes under load.
+- **Event-driven `waitForOutput`.** About 12 ms per wait, roughly 2 s of wall
+  time.
+
+What remains is mostly the CLI cold start itself: about 0.55 s to an idle
+composer locally, more on hosted runners, paid once or twice by most of the
+199 tests (126 of them now take under 1.5 s). Module initialization is spread
+thinly; the largest pieces measured were `application-mcp.js` (~36 ms, MCP SDK),
+settings schema construction (~20 ms) and `mode-notices.js` resolving profiles at
+import (~18 ms). Reducing that is product startup work. The remaining fixed
+sleeps (~60 s summed) are mostly negative-observation windows, which need a
+deterministic quiescence signal rather than a shorter sleep.

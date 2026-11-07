@@ -2142,16 +2142,24 @@
       "reason": "The engine needs the stop/continue decision and the reminder text before it can end or continue the turn. It is called once the final response's events are accepted (turn.ts), and the goal, reminder and verification facts it writes are the decision's own receipt, so they land at the turn's stop point. Could go if normal stop became an emit-and-await decision event like interaction_required (#199)."
     },
     {
+      "callback": "TurnDeps.prepareRequest",
+      "reason": "Binds the session-owned tools for the request (goal_check, propose_goal, session_rollover, memory tools); it writes nothing itself. Those tools write their own facts (goal, rollover_requested, memory) when the engine executes them, and execution starts only after the call's tool_start_requested event is accepted (turn-tools.ts #invoke), so the writes land between that call's tool_started and tool_finished facts. Could go if those tools returned their facts in the tool result for the reader to append."
+    },
+    {
+      "callback": "TurnDeps.askOrchestrator",
+      "reason": "A background child's question to its orchestrator: Session writes task_question_opened and the background_notice_enqueued that carries it to the parent, through the task registry (background.ts, task-questions.ts). The question belongs to the task, folded per task by replay-background.ts, and the notice is delivered to the parent only at its next steering boundary, so neither depends on where the child's engine was when it asked. The trail the gate prints may go through the poison path; the direct write is the question."
+    },
+    {
       "callback": "TurnDeps.runNested",
-      "reason": "Session owns a child run: it writes the branch_started and task facts and reads the child handle through the branch reader (session/branches.ts), which appends each child event before accepting it, the same contract as the root reader. Those facts are keyed by branch and task (replay-background.ts), not by position in the parent turn, and the parent tool result that reports the child is still a parent event."
+      "reason": "Session owns a child run: it writes branch_started, task facts and their background_notice_enqueued notices, and reads the child handle through the branch reader (session/branches.ts), which appends each child event (including top-level request_cost_recorded facts) before accepting it, the same contract as the root reader. Branch and task facts are keyed by branch and task (replay-background.ts), notices reach the parent only at a steering boundary, and the parent tool result that reports the child is still a parent event."
     },
     {
       "callback": "TurnDeps.subagents",
-      "reason": "Returns the task port tools use to message, answer or stop child tasks. Its writes are task facts in Session's task registry, folded per task by replay-background.ts rather than by position in the turn, and the calling tool's own result still reaches the log as a turn event."
+      "reason": "Returns the task port tools use to message, answer or stop child tasks. Its writes are task facts in Session's task registry, folded per task by replay-background.ts, plus background_notice_enqueued notices that reach the parent model only at a steering boundary; the calling tool's own result still reaches the log as a turn event, after the writes it caused."
     },
     {
       "callback": "TurnDeps.shellTasks",
-      "reason": "Returns the shell-task port tools use to wait on or stop background shell tasks. Its writes are task facts in Session's task registry, folded per task by replay-background.ts rather than by position in the turn, and the calling tool's own result still reaches the log as a turn event."
+      "reason": "Returns the shell-task port tools use to start, watch, wait on or stop background shell tasks. Its writes are task facts in Session's task registry (stops) and background_notice_enqueued facts for watched shell output (conversation-background.ts shellTaskPort). Notices reach the model only when a later steering boundary drains them, so their log position orders delivery, not this turn's events; the calling tool's own result still reaches the log as a turn event."
     }
   ]
 }

@@ -7,12 +7,15 @@
 // stay synchronous.
 //
 // How: a TypeScript program (no emit) finds every place outside engine/ that supplies one of those members, then
-// follows the supplied function through calls it can resolve to a body (including closures created inside it) and
-// reports the callback if it reaches a writer: ConversationJournal.commit/recover, a log's append, or a port
-// signature named commit, accept or append (optionally followed by a capitalised suffix: commitGoal, acceptCost)
-// outside engine/, the shape every Session write port has today. `accepted` observers are not writers.
-// Limits: a write behind a port with another name, or reached only through a value the checker cannot resolve to a
-// body, is not seen; closures are counted whether or not they run, so the check over-approximates within a body.
+// follows the supplied function through calls it can resolve to a body (including closures created inside it, and
+// values chosen by a conditional or `??`). A call to an interface or type-literal member is followed into every
+// object literal or `implements` class that implements it. The callback is reported if it reaches a writer:
+// ConversationJournal.commit/recover, a log's append, or a port signature named commit, accept or append
+// (optionally followed by a capitalised suffix: commitGoal, acceptCost) outside engine/. `accepted` observers are
+// not writers.
+// Limits: a write behind a port with another name that nothing in src/ implements by declaration, or reached only
+// through a value the checker cannot resolve, is not seen. Closures and error paths count whether or not they run,
+// so the check over-approximates, and the printed trail is one path, not necessarily the main one.
 import path from 'node:path';
 import ts from 'typescript';
 import { exceptionKeys, failureMap, repo, reportAndExit } from './gates/rules.mjs';
@@ -123,10 +126,75 @@ const bodyOf = (declaration) => {
   return undefined;
 };
 
+// An interface or type-literal member has no body; what runs is whatever implements it. Index every object literal
+// member and class member outside engine/ by name once (parse only), and ask the checker only for those whose name
+// matches the member being followed.
+const membersByName = new Map();
+for (const sf of program.getSourceFiles()) {
+  if (!sf.fileName.startsWith(src) || rel(sf.fileName).startsWith('src/engine/')) continue;
+  const visit = (node) => {
+    if (
+      (ts.isPropertyAssignment(node) || ts.isShorthandPropertyAssignment(node) || ts.isMethodDeclaration(node)) &&
+      node.name &&
+      (ts.isObjectLiteralExpression(node.parent) || ts.isClassLike(node.parent))
+    ) {
+      const name = node.name.getText();
+      if (!membersByName.has(name)) membersByName.set(name, []);
+      membersByName.get(name).push(node);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+}
+const implementations = new Map();
+const ownerTypes = new Map(); // object literal or class -> the types its members implement
+const ownerTypesOf = (owner) => {
+  if (!ownerTypes.has(owner)) {
+    const contextual = ts.isObjectLiteralExpression(owner) ? checker.getContextualType(owner) : undefined;
+    ownerTypes.set(
+      owner,
+      ts.isObjectLiteralExpression(owner)
+        ? contextual
+          ? [checker.getNonNullableType(contextual)]
+          : []
+        : (owner.heritageClauses ?? [])
+            .flatMap((clause) => clause.types)
+            .map((type) => checker.getTypeAtLocation(type)),
+    );
+  }
+  return ownerTypes.get(owner);
+};
+const implementationsOf = (signature) => {
+  if (implementations.has(signature)) return implementations.get(signature);
+  const found = [];
+  for (const member of membersByName.get(signature.name.getText()) ?? []) {
+    // A class without `implements` cannot implement the signature by declaration; skip it cheaply.
+    if (ts.isClassLike(member.parent) && !member.parent.heritageClauses) continue;
+    const targets = ownerTypesOf(member.parent).map((type) => type.getProperty(member.name.getText()));
+    if (targets.some((target) => target?.declarations?.includes(signature))) found.push(member);
+  }
+  implementations.set(signature, found);
+  return found;
+};
+const isSignature = (declaration) => ts.isPropertySignature(declaration) || ts.isMethodSignature(declaration);
+
 // A function value that is handed on (an argument, a property value, a returned or bound value) may be invoked
-// later, so it counts as called. A plain read such as a receiver (`commands.owner`) does not.
+// later, so it counts as called. A plain read such as a receiver (`commands.owner`) does not. A value chosen by a
+// conditional or `??`/`||`/`&&`, or wrapped in parentheses or a cast, is handed on if the whole expression is.
 const handedOn = (reference) => {
   const parent = reference.parent;
+  if (
+    (ts.isConditionalExpression(parent) && parent.condition !== reference) ||
+    (ts.isBinaryExpression(parent) &&
+      [ts.SyntaxKind.QuestionQuestionToken, ts.SyntaxKind.BarBarToken, ts.SyntaxKind.AmpersandAmpersandToken].includes(
+        parent.operatorToken.kind,
+      )) ||
+    ts.isParenthesizedExpression(parent) ||
+    ts.isAsExpression(parent) ||
+    ts.isNonNullExpression(parent) ||
+    ts.isSatisfiesExpression(parent)
+  )
+    return handedOn(parent);
   return (
     ((ts.isCallExpression(parent) || ts.isNewExpression(parent)) && !!parent.arguments?.includes(reference)) ||
     (ts.isPropertyAssignment(parent) && parent.initializer === reference) ||
@@ -144,21 +212,49 @@ const reaches = (start) => {
     if (!node || depth > 12 || seen.has(node)) return undefined;
     seen.add(node);
     let found;
-    const visit = (child) => {
-      if (found) return;
-      const callee = ts.isCallExpression(child)
+    const calleeOf = (child) =>
+      ts.isCallExpression(child)
         ? child.expression
         : (ts.isIdentifier(child) || ts.isPropertyAccessExpression(child)) && (child === node || handedOn(child))
         ? child
         : undefined;
+    const targetOf = (callee) => (ts.isPropertyAccessExpression(callee) ? callee.name : callee);
+    // A writer called in this body itself is reported before any deeper path, so the trail shows the nearest write.
+    const direct = (child) => {
+      if (found) return;
+      const callee = calleeOf(child);
+      const target = callee && targetOf(callee);
+      if (target && ts.isIdentifier(target) && resolve(target).some(isWriter)) {
+        found = [...trail, `${callee.getText().replace(/\s+/g, ' ')} (${where(child)})`];
+        return;
+      }
+      ts.forEachChild(child, direct);
+    };
+    direct(node);
+    if (found) return found;
+    const visit = (child) => {
+      if (found) return;
+      const callee = calleeOf(child);
       if (callee) {
-        const target = ts.isPropertyAccessExpression(callee) ? callee.name : callee;
+        const target = targetOf(callee);
         for (const declaration of ts.isIdentifier(target) ? resolve(target) : []) {
-          if (isWriter(declaration)) {
-            found = [...trail, `${callee.getText().replace(/\s+/g, ' ')} (${where(child)})`];
-            return;
-          }
+          if (isWriter(declaration)) continue; // reported by `direct` above
           if (!inSrc(declaration) || inEngine(declaration)) continue;
+          if (isSignature(declaration)) {
+            for (const implementation of implementationsOf(declaration)) {
+              const value = ts.isPropertyAssignment(implementation)
+                ? implementation.initializer
+                : ts.isShorthandPropertyAssignment(implementation)
+                ? implementation.name
+                : implementation;
+              const deeper = search(value, [...trail, `${target.getText()} (${where(child)})`], depth + 1);
+              if (deeper) {
+                found = deeper;
+                return;
+              }
+            }
+            continue;
+          }
           const body = bodyOf(declaration);
           if (body && !ts.isLiteralExpression(body)) {
             const deeper = search(body, [...trail, `${target.getText()} (${where(child)})`], depth + 1);

@@ -6,7 +6,8 @@
  * and emits `TurnEvent`s on a `TurnHandle`. It never writes the log. Session
  * accepts each event and only then lets the turn advance, so a crash can lose
  * at most the unaccepted tail. A few `TurnDeps` callbacks the session supplies
- * (steering, normal stop, nested runs, task ports) still write facts while the
+ * (steering, normal stop, nested runs, task ports, orchestrator questions, and the
+ * session-owned tools bound by request preparation) still write facts while the
  * engine waits on them; each is recorded with its reason in
  * scripts/rule-baseline.json and checked by scripts/check-engine-callbacks.mjs.
  * Request costs are `request_cost` events. When a tool needs approval or an answer, the

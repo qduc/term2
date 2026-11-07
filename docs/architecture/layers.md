@@ -79,8 +79,9 @@ wall-clock on a loaded 7-core box.
 | One projection: wire events are built only in `protocol/` | `check-rules.mjs` (one recorded exception: deferred web server) | every commit | 2.4 s |
 | Names are jobs (no service/adapter/orchestrator file or folder) | `check-rules.mjs` | every commit | in the above |
 | No new unused runtime exports (recorded in `rule-baseline.json`, reported by `scripts/arch-report.mjs`) | `check-rules.mjs` | every commit | in the above |
+| File basenames are unique under `src/` unless recorded with a reason | `check-rules.mjs` | every commit | in the above |
 | Every file is reached from `app/cli.ts` | `check-reachability.mjs` | every commit | 1.2 s |
-| Files stay under 500 lines unless a ceiling records why; layer edges stay within budget | `check-complexity.mjs` | every commit | 0.15 s |
+| Files stay under 500 lines, folders stay under 15 files unless a ceiling records why; layer edges within budget | `check-complexity.mjs` | every commit | 0.15 s |
 | A new exception or raised ceiling carries a reason, and the reviewer is shown each one | `check-baselines.mjs` | every commit | 0.2 s |
 | Root directory contains only allowlisted files | `check-root.mjs` | every commit | 0.05 s |
 | A message's path stays short and runs through the production direct files | `bench/hops.mts` | every commit | 5.8 s |

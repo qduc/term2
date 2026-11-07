@@ -126,6 +126,13 @@ for (const d of current.deviations) {
       );
     else if (reasonProblem(d.reason)) problem(`${where} ${reasonProblem(d.reason)}`);
     else accepted.push({ ...d, change: `ceiling ${before.lines} -> ${d.lines}` });
+  } else if (d.rule === 'folder-fanout' && d.files > before.files) {
+    if ((d.reason ?? '').trim() === (before.reason ?? '').trim())
+      problem(
+        `${where} ceiling rose ${before.files} -> ${d.files} but its reason is unchanged; say why the new files still belong here`,
+      );
+    else if (reasonProblem(d.reason)) problem(`${where} ${reasonProblem(d.reason)}`);
+    else accepted.push({ ...d, change: `ceiling ${before.files} -> ${d.files}` });
   }
 }
 
@@ -136,6 +143,15 @@ if (baseBudget && currentBudget) {
     problem(
       `scripts/complexity-budget.json maxLines rose ${baseBudget.maxLines} -> ${currentBudget.maxLines}; the global ` +
         'limit is a user decision, record a per-file ceiling instead',
+    );
+  if (
+    currentBudget.maxFolderFiles &&
+    baseBudget.maxFolderFiles &&
+    currentBudget.maxFolderFiles > baseBudget.maxFolderFiles
+  )
+    problem(
+      `scripts/complexity-budget.json maxFolderFiles rose ${baseBudget.maxFolderFiles} -> ${currentBudget.maxFolderFiles}; the global ` +
+        'limit is a user decision, record a per-folder ceiling instead',
     );
   const newEdges = accepted.filter((d) => d.rule === 'layer-direction').length;
   if (currentBudget.maxLayerEdges > baseBudget.maxLayerEdges + newEdges)

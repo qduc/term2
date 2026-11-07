@@ -75,8 +75,8 @@ Every integration, e2e and provider test pays its cost on every CI run, and thes
 tiers spend most of it waiting, not computing. On base `8a4617c` the e2e lane
 summed 579 s of test time on three workers while the 4-vCPU runner sat at 160%
 CPU. The attribution and measurements are in
-`docs/plans/test-suite-speed-2026-10-22.md`, "E2E lane root causes". When you
-write or change a test in these tiers:
+`docs/plans/engineering/measurements/test-suite-speed-2026-10-22.md`,
+"E2E lane root causes". When you write or change a test in these tiers:
 
 - **Count built-CLI launches.** A launch to an idle composer measured about
   0.55 s locally, more on hosted runners; ~236 launches were 42% of that lane's

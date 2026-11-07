@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import ProfileSelectionMenu from './ProfileSelectionMenu.js';
 import type { ProfileOption } from './use-profile-selection.js';
 import { PROFILE_TRIGGER } from './use-profile-selection.js';
 import type { MenuComponentProps } from './menu-registry.js';
 import type { MenuEffect, MenuFrame, MenuInteraction } from './menu-types.js';
 import { applyMenuEditorEvent } from './menu-editor.js';
+import { useMenuInteraction } from './use-menu-interaction.js';
 
 type ProfileState = ReturnType<typeof import('./use-profile-selection.js').useProfileSelection>;
 
@@ -60,10 +61,7 @@ export function ProfileMenuSession({ frame, active, controller, interactions, se
     [controller, frame.id, profiles],
   );
 
-  useEffect(() => {
-    if (!active) return;
-    return interactions.register(frame.id, interaction);
-  }, [active, frame.id, interaction, interactions]);
+  useMenuInteraction(interactions, frame.id, active, interaction);
 
   if (!active) return null;
   return (

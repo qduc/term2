@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import CopyMenu from './CopyMenu.js';
 import { useSelection } from './use-selection.js';
 import type { CopySelection } from './menu-types.js';
 import type { MenuComponentProps } from './menu-registry.js';
 import type { MenuEffect, MenuFrame, MenuInteraction } from './menu-types.js';
+import { useMenuInteraction } from './use-menu-interaction.js';
 
 type Props = MenuComponentProps<Extract<MenuFrame, { kind: 'copy' }>> & {
   services: MenuComponentProps<Extract<MenuFrame, { kind: 'copy' }>>['services'] & {
@@ -44,10 +45,7 @@ export function CopyMenuSession({ frame, active, interactions, services }: Props
     [onCopySelection, selection],
   );
 
-  useEffect(() => {
-    if (!active) return;
-    return interactions.register(frame.id, interaction);
-  }, [active, frame.id, interaction, interactions]);
+  useMenuInteraction(interactions, frame.id, active, interaction);
 
   if (!active) return null;
   return <CopyMenu items={frame.items} selectedIndex={selection.selectedIndex} />;

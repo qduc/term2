@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import SkillSelectionMenu from './SkillSelectionMenu.js';
 import type { MenuSkillInfo as SkillInfo } from '../integration.js';
 import type { MenuComponentProps } from './menu-registry.js';
 import type { MenuEffect, MenuFrame, MenuInteraction } from './menu-types.js';
 import { applyMenuEditorEvent } from './menu-editor.js';
+import { useMenuInteraction } from './use-menu-interaction.js';
 
 type SkillsState = ReturnType<typeof import('./use-skill-selection.js').useSkillSelection>;
 
@@ -56,10 +57,7 @@ export function SkillsMenuSession({ frame, active, controller, interactions, ser
     [controller, onSkillSelected, onSystemMessage, skills],
   );
 
-  useEffect(() => {
-    if (!active) return;
-    return interactions.register(frame.id, interaction);
-  }, [active, frame.id, interaction, interactions]);
+  useMenuInteraction(interactions, frame.id, active, interaction);
 
   if (!active) return null;
   return (

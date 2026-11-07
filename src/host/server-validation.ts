@@ -165,9 +165,7 @@ export function isSessionUpdateBody(body: unknown): body is SessionUpdateBody {
   )
     return false;
   return (
-    value.mode === undefined ||
-    (typeof value.mode === 'string' &&
-      ['standard', 'bare', 'lite', 'plan', 'mentor', 'orchestrator'].includes(value.mode))
+    value.mode === undefined || (typeof value.mode === 'string' && ['standard', 'bare', 'lite'].includes(value.mode))
   );
 }
 

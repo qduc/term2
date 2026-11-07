@@ -8,7 +8,8 @@ import { createIsolatedWorkspaceLease, writePtyTextAndSubmit } from './provider-
 // chain with "No tool output found" (#150 item 10).
 
 // Codex has its own input filters on a chained request, so item 10 is pinned on both Responses routes.
-it.each(['openai', 'codex'] as const)(
+// Accepted difference (#149): the direct CLI has no question-capable Pair profile.
+it.skip.each(['openai', 'codex'] as const)(
   'delivers a pending steer after cancelling an unanswered question (%s)',
   async (provider) => {
     const requests: Record<string, unknown>[] = [];

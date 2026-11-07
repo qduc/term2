@@ -13,7 +13,6 @@ import type { ConversationRecord } from '../session/conversation/conversation-re
 import type { ShellAutoApprovalAgentClient } from '../session/conversation-agent-client.js';
 import type { ExecutionContext } from '../tools/execution-context.js';
 import { LocalExecutionContext } from './tool-contract.js';
-import { primeActiveProfileNoticeIfActive } from '../session/mode-notices.js';
 import { installPlanModeInterceptor } from '../tools/plan-mode-interceptor.js';
 import { SessionAccessState } from '../session/session/session-access-state.js';
 import { SkillsService } from '../tools/skills/skills-service.js';
@@ -129,24 +128,8 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
   const shell = createDirectShellTools();
   const allowBackgroundShell = options.interactive === true && !remote;
   let goalPort: Pick<DirectContextPort, 'read' | 'commit'> | undefined;
-  const goalDeps: Pick<AgentFactoryDeps, 'getGoal' | 'proposeGoal'> = {
+  const goalDeps: Pick<AgentFactoryDeps, 'getGoal'> = {
     getGoal: () => goalPort?.read().goal.goal,
-    proposeGoal: {
-      // The approved proposal persists the goal; legacy sets its once-per-session guard on the same write.
-      appendGoal: (goal) => {
-        const state = goalPort?.read().goal;
-        if (
-          !goalPort ||
-          !state ||
-          !goalPort.commit(state.generation, [
-            { type: 'goal_proposed', goal },
-            { type: 'goal_changed', goal, source: 'proposal' },
-          ])
-        )
-          throw new Error('The goal changed while awaiting approval; no goal was created.');
-      },
-      hasPriorProposal: () => goalPort?.read().goal.proposalMade ?? false,
-    },
   };
   const deps: AgentFactoryDeps = {
     settings,
@@ -177,7 +160,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     // Session owns the live goal tool and applicability context.
     ...delegation.callbacks,
     getAskUserAnswer: () => answers.getStore(),
-    // Legacy's root gets the goal, which offers propose_goal where the profile allows asking the user (agent.ts).
+    // Root goal_check remains available; dropped workflows no longer offer propose_goal.
     ...(options.interactive === true ? goalDeps : {}),
     async checkToolInterceptors(name, params, callId) {
       for (const interceptor of interceptors) {
@@ -227,10 +210,6 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
   const reasoning = (modelSettings?.reasoning as { effort?: ReasoningEffort } | undefined)?.effort;
   const providerOptions = modelSettings?.providerData as AgentSurface['providerOptions'];
   const temperature = modelSettings?.temperature as number | undefined;
-  let notice: string | null = null;
-  primeActiveProfileNoticeIfActive(settings, (text) => {
-    notice = text;
-  });
   const agentClient = advisoryClient(createProviderRegistry(selection), selection, advisoryAbort.signal);
   // Legacy's in-loop advisory (approval batch coordinator): it sees the pending
   // call in history and caches per call id; `auto` mode may approve from it.
@@ -260,7 +239,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     ...(temperature !== undefined ? { temperature } : {}),
     ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
     ...(providerOptions !== undefined ? { providerOptions } : {}),
-    notice,
+    notice: null,
     runtime: {
       nativeToolSlots,
       tools: registry,

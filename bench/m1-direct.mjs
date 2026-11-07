@@ -33,6 +33,7 @@ const dynamic = (rel) => import(pathToFileURL(path.join(dist, rel)).href);
 const { createLog, openLog, readFacts } = await dynamic('session/log.js');
 const { replay } = await dynamic('session/replay.js');
 const { createConversation, openConversation } = await dynamic('session/conversation.js');
+const { profileEnterNotice } = await dynamic('session/mode-notices.js');
 
 const MODEL = { provider: 'mockprov', model: 'mock-alpha' };
 const SYSTEM = 'You are a test assistant.';
@@ -357,19 +358,21 @@ row(
   },
 );
 
-row('R2', 'follow-up after success (Pair): prior user is raw, notice only on the live request', async () => {
+row('R2', 'follow-up after success: prior user is raw, notice only on the live request', async () => {
   const s = await scenario(okScript('Hello there.'));
   try {
-    const r = await runCli(s, ['--profile', 'pair', 'say hello']);
+    const r = await runCli(s, ['say hello']);
     assert.equal(r.code, 0, r.stderr);
     assert.equal(r.stdout, 'Hello there.\n');
-    assert.equal(r.stderr, 'Profile: pair\n');
+    assert.equal(r.stderr, 'Profile: bare\n');
     const wire = lastUserText(s.requests[0]);
     const prompt = 'say hello';
-    assert.match(wire, /Pair Mode is ON/, 'first request carries the notice');
-    // The conversation adds the separator itself, so the notice handed to it excludes the wire's separator.
-    assert.equal(wire.slice(-(prompt.length + 2)), `\n\n${prompt}`, 'the wire separator before the prompt');
-    const notice = wire.slice(0, -(prompt.length + 2));
+    assert.doesNotMatch(wire, /Mode is ON/, 'Bare sends no workflow notice');
+    assert.equal(wire, prompt, 'Bare sends the raw user message without a notice');
+    // Historical sessions keep their notice. Use the retired Pair notice here so the follow-up
+    // still proves it is attached to the live message instead of being replayed from history.
+    const notice = profileEnterNotice('builtin:pair');
+    assert.ok(notice, 'the historical Pair notice still resolves');
     const file = onlyFile(s.convDir);
     const facts = readFacts(file);
     assert.equal(textOf(facts.find((fact) => fact.type === 'turn_started').input[0]), 'say hello');
@@ -1001,26 +1004,50 @@ row('R18', 'environment overrides reach the request', async () => {
   }
 });
 
-// Saved workflow policy must survive positional prompts independently of auto-approval.
-// Exercise the executable boundary: settings -> surface/provider request -> durable profile.
-for (const [index, { configured, args, expected }] of [
-  { configured: 'pair', args: [], expected: 'pair' },
-  { configured: 'plan', args: [], expected: 'plan' },
-  { configured: 'mentor', args: [], expected: 'mentor' },
-  { configured: 'orchestrator', args: [], expected: 'orchestrator' },
-  { configured: undefined, args: [], expected: 'bare' },
-  { configured: undefined, args: ['--auto-approve'], expected: 'bare' },
-  { configured: 'pair', args: ['--auto-approve'], expected: 'pair' },
-  { configured: 'plan', args: ['--auto-approve'], expected: 'plan' },
-  { configured: 'pair', args: ['--lite'], expected: 'bare' },
-  { configured: 'plan', args: ['--lite', '--auto-approve'], expected: 'bare' },
-  { configured: 'plan', args: ['--profile', 'pair'], expected: 'pair' },
-  { configured: 'pair', args: ['--profile', 'plan'], expected: 'plan' },
-  { configured: 'pair', args: ['--profile', 'bare'], expected: 'bare' },
-  { configured: 'plan', args: ['--lite', '--profile', 'pair'], expected: 'pair' },
-  { configured: 'pair', args: ['--profile', 'full'], expected: 'bare' },
+// Dropped workflows in saved settings fall back to Bare; explicit selections fail closed.
+for (const [index, { configured, args, reject }] of [
+  { configured: 'pair', args: [] },
+  { configured: 'plan', args: [] },
+  { configured: 'mentor', args: [] },
+  { configured: 'orchestrator', args: [] },
+  { configured: undefined, args: [] },
+  { configured: undefined, args: ['--auto-approve'] },
+  { configured: 'pair', args: ['--auto-approve'] },
+  { configured: 'plan', args: ['--auto-approve'] },
+  { configured: 'pair', args: ['--lite'] },
+  { configured: 'plan', args: ['--lite', '--auto-approve'] },
+  { configured: 'plan', args: ['--profile', 'pair'], reject: 'builtin:pair' },
+  { configured: 'pair', args: ['--profile', 'plan'], reject: 'builtin:plan' },
+  { configured: 'pair', args: ['--profile', 'bare'] },
+  { configured: 'plan', args: ['--lite', '--profile', 'pair'], reject: 'builtin:pair' },
+  { configured: 'pair', args: ['--profile', 'full'] },
 ].entries()) {
-  row(`R19.${index + 1}`, `saved ${configured ?? 'default'} ${args.join(' ')} selects ${expected}`, async () => {
+  const label = configured ?? 'default';
+  const expected = 'bare';
+  if (reject) {
+    row(`R19.${index + 1}`, `saved ${label} ${args.join(' ')} rejects retired ${reject}`, async () => {
+      const s = await scenario(
+        okScript('Profile selected.'),
+        {},
+        configured ? { activeProfileId: `builtin:${configured}` } : {},
+      );
+      try {
+        const settingsFile = path.join(s.home, '.local', 'state', 'term2-nodejs', 'settings.json');
+        const savedSettings = fs.readFileSync(settingsFile);
+        const r = await runCli(s, [...args, 'select the configured profile']);
+        assert.equal(r.code, 1);
+        assert.equal(r.stdout, '');
+        assert.equal(r.stderr, `error Missing parent or Profile '${reject}'\n`);
+        assert.equal(s.requests.length, 0, 'explicit retired profile is rejected before a provider call');
+        assert.equal(convFiles(s.convDir).length, 0, 'explicit retired profile starts no conversation');
+        assert.deepEqual(fs.readFileSync(settingsFile), savedSettings, 'rejection does not rewrite saved settings');
+      } finally {
+        await s.close();
+      }
+    });
+    continue;
+  }
+  row(`R19.${index + 1}`, `saved ${label} ${args.join(' ')} selects ${expected}`, async () => {
     const s = await scenario(
       okScript('Profile selected.'),
       {},
@@ -1038,14 +1065,8 @@ for (const [index, { configured, args, expected }] of [
       const wire = JSON.stringify(s.requests[0]);
       assert.ok(wire.includes('M1_PROFILE_CONTEXT_MARKER'), 'project context reaches the provider');
       const bareIdentity = "You are a coding assistant working in the user's checkout.";
-      assert.equal(wire.includes(bareIdentity), expected === 'bare', 'selected instruction identity');
-      for (const profile of ['Pair', 'Plan']) {
-        assert.equal(
-          lastUserText(s.requests[0]).includes(`${profile} Mode is ON`),
-          expected === profile.toLowerCase(),
-          'selected workflow notice',
-        );
-      }
+      assert.ok(wire.includes(bareIdentity), 'Bare instruction identity');
+      assert.doesNotMatch(wire, /Mode is ON/, 'Bare carries no workflow notice');
       const facts = readFacts(onlyFile(s.convDir));
       assert.equal(facts[0].type, 'session_started');
       assert.equal(facts[0].profile.id, `builtin:${expected}`);

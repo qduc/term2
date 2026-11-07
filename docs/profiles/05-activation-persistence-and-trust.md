@@ -65,8 +65,10 @@ single pending-notice slot owned by the session lifecycle.
 The notice is prepended to the next real user turn and then consumed exactly
 once, preserving the behavior owned by the session input preparation path.
 
-Starting or restoring a conversation with a notice-driven Profile active queues
-that Profile's enter notice as `primeActiveProfileNoticeIfActive()` does.
+The historical implementation queued an enter notice when starting or restoring
+a conversation with a notice-driven Profile active. The direct executable
+no longer primes workflow notices: Plan, Pair, Mentor, and Orchestrator are retired
+and saved selections fall back to Bare (see [the current policy](README.md#retired-workflow-profiles)).
 
 ## Commands and UI
 

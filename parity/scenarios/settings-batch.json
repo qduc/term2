@@ -1,6 +1,6 @@
 {
   "id": "settings-batch",
-  "description": "A headless run reflects model, generation, profile, and tool-toggle settings in the provider request and CLI output.",
+  "description": "A saved retired Pair profile falls back to Bare while a headless run retains model, generation, and tool-toggle settings in its provider request and CLI output.",
   "runs": [
     {
       "args": ["--auto-approve", "say hello"]

@@ -5,8 +5,10 @@ import { expect, it } from 'vitest';
 import { createIsolatedWorkspaceLease, writePtyTextAndSubmit } from './provider-test-harness.js';
 import { readHarnessComposerState } from '../../src/shared/lib/harness-input-idle.js';
 
+// Accepted difference (#149): Bare has no profile notice. Preserve image replay and chaining
+// coverage here; native-retry-notice-silent covers background notices, not requestNotice.
 it.skipIf(process.platform !== 'linux')(
-  'repeats a retry without duplicating its notice and chains the following turn',
+  'repeats a retry without duplicating its image and chains the following turn',
   async () => {
     const requests: Record<string, unknown>[] = [];
     const pending: ServerResponse[] = [];
@@ -54,7 +56,7 @@ it.skipIf(process.platform !== 'linux')(
         process.env.TERM2_TEST_CLI ? resolve(process.env.TERM2_TEST_CLI) : join(process.cwd(), 'dist/cli.js'),
         '--lite',
         '--profile',
-        'plan',
+        'bare',
       ],
       env: {
         PATH: `${join(lease.root, 'bin')}:${process.env.PATH ?? ''}`,
@@ -94,7 +96,6 @@ it.skipIf(process.platform !== 'linux')(
       await child.waitForVisibleOutput('Pasted Image #1');
       await child.write('\r');
       await child.waitForState(() => requests.length === 1);
-      expect(JSON.stringify(requests[0]!.input)).toContain('Plan Mode is ON');
       expect(JSON.stringify(requests[0]!.input)).toContain('FIRST_NOTICE_INPUT');
       expect(JSON.stringify(requests[0]!.input)).toContain(
         'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2ioAAAAASUVORK5CYII=',
@@ -126,7 +127,6 @@ it.skipIf(process.platform !== 'linux')(
       await writePtyTextAndSubmit(child, 'SECOND_NOTICE_INPUT');
       await child.waitForState(() => requests.length === 4);
       expect(JSON.stringify(requests[3]!.input)).toContain('SECOND_NOTICE_INPUT');
-      expect(JSON.stringify(requests[3]!.input)).not.toContain('Plan Mode is ON');
       expect(requests[3]!.previous_response_id).toBe('notice-response-2');
       complete(3);
       await child.waitForVisibleOutput('NOTICE_DONE_3');

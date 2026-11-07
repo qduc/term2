@@ -132,6 +132,16 @@ They omit text previews so warm listing needs metadata rather than log replay.
 source OAuth prompts and catalogue diagnostics. They do not open a conversation;
 `cli.ts` retains process startup, mode selection and signal ownership.
 
+Dropped workflow profiles (Plan, Pair, Mentor, Orchestrator; #149) cannot be selected
+through CLI, TUI, native configure, or HTTP. Saved settings and session metadata
+fall back to Bare at runtime, without rewriting historical facts or the settings
+file. CLI help advertises only Bare and its Standard/Full/Lite aliases. The direct
+tool surface keeps root goal checks but no longer installs goal proposal or
+startup workflow notices. The store validates the exact current Bare identity
+only for these retired profiles; all other restore identity, reasoning and temperature checks remain.
+Generic request notices remain supported; retry only reapplies a saved notice
+when its original mode matches the current mode, so dropped workflows stay off.
+
 ## Tools and delegation
 
 `src/delegation/direct/subagent-tools.ts` owns child preparation, invocation scope and

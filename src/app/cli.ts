@@ -11,6 +11,7 @@ import { getAllProviders, getProviderIds } from '../model/providers/index.js';
 import { installationVersion } from '../model/providers/fetch/logging-middleware.js';
 import { LoggingService } from '../session/logging/logging-service.js';
 import { VALID_REASONING_EFFORTS, type ModelSettingsReasoningEffort } from '../model/models/reasoning-effort.js';
+import { isDroppedProfile } from './dropped-profiles.js';
 import { resolveProfile } from '../config/profiles/resolver.js';
 import { BARE_PROFILE_ID, canonicalProfileId } from '../shared/profiles/legacy-adapter.js';
 import { SessionContextService } from '../session/session/session-context-service.js';
@@ -131,12 +132,13 @@ function chooseProfile(options: Pick<SessionOptions, 'profile' | 'lite'>, settin
   if (options.profile !== null) {
     const name = options.profile === 'full' ? 'standard' : options.profile;
     profileId = canonicalProfileId(name.includes(':') ? name : `builtin:${name}`);
+    if (isDroppedProfile(profileId)) throw new Error(`Missing parent or Profile '${profileId}'`);
     resolveProfile(profileId);
   } else if (options.lite) {
     profileId = BARE_PROFILE_ID;
   } else {
-    // Auto-approval does not select a workflow; honor the saved profile.
-    profileId = currentProfile;
+    // Removed workflows in saved settings use the same Bare fallback as a fresh session.
+    profileId = isDroppedProfile(currentProfile) ? BARE_PROFILE_ID : currentProfile;
   }
 
   settings.set('app.activeProfileId', profileId, { persist: false });

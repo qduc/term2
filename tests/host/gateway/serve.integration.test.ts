@@ -352,6 +352,34 @@ describe('term2 serve (child process)', () => {
       binding: { client: 'user-1', id: workspaceId },
     });
 
+    // #149: dropped HTTP modes fail atomically; retained aliases still configure the real Session.
+    const configPath = `/private/agent/v1/sessions/${sessionId}/config?format=direct`;
+    let config = await rpc('POST', configPath, {}, 'session_update', { sessionId });
+    expect(config.mode).toBe('bare');
+    for (const mode of ['plan', 'pair', 'mentor', 'orchestrator']) {
+      const rejected = await socketRequest(
+        socketPath,
+        'POST',
+        configPath,
+        { clientRequestId: `dropped-${mode}`, expectedRevision: config.configRevision, mode },
+        sign('user-1', 'session_update', { sessionId }),
+      );
+      expect(rejected.status, rejected.raw).toBe(400);
+      const unchanged = await rpc('POST', configPath, {}, 'session_update', { sessionId });
+      expect(unchanged).toEqual(config);
+    }
+    for (const mode of ['standard', 'bare', 'lite']) {
+      await rpc(
+        'POST',
+        configPath,
+        { clientRequestId: `retained-${mode}`, expectedRevision: config.configRevision, mode },
+        'session_update',
+        { sessionId },
+      );
+      config = await rpc('POST', configPath, {}, 'session_update', { sessionId });
+      expect(config.mode).toBe('bare');
+    }
+
     const stream = openEventStream(socketPath, sessionId);
     disposables.push(stream.close);
     await stream.waitFor((event) => event.type === 'configuration' && event.sessionId === sessionId, 45_000);

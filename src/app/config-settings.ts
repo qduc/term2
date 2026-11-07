@@ -1,5 +1,6 @@
 /** Isolated, source-schema-validated settings for one prepared runtime generation. */
 import { z } from 'zod';
+import { isDroppedProfile } from './dropped-profiles.js';
 import { getProfileMetadata } from '../config/profiles/active-profile.js';
 import { canonicalProfileId, legacyModeFromProfileId } from '../shared/profiles/legacy-adapter.js';
 import {
@@ -27,7 +28,7 @@ const sessionUpdate = z
     admission: z.literal('idle').optional(),
     modelSelection: ModelSelectionSchema.strict().optional(),
     reasoningEffort: AgentSettingsSchema.out.shape.reasoningEffort.optional(),
-    mode: z.enum(['standard', 'bare', 'lite', 'plan', 'mentor', 'orchestrator']).optional(),
+    mode: z.enum(['standard', 'bare', 'lite']).optional(),
   })
   .strict();
 
@@ -111,6 +112,7 @@ export function createDirectConfigSettings(
   if (patch.profileId !== undefined) {
     // Resolve before changing the private snapshot; invalid profiles fail the
     // complete preparation. Source owns aliases and legacy compatibility flags.
+    if (isDroppedProfile(patch.profileId)) throw new Error(`Missing parent or Profile '${patch.profileId}'`);
     const profileId = getProfileMetadata(patch.profileId).activeProfileId;
     const app = snapshot.app as Record<string, unknown>;
     app.activeProfileId = profileId;

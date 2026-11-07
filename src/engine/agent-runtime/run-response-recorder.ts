@@ -5,8 +5,8 @@ import type {
   StreamedModelToolResultPart,
   StreamedModelTurnEvent,
   StreamedModelTurnOutput,
-} from '../../shared/contracts/streamed-model-turn.js';
-import { ASSISTANT_TEXT_PART_SEPARATOR } from '../../shared/contracts/streamed-model-turn.js';
+} from '../../model/streamed-model-turn.js';
+import { ASSISTANT_TEXT_PART_SEPARATOR } from '../../model/streamed-model-turn.js';
 import { type ServiceTier } from '../../shared/cost/model-cost.js';
 import { addTokenUsage } from '../../shared/utils/ai/token-usage.js';
 import { getRunCodeExecutionResult, runCodeExecutionMetadata } from '../../tools/system/run-code/run-code-execution.js';

@@ -1,16 +1,16 @@
 import type { ToolExecutionScope as Term2HookScope } from '../../tools/types.js';
-import type { ApplicationAgent, NestedApprovalLedger } from '../../shared/contracts/nested-run-driver.js';
+import type { ApplicationAgent, NestedApprovalLedger } from '../../tools/nested-run-driver.js';
 import type { ProviderInput, ProviderInputItem } from '../../shared/contracts/provider-input.js';
 import type { RunTerminationCause } from '../../shared/contracts/run-termination.js';
 import type {
   StreamedModelTurnEvent,
   StreamedModelTurnInput,
   StreamedModelTurnRequest,
-} from '../../shared/contracts/streamed-model-turn.js';
+} from '../../model/streamed-model-turn.js';
 import { type ModelRequestCost } from '../../shared/cost/model-cost.js';
 import type { RequestSnapshot } from '../../tools/types.js';
 import { type AgentStream } from '../agent-stream.js';
-import type { RetryRecoveryBudget } from '../retry/retry-recovery-budget.js';
+import type { RetryRecoveryBudget } from '../../model/failure/retry-recovery-budget.js';
 import { takeRunBudgetGrant } from './run-budget-policy.js';
 import { RunBudget, isRunBudgetInteraction, type RunBudgetEvent, type RunBudgetInteraction } from './run-budget.js';
 import { normalizeHistory, normalizeInput } from './run-input.js';

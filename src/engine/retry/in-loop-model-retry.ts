@@ -3,9 +3,9 @@ import {
   isPreviousResponseNotFoundError,
   isRecoverableIncompleteStreamClose,
   isWebSocketConnectionLimitReachedError,
-} from './retry-error-classification.js';
-import { classifyUpstreamRetryableError } from './upstream-retry-policy.js';
-import { AmbiguousModelOutcomeError, ConversationStateNoProgressError } from './retry-errors.js';
+} from '../../model/failure/retry-error-classification.js';
+import { classifyUpstreamRetryableError } from '../../model/failure/upstream-retry-policy.js';
+import { AmbiguousModelOutcomeError, ConversationStateNoProgressError } from '../../model/failure/retry-errors.js';
 import { findReauthenticationRequiredError } from '../../model/providers/common/provider-errors.js';
 import { findWebSocketClosedEarly } from '../../model/providers/websocket-close-evidence.js';
 import { isCancellationError } from '../../shared/lib/harness-invariant-error.js';

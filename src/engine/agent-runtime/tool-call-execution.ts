@@ -1,5 +1,5 @@
-import type { NestedApprovalLedger } from '../../shared/contracts/nested-run-driver.js';
-import type { StreamedModelTurnEvent } from '../../shared/contracts/streamed-model-turn.js';
+import type { NestedApprovalLedger } from '../../tools/nested-run-driver.js';
+import type { StreamedModelTurnEvent } from '../../model/streamed-model-turn.js';
 import type {
   AnyToolDefinition,
   RequestSnapshot,
@@ -13,7 +13,7 @@ import {
   isCancellationError,
   isHarnessInvariantError,
 } from '../../shared/lib/harness-invariant-error.js';
-import { describeError } from '../../shared/utils/error-helpers.js';
+import { describeError } from '../../model/error-helpers.js';
 import { normalizeToolParameters } from '../../shared/lib/tool-invoke.js';
 import { isZodToolParameterSchema } from '../../tools/types.js';
 import type { ToolInvocationContext } from './tool-invocation-context.js';

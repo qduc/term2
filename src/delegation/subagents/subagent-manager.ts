@@ -1,6 +1,6 @@
-import type { NestedRunDriverFactory, NestedModelBinding } from '../../shared/contracts/nested-run-driver.js';
+import type { NestedRunDriverFactory, NestedModelBinding } from '../../tools/nested-run-driver.js';
 import { randomUUID } from 'node:crypto';
-import type { ApplicationAgent } from '../../shared/contracts/nested-run-driver.js';
+import type { ApplicationAgent } from '../../tools/nested-run-driver.js';
 import type { AnyToolDefinition } from '../../tools/types.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../../shared/service-interfaces.js';
 import type { ExecutionContext } from '../../tools/execution-context.js';

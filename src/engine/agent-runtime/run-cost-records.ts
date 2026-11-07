@@ -1,5 +1,5 @@
 import { getCatalogPricingVersion, getModelPricing } from '../../model/cost/pricing.js';
-import type { StreamedModelTurnRequest } from '../../shared/contracts/streamed-model-turn.js';
+import type { StreamedModelTurnRequest } from '../../model/streamed-model-turn.js';
 import { computeModelCost, type ModelRequestCost, type ServiceTier } from '../../shared/cost/model-cost.js';
 import { normalizeUsage } from '../../shared/utils/ai/token-usage.js';
 import type { RunState } from './run-state.js';

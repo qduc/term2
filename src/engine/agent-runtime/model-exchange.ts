@@ -1,8 +1,8 @@
 import { waitForAbortableRead } from '../../shared/contracts/abort-aware-wait.js';
-import type { StreamedModelTurnEvent, StreamedModelTurnRequest } from '../../shared/contracts/streamed-model-turn.js';
-import { ASSISTANT_TEXT_PART_SEPARATOR } from '../../shared/contracts/streamed-model-turn.js';
+import type { StreamedModelTurnEvent, StreamedModelTurnRequest } from '../../model/streamed-model-turn.js';
+import { ASSISTANT_TEXT_PART_SEPARATOR } from '../../model/streamed-model-turn.js';
 import { type ServiceTier } from '../../shared/cost/model-cost.js';
-import { describeError } from '../../shared/utils/error-helpers.js';
+import { describeError } from '../../model/error-helpers.js';
 import { type AgentStream } from '../agent-stream.js';
 import { buildFailureObservation } from '../decision-shadow/failure-observation.js';
 import { classifyInLoopModelRetry, sleepWithAbort } from '../retry/in-loop-model-retry.js';

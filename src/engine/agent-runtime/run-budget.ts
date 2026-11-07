@@ -8,14 +8,14 @@ export type {
   RunBudgetDimension,
   RunBudgetEvidence,
   RunBudgetEvent,
-} from '../../shared/contracts/nested-run-driver.js';
+} from '../../tools/nested-run-driver.js';
 import type {
   RunBudgetPolicy,
   RunBudgetEvent,
   RunBudgetEvidence,
   RunBudgetStage,
   RunBudgetDimension,
-} from '../../shared/contracts/nested-run-driver.js';
+} from '../../tools/nested-run-driver.js';
 
 interface RunBudgetSettingsReader {
   get(key: any): any;

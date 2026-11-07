@@ -1,24 +1,24 @@
 /** Live provider failures. Only the portable ModelError fields belong in facts. */
 import type { ModelCapabilities, ModelError } from './index.js';
-import { describeError, isAbortLikeError } from '../shared/utils/error-helpers.js';
+import { describeError, isAbortLikeError } from './error-helpers.js';
 import {
   isMissingServerToolOutputError,
   isNetworkProtocolError,
   isPreviousResponseNotFoundError,
   isRecoverableIncompleteStreamClose,
   isRetryableTransportError,
-} from '../engine/retry/retry-error-classification.js';
+} from './failure/retry-error-classification.js';
 import {
   isMissingChainedToolOutputError,
   isOrphanedChainedToolOutputError,
 } from '../shared/lib/chained-input-filter.js';
-import { classifyUpstreamRetryableError } from '../engine/retry/upstream-retry-policy.js';
-import { decideRecoverableModelRetry } from '../engine/retry/conversation-retry-policy.js';
+import { classifyUpstreamRetryableError } from './failure/upstream-retry-policy.js';
+import { decideRecoverableModelRetry } from './failure/conversation-retry-policy.js';
 import { findReauthenticationRequiredError } from './providers/common/provider-errors.js';
 import { UnsentWebSocketRequestError } from './providers/websocket-request-dispatch.js';
 import { findWebSocketClosedEarly } from './providers/websocket-close-evidence.js';
-import { AmbiguousModelOutcomeError } from '../engine/retry/retry-errors.js';
-import { isRetryRecoveryBudgetExhaustedError } from '../engine/retry/retry-recovery-budget.js';
+import { AmbiguousModelOutcomeError } from './failure/retry-errors.js';
+import { isRetryRecoveryBudgetExhaustedError } from './failure/retry-recovery-budget.js';
 
 /** Legacy's ProviderContextOverflowError text (src/engine/agent-runtime/request-input-limit.ts). */
 const PROVIDER_CONTEXT_OVERFLOW =

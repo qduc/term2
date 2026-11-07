@@ -5,7 +5,7 @@ import type { StreamHistorySource } from './session-stream-processor.js';
 import type { RetryCounts } from '../../engine/retry/retry-contracts.js';
 import type { ApprovalDecisionInput } from '../approval/approval-flow-coordinator.js';
 import type { AbortedApprovalContext } from '../approval/approval-state.js';
-import { RetryRecoveryBudget } from '../../engine/retry/retry-recovery-budget.js';
+import { RetryRecoveryBudget } from '../../model/failure/retry-recovery-budget.js';
 
 export interface PreparedContinuation {
   toolStartedEvent?: ConversationEvent;

@@ -2,8 +2,8 @@ import {
   ASK_USER_DECLINE_RESULT,
   ASK_USER_NO_ANSWER_RESULT,
   isAskUserTerminalAnswer,
-} from '../tools/agent/ask-user-constants.js';
-import { supportsFolderSessionRead, type PendingApproval } from '../contracts/conversation.js';
+} from '../../shared/tools/agent/ask-user-constants.js';
+import { supportsFolderSessionRead, type PendingApproval } from '../../tools/conversation.js';
 
 export type InteractionKind = 'tool_approval' | 'ask_user' | 'check_in';
 export type InteractionVariant =

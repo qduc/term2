@@ -1,5 +1,5 @@
 import { healPatchOperation } from '../tools/file/patch-healing.js';
-import type { NestedRunDriverFactory, NestedModelBinding } from '../shared/contracts/nested-run-driver.js';
+import type { NestedRunDriverFactory, NestedModelBinding } from '../tools/nested-run-driver.js';
 import { healSearchReplaceParams } from '../tools/file/edit-healing.js';
 import { createDiscordSendToolDefinition } from '../tools/discord-send.js';
 import type { DiscordSend } from '../clients/discord/discord-outbound.js';

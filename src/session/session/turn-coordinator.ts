@@ -15,7 +15,7 @@ import type { HookEventFactory } from '../hooks/hook-event-factory.js';
 import type { SessionIdSource } from './session-identity.js';
 import { AutomaticMemoryFinalizer } from './automatic-memory-finalizer.js';
 import type { SteerOutcome } from '../../engine/agent-runtime/run-loop-contracts.js';
-import { isClassifiedCancellation } from '../../engine/retry/provider-failure-classification.js';
+import { isClassifiedCancellation } from '../../model/failure/provider-failure-classification.js';
 import type { AutomaticMemoryCanary } from '../../tools/memory/automatic-memory-canary.js';
 
 export type TurnStartOptions = Pick<

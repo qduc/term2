@@ -1,4 +1,4 @@
-import { WebSocketReceiveTimeoutError } from '../../engine/retry/retry-errors.js';
+import { WebSocketReceiveTimeoutError } from '../failure/retry-errors.js';
 import type { ProviderTrafficReceiveTiming } from '../../shared/service-interfaces.js';
 
 export type WebSocketReceiveTimeouts = {

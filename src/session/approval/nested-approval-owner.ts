@@ -1,5 +1,5 @@
-import { isDeniedReadApproveAnswer } from '../../shared/contracts/conversation.js';
-import type { PendingApproval } from '../../shared/contracts/conversation.js';
+import { isDeniedReadApproveAnswer } from '../../tools/conversation.js';
+import type { PendingApproval } from '../../tools/conversation.js';
 import type { SessionIdSource } from '../session/session-identity.js';
 import { resolveSessionId } from '../session/session-identity.js';
 

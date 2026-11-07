@@ -1,8 +1,4 @@
-import type {
-  ApplicationAgent,
-  NestedRunDriverFactory,
-  NestedModelBinding,
-} from '../../shared/contracts/nested-run-driver.js';
+import type { ApplicationAgent, NestedRunDriverFactory, NestedModelBinding } from '../nested-run-driver.js';
 import type { SearchReplaceFullOperation } from './search-replace.js';
 import type { ILoggingService, ISettingsService } from '../../shared/service-interfaces.js';
 import { getProvider } from '../../model/providers/index.js';

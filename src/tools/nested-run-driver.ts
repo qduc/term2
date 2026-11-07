@@ -1,13 +1,13 @@
-import type { JsonSchemaDefinition } from './model-types.js';
-import type { RequestSnapshot, ToolRegistry } from '../../tools/types.js';
-import type { ProviderInput } from './provider-input.js';
-import type { StreamedModelTurn } from './streamed-model-turn.js';
-import type { ContinuationHandle } from './continuation-handle.js';
+import type { JsonSchemaDefinition } from '../shared/contracts/model-types.js';
+import type { RequestSnapshot, ToolRegistry } from './types.js';
+import type { ProviderInput } from '../shared/contracts/provider-input.js';
+import type { StreamedModelTurn } from '../model/streamed-model-turn.js';
+import type { ContinuationHandle } from '../shared/contracts/continuation-handle.js';
 import type { ApplicationRunEvent } from './application-stream.js';
-import type { RunTerminationCause } from './run-termination.js';
-import type { ProviderDefinition } from '../../model/providers/registry.js';
-import type { ILoggingService, ISettingsService, ISessionContextService } from '../service-interfaces.js';
-import type { ModelInfo } from '../../model/model-service.js';
+import type { RunTerminationCause } from '../shared/contracts/run-termination.js';
+import type { ProviderDefinition } from '../model/providers/registry.js';
+import type { ILoggingService, ISettingsService, ISessionContextService } from '../shared/service-interfaces.js';
+import type { ModelInfo } from '../model/model-service.js';
 
 /** Optional source composition binding for child provider metadata and scoped transports. */
 export interface NestedModelBinding {

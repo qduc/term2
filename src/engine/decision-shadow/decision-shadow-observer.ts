@@ -1,4 +1,4 @@
-import type { ProviderFailureKind } from '../retry/provider-failure-classification.js';
+import type { ProviderFailureKind } from '../../model/failure/provider-failure-classification.js';
 import type { FailureTriageEvidence } from './failure-triage.js';
 
 export type TerminalFailureObservation = {

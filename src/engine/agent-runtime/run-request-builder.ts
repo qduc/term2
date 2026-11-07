@@ -4,7 +4,7 @@ import type {
   ContextCompactionSessionState,
   StreamedModelTurnInput,
   StreamedModelTurnRequest,
-} from '../../shared/contracts/streamed-model-turn.js';
+} from '../../model/streamed-model-turn.js';
 import { type ModelRequestCost } from '../../shared/cost/model-cost.js';
 import { MaxTurnsExceededError } from '../../tools/subagents/max-turns-error.js';
 import { type AgentStream } from '../agent-stream.js';

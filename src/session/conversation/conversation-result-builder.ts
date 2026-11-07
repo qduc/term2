@@ -5,8 +5,8 @@ import type {
   ApprovalRequiredTerminal,
   ConversationTerminal,
   LLMAdvisory,
-} from '../../shared/contracts/conversation.js';
-import { CHECK_IN_TOOL_NAME } from '../../shared/contracts/conversation.js';
+} from '../../tools/conversation.js';
+import { CHECK_IN_TOOL_NAME } from '../../tools/conversation.js';
 import type { ILoggingService } from '../../shared/service-interfaces.js';
 import type { NormalizedUsage } from '../../shared/utils/ai/token-usage.js';
 import type { ModelRequestCost } from '../../shared/cost/model-cost.js';
@@ -25,7 +25,7 @@ import {
   extractToolTargetPaths,
   type ShellAutoApprovalResolver,
 } from '../approval/shell-auto-approval-resolver.js';
-import { supportsFolderSessionRead } from '../../shared/contracts/conversation.js';
+import { supportsFolderSessionRead } from '../../tools/conversation.js';
 import { resolveSessionReadFolder } from '../approval/session-read-grant-target.js';
 import type { PersistedAssistantTurnItem } from './conversation-persistence-types.js';
 import { parseToolCallArguments } from '../tool-call-arguments.js';
@@ -38,7 +38,7 @@ import {
   isUnsandboxedShell,
   requiresHumanShellApproval,
 } from '../approval/shell-sandbox-approval.js';
-import type { DeniedReadMetadata, PostExecuteApprovalToken } from '../../shared/contracts/conversation.js';
+import type { DeniedReadMetadata, PostExecuteApprovalToken } from '../../tools/conversation.js';
 import type { SessionAccessState } from '../session/session-access-state.js';
 import type { NestedToolCompatibilityState } from '../session/nested-tool-compatibility-state.js';
 import { resolveOutsideWorkspaceEdit } from '../approval/approval-descriptor.js';

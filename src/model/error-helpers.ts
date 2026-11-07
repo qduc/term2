@@ -137,5 +137,5 @@ export const isAbortLikeError = (error: unknown): boolean => {
 
   return abortPatterns.some((pattern) => pattern.test(errorMessage));
 };
-import { isUndiciSocketCloseError } from '../../engine/retry/retry-error-classification.js';
-import { findReauthenticationRequiredError } from '../../model/providers/common/provider-errors.js';
+import { isUndiciSocketCloseError } from './failure/retry-error-classification.js';
+import { findReauthenticationRequiredError } from './providers/common/provider-errors.js';

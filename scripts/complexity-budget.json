@@ -1,5 +1,5 @@
 {
-  "maxLayerEdges": 114,
+  "maxLayerEdges": 91,
   "maxLines": 500,
   "fileCeilings": {
     "src/model/provider.ts": {
@@ -106,7 +106,7 @@
       "lines": 717,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "src/engine/retry/retry-error-classification.ts": {
+    "src/model/failure/retry-error-classification.ts": {
       "lines": 542,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
@@ -194,7 +194,7 @@
       "lines": 779,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "src/shared/gateway/interaction-protocol.ts": {
+    "src/session/adopted/interaction-protocol.ts": {
       "lines": 657,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },

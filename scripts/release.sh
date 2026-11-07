@@ -370,8 +370,8 @@ run_health_checks() {
     # repository-wide lint command also traverses auxiliary tools that are not
     # part of the published package and can block an otherwise valid release.
     pnpm typecheck
-    pnpm exec eslint source
-    pnpm exec prettier --check source package.json CHANGELOG.md
+    pnpm exec eslint src
+    pnpm exec prettier --check src package.json CHANGELOG.md
     pnpm run build
     pnpm test
     mark_validated

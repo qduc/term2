@@ -105,7 +105,7 @@ async function startProvider(replies: Reply[], withUsage = false): Promise<strin
         const usage = {
           id,
           choices: [],
-          usage: { prompt_tokens: 78_021, completion_tokens: 731, prompt_tokens_details: { cached_tokens: 42_112 } },
+          usage: { prompt_tokens: 78_021, completion_tokens: 73, prompt_tokens_details: { cached_tokens: 42_112 } },
         };
         res.write(`data: ${JSON.stringify(usage)}\n\n`);
       }

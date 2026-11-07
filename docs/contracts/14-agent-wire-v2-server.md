@@ -239,7 +239,7 @@ do not claim replay parity. Reconnect uses the last fully applied accepted seq.
 ## Hydration and replay
 
 V2 SSE has no snapshot frame. A separate current-accepted hydration route is
-`GET /sessions/:id?format=agent-wire-v2`; it returns seq plus the exact public
+`POST /private/agent/v1/sessions/:id?format=agent-wire-v2`; it returns seq plus the exact public
 direct `WireSnapshot`, a same-cut InteractionDTOv1 resolver field, and real
 earliest replay metadata. It is not a replay event and has no synthetic
 timestamp. The snapshot does not reconstruct fresh aggregate cost or historical

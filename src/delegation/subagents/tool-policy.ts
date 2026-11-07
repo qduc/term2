@@ -1340,8 +1340,8 @@ export class SubagentToolFactory {
 
     // Honor explicit tool allowlist from the definition.
     // When a non-empty allowlist is present, only provision tools
-    // whose names appear in it. This lets AgentRuntime pass resolved
-    // tool lists through to ExecutionSubagentRunner.
+    // whose names appear in it. This lets the direct launcher pass a
+    // script-generic agent's resolved tool list through unchanged.
     if (definition.isScriptGeneric) {
       const allowed = new Set(definition.tools ?? []);
       return tools.filter((tool) => allowed.has(tool.name));

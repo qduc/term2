@@ -53,11 +53,9 @@ export function buildRunBudgetWarning(evidence: RunBudgetEvidence): string {
 /**
  * Reads the turn budget out of whatever context a tool was invoked with.
  *
- * Under `ApplicationRunLoop` the loop owns the count and exposes it as
- * `toolContext.turn`; under the legacy orchestrator path the count is kept on
- * the run's user context by a model-input filter. Tools serve both paths, so
- * this resolves either shape and prefers the loop's, which is authoritative
- * when present.
+ * Fallback for tool contexts that carry no run budget: it accepts either a
+ * `turn` object or a turn count kept on the run's user context, and prefers
+ * `turn` when both are present.
  */
 export function resolveTurnLimitContext(toolContext: unknown): TurnLimitContext | undefined {
   const candidate = toolContext as { turn?: { count?: number; max?: number }; context?: TurnLimitContext } | undefined;

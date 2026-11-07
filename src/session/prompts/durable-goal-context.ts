@@ -29,7 +29,7 @@ ${JSON.stringify(currentState)}
 \`\`\`${goal.status === 'active' ? ACTIVE_GOAL_STOP_CHECK : ''}`;
 }
 
-/** Stop-check contract enforced by `decideGoalStop`; only an active goal carries it. */
+/** Stop-check contract enforced by `session/goal-stop.ts`; only an active goal carries it. */
 const ACTIVE_GOAL_STOP_CHECK = `
 
 While this goal is active, finish every turn by calling \`${TOOL_NAME_GOAL_CHECK}\` by itself after your last work and its results, then give your final reply:

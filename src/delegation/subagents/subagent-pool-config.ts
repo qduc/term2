@@ -6,7 +6,7 @@ import type { SupportedSubagentRole } from './types.js';
  * Each subagent role draws its model from one ancillary tier; the tier's
  * model setting (`agent.<tier>Model`) is the role's round-robin model pool.
  * Mentor fans a question out across its own `agent.mentorPool` entries
- * (`MentorRunner`) instead of drawing from a tier.
+ * (`delegation/direct/subagent-callbacks.ts`) instead of drawing from a tier.
  */
 const ROLE_ANCILLARY_TIERS: Record<Exclude<SupportedSubagentRole, 'mentor'>, AncillaryModelTier> = {
   explorer: 'cheap',

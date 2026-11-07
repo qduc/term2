@@ -448,10 +448,6 @@
       "reason": "Internal host helper function \"createDirectServerHandler\" in host/server.ts used within its file; export keyword retained pending Phase 3 module cleanup."
     },
     {
-      "export": "model/cost/pricing.ts getOverlayPricingVersion",
-      "reason": "Pre-existing unused export \"getOverlayPricingVersion\" in model/cost/pricing.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
-    },
-    {
       "export": "model/failure/conversation-retry-policy.ts MAX_HALLUCINATION_RETRIES",
       "reason": "Internal model constant or variable \"MAX_HALLUCINATION_RETRIES\" in model/failure/conversation-retry-policy.ts used within its file; export keyword retained pending Phase 3 module cleanup."
     },
@@ -914,26 +910,6 @@
     {
       "export": "session/conversation/conversation-replay.ts rewindRemovedUserCount",
       "reason": "Internal session helper function \"rewindRemovedUserCount\" in session/conversation/conversation-replay.ts used within its file; export keyword retained pending Phase 3 module cleanup."
-    },
-    {
-      "export": "session/conversation/durable-goal-stop-check.ts GOAL_CHECK_UNRESOLVED_CAUSE",
-      "reason": "Internal session constant or variable \"GOAL_CHECK_UNRESOLVED_CAUSE\" in session/conversation/durable-goal-stop-check.ts used within its file; export keyword retained pending Phase 3 module cleanup."
-    },
-    {
-      "export": "session/conversation/durable-goal-stop-check.ts GOAL_CHECK_UNRESOLVED_NOTICE",
-      "reason": "Pre-existing unused export \"GOAL_CHECK_UNRESOLVED_NOTICE\" in session/conversation/durable-goal-stop-check.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
-    },
-    {
-      "export": "session/conversation/durable-goal-stop-check.ts GOAL_STOP_REMINDER_PREFIX",
-      "reason": "Internal session constant or variable \"GOAL_STOP_REMINDER_PREFIX\" in session/conversation/durable-goal-stop-check.ts used within its file; export keyword retained pending Phase 3 module cleanup."
-    },
-    {
-      "export": "session/conversation/durable-goal-stop-check.ts MAX_GOAL_STOP_REMINDERS_PER_TURN",
-      "reason": "Internal session constant or variable \"MAX_GOAL_STOP_REMINDERS_PER_TURN\" in session/conversation/durable-goal-stop-check.ts used within its file; export keyword retained pending Phase 3 module cleanup."
-    },
-    {
-      "export": "session/conversation/durable-goal-stop-check.ts MAX_GOAL_STOP_REMINDERS_WITHOUT_WORK",
-      "reason": "Internal session constant or variable \"MAX_GOAL_STOP_REMINDERS_WITHOUT_WORK\" in session/conversation/durable-goal-stop-check.ts used within its file; export keyword retained pending Phase 3 module cleanup."
     },
     {
       "export": "session/conversation/session-audit.ts formatSessionAudit",

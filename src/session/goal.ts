@@ -2,7 +2,7 @@
 import { z } from 'zod';
 import { createDurableGoal, MAX_GOAL_FIELD_LENGTH } from './conversation/durable-goal.js';
 import { GOAL_CHANGED_PROBLEM, GOAL_CHECK_DESCRIPTION } from '../tools/agent/goal-check.js';
-import { goalCheckParameters } from './conversation/durable-goal-stop-check.js';
+import { goalCheckParameters } from '../tools/agent/goal-check-contract.js';
 import { renderDurableGoalContext } from './prompts/durable-goal-context.js';
 import type { DurableGoal } from './logging/conversation-log-events.js';
 import type { Tool } from '../tools/index.js';

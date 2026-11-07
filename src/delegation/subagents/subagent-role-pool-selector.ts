@@ -39,7 +39,7 @@ export class SubagentRolePoolSelector {
 
   resolveForSpawn(role: SupportedSubagentRole, definition: SubagentDefinition): SubagentDefinition {
     // Mentor fans a question out across every `agent.mentorPool` entry
-    // (MentorRunner); it never round-robins, so this selector must not touch
+    // (`delegation/direct/subagent-callbacks.ts`); it never round-robins, so this selector must not touch
     // it even though the settings UI keys mentor to the same pool-editor
     // config.
     if (role === 'mentor') return definition;

@@ -6,8 +6,9 @@ export const AGENT_SPEC_DEFAULT_MAX_TURNS = 200;
 
 /**
  * Translate the task-shaped public spec into the shared AgentRuntime config.
- * Both AgentRuntime.runAgent and SubagentManager use this mapper so context,
- * constraints, completion guidance, defaults, and permissions cannot drift.
+ * The direct subagent launcher and the permission boundary both use this
+ * mapper so context, constraints, completion guidance, defaults, and
+ * permissions cannot drift.
  */
 export function agentSpecToConfig(spec: AgentSpec): AgentConfig {
   const selectedTools = spec.tools ?? DEFAULT_AGENT_SPEC_TOOLS;

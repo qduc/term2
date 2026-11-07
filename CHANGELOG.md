@@ -1,5 +1,26 @@
 ## [Unreleased]
 
+### Breaking Changes
+- **Node.js 24 or newer is required.** `engines.node` is now `>=24`, matching the only version CI and the publish workflow test.
+- **New runtime and conversation store.** term2 now runs on the rewritten "next" runtime (#86) and saves conversations in a separate `conversations-next` data directory. The old `conversations` directory is never written to and is not read automatically, so conversations saved by 0.40.0 and earlier do not appear in `term2 --resume ls` after upgrading.
+- **Profiles removed.** Plan, Pair, Mentor and Orchestrator are gone (#149), along with `/plan` and the `Shift+Tab` plan toggle. Saved settings and sessions that name a removed profile fall back to Bare without rewriting their history. Standard/`full` and Lite also resolve to Bare.
+
+### Improvements
+- Startup reaches an idle composer about 35% sooner by loading startup-only work on demand and caching compiled bundle code (#192, #195).
+
+### Bug Fixes
+- Restore per-session cost accounting and the footer cost display.
+- Honor startup settings for shared tool output limits (#178).
+- Suppress notices for denied recovery retries (#177).
+- Validate messages imported from the session browser (#176).
+- Honor summary replacement metadata at compaction boundaries, and preserve launch intent and compaction boundaries on resume (#174, #175).
+- Hide live reasoning in concise display mode (#161).
+
+### Upgrading from 0.40.x
+- Back up your term2 data directory before upgrading. Older versions cannot be assumed to read data written by this release.
+- Old conversations stay where they were and are not deleted. They can be converted with the standalone migrator, `scripts/migrate-conversations.mjs`, which currently ships only in a source checkout, not in the npm package. It works on a **copy** of the old directory; see `scripts/conversation-migration/migration-command.md` for the required flags.
+- Re-check `--profile` flags and saved profile settings if you used a removed profile.
+
 ## [0.40.0] - 2026-10-29
 
 ### Features

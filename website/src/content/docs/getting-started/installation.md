@@ -5,7 +5,7 @@ description: Install term2 and check the prerequisites for your first session.
 
 ## Prerequisites
 
-- **Node.js 20 or newer.** Node 24 is recommended.
+- **Node.js 24 or newer.**
 - **An interactive terminal** for model selection, chat, and approval prompts.
 - **Provider access:** an API key, an eligible OAuth account, or a configured local model endpoint. Hosted provider billing and account limits apply.
 

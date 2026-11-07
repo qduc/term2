@@ -2,10 +2,7 @@ import type { CommandMessage } from '../tools/types.js';
 import type { Item, ToolResult } from '../shared/contracts/conversation-items.js';
 import type { ConversationEvent } from './conversation/conversation-events.js';
 import { normalizeRunItem } from './conversation/run-item-normalizer.js';
-import {
-  extractCommandMessages,
-  type ToolCallMarkerStore,
-} from '../shared/utils/streaming/extract-command-messages.js';
+import { extractCommandMessages, type ToolCallMarkerStore } from './conversation/extract-command-messages.js';
 
 type ExtractCommandMessages = (items: readonly unknown[], markerStore?: ToolCallMarkerStore) => CommandMessage[];
 type EnrichedToolResult = ToolResult & { arguments?: unknown };

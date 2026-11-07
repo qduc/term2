@@ -27,7 +27,7 @@ import type {
   ToolsBlock,
 } from './types.js';
 import { ProfileResolutionError } from './types.js';
-import { canonicalProfileId } from '../../shared/profiles/legacy-adapter.js';
+import { canonicalProfileId } from './legacy-adapter.js';
 
 const DEFAULT_MAX_PARENT_DEPTH = 32;
 const DEFAULT_MAX_BLOCKS = 128;

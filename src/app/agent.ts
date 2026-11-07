@@ -1,7 +1,7 @@
 import { healPatchOperation } from '../tools/file/patch-healing.js';
 import type { NestedRunDriverFactory, NestedModelBinding } from '../tools/nested-run-driver.js';
 import { healSearchReplaceParams } from '../tools/file/edit-healing.js';
-import { createDiscordSendToolDefinition } from '../tools/discord-send.js';
+import { createDiscordSendToolDefinition } from './discord-send.js';
 import type { DiscordSend } from '../clients/discord/discord-outbound.js';
 import { createGrepToolDefinition } from '../tools/file/grep.js';
 import { presentBareShell } from '../tools/system/bare-shell.js';
@@ -68,7 +68,7 @@ import { ExecutionContext } from '../tools/execution-context.js';
 import { buildPromptSpec } from '../session/prompts/prompt-constructor.js';
 import { DIRECT_MEMORY_GUIDANCE_MARKER } from '../session/prompts/memory-prompt-marker.js';
 import { ProfileResolutionError, resolveActiveProfile } from '../config/profiles/index.js';
-import { shouldPreferPatchEditingModel } from '../shared/lib/tool-selection-policy.js';
+import { shouldPreferPatchEditingModel } from '../model/tool-selection-policy.js';
 import { SkillsService } from '../tools/skills/skills-service.js';
 import { createProposeGoalToolDefinition } from '../tools/agent/propose-goal.js';
 import { createGoalCheckToolDefinition } from '../tools/agent/goal-check.js';
@@ -87,7 +87,7 @@ import { getEnvInfo, getAgentsInstructions } from '../session/prompts/environmen
 export { getEnvInfo, getAgentsInstructions } from '../session/prompts/environment.js';
 import { MemoryCapabilityBuilder } from '../tools/memory/memory-capabilities.js';
 import { resolveDisabledCapabilities } from '../config/tool-toggles.js';
-import type { ShellChildRegistry } from '../shared/utils/shell/shell-child-registry.js';
+import type { ShellChildRegistry } from '../tools/shell/shell-child-registry.js';
 import { createSessionBrowserToolDefinitions } from '../tools/session-browser/session-browser-tools.js';
 import type { SessionBrowser } from '../session/conversation/session-browser.js';
 import type { SessionRolloverRequest, SessionRolloverRequestOutcome } from '../shared/contracts/session-rollover.js';
@@ -224,7 +224,7 @@ export const getAgentDefinition = (
     /** Root-session-only output store + watch layer for background jobs. */
     backgroundShellOutput?: BackgroundShellOutputBundle;
     shellChildRegistry?: ShellChildRegistry;
-    scopedSandbox?: import('../shared/utils/shell/sandbox/sandbox-policy.js').ScopedShellSandbox;
+    scopedSandbox?: import('../tools/shell/sandbox/sandbox-policy.js').ScopedShellSandbox;
     /** False for one-shot/non-interactive callers until their lifecycle is supported. */
     allowBackgroundShell?: boolean;
     /** False for non-interactive / headless sessions where user prompts cannot be answered. */

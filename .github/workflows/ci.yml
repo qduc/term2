@@ -121,6 +121,8 @@ jobs:
           path: dist/
           if-no-files-found: error
 
+  # Override the implicit success() check: changes is intentionally skipped on
+  # main pushes and workflow_call, which otherwise skips this downstream job.
   port:
     needs: [test, changes]
     if: ${{ !cancelled() && needs.test.result == 'success' && needs.changes.outputs.run != 'false' }}

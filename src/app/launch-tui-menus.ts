@@ -30,8 +30,8 @@ import {
   fetchLiveSettingValueSuggestions,
   filterSettingValueSuggestionsByQuery,
   mergeSettingValueSuggestions,
-} from '../shared/utils/value-suggestions.js';
-import { parseSettingValueForKey } from '../shared/utils/settings-command.js';
+} from './value-suggestions.js';
+import { parseSettingValueForKey } from './settings-command.js';
 import { isDeepStrictEqual } from 'node:util';
 import {
   SUBAGENT_POOL_SETTING_KEYS,
@@ -83,7 +83,7 @@ import {
   isProviderDisabled,
   resolveProviderCredentials,
   setProviderDisabled,
-} from '../shared/utils/ai/provider-credentials.js';
+} from '../model/provider-credentials.js';
 import type {
   MenuConversationEntry,
   MenuSettingsService,
@@ -93,7 +93,7 @@ import type {
 } from '../clients/tui/integration.js';
 import type { DirectApplication } from './application.js';
 
-import { canonicalProfileId, profileIdFromLegacyMode } from '../shared/profiles/legacy-adapter.js';
+import { canonicalProfileId, profileIdFromLegacyMode } from '../config/profiles/legacy-adapter.js';
 import { builtinProfiles } from '../config/profiles/registry.js';
 import { resolveActiveProfile } from '../config/profiles/active-profile.js';
 import { getProfileLabel } from '../config/profiles/labels.js';

@@ -39,12 +39,12 @@ import {
 } from '../../tools/subagents/utils.js';
 import { normalizeAgentRunUsage, extractUsage } from '../../shared/utils/ai/token-usage.js';
 import type { ModelRequestCost } from '../../shared/cost/model-cost.js';
-import { replayApprovals, type ApprovalRecord } from '../../session/approval/approval-replay.js';
+import { replayApprovals, type ApprovalRecord } from '../../engine/approval-replay.js';
 import type { ConversationEvent } from '../../session/conversation/conversation-events.js';
 import { AcquiredChildSlot } from '../../engine/agent-runtime/execution-budget.js';
 import { ToolOwnershipRegistry } from '../../session/approval/tool-ownership-registry.js';
 import { getCallIdFromObject } from '../../session/interruption-info.js';
-import { normalizeToolParameters } from '../../shared/lib/tool-invoke.js';
+import { normalizeToolParameters } from '../../tools/tool-invoke.js';
 import {
   ForegroundSubagentLease,
   type BackgroundSubagentApprovalPauseSink,

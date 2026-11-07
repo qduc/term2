@@ -7,8 +7,8 @@ import {
   wrapContextSummary,
   CONTEXT_COMPACTION_INSTRUCTIONS,
   CONTEXT_COMPACTION_REQUEST,
-} from '../../../session/prompts/context-compaction.js';
-import { projectConversationMessage } from '../../../session/conversation/conversation-message-projection.js';
+} from '../../prompts/context-compaction.js';
+import { projectConversationMessage } from '../../conversation-message-projection.js';
 import { createHash } from 'node:crypto';
 import {
   estimateContext,

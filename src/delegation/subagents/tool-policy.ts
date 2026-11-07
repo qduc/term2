@@ -21,9 +21,9 @@ import { parse } from 'unbash';
 import type { Word, WordPart } from 'unbash';
 import { isPathInScopeSafe, isHostInScope } from '../../engine/agent-runtime/scope-resolver.js';
 import { getProvider } from '../../model/providers/index.js';
-import { wrapToolInvoke, wrapNeedsApproval } from '../../shared/lib/tool-invoke.js';
+import { wrapToolInvoke, wrapNeedsApproval } from '../../tools/tool-invoke.js';
 import { toOpenAIStrictToolSchema } from '../../shared/lib/openai-strict-tool-schema.js';
-import { shouldUseStrictToolSchema, shouldPreferPatchEditingModel } from '../../shared/lib/tool-selection-policy.js';
+import { shouldUseStrictToolSchema, shouldPreferPatchEditingModel } from '../../model/tool-selection-policy.js';
 import { createReadFileToolDefinition } from '../../tools/file/read-file.js';
 import { createGrepToolDefinition } from '../../tools/file/grep.js';
 import { createFindFilesToolDefinition } from '../../tools/file/glob.js';
@@ -47,17 +47,17 @@ import { createRunExplorerToolDefinition, type ExplorerRunner } from '../../tool
 import type { SkillsService } from '../../tools/skills/skills-service.js';
 import { registerToolFormatters } from '../../tools/command-message-formatters.js';
 import { trimToolOutput } from '../../shared/utils/output/trim-tool-output.js';
-import { injectRunBudgetWarning } from '../../shared/utils/inject-warning-into-tool-output.js';
+import { injectRunBudgetWarning } from '../../engine/inject-warning-into-tool-output.js';
 import { tryAcquireFileLock } from '../../tools/file/file-locks.js';
-import { classifyCommand, SafetyStatus } from '../../shared/utils/shell/command-safety/index.js';
+import { classifyCommand, SafetyStatus } from '../../tools/shell/command-safety/index.js';
 import { evaluateShellAutoApprovalAdvisories } from '../../session/approval/shell-auto-approval-evaluator.js';
 import { shouldBypassToolApproval } from '../../session/approval/shell-auto-approval-resolver.js';
-import { extractWordText } from '../../shared/utils/shell/command-safety/utils.js';
+import { extractWordText } from '../../tools/shell/command-safety/utils.js';
 import type { ISubagentClient } from './subagent-client-types.js';
 import type { ToolApprovalPolicyRegistry } from '../../session/approval/tool-approval-policy-registry.js';
 import { MemoryCapabilityBuilder } from '../../tools/memory/memory-capabilities.js';
 import type { NestedToolCompatibilityState } from '../../session/session/nested-tool-compatibility-state.js';
-import type { ShellSandboxRunner } from '../../shared/utils/shell/sandbox/sandbox-policy.js';
+import type { ShellSandboxRunner } from '../../tools/shell/sandbox/sandbox-policy.js';
 import type { SessionBrowser } from '../../session/conversation/session-browser.js';
 import { createSessionBrowserToolDefinitions } from '../../tools/session-browser/session-browser-tools.js';
 
@@ -1058,7 +1058,7 @@ export class SubagentToolFactory {
   #nestedCompatibility?: NestedToolCompatibilityState;
   #readOnly: boolean;
   #shellSandboxRunner?: ShellSandboxRunner;
-  #scopedSandbox?: import('../../shared/utils/shell/sandbox/sandbox-policy.js').ScopedShellSandbox;
+  #scopedSandbox?: import('../../tools/shell/sandbox/sandbox-policy.js').ScopedShellSandbox;
   #runExplorer?: ExplorerRunner;
   #sessionBrowser?: SessionBrowser;
 
@@ -1073,7 +1073,7 @@ export class SubagentToolFactory {
     nestedCompatibility?: NestedToolCompatibilityState;
     readOnly?: boolean;
     shellSandboxRunner?: ShellSandboxRunner;
-    scopedSandbox?: import('../../shared/utils/shell/sandbox/sandbox-policy.js').ScopedShellSandbox;
+    scopedSandbox?: import('../../tools/shell/sandbox/sandbox-policy.js').ScopedShellSandbox;
     /** Prior-session transcript browser; provisioned to the librarian only. */
     sessionBrowser?: SessionBrowser;
   }) {

@@ -1,0 +1,175 @@
+import React, { useCallback, useMemo } from 'react';
+import { Box, Text, useInput } from 'ink';
+import ModelSelectionMenu from '../clients/tui/menus/ModelSelectionMenu.js';
+import { useStandaloneModelPicker } from './use-standalone-model-picker.js';
+import type { SettingsService } from '../config/settings/settings-service.js';
+import type { ILoggingService } from '../shared/service-interfaces.js';
+import type { ModelFetcher } from '../model/models/model-catalog-session.js';
+import { useTheme } from '../clients/tui/presentation/components/theme.js';
+import { getAllProviders, getProvider } from '../model/providers/index.js';
+import {
+  getAvailableProviderIds,
+  hasProviderCredentials,
+  resolveProviderCredentials,
+} from '../model/provider-credentials.js';
+
+export type StandaloneModelPickerSelection = { modelId: string; provider: string };
+
+export type StandaloneModelPickerOutcome =
+  | { status: 'selected'; selection: StandaloneModelPickerSelection }
+  | { status: 'cancelled' };
+
+export type StandaloneModelPickerAppProps = {
+  settingsService: SettingsService;
+  loggingService: ILoggingService;
+  modelFetcher?: ModelFetcher;
+  /** Filter query the menu opens with (e.g. the pattern typed after --model). */
+  initialQuery?: string;
+  /** Provider tab the menu opens on (e.g. where the top-ranked match lives). */
+  initialProvider?: string;
+  /** When set (an explicit --provider), search is scoped to this provider. */
+  lockProvider?: string;
+  /** One-line explanations shown above the menu (e.g. "No models match ..."). */
+  bannerLines?: string[];
+  /** Called exactly once when the picker has an outcome. The host owns teardown. */
+  onDone: (outcome: StandaloneModelPickerOutcome) => void;
+};
+
+/**
+ * Ink root for the pre-app model picker host: drives `ModelSelectionMenu`
+ * (the same presentational component the interactive app uses) with its own
+ * `useInput` boundary, since there is no composer here to own keys through
+ * the app's `MenuSurface`/`MenuController` machinery. Calls `onDone` exactly
+ * once, which lets the host clear the transient frame before unmounting and
+ * restoring the terminal.
+ */
+function StandaloneModelPickerApp({
+  settingsService,
+  loggingService,
+  modelFetcher,
+  initialQuery,
+  initialProvider,
+  lockProvider,
+  bannerLines,
+  onDone,
+}: StandaloneModelPickerAppProps) {
+  const theme = useTheme();
+  // The pre-session host uses the same renderer as the composer, without
+  // installing a second model menu or a second skin/theme context.
+  const menuSettings = useMemo(
+    () => ({
+      get: (key: string) => settingsService.getDynamic(key),
+      onChange: settingsService.onChange.bind(settingsService),
+      providers: getAllProviders,
+      providerLabel: (id: string) => getProvider(id)?.label,
+      availableProviderIds: (ids: string[]) => getAvailableProviderIds(settingsService, ids),
+      hasProviderCredentials: (id: string) => hasProviderCredentials(settingsService, id),
+      unavailableReason: (id: string) => resolveProviderCredentials(settingsService, id).unavailableReason,
+    }),
+    [settingsService],
+  );
+  const models = useStandaloneModelPicker({
+    loggingService,
+    settingsService,
+    modelFetcher,
+    initialQuery,
+    initialProvider,
+    lockProvider,
+  });
+
+  const finish = useCallback(
+    (outcome: StandaloneModelPickerOutcome) => {
+      onDone(outcome);
+    },
+    [onDone],
+  );
+
+  useInput((input, key) => {
+    // The inline nickname editor for a favorited row owns text input, Enter,
+    // and Escape while it is open, exactly as it does inside the composer's
+    // ModelMenuSession: Escape cancels the draft, not the whole picker.
+    if (models.nicknameDraft) {
+      if (key.return) {
+        models.commitNicknameDraft();
+      } else if (key.escape) {
+        models.cancelNicknameDraft();
+      } else if (key.backspace) {
+        models.backspaceNicknameDraft();
+      } else if (key.delete) {
+        models.removeNicknameDraft();
+      } else if (key.ctrl && input.toLowerCase() === 'f') {
+        models.toggleFavorite();
+      } else if (input && !key.ctrl && !key.meta && !key.tab) {
+        models.typeNicknameDraft(input);
+      }
+      return;
+    }
+
+    if (key.escape) {
+      finish({ status: 'cancelled' });
+      return;
+    }
+    if (key.upArrow) {
+      models.moveUp();
+    } else if (key.downArrow) {
+      models.moveDown();
+    } else if (key.pageUp) {
+      models.pageUp();
+    } else if (key.pageDown) {
+      models.pageDown();
+    } else if ((key as { home?: boolean }).home) {
+      models.moveHome();
+    } else if ((key as { end?: boolean }).end) {
+      models.moveEnd();
+    } else if (key.tab || key.leftArrow || key.rightArrow) {
+      // Tab and Right advance; Left moves backward through Favorites/Nicknames/All. Tab never
+      // completes a model id into a buffer here.
+      models.switchModelTab(key.leftArrow ? 'previous' : 'next');
+    } else if (key.ctrl && input === 'r') {
+      models.refresh();
+    } else if (key.ctrl && input.toLowerCase() === 'f') {
+      models.toggleFavorite();
+    } else if (key.ctrl && input.toLowerCase() === 'n') {
+      models.startNicknameEdit();
+    } else if (key.return) {
+      const selected = models.getSelectedItem();
+      if (!selected || selected.unavailableReason) return;
+      finish({ status: 'selected', selection: { modelId: selected.id, provider: selected.provider } });
+    } else if (key.backspace) {
+      models.backspaceQuery();
+    } else if (key.delete) {
+      // Forward-delete has no mid-string cursor to act on here.
+    } else if (input && !key.ctrl && !key.meta) {
+      models.typeQuery(input);
+    }
+  });
+
+  return (
+    <Box flexDirection="column">
+      {bannerLines?.map((line, index) => (
+        <Text key={index} color={theme.warning}>
+          {line}
+        </Text>
+      ))}
+      <ModelSelectionMenu
+        settingsService={menuSettings}
+        items={models.filteredModels}
+        selectedIndex={models.selectedIndex}
+        query={models.query}
+        modelTab={models.providerScope ? undefined : models.modelTab}
+        provider={models.providerScope}
+        loading={models.loading}
+        error={models.error}
+        warning={models.warning}
+        scrollOffset={models.scrollOffset}
+        canSwitchProvider={!models.providerScope}
+        providerSwitchDisabledMessage={lockProvider ? `Provider fixed by --provider ${lockProvider}` : undefined}
+        favoriteKeys={models.favoriteKeys}
+        nicknameLabels={models.nicknameLabels}
+        nicknameDraft={models.nicknameDraft}
+      />
+    </Box>
+  );
+}
+
+export default StandaloneModelPickerApp;

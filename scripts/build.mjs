@@ -25,10 +25,26 @@ if (result.status !== 0) process.exit(result.status ?? 1);
 // Runtime assets tsc does not emit, copied to the same place under dist/.
 for (const asset of ['src/session/prompts', 'src/model/providers/provider-presets.json'])
   fs.cpSync(path.join(repo, asset), path.join(dist, asset), { recursive: true });
-// package.json bin.term2. A static import keeps argv[1] (used by restart) on this file.
-fs.writeFileSync(path.join(dist, 'cli.js'), "#!/usr/bin/env node\nimport './src/app/cli.js';\n", {
-  mode: 0o755,
-});
+// package.json bin.term2. Importing the entry (rather than spawning it) keeps argv[1], used by
+// restart, on this file. Enabling Node's compile cache first lets an installed term2 reuse the
+// entry bundle's V8 bytecode across starts (about 110 ms of each start without it). The cache is
+// per user, beside term2's other caches: Node's default under os.tmpdir() adopts an existing
+// directory even when another user created it writable. Node < 22.1 has no such API and starts
+// as before; a cache that cannot be created is skipped, and NODE_COMPILE_CACHE and
+// NODE_DISABLE_COMPILE_CACHE take precedence.
+fs.writeFileSync(
+  path.join(dist, 'cli.js'),
+  [
+    '#!/usr/bin/env node',
+    "import module from 'node:module';",
+    "import path from 'node:path';",
+    "import envPaths from 'env-paths';",
+    "module.enableCompileCache?.(path.join(process.env.TERM2_CACHE_DIR || envPaths('term2').cache, 'node-compile-cache'));",
+    "await import('./src/app/cli.js');",
+    '',
+  ].join('\n'),
+  { mode: 0o755 },
+);
 fs.writeFileSync(path.join(dist, 'cli.d.ts'), 'export {};\n');
 // The gateway imports @qduc/agent-wire, a vendored dev dependency; ship a copy beside the build.
 const embed = spawnSync(process.execPath, ['scripts/embed-agent-wire.mjs'], { cwd: repo, stdio: 'inherit' });

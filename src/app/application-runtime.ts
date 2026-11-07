@@ -3,7 +3,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { isDeepStrictEqual } from 'node:util';
 import { LocalExecutionContext } from './tool-contract.js';
 import { installationVersion } from '../model/providers/fetch/logging-middleware.js';
-import { BARE_PROFILE_ID } from '../shared/profiles/legacy-adapter.js';
+import { BARE_PROFILE_ID } from '../config/profiles/legacy-adapter.js';
 import { isDroppedProfile } from './dropped-profiles.js';
 import { getProfileMetadata } from '../config/profiles/active-profile.js';
 import { planProfileTransition } from '../config/profiles/profile-transition.js';

@@ -9,7 +9,7 @@ import type { ProviderDeps, ProviderFetch } from './registry.js';
 import { createProviderFetch } from './fetch/composer.js';
 import type { FetchMiddleware } from './fetch/compose.js';
 import { injectHeaders, installationVersion } from './fetch/logging-middleware.js';
-import { NULL_SESSION_CONTEXT_SERVICE } from '../../session/session/session-context-service.js';
+import { NULL_SESSION_CONTEXT_SERVICE } from '../traffic-context.js';
 import type { ISessionContextService } from '../../shared/service-interfaces.js';
 import { OpenAIChatCompletionsModel } from './openai-chat-completions-model.js';
 import { OpenAIResponsesModelWithPromptCacheKey } from './openai-responses-model.js';

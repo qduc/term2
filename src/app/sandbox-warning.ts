@@ -1,5 +1,5 @@
 /** The startup warning `term2 acp` and `term2 serve` print when the shell sandbox cannot run. */
-import { getDefaultShellSandboxRunner } from '../shared/utils/shell/sandbox/shell-sandbox-runner.js';
+import { getDefaultShellSandboxRunner } from '../tools/shell/sandbox/shell-sandbox-runner.js';
 
 /** Writes one line (without its newline) through `writeLine` when the sandbox is unavailable or its probe fails. */
 export async function warnIfSandboxUnavailable(

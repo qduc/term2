@@ -4,8 +4,8 @@ import type { ModelRequestCost } from '../../shared/cost/model-cost.js';
 import type { ILoggingService, ISessionContextService, ISettingsService } from '../../shared/service-interfaces.js';
 import type { ProviderInputItem } from '../../shared/contracts/provider-input.js';
 import { getCatalogModel } from '../../model/providers/model-catalog/catalog.js';
-import { CONTEXT_COMPACTION_INSTRUCTIONS } from '../prompts/context-compaction.js';
-import { projectConversationMessage } from '../conversation/conversation-message-projection.js';
+import { CONTEXT_COMPACTION_INSTRUCTIONS } from '../../engine/prompts/context-compaction.js';
+import { projectConversationMessage } from '../../engine/conversation-message-projection.js';
 import {
   LocalContextCompactor,
   type ContextSummaryGenerator,
@@ -52,11 +52,11 @@ import { SessionRuntimeController } from './session-runtime-controller.js';
 import { ContinuationPlanApplier } from './continuation-plan-applier.js';
 import { ContinuationRecoveryHandler } from './continuation-recovery-handler.js';
 import { DefaultConversationRecoveryPolicy } from '../../engine/retry/recovery-policy.js';
-import { DefaultRecoveryExecutor } from '../../engine/retry/recovery-executor.js';
+import { DefaultRecoveryExecutor } from '../recovery/recovery-executor.js';
 import type { ClassifiedFailure } from '../../engine/retry/retry-contracts.js';
 import { GenerationGuard } from '../generation-guard.js';
-import { DefaultRetryClassifier } from '../../engine/retry/retry-classifier.js';
-import { RetryEventPresenter } from '../../engine/retry/retry-event-presenter.js';
+import { DefaultRetryClassifier } from '../recovery/retry-classifier.js';
+import { RetryEventPresenter } from '../recovery/retry-event-presenter.js';
 import { SessionTurnAdapter } from './session-turn-adapter.js';
 import { SessionTurnDomain } from './session-turn-domain.js';
 import { AutomaticMemoryFinalizer } from './automatic-memory-finalizer.js';
@@ -91,7 +91,7 @@ import type { HookLifecyclePort } from '../hooks/hook-service.js';
 import { HookEventFactory } from '../hooks/hook-event-factory.js';
 import { PendingInteractionState } from './pending-interaction-state.js';
 import { BackgroundSubagentApprovalController } from '../approval/background-subagent-approval-controller.js';
-import { ToolCallMarkerStore } from '../../shared/utils/streaming/extract-command-messages.js';
+import { ToolCallMarkerStore } from '../conversation/extract-command-messages.js';
 import { registerSessionRuntime } from '../../tools/workspace/active-workspace-root.js';
 import { NestedApprovalOwner, type NestedApprovalSnapshot } from '../approval/nested-approval-owner.js';
 import type { AutomaticMemoryCanary } from '../../tools/memory/automatic-memory-canary.js';

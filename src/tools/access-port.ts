@@ -1,5 +1,5 @@
-import type { DeniedReadStore, ExecutionOverrideStore } from '../shared/utils/shell/sandbox/denied-read-stores.js';
-import type { DockerHostControlGrants } from '../shared/utils/shell/sandbox/docker-host-control-grants.js';
+import type { DeniedReadStore, ExecutionOverrideStore } from './shell/sandbox/denied-read-stores.js';
+import type { DockerHostControlGrants } from './shell/sandbox/docker-host-control-grants.js';
 
 /** Read authority consulted by file tools; grants remain owned by the session. */
 export interface FileReadAccessPort {

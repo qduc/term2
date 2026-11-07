@@ -16,12 +16,12 @@ import {
   BARE_PROFILE_ID,
   isLegacyModeSettingKey,
   profileIdFromLegacyModeSetting,
-} from '../shared/profiles/legacy-adapter.js';
+} from '../config/profiles/legacy-adapter.js';
 import { planProfileTransition } from '../config/profiles/profile-transition.js';
 import { SETTING_KEYS } from '../config/settings/settings-service.js';
 import { CATEGORY_KEYS, HIDDEN_SETTINGS, SETTINGS_CATEGORIES } from '../config/settings/settings-completion-config.js';
 import { getSettingMetadata } from '../config/settings/settings-ui-metadata.js';
-import { createSettingsCommand, parseSettingValue } from '../shared/utils/settings-command.js';
+import { createSettingsCommand, parseSettingValue } from './settings-command.js';
 import { receiptNotice, sendNativeCommand } from '../clients/tui/commands.js';
 import type { TuiConnection, TuiIntegration } from '../clients/tui/integration.js';
 import type { WireConfigureRequest, WireSnapshot } from '../protocol/wire.js';

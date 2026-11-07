@@ -1,5 +1,5 @@
 import type { NestedApprovalLedger } from '../../tools/nested-run-driver.js';
-import type { ApprovalRecord } from '../../session/approval/approval-replay.js';
+import type { ApprovalRecord } from '../approval-replay.js';
 import type { RunBudgetEvent, RunBudgetEvidence, RunBudgetPolicy } from './run-budget.js';
 
 /**

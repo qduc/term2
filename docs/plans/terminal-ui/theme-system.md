@@ -81,8 +81,15 @@ Attributes query (`ESC [ c`). Terminals answer in order and all answer DA1, so
 receiving the DA1 reply means any colour reply has already arrived: a terminal that
 ignores OSC 11 costs one round trip instead of the full 150 ms timeout, and its DA1
 reply is consumed instead of landing in the prompt later. It must run before Ink
-takes over stdin because the replies arrive as input; `cli.tsx` calls it only when
-`shouldDetectBackground()` says the answer can matter.
+takes over stdin because the replies arrive as input, and only when
+`shouldDetectBackground()` says the answer can matter. `launch-tui-terminal.ts`
+sends the query before the TUI's modules load and `runTui` reads the answer just
+before rendering, so the round trip (or the timeout) overlaps startup. Because
+startup can keep the event loop busy past 150 ms while a reply waits, the timeout
+gives up from `setImmediate`, after Node has polled stdin once more. A 2026-11-07
+PTY probe that replied after 150–170 ms showed the theme lost and `[?62;22c` typed
+into the prompt without that step; replies after about 200 ms still land there,
+as they did before.
 
 **`SettingsThemeProvider` recolours new output only.** Lines already committed to
 the terminal's scrollback keep the colours they were printed with. Ink's `<Static>`

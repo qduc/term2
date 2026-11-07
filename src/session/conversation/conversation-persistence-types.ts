@@ -1,4 +1,4 @@
-import type { Message } from '../../shared/types/message.js';
+import type { Message } from '../../tools/message.js';
 import type {
   AssistantTextItem,
   Item,

@@ -1,0 +1,104 @@
+import type { CommandMessage as BaseCommandMessage } from './types.js';
+import type { NormalizedUsage } from '../shared/utils/ai/token-usage.js';
+import type { SkillAttachment, UserTurn } from '../shared/types/user-turn.js';
+
+export interface UserMessage {
+  /** Human arrival time, independent of processing/queue delay. */
+  humanInputAt?: string;
+  /** Inherited human arrival on a nonhuman rollover brief; never a new arrival. */
+  humanInputBaseline?: string;
+  id: string;
+  sender: 'user';
+  text: string;
+  /**
+   * True when the input was consumed as resolution for an aborted tool approval
+   * rather than added to the conversation store as a new user turn. /undo and the
+   * undo selection menu must skip these so UI and store stay aligned.
+   */
+  consumedForAbort?: boolean;
+  skill?: SkillAttachment;
+  /** Original normalized adopted submission for explicit retry. */
+  submittedTurn?: UserTurn;
+  /** Transcript presentation only; the provider and persistence role remains user. */
+  presentation?: 'session_rollover' | 'server_message';
+}
+
+export interface BotMessage {
+  id: string;
+  sender: 'bot';
+  text: string;
+  status?: 'streaming' | 'finalized';
+  reasoningText?: string;
+  usage?: NormalizedUsage;
+}
+
+export type CommandMessage = BaseCommandMessage & {
+  hadApproval?: boolean;
+};
+
+export interface SystemMessage {
+  id: string;
+  sender: 'system';
+  text: string;
+  /** Optional concise-mode notification summary; text retains the complete diagnostic. */
+  conciseText?: string;
+  /** Transcript presentation only; empty text renders as a divider rule. */
+  presentation?: 'rule';
+  /** Keep the exact receipt in text; render only this count in the terminal. */
+  memoryReceiptCount?: number;
+}
+
+export interface ReasoningMessage {
+  id: string;
+  sender: 'reasoning';
+  text: string;
+  status?: 'streaming' | 'finalized';
+}
+
+export interface SubagentActivityMessage {
+  id: string;
+  sender: 'subagent';
+  status: 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted' | 'backgrounded';
+  callId?: string;
+  agentId: string;
+  role: string;
+  task: string;
+  /** Original public delegation tool, retained to render historical logs accurately. */
+  parentTool?: string;
+  async?: boolean;
+  tools: (string | CommandMessage)[];
+  finalText?: string;
+}
+
+export type Message =
+  | UserMessage
+  | BotMessage
+  | CommandMessage
+  | SystemMessage
+  | ReasoningMessage
+  | SubagentActivityMessage;
+
+export const isUserMessage = (message: Message): message is UserMessage => message.sender === 'user';
+
+export const isBotMessage = (message: Message): message is BotMessage => message.sender === 'bot';
+
+export const isCommandMessage = (message: Message): message is CommandMessage => message.sender === 'command';
+
+export const isSubagentActivityMessage = (message: Message): message is SubagentActivityMessage =>
+  message.sender === 'subagent';
+
+export const isResultToolEvent = (tool: string | CommandMessage): boolean => {
+  if (tool && typeof tool === 'object') {
+    return tool.status === 'completed' || tool.status === 'failed' || tool.success !== undefined;
+  }
+  if (typeof tool === 'string') {
+    return (
+      tool.endsWith(' (Success)') ||
+      tool.endsWith(' (Failed)') ||
+      tool.endsWith(' (Cancelled)') ||
+      /\s+\(Failed:.*\)$/.test(tool) ||
+      /\s+\(\d+\s+match(es)?\)$/.test(tool)
+    );
+  }
+  return false;
+};

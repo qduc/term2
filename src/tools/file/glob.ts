@@ -40,7 +40,7 @@ const findFilesParametersSchema = z.object({
 export type FindFilesToolParams = z.infer<typeof findFilesParametersSchema>;
 
 import { ExecutionContext } from '../execution-context.js';
-import { executeShellCommand } from '../../shared/utils/shell/execute-shell.js';
+import { executeShellCommand } from '../shell/execute-shell.js';
 import { isScriptedToolCall } from '../../shared/utils/output/bound-tool-result.js';
 
 let hasFd: boolean | null = null;

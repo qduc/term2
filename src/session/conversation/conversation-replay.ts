@@ -20,7 +20,7 @@ import type {
 import { isTruncatedLogEvent } from '../logging/conversation-log-events.js';
 import { formatMemoryReceipt } from './conversation-events.js';
 import { validateCompactionSequence, type PersistedLogEnvelope } from './conversation-decoder.js';
-import type { BotMessage, CommandMessage, SubagentActivityMessage } from '../../shared/types/message.js';
+import type { BotMessage, CommandMessage, SubagentActivityMessage } from '../../tools/message.js';
 import type {
   SavedAppMode,
   SavedMessage,
@@ -37,13 +37,13 @@ import {
   isToolCallHistoryItem,
   isToolResultHistoryItem,
 } from '../tool-execution-ledger.js';
-import { projectConversationMessage } from './conversation-message-projection.js';
+import { projectConversationMessage } from '../../engine/conversation-message-projection.js';
 import { deriveLocalCheckpointRequestHistory } from './local-checkpoint-projection.js';
 import {
   legacyModeFromProfileId,
   profileIdFromLegacyMode,
   profileIdFromLegacyModeSetting,
-} from '../../shared/profiles/legacy-adapter.js';
+} from '../../config/profiles/legacy-adapter.js';
 
 export interface RestoredState {
   id: string;

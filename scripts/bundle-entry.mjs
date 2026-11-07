@@ -33,6 +33,21 @@ export async function bundleEntry(dist) {
       });
     },
   };
+  // Node links each builtin the bundle imports through an ESM facade that reads every export once.
+  // node:http's WebSocket, CloseEvent and MessageEvent exports are getters that load Node's internal
+  // undici, so a static import cost every start ~17 ms. Through require, an export is read when used.
+  const builtinsThroughRequire = {
+    name: 'builtins-through-require',
+    setup(b) {
+      b.onResolve({ filter: /^(node:)?http$/ }, (args) =>
+        args.kind === 'import-statement' ? { path: 'node:http', namespace: 'term2-require-builtin' } : undefined,
+      );
+      b.onLoad({ filter: /.*/, namespace: 'term2-require-builtin' }, (args) => ({
+        contents: `module.exports = require(${JSON.stringify(args.path)});`,
+        loader: 'js',
+      }));
+    },
+  };
   const devtoolsStub = path.join(dist, '.devtools-stub.js');
   // Ink imports react-devtools-core only when DEV=true and the package is installed; it is not.
   fs.writeFileSync(devtoolsStub, 'export default { initialize() {}, connectToDevTools() {} };\n');
@@ -49,7 +64,9 @@ export async function bundleEntry(dist) {
     // prebuilt bindings) stay ordinary node_modules imports.
     // @qduc/web-fetch is reached only through web_fetch's dynamic import(), yet bundled it put about
     // 5 MB (jsdom, parse5, domino, ...) in front of every start: each launch read, decoded and
-    // compiled it before any code ran. Loaded from node_modules, it costs only the first fetch.
+    // compiled it before any code ran. Loaded from node_modules, it costs only the first fetch. It
+    // must stay external regardless: jsdom resolves xhr-sync-worker.js beside itself, and bundled,
+    // every web_fetch call failed with "Cannot find module './xhr-sync-worker.js'".
     external: [
       '*.node',
       'better-sqlite3',
@@ -61,7 +78,7 @@ export async function bundleEntry(dist) {
       '@qduc/web-fetch',
     ],
     alias: { 'react-devtools-core': devtoolsStub },
-    plugins: [ownLocations],
+    plugins: [ownLocations, builtinsThroughRequire],
     // CommonJS dependencies expect require, __filename and __dirname. `define` maps only their free
     // uses, so a module's own `const __dirname = ...` keeps its own binding.
     define: { __filename: '__term2BundleFile', __dirname: '__term2BundleDir' },

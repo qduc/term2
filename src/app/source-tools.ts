@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { withTrimConfig } from '../shared/utils/output/output-trim.js';
-import { normalizeToolInput, runToolInputDiagnostics } from '../shared/lib/tool-invoke.js';
+import { normalizeToolInput, runToolInputDiagnostics } from '../tools/tool-invoke.js';
 import { isCancellationError, isHarnessInvariantError } from '../shared/lib/harness-invariant-error.js';
 import type { ToolApprovalPolicyRegistry } from '../session/approval/tool-approval-policy-registry.js';
 import { NestedApprovalOwner, type NestedApprovalSnapshot } from '../session/approval/nested-approval-owner.js';

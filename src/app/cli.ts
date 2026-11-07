@@ -13,20 +13,20 @@ import { LoggingService } from '../session/logging/logging-service.js';
 import { VALID_REASONING_EFFORTS, type ModelSettingsReasoningEffort } from '../model/models/reasoning-effort.js';
 import { isDroppedProfile } from './dropped-profiles.js';
 import { resolveProfile } from '../config/profiles/resolver.js';
-import { BARE_PROFILE_ID, canonicalProfileId } from '../shared/profiles/legacy-adapter.js';
-import { SessionContextService } from '../session/session/session-context-service.js';
+import { BARE_PROFILE_ID, canonicalProfileId } from '../config/profiles/legacy-adapter.js';
+import { SessionContextService } from '../model/traffic-context.js';
 import { buildEnvOverrides } from '../config/settings/settings-service.js';
 import {
   HOME_DIRECTORY_START_WARNING,
   shouldWarnOnHomeDirectoryStart,
 } from '../shared/utils/home-directory-start-guard.js';
-import type { AcpArgs } from '../clients/acp-v2/serve-args.js';
+import type { AcpArgs } from './serve-args.js';
 import type { ServeArgs } from '../host/gateway/serve-args.js';
 import type { DirectLaunchBase } from './launch-types.js';
 import type { DirectCommandConfiguration } from '../session/command-types.js';
 import type { InteractivePickerRequest } from '../model/models/model-resolution.js';
 import { HARNESS_IDLE_ENV } from '../shared/lib/harness-input-idle.js';
-import { formatResumeList } from '../shared/utils/resume-list.js';
+import { formatResumeList } from '../session/conversation/resume-list.js';
 import { isControlSocketName } from '../clients/control-socket/control-socket.js';
 import { createSettingsService, type SettingsService } from './settings.js';
 import { runLogin, runListModelsCommand } from './cli-account-commands.js';
@@ -34,7 +34,7 @@ import { listNativeConversations, resolveNativeResume, ResumeRefusal } from './c
 import {
   launchDirect,
   INTERACTIVE_TERMINAL_REQUIRED,
-  runDirectHeadlessOnHost,
+  loadDirectHeadless,
   type DirectHeadlessRequest,
   type DirectLaunchRequest,
 } from './launch.js';
@@ -153,6 +153,8 @@ async function runWithSignals(request: DirectHeadlessRequest): Promise<{
   readonly kind: 'completed' | 'cancelled' | 'failed' | 'context_paused' | 'blocked' | 'budget_paused';
   readonly signal?: NodeJS.Signals;
 }> {
+  // Loaded before the handlers below are installed, so a signal always finds the handle.
+  const runDirectHeadlessOnHost = await loadDirectHeadless();
   // The handle has no started bit. Latch observed activity so later inactivity
   // waits for its durable result.
   let turnHasStarted = false;
@@ -226,7 +228,7 @@ async function applyModelOverrides(
     return 'Error: --provider requires --model; provider-only selection is not supported.';
   }
 
-  const picker = pickerEligible ? await import('../model/models/model-picker-host.js') : undefined;
+  const picker = pickerEligible ? await import('./model-picker-host.js') : undefined;
 
   // A bare -m opens the picker itself (old cli.tsx); Escape keeps the configured model.
   if (options.model === '') {

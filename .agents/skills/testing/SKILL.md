@@ -271,6 +271,13 @@ and `68ef50ff` (local-only evidence), not a result file to resume appending.
 - **PTY relaunch lock race:** relaunching before the previous PTY child had exited
   raced the personal-memory lock and flaked CI. The harness must wait for child
   exit before relaunching; don't paper over it with retries.
+- **Idle is not "frame on screen" (fixed 2026-11-07):** the harness idle file is
+  written from a React effect, so the frame can still be in flight through the
+  PTY bridge. `approval-mode.e2e.test.ts` › "keeps all composer hints at 120
+  columns" read the screen right after idle and failed under load with
+  `expected [] to have a length of 1` (no hint row), 3 of 12 on `main` and 2 of 12
+  on the candidate beside four busy loops. Wait for the text you will assert on
+  (`waitForOutput`) before reading `getVisibleOutput()` after an idle wait.
 
 ### Local-only boundary lessons reviewed for reconciliation
 

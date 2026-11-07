@@ -1,7 +1,7 @@
 import React from 'react';
 import type { StandaloneModelPickerOutcome } from './StandaloneModelPickerApp.js';
 import type { ILoggingService } from '../shared/service-interfaces.js';
-import type { SettingsService } from '../config/settings/settings-service.js';
+import type { SettingsService } from './settings-service.js';
 import type { ModelFetcher } from '../model/models/model-catalog-session.js';
 
 export type ModelPickerHostResult = StandaloneModelPickerOutcome;

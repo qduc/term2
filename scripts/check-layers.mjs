@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Enforce the layer graph over the whole production tree (src).
 // Each top-level folder of src is a layer. A layer may import itself, the
-// layers listed in LAYER_DEPENDENCIES and shared/ (pure helpers every layer may use).
+// layers listed in LAYER_DEPENDENCIES, shared/ (pure helpers), and config/ (pure schemas).
 // Edges that predate the guard are listed one per line in layer-allowlist.json;
 // a new crossing edge fails, and a listed edge that no longer exists is reported.
 import fs from 'node:fs';
@@ -17,14 +17,14 @@ const LAYER_DEPENDENCIES = {
   shared: [],
   config: [],
   model: [],
-  tools: ['model', 'config'],
-  engine: ['model', 'tools', 'config'],
-  session: ['engine', 'model', 'tools', 'config'],
-  delegation: ['session', 'engine', 'model', 'tools', 'config'],
-  protocol: ['delegation', 'session', 'engine', 'model', 'tools', 'config'],
-  host: ['protocol', 'session', 'config'],
+  tools: ['model'],
+  engine: ['model', 'tools'],
+  session: ['engine', 'model', 'tools'],
+  delegation: ['session', 'engine', 'model', 'tools'],
+  protocol: ['delegation', 'session', 'engine', 'model', 'tools'],
+  host: ['protocol', 'session'],
   clients: ['host', 'protocol'],
-  app: ['clients', 'host', 'protocol', 'delegation', 'session', 'engine', 'tools', 'model', 'config'],
+  app: ['clients', 'host', 'protocol', 'delegation', 'session', 'engine', 'tools', 'model'],
 };
 
 // Imports are collected from static ES module syntax, including re-exports and dynamic imports.
@@ -78,7 +78,13 @@ for (const importer of files(rewriteSrc)) {
       continue;
     }
     const toLayer = layerOf(target);
-    if (toLayer === fromLayer || toLayer === 'shared' || LAYER_DEPENDENCIES[fromLayer]?.includes(toLayer)) continue;
+    if (
+      toLayer === fromLayer ||
+      toLayer === 'shared' ||
+      toLayer === 'config' ||
+      LAYER_DEPENDENCIES[fromLayer]?.includes(toLayer)
+    )
+      continue;
     const edge = `${relative(importer)} -> ${relative(target)} (${fromLayer} -> ${toLayer})`;
     crossing.add(edge);
     if (!allowlist.has(edge))

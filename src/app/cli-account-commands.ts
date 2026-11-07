@@ -1,7 +1,7 @@
 /** Account/catalog subcommands, independent of conversation launch and signal ownership. */
 import { stdin, stdout, stderr } from 'node:process';
 import { SessionContextService } from '../model/traffic-context.js';
-import { buildEnvOverrides } from '../config/settings/settings-service.js';
+import { buildEnvOverrides } from '../config/settings/settings-env.js';
 import { createSettingsService, type SettingsService } from './settings.js';
 
 import type { ILoggingService } from '../shared/service-interfaces.js';

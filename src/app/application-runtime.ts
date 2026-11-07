@@ -6,9 +6,10 @@ import { installationVersion } from '../model/providers/fetch/logging-middleware
 import { BARE_PROFILE_ID } from '../config/profiles/legacy-adapter.js';
 import { isDroppedProfile } from './dropped-profiles.js';
 import { getProfileMetadata } from '../config/profiles/active-profile.js';
-import { planProfileTransition } from '../config/profiles/profile-transition.js';
+import { planProfileTransition } from './profile-transition.js';
 import { RUNTIME_MODIFIABLE_SETTINGS } from '../config/settings/settings-schema.js';
-import { buildEnvOverrides, SettingsService } from '../config/settings/settings-service.js';
+import { buildEnvOverrides } from '../config/settings/settings-env.js';
+import { SettingsService } from './settings-service.js';
 import type { ModelRef } from '../model/index.js';
 import { createProviderRegistry } from '../model/provider.js';
 import type { DirectBackgroundTasks } from '../session/background.js';

@@ -36,6 +36,9 @@ Thumbs.db
 .cache/
 .term2/
 
+# Agent handoffs and task evidence (see AGENTS.md)
+.handoff/
+
 # pnpm store (created by local installs; not part of the project)
 .pnpm-store/
 .claude/worktrees/

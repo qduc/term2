@@ -73,9 +73,11 @@ wall-clock on a loaded 7-core box.
 | Only `session/` reads the log (`app/`, `clients/` ask the live session) | `check-layers.mjs` (log-reader guard) | every commit | in the above |
 | One projection: wire events are built only in `protocol/` | `check-rules.mjs` (one recorded exception: deferred web server) | every commit | 2.4 s |
 | Names are jobs (no service/adapter/orchestrator file or folder) | `check-rules.mjs` | every commit | in the above |
-| No new unused runtime exports (470 old ones recorded in `rule-baseline.json`; the list only shrinks) | `check-rules.mjs` | every commit | in the above |
+| No new unused runtime exports (recorded in `rule-baseline.json`, reported by `scripts/arch-report.mjs`; the list only shrinks) | `check-rules.mjs` | every commit | in the above |
 | Every file is reached from `app/cli.ts` | `check-reachability.mjs` | every commit | 1.2 s |
 | Files stay under 500 lines; allowlisted layer edges only shrink | `check-complexity.mjs` | every commit | 0.15 s |
+| Baselines and ceilings do not grow against merge base | `check-baselines.mjs` | every commit | 0.2 s |
+| Root directory contains only allowlisted files | `check-root.mjs` | every commit | 0.05 s |
 | A message's path stays short and runs through the production direct files | `bench/hops.mts` | every commit | 5.8 s |
 | The engine waits instead of calling up | layer table above (no upward import); the callbacks that still write facts (audit F1) are **not** checked | every commit | - |
 | One log: no second state to keep in sync | only the log-reader half is checked; the duplicate-reducer half (audit H1) is **not** | every commit | - |

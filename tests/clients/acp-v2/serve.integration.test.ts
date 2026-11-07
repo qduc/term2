@@ -233,6 +233,7 @@ const runAcpChild = async (
     });
   }
 
+  let bodyComplete = false;
   try {
     await client.connectWith(
       acp.ndJsonStream(new WritableStream<Uint8Array>({ write: (chunk) => stdinWriter.write(chunk) }), agentToClient),
@@ -243,8 +244,14 @@ const runAcpChild = async (
         });
         const created = await context.request(acp.methods.agent.session.new, { cwd: workspace });
         await body({ context, sessionId: created.sessionId, workspace, workspaceFile, updates, permissionRequests });
+        bodyComplete = true;
+        // Keep the SDK reader open while EOF-driven shutdown drains stdout.
+        await stdinWriter.close();
+        await Promise.race([exited, sleep(30_000)]);
       },
     );
+  } catch (error) {
+    if (!bodyComplete || !(error instanceof Error) || error.message !== 'ACP connection closed') throw error;
   } finally {
     // Closing stdin is the client's disconnect: the launcher cancels and closes
     // the session, then exits.
@@ -264,33 +271,87 @@ const runAcpChild = async (
 };
 
 describe('term2 acp permission round trips (child process)', () => {
-  // DEFECT: the child never sends `session/request_permission`. Its sessions are
-  // built by `createProductionRuntimeFactory`, and `session-backend.ts` reads the
-  // pending interaction from `turn.session.resources.runtime`, which that path
-  // never sets -- so every approval-required call falls through to the M1
-  // fail-closed default and the client's allow can never be honored.
   it('asks the client for permission and writes the file when allowed', async () => {
-    await runAcpChild(
-      async () => ({ outcome: { outcome: 'selected', optionId: 'allow-once' } }),
+    const result = await runAcpChild(
+      async () => ({ outcome: { outcome: 'selected', optionId: 'approve' } }),
       async (session) => {
         await session.context.request(acp.methods.agent.session.prompt, {
           sessionId: session.sessionId,
           prompt: [{ type: 'text', text: 'run the tool' }],
         });
-
-        const arrived = await waitFor(() => session.permissionRequests.length > 0, 5_000);
-        // Observed while this test was written: instead of a permission request the
-        // client sees state_update running -> tool_call pending -> two
-        // `tool_call_update` failed updates carrying the fallback reason
-        // 'Approval is not yet supported over ACP.', and no terminal state_update.
-        expect(arrived, 'DEFECT: term2 acp never sent session/request_permission to its client').toBe(true);
-        expect(session.permissionRequests[0]!.options.map((option) => option.optionId)).not.toContain(
-          'unsandboxed-once',
-        );
-
-        const written = await waitFor(() => fs.existsSync(session.workspaceFile), 5_000);
-        expect(written, 'an allowed shell call must run').toBe(true);
+        expect(
+          await waitFor(
+            () =>
+              session.updates.some(({ update }) => update.sessionUpdate === 'state_update' && update.state === 'idle'),
+            15_000,
+          ),
+        ).toBe(true);
+        expect(session.permissionRequests).toHaveLength(1);
+        const request = session.permissionRequests[0]!;
+        expect(request.sessionId).toBe(session.sessionId);
+        expect(request.subject?.type).toBe('tool_call');
+        expect(request.options.map((option) => option.optionId)).not.toContain('unsandboxed-once');
+        expect(fs.readFileSync(session.workspaceFile, 'utf8')).toBe('written\n');
       },
     );
+    expect(result.exit, result.stderr).toEqual({ code: 0, signal: null });
+    for (const line of result.stdoutText.trim().split('\n')) expect(JSON.parse(line).jsonrpc).toBe('2.0');
   }, 180_000);
+
+  const deniedReplies: Array<{
+    name: string;
+    permission: ((params: acp.RequestPermissionRequest) => Promise<acp.RequestPermissionResponse>) | undefined;
+    receivesRequest: boolean;
+  }> = [
+    {
+      name: 'explicit denial',
+      permission: async () => ({ outcome: { outcome: 'selected', optionId: 'reject' } }),
+      receivesRequest: true,
+    },
+    {
+      name: 'cancelled response',
+      permission: async () => ({ outcome: { outcome: 'cancelled' } }),
+      receivesRequest: true,
+    },
+    {
+      name: 'unknown option',
+      permission: async () => ({ outcome: { outcome: 'selected', optionId: 'not-offered' } }),
+      receivesRequest: true,
+    },
+    {
+      name: 'malformed response',
+      permission: async () => ({ outcome: {} } as unknown as acp.RequestPermissionResponse),
+      receivesRequest: true,
+    },
+    { name: 'unsupported client method', permission: undefined, receivesRequest: false },
+  ];
+
+  it.each(deniedReplies)(
+    'does not execute the tool after $name',
+    async ({ permission, receivesRequest }) => {
+      const result = await runAcpChild(permission, async (session) => {
+        await session.context.request(acp.methods.agent.session.prompt, {
+          sessionId: session.sessionId,
+          prompt: [{ type: 'text', text: 'run the tool' }],
+        });
+        expect(
+          await waitFor(
+            () =>
+              session.updates.some(({ update }) => update.sessionUpdate === 'state_update' && update.state === 'idle'),
+            15_000,
+          ),
+        ).toBe(true);
+        expect(session.permissionRequests).toHaveLength(receivesRequest ? 1 : 0);
+        expect(fs.existsSync(session.workspaceFile)).toBe(false);
+        expect(
+          session.updates.some(
+            ({ update }) => update.sessionUpdate === 'tool_call_update' && update.status === 'failed',
+          ),
+        ).toBe(true);
+      });
+      expect(result.exit, result.stderr).toEqual({ code: 0, signal: null });
+      for (const line of result.stdoutText.trim().split('\n')) expect(JSON.parse(line).jsonrpc).toBe('2.0');
+    },
+    180_000,
+  );
 });

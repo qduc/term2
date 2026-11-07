@@ -1,4 +1,4 @@
-import { VALID_REASONING_EFFORTS, type ModelSettingsReasoningEffort } from '../../model/models/reasoning-effort.js';
+import { VALID_REASONING_EFFORTS, type ModelSettingsReasoningEffort } from '../model/models/reasoning-effort.js';
 
 /**
  * Flag parsing for `term2 acp`, kept free of I/O so the launcher's

@@ -20,7 +20,7 @@ import {
   HOME_DIRECTORY_START_WARNING,
   shouldWarnOnHomeDirectoryStart,
 } from '../shared/utils/home-directory-start-guard.js';
-import type { AcpArgs } from '../clients/acp-v2/serve-args.js';
+import type { AcpArgs } from './serve-args.js';
 import type { ServeArgs } from '../host/gateway/serve-args.js';
 import type { DirectLaunchBase } from './launch-types.js';
 import type { DirectCommandConfiguration } from '../session/command-types.js';
@@ -226,7 +226,7 @@ async function applyModelOverrides(
     return 'Error: --provider requires --model; provider-only selection is not supported.';
   }
 
-  const picker = pickerEligible ? await import('../model/models/model-picker-host.js') : undefined;
+  const picker = pickerEligible ? await import('./model-picker-host.js') : undefined;
 
   // A bare -m opens the picker itself (old cli.tsx); Escape keeps the configured model.
   if (options.model === '') {

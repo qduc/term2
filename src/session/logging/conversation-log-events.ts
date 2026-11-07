@@ -5,7 +5,7 @@ import type { NormalizedUsage } from '../../shared/utils/ai/token-usage.js';
 import type { CommandMessage } from '../../tools/types.js';
 import type { SubagentResult } from '../../tools/subagents/types.js';
 import type { SavedToolExecution } from '../tool-execution-ledger.js';
-import type { UserMessage } from '../../shared/types/message.js';
+import type { UserMessage } from '../../tools/message.js';
 import type {
   SavedAppMode,
   PersistedAssistantTurn,

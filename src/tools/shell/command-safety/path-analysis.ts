@@ -1,6 +1,6 @@
 import path from 'path';
-import { getActiveWorkspaceRoot } from '../../../../tools/workspace/active-workspace-root.js';
-import type { ILoggingService } from '../../../service-interfaces.js';
+import { getActiveWorkspaceRoot } from '../../workspace/active-workspace-root.js';
+import type { ILoggingService } from '../../../shared/service-interfaces.js';
 import {
   SafetyStatus,
   SYSTEM_PATHS,

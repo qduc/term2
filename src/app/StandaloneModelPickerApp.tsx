@@ -11,7 +11,7 @@ import {
   getAvailableProviderIds,
   hasProviderCredentials,
   resolveProviderCredentials,
-} from '../shared/utils/ai/provider-credentials.js';
+} from '../model/provider-credentials.js';
 
 export type StandaloneModelPickerSelection = { modelId: string; provider: string };
 

@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ILoggingService } from '../../../service-interfaces.js';
+import type { ILoggingService } from '../../../shared/service-interfaces.js';
 import type { DeniedReadInfo } from './denied-read-detector.js';
 
 /**

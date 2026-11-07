@@ -14,7 +14,7 @@ import type { NestedApprovalOwner } from '../../session/approval/nested-approval
 import { applyApprovalGrant } from '../../session/approval/approval-grant-executor.js';
 import { isDockerHostControlShellApproval } from '../../session/approval/shell-sandbox-approval.js';
 import { resolveOutsideWorkspaceEdit } from '../../session/approval/approval-descriptor.js';
-import { normalizeToolParameters } from '../../shared/lib/tool-invoke.js';
+import { normalizeToolParameters } from '../../tools/tool-invoke.js';
 import { isZodToolParameterSchema, type AnyToolDefinition, type ToolRegistry } from '../../tools/types.js';
 import { renderCompactSignature } from '../../tools/system/run-code/tools-header.js';
 import {

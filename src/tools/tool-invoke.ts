@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { isAbortLike } from '../../tools/subagents/utils.js';
-import { unwrapSchema } from '../../config/settings/setting-schema-utils.js';
-import type { AnyToolDefinition, ToolParameterSchema } from '../../tools/types.js';
-import { isZodToolParameterSchema } from '../../tools/types.js';
+import { isAbortLike } from './subagents/utils.js';
+import { unwrapSchema } from '../config/settings/setting-schema-utils.js';
+import type { AnyToolDefinition, ToolParameterSchema } from './types.js';
+import { isZodToolParameterSchema } from './types.js';
 
 /**
  * Maximum payload size (in characters) for which JSON repair is attempted.

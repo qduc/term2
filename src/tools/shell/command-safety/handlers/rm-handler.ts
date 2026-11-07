@@ -1,8 +1,8 @@
 import path from 'node:path';
 import type { Command } from 'unbash';
-import { getActiveWorkspaceRoot } from '../../../../../tools/workspace/active-workspace-root.js';
+import { getActiveWorkspaceRoot } from '../../../workspace/active-workspace-root.js';
 import { SafetyStatus, SYSTEM_PATHS } from '../constants.js';
-import { SANDBOX_TEMP_DIR } from '../../temp-dir.js';
+import { SANDBOX_TEMP_DIR } from '../../../../shared/utils/shell/temp-dir.js';
 import type { CommandHandler, CommandHandlerHelpers, CommandHandlerResult } from './types.js';
 
 const SENSITIVE_SEGMENTS = new Set([

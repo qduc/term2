@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ISettingsService } from '../../../service-interfaces.js';
+import type { ISettingsService } from '../../../shared/service-interfaces.js';
 import { requestsDockerHostControl } from './docker-host-control.js';
 
 export type DockerHostControlGrant = 'once' | 'session' | 'project';

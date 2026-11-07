@@ -1,4 +1,4 @@
-import { isGpt5OrGpt6Model } from '../../shared/lib/tool-selection-policy.js';
+import { isGpt5OrGpt6Model } from '../../model/tool-selection-policy.js';
 
 export type PromptProfile = {
   id: string;

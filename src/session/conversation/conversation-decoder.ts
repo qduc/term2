@@ -5,7 +5,7 @@ import type {
   PersistedLogEvent,
   TruncatedLogEvent,
 } from '../logging/conversation-log-events.js';
-import type { Message } from '../../shared/types/message.js';
+import type { Message } from '../../tools/message.js';
 
 export type PersistedLogEnvelope = LogEnvelope<PersistedLogEvent>;
 

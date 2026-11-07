@@ -35,7 +35,7 @@ import {
 import type { ProviderContinuity } from '../provider-continuity.js';
 import type { SessionStreamProcessor } from './session-stream-processor.js';
 import { type AgentStream } from '../../engine/agent-stream.js';
-import { ToolCallMarkerStore } from '../../shared/utils/streaming/extract-command-messages.js';
+import { ToolCallMarkerStore } from '../conversation/extract-command-messages.js';
 import type { PostExecutePendingRegistry, PostExecutePendingEntry } from './post-execute-pending-registry.js';
 import type { SessionAccessState } from './session-access-state.js';
 import { extractFinalizationSnapshot } from '../stream-snapshot.js';

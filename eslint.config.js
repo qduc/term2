@@ -153,9 +153,9 @@ export default tseslint.config(
       'src/tools/run-agent-workflow.ts',
       'src/tools/system/shell.ts',
       'src/tools/types.ts',
-      'src/shared/utils/shell/command-safety/find-helpers.ts',
-      'src/shared/utils/shell/command-safety/index.ts',
-      'src/shared/utils/shell/command-safety/utils.ts',
+      'src/tools/shell/command-safety/find-helpers.ts',
+      'src/tools/shell/command-safety/index.ts',
+      'src/tools/shell/command-safety/utils.ts',
     ],
     rules: {
       '@typescript-eslint/no-explicit-any': 'error',

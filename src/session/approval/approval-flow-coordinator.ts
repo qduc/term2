@@ -2,7 +2,7 @@ import type { ConversationRecord } from '../conversation/conversation-record.js'
 import type { ILoggingService } from '../../shared/service-interfaces.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { ApprovalState, type AbortedApprovalContext, type PendingApprovalContext } from './approval-state.js';
-import { ToolCallMarkerStore } from '../../shared/utils/streaming/extract-command-messages.js';
+import { ToolCallMarkerStore } from '../conversation/extract-command-messages.js';
 import { getCallIdFromObject, getToolInfoFromInterruption } from '../interruption-info.js';
 import { validateApprovalGrant } from './approval-grant-executor.js';
 import type { PendingApproval } from '../../tools/conversation.js';

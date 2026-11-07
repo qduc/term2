@@ -44,7 +44,7 @@ import type { ConversationEvent } from '../../session/conversation/conversation-
 import { AcquiredChildSlot } from '../../engine/agent-runtime/execution-budget.js';
 import { ToolOwnershipRegistry } from '../../session/approval/tool-ownership-registry.js';
 import { getCallIdFromObject } from '../../session/interruption-info.js';
-import { normalizeToolParameters } from '../../shared/lib/tool-invoke.js';
+import { normalizeToolParameters } from '../../tools/tool-invoke.js';
 import {
   ForegroundSubagentLease,
   type BackgroundSubagentApprovalPauseSink,

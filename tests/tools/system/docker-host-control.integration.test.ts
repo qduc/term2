@@ -5,12 +5,12 @@ import type { ILoggingService } from '../../../src/shared/service-interfaces.js'
 import {
   grantDockerHostControl,
   resetDockerHostControlGrantsForTests,
-} from '../../../src/shared/utils/shell/sandbox/docker-host-control-grants.js';
+} from '../../../src/tools/shell/sandbox/docker-host-control-grants.js';
 import {
   createDockerHostControl,
   DOCKER_HOST_CONTROL_RETRY_INSTRUCTION,
-} from '../../../src/shared/utils/shell/sandbox/docker-host-control.js';
-import { getDefaultShellSandboxRunner } from '../../../src/shared/utils/shell/sandbox/shell-sandbox-runner.js';
+} from '../../../src/tools/shell/sandbox/docker-host-control.js';
+import { getDefaultShellSandboxRunner } from '../../../src/tools/shell/sandbox/shell-sandbox-runner.js';
 import { createShellToolDefinition } from '../../../src/tools/system/shell.js';
 
 const createNoopLogger = (): ILoggingService => ({

@@ -13,7 +13,7 @@ import { LoggingService } from '../session/logging/logging-service.js';
 import { VALID_REASONING_EFFORTS, type ModelSettingsReasoningEffort } from '../model/models/reasoning-effort.js';
 import { isDroppedProfile } from './dropped-profiles.js';
 import { resolveProfile } from '../config/profiles/resolver.js';
-import { BARE_PROFILE_ID, canonicalProfileId } from '../shared/profiles/legacy-adapter.js';
+import { BARE_PROFILE_ID, canonicalProfileId } from '../config/profiles/legacy-adapter.js';
 import { SessionContextService } from '../model/traffic-context.js';
 import { buildEnvOverrides } from '../config/settings/settings-service.js';
 import {
@@ -26,7 +26,7 @@ import type { DirectLaunchBase } from './launch-types.js';
 import type { DirectCommandConfiguration } from '../session/command-types.js';
 import type { InteractivePickerRequest } from '../model/models/model-resolution.js';
 import { HARNESS_IDLE_ENV } from '../shared/lib/harness-input-idle.js';
-import { formatResumeList } from '../shared/utils/resume-list.js';
+import { formatResumeList } from '../session/conversation/resume-list.js';
 import { isControlSocketName } from '../clients/control-socket/control-socket.js';
 import { createSettingsService, type SettingsService } from './settings.js';
 import { runLogin, runListModelsCommand } from './cli-account-commands.js';

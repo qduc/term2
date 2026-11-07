@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { ScriptedToolDefinition } from '../types.js';
 import type { ILoggingService, ISettingsService } from '../../shared/service-interfaces.js';
 import { getAllProviders } from '../../model/providers/index.js';
-import { isProviderDisabled, resolveProviderCredentials } from '../../shared/utils/ai/provider-credentials.js';
+import { isProviderDisabled, resolveProviderCredentials } from '../../model/provider-credentials.js';
 import { loadProviderModelGroup, type LoadProviderModelGroupDeps } from '../../model/models/model-listing.js';
 
 /** Project-scoped model usage metadata; discovery has no need for transcript or index internals. */

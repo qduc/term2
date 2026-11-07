@@ -7,7 +7,7 @@ import type {
 import type { SubagentResult } from '../../tools/subagents/types.js';
 import { isTerminalSubagentResult } from '../../tools/subagents/types.js';
 import type { NormalizedUsage } from '../../shared/utils/ai/token-usage.js';
-import { formatToolCommand, parseToolArguments } from '../../shared/utils/conversation/conversation-utils.js';
+import { formatToolCommand, parseToolArguments } from '../../tools/conversation-utils.js';
 import { formatSubagentResult, truncatePreview } from '../../tools/subagents/utils.js';
 import type { RunBudgetEvent } from '../../engine/agent-runtime/run-budget.js';
 

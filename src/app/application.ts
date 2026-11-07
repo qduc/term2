@@ -5,7 +5,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { getProfileMetadata } from '../config/profiles/active-profile.js';
-import { BARE_PROFILE_ID } from '../shared/profiles/legacy-adapter.js';
+import { BARE_PROFILE_ID } from '../config/profiles/legacy-adapter.js';
 import { isDroppedProfile } from './dropped-profiles.js';
 import { getModelContextWindow } from '../model/providers/model-catalog/catalog.js';
 import { SkillsService, type SkillInfo } from '../tools/skills/skills-service.js';

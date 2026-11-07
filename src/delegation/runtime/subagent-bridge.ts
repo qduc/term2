@@ -51,7 +51,7 @@ export interface SubagentBridgeDeps {
   /** Session-owned delivery path for approvals after foreground adoption. */
   backgroundApprovalPauseSink?: BackgroundSubagentApprovalPauseSink;
   readOnly?: boolean;
-  scopedSandbox?: import('../../shared/utils/shell/sandbox/sandbox-policy.js').ScopedShellSandbox;
+  scopedSandbox?: import('../../tools/shell/sandbox/sandbox-policy.js').ScopedShellSandbox;
   /** Root session transcript browser, lent to the librarian subagent. */
   sessionBrowser?: SessionBrowser;
 }

@@ -1,9 +1,9 @@
 import os from 'node:os';
-import { getActiveWorkspaceRoot } from '../../../../tools/workspace/active-workspace-root.js';
+import { getActiveWorkspaceRoot } from '../../workspace/active-workspace-root.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { SandboxRuntimeConfig } from '@anthropic-ai/sandbox-runtime';
-import { SANDBOX_TEMP_DIR } from '../temp-dir.js';
+import { SANDBOX_TEMP_DIR } from '../../../shared/utils/shell/temp-dir.js';
 import { isSecretKey } from './sandbox-env.js';
 
 export type SandboxReadPolicy = 'standard' | 'strict';

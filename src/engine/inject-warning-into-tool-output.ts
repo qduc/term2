@@ -1,4 +1,4 @@
-import type { RunBudgetEvidence } from '../../engine/agent-runtime/run-budget.js';
+import type { RunBudgetEvidence } from './agent-runtime/run-budget.js';
 
 const MAX_TURNS_LEFT_THRESHOLD = 5;
 

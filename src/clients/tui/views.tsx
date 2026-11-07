@@ -307,6 +307,8 @@ export function Activity({
             // Legacy has no command receipts: a rewind or retry shows only its result.
             receipt.request.operation.kind !== 'retry' &&
             receipt.request.operation.kind !== 'rewind' &&
+            // A rollover is internal: the rotated conversation is its only user-visible result.
+            receipt.request.operation.kind !== 'rollover' &&
             receipt.outcome?.kind !== 'retried' &&
             // Legacy prints nothing for a finished rewind.
             receipt.outcome?.kind !== 'rewound' &&

@@ -1,11 +1,8 @@
 name: CI
 
-# Run the full CI matrix on pushes to main, for the catalog updater, and on pull
-# requests targeting main, unless every file a pull request changes is inert for
-# CI (see the `changes` job); then the test jobs are skipped, which required
-# checks count as passing. All four tiers remain required; the existing four
-# jobs share their work. Provider cases still drive the built CLI against
-# deterministic loopback fixtures.
+# Quality runs independently of behavioral tests, including on docs-only PRs.
+# Keep all existing check names: port is a compatibility gate over the lanes
+# that now own its checks. Behavioral tiers may skip only inert PR changes.
 on:
   workflow_call:
     inputs:
@@ -36,14 +33,13 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ inputs.ref || github.ref }}
   cancel-in-progress: true
 
-# The same four runners now share the complete inventory. Each tier keeps its
-# configuration and module isolation; run-ci-lane.mjs builds dist/ and assigns
-# every discovered file once. Changed paths only decide whether a pull request
-# runs all of it or none of it; no test selection depends on them.
+# Each tier keeps its configuration and module isolation. The lane runner
+# assigns every discovered file once; only behavioral lanes build dist/.
 jobs:
   # Docs-only pull requests used to pay for the whole matrix. Inert means prose
-  # and evidence records the tests never read: markdown outside src/, and
-  # anything under docs/ except code. Not inert, although markdown: root
+  # and known evidence/image formats the tests never read. Unknown docs formats
+  # run CI; a code-extension blacklist misses shell, Python and future languages.
+  # Not inert, although markdown: root
   # AGENTS.md and the .agents/, .claude/ and .term2/ skill directories, because
   # the CLI puts them in its prompt and provider cases run it from the
   # checkout. Doc file names still reach that
@@ -73,8 +69,9 @@ jobs:
             case "$file" in
               '') ;;
               AGENTS.md | .agents/* | .claude/* | .term2/* | src/*) relevant+=("$file") ;;
-              docs/*.ts | docs/*.tsx | docs/*.js | docs/*.jsx | docs/*.mjs | docs/*.cjs | docs/*.mts | docs/*.cts) relevant+=("$file") ;;
-              docs/* | *.md | *.mdx) ;;
+              *.md | *.mdx) ;;
+              docs/*.json | docs/*.jsonl | docs/*.txt | docs/*.log | docs/*.stdout | docs/*.stderr | docs/*.exit | docs/*.diff | docs/*.patch | docs/*.deltas) ;;
+              docs/*.png | docs/*.jpg | docs/*.jpeg | docs/*.gif | docs/*.webp | docs/*.svg | docs/*.pdf) ;;
               *) relevant+=("$file") ;;
             esac
           done <<< "$files"
@@ -84,12 +81,14 @@ jobs:
             printf '  %s\n' "${relevant[@]:0:20}"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
-            echo "Every changed file is inert for CI; skipping the test jobs."
+            echo "Every changed file is inert for tests; running repository policy checks only."
           fi
 
+  # Keep repository policy in an existing required check, even when all costly
+  # test work is skipped. A docs-only root report must not bypass check-root.
   test:
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
@@ -97,22 +96,18 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha }}
           fetch-depth: 0
+      - name: Check repository policy
+        run: |
+          node scripts/check-root.mjs
+          node scripts/check-no-unit-tests.mjs
       - uses: ./.github/actions/setup-tests
+        if: needs.changes.outputs.run != 'false'
         with:
           ripgrep: 'true'
-      - name: Reject committed unit tests
-        run: pnpm check:no-unit-tests
-      - name: Run guards, CLI integration, safety and responses provider cases
+      - name: Run CLI integration, safety and responses provider cases
+        if: needs.changes.outputs.run != 'false'
         run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs test
-      - name: Upload built CLI for port checks
-        uses: actions/upload-artifact@v4
-        with:
-          name: term2-dist
-          path: dist/
-          if-no-files-found: error
-
-  port:
-    needs: test
+  quality:
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     steps:
@@ -120,12 +115,10 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha }}
           fetch-depth: 0
-      - uses: ./.github/actions/setup-tests
-      - name: Download built CLI
-        uses: actions/download-artifact@v4
-        with:
-          name: term2-dist
-          path: dist/
+      - name: Check repository policy
+        run: |
+          node scripts/check-root.mjs
+          node scripts/check-no-unit-tests.mjs
       - name: Reject unapproved golden changes
         if: github.event_name == 'pull_request'
         env:
@@ -146,8 +139,7 @@ jobs:
             echo "$changed"
             exit 1
           fi
-      - name: Check golden parity
-        run: node parity/run.mjs check --cli dist/cli.js
+      - uses: ./.github/actions/setup-tests
       - name: Typecheck production and check layer boundaries
         run: |
           pnpm exec tsc -p tsconfig.build.json --noEmit
@@ -157,10 +149,36 @@ jobs:
           node scripts/check-rules.mjs
           node scripts/check-engine-callbacks.mjs
           node scripts/check-baselines.mjs
-          node scripts/check-root.mjs
-          node --unhandled-rejections=strict --import tsx bench/hops.mts
-      - name: Check the headless path
-        run: node bench/m1-direct.mjs
+      - name: Run static repository guards
+        run: pnpm exec node scripts/run-ci-lane.mjs quality
+
+  # Preserve the existing check name without serializing quality behind tests.
+  # Explicit status handling also covers push/workflow_call's skipped changes job.
+  # An unexpected skipped, failed or cancelled lane must never make this pass.
+  port:
+    needs: [changes, quality, test, integration, e2e, provider-black-box]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require the expected lane results
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          node --input-type=module <<'NODE'
+          const needs = JSON.parse(process.env.NEEDS);
+          const inert = needs.changes.result === 'success' && needs.changes.outputs.run === 'false';
+          const expected = { quality: 'success', test: 'success',
+            integration: inert ? 'skipped' : 'success',
+            e2e: inert ? 'skipped' : 'success',
+            'provider-black-box': inert ? 'skipped' : 'success' };
+          for (const [lane, result] of Object.entries(expected)) {
+            if (needs[lane].result !== result) {
+              console.error(`${lane}: expected ${result}, got ${needs[lane].result}`);
+              process.exitCode = 1;
+            }
+          }
+          NODE
 
   integration:
     needs: changes
@@ -173,10 +191,17 @@ jobs:
           ref: ${{ inputs.ref || github.sha }}
           fetch-depth: 0
       - uses: ./.github/actions/setup-tests
+        id: setup
         with:
           ripgrep: 'true'
       - name: Run remaining integration and stateless provider cases
         run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs integration
+      - name: Check the headless path
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: node bench/headless.mjs
+      - name: Check the production message path budget
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: node --unhandled-rejections=strict --import tsx bench/hops.mts
 
   e2e:
     needs: changes
@@ -188,8 +213,12 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha }}
       - uses: ./.github/actions/setup-tests
+        id: setup
       - name: Run E2E process cases
         run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs e2e
+      - name: Check golden parity
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: node parity/run.mjs check --cli dist/cli.js
 
   provider-black-box:
     needs: changes

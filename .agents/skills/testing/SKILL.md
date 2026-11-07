@@ -55,9 +55,17 @@ production build lacks `act`.
 - Everything else: the evidence the `verification` skill asks for. Running tiers that don't
   touch your change is not evidence.
 
-CI runs every tier on pushes to `main`. A pull request runs every tier too, unless every file it
-changes is inert for CI (the `changes` job in `.github/workflows/ci.yml` defines inert); then it
-skips them all. Follow any late CI failure through to a passing run or a blocker someone clearly owns.
+CI runs the independent `quality` job on every pull request and push to `main`: production
+typechecking, architecture and repository guards, the static Vitest guards, and review approval
+for golden changes. It does not wait for behavioral lanes. Every behavioral tier also runs,
+unless every changed file in a pull request is inert (the `changes` job in
+`.github/workflows/ci.yml` defines inert); then only the expensive test work skips. The required
+`test` job still checks the root allowlist and rejects committed unit tests before dependency
+setup. `integration` owns `bench/headless.mjs` and `bench/hops.mts`; `e2e` owns golden parity.
+`port` is a compatibility aggregate requiring quality and test success, plus successful behavioral
+lanes or skips justified by an inert pull request. Known docs/evidence formats may skip tests;
+unknown extensions and executable scripts under `docs/` run every tier. Follow any late CI failure
+through to a passing run or a blocker someone clearly owns.
 Never claim a test, build, or check passed unless you ran it and it succeeded. For long runs, set an
 explicit finite timeout and wait for the completion notification rather than polling.
 

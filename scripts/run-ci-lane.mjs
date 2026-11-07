@@ -2,9 +2,9 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// Keep the existing four check names and runner count. Discover through each
+// Keep the existing behavioral check names; quality owns static guards. Discover through each
 // tier's real Vitest configuration so new files are assigned automatically.
-const lanes = ['test', 'integration', 'e2e', 'provider-black-box'];
+const lanes = ['quality', 'test', 'integration', 'e2e', 'provider-black-box'];
 const lane = process.argv[2];
 const listOnly = process.argv.includes('--list');
 if (!lanes.includes(lane)) throw new Error(`Expected a CI lane: ${lanes.join(', ')}`);
@@ -14,8 +14,7 @@ const env = {
   ...process.env,
   CI: '1',
   NODE_ENV: 'test',
-  // The lanes drive term2's real entry module. Tests still branch on this variable while
-  // their legacy-only expectations remain (#88 removes them).
+  // Behavioral lanes drive term2's production entry module against isolated fixtures.
   TERM2_TEST_CLI: resolve('dist/src/app/cli.js'),
 };
 // Dependencies are installed and verified by the setup action. Invoke the
@@ -29,7 +28,7 @@ const tiers = [
 ];
 
 function owner(tier, file) {
-  if (tier === 'guards') return 'test';
+  if (tier === 'guards') return 'quality';
   if (tier === 'integration')
     return /^tests\/cli\/cli(?:-headless)?\.integration\.test\.ts$/.test(file) ? 'test' : 'integration';
   if (tier === 'e2e') return 'e2e';
@@ -53,9 +52,11 @@ const plan = tiers.map(([tier, config]) => {
 });
 console.log(JSON.stringify({ lane, maxWorkers, plan }, null, 2));
 if (!listOnly) {
-  const build = spawnSync(process.execPath, ['scripts/build.mjs'], { env, stdio: 'inherit' });
-  if (build.status !== 0 || build.error)
-    throw new Error(`CLI build failed: ${build.error?.message ?? build.signal ?? build.status}`);
+  if (lane !== 'quality') {
+    const build = spawnSync(process.execPath, ['scripts/build.mjs'], { env, stdio: 'inherit' });
+    if (build.status !== 0 || build.error)
+      throw new Error(`CLI build failed: ${build.error?.message ?? build.signal ?? build.status}`);
+  }
   const result = spawnSync(process.execPath, [vitest, 'run', '--config', 'vitest.ci.config.ts', '--reporter=verbose'], {
     env: {
       ...env,

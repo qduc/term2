@@ -2,7 +2,7 @@
 // from the headless client's submit to the provider's HTTP request, and fail
 // when that path grows past the recorded budget.
 //
-// The real entry runs in this process as `term2-next "hello"` against a local
+// The real entry runs in this process as `term2 "hello"` against a local
 // fake OpenAI-compatible provider, so the path measured is the one a shipped
 // headless message takes. The provider call is the first fetch to that server.
 import assert from 'node:assert/strict';
@@ -15,7 +15,7 @@ import { createHook, executionAsyncId } from 'node:async_hooks';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const budget = JSON.parse(fs.readFileSync(path.join(repo, 'scripts/complexity-budget.json'), 'utf8')).messagePath;
-const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'rewrite-hops-')));
+const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-hops-')));
 const home = path.join(root, 'home');
 const workspace = path.join(root, 'workspace');
 for (const dir of [home, workspace, path.join(root, 'runtime'), path.join(root, 'tmp')])

@@ -1,18 +1,19 @@
 import { RetryingModel } from './retrying-model.js';
 import { registerProvider } from './registry.js';
 import type { ProviderDeps, ProviderFetch } from './registry.js';
-import { AiSdkOpenRouterProvider } from './ai-sdk-openrouter.provider.js';
 import { createProviderFetch } from './fetch/composer.js';
 import type { FetchMiddleware } from './fetch/compose.js';
 import { addCacheControlToLastTwoMessages } from './anthropic-chat-caching.js';
 import { NULL_SESSION_CONTEXT_SERVICE } from '../../session/session/session-context-service.js';
 import type { StreamedModelTurn } from '../../shared/contracts/streamed-model-turn.js';
 
-function createOpenRouterModel(deps: ProviderDeps, model: string) {
+async function createOpenRouterModel(deps: ProviderDeps, model: string) {
   const { settingsService, loggingService, sessionContextService } = deps;
   const apiKey = settingsService.get('agent.openrouter.apiKey') || process.env.OPENROUTER_API_KEY;
   if (!apiKey) return null;
 
+  // The OpenRouter AI SDK took ~15 ms to initialize on every start; load it with the first model.
+  const { AiSdkOpenRouterProvider } = await import('./ai-sdk-openrouter.provider.js');
   return new AiSdkOpenRouterProvider({
     defaultModel: model,
     resolveConfig: () => ({
@@ -120,8 +121,8 @@ registerProvider(
   {
     id: 'openrouter',
     label: 'OpenRouter',
-    createStreamedModel: (model, deps): StreamedModelTurn => {
-      const provider = createOpenRouterModel(deps, model);
+    createStreamedModel: async (model, deps): Promise<StreamedModelTurn> => {
+      const provider = await createOpenRouterModel(deps, model);
       if (!provider) throw new Error('OpenRouter API key is not configured');
       const streamedModel = provider.getStreamedModel(model);
       const retryAttempts = deps.retryAttempts ?? deps.settingsService.get('agent.retryAttempts') ?? 2;

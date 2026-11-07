@@ -33,7 +33,7 @@ import { listNativeConversations, resolveNativeResume, ResumeRefusal } from './c
 import {
   launchDirect,
   INTERACTIVE_TERMINAL_REQUIRED,
-  runDirectHeadlessOnHost,
+  loadDirectHeadless,
   type DirectHeadlessRequest,
   type DirectLaunchRequest,
 } from './launch.js';
@@ -151,6 +151,8 @@ async function runWithSignals(request: DirectHeadlessRequest): Promise<{
   readonly kind: 'completed' | 'cancelled' | 'failed' | 'context_paused' | 'blocked' | 'budget_paused';
   readonly signal?: NodeJS.Signals;
 }> {
+  // Loaded before the handlers below are installed, so a signal always finds the handle.
+  const runDirectHeadlessOnHost = await loadDirectHeadless();
   // The handle has no started bit. Latch observed activity so later inactivity
   // waits for its durable result.
   let turnHasStarted = false;

@@ -1,4 +1,8 @@
-import { Client, type ClientChannel } from 'ssh2';
+import { createRequire } from 'node:module';
+import type { Client, ClientChannel } from 'ssh2';
+
+/** ssh2 and its native crypto load with the first SSH client: importing them cost every start ~25 ms. */
+const requireSsh2 = (): typeof import('ssh2') => createRequire(import.meta.url)('ssh2');
 import { readFileSync } from 'fs';
 import { homedir } from 'os';
 import { ISSHService, SSHCommandOptions, SSHCommandResult } from '../shared/service-interfaces.js';
@@ -130,7 +134,7 @@ export class SSHService implements ISSHService {
   private activeCommandSettlers = new Set<(kind: SSHTransportErrorKind, cause?: unknown) => void>();
 
   constructor(private config: SSHConfig, client?: Client) {
-    this.client = client ?? new Client();
+    this.client = client ?? new (requireSsh2().Client)();
   }
 
   /**

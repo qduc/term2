@@ -93,10 +93,29 @@ must persist its native `session_started` and launcher `goal_changed` facts befo
 refusing a missing terminal. `cli.ts` retains its earlier argument, resume and
 home-directory refusals; those are not admitted starts. `runTui` uses the same
 Session creation and `setGoal` path as terminal launches, then checks terminal
-availability before background detection, control sockets or Ink. `launchTui`
-does not open MCP for a non-TTY start. A no-goal CLI terminal refusal still
-creates no conversation. Do not restore an early unconditional terminal return
-in `cli.ts`: it silently loses the user-authored goal.
+availability before reading the background colour answer, control sockets or Ink.
+The colour query itself goes out earlier: `launch.ts` runs `launch-tui-terminal.ts`
+(home-directory confirmation, then the query) before the TUI's modules load, so
+the reply, or the timeout of a terminal that never answers, overlaps startup.
+Without a TTY no query is sent. `launchTui` does not open MCP for a non-TTY start.
+A no-goal CLI terminal refusal still creates no conversation. Do not restore an
+early unconditional terminal return in `cli.ts`: it silently loses the
+user-authored goal.
+
+## Startup loading
+
+`dist/src/app/cli.js` is one esbuild bundle (`scripts/bundle-entry.mjs`). Every
+package left external, and every builtin, that the bundle imports statically is
+loaded and linked before any term2 code runs, whichever command was given; bundled
+modules initialize when their importer does. So a package needed only by one mode
+or on demand is imported where it is used: `ssh2` (`SSHService`), the sandbox
+runtime (`shell-sandbox-runner.ts`), the MCP SDK (`tools/mcp/mcp-sdk.ts`), the
+OpenRouter SDK and `@qduc/web-fetch` (external, so its jsdom stays out of the
+bundle). `launch.ts` loads each launcher, the headless one included, only for its
+mode. Until 2026-11-07 they were static imports, paid on every start; see
+[the measurements](../../docs/plans/engineering/measurements/test-suite-speed-2026-10-22.md#cli-cold-start-2026-11-07).
+`dist/cli.js`, the installed `term2`, enables Node's compile cache in term2's cache
+directory before importing the bundle.
 
 ## Native CLI conversation discovery
 

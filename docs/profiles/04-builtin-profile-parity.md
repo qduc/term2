@@ -86,9 +86,9 @@ enforcement.
 Required parity:
 
 - Resolve Standard's non-Lite base prompt, context, and eligible tools.
-- Queue `PLAN_MODE_ENTER_NOTICE` on activation and
-  `PLAN_MODE_EXIT_NOTICE` on deactivation using the existing next-user-turn
-  notice lane.
+- Queue the Plan enter notice (`profileEnterNotice('builtin:plan')`) on
+  activation and its exit notice (`profileExitNotice`) on deactivation using the
+  existing next-user-turn notice lane.
 - Preserve the planning workflow currently sourced from `plan-mode-info.md`.
 - Deny mutating shell commands through the policy currently checked by the shell
   tool.

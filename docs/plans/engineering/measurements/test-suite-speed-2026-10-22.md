@@ -1,5 +1,8 @@
 # Integration and provider test performance (2026-10-22)
 
+A later follow-up on the CLI's own startup time is recorded in
+[CLI cold start (2026-11-07)](#cli-cold-start-2026-11-07).
+
 ## Closeout: faster, one-minute goal not achieved
 
 Further performance experiments stopped at the user's direction. The retained
@@ -673,3 +676,208 @@ because of that inconsistency. Raw timestamps and snapshots are retained;
 mutable workflow `updated_at` values are recorded separately from job elapsed
 time. The approximately one-minute complete feedback target was not achieved;
 see the closeout above for the final verified measurements.
+
+## CLI cold start (2026-11-07)
+
+A follow-up at the user's request: shorten the built CLI's time to an idle
+composer. Every e2e launch pays it, and so does every user start. Measured on an
+idle 4-vCPU Linux container (load average below 1), base `7020c91` against the
+candidate on branch `claude/sweet-hamilton-igj0w0`, each built with
+`scripts/build.mjs` in its own checkout. Node 24.21.0 is the version CI's
+`setup-tests` installs; the container's own Node 22.23.4 was used for the
+profiling and the first measurements, and gave the same picture.
+
+### Method
+
+- **Time to idle:** from spawn until the application writes its harness idle
+  marker (`TERM2_HARNESS_IDLE_PATH`; the first transition to composer-owned idle),
+  under the same Python PTY bridge as `tests/helpers/terminal-e2e.ts`, with
+  `--profile bare` and the closed-loopback provider of `writeMockCliSettings`.
+  Base and candidate runs alternate. Each build gets its own compile cache, primed
+  with `--help` and one discarded launch, as `tests/helpers/cli-compile-cache.ts`
+  primes the suites.
+- **Attribution:** `node --cpu-prof --cpu-prof-interval=200` on PTY launches,
+  and a copy of each bundle whose esbuild `__esm`/`__commonJS` helpers record every
+  module's initialization window. Exclusive init time includes V8's lazy
+  compilation of the init function, which the profile otherwise charges to `__init`.
+- The harness, profilers and probes were temporary scratch scripts; none is
+  committed.
+
+### Results
+
+Medians (p25–p75) of interleaved runs, Node 24.21.0:
+
+| Condition | n | Base | Candidate | Change |
+| --- | ---: | ---: | ---: | ---: |
+| E2E conditions: `dist/src/app/cli.js`, `NODE_ENV=test`, warm `NODE_COMPILE_CACHE`, PTY never answers terminal queries | 25 | 707 ms (690–725) | 457 ms (445–474) | −35% |
+| `--help`, same conditions | 25 | 338 ms | 165 ms | −51% |
+| Installed `term2` (`dist/cli.js`), `NODE_ENV` unset, no `NODE_COMPILE_CACHE`, PTY answers OSC 11/DA1 at once like a local terminal | 20 | 690 ms (671–700) | 473 ms (458–491) | −31% |
+| Same, PTY never answers | 20 | 824 ms (807–829) | 455 ms (441–467) | −45% |
+| `--help` through `dist/cli.js` | 20 | 472 ms | 167 ms | −65% |
+
+The same five rows on Node 22.23.4: 701 → 444 ms (−37%), 342 → 162 ms,
+679 → 445 ms, 830 → 441 ms and 471 → 162 ms.
+
+`node scripts/run-ci-lane.mjs e2e` passed 199 of 199 cases in 39 files on every
+run below; nothing else ran on the box.
+
+| e2e lane | Base | Candidate | Change |
+| --- | ---: | ---: | ---: |
+| Node 24.21.0, alternating base, candidate, base, candidate: Vitest duration | 163.54 s, 161.79 s | 130.95 s, 134.61 s | −18% |
+| Same runs, summed case time | 466.7 s, 462.1 s | 375.0 s, 385.5 s | −18% |
+| Node 22.23.4, one run each: Vitest duration | 158.05 s | 133.60 s | −15.5% |
+
+These are local samples, not CI measurements.
+
+The attribution below was profiled on Node 22.23.4. Process start to the first
+module initialization fell from 150–175 ms to 97–116 ms (bare Node reaches user
+code in about 17 ms). Module initialization
+before idle fell from 233 ms over 1,339 modules to 173 ms over 1,284. The entry
+bundle shrank from 17.70 MB to 10.98 MB.
+
+### What changed, and what each was worth
+
+Intermediate interleaved comparisons (10–12 runs each, E2E conditions) took the
+candidate from 749 to 606, then 529, then 472 ms. The base itself drifted between
+701 and 763 ms across sessions, so the per-item figures below come from profiles
+and isolated timings, not from subtraction.
+
+1. **The terminal background query overlaps startup.** `runTui` used to send the
+   OSC 11/DA1 query after app and session creation and wait for the reply, up to
+   its 150 ms timeout. The test PTY never replies, so every e2e launch idled
+   149 ms; a local terminal answers in milliseconds, a remote link in one round
+   trip. `launch-tui-terminal.ts` now sends it, after the home-directory prompt,
+   before the TUI's modules load; `runTui` reads the answer just before Ink
+   renders. A first version that sent it at the top of `launchTui` still idled
+   72 ms, because most of the work it could hide is the TUI's own module
+   initialization. Overlap lets startup keep the event loop busy past the timer
+   while a reply waits, and libuv runs due timers before it polls input, so the
+   timer now gives up from `setImmediate`. A PTY that replied after 150–170 ms got
+   the light theme with that step and `[?62;22c` typed into the prompt without
+   it; the base build leaked at 170 ms. Replies after about 200 ms leak on every
+   build, as before.
+2. **External packages are no longer imported statically.** The bundle's static
+   imports of externals and builtins are linked before any term2 code runs.
+   `@anthropic-ai/sandbox-runtime` (about 45 modules, node-forge among them; 50 ms
+   alone with a warm cache) now loads with the first sandbox check, and `ssh2`
+   (27 ms alone) with the first `SSHService`. Before the runtime has loaded there
+   is no per-command state, so cleanup is a no-op and stderr is returned
+   unannotated; a runtime that cannot load reports `missing_dependency` instead
+   of having crashed startup.
+3. **`node:http` is required, not imported.** Node links a builtin through an
+   ESM facade that reads every export once, and `node:http`'s `WebSocket`,
+   `CloseEvent` and `MessageEvent` exports are getters that load Node's internal
+   undici and instantiate llhttp. An ESM import took 18–26 ms against 3–4 ms for
+   `require`. `scripts/bundle-entry.mjs` routes the two static imports (OAuth
+   loopback, HTTP server transport) through `require`.
+4. **`@qduc/web-fetch` is external.** It was already imported on demand, but its
+   jsdom tree (about 7 MB) sat in the bundle, read and decoded on every start
+   (UTF-8 decoding of the bundle fell from 38 to 24 ms).
+5. **Lazy initialization in the bundle:** the MCP client SDK (about 25 ms) loads
+   with the first server connection or login (`tools/mcp/mcp-sdk.ts`), the
+   OpenRouter AI SDK (15 ms) with the first OpenRouter model, and six unused
+   mode-notice constants (17 ms of profile resolution at import) were deleted.
+6. **`launch.ts` loads the headless runner only for a headless run.** Its static
+   re-export initialized the application graph for every command, `--help`
+   included.
+7. **The installed `term2` enables Node's compile cache.** Users had none:
+   with the base build, a cold-cache start took 859 ms against 747 ms warm
+   (n=8, `NODE_ENV` unset, non-answering PTY). `dist/cli.js` calls
+   `module.enableCompileCache()` before importing the bundle, in
+   `TERM2_CACHE_DIR` or env-paths' per-user cache, not Node's default under
+   `os.tmpdir()`: Node adopted a pre-existing world-writable directory there
+   without complaint, which on a shared host would let another user plant
+   bytecode. A cache directory that cannot be created (a `/sys` path, EPERM; a
+   path through a regular file, ENOTDIR) returned status 0 and the CLI started
+   normally on Node 22.23.4 and 24.21.0. On both versions, though, directory
+   creation spun at 100% CPU and never returned for a path under `/proc`; the
+   same applies to `NODE_COMPILE_CACHE` there.
+
+### Remaining costs, not changed
+
+- **React development build in test children.** They set `NODE_ENV=test`,
+  which `config/env-setup.ts` keeps (settings and OAuth code branch on it), so
+  e2e launches render with `react-reconciler.development` (about 36 ms self per
+  launch); users get the production build. Changing it is an owner decision
+  about which build the suites exercise.
+- **Lazily compiled code is never cached.** Node writes the entry's V8 code
+  cache right after compiling it: the cache was byte-identical after `--help`
+  and after a full TUI start (1.7 MB for the 17.7 MB base bundle), so every
+  launch recompiles each function it calls (58 ms charged to esbuild's `__init`
+  at base). Caching it would need a loader that writes the cache after startup,
+  such as `vm.Script#createCachedData`; not attempted.
+- `string-width`: about 15 ms to initialize (`Intl.Segmenter`) and 20 ms in
+  Ink's `widestLine` on the non-ASCII glyphs of the first frame.
+- zod: about 75 ms self, mostly constructing and applying the settings and
+  Profile schemas; converting tool parameters to JSON Schema
+  (`sourceToolSpec`) took about 5 ms.
+- Two synchronous `git` spawns while the tool surface is built (5–7 ms here,
+  outside a repository; more inside one).
+
+### Verification
+
+Author checks ran on the candidate's working tree on top of `7020c91`, before it was
+committed; later edits touched only this section and other prose. The container
+ran as root, with Node 24.21.0 and, as `setup-tests` installs them, `bubblewrap`
+and `socat`.
+
+| Check | Result |
+| --- | --- |
+| `node scripts/run-ci-lane.mjs test` | 110 of 110 passed |
+| `node scripts/run-ci-lane.mjs integration`, pnpm 11.7.0 | 179 passed, 1 skipped, 2 failed; the two failures are root-only, see below |
+| `node scripts/run-ci-lane.mjs e2e` | 199 of 199 passed in each of two runs, all ten `restart.e2e`/`restart-native.e2e` cases included |
+| `node scripts/run-ci-lane.mjs provider-black-box` | 202 passed, 1 skipped |
+| The `port` job: `parity/run.mjs check --cli dist/cli.js`, `bench/hops.mts`, `bench/m1-direct.mjs` | 9 of 9 goldens match; message path within budget; 33 of 33 rows passed |
+| `tsc -p tsconfig.build.json --noEmit`, `tsc --noEmit`, `check-layers`, `check-reachability`, `check-complexity`, `check-rules`, `check-baselines` (against `7020c91`), `check-root`, `check:no-unit-tests`; eslint and Prettier on the changed files | all passed |
+
+Failures that came from the container rather than the change, each matched on
+the base build:
+
+- **Running as root.** `tests/session/logging/logging-failures.integration.test.ts`
+  makes directories unwritable with `chmod 0o555`, which root ignores. Two cases
+  failed on both builds as root; the file passed 5 of 5 as an unprivileged user.
+- **No `bubblewrap`/`socat`.** Before they were installed, 12 Bare-profile cases
+  in `tests/cli/cli-headless.integration.test.ts` returned "Sandbox blocked this
+  command" or "Tool execution was not approved". The same 12 failed on the base.
+- **pnpm 10.28 instead of 11.** `package.json` requires pnpm 11 or later. With
+  10.28 on the path, `pnpm publish --dry-run` handed off to the npm 11 that comes
+  with Node 24, which contacted the fixture registry, and three accepted cases in
+  `scripts/release-identity.integration.test.ts` failed on both builds. With pnpm
+  11.7.0 the file passed 18 of 18.
+- **Node 22.23.4.** `discord-images.integration.test.ts` › "ends a stalled
+  response body within the shared 30-second download deadline" timed out at
+  35 s on both builds; it passed on Node 24.
+
+On Node 22, one provider-lane run failed on the candidate only, and it was not
+reproduced. `input-notice.blackbox.ts` › "retries the original pasted image and
+chains the following turn" timed out after 40,000 ms waiting for `/retry-turn`
+"after revision 3; got revision 4". The composer still held the submitted text
+and image marker, so the typed command was appended to it. The base passed that
+run. The file then passed 10 of 10 alone and 8 of 8 beside four busy loops on
+each build, and the whole provider lane passed on Node 24. The change does not
+touch the composer, paste or submit path. The cause is unknown; the signature is
+recorded in the `testing` skill.
+
+Behavioral probes on the built CLI, base against candidate, on Node 22:
+
+- **MCP.** A stdio echo server reached ready with its one tool (`echo__ping`). A
+  refused HTTP server failed, and a 401 server was classified as needing auth.
+- **Terminal background.** The background replies were described in item 1 above.
+- **SSH.** A refused connection reported ECONNREFUSED alike from the bundle and
+  from `dist/cli.js`.
+- **Sandbox.** Three scenarios gave identical results.
+- **Commands that do not launch.** `--help`, `--version`, `--resume ls`,
+  `control --help`, `discord --help`, a bad flag, a bad model and a bad provider
+  gave byte-identical output.
+- **Login.** `--codex-login` bound its loopback port and answered HTTP 200.
+- **Compile cache from `dist/cli.js`.**
+  - By default it was created under the user's cache directory with mode 755.
+  - `TERM2_CACHE_DIR` was honoured.
+  - `NODE_COMPILE_CACHE` took precedence.
+  - `NODE_DISABLE_COMPILE_CACHE` wrote nothing.
+
+Limits:
+
+- No hosted CI run is included.
+- Timings are local samples from one container.
+- Most probes ran on Node 22 only.

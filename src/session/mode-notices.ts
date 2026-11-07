@@ -100,16 +100,6 @@ export function profileExitNotice(profile: ResolvedProfile | string): string | n
   return null;
 }
 
-// Keep the historical constants available to compatibility callers. Their
-// content is produced through Profile resolution rather than a second prompt
-// file-loading path in this module.
-export const PLAN_MODE_ENTER_NOTICE = profileEnterNotice(resolveProfile('builtin:plan'))!;
-export const PLAN_MODE_EXIT_NOTICE = profileExitNotice(resolveProfile('builtin:plan'))!;
-export const MENTOR_MODE_ENTER_NOTICE = profileEnterNotice(resolveProfile('builtin:mentor'))!;
-export const MENTOR_MODE_EXIT_NOTICE = profileExitNotice(resolveProfile('builtin:mentor'))!;
-export const ORCHESTRATOR_MODE_ENTER_NOTICE = profileEnterNotice(resolveProfile('builtin:orchestrator'))!;
-export const ORCHESTRATOR_MODE_EXIT_NOTICE = profileExitNotice(resolveProfile('builtin:orchestrator'))!;
-
 /** Prime the active Profile's workflow once, without consulting legacy flags. */
 export function primeActiveProfileNoticeIfActive(
   settingsService: ISettingsService,

@@ -78,8 +78,12 @@ export function detectTerminalBackground(
       }
     };
 
-    // Armed before the query goes out, so `finish` can always cancel it.
-    const timer = setTimeout(finish, timeoutMs);
+    // Armed before the query goes out, so `finish` can always cancel it. The timer
+    // measures wall time, and a caller may keep the event loop busy past it while
+    // the reply already waits on stdin; libuv runs due timers before it polls input.
+    // Giving up from setImmediate, which runs after that poll, reads a reply that has
+    // arrived instead of leaving it to land in the prompt.
+    const timer = setTimeout(() => setImmediate(finish), timeoutMs);
 
     try {
       setRawMode(true);

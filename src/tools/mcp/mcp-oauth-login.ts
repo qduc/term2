@@ -12,7 +12,7 @@
  * the server's configured `redirectPorts` for authorization servers that match
  * the redirect against a registered allow-list.
  */
-import { auth as sdkAuth, type AuthResult } from '@modelcontextprotocol/client';
+import type { auth as sdkAuth, AuthResult } from '@modelcontextprotocol/client';
 import {
   awaitLoopbackCallback,
   bindLoopbackRedirect,
@@ -20,8 +20,16 @@ import {
   openInBrowser,
   type LoopbackFlowConfig,
 } from '../../shared/lib/oauth-loopback.js';
-import { McpOAuthProvider } from './mcp-oauth-provider.js';
-import { McpOAuthStore } from './mcp-oauth-store.js';
+import type { McpOAuthProvider } from './mcp-oauth-provider.js';
+import type { McpOAuthStore } from './mcp-oauth-store.js';
+import { loadMcpSdk } from './mcp-sdk.js';
+
+/**
+ * The provider validates its metadata URL with the SDK when constructed, so both
+ * load with the first login or stored credential rather than on every start.
+ */
+const loadOAuthProvider = async (): Promise<typeof McpOAuthProvider> =>
+  (await import('./mcp-oauth-provider.js')).McpOAuthProvider;
 
 const CALLBACK_PATH = '/mcp-oauth-callback';
 
@@ -78,7 +86,8 @@ export interface McpOAuthLoginResult {
  * so re-running `/mcp-login` on a healthy server is cheap and safe.
  */
 export async function runMcpOAuthLogin(options: McpOAuthLoginOptions): Promise<McpOAuthLoginResult> {
-  const auth = options.auth ?? sdkAuth;
+  const auth = options.auth ?? (await loadMcpSdk()).auth;
+  const McpOAuthProvider = await loadOAuthProvider();
   const open = options.openBrowser ?? openInBrowser;
   // Port 0 first (RFC 8252); the configured list only exists so a server that
   // pins its redirect URI still works, not to find a free port.
@@ -154,13 +163,14 @@ const issuerOf = (provider: McpOAuthProvider): { issuer?: string } => {
  * mid-session, while a genuinely unauthenticated server surfaces as `needs-auth`
  * instead of hijacking the terminal with a browser launch.
  */
-export function createRefreshOnlyProvider(options: {
+export async function createRefreshOnlyProvider(options: {
   serverName: string;
   serverUrl: string;
   store: McpOAuthStore;
   clientMetadataUrl?: string;
   clientId?: string;
-}): McpOAuthProvider {
+}): Promise<McpOAuthProvider> {
+  const McpOAuthProvider = await loadOAuthProvider();
   return new McpOAuthProvider({
     store: options.store,
     serverUrl: options.serverUrl,

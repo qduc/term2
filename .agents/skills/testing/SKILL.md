@@ -151,6 +151,15 @@ and `68ef50ff` (local-only evidence), not a result file to resume appending.
 - **PTY waits:** `turn-decisions.blackbox.ts` has recorded 40,000ms repeated-question
   waits with Amber/Violet or `SELECT_A_SECOND_COLOR` visible; restart e2e has a
   5,000ms composer acknowledgement wait “after revision 2; got revision 3”.
+  `input-notice.blackbox.ts` once timed out after 40,000ms waiting for `/retry-turn`
+  “after revision 3; got revision 4”. The composer still held the submitted text
+  and image marker, so the command was appended to them. This happened in a full
+  lane on Node 22 on 2026-11-07, and 36 reruns did not reproduce it.
+  `input-cache-guard.blackbox.ts` failed in its “third request after confirmation”
+  phase the same day, in a full provider lane on Node 24. The second Large request
+  prompt was visible, but typing `y` sent no request within 40,000ms. In 14 reruns
+  on each build, half beside busy loops, plus another full lane on each, it passed
+  on both the change and its `main` base.
   Unchanged-source reruns passed, but the recurring signatures' root causes were
   not established. Do not increase product deadlines or declare concurrency the
   cause from that alone. A separate fixed harness defect missed an already
@@ -186,6 +195,20 @@ and `68ef50ff` (local-only evidence), not a result file to resume appending.
   tests must isolate persisted config/task storage and inherited `XDG_STATE_HOME`.
   macOS fixtures also exposed `/tmp` canonicalization, Linux-only XDG paths,
   `/dev/full` assumptions, Yoga headless startup and wrapped terminal text.
+- **Toolchain unlike CI:** CI's `setup-tests` installs Node 24.21.0, pnpm 11,
+  `bubblewrap` and `socat`, and does not run as root. A cloud container may
+  differ on each, and the same failures appear on the base. Lane failures this
+  produced on 2026-11-07:
+  - Without `bwrap`/`socat`, 12 Bare-profile cases in `cli-headless.integration`
+    got “Sandbox blocked this command”.
+  - As root, `chmod 0o555` blocks nothing, so two `logging-failures` cases failed.
+  - With pnpm 10, `pnpm publish --dry-run` delegated to npm 11 and contacted the
+    fixture registry, failing three `release-identity` cases.
+  - On Node 22, the Discord stalled-body deadline test timed out.
+
+  Match CI's toolchain before treating such a failure as a regression. After
+  switching Node, rebuild the native addons (`better-sqlite3`, `ssh2`,
+  `cpu-features`).
 - **Native serve fixture migration:** a failure reading `manifest.json` just after
   `GATEWAY_READY` is before turn execution or SIGTERM. The native launcher persists
   dynamic grants in `direct-workspace-grants.json` and sessions in `conversations/`,

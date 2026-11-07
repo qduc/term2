@@ -9,17 +9,8 @@
  * refetch; `close()` shuts everything down. There is no automatic reconnect in
  * this slice — a failed server stays failed until the next `start()`.
  */
-import {
-  Client,
-  SdkError,
-  SdkErrorCode,
-  SdkHttpError,
-  SseError,
-  SSEClientTransport,
-  StreamableHTTPClientTransport,
-  UnauthorizedError,
-} from '@modelcontextprotocol/client';
-import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
+import type { Client, SSEClientTransport, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
+import type { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { McpCallError } from './mcp-tool-source.js';
 import type { McpServerSnapshot, McpToolDescriptor, McpToolSource } from './mcp-tool-source.js';
 
@@ -28,6 +19,7 @@ import { realpathOrSelf, type ResolvedMcpServerConfig } from './mcp-config.js';
 import { unsandboxedStdioLauncher, type StdioLauncher } from './mcp-stdio-launcher.js';
 import { createRefreshOnlyProvider, McpInteractiveLoginRequiredError, mcpNeedsAuthMessage } from './mcp-oauth-login.js';
 import type { McpOAuthStore } from './mcp-oauth-store.js';
+import { loadedMcpSdk, loadMcpSdk, type McpSdk } from './mcp-sdk.js';
 
 const DEFAULT_CALL_TIMEOUT_MS = 120_000;
 const STDERR_TAIL_CHARS = 2000;
@@ -275,7 +267,8 @@ export class McpConnectionManager implements McpToolSource {
     if (signal.aborted || (error instanceof Error && error.name === 'AbortError')) {
       return new McpCallError('aborted', `call to ${server}.${tool} was aborted`);
     }
-    if (error instanceof SdkError && error.code === SdkErrorCode.RequestTimeout) {
+    const sdk = loadedMcpSdk();
+    if (sdk && error instanceof sdk.SdkError && error.code === sdk.SdkErrorCode.RequestTimeout) {
       return new McpCallError('timeout', `call to ${server}.${tool} exceeded its timeout`);
     }
     // A crash or teardown mid-call kills the transport and (soon after) moves
@@ -284,8 +277,9 @@ export class McpConnectionManager implements McpToolSource {
     const connection = this.connections.get(server);
     const connectionLost = connection !== undefined && connection.state !== 'ready' && !this.isAbandoned(connection);
     const transportClosed =
-      error instanceof SdkError &&
-      (error.code === SdkErrorCode.ConnectionClosed || error.code === SdkErrorCode.NotConnected);
+      sdk !== undefined &&
+      error instanceof sdk.SdkError &&
+      (error.code === sdk.SdkErrorCode.ConnectionClosed || error.code === sdk.SdkErrorCode.NotConnected);
     if (connectionLost || transportClosed) {
       return new McpCallError(
         'server_unavailable',
@@ -311,10 +305,12 @@ export class McpConnectionManager implements McpToolSource {
         );
         return;
       }
+      const loaded = await loadMcpSdk();
+      if (this.isAbandoned(connection)) return;
       if (config.transport === 'stdio') {
-        await this.connectStdio(connection);
+        await this.connectStdio(connection, loaded);
       } else {
-        await this.connectHttp(connection);
+        await this.connectHttp(connection, loaded);
       }
       // Re-check after every await: close() may have fired while we were
       // launching or connecting. Anything just created is torn down, and the
@@ -357,14 +353,17 @@ export class McpConnectionManager implements McpToolSource {
    * case that must reach `needs-auth`.
    */
   private isAuthRequired(error: unknown): boolean {
-    if (error instanceof UnauthorizedError || error instanceof McpInteractiveLoginRequiredError) return true;
-    if (error instanceof SdkHttpError && error.status === 401) return true;
+    if (error instanceof McpInteractiveLoginRequiredError) return true;
+    const sdk = loadedMcpSdk();
+    if (!sdk) return false;
+    if (error instanceof sdk.UnauthorizedError) return true;
+    if (error instanceof sdk.SdkHttpError && error.status === 401) return true;
     // The legacy SSE transport reports the same 401 as an `SseError` carrying
     // the status in `code`, because the refused response arrives on the event
     // stream rather than from a JSON-RPC POST. Observed against real servers
     // (Asana, Atlassian), which without this land in `failed` with an opaque
     // "SSE error: Non-200 status code (401)" instead of an actionable login.
-    return error instanceof SseError && error.code === 401;
+    return error instanceof sdk.SseError && error.code === 401;
   }
 
   /**
@@ -400,7 +399,7 @@ export class McpConnectionManager implements McpToolSource {
     this.rebuildSnapshot();
   }
 
-  private async connectStdio(connection: Connection): Promise<void> {
+  private async connectStdio(connection: Connection, loaded: McpSdk): Promise<void> {
     const { config } = connection;
     const spawned = await this.stdioLauncher({
       name: config.name,
@@ -411,7 +410,7 @@ export class McpConnectionManager implements McpToolSource {
     });
     // The launcher may have resolved after close() started: never spawn then.
     if (this.isAbandoned(connection)) return;
-    const transport = new StdioClientTransport({
+    const transport = new loaded.StdioClientTransport({
       command: spawned.command,
       args: [...spawned.args],
       env: { ...spawned.env },
@@ -422,10 +421,10 @@ export class McpConnectionManager implements McpToolSource {
     // fires mid-handshake can always reach the transport and kill the child.
     connection.transport = transport;
     this.watchStdio(connection, transport);
-    await this.connectClient(connection, transport);
+    await this.connectClient(connection, transport, loaded);
   }
 
-  private async connectHttp(connection: Connection): Promise<void> {
+  private async connectHttp(connection: Connection, loaded: McpSdk): Promise<void> {
     const { config } = connection;
     if (config.url === undefined) throw new Error('http/sse server has no url');
     const headers = config.headers ?? {};
@@ -434,18 +433,18 @@ export class McpConnectionManager implements McpToolSource {
     // startup never runs discovery or dynamic client registration against a URL
     // nobody has logged in to yet. Present tokens refresh silently; an absent
     // one falls through to the 401 that `connectOne` maps to `needs-auth`.
-    const authProvider = this.refreshOnlyAuthProvider(config);
+    const authProvider = await this.refreshOnlyAuthProvider(config);
     const options = { requestInit: { headers }, ...(authProvider ? { authProvider } : {}) };
     const transport =
       config.transport === 'sse'
-        ? new SSEClientTransport(url, options)
-        : new StreamableHTTPClientTransport(url, options);
+        ? new loaded.SSEClientTransport(url, options)
+        : new loaded.StreamableHTTPClientTransport(url, options);
     // Stored like stdio so teardown is uniform across transports.
     connection.transport = transport;
     // Known gap: HTTP/SSE transports do not observe a dropped remote session
     // (no onclose signal we can rely on here), so such a server stays `ready`
     // until a call fails. Not handled in this slice.
-    await this.connectClient(connection, transport);
+    await this.connectClient(connection, transport, loaded);
   }
 
   /**
@@ -455,9 +454,9 @@ export class McpConnectionManager implements McpToolSource {
    * D2: a project server that has not been opted in gets no provider at all, so
    * a repository cannot cause even a discovery request to an issuer it chose.
    */
-  private refreshOnlyAuthProvider(
+  private async refreshOnlyAuthProvider(
     config: ResolvedMcpServerConfig,
-  ): ReturnType<typeof createRefreshOnlyProvider> | undefined {
+  ): Promise<Awaited<ReturnType<typeof createRefreshOnlyProvider>> | undefined> {
     if (!this.oauthStore || config.url === undefined) return undefined;
     if (!this.oauthEligible(config)) return undefined;
     if (this.oauthStore.getTokens(config.url) === undefined) return undefined;
@@ -512,8 +511,9 @@ export class McpConnectionManager implements McpToolSource {
   private async connectClient(
     connection: Connection,
     transport: StdioClientTransport | SSEClientTransport | StreamableHTTPClientTransport,
+    loaded: McpSdk,
   ): Promise<void> {
-    const client = new Client({ name: 'term2', version: '0.0.0' });
+    const client = new loaded.Client({ name: 'term2', version: '0.0.0' });
     client.setNotificationHandler('notifications/tools/list_changed', () => {
       void this.handleListChanged(connection);
     });

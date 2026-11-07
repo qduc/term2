@@ -2,17 +2,13 @@ import { executeShellCommand } from '../shared/utils/shell/execute-shell.js';
 import { formatShellExecutionOutput } from '../shared/utils/shell/shell-output.js';
 /** The interactive terminal client on the direct host. The app owns the connection and replaces it across sessions. */
 import fs from 'node:fs';
-import { homedir } from 'node:os';
 import { stderr, stdin, stdout } from 'node:process';
-import { createInterface } from 'node:readline/promises';
 import { collectProviderModels } from '../model/models/model-listing.js';
 import { resolveActiveProfile } from '../config/profiles/active-profile.js';
 import React, { useMemo, useRef, useState, type ReactNode } from 'react';
 import { Box, render } from 'ink';
 import Banner from '../clients/tui/presentation/components/layout/Banner.js';
 import { SettingsSkinProvider } from '../clients/tui/presentation/skins/SkinContext.js';
-import { detectTerminalBackground } from '../clients/tui/presentation/theme/detect-terminal-background.js';
-import { shouldDetectBackground } from '../clients/tui/presentation/theme/resolve-theme.js';
 import { SettingsThemeProvider } from '../clients/tui/presentation/theme/ThemeContext.js';
 import { getInkRenderOptions } from '../shared/utils/ink-render-options.js';
 import { getProfileLabel } from '../config/profiles/labels.js';
@@ -21,11 +17,6 @@ import type { WireSnapshot } from '../protocol/wire.js';
 import { useTerminalFocusNotifier } from '../clients/tui/presentation/hooks/use-terminal-focus-notifier.js';
 import { useSetting } from '../clients/tui/presentation/hooks/use-setting.js';
 import type { LoggingService } from '../session/logging/logging-service.js';
-import {
-  confirmHomeDirectoryStart,
-  HOME_DIRECTORY_START_WARNING,
-  shouldWarnOnHomeDirectoryStart,
-} from '../shared/utils/home-directory-start-guard.js';
 import { Tui, type TuiIntegration } from '../clients/tui/index.js';
 import type { DirectConnection } from '../host/in-process-direct-types.js';
 import { createDirectApplication, type DirectApplication } from './application.js';
@@ -36,6 +27,7 @@ import { printUsage } from './usage-report.js';
 import { createDirectTuiMenus } from './launch-tui-menus.js';
 import { performRestart, type DirectRestartPlan } from './launch-tui-restart.js';
 import type { DirectLaunchRequest } from './launch-types.js';
+import type { TerminalBackground } from './launch-tui-terminal.js';
 import type { ISettingsService } from '../shared/service-interfaces.js';
 import { INTERACTIVE_TERMINAL_REQUIRED } from './launch.js';
 import { openDirectApplicationMcp } from './application-mcp.js';
@@ -46,19 +38,6 @@ import { displaySessionId } from '../protocol/session-id.js';
 const profileLabels = new Map<unknown, string>();
 
 type InteractiveRequest = Extract<DirectLaunchRequest, { readonly kind: 'interactive' }>;
-
-async function confirmHomeStart({ lite, resumeId, ssh }: InteractiveRequest): Promise<boolean> {
-  const isNonLiteStart = !lite && resumeId === undefined && !ssh;
-  if (!shouldWarnOnHomeDirectoryStart({ cwd: process.cwd(), homeDir: homedir(), isNonLiteStart })) return true;
-  const readline = createInterface({ input: stdin, output: stdout });
-  try {
-    const confirmed = await confirmHomeDirectoryStart(() => readline.question(HOME_DIRECTORY_START_WARNING));
-    if (!confirmed) stderr.write('Cancelled.\n');
-    return confirmed;
-  } finally {
-    readline.close();
-  }
-}
 
 function DirectTui({
   app,
@@ -200,6 +179,7 @@ async function runTui(
   request: InteractiveRequest,
   target: DirectSessionTarget,
   pending: Restart,
+  background: TerminalBackground,
   mcp?: DirectMcp,
 ): Promise<number> {
   const { conversationsDir, selection, resumeId, fork, profileExplicit, controlSocket } = request;
@@ -257,10 +237,8 @@ async function runTui(
       return 1;
     }
 
-    // Ask before Ink takes stdin: the terminal's reply arrives as input.
-    const detectedBackground = shouldDetectBackground(settings.get('ui.theme'), process.env)
-      ? await detectTerminalBackground({ stdin, stdout })
-      : undefined;
+    // Read before Ink takes stdin: the terminal's reply arrives as input.
+    const detectedBackground = await background;
 
     if (exitCode !== 0) return exitCode;
     if (controlSocket) stderr.write(`${await bridge.attachAtStartup(initial.sessionId, controlSocket)}\n`);
@@ -323,8 +301,8 @@ async function runTui(
   }
 }
 
-export async function launchTui(request: InteractiveRequest): Promise<number> {
-  if (!(await confirmHomeStart(request))) return 1;
+/** Runs after `prepareInteractiveTerminal` confirmed the start and sent the background query. */
+export async function launchTui(request: InteractiveRequest, background: TerminalBackground): Promise<number> {
   const target = await openDirectSessionTarget(request.ssh, request.lite, new AbortController().signal);
   const pending: Restart = {};
   let exitCode: number;
@@ -340,7 +318,7 @@ export async function launchTui(request: InteractiveRequest): Promise<number> {
           onNotice: (message) => stderr.write(`MCP: ${message}\n`),
         });
       }
-      exitCode = await runTui(request, target, pending, mcp);
+      exitCode = await runTui(request, target, pending, background, mcp);
     } finally {
       try {
         await mcp?.close();

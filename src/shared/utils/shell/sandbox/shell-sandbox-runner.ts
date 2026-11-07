@@ -1,8 +1,19 @@
-import { SandboxManager } from '@anthropic-ai/sandbox-runtime';
-import type { SandboxRuntimeConfig } from '@anthropic-ai/sandbox-runtime';
+import type { SandboxManager as RuntimeSandboxManager, SandboxRuntimeConfig } from '@anthropic-ai/sandbox-runtime';
 import { SANDBOX_TEMP_DIR } from '../temp-dir.js';
 import { createSandboxRuntimeConfig, type SandboxAvailability, type ShellSandboxRunner } from './sandbox-policy.js';
 import { requestSandboxNetworkApproval } from './sandbox-network-approval.js';
+
+/**
+ * The runtime loads with the first sandbox check or command: importing it at
+ * startup cost every start ~50 ms (some 45 modules, node-forge among them). Its
+ * per-command state (violations, bwrap mount points) exists only after a wrap,
+ * so before it loads there is nothing to clean up or annotate.
+ */
+let loadedManager: typeof RuntimeSandboxManager | undefined;
+async function sandboxManager(): Promise<typeof RuntimeSandboxManager> {
+  loadedManager ??= (await import('@anthropic-ai/sandbox-runtime')).SandboxManager;
+  return loadedManager;
+}
 
 export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
   // SandboxManager is a process-wide singleton. Keep configuration and wrapping
@@ -14,6 +25,13 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
   #heldLease = false;
 
   async availability(): Promise<SandboxAvailability> {
+    let SandboxManager: typeof RuntimeSandboxManager;
+    try {
+      SandboxManager = await sandboxManager();
+    } catch (error) {
+      // Once a startup crash, a broken installation now reports like any other missing dependency.
+      return { type: 'missing_dependency', reason: error instanceof Error ? error.message : String(error) };
+    }
     if (!SandboxManager.isSupportedPlatform()) {
       return { type: 'unsupported_platform', reason: 'Sandbox runtime does not support this platform.' };
     }
@@ -40,6 +58,7 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
   ): Promise<{ command: string; diagnostics?: string[] }> {
     const operation = async () => {
       await this.#initialize(options.cwd, options.config);
+      const SandboxManager = await sandboxManager();
       const wrapped = await SandboxManager.wrapWithSandbox(command, undefined, undefined, options.signal);
       const diagnostics = SandboxManager.getLinuxGlobPatternWarnings?.() ?? [];
       return { command: wrapped, diagnostics };
@@ -65,11 +84,11 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
   }
 
   cleanupAfterCommand(): void {
-    SandboxManager.cleanupAfterCommand();
+    loadedManager?.cleanupAfterCommand();
   }
 
   annotateFailure(command: string, stderr: string): string {
-    return SandboxManager.annotateStderrWithSandboxFailures(command, stderr);
+    return loadedManager ? loadedManager.annotateStderrWithSandboxFailures(command, stderr) : stderr;
   }
 
   async #initialize(
@@ -82,6 +101,7 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
     }
 
     try {
+      const SandboxManager = await sandboxManager();
       if (AnthropicShellSandboxRunner.#initializedForKey) {
         await SandboxManager.reset();
       }

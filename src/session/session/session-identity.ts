@@ -4,7 +4,7 @@
  * session identity remains fixed; an explicit new-session action constructs a
  * new instance.
  */
-export class SessionIdentity {
+class SessionIdentity {
   #value: string;
   #startedAt: string;
   readonly #publicId: string;
@@ -61,8 +61,4 @@ export type SessionIdSource = string | SessionIdentity;
 
 export function resolveSessionId(source: SessionIdSource): string {
   return typeof source === 'string' ? source : source.current;
-}
-
-export function resolvePromptCacheKey(source: SessionIdSource): string {
-  return typeof source === 'string' ? source : source.promptCacheKey;
 }

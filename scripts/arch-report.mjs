@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 
 const scripts = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(scripts, '..');
@@ -106,6 +107,54 @@ try {
   // Fall back to apparent bytes
 }
 
+// 10. Single-importer fragments (small files <= 100 lines imported by exactly one other file)
+const importersOf = new Map();
+for (const file of srcFiles) importersOf.set(file, new Set());
+
+function resolveImport(fromFile, spec) {
+  if (!spec.startsWith('.')) return null;
+  let p = path.resolve(path.dirname(fromFile), spec);
+  if (p.endsWith('.js') || p.endsWith('.mjs') || p.endsWith('.cjs')) p = p.replace(/\.[mc]?js$/, '');
+  if (fs.existsSync(p + '.ts')) return p + '.ts';
+  if (fs.existsSync(p + '.tsx')) return p + '.tsx';
+  if (fs.existsSync(p + '.mts')) return p + '.mts';
+  if (fs.existsSync(p + '.cts')) return p + '.cts';
+  if (fs.existsSync(path.join(p, 'index.ts'))) return path.join(p, 'index.ts');
+  if (fs.existsSync(path.join(p, 'index.tsx'))) return path.join(p, 'index.tsx');
+  if (fs.existsSync(p) && fs.statSync(p).isFile()) return p;
+  return null;
+}
+
+const CONVENTIONS = new Set(['index.ts', 'index.tsx', 'types.ts', 'types.tsx', 'README.md']);
+for (const file of srcFiles) {
+  const content = fs.readFileSync(file, 'utf8');
+  // Use the same scanner as reachability: multiline declarations and dynamic
+  // imports are graph edges too; import-looking comments and strings are not.
+  const { importedFiles } = ts.preProcessFile(content, true, true);
+  for (const { fileName } of importedFiles) {
+    const resolved = resolveImport(file, fileName);
+    if (resolved && importersOf.has(resolved) && resolved !== file) {
+      importersOf.get(resolved).add(file);
+    }
+  }
+}
+
+const singleImporterFragments = [];
+for (const [target, importers] of importersOf.entries()) {
+  if (importers.size === 1) {
+    const base = path.basename(target);
+    if (CONVENTIONS.has(base)) continue;
+    const lines = fs.readFileSync(target, 'utf8').split('\n').length - 1;
+    if (lines <= 100) {
+      const relTarget = path.relative(srcDir, target).split(path.sep).join('/');
+      const importer = [...importers][0];
+      const relImporter = path.relative(srcDir, importer).split(path.sep).join('/');
+      singleImporterFragments.push({ file: relTarget, lines, importer: relImporter });
+    }
+  }
+}
+singleImporterFragments.sort((a, b) => a.file.localeCompare(b.file));
+
 const report = [
   'Architecture scoreboard:',
   `- Allowlisted layer edges: ${edges.length} (${pairs.size} layer pairs)`,
@@ -115,8 +164,16 @@ const report = [
   `- Files over 500 lines (excluding generated): ${over500}`,
   `- Files over 1,000 lines: ${over1000}`,
   `- Loose .ts files directly in src/session/: ${looseSessionFiles}`,
+  `- Single-importer fragments (<= 100 lines): ${singleImporterFragments.length}`,
   `- Agent handoff files in repo root: ${rootHandoffCount}`,
   `- docs/ size: ${docsMB} MB, ${docsFileCount} files (docs/experiments is ${expMB} MB)`,
 ].join('\n');
 
 console.log(report);
+
+if (process.argv.includes('--fragments') || process.argv.includes('fragments')) {
+  console.log(`\nSingle-importer fragments (${singleImporterFragments.length} files <= 100 lines):`);
+  for (const frag of singleImporterFragments) {
+    console.log(`  - ${frag.file} (${frag.lines} lines, imported only by ${frag.importer})`);
+  }
+}

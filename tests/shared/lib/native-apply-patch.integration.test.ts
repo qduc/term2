@@ -2,11 +2,12 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { z } from 'zod';
 import { ExecutionContext } from '../../../src/tools/execution-context.js';
 import { ToolApprovalPolicyRegistry } from '../../../src/session/approval/tool-approval-policy-registry.js';
-import { ApprovalLedger } from '../../../src/engine/agent-runtime/tool-invocation-context.js';
-import { ToolCallExecution } from '../../../src/engine/agent-runtime/tool-call-execution.js';
+import { createSourceToolRegistry } from '../../../src/app/source-tools.js';
+import { SessionAccessState } from '../../../src/session/session/session-access-state.js';
+import type { Tool, ToolContext } from '../../../src/tools/index.js';
+import { withActiveWorkspaceRoot } from '../../../src/tools/workspace/active-workspace-root.js';
 import { createMockSettingsService } from '../../helpers/settings-service.mock.js';
 import { createApplyPatchToolDefinition } from '../../../src/tools/file/apply-patch.js';
 import { resolveAncillaryModelTier } from '../../../src/engine/agent-runtime/model-resolver.js';
@@ -35,7 +36,7 @@ const PATCH = ['*** Begin Patch', '*** Add File: hello.txt', '+hi', '*** End Pat
 async function nativePatchTool() {
   const cwd = await mkdtemp(join(tmpdir(), 'term2-native-patch-'));
   cleanups.push(() => rm(cwd, { recursive: true, force: true }));
-  const settings = createMockSettingsService({ 'shell.autoApproveMode': 'always' });
+  const settings = createMockSettingsService({ 'shell.autoApproveMode': 'off' });
   const executionContext = ExecutionContext.pin(cwd);
   const approvalPolicyRegistry = new ToolApprovalPolicyRegistry();
   const deps: AgentFactoryDeps = {
@@ -67,84 +68,80 @@ async function nativePatchTool() {
     shouldUseNativePatchTool: true,
     deps,
   });
-  return { cwd, tool: tools.find((tool) => tool.name === 'apply_patch')! };
+  return { cwd, ...adapt([...tools], settings, approvalPolicyRegistry, cwd) };
 }
 
-async function settle(tool: AnyToolDefinition, args: string) {
-  const approvals = new ApprovalLedger();
-  const results: unknown[] = [];
-  const execution = new ToolCallExecution({});
-  const context = {
-    tools: [tool],
-    approvals,
-    toolContext: { context: {}, approvals },
-    onCall() {},
-    onDispatch() {},
-    onExecutionStarted() {},
-    onToolStall() {},
-    onResult(_entry: unknown, result: unknown) {
-      results.push(result);
+function adapt(
+  definitions: AnyToolDefinition[],
+  settings: ReturnType<typeof createMockSettingsService>,
+  policies: ToolApprovalPolicyRegistry,
+  cwd: string,
+) {
+  const access = new SessionAccessState(settings);
+  cleanups.push(() => access.dispose());
+  const registry = createSourceToolRegistry(definitions, {
+    withWorkspace: (operation) => withActiveWorkspaceRoot(() => cwd, operation),
+    policies,
+    settings,
+    sessionAccess: access,
+    sessionId: 'native-patch-test',
+    withAnswer: (_answer, operation) => operation(),
+  });
+  cleanups.push(() => registry.dispose());
+  const context: ToolContext = {
+    workspace: { root: cwd, target: 'local', access: 'read_write' },
+    settings: { get: (key) => settings.getDynamic(key) as never, watch: () => () => {} },
+    signal: new AbortController().signal,
+    progress() {},
+    runNested: async () => {
+      throw new Error('Unexpected nested run');
     },
   };
-  await execution.plan(
-    [{ type: 'tool_call', id: 'call-1', name: tool.name, arguments: args, toolType: 'custom' }],
-    context,
-  );
-  await execution.settle(context);
-  return { results, pending: execution.pendingApprovals.length };
+  return { tool: registry.get('apply_patch')!, context };
 }
 
-describe('native freeform apply_patch through the run loop', () => {
+async function settle(tool: Tool, context: ToolContext, args: string) {
+  try {
+    const input = tool.parse(args);
+    const approval = await tool.approval(input, context);
+    if (approval.kind === 'ask') return { results: [], pending: 1 };
+    if (approval.kind !== 'none') throw new Error(`Unexpected approval: ${approval.kind}`);
+    const result = await tool.execute(input, context);
+    return { results: [result.output], pending: 0 };
+  } catch (error) {
+    return { results: [String(error)], pending: 0 };
+  }
+}
+
+describe('native freeform apply_patch through the source tool boundary', () => {
   it('writes the file from a freeform patch script', async () => {
-    const { cwd, tool } = await nativePatchTool();
-    const { results, pending } = await settle(tool, PATCH);
+    const { cwd, tool, context } = await nativePatchTool();
+    const { results, pending } = await settle(tool, context, PATCH);
     expect(pending).toBe(0);
     expect(results).toEqual(['Created hello.txt']);
     expect(await readFile(join(cwd, 'hello.txt'), 'utf8')).toBe('hi\n');
   });
 
   it('leaves a delete pending approval', async () => {
-    const { cwd, tool } = await nativePatchTool();
+    const { cwd, tool, context } = await nativePatchTool();
     await writeFile(join(cwd, 'gone.txt'), 'x\n');
     const patch = ['*** Begin Patch', '*** Delete File: gone.txt', '*** End Patch', ''].join('\n');
-    const { results, pending } = await settle(tool, patch);
+    const { results, pending } = await settle(tool, context, patch);
     expect(pending).toBe(1);
     expect(results).toEqual([]);
     expect(await readFile(join(cwd, 'gone.txt'), 'utf8')).toBe('x\n');
   });
 
   it('reports a malformed freeform patch without asking the model to resend JSON', async () => {
-    const { cwd, tool } = await nativePatchTool();
+    const { cwd, tool, context } = await nativePatchTool();
     const { results, pending } = await settle(
       tool,
+      context,
       '{"operations":[{"type":"create_file","path":"hello.txt","diff":"+hi"}]}',
     );
     expect(pending).toBe(0);
     expect(String(results[0])).toMatch(/Invalid patch/);
-    expect(String(results[0])).not.toMatch(/Unrecognized key/);
+    expect(String(results[0])).not.toMatch(/Unrecognized key|Retry with valid JSON/);
     await expect(readFile(join(cwd, 'hello.txt'), 'utf8')).rejects.toThrow();
-  });
-
-  it('rejects a parser that returns a shape the tool schema does not accept', async () => {
-    let executed = false;
-    const schema = z.object({ patch: z.string() }).strict();
-    const tool: AnyToolDefinition = {
-      name: 'apply_patch',
-      description: 'fixture',
-      parameters: schema,
-      canonicalParameters: schema,
-      needsApproval: async () => false,
-      parseModelArguments: () => ({ operations: [] }),
-      execute: async () => {
-        executed = true;
-        return 'ran';
-      },
-      formatCommandMessage: () => [],
-    };
-    const { results, pending } = await settle(tool, '*** Begin Patch\n*** End Patch\n');
-    expect(pending).toBe(0);
-    expect(executed).toBe(false);
-    expect(String(results[0])).toMatch(/harness defect/);
-    expect(String(results[0])).not.toMatch(/Retry with valid JSON/);
   });
 });

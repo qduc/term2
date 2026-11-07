@@ -1,11 +1,58 @@
 {
-  "maxLayerEdges": 7,
+  "maxLayerEdges": 5,
   "maxLines": 500,
-  "fileCeilings": {
-    "src/model/provider.ts": {
-      "lines": 505,
-      "reason": "lazyModel is the one place a provider's streamed model becomes a Model; its native compact entry (body in provider-compact.ts) belongs beside stream. The usage it emits carries an aggregator's upstream provider, read from the same completion."
+  "maxFolderFiles": 15,
+  "folderCeilings": {
+    "src/app": {
+      "files": 78,
+      "reason": "Direct CLI application composition root, command dispatch, and setup workflows; to be decomposed into domain submodules in Phase 3."
     },
+    "src/clients/control": {
+      "files": 16,
+      "reason": "Control socket client protocol handlers, event bridges, and IPC framing for external orchestration."
+    },
+    "src/clients/tui": {
+      "files": 52,
+      "reason": "Terminal UI root components, hooks, layout, and session rendering; to be partitioned into submodules as the TUI matures."
+    },
+    "src/clients/tui/menus": {
+      "files": 70,
+      "reason": "Interactive modal and settings menus share picker and option contracts. Includes use-menu-interaction.ts, added on main to register all twelve menu handlers in the render commit; duplicating that layout-effect contract risks reviving the input race. Keep it with its callers and lower this ceiling when a cohesive menu group moves together."
+    },
+    "src/engine": {
+      "files": 21,
+      "reason": "Core turn execution loop, retry decision classifiers, and prompt assemblers; cohesive turn mechanics across providers."
+    },
+    "src/host": {
+      "files": 28,
+      "reason": "Server gateway, socket dispatch, and transport endpoints; combines direct SSE host and control socket routes."
+    },
+    "src/model": {
+      "files": 16,
+      "reason": "Model domain types, token usage tracking, and streaming completion contracts; core vocabulary for all provider adapters."
+    },
+    "src/model/providers": {
+      "files": 60,
+      "reason": "Loopback, cloud, and local AI provider implementations and fixtures; each provider file implements ModelProvider independently."
+    },
+    "src/protocol": {
+      "files": 27,
+      "reason": "Cross-client event envelopes, serialization codecs, and projection types; stable schemas shared by TUI, headless, and ACP."
+    },
+    "src/session": {
+      "files": 82,
+      "reason": "Root session directory holds loose session lifecycle, queue, and stream files; burndown planned in #197 and Phase 3."
+    },
+    "src/session/conversation": {
+      "files": 20,
+      "reason": "Conversation replay, journal index, and session browsing logic; scheduled for unification with direct store in Phase 3."
+    },
+    "src/tools": {
+      "files": 21,
+      "reason": "Root tool exports, execution facades, and adoption registries; bridges system and language tools to the agent runtime."
+    }
+  },
+  "fileCeilings": {
     "src/clients/tui/presentation/components/message/CommandMessage.tsx": {
       "lines": 1021,
       "reason": "Verbatim copy of legacy source/components/message/CommandMessage.tsx: tool rows match legacy by construction; splitting it would reintroduce a rewrite to prove. Four lines are the port exception that reads a live render's measured elapsed time (live-tool-age.ts). Three more are the accepted difference that keeps a finished row's status while a decision is open (#136 item 8)."
@@ -19,7 +66,7 @@
       "reason": "Port of source/hooks/use-subagent-pool-selection.ts with only imports changed; kept whole so it stays diffable against the legacy oracle."
     },
     "src/clients/tui/session.tsx": {
-      "lines": 541,
+      "lines": 539,
       "reason": "The session wires the composer to the ported legacy menu stack (useMenuStack, double-Escape) and routes every report into the transcript as legacy's addSystemMessage does; that wiring closes over submit, rewind and the viewport, declared later in the same component, so moving it out would add ref plumbing rather than a job seam. The composer's JSX also sits inside ComposerWidth (legacy InputBox's width-0 first frame), which only wraps it, and the command path routes a legacy clear-and-switch confirmation to the plan-toggle hook. The approval panel's Escape adds legacy's Stopped line through the viewport (one prop). The menu stack's first-run setup prompt sits under the live divider as legacy BottomArea places it (one line; the gate itself lives in menus/use-first-run-setup.ts). Candidate 2 adds the ported approval prompt host and tasks panel around the hidden composer box (legacy BottomArea order), which the same routing owns. The harness composer acknowledgement waits for the input to remount after an Esc-closed menu (two lines)."
     },
     "src/clients/tui/approval-prompt.tsx": {
@@ -31,23 +78,19 @@
       "reason": "One per-call Execution record carries a call's planning, admission, interaction answers and settlement; the chosen approval grant rides it like the batch-asked answer, so splitting would pass that record across files."
     },
     "src/app/tool-surface.ts": {
-      "lines": 525,
+      "lines": 503,
       "reason": "Builds one agent's tool surface, including session-browser and worker advisory binding. Delegation owns preparation; its injected registry/context ports close over this same surface's workspace, answers and interceptors, so their composition stays here."
     },
     "src/engine/turn-model.ts": {
-      "lines": 511,
+      "lines": 509,
       "reason": "One model step with its recovery loop; candidate 2 joins the replacement-boundary projection with legacy's retry notices and model_retrying observation, which share the loop's state."
     },
-    "src/protocol/projection.ts": {
-      "lines": 503,
-      "reason": "Snapshot projection of every wire fact kind; candidate 2's retry and child tool-state fields are a few lines each in the same switch."
-    },
     "src/protocol/wire.ts": {
-      "lines": 507,
+      "lines": 501,
       "reason": "The wire type catalogue; candidate 2 adds the task's live tool state fields beside the others, and usage carries OpenRouter's upstream provider."
     },
     "src/session/conversation.ts": {
-      "lines": 572,
+      "lines": 524,
       "reason": "The Conversation's turn driver; candidate 2 keeps both the question-cancel notice (a3) and the cross-turn compaction hold (solo/tools), each closing over the same driver state. Direct admission checks foreign native compaction coverage before accepting a turn, using the same configured provider and history as the driver."
     },
     "src/session/replay-fold.ts": {
@@ -56,10 +99,6 @@
     },
     "src/app/agent.ts": {
       "lines": 810,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
-    },
-    "src/app/lib/agent-configuration.ts": {
-      "lines": 544,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/app/lib/agent-factory.ts": {
@@ -83,19 +122,11 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/app/settings-service.ts": {
-      "lines": 1263,
+      "lines": 1258,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/config/settings/settings-ui-metadata.ts": {
       "lines": 543,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
-    },
-    "src/engine/agent-runtime/context-compaction/local-context-compactor.ts": {
-      "lines": 543,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
-    },
-    "src/engine/agent-runtime/generation-guard.ts": {
-      "lines": 536,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/engine/agent-runtime/permission-boundary.ts": {
@@ -147,23 +178,19 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/session/conversation/conversation-events.ts": {
-      "lines": 538,
+      "lines": 512,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/session/conversation/conversation-persistence.ts": {
-      "lines": 1224,
+      "lines": 1195,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/session/conversation/conversation-replay.ts": {
       "lines": 1974,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "src/session/conversation/conversation-store.ts": {
-      "lines": 570,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
-    },
     "src/session/conversation/session-browser.ts": {
-      "lines": 1076,
+      "lines": 1074,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/session/conversation/session-index/session-index-database.ts": {
@@ -171,7 +198,7 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/session/logging/conversation-log-events.ts": {
-      "lines": 511,
+      "lines": 506,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/session/logging/logging-service.ts": {
@@ -182,24 +209,12 @@
       "lines": 1766,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "src/session/session/session-composition.ts": {
-      "lines": 1484,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
-    },
-    "src/session/session/session-turn-domain.ts": {
-      "lines": 863,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
-    },
-    "src/session/tool-execution-ledger.ts": {
-      "lines": 779,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
-    },
     "src/session/adopted/interaction-protocol.ts": {
       "lines": 657,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/app/settings-command.ts": {
-      "lines": 593,
+      "lines": 589,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/tools/tool-invoke.ts": {
@@ -223,7 +238,7 @@
       "reason": "Inherited source schema/presentation module; launcher request typing now derives from its own schema rather than importing the engine's policy types."
     },
     "src/tools/file/apply-patch.ts": {
-      "lines": 878,
+      "lines": 875,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/tools/file/code-context.ts": {
@@ -231,7 +246,7 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/tools/file/search-replace.ts": {
-      "lines": 669,
+      "lines": 666,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/tools/mcp/mcp-connection-manager.ts": {
@@ -243,15 +258,11 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/tools/memory/memory-tools.ts": {
-      "lines": 591,
+      "lines": 590,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/tools/sandboxed-code-host/sandboxed-code-host.ts": {
       "lines": 523,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
-    },
-    "src/tools/subagents/codename-run-id.ts": {
-      "lines": 694,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/tools/system/run-code/run-code.ts": {
@@ -259,27 +270,7 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/tools/system/shell.ts": {
-      "lines": 1465,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
-    },
-    "src/delegation/runtime/subagent-bridge.ts": {
-      "lines": 659,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
-    },
-    "src/delegation/subagents/execution-runner.ts": {
-      "lines": 568,
-      "reason": "Compatibility one-shot execution; shared result formatting and artifact storage live in delegation/subagent-result.ts."
-    },
-    "src/delegation/subagents/nested-runner.ts": {
-      "lines": 981,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
-    },
-    "src/delegation/subagents/subagent-async-registry.ts": {
-      "lines": 1023,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
-    },
-    "src/session/session/subagent-notification-store.ts": {
-      "lines": 602,
+      "lines": 1463,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/delegation/subagents/tool-policy.ts": {

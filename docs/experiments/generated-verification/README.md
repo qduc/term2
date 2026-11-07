@@ -54,17 +54,6 @@ or obtain human agreement to defer them. Independently verify high-risk fixes.
   arguments, arbitrary result text, missing results and an orphan result.
   `projectProviderHistory` promises non-mutation and idempotence;
   `dropUnpairedFunctionCalls` promises complete-pair retention/orphan removal.
-- `history.ledger-settlement`: generated fresh call identities, dispatch/result
-  observations, scoped/all stream interruption, rejection of never-dispatched
-  calls, turn changes and export/import against an independent per-call model.
-  C2.5 requires unobserved dispatched effects to remain unknown, not aborted;
-  completed outcomes and out-of-scope calls must not change. This checks ledger
-  bookkeeping, not execution or retry of real effects.
-- `history.ledger-reconciliation`: generated partial transcripts and settled/open
-  ledger entries with explicit user anchors and retry-attempt drift. C2.1/C2.2
-  require one correctly ordered pair per settled call, preserved payloads and user
-  ownership, idempotence and non-mutation. OpenAI/local replacement checkpoints
-  prevent old ledger reinjection; model-request history starts at the last one.
 - `queue.serial-actions`: generated public submit, completion, failure, removal,
   edit, resume, discard and stale-completion sequences compared at every step to
   an independent serial FIFO model. The empty-pause invariant is explicit in
@@ -74,26 +63,19 @@ or obtain human agreement to defer them. Independently verify high-risk fixes.
   empty saved pauses must admit fresh work, while nonempty saved queues retain
   their payloads and pause reason without replay on construction.
 
-- `compaction.plan-cut`: generates genuine/synthetic user turns, parallel settled
-  rounds, reordered results, payload sizes and optional trailing unpaid calls.
-  Checks settled cut boundaries, exact prefix/tail partition, genuine-user
-  preservation and nonmutation, not which heuristic cut is selected.
-- `compaction.unsafe-pairs`: duplicate call identities and orphan results must
-  produce the planner's documented blocked outcome without mutation.
-- `continuity.debt-filter`: authoritative accepted segments feed real continuity
-  debt into chained filtering. Checks exact selected outputs/order, missing and
-  known-call orphan errors, debt retirement on new-user/reset/chaining-break,
-  and stale-lineage candidate refusal after reset.
-- `journal.reconstruction`: supported journal events reconstruct per-(turn,call)
-  identity, statuses, JSON payloads, reasoning ownership and deterministic order,
-  including call IDs reused across turns and reasoning-only aborted turns. Checks
-  nonmutation and fresh top-level history records (nested JSON may alias); not filesystem durability or executing recovered effects.
 - `opaque.lane-isolation`: sentinel-bearing native payloads pass through real
   OpenAI/Grok Responses and Chat Completions adapters plus the Codex converter.
   Foreign lanes cannot reach captured SDK input; compatible own payloads and
   ordinary content survive. Responses/Codex backend-origin pins are checked.
   Chat checks lane tags only. Disputed legacy `openai-compatible` -> Grok
   acceptance is excluded, not approved or changed.
+
+The `compaction.plan-cut`, `compaction.unsafe-pairs` and `continuity.debt-filter`
+properties, plus `history.ledger-settlement`, `history.ledger-reconciliation`
+and `journal.reconstruction`,
+were retired with their unused pre-rewrite implementations in #197.
+They did not exercise the live Session/engine path. Historical pilot evidence is
+retained in the plans below.
 
 Not covered: parallel command interleavings, persistence failures, approvals,
 steering, real provider transports, multi-call chat envelopes, full journal/crash

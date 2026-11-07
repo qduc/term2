@@ -93,11 +93,6 @@ export function getRunCodeExecutionResult(value: unknown): RunCodeExecution | un
   return (value as { [RUN_CODE_EXECUTION_RESULT]?: RunCodeExecution })[RUN_CODE_EXECUTION_RESULT];
 }
 
-export const runCodeExecutionMetadata = (execution: RunCodeExecution): RunCodeExecutionMetadata => ({
-  success: execution.script.status === 'succeeded',
-  ...(execution.script.status === 'failed' ? { diagnosticCode: execution.script.diagnostic.code } : {}),
-});
-
 const diagnosticCodeForHostError = (code: string): RunCodeDiagnosticCode => {
   switch (code) {
     case 'syntax_error':

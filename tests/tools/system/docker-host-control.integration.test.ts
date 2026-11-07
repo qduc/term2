@@ -2,10 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { expect, it } from 'vitest';
 import { createMockSettingsService } from '../../helpers/settings-service.mock.js';
 import type { ILoggingService } from '../../../src/shared/service-interfaces.js';
-import {
-  grantDockerHostControl,
-  resetDockerHostControlGrantsForTests,
-} from '../../../src/tools/shell/sandbox/docker-host-control-grants.js';
+import { SessionAccessState } from '../../../src/session/session/session-access-state.js';
 import {
   createDockerHostControl,
   DOCKER_HOST_CONTROL_RETRY_INSTRUCTION,
@@ -68,7 +65,11 @@ if (prerequisite) {
     }
 
     const sessionId = 'docker-desktop-integration';
+    const access = new SessionAccessState(
+      createMockSettingsService({ 'sandbox.enabled': true, 'shell.autoApproveMode': 'off' }),
+    );
     const tool = createShellToolDefinition({
+      sessionAccess: access,
       loggingService: createNoopLogger(),
       settingsService: createMockSettingsService({ 'sandbox.enabled': true }),
       shellSandboxRunner: runner,
@@ -79,7 +80,7 @@ if (prerequisite) {
       const blocked = await tool.execute({ command: 'docker version' }, context);
       expect(blocked).toContain('requires explicit approval');
 
-      grantDockerHostControl({ command: 'docker version', cwd: process.cwd(), scope: 'once', sessionId });
+      access.grantDocker('docker version', process.cwd(), 'once');
       const granted = await tool.execute({ command: 'docker version', timeout_ms: 20_000 }, context);
       expect(granted).toContain('exit 0');
 
@@ -88,11 +89,11 @@ if (prerequisite) {
       // /var/run/docker.sock default context.
       const wrapped = "(docker version 2>&1 || true) && printf 'done\\n'";
       expect(await tool.execute({ command: wrapped }, context)).toContain('requires explicit approval');
-      grantDockerHostControl({ command: wrapped, cwd: process.cwd(), scope: 'once', sessionId });
+      access.grantDocker(wrapped, process.cwd(), 'once');
       const grantedWrapped = await tool.execute({ command: wrapped, timeout_ms: 20_000 }, context);
       expect(grantedWrapped).not.toContain('permission denied');
     } finally {
-      resetDockerHostControlGrantsForTests();
+      access.dispose();
     }
   });
 
@@ -107,7 +108,11 @@ if (prerequisite) {
     // reaches Docker internally: no command-string check can see it.
     const indirect = `sh -c 'docker version --format "{{.Server.Version}}"'`;
     const sessionId = 'docker-desktop-indirect';
+    const access = new SessionAccessState(
+      createMockSettingsService({ 'sandbox.enabled': true, 'shell.autoApproveMode': 'off' }),
+    );
     const tool = createShellToolDefinition({
+      sessionAccess: access,
       loggingService: createNoopLogger(),
       settingsService: createMockSettingsService({ 'sandbox.enabled': true }),
       shellSandboxRunner: runner,
@@ -125,11 +130,11 @@ if (prerequisite) {
 
       // Approval leaves the pending block in place; only the run that uses it
       // clears it. Granting here mirrors prepareContinuation exactly.
-      grantDockerHostControl({ command: indirect, cwd: process.cwd(), scope: 'once', sessionId });
+      access.grantDocker(indirect, process.cwd(), 'once');
       expect(await tool.execute({ command: indirect, timeout_ms: 20_000 }, context)).toContain('exit 0');
       expect(await tool.needsApproval({ command: indirect }, context)).toBe(false);
     } finally {
-      resetDockerHostControlGrantsForTests();
+      access.dispose();
     }
   });
 }

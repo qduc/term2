@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
-import { normalizeApplicationInput } from '../../dist/src/engine/agent-runtime/application-run-loop.js';
+import { normalizeApplicationInput } from './v3-provider-input.mjs';
 import { getProfileMetadata } from '../../dist/src/config/profiles/active-profile.js';
 import { profileIdFromLegacyMode } from '../../dist/src/config/profiles/legacy-adapter.js';
 import { itemToInput } from '../../dist/src/model/provider-items.js';

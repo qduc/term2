@@ -1,10 +1,12 @@
 import type { ExecutionBudget } from '../../engine/agent-runtime/execution-budget.js';
+
 import type { AgentSpec } from '../../engine/agent-runtime/types.js';
+
 import type { SubagentRole } from '../../tools/subagents/types.js';
 
 // Tool-facing results and control acknowledgements remain contracts below the
 // execution layer. Requests resolved for execution carry private runtime policy.
-export * from '../../tools/subagents/types.js';
+export type * from '../../tools/subagents/types.js';
 
 export interface SubagentRequest {
   role: SubagentRole;

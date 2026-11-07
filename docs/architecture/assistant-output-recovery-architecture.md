@@ -1,3 +1,7 @@
+> **Archived — pre-rewrite runtime (removed in #197).** This document is historical
+> design rationale, not the current execution contract. See [Architecture Overview](architecture-overview.md)
+> and [layers](layers.md) for the single live path. Source snapshot: `e147c768f`.
+
 # Assistant Output Recovery Architecture
 
 > **Design record, written against the pre-rewrite `source/` tree.** Paths below are

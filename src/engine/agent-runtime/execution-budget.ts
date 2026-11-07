@@ -199,7 +199,7 @@ export class ExecutionBudget {
  * Opaque handle returned by tryAcquireChild().
  * Call release() when the child completes (in a finally block).
  */
-export class AcquiredChildSlot {
+class AcquiredChildSlot {
   #budget: ExecutionBudget;
   #releaseFn: () => void;
   #released = false;

@@ -7,476 +7,2153 @@
     }
   ],
   "unusedExports": [
-    "app/discord-send.ts discordSendParameters",
-    "app/file-service.ts scanWorkspaceEntries",
-    "app/host-config-access.ts sessionStart",
-    "app/input-preview.ts directInputPreviewResult",
-    "app/input-preview.ts inspectDirectInputPreview",
-    "app/model-picker-host.tsx isModelPickerEligible",
-    "app/model-picker-host.tsx isModelPickerHostSupported",
-    "app/profile-transition.ts ProfileTransitionService",
-    "app/profile-transition.ts classifyProfileTransition",
-    "app/settings-command.ts formatSettingsSummary",
-    "app/settings-command.ts parseDurationText",
-    "app/settings-completion-logic.ts isAdvancedSetting",
-    "app/value-suggestions.ts AUTO_APPROVE_MODE_DESCRIPTIONS",
-    "app/verifier-workspace.ts directVerifierRoot",
-    "app/verifier.ts DIRECT_VERIFIER_VERSION",
-    "clients/control-socket/control-socket.ts parseProcStartTime",
-    "clients/tui/command-transcript.ts useCommandTranscript",
-    "clients/tui/composer-footer.tsx directStatusView",
-    "clients/tui/draft.ts wireImages",
-    "clients/tui/presentation/components/layout/Banner.tsx resolveDisplayVersion",
-    "clients/tui/presentation/theme/detect-terminal-background.ts DEFAULT_DETECTION_TIMEOUT_MS",
-    "clients/tui/presentation/theme/resolve-theme.ts parseColorFgBg",
-    "clients/tui/terminal.ts TERMINAL_REDRAW_CLEAR",
-    "config/profiles/legacy-adapter.ts LEGACY_LITE_PROFILE_ID",
-    "config/profiles/legacy-adapter.ts LEGACY_STANDARD_PROFILE_ID",
-    "config/profiles/legacy-adapter.ts MENTOR_PROFILE_ID",
-    "config/profiles/legacy-adapter.ts ORCHESTRATOR_PROFILE_ID",
-    "config/profiles/legacy-adapter.ts PLAN_PROFILE_ID",
-    "config/profiles/legacy-adapter.ts legacyModeAdapter",
-    "config/profiles/legacy-adapter.ts normalizeLegacyMode",
-    "config/settings/session-runtime-settings.ts isNormalizedSelection",
-    "config/settings/session-runtime-settings.ts isReasoningSetting",
-    "config/settings/session-runtime-settings.ts parseRuntimeMutation",
-    "config/settings/settings-persistence.ts acquireSettingsLock",
-    "config/settings/settings-persistence.ts scanForRecoverableJson",
-    "config/settings/settings-schema.ts AgentWorkflowSettingsSchema",
-    "config/settings/settings-schema.ts AppSettingsSchema",
-    "config/settings/settings-schema.ts CustomProviderSchema",
-    "config/settings/settings-schema.ts DebugSettingsSchema",
-    "config/settings/settings-schema.ts EnvironmentSettingsSchema",
-    "config/settings/settings-schema.ts HooksSettingsSchema",
-    "config/settings/settings-schema.ts LoggingSettingsSchema",
-    "config/settings/settings-schema.ts MemorySettingsSchema",
-    "config/settings/settings-schema.ts SSHSettingsSchema",
-    "config/settings/settings-schema.ts SandboxSettingsSchema",
-    "config/settings/settings-schema.ts ShellSettingsSchema",
-    "config/settings/settings-schema.ts SubagentSettingsSchema",
-    "config/settings/settings-schema.ts ToolsSettingsSchema",
-    "config/settings/settings-schema.ts UISettingsSchema",
-    "config/settings/settings-schema.ts WebSearchSettingsSchema",
-    "config/settings/settings-sources.ts SETTINGS_SOURCE_KEYS",
-    "config/settings/settings-ui-metadata.ts SETTING_LABELS",
-    "config/settings/settings-ui-metadata.ts getSettingDescription",
-    "config/settings/settings-ui-metadata.ts humanizeSettingKey",
-    "config/tool-toggles.ts buildToggleConflictNotice",
-    "config/tool-toggles.ts isToolToggleKey",
-    "delegation/run-code/run-code-runtime.ts ACTION_SEMANTICS",
-    "delegation/run-code/run-code-runtime.ts bindPreparedAuthority",
-    "delegation/run-code/run-code-runtime.ts clipReason",
-    "delegation/run-code/run-code-runtime.ts createMediaReferenceStore",
-    "delegation/run-code/run-code-runtime.ts describeTool",
-    "delegation/run-code/run-code-runtime.ts isActionTool",
-    "delegation/run-code/run-code-runtime.ts mergeAbortSignals",
-    "delegation/run-code/run-code-runtime.ts serializeResult",
-    "delegation/run-code/run-code-runtime.ts withAbortSignal",
-    "delegation/runtime/executor.ts mapSubagentResultToRunResult",
-    "delegation/subagents/role-loader.ts ROLE_MAX_TURNS_DEFAULT",
-    "delegation/subagents/subagent-role-pool-selector.ts POOL_ENTRY_COOLDOWN_MS",
-    "delegation/subagents/tool-policy.ts captureValidationIfMatch",
-    "delegation/workflow/workflow-evaluator.ts WORKFLOW_PROHIBITED_TOOLS",
-    "engine/agent-runtime/agent-spec.ts AGENT_SPEC_DEFAULT_MAX_TURNS",
-    "engine/agent-runtime/context-compaction/index.ts resolveCompactionThreshold",
-    "engine/agent-runtime/model-resolver.ts getTierModelPoolEntries",
-    "engine/agent-runtime/permission-boundary.ts parentAuthorityFromDefinition",
-    "engine/agent-runtime/permission-resolver.ts DEFAULT_LIMITS",
-    "engine/agent-runtime/permission-resolver.ts DEFAULT_RESOLVED_PERMISSIONS",
-    "engine/agent-runtime/scope-resolver.ts getWorkspaceRoot",
-    "engine/agent-runtime/scope-resolver.ts isFilesystemScopeEmpty",
-    "engine/agent-runtime/scope-resolver.ts isNetworkScopeEmpty",
-    "engine/agent-runtime/scope-resolver.ts isPathInScope",
-    "engine/agent-runtime/scope-resolver.ts normalizeHostPattern",
-    "engine/agent-runtime/scope-resolver.ts normalizeScopePattern",
-    "engine/agent-runtime/scope-resolver.ts normalizeToolPath",
-    "engine/agent-runtime/scope-resolver.ts resolveRealToolPath",
-    "engine/agent-runtime/scope-resolver.ts setWorkspaceRoot",
-    "engine/agent-runtime/structured-output.ts validateAgainstSchema",
-    "engine/agent-runtime/structured-output.ts validateSchemaKeywords",
-    "engine/agent-runtime/text-attachment.ts serializeAttachment",
-    "engine/agent-runtime/text-attachment.ts validateAttachment",
-    "engine/agent-stream.ts isAgentStream",
-    "engine/completion-verification/contracts.ts budgetsSchema",
-    "engine/completion-verification/contracts.ts recordSchema",
-    "engine/completion-verification/gate.ts createVerificationGate",
-    "engine/completion-verification/verifier.ts createIndependentVerifier",
-    "engine/completion-verification/verifier.ts runQuickCheck",
-    "engine/decision-shadow/decision-client.ts DecisionEvaluationError",
-    "engine/decision-shadow/decision-client.ts createOpenRouterDecisionClient",
-    "engine/decision-shadow/decision-client.ts readDecisionErrorMetadata",
-    "engine/decision-shadow/failure-triage.ts FAILURE_CATEGORIES",
-    "engine/decision-shadow/failure-triage.ts FAILURE_TRIAGE_PROMPT_VERSION",
-    "engine/decision-shadow/failure-triage.ts RETRY_CHOICES",
-    "engine/decision-shadow/failure-triage.ts evaluateFailureTriage",
-    "engine/inject-warning-into-tool-output.ts buildRunBudgetWarning",
-    "engine/inject-warning-into-tool-output.ts buildToolStallWarning",
-    "engine/inject-warning-into-tool-output.ts buildTurnLimitWarning",
-    "engine/inject-warning-into-tool-output.ts injectTurnLimitWarning",
-    "engine/inject-warning-into-tool-output.ts injectWarningIntoToolOutput",
-    "engine/inject-warning-into-tool-output.ts resolveTurnLimitContext",
-    "engine/prompts/memory-recall-notice.ts MEMORY_RECALL_CLOSE",
-    "engine/prompts/memory-recall-notice.ts MEMORY_RECALL_OPEN",
-    "engine/prompts/memory-recall-notice.ts MEMORY_RECALL_OVERHEAD",
-    "engine/prompts/memory-recall-notice.ts recalledMemoryKeys",
-    "engine/prompts/memory-recall-notice.ts renderMemoryRecall",
-    "engine/prompts/memory-recall-notice.ts renderRecallLine",
-    "engine/prompts/memory-recall-notice.ts withMemoryRecall",
-    "engine/retry/in-loop-model-retry.ts computeInLoopBackoffDelayMs",
-    "host/gateway/serve-args.ts DEFAULT_SERVE_AUDIENCE",
-    "host/gateway/serve-args.ts DEFAULT_SERVE_ISSUER",
-    "host/server-contracts.ts ASSERTION_PURPOSES",
-    "host/server-sse.ts SERVER_EVENT_HEARTBEAT_INTERVAL_MS",
-    "host/server-validation.ts isSafeSettingsValue",
-    "host/server.ts createDirectServerHandler",
-    "model/cost/pricing.ts getOverlayPricingVersion",
-    "model/failure/conversation-retry-policy.ts MAX_HALLUCINATION_RETRIES",
-    "model/failure/conversation-retry-policy.ts isRecoverableModelError",
-    "model/failure/provider-failure-classification.ts hasExplicitCancellationMarker",
-    "model/model-service.ts MODEL_CACHE_STALE_GRACE_MS",
-    "model/model-service.ts MODEL_CACHE_TTL_MS",
-    "model/model-service.ts clearModelMemoryCacheForTest",
-    "model/model-service.ts getModelCacheDir",
-    "model/model-service.ts isStrictSubsetModels",
-    "model/model-service.ts setModelCacheClockForTest",
-    "model/model-service.ts setModelCacheDirForTest",
-    "model/models/decision-model-listing.ts clearDecisionModelListCache",
-    "model/models/model-favorites.ts getFavoriteEntries",
-    "model/models/model-favorites.ts isFavoriteModel",
-    "model/models/model-listing.ts filterModelGroups",
-    "model/models/model-listing.ts formatModelGroups",
-    "model/models/model-nicknames.ts NICKNAME_MAX_LENGTH",
-    "model/models/model-nicknames.ts parseNicknameTargetEntry",
-    "model/models/model-nicknames.ts serializeNicknameTarget",
-    "model/models/model-nicknames.ts setNicknameTarget",
-    "model/models/model-nicknames.ts validateNicknameName",
-    "model/models/model-resolution.ts formatDisambiguationPrompt",
-    "model/models/model-resolution.ts matchModels",
-    "model/models/model-resolution.ts parseModelFlag",
-    "model/models/model-resolution.ts promptForDisambiguation",
-    "model/provider-credentials.ts PROVIDER_CREDENTIAL_SETTING_KEYS",
-    "model/provider-credentials.ts getDisabledProviderIds",
-    "model/providers/ai-sdk-anthropic.provider.ts addAnthropicPromptCachingToMessages",
-    "model/providers/ai-sdk-anthropic.provider.ts getMaxOutputTokens",
-    "model/providers/codex-auth.ts CODEX_REDIRECT_PORTS",
-    "model/providers/codex-auth.ts CODEX_REDIRECT_URI",
-    "model/providers/codex-auth.ts saveCodexTokens",
-    "model/providers/codex-compact.ts isCodexCompactionIncompatible",
-    "model/providers/codex-responses-model.ts OpenAIResponsesModel",
-    "model/providers/codex-responses-model.ts wrapCodexStream",
-    "model/providers/codex-turn-converter.ts toCodexResponsesItem",
-    "model/providers/codex-turn-converter.ts toCodexToolResultOutput",
-    "model/providers/codex.provider.ts CodexProvider",
-    "model/providers/codex.provider.ts CodexTokenManager",
-    "model/providers/codex.provider.ts addCodexCompactHeaders",
-    "model/providers/codex.provider.ts addCodexResponsesLiteHeader",
-    "model/providers/codex.provider.ts codexHeadersMiddleware",
-    "model/providers/codex.provider.ts extractAccountId",
-    "model/providers/codex.provider.ts extractAccountIdFromClaims",
-    "model/providers/codex.provider.ts resolveCodexClientVersion",
-    "model/providers/codex.provider.ts resolveTokenPath",
-    "model/providers/codex.provider.ts sanitizeCodexRequestInit",
-    "model/providers/common/openai-compatible-message-contract.ts hasOpenAICompatibleAssistantPayload",
-    "model/providers/grok-auth.ts GROK_TOKEN_ENDPOINT",
-    "model/providers/grok-auth.ts readGrokCliTokens",
-    "model/providers/grok-auth.ts readStoredGrokTokens",
-    "model/providers/grok-auth.ts saveGrokTokens",
-    "model/providers/grok.provider.ts GROK_BASE_URL",
-    "model/providers/grok.provider.ts GROK_CLIENT_VERSION_FALLBACK",
-    "model/providers/grok.provider.ts buildGrokFetch",
-    "model/providers/grok.provider.ts createGrokStreamedModel",
-    "model/providers/grok.provider.ts fetchGrokModels",
-    "model/providers/grok.provider.ts lookupGrokClientVersion",
-    "model/providers/grok.provider.ts resolveGrokClientVersion",
-    "model/providers/llama-cpp.provider.ts applyLlamaCppRequestTransform",
-    "model/providers/model-catalog/catalog.ts lookupModelAnyProvider",
-    "model/providers/model-catalog/generate-catalog.ts VENDORED_PI_PROVIDERS",
-    "model/providers/model-catalog/generate-catalog.ts generateCatalogSource",
-    "model/providers/oauth-accounts.ts OAUTH_ACCOUNT_PROVIDERS",
-    "model/providers/oauth-session-account.ts createSessionAccountStore",
-    "model/providers/oauth-session-account.ts resetSessionAccounts",
-    "model/providers/openai-request-prefix-binding.ts prepareOpenAIRequestPrefixBinding",
-    "model/providers/openai-request-prefix-binding.ts runWithOpenAIRequestPrefixBindingScope",
-    "model/providers/openai-responses-model.ts createResponseEventNormalizationState",
-    "model/providers/openai-responses-model.ts normalizeResponseEvent",
-    "model/providers/openai-responses-model.ts supportsContextCompactionModel",
-    "model/providers/openai.provider.ts createRetryAwareFetch",
-    "model/providers/opencode-transport-discovery.ts parseOpencodeTransportDocumentation",
-    "model/providers/openrouter.provider.ts openRouterPreprocessingMiddleware",
-    "model/providers/provider-opaque-compatibility.ts LEGACY_SHARED_PROVIDER_TAG",
-    "model/providers/provider-presets.ts parseProviderInventory",
-    "model/providers/provider-service.ts getConfiguredProviderNames",
-    "model/providers/provider-service.ts hasProviderNameConflict",
-    "model/providers/web-search/firecrawl.provider.ts firecrawlProvider",
-    "model/providers/web-search/registry.ts clearWebSearchProviders",
-    "model/providers/web-search/registry.ts getAllWebSearchProviders",
-    "model/providers/web-search/registry.ts getDefaultWebSearchProvider",
-    "model/providers/web-search/registry.ts getWebSearchProvider",
-    "model/providers/web-search/searxng.provider.ts searxngProvider",
-    "protocol/context.ts publicGoal",
-    "protocol/context.ts publicVerification",
-    "protocol/state.ts firstById",
-    "protocol/state.ts publicWireConfiguration",
-    "protocol/tasks.ts publicTaskOwner",
-    "protocol/tasks.ts publicTaskResult",
-    "session/adopted/conversation-log.ts validateSessionFact",
-    "session/adopted/interaction-protocol.ts InteractionProtocolError",
-    "session/adopted/interaction-protocol.ts projectPendingInteraction",
-    "session/adopted/interaction-protocol.ts validatePendingInteractionDto",
-    "session/adopted/network.ts isNetworkAnswer",
-    "session/adopted/network.ts isNetworkIdentity",
-    "session/approval/approval-decision-policy.ts ManualApprovalDecisionPolicy",
-    "session/approval/session-read-access.ts sessionReadAccess",
-    "session/approval/tool-approval-policy-registry.ts toolApprovalPolicyRegistry",
-    "session/capabilities.ts directAcceptedGoalWindow",
-    "session/command-receipts.ts inspectDirectCommand",
-    "session/conversation-generation.ts installConversationGeneration",
-    "session/conversation-generation.ts prepareConversationGeneration",
-    "session/conversation/conversation-decoder.ts decodeSavedMessage",
-    "session/conversation/conversation-persistence.ts auditConversation",
-    "session/conversation/conversation-persistence.ts collectOrphanedDeltaSidecars",
-    "session/conversation/conversation-persistence.ts deleteConversation",
-    "session/conversation/conversation-persistence.ts forkConversation",
-    "session/conversation/conversation-persistence.ts getConversationLockPath",
-    "session/conversation/conversation-persistence.ts getConversationsDirForTest",
-    "session/conversation/conversation-persistence.ts hasConversationContent",
-    "session/conversation/conversation-persistence.ts loadConversation",
-    "session/conversation/conversation-persistence.ts loadConversationForProject",
-    "session/conversation/conversation-persistence.ts loadLastConversation",
-    "session/conversation/conversation-persistence.ts saveLastConversation",
-    "session/conversation/conversation-persistence.ts setConversationsDirForTest",
-    "session/conversation/conversation-persistence.ts setPidAlivenessCheckForTest",
-    "session/conversation/conversation-replay.ts replayEventsWithRetryTarget",
-    "session/conversation/conversation-replay.ts rewindRemovedUserCount",
-    "session/conversation/durable-goal-stop-check.ts GOAL_CHECK_UNRESOLVED_CAUSE",
-    "session/conversation/durable-goal-stop-check.ts GOAL_CHECK_UNRESOLVED_NOTICE",
-    "session/conversation/durable-goal-stop-check.ts GOAL_STOP_REMINDER_PREFIX",
-    "session/conversation/durable-goal-stop-check.ts MAX_GOAL_STOP_REMINDERS_PER_TURN",
-    "session/conversation/durable-goal-stop-check.ts MAX_GOAL_STOP_REMINDERS_WITHOUT_WORK",
-    "session/conversation/session-audit.ts formatSessionAudit",
-    "session/conversation/session-index/session-index-schema.ts SCHEMA_VERSION",
-    "session/conversation/session-index/session-index-worker-client.ts resolveWorkerTimeoutMs",
-    "session/final.ts captureDirectFinalWindow",
-    "session/final.ts directPublicCommandMessages",
-    "session/goal-stop.ts DIRECT_GOAL_IDLE_REMINDERS",
-    "session/goal-stop.ts DIRECT_GOAL_TURN_REMINDERS",
-    "session/goal-stop.ts decideDirectGoalStop",
-    "session/goal.ts DIRECT_GOAL_CHECK_PREFIX",
-    "session/goal.ts directGoalCheckSchema",
-    "session/hooks/hook-contracts.ts TERM2_HOOK_EVENT_NAMES",
-    "session/hooks/hook-contracts.ts isTerm2HookEvent",
-    "session/hooks/hook-discovery.ts discoverHookFiles",
-    "session/hooks/hook-editor-shim.ts HOOK_DECLARATION_SHIM_FILENAME",
-    "session/hooks/hook-editor-shim.ts HOOK_TSCONFIG_FILENAME",
-    "session/hooks/hook-event-factory.ts summarizeHookValue",
-    "session/hooks/hook-module-loader.ts HookModuleLoadError",
-    "session/hooks/hook-module-loader.ts NativeHookModuleLoader",
-    "session/hooks/hook-registry.ts HookRegistrationClosedError",
-    "session/import.ts importDirectSession",
-    "session/input-surge-approval.ts issueInputSurgeApproval",
-    "session/input-surge-guard.ts collectInputSurgeStats",
-    "session/large-uncached-input-guard.ts DEFAULT_LARGE_UNCACHED_INPUT_GUARD_CONFIG",
-    "session/logging/conversation-log-events.ts AGENT_AFFECTING_SETTINGS",
-    "session/logging/conversation-log-events.ts SIDECAR_EVENT_TYPES",
-    "session/logging/logging-service.ts localLogDateKey",
-    "session/logging/provider-traffic.ts ENCRYPTED_CONTENT_REDACTION",
-    "session/logging/provider-traffic.ts PROVIDER_REQUEST_FINGERPRINT_VERSION",
-    "session/logging/provider-traffic.ts TRAFFIC_TEXT_LIMIT",
-    "session/logging/provider-traffic.ts buildProviderRequestFingerprint",
-    "session/logging/provider-traffic.ts isRawTrafficCaptureEnabled",
-    "session/logging/provider-traffic.ts rawCapturePathForRequestPath",
-    "session/logging/provider-traffic.ts sanitizeSentTrafficBody",
-    "session/logging/provider-traffic.ts summarizeReceivedTraffic",
-    "session/openai-root-checkpoint-lifecycle-observer.ts DefaultOpenAIRootCheckpointLifecycleObserver",
-    "session/prompts/prompt-profiles.ts PROMPT_PROFILES",
-    "session/replay-fold.ts replayProjection",
-    "session/session/pending-interaction-state.ts getAskUserQuestions",
-    "session/session/session-composition.ts buildSessionRuntime",
-    "session/session/session-composition.ts computePublicStatus",
-    "session/session/session-composition.ts createConversationSession",
-    "session/session/session-composition.ts createSessionRuntimeInternals",
-    "session/session/session-input-planner.ts combineHistoryAndDraftBytes",
-    "session/session/subagent-notification-store.ts BACKGROUND_TASK_RECENT_RETENTION_MS",
-    "session/state.ts directSubmittedTurn",
-    "session/tool-execution-ledger.ts outputOf",
-    "session/tool-execution-ledger.ts toolNameOf",
-    "shared/conversation/conversation-time-gap.ts withHumanInputTime",
-    "shared/conversation/personal-memory-context.ts carryPersonalMemoryContext",
-    "shared/conversation/personal-memory-context.ts latestPersonalMemoryContext",
-    "shared/cost/model-cost.ts createSessionCostAccumulator",
-    "shared/cost/model-cost.ts resolveBillableTokens",
-    "shared/handoff/handoff-flow-reducer.ts createInitialHandoffState",
-    "shared/lib/chained-input-filter.ts MissingChainedToolOutputError",
-    "shared/lib/chained-input-filter.ts findChainedDeltaStart",
-    "shared/lib/harness-input-idle.ts publishHarnessInputState",
-    "shared/lib/harness-input-idle.ts readHarnessApprovalReady",
-    "shared/lib/harness-input-idle.ts readHarnessComposerState",
-    "shared/lib/harness-input-idle.ts readHarnessIdleGeneration",
-    "shared/lib/harness-input-idle.ts resetHarnessInputIdleForTests",
-    "shared/lib/harness-input-idle.ts waitForHarnessComposerValue",
-    "shared/lib/harness-input-idle.ts waitForHarnessIdleGeneration",
-    "shared/lib/input-owner.ts deriveInputOwner",
-    "shared/lib/oauth-loopback.ts interpretCallbackParams",
-    "shared/tools/agent/ask-user-constants.ts ASK_USER_DECLINE_LABEL",
-    "shared/types/user-turn.ts formatUserTurnForDisplay",
-    "shared/types/user-turn.ts hasUserTurnContent",
-    "shared/types/user-turn.ts stripImageSentinels",
-    "shared/utils/clipboard.ts copyViaOsc52",
-    "shared/utils/clipboard.ts getClipboardCommandCandidates",
-    "shared/utils/copy-selections.ts extractFencedCodeBlocks",
-    "shared/utils/home-directory-start-guard.ts isAffirmativeAnswer",
-    "shared/utils/home-directory-start-guard.ts isExactDirectory",
-    "shared/utils/output/bound-tool-result.ts DEFAULT_TOOL_RESULT_MAX_BYTES",
-    "shared/utils/output/bound-tool-result.ts SCRIPTED_TOOL_RESULT_MAX_BYTES",
-    "shared/utils/output/bound-tool-result.ts utf8ByteLength",
-    "shared/utils/output/output-trim.ts DEFAULT_TRIM_CONFIG",
-    "shared/utils/output/output-trim.ts setTrimConfig",
-    "shared/utils/process-restart.ts assertRestartSupported",
-    "shared/utils/project-scope.ts createProjectScopeResolver",
-    "shared/utils/project-scope.ts normalizeProjectPath",
-    "shared/utils/project-scope.ts readGitCommonDir",
-    "shared/utils/shell/shell-output.ts FULL_OUTPUT_SAVED_NOTE_PREFIX",
-    "shared/utils/skill-discovery-paths.ts SKILL_SCOPE_DIRS",
-    "shared/utils/ssh-config-parser.ts parseSSHConfig",
-    "tools/agent/ask-mentor.ts formatAskMentorCommandMessage",
-    "tools/agent/ask-orchestrator.ts formatAskOrchestratorCommandMessage",
-    "tools/agent/ask-user.ts formatAskUserCommandMessage",
-    "tools/agent/configure-task-check-in.ts MIN_CHECK_IN_INTERVAL_SECONDS",
-    "tools/agent/configure-task-check-in.ts MIN_NEXT_CHECK_IN_SECONDS",
-    "tools/agent/configure-task-check-in.ts configureTaskCheckInSchema",
-    "tools/agent/configure-task-check-in.ts configureTaskCheckInScriptedReturnSchema",
-    "tools/agent/configure-task-check-in.ts formatConfigureTaskCheckInCommandMessage",
-    "tools/agent/goal-check.ts formatGoalCheckCommandMessage",
-    "tools/agent/list-models.ts modelDiscoveryResultSchema",
-    "tools/agent/propose-goal.ts formatProposeGoalCommandMessage",
-    "tools/agent/run-subagent-async.ts createRunSubagentAsyncToolDefinition",
-    "tools/agent/run-subagent-async.ts formatCancelRunCommandMessage",
-    "tools/agent/run-subagent-async.ts formatGetSubagentResultCommandMessage",
-    "tools/agent/run-subagent-async.ts formatGetSubagentStatusCommandMessage",
-    "tools/agent/run-subagent-async.ts formatRunSubagentAsyncCommandMessage",
-    "tools/agent/run-subagent-async.ts formatSendMessageCommandMessage",
-    "tools/agent/run-subagent.ts formatRunSubagentCommandMessage",
-    "tools/background-task-activity.ts BACKGROUND_TASK_TOOL_LABEL_LIMIT",
-    "tools/background-task-activity.ts assessBackgroundTaskLiveness",
-    "tools/background-task-activity.ts isTerminalStatus",
-    "tools/command-message-formatters.ts clearToolFormatters",
-    "tools/conversation-utils.ts createShellMessageOutput",
-    "tools/conversation-utils.ts createStreamingState",
-    "tools/conversation-utils.ts enhanceApiKeyError",
-    "tools/conversation.ts DENIED_READ_APPROVE_ANSWERS",
-    "tools/file/apply-patch.ts PatchValidationError",
-    "tools/file/apply-patch.ts diagnoseContextMismatch",
-    "tools/file/apply-patch.ts formatApplyPatchCommandMessage",
-    "tools/file/code-context.ts formatCodeContextSearchCommandMessage",
-    "tools/file/code-context.ts formatReadCodeOutlineCommandMessage",
-    "tools/file/create-file.ts formatCreateFileCommandMessage",
-    "tools/file/edit-healing.ts DEFAULT_CONFIDENCE_THRESHOLD",
-    "tools/file/glob.ts formatFindFilesCommandMessage",
-    "tools/file/grep.ts formatGrepCommandMessage",
-    "tools/file/patch-healing.ts countContextMatchesInFile",
-    "tools/file/patch-healing.ts parseDiffStructure",
-    "tools/file/read-file.ts formatReadFileCommandMessage",
-    "tools/file/search-replace-matcher.ts GAP_MARKER",
-    "tools/file/search-replace-matcher.ts containsGapMarkerLine",
-    "tools/file/search-replace-matcher.ts detectEOL",
-    "tools/file/search-replace.ts formatSearchReplaceCommandMessage",
-    "tools/format-helpers.ts generateMessageId",
-    "tools/format-helpers.ts pickPatchOutputItemText",
-    "tools/languages/cpp.ts buildCppTestPatterns",
-    "tools/languages/cpp.ts extractCppOutline",
-    "tools/languages/cpp.ts resolveLocalCppImport",
-    "tools/languages/csharp.ts extractCsharpOutline",
-    "tools/languages/csharp.ts resolveCsharpImport",
-    "tools/languages/go.ts buildGoTestPatterns",
-    "tools/languages/go.ts resolveGoImport",
-    "tools/languages/java.ts extractJavaOutline",
-    "tools/languages/java.ts resolveJavaImport",
-    "tools/languages/php.ts buildPHPTestPatterns",
-    "tools/languages/php.ts extractPHPOutline",
-    "tools/languages/php.ts resolvePHPImport",
-    "tools/languages/python.ts buildPythonTestPatterns",
-    "tools/languages/python.ts resolvePythonImport",
-    "tools/languages/ruby.ts buildRubyTestPatterns",
-    "tools/languages/ruby.ts extractRubyOutline",
-    "tools/languages/ruby.ts resolveRubyImport",
-    "tools/languages/rust.ts buildRustTestPatterns",
-    "tools/languages/rust.ts resolveRustImport",
-    "tools/mcp/mcp-status.ts formatMcpNotice",
-    "tools/mcp/mcp-status.ts isActionableMcpState",
-    "tools/memory/distiller/secret-redaction.ts redactSecrets",
-    "tools/message.ts isBotMessage",
-    "tools/message.ts isResultToolEvent",
-    "tools/message.ts isSubagentActivityMessage",
-    "tools/session-rollover/session-rollover-tool.ts sessionRolloverParameters",
-    "tools/shell/background-shell-output-store.ts BackgroundShellOutputStoreError",
-    "tools/shell/background-shell-registry.ts BackgroundShellRegistryDisposedError",
-    "tools/shell/background-shell-watches.ts BackgroundShellWatchesError",
-    "tools/shell/command-logger.ts logCommandExecution",
-    "tools/shell/command-safety/handlers/index.ts commandHandlers",
-    "tools/shell/execute-shell.ts GatewayShellEnvironmentError",
-    "tools/shell/execute-shell.ts killLiveShellChildren",
-    "tools/shell/sandbox/denied-read-detector.ts suggestStableParent",
-    "tools/shell/sandbox/denied-read-stores.ts ProjectSandboxAllowReadStore",
-    "tools/shell/sandbox/denied-read-stores.ts deniedReadStore",
-    "tools/shell/sandbox/denied-read-stores.ts executionOverrideStore",
-    "tools/shell/sandbox/denied-read-stores.ts resetSandboxDeniedReadStoresForTest",
-    "tools/shell/sandbox/docker-host-control-grants.ts clearDockerHostControlSession",
-    "tools/shell/sandbox/docker-host-control-grants.ts configureDockerHostControlGrants",
-    "tools/shell/sandbox/docker-host-control-grants.ts consumeDockerHostControlDenial",
-    "tools/shell/sandbox/docker-host-control-grants.ts consumeDockerHostControlOnce",
-    "tools/shell/sandbox/docker-host-control-grants.ts grantDockerHostControl",
-    "tools/shell/sandbox/docker-host-control-grants.ts hasDockerHostControlProject",
-    "tools/shell/sandbox/docker-host-control-grants.ts hasDockerHostControlSession",
-    "tools/shell/sandbox/docker-host-control-grants.ts recordDockerHostControlDenial",
-    "tools/shell/sandbox/docker-host-control-grants.ts requiresDockerHostControlApproval",
-    "tools/shell/sandbox/docker-host-control-grants.ts resetDockerHostControlGrantsForTests",
-    "tools/shell/sandbox/sandbox-network-approval.ts registerSandboxNetworkApprovalHandler",
-    "tools/shell/sandbox/sandbox-network-store.ts ProjectNetworkAllowStore",
-    "tools/shell/sandbox/sandbox-network-store.ts SessionNetworkAllowStore",
-    "tools/shell/sandbox/sandbox-network-store.ts getProjectNetworkAllowStore",
-    "tools/shell/sandbox/sandbox-network-store.ts resetSandboxNetworkStoreForTest",
-    "tools/shell/sandbox/sandbox-network-store.ts sessionNetworkAllowStore",
-    "tools/shell/sandbox/sandbox-policy.ts isPathProtected",
-    "tools/shell/sandbox/shell-sandbox-runner.ts AnthropicShellSandboxRunner",
-    "tools/subagents/codename-run-id.ts CODENAME_RUN_ID_PATTERN",
-    "tools/subagents/codename-run-id.ts codenameRunIdSpace",
-    "tools/subagents/codename-run-id.ts parseCodenameRunId",
-    "tools/system/run-code/mcp-script-surface.ts mcpMemberName",
-    "tools/system/run-code/mcp-script-surface.ts mcpTextResult",
-    "tools/system/run-code/run-code-telemetry.ts RUN_CODE_COMPLETION_EVENT",
-    "tools/system/run-code/run-code-telemetry.ts RUN_CODE_COMPLETION_MESSAGE",
-    "tools/system/run-code/run-code-telemetry.ts buildRunCodeCompletionMeta",
-    "tools/system/run-code/run-code.ts formatRunCodeCommandMessage",
-    "tools/system/run-code/run-code.ts runCodeParametersSchema",
-    "tools/system/run-code/tools-header.ts RUN_CODE_ESSENTIAL_TOOLS",
-    "tools/system/run-code/tools-header.ts renderDetailedEntry",
-    "tools/system/run-code/tools-header.ts renderSchemaType",
-    "tools/system/shell.ts formatBackgroundShellCancelMonitorCommandMessage",
-    "tools/system/shell.ts formatBackgroundShellJobCommandMessage",
-    "tools/system/shell.ts formatBackgroundShellMonitorCommandMessage",
-    "tools/system/shell.ts formatShellCommandMessage",
-    "tools/tool-invoke.ts isInvalidToolInputError",
-    "tools/tool-invoke.ts repairJson",
-    "tools/tool-invoke.ts toolErrorFunction",
-    "tools/web/web-fetch.ts formatWebFetchCommandMessage",
-    "tools/web/web-search.ts formatResultsAsMarkdown",
-    "tools/web/web-search.ts formatWebSearchCommandMessage"
+    {
+      "export": "app/discord-send.ts discordSendParameters",
+      "reason": "Internal app constant or variable \"discordSendParameters\" in app/discord-send.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "app/file-service.ts scanWorkspaceEntries",
+      "reason": "Pre-existing unused export \"scanWorkspaceEntries\" in app/file-service.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "app/host-config-access.ts sessionStart",
+      "reason": "Internal app helper function \"sessionStart\" in app/host-config-access.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "app/input-preview.ts directInputPreviewResult",
+      "reason": "Internal app helper function \"directInputPreviewResult\" in app/input-preview.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "app/input-preview.ts inspectDirectInputPreview",
+      "reason": "Internal app helper function \"inspectDirectInputPreview\" in app/input-preview.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "app/model-picker-host.tsx isModelPickerEligible",
+      "reason": "Internal app helper function \"isModelPickerEligible\" in app/model-picker-host.tsx used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "app/model-picker-host.tsx isModelPickerHostSupported",
+      "reason": "Internal app helper function \"isModelPickerHostSupported\" in app/model-picker-host.tsx used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "app/profile-transition.ts ProfileTransitionService",
+      "reason": "Pre-existing unused export \"ProfileTransitionService\" in app/profile-transition.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "app/profile-transition.ts classifyProfileTransition",
+      "reason": "Internal app helper function \"classifyProfileTransition\" in app/profile-transition.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "app/settings-command.ts formatSettingsSummary",
+      "reason": "Pre-existing unused export \"formatSettingsSummary\" in app/settings-command.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "app/settings-command.ts parseDurationText",
+      "reason": "Internal app helper function \"parseDurationText\" in app/settings-command.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "app/settings-completion-logic.ts isAdvancedSetting",
+      "reason": "Internal app helper function \"isAdvancedSetting\" in app/settings-completion-logic.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "app/value-suggestions.ts AUTO_APPROVE_MODE_DESCRIPTIONS",
+      "reason": "Internal app constant or variable \"AUTO_APPROVE_MODE_DESCRIPTIONS\" in app/value-suggestions.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "app/verifier-workspace.ts directVerifierRoot",
+      "reason": "Internal app helper function \"directVerifierRoot\" in app/verifier-workspace.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "app/verifier.ts DIRECT_VERIFIER_VERSION",
+      "reason": "Internal app constant or variable \"DIRECT_VERIFIER_VERSION\" in app/verifier.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "clients/control-socket/control-socket.ts parseProcStartTime",
+      "reason": "Internal clients helper function \"parseProcStartTime\" in clients/control-socket/control-socket.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "clients/tui/command-transcript.ts useCommandTranscript",
+      "reason": "Internal clients helper function \"useCommandTranscript\" in clients/tui/command-transcript.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "clients/tui/composer-footer.tsx directStatusView",
+      "reason": "Internal clients helper function \"directStatusView\" in clients/tui/composer-footer.tsx used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "clients/tui/draft.ts wireImages",
+      "reason": "Internal clients helper function \"wireImages\" in clients/tui/draft.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "clients/tui/presentation/components/layout/Banner.tsx resolveDisplayVersion",
+      "reason": "Internal clients constant or variable \"resolveDisplayVersion\" in clients/tui/presentation/components/layout/Banner.tsx used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "clients/tui/presentation/theme/detect-terminal-background.ts DEFAULT_DETECTION_TIMEOUT_MS",
+      "reason": "Internal clients constant or variable \"DEFAULT_DETECTION_TIMEOUT_MS\" in clients/tui/presentation/theme/detect-terminal-background.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "clients/tui/presentation/theme/resolve-theme.ts parseColorFgBg",
+      "reason": "Internal clients helper function \"parseColorFgBg\" in clients/tui/presentation/theme/resolve-theme.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "clients/tui/terminal.ts TERMINAL_REDRAW_CLEAR",
+      "reason": "Internal clients constant or variable \"TERMINAL_REDRAW_CLEAR\" in clients/tui/terminal.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "config/profiles/legacy-adapter.ts LEGACY_LITE_PROFILE_ID",
+      "reason": "Pre-rewrite constant or variable \"LEGACY_LITE_PROFILE_ID\" in config/profiles/legacy-adapter.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "config/profiles/legacy-adapter.ts LEGACY_STANDARD_PROFILE_ID",
+      "reason": "Pre-rewrite constant or variable \"LEGACY_STANDARD_PROFILE_ID\" in config/profiles/legacy-adapter.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "config/profiles/legacy-adapter.ts MENTOR_PROFILE_ID",
+      "reason": "Pre-rewrite constant or variable \"MENTOR_PROFILE_ID\" in config/profiles/legacy-adapter.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "config/profiles/legacy-adapter.ts ORCHESTRATOR_PROFILE_ID",
+      "reason": "Pre-rewrite constant or variable \"ORCHESTRATOR_PROFILE_ID\" in config/profiles/legacy-adapter.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "config/profiles/legacy-adapter.ts PLAN_PROFILE_ID",
+      "reason": "Pre-rewrite constant or variable \"PLAN_PROFILE_ID\" in config/profiles/legacy-adapter.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "config/profiles/legacy-adapter.ts legacyModeAdapter",
+      "reason": "Pre-rewrite constant or variable \"legacyModeAdapter\" in config/profiles/legacy-adapter.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "config/profiles/legacy-adapter.ts normalizeLegacyMode",
+      "reason": "Pre-rewrite helper function \"normalizeLegacyMode\" in config/profiles/legacy-adapter.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "config/settings/session-runtime-settings.ts isNormalizedSelection",
+      "reason": "Internal config helper function \"isNormalizedSelection\" in config/settings/session-runtime-settings.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "config/settings/session-runtime-settings.ts isReasoningSetting",
+      "reason": "Internal config constant or variable \"isReasoningSetting\" in config/settings/session-runtime-settings.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "config/settings/session-runtime-settings.ts parseRuntimeMutation",
+      "reason": "Pre-existing unused export \"parseRuntimeMutation\" in config/settings/session-runtime-settings.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "config/settings/settings-persistence.ts acquireSettingsLock",
+      "reason": "Internal config helper function \"acquireSettingsLock\" in config/settings/settings-persistence.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "config/settings/settings-persistence.ts scanForRecoverableJson",
+      "reason": "Internal config helper function \"scanForRecoverableJson\" in config/settings/settings-persistence.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "config/settings/settings-schema.ts AgentWorkflowSettingsSchema",
+      "reason": "Internal config constant or variable \"AgentWorkflowSettingsSchema\" in config/settings/settings-schema.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "config/settings/settings-schema.ts AppSettingsSchema",
+      "reason": "Internal config constant or variable \"AppSettingsSchema\" in config/settings/settings-schema.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "config/settings/settings-schema.ts CustomProviderSchema",
+      "reason": "Internal config constant or variable \"CustomProviderSchema\" in config/settings/settings-schema.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "config/settings/settings-schema.ts DebugSettingsSchema",
+      "reason": "Internal config constant or variable \"DebugSettingsSchema\" in config/settings/settings-schema.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "config/settings/settings-schema.ts EnvironmentSettingsSchema",
+      "reason": "Internal config constant or variable \"EnvironmentSettingsSchema\" in config/settings/settings-schema.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "config/settings/settings-schema.ts HooksSettingsSchema",
+      "reason": "Internal config constant or variable \"HooksSettingsSchema\" in config/settings/settings-schema.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "config/settings/settings-schema.ts LoggingSettingsSchema",
+      "reason": "Internal config constant or variable \"LoggingSettingsSchema\" in config/settings/settings-schema.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "config/settings/settings-schema.ts MemorySettingsSchema",
+      "reason": "Internal config constant or variable \"MemorySettingsSchema\" in config/settings/settings-schema.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "config/settings/settings-schema.ts SSHSettingsSchema",
+      "reason": "Internal config constant or variable \"SSHSettingsSchema\" in config/settings/settings-schema.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "config/settings/settings-schema.ts SandboxSettingsSchema",
+      "reason": "Internal config constant or variable \"SandboxSettingsSchema\" in config/settings/settings-schema.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "config/settings/settings-schema.ts ShellSettingsSchema",
+      "reason": "Internal config constant or variable \"ShellSettingsSchema\" in config/settings/settings-schema.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "config/settings/settings-schema.ts SubagentSettingsSchema",
+      "reason": "Internal config constant or variable \"SubagentSettingsSchema\" in config/settings/settings-schema.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "config/settings/settings-schema.ts ToolsSettingsSchema",
+      "reason": "Internal config constant or variable \"ToolsSettingsSchema\" in config/settings/settings-schema.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "config/settings/settings-schema.ts UISettingsSchema",
+      "reason": "Internal config constant or variable \"UISettingsSchema\" in config/settings/settings-schema.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "config/settings/settings-schema.ts WebSearchSettingsSchema",
+      "reason": "Internal config constant or variable \"WebSearchSettingsSchema\" in config/settings/settings-schema.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "config/settings/settings-sources.ts SETTINGS_SOURCE_KEYS",
+      "reason": "Internal config constant or variable \"SETTINGS_SOURCE_KEYS\" in config/settings/settings-sources.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "config/settings/settings-ui-metadata.ts SETTING_LABELS",
+      "reason": "Internal config constant or variable \"SETTING_LABELS\" in config/settings/settings-ui-metadata.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "config/settings/settings-ui-metadata.ts getSettingDescription",
+      "reason": "Internal config helper function \"getSettingDescription\" in config/settings/settings-ui-metadata.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "config/settings/settings-ui-metadata.ts humanizeSettingKey",
+      "reason": "Internal config helper function \"humanizeSettingKey\" in config/settings/settings-ui-metadata.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "config/tool-toggles.ts buildToggleConflictNotice",
+      "reason": "Pre-existing unused export \"buildToggleConflictNotice\" in config/tool-toggles.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "config/tool-toggles.ts isToolToggleKey",
+      "reason": "Pre-existing unused export \"isToolToggleKey\" in config/tool-toggles.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "delegation/run-code/run-code-runtime.ts ACTION_SEMANTICS",
+      "reason": "Pre-rewrite constant or variable \"ACTION_SEMANTICS\" in delegation/run-code/run-code-runtime.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "delegation/run-code/run-code-runtime.ts bindPreparedAuthority",
+      "reason": "Pre-rewrite helper function \"bindPreparedAuthority\" in delegation/run-code/run-code-runtime.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "delegation/run-code/run-code-runtime.ts clipReason",
+      "reason": "Pre-rewrite constant or variable \"clipReason\" in delegation/run-code/run-code-runtime.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "delegation/run-code/run-code-runtime.ts createMediaReferenceStore",
+      "reason": "Pre-rewrite helper function \"createMediaReferenceStore\" in delegation/run-code/run-code-runtime.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "delegation/run-code/run-code-runtime.ts describeTool",
+      "reason": "Pre-rewrite helper function \"describeTool\" in delegation/run-code/run-code-runtime.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "delegation/run-code/run-code-runtime.ts isActionTool",
+      "reason": "Pre-rewrite constant or variable \"isActionTool\" in delegation/run-code/run-code-runtime.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "delegation/run-code/run-code-runtime.ts mergeAbortSignals",
+      "reason": "Pre-rewrite helper function \"mergeAbortSignals\" in delegation/run-code/run-code-runtime.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "delegation/run-code/run-code-runtime.ts serializeResult",
+      "reason": "Pre-rewrite constant or variable \"serializeResult\" in delegation/run-code/run-code-runtime.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "delegation/run-code/run-code-runtime.ts withAbortSignal",
+      "reason": "Pre-rewrite helper function \"withAbortSignal\" in delegation/run-code/run-code-runtime.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "delegation/subagents/role-loader.ts ROLE_MAX_TURNS_DEFAULT",
+      "reason": "Pre-rewrite constant or variable \"ROLE_MAX_TURNS_DEFAULT\" in delegation/subagents/role-loader.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "delegation/subagents/subagent-role-pool-selector.ts POOL_ENTRY_COOLDOWN_MS",
+      "reason": "Pre-rewrite constant or variable \"POOL_ENTRY_COOLDOWN_MS\" in delegation/subagents/subagent-role-pool-selector.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "delegation/subagents/tool-policy.ts captureValidationIfMatch",
+      "reason": "Pre-rewrite helper function \"captureValidationIfMatch\" in delegation/subagents/tool-policy.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "delegation/workflow/workflow-evaluator.ts WORKFLOW_PROHIBITED_TOOLS",
+      "reason": "Pre-rewrite constant or variable \"WORKFLOW_PROHIBITED_TOOLS\" in delegation/workflow/workflow-evaluator.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "engine/agent-runtime/agent-spec.ts AGENT_SPEC_DEFAULT_MAX_TURNS",
+      "reason": "Pre-rewrite constant or variable \"AGENT_SPEC_DEFAULT_MAX_TURNS\" in engine/agent-runtime/agent-spec.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "engine/agent-runtime/model-resolver.ts getTierModelPoolEntries",
+      "reason": "Pre-rewrite helper function \"getTierModelPoolEntries\" in engine/agent-runtime/model-resolver.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "engine/agent-runtime/permission-boundary.ts parentAuthorityFromDefinition",
+      "reason": "Pre-rewrite helper function \"parentAuthorityFromDefinition\" in engine/agent-runtime/permission-boundary.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "engine/agent-runtime/permission-resolver.ts DEFAULT_LIMITS",
+      "reason": "Pre-rewrite constant or variable \"DEFAULT_LIMITS\" in engine/agent-runtime/permission-resolver.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "engine/agent-runtime/permission-resolver.ts DEFAULT_RESOLVED_PERMISSIONS",
+      "reason": "Pre-rewrite constant or variable \"DEFAULT_RESOLVED_PERMISSIONS\" in engine/agent-runtime/permission-resolver.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "engine/agent-runtime/scope-resolver.ts getWorkspaceRoot",
+      "reason": "Pre-rewrite helper function \"getWorkspaceRoot\" in engine/agent-runtime/scope-resolver.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "engine/agent-runtime/scope-resolver.ts isFilesystemScopeEmpty",
+      "reason": "Pre-rewrite helper function \"isFilesystemScopeEmpty\" in engine/agent-runtime/scope-resolver.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "engine/agent-runtime/scope-resolver.ts isNetworkScopeEmpty",
+      "reason": "Pre-rewrite helper function \"isNetworkScopeEmpty\" in engine/agent-runtime/scope-resolver.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "engine/agent-runtime/scope-resolver.ts isPathInScope",
+      "reason": "Pre-rewrite helper function \"isPathInScope\" in engine/agent-runtime/scope-resolver.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "engine/agent-runtime/scope-resolver.ts normalizeHostPattern",
+      "reason": "Pre-rewrite helper function \"normalizeHostPattern\" in engine/agent-runtime/scope-resolver.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "engine/agent-runtime/scope-resolver.ts normalizeScopePattern",
+      "reason": "Pre-rewrite helper function \"normalizeScopePattern\" in engine/agent-runtime/scope-resolver.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "engine/agent-runtime/scope-resolver.ts normalizeToolPath",
+      "reason": "Pre-rewrite helper function \"normalizeToolPath\" in engine/agent-runtime/scope-resolver.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "engine/agent-runtime/scope-resolver.ts resolveRealToolPath",
+      "reason": "Pre-rewrite helper function \"resolveRealToolPath\" in engine/agent-runtime/scope-resolver.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "engine/agent-runtime/scope-resolver.ts setWorkspaceRoot",
+      "reason": "Pre-rewrite helper function \"setWorkspaceRoot\" in engine/agent-runtime/scope-resolver.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "engine/completion-verification/contracts.ts budgetsSchema",
+      "reason": "Internal engine constant or variable \"budgetsSchema\" in engine/completion-verification/contracts.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "engine/completion-verification/contracts.ts recordSchema",
+      "reason": "Internal engine constant or variable \"recordSchema\" in engine/completion-verification/contracts.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "engine/completion-verification/gate.ts createVerificationGate",
+      "reason": "Pre-existing unused export \"createVerificationGate\" in engine/completion-verification/gate.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "engine/completion-verification/verifier.ts createIndependentVerifier",
+      "reason": "Pre-existing unused export \"createIndependentVerifier\" in engine/completion-verification/verifier.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "engine/completion-verification/verifier.ts runQuickCheck",
+      "reason": "Pre-existing unused export \"runQuickCheck\" in engine/completion-verification/verifier.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "engine/decision-shadow/decision-client.ts DecisionEvaluationError",
+      "reason": "Internal engine class \"DecisionEvaluationError\" in engine/decision-shadow/decision-client.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "engine/decision-shadow/decision-client.ts createOpenRouterDecisionClient",
+      "reason": "Pre-existing unused export \"createOpenRouterDecisionClient\" in engine/decision-shadow/decision-client.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "engine/decision-shadow/decision-client.ts readDecisionErrorMetadata",
+      "reason": "Pre-existing unused export \"readDecisionErrorMetadata\" in engine/decision-shadow/decision-client.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "engine/inject-warning-into-tool-output.ts buildRunBudgetWarning",
+      "reason": "Internal engine helper function \"buildRunBudgetWarning\" in engine/inject-warning-into-tool-output.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "engine/inject-warning-into-tool-output.ts buildToolStallWarning",
+      "reason": "Internal engine helper function \"buildToolStallWarning\" in engine/inject-warning-into-tool-output.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "engine/inject-warning-into-tool-output.ts buildTurnLimitWarning",
+      "reason": "Internal engine helper function \"buildTurnLimitWarning\" in engine/inject-warning-into-tool-output.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "engine/inject-warning-into-tool-output.ts injectTurnLimitWarning",
+      "reason": "Internal engine helper function \"injectTurnLimitWarning\" in engine/inject-warning-into-tool-output.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "engine/inject-warning-into-tool-output.ts injectWarningIntoToolOutput",
+      "reason": "Internal engine constant or variable \"injectWarningIntoToolOutput\" in engine/inject-warning-into-tool-output.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "engine/inject-warning-into-tool-output.ts resolveTurnLimitContext",
+      "reason": "Internal engine helper function \"resolveTurnLimitContext\" in engine/inject-warning-into-tool-output.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "engine/prompts/memory-recall-notice.ts MEMORY_RECALL_CLOSE",
+      "reason": "Internal engine constant or variable \"MEMORY_RECALL_CLOSE\" in engine/prompts/memory-recall-notice.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "engine/prompts/memory-recall-notice.ts MEMORY_RECALL_OPEN",
+      "reason": "Internal engine constant or variable \"MEMORY_RECALL_OPEN\" in engine/prompts/memory-recall-notice.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "engine/prompts/memory-recall-notice.ts MEMORY_RECALL_OVERHEAD",
+      "reason": "Pre-existing unused export \"MEMORY_RECALL_OVERHEAD\" in engine/prompts/memory-recall-notice.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "engine/prompts/memory-recall-notice.ts recalledMemoryKeys",
+      "reason": "Pre-existing unused export \"recalledMemoryKeys\" in engine/prompts/memory-recall-notice.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "engine/prompts/memory-recall-notice.ts renderMemoryRecall",
+      "reason": "Internal engine helper function \"renderMemoryRecall\" in engine/prompts/memory-recall-notice.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "engine/prompts/memory-recall-notice.ts renderRecallLine",
+      "reason": "Pre-existing unused export \"renderRecallLine\" in engine/prompts/memory-recall-notice.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "engine/prompts/memory-recall-notice.ts withMemoryRecall",
+      "reason": "Pre-existing unused export \"withMemoryRecall\" in engine/prompts/memory-recall-notice.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "host/gateway/serve-args.ts DEFAULT_SERVE_AUDIENCE",
+      "reason": "Internal host constant or variable \"DEFAULT_SERVE_AUDIENCE\" in host/gateway/serve-args.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "host/gateway/serve-args.ts DEFAULT_SERVE_ISSUER",
+      "reason": "Internal host constant or variable \"DEFAULT_SERVE_ISSUER\" in host/gateway/serve-args.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "host/server-contracts.ts ASSERTION_PURPOSES",
+      "reason": "Internal host constant or variable \"ASSERTION_PURPOSES\" in host/server-contracts.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "host/server-sse.ts SERVER_EVENT_HEARTBEAT_INTERVAL_MS",
+      "reason": "Internal host constant or variable \"SERVER_EVENT_HEARTBEAT_INTERVAL_MS\" in host/server-sse.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "host/server-validation.ts isSafeSettingsValue",
+      "reason": "Internal host helper function \"isSafeSettingsValue\" in host/server-validation.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "host/server.ts createDirectServerHandler",
+      "reason": "Internal host helper function \"createDirectServerHandler\" in host/server.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/cost/pricing.ts getOverlayPricingVersion",
+      "reason": "Pre-existing unused export \"getOverlayPricingVersion\" in model/cost/pricing.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "model/failure/conversation-retry-policy.ts MAX_HALLUCINATION_RETRIES",
+      "reason": "Internal model constant or variable \"MAX_HALLUCINATION_RETRIES\" in model/failure/conversation-retry-policy.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/failure/conversation-retry-policy.ts isRecoverableModelError",
+      "reason": "Internal model constant or variable \"isRecoverableModelError\" in model/failure/conversation-retry-policy.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/failure/provider-failure-classification.ts hasExplicitCancellationMarker",
+      "reason": "Internal model helper function \"hasExplicitCancellationMarker\" in model/failure/provider-failure-classification.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/model-service.ts MODEL_CACHE_STALE_GRACE_MS",
+      "reason": "Internal model constant or variable \"MODEL_CACHE_STALE_GRACE_MS\" in model/model-service.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/model-service.ts MODEL_CACHE_TTL_MS",
+      "reason": "Internal model constant or variable \"MODEL_CACHE_TTL_MS\" in model/model-service.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/model-service.ts clearModelMemoryCacheForTest",
+      "reason": "Pre-existing unused export \"clearModelMemoryCacheForTest\" in model/model-service.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "model/model-service.ts getModelCacheDir",
+      "reason": "Internal model helper function \"getModelCacheDir\" in model/model-service.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/model-service.ts isStrictSubsetModels",
+      "reason": "Internal model helper function \"isStrictSubsetModels\" in model/model-service.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/model-service.ts setModelCacheClockForTest",
+      "reason": "Pre-existing unused export \"setModelCacheClockForTest\" in model/model-service.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "model/model-service.ts setModelCacheDirForTest",
+      "reason": "Pre-existing unused export \"setModelCacheDirForTest\" in model/model-service.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "model/models/decision-model-listing.ts clearDecisionModelListCache",
+      "reason": "Pre-existing unused export \"clearDecisionModelListCache\" in model/models/decision-model-listing.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "model/models/model-favorites.ts getFavoriteEntries",
+      "reason": "Internal model helper function \"getFavoriteEntries\" in model/models/model-favorites.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/models/model-favorites.ts isFavoriteModel",
+      "reason": "Pre-existing unused export \"isFavoriteModel\" in model/models/model-favorites.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "model/models/model-listing.ts filterModelGroups",
+      "reason": "Internal model helper function \"filterModelGroups\" in model/models/model-listing.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/models/model-listing.ts formatModelGroups",
+      "reason": "Internal model helper function \"formatModelGroups\" in model/models/model-listing.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/models/model-nicknames.ts NICKNAME_MAX_LENGTH",
+      "reason": "Internal model constant or variable \"NICKNAME_MAX_LENGTH\" in model/models/model-nicknames.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/models/model-nicknames.ts parseNicknameTargetEntry",
+      "reason": "Internal model helper function \"parseNicknameTargetEntry\" in model/models/model-nicknames.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/models/model-nicknames.ts serializeNicknameTarget",
+      "reason": "Internal model helper function \"serializeNicknameTarget\" in model/models/model-nicknames.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/models/model-nicknames.ts setNicknameTarget",
+      "reason": "Internal model helper function \"setNicknameTarget\" in model/models/model-nicknames.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/models/model-nicknames.ts validateNicknameName",
+      "reason": "Internal model helper function \"validateNicknameName\" in model/models/model-nicknames.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/models/model-resolution.ts formatDisambiguationPrompt",
+      "reason": "Internal model helper function \"formatDisambiguationPrompt\" in model/models/model-resolution.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/models/model-resolution.ts matchModels",
+      "reason": "Internal model helper function \"matchModels\" in model/models/model-resolution.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/models/model-resolution.ts parseModelFlag",
+      "reason": "Internal model helper function \"parseModelFlag\" in model/models/model-resolution.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/models/model-resolution.ts promptForDisambiguation",
+      "reason": "Internal model helper function \"promptForDisambiguation\" in model/models/model-resolution.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/provider-credentials.ts PROVIDER_CREDENTIAL_SETTING_KEYS",
+      "reason": "Internal model constant or variable \"PROVIDER_CREDENTIAL_SETTING_KEYS\" in model/provider-credentials.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/provider-credentials.ts getDisabledProviderIds",
+      "reason": "Internal model constant or variable \"getDisabledProviderIds\" in model/provider-credentials.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/ai-sdk-anthropic.provider.ts addAnthropicPromptCachingToMessages",
+      "reason": "Internal model helper function \"addAnthropicPromptCachingToMessages\" in model/providers/ai-sdk-anthropic.provider.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/ai-sdk-anthropic.provider.ts getMaxOutputTokens",
+      "reason": "Internal model helper function \"getMaxOutputTokens\" in model/providers/ai-sdk-anthropic.provider.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/codex-auth.ts CODEX_REDIRECT_PORTS",
+      "reason": "Internal model constant or variable \"CODEX_REDIRECT_PORTS\" in model/providers/codex-auth.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/codex-auth.ts CODEX_REDIRECT_URI",
+      "reason": "Pre-existing unused export \"CODEX_REDIRECT_URI\" in model/providers/codex-auth.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "model/providers/codex-auth.ts saveCodexTokens",
+      "reason": "Internal model helper function \"saveCodexTokens\" in model/providers/codex-auth.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/codex-compact.ts isCodexCompactionIncompatible",
+      "reason": "Pre-existing unused export \"isCodexCompactionIncompatible\" in model/providers/codex-compact.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "model/providers/codex-responses-model.ts OpenAIResponsesModel",
+      "reason": "Internal model class \"OpenAIResponsesModel\" in model/providers/codex-responses-model.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/codex-responses-model.ts wrapCodexStream",
+      "reason": "Internal model helper function \"wrapCodexStream\" in model/providers/codex-responses-model.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/codex-turn-converter.ts toCodexResponsesItem",
+      "reason": "Internal model helper function \"toCodexResponsesItem\" in model/providers/codex-turn-converter.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/codex-turn-converter.ts toCodexToolResultOutput",
+      "reason": "Internal model helper function \"toCodexToolResultOutput\" in model/providers/codex-turn-converter.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/codex.provider.ts CodexProvider",
+      "reason": "Internal model class \"CodexProvider\" in model/providers/codex.provider.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/codex.provider.ts CodexTokenManager",
+      "reason": "Internal model class \"CodexTokenManager\" in model/providers/codex.provider.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/codex.provider.ts addCodexCompactHeaders",
+      "reason": "Internal model helper function \"addCodexCompactHeaders\" in model/providers/codex.provider.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/codex.provider.ts addCodexResponsesLiteHeader",
+      "reason": "Internal model helper function \"addCodexResponsesLiteHeader\" in model/providers/codex.provider.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/codex.provider.ts codexHeadersMiddleware",
+      "reason": "Internal model helper function \"codexHeadersMiddleware\" in model/providers/codex.provider.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/codex.provider.ts extractAccountId",
+      "reason": "Internal model helper function \"extractAccountId\" in model/providers/codex.provider.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/codex.provider.ts extractAccountIdFromClaims",
+      "reason": "Internal model helper function \"extractAccountIdFromClaims\" in model/providers/codex.provider.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/codex.provider.ts resolveCodexClientVersion",
+      "reason": "Internal model helper function \"resolveCodexClientVersion\" in model/providers/codex.provider.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/codex.provider.ts resolveTokenPath",
+      "reason": "Internal model constant or variable \"resolveTokenPath\" in model/providers/codex.provider.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/codex.provider.ts sanitizeCodexRequestInit",
+      "reason": "Internal model helper function \"sanitizeCodexRequestInit\" in model/providers/codex.provider.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/common/openai-compatible-message-contract.ts hasOpenAICompatibleAssistantPayload",
+      "reason": "Internal model helper function \"hasOpenAICompatibleAssistantPayload\" in model/providers/common/openai-compatible-message-contract.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/grok-auth.ts GROK_TOKEN_ENDPOINT",
+      "reason": "Internal model constant or variable \"GROK_TOKEN_ENDPOINT\" in model/providers/grok-auth.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/grok-auth.ts readGrokCliTokens",
+      "reason": "Internal model helper function \"readGrokCliTokens\" in model/providers/grok-auth.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/grok-auth.ts readStoredGrokTokens",
+      "reason": "Internal model helper function \"readStoredGrokTokens\" in model/providers/grok-auth.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/grok-auth.ts saveGrokTokens",
+      "reason": "Internal model helper function \"saveGrokTokens\" in model/providers/grok-auth.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/grok.provider.ts GROK_BASE_URL",
+      "reason": "Internal model constant or variable \"GROK_BASE_URL\" in model/providers/grok.provider.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/grok.provider.ts GROK_CLIENT_VERSION_FALLBACK",
+      "reason": "Internal model constant or variable \"GROK_CLIENT_VERSION_FALLBACK\" in model/providers/grok.provider.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/grok.provider.ts buildGrokFetch",
+      "reason": "Internal model helper function \"buildGrokFetch\" in model/providers/grok.provider.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/grok.provider.ts createGrokStreamedModel",
+      "reason": "Internal model helper function \"createGrokStreamedModel\" in model/providers/grok.provider.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/grok.provider.ts fetchGrokModels",
+      "reason": "Internal model helper function \"fetchGrokModels\" in model/providers/grok.provider.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/grok.provider.ts lookupGrokClientVersion",
+      "reason": "Internal model helper function \"lookupGrokClientVersion\" in model/providers/grok.provider.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/grok.provider.ts resolveGrokClientVersion",
+      "reason": "Internal model helper function \"resolveGrokClientVersion\" in model/providers/grok.provider.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/llama-cpp.provider.ts applyLlamaCppRequestTransform",
+      "reason": "Internal model helper function \"applyLlamaCppRequestTransform\" in model/providers/llama-cpp.provider.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/model-catalog/catalog.ts lookupModelAnyProvider",
+      "reason": "Internal model helper function \"lookupModelAnyProvider\" in model/providers/model-catalog/catalog.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/model-catalog/generate-catalog.ts VENDORED_PI_PROVIDERS",
+      "reason": "Internal model constant or variable \"VENDORED_PI_PROVIDERS\" in model/providers/model-catalog/generate-catalog.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/model-catalog/generate-catalog.ts generateCatalogSource",
+      "reason": "Pre-existing unused export \"generateCatalogSource\" in model/providers/model-catalog/generate-catalog.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "model/providers/oauth-accounts.ts OAUTH_ACCOUNT_PROVIDERS",
+      "reason": "Internal model constant or variable \"OAUTH_ACCOUNT_PROVIDERS\" in model/providers/oauth-accounts.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/oauth-session-account.ts createSessionAccountStore",
+      "reason": "Internal model helper function \"createSessionAccountStore\" in model/providers/oauth-session-account.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/oauth-session-account.ts resetSessionAccounts",
+      "reason": "Pre-existing unused export \"resetSessionAccounts\" in model/providers/oauth-session-account.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "model/providers/openai-request-prefix-binding.ts prepareOpenAIRequestPrefixBinding",
+      "reason": "Pre-existing unused export \"prepareOpenAIRequestPrefixBinding\" in model/providers/openai-request-prefix-binding.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "model/providers/openai-request-prefix-binding.ts runWithOpenAIRequestPrefixBindingScope",
+      "reason": "Pre-existing unused export \"runWithOpenAIRequestPrefixBindingScope\" in model/providers/openai-request-prefix-binding.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "model/providers/openai-responses-model.ts createResponseEventNormalizationState",
+      "reason": "Internal model helper function \"createResponseEventNormalizationState\" in model/providers/openai-responses-model.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/openai-responses-model.ts normalizeResponseEvent",
+      "reason": "Internal model helper function \"normalizeResponseEvent\" in model/providers/openai-responses-model.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/openai-responses-model.ts supportsContextCompactionModel",
+      "reason": "Internal model helper function \"supportsContextCompactionModel\" in model/providers/openai-responses-model.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/openai.provider.ts createRetryAwareFetch",
+      "reason": "Internal model helper function \"createRetryAwareFetch\" in model/providers/openai.provider.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/opencode-transport-discovery.ts parseOpencodeTransportDocumentation",
+      "reason": "Internal model helper function \"parseOpencodeTransportDocumentation\" in model/providers/opencode-transport-discovery.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/openrouter.provider.ts openRouterPreprocessingMiddleware",
+      "reason": "Internal model constant or variable \"openRouterPreprocessingMiddleware\" in model/providers/openrouter.provider.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/provider-opaque-compatibility.ts LEGACY_SHARED_PROVIDER_TAG",
+      "reason": "Internal model constant or variable \"LEGACY_SHARED_PROVIDER_TAG\" in model/providers/provider-opaque-compatibility.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/provider-presets.ts parseProviderInventory",
+      "reason": "Internal model helper function \"parseProviderInventory\" in model/providers/provider-presets.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/provider-service.ts getConfiguredProviderNames",
+      "reason": "Internal model constant or variable \"getConfiguredProviderNames\" in model/providers/provider-service.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/provider-service.ts hasProviderNameConflict",
+      "reason": "Internal model constant or variable \"hasProviderNameConflict\" in model/providers/provider-service.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/web-search/firecrawl.provider.ts firecrawlProvider",
+      "reason": "Internal model constant or variable \"firecrawlProvider\" in model/providers/web-search/firecrawl.provider.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/web-search/registry.ts clearWebSearchProviders",
+      "reason": "Internal model helper function \"clearWebSearchProviders\" in model/providers/web-search/registry.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/web-search/registry.ts getAllWebSearchProviders",
+      "reason": "Internal model helper function \"getAllWebSearchProviders\" in model/providers/web-search/registry.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/web-search/registry.ts getDefaultWebSearchProvider",
+      "reason": "Internal model helper function \"getDefaultWebSearchProvider\" in model/providers/web-search/registry.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/web-search/registry.ts getWebSearchProvider",
+      "reason": "Internal model helper function \"getWebSearchProvider\" in model/providers/web-search/registry.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "model/providers/web-search/searxng.provider.ts searxngProvider",
+      "reason": "Internal model constant or variable \"searxngProvider\" in model/providers/web-search/searxng.provider.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "protocol/context.ts publicGoal",
+      "reason": "Internal protocol helper function \"publicGoal\" in protocol/context.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "protocol/context.ts publicVerification",
+      "reason": "Internal protocol helper function \"publicVerification\" in protocol/context.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "protocol/state.ts firstById",
+      "reason": "Internal protocol helper function \"firstById\" in protocol/state.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "protocol/state.ts publicWireConfiguration",
+      "reason": "Internal protocol helper function \"publicWireConfiguration\" in protocol/state.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "protocol/tasks.ts publicTaskOwner",
+      "reason": "Internal protocol helper function \"publicTaskOwner\" in protocol/tasks.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "protocol/tasks.ts publicTaskResult",
+      "reason": "Internal protocol helper function \"publicTaskResult\" in protocol/tasks.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/adopted/conversation-log.ts validateSessionFact",
+      "reason": "Internal session helper function \"validateSessionFact\" in session/adopted/conversation-log.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/adopted/interaction-protocol.ts InteractionProtocolError",
+      "reason": "Internal session class \"InteractionProtocolError\" in session/adopted/interaction-protocol.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/adopted/interaction-protocol.ts projectPendingInteraction",
+      "reason": "Pre-existing unused export \"projectPendingInteraction\" in session/adopted/interaction-protocol.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "session/adopted/interaction-protocol.ts validatePendingInteractionDto",
+      "reason": "Internal session helper function \"validatePendingInteractionDto\" in session/adopted/interaction-protocol.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/adopted/network.ts isNetworkAnswer",
+      "reason": "Internal session constant or variable \"isNetworkAnswer\" in session/adopted/network.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/adopted/network.ts isNetworkIdentity",
+      "reason": "Internal session constant or variable \"isNetworkIdentity\" in session/adopted/network.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/approval/tool-approval-policy-registry.ts toolApprovalPolicyRegistry",
+      "reason": "Pre-existing unused export \"toolApprovalPolicyRegistry\" in session/approval/tool-approval-policy-registry.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "session/capabilities.ts directAcceptedGoalWindow",
+      "reason": "Internal session helper function \"directAcceptedGoalWindow\" in session/capabilities.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/command-receipts.ts inspectDirectCommand",
+      "reason": "Internal session helper function \"inspectDirectCommand\" in session/command-receipts.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/conversation-generation.ts installConversationGeneration",
+      "reason": "Internal session helper function \"installConversationGeneration\" in session/conversation-generation.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/conversation-generation.ts prepareConversationGeneration",
+      "reason": "Internal session helper function \"prepareConversationGeneration\" in session/conversation-generation.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/conversation/conversation-decoder.ts decodeSavedMessage",
+      "reason": "Pre-existing unused export \"decodeSavedMessage\" in session/conversation/conversation-decoder.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "session/conversation/conversation-persistence.ts auditConversation",
+      "reason": "Pre-existing unused export \"auditConversation\" in session/conversation/conversation-persistence.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "session/conversation/conversation-persistence.ts collectOrphanedDeltaSidecars",
+      "reason": "Pre-existing unused export \"collectOrphanedDeltaSidecars\" in session/conversation/conversation-persistence.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "session/conversation/conversation-persistence.ts deleteConversation",
+      "reason": "Pre-existing unused export \"deleteConversation\" in session/conversation/conversation-persistence.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "session/conversation/conversation-persistence.ts forkConversation",
+      "reason": "Pre-existing unused export \"forkConversation\" in session/conversation/conversation-persistence.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "session/conversation/conversation-persistence.ts getConversationLockPath",
+      "reason": "Internal session helper function \"getConversationLockPath\" in session/conversation/conversation-persistence.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/conversation/conversation-persistence.ts getConversationsDirForTest",
+      "reason": "Pre-existing unused export \"getConversationsDirForTest\" in session/conversation/conversation-persistence.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "session/conversation/conversation-persistence.ts hasConversationContent",
+      "reason": "Internal session helper function \"hasConversationContent\" in session/conversation/conversation-persistence.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/conversation/conversation-persistence.ts loadConversation",
+      "reason": "Internal session helper function \"loadConversation\" in session/conversation/conversation-persistence.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/conversation/conversation-persistence.ts loadConversationForProject",
+      "reason": "Pre-existing unused export \"loadConversationForProject\" in session/conversation/conversation-persistence.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "session/conversation/conversation-persistence.ts loadLastConversation",
+      "reason": "Pre-existing unused export \"loadLastConversation\" in session/conversation/conversation-persistence.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "session/conversation/conversation-persistence.ts saveLastConversation",
+      "reason": "Pre-existing unused export \"saveLastConversation\" in session/conversation/conversation-persistence.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "session/conversation/conversation-persistence.ts setConversationsDirForTest",
+      "reason": "Pre-existing unused export \"setConversationsDirForTest\" in session/conversation/conversation-persistence.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "session/conversation/conversation-persistence.ts setPidAlivenessCheckForTest",
+      "reason": "Pre-existing unused export \"setPidAlivenessCheckForTest\" in session/conversation/conversation-persistence.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "session/conversation/conversation-replay.ts replayEventsWithRetryTarget",
+      "reason": "Internal session helper function \"replayEventsWithRetryTarget\" in session/conversation/conversation-replay.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/conversation/conversation-replay.ts rewindRemovedUserCount",
+      "reason": "Internal session helper function \"rewindRemovedUserCount\" in session/conversation/conversation-replay.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/conversation/durable-goal-stop-check.ts GOAL_CHECK_UNRESOLVED_CAUSE",
+      "reason": "Internal session constant or variable \"GOAL_CHECK_UNRESOLVED_CAUSE\" in session/conversation/durable-goal-stop-check.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/conversation/durable-goal-stop-check.ts GOAL_CHECK_UNRESOLVED_NOTICE",
+      "reason": "Pre-existing unused export \"GOAL_CHECK_UNRESOLVED_NOTICE\" in session/conversation/durable-goal-stop-check.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "session/conversation/durable-goal-stop-check.ts GOAL_STOP_REMINDER_PREFIX",
+      "reason": "Internal session constant or variable \"GOAL_STOP_REMINDER_PREFIX\" in session/conversation/durable-goal-stop-check.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/conversation/durable-goal-stop-check.ts MAX_GOAL_STOP_REMINDERS_PER_TURN",
+      "reason": "Internal session constant or variable \"MAX_GOAL_STOP_REMINDERS_PER_TURN\" in session/conversation/durable-goal-stop-check.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/conversation/durable-goal-stop-check.ts MAX_GOAL_STOP_REMINDERS_WITHOUT_WORK",
+      "reason": "Internal session constant or variable \"MAX_GOAL_STOP_REMINDERS_WITHOUT_WORK\" in session/conversation/durable-goal-stop-check.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/conversation/session-audit.ts formatSessionAudit",
+      "reason": "Pre-existing unused export \"formatSessionAudit\" in session/conversation/session-audit.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "session/conversation/session-index/session-index-schema.ts SCHEMA_VERSION",
+      "reason": "Internal session constant or variable \"SCHEMA_VERSION\" in session/conversation/session-index/session-index-schema.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/conversation/session-index/session-index-worker-client.ts resolveWorkerTimeoutMs",
+      "reason": "Internal session helper function \"resolveWorkerTimeoutMs\" in session/conversation/session-index/session-index-worker-client.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/final.ts captureDirectFinalWindow",
+      "reason": "Internal session helper function \"captureDirectFinalWindow\" in session/final.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/final.ts directPublicCommandMessages",
+      "reason": "Internal session helper function \"directPublicCommandMessages\" in session/final.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/goal-stop.ts DIRECT_GOAL_IDLE_REMINDERS",
+      "reason": "Internal session constant or variable \"DIRECT_GOAL_IDLE_REMINDERS\" in session/goal-stop.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/goal-stop.ts DIRECT_GOAL_TURN_REMINDERS",
+      "reason": "Internal session constant or variable \"DIRECT_GOAL_TURN_REMINDERS\" in session/goal-stop.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/goal-stop.ts decideDirectGoalStop",
+      "reason": "Internal session helper function \"decideDirectGoalStop\" in session/goal-stop.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/goal.ts DIRECT_GOAL_CHECK_PREFIX",
+      "reason": "Internal session constant or variable \"DIRECT_GOAL_CHECK_PREFIX\" in session/goal.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/goal.ts directGoalCheckSchema",
+      "reason": "Internal session constant or variable \"directGoalCheckSchema\" in session/goal.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/hooks/hook-discovery.ts discoverHookFiles",
+      "reason": "Pre-existing unused export \"discoverHookFiles\" in session/hooks/hook-discovery.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "session/hooks/hook-editor-shim.ts HOOK_DECLARATION_SHIM_FILENAME",
+      "reason": "Internal session constant or variable \"HOOK_DECLARATION_SHIM_FILENAME\" in session/hooks/hook-editor-shim.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/hooks/hook-editor-shim.ts HOOK_TSCONFIG_FILENAME",
+      "reason": "Internal session constant or variable \"HOOK_TSCONFIG_FILENAME\" in session/hooks/hook-editor-shim.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/hooks/hook-module-loader.ts HookModuleLoadError",
+      "reason": "Internal session class \"HookModuleLoadError\" in session/hooks/hook-module-loader.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/hooks/hook-module-loader.ts NativeHookModuleLoader",
+      "reason": "Pre-existing unused export \"NativeHookModuleLoader\" in session/hooks/hook-module-loader.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "session/hooks/hook-registry.ts HookRegistrationClosedError",
+      "reason": "Internal session class \"HookRegistrationClosedError\" in session/hooks/hook-registry.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/import.ts importDirectSession",
+      "reason": "Pre-existing unused export \"importDirectSession\" in session/import.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "session/input-surge-guard.ts collectInputSurgeStats",
+      "reason": "Internal session constant or variable \"collectInputSurgeStats\" in session/input-surge-guard.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/large-uncached-input-guard.ts DEFAULT_LARGE_UNCACHED_INPUT_GUARD_CONFIG",
+      "reason": "Internal session constant or variable \"DEFAULT_LARGE_UNCACHED_INPUT_GUARD_CONFIG\" in session/large-uncached-input-guard.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/logging/conversation-log-events.ts AGENT_AFFECTING_SETTINGS",
+      "reason": "Pre-existing unused export \"AGENT_AFFECTING_SETTINGS\" in session/logging/conversation-log-events.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "session/logging/conversation-log-events.ts SIDECAR_EVENT_TYPES",
+      "reason": "Pre-existing unused export \"SIDECAR_EVENT_TYPES\" in session/logging/conversation-log-events.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "session/logging/logging-service.ts localLogDateKey",
+      "reason": "Internal session helper function \"localLogDateKey\" in session/logging/logging-service.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/logging/provider-traffic.ts ENCRYPTED_CONTENT_REDACTION",
+      "reason": "Internal session constant or variable \"ENCRYPTED_CONTENT_REDACTION\" in session/logging/provider-traffic.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/logging/provider-traffic.ts PROVIDER_REQUEST_FINGERPRINT_VERSION",
+      "reason": "Internal session constant or variable \"PROVIDER_REQUEST_FINGERPRINT_VERSION\" in session/logging/provider-traffic.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/logging/provider-traffic.ts TRAFFIC_TEXT_LIMIT",
+      "reason": "Internal session constant or variable \"TRAFFIC_TEXT_LIMIT\" in session/logging/provider-traffic.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/logging/provider-traffic.ts buildProviderRequestFingerprint",
+      "reason": "Internal session helper function \"buildProviderRequestFingerprint\" in session/logging/provider-traffic.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/logging/provider-traffic.ts isRawTrafficCaptureEnabled",
+      "reason": "Internal session constant or variable \"isRawTrafficCaptureEnabled\" in session/logging/provider-traffic.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/logging/provider-traffic.ts rawCapturePathForRequestPath",
+      "reason": "Internal session constant or variable \"rawCapturePathForRequestPath\" in session/logging/provider-traffic.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/logging/provider-traffic.ts sanitizeSentTrafficBody",
+      "reason": "Internal session constant or variable \"sanitizeSentTrafficBody\" in session/logging/provider-traffic.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/logging/provider-traffic.ts summarizeReceivedTraffic",
+      "reason": "Internal session helper function \"summarizeReceivedTraffic\" in session/logging/provider-traffic.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/prompts/prompt-profiles.ts PROMPT_PROFILES",
+      "reason": "Internal session constant or variable \"PROMPT_PROFILES\" in session/prompts/prompt-profiles.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/replay-fold.ts replayProjection",
+      "reason": "Internal session helper function \"replayProjection\" in session/replay-fold.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/state.ts directSubmittedTurn",
+      "reason": "Internal session helper function \"directSubmittedTurn\" in session/state.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "session/tool-execution-ledger.ts outputOf",
+      "reason": "Pre-existing unused export \"outputOf\" in session/tool-execution-ledger.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "session/tool-execution-ledger.ts toolNameOf",
+      "reason": "Pre-existing unused export \"toolNameOf\" in session/tool-execution-ledger.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "shared/conversation/conversation-time-gap.ts withHumanInputTime",
+      "reason": "Internal shared helper function \"withHumanInputTime\" in shared/conversation/conversation-time-gap.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "shared/conversation/personal-memory-context.ts carryPersonalMemoryContext",
+      "reason": "Pre-existing unused export \"carryPersonalMemoryContext\" in shared/conversation/personal-memory-context.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "shared/conversation/personal-memory-context.ts latestPersonalMemoryContext",
+      "reason": "Internal shared helper function \"latestPersonalMemoryContext\" in shared/conversation/personal-memory-context.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "shared/cost/model-cost.ts createSessionCostAccumulator",
+      "reason": "Pre-existing unused export \"createSessionCostAccumulator\" in shared/cost/model-cost.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "shared/cost/model-cost.ts resolveBillableTokens",
+      "reason": "Internal shared helper function \"resolveBillableTokens\" in shared/cost/model-cost.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "shared/handoff/handoff-flow-reducer.ts createInitialHandoffState",
+      "reason": "Pre-existing unused export \"createInitialHandoffState\" in shared/handoff/handoff-flow-reducer.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "shared/lib/chained-input-filter.ts MissingChainedToolOutputError",
+      "reason": "Internal shared class \"MissingChainedToolOutputError\" in shared/lib/chained-input-filter.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "shared/lib/chained-input-filter.ts findChainedDeltaStart",
+      "reason": "Internal shared constant or variable \"findChainedDeltaStart\" in shared/lib/chained-input-filter.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "shared/lib/harness-input-idle.ts publishHarnessInputState",
+      "reason": "Pre-existing unused export \"publishHarnessInputState\" in shared/lib/harness-input-idle.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "shared/lib/harness-input-idle.ts readHarnessApprovalReady",
+      "reason": "Pre-existing unused export \"readHarnessApprovalReady\" in shared/lib/harness-input-idle.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "shared/lib/harness-input-idle.ts readHarnessComposerState",
+      "reason": "Internal shared helper function \"readHarnessComposerState\" in shared/lib/harness-input-idle.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "shared/lib/harness-input-idle.ts readHarnessIdleGeneration",
+      "reason": "Internal shared helper function \"readHarnessIdleGeneration\" in shared/lib/harness-input-idle.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "shared/lib/harness-input-idle.ts resetHarnessInputIdleForTests",
+      "reason": "Pre-existing unused export \"resetHarnessInputIdleForTests\" in shared/lib/harness-input-idle.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "shared/lib/harness-input-idle.ts waitForHarnessComposerValue",
+      "reason": "Pre-existing unused export \"waitForHarnessComposerValue\" in shared/lib/harness-input-idle.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "shared/lib/harness-input-idle.ts waitForHarnessIdleGeneration",
+      "reason": "Pre-existing unused export \"waitForHarnessIdleGeneration\" in shared/lib/harness-input-idle.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "shared/lib/oauth-loopback.ts interpretCallbackParams",
+      "reason": "Internal shared helper function \"interpretCallbackParams\" in shared/lib/oauth-loopback.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "shared/tools/agent/ask-user-constants.ts ASK_USER_DECLINE_LABEL",
+      "reason": "Internal shared constant or variable \"ASK_USER_DECLINE_LABEL\" in shared/tools/agent/ask-user-constants.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "shared/types/user-turn.ts formatUserTurnForDisplay",
+      "reason": "Pre-existing unused export \"formatUserTurnForDisplay\" in shared/types/user-turn.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "shared/types/user-turn.ts hasUserTurnContent",
+      "reason": "Pre-existing unused export \"hasUserTurnContent\" in shared/types/user-turn.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "shared/types/user-turn.ts stripImageSentinels",
+      "reason": "Internal shared helper function \"stripImageSentinels\" in shared/types/user-turn.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "shared/utils/clipboard.ts copyViaOsc52",
+      "reason": "Internal shared helper function \"copyViaOsc52\" in shared/utils/clipboard.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "shared/utils/clipboard.ts getClipboardCommandCandidates",
+      "reason": "Internal shared helper function \"getClipboardCommandCandidates\" in shared/utils/clipboard.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "shared/utils/copy-selections.ts extractFencedCodeBlocks",
+      "reason": "Internal shared helper function \"extractFencedCodeBlocks\" in shared/utils/copy-selections.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "shared/utils/home-directory-start-guard.ts isAffirmativeAnswer",
+      "reason": "Internal shared helper function \"isAffirmativeAnswer\" in shared/utils/home-directory-start-guard.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "shared/utils/home-directory-start-guard.ts isExactDirectory",
+      "reason": "Pre-existing unused export \"isExactDirectory\" in shared/utils/home-directory-start-guard.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "shared/utils/output/bound-tool-result.ts DEFAULT_TOOL_RESULT_MAX_BYTES",
+      "reason": "Internal shared constant or variable \"DEFAULT_TOOL_RESULT_MAX_BYTES\" in shared/utils/output/bound-tool-result.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "shared/utils/output/bound-tool-result.ts SCRIPTED_TOOL_RESULT_MAX_BYTES",
+      "reason": "Internal shared constant or variable \"SCRIPTED_TOOL_RESULT_MAX_BYTES\" in shared/utils/output/bound-tool-result.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "shared/utils/output/bound-tool-result.ts utf8ByteLength",
+      "reason": "Internal shared helper function \"utf8ByteLength\" in shared/utils/output/bound-tool-result.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "shared/utils/output/output-trim.ts DEFAULT_TRIM_CONFIG",
+      "reason": "Internal shared constant or variable \"DEFAULT_TRIM_CONFIG\" in shared/utils/output/output-trim.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "shared/utils/output/output-trim.ts setTrimConfig",
+      "reason": "Pre-existing unused export \"setTrimConfig\" in shared/utils/output/output-trim.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "shared/utils/process-restart.ts assertRestartSupported",
+      "reason": "Pre-existing unused export \"assertRestartSupported\" in shared/utils/process-restart.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "shared/utils/project-scope.ts createProjectScopeResolver",
+      "reason": "Internal shared helper function \"createProjectScopeResolver\" in shared/utils/project-scope.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "shared/utils/project-scope.ts normalizeProjectPath",
+      "reason": "Internal shared helper function \"normalizeProjectPath\" in shared/utils/project-scope.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "shared/utils/project-scope.ts readGitCommonDir",
+      "reason": "Internal shared helper function \"readGitCommonDir\" in shared/utils/project-scope.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "shared/utils/shell/shell-output.ts FULL_OUTPUT_SAVED_NOTE_PREFIX",
+      "reason": "Internal shared constant or variable \"FULL_OUTPUT_SAVED_NOTE_PREFIX\" in shared/utils/shell/shell-output.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "shared/utils/skill-discovery-paths.ts SKILL_SCOPE_DIRS",
+      "reason": "Internal shared constant or variable \"SKILL_SCOPE_DIRS\" in shared/utils/skill-discovery-paths.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "shared/utils/ssh-config-parser.ts parseSSHConfig",
+      "reason": "Internal shared helper function \"parseSSHConfig\" in shared/utils/ssh-config-parser.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/agent/ask-mentor.ts formatAskMentorCommandMessage",
+      "reason": "Pre-rewrite constant or variable \"formatAskMentorCommandMessage\" in tools/agent/ask-mentor.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "tools/agent/ask-orchestrator.ts formatAskOrchestratorCommandMessage",
+      "reason": "Pre-rewrite constant or variable \"formatAskOrchestratorCommandMessage\" in tools/agent/ask-orchestrator.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "tools/agent/ask-user.ts formatAskUserCommandMessage",
+      "reason": "Pre-rewrite constant or variable \"formatAskUserCommandMessage\" in tools/agent/ask-user.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "tools/agent/configure-task-check-in.ts MIN_CHECK_IN_INTERVAL_SECONDS",
+      "reason": "Pre-rewrite constant or variable \"MIN_CHECK_IN_INTERVAL_SECONDS\" in tools/agent/configure-task-check-in.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "tools/agent/configure-task-check-in.ts MIN_NEXT_CHECK_IN_SECONDS",
+      "reason": "Pre-rewrite constant or variable \"MIN_NEXT_CHECK_IN_SECONDS\" in tools/agent/configure-task-check-in.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "tools/agent/configure-task-check-in.ts configureTaskCheckInSchema",
+      "reason": "Pre-rewrite constant or variable \"configureTaskCheckInSchema\" in tools/agent/configure-task-check-in.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "tools/agent/configure-task-check-in.ts configureTaskCheckInScriptedReturnSchema",
+      "reason": "Pre-rewrite constant or variable \"configureTaskCheckInScriptedReturnSchema\" in tools/agent/configure-task-check-in.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "tools/agent/configure-task-check-in.ts formatConfigureTaskCheckInCommandMessage",
+      "reason": "Pre-rewrite constant or variable \"formatConfigureTaskCheckInCommandMessage\" in tools/agent/configure-task-check-in.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "tools/agent/goal-check.ts formatGoalCheckCommandMessage",
+      "reason": "Pre-rewrite constant or variable \"formatGoalCheckCommandMessage\" in tools/agent/goal-check.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "tools/agent/list-models.ts modelDiscoveryResultSchema",
+      "reason": "Pre-rewrite constant or variable \"modelDiscoveryResultSchema\" in tools/agent/list-models.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "tools/agent/propose-goal.ts formatProposeGoalCommandMessage",
+      "reason": "Pre-rewrite constant or variable \"formatProposeGoalCommandMessage\" in tools/agent/propose-goal.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "tools/agent/run-subagent-async.ts createRunSubagentAsyncToolDefinition",
+      "reason": "Pre-rewrite helper function \"createRunSubagentAsyncToolDefinition\" in tools/agent/run-subagent-async.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "tools/agent/run-subagent-async.ts formatCancelRunCommandMessage",
+      "reason": "Pre-rewrite constant or variable \"formatCancelRunCommandMessage\" in tools/agent/run-subagent-async.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "tools/agent/run-subagent-async.ts formatGetSubagentResultCommandMessage",
+      "reason": "Pre-rewrite constant or variable \"formatGetSubagentResultCommandMessage\" in tools/agent/run-subagent-async.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "tools/agent/run-subagent-async.ts formatGetSubagentStatusCommandMessage",
+      "reason": "Pre-rewrite constant or variable \"formatGetSubagentStatusCommandMessage\" in tools/agent/run-subagent-async.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "tools/agent/run-subagent-async.ts formatRunSubagentAsyncCommandMessage",
+      "reason": "Pre-rewrite constant or variable \"formatRunSubagentAsyncCommandMessage\" in tools/agent/run-subagent-async.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "tools/agent/run-subagent-async.ts formatSendMessageCommandMessage",
+      "reason": "Pre-rewrite constant or variable \"formatSendMessageCommandMessage\" in tools/agent/run-subagent-async.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "tools/agent/run-subagent.ts formatRunSubagentCommandMessage",
+      "reason": "Pre-rewrite constant or variable \"formatRunSubagentCommandMessage\" in tools/agent/run-subagent.ts; scheduled for complete removal alongside legacy runtime in #197."
+    },
+    {
+      "export": "tools/background-task-activity.ts BACKGROUND_TASK_TOOL_LABEL_LIMIT",
+      "reason": "Internal tools constant or variable \"BACKGROUND_TASK_TOOL_LABEL_LIMIT\" in tools/background-task-activity.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/background-task-activity.ts assessBackgroundTaskLiveness",
+      "reason": "Internal tools constant or variable \"assessBackgroundTaskLiveness\" in tools/background-task-activity.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/background-task-activity.ts isTerminalStatus",
+      "reason": "Internal tools constant or variable \"isTerminalStatus\" in tools/background-task-activity.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/command-message-formatters.ts clearToolFormatters",
+      "reason": "Pre-existing unused export \"clearToolFormatters\" in tools/command-message-formatters.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "tools/conversation-utils.ts createShellMessageOutput",
+      "reason": "Pre-existing unused export \"createShellMessageOutput\" in tools/conversation-utils.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "tools/conversation-utils.ts createStreamingState",
+      "reason": "Pre-existing unused export \"createStreamingState\" in tools/conversation-utils.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "tools/conversation-utils.ts enhanceApiKeyError",
+      "reason": "Pre-existing unused export \"enhanceApiKeyError\" in tools/conversation-utils.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "tools/conversation.ts DENIED_READ_APPROVE_ANSWERS",
+      "reason": "Internal tools constant or variable \"DENIED_READ_APPROVE_ANSWERS\" in tools/conversation.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/file/apply-patch.ts PatchValidationError",
+      "reason": "Internal tools class \"PatchValidationError\" in tools/file/apply-patch.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/file/apply-patch.ts diagnoseContextMismatch",
+      "reason": "Internal tools helper function \"diagnoseContextMismatch\" in tools/file/apply-patch.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/file/apply-patch.ts formatApplyPatchCommandMessage",
+      "reason": "Internal tools constant or variable \"formatApplyPatchCommandMessage\" in tools/file/apply-patch.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/file/code-context.ts formatCodeContextSearchCommandMessage",
+      "reason": "Internal tools constant or variable \"formatCodeContextSearchCommandMessage\" in tools/file/code-context.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/file/code-context.ts formatReadCodeOutlineCommandMessage",
+      "reason": "Internal tools constant or variable \"formatReadCodeOutlineCommandMessage\" in tools/file/code-context.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/file/create-file.ts formatCreateFileCommandMessage",
+      "reason": "Internal tools constant or variable \"formatCreateFileCommandMessage\" in tools/file/create-file.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/file/edit-healing.ts DEFAULT_CONFIDENCE_THRESHOLD",
+      "reason": "Internal tools constant or variable \"DEFAULT_CONFIDENCE_THRESHOLD\" in tools/file/edit-healing.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/file/glob.ts formatFindFilesCommandMessage",
+      "reason": "Internal tools constant or variable \"formatFindFilesCommandMessage\" in tools/file/glob.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/file/grep.ts formatGrepCommandMessage",
+      "reason": "Internal tools constant or variable \"formatGrepCommandMessage\" in tools/file/grep.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/file/patch-healing.ts countContextMatchesInFile",
+      "reason": "Internal tools helper function \"countContextMatchesInFile\" in tools/file/patch-healing.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/file/patch-healing.ts parseDiffStructure",
+      "reason": "Internal tools helper function \"parseDiffStructure\" in tools/file/patch-healing.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/file/read-file.ts formatReadFileCommandMessage",
+      "reason": "Internal tools constant or variable \"formatReadFileCommandMessage\" in tools/file/read-file.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/file/search-replace-matcher.ts GAP_MARKER",
+      "reason": "Pre-existing unused export \"GAP_MARKER\" in tools/file/search-replace-matcher.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "tools/file/search-replace-matcher.ts containsGapMarkerLine",
+      "reason": "Internal tools helper function \"containsGapMarkerLine\" in tools/file/search-replace-matcher.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/file/search-replace-matcher.ts detectEOL",
+      "reason": "Internal tools helper function \"detectEOL\" in tools/file/search-replace-matcher.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/file/search-replace.ts formatSearchReplaceCommandMessage",
+      "reason": "Internal tools constant or variable \"formatSearchReplaceCommandMessage\" in tools/file/search-replace.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/format-helpers.ts generateMessageId",
+      "reason": "Internal tools constant or variable \"generateMessageId\" in tools/format-helpers.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/format-helpers.ts pickPatchOutputItemText",
+      "reason": "Internal tools constant or variable \"pickPatchOutputItemText\" in tools/format-helpers.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/languages/cpp.ts buildCppTestPatterns",
+      "reason": "Internal tools helper function \"buildCppTestPatterns\" in tools/languages/cpp.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/languages/cpp.ts extractCppOutline",
+      "reason": "Internal tools helper function \"extractCppOutline\" in tools/languages/cpp.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/languages/cpp.ts resolveLocalCppImport",
+      "reason": "Internal tools helper function \"resolveLocalCppImport\" in tools/languages/cpp.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/languages/csharp.ts extractCsharpOutline",
+      "reason": "Internal tools helper function \"extractCsharpOutline\" in tools/languages/csharp.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/languages/csharp.ts resolveCsharpImport",
+      "reason": "Internal tools helper function \"resolveCsharpImport\" in tools/languages/csharp.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/languages/go.ts buildGoTestPatterns",
+      "reason": "Internal tools helper function \"buildGoTestPatterns\" in tools/languages/go.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/languages/go.ts resolveGoImport",
+      "reason": "Internal tools helper function \"resolveGoImport\" in tools/languages/go.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/languages/java.ts extractJavaOutline",
+      "reason": "Internal tools helper function \"extractJavaOutline\" in tools/languages/java.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/languages/java.ts resolveJavaImport",
+      "reason": "Internal tools helper function \"resolveJavaImport\" in tools/languages/java.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/languages/php.ts buildPHPTestPatterns",
+      "reason": "Internal tools helper function \"buildPHPTestPatterns\" in tools/languages/php.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/languages/php.ts extractPHPOutline",
+      "reason": "Internal tools helper function \"extractPHPOutline\" in tools/languages/php.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/languages/php.ts resolvePHPImport",
+      "reason": "Internal tools helper function \"resolvePHPImport\" in tools/languages/php.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/languages/python.ts buildPythonTestPatterns",
+      "reason": "Internal tools helper function \"buildPythonTestPatterns\" in tools/languages/python.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/languages/python.ts resolvePythonImport",
+      "reason": "Internal tools helper function \"resolvePythonImport\" in tools/languages/python.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/languages/ruby.ts buildRubyTestPatterns",
+      "reason": "Internal tools helper function \"buildRubyTestPatterns\" in tools/languages/ruby.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/languages/ruby.ts extractRubyOutline",
+      "reason": "Internal tools helper function \"extractRubyOutline\" in tools/languages/ruby.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/languages/ruby.ts resolveRubyImport",
+      "reason": "Internal tools helper function \"resolveRubyImport\" in tools/languages/ruby.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/languages/rust.ts buildRustTestPatterns",
+      "reason": "Internal tools helper function \"buildRustTestPatterns\" in tools/languages/rust.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/languages/rust.ts resolveRustImport",
+      "reason": "Internal tools helper function \"resolveRustImport\" in tools/languages/rust.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/mcp/mcp-status.ts formatMcpNotice",
+      "reason": "Pre-existing unused export \"formatMcpNotice\" in tools/mcp/mcp-status.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "tools/mcp/mcp-status.ts isActionableMcpState",
+      "reason": "Internal tools constant or variable \"isActionableMcpState\" in tools/mcp/mcp-status.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/memory/distiller/secret-redaction.ts redactSecrets",
+      "reason": "Internal tools helper function \"redactSecrets\" in tools/memory/distiller/secret-redaction.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/session-rollover/session-rollover-tool.ts sessionRolloverParameters",
+      "reason": "Internal tools constant or variable \"sessionRolloverParameters\" in tools/session-rollover/session-rollover-tool.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/shell/background-shell-output-store.ts BackgroundShellOutputStoreError",
+      "reason": "Internal tools class \"BackgroundShellOutputStoreError\" in tools/shell/background-shell-output-store.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/shell/background-shell-watches.ts BackgroundShellWatchesError",
+      "reason": "Internal tools class \"BackgroundShellWatchesError\" in tools/shell/background-shell-watches.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/shell/command-logger.ts logCommandExecution",
+      "reason": "Pre-existing unused export \"logCommandExecution\" in tools/shell/command-logger.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "tools/shell/command-safety/handlers/index.ts commandHandlers",
+      "reason": "Internal tools constant or variable \"commandHandlers\" in tools/shell/command-safety/handlers/index.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/shell/execute-shell.ts GatewayShellEnvironmentError",
+      "reason": "Internal tools class \"GatewayShellEnvironmentError\" in tools/shell/execute-shell.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/shell/execute-shell.ts killLiveShellChildren",
+      "reason": "Pre-existing unused export \"killLiveShellChildren\" in tools/shell/execute-shell.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "tools/shell/sandbox/denied-read-detector.ts suggestStableParent",
+      "reason": "Internal tools helper function \"suggestStableParent\" in tools/shell/sandbox/denied-read-detector.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/shell/sandbox/denied-read-stores.ts ProjectSandboxAllowReadStore",
+      "reason": "Internal tools class \"ProjectSandboxAllowReadStore\" in tools/shell/sandbox/denied-read-stores.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/shell/sandbox/denied-read-stores.ts deniedReadStore",
+      "reason": "Internal tools constant or variable \"deniedReadStore\" in tools/shell/sandbox/denied-read-stores.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/shell/sandbox/denied-read-stores.ts executionOverrideStore",
+      "reason": "Internal tools constant or variable \"executionOverrideStore\" in tools/shell/sandbox/denied-read-stores.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/shell/sandbox/denied-read-stores.ts resetSandboxDeniedReadStoresForTest",
+      "reason": "Pre-existing unused export \"resetSandboxDeniedReadStoresForTest\" in tools/shell/sandbox/denied-read-stores.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "tools/shell/sandbox/sandbox-network-approval.ts registerSandboxNetworkApprovalHandler",
+      "reason": "Pre-existing unused export \"registerSandboxNetworkApprovalHandler\" in tools/shell/sandbox/sandbox-network-approval.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "tools/shell/sandbox/sandbox-network-store.ts ProjectNetworkAllowStore",
+      "reason": "Internal tools class \"ProjectNetworkAllowStore\" in tools/shell/sandbox/sandbox-network-store.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/shell/sandbox/sandbox-network-store.ts SessionNetworkAllowStore",
+      "reason": "Internal tools class \"SessionNetworkAllowStore\" in tools/shell/sandbox/sandbox-network-store.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/shell/sandbox/sandbox-network-store.ts getProjectNetworkAllowStore",
+      "reason": "Internal tools helper function \"getProjectNetworkAllowStore\" in tools/shell/sandbox/sandbox-network-store.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/shell/sandbox/sandbox-network-store.ts resetSandboxNetworkStoreForTest",
+      "reason": "Pre-existing unused export \"resetSandboxNetworkStoreForTest\" in tools/shell/sandbox/sandbox-network-store.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "tools/shell/sandbox/sandbox-network-store.ts sessionNetworkAllowStore",
+      "reason": "Internal tools constant or variable \"sessionNetworkAllowStore\" in tools/shell/sandbox/sandbox-network-store.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/shell/sandbox/sandbox-policy.ts isPathProtected",
+      "reason": "Internal tools helper function \"isPathProtected\" in tools/shell/sandbox/sandbox-policy.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/shell/sandbox/shell-sandbox-runner.ts AnthropicShellSandboxRunner",
+      "reason": "Internal tools class \"AnthropicShellSandboxRunner\" in tools/shell/sandbox/shell-sandbox-runner.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/system/run-code/mcp-script-surface.ts mcpMemberName",
+      "reason": "Internal tools constant or variable \"mcpMemberName\" in tools/system/run-code/mcp-script-surface.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/system/run-code/mcp-script-surface.ts mcpTextResult",
+      "reason": "Internal tools constant or variable \"mcpTextResult\" in tools/system/run-code/mcp-script-surface.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/system/run-code/run-code-telemetry.ts RUN_CODE_COMPLETION_EVENT",
+      "reason": "Internal tools constant or variable \"RUN_CODE_COMPLETION_EVENT\" in tools/system/run-code/run-code-telemetry.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/system/run-code/run-code-telemetry.ts RUN_CODE_COMPLETION_MESSAGE",
+      "reason": "Internal tools constant or variable \"RUN_CODE_COMPLETION_MESSAGE\" in tools/system/run-code/run-code-telemetry.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/system/run-code/run-code-telemetry.ts buildRunCodeCompletionMeta",
+      "reason": "Internal tools constant or variable \"buildRunCodeCompletionMeta\" in tools/system/run-code/run-code-telemetry.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/system/run-code/run-code.ts formatRunCodeCommandMessage",
+      "reason": "Internal tools constant or variable \"formatRunCodeCommandMessage\" in tools/system/run-code/run-code.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/system/run-code/run-code.ts runCodeParametersSchema",
+      "reason": "Internal tools constant or variable \"runCodeParametersSchema\" in tools/system/run-code/run-code.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/system/run-code/tools-header.ts RUN_CODE_ESSENTIAL_TOOLS",
+      "reason": "Internal tools constant or variable \"RUN_CODE_ESSENTIAL_TOOLS\" in tools/system/run-code/tools-header.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/system/run-code/tools-header.ts renderDetailedEntry",
+      "reason": "Internal tools helper function \"renderDetailedEntry\" in tools/system/run-code/tools-header.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/system/run-code/tools-header.ts renderSchemaType",
+      "reason": "Internal tools helper function \"renderSchemaType\" in tools/system/run-code/tools-header.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/system/shell.ts formatBackgroundShellCancelMonitorCommandMessage",
+      "reason": "Internal tools constant or variable \"formatBackgroundShellCancelMonitorCommandMessage\" in tools/system/shell.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/system/shell.ts formatBackgroundShellJobCommandMessage",
+      "reason": "Internal tools constant or variable \"formatBackgroundShellJobCommandMessage\" in tools/system/shell.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/system/shell.ts formatBackgroundShellMonitorCommandMessage",
+      "reason": "Internal tools constant or variable \"formatBackgroundShellMonitorCommandMessage\" in tools/system/shell.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/system/shell.ts formatShellCommandMessage",
+      "reason": "Internal tools constant or variable \"formatShellCommandMessage\" in tools/system/shell.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/tool-invoke.ts isInvalidToolInputError",
+      "reason": "Internal tools constant or variable \"isInvalidToolInputError\" in tools/tool-invoke.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/tool-invoke.ts repairJson",
+      "reason": "Internal tools constant or variable \"repairJson\" in tools/tool-invoke.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/tool-invoke.ts toolErrorFunction",
+      "reason": "Pre-existing unused export \"toolErrorFunction\" in tools/tool-invoke.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
+    },
+    {
+      "export": "tools/web/web-fetch.ts formatWebFetchCommandMessage",
+      "reason": "Internal tools constant or variable \"formatWebFetchCommandMessage\" in tools/web/web-fetch.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/web/web-search.ts formatResultsAsMarkdown",
+      "reason": "Internal tools helper function \"formatResultsAsMarkdown\" in tools/web/web-search.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "tools/web/web-search.ts formatWebSearchCommandMessage",
+      "reason": "Internal tools constant or variable \"formatWebSearchCommandMessage\" in tools/web/web-search.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    }
   ],
   "jobNameExceptions": [
-    "app/file-service.ts",
-    "app/settings-service.ts",
-    "clients/notification-service.ts",
-    "config/profiles/legacy-adapter.ts",
-    "delegation/runtime/legacy-adapter.ts",
-    "model/model-service.ts",
-    "model/providers/provider-service.ts",
-    "session/conversation/session-index/session-index-service.ts",
-    "session/hooks/hook-service.ts",
-    "session/logging/logging-service.ts",
-    "session/session/session-turn-adapter.ts",
-    "shared/service-interfaces.ts",
-    "tools/agent/ask-orchestrator.ts",
-    "tools/skills/skills-service.ts",
-    "tools/ssh-service.ts"
+    {
+      "path": "app/file-service.ts",
+      "reason": "Disk file reading and workspace file search service; to be renamed to file-search.ts in Phase 3 move-only cleanup."
+    },
+    {
+      "path": "app/settings-service.ts",
+      "reason": "Persistent settings file reader and schema validator in app; to be renamed to settings-store.ts in Phase 3 move-only cleanup."
+    },
+    {
+      "path": "clients/notification-service.ts",
+      "reason": "Terminal OSC 777 notification emission helper; to be renamed to terminal-notifications.ts in Phase 3 move-only cleanup."
+    },
+    {
+      "path": "config/profiles/legacy-adapter.ts",
+      "reason": "Deprecated profile compatibility translation layer; retained until deleted alongside legacy subagents in #197."
+    },
+    {
+      "path": "delegation/runtime/legacy-adapter.ts",
+      "reason": "Pre-rewrite subagent delegation runtime adapter; retained until deleted alongside legacy subagents in #197."
+    },
+    {
+      "path": "model/model-service.ts",
+      "reason": "Model catalog discovery and active model configuration resolver; to be renamed to model-catalog.ts in Phase 3."
+    },
+    {
+      "path": "model/providers/provider-service.ts",
+      "reason": "Provider registry and factory dispatcher for LLM backends; to be renamed to provider-registry.ts in Phase 3."
+    },
+    {
+      "path": "session/conversation/session-index/session-index-service.ts",
+      "reason": "Session conversation index reader and cache for browsing history; to be renamed to session-index-cache.ts in Phase 3."
+    },
+    {
+      "path": "session/hooks/hook-service.ts",
+      "reason": "Session lifecycle hook discovery, execution, and dispatch logic; to be renamed to hook-dispatcher.ts in Phase 3."
+    },
+    {
+      "path": "session/logging/logging-service.ts",
+      "reason": "Winston-based rotating daily log file writer and session event logger; to be renamed to session-logger.ts in Phase 3."
+    },
+    {
+      "path": "shared/service-interfaces.ts",
+      "reason": "Interface definitions for app logging, settings, and provider services; to be decomposed into domain interfaces in Phase 3."
+    },
+    {
+      "path": "tools/agent/ask-orchestrator.ts",
+      "reason": "Interactive user prompt tool question coordinator; to be renamed to question-prompt-tool.ts in Phase 3 move-only cleanup."
+    },
+    {
+      "path": "tools/skills/skills-service.ts",
+      "reason": "Filesystem skill discovery, parsing, and execution manager; to be renamed to skill-catalog.ts in Phase 3."
+    },
+    {
+      "path": "tools/ssh-service.ts",
+      "reason": "Lazy SSH client connection pool and remote execution helper; to be renamed to ssh-client-pool.ts in Phase 3."
+    }
+  ],
+  "duplicateBasenames": [
+    {
+      "file": "clients/tui/presentation/skins/cards/activity.tsx",
+      "reason": "Terminal UI skin slot implementation for cards skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/ledger/activity.tsx",
+      "reason": "Terminal UI skin slot implementation for ledger skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/rail/activity.tsx",
+      "reason": "Terminal UI skin slot implementation for rail skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/zen/activity.tsx",
+      "reason": "Terminal UI skin slot implementation for zen skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "app/agent.ts",
+      "reason": "Application agent setup assembling tool declarations and model invocation loops for the direct CLI."
+    },
+    {
+      "file": "clients/acp/agent.ts",
+      "reason": "Agent Client Protocol (ACP) adapter wrapping agent capabilities and notifications for ACP clients."
+    },
+    {
+      "file": "clients/tui/presentation/skins/cards/approval.tsx",
+      "reason": "Terminal UI skin slot implementation for cards skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/classic/approval.tsx",
+      "reason": "Terminal UI skin slot implementation for classic skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/ledger/approval.tsx",
+      "reason": "Terminal UI skin slot implementation for ledger skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/rail/approval.tsx",
+      "reason": "Terminal UI skin slot implementation for rail skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/zen/approval.tsx",
+      "reason": "Terminal UI skin slot implementation for zen skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "shared/tools/agent/ask-user-constants.ts",
+      "reason": "Shared question types, validation schemas, and constants for ask_user tool."
+    },
+    {
+      "file": "tools/adopted/ask-user-constants.ts",
+      "reason": "Adopted legacy tool constants preserving compatibility with external harnesses."
+    },
+    {
+      "file": "clients/tui/presentation/skins/cards/body.tsx",
+      "reason": "Terminal UI skin slot implementation for cards skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/ledger/body.tsx",
+      "reason": "Terminal UI skin slot implementation for ledger skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/rail/body.tsx",
+      "reason": "Terminal UI skin slot implementation for rail skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/zen/body.tsx",
+      "reason": "Terminal UI skin slot implementation for zen skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/acp/budget.ts",
+      "reason": "ACP client budget adapter formatting token limits for external ACP consumers."
+    },
+    {
+      "file": "protocol/budget.ts",
+      "reason": "Wire protocol budget schema defining token and turn constraints across clients."
+    },
+    {
+      "file": "protocol/capabilities.ts",
+      "reason": "Client-server capability negotiation protocol definitions and wire schemas."
+    },
+    {
+      "file": "session/capabilities.ts",
+      "reason": "Session-level tool and execution capability permission verification rules."
+    },
+    {
+      "file": "protocol/command-receipts.ts",
+      "reason": "Protocol wire envelope types for command execution status notifications."
+    },
+    {
+      "file": "session/command-receipts.ts",
+      "reason": "Session log fact reducer tracking durable command execution receipts."
+    },
+    {
+      "file": "clients/tui/commands.ts",
+      "reason": "TUI slash-command registry and auto-completion definitions for terminal input."
+    },
+    {
+      "file": "protocol/commands.ts",
+      "reason": "Protocol definitions for client command dispatch and execution receipt framing."
+    },
+    {
+      "file": "protocol/context.ts",
+      "reason": "Protocol wire types representing attached workspace and document context items."
+    },
+    {
+      "file": "session/context.ts",
+      "reason": "Session context accumulation state combining user context items and system facts."
+    },
+    {
+      "file": "session/conversation.ts",
+      "reason": "Session conversation boundary defining turn lifecycle and history access."
+    },
+    {
+      "file": "tools/conversation.ts",
+      "reason": "Tool implementation exposing conversation history and search to subagents."
+    },
+    {
+      "file": "app/discord-send.ts",
+      "reason": "Direct CLI command action for dispatching Discord session notifications and messages."
+    },
+    {
+      "file": "clients/control/discord-send.ts",
+      "reason": "Control socket protocol bridge for Discord notification routing across process boundaries."
+    },
+    {
+      "file": "session/conversation/durable-goal.ts",
+      "reason": "Conversation state projection extracting persistent goal directives across resumes."
+    },
+    {
+      "file": "shared/contracts/durable-goal.ts",
+      "reason": "Shared contract interface and schemas defining goal lifecycle and criteria."
+    },
+    {
+      "file": "app/generation-guard.ts",
+      "reason": "Application generation wrapper enforcing per-turn stream character caps and deadlines around resolved models."
+    },
+    {
+      "file": "engine/agent-runtime/generation-guard.ts",
+      "reason": "Engine-level generation budget and runaway detector; scheduled to be cleaned up or merged in #197."
+    },
+    {
+      "file": "protocol/json.ts",
+      "reason": "Protocol JSON RPC message parsing and validation helpers."
+    },
+    {
+      "file": "tools/languages/json.ts",
+      "reason": "Language tool implementation for JSON linting, formatting, and schema validation."
+    },
+    {
+      "file": "config/profiles/legacy-adapter.ts",
+      "reason": "Configuration profile adapter mapping deprecated profile options to current schema."
+    },
+    {
+      "file": "delegation/runtime/legacy-adapter.ts",
+      "reason": "Pre-rewrite subagent delegation runtime adapter scheduled for removal in #197."
+    },
+    {
+      "file": "clients/tui/presentation/skins/shared/limits.ts",
+      "reason": "Terminal UI skin slot implementation for shared skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "tools/session-browser/limits.ts",
+      "reason": "Session browser tool pagination limits and byte ceilings for transcript inspection."
+    },
+    {
+      "file": "clients/tui/presentation/skins/cards/live-region.tsx",
+      "reason": "Terminal UI skin slot implementation for cards skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/classic/live-region.tsx",
+      "reason": "Terminal UI skin slot implementation for classic skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/ledger/live-region.tsx",
+      "reason": "Terminal UI skin slot implementation for ledger skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/rail/live-region.tsx",
+      "reason": "Terminal UI skin slot implementation for rail skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/zen/live-region.tsx",
+      "reason": "Terminal UI skin slot implementation for zen skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "app/memory.ts",
+      "reason": "Application-level memory inspection and export workflows invoked by CLI commands."
+    },
+    {
+      "file": "session/memory.ts",
+      "reason": "Session-level personal and shared memory persistence store and retrieval service."
+    },
+    {
+      "file": "clients/tui/presentation/skins/cards/messages.tsx",
+      "reason": "Terminal UI skin slot implementation for cards skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/classic/messages.tsx",
+      "reason": "Terminal UI skin slot implementation for classic skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/ledger/messages.tsx",
+      "reason": "Terminal UI skin slot implementation for ledger skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/rail/messages.tsx",
+      "reason": "Terminal UI skin slot implementation for rail skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/zen/messages.tsx",
+      "reason": "Terminal UI skin slot implementation for zen skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/menus/model-settings.ts",
+      "reason": "Interactive TUI modal menu for configuring provider models, temperatures, and options."
+    },
+    {
+      "file": "shared/utils/ai/model-settings.ts",
+      "reason": "Shared model configuration schema and default settings for AI provider resolution."
+    },
+    {
+      "file": "app/native-catalogue.ts",
+      "reason": "CLI-level model catalog query handler and formatting utilities for direct terminal display."
+    },
+    {
+      "file": "session/native-catalogue.ts",
+      "reason": "Session model catalogue store tracking available provider capabilities and pricing."
+    },
+    {
+      "file": "clients/tui/projection.ts",
+      "reason": "TUI-specific event subscriber projecting protocol stream updates into UI state."
+    },
+    {
+      "file": "protocol/projection.ts",
+      "reason": "Canonical wire event projection converting session log facts into client envelopes."
+    },
+    {
+      "file": "clients/acp/questions.ts",
+      "reason": "ACP questions adapter projecting ask-user interactions into ACP client requests."
+    },
+    {
+      "file": "protocol/questions.ts",
+      "reason": "Protocol schemas and payload definitions for interactive user clarification prompts."
+    },
+    {
+      "file": "protocol/queue.ts",
+      "reason": "Protocol message types defining queued steering inputs and cancel requests."
+    },
+    {
+      "file": "session/queue.ts",
+      "reason": "Session queue state management ordering concurrent human steers and pending actions."
+    },
+    {
+      "file": "clients/tui/presentation/skins/registry.ts",
+      "reason": "Theme skin registration catalog mapping skin identifiers to skin component slot sets."
+    },
+    {
+      "file": "config/profiles/registry.ts",
+      "reason": "Profile registry defining active execution profiles and runtime capability defaults."
+    },
+    {
+      "file": "model/providers/registry.ts",
+      "reason": "AI model provider registry mapping vendor prefixes to ModelProvider implementations."
+    },
+    {
+      "file": "model/providers/web-search/registry.ts",
+      "reason": "Web search provider registry tracking available search engines and API backends."
+    },
+    {
+      "file": "session/conversation/resume-list.ts",
+      "reason": "Conversation store indexer listing available session snapshots for resumption."
+    },
+    {
+      "file": "session/resume-list.ts",
+      "reason": "Direct session discovery utility formatting resume candidates for CLI selection."
+    },
+    {
+      "file": "engine/agent-runtime/run-budget.ts",
+      "reason": "Pre-rewrite execution turn budget tracking scheduled for removal in #197."
+    },
+    {
+      "file": "session/run-budget.ts",
+      "reason": "Session turn budget and token exhaustion enforcement for direct execution."
+    },
+    {
+      "file": "app/serve-args.ts",
+      "reason": "Command-line argument parser definitions for the term2 serve command."
+    },
+    {
+      "file": "host/gateway/serve-args.ts",
+      "reason": "Host gateway server initialization options and environment configuration types."
+    },
+    {
+      "file": "clients/tui/slash-commands.ts",
+      "reason": "TUI slash-command execution handlers and interactive prompt triggers."
+    },
+    {
+      "file": "shared/slash-commands.ts",
+      "reason": "Shared slash-command specification and argument tokenization definitions."
+    },
+    {
+      "file": "clients/tui/state.ts",
+      "reason": "Client-side reactive state container driving Ink terminal component renders."
+    },
+    {
+      "file": "protocol/state.ts",
+      "reason": "Wire protocol session state snapshot and synchronization message codecs."
+    },
+    {
+      "file": "session/state.ts",
+      "reason": "Core session aggregate state holding replayed history, flags, and queues."
+    },
+    {
+      "file": "clients/tui/presentation/skins/cards/status.tsx",
+      "reason": "Terminal UI skin slot implementation for cards skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/classic/status.tsx",
+      "reason": "Terminal UI skin slot implementation for classic skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/ledger/status.tsx",
+      "reason": "Terminal UI skin slot implementation for ledger skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/rail/status.tsx",
+      "reason": "Terminal UI skin slot implementation for rail skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/zen/status.tsx",
+      "reason": "Terminal UI skin slot implementation for zen skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/utils/streaming/streaming-speed-tracker.ts",
+      "reason": "Presentation component tracking smoothed tokens-per-second display rates."
+    },
+    {
+      "file": "shared/utils/streaming/streaming-speed-tracker.ts",
+      "reason": "Moving-window token emission speed calculation and rate measurement algorithm."
+    },
+    {
+      "file": "config/settings/subagent-pool-config.ts",
+      "reason": "Settings schema and validation rules for subagent concurrency and pool allocation."
+    },
+    {
+      "file": "delegation/subagents/subagent-pool-config.ts",
+      "reason": "Runtime pool sizing and role assignment logic for background subagent pools."
+    },
+    {
+      "file": "clients/tui/menus/subsequence-filter.ts",
+      "reason": "Fuzzy filter helper tailored for interactive TUI menu search inputs."
+    },
+    {
+      "file": "shared/utils/subsequence-filter.ts",
+      "reason": "Generic string subsequence matching utility shared across CLI utilities."
+    },
+    {
+      "file": "clients/tui/terminal.ts",
+      "reason": "Low-level terminal raw mode, escape sequence, and resize signal handling."
+    },
+    {
+      "file": "shared/types/terminal.ts",
+      "reason": "Platform-independent terminal dimensions, color capabilities, and capabilities types."
+    },
+    {
+      "file": "clients/tui/presentation/utils/ai/token-usage.ts",
+      "reason": "Status bar formatting utilities displaying active turn token usage and rates."
+    },
+    {
+      "file": "shared/utils/ai/token-usage.ts",
+      "reason": "Token counter calculations and aggregate session usage accumulation arithmetic."
+    },
+    {
+      "file": "clients/tui/presentation/tools/tool-names.ts",
+      "reason": "Human-readable display formatting and icon mappings for tool execution rows."
+    },
+    {
+      "file": "tools/tool-names.ts",
+      "reason": "Canonical tool identifier constants and aliases recognized by the agent runtime."
+    },
+    {
+      "file": "clients/tui/presentation/skins/cards/tools.tsx",
+      "reason": "Terminal UI skin slot implementation for cards skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/classic/tools.tsx",
+      "reason": "Terminal UI skin slot implementation for classic skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/ledger/tools.tsx",
+      "reason": "Terminal UI skin slot implementation for ledger skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/rail/tools.tsx",
+      "reason": "Terminal UI skin slot implementation for rail skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/zen/tools.tsx",
+      "reason": "Terminal UI skin slot implementation for zen skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/menus/use-setting.ts",
+      "reason": "Specialized hook synchronizing setting state in interactive menu pickers."
+    },
+    {
+      "file": "clients/tui/presentation/hooks/use-setting.ts",
+      "reason": "General React hook subscribing to configuration setting updates in the TUI."
+    },
+    {
+      "file": "tools/languages/utils.ts",
+      "reason": "Language tool execution helpers for AST traversal and syntax error extraction."
+    },
+    {
+      "file": "tools/shell/command-safety/utils.ts",
+      "reason": "Command safety parser utilities for extracting executable paths and flags."
+    },
+    {
+      "file": "tools/subagents/utils.ts",
+      "reason": "Subagent tool helper functions for parameter mapping and output extraction."
+    },
+    {
+      "file": "tools/utils.ts",
+      "reason": "General tool surface utility functions for error wrapping and schema conversion."
+    },
+    {
+      "file": "app/verifier.ts",
+      "reason": "Direct verifier workspace coordinator running independent checks for agent turns."
+    },
+    {
+      "file": "engine/completion-verification/verifier.ts",
+      "reason": "Engine completion verification logic evaluating model stop conditions and assertions."
+    },
+    {
+      "file": "clients/tui/presentation/skins/cards/width.ts",
+      "reason": "Terminal UI skin slot implementation for cards skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/zen/width.ts",
+      "reason": "Terminal UI skin slot implementation for zen skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "session/prompts/subagents/worktree-hygiene.md",
+      "reason": "Prompt instructions guiding background subagent roles on git worktree isolation."
+    },
+    {
+      "file": "session/prompts/worktree-hygiene.md",
+      "reason": "General system prompt fragment detailing worktree hygiene and baseline checks."
+    }
   ]
 }

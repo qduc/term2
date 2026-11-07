@@ -26,25 +26,6 @@ export interface StreamingState {
 }
 
 /**
- * Normalize tool arguments from JSON string or object.
- * Provider implementations may send arguments as either format.
- */
-export function parseToolArguments(rawArgs: unknown): unknown {
-  if (typeof rawArgs !== 'string') {
-    return rawArgs;
-  }
-  const trimmed = rawArgs.trim();
-  if (!trimmed) {
-    return rawArgs;
-  }
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    return rawArgs;
-  }
-}
-
-/**
  * Build a human-readable command string for display in the UI.
  * Each tool has its own formatting logic.
  */
@@ -174,13 +155,6 @@ export function enhanceApiKeyError(message: string): string {
     return 'The active provider API key is missing or invalid. Check the provider settings with /providers and verify its required environment variable.';
   }
   return message;
-}
-
-/**
- * Check if an error message indicates max turns exceeded.
- */
-export function isMaxTurnsError(message: string): boolean {
-  return message.includes('Max turns') && message.includes('exceeded');
 }
 
 /**

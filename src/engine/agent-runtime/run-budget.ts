@@ -71,15 +71,6 @@ export type RunBudgetInteraction = {
   readonly event: RunBudgetEvent;
 };
 
-export function isRunBudgetInteraction(value: unknown): value is RunBudgetInteraction {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    (value as { type?: unknown }).type === 'run_budget_interaction' &&
-    'event' in value
-  );
-}
-
 export interface RunBudgetSnapshot {
   readonly pricedUsdMicros: number;
   readonly unpricedTokens: number;

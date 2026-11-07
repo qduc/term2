@@ -3,7 +3,20 @@
  * task snapshots and actual execution evidence supplied by the tool surface.
  */
 import type { ResolvedAgentDefinition } from '../../engine/agent-runtime/resolved-agent.js';
-import type { ResolvedSubagentLaunch } from '../runtime/subagent-bridge.js';
+import type { AgentSpecBoundaryResult } from '../../engine/agent-runtime/permission-boundary.js';
+import type { SubagentDefinition } from '../subagents/types.js';
+import type { ForegroundSubagentApprovalCallback } from '../../tools/subagents/control-contract.js';
+
+/** Host-resolved launch accepted by the direct session-branch launcher. */
+export interface ResolvedSubagentLaunch {
+  resolvedDefinition: AgentSpecBoundaryResult | ResolvedAgentDefinition | SubagentDefinition;
+  task?: string;
+  worktree?: string;
+  authorizedWorktreePath?: string;
+  name?: string;
+  continue_run_id?: string;
+  foregroundChildApproval?: ForegroundSubagentApprovalCallback;
+}
 import type { AgentSpec } from '../../engine/agent-runtime/types.js';
 import { SubagentPoolEntrySchema } from '../../config/settings/settings-schema.js';
 import type {

@@ -15,7 +15,7 @@ import { getAncillaryTierForRole } from './subagent-pool-config.js';
 import { ModelSelectionSchema } from '../../config/settings/model-selection.js';
 
 const BASE_PROMPT_PATH = path.join(import.meta.dirname, '../../session/prompts');
-export const PROMPTS_DIR = path.join(BASE_PROMPT_PATH, 'subagents');
+const PROMPTS_DIR = path.join(BASE_PROMPT_PATH, 'subagents');
 
 /**
  * Fallback when a role markdown file omits `maxTurns`.

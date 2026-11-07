@@ -4,22 +4,21 @@ import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { createShellToolDefinition, type BackgroundShellExecutionResult } from '../../../../src/tools/system/shell.js';
+import { createShellToolDefinition } from '../../../../src/tools/system/shell.js';
 import { presentBareShell } from '../../../../src/tools/system/bare-shell.js';
 import { createRunCodeToolDefinition } from '../../../../src/delegation/run-code/run-code-tool.js';
 import { buildAgentTools, type AgentFactoryDeps } from '../../../../src/app/lib/agent-factory.js';
 import { createEditorImpl } from '../../../../src/tools/editor-impl.js';
 import { createMockSettingsService } from '../../../helpers/settings-service.mock.js';
 import { ExecutionContext } from '../../../../src/tools/execution-context.js';
-import {
-  NestedApprovalOwner,
-  type NestedApprovalSnapshot,
-} from '../../../../src/session/approval/nested-approval-owner.js';
+import { createDirectShellTools } from '../../../../src/app/shell-tools.js';
+import { createSourceToolRegistry, executeSourceChild } from '../../../../src/app/source-tools.js';
+import { DirectBackgroundTasks } from '../../../../src/session/background.js';
+import { directShellTasks } from '../../../../src/session/shell-tasks.js';
+import type { TurnDeps } from '../../../../src/engine/index.js';
+import type { InteractionDecision, ToolContext, ToolInteractionRequest } from '../../../../src/tools/index.js';
 import { ToolApprovalPolicyRegistry } from '../../../../src/session/approval/tool-approval-policy-registry.js';
 import { SessionAccessState } from '../../../../src/session/session/session-access-state.js';
-import { BackgroundShellRegistry } from '../../../../src/tools/shell/background-shell-registry.js';
-import { PostExecutePauseCapability } from '../../../../src/session/session/post-execute-pause-capability.js';
-import { PostExecutePendingRegistry } from '../../../../src/session/session/post-execute-pending-registry.js';
 import type { ShellSandboxRunner } from '../../../../src/tools/shell/sandbox/sandbox-policy.js';
 
 const logger = {
@@ -41,7 +40,7 @@ const quote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'";
 async function harness(
   options: {
     sandboxRunner?: ShellSandboxRunner;
-    approve?: (snapshot: NestedApprovalSnapshot) => string | undefined;
+    approve?: (request: ToolInteractionRequest) => string | undefined;
     owner?: boolean;
     bare?: boolean;
   } = {},
@@ -57,29 +56,34 @@ async function harness(
   });
   const executionContext = ExecutionContext.pin(cwd);
   const approvalPolicyRegistry = new ToolApprovalPolicyRegistry();
-  const owner = new NestedApprovalOwner('script-shell-session');
-  cleanups.push(() => owner.close());
-  const seen: NestedApprovalSnapshot[] = [];
-  owner.subscribe((snapshot) => {
-    if (!snapshot) return;
-    seen.push(snapshot);
-    const answer = options.approve?.(snapshot);
-    if (answer) void owner.decide(snapshot.requestId, { answer });
+  const tasks = new DirectBackgroundTasks({
+    sessionId: 'script-shell-session',
+    sink: { accept() {}, publish() {}, failed() {} },
   });
-  const background = new BackgroundShellRegistry<BackgroundShellExecutionResult>();
-  cleanups.push(() => background.dispose());
+  const shellTools = createDirectShellTools();
+  const seen: ToolInteractionRequest[] = [];
+  let pending: ((decision: InteractionDecision) => void) | undefined;
+  const decide = (answer: string) => {
+    const resolve = pending;
+    pending = undefined;
+    resolve?.(
+      answer === 'n' || answer === 'reject'
+        ? { kind: 'deny' }
+        : { kind: 'allow', ...(answer === 'unsandboxed-once' ? { grant: answer } : {}) },
+    );
+  };
   const access = new SessionAccessState(settings);
-  cleanups.push(() => access.dispose());
-  const pending = new PostExecutePendingRegistry({ sessionId: 'script-shell-session', epoch: 1 });
-  cleanups.push(() => pending.close());
-  const postExecutePauseCapability = new PostExecutePauseCapability(pending);
-  postExecutePauseCapability.setActiveRunId('test-live-run');
+  cleanups.push(async () => {
+    await tasks.close();
+    shellTools.dispose();
+    access.dispose();
+  });
   const shell = createShellToolDefinition({
     settingsService: settings,
     loggingService: logger,
     executionContext,
     sessionAccess: access,
-    backgroundShellRegistry: background,
+    backgroundShellRegistry: shellTools.registry,
     postExecuteDeniedRead: true,
     shellSandboxRunner: options.sandboxRunner,
   });
@@ -88,7 +92,6 @@ async function harness(
     approvalPolicyRegistry,
     executionContext,
     sessionAccess: access,
-    nestedApprovalOwner: options.owner === false ? undefined : owner,
   });
   const deps: AgentFactoryDeps = {
     settings,
@@ -96,7 +99,8 @@ async function harness(
     executionContext,
     approvalPolicyRegistry,
     sessionAccess: access,
-    postExecutePauseCapability,
+    withToolInvocation: shellTools.withInvocation,
+    executeScriptedTool: executeSourceChild,
     editor: createEditorImpl({ settingsService: settings, loggingService: logger, executionContext }),
     providerId: 'openai',
     serviceTierOverrideForNextRequest: null,
@@ -114,17 +118,69 @@ async function harness(
     shouldUseNativePatchTool: false,
     deps,
   });
-  const run = async (script: string, signal?: AbortSignal, timeout = 3000) =>
-    String(
-      await tools
-        .find((t) => t.name === 'run_code')!
-        .execute(
-          { code: script, description: 'shell integration', timeout_ms: timeout },
-          { context: { sessionId: 'script-shell-session' }, signal },
-          { toolCall: { callId: 'outer' } },
-        ),
-    );
-  return { cwd, tools, run, owner, seen, pending, background, settings };
+  const registry = createSourceToolRegistry(tools, {
+    withWorkspace: (operation) => operation(),
+    policies: approvalPolicyRegistry,
+    settings,
+    sessionAccess: access,
+    sessionId: 'script-shell-session',
+    withAnswer: (_answer, operation) => operation(),
+  });
+  cleanups.push(() => registry.dispose());
+  const context = (signal: AbortSignal): ToolContext => {
+    const parent: Parameters<NonNullable<TurnDeps['shellTasks']>>[0] = {
+      turnId: 'test-turn' as Parameters<NonNullable<TurnDeps['shellTasks']>>[0]['turnId'],
+      parentExecutionId: 'test-execution' as Parameters<NonNullable<TurnDeps['shellTasks']>>[0]['parentExecutionId'],
+      signal,
+    };
+    return {
+      workspace: { root: cwd, access: 'read_write', target: 'local' },
+      settings: { get: () => undefined, watch: () => () => {} },
+      signal,
+      shellTasks: directShellTasks(tasks, parent),
+      runNested: async () => {
+        throw new Error('Unexpected nested run');
+      },
+      progress() {},
+      executeChild: async (_descriptor, operation) => operation(),
+      ...(options.owner === false
+        ? {}
+        : {
+            interact: (request: ToolInteractionRequest) =>
+              new Promise<InteractionDecision>((resolve) => {
+                seen.push(request);
+                const finish = (decision: InteractionDecision) => {
+                  signal.removeEventListener('abort', abort);
+                  pending = undefined;
+                  resolve(decision);
+                };
+                const abort = () => finish({ kind: 'deny' });
+                pending = finish;
+                signal.addEventListener('abort', abort, { once: true });
+                const answer = options.approve?.(request);
+                if (answer) decide(answer);
+                else if (signal.aborted) abort();
+              }),
+          }),
+    };
+  };
+  const run = async (script: string, signal = new AbortController().signal, timeout = 3000) => {
+    const tool = registry.get('run_code')!;
+    try {
+      return (
+        await tool.execute(
+          tool.parse({ code: script, description: 'shell integration', timeout_ms: timeout }),
+          context(signal),
+        )
+      ).output;
+    } catch (error) {
+      if (signal.aborted) return String(error);
+      throw error;
+    } finally {
+      tasks.releaseParent('test-turn');
+    }
+  };
+  return { cwd, tools, registry, context, run, seen, decide, isPending: () => Boolean(pending), tasks, settings };
 }
 
 async function waitUntil(check: () => boolean | Promise<boolean>) {
@@ -154,21 +210,23 @@ function sandboxFixture() {
 describe('shell inside run_code through the wrapped tool graph', () => {
   it('keeps canonical validation and normalization when bare advertises fewer shell options', async () => {
     const graph = await harness({ bare: true });
-    const shell = graph.tools.find((tool) => tool.name === 'shell')!;
+    const shell = graph.registry.get('shell')!;
+    const context = graph.context(new AbortController().signal);
     for (const [index, extra] of [
       { background: null, monitor: null, check_in: null },
       { background: 'false' },
     ].entries()) {
       const file = `normalized-${index}.txt`;
-      const output = await shell.execute({ command: `printf canonical > ${file}`, ...extra }, {});
-      expect(String(output)).toContain('exit 0');
+      const output = await shell.execute(shell.parse({ command: `printf canonical > ${file}`, ...extra }), context);
+      expect(output.output).toContain('exit 0');
       expect(await readFile(join(graph.cwd, file), 'utf8')).toBe('canonical');
-      expect(graph.background.list()).toEqual([]);
+      expect(graph.tasks.list().filter((task) => task.mode === 'background')).toEqual([]);
     }
     for (const extra of [{ background: 'garbage' }, { monitor: { pattern: 5 } }]) {
       const params = { command: 'printf invalid > must-not-exist.txt', ...extra };
-      expect(await shell.needsApproval(params, {})).toBe(false);
-      expect(String(await shell.execute(params, {}))).toContain('Tool input did not match schema for shell');
+      const input = shell.parse(params);
+      expect((await shell.approval(input, context)).kind).toBe('none');
+      expect((await shell.execute(input, context)).output).toContain('Tool input did not match schema for shell');
       expect(existsSync(join(graph.cwd, 'must-not-exist.txt'))).toBe(false);
     }
   });
@@ -194,7 +252,7 @@ describe('shell inside run_code through the wrapped tool graph', () => {
     const h = await harness({
       approve: (snapshot) => {
         executedBeforeApproval = existsSync(join(h.cwd, 'approved.txt'));
-        expect(snapshot.preparedArguments).toMatchObject({ sandbox: 'unsandboxed' });
+        expect(snapshot.input).toMatchObject({ sandbox: 'unsandboxed' });
         return 'y';
       },
     });
@@ -217,7 +275,7 @@ describe('shell inside run_code through the wrapped tool graph', () => {
           sandbox: 'unsandboxed',
         })}); } catch (e) { return e.message; }`,
       );
-      expect(result).toMatch(/not approved|requires approval/);
+      expect(result).toMatch(/not approved|requires approval|interaction capability is unavailable/);
       expect(existsSync(join(h.cwd, 'forbidden.txt'))).toBe(false);
     }
   });
@@ -229,8 +287,7 @@ describe('shell inside run_code through the wrapped tool graph', () => {
       const h = await harness({ sandboxRunner: fixture.runner, approve: () => answer });
       const result = await h.run('return await tools.shell({command:"printf recovered"});');
       expect(h.seen).toHaveLength(1);
-      expect(h.seen[0]!.approval.deniedRead).toMatchObject({ deniedPath: '/outside-script-shell/data.txt' });
-      expect(h.pending.snapshot().entries).toHaveLength(0);
+      expect(h.seen[0]!.presentation?.deniedRead).toMatchObject({ deniedPath: '/outside-script-shell/data.txt' });
       if (answer === 'n') expect(result).not.toContain('recovered');
       else expect(result).toContain('recovered');
       expect(fixture.configs).toHaveLength(answer === 'allow-once' ? 2 : 1);
@@ -246,11 +303,11 @@ describe('shell inside run_code through the wrapped tool graph', () => {
     );
     await waitUntil(() => h.seen.length === 1);
     await delay(350);
-    await h.owner.decide(h.seen[0]!.requestId, { answer: 'y' });
+    h.decide('y');
     await waitUntil(() => h.seen.length === 2);
-    await h.owner.decide(h.seen[1]!.requestId, { answer: 'y' });
+    h.decide('y');
     expect(await result).toContain('approved');
-    expect(h.seen[0]!.nestedCallId).not.toBe(h.seen[1]!.nestedCallId);
+    expect(h.seen[0]!.sourceCallId).not.toBe(h.seen[1]!.sourceCallId);
   });
 
   it('cancels a pending approval without executing it', async () => {
@@ -261,10 +318,10 @@ describe('shell inside run_code through the wrapped tool graph', () => {
       `return await tools.shell(${JSON.stringify({ command, sandbox: 'unsandboxed' })});`,
       controller.signal,
     );
-    await waitUntil(() => Boolean(h.owner.getSnapshot()));
+    await waitUntil(() => h.isPending());
     controller.abort();
     await result;
-    expect(h.owner.getSnapshot()).toBeNull();
+    expect(h.isPending()).toBe(false);
     expect(existsSync(join(h.cwd, 'forbidden.txt'))).toBe(false);
   });
 
@@ -286,6 +343,27 @@ describe('shell inside run_code through the wrapped tool graph', () => {
     expect(existsSync(done)).toBe(false);
   });
 
+  it('detaches invocation cancellation when a real foreground command is adopted', async () => {
+    const h = await harness({ approve: () => 'y' });
+    const controller = new AbortController();
+    const started = join(h.cwd, 'adopt-started');
+    const done = join(h.cwd, 'adopt-done');
+    const command = `${process.execPath} -e "require('fs').writeFileSync('${started}','yes'); setTimeout(()=>require('fs').writeFileSync('${done}','yes'),700)"`;
+    const running = h.run(
+      `return await tools.shell(${JSON.stringify({ command, sandbox: 'unsandboxed' })});`,
+      controller.signal,
+      3000,
+    );
+    await waitUntil(() => existsSync(started));
+    const task = h.tasks.list().find((task) => task.kind === 'shell' && task.mode === 'foreground');
+    expect(task).toBeDefined();
+    expect(h.tasks.moveToBackground(task!.taskId).ok).toBe(true);
+    expect(String(await running)).toContain(task!.taskId);
+    controller.abort();
+    await waitUntil(() => existsSync(done));
+    await waitUntil(() => h.tasks.get(task!.taskId)?.status === 'completed');
+  });
+
   it('keeps a launched background job alive after script completion and parent abort', async () => {
     const h = await harness({ approve: () => 'y' });
     const controller = new AbortController();
@@ -299,7 +377,12 @@ describe('shell inside run_code through the wrapped tool graph', () => {
     controller.abort();
     await waitUntil(() => existsSync(done));
     expect(await readFile(done, 'utf8')).toBe('completed');
-    await waitUntil(() => h.background.list().every((job) => job.status !== 'running'));
-    expect(h.background.list()).toMatchObject([{ status: 'completed' }]);
+    await waitUntil(() =>
+      h.tasks
+        .list()
+        .filter((task) => task.mode === 'background')
+        .every((task) => task.status !== 'running'),
+    );
+    expect(h.tasks.list().filter((task) => task.mode === 'background')).toMatchObject([{ status: 'completed' }]);
   });
 });

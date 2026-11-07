@@ -1,26 +1,98 @@
 [
-  ".editorconfig",
-  ".gitattributes",
-  ".gitignore",
-  ".prettierignore",
-  ".prettierrc.json",
-  "AGENTS.md",
-  "CHANGELOG.md",
-  "CLAUDE.md",
-  "CONTEXT.md",
-  "LICENSE",
-  "README.md",
-  "ROADMAP.md",
-  "eslint.config.js",
-  "knip.json",
-  "package.json",
-  "pnpm-lock.yaml",
-  "pnpm-workspace.yaml",
-  "tsconfig.build.json",
-  "tsconfig.json",
-  "vitest.ci.config.ts",
-  "vitest.config.ts",
-  "vitest.e2e.config.ts",
-  "vitest.integration.config.ts",
-  "vitest.provider-black-box.config.ts"
+  {
+    "file": ".editorconfig",
+    "reason": "Cross-editor workspace formatting specifications for indents, line endings, and charset."
+  },
+  {
+    "file": ".gitattributes",
+    "reason": "Git path attribute configuration controlling line ending conversions and merge drivers."
+  },
+  {
+    "file": ".gitignore",
+    "reason": "Root Git ignore definitions excluding compilation output, caches, and node_modules."
+  },
+  {
+    "file": ".prettierignore",
+    "reason": "Path exclusion configuration for Prettier code formatting passes across the workspace."
+  },
+  {
+    "file": ".prettierrc.json",
+    "reason": "Canonical Prettier formatting options and style configuration for the repository."
+  },
+  {
+    "file": "AGENTS.md",
+    "reason": "Operational guidelines, tool usage constraints, and conventions for AI development agents."
+  },
+  {
+    "file": "CHANGELOG.md",
+    "reason": "Chronological log recording project changes, improvements, and release history."
+  },
+  {
+    "file": "CLAUDE.md",
+    "reason": "Workflow instructions, task commands, and system context tailored for Claude agents."
+  },
+  {
+    "file": "CONTEXT.md",
+    "reason": "System architectural overview, structural layers, and developer operational context."
+  },
+  {
+    "file": "LICENSE",
+    "reason": "Legal software license terms under which this repository is published and distributed."
+  },
+  {
+    "file": "README.md",
+    "reason": "Primary repository landing documentation introducing features, architecture, and usage."
+  },
+  {
+    "file": "ROADMAP.md",
+    "reason": "Strategic project milestones, architectural vision, and phased development plans."
+  },
+  {
+    "file": "eslint.config.js",
+    "reason": "ESLint flat configuration file defining JavaScript and TypeScript static analysis rules."
+  },
+  {
+    "file": "knip.json",
+    "reason": "Dead code and unused export detection configuration for workspace package analysis."
+  },
+  {
+    "file": "package.json",
+    "reason": "Top-level package manifest declaring root scripts, workspace metadata, and dev tooling."
+  },
+  {
+    "file": "pnpm-lock.yaml",
+    "reason": "Exact pinned dependency version graph guaranteeing deterministic pnpm installations."
+  },
+  {
+    "file": "pnpm-workspace.yaml",
+    "reason": "Monorepo workspace layout configuration defining package inclusion patterns."
+  },
+  {
+    "file": "tsconfig.build.json",
+    "reason": "Specialized TypeScript configuration optimizing production compiler builds."
+  },
+  {
+    "file": "tsconfig.json",
+    "reason": "Root TypeScript compiler options, path mappings, and compiler diagnostics configuration."
+  },
+  {
+    "file": "vitest.ci.config.ts",
+    "reason": "Vitest test runner configuration optimized for headless continuous integration."
+  },
+  {
+    "file": "vitest.config.ts",
+    "reason": "Primary Vitest test runner configuration defining workspace-wide test settings."
+  },
+  {
+    "file": "vitest.e2e.config.ts",
+    "reason": "Vitest configuration specialized for end-to-end integration test execution."
+  },
+  {
+    "file": "vitest.integration.config.ts",
+    "reason": "Vitest configuration specialized for multi-component integration test runs."
+  },
+  {
+    "file": "vitest.provider-black-box.config.ts",
+    "reason": "Vitest configuration running black-box model provider contract scenarios."
+  }
 ]

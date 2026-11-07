@@ -5,7 +5,7 @@ import type {
   PersistedAssistantTurnItem,
   PersistedReasoningItem,
 } from './conversation-persistence-types.js';
-import { normalizeRunItem, normalizeRunItems } from './run-item-normalizer.js';
+import { normalizeRunItems } from './run-item-normalizer.js';
 
 const clone = <T>(value: T): T => {
   try {
@@ -171,23 +171,6 @@ const mergeReasoningProviderData = (reasoningItems: PersistedReasoningItem[]): R
 
   return Object.keys(merged).length > 0 ? merged : undefined;
 };
-
-/**
- * Normalize a single raw provider run item into zero or more persisted item
- * shapes. Returns an empty array if the item is not a recognized
- * assistant-produced shape.
- *
- * The push helpers may produce multiple items (e.g. a reasoning fragment
- * followed by an assistant message or tool call), so callers that need the
- * full set should use this instead of `buildPersistedAssistantItemFromRaw`.
- */
-export function buildPersistedAssistantItemsFromRaw(item: unknown): PersistedAssistantTurnItem[] {
-  return normalizeRunItem(item);
-}
-
-export function buildPersistedAssistantTurnItems(items: readonly unknown[] | undefined): PersistedAssistantTurnItem[] {
-  return normalizeRunItems(items);
-}
 
 export function synthesizeHistoryFromAssistantTurn(
   baseHistory: readonly ProviderInputItem[],

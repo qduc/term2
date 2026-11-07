@@ -13,6 +13,7 @@ const edges = JSON.parse(fs.readFileSync(path.join(scripts, 'layer-allowlist.jso
 
 const { map: failures, add } = failureMap();
 const size = add('file-size');
+const fanout = add('folder-fanout');
 const hints = [];
 
 if (edges.length > budget.maxLayerEdges)
@@ -23,12 +24,19 @@ if (edges.length > budget.maxLayerEdges)
 else if (edges.length < budget.maxLayerEdges) hints.push(`lower maxLayerEdges to ${edges.length}`);
 
 const files = [];
+const folderCounts = new Map();
 const walk = (dir) => {
+  let tsCount = 0;
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) walk(full);
-    else if (/\.tsx?$/.test(entry.name)) files.push(full);
+    else if (/\.tsx?$/.test(entry.name)) {
+      files.push(full);
+      tsCount++;
+    }
   }
+  const relFolder = path.relative(repo, dir).split(path.sep).join('/');
+  if (tsCount > 0) folderCounts.set(relFolder, tsCount);
 };
 walk(path.join(repo, 'src'));
 
@@ -48,9 +56,26 @@ for (const full of files.sort()) {
 for (const file of Object.keys(budget.fileCeilings))
   if (!fs.existsSync(path.join(repo, file))) hints.push(`remove the ceiling for missing ${file}`);
 
+// A folder with dozens of direct files prompts looking for submodules: a folder
+// that stays cohesive keeps a ceiling, with the reason written next to it.
+const maxFolderFiles = budget.maxFolderFiles ?? 15;
+const folderCeilings = budget.folderCeilings ?? {};
+for (const [folder, count] of [...folderCounts.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+  const ceiling = folderCeilings[folder];
+  if (ceiling && reasonProblem(ceiling.reason)) fanout(`${folder} ceiling ${reasonProblem(ceiling.reason)}`);
+  if (!ceiling && count > maxFolderFiles) fanout(`${folder} has ${count} direct files (limit ${maxFolderFiles})`);
+  else if (ceiling && count > ceiling.files)
+    fanout(`${folder} grew to ${count} direct files (ceiling ${ceiling.files}; recorded reason: "${ceiling.reason}")`);
+  else if (ceiling && count <= maxFolderFiles) hints.push(`remove the folder ceiling for ${folder}`);
+  else if (ceiling && count < ceiling.files) hints.push(`lower the folder ceiling for ${folder} to ${count}`);
+}
+for (const folder of Object.keys(folderCeilings))
+  if (!fs.existsSync(path.join(repo, folder))) hints.push(`remove the folder ceiling for missing ${folder}`);
+
 for (const hint of hints) console.log(`under budget: ${hint} in scripts/complexity-budget.json`);
 reportAndExit(
   failures,
   `complexity check passed (${edges.length} layer edges, ${files.length} files, ` +
-    `${Object.keys(budget.fileCeilings).length} over ${budget.maxLines} lines)`,
+    `${Object.keys(budget.fileCeilings).length} over ${budget.maxLines} lines, ` +
+    `${Object.keys(folderCeilings).length} folders over ${maxFolderFiles} files)`,
 );

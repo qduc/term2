@@ -4,6 +4,7 @@ import type {
   BackgroundShellRegistryPort,
   BackgroundShellJob,
   BackgroundShellLaunchOptions,
+  ForegroundShellLeaseOptions,
 } from '../tools/shell/background-shell-registry.js';
 import type { BackgroundShellExecutionResult } from '../tools/system/shell.js';
 import { BackgroundShellOutputStore } from '../tools/shell/background-shell-output-store.js';
@@ -51,13 +52,15 @@ export function createDirectShellTools() {
     };
   };
   const start = (
-    options: BackgroundShellLaunchOptions<BackgroundShellExecutionResult>,
+    options: BackgroundShellLaunchOptions<BackgroundShellExecutionResult> &
+      Pick<ForegroundShellLeaseOptions<BackgroundShellExecutionResult>, 'parentSignal'>,
     mode: 'foreground' | 'background',
   ) => {
     const port = current();
     const handle = port.start({
       command: options.command,
       mode,
+      parentSignal: mode === 'foreground' ? options.parentSignal : undefined,
       run: options.run,
       status: options.resultToStatus,
       cleanup: async () => {

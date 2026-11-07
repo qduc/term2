@@ -9,7 +9,6 @@ import {
 import '../../src/model/providers/index.js';
 import { createOpenAICompatibleProviderDefinition } from '../../src/model/providers/openai-compatible.provider.js';
 import { RetryingModel } from '../../src/model/providers/retrying-model.js';
-import { classifyInLoopModelRetry } from '../../src/engine/retry/in-loop-model-retry.js';
 import { isTransientRetryableError } from '../../src/model/failure/retry-error-classification.js';
 import type { ILoggingService, ISettingsService } from '../../src/shared/service-interfaces.js';
 import { startFakeProviderHttpServer, type FakeProviderHttpServer } from './fake-provider-http-server.js';
@@ -211,10 +210,8 @@ describe('provider boundary contracts through the registry', () => {
       failure = error;
     }
     expect(failure).toBeDefined();
-    const decision = classifyInLoopModelRetry(failure, 0, 2, () => 0.5);
     expect(isTransientRetryableError(failure)).toBe(expected !== undefined);
     if (expected === undefined) {
-      expect(decision.retryable).toBe(false);
       const model = new RetryingModel(
         {
           ...providerModel,
@@ -233,7 +230,6 @@ describe('provider boundary contracts through the registry', () => {
       expect(server.requests).toHaveLength(1);
       return;
     }
-    expect(decision).toMatchObject({ retryable: true, delayMs: expected });
     const delays: number[] = [];
     let attempts = 0;
     const model = new RetryingModel(

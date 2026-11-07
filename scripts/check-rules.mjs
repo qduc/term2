@@ -7,6 +7,7 @@
 //   3. No new unused runtime exports: an exported function/const/class must be named somewhere else in src/ or bench/.
 //      Existing ones are recorded in rule-baseline.json (reason: still to delete or wire); new ones need a reason.
 //   4. One fold: only session/fold-fact.ts imports the leaf fact reducers (queue replay and the queue barrel are its legs).
+//   5. Duplicate basenames: files under src/ do not share basenames (excluding index, types, README, INTEGRATION).
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -190,7 +191,49 @@ for (const file of files) {
   visit(sf);
 }
 
+// 5. Duplicate basenames under src/.
+const duplicates = add('duplicate-basenames');
+const duplicateAllowed = exceptionKeys(baseline.duplicateBasenames, 'file', duplicates);
+const CONVENTIONS = new Set(['index.ts', 'index.tsx', 'types.ts', 'types.tsx', 'README.md', 'INTEGRATION.md']);
+const allSrcFiles = [];
+const walkSrcAll = (dir) => {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) walkSrcAll(full);
+    else if (/\.(tsx?|mts|mjs|cts|md)$/.test(entry.name)) allSrcFiles.push(full);
+  }
+};
+walkSrcAll(src);
+
+const byBase = new Map();
+for (const file of allSrcFiles) {
+  const base = path.basename(file);
+  if (CONVENTIONS.has(base)) continue;
+  if (!byBase.has(base)) byBase.set(base, []);
+  byBase.get(base).push(rel(file));
+}
+const foundDups = new Set();
+for (const [, list] of byBase) {
+  if (list.length > 1) {
+    for (const file of list) {
+      foundDups.add(file);
+      if (!duplicateAllowed.has(file)) {
+        const others = list.filter((f) => f !== file);
+        duplicates(`${file}: shares basename with ${others.join(', ')}`);
+      }
+    }
+  }
+}
+const staleDups = [...duplicateAllowed].filter((file) => !foundDups.has(file));
+if (staleDups.length)
+  console.log(
+    `rule-baseline.json lists ${
+      staleDups.length
+    } duplicate-basename exceptions that are no longer duplicated or gone; remove:\n  ${staleDups.join('\n  ')}`,
+  );
+
 reportAndExit(
   failures,
-  `rule check passed (${found.size} recorded unused exports, ${wireAllowed.size} recorded wire-event exceptions)`,
+  `rule check passed (${found.size} recorded unused exports, ${wireAllowed.size} recorded wire-event exceptions, ` +
+    `${duplicateAllowed.size} recorded duplicate basenames)`,
 );

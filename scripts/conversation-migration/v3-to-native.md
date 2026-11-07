@@ -73,7 +73,9 @@ One explicit `turn_started` with empty input and `display:false` opens a
 context-restoration wrapper. Observations correlate to that same wrapper so the
 existing same-turn physical payload sharing can operate. Exactly one final
 provider context is emitted as hidden `item` facts containing provider-bound
-`provider_input` Items, one per actual `normalizeApplicationInput(history)` part.
+`provider_input` Items, one per `normalizeApplicationInput(history)` part from
+`v3-provider-input.mjs`. This is the frozen v3 projection moved out of the removed
+run loop (#197), not the live engine's request builder.
 No portable re-encoding strips signatures, encrypted/opaque items, provider
 metadata, raw arguments, reasoning or structured output from that normalized
 request. Normalization errors fail `normalization-refused`; native schema/replay

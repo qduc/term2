@@ -12,7 +12,7 @@ import type {
   SubagentRunHandle,
   SubagentRunStatus,
 } from '../../tools/subagents/types.js';
-import type { ResolvedSubagentLaunch } from '../runtime/subagent-bridge.js';
+import type { ResolvedSubagentLaunch } from '../direct/subagent-callbacks.js';
 import type { NestedApprovalOwner } from '../../session/approval/nested-approval-owner.js';
 import type { ToolApprovalPolicyRegistry } from '../../session/approval/tool-approval-policy-registry.js';
 import { applyApprovalGrant } from '../../session/approval/approval-grant-executor.js';

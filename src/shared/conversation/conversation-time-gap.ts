@@ -97,7 +97,7 @@ export function conversationTimeGap(humanInputAt: string | undefined, history: r
 }
 
 /** Render a gap stored on a delegation-runtime user item; never infer missing timing. */
-export function formatConversationTimeGap(value: unknown): string | null {
+function formatConversationTimeGap(value: unknown): string | null {
   if (!value || typeof value !== 'object') return null;
   const gap = value as Record<string, unknown>;
   return humanArrivalNotice(gap.previousReceivedAt, gap.receivedAt);

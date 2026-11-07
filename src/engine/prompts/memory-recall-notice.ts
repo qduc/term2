@@ -24,7 +24,7 @@ function recallPrefix(text: string): string | undefined {
 export type RecallLine = { scope: 'global' | 'project'; id: string; title: string; summary: string };
 
 /** Stable identity of a memory across both scopes. */
-export function recallKey(scope: 'global' | 'project', id: string): string {
+function recallKey(scope: 'global' | 'project', id: string): string {
   return `${scope}:${id}`;
 }
 

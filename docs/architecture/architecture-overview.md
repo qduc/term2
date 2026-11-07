@@ -8,8 +8,7 @@ one wire protocol from one host.
 Start with [`layers.md`](layers.md). It is the reference for the source layers, their
 import rules, how a message travels and the rule checks that enforce all of it. This
 page answers the question `layers.md` leaves open: **which code actually runs a turn?**
-One path does. A second, pre-rewrite engine is still in `src/` but never runs, and it is
-easy to mistake for live code.
+One path does. The unused pre-rewrite runtime was removed in #197.
 
 ## The turn path
 
@@ -40,38 +39,18 @@ Child agents run on the same path: `delegation/direct/` (`createDirectSubagentTo
 launches each one as a session branch (`session/branches.ts`) that runs through
 `startNestedTurn` in `engine/turn.ts`. See [`src/delegation/README.md`](../../src/delegation/README.md).
 
-## Legacy code that never runs
+## Retained shared policy
 
-The pre-rewrite subagent engine is still in `src/`, but production never executes it.
-Nothing constructs its entry points, every production import of them is `import type`,
-and the built bundle (`dist/src/app/cli.bundle.cjs`) contains none of its classes:
+The direct launcher uses the role loader, tool policy, role-pool selector and worker
+worktree helpers in `delegation/subagents/`. These are policy, not a second runner.
+`engine/agent-runtime/` retains live resolvers, budgets and its generation guard;
+workflow launch contracts remain type-only. Compatibility role-definition adaptation
+and offline v3 migration remain supported. The public `./hooks` entrypoint retains
+its type contract.
 
-| Dead | Where |
-| --- | --- |
-| `SubagentManager` and its runners (`execution-runner.ts`, `mentor-runner.ts`, `nested-runner.ts`) | `delegation/subagents/` |
-| `SubagentBridge`, `compose-agent-runtime.ts` | `delegation/runtime/` |
-| `AgentConfiguration` | `app/lib/agent-configuration.ts` |
-| `ApplicationRunLoop` and most of the loop machinery | `engine/agent-runtime/` |
-| `createSessionRuntime`, `SessionTurnAdapter`, `TurnCoordinator` and nearly everything else | `session/session/` |
-| `ConversationRecord` | `session/conversation/` |
-
-The reachability gate counts type-only imports, so it reports this code as reached
-(#196). Deleting it is #197. Until then:
-
-- Do not fix bugs or add behavior there; a change there reaches no user.
-- Some files beside it are live: the role, tool-policy, pool and worktree policy that
-  `delegation/direct/` uses (`delegation/subagents/role-loader.ts`, `tool-policy.ts`,
-  `subagent-role-pool-selector.ts`, `worker-worktree.ts`), and the resolvers, budgets
-  and `generation-guard.ts` in `engine/agent-runtime/`. Before relying on anything in
-  these folders, search the built bundle for it.
-- [`conversation-core.md`](conversation-core.md) and [`conversation-loop.md`](conversation-loop.md)
-  describe the dead runtime. They are worth reading only for its design rationale.
-
-A behavior that exists in both places is a trap: a fix to the dead copy changes nothing.
-For example, the `[Conversation timing]` notice's clock and notice rules live once in
-`shared/conversation/conversation-time-gap.ts`. The live path uses them through
-`session/time-gap.ts`; the history helpers in the same shared file serve only the dead
-runtime and go with it.
+The archived [conversation core](conversation-core.md), [conversation loop](conversation-loop.md)
+and [output recovery](assistant-output-recovery-architecture.md) documents describe
+only the removed runtime. They are not implementation guidance for the live path.
 
 ## Where to go next
 
@@ -81,7 +60,7 @@ runtime and go with it.
 - The `architecture` skill (`.agents/skills/architecture/`) — module-design judgement
   and the runtime-path reference for debugging.
 - [`assistant-output-recovery-architecture.md`](assistant-output-recovery-architecture.md)
-  — recovery of assistant output.
+  — archived recovery design for the removed runtime.
 
 The earlier overview, with `ConversationOrchestrator`, `ConversationService`,
 `ConversationAdapter`, `TurnCoordinator` and `TurnWorkflow` on the main path, and its

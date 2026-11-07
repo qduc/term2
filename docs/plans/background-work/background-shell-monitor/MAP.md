@@ -43,6 +43,22 @@ compile error, a long migration printed a progress marker. The process keeps
 running; the notification arrives through the same durable background lane that
 already delivers job completions.
 
+## Cancellation boundary lesson (#197)
+
+Migrating the shell integration fixture to the live source-tool/Session graph
+exposed a pre-existing cancellation gap: the shell lease supplied a script deadline
+signal, but the app adapter discarded it and the Session port used only the root
+turn signal. The script returned while its foreground process kept running.
+Foreground admission now combines the invocation and turn signals in the Session
+adapter, where ownership transfer detaches their listener. Explicit background
+launches remain independent of the launching script. No deadline value or kill
+policy changed.
+
+The real-process fixture checks abort/deadline termination and detached background
+survival; foreground-to-background transfer is checked through the same live graph.
+A legacy-registry fixture passed while missing this adapter defect: process tests
+must cross the shipped admission adapter, not a retired lifecycle owner.
+
 ## Notes
 
 - Each phase is a feature-sized unit owning its own worktree under `.worktrees/`;

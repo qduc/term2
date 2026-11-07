@@ -1,5 +1,5 @@
 /** Application-owned model failure used for retry classification. */
-export class ModelBehaviorError extends Error {
+class ModelBehaviorError extends Error {
   override name = 'ModelBehaviorError';
 
   constructor(message: string, options?: { cause?: unknown }) {

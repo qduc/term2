@@ -1,5 +1,5 @@
 import type { SavedToolExecution } from '../tool-execution-ledger.js';
-import type { AssistantJournalItemLogEvent } from '../logging/conversation-log-events.js';
+
 import type { PersistedAssistantTurnItem } from './conversation-persistence-types.js';
 import { projectPersistedAssistantItemToProviderHistory } from './conversation-turn-items.js';
 import { normalizeRunItems } from './run-item-normalizer.js';
@@ -50,18 +50,4 @@ export function buildToolLedgerFromAssistantTurnItems(
     reasoning = [];
   }
   return [...entries.values()];
-}
-
-/** Preserve journal turn identity while sharing the authoritative pairing rule. */
-export function buildToolLedgerFromJournalEvents(
-  events: AssistantJournalItemLogEvent[],
-  startedAt: string,
-): SavedToolExecution[] {
-  const turns = new Map<string, PersistedAssistantTurnItem[]>();
-  for (const event of events) {
-    const items = turns.get(event.turnId) ?? [];
-    items.push(event.item);
-    turns.set(event.turnId, items);
-  }
-  return [...turns].flatMap(([turnId, items]) => buildToolLedgerFromAssistantTurnItems(items, turnId, startedAt));
 }

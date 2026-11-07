@@ -5,6 +5,7 @@
 # Run on demand (about a minute); not part of CI. Usage: bash scripts/prove-checks.sh
 set -u
 cd "$(dirname "$0")/.."
+export MERGE_BASE="${MERGE_BASE:-HEAD}"
 fail=0
 out=$(mktemp)
 backups=()
@@ -22,7 +23,8 @@ expect_fail() { # name, expected pattern, command...
   if "$@" >"$out" 2>&1; then echo "NOT CAUGHT  $name (passed)"; fail=1
   elif grep -qE "$pattern" "$out"; then
     # Show the violation the expected rule reported: the line after its FAIL header, or the matching line itself.
-    echo "caught      $name: $(awk -v p="$pattern" 'f { sub(/^ +/, ""); print; exit } $0 ~ p { if ($0 ~ /^FAIL/) f = 1; else { sub(/^ +/, ""); print; exit } }' "$out" | cut -c1-120)"
+    local msg; msg=$(node -e 'const fs=require("fs");const lines=fs.readFileSync(process.argv[1],"utf8").split("\n");const re=new RegExp(process.argv[2]);for(let i=0;i<lines.length;i++){if(re.test(lines[i])){if(lines[i].startsWith("FAIL"))console.log(lines[i+1]?.trim()||lines[i]);else console.log(lines[i].trim());break;}}' "$out" "$pattern" | cut -c1-120)
+    echo "caught      $name: $msg"
   else echo "NOT CAUGHT  $name (failed without /$pattern/: $(grep -m1 . "$out" | cut -c1-100))"; fail=1; fi
   restore
 }
@@ -46,6 +48,8 @@ seed "leaf-reducer module namespace-imported outside foldFact" src/app/settings.
 seed "leaf-reducer module dynamically imported outside foldFact" src/app/settings.ts $'\nexport const seededFold = import("../session/queue-state.js");\n' '\[one-fold\]' node scripts/check-rules.mjs
 seed "app/ reads a session log" src/app/settings.ts $'\nexport const seededReader = readFactLines;\n' '\[log-readers\]' node scripts/check-layers.mjs
 seed "engine imports app (layer direction)" src/engine/turn.ts $'\nimport "../app/settings.js";\n' '\[layer-direction\]' node scripts/check-layers.mjs
+seed "duplicate basename" src/app/turn.ts $'export const seededTurn = 1;\n' '\[duplicate-basenames\]' node scripts/check-rules.mjs
+seed "folder fan-out exceeds ceiling" src/config/settings/seeded-fanout.ts $'export const seeded = 1;\n' '\[folder-fanout\]' node scripts/check-complexity.mjs
 seed "file never reached from app/cli.ts" src/app/seeded-dead.ts $'export const dead = 1;\n' 'unreached from src/app/cli.ts: src/app/seeded-dead\.ts' node scripts/check-reachability.mjs
 # Match the seeded diagnostic too: pre-existing dead code must not satisfy this proof.
 for edge in \
@@ -76,8 +80,17 @@ backup scripts/complexity-budget.json; json scripts/complexity-budget.json "d.fi
 expect_fail "ceiling raised without a new reason" 'reason is unchanged' node scripts/check-baselines.mjs
 backup scripts/complexity-budget.json; json scripts/complexity-budget.json "d.maxLines=600"
 expect_fail "global line limit raised" 'maxLines rose' node scripts/check-baselines.mjs
+folder='src/tools'
+backup scripts/complexity-budget.json; json scripts/complexity-budget.json "d.folderCeilings['$folder'].files+=5"
+expect_fail "folder ceiling raised without a new reason" 'reason is unchanged' node scripts/check-baselines.mjs
+backup scripts/complexity-budget.json; json scripts/complexity-budget.json "d.maxFolderFiles+=5"
+expect_fail "global folder file limit raised" 'maxFolderFiles rose' node scripts/check-baselines.mjs
 backup scripts/complexity-budget.json; json scripts/complexity-budget.json "d.maxLayerEdges+=1"
 expect_fail "edge budget raised without a reasoned edge" 'maxLayerEdges rose' node scripts/check-baselines.mjs
+backup scripts/rule-baseline.json; json scripts/rule-baseline.json "d.duplicateBasenames.push('app/turn.ts')"
+expect_fail "duplicate basename allowlist grew by a bare entry" 'new bare entry' node scripts/check-baselines.mjs
+backup scripts/rule-baseline.json; json scripts/rule-baseline.json "d.duplicateBasenames.push({file:'app/turn.ts',reason:'needed'})"
+expect_fail "duplicate basename with placeholder reason" 'too short|placeholder' node scripts/check-baselines.mjs
 
 backup src/engine/turn.ts scripts/layer-allowlist.json scripts/complexity-budget.json
 printf '\nimport "../app/settings.js";\n' >> src/engine/turn.ts
@@ -88,6 +101,16 @@ expect_pass "reasoned layer edge is accepted and shown to the reviewer" 'Recorde
 backup scripts/complexity-budget.json
 json scripts/complexity-budget.json "const c=d.fileCeilings['$ceiling'];c.lines+=50;c.reason+=' Seeded by prove-checks: the new lines extend the same job.'"
 expect_pass "raised ceiling with a rewritten reason is accepted" "ceiling [0-9]+ -> [0-9]+" node scripts/check-baselines.mjs
+backup scripts/complexity-budget.json
+json scripts/complexity-budget.json "const c=d.folderCeilings['$folder'];c.files+=5;c.reason+=' Seeded by prove-checks: the new files extend the same module.'"
+expect_pass "raised folder ceiling with a rewritten reason is accepted" "ceiling [0-9]+ -> [0-9]+" node scripts/check-baselines.mjs
+backup src/app/seeded-dup.ts scripts/rule-baseline.json
+printf 'export const seededDup = 1;\n' >> src/app/seeded-dup.ts
+printf 'export const seededDup = 2;\n' >> src/tools/seeded-dup.ts
+backups+=("new:src/tools/seeded-dup.ts")
+json scripts/rule-baseline.json "d.duplicateBasenames.push({file:'app/seeded-dup.ts',reason:'Seeded by prove-checks: duplicate file allowed for testing reasons.'},{file:'tools/seeded-dup.ts',reason:'Seeded by prove-checks: duplicate file allowed for testing reasons.'})"
+expect_pass "reasoned duplicate basenames are accepted and shown to reviewer" 'duplicate-basenames' \
+  bash -c 'node scripts/check-rules.mjs && node scripts/check-baselines.mjs'
 
 rm -f "$out"
 exit $fail

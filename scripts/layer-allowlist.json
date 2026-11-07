@@ -16,14 +16,6 @@
     "reason": "Plan Phase 3.2: the hook logs through the concrete logger. Goes when app/ injects ILoggingService through TUI context."
   },
   {
-    "edge": "engine/agent-runtime/context-compaction/index.ts -> session/conversation/conversation-state-projector.ts (engine -> session)",
-    "reason": "Plan Phase 3.3: compaction needs session's projection of model history. Goes when the compactor takes a historyProjector and session passes projectModelRequestHistory."
-  },
-  {
-    "edge": "engine/retry/retry-contracts.ts -> session/conversation/conversation-events.ts (engine -> session)",
-    "reason": "Plan Phase 3.4 (type-only import): the retry contract names a session event type. Goes when engine defines its own RetryNotice and session's union includes it."
-  },
-  {
     "edge": "shared/lib/chained-input-filter.ts -> session/conversation/run-item-normalizer.ts (shared -> session)",
     "reason": "Plan Phase 3.5: a shared helper used by model/ and engine/ calls session normalization. Goes when the normalizer moves down (if pure) or is injected."
   }

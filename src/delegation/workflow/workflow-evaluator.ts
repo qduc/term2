@@ -1,5 +1,5 @@
 import type { Worker } from 'node:worker_threads';
-import type { AgentRuntime } from '../../engine/agent-runtime/agent-runtime.js';
+import type { AgentLauncher } from '../../engine/agent-runtime/types.js';
 import type { AgentConfig, RunResult } from '../../engine/agent-runtime/types.js';
 import { SandboxedCodeHostImpl } from '../../tools/sandboxed-code-host/sandboxed-code-host.js';
 import type { CapabilityHandler, CapabilityOutcome } from '../../tools/sandboxed-code-host/host-types.js';
@@ -38,7 +38,7 @@ import { WORKFLOW_PROHIBITED_TOOL_NAMES } from '../../tools/system/run-code/scri
 export const WORKFLOW_PROHIBITED_TOOLS: Set<string> = new Set<string>(WORKFLOW_PROHIBITED_TOOL_NAMES);
 
 export interface WorkflowEvaluatorDeps {
-  runtime: Pick<AgentRuntime, 'agent'>;
+  runtime: AgentLauncher;
   parentTools: readonly string[];
   limits?: Partial<WorkflowLimits>;
   /** Allows callers/tests to report captured workflow console output without exposing it to code. */

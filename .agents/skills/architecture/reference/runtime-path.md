@@ -12,10 +12,10 @@ measures this path, so its output is the current file list.
 (`session/branches.ts`) that run through `startNestedTurn` in the same `engine/turn.ts`.
 See `src/delegation/README.md`.
 
-**Not on the path.** `src/engine/agent-runtime/application-run-loop.ts`
-(`ApplicationRunLoop`), the legacy subagent runners in `src/delegation/subagents/`, and
-`src/session/session/` (`createSessionRuntime`) are not executed in production; the
-built bundle does not contain them (#197). Do not debug a live failure there.
+**Removed runtime.** The pre-rewrite run loop, subagent bridge/manager/runners and
+session composition were deleted in #197. Retained helpers in those folders are
+shared policy, not another execution path. Offline v3 input projection now lives
+with its converter in `scripts/conversation-migration/`.
 
 The legacy path this file once described (`app.tsx`, `ConversationOrchestrator`,
 `ConversationService`, `ConversationAdapter`, `QueueController`, `TurnWorkflow`) was

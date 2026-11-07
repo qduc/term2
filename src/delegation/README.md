@@ -45,10 +45,8 @@ console limits are unchanged by the ownership move.
 ## Shared result policy
 
 `subagent-result.ts` owns `buildDiffStat` and `truncateResultText` for the
-native background callbacks and compatibility execution runner. Keeping these
-helpers outside the runner lets both paths share result policy without importing
-compatibility execution just to format a result. Tool-facing result types remain
-in `tools/subagents/types.ts`.
+native background callbacks. Tool-facing result types remain in
+`tools/subagents/types.ts`.
 
 `buildDiffStat` preserves first-seen file order, deduplicates path strings, and
 looks up counts by the literal path before its resolved path; missing counts are
@@ -62,18 +60,9 @@ the settled result for notification and retrieval, so those consumers share one
 artifact. This module does not own child execution, failure classification or
 settlement.
 
-## Compatibility runners
+## Retained compatibility policy
 
-`subagents/subagent-manager.ts` retains its facade API and top-level lifecycle
-events. `subagents/runtime.ts` composes nested, one-shot and mentor runners,
-the asynchronous registry and the shared role-pool cursor. Do not put prompt,
-cache or execution policy back into the facade. `runtime/subagent-bridge.ts`
-retains resolved-launch and adopted foreground control. `runtime/` also owns
-the adapter from these runners to the lower `AgentRuntime` executor contract.
-The application run loop itself stays in engine.
-
-Tool-facing request schemas, results, acknowledgements and continuation-control
-ports stay under tools; execution-tree budgets and host-resolved definitions do
-not. Session's background notification store lives under `session/session/`,
-since it projects and queues accepted lifecycle events. Pool-editor metadata
-lives in config; role-to-tier policy lives here.
+`runtime/legacy-adapter.ts` adapts stored role definitions to the live AgentSpec
+contract. It does not launch a separate runtime. The direct launcher retains role,
+tool-policy, role-pool and worker-worktree helpers in `subagents/`; the unused
+pre-rewrite bridge, manager and runners were removed in #197.

@@ -33,7 +33,6 @@ export type BackgroundTaskActivity = {
 };
 
 export const BACKGROUND_SUBAGENT_QUIET_AFTER_MS = 30_000;
-export const BACKGROUND_SHELL_QUIET_AFTER_MS = 10_000;
 export const BACKGROUND_TASK_TOOL_LABEL_LIMIT = 80;
 
 /** Bounds provider-derived labels before they enter retained presentation state. */

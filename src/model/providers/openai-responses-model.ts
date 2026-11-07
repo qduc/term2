@@ -444,7 +444,7 @@ function toTurnOutput(item: any, lane: string = OPENAI_RESPONSES_OPAQUE_TAG): St
 
 export type ContextCompactionFailureCategory = 'request' | 'validation';
 
-export function contextCompactionFailureCategory(error: unknown): ContextCompactionFailureCategory | undefined {
+function contextCompactionFailureCategory(error: unknown): ContextCompactionFailureCategory | undefined {
   if (!error || typeof error !== 'object') return undefined;
   const record = error as Record<string, unknown>;
   const status = Number(record.status ?? record.statusCode ?? (record.error as any)?.status);

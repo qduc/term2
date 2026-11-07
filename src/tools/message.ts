@@ -1,5 +1,7 @@
 import type { CommandMessage as BaseCommandMessage } from './types.js';
+
 import type { NormalizedUsage } from '../shared/utils/ai/token-usage.js';
+
 import type { SkillAttachment, UserTurn } from '../shared/types/user-turn.js';
 
 export interface UserMessage {
@@ -77,28 +79,3 @@ export type Message =
   | SystemMessage
   | ReasoningMessage
   | SubagentActivityMessage;
-
-export const isUserMessage = (message: Message): message is UserMessage => message.sender === 'user';
-
-export const isBotMessage = (message: Message): message is BotMessage => message.sender === 'bot';
-
-export const isCommandMessage = (message: Message): message is CommandMessage => message.sender === 'command';
-
-export const isSubagentActivityMessage = (message: Message): message is SubagentActivityMessage =>
-  message.sender === 'subagent';
-
-export const isResultToolEvent = (tool: string | CommandMessage): boolean => {
-  if (tool && typeof tool === 'object') {
-    return tool.status === 'completed' || tool.status === 'failed' || tool.success !== undefined;
-  }
-  if (typeof tool === 'string') {
-    return (
-      tool.endsWith(' (Success)') ||
-      tool.endsWith(' (Failed)') ||
-      tool.endsWith(' (Cancelled)') ||
-      /\s+\(Failed:.*\)$/.test(tool) ||
-      /\s+\(\d+\s+match(es)?\)$/.test(tool)
-    );
-  }
-  return false;
-};

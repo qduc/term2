@@ -78,8 +78,8 @@ at each affected caller rather than assuming root and child selection are equal.
 Preserve prompts, CLI defaults, interactive/non-interactive behavior, provider
 requests, concurrency metadata, approval barriers and shutdown behavior wherever
 the slice reaches them. No persisted-format change or new default product policy
-is in scope. Consult [conversation core](../../architecture/conversation-core.md) and
-[conversation loop](../../architecture/conversation-loop.md) when tracing affected owners.
+is in scope. Trace current owners through [the architecture overview](../../architecture/architecture-overview.md).
+The conversation core and loop documents are archived pre-rewrite rationale (#197).
 
 ## Deferred capabilities and reasons to revisit
 

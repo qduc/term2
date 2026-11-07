@@ -1,4 +1,4 @@
-import type { ConversationRecord } from '../conversation/conversation-record.js';
+import type { ProviderInputItem } from '../../shared/contracts/provider-input.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../../shared/service-interfaces.js';
 import type { LLMAdvisory } from '../../tools/conversation.js';
 import {
@@ -119,7 +119,7 @@ const parseUnsandboxedFlag = (rawArguments: unknown): boolean => {
 import type { SessionAccessState } from '../session/session-access-state.js';
 
 export interface ShellAutoApprovalResolverDeps {
-  record: ConversationRecord;
+  record: { getHistory(): ProviderInputItem[] };
   agentClient: ShellAutoApprovalAgentClient;
   logger: ILoggingService;
   settingsService?: ISettingsService;
@@ -268,54 +268,5 @@ export class ShellAutoApprovalResolver {
 
   clearCache(): void {
     this.advisoriesByCallId.clear();
-  }
-}
-
-export class DelegatingShellAutoApprovalResolver extends ShellAutoApprovalResolver {
-  private delegate?: ShellAutoApprovalResolver;
-
-  constructor(deps: ShellAutoApprovalResolverDeps) {
-    super(deps);
-  }
-
-  setDelegate(delegate: ShellAutoApprovalResolver): void {
-    this.delegate = delegate;
-  }
-
-  override getAutoApproveMode(): AutoApproveMode | undefined {
-    return this.delegate ? this.delegate.getAutoApproveMode?.() : super.getAutoApproveMode();
-  }
-
-  override isUnsandboxedApprovalEligible(): boolean {
-    return this.delegate ? this.delegate.isUnsandboxedApprovalEligible() : super.isUnsandboxedApprovalEligible();
-  }
-
-  override shouldAutoApprove(advisory: LLMAdvisory | undefined): boolean {
-    return this.delegate ? this.delegate.shouldAutoApprove(advisory) : super.shouldAutoApprove(advisory);
-  }
-
-  override async resolveAdvisoryForInterruption(input: {
-    interruption: unknown;
-    siblings: unknown[];
-  }): Promise<LLMAdvisory | undefined> {
-    return this.delegate
-      ? this.delegate.resolveAdvisoryForInterruption(input)
-      : super.resolveAdvisoryForInterruption(input);
-  }
-
-  override recordManualDecision(command: string, decision: 'approved' | 'rejected'): void {
-    if (this.delegate) {
-      this.delegate.recordManualDecision(command, decision);
-    } else {
-      super.recordManualDecision(command, decision);
-    }
-  }
-
-  override clearCache(): void {
-    if (this.delegate) {
-      this.delegate.clearCache();
-    } else {
-      super.clearCache();
-    }
   }
 }

@@ -164,6 +164,8 @@ export type ShellTaskPort = {
   notify(id: string, key: string, text: string): boolean;
 };
 export type ShellTaskStart<T> = {
+  /** Foreground invocation cancellation, including script deadlines; detached on adoption. */
+  readonly parentSignal?: AbortSignal;
   readonly command: string;
   readonly mode: 'foreground' | 'background';
   readonly run: (signal: AbortSignal) => Promise<T>;

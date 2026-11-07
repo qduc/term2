@@ -51,7 +51,7 @@ import type {
   SubagentRunHandle,
   SubagentRunStatus,
 } from '../tools/subagents/types.js';
-import type { ResolvedSubagentLaunch } from '../delegation/runtime/subagent-bridge.js';
+import type { ResolvedSubagentLaunch } from '../delegation/direct/subagent-callbacks.js';
 import type {
   CancelRunParams,
   GetSubagentResultParams,
@@ -77,7 +77,7 @@ import { resolveAncillaryModelTier } from '../engine/agent-runtime/model-resolve
 import { createRunAgentWorkflowToolDefinition } from '../tools/run-agent-workflow.js';
 import { createWorktreeToolDefinitions } from '../tools/system/worktree.js';
 import { createRunCodeToolDefinition } from '../delegation/index.js';
-import type { AgentRuntime } from '../engine/agent-runtime/agent-runtime.js';
+import type { AgentLauncher } from '../engine/agent-runtime/types.js';
 import type { WorkflowLimits } from '../delegation/workflow/workflow-types.js';
 import { WorkflowEvaluatorImpl } from '../delegation/index.js';
 import { createRootAgentAuthoritySnapshot } from '../engine/agent-runtime/permission-boundary.js';
@@ -214,7 +214,7 @@ export const getAgentDefinition = (
       sessions: boolean;
     }) => void;
     projectInstructions?: string;
-    agentRuntime?: Pick<AgentRuntime, 'agent'> | null;
+    agentRuntime?: AgentLauncher | null;
     postExecuteDeniedRead?: boolean;
     sessionAccess?: SessionAccessState;
     readOnly?: boolean;

@@ -1,10 +1,19 @@
 import { readFile, writeFile, mkdir, rm } from 'fs/promises';
 import path from 'path';
 import { applyDiff } from '../shared/utils/apply-diff.js';
-import type { ApplyPatchOperation, ApplyPatchResult } from '../shared/contracts/patch.js';
 import type { ILoggingService, ISettingsService } from '../shared/service-interfaces.js';
 import { quoteShellArg } from './ssh-service.js';
 import { ExecutionContext } from './execution-context.js';
+
+type ApplyPatchOperation =
+  | { type: 'create_file'; path: string; diff: string }
+  | { type: 'update_file'; path: string; diff: string }
+  | { type: 'delete_file'; path: string };
+
+type ApplyPatchResult = {
+  status: 'completed' | 'failed';
+  output: string;
+};
 
 /**
  * Resolves a relative path and ensures it's within the workspace, unless the

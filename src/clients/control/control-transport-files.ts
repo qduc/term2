@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import process from 'node:process';
 import { connect } from 'node:net';
-import { readProcStartTime, type ControlAdvertisement } from './transport-primitives.js';
+import { readProcStartTime, type ControlAdvertisement } from '../control-socket/control-socket.js';
 
 export class ControlMutationUnavailable extends Error {}
 

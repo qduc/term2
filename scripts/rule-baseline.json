@@ -1728,14 +1728,6 @@
       "reason": "Terminal UI skin slot implementation for zen skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
     },
     {
-      "file": "shared/tools/agent/ask-user-constants.ts",
-      "reason": "Shared question types, validation schemas, and constants for ask_user tool."
-    },
-    {
-      "file": "tools/adopted/ask-user-constants.ts",
-      "reason": "Adopted legacy tool constants preserving compatibility with external harnesses."
-    },
-    {
       "file": "clients/tui/presentation/skins/cards/body.tsx",
       "reason": "Terminal UI skin slot implementation for cards skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
     },
@@ -2038,14 +2030,6 @@
     {
       "file": "shared/utils/subsequence-filter.ts",
       "reason": "Generic string subsequence matching utility shared across CLI utilities."
-    },
-    {
-      "file": "clients/tui/terminal.ts",
-      "reason": "Low-level terminal raw mode, escape sequence, and resize signal handling."
-    },
-    {
-      "file": "shared/types/terminal.ts",
-      "reason": "Platform-independent terminal dimensions, color capabilities, and capabilities types."
     },
     {
       "file": "clients/tui/presentation/utils/ai/token-usage.ts",

@@ -1,4 +1,4 @@
-import { ASK_USER_NO_ANSWER_RESULT } from '../tools/adopted/ask-user-constants.js';
+import { ASK_USER_NO_ANSWER_RESULT } from '../shared/tools/agent/ask-user-constants.js';
 import type { InteractionDecision } from '../tools/index.js';
 
 const NOTICE =

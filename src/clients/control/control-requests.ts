@@ -9,7 +9,7 @@ import {
   type ControlErrorCode,
   type ControlMutationReceipt,
   type BridgeOutcome,
-} from './transport-primitives.js';
+} from '../control-socket/control-socket.js';
 import type { ControlSessionPort } from './control-transport-types.js';
 import { ControlMutationUnavailable } from './control-transport-files.js';
 

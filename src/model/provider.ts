@@ -1,5 +1,4 @@
 import { DEFAULT_ASSUMED_CONTEXT_WINDOW } from './index.js';
-import { stringArray } from './provider-settings.js';
 import { weeklyQuota } from './provider-quota.js';
 import { observeProviderRequestDispatch } from './providers/request-dispatch.js';
 /**
@@ -308,7 +307,10 @@ function toProviderRequest(
   let codex: { promptCacheKey?: string; include?: readonly string[] } | undefined;
   if (ref.provider === 'codex') {
     const promptCacheKey = cacheKey && !extraBodyKey ? cacheKey : undefined;
-    const include = stringArray(provider.defaultModelSettings?.().include);
+    const rawInclude = provider.defaultModelSettings?.().include;
+    const include = Array.isArray(rawInclude)
+      ? rawInclude.filter((e): e is string => typeof e === 'string')
+      : undefined;
     if (promptCacheKey !== undefined || include !== undefined) {
       codex = {
         ...(promptCacheKey !== undefined ? { promptCacheKey } : {}),

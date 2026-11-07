@@ -53,7 +53,7 @@ import { classifyCommand, SafetyStatus } from '../../tools/shell/command-safety/
 import { evaluateShellAutoApprovalAdvisories } from '../../session/approval/shell-auto-approval-evaluator.js';
 import { shouldBypassToolApproval } from '../../session/approval/shell-auto-approval-resolver.js';
 import { extractWordText } from '../../tools/shell/command-safety/utils.js';
-import type { ISubagentClient } from './subagent-client-types.js';
+import type { ShellAutoApprovalAgentClient } from '../../session/conversation-agent-client.js';
 import type { ToolApprovalPolicyRegistry } from '../../session/approval/tool-approval-policy-registry.js';
 import { MemoryCapabilityBuilder } from '../../tools/memory/memory-capabilities.js';
 import type { NestedToolCompatibilityState } from '../../session/session/nested-tool-compatibility-state.js';
@@ -503,14 +503,14 @@ export class SubagentToolPolicy {
   #logger: ILoggingService;
   #sessionContextService: ISessionContextService;
   #executionContext?: ExecutionContext;
-  #agentClient?: ISubagentClient;
+  #agentClient?: ShellAutoApprovalAgentClient;
 
   constructor(deps: {
     settings: ISettingsService;
     logger: ILoggingService;
     sessionContextService: ISessionContextService;
     executionContext?: ExecutionContext;
-    agentClient?: ISubagentClient;
+    agentClient?: ShellAutoApprovalAgentClient;
   }) {
     this.#settings = deps.settings;
     this.#logger = deps.logger;

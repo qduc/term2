@@ -1,4 +1,4 @@
-export { ASK_USER_NO_ANSWER_RESULT } from '../tools/adopted/ask-user-constants.js';
+export { ASK_USER_NO_ANSWER_RESULT } from '../shared/tools/agent/ask-user-constants.js';
 /** Direct public protocol. No engine tokens, provider history or live callbacks cross this boundary. */
 import type { ModelRequestCost } from '../engine/recovery-budget.js';
 import type { DirectFinalWindow } from '../session/final.js';

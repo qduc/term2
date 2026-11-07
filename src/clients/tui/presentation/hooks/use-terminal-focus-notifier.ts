@@ -3,7 +3,10 @@ import { useInput } from 'ink';
 import { sendNotification } from '../../../notification-service.js';
 import type { LoggingService } from '../../../../session/logging/logging-service.js';
 import type { SettingsService } from '../../../../app/settings-service.js';
-import type { TerminalWriter } from '../../../../shared/types/terminal.js';
+
+type TerminalWriter = {
+  write: (value: string) => unknown;
+};
 
 interface UseTerminalFocusNotifierOptions {
   stdout: TerminalWriter;

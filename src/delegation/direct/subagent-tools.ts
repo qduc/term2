@@ -9,7 +9,7 @@ import { agentSpecToConfig } from '../../engine/agent-runtime/agent-spec.js';
 import type { AgentSpec } from '../../engine/agent-runtime/types.js';
 import { createRootBudget } from '../../engine/agent-runtime/execution-budget.js';
 import type { ResolvedAgentDefinition } from '../../engine/agent-runtime/resolved-agent.js';
-import type { ISubagentClient } from '../subagents/subagent-client-types.js';
+import type { ShellAutoApprovalAgentClient } from '../../session/conversation-agent-client.js';
 import { ToolApprovalPolicyRegistry } from '../../session/approval/tool-approval-policy-registry.js';
 import type { ExecutionContext } from '../../tools/execution-context.js';
 import { resolveActiveEnforcement } from '../../config/profiles/active-profile.js';
@@ -67,7 +67,7 @@ export type DirectSubagentToolsOptions = {
   /** The parent's session browser; legacy provisions it to the librarian only. */
   readonly sessionBrowser?: SessionBrowser;
   /** Legacy SubagentToolPolicy's advisory model client for a worker's YELLOW shell commands. */
-  readonly advisoryClient?: ISubagentClient;
+  readonly advisoryClient?: ShellAutoApprovalAgentClient;
 };
 
 /** Legacy subagent-bridge toManagerDefinition: a resolved definition with its own root budget. */

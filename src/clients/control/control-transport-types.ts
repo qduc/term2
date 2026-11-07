@@ -4,7 +4,7 @@ import type {
   ControlMutationReceipt,
   ControlSessionPort as V1ControlSessionPort,
   ControlSocketOptions as V1ControlSocketOptions,
-} from './transport-primitives.js';
+} from '../control-socket/control-socket.js';
 
 export type ControlBridgeResult =
   | (BridgeOutcome & { readonly receipt?: ControlMutationReceipt })

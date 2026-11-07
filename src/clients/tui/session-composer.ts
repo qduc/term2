@@ -15,10 +15,13 @@ import {
   submitText,
   WireCommandFailure,
 } from './commands.js';
-import { withSkillPrefix } from './skill-edit.js';
 import { randomUUID } from 'node:crypto';
 import type { TuiConnection } from './integration.js';
 import { useEditor } from './editor.js';
+
+/** An edited queue entry that began with an explicit skill request keeps that accepted prefix in the sent text. */
+const withSkillPrefix = (prefix: string | undefined, text: string): string =>
+  prefix === undefined ? text : `${prefix}${text ? `\n\n${text}` : ''}`;
 
 export function useSessionComposer(state: TuiState, historySize: number, onNotice?: (message: string) => void) {
   const [images, setImages] = useState<ImageRef[]>([]);

@@ -7,12 +7,8 @@
       "files": 78,
       "reason": "Direct CLI application composition root, command dispatch, and setup workflows; to be decomposed into domain submodules in Phase 3."
     },
-    "src/clients/control": {
-      "files": 16,
-      "reason": "Control socket client protocol handlers, event bridges, and IPC framing for external orchestration."
-    },
     "src/clients/tui": {
-      "files": 52,
+      "files": 50,
       "reason": "Terminal UI root components, hooks, layout, and session rendering; to be partitioned into submodules as the TUI matures."
     },
     "src/clients/tui/menus": {
@@ -26,10 +22,6 @@
     "src/host": {
       "files": 28,
       "reason": "Server gateway, socket dispatch, and transport endpoints; combines direct SSE host and control socket routes."
-    },
-    "src/model": {
-      "files": 16,
-      "reason": "Model domain types, token usage tracking, and streaming completion contracts; core vocabulary for all provider adapters."
     },
     "src/model/providers": {
       "files": 60,
@@ -66,8 +58,8 @@
       "reason": "Port of source/hooks/use-subagent-pool-selection.ts with only imports changed; kept whole so it stays diffable against the legacy oracle."
     },
     "src/clients/tui/session.tsx": {
-      "lines": 539,
-      "reason": "The session wires the composer to the ported legacy menu stack (useMenuStack, double-Escape) and routes every report into the transcript as legacy's addSystemMessage does; that wiring closes over submit, rewind and the viewport, declared later in the same component, so moving it out would add ref plumbing rather than a job seam. The composer's JSX also sits inside ComposerWidth (legacy InputBox's width-0 first frame), which only wraps it, and the command path routes a legacy clear-and-switch confirmation to the plan-toggle hook. The approval panel's Escape adds legacy's Stopped line through the viewport (one prop). The menu stack's first-run setup prompt sits under the live divider as legacy BottomArea places it (one line; the gate itself lives in menus/use-first-run-setup.ts). Candidate 2 adds the ported approval prompt host and tasks panel around the hidden composer box (legacy BottomArea order), which the same routing owns. The harness composer acknowledgement waits for the input to remount after an Esc-closed menu (two lines)."
+      "lines": 540,
+      "reason": "The session wires the composer to the ported legacy menu stack (useMenuStack, double-Escape) and routes every report into the transcript as legacy's addSystemMessage does; that wiring closes over submit, rewind and the viewport, declared later in the same component, so moving it out would add ref plumbing rather than a job seam. The composer's JSX also sits inside ComposerWidth (legacy InputBox's width-0 first frame), which only wraps it, and the command path routes a legacy clear-and-switch confirmation to the plan-toggle hook. The approval panel's Escape adds legacy's Stopped line through the viewport (one prop). The menu stack's first-run setup prompt sits under the live divider as legacy BottomArea places it (one line; the gate itself lives in menus/use-first-run-setup.ts). Candidate 2 adds the ported approval prompt host and tasks panel around the hidden composer box (legacy BottomArea order), which the same routing owns. The harness composer acknowledgement waits for the input to remount after an Esc-closed menu (two lines). The footer and filter hooks are imported from their own modules (two lines) rather than through a one-importer re-export barrel that existed only to save a line under this ceiling."
     },
     "src/clients/tui/approval-prompt.tsx": {
       "lines": 1145,

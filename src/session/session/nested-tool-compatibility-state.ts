@@ -1,7 +1,12 @@
-import type { SessionReadAccess } from '../approval/session-read-access.js';
 import type { DockerHostControlGrants } from '../../tools/shell/sandbox/docker-host-control-grants.js';
 import type { DeniedReadStore, ExecutionOverrideStore } from '../../tools/shell/sandbox/denied-read-stores.js';
 import type { NestedReadAccessPort, NestedShellAccessPort } from '../../tools/access-port.js';
+
+export interface SessionReadAccess {
+  allowFolder(sessionId: string, folder: string): void;
+  allows(sessionId: string, targetPath: string, baseDir?: string): boolean;
+  clear(sessionId: string): void;
+}
 /**
  * Optional compatibility capability supplied by a nested-tool host.
  * This contract retains no state or runtime implementation. Nested tools do

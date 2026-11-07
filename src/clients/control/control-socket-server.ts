@@ -15,7 +15,7 @@ import {
   readProcStartTime,
   reapControlDirectory,
   type ControlAdvertisement,
-} from './transport-primitives.js';
+} from '../control-socket/control-socket.js';
 import type { ControlSessionPort, ControlSocketOptions } from './control-transport-types.js';
 import {
   ControlMutationUnavailable,

@@ -68,9 +68,13 @@ See [the delegation public interface](../../src/delegation/README.md).
 ## Rule checks
 
 Every rule above and every claim below has a check, or it is not a rule. Each check was shown failing on a
-seeded violation (`bash scripts/prove-checks.sh` redoes that in about a minute). Per-commit checks are
-static and need no build; the heavy ones run per candidate and report, they do not gate commits. Times are
-wall-clock on a loaded 7-core box.
+seeded violation (`bash scripts/prove-checks.sh` redoes that in about a minute). The independent CI `quality`
+job runs production typechecking, static architecture and repository guards, and the golden-change review
+policy without waiting for behavioral tests. Static checks need no build. The headless contract bench and
+message-path probe run in `integration`; golden parity runs in `e2e`. The expensive lanes can skip inert
+pull requests, but `quality` always runs. The `port` check remains as a compatibility aggregate of quality
+and the behavioral lanes, not as a separate build or migration phase. Times below are wall-clock on a
+loaded 7-core box.
 
 | Rule | Check | When | Time |
 | ---- | ----- | ---- | ---- |
@@ -84,7 +88,7 @@ wall-clock on a loaded 7-core box.
 | Files stay under 500 lines, folders stay under 15 files unless a ceiling records why; layer edges within budget | `check-complexity.mjs` | every commit | 0.15 s |
 | A new exception or raised ceiling carries a reason, and the reviewer is shown each one | `check-baselines.mjs` | every commit | 0.2 s |
 | Root directory contains only allowlisted files | `check-root.mjs` | every commit | 0.05 s |
-| A message's path stays short and runs through the production direct files | `bench/hops.mts` | every commit | 5.8 s |
+| A message's path stays short and runs through the production direct files | `bench/hops.mts` | integration lane | 5.8 s |
 | The engine waits instead of calling up | layer table above (no upward import); `check-engine-callbacks.mjs` for the callbacks that write facts (audit F1): every `TurnDeps`/`TurnBudget` callback that reaches the session writer must be recorded in `rule-baseline.json` (`engineCallbackWrites`) with a reason. It follows calls it can resolve to a body, interface members into the object literals and classes that implement them, and port signatures named `commit*`/`accept*`/`append`; a write reached only through a value the checker cannot resolve is not seen | every commit | 10 s |
 | One log: no second state to keep in sync | only the log-reader half is checked; the duplicate-reducer half (audit H1) is **not** | every commit | - |
 | Speed stays within 1.2x of legacy on a large session | queue job, run on each candidate at load under 9 | per candidate | minutes |
@@ -215,8 +219,10 @@ measurable:
 
 `parity/run.mjs` runs each scenario in `parity/scenarios/` against a CLI
 build, with a scripted fake provider, and compares exit code, output, every
-provider request and the workspace files against `parity/goldens/`. The goldens
-were recorded from the old engine and are never edited to make a run pass.
+provider request and the workspace files against `parity/goldens/`. These reviewed
+behavior snapshots began as old-engine parity evidence and now guard the current
+CLI contract. Never re-record them merely to make a run pass: intentional changes
+need review and the live `golden-change` pull-request label, enforced by `quality`.
 
 The feature tracker that gated the port (`parity/inventory.mjs` and
 `parity/features.json`) was retired at the flip (#87): it extracted features
@@ -236,7 +242,7 @@ not-yet-created stores. Filename checks alone cannot protect an empty legacy sto
 custom native stores elsewhere remain supported, even when named `conversations`.
 On macOS and Windows, alternate-case spellings of that reserved path are also
 refused, including on case-sensitive volumes.
-`bench/m1-direct.mjs` covers the headless path.
+`bench/headless.mjs` covers the headless path.
 
 For direct HTTP session configuration, the BFF's `session_update` assertion binds
 only `sessionId`, not `workspaceId`; session lookup is separate, and the gateway
@@ -261,7 +267,7 @@ node scripts/check-reachability.mjs            # every src file is reached from 
 node scripts/check-complexity.mjs              # long files carry a recorded reason
 node --import tsx bench/hops.mts               # one message's path stays short
 node scripts/build.mjs                         # production build
-node bench/m1-direct.mjs                       # headless behaviour against the built CLI
+node bench/headless.mjs                       # headless behaviour against the built CLI
 ```
 
 A profile-dependent probe needs an explicit profile rather than the

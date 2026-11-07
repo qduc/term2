@@ -1,14 +1,9 @@
 #!/usr/bin/env node
-// M1 executable bench: m1-draft.md §9 table D (rows 1-12) plus flag and interactive-terminal
-// checks from §5. It spawns the built headless executable against a local fake OpenAI-compatible
-// provider, and drives the public session API in-process for follow-ups, reopen and failure
-// injection. Written against the approved behaviour and the frozen interfaces, not against
-// any implementation.
+// Headless CLI and session contracts: run the built executable against a local fake
+// OpenAI-compatible provider, and drive the public session API in-process for follow-ups,
+// reopen and failure injection. Exit 0 only when every row passes.
 //
-//   node scripts/build.mjs && node bench/m1-direct.mjs
-//
-// A row is BLOCKED, not PASS, when it reaches a frozen stub that is still unimplemented, so an
-// unfinished CLI or session layer can never pass by accident. Exit 0 only when every row passes.
+//   node scripts/build.mjs && node bench/headless.mjs
 
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -22,7 +17,6 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dist = path.join(repo, 'dist/src');
 const CLI = path.join(dist, 'app/cli.js');
-const STUB = 'the direct headless path is not implemented yet';
 
 if (!fs.existsSync(CLI)) {
   console.error(`missing ${path.relative(repo, CLI)}; build first: node scripts/build.mjs`);
@@ -37,8 +31,6 @@ const { profileEnterNotice } = await dynamic('session/mode-notices.js');
 
 const MODEL = { provider: 'mockprov', model: 'mock-alpha' };
 const SYSTEM = 'You are a test assistant.';
-
-class Blocked extends Error {}
 
 // ---------- Fake OpenAI-compatible provider (HTTP), scripted per request ----------
 
@@ -80,7 +72,7 @@ async function respond(res, step) {
 }
 
 async function scenario(script, agent = {}, app = {}) {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'm1-bench-')));
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-headless-')));
   const s = {
     root,
     home: path.join(root, 'home'),
@@ -169,9 +161,7 @@ function startCli(s, args, opts = {}) {
 }
 
 async function runCli(s, args, opts) {
-  const result = await startCli(s, args, opts).exited;
-  if (result.stderr.includes(STUB)) throw new Blocked(`CLI is still the M1 stub (${STUB})`);
-  return result;
+  return startCli(s, args, opts).exited;
 }
 
 // ---------- Helpers ----------
@@ -267,12 +257,11 @@ async function runTurn(conv, input, extra = {}) {
   for await (const event of turn.events) events.push(event);
   return events;
 }
-// Waits for CLI output. A run that exits first is BLOCKED if it is the stub, FAIL otherwise.
+// Wait for CLI output; exiting before the expected output is a failure.
 async function waitForOutput(run, text, label) {
   const start = Date.now();
   while (!run.out().includes(text)) {
     if (run.child.exitCode !== null || run.child.signalCode !== null) {
-      if (run.err().includes(STUB)) throw new Blocked(`CLI is still the M1 stub (${STUB})`);
       throw new Error(`CLI exited before ${label}; stderr ${JSON.stringify(run.err())}`);
     }
     if (Date.now() - start > 15_000) throw new Error(`timed out waiting for ${label}`);
@@ -311,7 +300,7 @@ const row = (id, name, fn) => rows.push({ id, name, fn });
 
 row(
   'R1',
-  'success: exact stdout/stderr, §4 fact order, replay idle, reopen twice identical, no provider hit',
+  'success: exact stdout/stderr, durable fact order, replay idle, reopen twice identical, no provider hit',
   async () => {
     const s = await scenario(okScript('Hello there.'));
     try {
@@ -819,7 +808,7 @@ row('R11', 'directness: the real executable loads none of the forbidden modules'
         "import fs from 'node:fs';",
         'export async function resolve(specifier, context, nextResolve) {',
         '  const result = await nextResolve(specifier, context);',
-        '  if (process.env.M1_LOADED_LOG) fs.appendFileSync(process.env.M1_LOADED_LOG, result.url + "\\n");',
+        '  if (process.env.HEADLESS_LOADED_LOG) fs.appendFileSync(process.env.HEADLESS_LOADED_LOG, result.url + "\\n");',
         '  return result;',
         '}',
         '',
@@ -832,7 +821,7 @@ row('R11', 'directness: the real executable loads none of the forbidden modules'
     const loadedLog = path.join(hookDir, 'loaded.txt');
     const r = await runCli(s, ['say hello'], {
       execArgv: ['--import', pathToFileURL(path.join(hookDir, 'register.mjs')).href],
-      env: { M1_LOADED_LOG: loadedLog },
+      env: { HEADLESS_LOADED_LOG: loadedLog },
     });
     assert.equal(r.code, 0, r.stderr);
     assert.equal(r.stdout, 'Hello there.\n');
@@ -853,7 +842,7 @@ row('R11', 'directness: the real executable loads none of the forbidden modules'
   }
 });
 
-row('R12', 'home guard from a fake HOME: the four §5 rows', async () => {
+row('R12', 'home guard from a fake HOME: prompt, auto-approve, lite and no-prompt cases', async () => {
   const s = await scenario(okScript('Hello there.'));
   try {
     const plain = await runCli(s, ['say hello'], { cwd: s.home });
@@ -881,7 +870,7 @@ row('R12', 'home guard from a fake HOME: the four §5 rows', async () => {
   }
 });
 
-row('R13', 'flags: --version and --help exit 0 without a provider call; M1 flags listed in help', async () => {
+row('R13', 'flags: --version and --help exit 0 without a provider call; headless flags listed in help', async () => {
   const s = await scenario(okScript('Hello there.'));
   try {
     const version = await runCli(s, ['--version']);
@@ -983,7 +972,6 @@ row('R17', 'late signal: a signal after the durable result never replaces its ex
           run.child.once('close', () => clearInterval(burst));
         });
         const r = await run.exited;
-        if (r.stderr.includes(STUB)) throw new Blocked(`CLI is still the M1 stub (${STUB})`);
         assert.equal(r.signal, null, `${signal} ${attempt} must not kill the process after its result`);
         assert.equal(r.code, code, `${signal} ${attempt} exit (stderr ${JSON.stringify(r.stderr)})`);
       } finally {
@@ -1054,7 +1042,7 @@ for (const [index, { configured, args, reject }] of [
       configured ? { activeProfileId: `builtin:${configured}` } : {},
     );
     try {
-      fs.writeFileSync(path.join(s.workspace, 'AGENTS.md'), 'M1_PROFILE_CONTEXT_MARKER\n');
+      fs.writeFileSync(path.join(s.workspace, 'AGENTS.md'), 'HEADLESS_PROFILE_CONTEXT_MARKER\n');
       const settingsFile = path.join(s.home, '.local', 'state', 'term2-nodejs', 'settings.json');
       const savedSettings = fs.readFileSync(settingsFile);
       const r = await runCli(s, [...args, 'select the configured profile']);
@@ -1063,7 +1051,7 @@ for (const [index, { configured, args, reject }] of [
       assert.equal(r.stderr, `Profile: ${expected}\n`);
       assert.equal(s.requests.length, 1);
       const wire = JSON.stringify(s.requests[0]);
-      assert.ok(wire.includes('M1_PROFILE_CONTEXT_MARKER'), 'project context reaches the provider');
+      assert.ok(wire.includes('HEADLESS_PROFILE_CONTEXT_MARKER'), 'project context reaches the provider');
       const bareIdentity = "You are a coding assistant working in the user's checkout.";
       assert.ok(wire.includes(bareIdentity), 'Bare instruction identity');
       assert.doesNotMatch(wire, /Mode is ON/, 'Bare carries no workflow notice');
@@ -1089,7 +1077,6 @@ for (const [index, { configured, args, reject }] of [
 
 let pass = 0;
 let fail = 0;
-let blocked = 0;
 for (const { id, name, fn } of rows) {
   const started = Date.now();
   try {
@@ -1098,14 +1085,9 @@ for (const { id, name, fn } of rows) {
     console.log(`PASS    ${id} ${name} (${Date.now() - started} ms)`);
   } catch (error) {
     const message = (error.message ?? String(error)).split('\n').slice(0, 8).join('\n          ');
-    if (error instanceof Blocked || /not implemented yet/.test(error.message ?? '')) {
-      blocked += 1;
-      console.log(`BLOCKED ${id} ${name}\n          ${message}`);
-    } else {
-      fail += 1;
-      console.log(`FAIL    ${id} ${name}\n          ${message}`);
-    }
+    fail += 1;
+    console.log(`FAIL    ${id} ${name}\n          ${message}`);
   }
 }
-console.log(`\n${pass} passed, ${fail} failed, ${blocked} blocked, of ${rows.length} rows`);
+console.log(`\n${pass} passed, ${fail} failed, of ${rows.length} rows`);
 process.exit(pass === rows.length ? 0 : 1);

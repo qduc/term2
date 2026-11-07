@@ -155,6 +155,7 @@ jobs:
           node scripts/check-reachability.mjs
           node scripts/check-complexity.mjs
           node scripts/check-rules.mjs
+          node scripts/check-engine-callbacks.mjs
           node scripts/check-baselines.mjs
           node scripts/check-root.mjs
           node --unhandled-rejections=strict --import tsx bench/hops.mts

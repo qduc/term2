@@ -2131,5 +2131,27 @@
       "file": "session/prompts/worktree-hygiene.md",
       "reason": "General system prompt fragment detailing worktree hygiene and baseline checks."
     }
+  ],
+  "engineCallbackWrites": [
+    {
+      "callback": "TurnDeps.takeSteering",
+      "reason": "The engine needs the steered items to build the request it is about to send, so it must have them synchronously. It asks only at a request boundary (turn-model.ts #prepare/#auxiliary), after every durable event the turn has published has been accepted (each publish is awaited; only transient tool_progress is not), so the queue and background-notice facts land after the turn's earlier facts and before the request that carries the items. Could go if steering became an emit-and-await event like interaction_required (#199)."
+    },
+    {
+      "callback": "TurnDeps.normalStop",
+      "reason": "The engine needs the stop/continue decision and the reminder text before it can end or continue the turn. It is called once the final response's events are accepted (turn.ts), and the goal, reminder and verification facts it writes are the decision's own receipt, so they land at the turn's stop point. Could go if normal stop became an emit-and-await decision event like interaction_required (#199)."
+    },
+    {
+      "callback": "TurnDeps.runNested",
+      "reason": "Session owns a child run: it writes the branch_started and task facts and reads the child handle through the branch reader (session/branches.ts), which appends each child event before accepting it, the same contract as the root reader. Those facts are keyed by branch and task (replay-background.ts), not by position in the parent turn, and the parent tool result that reports the child is still a parent event."
+    },
+    {
+      "callback": "TurnDeps.subagents",
+      "reason": "Returns the task port tools use to message, answer or stop child tasks. Its writes are task facts in Session's task registry, folded per task by replay-background.ts rather than by position in the turn, and the calling tool's own result still reaches the log as a turn event."
+    },
+    {
+      "callback": "TurnDeps.shellTasks",
+      "reason": "Returns the shell-task port tools use to wait on or stop background shell tasks. Its writes are task facts in Session's task registry, folded per task by replay-background.ts rather than by position in the turn, and the calling tool's own result still reaches the log as a turn event."
+    }
   ]
 }

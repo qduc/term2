@@ -64,15 +64,17 @@ export class TurnBudgetControl {
   }
 
   /** Stable per-physical-request records survive failures and history compaction.
-   * Model cached input is normalized as cache-read tokens, not extra prompt tokens. */
-  record(input: {
+   * Model cached input is normalized as cache-read tokens, not extra prompt tokens.
+   * A budgeted run hands the record to Session as a `request_cost` event and waits for it to be accepted,
+   * so the cost fact lands in the log in emission order (issue #199). */
+  async record(input: {
     requestId: string;
     model: ModelRef;
     usage?: Usage;
     costUsd?: number | string;
     outcome: ModelRequestCost['outcome'];
     serviceTier?: ModelRequestCost['serviceTier'];
-  }): void {
+  }): Promise<void> {
     const serviceTier = input.serviceTier ?? 'standard';
     // Subscriptions have no per-token rate to look up. A provider-reported
     // charge still wins; otherwise the request stays unpriced instead of
@@ -99,7 +101,9 @@ export class TurnBudgetControl {
       pricingVersion: getModelPricingVersion(serviceTier),
     });
     this.#costs.set(input.requestId, record);
-    this.deps.budget?.onRequestCost?.(record, { turnId: this.spec.turnId });
+    if (!this.deps.budget) return;
+    // Rejects only when this wait is cancelled; the event stays queued as cleanup and Session still records it.
+    await this.events.publish({ type: 'request_cost', record }).catch(() => {});
   }
 
   get wrappingUp(): boolean {

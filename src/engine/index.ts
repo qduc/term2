@@ -5,7 +5,11 @@
  * (`turn-model.ts`), dispatches the tools the model asks for (`turn-tools.ts`)
  * and emits `TurnEvent`s on a `TurnHandle`. It never writes the log. Session
  * accepts each event and only then lets the turn advance, so a crash can lose
- * at most the unaccepted tail. When a tool needs approval or an answer, the
+ * at most the unaccepted tail. A few `TurnDeps` callbacks the session supplies
+ * (steering, normal stop, nested runs, task ports) still write facts while the
+ * engine waits on them; each is recorded with its reason in
+ * scripts/rule-baseline.json and checked by scripts/check-engine-callbacks.mjs.
+ * Request costs are `request_cost` events. When a tool needs approval or an answer, the
  * turn emits an interaction request and waits in memory for the session to
  * answer it; it does not call up into a UI. `startCompaction` and the
  * `recovery*` files own compaction and recovery from model failures.

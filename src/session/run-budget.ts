@@ -35,17 +35,17 @@ class RunClock extends RunBudget {
   }
 }
 
-/** A root gets a new budget; children inherit only the parent's remaining finite envelope. */
+/**
+ * A root gets a new budget; children inherit only the parent's remaining finite envelope.
+ * This class never writes the log: a turn's reader builds each cost fact with `costFact` from the engine's
+ * `request_cost` event, and every committed cost fact comes back through `retain`.
+ */
 export class DirectRunBudgets {
   readonly #runs = new Map<TurnId, Run>();
   readonly #costs = new Map<string, DirectRequestCostFact>();
 
-  constructor(
-    readonly options: TurnDeps['budget'],
-    readonly accept: (fact: DirectRequestCostFact) => void,
-    facts: readonly Fact[],
-  ) {
-    for (const fact of facts) if (fact.type === 'request_cost_recorded') this.#retain(fact);
+  constructor(readonly options: TurnDeps['budget'], facts: readonly Fact[]) {
+    for (const fact of facts) if (fact.type === 'request_cost_recorded') this.retain(fact);
   }
 
   open(turnId: TurnId, parentTurnId?: TurnId, options = this.options): BudgetOptions | undefined {
@@ -70,23 +70,29 @@ export class DirectRunBudgets {
       state: run.state,
       ...(parent ? { wrapUpOnCritical: true } : {}),
       costRecords: (id) => this.records(id),
-      onRequestCost: (record, context) => {
-        if (context.turnId !== turnId) throw new Error('Physical request cost has the wrong run owner');
-        const shared = options.costRecords?.(turnId).find((entry) => entry.requestId === record.requestId);
-        const fact: DirectRequestCostFact = {
-          type: 'request_cost_recorded',
-          turnId,
-          rootTurnId: run.rootTurnId,
-          ...(parentTurnId ? { parentTurnId } : {}),
-          record: structuredClone(mergeCost(record, shared)),
-        };
-        // No accounting/observer publication before the sole Session writer accepts it.
-        this.#assertOwnership(fact);
-        this.accept(fact);
-        this.#retain(fact);
-        options.onRequestCost?.(record, context);
-      },
     };
+  }
+
+  /** The fact a reader commits for one of this run's `request_cost` events. Builds it; never writes it. */
+  costFact(turnId: TurnId, record: ModelRequestCost): DirectRequestCostFact {
+    const run = this.#runs.get(turnId);
+    if (!run) throw new Error('Physical request cost has no Session-owned run budget');
+    const shared = run.options.costRecords?.(turnId).find((entry) => entry.requestId === record.requestId);
+    const fact: DirectRequestCostFact = {
+      type: 'request_cost_recorded',
+      turnId,
+      rootTurnId: run.rootTurnId,
+      ...(run.parentTurnId ? { parentTurnId: run.parentTurnId } : {}),
+      record: structuredClone(mergeCost(record, shared)),
+    };
+    this.#assertOwnership(fact);
+    return fact;
+  }
+
+  /** Count a committed cost fact (replayed or just accepted) toward its run and every ancestor. */
+  retain(fact: DirectRequestCostFact): void {
+    this.#assertOwnership(fact);
+    this.#costs.set(fact.record.requestId, fact);
   }
 
   /** Descendant costs count once for each ancestor, never against an unrelated root. */
@@ -158,11 +164,6 @@ export class DirectRunBudgets {
         existing.parentTurnId !== fact.parentTurnId)
     )
       throw new Error('Physical request cost identity changed run ownership');
-  }
-
-  #retain(fact: DirectRequestCostFact): void {
-    this.#assertOwnership(fact);
-    this.#costs.set(fact.record.requestId, fact);
   }
 }
 

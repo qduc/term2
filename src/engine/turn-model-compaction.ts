@@ -138,7 +138,7 @@ export class TurnCompaction {
                   outcome: signal.aborted ? 'cancelled' : outcome,
                 };
                 requests.push(record);
-                this.budget.record({ ...record, serviceTier: serviceTierForRequest(prepared) });
+                await this.budget.record({ ...record, serviceTier: serviceTierForRequest(prepared) });
               }
             },
           }
@@ -332,7 +332,7 @@ export class TurnCompaction {
         outcome: signal.aborted ? 'cancelled' : outcome,
       };
       onRequest(record);
-      this.budget.record({
+      await this.budget.record({
         ...record,
         serviceTier: serviceTierForRequest(prepared.request),
       });

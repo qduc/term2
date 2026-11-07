@@ -9,8 +9,9 @@ import type {
   TurnId,
   TurnResult,
 } from '../engine/index.js';
+import type { ModelRequestCost } from '../engine/recovery-budget.js';
 import type { Item, ModelError } from '../model/index.js';
-import type { Fact, DirectTurnFact, DirectHistoryFact } from './facts.js';
+import type { Fact, DirectTurnFact, DirectHistoryFact, DirectRequestCostFact } from './facts.js';
 import type { Turn, TurnRequest, AnswerResult, AnswerProvenance, ConversationDeps } from './types.js';
 import type { bindDirectCapabilities } from './capabilities.js';
 import { ConversationJournal, modelError } from './conversation-journal.js';
@@ -78,6 +79,8 @@ export function ownConversationTurn(
   handle: TurnHandle,
   journal: ConversationJournal,
   options: {
+    /** Builds (never writes) the cost fact for this turn's `request_cost` event; see `DirectRunBudgets.costFact`. */
+    readonly requestCost: (record: ModelRequestCost) => DirectRequestCostFact;
     readonly capabilities: ReturnType<typeof bindDirectCapabilities>;
     readonly publishNotice: ConversationDeps['publishNotice'];
     released(): void;
@@ -143,9 +146,11 @@ export function ownConversationTurn(
       event.type === 'tool_execution_finished' ||
       event.type === 'compaction_completed' ||
       event.type === 'compaction_failed' ||
+      event.type === 'request_cost' ||
       (event.type === 'item' && event.item.type === 'tool_result');
     if ((cancelled || draining) && !cleanup) return null;
-    const fact = factFor(turnId, event);
+    // Cost is a fact, never a client event: its views come from the accepted fact.
+    const fact = event.type === 'request_cost' ? options.requestCost(event.record) : factFor(turnId, event);
     if (fact && !journal.commit([fact])) {
       cancel();
       return null;
@@ -153,7 +158,7 @@ export function ownConversationTurn(
     if (event.type === 'budget_required') budgets.set(event.requestId, event);
     if (event.type === 'interaction_required') requests.set(event.request.requestId, event.request);
     handle.accept(token);
-    return cancelled || draining ? null : event;
+    return cancelled || draining || event.type === 'request_cost' ? null : event;
   };
   const drain = async (): Promise<void> => {
     while (!done) {

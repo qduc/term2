@@ -142,6 +142,26 @@ export const RULES = {
       entry: 'duplicateBasenames: { "file": "<path under src/>", "reason": "..." }',
     },
   },
+  'engine-callback-writes': {
+    title: 'The engine waits instead of calling up: engine callbacks do not write the log',
+    why:
+      "A turn's facts reach the log through its events, appended by the turn's reader before each is accepted, " +
+      'so the log order is the order the engine emitted them. A callback the engine invokes that writes the log is ' +
+      'a second write path: where its facts land depends on when the engine chose to call it, and replay cannot ' +
+      'tell the two apart.',
+    fix:
+      'Emit a TurnEvent and let session/conversation-turn.ts (and the branch reader in session/branches.ts) build ' +
+      'and append the fact before accepting it, as request costs do.',
+    avoid:
+      'Do not move the write behind a port with another name or a value the checker cannot follow; that hides the ' +
+      'write path and keeps it.',
+    exceptions: {
+      file: 'scripts/rule-baseline.json',
+      entry:
+        'engineCallbackWrites: { "callback": "TurnDeps.<member>", "reason": "why the engine must have the result ' +
+        'synchronously, and why its facts still land in a deterministic place" }',
+    },
+  },
   'folder-fanout': {
     title: 'Folder fan-out stays under the file limit',
     why:
@@ -257,6 +277,8 @@ export function readDeviations(read) {
     add('unused-exports', 'scripts/rule-baseline.json', entry, 'export', 'unusedExports');
   for (const entry of rules?.duplicateBasenames ?? [])
     add('duplicate-basenames', 'scripts/rule-baseline.json', entry, 'file', 'duplicateBasenames');
+  for (const entry of rules?.engineCallbackWrites ?? [])
+    add('engine-callback-writes', 'scripts/rule-baseline.json', entry, 'callback', 'engineCallbackWrites');
 
   const reach = json('scripts/reachability-allowlist.json');
   for (const [file, reason] of Object.entries(reach ?? {}))

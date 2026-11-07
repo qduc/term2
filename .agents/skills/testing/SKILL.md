@@ -55,7 +55,9 @@ production build lacks `act`.
 - Everything else: the evidence the `verification` skill asks for. Running tiers that don't
   touch your change is not evidence.
 
-CI runs every tier. Follow any late CI failure through to a passing run or a blocker someone clearly owns.
+CI runs every tier on pushes to `main`. A pull request runs every tier too, unless every file it
+changes is inert for CI (the `changes` job in `.github/workflows/ci.yml` defines inert); then it
+skips them all. Follow any late CI failure through to a passing run or a blocker someone clearly owns.
 Never claim a test, build, or check passed unless you ran it and it succeeded. For long runs, set an
 explicit finite timeout and wait for the completion notification rather than polling.
 

@@ -1,18 +1,24 @@
 // Replace dist's entry module with a single-file esbuild bundle of everything it imports.
 //
 // Startup is mostly Node's ESM loader resolving and compiling some thousand separate modules:
-// 1.6 s to an idle composer unbundled, about 1.05 s bundled (with a compile cache). The
-// bundle takes the entry's own path, so dist/cli.js, restart (argv[1]) and every test that
-// launches dist/src/app/cli.js run it unchanged. The other emitted modules stay
-// beside it: worker threads, prompts and other assets are still loaded from their own files.
+// 1.6 s to an idle composer unbundled, about 1.05 s bundled (with a compile cache). The bundle is
+// CommonJS (cli.bundle.cjs, beside the entry) so that scripts/bundle-loader.mjs, copied to the
+// entry's own path, can run it through vm.Script and cache the code compiled during startup. So
+// dist/cli.js, restart (argv[1]) and every test that launches dist/src/app/cli.js run it unchanged.
+// The other emitted modules stay beside it: worker threads, prompts and other assets are still
+// loaded from their own files.
 import fs from 'node:fs';
 import path from 'node:path';
-import { build } from 'esbuild';
+import { fileURLToPath } from 'node:url';
+import { build, transform } from 'esbuild';
+
+const loader = fileURLToPath(new URL('./bundle-loader.mjs', import.meta.url));
 
 export async function bundleEntry(dist) {
   const entry = path.join(dist, 'src/app/cli.js');
   const entryDir = path.dirname(entry);
-  const tmp = path.join(dist, '.cli.bundle.js');
+  const bundle = path.join(entryDir, 'cli.bundle.cjs');
+  const tmp = path.join(dist, '.cli.bundle.mjs');
   // Our modules locate assets, workers and dynamic imports from import.meta. Rewrite each use to
   // the module's own emitted path (which still exists), so it resolves exactly as unbundled.
   const ownLocations = {
@@ -33,19 +39,20 @@ export async function bundleEntry(dist) {
       });
     },
   };
-  // Node links each builtin the bundle imports through an ESM facade that reads every export once.
-  // node:http's WebSocket, CloseEvent and MessageEvent exports are getters that load Node's internal
-  // undici, so a static import cost every start ~17 ms. Through require, an export is read when used.
-  const builtinsThroughRequire = {
-    name: 'builtins-through-require',
+  // react, react-reconciler and scheduler choose their development or production build from
+  // NODE_ENV when first required. env-setup.ts defaults it to production, but the test suites launch
+  // dist with NODE_ENV=test (settings and OAuth branch on it), so they rendered with the development
+  // reconciler (~36 ms more per launch) and checked a React build users do not run. Each selector is
+  // pinned to its production branch; esbuild then leaves the development files out of the bundle.
+  const reactProductionBuild = {
+    name: 'react-production-build',
     setup(b) {
-      b.onResolve({ filter: /^(node:)?http$/ }, (args) =>
-        args.kind === 'import-statement' ? { path: 'node:http', namespace: 'term2-require-builtin' } : undefined,
-      );
-      b.onLoad({ filter: /.*/, namespace: 'term2-require-builtin' }, (args) => ({
-        contents: `module.exports = require(${JSON.stringify(args.path)});`,
-        loader: 'js',
-      }));
+      const selector = "process.env.NODE_ENV === 'production'";
+      b.onLoad({ filter: /[\\/]node_modules[\\/](react|react-reconciler|scheduler)[\\/][^\\/]+\.js$/ }, async (args) => {
+        const code = await fs.promises.readFile(args.path, 'utf8');
+        if (!code.includes(selector)) return undefined;
+        return { contents: code.replaceAll(selector, 'true'), loader: 'js' };
+      });
     },
   };
   const devtoolsStub = path.join(dist, '.devtools-stub.js');
@@ -78,25 +85,50 @@ export async function bundleEntry(dist) {
       '@qduc/web-fetch',
     ],
     alias: { 'react-devtools-core': devtoolsStub },
-    plugins: [ownLocations, builtinsThroughRequire],
-    // CommonJS dependencies expect require, __filename and __dirname. `define` maps only their free
-    // uses, so a module's own `const __dirname = ...` keeps its own binding.
+    plugins: [reactProductionBuild, ownLocations],
+    // CommonJS dependencies expect __filename and __dirname. `define` maps only their free uses, so a
+    // module's own `const __dirname = ...` keeps its own binding.
     define: { __filename: '__term2BundleFile', __dirname: '__term2BundleDir' },
-    banner: {
-      js: [
-        "import { createRequire as __term2CreateRequire } from 'node:module';",
-        "import { fileURLToPath as __term2FileUrlToPath } from 'node:url';",
-        "import { dirname as __term2Dirname } from 'node:path';",
-        'const require = __term2CreateRequire(import.meta.url);',
-        'const __term2BundleFile = __term2FileUrlToPath(import.meta.url);',
-        'const __term2BundleDir = __term2Dirname(__term2BundleFile);',
-        'const __term2ModuleUrl = (rel) => new URL(rel, import.meta.url).href;',
-        'const __term2ModuleFile = (rel) => __term2FileUrlToPath(__term2ModuleUrl(rel));',
-        'const __term2ModuleDir = (rel) => __term2Dirname(__term2ModuleFile(rel));',
-      ].join('\n'),
-    },
   });
   fs.rmSync(devtoolsStub);
-  fs.renameSync(tmp, entry);
+  // Then to CommonJS. Bundling straight to CommonJS fails on Ink's and yoga's top-level awaits; the
+  // ES module bundle has already turned those into async module initializers, so only an await at
+  // the entry's own top level can fail this step, and it fails the build.
+  let code = fs.readFileSync(tmp, 'utf8');
+  // A script inside the loader's function wrapper cannot start with a hashbang.
+  if (code.startsWith('#!')) code = code.slice(code.indexOf('\n') + 1);
+  // esbuild heads each inlined module with a `// dist/<path>` comment, which tests use to patch one
+  // module (tests/helpers/patch-compiled-module.ts). A transform drops comments but keeps legal
+  // ones (`//!`) in place, so the markers cross as legal comments and are restored afterwards.
+  code = code.replace(/^\/\/ dist\//gm, '//! dist/');
+  const cjs = await transform(code, {
+    format: 'cjs',
+    platform: 'node',
+    target: 'node20',
+    logLevel: 'warning',
+    legalComments: 'inline',
+    // Dependencies' import.meta (yoga's script URL, Ink's package.json lookup, a DEV-only resolve)
+    // gets the bundle's location, as it had in the ES module bundle.
+    define: { 'import.meta.url': '__term2BundleUrl', 'import.meta.resolve': '__term2Resolve' },
+    // The first line stays empty: the loader's function wrapper goes there, so every other line and
+    // column of a stack trace matches the file. The modules were ES modules, so strict mode.
+    banner: [
+      '',
+      "'use strict';",
+      "const { fileURLToPath: __term2FileUrlToPath, pathToFileURL: __term2PathToFileUrl } = require('node:url');",
+      "const { dirname: __term2Dirname } = require('node:path');",
+      'const __term2BundleFile = __filename;',
+      'const __term2BundleDir = __dirname;',
+      'const __term2BundleUrl = __term2PathToFileUrl(__filename).href;',
+      'const __term2Resolve = (specifier) => __term2PathToFileUrl(require.resolve(specifier)).href;',
+      'const __term2ModuleUrl = (rel) => new URL(rel, __term2BundleUrl).href;',
+      'const __term2ModuleFile = (rel) => __term2FileUrlToPath(__term2ModuleUrl(rel));',
+      'const __term2ModuleDir = (rel) => __term2Dirname(__term2ModuleFile(rel));',
+    ].join('\n'),
+  });
+  fs.writeFileSync(bundle, cjs.code.replace(/^\/\/! dist\//gm, '// dist/'));
+  fs.rmSync(tmp);
   fs.rmSync(`${entry}.map`, { force: true }); // described the unbundled module
+  fs.copyFileSync(loader, entry);
+  fs.chmodSync(entry, 0o755);
 }

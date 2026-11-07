@@ -4,9 +4,11 @@ import path from 'node:path';
 /**
  * Patch one emitted module in a private copy of dist/, refusing stale or no-op fault stimuli.
  *
- * The entry (dist/src/app/cli.js) is a single-file bundle of every module it imports, and
- * esbuild heads each inlined module with a `// dist/<path>` comment. When `file` is inlined, the
- * same text is patched inside its section of the bundle, which is the code a (re)started CLI runs.
+ * The entry (dist/src/app/cli.js) is a small loader for a single-file bundle of every module it
+ * imports (dist/src/app/cli.bundle.cjs), and esbuild heads each inlined module with a
+ * `// dist/<path>` comment. When `file` is inlined, the same text is patched inside its section of
+ * the bundle, which is the code a (re)started CLI runs. The entry's own code is spread over several
+ * sections, so a patch to the entry searches the whole bundle.
  */
 async function compiledSection(file: string) {
   const normalized = file.split(path.sep).join('/');
@@ -15,11 +17,15 @@ async function compiledSection(file: string) {
   const at = found ? found.index + 'dist'.length : -1;
   const distRoot = at < 0 ? undefined : normalized.slice(0, at);
   const entry = distRoot === undefined ? undefined : `${distRoot}/src/app/cli.js`;
-  // The entry itself is the bundle: patch it as one file.
-  const marker = distRoot === undefined || normalized === entry ? '' : `// dist${normalized.slice(at)}\n`;
-  const bundle = entry === undefined ? '' : await readFile(entry, 'utf8');
+  const bundleFile = distRoot === undefined ? undefined : `${distRoot}/src/app/cli.bundle.cjs`;
+  if (normalized === entry) {
+    const code = await readFile(bundleFile!, 'utf8');
+    return { target: bundleFile!, code, from: 0, to: code.length };
+  }
+  const marker = distRoot === undefined ? '' : `// dist${normalized.slice(at)}\n`;
+  const bundle = bundleFile === undefined ? '' : await readFile(bundleFile, 'utf8');
   const start = marker ? bundle.indexOf(marker) : -1;
-  const target = start >= 0 ? entry! : file;
+  const target = start >= 0 ? bundleFile! : file;
   const code = start >= 0 ? bundle : await readFile(file, 'utf8');
   // Search only the module's own section: from its marker to the next module's marker.
   const from = start >= 0 ? start + marker.length : 0;

@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from 'child_process';
 import process from 'process';
-import { SANDBOX_TEMP_DIR } from './temp-dir.js';
+import { SANDBOX_TEMP_DIR } from '../../shared/utils/shell/temp-dir.js';
 import { registerSandboxNetworkApprovalPauseController } from './sandbox/sandbox-network-approval.js';
 import { killAllShellChildrenAtProcessExit, ShellChildRegistry } from './shell-child-registry.js';
 
@@ -246,7 +246,7 @@ export interface ShellExecutionResult {
   pausedMs?: number;
 }
 
-import { ISSHService } from '../../service-interfaces.js';
+import { ISSHService } from '../../shared/service-interfaces.js';
 
 export class GatewayShellEnvironmentError extends Error {
   constructor() {

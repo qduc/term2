@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { getActiveWorkspaceRoot } from '../../../../tools/workspace/active-workspace-root.js';
+import { getActiveWorkspaceRoot } from '../../workspace/active-workspace-root.js';
 import path from 'node:path';
 
 const PROJECT_CONFIG_DIR = '.term2';

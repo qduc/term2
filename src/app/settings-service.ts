@@ -1,16 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { LoggingService } from '../../session/logging/logging-service.js';
-import { clearModelCache } from '../../model/model-service.js';
-import { getProvider, upsertProvider } from '../../model/providers/registry.js';
-import { createOpenAICompatibleProviderDefinition } from '../../model/providers/openai-compatible-lazy.js';
-import { resolveProviderId, resolveProviderName } from './custom-provider-normalization.js';
+import { LoggingService } from '../session/logging/logging-service.js';
+import { clearModelCache } from '../model/model-service.js';
+import { getProvider, upsertProvider } from '../model/providers/registry.js';
+import { createOpenAICompatibleProviderDefinition } from '../model/providers/openai-compatible-lazy.js';
+import { resolveProviderId, resolveProviderName } from '../config/settings/custom-provider-normalization.js';
 import {
   canonicalProfileId,
   legacyModeFromProfileId,
   profileIdFromLegacyMode,
   profileIdFromLegacyModeSetting,
-} from '../../shared/profiles/legacy-adapter.js';
+} from '../config/profiles/legacy-adapter.js';
 import {
   DEFAULT_SETTINGS,
   OPTIONAL_DEFAULT_KEYS,
@@ -22,11 +22,11 @@ import {
   type SettingValue,
   type SettingsData,
   type SettingsWithSources,
-} from './settings-schema.js';
-import { isTestEnvironment, parseBooleanEnv } from './settings-env.js';
-import { flattenSettings, mergeSettings, trackSettingSources } from './settings-merger.js';
-import { buildSettingsWithSources } from './settings-sources.js';
-import { migrateLegacyAncillarySettings } from './ancillary-settings-migration.js';
+} from '../config/settings/settings-schema.js';
+import { isTestEnvironment, parseBooleanEnv } from '../config/settings/settings-env.js';
+import { flattenSettings, mergeSettings, trackSettingSources } from '../config/settings/settings-merger.js';
+import { buildSettingsWithSources } from '../config/settings/settings-sources.js';
+import { migrateLegacyAncillarySettings } from '../config/settings/ancillary-settings-migration.js';
 import {
   hasMissingKeys,
   loadSettingsFromFile,
@@ -34,8 +34,8 @@ import {
   saveSettingsToFile,
   stripSensitiveSettings,
   type SettingsFileRecovery,
-} from './settings-persistence.js';
-import { resolveSettingsDirectory } from './settings-path.js';
+} from '../config/settings/settings-persistence.js';
+import { resolveSettingsDirectory } from '../config/settings/settings-path.js';
 
 /**
  * Result of a public settings mutation at the SettingsService owner boundary.
@@ -1256,8 +1256,3 @@ export class SettingsService {
     return hasMissingKeys(target, source, OPTIONAL_DEFAULT_KEYS, prefix);
   }
 }
-
-export { buildEnvOverrides } from './settings-env.js';
-
-export { SETTING_KEYS, SENSITIVE_SETTINGS } from './settings-schema.js';
-export type { SettingsData, SettingSource, SettingWithSource, SettingsWithSources } from './settings-schema.js';

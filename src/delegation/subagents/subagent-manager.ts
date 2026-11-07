@@ -59,7 +59,7 @@ export class SubagentManager {
     nestedCompatibility?: NestedToolCompatibilityState;
     backgroundApprovalPauseSink?: BackgroundSubagentApprovalPauseSink;
     readOnly?: boolean;
-    scopedSandbox?: import('../../shared/utils/shell/sandbox/sandbox-policy.js').ScopedShellSandbox;
+    scopedSandbox?: import('../../tools/shell/sandbox/sandbox-policy.js').ScopedShellSandbox;
     sessionBrowser?: SessionBrowser;
   }) {
     this.#logger = deps.logger;

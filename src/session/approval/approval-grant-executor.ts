@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { getProjectAllowReadStore } from '../../shared/utils/shell/sandbox/denied-read-stores.js';
+import { getProjectAllowReadStore } from '../../tools/shell/sandbox/denied-read-stores.js';
 import {
   isDeniedReadApproveAnswer,
   isDockerHostControlApproveAnswer,

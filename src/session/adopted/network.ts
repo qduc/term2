@@ -1,9 +1,6 @@
 /** Network-approval facts of the adopted session log, validated for the v3 migration. */
-import {
-  isSandboxNetworkHost,
-  isSandboxNetworkPort,
-} from '../../shared/utils/shell/sandbox/sandbox-network-validation.js';
-import type { NetworkApprovalAnswer } from '../../shared/utils/shell/sandbox/sandbox-network-approval.js';
+import { isSandboxNetworkHost, isSandboxNetworkPort } from '../../tools/shell/sandbox/sandbox-network-validation.js';
+import type { NetworkApprovalAnswer } from '../../tools/shell/sandbox/sandbox-network-approval.js';
 
 export type NetworkRequestFact = {
   readonly type: 'session_network_requested';

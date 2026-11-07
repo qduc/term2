@@ -1,4 +1,4 @@
-import type { ProviderDefinition } from '../../model/providers/registry.js';
+import type { ProviderDefinition } from './providers/registry.js';
 
 type ProviderCapabilities = ProviderDefinition['capabilities'];
 

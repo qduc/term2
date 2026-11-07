@@ -2,7 +2,7 @@ import React, { useCallback, useMemo } from 'react';
 import { Box, Text, useInput } from 'ink';
 import ModelSelectionMenu from '../clients/tui/menus/ModelSelectionMenu.js';
 import { useStandaloneModelPicker } from './use-standalone-model-picker.js';
-import type { SettingsService } from '../config/settings/settings-service.js';
+import type { SettingsService } from './settings-service.js';
 import type { ILoggingService } from '../shared/service-interfaces.js';
 import type { ModelFetcher } from '../model/models/model-catalog-session.js';
 import { useTheme } from '../clients/tui/presentation/components/theme.js';
@@ -11,7 +11,7 @@ import {
   getAvailableProviderIds,
   hasProviderCredentials,
   resolveProviderCredentials,
-} from '../shared/utils/ai/provider-credentials.js';
+} from '../model/provider-credentials.js';
 
 export type StandaloneModelPickerSelection = { modelId: string; provider: string };
 

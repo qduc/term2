@@ -1,5 +1,5 @@
-import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_SEARCH_REPLACE } from '../../../tools/tool-names.js';
-import { parseUpstreamApplyPatch } from '../../../tools/file/upstream-apply-patch.js';
+import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_SEARCH_REPLACE } from './tool-names.js';
+import { parseUpstreamApplyPatch } from './file/upstream-apply-patch.js';
 
 /**
  * Pure utility functions extracted from use-conversation.ts for testability.
@@ -22,7 +22,7 @@ export interface StreamingState {
    * second compaction item in the same response supersedes the first instead of stacking.
    */
   contextCompactionMessageId: string | null;
-  latestUsage: import('../ai/token-usage.js').NormalizedUsage | null;
+  latestUsage: import('../shared/utils/ai/token-usage.js').NormalizedUsage | null;
 }
 
 /**

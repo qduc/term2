@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { getActiveWorkspaceRoot } from '../../tools/workspace/active-workspace-root.js';
 import path from 'node:path';
 import type { ISettingsService } from '../../shared/service-interfaces.js';
-import { requestsDockerHostControl } from '../../shared/utils/shell/sandbox/docker-host-control.js';
+import { requestsDockerHostControl } from '../../tools/shell/sandbox/docker-host-control.js';
 import type { FileReadAccessPort, FileEditAccessPort, ShellAccessPort } from '../../tools/access-port.js';
 
 export type DockerHostControlGrant = 'once' | 'session' | 'project';

@@ -23,7 +23,7 @@ import type { WireBudgetEvidence, WireEvent, WireFinalWindow, WireUsage } from '
 // Retained presentation helpers cross the source boundary here, never in clients.
 export { formatGoalClosedByCheck } from '../session/conversation/durable-goal.js';
 /** Legacy's one-line tool label (the task panel's newest-call row). */
-export { formatToolCommand } from '../shared/utils/conversation/conversation-utils.js';
+export { formatToolCommand } from '../tools/conversation-utils.js';
 
 /** Copy the actual text chunk. fullText is supplied only by a caller that has
  * observed this message's stream from its first delta; no transcript is treated

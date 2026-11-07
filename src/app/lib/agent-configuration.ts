@@ -9,7 +9,7 @@ import type { AskUserAnswerStore } from '../../shared/lib/ask-user-answer-store.
 import type { SubagentBridge } from '../../delegation/runtime/subagent-bridge.js';
 import type { AgentFactoryDeps } from './agent-factory.js';
 import { buildAgent } from './agent-factory.js';
-import { createEditorImpl } from '../../shared/lib/editor-impl.js';
+import { createEditorImpl } from '../../tools/editor-impl.js';
 import { getProvider } from '../../model/providers/index.js';
 import type { ProviderDefinition } from '../../model/providers/registry.js';
 import { SkillsService } from '../../tools/skills/skills-service.js';
@@ -19,7 +19,7 @@ import type { ApplicationAgent } from '../../tools/nested-run-driver.js';
 import type { BackgroundShellRegistry } from '../../tools/shell/background-shell-registry.js';
 import type { BackgroundShellOutputBundle } from '../../tools/shell/background-shell-watches.js';
 import type { BackgroundShellExecutionResult } from '../../tools/system/shell.js';
-import type { ShellChildRegistry } from '../../shared/utils/shell/shell-child-registry.js';
+import type { ShellChildRegistry } from '../../tools/shell/shell-child-registry.js';
 import type { SessionBrowser } from '../../session/conversation/session-browser.js';
 import type { SessionRolloverRequest, SessionRolloverRequestOutcome } from '../../shared/contracts/session-rollover.js';
 import { ToolApprovalPolicyRegistry } from '../../session/approval/tool-approval-policy-registry.js';
@@ -65,7 +65,7 @@ export interface AgentConfigurationDeps {
   /** Root-session-owned output store + watch layer; nested clients omit it. */
   backgroundShellOutput?: BackgroundShellOutputBundle;
   shellChildRegistry?: ShellChildRegistry;
-  scopedSandbox?: import('../../shared/utils/shell/sandbox/sandbox-policy.js').ScopedShellSandbox;
+  scopedSandbox?: import('../../tools/shell/sandbox/sandbox-policy.js').ScopedShellSandbox;
   /** False for one-shot/non-interactive callers until their lifecycle is supported. */
   allowBackgroundShell?: boolean;
   /** False for non-interactive / headless sessions where user prompts cannot be answered. */
@@ -121,7 +121,7 @@ export class AgentConfiguration implements AgentSource {
   #backgroundShellRegistry?: BackgroundShellRegistry<BackgroundShellExecutionResult>;
   #backgroundShellOutput?: BackgroundShellOutputBundle;
   #shellChildRegistry?: ShellChildRegistry;
-  #scopedSandbox?: import('../../shared/utils/shell/sandbox/sandbox-policy.js').ScopedShellSandbox;
+  #scopedSandbox?: import('../../tools/shell/sandbox/sandbox-policy.js').ScopedShellSandbox;
   #allowBackgroundShell: boolean;
   #allowAskUser: boolean;
   #sessionBrowser?: SessionBrowser;

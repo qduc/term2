@@ -1,4 +1,4 @@
-import { canonicalProfileId } from '../../shared/profiles/legacy-adapter.js';
+import { canonicalProfileId } from './legacy-adapter.js';
 import { builtinProfileRegistry } from './registry.js';
 
 /**

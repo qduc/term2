@@ -1,10 +1,10 @@
-import type { ISettingsService } from '../../shared/service-interfaces.js';
-import { isBareProfile } from '../../session/prompts/prompt-constructor.js';
-import { profileEnterNotice, profileExitNotice } from '../../session/mode-notices.js';
-import { resolveActiveProfile } from './active-profile.js';
-import { BUILTIN_INTEGRATIONS } from './registry.js';
-import { resolveProfile } from './resolver.js';
-import type { ResolvedProfile } from './types.js';
+import type { ISettingsService } from '../shared/service-interfaces.js';
+import { isBareProfile } from '../session/prompts/prompt-constructor.js';
+import { profileEnterNotice, profileExitNotice } from '../session/mode-notices.js';
+import { resolveActiveProfile } from '../config/profiles/active-profile.js';
+import { BUILTIN_INTEGRATIONS } from '../config/profiles/registry.js';
+import { resolveProfile } from '../config/profiles/resolver.js';
+import type { ResolvedProfile } from '../config/profiles/types.js';
 
 export type ProfileTransitionClass = 'noop' | 'structural' | 'notice-only' | 'agent-rebuild';
 

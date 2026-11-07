@@ -7,21 +7,21 @@ import type { ApplicationAgent } from '../../tools/nested-run-driver.js';
 import type { ReasoningEffortSetting } from '../../tools/conversation.js';
 import { getAgentDefinition } from '../agent.js';
 import { getProvider, type ProviderDefinition } from '../../model/providers/index.js';
-import { createEditorImpl } from '../../shared/lib/editor-impl.js';
+import { createEditorImpl } from '../../tools/editor-impl.js';
 import { bindRunCodeRegistry, isDirectlyCallable, TOOL_NAME_RUN_CODE } from '../../tools/system/run-code/index.js';
-import { normalizeToolParameters, wrapNeedsApproval, wrapToolInvoke } from '../../shared/lib/tool-invoke.js';
+import { normalizeToolParameters, wrapNeedsApproval, wrapToolInvoke } from '../../tools/tool-invoke.js';
 import type { ILoggingService, ISettingsService } from '../../shared/service-interfaces.js';
 import type { ListWorktreesSync } from '../../tools/workspace/worktree-inventory.js';
 import { ExecutionContext } from '../../tools/execution-context.js';
 import { trimToolOutput } from '../../shared/utils/output/trim-tool-output.js';
 import { isScriptedToolCall } from '../../shared/utils/output/bound-tool-result.js';
 import { SkillsService } from '../../tools/skills/skills-service.js';
-import { injectRunBudgetWarning } from '../../shared/utils/inject-warning-into-tool-output.js';
+import { injectRunBudgetWarning } from '../../engine/inject-warning-into-tool-output.js';
 import { toOpenAIStrictToolSchema } from '../../shared/lib/openai-strict-tool-schema.js';
 import {
   shouldUseNativePatchTool as shouldUseNativePatchToolPolicy,
   shouldUseStrictToolSchema,
-} from '../../shared/lib/tool-selection-policy.js';
+} from '../../model/tool-selection-policy.js';
 import { getModelDefaultReasoningLevel, getProviderDefaultReasoningLevel } from '../../model/model-service.js';
 import type { ToolApprovalPolicyRegistry } from '../../session/approval/tool-approval-policy-registry.js';
 import { shouldBypassToolApproval } from '../../session/approval/shell-auto-approval-resolver.js';
@@ -38,7 +38,7 @@ import type { BackgroundShellRegistryPort } from '../../tools/shell/background-s
 import type { BackgroundShellOutputBundle } from '../../tools/shell/background-shell-watches.js';
 import type { BackgroundShellExecutionResult } from '../../tools/system/shell.js';
 import { getCatalogModel } from '../../model/providers/model-catalog/catalog.js';
-import type { ShellChildRegistry } from '../../shared/utils/shell/shell-child-registry.js';
+import type { ShellChildRegistry } from '../../tools/shell/shell-child-registry.js';
 import type { SessionBrowser } from '../../session/conversation/session-browser.js';
 import type { SessionRolloverRequest, SessionRolloverRequestOutcome } from '../../shared/contracts/session-rollover.js';
 import { UPSTREAM_APPLY_PATCH_GRAMMAR, freeformApplyPatchArguments } from '../../tools/file/upstream-apply-patch.js';
@@ -133,7 +133,7 @@ export interface AgentFactoryDeps {
   /** Root-session-owned output store + watch layer for background jobs. */
   backgroundShellOutput?: BackgroundShellOutputBundle;
   shellChildRegistry?: ShellChildRegistry;
-  scopedSandbox?: import('../../shared/utils/shell/sandbox/sandbox-policy.js').ScopedShellSandbox;
+  scopedSandbox?: import('../../tools/shell/sandbox/sandbox-policy.js').ScopedShellSandbox;
   /** False for one-shot/non-interactive callers until their lifecycle is supported. */
   allowBackgroundShell?: boolean;
   /** False for non-interactive / headless sessions where user prompts cannot be answered. */

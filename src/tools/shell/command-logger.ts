@@ -1,4 +1,4 @@
-import type { ISettingsService } from '../../service-interfaces.js';
+import type { ISettingsService } from '../../shared/service-interfaces.js';
 
 /**
  * Log command execution for security forensics

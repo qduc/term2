@@ -1,4 +1,4 @@
-import type { ProfileId, SavedAppMode } from '../../config/profiles/types.js';
+import type { ProfileId, SavedAppMode } from './types.js';
 
 /** Retired Standard Profile; existing selections now use Bare. */
 export const LEGACY_STANDARD_PROFILE_ID = 'builtin:standard' as const;

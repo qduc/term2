@@ -1,8 +1,8 @@
 import chalk from 'chalk';
-import { getResumeCommand } from '../../session/conversation/conversation-persistence.js';
+import { getResumeCommand } from './conversation-persistence.js';
 
-import type { SavedAppMode } from '../../session/conversation/conversation-persistence-types.js';
-import { profileIdFromLegacyMode } from '../profiles/legacy-adapter.js';
+import type { SavedAppMode } from './conversation-persistence-types.js';
+import { profileIdFromLegacyMode } from '../../config/profiles/legacy-adapter.js';
 import { getProfileLabel } from '../../config/profiles/labels.js';
 
 interface ConversationListEntry {

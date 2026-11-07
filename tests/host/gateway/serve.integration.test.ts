@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { createGatewayAssertion } from '../../../src/host/server-assertion.js';
-import { getDefaultShellSandboxRunner } from '../../../src/shared/utils/shell/sandbox/shell-sandbox-runner.js';
+import { getDefaultShellSandboxRunner } from '../../../src/tools/shell/sandbox/shell-sandbox-runner.js';
 import { resolveSettingsDirectory } from '../../../src/config/settings/settings-path.js';
 import { createTestChildEnv } from '../../helpers/terminal-e2e.js';
 import type { WireEvent } from '../../../src/protocol/wire.js';

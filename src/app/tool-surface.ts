@@ -3,7 +3,7 @@ import { withActiveWorkspaceRoot } from '../tools/workspace/active-workspace-roo
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import { buildAgent, buildAgentTools, type AgentFactoryDeps } from './lib/agent-factory.js';
-import { createEditorImpl } from '../shared/lib/editor-impl.js';
+import { createEditorImpl } from '../tools/editor-impl.js';
 import { getCatalogModel } from '../model/providers/model-catalog/catalog.js';
 import { resolveRequestOutput } from '../engine/agent-runtime/model-context-policy.js';
 import { NonInteractiveApprovalPolicy } from '../session/approval/non-interactive-approval-policy.js';
@@ -19,7 +19,7 @@ import { SkillsService } from '../tools/skills/skills-service.js';
 import { bindRunCodeRegistry } from '../tools/system/run-code/run-code.js';
 import { TOOL_NAME_DESCRIBE } from '../tools/system/run-code/script-surface.js';
 import type { AnyToolDefinition } from '../tools/types.js';
-import { InvalidatableShellChildRegistry } from '../shared/utils/shell/shell-child-registry.js';
+import { InvalidatableShellChildRegistry } from '../tools/shell/shell-child-registry.js';
 import type { ProviderInputItem } from '../shared/contracts/provider-input.js';
 import type { ToolContextSeed } from '../engine/index.js';
 import type { Workspace } from '../tools/index.js';

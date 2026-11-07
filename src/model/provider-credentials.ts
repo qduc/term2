@@ -1,17 +1,13 @@
-import type { ISettingsService } from '../../service-interfaces.js';
-import { SETTING_KEYS } from '../../../config/settings/settings-schema.js';
+import type { ISettingsService } from '../shared/service-interfaces.js';
+import { SETTING_KEYS } from '../config/settings/settings-schema.js';
 import {
   decodeStoredCustomProviderConfigs,
   normalizeProviderIdentifier,
   type StoredCustomProviderConfig,
-} from '../../../config/settings/custom-provider-normalization.js';
-import { getProvider } from '../../../model/providers/registry.js';
-import {
-  readStoredCodexTokens,
-  resolveCodexTokenPath,
-  resolveTerm2CodexAuthPath,
-} from '../../../model/providers/codex-auth.js';
-import { hasGrokLogin } from '../../../model/providers/grok-auth.js';
+} from '../config/settings/custom-provider-normalization.js';
+import { getProvider } from './providers/registry.js';
+import { readStoredCodexTokens, resolveCodexTokenPath, resolveTerm2CodexAuthPath } from './providers/codex-auth.js';
+import { hasGrokLogin } from './providers/grok-auth.js';
 
 const hasConfiguredCredential = (value: unknown): boolean => typeof value === 'string' && value.trim().length > 0;
 

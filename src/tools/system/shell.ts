@@ -4,10 +4,10 @@ import path from 'path';
 import { existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { relaxedNumber } from '../utils.js';
-import { validateCommandSafety } from '../../shared/utils/shell/command-safety/index.js';
-import { logValidationError as logValidationErrorUtil } from '../../shared/utils/shell/command-logger.js';
-import { executeShellCommand } from '../../shared/utils/shell/execute-shell.js';
-import type { ShellChildRegistry } from '../../shared/utils/shell/shell-child-registry.js';
+import { validateCommandSafety } from '../shell/command-safety/index.js';
+import { logValidationError as logValidationErrorUtil } from '../shell/command-logger.js';
+import { executeShellCommand } from '../shell/execute-shell.js';
+import type { ShellChildRegistry } from '../shell/shell-child-registry.js';
 import { formatShellExecutionOutput } from '../../shared/utils/shell/shell-output.js';
 import type { PostExecutePauseDescriptor, ScriptedToolDefinition, FormatCommandMessage } from '../types.js';
 import type { ILoggingService, ISettingsService } from '../../shared/service-interfaces.js';
@@ -21,25 +21,25 @@ import {
 } from '../format-helpers.js';
 import { ExecutionContext } from '../execution-context.js';
 import { HarnessInvariantError } from '../../shared/lib/harness-invariant-error.js';
-import { createSandboxEnvironment } from '../../shared/utils/shell/sandbox/sandbox-env.js';
+import { createSandboxEnvironment } from '../shell/sandbox/sandbox-env.js';
 import { SANDBOX_TEMP_DIR } from '../../shared/utils/shell/temp-dir.js';
 import {
   SANDBOX_ESCAPE_INSTRUCTION,
   createSandboxRuntimeConfig,
   type SandboxAvailability,
   type ShellSandboxRunner,
-} from '../../shared/utils/shell/sandbox/sandbox-policy.js';
-import { getDefaultShellSandboxRunner } from '../../shared/utils/shell/sandbox/shell-sandbox-runner.js';
-import { DETAILED_DENIED_READ_INSTRUCTION } from '../../shared/utils/shell/sandbox/denied-read-detector.js';
-import type { DeniedReadInfo } from '../../shared/utils/shell/sandbox/denied-read-detector.js';
-import { getProjectAllowReadStore } from '../../shared/utils/shell/sandbox/denied-read-stores.js';
-import { classifySandboxFailure } from '../../shared/utils/shell/sandbox/sandbox-failure-classifier.js';
+} from '../shell/sandbox/sandbox-policy.js';
+import { getDefaultShellSandboxRunner } from '../shell/sandbox/shell-sandbox-runner.js';
+import { DETAILED_DENIED_READ_INSTRUCTION } from '../shell/sandbox/denied-read-detector.js';
+import type { DeniedReadInfo } from '../shell/sandbox/denied-read-detector.js';
+import { getProjectAllowReadStore } from '../shell/sandbox/denied-read-stores.js';
+import { classifySandboxFailure } from '../shell/sandbox/sandbox-failure-classifier.js';
 import { resolveActiveEnforcement } from '../../config/profiles/index.js';
 import {
   createDockerHostControl,
   DOCKER_HOST_CONTROL_RETRY_INSTRUCTION,
   type DockerHostControl,
-} from '../../shared/utils/shell/sandbox/docker-host-control.js';
+} from '../shell/sandbox/docker-host-control.js';
 import type { ShellAccessPort, NestedShellAccessPort } from '../access-port.js';
 import {
   type BackgroundShellJob,
@@ -679,7 +679,7 @@ export function createShellToolDefinition(deps: {
   executionContext?: ExecutionContext;
   executeShellCommandImpl?: typeof executeShellCommand;
   shellSandboxRunner?: ShellSandboxRunner;
-  registerSandboxNetworkPauseController?: import('../../shared/utils/shell/execute-shell.js').ExecuteShellOptions['registerSandboxNetworkPauseController'];
+  registerSandboxNetworkPauseController?: import('../shell/execute-shell.js').ExecuteShellOptions['registerSandboxNetworkPauseController'];
   dockerHostControlFactory?: () => DockerHostControl;
   sessionId?: string;
   orchestratorMode?: boolean;

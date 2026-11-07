@@ -91,7 +91,7 @@ import type { HookLifecyclePort } from '../hooks/hook-service.js';
 import { HookEventFactory } from '../hooks/hook-event-factory.js';
 import { PendingInteractionState } from './pending-interaction-state.js';
 import { BackgroundSubagentApprovalController } from '../approval/background-subagent-approval-controller.js';
-import { ToolCallMarkerStore } from '../../shared/utils/streaming/extract-command-messages.js';
+import { ToolCallMarkerStore } from '../conversation/extract-command-messages.js';
 import { registerSessionRuntime } from '../../tools/workspace/active-workspace-root.js';
 import { NestedApprovalOwner, type NestedApprovalSnapshot } from '../approval/nested-approval-owner.js';
 import type { AutomaticMemoryCanary } from '../../tools/memory/automatic-memory-canary.js';

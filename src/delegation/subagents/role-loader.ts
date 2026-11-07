@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import type { ISettingsService } from '../../shared/service-interfaces.js';
 import type { SubagentRole, SubagentDefinition } from './types.js';
 import type { AnyToolDefinition } from '../../tools/types.js';
-import { isGpt5OrGpt6Model } from '../../shared/lib/tool-selection-policy.js';
+import { isGpt5OrGpt6Model } from '../../model/tool-selection-policy.js';
 import { getEnvInfo, getAgentsInstructions } from '../../session/prompts/environment.js';
 import type { ExecutionContext } from '../../tools/execution-context.js';
 import { getShellSandboxAddendum } from '../../session/prompts/shell-sandbox.js';

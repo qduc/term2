@@ -2,7 +2,7 @@ import type { ISettingsService } from '../../shared/service-interfaces.js';
 import { KNOWN_CUSTOM_PROVIDER_TYPES, type KnownCustomProviderType } from '../../config/settings/settings-schema.js';
 import { getAllProviders, upsertProvider, unregisterProvider } from './index.js';
 import { createOpenAICompatibleProviderDefinition } from './openai-compatible-lazy.js';
-import { hasProviderCredentials, isProviderDisabled } from '../../shared/utils/ai/provider-credentials.js';
+import { hasProviderCredentials, isProviderDisabled } from '../provider-credentials.js';
 import {
   decodeStoredCustomProviderConfigs,
   normalizeProviderIdentifier,

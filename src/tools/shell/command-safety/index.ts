@@ -6,7 +6,7 @@ import { hasFindDangerousExecution, hasFindSuspiciousFlags } from './find-helper
 import { analyzePathRisk } from './path-analysis.js';
 import { getCommandHandler } from './handlers/index.js';
 import type { CommandHandlerHelpers } from './handlers/index.js';
-import type { ILoggingService } from '../../../service-interfaces.js';
+import type { ILoggingService } from '../../../shared/service-interfaces.js';
 
 const nullLoggingService: ILoggingService = {
   info: () => {},

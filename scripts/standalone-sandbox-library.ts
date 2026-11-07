@@ -50,11 +50,8 @@ import fs from 'node:fs';
 import { execSync, type ExecSyncOptions } from 'node:child_process';
 
 import { SandboxManager, type SandboxRuntimeConfig } from '@anthropic-ai/sandbox-runtime';
-import {
-  createSandboxRuntimeConfig,
-  type SandboxReadPolicy,
-} from '../src/shared/utils/shell/sandbox/sandbox-policy.js';
-import { createSandboxEnvironment } from '../src/shared/utils/shell/sandbox/sandbox-env.js';
+import { createSandboxRuntimeConfig, type SandboxReadPolicy } from '../src/tools/shell/sandbox/sandbox-policy.js';
+import { createSandboxEnvironment } from '../src/tools/shell/sandbox/sandbox-env.js';
 import { SANDBOX_TEMP_DIR } from '../src/shared/utils/shell/temp-dir.js';
 import { resolve } from 'node:path';
 

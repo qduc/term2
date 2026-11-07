@@ -12,7 +12,7 @@ import { createApplyPatchToolDefinition } from '../../../src/tools/file/apply-pa
 import { resolveAncillaryModelTier } from '../../../src/engine/agent-runtime/model-resolver.js';
 import type { AnyToolDefinition } from '../../../src/tools/types.js';
 import { buildAgentTools, type AgentFactoryDeps } from '../../../src/app/lib/agent-factory.js';
-import { createEditorImpl } from '../../../src/shared/lib/editor-impl.js';
+import { createEditorImpl } from '../../../src/tools/editor-impl.js';
 
 const logger = {
   info() {},

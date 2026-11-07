@@ -18,13 +18,13 @@ import {
 } from '../config/settings/settings-ui-metadata.js';
 import { SETTING_KEYS } from '../config/settings/settings-schema.js';
 import { SETTING_ENV_VARIABLES } from '../config/settings/settings-env.js';
-import { SETTINGS_CATEGORIES } from '../config/settings/settings-completion-config.js';
+import { SETTINGS_CATEGORIES } from './settings-completion-config.js';
 import {
   buildSettingsList,
   filterSettingsByCategory,
   filterSettingsByQuery,
   getSettingCategory,
-} from '../config/settings/settings-completion-logic.js';
+} from './settings-completion-logic.js';
 import {
   buildSettingValueSuggestions,
   fetchLiveSettingValueSuggestions,
@@ -83,7 +83,7 @@ import {
   isProviderDisabled,
   resolveProviderCredentials,
   setProviderDisabled,
-} from '../shared/utils/ai/provider-credentials.js';
+} from '../model/provider-credentials.js';
 import type {
   MenuConversationEntry,
   MenuSettingsService,
@@ -93,7 +93,7 @@ import type {
 } from '../clients/tui/integration.js';
 import type { DirectApplication } from './application.js';
 
-import { canonicalProfileId, profileIdFromLegacyMode } from '../shared/profiles/legacy-adapter.js';
+import { canonicalProfileId, profileIdFromLegacyMode } from '../config/profiles/legacy-adapter.js';
 import { builtinProfiles } from '../config/profiles/registry.js';
 import { resolveActiveProfile } from '../config/profiles/active-profile.js';
 import { getProfileLabel } from '../config/profiles/labels.js';

@@ -1,6 +1,6 @@
 import type { FC, ReactNode } from 'react';
 import type { ColorRole, ModeBadge, ToolStatusKind } from '../theme/palettes.js';
-import type { SkinName } from './names.js';
+import type { SkinName } from '../../../../config/skins/names.js';
 
 /**
  * The skin contract.

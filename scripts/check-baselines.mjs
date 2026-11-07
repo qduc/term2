@@ -43,7 +43,35 @@ function showFile(commit, relativePath) {
   }
 }
 
+function getRenamedFiles(commit) {
+  const renames = new Map();
+  try {
+    const out = execSync(`git diff -M --diff-filter=R --name-status ${commit}`, {
+      cwd: repo,
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore'],
+    });
+    for (const line of out.trim().split('\n')) {
+      if (!line) continue;
+      const parts = line.split('\t');
+      if (parts.length >= 3 && parts[0].startsWith('R')) {
+        const oldPath = parts[1].trim();
+        const newPath = parts[2].trim();
+        renames.set(newPath, oldPath);
+      }
+    }
+  } catch {}
+  return renames;
+}
+
 const baseCommit = getBaseCommit();
+const renames = getRenamedFiles(baseCommit);
+const oldPathFor = (p) => {
+  if (renames.has(p)) return renames.get(p);
+  const withSrc = renames.get(`src/${p}`);
+  if (withSrc) return withSrc.replace(/^src\//, '');
+  return undefined;
+};
 const problems = [];
 
 function parseAllowlist(text) {
@@ -74,7 +102,7 @@ const baseReachText = showFile(baseCommit, 'scripts/reachability-allowlist.json'
 if (baseReachText) {
   const baseReach = JSON.parse(baseReachText);
   const currentReach = JSON.parse(fs.readFileSync(path.join(scripts, 'reachability-allowlist.json'), 'utf8'));
-  const added = Object.keys(currentReach).filter((k) => !(k in baseReach));
+  const added = Object.keys(currentReach).filter((k) => !(k in baseReach) && !baseReach[renames.get(k)]);
   if (added.length > 0) {
     problems.push(`scripts/reachability-allowlist.json grew: new entry ${added.join(', ')}`);
   }
@@ -95,14 +123,24 @@ if (baseRuleText) {
 
   const baseJob = new Set(baseRule.jobNameExceptions || []);
   const currentJob = currentRule.jobNameExceptions || [];
-  const addedJob = currentJob.filter((j) => !baseJob.has(j));
+  const addedJob = currentJob.filter((j) => !baseJob.has(j) && !baseJob.has(oldPathFor(j)));
   if (addedJob.length > 0) {
     problems.push(`scripts/rule-baseline.json grew: jobNameExceptions added ${addedJob.join(', ')}`);
   }
 
   const baseUnused = new Set(baseRule.unusedExports || []);
   const currentUnused = currentRule.unusedExports || [];
-  const addedUnused = currentUnused.filter((u) => !baseUnused.has(u));
+  const addedUnused = currentUnused.filter((u) => {
+    if (baseUnused.has(u)) return false;
+    const spaceIdx = u.indexOf(' ');
+    if (spaceIdx > 0) {
+      const file = u.slice(0, spaceIdx);
+      const symbol = u.slice(spaceIdx + 1);
+      const oldFile = oldPathFor(file);
+      if (oldFile && baseUnused.has(`${oldFile} ${symbol}`)) return false;
+    }
+    return true;
+  });
   if (addedUnused.length > 0) {
     problems.push(`scripts/rule-baseline.json grew: unusedExports added ${addedUnused.length} entries`);
   }
@@ -129,11 +167,12 @@ if (baseBudgetText) {
   const currentCeilings = currentBudget.fileCeilings || {};
 
   for (const [file, info] of Object.entries(currentCeilings)) {
-    if (!baseCeilings[file]) {
+    const baseEntry = baseCeilings[file] || baseCeilings[renames.get(file)];
+    if (!baseEntry) {
       problems.push(`scripts/complexity-budget.json grew: new file ceiling for ${file}`);
-    } else if (info.lines > baseCeilings[file].lines) {
+    } else if (info.lines > baseEntry.lines) {
       problems.push(
-        `scripts/complexity-budget.json raised ceiling: ${file} lines ceiling grew from ${baseCeilings[file].lines} to ${info.lines}`,
+        `scripts/complexity-budget.json raised ceiling: ${file} lines ceiling grew from ${baseEntry.lines} to ${info.lines}`,
       );
     }
   }

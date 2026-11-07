@@ -57,7 +57,10 @@ production build lacks `act`.
 
 CI runs every tier on pushes to `main`. A pull request runs every tier too, unless every file it
 changes is inert for CI (the `changes` job in `.github/workflows/ci.yml` defines inert); then it
-skips them all. Follow any late CI failure through to a passing run or a blocker someone clearly owns.
+skips the expensive test work. The required `test` job still checks the root allowlist and
+rejects committed unit tests before dependency setup. Known docs/evidence formats may skip tests;
+unknown extensions and executable scripts under `docs/` run every tier. Follow any late CI failure
+through to a passing run or a blocker someone clearly owns.
 Never claim a test, build, or check passed unless you ran it and it succeeded. For long runs, set an
 explicit finite timeout and wait for the completion notification rather than polling.
 

@@ -3,7 +3,8 @@ name: CI
 # Run the full CI matrix on pushes to main, for the catalog updater, and on pull
 # requests targeting main, unless every file a pull request changes is inert for
 # CI (see the `changes` job); then the test jobs are skipped, which required
-# checks count as passing. All four tiers remain required; the existing four
+# checks count as passing. Repository policy checks always run in `test`.
+# All four tiers remain required; the existing four
 # jobs share their work. Provider cases still drive the built CLI against
 # deterministic loopback fixtures.
 on:
@@ -42,8 +43,9 @@ concurrency:
 # runs all of it or none of it; no test selection depends on them.
 jobs:
   # Docs-only pull requests used to pay for the whole matrix. Inert means prose
-  # and evidence records the tests never read: markdown outside src/, and
-  # anything under docs/ except code. Not inert, although markdown: root
+  # and known evidence/image formats the tests never read. Unknown docs formats
+  # run CI; a code-extension blacklist misses shell, Python and future languages.
+  # Not inert, although markdown: root
   # AGENTS.md and the .agents/, .claude/ and .term2/ skill directories, because
   # the CLI puts them in its prompt and provider cases run it from the
   # checkout. Doc file names still reach that
@@ -73,8 +75,9 @@ jobs:
             case "$file" in
               '') ;;
               AGENTS.md | .agents/* | .claude/* | .term2/* | src/*) relevant+=("$file") ;;
-              docs/*.ts | docs/*.tsx | docs/*.js | docs/*.jsx | docs/*.mjs | docs/*.cjs | docs/*.mts | docs/*.cts) relevant+=("$file") ;;
-              docs/* | *.md | *.mdx) ;;
+              *.md | *.mdx) ;;
+              docs/*.json | docs/*.jsonl | docs/*.txt | docs/*.log | docs/*.stdout | docs/*.stderr | docs/*.exit | docs/*.diff | docs/*.patch | docs/*.deltas) ;;
+              docs/*.png | docs/*.jpg | docs/*.jpeg | docs/*.gif | docs/*.webp | docs/*.svg | docs/*.pdf) ;;
               *) relevant+=("$file") ;;
             esac
           done <<< "$files"
@@ -84,12 +87,14 @@ jobs:
             printf '  %s\n' "${relevant[@]:0:20}"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
-            echo "Every changed file is inert for CI; skipping the test jobs."
+            echo "Every changed file is inert for tests; running repository policy checks only."
           fi
 
+  # Keep repository policy in an existing required check, even when all costly
+  # test work is skipped. A docs-only root report must not bypass check-root.
   test:
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
@@ -97,14 +102,19 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha }}
           fetch-depth: 0
+      - name: Check repository policy
+        run: |
+          node scripts/check-root.mjs
+          node scripts/check-no-unit-tests.mjs
       - uses: ./.github/actions/setup-tests
+        if: needs.changes.outputs.run != 'false'
         with:
           ripgrep: 'true'
-      - name: Reject committed unit tests
-        run: pnpm check:no-unit-tests
       - name: Run guards, CLI integration, safety and responses provider cases
+        if: needs.changes.outputs.run != 'false'
         run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs test
       - name: Upload built CLI for port checks
+        if: needs.changes.outputs.run != 'false'
         uses: actions/upload-artifact@v4
         with:
           name: term2-dist
@@ -112,7 +122,8 @@ jobs:
           if-no-files-found: error
 
   port:
-    needs: test
+    needs: [test, changes]
+    if: ${{ !cancelled() && needs.test.result == 'success' && needs.changes.outputs.run != 'false' }}
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     steps:
@@ -156,7 +167,6 @@ jobs:
           node scripts/check-complexity.mjs
           node scripts/check-rules.mjs
           node scripts/check-baselines.mjs
-          node scripts/check-root.mjs
           node --unhandled-rejections=strict --import tsx bench/hops.mts
       - name: Check the headless path
         run: node bench/m1-direct.mjs

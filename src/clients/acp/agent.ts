@@ -44,7 +44,7 @@ export function createAcpAgent(options: AcpAgentOptions): acp.AgentApp {
   app.onRequest(acp.methods.agent.initialize, () => ({
     protocolVersion: acp.PROTOCOL_VERSION,
     info: { name: 'term2', title: 'term2', version: options.version },
-    capabilities: { session: { prompt: { image: {} } } },
+    capabilities: { session: { prompt: { image: {}, embeddedContext: {} } } },
   }));
   app.onRequest(acp.methods.agent.session.new, async ({ params, client }) => {
     assertSessionExtensions(params);

@@ -1,6 +1,8 @@
 /**
- * Human-arrival timing: the one policy for the model-only `[Conversation timing]` notice, shared by the
- * foreground turn (`session/time-gap.ts`) and the delegation runtime (this file's history helpers).
+ * Human-arrival timing: the one policy for the model-only `[Conversation timing]` notice. The live turn path
+ * uses `advanceHumanClock` and `humanArrivalNotice` through `session/time-gap.ts`. The history helpers below
+ * (`withHumanInputTime`, `latestHumanInputAt`, `conversationTimeGap`, `formatConversationTimeGap`) serve only the
+ * legacy runtime, which production never executes, and go with it (#197).
  *
  * The clock is the latest accepted human receipt. It only moves forward, and only on trustworthy evidence:
  * a canonical ISO timestamp. A malformed receipt poisons it for good, so a bad clock never produces a gap.

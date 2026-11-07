@@ -1,12 +1,12 @@
 # Assistant Output Recovery Architecture
 
 > **Design record, written against the pre-rewrite `source/` tree.** Paths below are
-> historical. The structures it discusses now live under `src/` and serve the delegation
-> runtime ([overview](architecture-overview.md)): `ToolExecutionLedger`
-> (`src/session/tool-execution-ledger.ts`), `AssistantTurnJournal`
+> historical. The structures it discusses now live under `src/` but belong to the legacy
+> runtime, which production never executes ([overview](architecture-overview.md), #197):
+> `ToolExecutionLedger` (`src/session/tool-execution-ledger.ts`), `AssistantTurnJournal`
 > (`src/session/logging/assistant-turn-journal.ts`), `ConversationStore` and
-> `ConversationRecord` (`src/session/conversation/`). The foreground turn does not use
-> them: it replays history and retry eligibility from the session's one log
+> `ConversationRecord` (`src/session/conversation/`). None of them is in the built bundle.
+> The live turn path replays history and retry eligibility from the session's one log
 > ([`layers.md`](layers.md), "One log").
 
 ## Problem Statement

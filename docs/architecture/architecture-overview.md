@@ -7,12 +7,13 @@ one wire protocol from one host.
 
 Start with [`layers.md`](layers.md). It is the reference for the source layers, their
 import rules, how a message travels and the rule checks that enforce all of it. This
-page only answers the question `layers.md` leaves open: **which turn path does a change
-touch?** There are two, and they share less than their names suggest.
+page answers the question `layers.md` leaves open: **which code actually runs a turn?**
+One path does. A second, pre-rewrite engine is still in `src/` but never runs, and it is
+easy to mistake for live code.
 
-## The foreground turn
+## The turn path
 
-Every conversation a person has with term2 runs here.
+Every conversation, every client and every child agent runs here.
 
 ```
 client ── WireCommand ──▶ host/in-process-direct.ts ──▶ protocol/commands.ts
@@ -35,35 +36,42 @@ client ── WireCommand ──▶ host/in-process-direct.ts ──▶ protocol
 Details: "How a message travels" and "Where an approval waits" in `layers.md`.
 `bench/hops.mts` measures this path, so its output is the current file list.
 
-## The delegation runtime
+Child agents run on the same path: `delegation/direct/` (`createDirectSubagentTools`)
+launches each one as a session branch (`session/branches.ts`) that runs through
+`startNestedTurn` in `engine/turn.ts`. See [`src/delegation/README.md`](../../src/delegation/README.md).
 
-The legacy subagent path still runs on the pre-rewrite engine, `ApplicationRunLoop`
-(`engine/agent-runtime/`). `delegation/subagents/subagent-manager.ts` is its facade;
-the run logic lives in three runners:
+## Legacy code that never runs
 
-| Runner | How it drives the loop |
+The pre-rewrite subagent engine is still in `src/`, but production never executes it.
+Nothing constructs its entry points, every production import of them is `import type`,
+and the built bundle (`dist/src/app/cli.bundle.cjs`) contains none of its classes:
+
+| Dead | Where |
 | --- | --- |
-| `execution-runner.ts` (one-shot explorer/worker/librarian) | Inside a session runtime from `createSessionRuntime` (`session/core/session-runtime.ts`, composed in `session/session/session-composition.ts`). `ConversationRecord` owns acceptance there. |
-| `mentor-runner.ts`, `nested-runner.ts` | Construct the loop directly through `engine/agent-runtime/legacy-nested-driver.ts`, wired by `delegation/runtime/compose-agent-runtime.ts`. |
+| `SubagentManager` and its runners (`execution-runner.ts`, `mentor-runner.ts`, `nested-runner.ts`) | `delegation/subagents/` |
+| `SubagentBridge`, `compose-agent-runtime.ts` | `delegation/runtime/` |
+| `AgentConfiguration` | `app/lib/agent-configuration.ts` |
+| `ApplicationRunLoop` and most of the loop machinery | `engine/agent-runtime/` |
+| `createSessionRuntime`, `SessionTurnAdapter`, `TurnCoordinator` and nearly everything else | `session/session/` |
+| `ConversationRecord` | `session/conversation/` |
 
-[`conversation-core.md`](conversation-core.md) and
-[`conversation-loop.md`](conversation-loop.md) describe this runtime: the model–tool
-loop, acceptance into `ConversationRecord`, and the contracts for approval, retry,
-cancellation and persistence. None of it applies to `engine/turn.ts`.
+The reachability gate counts type-only imports, so it reports this code as reached
+(#196). Deleting it is #197. Until then:
 
-The native child-agent launcher in `delegation/direct/` is separate from this path; it
-uses session-owned branch and task ports. See [`src/delegation/README.md`](../../src/delegation/README.md).
+- Do not fix bugs or add behavior there; a change there reaches no user.
+- Some files beside it are live: the role, tool-policy, pool and worktree policy that
+  `delegation/direct/` uses (`delegation/subagents/role-loader.ts`, `tool-policy.ts`,
+  `subagent-role-pool-selector.ts`, `worker-worktree.ts`), and the resolvers, budgets
+  and `generation-guard.ts` in `engine/agent-runtime/`. Before relying on anything in
+  these folders, search the built bundle for it.
+- [`conversation-core.md`](conversation-core.md) and [`conversation-loop.md`](conversation-loop.md)
+  describe the dead runtime. They are worth reading only for its design rationale.
 
-## When a behavior exists on both paths
-
-Some behaviors run on both paths. Put the policy in one module both may import, and
-leave each path only what differs in its data. For example, the `[Conversation timing]`
-notice for a gap between human messages: its clock and notice rules live in
-`shared/conversation/conversation-time-gap.ts` (`advanceHumanClock`,
-`humanArrivalNotice`). The foreground's `session/time-gap.ts` only decides which queue
-inputs are human and reads their receipts, and the delegation runtime reads stamps from
-history. Before changing such a behavior, check whether the other path has its own copy;
-if it does, unify it or say in the change why the two must differ.
+A behavior that exists in both places is a trap: a fix to the dead copy changes nothing.
+For example, the `[Conversation timing]` notice's clock and notice rules live once in
+`shared/conversation/conversation-time-gap.ts`. The live path uses them through
+`session/time-gap.ts`; the history helpers in the same shared file serve only the dead
+runtime and go with it.
 
 ## Where to go next
 
@@ -75,7 +83,7 @@ if it does, unify it or say in the change why the two must differ.
 - [`assistant-output-recovery-architecture.md`](assistant-output-recovery-architecture.md)
   — recovery of assistant output.
 
-The pre-rewrite overview, with `ConversationOrchestrator`, `ConversationService`,
+The earlier overview, with `ConversationOrchestrator`, `ConversationService`,
 `ConversationAdapter`, `TurnCoordinator` and `TurnWorkflow` on the main path, and its
 internals pages (`turn-workflow-internals.md`, `conversation-orchestrator-internals.md`)
 described the `source/` tree deleted at the flip (#86–#88). Git history keeps them, for

@@ -1,11 +1,13 @@
 # Follow the model–tool loop
 
-> **Scope: the delegation runtime, not the foreground turn.** This describes
+> **This runtime is not executed in production.** This page describes
 > `ApplicationRunLoop` and the session runtime that `createSessionRuntime` builds
-> (`src/session/session/`), which the legacy subagent runners in
-> `src/delegation/subagents/` drive. Every person-facing conversation runs on the
-> foreground path instead (`session/conversation-turn.ts`, `engine/turn.ts`); see
-> [the overview](architecture-overview.md). "Runtime session" below is the session
+> (`src/session/session/`), driven by the legacy subagent runners in
+> `src/delegation/subagents/`. Nothing constructs those runners, and the built bundle
+> contains none of this code; deleting it is #197. Every conversation and child agent
+> runs on `session/conversation-turn.ts` and `engine/turn.ts` instead; see
+> [the overview](architecture-overview.md). Read this page for its design rationale, not
+> as a description of live behavior. "Runtime session" below is the session
 > `createSessionRuntime` builds, which this page called the root session before the
 > rewrite (#86–#88).
 

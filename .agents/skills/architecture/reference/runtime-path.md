@@ -8,12 +8,14 @@ session, `session/conversation-turn.ts`, `engine/turn.ts`, the model registry an
 provider. Read those two sections, then the layer's `index.ts`. `bench/hops.mts`
 measures this path, so its output is the current file list.
 
-**Delegation runtime.** `src/engine/agent-runtime/` (`ApplicationRunLoop`) is the loop
-the legacy subagent runners in `src/delegation/subagents/` drive: `execution-runner.ts`
-through a session runtime (`createSessionRuntime`, `src/session/session/`), and the
-mentor and nested runners directly through `legacy-nested-driver.ts`. Start at
-`#runTurn`, then `docs/architecture/conversation-loop.md`. The native launcher policy
-lives in `src/delegation/direct/` and uses session-owned branch/task ports.
+**Child agents.** `src/delegation/direct/` launches them as session branches
+(`session/branches.ts`) that run through `startNestedTurn` in the same `engine/turn.ts`.
+See `src/delegation/README.md`.
+
+**Not on the path.** `src/engine/agent-runtime/application-run-loop.ts`
+(`ApplicationRunLoop`), the legacy subagent runners in `src/delegation/subagents/`, and
+`src/session/session/` (`createSessionRuntime`) are not executed in production; the
+built bundle does not contain them (#197). Do not debug a live failure there.
 
 The legacy path this file once described (`app.tsx`, `ConversationOrchestrator`,
 `ConversationService`, `ConversationAdapter`, `QueueController`, `TurnWorkflow`) was

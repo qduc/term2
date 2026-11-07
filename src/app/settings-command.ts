@@ -1,7 +1,7 @@
 import type { SlashCommand } from '../shared/slash-commands.js';
 import { SETTINGS_RESET_TRIGGER, SETTINGS_TRIGGER } from '../clients/tui/menus/triggers.js';
-import type { SettingsService, SettingsWithSources, DurableWriteResult } from '../config/settings/settings-service.js';
-import { SETTING_KEYS } from '../config/settings/settings-service.js';
+import type { SettingsService, DurableWriteResult } from './settings-service.js';
+import { SETTING_KEYS, type SettingsWithSources } from '../config/settings/settings-schema.js';
 import { getProvider } from '../model/providers/index.js';
 import { parseModelProviderArg } from '../shared/utils/ai/model-provider-arg.js';
 import { getModelSettingConfig } from '../shared/utils/ai/model-settings.js';

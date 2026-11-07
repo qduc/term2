@@ -21,8 +21,8 @@
 /** `undefined` lets the terminal's own default win, which is how `mono` works. */
 export type Color = string | undefined;
 
-export const THEME_NAMES = ['dark', 'light', 'high-contrast', 'mono'] as const;
-export type ThemeName = (typeof THEME_NAMES)[number];
+import { THEME_NAMES, type ThemeName } from '../../../../config/settings/theme-setting.js';
+export { THEME_NAMES, type ThemeName };
 
 /**
  * A colour a table or helper can name without holding a value: store the role,

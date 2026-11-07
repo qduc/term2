@@ -15,7 +15,7 @@ import { isDroppedProfile } from './dropped-profiles.js';
 import { resolveProfile } from '../config/profiles/resolver.js';
 import { BARE_PROFILE_ID, canonicalProfileId } from '../config/profiles/legacy-adapter.js';
 import { SessionContextService } from '../model/traffic-context.js';
-import { buildEnvOverrides } from '../config/settings/settings-service.js';
+import { buildEnvOverrides } from '../config/settings/settings-env.js';
 import {
   HOME_DIRECTORY_START_WARNING,
   shouldWarnOnHomeDirectoryStart,

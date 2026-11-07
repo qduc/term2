@@ -318,6 +318,17 @@ branches; do not infer that remote source `42724797` has those capabilities.
   reach the direct path. Those totals were neither M1 coverage nor a passing tier;
   keep executable routing explicit when interpreting migration evidence.
 
+- **Native SQLite shutdown on Node 24.19.0:** `better-sqlite3@12.4.1` can abort
+  on fork/resume with `node::RemoveEnvironmentCleanupHook`, `Assertion failed:
+  (env) != nullptr`, and `Database::~Database()` or `Statement::~Statement()` in
+  the native stack. This reproduced on unmodified `main` `cb165c8a` in the resume
+  PTY suite during #212; a child can exit by signal (`exitCode: null`) or leave
+  the harness waiting for an idle file that will never arrive. A passing rerun
+  does not explain the native abort. Inspect the child's stderr/exit before
+  attributing a missing resume frame to rendering changes; the native cause and
+  repair remain unresolved. The explicit CLI resume/fork idle timeout also
+  reproduced on that base, without a captured native stack for that timeout.
+
 ## Prompt and instruction changes
 
 Prompt text under `src/session/prompts/` is product behavior. When trimming a prompt, show

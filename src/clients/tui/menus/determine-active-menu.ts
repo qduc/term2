@@ -17,7 +17,6 @@ export type ActiveMenu =
   | { type: 'model'; startIndex: number; origin: 'settings-backed' | 'direct-trigger' }
   | { type: 'skills'; startIndex: number }
   | { type: 'resume'; startIndex: number }
-  | { type: 'profile'; startIndex: number }
   | { type: 'path'; trigger: { start: number; query: string } };
 
 const hasCompletion = (completion: SlashCommandCompletion | undefined): completion is SlashCommandCompletion =>
@@ -33,6 +32,11 @@ export const determineActiveMenu = (
   // src/config/settings/settings-ui-metadata.ts, supplied by the app.
   isKnownSettingKey: (key: string) => boolean = () => false,
 ): ActiveMenu => {
+  // Compatibility settings remain readable by exact name, without a value editor or toggle.
+  if (
+    /^\/settings (?:reset )?app\.(?:activeProfileId|liteMode|planMode|mentorMode|orchestratorMode)(?:\s|$)/.test(value)
+  )
+    return { type: 'none' };
   const commandCompletions = getCommandCompletions(commands);
 
   // Priority 0: model selection. Settings-backed model keys stay in model-settings;
@@ -95,7 +99,7 @@ export const determineActiveMenu = (
     }
   }
 
-  // Priority 2: skills, resume, and profile selection (after settings triggers, before slash).
+  // Priority 2: skills and resume selection (after settings triggers, before slash).
   for (const completion of commandCompletions) {
     if (completion.type === 'skills') {
       if (value.startsWith(completion.trigger) && cursorOffset >= completion.trigger.length) {
@@ -105,12 +109,11 @@ export const determineActiveMenu = (
       if (value.startsWith(completion.trigger) && cursorOffset >= completion.trigger.length) {
         return { type: 'resume', startIndex: completion.trigger.length };
       }
-    } else if (completion.type === 'profile') {
-      if (value.startsWith(completion.trigger) && cursorOffset >= completion.trigger.length) {
-        return { type: 'profile', startIndex: completion.trigger.length };
-      }
     }
   }
+
+  // Exact compatibility aliases run directly; they never open an empty slash picker.
+  if (/^\/(?:profile|bare|lite)$/i.test(value)) return { type: 'none' };
 
   // Priority 3: slash command (only when no space typed yet and cursor has moved past '/').
   if (value.startsWith('/') && !value.slice(1).includes(' ') && cursorOffset > 0) {

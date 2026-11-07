@@ -53,19 +53,11 @@ export const LEGACY_COMMANDS: readonly Entry[] = [
   { name: 'retry-tool', description: 'Retry the last tool call' },
   { name: 'retry-turn', description: 'Regenerate the latest user turn from its original prompt' },
   { name: 'compact', description: 'Compact older conversation turns into a local summary' },
-  { name: 'bare', description: 'Toggle the Bare profile (minimal prompt)' },
-  { name: 'lite', description: 'Toggle the Bare profile (Lite was merged into Bare)', runs: 'bare' },
   {
     name: 'auto-approve',
     description: 'Set tool auto-approval mode (off, advisory, auto, always)',
     expectsArgs: true,
     completion: { type: 'setting-value', trigger: '/auto-approve ', settingKey: 'shell.autoApproveMode' },
-  },
-  {
-    name: 'profile',
-    description: 'Switch the active profile',
-    expectsArgs: true,
-    completion: { type: 'profile', trigger: '/profile ' },
   },
   { name: 'handoff', description: 'Send the last assistant response to another model for review' },
   {

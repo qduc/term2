@@ -18,7 +18,6 @@ export function runDirectHeadlessOnHost(request: DirectHeadlessRequest): DirectH
     let target: DirectSessionTarget | null = null;
     let mcp: DirectMcp | undefined;
     let profileMetadata: Readonly<Record<string, unknown>> = {};
-    let profileName = '';
     try {
       const opened = await openDirectSessionTarget(request.ssh, request.lite === true, stop.signal);
       target = opened;
@@ -27,7 +26,7 @@ export function runDirectHeadlessOnHost(request: DirectHeadlessRequest): DirectH
         conversationsDir,
         interactive: false,
         onNotice: (message) => {
-          // Same non-error diagnostic as the profile line. The old CLI only logs these.
+          // MCP setup notices are non-error diagnostics, suppressed by --quiet.
           if (!request.quiet) io.stderr.write(`MCP: ${message}\n`);
         },
       });
@@ -42,9 +41,8 @@ export function runDirectHeadlessOnHost(request: DirectHeadlessRequest): DirectH
         authority: opened.authority,
         ...(opened.binding ? { sessionBinding: opened.binding } : {}),
         hooks: { root: fs.realpathSync(process.cwd()), mode: 'non-interactive' },
-        onSurface(surface, profile) {
+        onSurface(_surface, profile) {
           profileMetadata = profile;
-          profileName = surface.profileName;
         },
       });
       application = app;
@@ -58,8 +56,6 @@ export function runDirectHeadlessOnHost(request: DirectHeadlessRequest): DirectH
         sessionId === undefined
           ? await app.host.createSession(app.principal, opened.grant)
           : await app.host.connect(app.principal, sessionId);
-      // Announce only the restored/configured selection, once.
-      if (!request.quiet) io.stderr.write(`Profile: ${profileName}\n`);
       if (request.goal) await app.setGoal(connection.sessionId, request.goal, 'launcher');
       active = true;
       const { outcome } = await runDirectHeadless(connection, {

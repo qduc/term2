@@ -199,7 +199,6 @@ async function runCommand(
     expect(identity.version).toBe(`${manifest.version}-dev+${identity.commit.slice(0, 7)}`);
   await session.waitForOutput(`v${identity.version}`, 30_000);
   await session.waitForOutput('term²', 30_000);
-  await session.waitForOutput('BARE', 30_000);
   await session.waitForOutput('mockprov', 30_000);
   await session.waitForOutput('mock-alpha', 30_000);
 
@@ -306,6 +305,18 @@ async function runCommand(
   for (const forbidden of forbiddenOutput) expect(session.getVisibleOutput()).not.toContain(forbidden);
   if (expectedDraft !== undefined) await waitForHarnessComposerValue(idlePath, expectedDraft, { timeoutMs: 60_000 });
 
+  if (/^\/(profile|bare|lite|settings)( |$)/.test(command) && firstPrompt) {
+    const logs = fs.readdirSync(env.TERM2_CONVERSATIONS_DIR).filter((name) => name.endsWith('.jsonl'));
+    expect(logs).toHaveLength(1);
+    const content = fs.readFileSync(path.join(env.TERM2_CONVERSATIONS_DIR, logs[0]!), 'utf8');
+    expect(content).toContain('keep this conversation');
+    const facts = content
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line).fact);
+    expect(facts.filter((fact) => fact.type === 'session_started')).toHaveLength(1);
+    expect(facts.some((fact) => fact.type === 'configuration_changed')).toBe(false);
+  }
   if (exerciseMenu === 'model-picker') {
     await waitForHarnessComposerValue(idlePath, '/model ', { timeoutMs: 60_000 });
     await session.waitForOutput('aka "luna"', 30_000);
@@ -361,9 +372,24 @@ it('/settings without an argument opens the legacy settings menu', { timeout: TI
   runCommand('/settings', 'Tab section', undefined, false, '/settings '),
 );
 
-it('/profile without an argument opens the Profiles menu', { timeout: TIMEOUT_MS }, () =>
-  runCommand('/profile', 'Currently active', undefined, false, '/profile '),
-);
+for (const command of [
+  '/profile',
+  '/profile standard',
+  '/profile full',
+  '/profile lite',
+  '/bare',
+  '/lite',
+  '/settings app.activeProfileId builtin:full',
+  '/settings app.liteMode true',
+  '/settings reset app.activeProfileId',
+]) {
+  it(`${command} is a hidden no-op with history`, { timeout: TIMEOUT_MS }, () =>
+    runCommand(command, 'The default experience is already active.', 'keep this conversation', false, '', [
+      'Clear session and switch',
+      'Currently active',
+    ]),
+  );
+}
 
 it(
   '/model picker filters, toggles favorites, selects a model and clears the composer',
@@ -430,3 +456,11 @@ it(
 it('Enter opens slash pickers and Escape returns to the composer', { timeout: TIMEOUT_MS }, () =>
   runCommand('', '', undefined, 'slash-picker-tab'),
 );
+
+for (const name of ['plan', 'pair', 'mentor', 'orchestrator', 'unknown']) {
+  it(`/profile ${name} cannot activate a dropped or unknown profile`, { timeout: TIMEOUT_MS }, () =>
+    runCommand(`/profile ${name}`, `Missing parent or Profile 'builtin:${name}'`, 'keep this conversation', false, '', [
+      'Clear session and switch',
+    ]),
+  );
+}

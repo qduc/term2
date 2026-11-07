@@ -7,7 +7,6 @@ import type { TuiSettingsSchema } from '../integration.js';
 const STOP_CHAR_REGEX = /[\s,;:()[\]{}<>]/;
 export const SETTINGS_TRIGGER = '/settings ';
 export const SETTINGS_RESET_TRIGGER = '/settings reset ';
-export const PROFILE_TRIGGER = '/profile ';
 
 const whitespaceRegex = /\s/;
 
@@ -277,32 +276,6 @@ export function createDefaultTriggerRegistry(
           identity: 'skills-root',
           frame: {
             kind: 'skills',
-            binding: {
-              trigger: { range: { start: 0, end: active.startIndex }, text: editor.text.slice(0, active.startIndex) },
-              queryStart: active.startIndex,
-              queryEnd: 'cursor',
-              replacement: { start: active.startIndex, end: 'cursor' },
-            },
-          },
-        };
-      }
-      return null;
-    },
-    successors: [],
-  });
-
-  // Priority 20: Profile
-  registerRule({
-    id: 'profile',
-    priority: 20,
-    parse: (editor) => {
-      const active = determineActiveMenu(editor.text, editor.cursor, slashCommands);
-      if (active.type === 'profile') {
-        return {
-          ruleId: 'profile',
-          identity: 'profile-root',
-          frame: {
-            kind: 'profile',
             binding: {
               trigger: { range: { start: 0, end: active.startIndex }, text: editor.text.slice(0, active.startIndex) },
               queryStart: active.startIndex,

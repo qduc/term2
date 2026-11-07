@@ -4,6 +4,10 @@
     "reason": "Cross-editor workspace formatting specifications for indents, line endings, and charset."
   },
   {
+    "file": ".git",
+    "reason": "Git metadata: a directory in the primary checkout and an indirection file in feature worktrees required by AGENTS.md. It is created and owned by Git, not an application report or task artifact."
+  },
+  {
     "file": ".gitattributes",
     "reason": "Git path attribute configuration controlling line ending conversions and merge drivers."
   },

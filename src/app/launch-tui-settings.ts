@@ -11,13 +11,12 @@
 import { isDroppedProfile } from './dropped-profiles.js';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { resolveActiveProfile } from '../config/profiles/active-profile.js';
+import { resolveProfile } from '../config/profiles/resolver.js';
 import {
   BARE_PROFILE_ID,
   isLegacyModeSettingKey,
   profileIdFromLegacyModeSetting,
 } from '../config/profiles/legacy-adapter.js';
-import { planProfileTransition } from './profile-transition.js';
 import { SETTING_KEYS } from '../config/settings/settings-schema.js';
 import { CATEGORY_KEYS, HIDDEN_SETTINGS, SETTINGS_CATEGORIES } from './settings-completion-config.js';
 import { getSettingMetadata } from '../config/settings/settings-ui-metadata.js';
@@ -62,9 +61,16 @@ function settingsBrowse(
 }
 
 // Legacy source/commands/mode-commands.ts and use-app-commands.ts (React modules, so copied, not imported).
-const BARE_ENABLED_DETAIL = ' - minimal prompt; AGENTS.md read on demand; other tools via run_code';
 const APPROVAL_MODES = ['off', 'advisory', 'auto', 'always'];
 const PROFILE_KEY = 'app.activeProfileId';
+
+/** Hidden compatibility inputs can only acknowledge the default experience. */
+function acknowledgeProfile(id: string = BARE_PROFILE_ID): CommandResult {
+  const target = id.includes(':') ? id : `builtin:${id}`;
+  if (isDroppedProfile(target)) throw new Error(`Missing parent or Profile '${target}'`);
+  if (resolveProfile(target).identity.id !== BARE_PROFILE_ID) throw new Error(`Profile '${target}' is not selectable.`);
+  return { applied: true, message: 'The default experience is already active.' };
+}
 /** The Session owns these, so a value the settings command saved is also sent to it. */
 const SELECTION_KEYS = new Set(['agent.modelSelection', 'agent.reasoningEffort']);
 
@@ -95,39 +101,6 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
     return { message: receiptNotice(result) };
   };
 
-  /** `said` is what legacy prints: nothing for /profile and /settings, the mode line for a toggle. */
-  const switchProfile = async (
-    connection: TuiConnection,
-    targetId: string,
-    retry: string,
-    said: { readonly noop?: string; readonly done?: string } = {},
-  ): Promise<CommandResult> => {
-    // Every TUI switch (/profile, /settings app.activeProfileId, app.planMode, ...) refuses a dropped profile (#149)
-    // exactly as it refuses an unknown one: the resolver's own error.
-    if (isDroppedProfile(targetId)) throw new Error(`Missing parent or Profile '${targetId}'`);
-    const { settings } = detailsOf(connection.sessionId);
-    const plan = planProfileTransition(settings, targetId);
-    if (plan.class === 'noop') return { applied: true, ...(said.noop ? { message: said.noop } : {}) };
-    const snapshot = latest().sessionId === connection.sessionId ? latest() : connection.snapshot;
-    // Legacy mode-commands.ts: a change to or from Bare with history asks to clear (requestModeSwitchConfirm).
-    const current = resolveActiveProfile(settings).identity.id;
-    const enable = plan.targetId === BARE_PROFILE_ID;
-    if ((enable || current === BARE_PROFILE_ID) && snapshot?.messages.some((message) => message.role !== 'system')) {
-      const line = `Bare mode ${enable ? `enabled${BARE_ENABLED_DETAIL}` : 'disabled'}`;
-      return { confirmClear: { profileId: plan.targetId, enable, line } };
-    }
-    if (plan.class === 'structural' && (!snapshot || snapshot.messages.length > 0)) {
-      throw new Error(
-        `Cannot switch modes mid-session (tool/context mismatch). Use \`/clear\` first, then \`${retry}\`.`,
-      );
-    }
-    const previous = settings.get(PROFILE_KEY);
-    // Legacy's profile transition saves the new profile; a refused rebuild takes it back on disk as well.
-    settings.set(PROFILE_KEY, plan.targetId);
-    const undo = () => settings.set(PROFILE_KEY, previous);
-    return rebuild(connection, undo, said.done ?? '');
-  };
-
   /** Most tool gates read settings as they run, so only a reconfigured session has to wait for a rebuild. */
   const write = async (
     connection: TuiConnection,
@@ -148,20 +121,9 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
   };
 
   return {
-    /** `/bare` and `/lite` (legacy mode-commands.ts). The plan, mentor and orchestrator modes are dropped (#149). */
-    toggle(connection: TuiConnection, mode: 'bare' | 'lite'): Promise<CommandResult> {
-      return switchProfile(connection, BARE_PROFILE_ID, `/${mode}`, {
-        noop: 'Bare mode is already active',
-        done: `Bare mode enabled${BARE_ENABLED_DETAIL}`,
-      });
-    },
-
-    profile(connection: TuiConnection, id: string | undefined): Promise<CommandResult> {
-      if (!id)
-        return Promise.resolve({
-          message: 'Use /profile <name or full profile ID>.',
-        });
-      return switchProfile(connection, id.includes(':') ? id : `builtin:${id}`, `/profile ${id}`);
+    /** Exact, unadvertised aliases retained for existing typed commands. */
+    profile(_connection: TuiConnection, id?: string): Promise<CommandResult> {
+      return Promise.resolve(acknowledgeProfile(id));
     },
 
     async settings(connection: TuiConnection, args: string): Promise<CommandResult> {
@@ -198,11 +160,7 @@ export function createDirectTuiSettings(app: DirectApplication, latest: () => Wi
               : raw
             : profileIdFromLegacyModeSetting(key, isReset ? false : parseSettingValue(raw), current);
         if (!targetId) return { message: `${key} does not name a profile here.` };
-        return switchProfile(
-          connection,
-          targetId.includes(':') ? targetId : `builtin:${targetId}`,
-          `/settings ${args}`,
-        );
+        return acknowledgeProfile(targetId);
       }
       if (SELECTION_KEYS.has(key)) {
         // Legacy's settings command parses, saves and words it; the Session then switches to the saved value.

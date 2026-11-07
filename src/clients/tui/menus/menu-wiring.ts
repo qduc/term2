@@ -14,7 +14,6 @@ import { useModelSelection } from './use-model-selection.js';
 import { useSettingsCompletion } from './use-settings-completion.js';
 import { useSettingsValueCompletion } from './use-settings-value-completion.js';
 import type { CommandResult } from '../integration.js';
-import { useProfileSelection } from './use-profile-selection.js';
 import { useSkillSelection } from './use-skill-selection.js';
 import { useResumeSelection } from './use-resume-selection.js';
 import { useInputContext } from './input-context.js';
@@ -42,7 +41,6 @@ export const MENU_RULE_IDS: readonly string[] = [
   'settings-value-child',
   'direct-setting-value',
   'resume',
-  'profile',
   'skills',
 ];
 
@@ -69,7 +67,6 @@ export function useMenuWiring({
   const settingsValue = useSettingsValueCompletion(settingsService);
   const listConversations = useCallback(() => menus.resume?.list(sessionId) ?? Promise.resolve([]), [menus, sessionId]);
   const resume = useResumeSelection({ listConversations });
-  const profiles = useProfileSelection();
   const skills = useSkillSelection();
   return {
     slash,
@@ -80,7 +77,6 @@ export function useMenuWiring({
     settingsService,
     schema: menus.schema,
     resume,
-    profiles,
     skills,
     onSkillSelected: (skill: { name: string }) => onSkillSelected(skill.name),
     onSystemMessage: actions.notice,

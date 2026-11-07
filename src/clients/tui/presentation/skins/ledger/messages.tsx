@@ -10,20 +10,10 @@ const truncateModel = (name: string): string =>
 
 /**
  * One header bar: the product chip, then facts. The bar is a band on `codeBackground`,
- * so a chip cannot use that surface here; the mode badge keeps its own identity colour
- * and the product chip is solid. The facts are grouped, so a narrow terminal wraps
- * between groups (`term² v1.2`, `provider/model effort`, `mentor ...`) and never inside one.
+ * so a chip cannot use that surface here; the product chip is solid. The facts
+ * wrap between groups (`term² v1.2`, `provider/model effort`) on narrow terminals.
  */
-export const LedgerBanner: FC<BannerView> = ({
-  version,
-  mode,
-  mentor,
-  providerLabel,
-  model,
-  reasoningEffort,
-  mentorModel,
-  mentorReasoningEffort,
-}) => {
+export const LedgerBanner: FC<BannerView> = ({ version, providerLabel, model, reasoningEffort }) => {
   const theme = useTheme();
   const showEffort = (effort: string) => effort !== 'none' && effort !== 'default';
   return (
@@ -35,22 +25,6 @@ export const LedgerBanner: FC<BannerView> = ({
               term²
             </Chip>
             <Text color={theme.textMuted}> v{version}</Text>
-            {mode !== 'STANDARD' && (
-              <>
-                {' '}
-                <Chip tone="accent" bold surface={theme.modeBadge[mode]} surfaceText={theme.modeBadgeForeground}>
-                  {mode}
-                </Chip>
-              </>
-            )}
-            {mentor && (
-              <>
-                {' '}
-                <Chip tone="accentAlt" bold surface={theme.modeBadge.MENTOR} surfaceText={theme.modeBadgeForeground}>
-                  MENTOR
-                </Chip>
-              </>
-            )}
           </Text>
         </Box>
         <Box>
@@ -63,17 +37,6 @@ export const LedgerBanner: FC<BannerView> = ({
             {showEffort(reasoningEffort) && <Text color={theme.warning}> {reasoningEffort}</Text>}
           </Text>
         </Box>
-        {mentor && mentorModel && (
-          <Box>
-            <Text>
-              <Text color={theme.textMuted}>mentor</Text>
-              <Text color={theme.accentAlt} bold>
-                {truncateModel(mentorModel)}
-              </Text>
-              {showEffort(mentorReasoningEffort) && <Text color={theme.warning}> {mentorReasoningEffort}</Text>}
-            </Text>
-          </Box>
-        )}
       </Box>
     </Box>
   );

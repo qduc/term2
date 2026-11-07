@@ -305,11 +305,11 @@ behaves as it does today.
   through `app/tool-surface.ts`. Fixing gaps against legacy would need the
   catalog binding, connection lifecycle and approval policy together.
 - **Plan, pair, mentor and orchestrator profiles/modes, and
-  `run_agent_workflow` — dropped from parity work.** `--profile` still selects
-  any of them through `config/profiles/`, and the TUI's `/plan`,
-  `/mentor` and `/orchestrator` commands still switch them; parity for their prompts, settings and workflow execution
-  is not being checked. Bare, `--lite`, subagent `ask_orchestrator` and the
-  retained mentor catalog are kept.
+  `run_agent_workflow` — dropped from parity work.** Explicit selections of
+  these profiles are rejected; saved selections fall back to Bare. The app has
+  one default experience and hides profile controls and labels. Profile backend,
+  metadata, legacy aliases, subagent `ask_orchestrator` and the retained mentor
+  catalog remain.
 - **ACP — dropped from parity work, still wired.** `term2 acp` dispatches to
   `app/launch-acp.ts`, with `clients/acp/` as the adapter for session
   attachment, rendering and permission/question mapping.

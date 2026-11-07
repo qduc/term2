@@ -1622,6 +1622,10 @@
     {
       "export": "tools/web/web-search.ts formatWebSearchCommandMessage",
       "reason": "Internal tools constant or variable \"formatWebSearchCommandMessage\" in tools/web/web-search.ts used within its file; export keyword retained pending Phase 3 module cleanup."
+    },
+    {
+      "export": "config/profiles/registry.ts builtinProfiles",
+      "reason": "Issue #212 removes the consumer picker, the last app caller of this registry enumeration. Keep the profile backend public surface for compatibility and diagnostic consumers; remove this exception when an actual runtime caller uses the export or backend API removal is authorized."
     }
   ],
   "jobNameExceptions": [

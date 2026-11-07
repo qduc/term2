@@ -168,3 +168,14 @@ it.each([
     expect(fs.readFileSync(settingsFile, 'utf8')).toBe(savedSettings);
   },
 );
+
+it('does not expose profile controls in settings search', { timeout: TIMEOUT_MS }, async () => {
+  const { idlePath } = await start();
+  session!.write('/settings profile');
+  await waitForHarnessComposerValue(idlePath, '/settings profile', { timeoutMs: 60_000 });
+  await session!.waitForOutput('No settings match', 30_000);
+  const output = session!.getVisibleOutput();
+  expect(output).not.toContain('app.activeProfileId');
+  expect(output).not.toContain('app.liteMode');
+  expect(output).not.toContain('app.planMode');
+});

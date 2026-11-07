@@ -8,7 +8,6 @@ import { SubagentPoolMenuSession } from './SubagentPoolMenuSession.js';
 import { SettingsMenuSession } from './SettingsMenuSession.js';
 import { SettingsValueMenuSession } from './SettingsValueMenuSession.js';
 import { ResumeMenuSession } from './ResumeMenuSession.js';
-import { ProfileMenuSession } from './ProfileMenuSession.js';
 import { SkillsMenuSession } from './SkillsMenuSession.js';
 import { CopyMenuSession } from './CopyMenuSession.js';
 import { RewindMenuSession } from './RewindMenuSession.js';
@@ -37,7 +36,6 @@ const defaultRegistry: Partial<MenuRegistry> = {
   settings: SettingsMenuSession as React.ComponentType<any>,
   settings_value: SettingsValueMenuSession as React.ComponentType<any>,
   resume: ResumeMenuSession as React.ComponentType<any>,
-  profile: ProfileMenuSession as React.ComponentType<any>,
   skills: SkillsMenuSession as React.ComponentType<any>,
   copy: CopyMenuSession as React.ComponentType<any>,
   rewind: RewindMenuSession as React.ComponentType<any>,

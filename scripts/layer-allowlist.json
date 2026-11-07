@@ -1,11 +1,7 @@
 [
   {
-    "edge": "clients/tui/presentation/components/layout/Banner.tsx -> engine/agent-runtime/model-resolver.ts (clients -> engine)",
-    "reason": "Plan Phase 3.1: the banner resolves the model label itself. Goes when app/ computes model and provider labels and passes them as props or protocol state."
-  },
-  {
     "edge": "clients/tui/presentation/components/layout/Banner.tsx -> model/providers/index.ts (clients -> model)",
-    "reason": "Plan Phase 3.1: the banner resolves the provider label itself. Goes with the edge above, when app/ passes the labels in."
+    "reason": "Plan Phase 3.1: the banner resolves the provider label itself. Remove when app/ passes the provider label into the banner."
   },
   {
     "edge": "clients/tui/presentation/hooks/use-terminal-focus-notifier.ts -> app/settings-service.ts (clients -> app)",

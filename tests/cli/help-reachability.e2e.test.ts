@@ -86,6 +86,7 @@ for (const [cols, rows] of [
       // The last help line (legacy's begins `Shift+Tab: switch Standard/Plan · `, dropped with Plan: #149).
       await terminal.waitForOutput('@: complete paths · !: shell', 30_000);
       const helpOutput = terminal.getOutput();
+      expect(helpOutput).not.toMatch(/Profile:|\bBARE\b/);
       expect(helpOutput.lastIndexOf('Keyboard shortcuts')).toBeGreaterThan(helpOutput.lastIndexOf('/help —'));
       // Legacy's command table, except /undo, as the slash menu lists it.
       const table = fs.readFileSync(
@@ -97,6 +98,9 @@ for (const [cols, rows] of [
       for (const command of commands.filter((name) => name !== 'undo')) expect(helpOutput).toContain(`/${command} —`);
       // Dropped by owner scope, or never in legacy.
       for (const command of [
+        '/profile',
+        '/bare',
+        '/lite',
         '/plan',
         '/mentor',
         '/orchestrator',

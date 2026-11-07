@@ -129,6 +129,32 @@ export const RULES = {
       entry: '{ "file": "<name>", "reason": "..." }',
     },
   },
+  'duplicate-basenames': {
+    title: 'File basenames are unique under src/',
+    why:
+      'Two files sharing a basename (like generation-guard.ts in app/, session/ and engine/) confuse readers, ' +
+      'collide in imports, and invite parallel classes with the same name. Often they are fragments split to pass ' +
+      'the line limit rather than real modules.',
+    fix: 'Name the file after its specific job, or merge fragments that only make sense together.',
+    avoid: 'Do not add meaningless prefixes or suffixes to dodge the check without clarifying what the file does.',
+    exceptions: {
+      file: 'scripts/rule-baseline.json',
+      entry: 'duplicateBasenames: { "file": "<path under src/>", "reason": "..." }',
+    },
+  },
+  'folder-fanout': {
+    title: 'Folder fan-out stays under the file limit',
+    why:
+      'A folder with dozens of direct files usually holds multiple modules or over-split fragments. A ceiling ' +
+      'prompts authors to group cohesive files into submodules or combine fragments before the folder becomes a catch-all.',
+    fix: 'Group cohesive files into a subfolder with its own index.ts, or merge single-importer fragments back into their owners.',
+    avoid: 'Do not create arbitrary subfolders with non-names to dodge the limit.',
+    exceptions: {
+      file: 'scripts/complexity-budget.json',
+      entry: 'folderCeilings: "<folder>": { "files": N, "reason": "..." }',
+      note: 'when raising an existing ceiling, rewrite its reason to cover the new files',
+    },
+  },
   baselines: {
     title: 'Recorded deviations carry reasons',
     why:
@@ -229,6 +255,8 @@ export function readDeviations(read) {
     add('names-are-jobs', 'scripts/rule-baseline.json', entry, 'path', 'jobNameExceptions');
   for (const entry of rules?.unusedExports ?? [])
     add('unused-exports', 'scripts/rule-baseline.json', entry, 'export', 'unusedExports');
+  for (const entry of rules?.duplicateBasenames ?? [])
+    add('duplicate-basenames', 'scripts/rule-baseline.json', entry, 'file', 'duplicateBasenames');
 
   const reach = json('scripts/reachability-allowlist.json');
   for (const [file, reason] of Object.entries(reach ?? {}))
@@ -249,6 +277,15 @@ export function readDeviations(read) {
       reason: info.reason ?? null,
       legacy: false,
       lines: info.lines,
+    });
+  for (const [folder, info] of Object.entries(budget?.folderCeilings ?? {}))
+    deviations.push({
+      rule: 'folder-fanout',
+      file: 'scripts/complexity-budget.json',
+      key: folder,
+      reason: info.reason ?? null,
+      legacy: false,
+      files: info.files,
     });
 
   const root = json('scripts/root-allowlist.json');

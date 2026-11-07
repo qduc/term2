@@ -478,5 +478,467 @@
     "tools/agent/ask-orchestrator.ts",
     "tools/skills/skills-service.ts",
     "tools/ssh-service.ts"
+  ],
+  "duplicateBasenames": [
+    {
+      "file": "clients/tui/presentation/skins/cards/activity.tsx",
+      "reason": "Terminal UI skin slot implementation for cards skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/ledger/activity.tsx",
+      "reason": "Terminal UI skin slot implementation for ledger skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/rail/activity.tsx",
+      "reason": "Terminal UI skin slot implementation for rail skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/zen/activity.tsx",
+      "reason": "Terminal UI skin slot implementation for zen skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "app/agent.ts",
+      "reason": "Application agent setup assembling tool declarations and model invocation loops for the direct CLI."
+    },
+    {
+      "file": "clients/acp/agent.ts",
+      "reason": "Agent Client Protocol (ACP) adapter wrapping agent capabilities and notifications for ACP clients."
+    },
+    {
+      "file": "clients/tui/presentation/skins/cards/approval.tsx",
+      "reason": "Terminal UI skin slot implementation for cards skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/classic/approval.tsx",
+      "reason": "Terminal UI skin slot implementation for classic skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/ledger/approval.tsx",
+      "reason": "Terminal UI skin slot implementation for ledger skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/rail/approval.tsx",
+      "reason": "Terminal UI skin slot implementation for rail skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/zen/approval.tsx",
+      "reason": "Terminal UI skin slot implementation for zen skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "shared/tools/agent/ask-user-constants.ts",
+      "reason": "Shared question types, validation schemas, and constants for ask_user tool."
+    },
+    {
+      "file": "tools/adopted/ask-user-constants.ts",
+      "reason": "Adopted legacy tool constants preserving compatibility with external harnesses."
+    },
+    {
+      "file": "clients/tui/presentation/skins/cards/body.tsx",
+      "reason": "Terminal UI skin slot implementation for cards skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/ledger/body.tsx",
+      "reason": "Terminal UI skin slot implementation for ledger skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/rail/body.tsx",
+      "reason": "Terminal UI skin slot implementation for rail skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/zen/body.tsx",
+      "reason": "Terminal UI skin slot implementation for zen skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/acp/budget.ts",
+      "reason": "ACP client budget adapter formatting token limits for external ACP consumers."
+    },
+    {
+      "file": "protocol/budget.ts",
+      "reason": "Wire protocol budget schema defining token and turn constraints across clients."
+    },
+    {
+      "file": "protocol/capabilities.ts",
+      "reason": "Client-server capability negotiation protocol definitions and wire schemas."
+    },
+    {
+      "file": "session/capabilities.ts",
+      "reason": "Session-level tool and execution capability permission verification rules."
+    },
+    {
+      "file": "session/codename-run-id.ts",
+      "reason": "Session turn identifier generation mapping run IDs to human-readable codenames."
+    },
+    {
+      "file": "tools/subagents/codename-run-id.ts",
+      "reason": "Subagent tool helper formatting child agent execution identifiers for display."
+    },
+    {
+      "file": "protocol/command-receipts.ts",
+      "reason": "Protocol wire envelope types for command execution status notifications."
+    },
+    {
+      "file": "session/command-receipts.ts",
+      "reason": "Session log fact reducer tracking durable command execution receipts."
+    },
+    {
+      "file": "clients/tui/commands.ts",
+      "reason": "TUI slash-command registry and auto-completion definitions for terminal input."
+    },
+    {
+      "file": "protocol/commands.ts",
+      "reason": "Protocol definitions for client command dispatch and execution receipt framing."
+    },
+    {
+      "file": "protocol/context.ts",
+      "reason": "Protocol wire types representing attached workspace and document context items."
+    },
+    {
+      "file": "session/context.ts",
+      "reason": "Session context accumulation state combining user context items and system facts."
+    },
+    {
+      "file": "session/conversation.ts",
+      "reason": "Session conversation boundary defining turn lifecycle and history access."
+    },
+    {
+      "file": "tools/conversation.ts",
+      "reason": "Tool implementation exposing conversation history and search to subagents."
+    },
+    {
+      "file": "app/discord-send.ts",
+      "reason": "Direct CLI command action for dispatching Discord session notifications and messages."
+    },
+    {
+      "file": "clients/control/discord-send.ts",
+      "reason": "Control socket protocol bridge for Discord notification routing across process boundaries."
+    },
+    {
+      "file": "session/conversation/durable-goal.ts",
+      "reason": "Conversation state projection extracting persistent goal directives across resumes."
+    },
+    {
+      "file": "shared/contracts/durable-goal.ts",
+      "reason": "Shared contract interface and schemas defining goal lifecycle and criteria."
+    },
+    {
+      "file": "app/generation-guard.ts",
+      "reason": "Application generation wrapper enforcing per-turn stream character caps and deadlines around resolved models."
+    },
+    {
+      "file": "engine/agent-runtime/generation-guard.ts",
+      "reason": "Engine-level generation budget and runaway detector; scheduled to be cleaned up or merged in #197."
+    },
+    {
+      "file": "session/generation-guard.ts",
+      "reason": "Session-level generation token counter guarding asynchronous provider state transitions."
+    },
+    {
+      "file": "protocol/json.ts",
+      "reason": "Protocol JSON RPC message parsing and validation helpers."
+    },
+    {
+      "file": "tools/languages/json.ts",
+      "reason": "Language tool implementation for JSON linting, formatting, and schema validation."
+    },
+    {
+      "file": "config/profiles/legacy-adapter.ts",
+      "reason": "Configuration profile adapter mapping deprecated profile options to current schema."
+    },
+    {
+      "file": "delegation/runtime/legacy-adapter.ts",
+      "reason": "Pre-rewrite subagent delegation runtime adapter scheduled for removal in #197."
+    },
+    {
+      "file": "clients/tui/presentation/skins/shared/limits.ts",
+      "reason": "Terminal UI skin slot implementation for shared skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "tools/session-browser/limits.ts",
+      "reason": "Session browser tool pagination limits and byte ceilings for transcript inspection."
+    },
+    {
+      "file": "clients/tui/presentation/skins/cards/live-region.tsx",
+      "reason": "Terminal UI skin slot implementation for cards skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/classic/live-region.tsx",
+      "reason": "Terminal UI skin slot implementation for classic skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/ledger/live-region.tsx",
+      "reason": "Terminal UI skin slot implementation for ledger skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/rail/live-region.tsx",
+      "reason": "Terminal UI skin slot implementation for rail skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/zen/live-region.tsx",
+      "reason": "Terminal UI skin slot implementation for zen skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "app/memory.ts",
+      "reason": "Application-level memory inspection and export workflows invoked by CLI commands."
+    },
+    {
+      "file": "session/memory.ts",
+      "reason": "Session-level personal and shared memory persistence store and retrieval service."
+    },
+    {
+      "file": "clients/tui/presentation/skins/cards/messages.tsx",
+      "reason": "Terminal UI skin slot implementation for cards skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/classic/messages.tsx",
+      "reason": "Terminal UI skin slot implementation for classic skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/ledger/messages.tsx",
+      "reason": "Terminal UI skin slot implementation for ledger skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/rail/messages.tsx",
+      "reason": "Terminal UI skin slot implementation for rail skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/zen/messages.tsx",
+      "reason": "Terminal UI skin slot implementation for zen skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/menus/model-settings.ts",
+      "reason": "Interactive TUI modal menu for configuring provider models, temperatures, and options."
+    },
+    {
+      "file": "shared/utils/ai/model-settings.ts",
+      "reason": "Shared model configuration schema and default settings for AI provider resolution."
+    },
+    {
+      "file": "app/native-catalogue.ts",
+      "reason": "CLI-level model catalog query handler and formatting utilities for direct terminal display."
+    },
+    {
+      "file": "session/native-catalogue.ts",
+      "reason": "Session model catalogue store tracking available provider capabilities and pricing."
+    },
+    {
+      "file": "clients/tui/projection.ts",
+      "reason": "TUI-specific event subscriber projecting protocol stream updates into UI state."
+    },
+    {
+      "file": "protocol/projection.ts",
+      "reason": "Canonical wire event projection converting session log facts into client envelopes."
+    },
+    {
+      "file": "clients/acp/questions.ts",
+      "reason": "ACP questions adapter projecting ask-user interactions into ACP client requests."
+    },
+    {
+      "file": "protocol/questions.ts",
+      "reason": "Protocol schemas and payload definitions for interactive user clarification prompts."
+    },
+    {
+      "file": "protocol/queue.ts",
+      "reason": "Protocol message types defining queued steering inputs and cancel requests."
+    },
+    {
+      "file": "session/queue.ts",
+      "reason": "Session queue state management ordering concurrent human steers and pending actions."
+    },
+    {
+      "file": "clients/tui/presentation/skins/registry.ts",
+      "reason": "Theme skin registration catalog mapping skin identifiers to skin component slot sets."
+    },
+    {
+      "file": "config/profiles/registry.ts",
+      "reason": "Profile registry defining active execution profiles and runtime capability defaults."
+    },
+    {
+      "file": "model/providers/registry.ts",
+      "reason": "AI model provider registry mapping vendor prefixes to ModelProvider implementations."
+    },
+    {
+      "file": "model/providers/web-search/registry.ts",
+      "reason": "Web search provider registry tracking available search engines and API backends."
+    },
+    {
+      "file": "session/conversation/resume-list.ts",
+      "reason": "Conversation store indexer listing available session snapshots for resumption."
+    },
+    {
+      "file": "session/resume-list.ts",
+      "reason": "Direct session discovery utility formatting resume candidates for CLI selection."
+    },
+    {
+      "file": "engine/agent-runtime/run-budget.ts",
+      "reason": "Pre-rewrite execution turn budget tracking scheduled for removal in #197."
+    },
+    {
+      "file": "session/run-budget.ts",
+      "reason": "Session turn budget and token exhaustion enforcement for direct execution."
+    },
+    {
+      "file": "app/serve-args.ts",
+      "reason": "Command-line argument parser definitions for the term2 serve command."
+    },
+    {
+      "file": "host/gateway/serve-args.ts",
+      "reason": "Host gateway server initialization options and environment configuration types."
+    },
+    {
+      "file": "clients/tui/slash-commands.ts",
+      "reason": "TUI slash-command execution handlers and interactive prompt triggers."
+    },
+    {
+      "file": "shared/slash-commands.ts",
+      "reason": "Shared slash-command specification and argument tokenization definitions."
+    },
+    {
+      "file": "clients/tui/state.ts",
+      "reason": "Client-side reactive state container driving Ink terminal component renders."
+    },
+    {
+      "file": "protocol/state.ts",
+      "reason": "Wire protocol session state snapshot and synchronization message codecs."
+    },
+    {
+      "file": "session/state.ts",
+      "reason": "Core session aggregate state holding replayed history, flags, and queues."
+    },
+    {
+      "file": "clients/tui/presentation/skins/cards/status.tsx",
+      "reason": "Terminal UI skin slot implementation for cards skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/classic/status.tsx",
+      "reason": "Terminal UI skin slot implementation for classic skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/ledger/status.tsx",
+      "reason": "Terminal UI skin slot implementation for ledger skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/rail/status.tsx",
+      "reason": "Terminal UI skin slot implementation for rail skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/zen/status.tsx",
+      "reason": "Terminal UI skin slot implementation for zen skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/utils/streaming/streaming-speed-tracker.ts",
+      "reason": "Presentation component tracking smoothed tokens-per-second display rates."
+    },
+    {
+      "file": "shared/utils/streaming/streaming-speed-tracker.ts",
+      "reason": "Moving-window token emission speed calculation and rate measurement algorithm."
+    },
+    {
+      "file": "config/settings/subagent-pool-config.ts",
+      "reason": "Settings schema and validation rules for subagent concurrency and pool allocation."
+    },
+    {
+      "file": "delegation/subagents/subagent-pool-config.ts",
+      "reason": "Runtime pool sizing and role assignment logic for background subagent pools."
+    },
+    {
+      "file": "clients/tui/menus/subsequence-filter.ts",
+      "reason": "Fuzzy filter helper tailored for interactive TUI menu search inputs."
+    },
+    {
+      "file": "shared/utils/subsequence-filter.ts",
+      "reason": "Generic string subsequence matching utility shared across CLI utilities."
+    },
+    {
+      "file": "clients/tui/terminal.ts",
+      "reason": "Low-level terminal raw mode, escape sequence, and resize signal handling."
+    },
+    {
+      "file": "shared/types/terminal.ts",
+      "reason": "Platform-independent terminal dimensions, color capabilities, and capabilities types."
+    },
+    {
+      "file": "clients/tui/presentation/utils/ai/token-usage.ts",
+      "reason": "Status bar formatting utilities displaying active turn token usage and rates."
+    },
+    {
+      "file": "shared/utils/ai/token-usage.ts",
+      "reason": "Token counter calculations and aggregate session usage accumulation arithmetic."
+    },
+    {
+      "file": "clients/tui/presentation/tools/tool-names.ts",
+      "reason": "Human-readable display formatting and icon mappings for tool execution rows."
+    },
+    {
+      "file": "tools/tool-names.ts",
+      "reason": "Canonical tool identifier constants and aliases recognized by the agent runtime."
+    },
+    {
+      "file": "clients/tui/presentation/skins/cards/tools.tsx",
+      "reason": "Terminal UI skin slot implementation for cards skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/classic/tools.tsx",
+      "reason": "Terminal UI skin slot implementation for classic skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/ledger/tools.tsx",
+      "reason": "Terminal UI skin slot implementation for ledger skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/rail/tools.tsx",
+      "reason": "Terminal UI skin slot implementation for rail skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/zen/tools.tsx",
+      "reason": "Terminal UI skin slot implementation for zen skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/menus/use-setting.ts",
+      "reason": "Specialized hook synchronizing setting state in interactive menu pickers."
+    },
+    {
+      "file": "clients/tui/presentation/hooks/use-setting.ts",
+      "reason": "General React hook subscribing to configuration setting updates in the TUI."
+    },
+    {
+      "file": "tools/languages/utils.ts",
+      "reason": "Language tool execution helpers for AST traversal and syntax error extraction."
+    },
+    {
+      "file": "tools/shell/command-safety/utils.ts",
+      "reason": "Command safety parser utilities for extracting executable paths and flags."
+    },
+    {
+      "file": "tools/subagents/utils.ts",
+      "reason": "Subagent tool helper functions for parameter mapping and output extraction."
+    },
+    {
+      "file": "tools/utils.ts",
+      "reason": "General tool surface utility functions for error wrapping and schema conversion."
+    },
+    {
+      "file": "app/verifier.ts",
+      "reason": "Direct verifier workspace coordinator running independent checks for agent turns."
+    },
+    {
+      "file": "engine/completion-verification/verifier.ts",
+      "reason": "Engine completion verification logic evaluating model stop conditions and assertions."
+    },
+    {
+      "file": "clients/tui/presentation/skins/cards/width.ts",
+      "reason": "Terminal UI skin slot implementation for cards skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "clients/tui/presentation/skins/zen/width.ts",
+      "reason": "Terminal UI skin slot implementation for zen skin conforming to the Skin interface (docs/plans/terminal-ui/theme-system.md)."
+    },
+    {
+      "file": "session/prompts/subagents/worktree-hygiene.md",
+      "reason": "Prompt instructions guiding background subagent roles on git worktree isolation."
+    },
+    {
+      "file": "session/prompts/worktree-hygiene.md",
+      "reason": "General system prompt fragment detailing worktree hygiene and baseline checks."
+    }
   ]
 }

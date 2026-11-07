@@ -28,7 +28,12 @@ for (const [id, rule] of Object.entries(RULES)) {
     `\n${rule.title} [${id}] — ${reasoned.length} with reasons, ${legacy.length} legacy (${rule.exceptions.file})`,
   );
   console.log(`  why the rule exists: ${rule.why}`);
-  for (const d of reasoned) console.log(`  - ${d.key}${d.lines ? ` (ceiling ${d.lines})` : ''}\n      ${d.reason}`);
+  for (const d of reasoned)
+    console.log(
+      `  - ${d.key}${d.lines ? ` (ceiling ${d.lines})` : ''}${d.files ? ` (ceiling ${d.files} files)` : ''}\n      ${
+        d.reason
+      }`,
+    );
   if (legacy.length) {
     console.log(`  legacy entries: ${legacy[0].legacyReason ?? 'predate per-entry reasons.'}`);
     if (showLegacy || (only && legacy.length <= 30)) for (const d of legacy) console.log(`  - ${d.key}`);

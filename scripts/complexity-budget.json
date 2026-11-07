@@ -1,6 +1,73 @@
 {
   "maxLayerEdges": 7,
   "maxLines": 500,
+  "maxFolderFiles": 15,
+  "folderCeilings": {
+    "src/app": {
+      "files": 78,
+      "reason": "Direct CLI application composition root, command dispatch, and setup workflows; to be decomposed into domain submodules in Phase 3."
+    },
+    "src/clients/control": {
+      "files": 16,
+      "reason": "Control socket client protocol handlers, event bridges, and IPC framing for external orchestration."
+    },
+    "src/clients/tui": {
+      "files": 52,
+      "reason": "Terminal UI root components, hooks, layout, and session rendering; to be partitioned into submodules as the TUI matures."
+    },
+    "src/clients/tui/menus": {
+      "files": 69,
+      "reason": "Interactive modal and settings menus for the TUI client; cohesive menu implementations sharing the picker and option contracts."
+    },
+    "src/delegation/subagents": {
+      "files": 16,
+      "reason": "Subagent role loader, role pool selector, and worker worktree config; pre-rewrite subagent runtime files to be cleaned up in #197."
+    },
+    "src/engine": {
+      "files": 23,
+      "reason": "Core turn execution loop, retry decision classifiers, and prompt assemblers; cohesive turn mechanics across providers."
+    },
+    "src/engine/agent-runtime": {
+      "files": 36,
+      "reason": "Pre-rewrite engine runtime policies, budgets, and loopback handlers; pending deletion with the legacy subagent runtime (#197)."
+    },
+    "src/host": {
+      "files": 28,
+      "reason": "Server gateway, socket dispatch, and transport endpoints; combines direct SSE host and control socket routes."
+    },
+    "src/model": {
+      "files": 16,
+      "reason": "Model domain types, token usage tracking, and streaming completion contracts; core vocabulary for all provider adapters."
+    },
+    "src/model/providers": {
+      "files": 60,
+      "reason": "Loopback, cloud, and local AI provider implementations and fixtures; each provider file implements ModelProvider independently."
+    },
+    "src/protocol": {
+      "files": 27,
+      "reason": "Cross-client event envelopes, serialization codecs, and projection types; stable schemas shared by TUI, headless, and ACP."
+    },
+    "src/session": {
+      "files": 89,
+      "reason": "Root session directory holds loose session lifecycle, queue, and stream files; burndown planned in #197 and Phase 3."
+    },
+    "src/session/approval": {
+      "files": 20,
+      "reason": "Approval policies, grant executors, and background subagent authorization flows; to be consolidated into an approval manager."
+    },
+    "src/session/conversation": {
+      "files": 26,
+      "reason": "Conversation replay, journal index, and session browsing logic; scheduled for unification with direct store in Phase 3."
+    },
+    "src/session/session": {
+      "files": 32,
+      "reason": "Pre-rewrite session composition and pause capabilities; dead code never constructed in production, will be deleted in #197."
+    },
+    "src/tools": {
+      "files": 21,
+      "reason": "Root tool exports, execution facades, and adoption registries; bridges system and language tools to the agent runtime."
+    }
+  },
   "fileCeilings": {
     "src/model/provider.ts": {
       "lines": 505,

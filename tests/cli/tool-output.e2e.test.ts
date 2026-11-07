@@ -93,6 +93,8 @@ async function startProvider(replies: Reply[]): Promise<string> {
         res.end([...frames.map((frame) => `data: ${JSON.stringify(frame)}\n`), 'data: [DONE]', ''].join('\n'));
       if (reply.reasoning) {
         res.write(`data: ${JSON.stringify({ id, choices: [{ delta: { reasoning_content: reply.reasoning } }] })}\n\n`);
+        // A measured rate needs two deltas apart in time, not a long pause: about 13 estimated
+        // tokens over 250 ms is ~50 tok/s, far inside the status bar's 500 tok/s plausibility cap.
         setTimeout(() => {
           res.write(
             `data: ${JSON.stringify({
@@ -101,7 +103,7 @@ async function startProvider(replies: Reply[]): Promise<string> {
             })}\n\n`,
           );
           finishReasoning = finish;
-        }, 1200);
+        }, 250);
       } else finish();
     });
   });

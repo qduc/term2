@@ -42,6 +42,12 @@ afterEach(async () => {
 
 type Reply = { error?: string; call?: { id: string; command?: string; tool?: string; args?: object }; text?: string };
 
+// A usage reply streams its first frame, then the rest after USAGE_STREAM_MS. The status bar shows a
+// measured rate only up to 500 tok/s, so the output count bounds that pause from below: 73 tokens stay
+// plausible down to 146 ms measured. 731 tokens used to need 1.7 s per reply for the same margin.
+const USAGE_OUTPUT_TOKENS = 73;
+const USAGE_STREAM_MS = 400;
+
 /** One SSE reply per chat request, in order: a single shell call or plain text. */
 async function startProvider(replies: Reply[], withUsage = false): Promise<string> {
   let requests = 0;
@@ -105,7 +111,7 @@ async function startProvider(replies: Reply[], withUsage = false): Promise<strin
           choices: [],
           usage: {
             prompt_tokens: requests === 1 ? 78021 : 12345,
-            completion_tokens: 731,
+            completion_tokens: USAGE_OUTPUT_TOKENS,
             prompt_tokens_details: { cached_tokens: requests === 1 ? 42112 : 0 },
           },
         });
@@ -118,7 +124,7 @@ async function startProvider(replies: Reply[], withUsage = false): Promise<strin
             res.end(
               [...frames.slice(1).map((frame) => `data: ${JSON.stringify(frame)}\n`), 'data: [DONE]', ''].join('\n'),
             ),
-          1700,
+          USAGE_STREAM_MS,
         );
       } else {
         res.end([...frames.map((frame) => `data: ${JSON.stringify(frame)}\n`), 'data: [DONE]', ''].join('\n'));
@@ -658,7 +664,13 @@ it('/model <provider>/<model> confirms the new model by name', { timeout: TIMEOU
 );
 
 it('/usage agrees with the cached share in the status bar', { timeout: TIMEOUT_MS }, async () => {
-  await runCommand('/usage', 'Token usage: 78,021 input (42,112 cached), 731 output', 'hello', false, true);
+  await runCommand(
+    '/usage',
+    `Token usage: 78,021 input (42,112 cached), ${USAGE_OUTPUT_TOKENS} output`,
+    'hello',
+    false,
+    true,
+  );
   expect(session!.getVisibleOutput()).toContain('54% cached');
   expect(session!.getVisibleOutput()).toContain('Ctx 78k');
   expect(session!.getVisibleOutput()).toMatch(/\d+(?:\.\d+)?t\/s/);
@@ -668,7 +680,7 @@ it('/usage agrees with the cached share in the status bar', { timeout: TIMEOUT_M
   await session!.waitForOutput('Unknown command /queue', 30_000);
   const visible = session!.getVisibleOutput();
   const afterNotice = visible.slice(visible.lastIndexOf('▌ term²'));
-  expect(afterNotice).toContain('Token usage: 78,021 input (42,112 cached), 731 output');
+  expect(afterNotice).toContain(`Token usage: 78,021 input (42,112 cached), ${USAGE_OUTPUT_TOKENS} output`);
   expect(afterNotice).toContain('By model:');
   expect(afterNotice).toContain('mockprov/mock-alpha:');
 });

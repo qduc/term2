@@ -1,5 +1,6 @@
 /** Native counterparts to legacy-storage restart probes. No legacy facts or sidecars are seeded. */
 import { patchCompiledModule } from '../tests/helpers/patch-compiled-module.js';
+import { copyBuiltCli } from '../tests/helpers/copy-built-cli.js';
 import { createServer } from 'node:http';
 import { cp, mkdir, readFile, readdir, readlink, symlink, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -85,7 +86,7 @@ async function fixture(holdFirst = false, backgroundFirst = false) {
     prepare: async (root, paths) => {
       await mkdir(join(root, 'work'));
       await mkdir(join(root, 'runtime'), { mode: 0o700 });
-      await cp(resolve('dist'), join(root, 'direct-dist'), { recursive: true });
+      copyBuiltCli(resolve('dist'), join(root, 'direct-dist'));
       await cp(resolve('package.json'), join(root, 'package.json'));
       await symlink(resolve('node_modules'), join(root, 'node_modules'), 'dir');
       await mkdir(paths.logDir, { recursive: true });

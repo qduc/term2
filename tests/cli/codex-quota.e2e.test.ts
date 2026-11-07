@@ -13,6 +13,8 @@ import {
 } from '../../src/shared/lib/harness-input-idle.js';
 
 const cli = testCliPath(fileURLToPath(new URL('../../dist/src/app/cli.js', import.meta.url)));
+// Seconds until the 'expiry' case's quota window resets; the footer drops it on a timer at that moment.
+const EXPIRY_S = 4;
 
 it.each(['expiry', 'configuration', 'secondary'] as const)(
   'shows genuine Codex quota and clears it on %s',
@@ -55,8 +57,10 @@ it.each(['expiry', 'configuration', 'secondary'] as const)(
               [clearBy === 'secondary' ? 'secondary' : 'primary']: {
                 window_minutes: 10080,
                 used_percent: 37,
-                reset_at: Math.floor(Date.now() / 1000) + (clearBy === 'expiry' ? 8 : 60),
-                reset_after_seconds: 8,
+                // Whole seconds: the window really resets 3-4 s after this reply. That only has to
+                // outlast rendering the reply's status line, not a fixed observation period.
+                reset_at: Math.floor(Date.now() / 1000) + (clearBy === 'expiry' ? EXPIRY_S : 60),
+                reset_after_seconds: EXPIRY_S,
               },
             },
           });
@@ -121,7 +125,7 @@ it.each(['expiry', 'configuration', 'secondary'] as const)(
       expect(terminal.getVisibleOutput()).toMatch(/7D 37%→\d\d\/\d\d/);
       const mark = terminal.getVisibleOutput().length;
       if (clearBy === 'expiry') {
-        // The window resets 8 s after the reply; wait for the status line that drops it.
+        // The window resets EXPIRY_S after the reply; wait for the status line that drops it.
         await expect
           .poll(
             () => {

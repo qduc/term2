@@ -753,6 +753,12 @@ candidate on branch `claude/sweet-hamilton-igj0w0`, each built with
 `setup-tests` installs; the container's own Node 22.23.4 was used for the
 profiling and the first measurements, and gave the same picture.
 
+This work was developed against `7020c91`, before
+[E2E lane root causes](#e2e-lane-root-causes-2026-11-07) landed. That work also
+made the test PTYs answer DA1 and made `@qduc/web-fetch` external. So the results
+come in two parts. Against `main` at `c543ea2`, after merging, is what this change
+adds today. Against `7020c91` is the whole change as it was developed.
+
 ### Method
 
 - **Time to idle:** from spawn until the application writes its harness idle
@@ -770,6 +776,32 @@ profiling and the first measurements, and gave the same picture.
   committed.
 
 ### Results
+
+#### Against `main` (`c543ea2`), after merging
+
+Medians (p25–p75) of interleaved runs, Node 24.21.0. In the E2E row the PTY
+answers DA1 only, as `PYTHON_DA1_RESPONDER` now does.
+
+| Condition | n | `main` | Merged | Change |
+| --- | ---: | ---: | ---: | ---: |
+| E2E conditions: `dist/src/app/cli.js`, `NODE_ENV=test`, warm `NODE_COMPILE_CACHE`, PTY answers DA1 only | 25 | 575 ms (562–600) | 509 ms (490–540) | −11% |
+| `--help`, same conditions | 25 | 358 ms | 181 ms | −49% |
+| Installed `term2`, conditions of the matching row below, PTY answers OSC 11/DA1 at once | 20 | 689 ms (674–712) | 505 ms (478–516) | −27% |
+| Same, PTY never answers | 20 | 859 ms (839–891) | 489 ms (476–524) | −43% |
+| `--help` through `dist/cli.js` | 20 | 452 ms | 187 ms | −59% |
+
+`node scripts/run-ci-lane.mjs e2e` ran alternating `main`, merged, `main`,
+merged. Every run passed 162 cases and skipped one.
+
+| e2e lane | `main` | Merged | Change |
+| --- | ---: | ---: | ---: |
+| Vitest duration | 96.03 s, 93.08 s | 90.24 s, 82.26 s | about −9% |
+| Summed case time | 265.1 s, 266.6 s | 250.4 s, 235.4 s | about −9% |
+
+The e2e lane gains less than it did against `7020c91`. `main`'s DA1 responder
+already removed the 150 ms wait that item 1 hides.
+
+#### As developed, against `7020c91`
 
 Medians (p25–p75) of interleaved runs, Node 24.21.0:
 
@@ -801,7 +833,9 @@ The attribution below was profiled on Node 22.23.4. Process start to the first
 module initialization fell from 150–175 ms to 97–116 ms (bare Node reaches user
 code in about 17 ms). Module initialization
 before idle fell from 233 ms over 1,339 modules to 173 ms over 1,284. The entry
-bundle shrank from 17.70 MB to 10.98 MB.
+bundle shrank from 17.70 MB to 10.98 MB. `main` alone is now 10.81 MB, since it
+also made `@qduc/web-fetch` external. Merged, the bundle is 10.98 MB again,
+because of item 5's `jose`.
 
 ### What changed, and what each was worth
 
@@ -823,7 +857,9 @@ and isolated timings, not from subtraction.
    timer now gives up from `setImmediate`. A PTY that replied after 150–170 ms got
    the light theme with that step and `[?62;22c` typed into the prompt without
    it; the base build leaked at 170 ms. Replies after about 200 ms leak on every
-   build, as before.
+   build, as before. On `main`, the test PTYs now answer DA1, so e2e launches no
+   longer wait out the timeout. The overlap still hides a real terminal's round
+   trip, and a silent terminal's whole 150 ms.
 
    The earlier query has two side effects:
    - An interactive start that fails before Ink renders, such as a refused
@@ -855,10 +891,20 @@ and isolated timings, not from subtraction.
    returned `Error: Cannot find module './xhr-sync-worker.js'`. The candidate
    returns the page's title and markdown; the independent verifier found this, and
    a rerun reproduced it. No test drives `web_fetch` through the built CLI.
+   `main` made the same change independently in
+   [E2E lane root causes](#e2e-lane-root-causes-2026-11-07). After the merge this
+   item is no longer in this branch's diff; only the comment recording the
+   worker-file reason is.
 5. **Lazy initialization in the bundle:** the MCP client SDK (about 25 ms) loads
    with the first server connection or login (`tools/mcp/mcp-sdk.ts`), the
    OpenRouter AI SDK (15 ms) with the first OpenRouter model, and six unused
    mode-notice constants (17 ms of profile resolution at import) were deleted.
+   This removes two of the module costs that the E2E lane root-causes section
+   named: `application-mcp.js` and `mode-notices.js`.
+
+   A dynamic `import()` keeps the SDK's whole namespace, so esbuild can no
+   longer drop `jose` (about 127 KB) as it did for the named static imports. It
+   initializes only with the SDK, but every start still reads it with the bundle.
 6. **`launch.ts` loads the headless runner only for a headless run.** Its static
    re-export initialized the application graph for every command, `--help`
    included.
@@ -989,6 +1035,24 @@ and found no blocking defect:
   - It found the `web_fetch` fix in item 4 and the two side effects in item 1.
   - It could not verify a Node older than 22.1 (that was simulated), macOS or
     Windows cache paths, or the `input-notice` failure on Node 22.
+
+**After merging `main` (`e0c4b50` against `c543ea2`):**
+
+- **Lanes**, on Node 24.21.0 and pnpm 11:
+  - test: 161 of 161 passed.
+  - integration: 179 passed, 1 skipped; the only failures were the two root-only
+    `logging-failures` cases.
+  - e2e: four runs, as above.
+  - provider-black-box: the first run failed one case, `input-cache-guard.blackbox.ts`
+    › "confirms a large uncached request after undo before dispatch". The second
+    large-request prompt was on screen, but typing `y` sent no third request
+    within 40 s. That case then passed 8 of 8 alone and 6 of 6 beside four busy
+    loops on each build. A second full lane passed on both builds: 206 passed,
+    5 skipped.
+- **Static checks:** `tsc` (both configs), every `check-*` script, `check-no-unit-tests`
+  and eslint passed.
+- **The merge itself:** apart from the three resolved conflicts, the merge commit
+  differs from `main` only in files this branch changed.
 
 Limits:
 

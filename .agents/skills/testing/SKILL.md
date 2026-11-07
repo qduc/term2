@@ -155,6 +155,11 @@ and `68ef50ff` (local-only evidence), not a result file to resume appending.
   “after revision 3; got revision 4”. The composer still held the submitted text
   and image marker, so the command was appended to them. This happened in a full
   lane on Node 22 on 2026-11-07, and 36 reruns did not reproduce it.
+  `input-cache-guard.blackbox.ts` failed in its “third request after confirmation”
+  phase the same day, in a full provider lane on Node 24. The second Large request
+  prompt was visible, but typing `y` sent no request within 40,000ms. In 14 reruns
+  on each build, half beside busy loops, plus another full lane on each, it passed
+  on both the change and its `main` base.
   Unchanged-source reruns passed, but the recurring signatures' root causes were
   not established. Do not increase product deadlines or declare concurrency the
   cause from that alone. A separate fixed harness defect missed an already

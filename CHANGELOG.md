@@ -9,6 +9,7 @@
 - Startup reaches an idle composer about 35% sooner by loading startup-only work on demand and caching compiled bundle code (#192, #195).
 
 ### Bug Fixes
+- Fix native web/BFF pairing races, idle stream connection, accepted user-message delivery, truncated-frame checkpoints, native interaction IDs, settled abort responses and result-only hydration. Preserve native command/replay errors and remove unsupported profile choices. Browser v2 activation remains gated on the shared task-question parser fix (#80).
 - Restore per-session cost accounting and the footer cost display.
 - Honor startup settings for shared tool output limits (#178).
 - Suppress notices for denied recovery retries (#177).

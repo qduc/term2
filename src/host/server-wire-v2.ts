@@ -30,8 +30,9 @@ import type { ServerInteractions } from './server-interactions.js';
 import { canonicalCandidate, canonicalCommandMessageCandidates, type CanonicalEventContext } from './server-events.js';
 import { ServerHttpError } from './server-errors.js';
 
-/** Explicit v2 negotiation is implemented against the pinned 0.2.1 artifact, but activation
- * (this flag) waits for the browser/BFF migration. Do not flip it to claim support before then. */
+/** The pinned 0.2.1 parser rejects native task-question transitions and pendingQuestion.
+ * Keep activation closed until the shared artifact is corrected and combined browser/BFF
+ * evidence is independently accepted; see Contract 14. */
 export const AGENT_WIRE_V2_RUNTIME_AVAILABLE: boolean = false;
 
 /** Public aliases to the exact shared v2 exports. No local vocabulary copy. */
@@ -129,6 +130,19 @@ function changesFor(
 ): AgentWireV2ChangeDraft[] {
   if (event.type === 'snapshot') return [];
   if (event.type === 'subagent') return subagentChanges(event, interactions, context);
+  if (event.type === 'turn_started') {
+    // Input messages belong to this same accepted boundary. Their message IDs
+    // differ from turn IDs; preserve them rather than using the v1 admission DTO.
+    const messages = event.payload.input.map((message) => change({ type: 'message', payload: { message } }, branch));
+    const started = canonicalCandidate(event, interactions, context);
+    return started ? [...messages, change(started, branch)] : messages;
+  }
+  if (event.type === 'queue_changed') {
+    return [
+      change({ type: 'queue_changed', payload: event.payload }, branch),
+      ...(event.payload.messages ?? []).map((message) => change({ type: 'message', payload: { message } }, branch)),
+    ];
+  }
   const exact = exactChange(event, branch);
   if (exact) return [exact];
   if (event.type === 'tool_finished') {
@@ -158,8 +172,6 @@ function subagentChanges(
 
 function exactChange(event: WireEvent, branch?: AgentWireV2Branch): AgentWireV2ChangeDraft | null {
   switch (event.type) {
-    case 'queue_changed':
-      return change({ type: 'queue_changed', payload: event.payload }, branch);
     case 'session_rotated':
       if (event.payload.logicalSessionId !== event.sessionId)
         return unavailable('rotation logical session does not match envelope identity');
@@ -229,10 +241,9 @@ function exactChange(event: WireEvent, branch?: AgentWireV2Branch): AgentWireV2C
       return change({ type: event.type, payload: event.payload }, branch);
     case 'reasoning':
       return change({ type: 'reasoning', payload: event.payload }, branch);
-    // Accepted transcript/task updates have real native producers but no shared
-    // v2 names yet. Preserve their exact public payload; do not relabel them as
-    // terminals or synthesize missing fields. Shared v2 parser/consumer intake
-    // is a separate owner dependency (see m6-v2-remaining-vocabulary-final.md).
+    // Preserve the exact native public payload. The installed shared task
+    // validator still needs question open/close changes and pendingQuestion;
+    // the activation gate prevents advertising this incomplete vocabulary.
     case 'message':
       return change({ type: 'message', payload: event.payload }, branch);
     case 'task_changed':

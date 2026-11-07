@@ -2,6 +2,26 @@
 
 ## Resume here
 
+**Native follow-up (#80, 2026-11-07):** current application/host code is under
+`src/`, and the browser/BFF is `web-client/`. The historical milestones below do
+not describe current activation. Both consumers pin wire 0.2.1; the v2 gate stays
+closed because its task validator rejects native `task_question_opened` and
+`task_question_closed`, plus the opened task's `pendingQuestion` descriptor.
+Native async `ask_orchestrator` can produce these facts. Extend both the shared
+change enum and task schema in the package owner's source, rebuild the artifact,
+and update both pins before repeating combined acceptance. Do not discard or
+relabel the facts to make the parser pass. The current contract and operator
+setup are [Contract 14](../../contracts/14-agent-wire-v2-server.md) and the
+[gateway setup](../../../website/src/content/docs/remote/web-gateway.md).
+
+Two browser/BFF integration traps found during this work: an idle v2 stream has
+no snapshot body to flush through a proxy, so send an immediate cursorless SSE
+comment; and concurrent first-page requests can race OTP registration, so
+coalesce registration per client and retry fresh authentication once after a
+competing registration. An already trusted key must still pass normal gateway
+signature validation. EOF is not an SSE frame terminator: checkpointing a
+complete-looking but unterminated frame can skip it on reconnect.
+
 **Status (2026-09-29): merged state.** term2 main is at merge commit `077be788`, which includes the gateway projection completion and Contract 13's `POST /private/agent/v1/sessions/:sessionId/commands` route. The preceding web-client routes work is at `f4b394dd`. ChatForge main is at `a4ff51b`. LAN listen uses `chooseListenHost`, which reads `TERM2_WEB_CLIENT_ALLOWED_HOSTS` and defaults to `127.0.0.1`; the policy is written up in `docs/plans/web-client/web-client-lan-tls.md`.
 
 **What was true on 2026-09-12:** term2 main had M0 `38d7cd7d`, M1 `8351e165`, M2 `73a9e3ab` (follow-up `6ddc5c0b`), M5b `0114bb6e`, M4 `5c8a3fb5`, F2 `45373d68`, F3 `1622c851`, F4 `33854fc3`, F1 `a99eafaa`, and F5 `afde86c6`. ChatForge `integration/v1-chat` had M5c `2caf86c`, M4c `507b1cb`, and F5c `ae398a4`. The first live run found D1 (read-only grants writable through `run_code`), D2–D4 and D3b; the fix wave F1–F5 and F5c closed them, and the final live run passed D1–D4 and the F4/F5 checks. This is historical, not the current status.

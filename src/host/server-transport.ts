@@ -172,6 +172,9 @@ export class DirectServerTransport {
       if (response.destroyed) return;
       if (result.stream) {
         response.writeHead(result.status, result.headers);
+        // V2 starts after a separately hydrated accepted cut and has no snapshot
+        // frame. An idle stream must establish its handshake before the next turn.
+        response.flushHeaders();
         await result.stream.start(response, request);
       } else send(response, result);
     } catch (error) {

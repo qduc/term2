@@ -246,6 +246,7 @@ export interface AbortResult {
   turnId: string;
   accepted: boolean;
   alreadySettled?: boolean;
+  abortStatus?: 'terminal_accepted';
 }
 
 export const TERM2_COMMAND_IDS = ['compact', 'retry-tool', 'retry-turn'] as const;

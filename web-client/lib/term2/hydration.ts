@@ -179,7 +179,12 @@ function contextTurns(context: Pick<SessionHydration['snapshot'], 'messages' | '
   if (context.timeline) {
     for (const entry of context.timeline) {
       if (entry.kind === 'message') message(context.messages.find(item => item.id === entry.id)!);
-      else tool(context.tools.find(item => item.executionId === entry.id)!);
+      else {
+        const call = context.tools.find(item => item.executionId === entry.id);
+        // A result-only slot has no accepted call name or turn ownership.
+        // Retain it in the snapshot evidence without inventing a tool card.
+        if (call) tool(call);
+      }
     }
   } else if (context.tools.length === 0) {
     // The message array itself supplies order when no mixed tool ordering is needed.

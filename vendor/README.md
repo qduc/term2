@@ -1,5 +1,10 @@
 # Pre-publication shared package artifacts
 
+The root and web-client currently pin `qduc-agent-wire-0.2.1.tgz`. The lockfile
+records its integrity. The 0.1.0 provenance below is historical, not the current
+consumer version. Version 0.2.1 still rejects native task-question open/close
+changes and `pendingQuestion`; it does not authorize enabling the v2 server gate.
+
 `qduc-agent-wire-0.1.0.tgz` was built and packed from the independent
 `qduc/agent-runtime` repository at commit
 `b2e2ae6` (`Make standalone builds independent of parent dependency trees`).

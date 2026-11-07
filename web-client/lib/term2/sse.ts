@@ -79,11 +79,8 @@ export async function consumeSseResponse(
         options.onFrame(envelopeFromFrame(frame, options.expectedSessionId));
       }
     }
-    const tail = decoder.decode();
-    const decoded = decodeSseText('\n\n', carry + tail);
-    for (const frame of decoded.frames) {
-      options.onFrame(envelopeFromFrame(frame, options.expectedSessionId));
-    }
+    // An EOF is not an SSE dispatch boundary. A disconnected partial frame
+    // must be replayed from the last complete accepted batch, never checkpointed.
   } finally {
     await reader.cancel().catch(() => {});
     reader.releaseLock?.();

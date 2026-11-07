@@ -110,8 +110,9 @@ loaded and linked before any term2 code runs, whichever command was given; bundl
 modules initialize when their importer does. So a package needed only by one mode
 or on demand is imported where it is used: `ssh2` (`SSHService`), the sandbox
 runtime (`shell-sandbox-runner.ts`), the MCP SDK (`tools/mcp/mcp-sdk.ts`), the
-OpenRouter SDK and `@qduc/web-fetch` (external, so its jsdom stays out of the
-bundle). `launch.ts` loads each launcher, the headless one included, only for its
+OpenRouter SDK and `@qduc/web-fetch`. That last one is external: its jsdom stays
+out of the bundle and finds its own worker file, which it could not do when it
+was bundled. `launch.ts` loads each launcher, the headless one included, only for its
 mode. Until 2026-11-07 they were static imports, paid on every start; see
 [the measurements](../../docs/plans/engineering/measurements/test-suite-speed-2026-10-22.md#cli-cold-start-2026-11-07).
 `dist/cli.js`, the installed `term2`, enables Node's compile cache in term2's cache

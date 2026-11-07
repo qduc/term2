@@ -711,12 +711,14 @@ Medians (p25–p75) of interleaved runs, Node 24.21.0:
 | --- | ---: | ---: | ---: | ---: |
 | E2E conditions: `dist/src/app/cli.js`, `NODE_ENV=test`, warm `NODE_COMPILE_CACHE`, PTY never answers terminal queries | 25 | 707 ms (690–725) | 457 ms (445–474) | −35% |
 | `--help`, same conditions | 25 | 338 ms | 165 ms | −51% |
-| Installed `term2` (`dist/cli.js`), `NODE_ENV` unset, no `NODE_COMPILE_CACHE`, PTY answers OSC 11/DA1 at once like a local terminal | 20 | 690 ms (671–700) | 473 ms (458–491) | −31% |
+| Installed `term2` (`dist/cli.js`), `NODE_ENV` unset, no `NODE_COMPILE_CACHE`, one `TERM2_CACHE_DIR` for all runs (the candidate's own cache, warm after the first launch), PTY answers OSC 11/DA1 at once like a local terminal | 20 | 690 ms (671–700) | 473 ms (458–491) | −31% |
 | Same, PTY never answers | 20 | 824 ms (807–829) | 455 ms (441–467) | −45% |
 | `--help` through `dist/cli.js` | 20 | 472 ms | 167 ms | −65% |
 
 The same five rows on Node 22.23.4: 701 → 444 ms (−37%), 342 → 162 ms,
-679 → 445 ms, 830 → 441 ms and 471 → 162 ms.
+679 → 445 ms, 830 → 441 ms and 471 → 162 ms. On a first start, with no compile
+cache for either build, the independent verifier measured 967 → 750 ms (n=5,
+Node 24, never-answering PTY).
 
 `node scripts/run-ci-lane.mjs e2e` passed 199 of 199 cases in 39 files on every
 run below; nothing else ran on the box.
@@ -756,6 +758,15 @@ and isolated timings, not from subtraction.
    the light theme with that step and `[?62;22c` typed into the prompt without
    it; the base build leaked at 170 ms. Replies after about 200 ms leak on every
    build, as before.
+
+   The earlier query has two side effects:
+   - An interactive start that fails before Ink renders, such as a refused
+     `--ssh` or a failed session creation, has now sent the query. A reply that
+     arrives after term2 exits lands in the shell.
+   - Between giving up and Ink taking stdin, the terminal is in cooked mode, and
+     that window is longer now. A reply that lands in it is echoed as
+     `^[]11;rgb:…` rather than typed into the prompt. The base echoed replies at
+     160–200 ms the same way.
 2. **External packages are no longer imported statically.** The bundle's static
    imports of externals and builtins are linked before any term2 code runs.
    `@anthropic-ai/sandbox-runtime` (about 45 modules, node-forge among them; 50 ms
@@ -772,7 +783,12 @@ and isolated timings, not from subtraction.
    loopback, HTTP server transport) through `require`.
 4. **`@qduc/web-fetch` is external.** It was already imported on demand, but its
    jsdom tree (about 7 MB) sat in the bundle, read and decoded on every start
-   (UTF-8 decoding of the bundle fell from 38 to 24 ms).
+   (UTF-8 decoding of the bundle fell from 38 to 24 ms). This also fixes `web_fetch`
+   in the built CLI, which is reached through `run_code`. Bundled, jsdom resolved
+   its `xhr-sync-worker.js` relative to the bundle. At `7020c91`, every call
+   returned `Error: Cannot find module './xhr-sync-worker.js'`. The candidate
+   returns the page's title and markdown; the independent verifier found this, and
+   a rerun reproduced it. No test drives `web_fetch` through the built CLI.
 5. **Lazy initialization in the bundle:** the MCP client SDK (about 25 ms) loads
    with the first server connection or login (`tools/mcp/mcp-sdk.ts`), the
    OpenRouter AI SDK (15 ms) with the first OpenRouter model, and six unused
@@ -875,6 +891,38 @@ Behavioral probes on the built CLI, base against candidate, on Node 22:
   - `TERM2_CACHE_DIR` was honoured.
   - `NODE_COMPILE_CACHE` took precedence.
   - `NODE_DISABLE_COMPILE_CACHE` wrote nothing.
+
+**Independent verification: accepted.** A separate agent verified commit
+`021d9e6` against `7020c91` on Node 24.21.0 with pnpm 11. It ran its own probes
+and found no blocking defect:
+
+- **Sandbox enforcement.** Writing outside the workspace and reading
+  `~/.ssh/id_rsa` were denied identically on both builds.
+- **A sandbox runtime that throws on import.**
+  - The base crashed even on `--help`.
+  - The candidate started and failed closed: commands that needed the sandbox
+    were refused or asked for approval, and ACP reported `missing_dependency`.
+- **MCP.** Classification output was byte-identical for 401s over streamable HTTP
+  and SSE, refresh-only tokens, crashed servers and servers that died mid-call. A
+  full PTY `/mcp-login` OAuth flow matched too.
+- **SSH.** A round trip against an in-process ssh2 server matched.
+- **Headless SIGINT/SIGTERM exit codes.** They matched.
+- **Background replies.** A sweep of late replies matched the timings in item 1.
+- **Bundle markers.** All 866 `// dist/` markers survived.
+- **Compile cache.**
+  - The default directory, `TERM2_CACHE_DIR`, `XDG_CACHE_HOME`,
+    `NODE_COMPILE_CACHE` precedence and `NODE_DISABLE_COMPILE_CACHE` behaved as
+    described.
+  - ENOTDIR, EROFS and unwritable-HOME starts succeeded.
+  - `NODE_COMPILE_CACHE` did not leak to child processes.
+- **CI checks.**
+  - It repeated all four lanes and reached the same results.
+  - The `port` checks passed.
+  - `input-notice` passed 12 of 12 under load.
+- **What it found, and could not verify.**
+  - It found the `web_fetch` fix in item 4 and the two side effects in item 1.
+  - It could not verify a Node older than 22.1 (that was simulated), macOS or
+    Windows cache paths, or the `input-notice` failure on Node 22.
 
 Limits:
 

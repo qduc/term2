@@ -1,5 +1,5 @@
 /** The app's one settings owner: the source `SettingsService`. Sessions build their own runtime generations from it. */
-import { SettingsService } from '../config/settings/settings-service.js';
+import { SettingsService } from './settings-service.js';
 
 export type AppSettingsOptions = NonNullable<ConstructorParameters<typeof SettingsService>[0]>;
 export type { SettingsService };

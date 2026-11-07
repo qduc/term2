@@ -1,6 +1,6 @@
-import { SENSITIVE_SETTINGS } from './settings-service.js';
-import { getSettingLabel } from './settings-ui-metadata.js';
-import { scoreSubsequence } from '../../shared/utils/subsequence-filter.js';
+import { SENSITIVE_SETTINGS } from '../config/settings/settings-schema.js';
+import { getSettingLabel } from '../config/settings/settings-ui-metadata.js';
+import { scoreSubsequence } from '../shared/utils/subsequence-filter.js';
 import {
   CATEGORY_KEYS,
   HIDDEN_SETTINGS,

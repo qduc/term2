@@ -2,7 +2,7 @@ import React, { createContext, useContext, type FC, type ReactNode } from 'react
 import type { ISettingsService } from '../../../../shared/service-interfaces.js';
 import { useSetting } from '../hooks/use-setting.js';
 import { classicSkin } from './classic/index.js';
-import { DEFAULT_SKIN_NAME } from './names.js';
+import { DEFAULT_SKIN_NAME } from '../../../../config/skins/names.js';
 import { getSkin } from './registry.js';
 import type { Skin } from './types.js';
 const SkinContext = createContext<Skin>(classicSkin);

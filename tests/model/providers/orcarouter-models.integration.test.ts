@@ -6,7 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { unregisterProvider } from '../../../src/model/providers/registry.js';
 import type { ProviderFetch } from '../../../src/model/providers/registry.js';
 import type { ILoggingService } from '../../../src/shared/service-interfaces.js';
-import { SettingsService } from '../../../src/config/settings/settings-service.js';
+import { SettingsService } from '../../../src/app/settings-service.js';
 import type { KnownCustomProviderType } from '../../../src/config/settings/settings-schema.js';
 import { clearModelMemoryCacheForTest, fetchModels, getModelCacheFilePath } from '../../../src/model/model-service.js';
 

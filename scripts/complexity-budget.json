@@ -1,5 +1,5 @@
 {
-  "maxLayerEdges": 27,
+  "maxLayerEdges": 7,
   "maxLines": 500,
   "fileCeilings": {
     "src/model/provider.ts": {
@@ -82,7 +82,7 @@
       "lines": 1361,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "src/config/settings/settings-service.ts": {
+    "src/app/settings-service.ts": {
       "lines": 1263,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },

@@ -1,8 +1,5 @@
-import { THEME_NAMES, type ThemeName } from './palettes.js';
-
-/** What `ui.theme` may hold: a concrete palette, or `auto` to pick one for the terminal. */
-export type ThemeSetting = 'auto' | ThemeName;
-export const THEME_SETTING_VALUES = ['auto', ...THEME_NAMES] as const;
+import { THEME_SETTING_VALUES, type ThemeName, type ThemeSetting } from '../../../../config/settings/theme-setting.js';
+export { THEME_SETTING_VALUES, type ThemeSetting };
 
 export type BackgroundMode = 'dark' | 'light';
 export type Rgb = { r: number; g: number; b: number };

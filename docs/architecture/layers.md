@@ -21,22 +21,30 @@ reached from the CLI.
 | Layer       | Job                                                           | May depend on                  |
 | ----------- | ------------------------------------------------------------- | ------------------------------ |
 | `clients/`  | Render the protocol (TUI, headless, ACP, control, Discord)    | host, protocol                 |
-| `host/`     | Transport and access: in-process host, HTTP server, auth      | protocol, session, config      |
+| `host/`     | Transport and access: in-process host, HTTP server, auth      | protocol, session              |
 | `protocol/` | The one public event and command format, one projection       | session and everything below   |
 | `delegation/` | Child agents, roles/pools, runners and workflow execution   | session and everything below   |
-| `session/`  | One durable conversation: append-only log, replay, recovery policy | engine, model, tools, config   |
-| `engine/`   | The turn loop: waits for answers, compacts, recovery mechanics | model, tools, config           |
-| `tools/`    | Tool contracts: schema, approval policy and execute function  | model, config                  |
+| `session/`  | One durable conversation: append-only log, replay, recovery policy | engine, model, tools           |
+| `engine/`   | The turn loop: waits for answers, compacts, recovery mechanics | model, tools                   |
+| `tools/`    | Tool contracts: schema, approval policy and execute function  | model                          |
 | `model/`    | Providers behind one streaming interface, item format         | nothing                        |
-| `config/`   | Settings reader contract                                      | nothing                        |
-| `shared/`   | Helpers every layer may import (utils, contracts, types)      | nothing (see below)            |
+| `config/`   | Pure schemas, defaults and profile definitions                | nothing (pure leaf)            |
+| `shared/`   | Helpers every layer may import (utils, contracts, types)      | nothing (pure leaf)            |
 | `app/`      | Composition root: the only place concrete layers are wired    | everything                     |
 
-Code moved in from `source/` (#87) did not all fit the table. Its crossing
-edges, including those from `shared/` files that are not yet pure, are listed
-one per line in `scripts/layer-allowlist.json`. `check-layers.mjs` fails on a
-crossing edge that is not listed, and on any import from outside `src/`; it
-prints listed edges that no longer exist so the list only shrinks.
+Both `config/` (pure schemas and profile definitions) and `shared/` (pure helpers) are leaf layers that any layer may import, and neither may import any other layer. Settings service and file I/O live in `app/` (Decision D1).
+
+### Known exceptions
+
+The scheduled architecture cleanup (#181) reduced allowlisted crossing edges from 116 down to the 7 documented in [Phase 3 of the architecture cleanup plan](../plans/engineering/architecture-cleanup.md#phase-3-the-seven-real-design-problems-ports-when-touched). These remaining edges represent design seams addressed on a pay-as-you-go basis when those components are next touched:
+
+1. `clients/tui/presentation/components/layout/Banner.tsx` → `engine/agent-runtime/model-resolver.ts`, `model/providers/index.ts` (Phase 3.1: UI resolves models directly)
+2. `clients/tui/presentation/hooks/use-terminal-focus-notifier.ts` → `app/settings-service.ts`, `session/logging/logging-service.ts` (Phase 3.2: client hook reaches concrete services)
+3. `engine/agent-runtime/context-compaction/index.ts` → `session/conversation/conversation-state-projector.ts` (Phase 3.3: compaction needs session history projection)
+4. `engine/retry/retry-contracts.ts` → `session/conversation/conversation-events.ts` (Phase 3.4: engine retry contract names session event type)
+5. `shared/lib/chained-input-filter.ts` → `session/conversation/run-item-normalizer.ts` (Phase 3.5: shared helper calls session normalization)
+
+Every crossing edge is listed in `scripts/layer-allowlist.json`. `check-layers.mjs` fails on any unallowlisted edge, and prints listed edges that no longer exist so the list only shrinks.
 
 `delegation/` sits between protocol and session; session does not import it.
 The app injects its concrete launcher/evaluator implementations into tools.

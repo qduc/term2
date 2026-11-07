@@ -17,9 +17,9 @@ import {
   isLegacyModeSettingKey,
   profileIdFromLegacyModeSetting,
 } from '../config/profiles/legacy-adapter.js';
-import { planProfileTransition } from '../config/profiles/profile-transition.js';
-import { SETTING_KEYS } from '../config/settings/settings-service.js';
-import { CATEGORY_KEYS, HIDDEN_SETTINGS, SETTINGS_CATEGORIES } from '../config/settings/settings-completion-config.js';
+import { planProfileTransition } from './profile-transition.js';
+import { SETTING_KEYS } from '../config/settings/settings-schema.js';
+import { CATEGORY_KEYS, HIDDEN_SETTINGS, SETTINGS_CATEGORIES } from './settings-completion-config.js';
 import { getSettingMetadata } from '../config/settings/settings-ui-metadata.js';
 import { createSettingsCommand, parseSettingValue } from './settings-command.js';
 import { receiptNotice, sendNativeCommand } from '../clients/tui/commands.js';

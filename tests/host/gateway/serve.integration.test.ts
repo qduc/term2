@@ -295,6 +295,69 @@ describe('term2 serve (child process)', () => {
     expect(fs.statSync(stateDir).mode & 0o777).toBe(0o700);
     expect(fs.statSync(socketPath).mode & 0o777).toBe(0o660);
 
+    // Every private route must bind a signed assertion to its declared purpose.
+    // Probe the real socket before sending any request that could mutate state.
+    const privateRoutes = [
+      ['GET', '/private/agent/v1/workspaces', 'workspace_list'],
+      ['POST', '/private/agent/v1/workspaces', 'workspace_list'],
+      ['POST', '/private/agent/v1/workspace/candidates/validate', 'workspace_candidate_validate'],
+      ['POST', '/private/agent/v1/workspace/candidates/browse', 'workspace_candidate_browse'],
+      ['POST', '/private/agent/v1/workspace/candidates/select', 'workspace_candidate_select'],
+      ['GET', '/private/agent/v1/models', 'model_list'],
+      ['GET', '/private/agent/v1/settings', 'settings_read'],
+      ['PUT', '/private/agent/v1/settings', 'settings_write'],
+      ['POST', '/private/agent/v1/credentials/provider', 'credential_write'],
+      ['DELETE', '/private/agent/v1/credentials/provider', 'credential_delete'],
+      ['POST', '/private/agent/v1/oauth/provider/login', 'oauth_login'],
+      ['POST', '/private/agent/v1/oauth/provider/select', 'oauth_select'],
+      ['DELETE', '/private/agent/v1/oauth/provider/accounts/account', 'oauth_delete'],
+      ['POST', '/private/agent/v1/sessions', 'session_create'],
+      ['GET', '/private/agent/v1/sessions', 'session_list'],
+      ['POST', '/private/agent/v1/sessions/probe', 'session_read'],
+      ['POST', '/private/agent/v1/sessions/probe/messages', 'message_submit'],
+      ['POST', '/private/agent/v1/sessions/probe/abort', 'abort'],
+      ['GET', '/private/agent/v1/sessions/probe/events', 'events_connect'],
+      ['POST', '/private/agent/v1/sessions/probe/config', 'session_update'],
+      ['POST', '/private/agent/v1/sessions/probe/commands', 'command_invoke'],
+      ['POST', '/private/agent/v1/sessions/probe/interactions/request', 'interaction_resolve'],
+    ] as const;
+    for (const [method, route, purpose] of privateRoutes) {
+      const unsigned = await socketRequest(socketPath, method, route, undefined);
+      expect(unsigned.status, `${method} ${route}: ${unsigned.raw}`).toBe(401);
+      const isSessionRoute = route.startsWith('/private/agent/v1/sessions/probe');
+      const wrongPurpose = isSessionRoute
+        ? purpose === 'session_read'
+          ? 'message_submit'
+          : 'session_read'
+        : purpose === 'workspace_list'
+        ? 'model_list'
+        : 'workspace_list';
+      const rejected = await socketRequest(
+        socketPath,
+        method,
+        route,
+        undefined,
+        sign('user-1', wrongPurpose, isSessionRoute ? { sessionId: 'probe' } : {}),
+      );
+      expect(rejected.status, `${method} ${route}: ${rejected.raw}`).toBe(400);
+      expect(jsonBody(rejected).error.code).toBe('protocol_conflict');
+    }
+    const replayedAssertion = sign('user-1', 'workspace_list');
+    expect(
+      (await socketRequest(socketPath, 'GET', '/private/agent/v1/workspaces', undefined, replayedAssertion)).status,
+    ).toBe(200);
+    expect(
+      (await socketRequest(socketPath, 'GET', '/private/agent/v1/workspaces', undefined, replayedAssertion)).status,
+    ).toBe(401);
+    const nonOwner = await socketRequest(
+      socketPath,
+      'GET',
+      '/private/agent/v1/settings',
+      undefined,
+      sign('user-2', 'settings_read'),
+    );
+    expect(nonOwner.status).toBe(403);
+
     const rpc = async (
       method: string,
       requestPath: string,

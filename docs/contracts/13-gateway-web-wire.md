@@ -11,10 +11,10 @@ repositories, so it uses the five sections the plan prescribes: routes, auth, ev
 gaps, mismatches. A later milestone that repairs a seam here should get its own
 seam-shaped record.
 
-**Sources read for this record.** term2: `source/gateway/gateway.ts`, `contracts.ts`,
+**Sources read for this record (historical pre-rewrite tree at `fbec9bb6`).** term2: historical `source/gateway/gateway.ts`, `contracts.ts`,
 `assertion.ts`, `pairing.ts`, `trusted-clients.ts`, `server.ts`,
 `interaction-protocol.ts`, `persistence/{contracts,projection,coordinator,session-index,interaction-checkpoint}.ts`,
-and `source/services/conversation/conversation-events.ts`. ChatForge
+and historical `source/services/conversation/conversation-events.ts` (legacy gateway wire moved/retired in #87/#88). ChatForge
 (`~/chat-term2-integration/chat/`, read-only): `backend/src/lib/term2GatewayClient.js`,
 `backend/src/routes/agentGateway.js`, `backend/src/lib/agentProtocol.js`,
 `backend/src/lib/term2LocalControlBroker.js`, `frontend/lib/term2/event-adapter.ts`,

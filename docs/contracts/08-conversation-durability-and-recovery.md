@@ -1,6 +1,6 @@
 # Contract 08 — Conversation durability and recovery
 
-Status: **draft under review 2026-08-15; focused gate green after VP-decided repairs.** Owners:
+Status: **draft under review 2026-08-15; focused gate green after VP-decided repairs.** In the rewrite (#86–#88; see `docs/architecture/layers.md` and `docs/contracts/09-rewrite-native-conversation.md`), multi-file persistence was replaced by the single-log native session in `src/session/` (`src/session/log.ts`, `src/session/facts.ts`, `src/session/conversation-journal.ts`, `src/session/replay.ts`, `src/session/command-history.ts`). Historical pre-rewrite owners were:
 `ConversationLogWriter` (`conversation-log-writer.ts`), conversation persistence
 and directory resolution (`conversation-persistence.ts`), composer prompt
 history (`history-service.ts`), and log decoding and replay recovery
@@ -22,26 +22,28 @@ history (`history-service.ts`), and log decoding and replay recovery
 ## 2. Owners
 
 - **Enforcement:**
-  - `ConversationLogWriterImpl` (`conversation-log-writer.ts:282-557`): file
-    descriptor and lockfile lifecycle (including stale same-host lock reclaim in
-    `acquireLock`), shared monotonic sequence allocation,
-    fsync event classification (`FSYNC_EVENTS`), sidecar appending, and
-    fail-fast failure latching (`#failure`, `#throwIfFailed`).
-  - `conversation-persistence.ts` (`:1-641`): directory hierarchy creation,
-    legacy log migration, conversation loading (`loadConversation`,
-    `loadConversationForProject`, `loadLastConversation`), deletion (including
-    synchronous residual `.deltas` removal), atomic forking
-    (`forkConversation`), last-session registry (`saveLastConversation`,
-    `readLastConversationFile`, `writeLastConversationFile`), orphan sidecar
-    garbage collection (`collectOrphanedDeltaSidecars`), and the advisory-lock
-    liveness probe (`isPidAlive`, `setPidAlivenessCheckForTest`) used by
-    `isConversationLocked`'s held/stale/corrupt diagnostic.
-  - `HistoryService` (`history-service.ts:50-165`): user prompt and multimodal turn
-    persistence, history size bounding, duplicate deduplication, legacy format
-    loading, corrupt-history quarantine before a valid replacement write, and
-    same-directory temp + atomic rename saves.
-  - `conversation-decoder.ts` / `conversation-replay.ts`: envelope JSON line decoding,
-    corruption skipping, and stateless turn/ledger state reconstruction.
+  - Current native session owner: `src/session/log.ts` and `src/session/conversation-journal.ts` (fsyncSync, atomic append, latching, single-writer lock), `src/session/facts.ts` (native facts), and `src/session/replay.ts`.
+  - Historical pre-rewrite owners (retired in #87/#88):
+    - `ConversationLogWriterImpl` (`conversation-log-writer.ts:282-557`): file
+      descriptor and lockfile lifecycle (including stale same-host lock reclaim in
+      `acquireLock`), shared monotonic sequence allocation,
+      fsync event classification (`FSYNC_EVENTS`), sidecar appending, and
+      fail-fast failure latching (`#failure`, `#throwIfFailed`).
+    - `conversation-persistence.ts` (`:1-641`): directory hierarchy creation,
+      legacy log migration, conversation loading (`loadConversation`,
+      `loadConversationForProject`, `loadLastConversation`), deletion (including
+      synchronous residual `.deltas` removal), atomic forking
+      (`forkConversation`), last-session registry (`saveLastConversation`,
+      `readLastConversationFile`, `writeLastConversationFile`), orphan sidecar
+      garbage collection (`collectOrphanedDeltaSidecars`), and the advisory-lock
+      liveness probe (`isPidAlive`, `setPidAlivenessCheckForTest`) used by
+      `isConversationLocked`'s held/stale/corrupt diagnostic.
+    - `HistoryService` (`history-service.ts:50-165`): user prompt and multimodal turn
+      persistence, history size bounding, duplicate deduplication, legacy format
+      loading, corrupt-history quarantine before a valid replacement write, and
+      same-directory temp + atomic rename saves (now in `src/session/command-history.ts`).
+    - `conversation-decoder.ts` / `conversation-replay.ts`: envelope JSON line decoding,
+      corruption skipping, and stateless turn/ledger state reconstruction.
 - **Recovery:**
   - `readLogTailState` (`conversation-log-writer.ts:121-172`): trailing newline
     repair for torn final lines; backward scan for high-water `seq` counter.
@@ -56,10 +58,10 @@ history (`history-service.ts`), and log decoding and replay recovery
     corrupted JSONL entries during replay.
 
 > [!NOTE]
-> **Boundary Note on Directory Placement:** `conversation-log-writer.ts` resides in
-> `source/services/logging/` but is durable state persistence, not diagnostic telemetry.
-> It manages file locks, write-ahead logs, and sequence reconstruction, governed
-> by this contract (Contract 08) rather than the diagnostic logging port (Contract 07 / SB-05).
+> **Boundary Note on Directory Placement:** in the pre-rewrite tree `conversation-log-writer.ts` resided in
+> historical `source/services/logging/` but was durable state persistence, not diagnostic telemetry.
+> In the rewrite (#87), conversation log writing lives directly under `src/session/` (`src/session/log.ts`,
+> `src/session/conversation-journal.ts`).
 
 ### Write-failure behavior visible to the user
 
@@ -275,7 +277,7 @@ fail open and disable/refrain from using the failed diagnostic sink.
 
 ## 9. Verification commands
 
-### Focused Verification Gate
+### Focused Verification Gate (Historical pre-rewrite baseline at tag `unit-suite-baseline`, verified 2026-08-15)
 
 ```bash
 NODE_ENV=test pnpm test \

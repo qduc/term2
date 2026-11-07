@@ -1,10 +1,9 @@
 # Contract 09 — Execution-root authority and workspace lease
 
 Status: **audit draft landed docs-only 2026-08-16 under the President's
-remaining-SB slice I grant.** Owner: `ExecutionContext` and the worktree
-admission tool (`source/services/execution-context.ts`,
-`source/tools/system/worktree.ts`), with the active-root fallback in
-`source/services/workspace/active-workspace-root.ts`.
+remaining-SB slice I grant.** Owner: `ExecutionContext` (`src/tools/execution-context.ts`) and the worktree
+admission tool (`src/tools/system/worktree.ts`, `src/tools/workspace/worktree-transition.ts`), with the active-root fallback in
+`src/tools/workspace/active-workspace-root.ts` (moved from `source/` in #87).
 
 The original landing changed documentation only. The three characterization
 tests cited in §8 as coverage gaps (G2 file completion, G5 sandbox allow-write,
@@ -64,12 +63,12 @@ process-wide publication to suppress those prompts.
 ## 2. Owners
 
 - **Admission enforcement:** `resolveEnterWorktree` and
-  `resolveExitWorktree` in `source/services/workspace/worktree-transition.ts`,
+  `resolveExitWorktree` in `src/tools/workspace/worktree-transition.ts` (formerly `source/services/workspace/worktree-transition.ts`),
   using the runtime-issued list and running-job snapshot.
 - **Lease and publication enforcement:** `ExecutionContext.enterWorkspace`,
   `exitWorkspace`, and `ExecutionContext.pin` in
-  `source/services/execution-context.ts`; the fallback getter and its test/reset
-  publisher are in `active-workspace-root.ts`.
+  `src/tools/execution-context.ts` (formerly `source/services/execution-context.ts`); the fallback getter and its test/reset
+  publisher are in `src/tools/workspace/active-workspace-root.ts`.
 - **Root consumers:** each consumer listed in §4 owns its local policy while
   taking the active-root default. Contract 05 C5.5 still owns fail-closed
   sandbox policy; Contract 09 owns which leased root is supplied to that policy.
@@ -107,29 +106,28 @@ process-wide publication to suppress those prompts.
 
 The source audit verified the following production consumers of
 `getActiveWorkspaceRoot()` or its file-service wrapper. **Every citation below
-was re-verified against this tree's main HEAD (`83c3dd9d`) on 2026-08-16 and
-resolves at its listed location:**
+records its mapping from the pre-rewrite source audit at main HEAD (`83c3dd9d`) to the current tree:**
 
-- `source/services/agent-runtime/scope-resolver.ts:64` — implicit agent scope.
-- `source/services/approval/approval-decision-executor.ts:261,282` — project
-  allow-read persistence and approval decision cwd default.
-- `source/services/approval/session-read-access.ts:16` — session read base-dir
+- historical `source/services/agent-runtime/scope-resolver.ts:64` — implicit agent scope (retired with legacy runtime in #197).
+- historical `source/services/approval/approval-decision-executor.ts:261,282` — project
+  allow-read persistence and approval decision cwd default (retired in #197).
+- `src/session/approval/session-read-access.ts:16` (formerly `source/services/approval/session-read-access.ts`) — session read base-dir
   default.
-- `source/services/conversation/conversation-result-builder.ts:372` — active
-  workspace result projection.
-- `source/services/file-service.ts:32,167,182-199` — completion scan and
+- historical `source/services/conversation/conversation-result-builder.ts:372` — active
+  workspace result projection (retired with legacy runtime in #197).
+- `src/app/file-service.ts` (formerly `source/services/file-service.ts:32,167,182-199`) — completion scan and
   root-sensitive cache.
-- `source/services/session/session-access-state.ts:24,32,36,40` — read/edit
-  base-dir defaults.
-- `source/tools/utils.ts:14,152` — path and protected-hook defaults.
-- `source/utils/shell/command-safety/path-analysis.ts:145` — project
+- historical `source/services/session/session-access-state.ts:24,32,36,40` — read/edit
+  base-dir defaults (retired with legacy runtime in #197).
+- `src/tools/conversation-utils.ts` (formerly `source/tools/utils.ts:14,152`) — path and protected-hook defaults.
+- `src/tools/shell/command-safety/path-analysis.ts:145` (formerly `source/utils/shell/command-safety/path-analysis.ts`) — project
   membership for path-risk classification.
-- `source/utils/shell/sandbox/sandbox-env.ts:49` — sandbox cwd default.
-- `source/utils/shell/sandbox/sandbox-network-store.ts:96,105` — project
+- `src/tools/shell/sandbox/sandbox-env.ts:49` (formerly `source/utils/shell/sandbox/sandbox-env.ts`) — sandbox cwd default.
+- `src/tools/shell/sandbox/` (formerly `source/utils/shell/sandbox/sandbox-network-store.ts:96,105`) — project
   network allow-store defaults.
-- `source/utils/shell/sandbox/sandbox-policy.ts:433` — realpath-resolved
+- `src/tools/shell/sandbox/sandbox-policy.ts:433` (formerly `source/utils/shell/sandbox/sandbox-policy.ts`) — realpath-resolved
   sandbox workspace and write allowlist.
-- `source/components/layout/StatusBar.tsx:13,70` — active-root Docker
+- `src/clients/tui/presentation/skins/*/status.tsx` (formerly `source/components/layout/StatusBar.tsx:13,70`) — active-root Docker
   project-grant lookup for status-bar presentation.
 
 This is the verified current source-audit inventory, not a claim that the
@@ -199,36 +197,36 @@ recorded in §8 as coverage gaps.
 
 - `ExecutionContext.enterWorkspace`, `exitWorkspace`, `pin`, and
   `getCwd`/`getActiveWorkspace`, with the fallback getter, in
-  `source/services/execution-context.test.ts` and
+  historical `source/services/execution-context.test.ts` and
   `source/services/workspace/active-workspace-root.test.ts`.
 - `resolveEnterWorktree`, `resolveExitWorktree`, and
-  `resolveWorkerWorktree` in `source/services/workspace/worktree-transition.test.ts`.
-- `getWorkspaceEntries` public boundary in `source/services/file-service.test.ts`
+  `resolveWorkerWorktree` in historical `source/services/workspace/worktree-transition.test.ts`.
+- `getWorkspaceEntries` public boundary in historical `source/services/file-service.test.ts`
   — the on-main suite covers `scanWorkspaceEntries` scanning only; the G2
   lease-following characterization is **pending** (see §8).
 - `createSandboxRuntimeConfig` — the G5 sandbox allow-write characterization in
-  `source/services/workspace/workspace-lease-authority.test.ts` is **pending**
+  historical `source/services/workspace/workspace-lease-authority.test.ts` is **pending**
   (not on main); Contract 05's broader sandbox policy tests in
   `source/utils/shell/sandbox/sandbox-policy.test.ts` retain the fail-closed
   policy boundary.
 - `analyzePathRisk` and `SafetyStatus` — the G6 path-classification
-  characterization in `source/services/workspace/workspace-lease-authority.test.ts`
+  characterization in historical `source/services/workspace/workspace-lease-authority.test.ts`
   is **pending** (not on main); the path-analysis suite in
   `source/utils/shell/command-safety.path.test.ts` retains the broader
   classification matrix.
-- `createWorktreeToolDefinitions` in `source/tools/system/worktree.test.ts`
+- `createWorktreeToolDefinitions` in historical `source/tools/system/worktree.test.ts`
   (enter/exit tool coupling and publication boundary).
 
 ## 8. Deterministic contract matrix
 
-Each cell cites only on-main evidence. The three cells that only the unmerged
+Each cell cites only on-main evidence from the historical baseline (at tag `unit-suite-baseline`). The three cells that only the unmerged
 characterizations covered are recorded as **coverage gaps** — classified per the
 README failure-classification legend as coverage gaps, **not** product defects:
 current behavior may be correct but uncharacterized at the lease-following
 boundary, and each gap names the exact public-boundary test that must land to
 turn it into a red/green characterization.
 
-| ROADMAP minimum-matrix cell | Evidence | Status |
+| ROADMAP minimum-matrix cell | Evidence (historical pre-rewrite `source/` tests at tag `unit-suite-baseline`) | Status |
 | --- | --- | --- |
 | Fallback with no lease | `source/services/workspace/active-workspace-root.test.ts:9` — `falls back to the process cwd when no workspace is leased` | covered |
 | Successful parent publication | `source/services/workspace/active-workspace-root.test.ts:13` — `entering a workspace publishes the leased root to code that cannot reach the context` | covered |
@@ -240,7 +238,7 @@ turn it into a red/green characterization.
 | Parent versus child pin publication | `source/services/execution-context.test.ts:110-126` — `pin leases a root without publishing the process-wide active workspace`; `pin does not retarget a parent session context that entered a different root` | covered |
 | Runtime worktree admission outcomes | `source/services/workspace/worktree-transition.test.ts` — entered (`:31`,`:35`,`:80`), already-active (`:76`), not-found (`:39`), ambiguous (`:51`,`:59`), unavailable (`:65`,`:70`), and busy (`:84`) entry cases; exited (`:89`), not-in-worktree (`:96`), and busy (`:103`) exit cases | covered |
 | `enter_worktree`/`exit_worktree` tool coupling | `source/tools/system/worktree.test.ts:24-40,58-71` — `enter_worktree` publishes the selected root and `exit_worktree` releases it; rejected transitions leave the context unchanged | covered |
-| Parent transition never calls process.chdir | `source/services/execution-context.ts:17-87` source audit; no production `process.chdir` in the lease implementation | source-audited; no dedicated characterization |
+| Parent transition never calls process.chdir | `src/tools/execution-context.ts` source audit (formerly `source/services/execution-context.ts:17-87`); no production `process.chdir` in the lease implementation | source-audited; no dedicated characterization |
 | All default-root consumers | §4 source audit inventory (re-verified at main HEAD); the on-main suites cover representative public boundaries, not exhaustive future-consumer behavior | source-audited; not an exhaustive test claim |
 
 The existing execution-context tests already provide the stronger parent-versus-
@@ -274,7 +272,7 @@ git -C /home/qduc/term2/.worktrees/sb09-slice-i-docs diff --check
 git -C /home/qduc/term2/.worktrees/sb09-slice-i-docs diff --name-only main
 ```
 
-Characterization gate (passing):
+Historical characterization gate (pre-rewrite `source/` tests at tag `unit-suite-baseline`, passing on 2026-08-16):
 
 ```sh
 NODE_ENV=test pnpm test \

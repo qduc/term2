@@ -1,12 +1,6 @@
 # Contract 11 — Destructive approval authority
 
-Status: **audit draft — not owner-reviewed.** Owner: `ToolApprovalBatchCoordinator`
-(`source/services/approval/tool-approval-batch-coordinator.ts`), `ApprovalDecisionExecutor`
-(`source/services/approval/approval-decision-executor.ts`), `ConversationAdapter`
-(`source/services/conversation/conversation-adapter.ts`), `SubagentToolPolicy`
-(`source/services/subagents/tool-policy.ts`), and the durable log events
-(`source/services/logging/conversation-log-events.ts`,
-`source/services/logging/conversation-logger.ts`).
+Status: **audit draft (historical pre-rewrite baseline).** In the rewrite (#88, #197), the legacy approval coordinators (`ToolApprovalBatchCoordinator`, `ApprovalDecisionExecutor`, `ConversationAdapter`, and `ConversationLogger`) were deleted with the legacy runtime. Foreground approval flows run as `interaction_required` through `src/engine/turn-tool-interactions.ts` and `src/session/conversation-turn.ts`, with decisions logged to `src/session/facts.ts`. Child/worker tool policy lives in `SubagentToolPolicy` (`src/delegation/subagents/tool-policy.ts`). Historical pre-rewrite owners were: `ToolApprovalBatchCoordinator` (`source/services/approval/tool-approval-batch-coordinator.ts`), `ApprovalDecisionExecutor` (`source/services/approval/approval-decision-executor.ts`), `ConversationAdapter` (`source/services/conversation/conversation-adapter.ts`), `SubagentToolPolicy` (`source/services/subagents/tool-policy.ts`), and the pre-rewrite log events (`source/services/logging/conversation-log-events.ts`, `source/services/logging/conversation-logger.ts`).
 
 This record is **tests/docs-only**. It frames future contract tests under the three
 immutable Presidential Contract 11 decisions (C11-D5 `record_rejected`, C11-D8
@@ -89,13 +83,13 @@ may approve a Yellow-risk command at all in non-interactive mode.
 
 - C11.1: `ToolApprovalBatchCoordinator.stageBatch` with a run context whose `isToolApproved`
   returns `false` for a call — the durable `decisionsByCallId` entry must be `'rejected'`.
-  Red: `source/services/approval/c11-d5-batch-denial-boundary.test.ts`.
+  Red: historical `source/services/approval/c11-d5-batch-denial-boundary.test.ts` (at tag `unit-suite-baseline`).
 - C11.2: `ConversationAdapter.handleApprovalDecision` with a captured log sink — the
   `approval_resolved` event must carry an additive `grantKind`. Red:
-  `source/services/conversation/c11-d8-grant-kind-boundary.test.ts`.
+  historical `source/services/conversation/c11-d8-grant-kind-boundary.test.ts` (at tag `unit-suite-baseline`).
 - C11.3: `SubagentToolPolicy.wrapShellTool` / worker manager path — a metadata-less YELLOW
   approval (positive advisory with no risk/authority/confidence/source) must be rejected.
-  Red: `source/services/subagents/c11-d10-provenance-boundary.test.ts`.
+  Red: historical `source/services/subagents/c11-d10-provenance-boundary.test.ts` (at tag `unit-suite-baseline`).
 
 ## 8. Deterministic contract matrix
 
@@ -111,7 +105,7 @@ failures; see the test files for the exact observed failure text.
 
 ## 9. Verification commands
 
-- Focused: `NODE_ENV=test pnpm --dir /home/qduc/term2/.worktrees/c11-destructive-approval-contract vitest run source/services/approval/c11-d5-batch-denial-boundary.test.ts source/services/conversation/c11-d8-grant-kind-boundary.test.ts source/services/subagents/c11-d10-provenance-boundary.test.ts` (3 files; 3 retained expected failures).
+- Focused (historical pre-rewrite baseline): `NODE_ENV=test pnpm vitest run source/services/approval/c11-d5-batch-denial-boundary.test.ts source/services/conversation/c11-d8-grant-kind-boundary.test.ts source/services/subagents/c11-d10-provenance-boundary.test.ts` (3 files at tag `unit-suite-baseline`; 3 retained expected failures).
 - Typecheck, Prettier, and `git diff --check` pass (tests/docs-only).
 - Provider black-box is **not** run for this tests/docs-only slice; C11.3's repair (not this record) requires it.
 

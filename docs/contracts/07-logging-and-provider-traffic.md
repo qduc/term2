@@ -50,8 +50,8 @@ logging is enabled.
 ## 2. Owners
 
 - **Enforcement:**
-  - `LoggingService` (`source/services/logging/logging-service.ts`) — owns Winston file and console logger transports, log level filtering, category filtering (`LOG_CATEGORIES`), runtime log schema validation fallback, and correlation tracking.
-  - `ProviderTraffic` & `ProviderTrafficArtifactStore` (`source/services/logging/provider-traffic.ts`) — owns provider wire request/response serialization, instruction truncation, `encrypted_content` redaction, daily directory layout (`<logDir>/provider-traffic/<date>/<session>/`), daily index (`index.jsonl`), and in-memory `#requestPaths` correlation.
+  - `LoggingService` (`src/session/logging/logging-service.ts`, moved from `source/services/logging/` in #87) — owns Winston file and console logger transports, log level filtering, category filtering (`LOG_CATEGORIES`), runtime log schema validation fallback, and correlation tracking.
+  - `ProviderTraffic` & `ProviderTrafficArtifactStore` (`src/session/logging/provider-traffic.ts`) — owns provider wire request/response serialization, instruction truncation, `encrypted_content` redaction, daily directory layout (`<logDir>/provider-traffic/<date>/<session>/`), daily index (`index.jsonl`), and in-memory `#requestPaths` correlation.
 - **Recovery:**
   - `LoggingService.cleanupProviderTraffic` — at startup prunes dated provider/evaluator traffic folders older than `LOG_RETENTION_DAYS = 7`, then removes oldest dated folders until each tree is at most `LOG_DIRECTORY_MAX_BYTES = 512 MiB`.
   - `LoggingService.cleanupRotatedApplicationLogs` — applies the same 7-day age and 512 MiB per-directory caps to `term2-YYYY-MM-DD.log[.N]` files. Winston's existing `maxSize: 10m` / `maxFiles: 7d` rotation remains in place; the startup sweep enforces an aggregate cap too.
@@ -61,12 +61,12 @@ logging is enabled.
 
 ## 3. Execution paths that share the contract
 
-- **Fetch Provider Middleware:** `source/providers/fetch/logging-middleware.ts:113-157` (invoking `recordRequestStart`, `recordResponseReceived`, and `recordRequestFailed` around HTTP provider calls for OpenAI, Anthropic, Gemini, OpenRouter, Ollama, DeepSeek).
-- **Codex / Responses Model Stream:** `source/providers/codex-responses-model.ts:1068, 1088, 1110, 1131` (invoking `recordRequestStart`, `recordResponseReceived`, `recordResponseClosed`, and `recordRequestFailed` over WebSocket / SSE transports).
-- **Application Run Loop & Session Stream:** `source/services/agent-runtime/application-run-loop.ts` and `source/services/session/session-stream-processor.ts` (emitting debug/info/warn/error diagnostics across turn segments, tool dispatches, stall escalation, and stream recovery).
-- **Conversation Logger Error Boundary:** `source/services/logging/conversation-logger.ts:45-56` (catching log sink errors and emitting `conversation_log.sink_failed` via `logger.warn`).
-- **CLI & Non-Interactive Bootstrap:** `source/cli.tsx:399-411` and `source/non-interactive.ts` (instantiating `LoggingService` and injecting it into services, settings, and React Ink root).
-- **UI Diagnostics & Menu Hooks:** `source/hooks/use-conversation.ts`, `use-model-selection.ts`, and `use-subagent-pool-selection.ts` (emitting UI lifecycle and model switch diagnostics).
+- **Fetch Provider Middleware:** `src/model/providers/fetch/logging-middleware.ts:113-157` (formerly `source/providers/fetch/logging-middleware.ts`, invoking `recordRequestStart`, `recordResponseReceived`, and `recordRequestFailed` around HTTP provider calls for OpenAI, Anthropic, Gemini, OpenRouter, Ollama, DeepSeek).
+- **Codex / Responses Model Stream:** `src/model/providers/codex-responses-model.ts:1068, 1088, 1110, 1131` (formerly `source/providers/codex-responses-model.ts`, invoking `recordRequestStart`, `recordResponseReceived`, `recordResponseClosed`, and `recordRequestFailed` over WebSocket / SSE transports).
+- **Turn Loop & Session Stream:** `src/engine/turn.ts` and `src/session/conversation-turn.ts` (formerly pre-rewrite `source/services/agent-runtime/application-run-loop.ts` and `source/services/session/session-stream-processor.ts`).
+- **Conversation Logger Error Boundary:** `src/session/log.ts` (formerly pre-rewrite `source/services/logging/conversation-logger.ts`, retired in #197).
+- **CLI & Non-Interactive Bootstrap:** `src/app/cli.ts` and `src/app/non-interactive.ts` (formerly `source/cli.tsx` and `source/non-interactive.ts`).
+- **UI Diagnostics & Menu Hooks:** `src/clients/tui/` presentation and menu hooks (formerly `source/hooks/`).
 
 ## 4. Identities and state crossing the boundary
 
@@ -75,7 +75,7 @@ logging is enabled.
 - `ProviderTrafficRequest`: `{ requestId, provider, model, sentBody, headers?, modelClass?, modelWrapperClass? }`.
 - `ProviderTrafficResponse`: `{ requestId, provider, model, status, response, error?, modelClass?, modelWrapperClass?, transport?, receiveTiming? }`.
 - `ProviderTrafficClosedResponse`: `{ requestId, provider, model, outcome: 'consumer_closed' | 'aborted', eventCount, modelClass?, modelWrapperClass?, diagnostics? }`.
-- `DailySessionIndexEntry` (verbatim source type from `source/services/logging/provider-traffic.ts:48-61`):
+- `DailySessionIndexEntry` (verbatim source type from `src/session/logging/provider-traffic.ts:48-61`):
   ```ts
   export type DailySessionIndexEntry = {
     sessionId: string;
@@ -138,17 +138,18 @@ Aligned with Contract 05 runtime guards and effect safety:
 ## 7. Public boundary under test
 
 The contract is tested deterministically at the public interface boundary of:
-- `ILoggingService` / `LoggingService` (`source/services/logging/logging-service.ts`)
-- `IProviderTraffic` / `ProviderTraffic` (`source/services/logging/provider-traffic.ts`)
-- `ProviderTrafficArtifactStore` (`source/services/logging/provider-traffic.ts`)
-- `RuntimeLogSchema` (`source/services/logging/logging-contract.ts`)
-- `createLoggingMiddleware` (`source/providers/fetch/logging-middleware.ts` via `source/providers/fetch/composer.test.ts`)
+- `ILoggingService` / `LoggingService` (`src/session/logging/logging-service.ts`)
+- `IProviderTraffic` / `ProviderTraffic` (`src/session/logging/provider-traffic.ts`)
+- `ProviderTrafficArtifactStore` (`src/session/logging/provider-traffic.ts`)
+- `RuntimeLogSchema` (`src/session/logging/logging-contract.ts`)
+- `createLoggingMiddleware` (`src/model/providers/fetch/logging-middleware.ts`)
+- Active integration test: `tests/session/logging/logging-failures.integration.test.ts`
 
 Tests execute against isolated disk fixtures created via `fs.mkdtempSync` and typed test doubles (`CompletionOnlyThrowingStore`, `StartThrowingStore`, `ThrowingStore`). No production code was modified.
 
 ## 8. Deterministic contract matrix
 
-| Seam / Scenario | Invariant | Expected Outcome | Classification | Exact Test Declaration & Location |
+| Seam / Scenario | Invariant | Expected Outcome | Classification | Exact Test Declaration & Location (Historical pre-rewrite unit tests at tag `unit-suite-baseline`) |
 |---|---|---|---|---|
 | Initialize logging service | C7.1 | Instantiates Winston logger, sets default log level | Characterized & Tested | `source/services/logging/logging-service.test.ts:73`: `it.sequential('LoggingService initializes without error')` |
 | Create log directory | C7.1 | Creates missing log directory recursively | Characterized & Tested | `source/services/logging/logging-service.test.ts:82`: `it.sequential('creates log directory if it does not exist')` |
@@ -219,7 +220,7 @@ Tests execute against isolated disk fixtures created via `fs.mkdtempSync` and ty
 
 ## 9. Verification commands
 
-- **Focused Contract Verification:**
+- **Historical Contract Verification (pre-rewrite `source/` tests at tag `unit-suite-baseline`):**
   ```bash
   NODE_ENV=test pnpm test source/services/logging/logging-service.test.ts source/services/logging/provider-traffic.test.ts source/services/logging/logging-contract.test.ts source/providers/fetch/composer.test.ts
   ```
@@ -229,16 +230,16 @@ Tests execute against isolated disk fixtures created via `fs.mkdtempSync` and ty
   pnpm test:provider-black-box
   ```
   *Result (2026-08-15):* 19 test files, 166 passing, 1 skipped in 50.95s (Exit 0).
-- **All Logging Subsystem Tests:**
+- **All Logging Subsystem Tests (Historical pre-rewrite unit tests at tag `unit-suite-baseline`):**
   ```bash
   NODE_ENV=test pnpm test source/services/logging/
   ```
   *Result (2026-08-15):* 8 test files, 108 tests (101 passing, 7 expected failures) in 1.68s (Exit 0).
-- **Broader Full-Suite Verification:**
+- **Broader Full-Suite Verification (Historical baseline):**
   ```bash
   NODE_ENV=test pnpm test
   ```
-  *Result (2026-08-15):* 485 test files, 6,249 tests (483 files passed / 6,237 tests passed, 9 expected failures, 2 skipped, 1 unrelated baseline failure in `source/services/settings/settings-schema.test.ts` testing default `maxModelRequestDurationMs` setting).
+  *Result (2026-08-15):* 485 test files, 6,249 tests (483 files passed / 6,237 tests passed, 9 expected failures, 2 skipped, 1 unrelated baseline failure in historical `source/services/settings/settings-schema.test.ts` testing default `maxModelRequestDurationMs` setting).
 - **TypeScript Typecheck:**
   ```bash
   pnpm typecheck
@@ -249,7 +250,7 @@ Tests execute against isolated disk fixtures created via `fs.mkdtempSync` and ty
 
 ### Defect Class 1: Unhandled Synchronous Filesystem I/O in Diagnostic Provider Traffic Artifact Store
 - **Level 1 — Bug:** Diagnostic provider-traffic artifact write failure (e.g. disk full `ENOSPC`, permission denied `EACCES`, read-only filesystem `EROFS`) throws synchronously into the caller, aborting active LLM generation requests before they reach the provider or crashing the response processing stream loop.
-- **Level 2 — Root Cause:** `ProviderTrafficArtifactStore.recordRequestStart`, `recordRequestComplete`, `writeTrafficEnvelope`, `#touchDailyIndex`, and `#upsertDailyIndex` (`source/services/logging/provider-traffic.ts:188-191, 702-765, 801-805`) perform synchronous `fs.mkdirSync` and `fs.writeFileSync` calls without `try/catch` error boundaries. In fetch middleware (`source/providers/fetch/logging-middleware.ts:122`), `recordRequestStart` is executed synchronously on the active LLM request path.
+- **Level 2 — Root Cause:** `ProviderTrafficArtifactStore.recordRequestStart`, `recordRequestComplete`, `writeTrafficEnvelope`, `#touchDailyIndex`, and `#upsertDailyIndex` (`src/session/logging/provider-traffic.ts:188-191, 702-765, 801-805`) perform synchronous `fs.mkdirSync` and `fs.writeFileSync` calls without `try/catch` error boundaries. In fetch middleware (`src/model/providers/fetch/logging-middleware.ts:122`), `recordRequestStart` is executed synchronously on the active LLM request path.
 - **Level 3 — System Weakness / Detection Gap:**
   1. *Representability:* `IProviderTraffic.recordRequestStart` returns `void` synchronously, masking throwing I/O operations as a simple in-memory call.
   2. *Boundary Contract:* Missing fail-open contract guard between diagnostic artifact capture and primary LLM request execution.
@@ -260,7 +261,7 @@ Tests execute against isolated disk fixtures created via `fs.mkdtempSync` and ty
 
 ### Defect Class 2: Daily Index JSON Parse Crash on Corrupted Line
 - **Level 1 — Bug:** If an unclean shutdown, disk full condition, or process crash leaves a partial or malformed line in `<logDir>/provider-traffic/<date>/index.jsonl`, subsequent calls to `recordRequestStart` throw an unhandled `SyntaxError: Unexpected token` during `#readDailyIndex`, permanently breaking all provider traffic operations for that day.
-- **Level 2 — Root Cause:** `ProviderTrafficArtifactStore.#readDailyIndex` (`source/services/logging/provider-traffic.ts:791-799`) iterates lines with `.map(line => JSON.parse(line))` without wrapping individual line parses in `try/catch` or filtering invalid lines.
+- **Level 2 — Root Cause:** `ProviderTrafficArtifactStore.#readDailyIndex` (`src/session/logging/provider-traffic.ts:791-799`) iterates lines with `.map(line => JSON.parse(line))` without wrapping individual line parses in `try/catch` or filtering invalid lines.
 - **Level 3 — System Weakness / Detection Gap:**
   1. *Representability:* `index.jsonl` lines are deserialized as untyped JSON without defensive schema validation.
   2. *Detection Gap:* Tests only read clean index files written by previous test steps; no test seeded an incomplete or corrupt JSON line.
@@ -268,7 +269,7 @@ Tests execute against isolated disk fixtures created via `fs.mkdtempSync` and ty
 
 ### Defect Class 3: Security-Relevant Redaction Leaks in Winston Application Logs
 - **Level 1 — Bug:** While `ProviderTraffic` sanitizes sent and received artifacts, `LoggingService.log` leaks `encrypted_content` in nested message payloads when `LOG_VERBOSE_PAYLOADS=1`, and fails to sanitize `evaluator.request.started` messages entirely (leaving base64 image data and system prompts unredacted).
-- **Level 2 — Root Cause:** `LoggingService.log` (`source/services/logging/logging-service.ts:342`) conditionally calls `sanitizeLogMetadata` *only* when `metadata.eventType === 'provider.request.started'`, omitting `evaluator.request.started`. Furthermore, `sanitizeLogMetadata` (`source/utils/output/log-truncation.ts:144`) strips top-level `reasoning` and `reasoning_content` keys but does not recursively redact `encrypted_content` inside message arrays or compaction items.
+- **Level 2 — Root Cause:** `LoggingService.log` (`src/session/logging/logging-service.ts:342`) conditionally calls `sanitizeLogMetadata` *only* when `metadata.eventType === 'provider.request.started'`, omitting `evaluator.request.started`. Furthermore, `sanitizeLogMetadata` (`src/shared/utils/output/log-truncation.ts:144`) strips top-level `reasoning` and `reasoning_content` keys but does not recursively redact `encrypted_content` inside message arrays or compaction items.
 - **Level 3 — System Weakness / Detection Gap:**
   1. *Boundary Contract:* Redaction was applied ad-hoc in the artifact serialization path rather than as a uniform pre-log sanitization pipeline.
   2. *Detection Gap:* Tests only verified `provider.request.started` with default `verbosePayloads: false`.
@@ -276,11 +277,11 @@ Tests execute against isolated disk fixtures created via `fs.mkdtempSync` and ty
 
 ### Defect Class 4: Double-Fault Error Masking in Fetch Middleware
 - **Level 1 — Bug:** When an upstream provider request fails (e.g. 504 Gateway Timeout or network abort), if diagnostic `recordRequestFailed` throws during error recording, the diagnostic error replaces and masks the original provider error.
-- **Level 2 — Root Cause:** `createLoggingMiddleware` (`source/providers/fetch/logging-middleware.ts:134-140`) executes `providerTraffic.recordRequestFailed` inside its `catch (error)` block; at the time of writing `ProviderTraffic` threw on store errors, so the original error was replaced.
+- **Level 2 — Root Cause:** `createLoggingMiddleware` (`src/model/providers/fetch/logging-middleware.ts:134-140`) executes `providerTraffic.recordRequestFailed` inside its `catch (error)` block; at the time of writing `ProviderTraffic` threw on store errors, so the original error was replaced.
 - **Structural Hardening (Phase 2 Repair): landed for the store write.** Every artifact-store call in `ProviderTraffic` now goes through `#runArtifactStoreOperation` (`provider-traffic.ts:1103-1121`), which swallows store errors behind a warning, so a store write can no longer mask the provider error. The residual exposure is narrower: the winston `loggingService.error`/`info` call that follows each store write is still unguarded.
 
 ### Codex Stream Consumer Direct Gaps (Unresolved Seam Defect)
-- In `source/providers/codex-responses-model.ts`:
+- In `src/model/providers/codex-responses-model.ts`:
   - `#logTrafficReceived` path (:1079): `this.providerTraffic.recordResponseReceived(...)` is invoked without `await` or `.catch()`. If the returned promise rejects, Node.js emits an unhandled promise rejection that terminates the process under `--unhandled-rejections=strict`.
   - `#logTrafficFailed` path (:1101): `this.providerTraffic.recordRequestFailed(...)` is invoked synchronously on WebSocket failure. If it throws, the diagnostic failure replaces and masks the real WebSocket provider error.
   - `#logTrafficClosed` path (:1121): `this.providerTraffic.recordResponseClosed(...)` is invoked synchronously in the stream loop `finally` block. If it throws, the synchronous exception displaces the primary stream return value or upstream abort error.

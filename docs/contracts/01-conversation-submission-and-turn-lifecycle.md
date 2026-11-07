@@ -1,6 +1,8 @@
 # Contract 01 — Conversation submission and turn lifecycle
 
-Status: **owner-reviewed 2026-08-14; focused command all-green 2026-08-15 after the SB-01 repair (B1 flipped).**
+Status: **Historical pre-rewrite baseline at commit fbec9bb6 (tag `unit-suite-baseline`).**
+Historical verification: **owner-reviewed 2026-08-14; focused command all-green 2026-08-15 after the SB-01 repair (B1 flipped).**
+During the native single-log rewrite in #87/#88 and the legacy runtime retirement in #197, the pre-rewrite queue orchestration and adapter stack (`QueueController`, `ConversationAdapter`, `TurnCoordinator`, `TurnStatusMachine`, `TurnWorkflow`, `ConversationOrchestrator`, `TurnInputMailbox`) was retired. Current queue state is derived directly from the single session log via `src/session/facts.ts`, `src/session/log.ts`, `src/session/queue.ts`, `src/session/queue-state.ts`, and `src/session/queue-replay.ts`. Current turn submission, execution, and projection are owned by `src/session/conversation-turn.ts`, `src/engine/turn.ts`, `src/session/conversation-journal.ts`, and `src/protocol/projection.ts`. Pre-rewrite unit test suites cited below are preserved at tag `unit-suite-baseline`.
 
 ## 1. Contract
 
@@ -14,14 +16,16 @@ Status: **owner-reviewed 2026-08-14; focused command all-green 2026-08-15 after 
 
 ## 2. Owners
 
-- **Enforcement:** `QueueController` (queue admission and queue-item state);
+- **Enforcement:** `src/session/queue.ts` (steer admission, queue state machine, and pending items), `src/session/conversation-turn.ts` (turn submission and lease boundary), `src/engine/turn.ts` (turn loop and execution), `src/session/conversation-journal.ts` (event logging and terminal settlement), and `src/protocol/projection.ts` (UI projections).
+  Historical pre-rewrite enforcement was split across: `QueueController` (queue admission and queue-item state);
   `ConversationAdapter` (request identity, executable payload routing, promise
   settlement); `TurnStatusMachine` (turn status legality); `TurnCoordinator`
   (turn admission and delegation); `ApplicationRunLoop` (request-boundary
-  timing); `TurnInputMailbox` (`source/services/agent-runtime/turn-input-mailbox.ts`,
+  timing); `TurnInputMailbox` (historical baseline at `source/services/agent-runtime/turn-input-mailbox.ts`,
   pending steer admission, FIFO/edit/retract, and turn/segment settlement);
-  `ConversationOrchestrator` (projection onto UI).
-- **Recovery:** `ConversationAdapter` settlement paths (`retractSubmission`,
+  `ConversationOrchestrator` (projection onto UI) — all retired in #87/#88 and #197.
+- **Recovery:** In the current engine: `src/engine/recovery-continuity.ts`, `src/session/tool-execution-ledger.ts`, and queue retraction via `src/session/queue.ts`.
+  Historically: `ConversationAdapter` settlement paths (`retractSubmission`,
   `discardQueue`, cancel); `TurnCoordinator.abort` (+ `providerContinuity.clear`);
   `TurnInputMailbox` releases pending steers on turn abort/close and preserves
   them across segment abort;
@@ -142,7 +146,10 @@ Status: **owner-reviewed 2026-08-14; focused command all-green 2026-08-15 after 
 
 Focused (verified 2026-08-14, all green; re-verified 2026-08-15 with the SB-01 files — 1 retained-red expected fail; re-verified 2026-08-15 after the SB-01 repair — all green):
 
+Historical pre-rewrite verification command (at tag `unit-suite-baseline`):
+
 ```sh
+# Historical pre-rewrite baseline command:
 NODE_ENV=test pnpm test \
   source/services/queue/queue-controller.test.ts \
   source/services/conversation/conversation-adapter.test.ts \

@@ -1,10 +1,6 @@
 # Contract 03 — Child-run identity, authority, and lifecycle
 
-Status: **owner-reviewed 2026-08-14; focused command green.** Owner:
-`createSubagentRuntime` and its strategy-specific runners (`SubagentAsyncRegistry`
-for background, `NestedSubagentRunner` for foreground, `ExecutionSubagentRunner`,
-`MentorRunner`), with event routing in `SubagentBridge` (`source/lib/subagent-bridge.ts`)
-and provider traffic identity in session context (`session-context-service`).
+Status: **historical seam record (owner-reviewed 2026-08-14).** In the rewrite and #197, the pre-rewrite subagent runtime (`createSubagentRuntime`, `SubagentAsyncRegistry`, `NestedSubagentRunner`, `ExecutionSubagentRunner`, `MentorRunner`, and `SubagentBridge`) was removed. Child agents now execute as native session branches (`src/session/branches.ts`) started via `startNestedTurn` in `src/engine/turn.ts`, launched by `createDirectSubagentTools` (`src/delegation/direct/subagent-tools.ts`). Delegation policy (role loader, tool policy, role pools, worker worktrees) lives in `src/delegation/subagents/` (see `src/delegation/README.md`). Memory capability derivation lives in `src/session/memory.ts`. The invariants below record the behavioral contract that governs child runs.
 
 **C3.7 extension landed docs-only 2026-08-16** under the remaining-SB slice I
 grant; the owner-reviewed 2026-08-14 baseline rows C3.1–C3.6 are unchanged.
@@ -23,18 +19,17 @@ grant; the owner-reviewed 2026-08-14 baseline rows C3.1–C3.6 are unchanged.
 
 ## 2. Owners
 
-- **Enforcement:** `SubagentAsyncRegistry` (async identity, admission,
-  cancellation, settlement); `NestedSubagentRunner` (foreground identity and
-  lease); `SubagentToolPolicy` (permission attenuation); run-budget clamping
-  (`nested-runner.ts:408-425`); `SubagentBridge` (sink routing); traffic
-  context derivation (bridge + registry); `MemoryCapabilityBuilder`
-  (`source/services/memory/memory-capabilities.ts`) — enforcement owner for the
-  memory tool-set slice: a subagent subject's memory tool set is derived from
-  its role (C3.7).
-- **Recovery:** bridge abort controllers and `dispose()`; registry
-  `cancelAllRuns`/`disposeAndWaitForAdoptedLeases`; `ForegroundSubagentLease`
-  detach/adopt; session composition disposal ordering
-  (`session-composition.ts:717-754`).
+- **Enforcement:**
+  - Current native owners: `createDirectSubagentTools` (`src/delegation/direct/subagent-tools.ts`); session branch and task admission in `src/session/branches.ts` and `src/session/conversation-background.ts`; turn execution in `src/engine/turn.ts` (`startNestedTurn`); permission and capability attenuation in `src/delegation/subagents/tool-policy.ts`; memory tool derivation in `src/session/memory.ts`.
+  - Historical pre-rewrite owners (retired in #197): `SubagentAsyncRegistry` (async identity, admission,
+    cancellation, settlement); `NestedSubagentRunner` (foreground identity and
+    lease); `SubagentToolPolicy` (permission attenuation); run-budget clamping
+    (`nested-runner.ts:408-425`); `SubagentBridge` (historical `source/lib/subagent-bridge.ts`, sink routing); traffic
+    context derivation (bridge + registry); `MemoryCapabilityBuilder`
+    (historical `source/services/memory/memory-capabilities.ts`) — enforcement owner for the
+    memory tool-set slice: a subagent subject's memory tool set is derived from
+    its role (C3.7).
+- **Recovery:** branch cancellation via session abort signals; `DirectSubagentSessions` task cleanup; disposal ordering. Pre-rewrite recovery: bridge abort controllers and `dispose()`; registry `cancelAllRuns`/`disposeAndWaitForAdoptedLeases`; `ForegroundSubagentLease` detach/adopt; session composition disposal ordering (`session-composition.ts:717-754`).
 
 ## 3. Execution paths that share the contract
 
@@ -152,7 +147,8 @@ grant; the owner-reviewed 2026-08-14 baseline rows C3.1–C3.6 are unchanged.
 - `SubagentAsyncRegistry` (launch, continue, cancel, adopt, dispose, errors) —
   `subagent-async-registry.test.ts`.
 - `SubagentBridge` (sink routing, buffering, abort scope, traffic context) —
-  `source/lib/subagent-bridge.test.ts`, `.background-sink.test.ts`,
+- `SubagentBridge` (sink routing, buffering, abort scope, traffic context) —
+  historical `source/lib/subagent-bridge.test.ts`, `.background-sink.test.ts`,
   `.abort-scope.test.ts`.
 - `NestedSubagentRunner` (foreground identity, approvals, terminal emission) —
   `nested-runner.test.ts`.
@@ -181,11 +177,11 @@ grant; the owner-reviewed 2026-08-14 baseline rows C3.1–C3.6 are unchanged.
 | Session dispose | `subagent-async-registry.test.ts` ("keeps an adopted settlement awaitable through disposal without emitting a late lifecycle event", "dispose signals active work, lets obtained result promises settle, and emits no late lifecycle event"); `subagent-bridge.test.ts` "dispose cancels session work and clears manager-owned state once" | covered |
 | Duplicate role/name admission | `subagent-async-registry.test.ts` ("rejects invalid and already active run names with typed registry errors", "rejects a fresh run targeting an active shared session", "rejects continuation of a %s run") | covered |
 | Structured error round-trip | `subagent-async-registry.test.ts` ("rejects invalid and already active run names with typed registry errors", "reports typed not-found, active, worker, and evicted errors", "returns typed errors for invalid, inactive, and mentor steering targets"); `subagent-bridge.test.ts` "runSubagentAsync preserves a typed duplicate-name rejection without disturbing the active run" | covered |
-| Read-access child memory authority | `source/services/memory/memory-capabilities.test.ts` "grants %s the expected enabled-memory access" — explorer and worker rows assert `capability.tools` equals exactly `memory_list, memory_get, memory_search, memory_retrieve` (no `memory_create`/`memory_update`/`memory_delete`); "gives %s on-demand read access without injecting memory context" (explorer/worker) | covered |
+| Read-access child memory authority | historical `source/services/memory/memory-capabilities.test.ts` (at tag `unit-suite-baseline`) "grants %s the expected enabled-memory access" — explorer and worker rows assert `capability.tools` equals exactly `memory_list, memory_get, memory_search, memory_retrieve` (no `memory_create`/`memory_update`/`memory_delete`); "gives %s on-demand read access without injecting memory context" (explorer/worker) | covered |
 
 ## 9. Verification commands
 
-Focused (verified 2026-08-14, all green):
+Focused (historical pre-rewrite baseline at tag `unit-suite-baseline`, verified 2026-08-14, all green):
 
 ```sh
 NODE_ENV=test pnpm test \
@@ -205,15 +201,15 @@ NODE_ENV=test pnpm test \
 
 Result: **12 files / 262 tests passed.** This command corrects the Phase 0
 baseline Seam 3 command: three of its paths do not exist
-(`source/services/subagents/runtime.test.ts`, `subagent-bridge.test.ts`,
-`subagent-event-bus.test.ts` — the bridge lives at `source/lib/subagent-bridge.ts`
+(historical `source/services/subagents/runtime.test.ts`, `subagent-bridge.test.ts`,
+`subagent-event-bus.test.ts` — the bridge lived at `source/lib/subagent-bridge.ts`
 and there is no `subagent-event-bus` module), so Vitest silently ran only 2 of
 5 files. The real runtime tests live in `subagent-async-registry.test.ts`,
 `nested-runner.test.ts`, `execution-runner.test.ts`, `mentor-runner.test.ts`.
 The evaluator-traffic boundaries cited in the matrix are included as well.
 Classification: **test defect in the baseline record, not a product defect.**
 
-Note on test tiers: with the subsequent test-suite tier split (`slow-test-suite.md` / `33e5e6f2`), integration tests run in their own tier. `source/lib/subagent-provider-session.integration.test.ts` is verified via `NODE_ENV=test pnpm test:integration` (3 passing tests), while the remaining 11 unit files are verified via `NODE_ENV=test pnpm test` (314 passing tests).
+Note on test tiers: with the subsequent test-suite tier split (`slow-test-suite.md` / `33e5e6f2`), integration tests run in their own tier. Historical `source/lib/subagent-provider-session.integration.test.ts` was verified via `NODE_ENV=test pnpm test:integration` (3 passing tests), while the remaining 11 unit files were verified via `NODE_ENV=test pnpm test` (314 passing tests).
 
 Broader gates: `NODE_ENV=test pnpm test`, `pnpm typecheck`, and — for any
 bridge/run-loop/registry change — `NODE_ENV=test pnpm test:provider-black-box`.
@@ -225,7 +221,7 @@ All minimum-matrix cells are covered.
 **C3.7 classified coverage note (updated 2026-08-16):** the stricter
 on-main-vs-child comparison — `gives %s a strict read-only subset of main
 memory tools` — **is on main** in
-`source/services/memory/memory-capabilities.test.ts` (test "gives %s a strict read-only subset of main memory tools", it.each over
+historical `source/services/memory/memory-capabilities.test.ts` (at tag `unit-suite-baseline`, test "gives %s a strict read-only subset of main memory tools", it.each over
 `explorer`/`worker`), merged with the `sb08-memory-local-disposition`
 worktree. The on-main tests pin the exact read tool set for explorer and
 worker and prove strict subset membership against the main subject's set.

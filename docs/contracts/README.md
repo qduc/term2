@@ -91,11 +91,11 @@ On 2026-08-14, Phase 1 verification found that the original Phase 0 focused
 commands for Seams 2, 3, and 4 referenced test files that do not exist in this
 checkout:
 
-| Seam | Nonexistent path(s) in baseline command | Verified effect (2026-08-14 re-run) |
+| Seam | Nonexistent historical path(s) in baseline command (pre-rewrite `source/`) | Verified effect (2026-08-14 re-run) |
 | --- | --- | --- |
-| 2 | `source/services/context-compaction/provider-neutral-compactor.test.ts`, `source/lib/session-input-planner.test.ts` | Vitest silently ran only the 4 existing files / 139 tests; baseline recorded "6 files / 172 tests" |
-| 3 | `source/services/subagents/runtime.test.ts`, `source/services/subagents/subagent-bridge.test.ts`, `source/services/subagents/subagent-event-bus.test.ts` | Vitest silently ran only 2 existing files / 106 tests; baseline recorded "5 files / 91 tests" |
-| 4 | `source/services/settings/settings-manager.test.ts`, `source/services/settings/settings-store.test.ts` | Vitest silently ran only 1 existing file / 26 tests; baseline recorded "3 files / 44 tests" |
+| 2 | historical `source/services/context-compaction/provider-neutral-compactor.test.ts`, `source/lib/session-input-planner.test.ts` | Vitest silently ran only the 4 existing files / 139 tests; baseline recorded "6 files / 172 tests" |
+| 3 | historical `source/services/subagents/runtime.test.ts`, `source/services/subagents/subagent-bridge.test.ts`, `source/services/subagents/subagent-event-bus.test.ts` | Vitest silently ran only 2 existing files / 106 tests; baseline recorded "5 files / 91 tests" |
+| 4 | historical `source/services/settings/settings-manager.test.ts`, `source/services/settings/settings-store.test.ts` | Vitest silently ran only 1 existing file / 26 tests; baseline recorded "3 files / 44 tests" |
 
 **Classification: test defect in the baseline record (not a product defect).**
 The real test files exist under the corrected paths (see each record's

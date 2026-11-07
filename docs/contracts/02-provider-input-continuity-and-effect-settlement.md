@@ -1,12 +1,15 @@
 # Contract 02 — Provider input, continuity, and effect settlement
 
 Historical verification: **owner-reviewed 2026-08-14; focused command green.**
+Status: **Historical pre-rewrite baseline at commit fbec9bb6 (tag `unit-suite-baseline`).**
+During the native single-log rewrite in #87/#88 and the legacy runtime retirement in #197, the pre-rewrite turn orchestration (`ConversationRecord`, `ProviderContinuity`, `SessionInputPlanner`, `DefaultRecoveryExecutor`, `ApplicationRunLoop`, `SessionStreamProcessor`) was retired. Current continuity and ledger state are owned by `src/session/tool-execution-ledger.ts`, `src/engine/recovery-continuity.ts`, and `src/model/providers/chained-wire-state.ts`, with turn execution in `src/engine/turn.ts` and delta filtering in `src/shared/lib/chained-input-filter.ts`. Pre-rewrite unit test suites cited below are preserved at tag `unit-suite-baseline`.
+
 The evidence below records that baseline; ownership references describe the current code. Owners:
 `ToolCallExecution` (response-scoped planning and ordered call/result emission),
-`ConversationRecord` (private tool ledger, journal and provider-history acceptance),
-`ProviderContinuity`, `SessionInputPlanner`, `filterChainedModelInput` (`chained-input-filter.ts`),
+`ConversationRecord` (private tool ledger, journal and provider-history acceptance; current ledger in `src/session/tool-execution-ledger.ts`),
+`ProviderContinuity` (current wire state in `src/model/providers/chained-wire-state.ts`), `SessionInputPlanner`, `filterChainedModelInput` (`src/shared/lib/chained-input-filter.ts`),
 `ConversationRecord.acceptSegment` → `ProviderContinuity.acceptSegment` (synchronous continuity publication and debt sync), and retry/recovery policy
-(`retry-classifier`, `recovery-policy`, `DefaultRecoveryExecutor`).
+(`retry-classifier`, `recovery-policy`, `DefaultRecoveryExecutor`; current recovery in `src/engine/recovery-continuity.ts`).
 
 ## 1. Contract
 
@@ -28,14 +31,15 @@ The evidence below records that baseline; ownership references describe the curr
 
 - **Enforcement:** `ToolCallExecution` (the ephemeral ordered response plan and
   invocation lifecycle; it does not own durable effect state); `ConversationRecord`
-  (accepted history, private tool ledger/journal, call/result evidence and reconstruction);
+  (accepted history, private tool ledger/journal, call/result evidence and reconstruction;
+  current ledger and pairing logic live in `src/session/tool-execution-ledger.ts`);
   `conversation-state-projector.ts` (the projection rules used inside Record for
-  pairing and replacement boundaries); `ProviderContinuity` (chain and debt);
-  `SessionInputPlanner` (chain vs full-history decision); `filterChainedModelInput`
-  in `source/lib/chained-input-filter.ts` (delta validation);
+  pairing and replacement boundaries); `ProviderContinuity` (chain and debt; current wire state in `src/model/providers/chained-wire-state.ts` and `src/engine/recovery-continuity.ts`);
+  `SessionInputPlanner` (chain vs full-history decision; current turn dispatch in `src/engine/turn.ts`); `filterChainedModelInput`
+  in `src/shared/lib/chained-input-filter.ts` (delta validation);
   `ProviderContinuity.acceptSegment` (response/checkpoint publication and debt sync
   within Record acceptance); retry classification/policy. `ApplicationRunLoop`
-  invokes root session acceptance synchronously before publishing observed events;
+  invokes root session acceptance synchronously before publishing observed events (current turn loop in `src/engine/turn.ts`);
   `SessionStreamProcessor` retains presentation state, not history mutation authority.
 - **C2.6 request admission (enforcement):** `SessionInputPlanner.build` detects foreign opaque history before chained/full-history dispatch. `InitialInputPreparer` restores the unsubmitted user turn and surfaces actionable recovery guidance. Adapter-level non-serialization remains independently enforced.
 - **C2.6 adapter isolation (enforcement):** `toResponsesApiInput` (`openai-responses-model.ts`),
@@ -88,8 +92,8 @@ The evidence below records that baseline; ownership references describe the curr
 - Replacement boundary: an OpenAI opaque `compaction` item or a local context
   summary (`conversation-state-projector.ts:35-55`).
 - `ProviderInputItem.providerOpaque?: { provider, sourceProvider? }` and persisted
-  `provider_opaque` items (`source/contracts/provider-input.ts:20-42`;
-  `conversation-turn-items.ts:94-105`).
+  `provider_opaque` items (`src/shared/contracts/provider-input.ts`;
+  `src/session/conversation/conversation-turn-items.ts`).
 - `inputSurgeKind: 'delta'` for chained input (`session-input-planner.ts:211-230`).
 - Adapter lane ownership: the acceptance rule lives once in
   `providers/provider-opaque-compatibility.ts` and keys on the *lane* tag, not the provider id.
@@ -161,7 +165,7 @@ The evidence below records that baseline; ownership references describe the curr
   `tool_recovery` conversation event.
 - Provider traffic: `${eventPrefix}.request.started`, `provider.response.failed`,
   `${eventPrefix}.response.received`, `${eventPrefix}.response.closed`
-  (`source/services/logging/provider-traffic.ts:1022-1230`).
+  (`src/session/logging/provider-traffic.ts`).
 - Opaque refusal (C2.6) has **no** log event: the thrown message is the only signal
   (`Refusing to splice provider_opaque from '<tag>' ...` /
   `Refusing to serialize provider_opaque from '<tag>' ...`).
@@ -251,7 +255,10 @@ and recovery variants at that baseline; they are not current symbol guidance.
 
 Focused (verified 2026-08-14, all green):
 
+Historical pre-rewrite verification command (at tag `unit-suite-baseline`):
+
 ```sh
+# Historical pre-rewrite baseline command:
 NODE_ENV=test pnpm test \
   source/services/tool-execution-ledger.test.ts \
   source/services/provider-continuity.test.ts \
@@ -272,8 +279,8 @@ NODE_ENV=test pnpm test \
 Result: **14 files / 355 tests passed.** This command corrects the Phase 0
 baseline Seam 2 command, which referenced two nonexistent paths
 (`source/lib/session-input-planner.test.ts`,
-`source/services/context-compaction/provider-neutral-compactor.test.ts`) that
-Vitest silently ignored; the real files are
+`source/services/context-compaction/provider-neutral-compactor.test.ts` in the historical baseline) that
+Vitest silently ignored; the real pre-rewrite files were
 `source/services/session/session-input-planner.test.ts` and
 `source/services/agent-runtime/context-compaction/local-context-compactor.test.ts`.
 It also includes every practical matrix-evidence boundary, including
@@ -282,10 +289,11 @@ It also includes every practical matrix-evidence boundary, including
 **test defect in the baseline record, not a product defect.**
 
 Supplementary C2.6 adapter-isolation command (C2.6 focused gate, verified
-2026-08-16 in `.worktrees/sb07-type-hardening`; the four adapter/converter
+2026-08-16 in `.worktrees/sb07-type-hardening`; historical pre-rewrite baseline at tag `unit-suite-baseline`; the four adapter/converter
 proof files are the required fail-closed subset):
 
 ```sh
+# Historical pre-rewrite baseline command:
 NODE_ENV=test pnpm test \
   source/providers/openai-responses-model.test.ts \
   source/providers/openai-chat-completions-model.test.ts \
@@ -315,14 +323,14 @@ current production behavior — no `it.fails` was written in this workstream.
 
 - **Deferred type gap (SB-07, documentation-only; no repair authorized in this slice):**
   The reviewed baseline declaration for `ProviderFetch` was
-  `(url: string, options?: any) => Promise<any>` at `source/providers/registry.ts:21`.
+  `(url: string, options?: any) => Promise<any>` (historical baseline at `source/providers/registry.ts:21`; typed as `typeof fetch` in `src/model/providers/registry.ts`).
   It leaves the catalog/token-refresh fetch boundary structurally untyped. Record this
   as an owner decision; do not invent a second fetch seam or retype the declaration here.
 - **Deferred unary decorator gap (SB-07, documentation-only; no repair authorized in
   this slice):** The reviewed baseline declaration was
   `StreamedModelTurn.getResponse?(...): Promise<any>` at
-  `source/contracts/streamed-model-turn.ts:67`, and `RetryingModel` does not forward
-  the optional unary method (`source/providers/retrying-model.ts`). The run loop uses
+  `src/model/streamed-model-turn.ts` (historical baseline at `source/contracts/streamed-model-turn.ts:67`), and `RetryingModel` does not forward
+  the optional unary method (`src/model/providers/retrying-model.ts`, historical baseline at `source/providers/retrying-model.ts`). The run loop uses
   `model.stream(request)` (`application-run-loop.ts:975`), and the green characterization
   at `retrying-model.test.ts:123` proves absence when the wrapped model has no unary
   capability. This records the type/decorator gap without retyping `getResponse`, adding

@@ -147,7 +147,7 @@ the ledger remains the authoritative per-guard inventory.
 
 ## 9. Verification commands
 
-Focused (verified 2026-08-14, including the retained expected-failure
+Focused (historical pre-rewrite baseline at tag `unit-suite-baseline`, verified 2026-08-14, including the retained expected-failure
 characterization in §10):
 
 ```sh

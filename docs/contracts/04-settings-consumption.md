@@ -36,7 +36,7 @@ changes, `/settings` command for user entry).
   compactor).
 - Nested subagent, mentor, background, and workflow paths (inherited/attenuated
   settings).
-- Non-interactive mode (`source/non-interactive.ts`).
+- Non-interactive mode (`src/app/non-interactive.ts`, formerly `source/non-interactive.ts`).
 - Runtime `/settings` mutation and reset; startup load (file/env/CLI).
 
 ## 4. Identities and state crossing the boundary
@@ -75,7 +75,7 @@ changes, `/settings` command for user entry).
   `agent.reasoningEffort`, then `'default'`.
 - **Per-invocation:** mentor consultation values override role/definition
   (`mentor-runner.ts:244-250`, `:283-290`); shell tool `timeout_ms` and
-  `max_output_length` override settings (`source/tools/system/shell.ts:843-858`);
+  `max_output_length` override settings (`src/tools/system/shell.ts:843-858`, formerly `source/tools/system/shell.ts`);
   `AgentConfiguration` receives a complete selection and optional temperature.
   Exact policies require a pair; relative policies select a tier entry or
   inherit the complete parent (`resolveModelPolicy`).
@@ -139,7 +139,7 @@ an OpenRouter Decisions identifier, not a general provider-model selection;
 - Startup logs count CLI/env/config override leaves without values
   (`settings-service.ts:243-249`).
 - Shell execution logs the resolved `timeout` and `maxOutputLength`
-  (`source/tools/system/shell.ts:860-868`).
+  (`src/tools/system/shell.ts:860-868`, formerly `source/tools/system/shell.ts`).
 - Diagnosis: a setting that appears in the summary with an unexpected source is
   resolved through a precedence layer other than the one intended (C4.2).
 
@@ -168,8 +168,8 @@ request" means the effective setting is read while creating the next model,
 tool, or child run; "restart-only" means `SettingsService` persists it but
 does not promise a live replacement of its already-created owner.
 
-The canonical exhaustive inventory is
-[`settings-consumer-inventory.ts`](../../source/services/settings/test-helpers/settings-consumer-inventory.ts).
+The canonical exhaustive inventory is historical `settings-consumer-inventory.ts`
+(at tag `unit-suite-baseline`, formerly `source/services/settings/test-helpers/settings-consumer-inventory.ts`).
 Its 20 owner/classification groups distinguish the live-effect router, next
 request/tool/child-run consumers, security-sensitive credentials,
 presentation-only settings, and restart-only owners. The runtime owners include
@@ -206,7 +206,7 @@ live router or at their documented next-request boundary.
 
 ## 10. Verification commands
 
-Focused (recorded 2026-08-14, all green):
+Focused (historical pre-rewrite baseline at tag `unit-suite-baseline`, recorded 2026-08-14, all green):
 
 ```sh
 NODE_ENV=test pnpm test \

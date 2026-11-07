@@ -20,8 +20,8 @@ once-per-client lifecycle are implemented through the public boundary. See
 ## 2. Owners
 
 - **Enforcement:**
-  - `SSHService` (`source/services/ssh-service.ts`) — owns transport connection lifecycle, ssh2 client events, stream listeners, heredoc construction, and remote command invocation, including typed in-flight settlement.
-  - `ExecutionContext` (`source/services/execution-context.ts`) — owns remote vs local execution mode authority, working directory resolution, and workspace lease validation.
+  - `SSHService` (`src/tools/ssh-service.ts`, moved from `source/services/ssh-service.ts` in #87) — owns transport connection lifecycle, ssh2 client events, stream listeners, heredoc construction, and remote command invocation, including typed in-flight settlement.
+  - `ExecutionContext` (`src/tools/execution-context.ts`, moved from `source/services/execution-context.ts` in #87) — owns remote vs local execution mode authority, working directory resolution, and workspace lease validation.
 - **Recovery:**
   - `SSHService.disconnect` — idempotently settles active commands with `explicit_disconnect`, calls `client.end()`, and marks `connected = false`.
   - `SSHService.connect` — single-flight; a call while connected resolves without reconnecting and attaches no duplicate listeners.
@@ -29,25 +29,25 @@ once-per-client lifecycle are implemented through the public boundary. See
 
 ## 3. Execution paths that share the contract
 
-- **CLI Bootstrap & Teardown:** `source/cli.tsx:511-536` (`service.connect()`, `executeCommand('pwd')` to detect remote working directory, and `service.disconnect()` during shutdown).
-- **Execution Context Mode Authority:** `source/services/execution-context.ts:20-30` (holds `ISSHService`, sets `isRemote() === true`, and locks working directory authority to `remoteDir`).
-- **Remote Shell Bridge:** `source/utils/shell/execute-shell.ts:342-344` (`executeShellCommand` forwarding execution to `sshService.executeCommand` when present). Forwards `cwd` only; the global shell `timeout`/`signal` policy is deliberately **not** forwarded (see §10, audit).
-- **System Tool (shell):** `source/tools/system/shell.ts:734-738`, `:804-809`, and `:1008` (bypasses local sandbox, rejects background shell jobs for SSH, and routes execution through `executeShellCommandImpl` with `sshService`).
-- **Interactive Shell Session:** `source/services/shell/shell-interaction-session.ts:102-125` (interactive lite shell execution over remote SSH).
-- **Editor Implementation:** `source/lib/editor-impl.ts:88, 97, 152, 191` (`createFile` calling `mkdir` and `writeFile`; `updateFile` calling `readFile` and `writeFile`); `:248` `deleteFile` now executes `rm -f ${quoteShellArg(targetPath)}` — the target path is POSIX single-quote escaped through the shared helper, closing the sibling injection vector listed in §10 Defect Class 2.
-- **File Tool (create_file):** `source/tools/file/create-file.ts:85, 181-182, 205-206` (`fileExists` calling `readFile`; `execute` calling `mkdir` and `writeFile`).
-- **File Tool (read_file):** `source/tools/file/read-file.ts:148` (calls `readFile(absolutePath)`).
-- **File Tool (search_replace):** `source/tools/file/search-replace.ts:398, 403` (calls `readFile` and `writeFile`).
-- **File Tool (apply_patch):** `source/tools/file/apply-patch.ts:282, 362, 367, 372` (calls `readFile`, `writeFile`, and `mkdir`).
-- **File Tool (glob):** `source/tools/file/glob.ts:51-60, 191-233` (`checkFdAvailability` calling `executeCommand('fd --version')`; the `glob` tool's `execute` delegating via `executeShellCommand` with single-quote escaping).
-- **File Tool (grep):** `source/tools/file/grep.ts:123-131, 246-305` (`checkRgAvailability` calling `executeCommand('rg --version')`; the `grep` tool's `execute` delegating via `executeShellCommand` with `shellQuoteArg`).
+- **CLI Bootstrap & Teardown:** `src/app/cli.ts` (formerly `source/cli.tsx:511-536`, `service.connect()`, `executeCommand('pwd')` to detect remote working directory, and `service.disconnect()` during shutdown).
+- **Execution Context Mode Authority:** `src/tools/execution-context.ts:20-30` (holds `ISSHService`, sets `isRemote() === true`, and locks working directory authority to `remoteDir`).
+- **Remote Shell Bridge:** `src/tools/shell/execute-shell.ts:342-344` (formerly `source/utils/shell/execute-shell.ts`, `executeShellCommand` forwarding execution to `sshService.executeCommand` when present). Forwards `cwd` only; the global shell `timeout`/`signal` policy is deliberately **not** forwarded (see §10, audit).
+- **System Tool (shell):** `src/tools/system/shell.ts` (bypasses local sandbox, rejects background shell jobs for SSH, and routes execution through `executeShellCommandImpl` with `sshService`).
+- **Interactive Shell Session:** historical pre-rewrite `source/services/shell/shell-interaction-session.ts:102-125` (interactive lite shell execution over remote SSH).
+- **Editor Implementation:** `src/tools/editor-impl.ts` (formerly `source/lib/editor-impl.ts`, `createFile` calling `mkdir` and `writeFile`; `updateFile` calling `readFile` and `writeFile`); `deleteFile` now executes `rm -f ${quoteShellArg(targetPath)}` — the target path is POSIX single-quote escaped through the shared helper, closing the sibling injection vector listed in §10 Defect Class 2.
+- **File Tool (create_file):** `src/tools/file/create-file.ts` (`fileExists` calling `readFile`; `execute` calling `mkdir` and `writeFile`).
+- **File Tool (read_file):** `src/tools/file/read-file.ts` (calls `readFile(absolutePath)`).
+- **File Tool (search_replace):** `src/tools/file/search-replace.ts` (calls `readFile` and `writeFile`).
+- **File Tool (apply_patch):** `src/tools/file/apply-patch.ts` (calls `readFile`, `writeFile`, and `mkdir`).
+- **File Tool (glob):** `src/tools/file/glob.ts` (`checkFdAvailability` calling `executeCommand('fd --version')`; the `glob` tool's `execute` delegating via `executeShellCommand` with single-quote escaping).
+- **File Tool (grep):** `src/tools/file/grep.ts` (`checkRgAvailability` calling `executeCommand('rg --version')`; the `grep` tool's `execute` delegating via `executeShellCommand` with `shellQuoteArg`).
 
 ## 4. Identities and state crossing the boundary
 
 - `SSHConfig`: `{ host: string; port: number; username: string; agent?: string; identityFile?: string }` crossing at `SSHService` construction.
 - `executeCommand` Options (`SSHCommandOptions`): `{ cwd?: string; timeoutMs?: number; signal?: AbortSignal }`. Absent options preserve pre-repair behavior exactly: no timeout timer, no abort listener, `cwd` optional.
 - `executeCommand` Result (`SSHCommandResult`): `{ stdout: string; stderr: string; exitCode: number | null; timedOut: boolean }` — resolved results keep full fidelity.
-- Typed settlement (`SSHTransportError`, exported from `source/services/ssh-service.ts`): `{ name: 'SSHTransportError'; kind: SSHTransportErrorKind; remoteEffect: 'none' | 'unknown'; cause?: unknown; partialOutput?: { stdout: string; stderr: string } }`.
+- Typed settlement (`SSHTransportError`, exported from `src/tools/ssh-service.ts`): `{ name: 'SSHTransportError'; kind: SSHTransportErrorKind; remoteEffect: 'none' | 'unknown'; cause?: unknown; partialOutput?: { stdout: string; stderr: string } }`.
 - Connection State: private `connected: boolean` projected through public `isConnected(): boolean`.
 - Stream Events: ssh2 `ready`, `error`, `end`, `close`, `data` (stdout/stderr).
 - Listener policy: connection-lifecycle listeners attach **once per client instance**; `connect()` is single-flight; per-command listeners are removed on settlement. Keepalive policy is explicitly **none** — no keepalive configuration and no background pings.
@@ -98,14 +98,14 @@ resolve on `exitCode === 0`; reject with descriptive error containing remote
 ## 7. Public boundary under test
 
 The contract is tested deterministically at the public interface boundary of:
-- `ISSHService` / `SSHService` (`source/services/ssh-service.ts`)
-- `ExecutionContext` (`source/services/execution-context.ts`)
+- `ISSHService` / `SSHService` (`src/tools/ssh-service.ts`)
+- `ExecutionContext` (`src/tools/execution-context.ts`)
 
 No internal private fields are accessed; all tests use public operations and simulated transport event injection on the injected ssh2 `Client`. Time-bound behavior uses `vi.useFakeTimers()` with manually driven mock callbacks — no real waits.
 
 ## 8. Deterministic contract matrix
 
-All rows are green as of 2026-08-16 in `source/services/ssh-service.test.ts`.
+All rows are green as of 2026-08-16 in historical `source/services/ssh-service.test.ts` (at tag `unit-suite-baseline`).
 
 | Seam / Scenario | Invariant | Expected Outcome | Classification | Exact Test Declaration & Location |
 |---|---|---|---|---|
@@ -131,8 +131,8 @@ All rows are green as of 2026-08-16 in `source/services/ssh-service.test.ts`.
 | Mkdir directory | C6.5 | Executes `mkdir '<path>'` | Verified | `:378` `it('mkdir: creates directory')` |
 | Mkdir recursive | C6.5 | Executes `mkdir -p '<path>'` | Verified | `:394` `it('mkdir: creates directory recursively')` |
 | Mkdir failure | C6.5 | Throws error containing stderr | Verified | `:410` `it('mkdir: throws on failure')` |
-| Execution context remote mode | C6.2 | Reports `isRemote() === true`, cwd = remoteDir | Verified | `source/services/execution-context.test.ts:30`, `:52` |
-| Remote mode rejects local lease | C6.2 | Throws error rejecting `enterWorkspace` | Verified | `source/services/execution-context.test.ts:104` |
+| Execution context remote mode | C6.2 | Reports `isRemote() === true`, cwd = remoteDir | Verified | historical `source/services/execution-context.test.ts:30`, `:52` |
+| Remote mode rejects local lease | C6.2 | Throws error rejecting `enterWorkspace` | Verified | historical `source/services/execution-context.test.ts:104` |
 | In-flight drop: connection error | C6.3 | Typed `connection_error`, `remoteEffect: 'unknown'` | **Repaired (was retained expected failure)** | `:430` `it('executeCommand: in-flight connection error rejects the pending command rather than hanging indefinitely')` |
 | In-flight drop: server end | C6.3 | Typed `connection_end` | **Repaired (was retained expected failure)** | `:460` `it('executeCommand: in-flight connection end rejects the pending command rather than hanging indefinitely')` |
 | In-flight drop: client close | C6.3 | Typed `connection_close` | **Repaired (was retained expected failure)** | `:488` `it('executeCommand: in-flight client close rejects the pending command rather than hanging indefinitely')` |
@@ -151,17 +151,17 @@ All rows are green as of 2026-08-16 in `source/services/ssh-service.test.ts`.
 | Shell safety: readFile path | C6.4 | Path encoded with POSIX single quotes | **Repaired (was retained expected failure)** | `:788` `it('readFile: encodes path using canonical POSIX single-quote escaping')` |
 | Shell safety: writeFile path | C6.4 | Path encoded with POSIX single quotes | **Repaired (was retained expected failure)** | `:803` `it('writeFile: encodes path using canonical POSIX single-quote escaping')` |
 | Shell safety: mkdir path | C6.4 | Path encoded with POSIX single quotes | **Repaired (was retained expected failure)** | `:827` `it('mkdir: encodes directory path using canonical POSIX single-quote escaping')` |
-| Shell safety: editor rm target | C6.4 | `deleteFile` remote `rm -f` target single-quoted | Verified (repair) | `source/lib/editor-impl.test.ts` `it('deleteFile encodes the remote rm target with POSIX single-quote escaping')` |
+| Shell safety: editor rm target | C6.4 | `deleteFile` remote `rm -f` target single-quoted | Verified (repair) | historical `source/lib/editor-impl.test.ts` `it('deleteFile encodes the remote rm target with POSIX single-quote escaping')` |
 
 ## 9. Verification commands
 
-- **Focused Contract Verification:**
+- **Focused Contract Verification (historical pre-rewrite baseline at tag `unit-suite-baseline`):**
   ```bash
   NODE_ENV=test pnpm test source/services/ssh-service.test.ts source/services/execution-context.test.ts
   ```
   *Result (2026-08-16):* 2 test files, 59 tests (all passing) in 527ms (Exit 0). Pre-repair baseline (2026-08-15): 47 tests (37 passing, 10 expected failures).
 - **Ordinary red re-observation (2026-08-16):** the five in-flight-drop invariants run against the pre-repair `SSHService` (extracted read-only from `git HEAD`) settle never — 5/5 red immediately after event injection, no real waits.
-- **Editor sibling:** `NODE_ENV=test pnpm test source/lib/editor-impl.test.ts` — 11 tests passing (Exit 0).
+- **Editor sibling (historical pre-rewrite baseline):** `NODE_ENV=test pnpm test source/lib/editor-impl.test.ts` — 11 tests passing (Exit 0).
 - **Broader Full-Suite Verification:**
   ```bash
   NODE_ENV=test pnpm test

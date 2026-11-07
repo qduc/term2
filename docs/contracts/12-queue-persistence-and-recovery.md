@@ -1,8 +1,6 @@
 # Contract 12 — Queue Persistence and Recovery
 
-**Status:** audit draft — **owner-reviewed 2026-08-16** (replaces the stale
-“awaiting owner review” header; the three residual decisions below are
-confirmed retain-current by the President).
+**Status:** historical seam record (owner-reviewed 2026-08-16). In the term2 rewrite (#86–#88; see `docs/architecture/layers.md` and `docs/contracts/09-rewrite-native-conversation.md`), the separate `.queue.json` sidecar and `QueueController` were retired. The single append-only conversation log (`src/session/facts.ts`, `src/session/log.ts`, `src/session/conversation-journal.ts`) now owns queue persistence, with queue state replayed directly from native facts via `src/session/queue.ts`, `src/session/queue-state.ts`, and `src/session/queue-replay.ts`. The rationale and invariants below document the requirements that shaped this boundary.
 
 ## 1. Contract
 
@@ -21,10 +19,8 @@ confirmed retain-current by the President).
 
 **Enforcement**
 
-- `QueueController.#persist`, `#restore`, and persisted-record validation in `source/services/queue/queue-controller.ts`.
-- `createSessionQueuePersistence` in `source/services/conversation/queue-persistence.ts`.
-- `ConversationAdapter.#runQueuedTurn` in `source/services/conversation/conversation-adapter.ts` for recovered text and fail-closed placeholder handling.
-- `createConversationAdapterForRuntime` for production enablement and test-environment disablement.
+- Current native owner: single append-only log in `src/session/log.ts` and `src/session/conversation-journal.ts` (writing native queue facts per `src/session/facts.ts`); queue mutations and state reduction in `src/session/queue.ts`, `src/session/queue-state.ts`, and `src/session/queue-replay.ts`.
+- Historical pre-rewrite owners (retired in #87/#88): `QueueController.#persist`, `#restore`, and persisted-record validation in historical `source/services/queue/queue-controller.ts`; `createSessionQueuePersistence` in historical `source/services/conversation/queue-persistence.ts`; `ConversationAdapter.#runQueuedTurn` in historical `source/services/conversation/conversation-adapter.ts` for recovered text and fail-closed placeholder handling; `createConversationAdapterForRuntime` for production enablement and test-environment disablement.
 
 **Recovery**
 
@@ -111,7 +107,7 @@ Tests do not reach into private restore/persist methods or private adapter maps.
 
 ## 9. Verification commands
 
-Run from the dedicated worktree, with `NODE_ENV=test` for Vitest:
+Historical verification command (pre-rewrite `source/` tree at tag `unit-suite-baseline`, verified 2026-08-16):
 
 ```sh
 NODE_ENV=test pnpm test \
@@ -120,9 +116,6 @@ NODE_ENV=test pnpm test \
   source/services/conversation/conversation-adapter.test.ts
 pnpm typecheck
 pnpm exec prettier --check \
-  source/services/queue/queue-controller.test.ts \
-  source/services/conversation/queue-persistence.test.ts \
-  source/services/conversation/conversation-adapter.test.ts \
   docs/contracts/12-queue-persistence-and-recovery.md
 git diff --check
 ```

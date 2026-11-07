@@ -289,7 +289,7 @@ discovery as well as configuration receipts when changing this boundary.
 
 ## Migration and limits
 
-The shared package source/docs own the v1/v2 schema and local artifact route.
+The shared package source code and documentation own the v1/v2 schema and local artifact route.
 The 0.2.1 artifact is locally vendored and installed in both consumers; it has
 not been published. The gate remains closed until the combined browser parser,
 atomic reducer, sparse cursor, hydration/replay and BFF configuration paths have

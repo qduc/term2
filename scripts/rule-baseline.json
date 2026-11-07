@@ -13,7 +13,7 @@
     },
     {
       "export": "app/file-service.ts scanWorkspaceEntries",
-      "reason": "Domain app constant or variable \"scanWorkspaceEntries\" in app/file-service.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"scanWorkspaceEntries\" in app/file-service.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "app/host-config-access.ts sessionStart",
@@ -37,7 +37,7 @@
     },
     {
       "export": "app/profile-transition.ts ProfileTransitionService",
-      "reason": "Domain app class \"ProfileTransitionService\" in app/profile-transition.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"ProfileTransitionService\" in app/profile-transition.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "app/profile-transition.ts classifyProfileTransition",
@@ -45,7 +45,7 @@
     },
     {
       "export": "app/settings-command.ts formatSettingsSummary",
-      "reason": "Domain app helper function \"formatSettingsSummary\" in app/settings-command.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"formatSettingsSummary\" in app/settings-command.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "app/settings-command.ts parseDurationText",
@@ -137,7 +137,7 @@
     },
     {
       "export": "config/settings/session-runtime-settings.ts parseRuntimeMutation",
-      "reason": "Domain config helper function \"parseRuntimeMutation\" in config/settings/session-runtime-settings.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"parseRuntimeMutation\" in config/settings/session-runtime-settings.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "config/settings/settings-persistence.ts acquireSettingsLock",
@@ -225,11 +225,11 @@
     },
     {
       "export": "config/tool-toggles.ts buildToggleConflictNotice",
-      "reason": "Domain config helper function \"buildToggleConflictNotice\" in config/tool-toggles.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"buildToggleConflictNotice\" in config/tool-toggles.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "config/tool-toggles.ts isToolToggleKey",
-      "reason": "Domain config helper function \"isToolToggleKey\" in config/tool-toggles.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"isToolToggleKey\" in config/tool-toggles.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "delegation/run-code/run-code-runtime.ts ACTION_SEMANTICS",
@@ -377,15 +377,15 @@
     },
     {
       "export": "engine/completion-verification/gate.ts createVerificationGate",
-      "reason": "Domain engine helper function \"createVerificationGate\" in engine/completion-verification/gate.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"createVerificationGate\" in engine/completion-verification/gate.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "engine/completion-verification/verifier.ts createIndependentVerifier",
-      "reason": "Domain engine helper function \"createIndependentVerifier\" in engine/completion-verification/verifier.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"createIndependentVerifier\" in engine/completion-verification/verifier.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "engine/completion-verification/verifier.ts runQuickCheck",
-      "reason": "Domain engine helper function \"runQuickCheck\" in engine/completion-verification/verifier.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"runQuickCheck\" in engine/completion-verification/verifier.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "engine/decision-shadow/decision-client.ts DecisionEvaluationError",
@@ -393,11 +393,11 @@
     },
     {
       "export": "engine/decision-shadow/decision-client.ts createOpenRouterDecisionClient",
-      "reason": "Domain engine helper function \"createOpenRouterDecisionClient\" in engine/decision-shadow/decision-client.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"createOpenRouterDecisionClient\" in engine/decision-shadow/decision-client.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "engine/decision-shadow/decision-client.ts readDecisionErrorMetadata",
-      "reason": "Domain engine helper function \"readDecisionErrorMetadata\" in engine/decision-shadow/decision-client.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"readDecisionErrorMetadata\" in engine/decision-shadow/decision-client.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "engine/decision-shadow/failure-triage.ts FAILURE_CATEGORIES",
@@ -413,7 +413,7 @@
     },
     {
       "export": "engine/decision-shadow/failure-triage.ts evaluateFailureTriage",
-      "reason": "Domain engine helper function \"evaluateFailureTriage\" in engine/decision-shadow/failure-triage.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"evaluateFailureTriage\" in engine/decision-shadow/failure-triage.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "engine/inject-warning-into-tool-output.ts buildRunBudgetWarning",
@@ -449,11 +449,11 @@
     },
     {
       "export": "engine/prompts/memory-recall-notice.ts MEMORY_RECALL_OVERHEAD",
-      "reason": "Domain engine constant or variable \"MEMORY_RECALL_OVERHEAD\" in engine/prompts/memory-recall-notice.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"MEMORY_RECALL_OVERHEAD\" in engine/prompts/memory-recall-notice.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "engine/prompts/memory-recall-notice.ts recalledMemoryKeys",
-      "reason": "Domain engine helper function \"recalledMemoryKeys\" in engine/prompts/memory-recall-notice.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"recalledMemoryKeys\" in engine/prompts/memory-recall-notice.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "engine/prompts/memory-recall-notice.ts renderMemoryRecall",
@@ -461,11 +461,11 @@
     },
     {
       "export": "engine/prompts/memory-recall-notice.ts renderRecallLine",
-      "reason": "Domain engine helper function \"renderRecallLine\" in engine/prompts/memory-recall-notice.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"renderRecallLine\" in engine/prompts/memory-recall-notice.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "engine/prompts/memory-recall-notice.ts withMemoryRecall",
-      "reason": "Domain engine helper function \"withMemoryRecall\" in engine/prompts/memory-recall-notice.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"withMemoryRecall\" in engine/prompts/memory-recall-notice.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "engine/retry/in-loop-model-retry.ts computeInLoopBackoffDelayMs",
@@ -497,7 +497,7 @@
     },
     {
       "export": "model/cost/pricing.ts getOverlayPricingVersion",
-      "reason": "Domain model helper function \"getOverlayPricingVersion\" in model/cost/pricing.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"getOverlayPricingVersion\" in model/cost/pricing.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "model/failure/conversation-retry-policy.ts MAX_HALLUCINATION_RETRIES",
@@ -521,7 +521,7 @@
     },
     {
       "export": "model/model-service.ts clearModelMemoryCacheForTest",
-      "reason": "Domain model helper function \"clearModelMemoryCacheForTest\" in model/model-service.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"clearModelMemoryCacheForTest\" in model/model-service.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "model/model-service.ts getModelCacheDir",
@@ -533,15 +533,15 @@
     },
     {
       "export": "model/model-service.ts setModelCacheClockForTest",
-      "reason": "Domain model helper function \"setModelCacheClockForTest\" in model/model-service.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"setModelCacheClockForTest\" in model/model-service.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "model/model-service.ts setModelCacheDirForTest",
-      "reason": "Domain model helper function \"setModelCacheDirForTest\" in model/model-service.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"setModelCacheDirForTest\" in model/model-service.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "model/models/decision-model-listing.ts clearDecisionModelListCache",
-      "reason": "Domain model helper function \"clearDecisionModelListCache\" in model/models/decision-model-listing.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"clearDecisionModelListCache\" in model/models/decision-model-listing.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "model/models/model-favorites.ts getFavoriteEntries",
@@ -549,7 +549,7 @@
     },
     {
       "export": "model/models/model-favorites.ts isFavoriteModel",
-      "reason": "Domain model helper function \"isFavoriteModel\" in model/models/model-favorites.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"isFavoriteModel\" in model/models/model-favorites.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "model/models/model-listing.ts filterModelGroups",
@@ -617,7 +617,7 @@
     },
     {
       "export": "model/providers/codex-auth.ts CODEX_REDIRECT_URI",
-      "reason": "Domain model constant or variable \"CODEX_REDIRECT_URI\" in model/providers/codex-auth.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"CODEX_REDIRECT_URI\" in model/providers/codex-auth.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "model/providers/codex-auth.ts saveCodexTokens",
@@ -625,7 +625,7 @@
     },
     {
       "export": "model/providers/codex-compact.ts isCodexCompactionIncompatible",
-      "reason": "Domain model helper function \"isCodexCompactionIncompatible\" in model/providers/codex-compact.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"isCodexCompactionIncompatible\" in model/providers/codex-compact.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "model/providers/codex-responses-model.ts OpenAIResponsesModel",
@@ -745,7 +745,7 @@
     },
     {
       "export": "model/providers/model-catalog/generate-catalog.ts generateCatalogSource",
-      "reason": "Domain model helper function \"generateCatalogSource\" in model/providers/model-catalog/generate-catalog.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"generateCatalogSource\" in model/providers/model-catalog/generate-catalog.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "model/providers/oauth-accounts.ts OAUTH_ACCOUNT_PROVIDERS",
@@ -757,15 +757,15 @@
     },
     {
       "export": "model/providers/oauth-session-account.ts resetSessionAccounts",
-      "reason": "Domain model helper function \"resetSessionAccounts\" in model/providers/oauth-session-account.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"resetSessionAccounts\" in model/providers/oauth-session-account.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "model/providers/openai-request-prefix-binding.ts prepareOpenAIRequestPrefixBinding",
-      "reason": "Domain model constant or variable \"prepareOpenAIRequestPrefixBinding\" in model/providers/openai-request-prefix-binding.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"prepareOpenAIRequestPrefixBinding\" in model/providers/openai-request-prefix-binding.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "model/providers/openai-request-prefix-binding.ts runWithOpenAIRequestPrefixBindingScope",
-      "reason": "Domain model constant or variable \"runWithOpenAIRequestPrefixBindingScope\" in model/providers/openai-request-prefix-binding.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"runWithOpenAIRequestPrefixBindingScope\" in model/providers/openai-request-prefix-binding.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "model/providers/openai-responses-model.ts createResponseEventNormalizationState",
@@ -865,7 +865,7 @@
     },
     {
       "export": "session/adopted/interaction-protocol.ts projectPendingInteraction",
-      "reason": "Domain session helper function \"projectPendingInteraction\" in session/adopted/interaction-protocol.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"projectPendingInteraction\" in session/adopted/interaction-protocol.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "session/adopted/interaction-protocol.ts validatePendingInteractionDto",
@@ -881,15 +881,15 @@
     },
     {
       "export": "session/approval/approval-decision-policy.ts ManualApprovalDecisionPolicy",
-      "reason": "Domain session class \"ManualApprovalDecisionPolicy\" in session/approval/approval-decision-policy.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"ManualApprovalDecisionPolicy\" in session/approval/approval-decision-policy.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "session/approval/session-read-access.ts sessionReadAccess",
-      "reason": "Domain session constant or variable \"sessionReadAccess\" in session/approval/session-read-access.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"sessionReadAccess\" in session/approval/session-read-access.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "session/approval/tool-approval-policy-registry.ts toolApprovalPolicyRegistry",
-      "reason": "Domain session constant or variable \"toolApprovalPolicyRegistry\" in session/approval/tool-approval-policy-registry.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"toolApprovalPolicyRegistry\" in session/approval/tool-approval-policy-registry.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "session/capabilities.ts directAcceptedGoalWindow",
@@ -909,23 +909,23 @@
     },
     {
       "export": "session/conversation/conversation-decoder.ts decodeSavedMessage",
-      "reason": "Domain session helper function \"decodeSavedMessage\" in session/conversation/conversation-decoder.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"decodeSavedMessage\" in session/conversation/conversation-decoder.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "session/conversation/conversation-persistence.ts auditConversation",
-      "reason": "Domain session helper function \"auditConversation\" in session/conversation/conversation-persistence.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"auditConversation\" in session/conversation/conversation-persistence.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "session/conversation/conversation-persistence.ts collectOrphanedDeltaSidecars",
-      "reason": "Domain session helper function \"collectOrphanedDeltaSidecars\" in session/conversation/conversation-persistence.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"collectOrphanedDeltaSidecars\" in session/conversation/conversation-persistence.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "session/conversation/conversation-persistence.ts deleteConversation",
-      "reason": "Domain session helper function \"deleteConversation\" in session/conversation/conversation-persistence.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"deleteConversation\" in session/conversation/conversation-persistence.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "session/conversation/conversation-persistence.ts forkConversation",
-      "reason": "Domain session helper function \"forkConversation\" in session/conversation/conversation-persistence.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"forkConversation\" in session/conversation/conversation-persistence.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "session/conversation/conversation-persistence.ts getConversationLockPath",
@@ -933,7 +933,7 @@
     },
     {
       "export": "session/conversation/conversation-persistence.ts getConversationsDirForTest",
-      "reason": "Domain session helper function \"getConversationsDirForTest\" in session/conversation/conversation-persistence.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"getConversationsDirForTest\" in session/conversation/conversation-persistence.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "session/conversation/conversation-persistence.ts hasConversationContent",
@@ -945,23 +945,23 @@
     },
     {
       "export": "session/conversation/conversation-persistence.ts loadConversationForProject",
-      "reason": "Domain session helper function \"loadConversationForProject\" in session/conversation/conversation-persistence.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"loadConversationForProject\" in session/conversation/conversation-persistence.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "session/conversation/conversation-persistence.ts loadLastConversation",
-      "reason": "Domain session helper function \"loadLastConversation\" in session/conversation/conversation-persistence.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"loadLastConversation\" in session/conversation/conversation-persistence.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "session/conversation/conversation-persistence.ts saveLastConversation",
-      "reason": "Domain session helper function \"saveLastConversation\" in session/conversation/conversation-persistence.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"saveLastConversation\" in session/conversation/conversation-persistence.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "session/conversation/conversation-persistence.ts setConversationsDirForTest",
-      "reason": "Domain session helper function \"setConversationsDirForTest\" in session/conversation/conversation-persistence.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"setConversationsDirForTest\" in session/conversation/conversation-persistence.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "session/conversation/conversation-persistence.ts setPidAlivenessCheckForTest",
-      "reason": "Domain session helper function \"setPidAlivenessCheckForTest\" in session/conversation/conversation-persistence.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"setPidAlivenessCheckForTest\" in session/conversation/conversation-persistence.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "session/conversation/conversation-replay.ts replayEventsWithRetryTarget",
@@ -977,7 +977,7 @@
     },
     {
       "export": "session/conversation/durable-goal-stop-check.ts GOAL_CHECK_UNRESOLVED_NOTICE",
-      "reason": "Domain session constant or variable \"GOAL_CHECK_UNRESOLVED_NOTICE\" in session/conversation/durable-goal-stop-check.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"GOAL_CHECK_UNRESOLVED_NOTICE\" in session/conversation/durable-goal-stop-check.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "session/conversation/durable-goal-stop-check.ts GOAL_STOP_REMINDER_PREFIX",
@@ -993,7 +993,7 @@
     },
     {
       "export": "session/conversation/session-audit.ts formatSessionAudit",
-      "reason": "Domain session helper function \"formatSessionAudit\" in session/conversation/session-audit.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"formatSessionAudit\" in session/conversation/session-audit.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "session/conversation/session-index/session-index-schema.ts SCHEMA_VERSION",
@@ -1037,11 +1037,11 @@
     },
     {
       "export": "session/hooks/hook-contracts.ts isTerm2HookEvent",
-      "reason": "Domain session helper function \"isTerm2HookEvent\" in session/hooks/hook-contracts.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"isTerm2HookEvent\" in session/hooks/hook-contracts.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "session/hooks/hook-discovery.ts discoverHookFiles",
-      "reason": "Domain session helper function \"discoverHookFiles\" in session/hooks/hook-discovery.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"discoverHookFiles\" in session/hooks/hook-discovery.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "session/hooks/hook-editor-shim.ts HOOK_DECLARATION_SHIM_FILENAME",
@@ -1053,7 +1053,7 @@
     },
     {
       "export": "session/hooks/hook-event-factory.ts summarizeHookValue",
-      "reason": "Domain session helper function \"summarizeHookValue\" in session/hooks/hook-event-factory.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"summarizeHookValue\" in session/hooks/hook-event-factory.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "session/hooks/hook-module-loader.ts HookModuleLoadError",
@@ -1061,7 +1061,7 @@
     },
     {
       "export": "session/hooks/hook-module-loader.ts NativeHookModuleLoader",
-      "reason": "Domain session class \"NativeHookModuleLoader\" in session/hooks/hook-module-loader.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"NativeHookModuleLoader\" in session/hooks/hook-module-loader.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "session/hooks/hook-registry.ts HookRegistrationClosedError",
@@ -1069,11 +1069,11 @@
     },
     {
       "export": "session/import.ts importDirectSession",
-      "reason": "Domain session helper function \"importDirectSession\" in session/import.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"importDirectSession\" in session/import.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "session/input-surge-approval.ts issueInputSurgeApproval",
-      "reason": "Domain session helper function \"issueInputSurgeApproval\" in session/input-surge-approval.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"issueInputSurgeApproval\" in session/input-surge-approval.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "session/input-surge-guard.ts collectInputSurgeStats",
@@ -1085,11 +1085,11 @@
     },
     {
       "export": "session/logging/conversation-log-events.ts AGENT_AFFECTING_SETTINGS",
-      "reason": "Domain session constant or variable \"AGENT_AFFECTING_SETTINGS\" in session/logging/conversation-log-events.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"AGENT_AFFECTING_SETTINGS\" in session/logging/conversation-log-events.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "session/logging/conversation-log-events.ts SIDECAR_EVENT_TYPES",
-      "reason": "Domain session constant or variable \"SIDECAR_EVENT_TYPES\" in session/logging/conversation-log-events.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"SIDECAR_EVENT_TYPES\" in session/logging/conversation-log-events.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "session/logging/logging-service.ts localLogDateKey",
@@ -1129,7 +1129,7 @@
     },
     {
       "export": "session/openai-root-checkpoint-lifecycle-observer.ts DefaultOpenAIRootCheckpointLifecycleObserver",
-      "reason": "Domain session class \"DefaultOpenAIRootCheckpointLifecycleObserver\" in session/openai-root-checkpoint-lifecycle-observer.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"DefaultOpenAIRootCheckpointLifecycleObserver\" in session/openai-root-checkpoint-lifecycle-observer.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "session/prompts/prompt-profiles.ts PROMPT_PROFILES",
@@ -1173,11 +1173,11 @@
     },
     {
       "export": "session/tool-execution-ledger.ts outputOf",
-      "reason": "Domain session constant or variable \"outputOf\" in session/tool-execution-ledger.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"outputOf\" in session/tool-execution-ledger.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "session/tool-execution-ledger.ts toolNameOf",
-      "reason": "Domain session constant or variable \"toolNameOf\" in session/tool-execution-ledger.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"toolNameOf\" in session/tool-execution-ledger.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "shared/conversation/conversation-time-gap.ts withHumanInputTime",
@@ -1185,7 +1185,7 @@
     },
     {
       "export": "shared/conversation/personal-memory-context.ts carryPersonalMemoryContext",
-      "reason": "Domain shared helper function \"carryPersonalMemoryContext\" in shared/conversation/personal-memory-context.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"carryPersonalMemoryContext\" in shared/conversation/personal-memory-context.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "shared/conversation/personal-memory-context.ts latestPersonalMemoryContext",
@@ -1193,7 +1193,7 @@
     },
     {
       "export": "shared/cost/model-cost.ts createSessionCostAccumulator",
-      "reason": "Domain shared helper function \"createSessionCostAccumulator\" in shared/cost/model-cost.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"createSessionCostAccumulator\" in shared/cost/model-cost.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "shared/cost/model-cost.ts resolveBillableTokens",
@@ -1201,7 +1201,7 @@
     },
     {
       "export": "shared/handoff/handoff-flow-reducer.ts createInitialHandoffState",
-      "reason": "Domain shared helper function \"createInitialHandoffState\" in shared/handoff/handoff-flow-reducer.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"createInitialHandoffState\" in shared/handoff/handoff-flow-reducer.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "shared/lib/chained-input-filter.ts MissingChainedToolOutputError",
@@ -1213,11 +1213,11 @@
     },
     {
       "export": "shared/lib/harness-input-idle.ts publishHarnessInputState",
-      "reason": "Domain shared helper function \"publishHarnessInputState\" in shared/lib/harness-input-idle.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"publishHarnessInputState\" in shared/lib/harness-input-idle.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "shared/lib/harness-input-idle.ts readHarnessApprovalReady",
-      "reason": "Domain shared helper function \"readHarnessApprovalReady\" in shared/lib/harness-input-idle.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"readHarnessApprovalReady\" in shared/lib/harness-input-idle.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "shared/lib/harness-input-idle.ts readHarnessComposerState",
@@ -1229,15 +1229,15 @@
     },
     {
       "export": "shared/lib/harness-input-idle.ts resetHarnessInputIdleForTests",
-      "reason": "Domain shared helper function \"resetHarnessInputIdleForTests\" in shared/lib/harness-input-idle.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"resetHarnessInputIdleForTests\" in shared/lib/harness-input-idle.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "shared/lib/harness-input-idle.ts waitForHarnessComposerValue",
-      "reason": "Domain shared helper function \"waitForHarnessComposerValue\" in shared/lib/harness-input-idle.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"waitForHarnessComposerValue\" in shared/lib/harness-input-idle.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "shared/lib/harness-input-idle.ts waitForHarnessIdleGeneration",
-      "reason": "Domain shared helper function \"waitForHarnessIdleGeneration\" in shared/lib/harness-input-idle.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"waitForHarnessIdleGeneration\" in shared/lib/harness-input-idle.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "shared/lib/input-owner.ts deriveInputOwner",
@@ -1253,11 +1253,11 @@
     },
     {
       "export": "shared/types/user-turn.ts formatUserTurnForDisplay",
-      "reason": "Domain shared helper function \"formatUserTurnForDisplay\" in shared/types/user-turn.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"formatUserTurnForDisplay\" in shared/types/user-turn.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "shared/types/user-turn.ts hasUserTurnContent",
-      "reason": "Domain shared helper function \"hasUserTurnContent\" in shared/types/user-turn.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"hasUserTurnContent\" in shared/types/user-turn.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "shared/types/user-turn.ts stripImageSentinels",
@@ -1281,7 +1281,7 @@
     },
     {
       "export": "shared/utils/home-directory-start-guard.ts isExactDirectory",
-      "reason": "Domain shared helper function \"isExactDirectory\" in shared/utils/home-directory-start-guard.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"isExactDirectory\" in shared/utils/home-directory-start-guard.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "shared/utils/output/bound-tool-result.ts DEFAULT_TOOL_RESULT_MAX_BYTES",
@@ -1301,11 +1301,11 @@
     },
     {
       "export": "shared/utils/output/output-trim.ts setTrimConfig",
-      "reason": "Domain shared helper function \"setTrimConfig\" in shared/utils/output/output-trim.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"setTrimConfig\" in shared/utils/output/output-trim.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "shared/utils/process-restart.ts assertRestartSupported",
-      "reason": "Domain shared helper function \"assertRestartSupported\" in shared/utils/process-restart.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"assertRestartSupported\" in shared/utils/process-restart.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "shared/utils/project-scope.ts createProjectScopeResolver",
@@ -1417,19 +1417,19 @@
     },
     {
       "export": "tools/command-message-formatters.ts clearToolFormatters",
-      "reason": "Domain tools constant or variable \"clearToolFormatters\" in tools/command-message-formatters.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"clearToolFormatters\" in tools/command-message-formatters.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "tools/conversation-utils.ts createShellMessageOutput",
-      "reason": "Domain tools helper function \"createShellMessageOutput\" in tools/conversation-utils.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"createShellMessageOutput\" in tools/conversation-utils.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "tools/conversation-utils.ts createStreamingState",
-      "reason": "Domain tools helper function \"createStreamingState\" in tools/conversation-utils.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"createStreamingState\" in tools/conversation-utils.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "tools/conversation-utils.ts enhanceApiKeyError",
-      "reason": "Domain tools helper function \"enhanceApiKeyError\" in tools/conversation-utils.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"enhanceApiKeyError\" in tools/conversation-utils.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "tools/conversation.ts DENIED_READ_APPROVE_ANSWERS",
@@ -1485,7 +1485,7 @@
     },
     {
       "export": "tools/file/search-replace-matcher.ts GAP_MARKER",
-      "reason": "Domain tools constant or variable \"GAP_MARKER\" in tools/file/search-replace-matcher.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"GAP_MARKER\" in tools/file/search-replace-matcher.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "tools/file/search-replace-matcher.ts containsGapMarkerLine",
@@ -1585,7 +1585,7 @@
     },
     {
       "export": "tools/mcp/mcp-status.ts formatMcpNotice",
-      "reason": "Domain tools constant or variable \"formatMcpNotice\" in tools/mcp/mcp-status.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"formatMcpNotice\" in tools/mcp/mcp-status.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "tools/mcp/mcp-status.ts isActionableMcpState",
@@ -1597,15 +1597,15 @@
     },
     {
       "export": "tools/message.ts isBotMessage",
-      "reason": "Domain tools constant or variable \"isBotMessage\" in tools/message.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"isBotMessage\" in tools/message.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "tools/message.ts isResultToolEvent",
-      "reason": "Domain tools constant or variable \"isResultToolEvent\" in tools/message.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"isResultToolEvent\" in tools/message.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "tools/message.ts isSubagentActivityMessage",
-      "reason": "Domain tools constant or variable \"isSubagentActivityMessage\" in tools/message.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"isSubagentActivityMessage\" in tools/message.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "tools/session-rollover/session-rollover-tool.ts sessionRolloverParameters",
@@ -1625,7 +1625,7 @@
     },
     {
       "export": "tools/shell/command-logger.ts logCommandExecution",
-      "reason": "Domain tools helper function \"logCommandExecution\" in tools/shell/command-logger.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"logCommandExecution\" in tools/shell/command-logger.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "tools/shell/command-safety/handlers/index.ts commandHandlers",
@@ -1637,7 +1637,7 @@
     },
     {
       "export": "tools/shell/execute-shell.ts killLiveShellChildren",
-      "reason": "Domain tools helper function \"killLiveShellChildren\" in tools/shell/execute-shell.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"killLiveShellChildren\" in tools/shell/execute-shell.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "tools/shell/sandbox/denied-read-detector.ts suggestStableParent",
@@ -1657,51 +1657,51 @@
     },
     {
       "export": "tools/shell/sandbox/denied-read-stores.ts resetSandboxDeniedReadStoresForTest",
-      "reason": "Domain tools helper function \"resetSandboxDeniedReadStoresForTest\" in tools/shell/sandbox/denied-read-stores.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"resetSandboxDeniedReadStoresForTest\" in tools/shell/sandbox/denied-read-stores.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "tools/shell/sandbox/docker-host-control-grants.ts clearDockerHostControlSession",
-      "reason": "Domain tools constant or variable \"clearDockerHostControlSession\" in tools/shell/sandbox/docker-host-control-grants.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"clearDockerHostControlSession\" in tools/shell/sandbox/docker-host-control-grants.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "tools/shell/sandbox/docker-host-control-grants.ts configureDockerHostControlGrants",
-      "reason": "Domain tools constant or variable \"configureDockerHostControlGrants\" in tools/shell/sandbox/docker-host-control-grants.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"configureDockerHostControlGrants\" in tools/shell/sandbox/docker-host-control-grants.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "tools/shell/sandbox/docker-host-control-grants.ts consumeDockerHostControlDenial",
-      "reason": "Domain tools constant or variable \"consumeDockerHostControlDenial\" in tools/shell/sandbox/docker-host-control-grants.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"consumeDockerHostControlDenial\" in tools/shell/sandbox/docker-host-control-grants.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "tools/shell/sandbox/docker-host-control-grants.ts consumeDockerHostControlOnce",
-      "reason": "Domain tools constant or variable \"consumeDockerHostControlOnce\" in tools/shell/sandbox/docker-host-control-grants.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"consumeDockerHostControlOnce\" in tools/shell/sandbox/docker-host-control-grants.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "tools/shell/sandbox/docker-host-control-grants.ts grantDockerHostControl",
-      "reason": "Domain tools constant or variable \"grantDockerHostControl\" in tools/shell/sandbox/docker-host-control-grants.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"grantDockerHostControl\" in tools/shell/sandbox/docker-host-control-grants.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "tools/shell/sandbox/docker-host-control-grants.ts hasDockerHostControlProject",
-      "reason": "Domain tools constant or variable \"hasDockerHostControlProject\" in tools/shell/sandbox/docker-host-control-grants.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"hasDockerHostControlProject\" in tools/shell/sandbox/docker-host-control-grants.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "tools/shell/sandbox/docker-host-control-grants.ts hasDockerHostControlSession",
-      "reason": "Domain tools constant or variable \"hasDockerHostControlSession\" in tools/shell/sandbox/docker-host-control-grants.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"hasDockerHostControlSession\" in tools/shell/sandbox/docker-host-control-grants.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "tools/shell/sandbox/docker-host-control-grants.ts recordDockerHostControlDenial",
-      "reason": "Domain tools constant or variable \"recordDockerHostControlDenial\" in tools/shell/sandbox/docker-host-control-grants.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"recordDockerHostControlDenial\" in tools/shell/sandbox/docker-host-control-grants.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "tools/shell/sandbox/docker-host-control-grants.ts requiresDockerHostControlApproval",
-      "reason": "Domain tools constant or variable \"requiresDockerHostControlApproval\" in tools/shell/sandbox/docker-host-control-grants.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"requiresDockerHostControlApproval\" in tools/shell/sandbox/docker-host-control-grants.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "tools/shell/sandbox/docker-host-control-grants.ts resetDockerHostControlGrantsForTests",
-      "reason": "Domain tools constant or variable \"resetDockerHostControlGrantsForTests\" in tools/shell/sandbox/docker-host-control-grants.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"resetDockerHostControlGrantsForTests\" in tools/shell/sandbox/docker-host-control-grants.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "tools/shell/sandbox/sandbox-network-approval.ts registerSandboxNetworkApprovalHandler",
-      "reason": "Domain tools helper function \"registerSandboxNetworkApprovalHandler\" in tools/shell/sandbox/sandbox-network-approval.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"registerSandboxNetworkApprovalHandler\" in tools/shell/sandbox/sandbox-network-approval.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "tools/shell/sandbox/sandbox-network-store.ts ProjectNetworkAllowStore",
@@ -1717,7 +1717,7 @@
     },
     {
       "export": "tools/shell/sandbox/sandbox-network-store.ts resetSandboxNetworkStoreForTest",
-      "reason": "Domain tools helper function \"resetSandboxNetworkStoreForTest\" in tools/shell/sandbox/sandbox-network-store.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"resetSandboxNetworkStoreForTest\" in tools/shell/sandbox/sandbox-network-store.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "tools/shell/sandbox/sandbox-network-store.ts sessionNetworkAllowStore",
@@ -1737,11 +1737,11 @@
     },
     {
       "export": "tools/subagents/codename-run-id.ts codenameRunIdSpace",
-      "reason": "Domain tools helper function \"codenameRunIdSpace\" in tools/subagents/codename-run-id.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"codenameRunIdSpace\" in tools/subagents/codename-run-id.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "tools/subagents/codename-run-id.ts parseCodenameRunId",
-      "reason": "Domain tools helper function \"parseCodenameRunId\" in tools/subagents/codename-run-id.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"parseCodenameRunId\" in tools/subagents/codename-run-id.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "tools/system/run-code/mcp-script-surface.ts mcpMemberName",
@@ -1809,7 +1809,7 @@
     },
     {
       "export": "tools/tool-invoke.ts toolErrorFunction",
-      "reason": "Domain tools constant or variable \"toolErrorFunction\" in tools/tool-invoke.ts; exported utility or contract retained for modularity and future consumers."
+      "reason": "Pre-existing unused export \"toolErrorFunction\" in tools/tool-invoke.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },
     {
       "export": "tools/web/web-fetch.ts formatWebFetchCommandMessage",

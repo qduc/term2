@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 
 const scripts = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(scripts, '..');
@@ -111,6 +112,7 @@ const importersOf = new Map();
 for (const file of srcFiles) importersOf.set(file, new Set());
 
 function resolveImport(fromFile, spec) {
+  if (!spec.startsWith('.')) return null;
   let p = path.resolve(path.dirname(fromFile), spec);
   if (p.endsWith('.js') || p.endsWith('.mjs') || p.endsWith('.cjs')) p = p.replace(/\.[mc]?js$/, '');
   if (fs.existsSync(p + '.ts')) return p + '.ts';
@@ -126,9 +128,11 @@ function resolveImport(fromFile, spec) {
 const CONVENTIONS = new Set(['index.ts', 'index.tsx', 'types.ts', 'types.tsx', 'README.md']);
 for (const file of srcFiles) {
   const content = fs.readFileSync(file, 'utf8');
-  const matches = content.matchAll(/(?:import|export)\s+(?:type\s+)?(?:.*?from\s+)?['"](\.[^'"]+)['"]/g);
-  for (const m of matches) {
-    const resolved = resolveImport(file, m[1]);
+  // Use the same scanner as reachability: multiline declarations and dynamic
+  // imports are graph edges too; import-looking comments and strings are not.
+  const { importedFiles } = ts.preProcessFile(content, true, true);
+  for (const { fileName } of importedFiles) {
+    const resolved = resolveImport(file, fileName);
     if (resolved && importersOf.has(resolved) && resolved !== file) {
       importersOf.get(resolved).add(file);
     }

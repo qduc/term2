@@ -80,7 +80,7 @@ wall-clock on a loaded 7-core box.
 | Names are jobs (no service/adapter/orchestrator file or folder) | `check-rules.mjs` | every commit | in the above |
 | No new unused runtime exports (recorded in `rule-baseline.json`, reported by `scripts/arch-report.mjs`) | `check-rules.mjs` | every commit | in the above |
 | File basenames are unique under `src/` unless recorded with a reason | `check-rules.mjs` | every commit | in the above |
-| Every file is reached from `app/cli.ts` | `check-reachability.mjs` | every commit | 1.2 s |
+| Every runtime file is reached by value edges from `app/cli.ts` | `check-reachability.mjs` | every commit | 1.2 s |
 | Files stay under 500 lines, folders stay under 15 files unless a ceiling records why; layer edges within budget | `check-complexity.mjs` | every commit | 0.15 s |
 | A new exception or raised ceiling carries a reason, and the reviewer is shown each one | `check-baselines.mjs` | every commit | 0.2 s |
 | Root directory contains only allowlisted files | `check-root.mjs` | every commit | 0.05 s |
@@ -187,9 +187,12 @@ measurable:
   job, not a target: split along a real seam, or, when a file reads better
   whole, give it a ceiling with a one-line reason. When something gets smaller,
   the check prints the new number to record.
-- `scripts/check-reachability.mjs` walks every import from `src/app/cli.ts` and
-  fails when a file under `src/` is never reached, so dead code cannot hide in
-  the layers. A file kept on purpose goes in
+- `scripts/check-reachability.mjs` walks value imports, re-exports, literal
+  dynamic imports and `require` calls from `src/app/cli.ts`. Type-only edges do
+  not make runtime code reachable; modules containing only erased type
+  declarations/imports and explicit type re-exports need no runtime importer.
+  This is a source-graph check, not proof that a value import survives bundler
+  tree-shaking. A runtime file kept on purpose goes in
   `scripts/reachability-allowlist.json` with the reason it stays.
 - `bench/hops.mts` runs the real entry in-process against a local fake
   provider, sends one headless prompt, and records the chain of files active

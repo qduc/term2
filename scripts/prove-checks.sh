@@ -50,7 +50,19 @@ seed "app/ reads a session log" src/app/settings.ts $'\nexport const seededReade
 seed "engine imports app (layer direction)" src/engine/turn.ts $'\nimport "../app/settings.js";\n' '\[layer-direction\]' node scripts/check-layers.mjs
 seed "duplicate basename" src/app/turn.ts $'export const seededTurn = 1;\n' '\[duplicate-basenames\]' node scripts/check-rules.mjs
 seed "folder fan-out exceeds ceiling" src/config/settings/seeded-fanout.ts $'export const seeded = 1;\n' '\[folder-fanout\]' node scripts/check-complexity.mjs
-seed "file never reached from app/cli.ts" src/app/seeded-dead.ts $'export const dead = 1;\n' '\[reachability\]' node scripts/check-reachability.mjs
+seed "file never reached from app/cli.ts" src/app/seeded-dead.ts $'export const dead = 1;\n' 'unreached from src/app/cli.ts: src/app/seeded-dead\.ts' node scripts/check-reachability.mjs
+# Match the seeded diagnostic too: pre-existing dead code must not satisfy this proof.
+for edge in \
+  'import type { SeededDead } from "./seeded-type-dead.js";' \
+  'import { type SeededDead } from "./seeded-type-dead.js";' \
+  'export type { SeededDead } from "./seeded-type-dead.js";' \
+  'export { type SeededDead } from "./seeded-type-dead.js";'; do
+  backup src/app/cli.ts src/app/seeded-type-dead.ts
+  printf '\n%s\n' "$edge" >> src/app/cli.ts
+  printf 'export class SeededDead {}\n' > src/app/seeded-type-dead.ts
+  expect_fail "runtime file linked only by $edge" \
+    'unreached from src/app/cli.ts: src/app/seeded-type-dead\.ts' node scripts/check-reachability.mjs
+done
 seed "file over 500 lines" src/app/seeded-big.ts "$(for i in $(seq 520); do echo "export const v$i = $i;"; done)" '\[file-size\]' node scripts/check-complexity.mjs
 seed "unallowlisted root file" seeded-root-file.md $'seeded\n' '\[root-files\]' node scripts/check-root.mjs
 seed "failure explains the rule" src/app/seeded-service.ts $'export const seeded = 1;\n' 'Why this rule exists: .*pattern a file is' node scripts/check-rules.mjs

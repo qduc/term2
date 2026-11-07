@@ -38,10 +38,6 @@ import type { DirectConfigurationIntent } from './config-settings.js';
 import { createDirectInputPreview } from './input-preview.js';
 import { createDirectMcpRefresh } from './application-mcp.js';
 import type { DirectMcp } from './mcp.js';
-import type {
-  AgentSource as _AgentSource,
-  AgentConfiguration as _AgentConfiguration,
-} from './lib/agent-configuration.js';
 
 export type DirectApplicationOptions = Omit<DirectRuntimeOptions, 'canRun'> & {
   readonly conversationsDir: string;

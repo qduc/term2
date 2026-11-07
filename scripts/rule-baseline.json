@@ -478,7 +478,6 @@
     "session/conversation/session-index/session-index-service.ts",
     "session/hooks/hook-service.ts",
     "session/logging/logging-service.ts",
-    "session/session/session-context-service.ts",
     "session/session/session-turn-adapter.ts",
     "shared/profiles/legacy-adapter.ts",
     "shared/service-interfaces.ts",

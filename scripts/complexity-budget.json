@@ -1,5 +1,5 @@
 {
-  "maxLayerEdges": 58,
+  "maxLayerEdges": 53,
   "maxLines": 500,
   "fileCeilings": {
     "src/model/provider.ts": {

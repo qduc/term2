@@ -24,8 +24,8 @@ reached from the CLI.
 | `host/`     | Transport and access: in-process host, HTTP server, auth      | protocol, session, config      |
 | `protocol/` | The one public event and command format, one projection       | session and everything below   |
 | `delegation/` | Child agents, roles/pools, runners and workflow execution   | session and everything below   |
-| `session/`  | One durable conversation: append-only log and its replay      | engine, model, tools, config   |
-| `engine/`   | The turn loop: waits for answers, compacts, recovers          | model, tools, config           |
+| `session/`  | One durable conversation: append-only log, replay, recovery policy | engine, model, tools, config   |
+| `engine/`   | The turn loop: waits for answers, compacts, recovery mechanics | model, tools, config           |
 | `tools/`    | Tool contracts: schema, approval policy and execute function  | model, config                  |
 | `model/`    | Providers behind one streaming interface, item format         | nothing                        |
 | `config/`   | Settings reader contract                                      | nothing                        |

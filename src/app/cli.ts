@@ -11,15 +11,16 @@ import { getAllProviders, getProviderIds } from '../model/providers/index.js';
 import { installationVersion } from '../model/providers/fetch/logging-middleware.js';
 import { LoggingService } from '../session/logging/logging-service.js';
 import { VALID_REASONING_EFFORTS, type ModelSettingsReasoningEffort } from '../model/models/reasoning-effort.js';
+import { isDroppedProfile } from './dropped-profiles.js';
 import { resolveProfile } from '../config/profiles/resolver.js';
 import { BARE_PROFILE_ID, canonicalProfileId } from '../shared/profiles/legacy-adapter.js';
-import { SessionContextService } from '../session/session/session-context-service.js';
+import { SessionContextService } from '../model/traffic-context.js';
 import { buildEnvOverrides } from '../config/settings/settings-service.js';
 import {
   HOME_DIRECTORY_START_WARNING,
   shouldWarnOnHomeDirectoryStart,
 } from '../shared/utils/home-directory-start-guard.js';
-import type { AcpArgs } from '../clients/acp-v2/serve-args.js';
+import type { AcpArgs } from './serve-args.js';
 import type { ServeArgs } from '../host/gateway/serve-args.js';
 import type { DirectLaunchBase } from './launch-types.js';
 import type { DirectCommandConfiguration } from '../session/command-types.js';
@@ -131,12 +132,13 @@ function chooseProfile(options: Pick<SessionOptions, 'profile' | 'lite'>, settin
   if (options.profile !== null) {
     const name = options.profile === 'full' ? 'standard' : options.profile;
     profileId = canonicalProfileId(name.includes(':') ? name : `builtin:${name}`);
+    if (isDroppedProfile(profileId)) throw new Error(`Missing parent or Profile '${profileId}'`);
     resolveProfile(profileId);
   } else if (options.lite) {
     profileId = BARE_PROFILE_ID;
   } else {
-    // Auto-approval does not select a workflow; honor the saved profile.
-    profileId = currentProfile;
+    // Removed workflows in saved settings use the same Bare fallback as a fresh session.
+    profileId = isDroppedProfile(currentProfile) ? BARE_PROFILE_ID : currentProfile;
   }
 
   settings.set('app.activeProfileId', profileId, { persist: false });
@@ -226,7 +228,7 @@ async function applyModelOverrides(
     return 'Error: --provider requires --model; provider-only selection is not supported.';
   }
 
-  const picker = pickerEligible ? await import('../model/models/model-picker-host.js') : undefined;
+  const picker = pickerEligible ? await import('./model-picker-host.js') : undefined;
 
   // A bare -m opens the picker itself (old cli.tsx); Escape keeps the configured model.
   if (options.model === '') {

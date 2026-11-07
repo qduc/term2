@@ -10,7 +10,7 @@ import {
   CONTEXT_COMPACTION_REQUEST,
   buildContextCompactionInput,
   wrapContextSummary,
-} from '../session/prompts/context-compaction.js';
+} from './prompts/context-compaction.js';
 import { hasCompleteDirectToolPairs } from './recovery-history.js';
 import { selfContained } from './recovery-continuity.js';
 import { toolReceipts } from './compaction-receipts.js';

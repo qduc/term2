@@ -3,6 +3,8 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { isDeepStrictEqual } from 'node:util';
 import { LocalExecutionContext } from './tool-contract.js';
 import { installationVersion } from '../model/providers/fetch/logging-middleware.js';
+import { BARE_PROFILE_ID } from '../shared/profiles/legacy-adapter.js';
+import { isDroppedProfile } from './dropped-profiles.js';
 import { getProfileMetadata } from '../config/profiles/active-profile.js';
 import { planProfileTransition } from '../config/profiles/profile-transition.js';
 import { RUNTIME_MODIFIABLE_SETTINGS } from '../config/settings/settings-schema.js';
@@ -136,10 +138,9 @@ function sessionSettings(
   keepLoadTimeMigrations(settings, defaults);
   // The latest configuration, where there is one, outranks the session's start fact.
   const stored = configuration?.profile ?? metadata?.profile;
-  // #149 asks a dropped profile named here to run Bare, but the settings-batch and tools-batch goldens (recorded from
-  // legacy with the pair profile) require it to run as named; changing that needs the owner's approval of those goldens.
+  // A saved dropped workflow is historical data, not authority to reactivate it (#149).
   const profile = stored && !profileExplicit ? stored.id : defaults.get('app.activeProfileId');
-  settings.set('app.activeProfileId', profile, { persist: false });
+  settings.set('app.activeProfileId', isDroppedProfile(profile) ? BARE_PROFILE_ID : profile, { persist: false });
   settings.set('agent.modelSelection', model, { persist: false });
   const reasoning =
     configuration?.intent.reasoningEffort ??

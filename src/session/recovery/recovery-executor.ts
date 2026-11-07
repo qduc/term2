@@ -1,7 +1,12 @@
-import type { ConversationEvent } from '../../session/conversation/conversation-events.js';
-import type { NextRunInstruction, RecoveryResult, RecoveryExecutor, RecoveryExecutorInput } from './retry-contracts.js';
-import type { ConversationRecord } from '../../session/conversation/conversation-record.js';
-import type { ProviderContinuity } from '../../session/provider-continuity.js';
+import type { ConversationEvent } from '../conversation/conversation-events.js';
+import type {
+  NextRunInstruction,
+  RecoveryResult,
+  RecoveryExecutor,
+  RecoveryExecutorInput,
+} from '../../engine/retry/retry-contracts.js';
+import type { ConversationRecord } from '../conversation/conversation-record.js';
+import type { ProviderContinuity } from '../provider-continuity.js';
 
 export type RecoveryExecutorDeps = {
   record: ConversationRecord;

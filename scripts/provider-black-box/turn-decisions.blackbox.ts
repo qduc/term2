@@ -5,7 +5,8 @@ import { expect, it } from 'vitest';
 import { readHarnessApprovalReady } from '../../src/shared/lib/harness-input-idle.js';
 import { createIsolatedWorkspaceLease, writePtyTextAndSubmit } from './provider-test-harness.js';
 
-it('resumes repeated questions once per decision and settles cancellation before the next turn', async () => {
+// Accepted difference (#149): the direct CLI has no question-capable Pair profile.
+it.skip('resumes repeated questions once per decision and settles cancellation before the next turn', async () => {
   const requests: Record<string, unknown>[] = [];
   const pending: ServerResponse[] = [];
   const server = createServer(async (request, response) => {

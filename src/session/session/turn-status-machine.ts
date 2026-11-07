@@ -1,4 +1,4 @@
-import type { ConversationTerminal } from '../../shared/contracts/conversation.js';
+import type { ConversationTerminal } from '../../tools/conversation.js';
 
 export type SessionStatus = 'idle' | 'streaming' | 'awaiting_approval' | 'continuing';
 

@@ -1,5 +1,5 @@
 import { unwrapContinuationHandle, type ContinuationHandle } from '../../shared/contracts/continuation-handle.js';
-import type { ApplicationAgent } from '../../shared/contracts/nested-run-driver.js';
+import type { ApplicationAgent } from '../../tools/nested-run-driver.js';
 import type { ProviderInput, ProviderInputItem } from '../../shared/contracts/provider-input.js';
 import { conversationTimeGap } from '../../shared/conversation/conversation-time-gap.js';
 import { withPersonalMemoryContext } from '../../shared/conversation/personal-memory-context.js';
@@ -23,7 +23,7 @@ import { createRunState, refreshContinuation } from './run-state.js';
 import { RunToolRound } from './run-tool-round.js';
 import { ToolCallExecution } from './tool-call-execution.js';
 import { TurnInputMailbox } from './turn-input-mailbox.js';
-export type { AgentModelSettings, ApplicationAgent } from '../../shared/contracts/nested-run-driver.js';
+export type { AgentModelSettings, ApplicationAgent } from '../../tools/nested-run-driver.js';
 export { normalizeApplicationInput, toModelTools } from './run-input.js';
 export type {
   ApplicationBoundaryCompaction,

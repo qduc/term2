@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ApplicationAgent, NestedRunDriverFactory } from '../../shared/contracts/nested-run-driver.js';
+import type { ApplicationAgent, NestedRunDriverFactory } from '../../tools/nested-run-driver.js';
 import {
   reportSchema,
   type VerificationRequest,

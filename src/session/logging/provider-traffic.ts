@@ -22,7 +22,7 @@ import type {
 import {
   classifyProviderFailure,
   isClassifiedCancellation,
-} from '../../engine/retry/provider-failure-classification.js';
+} from '../../model/failure/provider-failure-classification.js';
 
 export type SentTrafficRecord = {
   requestId: string;

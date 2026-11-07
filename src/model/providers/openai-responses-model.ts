@@ -9,7 +9,7 @@ import type {
   StreamedModelUsage,
   StreamedModelProviderOptions,
   ContextCompactionSessionState,
-} from '../../shared/contracts/streamed-model-turn.js';
+} from '../streamed-model-turn.js';
 import type { ProviderRequestCapture } from './provider-request-capture.js';
 import { OPENAI_RESPONSES_OPAQUE_TAG, isForeignProviderOpaque } from './provider-opaque-compatibility.js';
 import { consumeOpenAIRequestPrefixBindingWithOutcome } from './openai-request-prefix-binding.js';

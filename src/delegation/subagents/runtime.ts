@@ -1,4 +1,4 @@
-import type { NestedRunDriverFactory, NestedModelBinding } from '../../shared/contracts/nested-run-driver.js';
+import type { NestedRunDriverFactory, NestedModelBinding } from '../../tools/nested-run-driver.js';
 import { randomUUID } from 'node:crypto';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../../shared/service-interfaces.js';
 import type { ExecutionContext } from '../../tools/execution-context.js';
@@ -18,7 +18,7 @@ import { NestedToolCompatibilityState } from '../../session/session/nested-tool-
 import type { BackgroundSubagentApprovalPauseSink } from './foreground-subagent-lease.js';
 import { SubagentRolePoolSelector } from './subagent-role-pool-selector.js';
 import type { SessionBrowser } from '../../session/conversation/session-browser.js';
-import { classifyPoolEntryFailure } from '../../engine/retry/provider-failure-classification.js';
+import { classifyPoolEntryFailure } from '../../model/failure/provider-failure-classification.js';
 
 export interface SubagentRuntimeDeps {
   driverFactory?: NestedRunDriverFactory;

@@ -1,6 +1,6 @@
-import { stripSteeringNotice } from '../prompts/steering-notice.js';
-import { stripMemoryRecall } from '../prompts/memory-recall-notice.js';
-import { isLocalContextSummary } from '../../shared/contracts/provider-input.js';
+import { stripSteeringNotice } from './prompts/steering-notice.js';
+import { stripMemoryRecall } from './prompts/memory-recall-notice.js';
+import { isLocalContextSummary } from '../shared/contracts/provider-input.js';
 
 export const SHELL_CONTEXT_PREFIX = '[Previous Shell Session]';
 const LEGACY_MODE_NOTICE_PREFIX = '[Mode Notice] ';

@@ -6,7 +6,7 @@ import type {
   LLMAdvisoryConfidence,
   LLMAdvisoryRiskLevel,
   ReasoningEffortSetting,
-} from '../../shared/contracts/conversation.js';
+} from '../../tools/conversation.js';
 import { classifyCommandDetailed, SafetyStatus } from '../../shared/utils/shell/command-safety/index.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../../shared/service-interfaces.js';
 import {
@@ -16,7 +16,7 @@ import {
 import type { ShellAutoApprovalAgentClient } from '../conversation-agent-client.js';
 import type { SessionAccessState } from '../session/session-access-state.js';
 import { resolveAncillaryModelTier } from '../../engine/agent-runtime/model-resolver.js';
-import { projectConversationMessage } from '../conversation/conversation-message-projection.js';
+import { projectConversationMessage } from '../../engine/conversation-message-projection.js';
 import { isSensitiveReadPath } from '../../shared/utils/shell/sandbox/denied-read-detector.js';
 import { evaluateDecisionShadow, type DecisionShadowEvidence } from './decision-shadow.js';
 

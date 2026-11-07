@@ -1,4 +1,7 @@
-import { classifyProviderFailure, isClassifiedCancellation } from '../retry/provider-failure-classification.js';
+import {
+  classifyProviderFailure,
+  isClassifiedCancellation,
+} from '../../model/failure/provider-failure-classification.js';
 import type { ServiceTier } from '../../shared/cost/model-cost.js';
 import type { TerminalFailureObservation } from './decision-shadow-observer.js';
 

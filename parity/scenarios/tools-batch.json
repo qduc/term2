@@ -1,11 +1,11 @@
 {
   "id": "tools-batch",
-  "description": "One headless turn reads, searches, runs an auto-approved shell command, and edits a file. Uses Pair explicitly: Bare intentionally delegates file search and edits to shell, not dedicated grep/search_replace tools.",
+  "description": "One Bare headless turn reads, searches, runs an auto-approved shell command, and edits a file through run_code. Bare uses shell commands for text reads, search, and edits; the same workspace effects remain asserted.",
   "runs": [
     {
       "args": [
         "--profile",
-        "pair",
+        "bare",
         "--auto-approve",
         "read notes.txt, search for needle, create shell.txt, and edit notes.txt"
       ]
@@ -20,7 +20,7 @@
         {
           "name": "run_code",
           "arguments": {
-            "code": "const read = await tools.read_file({ path: 'notes.txt' });\nconst search = await tools.grep({ pattern: 'needle', path: '.', fixed_strings: true });\nconst shell = await tools.shell({ command: \"printf 'shell-ok\\\\n' > shell.txt\", description: 'Create shell.txt' });\nconst edit = await tools.search_replace({ path: 'notes.txt', replacements: [{ search_content: 'needle in a haystack', replace_content: 'needle found' }] });\nreturn { read, search, shell, edit };",
+            "code": "const read = await tools.shell({\"command\": \"cat notes.txt\", \"description\": \"Read notes.txt\"});\nconst search = await tools.shell({\"command\": \"grep -nF needle notes.txt\", \"description\": \"Find needle in notes.txt\"});\nconst shell = await tools.shell({\"command\": \"printf 'shell-ok\\\\n' > shell.txt\", \"description\": \"Create shell.txt\"});\nconst edit = await tools.shell({\"command\": \"grep -qFx 'needle in a haystack' notes.txt && printf 'needle found\\\\n' > notes.txt\", \"description\": \"Replace expected text in notes.txt\"});\nreturn { read, search, shell, edit };",
             "description": "Read, search, create, and edit workspace files."
           }
         }

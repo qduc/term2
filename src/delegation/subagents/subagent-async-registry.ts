@@ -28,7 +28,7 @@ import {
   sanitizeBackgroundTaskToolLabel,
   type BackgroundTaskObservation,
 } from '../../tools/background-task-activity.js';
-import { classifyPoolEntryFailure } from '../../engine/retry/provider-failure-classification.js';
+import { classifyPoolEntryFailure } from '../../model/failure/provider-failure-classification.js';
 import type { PoolEntryFailure } from './subagent-role-pool-selector.js';
 
 import { SUBAGENT_RUN_NAME_PATTERN, SubagentRegistryError } from '../../tools/subagents/launch-contract.js';

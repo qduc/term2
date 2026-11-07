@@ -1,4 +1,4 @@
-import type { ApplicationRunEvent } from '../../shared/contracts/application-stream.js';
+import type { ApplicationRunEvent } from '../../tools/application-stream.js';
 import { createContinuationHandle } from '../../shared/contracts/continuation-handle.js';
 import { createAgentStream } from '../agent-stream.js';
 import type { ApplicationRunLoopOptions } from './run-loop-contracts.js';

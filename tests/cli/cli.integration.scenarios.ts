@@ -74,10 +74,13 @@ async function startModelMock(
   close: () => Promise<void>;
   capturedModels: () => string[];
   capturedRequests: () => Record<string, unknown>[];
+  requestCount: () => number;
 }> {
+  let requestCount = 0;
   const requestedModels: string[] = [];
   const requestedBodies: Record<string, unknown>[] = [];
   const server = http.createServer((req, res) => {
+    requestCount += 1;
     if (req.method === 'GET' && req.url?.includes('/models')) {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(
@@ -127,6 +130,7 @@ async function startModelMock(
     close: () => new Promise((resolve) => server.close(() => resolve())),
     capturedModels: () => [...requestedModels],
     capturedRequests: () => [...requestedBodies],
+    requestCount: () => requestCount,
   };
 }
 
@@ -499,6 +503,100 @@ function expectSecondCallRefused(run: Awaited<ReturnType<typeof runApprovalReuse
 }
 export function registerCliScenarios(group: 'startup' | 'headless'): void {
   if (group === 'startup') {
+    it.each(['plan', 'pair', 'mentor', 'orchestrator'].flatMap((name) => [name, `builtin:${name}`]))(
+      'CLI rejects dropped explicit profile %s before any provider request',
+      async (profile) => {
+        const mock = await startModelMock(['mock-alpha']);
+        writeSettings(testDir, {
+          agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
+          providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
+        });
+        try {
+          const result = await spawnCli(
+            [cliPath(), '--profile', profile, 'Reply'],
+            createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: conversationsDir, DISABLE_LOGGING: '1' }),
+            testDir,
+          );
+          expect(result.status, result.stderr).not.toBe(0);
+          expect(result.stderr).toContain(`Missing parent or Profile 'builtin:${profile.replace('builtin:', '')}'`);
+          expect(mock.requestCount()).toBe(0);
+          expect(fs.readdirSync(conversationsDir).filter((name) => name.endsWith('.jsonl'))).toHaveLength(0);
+        } finally {
+          await mock.close();
+        }
+      },
+    );
+
+    it.each([
+      ...['plan', 'pair', 'mentor', 'orchestrator'].flatMap((name) =>
+        [false, true].map((autoApprove) => ({
+          label: `saved ${name}`,
+          app: { activeProfileId: `builtin:${name}` } as Record<string, unknown>,
+          autoApprove,
+        })),
+      ),
+      ...['planMode', 'mentorMode', 'orchestratorMode'].map((flag) => ({
+        label: `legacy ${flag}`,
+        app: { [flag]: true } as Record<string, unknown>,
+        autoApprove: false,
+      })),
+    ])(
+      'CLI falls back to Bare for $label without rewriting settings (autoApprove=$autoApprove)',
+      async ({ app, autoApprove }) => {
+        const workspace = path.join(testDir, 'workspace');
+        fs.mkdirSync(workspace);
+        const mock = await startModelMock(['mock-alpha']);
+        const settingsFile = writeSettings(testDir, {
+          app,
+          agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
+          providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
+        });
+        const settingsBefore = fs.readFileSync(settingsFile, 'utf8');
+        try {
+          const result = await spawnCli(
+            [cliPath(), ...(autoApprove ? ['--auto-approve'] : []), '--json', 'Reply'],
+            createTestChildEnv({ HOME: testDir, TERM2_CONVERSATIONS_DIR: conversationsDir, DISABLE_LOGGING: '1' }),
+            workspace,
+          );
+          expect(result.status, result.stderr).toBe(0);
+          expect(result.stderr).toContain('Profile: bare');
+          expect(fs.readFileSync(settingsFile, 'utf8')).toBe(settingsBefore);
+          expect(mock.capturedRequests()).toHaveLength(1);
+          const request = mock.capturedRequests()[0]!;
+          const wire = JSON.stringify(request);
+          const messages = request.messages as { role: string; content: string }[];
+          const system = messages
+            .filter((message) => message.role === 'system')
+            .map((message) => message.content)
+            .join('\n');
+          expect(system).toContain('Use the shell to read, search, and edit files');
+          expect(system).toContain('Unattended mode: Never ask');
+          expect(wire).not.toMatch(/(?:Plan|Pair|Mentor|Orchestrator) Mode is ON/);
+          expect(wire).not.toContain('propose_goal');
+          expect((request.tools as { function: { name: string } }[]).map((tool) => tool.function.name).sort()).toEqual([
+            'goal_check',
+            'run_code',
+            'run_subagent',
+            'shell',
+          ]);
+          const emitted = result.stdout
+            .trim()
+            .split('\n')
+            .map((line) => JSON.parse(line));
+          expect(emitted[0]).toMatchObject({ type: 'session_start', activeProfileId: 'builtin:bare' });
+          const files = fs.readdirSync(conversationsDir).filter((name) => name.endsWith('.jsonl'));
+          expect(files).toHaveLength(1);
+          const saved = readSavedHistory(path.join(conversationsDir, files[0]!));
+          expect(saved.format).toBe('native');
+          expect(saved.records.filter((event) => event.type === 'session_started')).toEqual([
+            expect.objectContaining({ profile: expect.objectContaining({ id: 'builtin:bare' }) }),
+          ]);
+        } finally {
+          await mock.close();
+        }
+      },
+    );
+
     it('CLI generic model listing ignores vendor capabilities and replaces broadly filtered disk catalogs', async () => {
       const advertised = [
         { id: 'fixture-chat', supported_endpoint_types: ['openai'] },
@@ -2394,7 +2492,7 @@ fs.createWriteStream = (filename, options) => {
       },
     );
 
-    it.each(['full', 'bare', 'lite', 'pair', 'plan', 'mentor', 'orchestrator'])(
+    it.each(['full', 'bare', 'lite'])(
       'headless %s has unattended instructions and no ask_user capability',
       async (profile) => {
         const mock = await startModelMock(['mock-alpha']);

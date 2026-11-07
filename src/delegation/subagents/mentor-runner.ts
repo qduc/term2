@@ -1,8 +1,4 @@
-import type {
-  NestedRunDriverFactory,
-  ApplicationAgent,
-  NestedModelBinding,
-} from '../../shared/contracts/nested-run-driver.js';
+import type { NestedRunDriverFactory, ApplicationAgent, NestedModelBinding } from '../../tools/nested-run-driver.js';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../../shared/service-interfaces.js';

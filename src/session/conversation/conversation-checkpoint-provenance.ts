@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { isLocalContextSummary } from '../../shared/contracts/provider-input.js';
 import { isTruncatedLogEvent, type EventReference } from '../logging/conversation-log-events.js';
 import type { PersistedLogEnvelope } from './conversation-decoder.js';
-import { projectConversationMessage } from './conversation-message-projection.js';
+import { projectConversationMessage } from '../../engine/conversation-message-projection.js';
 
 const referenceOf = (envelope: PersistedLogEnvelope): EventReference | null =>
   envelope.logId && envelope.eventId ? { logId: envelope.logId, eventId: envelope.eventId } : null;

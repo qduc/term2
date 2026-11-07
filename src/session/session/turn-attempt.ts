@@ -5,7 +5,7 @@ import type { RetryCounts } from '../../engine/retry/retry-contracts.js';
 import type { SessionInputPlan } from './session-input-planner.js';
 import type { GenerationToken } from '../generation-guard.js';
 import type { ProviderHistorySnapshot } from '../conversation/conversation-store.js';
-import { RetryRecoveryBudget } from '../../engine/retry/retry-recovery-budget.js';
+import { RetryRecoveryBudget } from '../../model/failure/retry-recovery-budget.js';
 
 export class TurnAttempt {
   #turn: UserTurn;

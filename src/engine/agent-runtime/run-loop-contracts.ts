@@ -1,19 +1,19 @@
 import type { ToolExecutionScope as Term2HookScope } from '../../tools/types.js';
-import type { ApplicationRunEvent } from '../../shared/contracts/application-stream.js';
-import type { ApplicationAgent, NestedApprovalLedger } from '../../shared/contracts/nested-run-driver.js';
+import type { ApplicationRunEvent } from '../../tools/application-stream.js';
+import type { ApplicationAgent, NestedApprovalLedger } from '../../tools/nested-run-driver.js';
 import type { ProviderInput, ProviderInputItem } from '../../shared/contracts/provider-input.js';
 import type { RunTerminationCause } from '../../shared/contracts/run-termination.js';
 import type {
   ContextCompactionSessionState,
   StreamedModelTurn,
   StreamedModelTurnRequest,
-} from '../../shared/contracts/streamed-model-turn.js';
+} from '../../model/streamed-model-turn.js';
 import { type ModelRequestCost } from '../../shared/cost/model-cost.js';
 import { MaxTurnsExceededError } from '../../tools/subagents/max-turns-error.js';
 import type { ToolExecutionLifecyclePort } from '../../tools/types.js';
 import { type AgentStream } from '../agent-stream.js';
 import type { DecisionShadowObserver } from '../decision-shadow/decision-shadow-observer.js';
-import type { RetryRecoveryBudget } from '../retry/retry-recovery-budget.js';
+import type { RetryRecoveryBudget } from '../../model/failure/retry-recovery-budget.js';
 import { type GenerationGuardOptions } from './generation-guard.js';
 import { type RunBudgetEvent, type RunBudgetPolicy } from './run-budget.js';
 export interface ApplicationRequestPreparation {

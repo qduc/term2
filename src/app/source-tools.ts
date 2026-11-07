@@ -8,7 +8,7 @@ import type { ToolApprovalPolicyRegistry } from '../session/approval/tool-approv
 import { NestedApprovalOwner, type NestedApprovalSnapshot } from '../session/approval/nested-approval-owner.js';
 import { isDockerHostControlShellApproval } from '../session/approval/shell-sandbox-approval.js';
 import type { SessionAccessState } from '../session/session/session-access-state.js';
-import { DOCKER_HOST_CONTROL_APPROVE_ANSWERS, supportsFolderSessionRead } from '../shared/contracts/conversation.js';
+import { DOCKER_HOST_CONTROL_APPROVE_ANSWERS, supportsFolderSessionRead } from '../tools/conversation.js';
 import { applyApprovalGrant } from '../session/approval/approval-grant-executor.js';
 import { resolveSessionReadFolder } from '../session/approval/session-read-grant-target.js';
 import { shouldBypassToolApproval } from '../session/approval/shell-auto-approval-resolver.js';

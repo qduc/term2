@@ -1,6 +1,6 @@
 import type { ConversationRecord } from '../conversation/conversation-record.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../../shared/service-interfaces.js';
-import type { LLMAdvisory } from '../../shared/contracts/conversation.js';
+import type { LLMAdvisory } from '../../tools/conversation.js';
 import {
   evaluateShellAutoApprovalAdvisories,
   type ShellAutoApprovalManualDecision,

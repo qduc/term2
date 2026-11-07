@@ -7,7 +7,7 @@ import type {
   StreamedModelTurnEvent,
   StreamedModelTurnRequest,
   StreamedModelUsage,
-} from '../../src/shared/contracts/streamed-model-turn.js';
+} from '../../src/model/streamed-model-turn.js';
 import type { ProviderDefinition } from '../../src/model/providers/registry.js';
 
 type Arm = 'A' | 'B';

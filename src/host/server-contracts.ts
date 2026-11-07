@@ -245,7 +245,7 @@ export type SessionUpdateBody = {
   admission?: 'idle';
   modelSelection?: { model: string; provider: string };
   reasoningEffort?: 'default' | 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
-  mode?: 'standard' | 'bare' | 'lite' | 'plan' | 'mentor' | 'orchestrator';
+  mode?: 'standard' | 'bare' | 'lite';
 };
 export type CommandBody = {
   commandId: string;

@@ -1,7 +1,7 @@
 /**
  * Profiles next does not offer or enter (owner decision, #149): legacy's plan, pair, mentor and orchestrator. The
- * /profile menu leaves them out and `/profile <name>` treats one as unknown. A setting that already names one still
- * runs it for now: the settings-batch and tools-batch goldens were recorded that way (see application-runtime).
+ * /profile menu leaves them out and explicit selections treat them as unknown. Saved settings and sessions
+ * that name one fall back to Bare without rewriting their persisted history.
  */
 const DROPPED = new Set(['plan', 'pair', 'mentor', 'orchestrator']);
 

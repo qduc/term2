@@ -6,7 +6,7 @@
 import { join } from 'node:path';
 import { resolveSettingsDirectory } from '../config/settings/settings-path.js';
 import { parseServeArgs, type ServeArgs } from '../host/gateway/serve-args.js';
-import { parseAcpArgs, type AcpArgs } from '../clients/acp-v2/serve-args.js';
+import { parseAcpArgs, type AcpArgs } from './serve-args.js';
 import { createDurableGoal } from '../session/conversation/durable-goal.js';
 import type { DurableGoal } from '../session/logging/conversation-log-events.js';
 
@@ -91,13 +91,7 @@ const FLAGS: readonly Flag[] = [
   opt(['-r', '--reasoning'], ' <effort>', 'Set reasoning effort (default, none, minimal, low, medium, high, xhigh)'),
   opt(['--goal'], ' <text>', 'Persist a user-authored session outcome (max 2,000 characters)'),
   opt(['--goal-criteria'], ' <text>', 'Optional success criteria (max 2,000 characters; requires --goal)'),
-  opt(
-    ['--profile'],
-    ' <name>',
-    'Select a profile (bare [default], plan, pair, mentor, orchestrator; standard/full/lite = bare)',
-    undefined,
-    'required',
-  ),
+  opt(['--profile'], ' <name>', 'Select a profile (bare [default]; standard/full/lite = bare)', undefined, 'required'),
   opt(['-l', '--lite'], '', 'Start in the Bare profile (alias kept from Lite)'),
   opt(['--auto-approve'], '', 'Allow tool execution for a non-interactive prompt'),
   // Quiet only changes the non-interactive runner; the TUI ignores it, as the current CLI does.
@@ -170,7 +164,7 @@ https://github.com/qduc/term2/blob/main/docs/reference/discord-bridge.md
 Candidate: live Discord/mobile validation is still outstanding.
 `;
 
-/** Legacy's meow help (source/cli.tsx: the package description, then its help text), byte for byte. */
+/** Public help for the shipped executable, including its supported profile surface. */
 export const helpText = (): string => `
   A terminal-based AI assistant that can help you get things done on your computer
 
@@ -195,7 +189,7 @@ export const helpText = (): string => `
     -r, --reasoning <effort>             Set reasoning effort (default, none, minimal, low, medium, high, xhigh)
         --goal <text>                    Persist a user-authored session outcome (max 2,000 characters)
         --goal-criteria <text>            Optional success criteria (max 2,000 characters; requires --goal)
-        --profile <name>                 Select a profile (bare [default], plan, pair, mentor, orchestrator; standard/full/lite = bare)
+        --profile <name>                 Select a profile (bare [default]; standard/full/lite = bare)
     -l, --lite                           Start in the Bare profile (alias kept from Lite)
         --auto-approve                   Allow tool execution for a non-interactive prompt
     -q, --quiet                          Suppress non-error diagnostics on stderr in non-interactive mode

@@ -2,6 +2,7 @@ import { createServer } from 'node:http';
 import { cp, mkdir, readFile, readdir, symlink, writeFile } from 'node:fs/promises';
 import { join, resolve, relative } from 'node:path';
 import { expect, it } from 'vitest';
+import { copyBuiltCli } from '../tests/helpers/copy-built-cli.js';
 import {
   compiledIdentifier,
   patchCompiledModule as patchFixtureModule,
@@ -80,7 +81,7 @@ export default function register(term2) { for (const type of ['session.start', '
         );
 
         // Restart faults may delete the entry. Never mutate the runner's shared build.
-        await cp(resolve('dist'), join(root, 'direct-dist'), { recursive: true });
+        copyBuiltCli(resolve('dist'), join(root, 'direct-dist'));
         await cp(resolve('package.json'), join(root, 'package.json'));
         await symlink(resolve('node_modules'), join(root, 'node_modules'), 'dir');
         await mkdir(paths.logDir, { recursive: true });
@@ -251,9 +252,8 @@ it.each(['runner', 'missing-entry', 'cleanup', 'lock', 'writer-close', 'native-e
       },
       prepare: async (root, paths) => {
         await mkdir(join(root, 'work'));
-        await cp(resolve('dist'), join(root, 'dist'), { recursive: true });
         // Restart faults may delete the entry. Never mutate the runner's shared build.
-        await cp(resolve('dist'), join(root, 'direct-dist'), { recursive: true });
+        copyBuiltCli(resolve('dist'), join(root, 'direct-dist'));
         await cp(resolve('package.json'), join(root, 'package.json'));
         await symlink(resolve('node_modules'), join(root, 'node_modules'), 'dir');
         await mkdir(paths.logDir, { recursive: true });

@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import type { ISessionContextService, SessionTrafficContext } from '../../shared/service-interfaces.js';
+import type { ISessionContextService, SessionTrafficContext } from '../shared/service-interfaces.js';
 
 export class SessionContextService implements ISessionContextService {
   readonly #storage = new AsyncLocalStorage<SessionTrafficContext>();

@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import fs from 'node:fs';
 import { stripVTControlCharacters } from 'node:util';
 import path from 'node:path';
 
@@ -42,6 +43,7 @@ const CHILD_ENV_KEYS = [
   'CI',
   'NODE_ENV',
   'TERM2_TEST_OWNER',
+  'TERM2_EXIT_CONFIRM_WINDOW_MS',
 ];
 
 /** Build a child environment without leaking ambient credentials or service URLs. */
@@ -68,6 +70,32 @@ function tailOf(text: string, max = 800): string {
   return stripped.length > max ? `…${stripped.slice(-max)}` : stripped;
 }
 
+/**
+ * Python for a PTY bridge: answer Primary Device Attributes like a real terminal.
+ *
+ * The TUI asks for the background colour (OSC 11) followed by DA1 before Ink starts, and treats the
+ * DA1 reply as "all replies are in". Every terminal answers DA1; a bridge that stays silent sends
+ * each launch down the detection timeout backstop instead (150ms per start, and per restart). This
+ * answers DA1 only, as a terminal without OSC 11 support would, so the detected background stays
+ * unknown exactly as before. `answer_da1(fd, chunk)` scans child output, including a query split
+ * across reads, and writes one reply per query to the PTY master.
+ */
+export const PYTHON_DA1_RESPONDER = `
+DA1_QUERIES = (b'\\x1b[c', b'\\x1b[0c')
+DA1_REPLY = b'\\x1b[?62;22c'
+da1_carry = b''
+def answer_da1(fd, chunk):
+    global da1_carry
+    scan = da1_carry + chunk
+    for query in DA1_QUERIES:
+        at = scan.find(query)
+        while at >= 0:
+            if at + len(query) > len(da1_carry):
+                os.write(fd, DA1_REPLY)
+            at = scan.find(query, at + 1)
+    da1_carry = scan[-3:]
+`;
+
 const PYTHON_PTY_BRIDGE = `
 import fcntl
 import os
@@ -76,7 +104,7 @@ import select
 import struct
 import sys
 import termios
-
+${PYTHON_DA1_RESPONDER}
 rows, cols = int(sys.argv[1]), int(sys.argv[2])
 argv = sys.argv[3:]
 pid, master = pty.fork()
@@ -95,6 +123,7 @@ while True:
         if not chunk:
             break
         os.write(sys.stdout.fileno(), chunk)
+        answer_da1(master, chunk)
     if stdin_open and sys.stdin.fileno() in readable:
         chunk = os.read(sys.stdin.fileno(), 4096)
         if chunk:
@@ -206,7 +235,17 @@ export function spawnTerminal(command: string, args: string[], options: SpawnTer
     });
   };
 
-  const getVisibleOutput = () => stripVTControlCharacters(output);
+  // Waits poll this every 25ms over the whole session's output. Output only grows, so strip it
+  // again only after new bytes arrive instead of on every poll.
+  let visible = '';
+  let visibleLength = 0;
+  const getVisibleOutput = () => {
+    if (visibleLength !== output.length) {
+      visible = stripVTControlCharacters(output);
+      visibleLength = output.length;
+    }
+    return visible;
+  };
 
   return {
     bridgePid: terminal.pid!,
@@ -221,9 +260,40 @@ export function spawnTerminal(command: string, args: string[], options: SpawnTer
       terminal.kill(signal);
     },
     dispose: () => {
+      if (exitState) return;
+      killPtyChildren(terminal.pid);
       terminal.kill();
     },
   };
+}
+
+/**
+ * SIGKILL the process group of each child of a PTY bridge: the CLI leads its own session there.
+ *
+ * Killing only the bridge closes the PTY, which merely hangs the CLI up. Its shutdown then kept
+ * writing under the test's HOME while `afterEach` removed that directory, failing teardown with
+ * ENOTEMPTY (the "teardown race" in the testing skill). Linux-only, like the workspace sweep:
+ * elsewhere the bridge kill alone remains.
+ */
+function killPtyChildren(bridgePid: number | undefined): void {
+  if (process.platform !== 'linux' || !bridgePid) return;
+  let children: string[];
+  try {
+    children = fs.readFileSync(`/proc/${bridgePid}/task/${bridgePid}/children`, 'utf8').split(/\s+/).filter(Boolean);
+  } catch {
+    return; // the bridge already exited
+  }
+  for (const child of children.map(Number)) {
+    try {
+      process.kill(-child, 'SIGKILL');
+    } catch {
+      try {
+        process.kill(child, 'SIGKILL');
+      } catch {
+        // exited meanwhile
+      }
+    }
+  }
 }
 
 /** Press the Enter that closes a slash menu showing no match for the typed `text`, and wait until it closed. */

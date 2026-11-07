@@ -8,7 +8,7 @@ import type { TurnAttempt } from './turn-attempt.js';
 import { consumeInputSurgeApproval, type InputSurgeApproval } from '../input-surge-approval.js';
 import type { SessionIdSource } from './session-identity.js';
 import { resolveSessionId } from './session-identity.js';
-import { stripMemoryRecall } from '../prompts/memory-recall-notice.js';
+import { stripMemoryRecall } from '../../engine/prompts/memory-recall-notice.js';
 
 type InputSurgeErrorEvent = Extract<ConversationEvent, { type: 'error' }>;
 

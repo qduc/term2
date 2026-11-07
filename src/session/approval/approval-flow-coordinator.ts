@@ -5,7 +5,7 @@ import { ApprovalState, type AbortedApprovalContext, type PendingApprovalContext
 import { ToolCallMarkerStore } from '../../shared/utils/streaming/extract-command-messages.js';
 import { getCallIdFromObject, getToolInfoFromInterruption } from '../interruption-info.js';
 import { validateApprovalGrant } from './approval-grant-executor.js';
-import type { PendingApproval } from '../../shared/contracts/conversation.js';
+import type { PendingApproval } from '../../tools/conversation.js';
 import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import { GenerationGuard } from '../generation-guard.js';
 import type { ToolOwner } from './tool-owner.js';

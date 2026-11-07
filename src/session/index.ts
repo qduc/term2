@@ -3,7 +3,11 @@
  * replayed from it.
  *
  * `store.ts` creates and opens sessions in the native conversations
- * directory and hands the host a `DirectSession` (`session.ts`), the
+ * directory. Its optional app-owned `restoreProfile` maps only retired profile
+ * identities for restore validation; it never rewrites log facts. Without it,
+ * exact identity/version/digest restoration is required. Reasoning, temperature
+ * and workspace validation are unchanged. The store hands the host a
+ * `DirectSession` (`session.ts`), the
  * live facade over one `Conversation` (`conversation.ts`). Only the
  * conversation writes facts. A submitted message is admitted to the log, then
  * `conversation-turn.ts` starts the engine turn and is the sole reader of its

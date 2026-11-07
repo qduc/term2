@@ -2,7 +2,7 @@ import type { ILoggingService, ISettingsService } from '../../shared/service-int
 import type { ISessionContextService } from '../../shared/service-interfaces.js';
 import type { ProviderRequestCapture } from './provider-request-capture.js';
 import type { SessionAccountStore } from './oauth-session-account.js';
-import type { ContextCompactionSessionState, StreamedModelTurn } from '../../shared/contracts/streamed-model-turn.js';
+import type { ContextCompactionSessionState, StreamedModelTurn } from '../streamed-model-turn.js';
 import type { ProviderRetryInfo } from './retrying-model.js';
 
 export interface ProviderDeps {

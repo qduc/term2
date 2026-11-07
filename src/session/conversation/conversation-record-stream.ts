@@ -6,7 +6,7 @@ import type { ProviderInputItem } from '../../shared/contracts/provider-input.js
 import type { ProviderOpaqueItem } from '../../shared/contracts/conversation-items.js';
 import { extractReplaySnapshot, extractFinalizationSnapshot, type StreamReplaySnapshot } from '../stream-snapshot.js';
 import { collectDuplicateToolCallResultPairs } from '../input-surge-guard.js';
-import { projectConversationMessage } from './conversation-message-projection.js';
+import { projectConversationMessage } from '../../engine/conversation-message-projection.js';
 import { normalizeRunItem } from './run-item-normalizer.js';
 import { projectPersistedAssistantItemToProviderHistory } from './conversation-turn-items.js';
 import type { SessionIdSource } from '../session/session-identity.js';

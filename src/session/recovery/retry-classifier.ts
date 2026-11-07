@@ -1,5 +1,5 @@
-import { RequestInputLimitError } from '../agent-runtime/request-input-limit.js';
-import { decideRetry } from './conversation-retry-policy.js';
+import { RequestInputLimitError } from '../../engine/agent-runtime/request-input-limit.js';
+import { decideRetry } from '../../model/failure/conversation-retry-policy.js';
 import {
   isMissingServerToolOutputError,
   isPreviousResponseNotFoundError,
@@ -7,27 +7,27 @@ import {
   isRetryableTransportError,
   isTransientRetryableError,
   isWebSocketConnectionLimitReachedError,
-} from './retry-error-classification.js';
-import { classifyUpstreamRetryableError } from './upstream-retry-policy.js';
-import type { ClassificationContext, ClassifiedFailure } from './retry-contracts.js';
+} from '../../model/failure/retry-error-classification.js';
+import { classifyUpstreamRetryableError } from '../../model/failure/upstream-retry-policy.js';
+import type { ClassificationContext, ClassifiedFailure } from '../../engine/retry/retry-contracts.js';
 import {
   AmbiguousModelOutcomeError,
   ConversationStateNoProgressError,
   getZeroFrameAmbiguousTimeout,
-} from './retry-errors.js';
-import { extractHistoryLength } from '../../session/stream-snapshot.js';
-import type { ConversationAgentClient } from '../../session/conversation-agent-client.js';
+} from '../../model/failure/retry-errors.js';
+import { extractHistoryLength } from '../stream-snapshot.js';
+import type { ConversationAgentClient } from '../conversation-agent-client.js';
 import {
   isMissingChainedToolOutputError,
   isOrphanedChainedToolOutputError,
 } from '../../shared/lib/chained-input-filter.js';
-import { isRetryRecoveryBudgetExhaustedError } from './retry-recovery-budget.js';
-import { streamHasCommittedOutput } from '../agent-stream.js';
+import { isRetryRecoveryBudgetExhaustedError } from '../../model/failure/retry-recovery-budget.js';
+import { streamHasCommittedOutput } from '../../engine/agent-stream.js';
 import { UnsentWebSocketRequestError } from '../../model/providers/websocket-request-dispatch.js';
 import {
   isSettledCommittedToolContinuation,
   admitsProviderStateRejectionRecovery,
-} from './committed-tool-continuation.js';
+} from '../../engine/retry/committed-tool-continuation.js';
 
 const TRANSIENT_BASE_DELAY_MS = 500;
 const TRANSIENT_MAX_DELAY_MS = 30_000;

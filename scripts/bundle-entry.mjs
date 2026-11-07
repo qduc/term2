@@ -61,10 +61,12 @@ export async function bundleEntry(dist) {
     logLevel: 'warning',
     legalComments: 'none',
     // Native addons and packages that load their own files beside them (binaries, workers,
-    // prebuilt bindings) stay ordinary node_modules imports. So does @qduc/web-fetch. Its jsdom
-    // resolves xhr-sync-worker.js beside itself, so bundled, every web_fetch call failed with
-    // "Cannot find module". It also made up ~7 MB of the ~18 MB entry that every start
-    // reads and decodes, though only the web_fetch tool imports it, on demand.
+    // prebuilt bindings) stay ordinary node_modules imports.
+    // @qduc/web-fetch is reached only through web_fetch's dynamic import(), yet bundled it put about
+    // 5 MB (jsdom, parse5, domino, ...) in front of every start: each launch read, decoded and
+    // compiled it before any code ran. Loaded from node_modules, it costs only the first fetch. It
+    // must stay external regardless: jsdom resolves xhr-sync-worker.js beside itself, and bundled,
+    // every web_fetch call failed with "Cannot find module './xhr-sync-worker.js'".
     external: [
       '*.node',
       'better-sqlite3',

@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import type { StreamedModelTurn, StreamedModelTurnRequest } from '../../shared/contracts/streamed-model-turn.js';
+import type { StreamedModelTurn, StreamedModelTurnRequest } from '../streamed-model-turn.js';
 import {
   buildProviderFetch,
   type CustomProviderConfig,

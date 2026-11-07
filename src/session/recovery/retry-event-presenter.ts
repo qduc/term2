@@ -1,7 +1,7 @@
-import type { ClassifiedFailure } from './retry-contracts.js';
-import type { ConversationEvent } from '../../session/conversation/conversation-events.js';
-import { describeError } from '../../shared/utils/error-helpers.js';
-import { classifyProviderFailure } from './provider-failure-classification.js';
+import type { ClassifiedFailure } from '../../engine/retry/retry-contracts.js';
+import type { ConversationEvent } from '../conversation/conversation-events.js';
+import { describeError } from '../../model/error-helpers.js';
+import { classifyProviderFailure } from '../../model/failure/provider-failure-classification.js';
 
 export type RetryEventPresenterInput = {
   failure: ClassifiedFailure;

@@ -4,8 +4,10 @@ import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { createIsolatedWorkspaceLease, exitInteractive, writePtyTextAndSubmit } from './provider-test-harness.js';
 
+// Accepted difference (#149): Bare has no profile notice. Preserve image replay and chaining
+// coverage here; native-retry-notice-silent covers background notices, not requestNotice.
 it.skipIf(process.platform !== 'linux')(
-  'retains the original retry notice across a process restart without changing durable user input',
+  'retains the original retry image across a process restart without changing durable user input',
   async () => {
     const requests: Record<string, unknown>[] = [];
     const pending: ServerResponse[] = [];
@@ -49,7 +51,7 @@ it.skipIf(process.platform !== 'linux')(
     });
     let child = await lease.start({
       command: process.execPath,
-      args: [join(process.cwd(), 'dist/src/app/cli.js'), '--lite', '--profile', 'plan'],
+      args: [join(process.cwd(), 'dist/src/app/cli.js'), '--lite', '--profile', 'bare'],
       env: {
         PATH: `${join(lease.root, 'bin')}:${process.env.PATH ?? ''}`,
         TERM2_DIRECT_CONVERSATIONS_DIR: lease.paths.conversationsDir,
@@ -88,7 +90,6 @@ it.skipIf(process.platform !== 'linux')(
       await child.waitForVisibleOutput('Pasted Image #1');
       await child.write('\r');
       await child.waitForState(() => requests.length === 1);
-      expect(JSON.stringify(requests[0]!.input)).toContain('Plan Mode is ON');
       expect(JSON.stringify(requests[0]!.input)).toContain('FIRST_NOTICE_INPUT');
       expect(JSON.stringify(requests[0]!.input)).toContain(
         'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2ioAAAAASUVORK5CYII=',
@@ -109,11 +110,11 @@ it.skipIf(process.platform !== 'linux')(
         .filter((fact) => fact?.type === 'turn_started');
       expect(facts).toHaveLength(1);
       expect(JSON.stringify(facts[0]!.input)).toContain('FIRST_NOTICE_INPUT');
-      expect(JSON.stringify(facts[0]!.input)).not.toContain('Plan Mode is ON');
-      expect(facts[0]!.requestNotice).toContain('Plan Mode is ON');
+      expect(JSON.stringify(facts[0]!.input)).toContain('iVBORw0KGgoAAAANSUhEUg');
+      expect(facts[0]!.requestNotice).toBeUndefined();
       child = await lease.start({
         command: process.execPath,
-        args: [join(process.cwd(), 'dist/src/app/cli.js'), '--lite', '--profile', 'plan', '--resume', sessionId],
+        args: [join(process.cwd(), 'dist/src/app/cli.js'), '--lite', '--profile', 'bare', '--resume', sessionId],
         env: {
           PATH: `${join(lease.root, 'bin')}:${process.env.PATH ?? ''}`,
           TERM2_DIRECT_CONVERSATIONS_DIR: lease.paths.conversationsDir,
@@ -135,7 +136,6 @@ it.skipIf(process.platform !== 'linux')(
       await writePtyTextAndSubmit(child, 'AFTER_RESTART_INPUT');
       await child.waitForState(() => requests.length === 3);
       expect(JSON.stringify(requests[2]!.input)).toContain('AFTER_RESTART_INPUT');
-      expect(JSON.stringify(requests[2]!.input)).not.toContain('Plan Mode is ON');
       expect(requests[2]!.previous_response_id).toBe('notice-response-1');
       complete(2);
       await child.waitForVisibleOutput('NOTICE_DONE_2');

@@ -9,7 +9,7 @@ import type { ProviderDeps, ProviderFetch } from './registry.js';
 import { createProviderFetch } from './fetch/composer.js';
 import type { FetchMiddleware } from './fetch/compose.js';
 import { injectHeaders, installationVersion } from './fetch/logging-middleware.js';
-import { NULL_SESSION_CONTEXT_SERVICE } from '../../session/session/session-context-service.js';
+import { NULL_SESSION_CONTEXT_SERVICE } from '../traffic-context.js';
 import type { ISessionContextService } from '../../shared/service-interfaces.js';
 import { OpenAIChatCompletionsModel } from './openai-chat-completions-model.js';
 import { OpenAIResponsesModelWithPromptCacheKey } from './openai-responses-model.js';
@@ -17,7 +17,7 @@ import { GROK_RESPONSES_OPAQUE_TAG } from './provider-opaque-compatibility.js';
 import { applyClientResponseNormalization, type CostTrailerCapture } from './openai-compatible-response-normalizer.js';
 import { RetryingModel } from './retrying-model.js';
 import { GrokTokenManager } from './grok-auth.js';
-import type { StreamedModelTurn } from '../../shared/contracts/streamed-model-turn.js';
+import type { StreamedModelTurn } from '../streamed-model-turn.js';
 
 /**
  * Grok subscription access goes through the CLI chat proxy, not the metered

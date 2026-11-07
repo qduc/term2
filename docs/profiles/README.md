@@ -58,16 +58,21 @@ same definition, resolution, and consumption path intended for future custom
 Profiles. A descriptive Profile registry layered beside mode booleans does not
 satisfy this specification.
 
-## Pair profile
+## Retired workflow profiles
 
-Use `/profile pair` (or choose Pair in the profile picker) for human-led coding.
-The assistant orients you in the code, asks about unresolved decisions, requests
-approval for one small change, implements and verifies it, then returns control.
-Interfaces and consequential design decisions remain yours to author.
+Plan, Pair, Mentor, and Orchestrator were removed from the direct executable by
+[owner decision #149](https://github.com/qduc/term2/issues/149). They are not offered
+by `/profile`, typed mode commands, `--profile`, or HTTP session configuration.
+Shift+Tab no longer selects Plan. Explicit selections fail as unknown profiles;
+saved settings and resumed sessions naming a dropped profile run Bare instead.
+This fallback does not rewrite their settings or historical conversation facts.
+Workflow notices from old profiles are not reapplied on retry because their
+recorded mode differs from Bare. Same-mode notices and the original user input
+remain intact.
 
-Pair is instruction-only: it retains the former Standard tool/context composition and enforcement. Approval
-and step size are model instructions, not additional runtime restrictions. Switch
-back to the default with `/profile bare`. The workflow is restored with the saved profile.
+The shared profile definitions and historical schemas remain compatibility data,
+not selectable runtime workflows. Bare retains goal checks, delegation and its
+normal permissions. It does not offer the dropped workflows' `propose_goal` tool.
 
 ## Bare profile and unattended runs
 
@@ -80,12 +85,8 @@ Old sessions without a profile or enabled legacy mode also use Bare. History and
 settings files are not bulk-rewritten: runtime selection and new session headers
 use Bare, including resume and rollover. Unknown profile IDs still fail normally.
 
-Explicit Plan, Pair, Mentor, and Orchestrator selections retain their previous
-full-context/tool compositions; they do not inherit Bare's minimal composition.
-Configured profiles are honored even for positional prompts without
-`--auto-approve`. Leaving Plan/Mentor/Orchestrator returns to Bare; `/bare` and
-`/lite` are idempotent while Bare is active. Changes to/from Bare still require
-clearing existing interactive history through the confirmation flow.
+Configured remaining profiles are honored even for positional prompts without
+`--auto-approve`. `/bare` and `/lite` are idempotent while Bare is active.
 
 Lite was merged into Bare on 2026-10-24. Every Lite entry point now selects
 `builtin:bare`: `--lite`, `--profile lite`, `/lite` (alongside `/bare`),

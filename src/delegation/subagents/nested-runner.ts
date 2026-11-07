@@ -3,7 +3,7 @@ import type {
   ApplicationAgent,
   AgentModelSettings,
   NestedModelBinding,
-} from '../../shared/contracts/nested-run-driver.js';
+} from '../../tools/nested-run-driver.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { ApprovalLedger, type ToolInvocationContext } from '../../engine/agent-runtime/tool-invocation-context.js';
@@ -39,7 +39,7 @@ import {
 } from '../../tools/subagents/utils.js';
 import { normalizeAgentRunUsage, extractUsage } from '../../shared/utils/ai/token-usage.js';
 import type { ModelRequestCost } from '../../shared/cost/model-cost.js';
-import { replayApprovals, type ApprovalRecord } from '../../session/approval/approval-replay.js';
+import { replayApprovals, type ApprovalRecord } from '../../engine/approval-replay.js';
 import type { ConversationEvent } from '../../session/conversation/conversation-events.js';
 import { AcquiredChildSlot } from '../../engine/agent-runtime/execution-budget.js';
 import { ToolOwnershipRegistry } from '../../session/approval/tool-ownership-registry.js';
@@ -51,7 +51,7 @@ import {
   type ForegroundSubagentApprovalCallback,
 } from './foreground-subagent-lease.js';
 import { pinWorkerWorktree } from './worker-worktree.js';
-import { classifyPoolEntryFailure } from '../../engine/retry/provider-failure-classification.js';
+import { classifyPoolEntryFailure } from '../../model/failure/provider-failure-classification.js';
 import { streamHasCommittedOutput } from '../../engine/agent-stream.js';
 
 export type CachedRoleTool = {

@@ -4,8 +4,8 @@ import type { ProviderDeps, ProviderFetch } from './registry.js';
 import { createProviderFetch } from './fetch/composer.js';
 import type { FetchMiddleware } from './fetch/compose.js';
 import { addCacheControlToLastTwoMessages } from './anthropic-chat-caching.js';
-import { NULL_SESSION_CONTEXT_SERVICE } from '../../session/session/session-context-service.js';
-import type { StreamedModelTurn } from '../../shared/contracts/streamed-model-turn.js';
+import { NULL_SESSION_CONTEXT_SERVICE } from '../traffic-context.js';
+import type { StreamedModelTurn } from '../streamed-model-turn.js';
 
 async function createOpenRouterModel(deps: ProviderDeps, model: string) {
   const { settingsService, loggingService, sessionContextService } = deps;

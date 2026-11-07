@@ -2,13 +2,13 @@ import type { ConversationRecord } from '../conversation/conversation-record.js'
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import type { ILoggingService } from '../../shared/service-interfaces.js';
 import type { GenerationGuard } from '../generation-guard.js';
-import type { DefaultRetryClassifier } from '../../engine/retry/retry-classifier.js';
+import type { DefaultRetryClassifier } from '../recovery/retry-classifier.js';
 import type { DefaultConversationRecoveryPolicy } from '../../engine/retry/recovery-policy.js';
-import type { DefaultRecoveryExecutor } from '../../engine/retry/recovery-executor.js';
-import type { RetryEventPresenter } from '../../engine/retry/retry-event-presenter.js';
+import type { DefaultRecoveryExecutor } from '../recovery/recovery-executor.js';
+import type { RetryEventPresenter } from '../recovery/retry-event-presenter.js';
 import type { ClassifiedFailure, RetryCounts, RecoveryState } from '../../engine/retry/retry-contracts.js';
 import type { TurnProjectionState } from './turn-projection-state.js';
-import { classifyProviderFailure } from '../../engine/retry/provider-failure-classification.js';
+import { classifyProviderFailure } from '../../model/failure/provider-failure-classification.js';
 import { skipsAutomaticReplayClaim } from '../../engine/retry/committed-tool-continuation.js';
 import type { SessionIdSource } from './session-identity.js';
 import { resolveSessionId } from './session-identity.js';

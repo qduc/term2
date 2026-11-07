@@ -8,7 +8,7 @@
  * prevents the session layer from depending on a provider runner's type.
  */
 import type { ContinuationHandle } from '../shared/contracts/continuation-handle.js';
-import type { ApplicationRunEvent } from '../shared/contracts/application-stream.js';
+import type { ApplicationRunEvent } from '../tools/application-stream.js';
 import type { RunTerminationCause } from '../shared/contracts/run-termination.js';
 export { selectAgentStreamItems } from '../shared/utils/ai/stream-items.js';
 

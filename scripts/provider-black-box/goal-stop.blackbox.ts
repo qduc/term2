@@ -39,14 +39,14 @@ it('bounds missing goal checks and keeps blocked and deferred goals active', asy
   });
   const child = await lease.start({
     command: process.execPath,
-    // This journey needs Pair capabilities; full/standard now alias Bare.
+    // This journey uses retained Bare capabilities; no dropped workflow is needed.
     // Keep --lite to bypass the home-directory start guard (cwd is HOME),
-    // then select Pair explicitly rather than relying on a legacy alias.
+    // then select Bare explicitly rather than relying on a legacy alias.
     args: [
       process.env.TERM2_TEST_CLI ? resolve(process.env.TERM2_TEST_CLI) : join(process.cwd(), 'dist/cli.js'),
       '--lite',
       '--profile',
-      'pair',
+      'bare',
     ],
     cwd: lease.root,
     cols: 120,

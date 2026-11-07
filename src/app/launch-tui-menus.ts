@@ -30,8 +30,8 @@ import {
   fetchLiveSettingValueSuggestions,
   filterSettingValueSuggestionsByQuery,
   mergeSettingValueSuggestions,
-} from '../shared/utils/value-suggestions.js';
-import { parseSettingValueForKey } from '../shared/utils/settings-command.js';
+} from './value-suggestions.js';
+import { parseSettingValueForKey } from './settings-command.js';
 import { isDeepStrictEqual } from 'node:util';
 import {
   SUBAGENT_POOL_SETTING_KEYS,

@@ -1,4 +1,4 @@
-import type { PendingApproval } from '../../shared/contracts/conversation.js';
+import type { PendingApproval } from '../../tools/conversation.js';
 import { isAskUserTerminalAnswer } from '../../shared/tools/agent/ask-user-constants.js';
 
 export type AskUserAnswer = string | string[];

@@ -1,7 +1,4 @@
-import type { ISettingsService } from '../shared/service-interfaces.js';
-import { resolveActiveProfile } from '../config/profiles/active-profile.js';
 import { resolveProfile } from '../config/profiles/resolver.js';
-import { ProfileResolutionError } from '../config/profiles/types.js';
 import type { ResolvedProfile } from '../config/profiles/types.js';
 
 /**
@@ -98,19 +95,4 @@ export function profileExitNotice(profile: ResolvedProfile | string): string | n
       '</system-notice>'
     );
   return null;
-}
-
-/** Prime the active Profile's workflow once, without consulting legacy flags. */
-export function primeActiveProfileNoticeIfActive(
-  settingsService: ISettingsService,
-  queue: (text: string) => void,
-): void {
-  try {
-    const notice = profileEnterNotice(resolveActiveProfile(settingsService));
-    if (notice) queue(notice);
-  } catch (error) {
-    // Startup priming should not make an otherwise recoverable settings state
-    // unusable. Activation itself remains strict and reports this error.
-    if (!(error instanceof ProfileResolutionError)) throw error;
-  }
 }

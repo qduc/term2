@@ -5,7 +5,7 @@ import type { PersistedLogEnvelope } from './conversation-decoder.js';
 import { projectModelRequestHistory } from './conversation-state-projector.js';
 import { repairConversationHistory } from './conversation-history-repair.js';
 import { synthesizeHistoryFromAssistantTurn } from './conversation-turn-items.js';
-import { projectConversationMessage } from './conversation-message-projection.js';
+import { projectConversationMessage } from '../../engine/conversation-message-projection.js';
 import { createCheckpointSourceDigest } from './conversation-checkpoint-provenance.js';
 
 type ProjectionResult =

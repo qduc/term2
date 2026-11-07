@@ -1,4 +1,4 @@
-import type { LLMAdvisory } from '../../shared/contracts/conversation.js';
+import type { LLMAdvisory } from '../../tools/conversation.js';
 import type { ShellAutoApprovalResolver } from './shell-auto-approval-resolver.js';
 import { shouldBypassToolApproval, isAutoApprovableTool } from './shell-auto-approval-resolver.js';
 

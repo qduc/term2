@@ -1,8 +1,11 @@
 name: CI
 
-# Run the full CI matrix on pull requests targeting main and on pushes to main.
-# All four tiers remain required; the existing four jobs share their work.
-# Provider cases still drive the built CLI against deterministic loopback fixtures.
+# Run the full CI matrix on pushes to main, for the catalog updater, and on pull
+# requests targeting main, unless every file a pull request changes is inert for
+# CI (see the `changes` job); then the test jobs are skipped, which required
+# checks count as passing. All four tiers remain required; the existing four
+# jobs share their work. Provider cases still drive the built CLI against
+# deterministic loopback fixtures.
 on:
   workflow_call:
     inputs:
@@ -35,9 +38,58 @@ concurrency:
 
 # The same four runners now share the complete inventory. Each tier keeps its
 # configuration and module isolation; run-ci-lane.mjs builds dist/ and assigns
-# every discovered file once. No test selection depends on changed paths.
+# every discovered file once. Changed paths only decide whether a pull request
+# runs all of it or none of it; no test selection depends on them.
 jobs:
+  # Docs-only pull requests used to pay for the whole matrix. Inert means prose
+  # and evidence records the tests never read: markdown outside src/, and
+  # anything under docs/ except code. Not inert, although markdown: root
+  # AGENTS.md and the .agents/, .claude/ and .term2/ skill directories, because
+  # the CLI puts them in its prompt and provider cases run it from the
+  # checkout. Doc file names still reach that
+  # prompt's depth-2 project tree; no case asserts on the tree, and main runs
+  # everything after merge. Fail open: if this job fails, its empty output runs
+  # every job below.
+  changes:
+    if: github.event_name == 'pull_request' && !inputs.ref
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.scope.outputs.run }}
+    steps:
+      - name: Classify changed files
+        id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          CHANGED_FILES: ${{ github.event.pull_request.changed_files }}
+        run: |
+          # Both sides of a rename count. The files API lists at most 3,000 files,
+          # so a larger pull request always runs.
+          files="$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" \
+            --jq '.[] | .filename, (.previous_filename // empty)')"
+          relevant=()
+          while IFS= read -r file; do
+            case "$file" in
+              '') ;;
+              AGENTS.md | .agents/* | .claude/* | .term2/* | src/*) relevant+=("$file") ;;
+              docs/*.ts | docs/*.tsx | docs/*.js | docs/*.jsx | docs/*.mjs | docs/*.cjs | docs/*.mts | docs/*.cts) relevant+=("$file") ;;
+              docs/* | *.md | *.mdx) ;;
+              *) relevant+=("$file") ;;
+            esac
+          done <<< "$files"
+          if [[ -z "$files" || "$CHANGED_FILES" -gt 3000 || ${#relevant[@]} -gt 0 ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            printf 'Running CI for:\n'
+            printf '  %s\n' "${relevant[@]:0:20}"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "Every changed file is inert for CI; skipping the test jobs."
+          fi
+
   test:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
@@ -50,7 +102,7 @@ jobs:
           ripgrep: 'true'
       - name: Reject committed unit tests
         run: pnpm check:no-unit-tests
-      - name: Run guards, CLI integration and safety provider cases
+      - name: Run guards, CLI integration, safety and responses provider cases
         run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs test
       - name: Upload built CLI for port checks
         uses: actions/upload-artifact@v4
@@ -110,6 +162,8 @@ jobs:
         run: node bench/m1-direct.mjs
 
   integration:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
@@ -124,6 +178,8 @@ jobs:
         run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs integration
 
   e2e:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -131,10 +187,12 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha }}
       - uses: ./.github/actions/setup-tests
-      - name: Run E2E and Responses provider cases
+      - name: Run E2E process cases
         run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs e2e
 
   provider-black-box:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:

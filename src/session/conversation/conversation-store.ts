@@ -3,10 +3,10 @@ import type { ProviderInputItem } from '../../shared/contracts/provider-input.js
 import { userTurnToProviderItem } from './user-turn-item.js';
 import { type UserTurn } from '../../shared/types/user-turn.js';
 import { TOOL_NAME_APPLY_PATCH, TOOL_NAME_CREATE_FILE, TOOL_NAME_SEARCH_REPLACE } from '../../tools/tool-names.js';
-import { projectConversationMessage } from './conversation-message-projection.js';
+import { projectConversationMessage } from '../../engine/conversation-message-projection.js';
 import { normalizeRunItem } from './run-item-normalizer.js';
 
-export { SHELL_CONTEXT_PREFIX } from './conversation-message-projection.js';
+export { SHELL_CONTEXT_PREFIX } from '../../engine/conversation-message-projection.js';
 
 export type ProviderHistorySnapshot = {
   revision: number;

@@ -1,5 +1,5 @@
 /** Response-local identity evidence shared by the OpenAI and Codex stream readers. */
-import type { StreamedModelToolArgumentScope } from '../../shared/contracts/streamed-model-turn.js';
+import type { StreamedModelToolArgumentScope } from '../streamed-model-turn.js';
 
 const record = (value: unknown): Record<string, unknown> | undefined =>
   value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;

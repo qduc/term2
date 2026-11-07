@@ -3,7 +3,7 @@ import type {
   StreamedModelProviderOptions,
   StreamedModelToolResultPart,
   StreamedModelTurnInput,
-} from '../../shared/contracts/streamed-model-turn.js';
+} from '../streamed-model-turn.js';
 import { OPENAI_RESPONSES_OPAQUE_TAG, isForeignProviderOpaque } from './provider-opaque-compatibility.js';
 
 /**

@@ -27,7 +27,7 @@ import type {
   StreamedModelTurn,
   StreamedModelTurnEvent,
   StreamedModelTurnRequest,
-} from '../shared/contracts/streamed-model-turn.js';
+} from './streamed-model-turn.js';
 import type {
   ILoggingService,
   ISessionContextService,

@@ -1,9 +1,9 @@
-import type { CommandMessage } from '../../tools/types.js';
-import type { NormalizedUsage } from '../utils/ai/token-usage.js';
-import type { ModelRequestCost } from '../cost/model-cost.js';
-import type { Item } from './conversation-items.js';
+import type { CommandMessage } from './types.js';
+import type { NormalizedUsage } from '../shared/utils/ai/token-usage.js';
+import type { ModelRequestCost } from '../shared/cost/model-cost.js';
+import type { Item } from '../shared/contracts/conversation-items.js';
 import type { RunBudgetEvent } from './nested-run-driver.js';
-import type { RunTerminationCause } from './run-termination.js';
+import type { RunTerminationCause } from '../shared/contracts/run-termination.js';
 
 export type ReasoningEffortSetting = 'default' | 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
@@ -166,7 +166,7 @@ export interface FinalTerminal {
   costRecords?: ModelRequestCost[];
   turnItems?: Item[];
   /** Canonical provider transcript after a run-local compaction. */
-  providerHistory?: import('./provider-input.js').ProviderInputItem[];
+  providerHistory?: import('../shared/contracts/provider-input.js').ProviderInputItem[];
   terminalCause?: RunTerminationCause;
 }
 

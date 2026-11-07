@@ -51,9 +51,11 @@ it.each(['unreachable', 'catalog'] as const)(
         `${HARNESS_IDLE_ENV}=${idlePath}`,
         'TERM=xterm-256color',
         'CI=false',
+        ...(process.env.TERM2_TEST_NODE_COMPILE_CACHE
+          ? [`NODE_COMPILE_CACHE=${process.env.TERM2_TEST_NODE_COMPILE_CACHE}`]
+          : []),
+        // The built entry is JavaScript; a tsx loader only re-transformed the bundle (~3.5 s per start).
         'node',
-        '--import',
-        'tsx',
         testCliPath('dist/cli.js'),
       ],
       { cols: 120, rows: 40 },

@@ -1,8 +1,8 @@
-import type { PostExecuteDecision } from '../../shared/contracts/conversation.js';
+import type { PostExecuteDecision } from '../../tools/conversation.js';
 import type { SessionIdSource } from './session-identity.js';
 import { resolveSessionId } from './session-identity.js';
 
-export type { PostExecuteDecision } from '../../shared/contracts/conversation.js';
+export type { PostExecuteDecision } from '../../tools/conversation.js';
 
 export type PostExecutePendingEntry = {
   /** Stable across UI re-renders; includes the session epoch and live run identity. */
@@ -11,7 +11,7 @@ export type PostExecutePendingEntry = {
   toolCallId: string;
   toolName: string;
   argumentsText: string;
-  deniedRead?: import('../../shared/contracts/conversation.js').DeniedReadMetadata;
+  deniedRead?: import('../../tools/conversation.js').DeniedReadMetadata;
 };
 
 export type PostExecutePendingSnapshot = {

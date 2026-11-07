@@ -1,4 +1,4 @@
-import type { StreamedModelTurnEvent } from '../../shared/contracts/streamed-model-turn.js';
+import type { StreamedModelTurnEvent } from '../../model/streamed-model-turn.js';
 import { type AgentStream } from '../agent-stream.js';
 import { RunResponseRecorder } from './run-response-recorder.js';
 import { EventQueue } from './run-segment-events.js';

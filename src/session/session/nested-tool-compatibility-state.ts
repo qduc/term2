@@ -1,7 +1,7 @@
 import type { ISettingsService } from '../../shared/service-interfaces.js';
 import { SessionReadAccess } from '../approval/session-read-access.js';
-import { DockerHostControlGrants } from '../../shared/utils/shell/sandbox/docker-host-control-grants.js';
-import { DeniedReadStore, ExecutionOverrideStore } from '../../shared/utils/shell/sandbox/denied-read-stores.js';
+import { DockerHostControlGrants } from '../../tools/shell/sandbox/docker-host-control-grants.js';
+import { DeniedReadStore, ExecutionOverrideStore } from '../../tools/shell/sandbox/denied-read-stores.js';
 import type { NestedReadAccessPort, NestedShellAccessPort } from '../../tools/access-port.js';
 
 /**

@@ -1,7 +1,7 @@
 import { type ProviderDefinition, type ProviderDeps, type ProviderFetch } from './registry.js';
 import type { CustomProviderConfig } from './openai-compatible.provider.js';
 import { neuralwattDefaultReasoningLevel } from './neuralwatt.provider.js';
-import { resolveProviderCredentialValue } from '../../shared/utils/ai/provider-credentials.js';
+import { resolveProviderCredentialValue } from '../provider-credentials.js';
 
 export function createOpenAICompatibleProviderDefinition(config: CustomProviderConfig): ProviderDefinition {
   const providerId = config.name;

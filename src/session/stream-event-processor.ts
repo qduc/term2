@@ -12,7 +12,7 @@ import { createInvalidToolCallDiagnostic } from './logging/logging-contract.js';
 import { parseToolCallArguments } from './tool-call-arguments.js';
 import { assertAgentStream, type AgentStream } from '../engine/agent-stream.js';
 import type { ToolCallStreamingDeltaEvent } from './conversation/conversation-events.js';
-import { ToolCallMarkerStore } from '../shared/utils/streaming/extract-command-messages.js';
+import { ToolCallMarkerStore } from './conversation/extract-command-messages.js';
 
 export interface StreamAccumulator {
   finalOutput: string;

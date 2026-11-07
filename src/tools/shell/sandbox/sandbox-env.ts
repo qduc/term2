@@ -1,5 +1,5 @@
-import { resolveSandboxXdgLayout } from '../temp-dir.js';
-import { getActiveWorkspaceRoot } from '../../../../tools/workspace/active-workspace-root.js';
+import { resolveSandboxXdgLayout } from '../../../shared/utils/shell/temp-dir.js';
+import { getActiveWorkspaceRoot } from '../../workspace/active-workspace-root.js';
 
 const ALLOWED_EXACT_KEYS = new Set(['PATH', 'SHELL', 'TMPDIR', 'TEMP', 'TMP', 'TERM', 'HOME', 'TMUX']);
 

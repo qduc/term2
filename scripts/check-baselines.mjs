@@ -89,7 +89,25 @@ const baseLayerText = showFile(baseCommit, 'scripts/layer-allowlist.json');
 if (baseLayerText) {
   const baseEdges = new Set(parseAllowlist(baseLayerText));
   const currentEdges = new Set(parseAllowlist(fs.readFileSync(path.join(scripts, 'layer-allowlist.json'), 'utf8')));
-  const added = [...currentEdges].filter((e) => !baseEdges.has(e));
+  const added = [...currentEdges].filter((e) => {
+    if (baseEdges.has(e)) return false;
+    const match = e.match(/^(.+?) -> (.+?) \((.+?) -> (.+?)\)$/);
+    if (match) {
+      const [, source, target] = match;
+      const oldSource = oldPathFor(source);
+      const oldTarget = oldPathFor(target);
+      for (const baseEdge of baseEdges) {
+        const baseMatch = baseEdge.match(/^(.+?) -> (.+?) \((.+?) -> (.+?)\)$/);
+        if (baseMatch) {
+          const [, bSource, bTarget] = baseMatch;
+          const matchSource = bSource === source || (oldSource && bSource === oldSource);
+          const matchTarget = bTarget === target || (oldTarget && bTarget === oldTarget);
+          if (matchSource && matchTarget) return false;
+        }
+      }
+    }
+    return true;
+  });
   if (added.length > 0) {
     problems.push(
       `scripts/layer-allowlist.json grew by ${added.length} entry/entries: ${added.slice(0, 3).join('; ')}`,

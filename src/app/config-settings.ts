@@ -2,7 +2,7 @@
 import { z } from 'zod';
 import { isDroppedProfile } from './dropped-profiles.js';
 import { getProfileMetadata } from '../config/profiles/active-profile.js';
-import { canonicalProfileId, legacyModeFromProfileId } from '../shared/profiles/legacy-adapter.js';
+import { canonicalProfileId, legacyModeFromProfileId } from '../config/profiles/legacy-adapter.js';
 import {
   SettingsSchema,
   AgentSettingsSchema,

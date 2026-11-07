@@ -1,10 +1,10 @@
 import { readFile, writeFile, mkdir, rm } from 'fs/promises';
 import path from 'path';
-import { applyDiff } from '../utils/apply-diff.js';
-import type { ApplyPatchOperation, ApplyPatchResult } from '../contracts/patch.js';
-import type { ILoggingService, ISettingsService } from '../service-interfaces.js';
-import { quoteShellArg } from '../../tools/ssh-service.js';
-import { ExecutionContext } from '../../tools/execution-context.js';
+import { applyDiff } from '../shared/utils/apply-diff.js';
+import type { ApplyPatchOperation, ApplyPatchResult } from '../shared/contracts/patch.js';
+import type { ILoggingService, ISettingsService } from '../shared/service-interfaces.js';
+import { quoteShellArg } from './ssh-service.js';
+import { ExecutionContext } from './execution-context.js';
 
 /**
  * Resolves a relative path and ensures it's within the workspace, unless the

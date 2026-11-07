@@ -1,7 +1,7 @@
 import { clearModelCache, fetchModels, type ModelInfo, type FetchModelsDeps } from '../model-service.js';
 import { getProviderIds } from '../providers/index.js';
 import type { ILoggingService, ISettingsService } from '../../shared/service-interfaces.js';
-import { getAvailableProviderIds, isProviderDisabled } from '../../shared/utils/ai/provider-credentials.js';
+import { getAvailableProviderIds, isProviderDisabled } from '../provider-credentials.js';
 
 export type ModelFetcher = (provider: string) => Promise<ModelInfo[]>;
 

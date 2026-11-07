@@ -5,7 +5,7 @@ import { SETTING_KEYS } from '../config/settings/settings-service.js';
 import { getProvider } from '../model/providers/index.js';
 import { parseModelProviderArg } from '../shared/utils/ai/model-provider-arg.js';
 import { getModelSettingConfig } from '../shared/utils/ai/model-settings.js';
-import { isLegacyModeSettingKey, profileIdFromLegacyModeSetting } from '../shared/profiles/legacy-adapter.js';
+import { isLegacyModeSettingKey, profileIdFromLegacyModeSetting } from '../config/profiles/legacy-adapter.js';
 import {
   isArraySetting,
   isDurationSetting,

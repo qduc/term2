@@ -3,7 +3,7 @@ import type { ModelInfo } from '../model/model-service.js';
 import type { ILoggingService, ISettingsService } from '../shared/service-interfaces.js';
 import { ModelCatalogSession, orderedProviderIds, type ModelFetcher } from '../model/models/model-catalog-session.js';
 import { getProviderIds } from '../model/providers/index.js';
-import { resolveProviderCredentials } from '../shared/utils/ai/provider-credentials.js';
+import { resolveProviderCredentials } from '../model/provider-credentials.js';
 import { getFavoriteModelInfos, serializeFavorite, toggleFavoriteModel } from '../model/models/model-favorites.js';
 import {
   commitNicknameEdit,

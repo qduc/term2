@@ -1,6 +1,6 @@
 import type { SubagentResult } from './types.js';
 import { MaxTurnsExceededError } from './max-turns-error.js';
-import { isMaxTurnsError } from '../../shared/utils/conversation/conversation-utils.js';
+import { isMaxTurnsError } from '../conversation-utils.js';
 
 // Diagnostic text can describe cancellation or contain it in a path without
 // representing a stop. Application-owned cancellation producers carry identity.

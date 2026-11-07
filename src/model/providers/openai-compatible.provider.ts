@@ -6,7 +6,7 @@ import { AiSdkAnthropicProvider } from './ai-sdk-anthropic.provider.js';
 import { AiSdkGoogleProvider } from './ai-sdk-google.provider.js';
 import { buildOpenAICompatibleUrl, normalizeBaseUrl } from './common/openai-compatible-utils.js';
 import { isOpencodeProvider, isOpencodeTrailer, resolveOpencodeRuntimeConfig } from './opencode.provider.js';
-import { resolveProviderCredentialValue } from '../../shared/utils/ai/provider-credentials.js';
+import { resolveProviderCredentialValue } from '../provider-credentials.js';
 import { OpencodeAnthropicFormatProvider } from './opencode-model-provider.js';
 import { createOpencodeSessionMiddleware } from './opencode-middleware.js';
 import { createAnthropicChatCachingMiddleware } from './anthropic-chat-caching.js';

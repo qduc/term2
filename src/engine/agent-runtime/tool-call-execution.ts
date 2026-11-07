@@ -14,7 +14,7 @@ import {
   isHarnessInvariantError,
 } from '../../shared/lib/harness-invariant-error.js';
 import { describeError } from '../../model/error-helpers.js';
-import { normalizeToolParameters } from '../../shared/lib/tool-invoke.js';
+import { normalizeToolParameters } from '../../tools/tool-invoke.js';
 import { isZodToolParameterSchema } from '../../tools/types.js';
 import type { ToolInvocationContext } from './tool-invocation-context.js';
 

@@ -8,7 +8,7 @@ import { createShellToolDefinition, type BackgroundShellExecutionResult } from '
 import { presentBareShell } from '../../../../src/tools/system/bare-shell.js';
 import { createRunCodeToolDefinition } from '../../../../src/delegation/run-code/run-code-tool.js';
 import { buildAgentTools, type AgentFactoryDeps } from '../../../../src/app/lib/agent-factory.js';
-import { createEditorImpl } from '../../../../src/shared/lib/editor-impl.js';
+import { createEditorImpl } from '../../../../src/tools/editor-impl.js';
 import { createMockSettingsService } from '../../../helpers/settings-service.mock.js';
 import { ExecutionContext } from '../../../../src/tools/execution-context.js';
 import {
@@ -20,7 +20,7 @@ import { SessionAccessState } from '../../../../src/session/session/session-acce
 import { BackgroundShellRegistry } from '../../../../src/tools/shell/background-shell-registry.js';
 import { PostExecutePauseCapability } from '../../../../src/session/session/post-execute-pause-capability.js';
 import { PostExecutePendingRegistry } from '../../../../src/session/session/post-execute-pending-registry.js';
-import type { ShellSandboxRunner } from '../../../../src/shared/utils/shell/sandbox/sandbox-policy.js';
+import type { ShellSandboxRunner } from '../../../../src/tools/shell/sandbox/sandbox-policy.js';
 
 const logger = {
   info() {},

@@ -1,4 +1,4 @@
-import { executeShellCommand } from '../shared/utils/shell/execute-shell.js';
+import { executeShellCommand } from '../tools/shell/execute-shell.js';
 import { formatShellExecutionOutput } from '../shared/utils/shell/shell-output.js';
 /** The interactive terminal client on the direct host. The app owns the connection and replaces it across sessions. */
 import fs from 'node:fs';

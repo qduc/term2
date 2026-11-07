@@ -3,11 +3,11 @@ import {
   normalizeToolArguments,
   getOutputText,
   type ToolResultItem,
-} from '../../../tools/format-helpers.js';
-import { getToolFormatter } from '../../../tools/command-message-formatters.js';
-import type { CommandMessage } from '../../../tools/types.js';
-import type { Item, ToolResult } from '../../contracts/conversation-items.js';
-import { normalizeRunItem } from '../../../session/conversation/run-item-normalizer.js';
+} from '../../tools/format-helpers.js';
+import { getToolFormatter } from '../../tools/command-message-formatters.js';
+import type { CommandMessage } from '../../tools/types.js';
+import type { Item, ToolResult } from '../../shared/contracts/conversation-items.js';
+import { normalizeRunItem } from './run-item-normalizer.js';
 
 /** Per-session/turn markers used to annotate tool results without process-global state. */
 export class ToolCallMarkerStore {

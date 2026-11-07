@@ -1,4 +1,4 @@
-import { normalizeObjectParams } from '../../shared/lib/tool-invoke.js';
+import { normalizeObjectParams } from '../../tools/tool-invoke.js';
 
 export type ToolApprovalPolicyResult =
   | { kind: 'auto_approve' }

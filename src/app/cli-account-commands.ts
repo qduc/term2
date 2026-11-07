@@ -11,7 +11,7 @@ import { listOAuthAccounts, removeOAuthAccount, setActiveOAuthAccount } from '..
 import { loginToCodex } from '../model/providers/codex-auth.js';
 import { loginToGrok } from '../model/providers/grok-auth.js';
 import { ModelCatalogSession } from '../model/models/model-catalog-session.js';
-import { getAvailableProviderIds, resolveProviderCredentials } from '../shared/utils/ai/provider-credentials.js';
+import { getAvailableProviderIds, resolveProviderCredentials } from '../model/provider-credentials.js';
 import type {
   CredentialDescription,
   DirectCredentialBackend,

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { SANDBOX_TEMP_DIR } from '../temp-dir.js';
+import { SANDBOX_TEMP_DIR } from '../../../shared/utils/shell/temp-dir.js';
 
 export interface DockerHostControl {
   socketPath: string;

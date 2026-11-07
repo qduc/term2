@@ -46,7 +46,7 @@ const searchParametersSchema = z.object({
 export type SearchToolParams = z.infer<typeof searchParametersSchema>;
 
 import { ExecutionContext } from '../execution-context.js';
-import { executeShellCommand } from '../../shared/utils/shell/execute-shell.js';
+import { executeShellCommand } from '../shell/execute-shell.js';
 import { isScriptedToolCall, resolveResultMaxBytesForCall } from '../../shared/utils/output/bound-tool-result.js';
 
 let hasRg: boolean | null = null;

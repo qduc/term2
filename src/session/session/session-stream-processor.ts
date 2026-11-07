@@ -5,7 +5,7 @@ import type { AgentStream } from '../../engine/agent-stream.js';
 import type { ConversationEvent } from '../conversation/conversation-events.js';
 import { createStreamAccumulator, processStreamEvents, type StreamAccumulator } from '../stream-event-processor.js';
 import { GenerationGuard } from '../generation-guard.js';
-import { ToolCallMarkerStore } from '../../shared/utils/streaming/extract-command-messages.js';
+import { ToolCallMarkerStore } from '../conversation/extract-command-messages.js';
 import type { SessionIdSource } from './session-identity.js';
 import { resolveSessionId } from './session-identity.js';
 import type { StreamHistorySource } from '../conversation/conversation-record-stream.js';

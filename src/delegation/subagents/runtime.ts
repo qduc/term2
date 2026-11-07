@@ -37,7 +37,7 @@ export interface SubagentRuntimeDeps {
   /** Session-owned queue/control sink for pauses from adopted child runs. */
   backgroundApprovalPauseSink?: BackgroundSubagentApprovalPauseSink;
   readOnly?: boolean;
-  scopedSandbox?: import('../../shared/utils/shell/sandbox/sandbox-policy.js').ScopedShellSandbox;
+  scopedSandbox?: import('../../tools/shell/sandbox/sandbox-policy.js').ScopedShellSandbox;
   sessionBrowser?: SessionBrowser;
 }
 

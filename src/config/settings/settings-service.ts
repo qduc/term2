@@ -10,7 +10,7 @@ import {
   legacyModeFromProfileId,
   profileIdFromLegacyMode,
   profileIdFromLegacyModeSetting,
-} from '../../shared/profiles/legacy-adapter.js';
+} from '../profiles/legacy-adapter.js';
 import {
   DEFAULT_SETTINGS,
   OPTIONAL_DEFAULT_KEYS,

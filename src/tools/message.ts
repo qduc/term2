@@ -1,6 +1,6 @@
-import type { CommandMessage as BaseCommandMessage } from '../../tools/types.js';
-import type { NormalizedUsage } from '../utils/ai/token-usage.js';
-import type { SkillAttachment, UserTurn } from './user-turn.js';
+import type { CommandMessage as BaseCommandMessage } from './types.js';
+import type { NormalizedUsage } from '../shared/utils/ai/token-usage.js';
+import type { SkillAttachment, UserTurn } from '../shared/types/user-turn.js';
 
 export interface UserMessage {
   /** Human arrival time, independent of processing/queue delay. */

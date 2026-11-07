@@ -126,12 +126,16 @@ compiles the bundle with `vm.Script` instead, and writes the script's V8 code
 cache to `term2-bundle/` inside whatever compile cache directory Node reports.
 It writes the cache 2 s after start as `<bundle>.settled`, which covers an idle
 TUI, or at exit as `<bundle>.exit` when a short run (`--help`, a headless run)
-found no usable cache. A settled cache is never rewritten, and V8 rejects one
-from another Node version or flag set, so it is deleted. The file name holds the
-bundle's size and mtime, because V8 checks only the length of a cache's source.
-Without a compile cache directory (`NODE_DISABLE_COMPILE_CACHE`, no
-`NODE_COMPILE_CACHE` when launched directly) the bundle is `require()`d as an
-ordinary CommonJS module. Dynamic `import()` from the script goes through
+found no usable cache. A settled cache is never rewritten. V8 checks only a
+cache's header and the length of its source, so the file name holds the bundle's
+size and CRC32, and each file starts with a CRC32 of its data, checked before V8
+sees it. Without that check, a cache damaged past its header crashed V8 (exit 133)
+on every start, and a same-length bundle could run another's bytecode. A cache
+that fails either check, or that V8 rejects, is deleted. Without a compile cache
+directory (`NODE_DISABLE_COMPILE_CACHE`, no `NODE_COMPILE_CACHE` when launched
+directly), or on a Node without `module.getCompileCacheDir`, the vm loader
+constant or `zlib.crc32`, the bundle is `require()`d as an ordinary CommonJS
+module. Dynamic `import()` from the script goes through
 `vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER`; the loader takes the first such
 import itself, so Node's one-time ExperimentalWarning for that constant is
 dropped and never reaches the terminal.

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Fail when a file under src cannot be reached from the production entry.
-// The walk follows every static, type-only, re-export and dynamic import from
-// src/app/cli.ts. A file kept on purpose without a production importer
+// The walk follows value imports, re-exports, dynamic imports and require from
+// src/app/cli.ts. Erased type modules need no runtime importer. A runtime file kept
+// on purpose without a production importer
 // goes in reachability-allowlist.json with the reason it stays.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -35,9 +36,78 @@ function resolve(importer, specifier) {
   return candidates.find((candidate) => fs.existsSync(candidate) && fs.statSync(candidate).isFile()) ?? null;
 }
 
+const sources = new Map();
+function source(file) {
+  if (!sources.has(file)) {
+    sources.set(file, ts.createSourceFile(file, fs.readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true));
+  }
+  return sources.get(file);
+}
+
+function typeOnly(node) {
+  if (node.isTypeOnly) return true;
+  if (ts.isImportDeclaration(node)) {
+    const clause = node.importClause;
+    const bindings = clause?.namedBindings;
+    return (
+      !clause?.name &&
+      bindings &&
+      ts.isNamedImports(bindings) &&
+      bindings.elements.length > 0 &&
+      bindings.elements.every((element) => element.isTypeOnly)
+    );
+  }
+  const bindings = node.exportClause;
+  return (
+    bindings &&
+    ts.isNamedExports(bindings) &&
+    bindings.elements.length > 0 &&
+    bindings.elements.every((element) => element.isTypeOnly)
+  );
+}
+
 function imports(file) {
-  const info = ts.preProcessFile(fs.readFileSync(file, 'utf8'), true, true);
-  return info.importedFiles.map(({ fileName }) => resolve(file, fileName)).filter(Boolean);
+  const targets = [];
+  const add = (literal) => {
+    if (literal && ts.isStringLiteralLike(literal)) {
+      const target = resolve(file, literal.text);
+      if (target) targets.push(target);
+    }
+  };
+  const visit = (node) => {
+    if (ts.isImportDeclaration(node)) {
+      if (node.importClause?.isTypeOnly || typeOnly(node)) return;
+      add(node.moduleSpecifier);
+    } else if (ts.isExportDeclaration(node)) {
+      if (typeOnly(node)) return;
+      add(node.moduleSpecifier);
+    } else if (ts.isImportEqualsDeclaration(node)) {
+      if (!node.isTypeOnly && ts.isExternalModuleReference(node.moduleReference)) add(node.moduleReference.expression);
+    } else if (
+      ts.isCallExpression(node) &&
+      (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+        (ts.isIdentifier(node.expression) && node.expression.text === 'require'))
+    ) {
+      add(node.arguments[0]);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source(file));
+  return targets;
+}
+
+// Interfaces, aliases and explicitly type-only dependencies erase completely.
+// Be conservative about re-exports: only explicitly type-only ones are exempt.
+function pureTypes(file) {
+  return source(file).statements.every(
+    (node) =>
+      ts.isInterfaceDeclaration(node) ||
+      ts.isTypeAliasDeclaration(node) ||
+      ts.isEmptyStatement(node) ||
+      (ts.isImportDeclaration(node) && (node.importClause?.isTypeOnly || typeOnly(node))) ||
+      (ts.isImportEqualsDeclaration(node) && node.isTypeOnly) ||
+      (ts.isExportDeclaration(node) && typeOnly(node)),
+  );
 }
 
 let allowlist;
@@ -66,6 +136,7 @@ for (const file of all) {
     if (allowlist[file]) problem(`${file} is reached from cli.ts; remove its reachability allowlist entry`);
     continue;
   }
+  if (!(file in allowlist) && pureTypes(path.join(repo, file))) continue;
   if (!(file in allowlist)) problem(`unreached from src/app/cli.ts: ${file}`);
   else if (reasonProblem(allowlist[file])) problem(`${file} ${reasonProblem(allowlist[file])}`);
 }

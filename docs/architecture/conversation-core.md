@@ -1,9 +1,18 @@
 # Follow the model–tool loop
 
+> **Scope: the delegation runtime, not the foreground turn.** This describes
+> `ApplicationRunLoop` and the session runtime that `createSessionRuntime` builds
+> (`src/session/session/`), which the legacy subagent runners in
+> `src/delegation/subagents/` drive. Every person-facing conversation runs on the
+> foreground path instead (`session/conversation-turn.ts`, `engine/turn.ts`); see
+> [the overview](architecture-overview.md). "Runtime session" below is the session
+> `createSessionRuntime` builds, which this page called the root session before the
+> rewrite (#86–#88).
+
 `ApplicationRunLoop.#runTurn` in
-[`application-run-loop.ts`](../../source/services/agent-runtime/application-run-loop.ts)
-owns execution advancement. In the root session path,
-[`ConversationRecord`](../../source/services/conversation/conversation-record.ts)
+[`application-run-loop.ts`](../../src/engine/agent-runtime/application-run-loop.ts)
+owns execution advancement. In the runtime session,
+[`ConversationRecord`](../../src/session/conversation/conversation-record.ts)
 owns acceptance of provider history, tool evidence and assistant journal items.
 Presentation observes those facts; it does not commit them.
 
@@ -33,7 +42,7 @@ The control cycle is model → tools → model. Acceptance happens during that c
 before the runtime publishes the corresponding event to observers. It is not a
 later step that a UI consumer must finish before execution may proceed.
 
-The root session supplies bounded callbacks through `ApplicationTurnSession`.
+The runtime session supplies bounded callbacks through `ApplicationTurnSession`.
 `SessionTurnAdapter.#acceptEvent` routes observed items and streaming fragments to
 Record. `acceptToolDispatch` records dispatch evidence before a tool body can run.
 `#acceptSegment` delegates to Record, which reconciles the segment and synchronously
@@ -96,7 +105,15 @@ unmeasured.
 
 ## Human-arrival timing
 
-Root conversation submissions retain a host-observed `humanInputAt` on the
+This section was written for the pre-rewrite root conversation, and
+`src/shared/conversation/conversation-time-gap.ts` still implements it for the
+runtime session. The foreground path has its own implementation,
+`src/session/time-gap.ts` (`planDirectTiming`), which derives timing from accepted
+queue evidence and treats a malformed human receipt as poisoning the clock rather
+than as no evidence. The rules below were not re-verified against the foreground
+implementation; read `planDirectTiming` before relying on them there.
+
+Submissions retain a host-observed `humanInputAt` on the
 user turn, including through the durable pending queue. At a gap of at least
 one hour, model input gets a separate `[Conversation timing]` system message;
 the user's text and transcript presentation stay unchanged. The note gives
@@ -104,7 +121,7 @@ whole elapsed minutes and both UTC timestamps, and describes human arrivals,
 not agent inactivity. One hour avoids noise during ordinary back-and-forth;
 there is no setting or background timer.
 
-`conversation-time-gap.ts` owns this policy. Timing metadata stays attached to
+`conversation-time-gap.ts` owns this policy in the runtime session. Timing metadata stays attached to
 its user item so replay and rewind cannot duplicate or orphan the notice.
 Pending steers derive their gap at FIFO admission, not at mailbox offer time;
 released-steer priority must not move the latest human-arrival baseline

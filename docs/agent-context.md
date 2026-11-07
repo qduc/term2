@@ -8,7 +8,7 @@ revisited when new evidence supports doing so.
 
 Read the relevant documents before touching these areas, starting with **Resume here** where present. Keep milestone status, measurements, and implementation history in the linked documents, not this index.
 
-- **Architecture and turn flow:** [Overview](architecture/architecture-overview.md), [conversation core](architecture/conversation-core.md), and [conversation loop](architecture/conversation-loop.md)
+- **Architecture and turn flow:** [Layers](architecture/layers.md) (layers, message path, rule checks), [overview](architecture/architecture-overview.md) (which of the two turn paths a change touches), and, for the delegation runtime only, [conversation core](architecture/conversation-core.md) and [conversation loop](architecture/conversation-loop.md)
 - **Reference guides:** [Logging](reference/logging.md), [public hooks](reference/public-hooks.md), [model discovery](reference/agent-model-discovery.md), [Docker sandbox](reference/docker-host-control-sandbox.md), and [workflow evolution](reference/workflow-evolution.md)
 - **Agent assembly:** [Bounded feature composition and deferral criteria](plans/agent-runtime/agent-assembly-migration.md)
 - **Gateway:** [Web client gateway](plans/web-client/web-client-gateway-completion.md)

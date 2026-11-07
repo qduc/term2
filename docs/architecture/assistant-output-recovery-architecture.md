@@ -1,5 +1,14 @@
 # Assistant Output Recovery Architecture
 
+> **Design record, written against the pre-rewrite `source/` tree.** Paths below are
+> historical. The structures it discusses now live under `src/` but belong to the legacy
+> runtime, which production never executes ([overview](architecture-overview.md), #197):
+> `ToolExecutionLedger` (`src/session/tool-execution-ledger.ts`), `AssistantTurnJournal`
+> (`src/session/logging/assistant-turn-journal.ts`), `ConversationStore` and
+> `ConversationRecord` (`src/session/conversation/`). None of them is in the built bundle.
+> The live turn path replays history and retry eligibility from the session's one log
+> ([`layers.md`](layers.md), "One log").
+
 ## Problem Statement
 
 The current recovery mechanism is centered on `source/services/tool-execution-ledger.ts`, which stores tool call/result pairs so interrupted turns can be reconstructed after a failure. That solves one narrow class of recovery: tool execution that started but did not finish cleanly.

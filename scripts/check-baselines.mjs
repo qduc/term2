@@ -1,33 +1,41 @@
 #!/usr/bin/env node
-// CI guard (Rule 6): Agents may not grow a baseline.
-// Compares layer-allowlist.json, rule-baseline.json, reachability-allowlist.json,
-// complexity-budget.json (and root-allowlist.json) against the merge base.
-// Adding entries or raising ceilings fails CI; removing entries or lowering ceilings is allowed.
+// CI guard: recorded deviations from a rule must carry reasons, and the reviewer sees every new one.
+//
+// Compares the gate exception files (layer-allowlist.json, rule-baseline.json, reachability-allowlist.json,
+// complexity-budget.json, root-allowlist.json) against the merge base. A change may add an exception or raise a
+// file ceiling when it judges the rule wrong for that case, but only with a reason a later reader can judge:
+//   - a new entry must be an object with a reason (bare legacy strings cannot grow);
+//   - a raised file ceiling must rewrite its reason to cover the new lines;
+//   - the global line limit cannot rise here, that is the user's call.
+// Every accepted deviation is printed (and written to the CI step summary) for the reviewer to confirm.
+// Removing entries or lowering ceilings is always allowed. Policy: docs/architecture/layers.md#when-a-gate-fails.
 import { execSync } from 'node:child_process';
 import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const scripts = path.dirname(fileURLToPath(import.meta.url));
-const repo = path.resolve(scripts, '..');
+import {
+  RULES,
+  failureMap,
+  readDeviations,
+  readWorkingTree,
+  reasonProblem,
+  repo,
+  reportAndExit,
+} from './gates/rules.mjs';
 
 function getBaseCommit() {
   if (process.env.PR_BASE) return process.env.PR_BASE;
   if (process.env.MERGE_BASE) return process.env.MERGE_BASE;
   if (process.env.BASE_REF) return process.env.BASE_REF;
-  if (process.env.GITHUB_BASE_REF) {
+  const ref = process.env.GITHUB_BASE_REF ? `origin/${process.env.GITHUB_BASE_REF}` : 'origin/main';
+  for (const candidate of [ref, 'origin/main']) {
     try {
-      const mb = execSync(`git merge-base HEAD origin/${process.env.GITHUB_BASE_REF}`, {
+      const mb = execSync(`git merge-base HEAD ${candidate}`, {
         cwd: repo,
         encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'ignore'],
       }).trim();
       if (mb) return mb;
     } catch {}
   }
-  try {
-    const mb = execSync('git merge-base HEAD origin/main', { cwd: repo, encoding: 'utf8' }).trim();
-    if (mb) return mb;
-  } catch {}
   return 'HEAD';
 }
 
@@ -43,6 +51,7 @@ function showFile(commit, relativePath) {
   }
 }
 
+// new path -> old path, repo-relative.
 function getRenamedFiles(commit) {
   const renames = new Map();
   try {
@@ -52,13 +61,8 @@ function getRenamedFiles(commit) {
       stdio: ['pipe', 'pipe', 'ignore'],
     });
     for (const line of out.trim().split('\n')) {
-      if (!line) continue;
       const parts = line.split('\t');
-      if (parts.length >= 3 && parts[0].startsWith('R')) {
-        const oldPath = parts[1].trim();
-        const newPath = parts[2].trim();
-        renames.set(newPath, oldPath);
-      }
+      if (parts.length >= 3 && parts[0].startsWith('R')) renames.set(parts[2].trim(), parts[1].trim());
     }
   } catch {}
   return renames;
@@ -66,150 +70,102 @@ function getRenamedFiles(commit) {
 
 const baseCommit = getBaseCommit();
 const renames = getRenamedFiles(baseCommit);
-const oldPathFor = (p) => {
-  if (renames.has(p)) return renames.get(p);
-  const withSrc = renames.get(`src/${p}`);
-  if (withSrc) return withSrc.replace(/^src\//, '');
-  return undefined;
+// Paths in the exception files are repo-relative or relative to src/, depending on the file.
+const oldPath = (p) => renames.get(p) ?? renames.get(`src/${p}`)?.replace(/^src\//, '');
+
+const base = readDeviations((file) => showFile(baseCommit, file));
+const current = readDeviations(readWorkingTree);
+
+const index = (deviations) => {
+  const map = new Map();
+  for (const d of deviations) map.set(`${d.rule}\0${d.key}`, d);
+  return map;
 };
-const problems = [];
+const baseIndex = index(base.deviations);
+const EDGE = /^(.+?) -> (.+?) \((.+?) -> (.+?)\)$/;
+const baseEdges = base.deviations
+  .filter((d) => d.rule === 'layer-direction')
+  .map((d) => d.key.match(EDGE))
+  .filter(Boolean);
 
-function parseAllowlist(text) {
-  try {
-    return JSON.parse(text);
-  } catch {
-    const matches = [...text.matchAll(/"([^"]+ -> [^"]+ \([^)]+\))"/g)].map((m) => m[1]);
-    if (matches.length > 0) return matches;
-    throw new Error('cannot parse layer-allowlist.json');
-  }
-}
-
-// 1. layer-allowlist.json
-const baseLayerText = showFile(baseCommit, 'scripts/layer-allowlist.json');
-if (baseLayerText) {
-  const baseEdges = new Set(parseAllowlist(baseLayerText));
-  const currentEdges = new Set(parseAllowlist(fs.readFileSync(path.join(scripts, 'layer-allowlist.json'), 'utf8')));
-  const added = [...currentEdges].filter((e) => {
-    if (baseEdges.has(e)) return false;
-    const match = e.match(/^(.+?) -> (.+?) \((.+?) -> (.+?)\)$/);
-    if (match) {
-      const [, source, target] = match;
-      const oldSource = oldPathFor(source);
-      const oldTarget = oldPathFor(target);
-      for (const baseEdge of baseEdges) {
-        const baseMatch = baseEdge.match(/^(.+?) -> (.+?) \((.+?) -> (.+?)\)$/);
-        if (baseMatch) {
-          const [, bSource, bTarget] = baseMatch;
-          const matchSource = bSource === source || (oldSource && bSource === oldSource);
-          const matchTarget = bTarget === target || (oldTarget && bTarget === oldTarget);
-          if (matchSource && matchTarget) return false;
-        }
-      }
-    }
-    return true;
-  });
-  if (added.length > 0) {
-    problems.push(
-      `scripts/layer-allowlist.json grew by ${added.length} entry/entries: ${added.slice(0, 3).join('; ')}`,
+function baseEntryFor(d) {
+  const direct = baseIndex.get(`${d.rule}\0${d.key}`);
+  if (direct) return direct;
+  if (d.rule === 'layer-direction') {
+    // An edge whose ends were renamed is the same edge.
+    const m = d.key.match(EDGE);
+    if (!m) return undefined;
+    const [, source, target] = m;
+    const hit = baseEdges.find(
+      ([, s, t]) => (s === source || s === oldPath(source)) && (t === target || t === oldPath(target)),
     );
+    return hit ? { key: hit[0] } : undefined;
   }
+  const [file, ...rest] = d.key.split(' ');
+  const old = oldPath(file);
+  return old ? baseIndex.get(`${d.rule}\0${[old, ...rest].join(' ')}`) : undefined;
 }
 
-// 2. reachability-allowlist.json
-const baseReachText = showFile(baseCommit, 'scripts/reachability-allowlist.json');
-if (baseReachText) {
-  const baseReach = JSON.parse(baseReachText);
-  const currentReach = JSON.parse(fs.readFileSync(path.join(scripts, 'reachability-allowlist.json'), 'utf8'));
-  const added = Object.keys(currentReach).filter((k) => !(k in baseReach) && !baseReach[renames.get(k)]);
-  if (added.length > 0) {
-    problems.push(`scripts/reachability-allowlist.json grew: new entry ${added.join(', ')}`);
-  }
-}
+const { map: failures, add } = failureMap();
+const problem = add('baselines');
+const accepted = [];
 
-// 3. rule-baseline.json
-const baseRuleText = showFile(baseCommit, 'scripts/rule-baseline.json');
-if (baseRuleText) {
-  const baseRule = JSON.parse(baseRuleText);
-  const currentRule = JSON.parse(fs.readFileSync(path.join(scripts, 'rule-baseline.json'), 'utf8'));
-
-  const baseWire = new Set((baseRule.wireEventOutsideProtocol || []).map((e) => `${e.file} ${e.type}`));
-  const currentWire = (currentRule.wireEventOutsideProtocol || []).map((e) => `${e.file} ${e.type}`);
-  const addedWire = currentWire.filter((w) => !baseWire.has(w));
-  if (addedWire.length > 0) {
-    problems.push(`scripts/rule-baseline.json grew: wireEventOutsideProtocol added ${addedWire.join(', ')}`);
-  }
-
-  const baseJob = new Set(baseRule.jobNameExceptions || []);
-  const currentJob = currentRule.jobNameExceptions || [];
-  const addedJob = currentJob.filter((j) => !baseJob.has(j) && !baseJob.has(oldPathFor(j)));
-  if (addedJob.length > 0) {
-    problems.push(`scripts/rule-baseline.json grew: jobNameExceptions added ${addedJob.join(', ')}`);
-  }
-
-  const baseUnused = new Set(baseRule.unusedExports || []);
-  const currentUnused = currentRule.unusedExports || [];
-  const addedUnused = currentUnused.filter((u) => {
-    if (baseUnused.has(u)) return false;
-    const spaceIdx = u.indexOf(' ');
-    if (spaceIdx > 0) {
-      const file = u.slice(0, spaceIdx);
-      const symbol = u.slice(spaceIdx + 1);
-      const oldFile = oldPathFor(file);
-      if (oldFile && baseUnused.has(`${oldFile} ${symbol}`)) return false;
-    }
-    return true;
-  });
-  if (addedUnused.length > 0) {
-    problems.push(`scripts/rule-baseline.json grew: unusedExports added ${addedUnused.length} entries`);
-  }
-}
-
-// 4. complexity-budget.json
-const baseBudgetText = showFile(baseCommit, 'scripts/complexity-budget.json');
-if (baseBudgetText) {
-  const baseBudget = JSON.parse(baseBudgetText);
-  const currentBudget = JSON.parse(fs.readFileSync(path.join(scripts, 'complexity-budget.json'), 'utf8'));
-
-  if (currentBudget.maxLayerEdges > baseBudget.maxLayerEdges) {
-    problems.push(
-      `scripts/complexity-budget.json raised ceiling: maxLayerEdges grew from ${baseBudget.maxLayerEdges} to ${currentBudget.maxLayerEdges}`,
-    );
-  }
-  if (currentBudget.maxLines > baseBudget.maxLines) {
-    problems.push(
-      `scripts/complexity-budget.json raised ceiling: maxLines grew from ${baseBudget.maxLines} to ${currentBudget.maxLines}`,
-    );
-  }
-
-  const baseCeilings = baseBudget.fileCeilings || {};
-  const currentCeilings = currentBudget.fileCeilings || {};
-
-  for (const [file, info] of Object.entries(currentCeilings)) {
-    const baseEntry = baseCeilings[file] || baseCeilings[renames.get(file)];
-    if (!baseEntry) {
-      problems.push(`scripts/complexity-budget.json grew: new file ceiling for ${file}`);
-    } else if (info.lines > baseEntry.lines) {
-      problems.push(
-        `scripts/complexity-budget.json raised ceiling: ${file} lines ceiling grew from ${baseEntry.lines} to ${info.lines}`,
+for (const d of current.deviations) {
+  if (!base.present.has(d.file)) continue; // the exception file is new in this change; nothing to compare
+  const before = baseEntryFor(d);
+  const where = `${d.file}: [${d.rule}] ${d.key}`;
+  if (!before) {
+    if (d.legacy)
+      problem(`${where} is a new bare entry; write it as an object with a reason (${RULES[d.rule].exceptions?.entry})`);
+    else if (reasonProblem(d.reason)) problem(`${where} ${reasonProblem(d.reason)}`);
+    else accepted.push({ ...d, change: 'new exception' });
+  } else if (d.rule === 'file-size' && d.lines > before.lines) {
+    if ((d.reason ?? '').trim() === (before.reason ?? '').trim())
+      problem(
+        `${where} ceiling rose ${before.lines} -> ${d.lines} but its reason is unchanged; say why the new lines still belong here`,
       );
-    }
+    else if (reasonProblem(d.reason)) problem(`${where} ${reasonProblem(d.reason)}`);
+    else accepted.push({ ...d, change: `ceiling ${before.lines} -> ${d.lines}` });
   }
 }
 
-// 5. root-allowlist.json (if present in base)
-const baseRootText = showFile(baseCommit, 'scripts/root-allowlist.json');
-if (baseRootText) {
-  const baseRoot = new Set(JSON.parse(baseRootText));
-  const currentRoot = JSON.parse(fs.readFileSync(path.join(scripts, 'root-allowlist.json'), 'utf8'));
-  const added = currentRoot.filter((r) => !baseRoot.has(r));
-  if (added.length > 0) {
-    problems.push(`scripts/root-allowlist.json grew: added root file ${added.join(', ')}`);
+const baseBudget = base.budget;
+const currentBudget = current.budget;
+if (baseBudget && currentBudget) {
+  if (currentBudget.maxLines > baseBudget.maxLines)
+    problem(
+      `scripts/complexity-budget.json maxLines rose ${baseBudget.maxLines} -> ${currentBudget.maxLines}; the global ` +
+        'limit is a user decision, record a per-file ceiling instead',
+    );
+  const newEdges = accepted.filter((d) => d.rule === 'layer-direction').length;
+  if (currentBudget.maxLayerEdges > baseBudget.maxLayerEdges + newEdges)
+    problem(
+      `scripts/complexity-budget.json maxLayerEdges rose ${baseBudget.maxLayerEdges} -> ${currentBudget.maxLayerEdges} ` +
+        `but only ${newEdges} reasoned edge(s) were added`,
+    );
+}
+
+reportAndExit(failures);
+
+if (accepted.length) {
+  const lines = [
+    `Recorded deviations added in this change (${accepted.length}). Each passed because it carries a reason.`,
+    'Reviewer: confirm each reason holds, and that fixing the violation really costs more than the exception.',
+    ...accepted.map((d) => `  [${d.rule}] ${d.key} (${d.change}, ${d.file})\n    reason: ${d.reason}`),
+  ];
+  console.log(lines.join('\n'));
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    const md = [
+      '### Recorded gate deviations in this change',
+      '',
+      'Each passed because it carries a reason. Reviewer: confirm each one holds.',
+      '',
+      '| Rule | Entry | Change | Reason |',
+      '| --- | --- | --- | --- |',
+      ...accepted.map((d) => `| ${d.rule} | \`${d.key}\` | ${d.change} | ${d.reason.replace(/\|/g, '\\|')} |`),
+      '',
+    ];
+    fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, md.join('\n'));
   }
 }
-
-if (problems.length > 0) {
-  console.error(problems.join('\n'));
-  process.exit(1);
-}
-
 console.log(`baseline check passed (compared with ${baseCommit.slice(0, 7)})`);

@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import ResumeSelectionMenu from './ResumeSelectionMenu.js';
 import type { MenuConversationEntry as ConversationListEntry } from '../integration.js';
 import type { MenuComponentProps } from './menu-registry.js';
 import type { MenuEffect, MenuFrame, MenuInteraction } from './menu-types.js';
 import { applyMenuEditorEvent } from './menu-editor.js';
+import { useMenuInteraction } from './use-menu-interaction.js';
 
 type ResumeState = ReturnType<typeof import('./use-resume-selection.js').useResumeSelection>;
 
@@ -55,10 +56,7 @@ export function ResumeMenuSession({ frame, active, controller, interactions, ser
     [controller, onResumeConversation, resume],
   );
 
-  useEffect(() => {
-    if (!active) return;
-    return interactions.register(frame.id, interaction);
-  }, [active, frame.id, interaction, interactions]);
+  useMenuInteraction(interactions, frame.id, active, interaction);
 
   if (!active) return null;
   return (

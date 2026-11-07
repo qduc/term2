@@ -77,6 +77,9 @@ your claims, and your evidence, but not your conclusion. The verifier:
 - rejects a unit-style test disguised as an `*.integration.*` or `*.e2e.*` file. An
   integration test must cross a real boundary: process, filesystem, network fixture,
   persisted session, or the built CLI;
+- reads the "Recorded deviations added in this change" output of `node scripts/check-baselines.mjs` and
+  rejects any deviation whose reason does not hold, or where fixing the violation would cost less than the
+  exception ([When a gate fails](../../../docs/architecture/layers.md#when-a-gate-fails));
 - returns `accept` or `reject` with reasons. On reject, rework and verify again.
 
 Report independent acceptance separately from author checks; neither implies the other ran.

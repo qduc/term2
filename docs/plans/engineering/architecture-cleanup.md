@@ -25,7 +25,7 @@ Every step is measured before it lands; nothing is done on taste.
 
 This plan is done when:
 
-- The Phase 0 ratchets are live: no baseline can grow, and the root stays clean.
+- The Phase 0 ratchets are live: no baseline grows without a recorded reason, and the root stays clean.
 - Phases 1 and 2 are merged. `layer-allowlist.json` holds at most the 7 known
   edges from Phase 3, and `unusedExports` is empty.
 - `layers.md` describes the code as it is, with a short "Known exceptions"
@@ -117,10 +117,14 @@ These apply to every PR under this plan, human or agent.
    a move PR, list branches and worktrees that touch the moved files
    (`git log main..<branch> --name-only`). Land or rebase them first, note the
    move window in `AGENTS.md`, and merge the move within a day.
-6. **Agents may not grow a baseline.** CI fails if, compared with the merge
+6. **A baseline grows only with a reason.** CI fails if, compared with the merge
    base, `layer-allowlist.json`, `rule-baseline.json`,
-   `reachability-allowlist.json` or `complexity-budget.json` gains an entry or
-   raises a ceiling. Removing entries is always allowed.
+   `reachability-allowlist.json`, `complexity-budget.json` or
+   `root-allowlist.json` gains an entry or raises a ceiling without a reason a
+   reviewer can judge, and shows the reviewer every one that has a reason.
+   Removing entries is always allowed. This rule originally banned all growth;
+   see [When a gate fails](../../architecture/layers.md#when-a-gate-fails) for
+   why it changed.
 7. **Verification tier follows the change type**, under the repository's
    existing evidence policy:
 
@@ -212,8 +216,8 @@ unchanged.
 | 3.4 | `retry-contracts.ts` → `conversation-events.ts` (type only) | The engine's retry contract names a session event type | The engine defines its own `RetryNotice` type; session's `ConversationEvent` union includes it |
 | 3.5 | `chained-input-filter.ts` → `run-item-normalizer.ts` | A shared helper used by `model/` (3 files) and `engine/` calls session normalization | Measure `run-item-normalizer` and `tool-occurrence` dependencies. Move both down if they are pure; otherwise inject the normalizer |
 
-There is no exit deadline. Each fix removes its allowlist entry and its line
-in "Known exceptions". When the list is empty, delete `layer-allowlist.json`
+There is no exit deadline. Each fix removes its allowlist entry, which carries
+the edge's reason. When the list is empty, delete `layer-allowlist.json`
 and the allowlist code path in `check-layers.mjs`.
 
 ## Phase 4: size and structure (hotspots, when touched)

@@ -1,7 +1,18 @@
 # Execution and acceptance in a conversation turn
 
-Start with the [central flow](conversation-core.md). The production execution
-owner is `ApplicationRunLoop.#runTurn`; the root session's acceptance owner is
+> **This runtime is not executed in production.** This page describes
+> `ApplicationRunLoop` and the session runtime that `createSessionRuntime` builds
+> (`src/session/session/`), driven by the legacy subagent runners in
+> `src/delegation/subagents/`. Nothing constructs those runners, and the built bundle
+> contains none of this code; deleting it is #197. Every conversation and child agent
+> runs on `session/conversation-turn.ts` and `engine/turn.ts` instead; see
+> [the overview](architecture-overview.md). Read this page for its design rationale, not
+> as a description of live behavior. "Runtime session" below is the session
+> `createSessionRuntime` builds, which this page called the root session before the
+> rewrite (#86–#88).
+
+Start with the [central flow](conversation-core.md). The legacy runtime's execution
+owner is `ApplicationRunLoop.#runTurn`; the runtime session's acceptance owner is
 `ConversationRecord`. These are distinct responsibilities: the loop decides
 when another model/tool step runs, while Record decides which observed facts
 become accepted conversation history and recovery evidence.
@@ -31,7 +42,7 @@ illustrative `recordResponse` step or presentation consumption.
 
 | Boundary | Concrete symbols | Responsibility |
 | --- | --- | --- |
-| Conversation | `ConversationAdapter.submitMessage`, `TurnCoordinator`, `LiveRun` | Admit executable input, own one live turn, expose status and commands, and apply retained queue/pause rules. |
+| Conversation | `TurnCoordinator`, `LiveRun` (input arrives from the runtime's caller, such as `execution-runner.ts`) | Admit executable input, own one live turn, expose status and commands, and apply retained queue/pause rules. |
 | Execution | `ApplicationRunLoop.#runTurn`, `#finishTurn`, `RunToolRound.execute` | Advance the model–tool cycle, await addressed decisions and apply selected recovery. |
 | Request construction | `RunRequestBuilder.prepareBoundary`, `build`, `ReadyModelRequest` | Admit steering, apply compaction and budget checks, then construct each attempt with scoped preparation/admission, cost and abort handles. |
 | Model exchange | `ModelExchangeRequest.askModel` | Resolve the model, build each attempt, dispatch/consume its stream, roll back provisional output and retry; never execute tools. |
@@ -44,7 +55,7 @@ illustrative `recordResponse` step or presentation consumption.
 | Session lifecycle | `SessionLifecycle` | Complete undo/retry/rewind/reset/import operations, including retirement, dependent resets and appropriate logging. |
 | Logging | `ConversationLogger.log`, `dispatchEventToLog` | Deliver observational log events. No callback replays logs into the live provider-history store. |
 
-For the root session, `ApplicationRunLoop` supplies synchronous acceptance through
+For the runtime session, `ApplicationRunLoop` supplies synchronous acceptance through
 its event queue before publishing to stream consumers. Dispatch evidence has a
 separate `acceptToolDispatch` callback immediately before physical dispatch. A
 presentation consumer therefore does not decide whether a tool call/result is
@@ -82,7 +93,7 @@ unsettled calls. Context finishes response publication, checkpoint promotion and
 debt synchronization before the next request. Diagnostics cannot revoke acceptance
 or create a replayable execution failure.
 
-The root runtime still has request-local `state.input`, `state.history` and
+The runtime still has request-local `state.input`, `state.history` and
 continuation state. Provider delta construction, native compaction and approval
 suspension need those views. Their existence is not evidence of competing
 acceptance authority, but changing their synchronization still requires care.
@@ -97,7 +108,7 @@ session/dependency type exports, `normalizeApplicationInput`, `toModelTools` and
 request input/tool projection lives in `run-input.ts`. Existing callers do not
 need to know those internal paths.
 
-- `runTurn(session)` drives root turns through bounded session operations.
+- `runTurn(session)` drives runtime-session turns (from `SessionTurnAdapter`) through bounded session operations.
   `startStream(agent, input, options)` and `continueRunStream(handle, options)`
   expose nested/legacy event views of the same advancement loop. Continuation
   refresh preserves accounting and approvals while checking provider provenance.
@@ -142,7 +153,7 @@ Approval contexts retain runtime decision handles and policy evidence, not displ
 argument maps or command-ID snapshots. Presentation retains its own detached,
 generation-guarded caches across waits. `TurnProjectionState` no longer mirrors a
 continuation handle, current tool-call list, journal snapshot or response-ID copy.
-The root session's unconsumed continuation call-ID reconstruction has been deleted.
+The runtime session's unconsumed continuation call-ID reconstruction has been deleted.
 
 `SessionLifecycle` absorbs the former `SessionManager`: callers invoke one complete
 history operation, rather than mutate Record and then remember cleanup and logging.

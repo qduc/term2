@@ -3,21 +3,26 @@
 // Every failure names file:line and the rule, so the author can fix it alone.
 //   1. One projection: a WireEvent (the {sessionId, seq, turnId, type, payload} envelope) is only built in protocol/.
 //   2. Names are jobs: no file or folder under src/ is called service, adapter or orchestrator
-//      (paths moved in from source/ are recorded in rule-baseline.json; the list only shrinks).
+//      (exceptions are recorded in rule-baseline.json; new ones need a reason, see scripts/gates/rules.mjs).
 //   3. No new unused runtime exports: an exported function/const/class must be named somewhere else in src/ or bench/.
-//      Existing ones are recorded in rule-baseline.json (reason: still to delete or wire); the list only shrinks.
+//      Existing ones are recorded in rule-baseline.json (reason: still to delete or wire); new ones need a reason.
 //   4. One fold: only session/fold-fact.ts imports the leaf fact reducers (queue replay and the queue barrel are its legs).
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
+import { exceptionKeys, failureMap, reportAndExit } from './gates/rules.mjs';
 
 const scripts = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(scripts, '..');
 const src = path.join(repo, 'src');
 const baselinePath = path.join(scripts, 'rule-baseline.json');
 const baseline = JSON.parse(fs.readFileSync(baselinePath, 'utf8'));
-const problems = [];
+const { map: failures, add } = failureMap();
+const projection = add('one-projection');
+const jobNames = add('names-are-jobs');
+const unused = add('unused-exports');
+const fold = add('one-fold');
 
 const walk = (dir) =>
   fs
@@ -43,8 +48,12 @@ const payloads = eventsText.slice(
   eventsText.indexOf('export type WireEventType'),
 );
 const wireTypes = new Set([...payloads.matchAll(/^ {2}([a-z_]+):/gm)].map((match) => match[1]));
-if (wireTypes.size < 20) problems.push('rule-check: could not read WireEventPayloads from protocol/wire-events.ts');
-const wireAllowed = new Set(baseline.wireEventOutsideProtocol.map((entry) => `${entry.file} ${entry.type}`));
+if (wireTypes.size < 20) projection('rule-check: could not read WireEventPayloads from protocol/wire-events.ts');
+const wireAllowed = exceptionKeys(
+  baseline.wireEventOutsideProtocol.map((entry) => ({ key: `${entry.file} ${entry.type}`, reason: entry.reason })),
+  'key',
+  projection,
+);
 for (const file of files) {
   const name = rel(file);
   if (name.startsWith('protocol/')) continue;
@@ -62,25 +71,21 @@ for (const file of files) {
         ['payload', 'turnId', 'seq', 'sessionId'].every((k) => props.has(k))
       )
         if (!wireAllowed.has(`${name} ${type.text}`))
-          problems.push(
-            `${name}:${lineOf(sf, node)}: builds a WireEvent '${
-              type.text
-            }' outside protocol/ (rule: one projection, wire events are built only in protocol/)`,
-          );
+          projection(`${name}:${lineOf(sf, node)}: builds a WireEvent '${type.text}' outside protocol/`);
     }
     ts.forEachChild(node, visit);
   };
   visit(sf);
 }
 
-// 2. Names are jobs. Paths moved in from source/ with such names are recorded in rule-baseline.json; the list only shrinks.
-const namedPaths = new Set(baseline.jobNameExceptions);
+// 2. Names are jobs. Exceptions are recorded in rule-baseline.json: legacy strings, or { path, reason }.
+const namedPaths = exceptionKeys(baseline.jobNameExceptions, 'path', jobNames);
 for (const file of files)
   if (/service|adapter|orchestrator/i.test(rel(file)) && !namedPaths.has(rel(file)))
-    problems.push(`${rel(file)}:1: path names a layer or file service/adapter/orchestrator (rule: names are jobs)`);
+    jobNames(`${rel(file)}:1: path names a file or folder service/adapter/orchestrator`);
 for (const name of namedPaths)
   if (!files.some((file) => rel(file) === name))
-    problems.push(`rule-baseline.json jobNameExceptions names missing ${name}`);
+    jobNames(`rule-baseline.json jobNameExceptions names missing ${name}; remove it`);
 
 // 3. Unused runtime exports.
 const counts = new Map();
@@ -90,7 +95,7 @@ for (const [file, text] of texts)
     if (!perFile) counts.set(match[0], (perFile = new Map()));
     perFile.set(file, (perFile.get(file) ?? 0) + 1);
   }
-const known = new Set(baseline.unusedExports);
+const known = exceptionKeys(baseline.unusedExports, 'export', unused);
 const found = new Set();
 for (const file of files) {
   const sf = parse(file);
@@ -106,12 +111,7 @@ for (const file of files) {
       const key = `${rel(file)} ${id}`;
       found.add(key);
       if (!known.has(key))
-        problems.push(
-          `${rel(file)}:${lineOf(
-            sf,
-            st,
-          )}: export '${id}' is not used anywhere (rule: no unused exports; delete it, or use it)`,
-        );
+        unused(`${rel(file)}:${lineOf(sf, st)}: export '${id}' is not used anywhere (key: "${key}")`);
     }
   }
 }
@@ -152,10 +152,7 @@ for (const file of files) {
   const name = rel(file);
   if (foldAllowed.has(name)) continue;
   const sf = parse(file);
-  const flag = (node, what) =>
-    problems.push(
-      `${name}:${lineOf(sf, node)}: ${what} (rule: one fold, call foldFact from session/fold-fact.ts instead)`,
-    );
+  const flag = (node, what) => fold(`${name}:${lineOf(sf, node)}: ${what}`);
   const visit = (node) => {
     if (
       (ts.isImportSpecifier(node) || ts.isExportSpecifier(node)) &&
@@ -193,10 +190,7 @@ for (const file of files) {
   visit(sf);
 }
 
-if (problems.length) {
-  console.error(problems.sort().join('\n'));
-  process.exit(1);
-}
-console.log(
+reportAndExit(
+  failures,
   `rule check passed (${found.size} recorded unused exports, ${wireAllowed.size} recorded wire-event exceptions)`,
 );

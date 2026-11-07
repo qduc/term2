@@ -65,7 +65,9 @@ for (const f of files) {
 }
 const layer = (f) => f.split('/')[0];
 
-const allow = JSON.parse(fs.readFileSync(path.join(root, 'scripts/layer-allowlist.json'), 'utf8'));
+const allow = JSON.parse(fs.readFileSync(path.join(root, 'scripts/layer-allowlist.json'), 'utf8')).map((e) =>
+  typeof e === 'string' ? e : e.edge,
+);
 const edges = allow.map((s) => {
   const m = s.match(/^(\S+) -> (\S+) \((\S+) -> (\S+)\)$/);
   return { from: m[1], to: m[2], fl: m[3], tl: m[4] };

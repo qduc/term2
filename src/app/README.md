@@ -104,10 +104,11 @@ user-authored goal.
 
 ## Startup loading
 
-`dist/src/app/cli.js` is one esbuild bundle (`scripts/bundle-entry.mjs`). Every
-package left external, and every builtin, that the bundle imports statically is
-loaded and linked before any term2 code runs, whichever command was given; bundled
-modules initialize when their importer does. So a package needed only by one mode
+`dist/src/app/cli.js` is a loader (`scripts/bundle-loader.mjs`) for one esbuild
+bundle beside it, `cli.bundle.cjs` (`scripts/bundle-entry.mjs`). Every package
+left external, and every builtin, that the bundle's top level requires is loaded
+before any term2 code runs, whichever command was given; bundled modules
+initialize when their importer does. So a package needed only by one mode
 or on demand is imported where it is used: `ssh2` (`SSHService`), the sandbox
 runtime (`shell-sandbox-runner.ts`), the MCP SDK (`tools/mcp/mcp-sdk.ts`), the
 OpenRouter SDK and `@qduc/web-fetch`. That last one is external: its jsdom stays
@@ -116,7 +117,29 @@ was bundled. `launch.ts` loads each launcher, the headless one included, only fo
 mode. Until 2026-11-07 they were static imports, paid on every start; see
 [the measurements](../../docs/plans/engineering/measurements/test-suite-speed-2026-10-22.md#cli-cold-start-2026-11-07).
 `dist/cli.js`, the installed `term2`, enables Node's compile cache in term2's cache
-directory before importing the bundle.
+directory before importing the loader.
+
+Node's compile cache keeps only the code V8 compiled when it first compiled a
+file, so a bundle loaded through it recompiled every lazily compiled function
+(module initializers, Ink, React, the first frame) on each start. The loader
+compiles the bundle with `vm.Script` instead, and writes the script's V8 code
+cache to `term2-bundle/` inside whatever compile cache directory Node reports.
+It writes the cache 2 s after start as `<bundle>.settled`, which covers an idle
+TUI, or at exit as `<bundle>.exit` when a short run (`--help`, a headless run)
+found no usable cache. A settled cache is never rewritten, and V8 rejects one
+from another Node version or flag set, so it is deleted. The file name holds the
+bundle's size and mtime, because V8 checks only the length of a cache's source.
+Without a compile cache directory (`NODE_DISABLE_COMPILE_CACHE`, no
+`NODE_COMPILE_CACHE` when launched directly) the bundle is `require()`d as an
+ordinary CommonJS module. Dynamic `import()` from the script goes through
+`vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER`; the loader takes the first such
+import itself, so Node's one-time ExperimentalWarning for that constant is
+dropped and never reaches the terminal.
+
+The bundle pins `react`, `react-reconciler` and `scheduler` to their
+production builds. They used to pick a build from `NODE_ENV` at runtime, so the
+test suites (`NODE_ENV=test`) ran React's development build, which users do not
+run.
 
 ## Native CLI conversation discovery
 

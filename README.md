@@ -87,9 +87,15 @@ See [approvals](https://qduc.github.io/term2/safety/approvals/) and [sandbox bou
 
 ## Status
 
-The interactive TUI and headless runs (including `--resume` and JSON output) are the supported core. SSH remote projects, the Discord bridge, ACP (`term2 acp`), the control socket (`term2 control`) and the web/server host (`term2 serve`) are experimental and may change between releases.
+Supported:
 
-For the experimental SDK 1.4.0 ACP v2 reference client:
+- The interactive TUI and headless runs, including `--resume` and JSON output.
+- The web/server host (`term2 serve`) with the separately built [`web-client/`](web-client/) from the same source revision. See [gateway setup](https://qduc.github.io/term2/remote/web-gateway/) for pairing, BFF keys and remote-access limits.
+- The ACP subset described below. ACP v2 is itself an upstream experimental protocol; only the SDK 1.4.0 reference client was verified, and no GUI editor was tested.
+
+Experimental, and may change between releases: SSH remote projects, the standalone control socket (`term2 control`) and the Discord bridge, which awaits live acceptance.
+
+For the SDK 1.4.0 ACP v2 reference client:
 
 ```sh
 term2 acp --provider <provider> --model <exact-model-id>

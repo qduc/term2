@@ -27,14 +27,23 @@ and `createdAt` are required; noncanonical instants fail `invalid-timestamp`.
 or `workspace`. Existing values win, including invalid values that must fail;
 fallback is not an override. When profile ID is absent but appMode is recorded,
 the compiled `profileIdFromLegacyMode` selects the profile before fallback is
-considered; absent both, only an explicit fallback may supply it. Missing required configuration fails
+considered; absent both, an explicit fallback supplies it, otherwise Bare (36 of one
+user's ssh-host logs predate both fields). Missing required configuration fails
 `missing-configuration`. Workspaces must be absolute local paths. Any recorded
 `sshHost` fails `unsupported-remote-identity`, rather than granting local access
 for a remote source. No workspace grant or binding is synthesized.
 
-The native profile header uses actual compiled `getProfileMetadata`. Unknown
-profiles fail `unsupported-profile`; a conflicting version/digest on the selected
-init fails `profile-mismatch`. Unsupported reasoning fails
+The native profile header uses actual compiled `getProfileMetadata`. Custom
+(`user:`/`project:`) and unknown profiles fail `unsupported-profile`. Bare, the
+retired Standard/Lite/Full (which `getProfileMetadata` resolves to Bare) and the
+dropped workflow profiles plan/pair/mentor/orchestrator (mapped like the app's
+`isDroppedProfile`) all get today's Bare header. Bare's version and digest change
+whenever its prompt does; a rehearsal on one user's ssh-host store found six older
+Bare digests across 354 logs. Such drift is accepted for Bare and marked by
+`fidelity.profileRebasedCount`. Whenever the selected init recorded a version or
+digest, the import notice's `sourceSettings` keeps it as `activeProfileVersion`/
+`activeProfileDigest`, matching or not. No current built-in other than Bare is
+reachable, so `profile-mismatch` remains only as a guard. Unsupported reasoning fails
 `unsupported-reasoning`. Explicit `default` is retained as intent and in the
 notice, but omitted from native effort fields. Model/provider identifiers are preserved, not guessed
 from a catalog. The native `configuration_changed` retains model, reasoning and
@@ -75,7 +84,20 @@ existing same-turn physical payload sharing can operate. Exactly one final
 provider context is emitted as hidden `item` facts containing provider-bound
 `provider_input` Items, one per `normalizeApplicationInput(history)` part from
 `v3-provider-input.mjs`. This is the frozen v3 projection moved out of the removed
-run loop (#197), not the live engine's request builder.
+run loop (#197), not the live engine's request builder. It deliberately widens that
+run loop in two places, found by rehearsing on real v3 data: a bare single-part
+tool result output object is read as a one-part array, and `input_text` reasoning
+parts are read like `text`. Both are older Agents SDK encodings of the same text,
+and the run loop's refusal of them stranded most of one user's v3 conversations.
+For `codex` conversations, reasoning metadata saved flat before 2026-08-02 (the raw
+response item, recognised by `type: 'reasoning'`, with `id`, `content`,
+`encrypted_content` and sometimes `internal_chat_message_metadata_passthrough` and
+`metadata`) is moved unchanged under `codex`. The Codex provider then sends the raw
+item's fields, including `encrypted_content`, instead of refusing the resumed request
+as foreign metadata. As for all Codex reasoning, it rebuilds `summary` from the
+reasoning text and uses the item ID, so the wire is not byte-identical to the
+pre-2026-08-02 provider's. Logs already migrated by an earlier migrator keep the flat
+form; re-migrate them into a fresh destination.
 No portable re-encoding strips signatures, encrypted/opaque items, provider
 metadata, raw arguments, reasoning or structured output from that normalized
 request. Normalization errors fail `normalization-refused`; native schema/replay

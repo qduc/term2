@@ -1,0 +1,756 @@
+{
+  "schemaVersion": 1,
+  "kind": "real-traffic-recording",
+  "provider": "google",
+  "wireFamily": "google",
+  "transport": "http-sse",
+  "capture": {
+    "sdkPackage": "term2-cli",
+    "apiSdkVersion": "0.40.0",
+    "model": "gemini-3.8-flash",
+    "modelFamily": "google",
+    "capturedAt": "2026-11-08T05:03:56.914Z",
+    "recorderVersion": "release-smoke-1",
+    "probeScenario": "cli-release-turn-v1"
+  },
+  "turns": [
+    {
+      "frames": [
+        {
+          "kind": "http-request",
+          "method": "POST",
+          "urlPath": "/v1beta/models/gemini-3.8-flash:streamGenerateContent?alt=sse",
+          "headers": {
+            "accept": "*/*",
+            "accept-encoding": "identity",
+            "accept-language": "*",
+            "content-type": "application/json",
+            "sec-fetch-mode": "cors",
+            "user-agent": "ai-sdk/google/3.0.72 ai-sdk/provider-utils/4.0.27 runtime/node.js/24",
+            "x-goog-api-key": "[REDACTED]"
+          },
+          "body": {
+            "generationConfig": {
+              "maxOutputTokens": 32000
+            },
+            "contents": [
+              {
+                "role": "user",
+                "parts": [
+                  {
+                    "text": "Use the read_file tool to read smoke.txt in the current directory, then reply with only its exact contents."
+                  }
+                ]
+              }
+            ],
+            "systemInstruction": {
+              "parts": [
+                {
+                  "text": "You are a coding assistant working in the user's checkout. Use the shell to read, search, and edit files.\n\n- Combine independent reads and steps into one shell call, and filter large output before returning it.\n- Be concise.\n\nEnvironment: OS: Linux 7.2.15-200.fc44.x86_64 (linux); shell: unknown; cwd (you're already here, don't `cd` to it): /tmp/term2-release-smoke-exBLth/work; home (`~`): /tmp/term2-release-smoke-exBLth/home; date: 2026-11-08\n\nUnattended mode: Never ask the user questions; nobody can answer. Make reasonable low-risk assumptions within existing permissions, keep going, and state any assumptions in your final response. If something essential is missing, report blocked and say what is needed.\n\n## Durable session goal applicability\nNo durable session goal is set. Continue the ordinary request/tool workflow; do not call goal_check. Only an active durable session goal requires a goal_check before ending a turn. This does not authorize creating a goal or grant any permission."
+                }
+              ]
+            },
+            "tools": [
+              {
+                "functionDeclarations": [
+                  {
+                    "name": "shell",
+                    "description": "Run shell commands for reads, searches and local checks. Combine known dependent steps in one command; batch independent reads and return only relevant evidence. Make file edits with the shell too. Foreground execution only. Respect approvals; unsandboxed execution requires approval.",
+                    "parameters": {
+                      "required": ["command", "sandbox"],
+                      "type": "object",
+                      "properties": {
+                        "command": {
+                          "description": "Shell command. Batch related reads and filter output locally.",
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "description": {
+                          "description": "Short user-visible description.",
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "timeout_ms": {
+                          "description": "Finite deadline in milliseconds; size explicitly for long work. A timeout is not permission to repeat effects.",
+                          "type": "integer"
+                        },
+                        "max_output_length": {
+                          "description": "Output character limit. Overflow is saved to a file; inspect relevant ranges instead of rerunning.",
+                          "type": "integer"
+                        },
+                        "sandbox": {
+                          "description": "Run mode. default runs inside the sandbox when available. unsandboxed requires explicit user approval.",
+                          "type": "string",
+                          "enum": ["default", "unsandboxed"]
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "name": "goal_check",
+                    "description": "Use only when a durable session goal is active; do not call when no goal is set. Report your self-check against that goal. While the goal is active, call this by itself as the last tool call before ending a turn, after any work and after reading its results. Reporting achieved proposes completion: the harness closes the goal only after its applicable verification policy accepts the claim. It may request repairs or leave the goal active. Before claiming achieved, verify the outcome and every success criterion against concrete evidence from this session (commands you ran and their results, files you read); if anything is unverified, keep working or report blocked instead. It grants no permission and does not override newer user instructions. Use deferred when the latest user message asked for something other than the goal or asked you to pause.",
+                    "parameters": {
+                      "required": ["status", "evidence"],
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "description": "achieved: the outcome holds now, verified against concrete evidence; this proposes completion to the harness. blocked: progress needs user input or a capability you do not have. not_achieved: more work is needed and you can do it. deferred: the latest user message asked for something else, asked you to pause, or superseded the goal.",
+                          "type": "string",
+                          "enum": ["achieved", "blocked", "not_achieved", "deferred"]
+                        },
+                        "evidence": {
+                          "description": "achieved: concrete evidence that the outcome holds (commands run, results, files). blocked: the concrete blocker and exactly what is needed from the user. not_achieved: what remains and your next step. deferred: which newer user request or pause took priority.",
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "criteriaEvidence": {
+                          "description": "Required for achieved when the goal has success criteria: evidence for each criterion.",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "name": "run_subagent",
+                    "description": "Delegate a bounded task to the general agent runtime. Use agent_spec for dynamic goal/context/tools/constraints/model/budget; legacy named roles are compatibility presets. This session requires background execution: the tool returns a running handle immediately and a later completion notification. The subagent runs in its own context and returns only a summary, preserving your context. (When to reach for this vs. doing it yourself is covered by the delegation guidance in your system instructions.)\n\nBackground launches return immediately; do not duplicate them or call get_subagent_result until the completion notification arrives.\n\n## Task Requirements\nGive the task one clear objective, one ownership boundary, and one concrete done condition. Include the task-specific scope, non-discoverable parent findings or decisions, constraints, deliverable or acceptance criteria, and validation when applicable. Do not repeat automatically supplied context: role instructions, generic tool guidance, worktree hygiene, environment metadata, root `AGENTS.md`, or skills catalog. The subagent does not see your conversation or reasoning. For explorer, request concrete evidence to collect for a bounded question and choose breadth or depth, never both: map one defined surface shallowly or trace one narrow seam thoroughly. Do not ask explorer to diagnose, recommend a fix, choose an approach, or own the user's complete investigation, review, diagnosis, or planning deliverable. For worker, assign one cohesive implementation unit. For mentor, ask one decision or challenge question. For reviewer, describe the artifact to review (diff range, files, plan) and the review criteria; it gathers evidence only through explorers. For librarian, assign one history question to answer from memory and prior sessions, or one memory-maintenance topic boundary.\n\nFor isolated worker edits, create a git worktree under the workspace root first (`git worktree add .worktrees/<slug> -b <slug>`), then pass `worktree` as that directory basename or branch name. `worktree` pins the child into that existing tree without re-rooting this session; generic writable agents may use it too.\n\nA background status of \"running\" means launch succeeded: end the turn and wait for the completion notification.",
+                    "parameters": {
+                      "required": ["execution"],
+                      "type": "object",
+                      "properties": {
+                        "execution": {
+                          "description": "Only background execution is available in this session.",
+                          "enum": ["background"],
+                          "type": "string"
+                        },
+                        "role": {
+                          "description": "Optional legacy role preset.",
+                          "type": "string",
+                          "enum": ["explorer", "worker", "mentor", "reviewer", "librarian"]
+                        },
+                        "task": {
+                          "description": "Complete description of one bounded delegated unit with one objective, ownership boundary, and done condition. For explorer, specify concrete evidence to collect and choose breadth or depth, never both; do not delegate diagnosis, recommendations, or the parent task itself.",
+                          "type": "string"
+                        },
+                        "agent_spec": {
+                          "description": "Dynamic goal/context/tools/constraints/model/budget; no named role required.",
+                          "required": ["goal"],
+                          "type": "object",
+                          "properties": {
+                            "goal": {
+                              "description": "The goal for this general-purpose agent invocation.",
+                              "type": "string"
+                            },
+                            "context": {
+                              "type": "object"
+                            },
+                            "tools": {
+                              "description": "Optional allowlist of child-buildable tools; omitted defaults to read-only workspace tools.",
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "read_file",
+                                  "grep",
+                                  "glob",
+                                  "read_code_outline",
+                                  "code_context_search",
+                                  "web_search",
+                                  "web_fetch",
+                                  "shell",
+                                  "apply_patch",
+                                  "search_replace",
+                                  "create_file"
+                                ]
+                              }
+                            },
+                            "permissions": {
+                              "type": "object",
+                              "properties": {
+                                "tools": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "enum": [
+                                      "read_file",
+                                      "grep",
+                                      "glob",
+                                      "read_code_outline",
+                                      "code_context_search",
+                                      "web_search",
+                                      "web_fetch",
+                                      "shell",
+                                      "apply_patch",
+                                      "search_replace",
+                                      "create_file"
+                                    ]
+                                  }
+                                },
+                                "filesystem": {
+                                  "type": "object",
+                                  "properties": {
+                                    "read": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "write": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  }
+                                },
+                                "network": {
+                                  "type": "object",
+                                  "properties": {
+                                    "hosts": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  }
+                                },
+                                "agents": {
+                                  "type": "object",
+                                  "properties": {
+                                    "create": {
+                                      "type": "boolean"
+                                    },
+                                    "maxDepth": {
+                                      "type": "number"
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            "constraints": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "doneWhen": {
+                              "type": "string"
+                            },
+                            "model": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": ["efficient", "balanced", "capable"]
+                                },
+                                {
+                                  "required": ["provider", "model"],
+                                  "type": "object",
+                                  "properties": {
+                                    "provider": {
+                                      "type": "string"
+                                    },
+                                    "model": {
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            "budget": {
+                              "description": "Only enforced per-invocation budgets are accepted.",
+                              "type": "object",
+                              "properties": {
+                                "maxTurns": {
+                                  "description": "Maximum model turns; defaults to 200.",
+                                  "type": "integer"
+                                },
+                                "maxTokens": {
+                                  "description": "Provider output-token cap per model response, not an aggregate run token budget.",
+                                  "type": "integer"
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "worktree": {
+                          "description": "For write-capable workers or generic agent specs. Directory basename or branch of an existing git worktree to pin the child into. Create the worktree first under the workspace root; this does not re-root the parent session.",
+                          "type": "string"
+                        },
+                        "name": {
+                          "description": "Optional active-run alias: lowercase letter first, then up to 31 lowercase letters, digits, underscores, or hyphens. Background only.",
+                          "type": "string"
+                        },
+                        "continue_run_id": {
+                          "description": "Continue a completed background run using its runId. Background only; writable generic runs and workers cannot continue.",
+                          "type": "string"
+                        },
+                        "check_in": {
+                          "description": "Optional check-in configuration for this background subagent. Background only.",
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "description": "Enable or disable proactive check-ins for this background subagent. Defaults to true.",
+                              "type": "boolean"
+                            },
+                            "interval_seconds": {
+                              "description": "Custom interval in seconds between proactive check-ins.",
+                              "type": "integer"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "name": "run_code",
+                    "description": "Write a JavaScript program and execute it. Return the value you want the model to receive; that completion value is the result of the run. Most tools you already have are available inside the script as `tools.<tool_name>(params)`, returning a promise that resolves to that tool's normal result and rejecting when the call fails, so you can try/catch it. Parameters are exactly the parameters documented for that tool; they are validated against the real schema before the tool runs. Prefer this over many separate tool calls when the work is a loop, a fan-out over many files, or a multi-step computation whose intermediate values you do not need to see. `console.log` is a debugging trace: it is suppressed on successful runs unless you set `include_console: true`, but it is included when the script fails or times out. The code runs in an isolated context with no filesystem, network, timers, require, or eval: `tools.*` is the only way out. Auto-approved tools run immediately. Tools that require user approval present the existing approval prompt and resume this script after a decision; denial is catchable. The catalogue below is the complete set of tools a script can call: a name that is absent from it is not available inside the script, even when the direct tool surface offers it.\n\nEach script may admit at most 200 tools.* calls. Track progress and split large work into chunks; catch individual failures or use Promise.allSettled so you can return partial results. When the call budget is exhausted, the error reports calls admitted and calls remaining: return the partial results and start another run_code call only for unattempted work. Do not repeat completed tool effects. Return only the fields, line ranges, or summaries you need: model-visible output is limited to 30,000 characters, and larger host results can fail before rendering. For independent reads, preserve successful siblings with `Promise.allSettled`, mapping rejections to `{error: r.reason.message}` before returning. If the final result says `Full output saved to`, read that exact path with `read_file` rather than repeating completed calls; for a large artifact, read line ranges or the fields you need instead of transferring the whole value. A scripted `read_file` result may itself have `truncated: true` and a `fullOutputPath`; follow that path or narrow the projection before returning it. Use `tools.describe` before guessing parameters or returned fields. If a patch or file body contains JavaScript syntax such as backticks or `${...}`, pass it through the `inputs` parameter and read it from the global `inputs` object instead of embedding it in code. Code and serialized inputs share the 65,536-byte admission limit. Example: `const r = await Promise.allSettled([tools.read_file({path:\"a.ts\"}), tools.read_file({path:\"b.ts\"})]); return r.map(x => x.status === \"fulfilled\" ? {content:(typeof x.value === \"string\" ? x.value : x.value.content).slice(0,2000)} : {error:x.reason.message});`\n\nAvailable inside the script (parameter shapes are approximate; each call is validated against the tool’s real schema):\nUse tools.describe(name) when you need the full schema and description for a tool.\nUse only the tools listed here: a name that is not listed is not available inside the script.\nEssential tools:\n- tools.read_file({ path: string, start_line?: number, end_line?: number }) — Read file content from the workspace (like cat command). Supports reading specific line ranges. Image files are returned as image content fo…\n    returns { path: string, totalLines: number, fromLine: number, toLine: number, content: string, truncated: boolean, fullOutputPath?: string }|{ type: \"text\", text: string }|{ __term2_run_code_media_reference__: string }|string[]|string (guidance: { path: string, totalLines: number, fromLine: number, toLine: number, content: string, truncated: boolean, fullOutputPath?: string } or content parts [{ type: \"text\" | \"image\", ... }] for image files)\n\nOther tools (call tools.describe(name) before use): shell, web_search, web_fetch, configure_task_check_in, memory_list, memory_get, memory_search, memory_retrieve, memory_create, memory_update, memory_delete, list_models, get_subagent_result, get_subagent_status, send_message, cancel_run\n\n## Agent capability\n\nWhen present, a flat `agent` global (not a `tools.*` entry) launches host-resolved agents from the script:\n- `agent.run({ spec, worktree? })` awaits one foreground agent and resolves to its nested result (status, finalText, filesChanged, toolsUsed, ...). Fan out with `Promise.all` and catch per-call rejections (`agent.run failed: ...`). The host aborts the child if the script times out or is cancelled. When a session approval owner is bound, child tool approval pauses surface to the user and resume the exact child execution; the work clock pauses only while all calls await approval. Without that owner, or for non-tool interruptions, the child rejects rather than reporting completion.\n- `agent.start({ spec, name? })` starts a conversation-scoped background run and resolves to `{ runId, name?, role, status: 'running' }`; it survives this script and its timeout. `continue_run_id` is rejected by this script capability until stored-run authority can be verified.\n- `agent.status({ runId? })` peeks non-blocking progress; `agent.result({ runId })` awaits the settled result; `agent.cancel({ target })` requests cancellation. Background completion reaches the session notification lane even after this script returns.\n- `spec` is a plain AgentSpec (`{ goal, tools?, permissions?, constraints?, doneWhen?, model?, budget? }`). The host attenuates it against this session's authority before launch: requests beyond parent tools, scopes, or the worktree scope reject per call as `Agent specification rejected: ...`; the raw spec is never forwarded to any launch path.\n- Per-script limits, separate from the tools.* budget: at most 16 agent launches, 4 parallel foreground runs, and 200 agent.* calls.",
+                    "parameters": {
+                      "required": ["code", "description"],
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "description": "JavaScript (not TypeScript) executed as the body of an async function. Top-level await is available. Return the value you want the model to receive. Use console.log only for debugging.",
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "inputs": {
+                          "description": "JSON data exposed to the script as the global `inputs`. Use this for patch or file text. Code and serialized inputs share the 65,536-byte admission limit.",
+                          "type": "object"
+                        },
+                        "include_console": {
+                          "description": "Include console.log debugging trace in the successful result. Defaults to false.",
+                          "type": "boolean"
+                        },
+                        "timeout_ms": {
+                          "description": "Wall-clock limit for the script. Defaults to 120000.",
+                          "type": "integer"
+                        },
+                        "description": {
+                          "description": "One short line describing what the script does, shown to the user.",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "seq": 0
+        },
+        {
+          "kind": "http-response-head",
+          "status": 200,
+          "headers": {
+            "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+            "content-disposition": "attachment",
+            "content-type": "text/event-stream",
+            "date": "Sun, 08 Nov 2026 05:04:01 GMT",
+            "server": "scaffolding on HTTPServer2",
+            "server-timing": "gfet4t7; dur=3755",
+            "transfer-encoding": "chunked",
+            "vary": "Origin, X-Origin, Referer",
+            "x-content-type-options": "nosniff",
+            "x-frame-options": "SAMEORIGIN",
+            "x-xss-protection": "0"
+          },
+          "seq": 1
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"candidates\":[{\"content\":{\"parts\":[{\"functionCall\":{\"name\":\"run_code\",\"args\":{\"description\":\"Read smoke.txt using tools.read_file\",\"code\":\"const res = await tools.read_file({ path: \\\"smoke.txt\\\" });\\nreturn res;\"},\"id\":\"call_<1>\"},\"thoughtSignature\":\"[REDACTED]\"}],\"role\":\"model\"},\"index\":0}],\"usageMetadata\":{\"promptTokenCount\":3922,\"candidatesTokenCount\":52,\"totalTokenCount\":4155,\"promptTokensDetails\":[{\"modality\":\"TEXT\",\"tokenCount\":3922}],\"thoughtsTokenCount\":181,\"serviceTier\":\"standard\"},\"modelVersion\":\"gemini-3.8-flash\",\"responseId\":\"vQLwaq3iNLCSz7sPz56Y8Q4\"}",
+          "seq": 2
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"\"}],\"role\":\"model\"},\"finishReason\":\"STOP\",\"index\":0}],\"usageMetadata\":{\"promptTokenCount\":3922,\"candidatesTokenCount\":52,\"totalTokenCount\":4155,\"promptTokensDetails\":[{\"modality\":\"TEXT\",\"tokenCount\":3922}],\"thoughtsTokenCount\":181,\"serviceTier\":\"standard\"},\"modelVersion\":\"gemini-3.8-flash\",\"responseId\":\"vQLwaq3iNLCSz7sPz56Y8Q4\"}",
+          "seq": 3
+        }
+      ]
+    },
+    {
+      "frames": [
+        {
+          "kind": "http-request",
+          "method": "POST",
+          "urlPath": "/v1beta/models/gemini-3.8-flash:streamGenerateContent?alt=sse",
+          "headers": {
+            "accept": "*/*",
+            "accept-encoding": "identity",
+            "accept-language": "*",
+            "content-type": "application/json",
+            "sec-fetch-mode": "cors",
+            "user-agent": "ai-sdk/google/3.0.72 ai-sdk/provider-utils/4.0.27 runtime/node.js/24",
+            "x-goog-api-key": "[REDACTED]"
+          },
+          "body": {
+            "generationConfig": {
+              "maxOutputTokens": 32000
+            },
+            "contents": [
+              {
+                "role": "user",
+                "parts": [
+                  {
+                    "text": "Use the read_file tool to read smoke.txt in the current directory, then reply with only its exact contents."
+                  }
+                ]
+              },
+              {
+                "role": "model",
+                "parts": [
+                  {
+                    "functionCall": {
+                      "name": "run_code",
+                      "args": {
+                        "description": "Read smoke.txt using tools.read_file",
+                        "code": "const res = await tools.read_file({ path: \"smoke.txt\" });\nreturn res;"
+                      }
+                    },
+                    "thoughtSignature": "[REDACTED]"
+                  }
+                ]
+              },
+              {
+                "role": "user",
+                "parts": [
+                  {
+                    "functionResponse": {
+                      "name": "run_code",
+                      "response": {
+                        "name": "run_code",
+                        "content": "Result:\n{\"path\":\"/tmp/term2-release-smoke-exBLth/work/smoke.txt\",\"totalLines\":2,\"fromLine\":1,\"toLine\":2,\"content\":\"kestrel-41-orbit\\n\",\"truncated\":false}\n\n[1 tool call: read_file]"
+                      }
+                    }
+                  }
+                ]
+              }
+            ],
+            "systemInstruction": {
+              "parts": [
+                {
+                  "text": "You are a coding assistant working in the user's checkout. Use the shell to read, search, and edit files.\n\n- Combine independent reads and steps into one shell call, and filter large output before returning it.\n- Be concise.\n\nEnvironment: OS: Linux 7.2.15-200.fc44.x86_64 (linux); shell: unknown; cwd (you're already here, don't `cd` to it): /tmp/term2-release-smoke-exBLth/work; home (`~`): /tmp/term2-release-smoke-exBLth/home; date: 2026-11-08\n\nUnattended mode: Never ask the user questions; nobody can answer. Make reasonable low-risk assumptions within existing permissions, keep going, and state any assumptions in your final response. If something essential is missing, report blocked and say what is needed.\n\n## Durable session goal applicability\nNo durable session goal is set. Continue the ordinary request/tool workflow; do not call goal_check. Only an active durable session goal requires a goal_check before ending a turn. This does not authorize creating a goal or grant any permission."
+                }
+              ]
+            },
+            "tools": [
+              {
+                "functionDeclarations": [
+                  {
+                    "name": "shell",
+                    "description": "Run shell commands for reads, searches and local checks. Combine known dependent steps in one command; batch independent reads and return only relevant evidence. Make file edits with the shell too. Foreground execution only. Respect approvals; unsandboxed execution requires approval.",
+                    "parameters": {
+                      "required": ["command", "sandbox"],
+                      "type": "object",
+                      "properties": {
+                        "command": {
+                          "description": "Shell command. Batch related reads and filter output locally.",
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "description": {
+                          "description": "Short user-visible description.",
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "timeout_ms": {
+                          "description": "Finite deadline in milliseconds; size explicitly for long work. A timeout is not permission to repeat effects.",
+                          "type": "integer"
+                        },
+                        "max_output_length": {
+                          "description": "Output character limit. Overflow is saved to a file; inspect relevant ranges instead of rerunning.",
+                          "type": "integer"
+                        },
+                        "sandbox": {
+                          "description": "Run mode. default runs inside the sandbox when available. unsandboxed requires explicit user approval.",
+                          "type": "string",
+                          "enum": ["default", "unsandboxed"]
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "name": "goal_check",
+                    "description": "Use only when a durable session goal is active; do not call when no goal is set. Report your self-check against that goal. While the goal is active, call this by itself as the last tool call before ending a turn, after any work and after reading its results. Reporting achieved proposes completion: the harness closes the goal only after its applicable verification policy accepts the claim. It may request repairs or leave the goal active. Before claiming achieved, verify the outcome and every success criterion against concrete evidence from this session (commands you ran and their results, files you read); if anything is unverified, keep working or report blocked instead. It grants no permission and does not override newer user instructions. Use deferred when the latest user message asked for something other than the goal or asked you to pause.",
+                    "parameters": {
+                      "required": ["status", "evidence"],
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "description": "achieved: the outcome holds now, verified against concrete evidence; this proposes completion to the harness. blocked: progress needs user input or a capability you do not have. not_achieved: more work is needed and you can do it. deferred: the latest user message asked for something else, asked you to pause, or superseded the goal.",
+                          "type": "string",
+                          "enum": ["achieved", "blocked", "not_achieved", "deferred"]
+                        },
+                        "evidence": {
+                          "description": "achieved: concrete evidence that the outcome holds (commands run, results, files). blocked: the concrete blocker and exactly what is needed from the user. not_achieved: what remains and your next step. deferred: which newer user request or pause took priority.",
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "criteriaEvidence": {
+                          "description": "Required for achieved when the goal has success criteria: evidence for each criterion.",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "name": "run_subagent",
+                    "description": "Delegate a bounded task to the general agent runtime. Use agent_spec for dynamic goal/context/tools/constraints/model/budget; legacy named roles are compatibility presets. This session requires background execution: the tool returns a running handle immediately and a later completion notification. The subagent runs in its own context and returns only a summary, preserving your context. (When to reach for this vs. doing it yourself is covered by the delegation guidance in your system instructions.)\n\nBackground launches return immediately; do not duplicate them or call get_subagent_result until the completion notification arrives.\n\n## Task Requirements\nGive the task one clear objective, one ownership boundary, and one concrete done condition. Include the task-specific scope, non-discoverable parent findings or decisions, constraints, deliverable or acceptance criteria, and validation when applicable. Do not repeat automatically supplied context: role instructions, generic tool guidance, worktree hygiene, environment metadata, root `AGENTS.md`, or skills catalog. The subagent does not see your conversation or reasoning. For explorer, request concrete evidence to collect for a bounded question and choose breadth or depth, never both: map one defined surface shallowly or trace one narrow seam thoroughly. Do not ask explorer to diagnose, recommend a fix, choose an approach, or own the user's complete investigation, review, diagnosis, or planning deliverable. For worker, assign one cohesive implementation unit. For mentor, ask one decision or challenge question. For reviewer, describe the artifact to review (diff range, files, plan) and the review criteria; it gathers evidence only through explorers. For librarian, assign one history question to answer from memory and prior sessions, or one memory-maintenance topic boundary.\n\nFor isolated worker edits, create a git worktree under the workspace root first (`git worktree add .worktrees/<slug> -b <slug>`), then pass `worktree` as that directory basename or branch name. `worktree` pins the child into that existing tree without re-rooting this session; generic writable agents may use it too.\n\nA background status of \"running\" means launch succeeded: end the turn and wait for the completion notification.",
+                    "parameters": {
+                      "required": ["execution"],
+                      "type": "object",
+                      "properties": {
+                        "execution": {
+                          "description": "Only background execution is available in this session.",
+                          "enum": ["background"],
+                          "type": "string"
+                        },
+                        "role": {
+                          "description": "Optional legacy role preset.",
+                          "type": "string",
+                          "enum": ["explorer", "worker", "mentor", "reviewer", "librarian"]
+                        },
+                        "task": {
+                          "description": "Complete description of one bounded delegated unit with one objective, ownership boundary, and done condition. For explorer, specify concrete evidence to collect and choose breadth or depth, never both; do not delegate diagnosis, recommendations, or the parent task itself.",
+                          "type": "string"
+                        },
+                        "agent_spec": {
+                          "description": "Dynamic goal/context/tools/constraints/model/budget; no named role required.",
+                          "required": ["goal"],
+                          "type": "object",
+                          "properties": {
+                            "goal": {
+                              "description": "The goal for this general-purpose agent invocation.",
+                              "type": "string"
+                            },
+                            "context": {
+                              "type": "object"
+                            },
+                            "tools": {
+                              "description": "Optional allowlist of child-buildable tools; omitted defaults to read-only workspace tools.",
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "read_file",
+                                  "grep",
+                                  "glob",
+                                  "read_code_outline",
+                                  "code_context_search",
+                                  "web_search",
+                                  "web_fetch",
+                                  "shell",
+                                  "apply_patch",
+                                  "search_replace",
+                                  "create_file"
+                                ]
+                              }
+                            },
+                            "permissions": {
+                              "type": "object",
+                              "properties": {
+                                "tools": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "enum": [
+                                      "read_file",
+                                      "grep",
+                                      "glob",
+                                      "read_code_outline",
+                                      "code_context_search",
+                                      "web_search",
+                                      "web_fetch",
+                                      "shell",
+                                      "apply_patch",
+                                      "search_replace",
+                                      "create_file"
+                                    ]
+                                  }
+                                },
+                                "filesystem": {
+                                  "type": "object",
+                                  "properties": {
+                                    "read": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "write": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  }
+                                },
+                                "network": {
+                                  "type": "object",
+                                  "properties": {
+                                    "hosts": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  }
+                                },
+                                "agents": {
+                                  "type": "object",
+                                  "properties": {
+                                    "create": {
+                                      "type": "boolean"
+                                    },
+                                    "maxDepth": {
+                                      "type": "number"
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            "constraints": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "doneWhen": {
+                              "type": "string"
+                            },
+                            "model": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": ["efficient", "balanced", "capable"]
+                                },
+                                {
+                                  "required": ["provider", "model"],
+                                  "type": "object",
+                                  "properties": {
+                                    "provider": {
+                                      "type": "string"
+                                    },
+                                    "model": {
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            "budget": {
+                              "description": "Only enforced per-invocation budgets are accepted.",
+                              "type": "object",
+                              "properties": {
+                                "maxTurns": {
+                                  "description": "Maximum model turns; defaults to 200.",
+                                  "type": "integer"
+                                },
+                                "maxTokens": {
+                                  "description": "Provider output-token cap per model response, not an aggregate run token budget.",
+                                  "type": "integer"
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "worktree": {
+                          "description": "For write-capable workers or generic agent specs. Directory basename or branch of an existing git worktree to pin the child into. Create the worktree first under the workspace root; this does not re-root the parent session.",
+                          "type": "string"
+                        },
+                        "name": {
+                          "description": "Optional active-run alias: lowercase letter first, then up to 31 lowercase letters, digits, underscores, or hyphens. Background only.",
+                          "type": "string"
+                        },
+                        "continue_run_id": {
+                          "description": "Continue a completed background run using its runId. Background only; writable generic runs and workers cannot continue.",
+                          "type": "string"
+                        },
+                        "check_in": {
+                          "description": "Optional check-in configuration for this background subagent. Background only.",
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "description": "Enable or disable proactive check-ins for this background subagent. Defaults to true.",
+                              "type": "boolean"
+                            },
+                            "interval_seconds": {
+                              "description": "Custom interval in seconds between proactive check-ins.",
+                              "type": "integer"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "name": "run_code",
+                    "description": "Write a JavaScript program and execute it. Return the value you want the model to receive; that completion value is the result of the run. Most tools you already have are available inside the script as `tools.<tool_name>(params)`, returning a promise that resolves to that tool's normal result and rejecting when the call fails, so you can try/catch it. Parameters are exactly the parameters documented for that tool; they are validated against the real schema before the tool runs. Prefer this over many separate tool calls when the work is a loop, a fan-out over many files, or a multi-step computation whose intermediate values you do not need to see. `console.log` is a debugging trace: it is suppressed on successful runs unless you set `include_console: true`, but it is included when the script fails or times out. The code runs in an isolated context with no filesystem, network, timers, require, or eval: `tools.*` is the only way out. Auto-approved tools run immediately. Tools that require user approval present the existing approval prompt and resume this script after a decision; denial is catchable. The catalogue below is the complete set of tools a script can call: a name that is absent from it is not available inside the script, even when the direct tool surface offers it.\n\nEach script may admit at most 200 tools.* calls. Track progress and split large work into chunks; catch individual failures or use Promise.allSettled so you can return partial results. When the call budget is exhausted, the error reports calls admitted and calls remaining: return the partial results and start another run_code call only for unattempted work. Do not repeat completed tool effects. Return only the fields, line ranges, or summaries you need: model-visible output is limited to 30,000 characters, and larger host results can fail before rendering. For independent reads, preserve successful siblings with `Promise.allSettled`, mapping rejections to `{error: r.reason.message}` before returning. If the final result says `Full output saved to`, read that exact path with `read_file` rather than repeating completed calls; for a large artifact, read line ranges or the fields you need instead of transferring the whole value. A scripted `read_file` result may itself have `truncated: true` and a `fullOutputPath`; follow that path or narrow the projection before returning it. Use `tools.describe` before guessing parameters or returned fields. If a patch or file body contains JavaScript syntax such as backticks or `${...}`, pass it through the `inputs` parameter and read it from the global `inputs` object instead of embedding it in code. Code and serialized inputs share the 65,536-byte admission limit. Example: `const r = await Promise.allSettled([tools.read_file({path:\"a.ts\"}), tools.read_file({path:\"b.ts\"})]); return r.map(x => x.status === \"fulfilled\" ? {content:(typeof x.value === \"string\" ? x.value : x.value.content).slice(0,2000)} : {error:x.reason.message});`\n\nAvailable inside the script (parameter shapes are approximate; each call is validated against the tool’s real schema):\nUse tools.describe(name) when you need the full schema and description for a tool.\nUse only the tools listed here: a name that is not listed is not available inside the script.\nEssential tools:\n- tools.read_file({ path: string, start_line?: number, end_line?: number }) — Read file content from the workspace (like cat command). Supports reading specific line ranges. Image files are returned as image content fo…\n    returns { path: string, totalLines: number, fromLine: number, toLine: number, content: string, truncated: boolean, fullOutputPath?: string }|{ type: \"text\", text: string }|{ __term2_run_code_media_reference__: string }|string[]|string (guidance: { path: string, totalLines: number, fromLine: number, toLine: number, content: string, truncated: boolean, fullOutputPath?: string } or content parts [{ type: \"text\" | \"image\", ... }] for image files)\n\nOther tools (call tools.describe(name) before use): shell, web_search, web_fetch, configure_task_check_in, memory_list, memory_get, memory_search, memory_retrieve, memory_create, memory_update, memory_delete, list_models, get_subagent_result, get_subagent_status, send_message, cancel_run\n\n## Agent capability\n\nWhen present, a flat `agent` global (not a `tools.*` entry) launches host-resolved agents from the script:\n- `agent.run({ spec, worktree? })` awaits one foreground agent and resolves to its nested result (status, finalText, filesChanged, toolsUsed, ...). Fan out with `Promise.all` and catch per-call rejections (`agent.run failed: ...`). The host aborts the child if the script times out or is cancelled. When a session approval owner is bound, child tool approval pauses surface to the user and resume the exact child execution; the work clock pauses only while all calls await approval. Without that owner, or for non-tool interruptions, the child rejects rather than reporting completion.\n- `agent.start({ spec, name? })` starts a conversation-scoped background run and resolves to `{ runId, name?, role, status: 'running' }`; it survives this script and its timeout. `continue_run_id` is rejected by this script capability until stored-run authority can be verified.\n- `agent.status({ runId? })` peeks non-blocking progress; `agent.result({ runId })` awaits the settled result; `agent.cancel({ target })` requests cancellation. Background completion reaches the session notification lane even after this script returns.\n- `spec` is a plain AgentSpec (`{ goal, tools?, permissions?, constraints?, doneWhen?, model?, budget? }`). The host attenuates it against this session's authority before launch: requests beyond parent tools, scopes, or the worktree scope reject per call as `Agent specification rejected: ...`; the raw spec is never forwarded to any launch path.\n- Per-script limits, separate from the tools.* budget: at most 16 agent launches, 4 parallel foreground runs, and 200 agent.* calls.",
+                    "parameters": {
+                      "required": ["code", "description"],
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "description": "JavaScript (not TypeScript) executed as the body of an async function. Top-level await is available. Return the value you want the model to receive. Use console.log only for debugging.",
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "inputs": {
+                          "description": "JSON data exposed to the script as the global `inputs`. Use this for patch or file text. Code and serialized inputs share the 65,536-byte admission limit.",
+                          "type": "object"
+                        },
+                        "include_console": {
+                          "description": "Include console.log debugging trace in the successful result. Defaults to false.",
+                          "type": "boolean"
+                        },
+                        "timeout_ms": {
+                          "description": "Wall-clock limit for the script. Defaults to 120000.",
+                          "type": "integer"
+                        },
+                        "description": {
+                          "description": "One short line describing what the script does, shown to the user.",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "seq": 0
+        },
+        {
+          "kind": "http-response-head",
+          "status": 200,
+          "headers": {
+            "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+            "content-disposition": "attachment",
+            "content-type": "text/event-stream",
+            "date": "Sun, 08 Nov 2026 05:04:04 GMT",
+            "server": "scaffolding on HTTPServer2",
+            "server-timing": "gfet4t7; dur=2698",
+            "transfer-encoding": "chunked",
+            "vary": "Origin, X-Origin, Referer",
+            "x-content-type-options": "nosniff",
+            "x-frame-options": "SAMEORIGIN",
+            "x-xss-protection": "0"
+          },
+          "seq": 1
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"kestrel-41-orbit\"}],\"role\":\"model\"},\"index\":0}],\"usageMetadata\":{\"promptTokenCount\":4062,\"candidatesTokenCount\":7,\"totalTokenCount\":4131,\"promptTokensDetails\":[{\"modality\":\"TEXT\",\"tokenCount\":4062}],\"thoughtsTokenCount\":62,\"serviceTier\":\"standard\"},\"modelVersion\":\"gemini-3.8-flash\",\"responseId\":\"wQLwar_aLbPR3LUP4-3r4Qk\"}",
+          "seq": 2
+        },
+        {
+          "kind": "sse-event",
+          "data": "{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"\",\"thoughtSignature\":\"[REDACTED]\"}],\"role\":\"model\"},\"finishReason\":\"STOP\",\"index\":0}],\"usageMetadata\":{\"promptTokenCount\":4243,\"candidatesTokenCount\":7,\"totalTokenCount\":4312,\"promptTokensDetails\":[{\"modality\":\"TEXT\",\"tokenCount\":4243}],\"thoughtsTokenCount\":62,\"serviceTier\":\"standard\"},\"modelVersion\":\"gemini-3.8-flash\",\"responseId\":\"wQLwar_aLbPR3LUP4-3r4Qk\"}",
+          "seq": 3
+        }
+      ]
+    }
+  ],
+  "placeholders": {
+    "call_16242772557171182094": "call_<1>"
+  }
+}

@@ -16,7 +16,6 @@ const filterableMenuKinds = new Set<MenuFrame['kind']>([
   'settings_value',
   'model',
   'skills',
-  'profile',
 ]);
 
 type FilterableMenuFrame = Extract<MenuFrame, { binding: { query: string } }>;

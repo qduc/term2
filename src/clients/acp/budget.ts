@@ -12,6 +12,8 @@ export async function requestBudget(input: {
   readonly signal: AbortSignal;
 }): Promise<BudgetAnswer> {
   try {
+    const { request } = await input.client.initialized;
+    if (request.capabilities?.elicitation?.form == null) return stop('system');
     const response = await input.client.request(
       acp.methods.client.elicitation.create,
       {

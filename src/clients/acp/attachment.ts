@@ -1,6 +1,7 @@
 import * as acp from '@agentclientprotocol/sdk/experimental/v2';
 import type { DirectConnection } from '../../host/in-process-direct-types.js';
 import type { WireBudgetRequest, WireCommand, WireEvent, WireInteraction } from '../../protocol/wire.js';
+import { reduceWireEvent } from '../../protocol/reducer.js';
 import type { AcpLogger, EmitUpdate, PromptExecution, PromptOutcome } from './contract.js';
 import { errorMessage } from './contract.js';
 import { AcpRenderer, MissingAcpWireContract, terminalOutcome } from './render.js';
@@ -56,6 +57,7 @@ export class AcpAttachment {
   private closed = false;
   private foregroundTurnId: string | null;
   private status: DirectConnection['snapshot']['status'];
+  private activity: DirectConnection['snapshot'];
   private closeWaiter: { readonly turnId: string; resolve(): void; reject(error: unknown): void } | null = null;
   private pump: Promise<void> = Promise.resolve();
 
@@ -66,26 +68,18 @@ export class AcpAttachment {
   ) {
     this.foregroundTurnId = connection.snapshot.activeTurnId;
     this.status = connection.snapshot.status;
+    this.activity = connection.snapshot;
   }
 
   /** Replay a current snapshot before consuming its strictly subsequent events. */
   async start(replay: boolean): Promise<void> {
     for (const update of this.renderer.snapshot(this.connection.snapshot, replay)) await this.emit(update);
-    if (replay && (this.status === 'running' || this.status === 'awaiting_interaction')) {
-      await this.emit({ sessionUpdate: 'state_update', state: 'running' });
-    }
-    if (
-      replay &&
-      this.status !== 'running' &&
-      this.status !== 'awaiting_interaction' &&
-      this.connection.snapshot.terminal
-    ) {
-      await this.emit({
-        sessionUpdate: 'state_update',
-        state: 'idle',
-        ...terminalOutcome(this.connection.snapshot.terminal),
-      });
-    }
+    // Current activity is live synchronization, even when history is omitted.
+    await this.emit({
+      sessionUpdate: 'state_update',
+      state:
+        this.status === 'awaiting_interaction' ? 'requires_action' : this.status === 'running' ? 'running' : 'idle',
+    });
     for (const permission of this.connection.snapshot.pendingInteractions) this.openPermission(permission);
     for (const request of this.connection.snapshot.pendingBudgets ?? []) this.openBudget(request);
     this.pump = this.consume().catch((error: unknown) => this.fail(error));
@@ -221,6 +215,13 @@ export class AcpAttachment {
       await this.onEvent(event.payload.event, true, branch);
       return;
     }
+    if (!nested) {
+      // Native interaction facts change foreground state without a
+      // separate status_changed event. Use the protocol's state semantics,
+      // including concurrent requests and background task distinctions.
+      this.activity = reduceWireEvent(this.activity, event);
+      await this.updateStatus(this.activity.status);
+    }
     if (!nested && event.type === 'turn_started') {
       if (event.payload.foreground) this.foregroundTurnId = event.turnId;
       if (this.active?.messageId && event.payload.input.some((message) => message.id === this.active?.messageId)) {
@@ -229,7 +230,6 @@ export class AcpAttachment {
     }
     if (!nested && event.type === 'snapshot') {
       this.foregroundTurnId = event.payload.snapshot.activeTurnId;
-      this.status = event.payload.snapshot.status;
       const snapshot = event.payload.snapshot;
       for (const terminal of [...(snapshot.turnResults ?? []), ...(snapshot.terminal ? [snapshot.terminal] : [])]) {
         if (this.active?.turnId === terminal.turnId) this.active.resolve(terminalOutcome(terminal));
@@ -247,13 +247,6 @@ export class AcpAttachment {
       }
       for (const interaction of snapshot.pendingInteractions) this.openPermission(interaction);
       for (const request of snapshot.pendingBudgets ?? []) this.openBudget(request);
-    }
-    if (!nested && event.type === 'status_changed') {
-      const wasRunning = this.status === 'running' || this.status === 'awaiting_interaction';
-      this.status = event.payload.status;
-      if (!this.active && !wasRunning && (this.status === 'running' || this.status === 'awaiting_interaction')) {
-        await this.emit({ sessionUpdate: 'state_update', state: 'running' });
-      }
     }
     for (const update of renderer.event(event)) await (this.active?.emit ?? this.emit.bind(this))(update);
     if (event.type === 'interaction_opened') {
@@ -281,6 +274,17 @@ export class AcpAttachment {
         if (!this.active)
           await this.emit({ sessionUpdate: 'state_update', state: 'idle', ...terminalOutcome(event.payload) });
       }
+    }
+  }
+
+  private async updateStatus(status: DirectConnection['snapshot']['status']): Promise<void> {
+    const previous = this.status;
+    this.status = status;
+    if (previous !== status && (status === 'running' || status === 'awaiting_interaction')) {
+      await this.emit({
+        sessionUpdate: 'state_update',
+        state: status === 'awaiting_interaction' ? 'requires_action' : 'running',
+      });
     }
   }
 

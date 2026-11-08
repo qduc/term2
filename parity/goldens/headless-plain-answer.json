@@ -4,7 +4,7 @@
     {
       "exitCode": 0,
       "stdout": "Hello there.\n",
-      "stderr": "Profile: bare\n",
+      "stderr": "",
       "requests": [
         {
           "model": "mock-alpha",

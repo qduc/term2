@@ -26,8 +26,8 @@ export function promptInput(blocks: acp.PromptRequest['prompt']): PromptInput {
     if (block.type === 'text' && typeof block.text === 'string') text = block.text;
     else if (block.type === 'resource_link') text = `[Resource: ${String(block.uri)}]`;
     else if (block.type === 'resource') {
-      const resource = block.resource as { type?: string; text?: string };
-      if (resource.type !== 'text' || typeof resource.text !== 'string') {
+      const resource = block.resource;
+      if (!resource || typeof resource !== 'object' || !('text' in resource) || typeof resource.text !== 'string') {
         throw acp.RequestError.invalidParams(undefined, 'Unsupported embedded resource');
       }
       text = resource.text;

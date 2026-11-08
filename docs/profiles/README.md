@@ -1,4 +1,21 @@
-# Profile architecture specification
+# Profile architecture and compatibility
+
+The app offers one default experience (Bare). CLI help, onboarding, slash
+completion, settings menus, banners, the footer and resume views do not expose
+profile selection or routine profile labels. `src/config/profiles/` remains the
+backend for composition, resolution, metadata and legacy adapters.
+
+Hidden CLI inputs `--profile bare/standard/full/lite`, `--lite` and `-l` remain
+compatible. Exact typed `/profile [name]`, `/bare` and `/lite` aliases acknowledge
+the default without clearing history or switching. Explicit dropped profile
+selections (Plan, Pair, Mentor, Orchestrator) fail; saved dropped selections fall
+back to Bare under the existing restore policy. Settings schema and load/save
+normalization remain intact, including legacy mode flags. Session profile ID,
+version and digest remain in persisted and machine-readable output, including
+NDJSON, web/server and ACP contracts; plain-text startup no longer announces them.
+
+The specifications and milestone descriptions below describe the historical
+architecture and behavior; they do not advertise current selectable profiles.
 
 Status: **Milestone 1 implemented and merged.** Built-in profile architecture and legacy mode removal merged in `b1ddd32a` (2026-09-02); Pair profile added in `37523fac` (2026-09-03).
 
@@ -78,15 +95,15 @@ normal permissions. It does not offer the dropped workflows' `propose_goal` tool
 
 Bare is the default for fresh sessions, including interactive and auto-approved runs.
 `--profile bare` explicitly selects it; CLI overrides do not persist. Standard is
-retired, not offered in the picker, and has no selectable full-context definition.
+retired and has no selectable full-context definition. The consumer picker is removed.
 Old `--profile standard`, `--profile full`, `/profile standard`, `/profile full`,
 and saved `builtin:standard` selections resolve to canonical `builtin:bare`.
 Old sessions without a profile or enabled legacy mode also use Bare. History and
 settings files are not bulk-rewritten: runtime selection and new session headers
 use Bare, including resume and rollover. Unknown profile IDs still fail normally.
 
-Configured remaining profiles are honored even for positional prompts without
-`--auto-approve`. `/bare` and `/lite` are idempotent while Bare is active.
+The default is the same for positional prompts with or without `--auto-approve`.
+Hidden `/bare` and `/lite` aliases are no-ops.
 
 Lite was merged into Bare on 2026-10-24. Every Lite entry point now selects
 `builtin:bare`: `--lite`, `--profile lite`, `/lite` (alongside `/bare`),
@@ -149,7 +166,7 @@ saving or quality equivalence is claimed. Environment context was restored next:
 completed paired runs it used 45% and 50% fewer tokens
 ([retry notes (historical)](https://github.com/qduc/term2/blob/1cca21b541b3d2e9a55ddd81e3514c17ff5e1503/experiments/bare-profile/cheap-additions-retry.md)).
 
-Every CLI session prints its profile on stderr. Headless NDJSON begins with a
+Plain-text CLI startup omits the routine profile announcement. Headless NDJSON begins with a
 `session_start` carrying `activeProfileId`, and persisted conversation headers
 record the same canonical profile ID. CLI session headers also carry
 `activeProfileVersion` and `activeProfileDigest` for composition comparisons; the

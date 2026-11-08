@@ -1,3 +1,4 @@
+import { resolveSettingsDirectory } from '../../src/config/settings/settings-path.js';
 import { writeMockCliSettings } from '../helpers/mock-cli-settings.js';
 import { afterEach, expect, it } from 'vitest';
 import fs from 'node:fs';
@@ -32,14 +33,21 @@ afterEach(() => {
   tempHome = '';
 });
 
-it.sequential.each(['lite', 'bare'])(
-  'starts the %s terminal UI and exits on the second Ctrl+C',
+it.sequential.each([
+  { profile: 'lite', skin: 'classic' },
+  ...['classic', 'cards', 'rail', 'ledger', 'zen'].map((skin) => ({ profile: 'bare', skin })),
+])(
+  'starts the $profile terminal UI with $skin skin and no profile labels',
   { timeout: TEST_TIMEOUT_MS },
-  async (profile) => {
+  async ({ profile, skin }) => {
     tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-e2e-home-'));
     tempConversationsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'term2-e2e-conversations-'));
 
     writeMockCliSettings(tempHome);
+    const settingsFile = path.join(resolveSettingsDirectory({ homeDir: tempHome }), 'settings.json');
+    const settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+    settings.ui = { skin };
+    fs.writeFileSync(settingsFile, JSON.stringify(settings));
     const idlePath = path.join(tempHome, 'input-idle');
     session = spawnTerminal(
       'node',
@@ -61,8 +69,9 @@ it.sequential.each(['lite', 'bare'])(
     // Idle is application-owned evidence that startup reached the composer.
     // --lite is an alias of Bare, so both start the same Profile; the identity
     // is checked in the session header below.
-    await session.waitForOutput('BARE', STARTUP_TIMEOUT_MS);
     await waitForHarnessIdleGeneration(idlePath, { timeoutMs: STARTUP_TIMEOUT_MS });
+    expect(session.getVisibleOutput()).not.toMatch(/Profile:|\bBARE\b|\bBare\b/);
+    expect(session.getVisibleOutput()).toContain('mock-alpha');
 
     {
       const headers = fs

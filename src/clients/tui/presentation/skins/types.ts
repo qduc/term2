@@ -1,5 +1,5 @@
 import type { FC, ReactNode } from 'react';
-import type { ColorRole, ModeBadge, ToolStatusKind } from '../theme/palettes.js';
+import type { ColorRole, ToolStatusKind } from '../theme/palettes.js';
 import type { SkinName } from '../../../../config/skins/names.js';
 
 /**
@@ -25,14 +25,9 @@ import type { SkinName } from '../../../../config/skins/names.js';
 
 export interface BannerView {
   version: string;
-  mode: ModeBadge;
-  /** True when the Mentor profile is active (a second badge, and a mentor model). */
-  mentor: boolean;
   providerLabel: string;
   model: string | undefined;
   reasoningEffort: string;
-  mentorModel: string | undefined;
-  mentorReasoningEffort: string;
 }
 
 export interface UserMessageView {

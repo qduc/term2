@@ -2,7 +2,7 @@ import type { TuiConnection } from './integration.js';
 import { resetSession } from './commands.js';
 import { displaySessionId } from '../../protocol/session-id.js';
 
-export const WELCOME = 'Welcome to term²! Type a message to start chatting.';
+const WELCOME = 'Welcome to term²! Type a message to start chatting.';
 
 /**
  * `/clear`: create the replacement session, then attach it. Returns null on success.

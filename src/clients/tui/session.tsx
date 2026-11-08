@@ -13,7 +13,7 @@ import type { InteractionInputHandler } from './interaction-input.js';
 import { runBangShell } from './bang-shell.js';
 import { useInterrupt } from './interrupt.js';
 import { useQueuePaused } from './queue-paused.js';
-import { isCtrlG, isCtrlO, isCtrlT, isShiftTab, useProfileClearConfirm } from './shift-tab.js';
+import { isCtrlG, isCtrlO, isCtrlT, isShiftTab } from './shift-tab.js';
 import { resolveTypedCommand } from './typed-command.js';
 import { REWIND_COMMAND, rewindItems, runRewindCommand } from './menus/rewind-command.js';
 import { cleanImageMarkers, wireAttachments } from './draft.js';
@@ -208,7 +208,6 @@ export function TuiSession({
       setNotice(error instanceof Error ? error.message : String(error)),
     );
   });
-  const profileClear = useProfileClearConfirm(integration, connection, confirmation, setNotice, beginNewConversation);
   const composerFilter = useComposerFilter({
     composerActive,
     outputExpanded: viewport.expanded,
@@ -348,7 +347,6 @@ export function TuiSession({
           // Legacy adds command output (/usage) as a system message, like /help.
           if (result.transcript) viewport.appendCommandOutput(result.transcript, true);
           if (result.menu) menuStack.openMenu(result.menu);
-          if (result.confirmClear) profileClear.confirmClear(result.confirmClear);
           if (result.draft) {
             restoreDraft(result.draft);
             return;

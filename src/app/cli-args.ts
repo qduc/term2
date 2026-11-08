@@ -106,7 +106,7 @@ const FLAGS: readonly Flag[] = [
   },
   opt(['--ssh'], ' <user@host>', 'Enable SSH mode for a remote host'),
   opt(['--discord-input'], '', 'Allow Discord input and explicit root notifications on this control socket'),
-  opt(['--remote-dir'], ' <path>', 'Remote working directory (required for non-lite SSH sessions)'),
+  opt(['--remote-dir'], ' <path>', 'Remote working directory'),
   opt(['--ssh-port'], ' <port>', 'SSH port (default: 22)'),
   opt(['--control-socket'], '[=<name>]', 'Enable a local socket for the interactive TUI'),
   opt(['--grok-login'], '', 'Log in to Grok in a browser (OAuth) and exit'),
@@ -164,7 +164,7 @@ https://github.com/qduc/term2/blob/main/docs/reference/discord-bridge.md
 Candidate: live Discord/mobile validation is still outstanding.
 `;
 
-/** Public help for the shipped executable, including its supported profile surface. */
+/** Public help for the shipped executable. Compatibility profile flags stay parseable but hidden. */
 export const helpText = (): string => `
   A terminal-based AI assistant that can help you get things done on your computer
 
@@ -189,15 +189,13 @@ export const helpText = (): string => `
     -r, --reasoning <effort>             Set reasoning effort (default, none, minimal, low, medium, high, xhigh)
         --goal <text>                    Persist a user-authored session outcome (max 2,000 characters)
         --goal-criteria <text>            Optional success criteria (max 2,000 characters; requires --goal)
-        --profile <name>                 Select a profile (bare [default]; standard/full/lite = bare)
-    -l, --lite                           Start in the Bare profile (alias kept from Lite)
         --auto-approve                   Allow tool execution for a non-interactive prompt
     -q, --quiet                          Suppress non-error diagnostics on stderr in non-interactive mode
         --show-reasoning                 Stream reasoning deltas to stderr in non-interactive mode
         --json                           Emit newline-delimited JSON (NDJSON) events in non-interactive mode
         --ssh <user@host>                Enable SSH mode for a remote host
         --discord-input                 Allow Discord input and explicit root notifications on this control socket
-        --remote-dir <path>              Remote working directory (required for non-lite SSH sessions)
+        --remote-dir <path>              Remote working directory
         --ssh-port <port>                SSH port (default: 22)
         --control-socket[=<name>]        Enable a local socket for the interactive TUI
         --grok-login                     Log in to Grok in a browser (OAuth) and exit
@@ -250,7 +248,6 @@ export const helpText = (): string => `
   More examples
     $ term2 --model gpt-5.4 --provider openai
     $ term2 --model
-    $ term2 --lite
     $ term2 --auto-approve "list files in the current directory"
     $ term2 -q "generate json payload"
     $ term2 --json "explain this function"

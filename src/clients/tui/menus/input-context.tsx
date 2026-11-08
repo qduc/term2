@@ -23,7 +23,6 @@ export type InputMode =
   | 'settings_value_completion'
   | 'model_selection'
   | 'skill_selection'
-  | 'profile_selection'
   | 'resume_selection'
   | 'copy_selection'
   | 'rewind_selection'
@@ -44,8 +43,6 @@ function frameKindToLegacyMode(kind: MenuFrame['kind'] | undefined): InputMode {
       return 'model_selection';
     case 'skills':
       return 'skill_selection';
-    case 'profile':
-      return 'profile_selection';
     case 'resume':
       return 'resume_selection';
     case 'copy':

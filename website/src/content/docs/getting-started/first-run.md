@@ -38,21 +38,13 @@ During a session, `/model` or `Ctrl+O` opens model selection; `/providers` manag
 
 ## 3. Explore before editing
 
-Enter this slash command in the chat:
-
-```text
-/plan
-```
-
-Then ask:
-
 > Explain how this project starts. Point me to the entry points and the command for running its tests.
 
-Plan mode blocks workspace mutations. Review the files and commands the agent uses, then compare its answer with the project itself. A useful first result names the actual entry points and test command, rather than guessing a generic setup.
+Ask the assistant to inspect before making changes. This request does not change runtime permissions. Review the files and commands the agent uses, then compare its answer with the project itself. A useful first result names the actual entry points and test command, rather than guessing a generic setup.
 
 ## 4. Make one small change
 
-Enter `/plan` again to return to Standard mode. Describe a narrow change and how to check it, for example:
+Describe a narrow change and how to check it, for example:
 
 > Add a test for this edge case, fix the failure, and run that test. Explain the resulting diff.
 

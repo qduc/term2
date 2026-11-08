@@ -4,7 +4,7 @@
     {
       "exitCode": 0,
       "stdout": "Created hello.txt.\n",
-      "stderr": "Profile: bare\n[tool] shell: printf 'hi\\n' > hello.txt\n",
+      "stderr": "[tool] shell: printf 'hi\\n' > hello.txt\n",
       "requests": [
         {
           "model": "mock-alpha",

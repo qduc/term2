@@ -1,5 +1,3 @@
-import { toTierModelPoolEntries } from '../../../../../engine/agent-runtime/model-resolver.js';
-import { getProfileLabel } from '../../../../../config/profiles/labels.js';
 import React, { FC, useEffect, useRef } from 'react';
 import { Box, measureElement, type DOMElement } from 'ink';
 import { useTerminalColumns } from '../../hooks/use-terminal-columns.js';
@@ -7,7 +5,6 @@ import { createRequire } from 'node:module';
 import { useSetting } from '../../hooks/use-setting.js';
 import { getProvider } from '../../../../../model/providers/index.js';
 import type { ISettingsService } from '../../../../../shared/service-interfaces.js';
-import type { ModeBadge } from '../theme.js';
 import { useSkin } from '../../skins/SkinContext.js';
 
 const require = createRequire(import.meta.url);
@@ -56,35 +53,15 @@ const Banner: FC<BannerProps> = ({ settingsService, onHeightChange }) => {
     if (container.current && onHeightChange) onHeightChange(measureElement(container.current).height);
   });
   const { Banner: SkinBanner } = useSkin();
-  const activeProfileId = useSetting(settingsService, 'app.activeProfileId') ?? 'builtin:bare';
   const selection = useSetting(settingsService, 'agent.modelSelection');
   const model = selection.model;
-  const smartPool = useSetting(settingsService, 'agent.smartModel');
-  // Display uses the pool's first entry; the pool cursor only advances per
-  // subagent spawn.
-  const smartModel = toTierModelPoolEntries(smartPool)[0]?.model;
-  const mentorModel = smartModel;
   const providerKey = selection.provider;
   const reasoningEffort = useSetting(settingsService, 'agent.reasoningEffort') ?? 'default';
-  const mentorReasoningEffort = useSetting(settingsService, 'agent.mentorReasoningEffort') ?? 'default';
 
   const providerDef = getProvider(providerKey);
   const providerLabel = providerDef?.label || providerKey;
-  // Mentor adds its own badge/model; the legacy base badge is hidden by skins.
-  const mentor = activeProfileId === 'builtin:mentor';
-  const baseMode = (mentor ? 'STANDARD' : getProfileLabel(activeProfileId).toUpperCase()) as ModeBadge;
-
   const banner = (
-    <SkinBanner
-      version={version}
-      mode={baseMode}
-      mentor={mentor}
-      providerLabel={providerLabel}
-      model={model}
-      reasoningEffort={reasoningEffort}
-      mentorModel={mentorModel}
-      mentorReasoningEffort={mentorReasoningEffort}
-    />
+    <SkinBanner version={version} providerLabel={providerLabel} model={model} reasoningEffort={reasoningEffort} />
   );
   return onHeightChange ? (
     <Box ref={container} flexDirection="column">

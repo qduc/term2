@@ -74,7 +74,7 @@ async function startModelMock(
   modelIds: string[],
   script?: { toolCommand: string; toolName?: string; toolInput?: object },
 ): Promise<{ baseUrl: string; close: () => Promise<void> }> {
-  let toolCallIssued = false;
+  const toolTurns = new Set<number>();
   const server = http.createServer((req, res) => {
     if (req.method === 'GET' && req.url?.includes('/models')) {
       res.writeHead(200, { 'content-type': 'application/json' });
@@ -87,11 +87,13 @@ async function startModelMock(
     });
     req.on('end', () => {
       res.writeHead(200, { 'content-type': 'text/event-stream' });
-      // Only the first turn asks for the tool call; the turn after the tool
-      // result (which still carries the prompt in its history) must answer with
-      // text, or the model would loop on the same call.
-      if (script && !toolCallIssued && body.includes('run the tool')) {
-        toolCallIssued = true;
+      // Each admitted user prompt asks once; the continuation after its tool result
+      // answers with text. Repeated provider call IDs must not become execution IDs.
+      const users = (JSON.parse(body).messages ?? []).filter(
+        (message: { role: string }) => message.role === 'user',
+      ).length;
+      if (script && !toolTurns.has(users) && body.includes('run the tool')) {
+        toolTurns.add(users);
         res.end(approvalToolTurnBody(script.toolCommand, script.toolName, script.toolInput));
         return;
       }
@@ -280,7 +282,15 @@ async function toolTurn(session: ChildSession): Promise<void> {
     )
     .toBe(true);
   expect(session.updates.slice(from).some(({ update }) => update.sessionUpdate === 'tool_call')).toBe(true);
-  expect(session.updates.slice(from).some(({ update }) => update.sessionUpdate === 'tool_call_update')).toBe(true);
+  expect(
+    session.updates
+      .slice(from)
+      .some(
+        ({ update }) =>
+          (update.sessionUpdate === 'tool_call' || update.sessionUpdate === 'tool_call_update') &&
+          (update.status === 'completed' || update.status === 'failed'),
+      ),
+  ).toBe(true);
 }
 
 describe('term2 acp real-tool permission round trips', () => {
@@ -320,7 +330,9 @@ describe('term2 acp real-tool permission round trips', () => {
         async (session) => {
           await toolTurn(session);
           expect(session.permissionRequests).toHaveLength(1);
-          const output = session.updates.filter(({ update }) => update.sessionUpdate === 'tool_call_update');
+          const output = session.updates.filter(
+            ({ update }) => update.sessionUpdate === 'tool_call_update' || update.sessionUpdate === 'tool_call',
+          );
           if (process.env.TERM2_ACP_REQUIRE_SHELL_SUCCESS === '1') {
             expect(fs.existsSync(session.workspaceFile), JSON.stringify(session.updates)).toBe(true);
           }
@@ -336,6 +348,40 @@ describe('term2 acp real-tool permission round trips', () => {
     },
     60_000,
   );
+
+  it('asks again after allow-once and resume, with distinct native execution IDs', async () => {
+    let decisions = 0;
+    const result = await runAcpChild(
+      async () => ({
+        outcome: {
+          outcome: 'selected',
+          optionId: decisions++ === 0 ? 'approve' : 'reject',
+        },
+      }),
+      async (session) => {
+        await toolTurn(session);
+        await session.context.request(acp.methods.agent.session.close, { sessionId: session.sessionId });
+        await session.context.request(acp.methods.agent.session.resume, {
+          sessionId: session.sessionId,
+          cwd: session.workspace,
+          replayFrom: { type: 'start' },
+        });
+        await toolTurn(session);
+        expect(session.permissionRequests).toHaveLength(2);
+        const ids = session.permissionRequests.map((request) => {
+          expect(request.subject?.type).toBe('tool_call');
+          return (request.subject as acp.RequestPermissionRequest['subject'] & { toolCall: { toolCallId: string } })
+            .toolCall.toolCallId;
+        });
+        expect(new Set(ids).size).toBe(2);
+        if (process.env.TERM2_ACP_REQUIRE_SHELL_SUCCESS === '1') {
+          expect(fs.readFileSync(session.workspaceFile, 'utf8')).toBe('written\n');
+        }
+      },
+      { command: 'echo written >> probe.txt' },
+    );
+    assertTransport(result);
+  }, 60_000);
 
   it('does not let saved sandbox=false or auto-approval run outside the required sandbox', async () => {
     const result = await runAcpChild(

@@ -259,7 +259,7 @@ export function useTerm2Session(sessionId: string | null): UseTerm2SessionResult
         } catch (error) {
           if (signal.aborted) return;
           patchView(clearTerm2LiveEvidence);
-          if (error instanceof Term2ApiError && error.status === 410) {
+          if (error instanceof Term2ApiError && (error.status === 410 || error.code === 'replay_unavailable')) {
             patchView(current => ({ ...current, status: 'error', reloadRequired: true, error: 'The native replay cut is no longer available. Reload explicitly to hydrate a new current cut; no missing history was reconstructed.' }));
             return;
           }

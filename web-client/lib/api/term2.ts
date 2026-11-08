@@ -592,14 +592,16 @@ function validateMessage(value: unknown): MessageAdmission {
 }
 function validateAbort(value: unknown): AbortResult {
   const input = object(value);
+  only(input, ['sessionId', 'turnId', 'accepted', 'alreadySettled', 'abortStatus']);
   if (input.accepted === true && Object.keys(input).length === 3 && input.alreadySettled === undefined)
     return { sessionId: id(input.sessionId), turnId: id(input.turnId), accepted: true };
-  if (input.accepted === false && input.alreadySettled === true && Object.keys(input).length === 4)
+  if (input.accepted === false && input.alreadySettled === true && input.abortStatus === 'terminal_accepted')
     return {
       sessionId: id(input.sessionId),
       turnId: id(input.turnId),
       accepted: false,
       alreadySettled: true,
+      abortStatus: 'terminal_accepted',
     };
   throw new Term2ApiError(503, 'Invalid agent response');
 }
@@ -644,9 +646,15 @@ function validateInteraction(value: unknown): InteractionResult {
       accepted: true,
       sessionId: id(input.sessionId),
       turnId: id(input.turnId),
-      interactionId: id(input.interactionId),
+      interactionId: interactionId(input.interactionId),
     };
   throw new Term2ApiError(503, 'Invalid agent response');
+}
+
+function interactionId(value: unknown): string {
+  if (typeof value !== 'string' || !/^[A-Za-z0-9_:-]{1,256}$/u.test(value))
+    throw new Term2ApiError(503, 'Invalid interaction identity');
+  return value;
 }
 
 function validateInteractionRequest(

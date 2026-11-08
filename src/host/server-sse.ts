@@ -95,6 +95,13 @@ function eventStream(connection: DirectConnection | DirectReplayConnection, enco
           disconnect();
           return;
         }
+        // A comment establishes the downstream BFF/browser stream immediately.
+        // Headers alone can remain buffered by an HTTP streaming proxy until
+        // the first body byte; v2 has no initial snapshot event to provide it.
+        if (!response.write(': connected\n\n')) {
+          disconnect();
+          return;
+        }
         const write = (event: WireEvent): boolean => {
           if (closed || response.destroyed || response.writableEnded) return false;
           const frame = encoding.encode(event);

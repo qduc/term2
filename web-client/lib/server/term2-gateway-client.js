@@ -38,6 +38,7 @@ const SAFE_ERROR_CODES = new Set([
   'protocol_upgrade_required',
   'agent_wire_v2_unavailable',
   'hydration_unavailable',
+  'replay_unavailable',
   'not_found',
   'workspace_forbidden',
   'validation_error',
@@ -74,6 +75,13 @@ const SAFE_ERROR_CODES = new Set([
   'settings_unavailable',
   'session_busy',
   'command_not_allowed',
+  'command_outcome_unobserved',
+  'command_stale',
+  'command_ineligible',
+  'command_cancelled',
+  'command_failed',
+  'command_unavailable',
+  'too_late',
   'compact_failed',
   'compact_interrupted',
   'compact_invalid_state',
@@ -90,6 +98,7 @@ const SAFE_ERROR_MESSAGES = Object.freeze({
     'Upgrade the browser and BFF together and use format=agent-wire-v2; config mutations require clientRequestId and the original expectedRevision. Do not auto-key, rebase or retry the old request',
   agent_wire_v2_unavailable: 'agent-wire-v2 is gated until the shared artifact and consumer migration are combined',
   hydration_unavailable: 'Native accepted hydration is unavailable',
+  replay_unavailable: 'Native atomic replay is unavailable; reload explicitly to hydrate a new accepted cut',
   not_found: 'Resource not found',
   workspace_forbidden: 'Workspace is not available',
   validation_error: 'Invalid request',
@@ -126,6 +135,13 @@ const SAFE_ERROR_MESSAGES = Object.freeze({
   settings_unavailable: 'Settings unavailable',
   session_busy: 'Session is busy',
   command_not_allowed: 'Command is not allowed',
+  command_outcome_unobserved: 'Command outcome was not observed; check only the original request',
+  command_stale: 'Command target is stale',
+  command_ineligible: 'Command is not eligible',
+  command_cancelled: 'Command was cancelled',
+  command_failed: 'Command failed; check only the original request',
+  command_unavailable: 'Native command operation is unavailable',
+  too_late: 'Operation is too late for this turn',
   compact_failed: 'Context compaction failed',
   compact_interrupted: 'Context compaction was interrupted',
   compact_invalid_state: 'Context compaction state is invalid',
@@ -356,6 +372,7 @@ function validatePairingResponse(value) {
 }
 
 export class Term2GatewayClient {
+  #pairingPromise;
   /**
    * @param {{
    *   gatewayConfig?: ReturnType<typeof getGatewayConfig>,
@@ -474,6 +491,13 @@ export class Term2GatewayClient {
   }
 
   async pair() {
+    if (!this.#pairingPromise) {
+      this.#pairingPromise = this.#pairOnce().finally(() => { this.#pairingPromise = undefined; });
+    }
+    return this.#pairingPromise;
+  }
+
+  async #pairOnce() {
     if (!this.gatewayConfig.pairingEnabled) return { paired: false };
     this.#assertEnabled();
     const otp = this.gatewayConfig.pairingOtp;
@@ -515,12 +539,26 @@ export class Term2GatewayClient {
     } catch (error) {
       if (
         this.gatewayConfig.pairingEnabled &&
-        !this.pairingComplete &&
         error instanceof Term2GatewayError &&
         error.code === 'pairing_required'
       ) {
-        await this.pair();
-        return operation();
+        let pairingError;
+        if (!this.pairingComplete) {
+          try { await this.pair(); }
+          catch (failure) { pairingError = failure; }
+        }
+        // Another route bundle/process may have registered this same key while
+        // our unauthenticated request or registration was in flight. Retry once
+        // with a fresh assertion; only the gateway's authentication can admit it.
+        try {
+          const result = await operation();
+          this.pairingComplete = true;
+          return result;
+        } catch (retryError) {
+          if (pairingError && retryError instanceof Term2GatewayError && retryError.code === 'pairing_required')
+            throw pairingError;
+          throw retryError;
+        }
       }
       throw error;
     }

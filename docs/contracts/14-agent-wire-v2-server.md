@@ -1,43 +1,51 @@
-# Contract 14 — agent-wire v2 server transport (gated)
+# Contract 14 — agent-wire v2 server transport
 
-**Status:** source implementation for the M6 versioned-wire migration; **not
-active** and not a consumer-acceptance claim. Root and web manifests now pin the
-vendored `@qduc/agent-wire` 0.2.1 artifact and the browser/BFF request v2, but
-`AGENT_WIRE_V2_RUNTIME_AVAILABLE` remains false pending combined-path proof.
-The historical artifact/intake prerequisites below are not current build results.
+**Status:** the root and browser/BFF pin the source-built vendored
+`@qduc/agent-wire` 0.2.3 artifact. `AGENT_WIRE_V2_RUNTIME_AVAILABLE` is **true**.
+Explicit v2 hydration, events and configuration mutations use the native
+Session contract below. Matching native/BFF/browser acceptance and independent
+activation review include background `ask_orchestrator` open/answer/close,
+pending and settled hydration, and accepted-cursor reconnect.
 
-## Direct-host old-client refusal (first #80 slice)
+Task descriptors preserve `pendingQuestion`, native tool tracking and the last
+activity observation. These fields are validated by the shared package, not
+removed or relabeled to fit a parser. Wire 0.2.2 accepted question names but
+rejected the tracking carried by real child tool execution; 0.2.3 fixes that
+boundary. See [wire package ownership](../../vendor/README.md).
 
-The direct build accepts two bounded compatibility exceptions, not unchanged
-v1 parity: explicit v2 atomic events and keyed/revisioned configuration receipts
-(including native pending responses). No v1 shim or event journal is supplied.
-Alongside those two v2 exceptions, **same-root access conflict** is a named,
-reversible #80 exception: one grant per canonical root, with access fixed at
-admission. It is not permission to redesign grants or claim other route parity.
+## Access and compatibility
 
-`createDirectServerHandler` refuses unqualified events with HTTP 400
-`protocol_upgrade_required`, `retryable:false` and
-`details.requiredFormat:'agent-wire-v2'` before opening SSE or connecting to the
-host. The generic message tells clients to upgrade browser/BFF together. Transport
-assertion authentication and route/purpose/session binding precede that refusal;
-native session ownership is not queried, and the response discloses no session
-existence, owner or configuration.
+The HTTP host is a transport/access adapter over the native Session and protocol.
+It never drives turns, writes conversation state, or persists admission dedupe.
+Session owns original admissions and their `clientRequestId` replay.
 
-`configureSession` runs after the existing host connection/ownership check. A
-selection patch missing `clientRequestId` or `expectedRevision` receives the same
-nonretryable 400 code, naming both required fields and the explicit v2 format,
-before preparation or command dispatch. Clients must not invent keys, rebase or
-retry the old patch. Empty `{}` discovery remains separate. Recognized formats
-are absent, `direct` and `agent-wire-v2`; unknown config formats now reject with
-400 validation error, including discovery. Invalid/conflicting format headers
-still reject. Existing valid keyed requests and native receipt projection are
-unchanged; explicit v2 mutation/SSE still receive the honest unavailable response
-while the capability gate is false.
+All 21 assertion purposes in `src/host/server-contracts.ts` bind to the methods
+and paths in `server-routes.ts`. The existing RS256 assertion validation, issuer,
+audience, expiry, one-use replay ledger, route purpose/session binding, local-owner
+checks, native session ownership, canonical workspace admission and read/write
+posture remain authorities. Pairing registers the BFF key, not a browser key.
+Concurrent first-page requests may share a registration attempt; after a competing
+registration, the BFF retries authentication once with a fresh assertion. A retry
+never bypasses signature validation or invents a command/admission key.
 
-The BFF recognizes this refusal code and supplies its own fixed actionable
-message, without forwarding arbitrary upstream messages or details. This slice
-does not prove browser/native runtime compatibility or all 21 route purposes;
-the old gateway/default CLI contract in Contract 13 is unchanged.
+The compatibility aliases are `POST /` for creation and both GET/POST
+`/private/agent/v1/workspaces`. The private session-read route is **POST**
+`/private/agent/v1/sessions/:sessionId`, including v2 hydration. The browser's
+public GET is translated to that POST by the BFF.
+
+There are two bounded wire exceptions: explicitly negotiated v2 atomic events
+and keyed/revisioned configuration receipts, including pending results. There is
+no v1 shim, automatic fallback, generated request key or revision rebasing.
+Same-root access conflict below is the separately named access exception.
+
+Unqualified events refuse with HTTP 400 `protocol_upgrade_required`,
+`retryable:false`, and `details.requiredFormat:'agent-wire-v2'`, after assertion
+and route binding checks but before connecting to the Session. This refusal
+reveals no session existence or owner. An unkeyed configuration mutation refuses
+with the same code after the normal connection/ownership check, before dispatch,
+and names `clientRequestId` and `expectedRevision`. Empty `{}` configuration
+discovery remains separate. The BFF supplies fixed actionable messages instead
+of forwarding arbitrary upstream diagnostics.
 
 ## Same-root access conflict
 
@@ -102,198 +110,117 @@ without `stateDirectory` has only in-memory dynamic grants; restarting clears
 those, not any static inputs. `bindDirectSessionAccess` in
 `host-config-access.ts` establishes the old-session limitation above.
 
-## Versions and negotiation
+## Negotiation
 
-- **v1:** the unqualified `@qduc/agent-wire` envelope remains schemaVersion 1
-  and unchanged. The existing canonical route remains unavailable while its
-  mappings are incomplete; `format=direct` remains the existing direct
-  snapshot/live transport. There is no automatic v1-to-v2 upgrade.
-- **v2:** an explicitly negotiated transport, never inferred from `Accept` or a
-  package version. SSE and configure mutation use
-  `?format=agent-wire-v2`; an optional `x-term2-event-format: agent-wire-v2`
-  request header must agree if both are present. Unknown formats are invalid.
-  While the combined gate is closed, v2 SSE and configure mutation return
-  `503 agent_wire_v2_unavailable` with a required-dependency detail; they do not
-  fall back to v1 or direct.
+V2 SSE, hydration and configuration use `?format=agent-wire-v2`. An optional
+`x-term2-event-format: agent-wire-v2` header must agree with query negotiation.
+SSE/configuration reject unknown or conflicting formats. `format=direct` remains
+the explicit native snapshot/live transport; it is not a browser fallback.
+Unqualified events are refused, rather than automatically upgraded to v2.
+Older gated server builds refuse explicit v2 requests with `503 agent_wire_v2_unavailable`; use matching server and browser builds.
 
-## SSE
+## Atomic events and reconnect
 
-Accepted frames are named `event: accepted` and contain exactly one real
-accepted FactLine boundary:
+An accepted frame is `event: accepted`, with exactly one real accepted FactLine
+boundary: `{schemaVersion:2,kind:'accepted',sessionId,seq,occurredAt,changes}`.
+Its SSE `id` is that seq. The ordered changes form one atomic batch; an empty
+batch is legal and sequences may be sparse. Consumers checkpoint only after the
+whole batch succeeds, ignore duplicate accepted batches, and never manufacture
+per-change IDs, timestamps, missing history or contiguous sequences.
 
-```text
-event: accepted
-id: <real accepted seq>
-data: {"schemaVersion":2,"kind":"accepted","sessionId":"...","seq":123,"occurredAt":"...","changes":[...]}
-```
+Input messages from native `turn_started` and queue steering are `message`
+changes in their original accepted batch. They keep actual message IDs, content
+and turn ownership; message IDs are not replaced with turn IDs. Accepted final
+messages keep draft-replacement correlation. Tool calls, starts, results, task
+metadata and branch identity preserve native evidence; an unmatched result does
+not create an invented tool name, start or turn.
 
-The ordered `changes` array is the atomic batch for that seq/at; empty is legal.
-One SSE id is the cursor for the whole batch. Seq may be sparse. No sub-event
-IDs/timestamps are manufactured. A root change omits `branch`; a child change
-carries only the accepted branch identity. Native queue aggregate ID arrays,
-rotation identity, context-compaction attempt evidence including real
-`turnId`/`compactionId`, history replacement correlation and configure receipts
-are retained. The server explicitly maps the proposed accepted-only `cost`,
-`request_cost_recorded`, `goal`, `goal_proposed`, `verification`, `notice`,
-`background_notice_enqueued` and `background_notices_delivered` names to their
-exact native payloads; shared source prior delta `af3d0ff` added those accepted
-names and rejects branch wrappers on cost/request receipt. Shared final
-`a4bcebc4` now also adds accepted `message`, `task_changed` and `tool_called`,
-adds live `error`/`turn_failed`, exports accepted/live change types, and rejects
-accepted `error`; the unbuilt artifact keeps the gate closed. `request_cost_recorded` and aggregate `cost` are not branch
-wrapped; request records retain physical ancestry and are upsert-only, never a
-second charge. Native accepted `message` and `task_changed` are mapped to those
-exact requested names with their complete native public payloads; see
-“Required remaining accepted vocabulary” below. Changes without a shared name
-are not relabelled; the accepted boundary may be an empty batch.
+Live frames are `event: live`, have no SSE id, seq or timestamp, and never advance
+a checkpoint. They contain only the pinned live vocabulary, including transient
+`error`/`turn_failed`. A transient failure settles visible activity without
+claiming an accepted terminal. Raw reasoning/progress may be unavailable after
+reconnect; accepted summaries/final results remain authority.
 
-### Accepted/live type boundary
+V2 SSE has no snapshot frame. The transport flushes headers and an immediate SSE
+comment so the BFF/browser can connect to an idle session without waiting for the
+next event or heartbeat. Comments carry no cursor or history. Only blank-line
+terminated SSE frames dispatch; EOF does not complete a truncated batch.
 
-The server source imports the shared exports from `@qduc/agent-wire` rather
-than defining a local mirror. The earlier source-only alignment required 0.2.0;
-the root and web consumers now pin the locally packaged 0.2.1 artifact, whose
-queue-submission validator follows the flattened public projection. Package
-installation and captured-frame parsing do not by themselves prove the combined
-browser/native path or authorize activation.
+Reconnect requests the last fully applied accepted seq. Native capture supplies
+the tail `(fromSeq,toSeq]`, synchronized transient state and then live updates,
+in that order; no current snapshot is prepended to the tail. Disconnect and
+backpressure release only the subscriber attachment, not the Session. A refused
+replay remains explicit; the browser stops on `replay_unavailable`/410 and offers
+an explicit new hydration cut, without a live-only fallback.
 
-- accepted changes use shared `AgentAcceptedChangeTypeV2`; `error` is not in
-  that allowlist;
-- live changes use shared `AgentLiveChangeTypeV2`, including `error` and
-  `turn_failed`;
-- the general shared `AgentChangeTypeV2` includes both, but envelope kind
-  narrows the batch.
-  `turn_failed` is a normal accepted terminal and also the transient
-  synchronized-failure name; kind and absence of a cursor distinguish them.
-- The server rejects an accepted error before constructing the envelope and
-  rejects a branch wrapper on `task_changed`; shared `a4bcebc4` does the same.
+## Hydration
 
-### Required remaining accepted vocabulary (M6)
+Private **POST** `/private/agent/v1/sessions/:id?format=agent-wire-v2` with `{}`
+returns `{schemaVersion:2,kind:'snapshot',sessionId,seq,snapshot,interaction,
+earliestReplayableSequence}`. It is a current accepted projection, not a replay
+event, and has no fabricated occurrence timestamp. Snapshot/envelope cursors
+must match. The pending InteractionDTO resolver uses the same snapshot cut.
+Open SSE with `after=seq` after installing this snapshot once.
 
-The candidate native producer has two concrete accepted changes that were
-previously dropped and that M6 transcript/task-history parity needs:
+Optional `branches` are native read models at the enclosing root cut. `[]` means
+no accepted branches; absence means capability unavailable. Each entry retains
+its actual branch/task/turn identity and ancestry, accepted transcript/tool
+order, pending interactions/budgets, results and selected request receipts.
+`acceptedSeq` is observation provenance, not another reconnect cursor. Branch
+`queue:null` means unavailable; the root queue is never copied into it. A
+result-only timeline slot remains exact evidence without a guessed tool card.
 
-- `message`: exact `{message: WireMessage, replacesDraftId?: string}` from the
-  accepted `item` fact. The message retains its real `id`, role, content/text,
-  optional turn/modelStep/execution identity, error/draft flags and exact
-  replacement relation. No provider history or private content is added.
-- `task_changed`: exact `{change: task_started|task_backgrounded|task_stop_requested|task_finished,
-  at: number, task: WireTask}` from the accepted task fact. Preserve the task's
-  actual optional input/name/role/model/mode/timestamps/progress/result and
-  `toolUseCounts`; absent and empty remain distinct. A stop request or child
-  terminal is not task completion.
+## Cost evidence
 
-The server source maps these names now and imports the shared final
-`a4bcebc4` allowlists/types directly. Shared adds them to the accepted
-allowlist, validates their payloads, exports
-`AgentAcceptedChangeTypeV2`/`AgentLiveChangeTypeV2`, and rejects accepted
-`error`; the server no longer copies that vocabulary. Browser reduction remains
-external intake; the 0.1.0 artifact remains a build/activation dependency. Until
-that combined intake is complete, the v2 gate stays closed and an activation
-attempt with these names would be invalid, not silently downgraded.
+Native aggregate `cost` and physical request receipts are separate contracts.
+An aggregate `cost` event is an absolute `{totalUsd,currency:'USD'}` observation,
+never an increment. Current native hydration can report `cost:null`; this means
+unavailable, not zero. The server/browser must not reconstruct a session bill
+from partial usage, task metadata, compaction estimates or selected receipts.
 
-`status_changed` is not added by this step: the candidate native producer has
-no accepted `status_changed` fact. Status is current snapshot state and the
-existing accepted lifecycle events; inventing a status event would fabricate
-replay provenance. If a native accepted status producer is added later, it
-needs a separate exact `{status}` contract and consumer intake.
+`request_cost_recorded` keeps the complete native request record and real
+turn/root/parent ownership. Root receipt state upserts by physical `requestId`;
+a correction replaces the earlier record, and duplicate delivery is not another
+charge. Branch receipts select the same root charges and are never added again.
+The browser's separately labeled known receipt subtotal describes only supplied
+receipts, with exact/estimated/partial/unavailable pricing and unknown historical
+coverage. It is never added to a native aggregate or presented as a complete bill.
 
-### Tool calls and transient runtime errors
+## Interactions and configuration
 
-- `tool_called` is a real accepted native fact emitted before a physical
-  `tool_started`. It carries the exact `{tool: WireTool}` public descriptor
-  (`status:'called'`, actual execution/call/turn identity and public input), and
-  may be branch-scoped. It is needed for an accepted pending tool call that has
-  not reached physical start; it must not be relabelled as `tool_started` or
-  discarded. The server maps it now; shared/browser intake is required.
-- `error` is a native **transient** observation: `DirectProjection` publishes it
-  with `seq:null` when synchronized runtime error state appears. It carries
-  `{error: WireError}` only. The server maps it as `event: live` and refuses any
-  accepted error boundary; consumers must not checkpoint it or infer a durable
-  terminal.
-- `turn_failed` is the companion **live-only** lifecycle change for the same
-  synchronized runtime failure. Native `synchronize` emits a null-seq
-  `turn_ended` with the active turn and failed terminal; the server maps it
-  through the existing canonical failed-terminal shape as `event: live`
-  (`turnId`, failed outcome/reason, and any real cause). It has no SSE id, seq,
-  `occurredAt` or replay position, and is not an accepted terminal. It settles
-  the client's visible activity without claiming durable history; hydration and
-  the last accepted terminal remain authority. A synchronized state `snapshot`
-  is not re-emitted as a cursor-bearing event.
-- `status_changed` is not synthesized for this path: the native producer emits
-  no accepted or transient status event; status is represented by the transient
-  failed terminal plus the current snapshot/hydration state.
-- `model_response_completed` is accepted native audit with modelStep/stopReason/
-  optional costUsd, but the shared reducer has no public state change and no
-  current M6 client consumes it. It is not mapped in this step; do not synthesize
-  a cost/terminal from it.
-- `budget_observed` is accepted native evidence retained in the direct snapshot's
-  `budgetObservations`, but no current M6 client behavior consumes that field.
-  It is not mapped in this step; budget-opened/closed authority remains separate.
+Native interaction IDs may contain colons, e.g. `turn-7:question:1`. Projection,
+BFF requests, native routes and browser response validation accept
+`[A-Za-z0-9_:-]{1,256}` for these IDs. Session IDs retain their narrower validation.
+Approval and rejection must travel through the native resolver. A settled abort
+retains `abortStatus:'terminal_accepted'`; this is evidence of accepted terminal
+state, not inferred physical cleanup.
 
-These are explicit remaining vocabulary gaps, not parity claims.
+Configuration mutations retain the caller's original `clientRequestId` and
+`expectedRevision`, optional idle admission, and selection patch. Responses are
+`{schemaVersion:2,sessionId,result:<native configure result>}`, including pending,
+finished, rejected/interrupted and non-receipt outcomes. Pending means no installed
+outcome yet. Same-key lookup preserves the original receipt/revision and replayed
+provenance. Native failure results can arrive on non-2xx HTTP; the BFF preserves
+the versioned result while applying safe diagnostic redaction. Neither BFF nor
+browser re-keys, rebases or automatically retries an old patch.
 
-Live frames are named `event: live`, have no SSE id or seq/time fields, and carry
-only the shared v2 live change types. They never advance a resume checkpoint and
-do not claim replay parity. Reconnect uses the last fully applied accepted seq.
+Current-state discovery is a separate empty `{}` request and cannot stand in for
+a mutation's original outcome. The browser offers Standard/Bare/Lite; retained
+aliases resolve to Bare. A captured `pair` label can be displayed without offering
+it as a new selection. Removed Plan/Mentor/Orchestrator profiles are not offered.
+Native command/replay error codes retain their HTTP status through the BFF with
+fixed safe text, instead of being masked as generic gateway failures.
 
-## Hydration and replay
+## Migration and activation
 
-V2 SSE has no snapshot frame. A separate current-accepted hydration route is
-`GET /sessions/:id?format=agent-wire-v2`; it returns seq plus the exact public
-direct `WireSnapshot`, a same-cut InteractionDTOv1 resolver field, and real
-earliest replay metadata. It is not a replay event and has no synthetic
-timestamp. The snapshot does not reconstruct fresh aggregate cost or historical
-notices; those remain native-owner gaps and must not be fabricated from request
-records, task metadata or compaction estimates.
+The direct launcher uses a separate state directory and preserves old gateway and
+conversation data. Conversation migration is outside this contract (#148). Never
+restore the legacy runtime or point the native writer at old gateway data.
 
-Native ORIGINAL `838664750acec8a65de2526a7712c743e9d17989` supplies optional
-`branches: WireBranchSnapshot[]` at the same outer cut. When integrated, the
-server passes it through unchanged: `[]` means real no accepted branch_started
-and an absent field means capability unavailable; each entry keeps actual
-`branchId/taskId/turnId`, optional recorded ancestry, `acceptedSeq` (not a
-reconnect cursor), accepted transcript/tool/order, pending interactions/budgets,
-turn results, nullable usage/reasoning, terminal/notices, requestCosts views and
-`queue:null`. RequestCosts are selected views by producing child turnId, never
-additional charges; root queue is never copied. Raw reasoning/progress are not
-reconstructed. See `m6-v2-hydration-interface.md` for the exact client sequence
-and gaps.
-
-## Interaction identity
-
-Native interaction request IDs can contain colon-delimited turn and sequence
-components (for example, `turn-1:question:1`). The browser projection, BFF
-interaction route and private host interaction route accept letters, digits,
-underscore, hyphen and colon, up to 256 characters. Session IDs keep their
-separate, narrower validation. A browser happy-path test alone does not cover
-this boundary: exercise both a real approval and a real rejection through the
-native interaction route when changing it.
-
-## Configure receipts
-
-`POST /sessions/:id/config?format=agent-wire-v2` keeps the established HTTP
-mutation patch (`clientRequestId`, original `expectedRevision`, optional idle
-admission and selection fields). The request operation in the native receipt is
-evidence, not a replacement for the caller's patch. Mutation responses use
-`{schemaVersion:2,sessionId,result:<native configure result>}`, preserving
-pending/configured/rejected/interrupted/non-receipt outcomes, original receipt
-revision, optional replayed provenance and the established safe diagnostic
-redaction. Empty `{}` remains the separate current-state discovery response; it
-is not the original mutation result.
-
-Direct discovery reports native profile labels, including `bare` and `pair`;
-these are not the older gateway's mode enum. The browser must accept both or
-it silently loses the configuration controls after a successful discovery.
-The direct mutation path accepts `bare` but not `pair`, so the browser displays
-a current `pair` profile without offering it as a new selection. Exercise actual
-discovery as well as configuration receipts when changing this boundary.
-
-## Migration and limits
-
-The shared package source code and documentation own the v1/v2 schema and local artifact route.
-The 0.2.1 artifact is locally vendored and installed in both consumers; it has
-not been published. The gate remains closed until the combined browser parser,
-atomic reducer, sparse cursor, hydration/replay and BFF configuration paths have
-independent verification. Until then no v2 runtime support, replay
-parity, fresh branch history, aggregate cost reconstruction, complete M6
-transcript/task-history/tool-call delivery, model-response/budget-observation
-delivery or M6 completion is claimed.
+Activation still requires a corrected artifact built by the shared-package owner,
+matching root/web pins, combined browser/native acceptance including background
+questions, and independent approval of the combined evidence. No deployment,
+npm publication, aggregate reconstruction, raw live-stream replay parity, branch
+queue support, or protocol support for unmapped native model-response/budget audit
+facts is implied. The operator topology is documented in the
+[web gateway setup](../../website/src/content/docs/remote/web-gateway.md).

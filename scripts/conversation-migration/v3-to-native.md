@@ -33,15 +33,17 @@ user's ssh-host logs predate both fields). Missing required configuration fails
 `sshHost` fails `unsupported-remote-identity`, rather than granting local access
 for a remote source. No workspace grant or binding is synthesized.
 
-The native profile header uses actual compiled `getProfileMetadata`. Unknown
-profiles fail `unsupported-profile`. Built-in profiles, including the retired
-Standard/Lite/Full, now all resolve to Bare, whose version and digest change
-whenever its prompt does; a rehearsal on one user's ssh-host store found six
-older Bare digests across 354 logs. Those continue under today's Bare, as a resumed
-native conversation would, and the import notice's `sourceSettings` keeps the
-recorded `activeProfileVersion`/`activeProfileDigest`; `fidelity.profileRebasedCount`
-marks them. A conflicting version/digest for a profile that does not resolve to
-Bare (a custom profile changed since) still fails `profile-mismatch`. Unsupported reasoning fails
+The native profile header uses actual compiled `getProfileMetadata`. Custom
+(`user:`/`project:`) and unknown profiles fail `unsupported-profile`. Bare, the
+retired Standard/Lite/Full (which `getProfileMetadata` resolves to Bare) and the
+dropped workflow profiles plan/pair/mentor/orchestrator (mapped like the app's
+`isDroppedProfile`) all get today's Bare header. Bare's version and digest change
+whenever its prompt does; a rehearsal on one user's ssh-host store found six older
+Bare digests across 354 logs. Such drift is accepted for Bare and marked by
+`fidelity.profileRebasedCount`. Whenever the selected init recorded a version or
+digest, the import notice's `sourceSettings` keeps it as `activeProfileVersion`/
+`activeProfileDigest`, matching or not. No current built-in other than Bare is
+reachable, so `profile-mismatch` remains only as a guard. Unsupported reasoning fails
 `unsupported-reasoning`. Explicit `default` is retained as intent and in the
 notice, but omitted from native effort fields. Model/provider identifiers are preserved, not guessed
 from a catalog. The native `configuration_changed` retains model, reasoning and

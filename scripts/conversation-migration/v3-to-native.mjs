@@ -2,6 +2,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { normalizeApplicationInput } from './v3-provider-input.mjs';
 import { getProfileMetadata } from '../../dist/src/config/profiles/active-profile.js';
 import { BARE_PROFILE_ID, profileIdFromLegacyMode } from '../../dist/src/config/profiles/legacy-adapter.js';
+import { isDroppedProfile } from '../../dist/src/app/dropped-profiles.js';
 import { itemToInput } from '../../dist/src/model/provider-items.js';
 import { validateFact } from '../../dist/src/session/log-facts.js';
 import { replay } from '../../dist/src/session/replay.js';
@@ -103,7 +104,8 @@ export function convertValidatedV3(input, options = {}) {
     const nativeReasoning = reasoning === 'default' ? undefined : reasoning;
     let metadata;
     try {
-      metadata = getProfileMetadata(profileId);
+      // The app continues dropped workflow profiles under Bare (src/app/dropped-profiles.ts).
+      metadata = getProfileMetadata(isDroppedProfile(profileId) ? BARE_PROFILE_ID : profileId);
     } catch {
       refuse('unsupported-profile');
     }
@@ -113,12 +115,13 @@ export function convertValidatedV3(input, options = {}) {
       digest: metadata.activeProfileDigest,
     };
     // Metadata on the selected init is evidence, not permission to substitute a
-    // changed custom profile with the same name. Built-in profiles all resolve to
-    // Bare, whose prompt changes between releases; those continue under today's
-    // Bare, as a resumed native conversation would, with the original recorded.
+    // changed profile with the same name. Bare, retired Standard/Lite/Full and the
+    // dropped workflow profiles all continue under today's Bare, whose prompt
+    // changes between releases, with the recorded identity kept in the notice.
+    // Only a non-Bare built-in can still fail (custom IDs are unsupported-profile).
     const init = envelopes.filter(({ event }) => event.type === 'session_init').at(-1)?.event;
     const recordedProfile =
-      init?.activeProfileId === profileId || (derivedProfile && init?.activeProfileId === undefined)
+      init?.activeProfileId === profileId || (init && init.activeProfileId === undefined)
         ? { version: init.activeProfileVersion, digest: init.activeProfileDigest }
         : {};
     const profileDrift =

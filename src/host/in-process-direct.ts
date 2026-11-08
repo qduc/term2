@@ -31,13 +31,16 @@ export function createDirectInProcessHost(deps: DirectHostDeps): DirectHost {
   const attachments = new Map<string, Promise<DirectAttachment>>();
   const connections = new Set<DirectEventQueue>();
   const creates = new Set<Promise<DirectSession>>();
+  const closingSessions = new Map<string, Promise<void>>();
   let disposed = false;
   let disposal: Promise<void> | null = null;
   const open = (): void => {
     if (disposed) throw new DirectProtocolError('closed', 'Host is closed.');
   };
 
-  function attachment(id: string): Promise<DirectAttachment> {
+  async function attachment(id: string): Promise<DirectAttachment> {
+    await closingSessions.get(id);
+    open();
     let pending = attachments.get(id);
     if (!pending) {
       pending = deps.sessions.open(id).then((session) => {
@@ -100,6 +103,29 @@ export function createDirectInProcessHost(deps: DirectHostDeps): DirectHost {
     return result as DirectConnection | DirectReplayConnection;
   }
   return {
+    async closeSession(principal, sessionId) {
+      open();
+      await deps.authorize(principal, { kind: 'write', sessionId });
+      const existing = closingSessions.get(sessionId);
+      if (existing) return await existing;
+      const pending = attachments.get(sessionId);
+      if (!pending) return;
+      const closing = (async () => {
+        const attached = await pending;
+        try {
+          await attached.session.close();
+        } finally {
+          attached.close();
+          if (attachments.get(sessionId) === pending) attachments.delete(sessionId);
+        }
+      })();
+      closingSessions.set(sessionId, closing);
+      try {
+        await closing;
+      } finally {
+        if (closingSessions.get(sessionId) === closing) closingSessions.delete(sessionId);
+      }
+    },
     async listSessions(principal, cursor) {
       open();
       await deps.authorize(principal, { kind: 'list' });

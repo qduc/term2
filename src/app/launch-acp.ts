@@ -15,6 +15,7 @@ import { warnIfSandboxUnavailable } from './sandbox-warning.js';
 import { isProviderDisabled, resolveProviderCredentials } from '../model/provider-credentials.js';
 import { fetchModels, peekCachedModels } from '../model/model-service.js';
 import type { WireModel } from '../protocol/wire.js';
+import { createAcpSessions } from './acp-sessions.js';
 
 type AcpRequest = Extract<DirectLaunchRequest, { readonly kind: 'acp' }>;
 
@@ -91,10 +92,17 @@ export async function launchAcp(request: AcpRequest): Promise<number> {
         !isProviderDisabled(selection.settings, provider.id) &&
         resolveProviderCredentials(selection.settings, provider.id).configured,
     );
+  const sessions = createAcpSessions();
   const app = await createDirectApplication({
     conversationsDir,
     selection,
-    surface: () => ({ autoApprove: false, interactive: true, allowUnsandboxed: false }),
+    surface: (sessionId) => ({
+      autoApprove: false,
+      interactive: true,
+      allowUnsandboxed: false,
+      mcp: sessions.surface(sessionId),
+    }),
+    mcpCatalog: sessions,
     approvalAlwaysAsks: true,
     requireSandbox: true,
     persistSessionConfiguration: false,
@@ -162,6 +170,7 @@ export async function launchAcp(request: AcpRequest): Promise<number> {
       workspaces: acpWorkspaces(app),
       logger,
       models,
+      sessions,
       async configuration(sessionId) {
         const state = await app.sessionConfiguration(sessionId);
         return { model: state.model, reasoning: state.reasoningEffort };
@@ -173,11 +182,13 @@ export async function launchAcp(request: AcpRequest): Promise<number> {
     process.removeListener('SIGINT', onSignal);
     process.removeListener('SIGTERM', onSignal);
     try {
+      await sessions.drain();
       await app.close();
     } catch (error) {
       io.writeStderr(`term2 acp: shutdown failed: ${messageOf(error)}`);
       exitCode = 1;
     }
+    await sessions.shutdown();
   }
   return exitCode;
 }

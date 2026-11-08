@@ -369,3 +369,23 @@ introduced by this bridge.
 The direct CLI supports the standalone `control` client and `--control-socket=<name>` interactive startup. Both use the private `XDG_RUNTIME_DIR` advertisement and the same socket protocol; the help must not mark control, or any other dispatched subcommand, as unavailable. A socket is opt-in, not started by a normal launch.
 
 The direct `/settings` command presents a category index and three-item category pages (`/settings <category> [page]`) with descriptions and redacted secret values instead of dumping all settings into the unscrollable notice. Existing `/settings <key> [value]` and reset routes remain the editing interface and retain their session/restart restrictions.
+
+## ACP session resources
+
+`createAcpSessions` in `acp-sessions.ts` owns ACP-supplied MCP managers per native
+session. `open` validates the full list, starts connections with explicit cwd,
+environment and HTTP headers, and installs the immutable source through initial
+creation or an exact accepted native configure receipt. An async-local candidate
+is visible only to that creation/configuration, not sibling sessions. MCP calls
+remain script-only and require the ordinary native permission exchange. No
+client-supplied credentials are persisted in settings. ACP selects the manager’s
+`httpRedirect:error` policy so forwarded HTTP headers cannot follow redirects.
+
+Failed preparation leaves the existing source intact. After native acceptance,
+the source stays owned even if obtaining a fresh Host view fails. Older managers
+are retained until explicit Session drain because older tool generations may
+still reference them. `drain` rejects new setup and waits for admitted setup
+operations before `app.close`; `shutdown` then closes managers. Host
+`closeSession` releases native work/attachments without deleting retained logs.
+A reopened session replaces the old entry in `createDirectMcpRefresh` so later
+catalog notifications target the new runtime.

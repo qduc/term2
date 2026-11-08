@@ -55,7 +55,10 @@ export function createAcpAgent(options: AcpAgentOptions): acp.AgentApp {
   app.onRequest(acp.methods.agent.session.resume, async ({ params, client }) => {
     assertSessionExtensions(params);
     if (active.has(params.sessionId)) throw new acp.RequestError(-32000, 'Cannot resume an active ACP prompt');
-    return await options.backend.resumeSession(params, v2Client(client));
+    return await options.backend.resumeSession(
+      { sessionId: params.sessionId, cwd: params.cwd, replayFrom: params.replayFrom },
+      v2Client(client),
+    );
   });
   app.onRequest(acp.methods.agent.session.prompt, async ({ params, client }) => {
     const prompt = reserve(active, params.sessionId);

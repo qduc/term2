@@ -132,11 +132,14 @@ export function createDirectMcpRefresh(
       return epoch;
     },
     track(session: DirectSession, openedAtEpoch: number) {
-      if (stopped || sessions.has(session.id)) return;
+      const previous = sessions.get(session.id);
+      if (stopped || previous?.session === session) return;
+      previous?.unsubscribe();
+      if (previous) previous.pending = undefined;
       const capture = session.capture((update) => {
         if (stopped || update.type !== 'state') return;
         const entry = sessions.get(session.id);
-        if (!entry) return;
+        if (!entry || entry.session !== session) return;
         entry.state = update.state;
         if (entry.pending) {
           const attempt = entry.pending;

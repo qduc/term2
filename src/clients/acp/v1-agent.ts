@@ -2,6 +2,8 @@ import * as acp from '@agentclientprotocol/sdk';
 import type { AcpAgentOptions } from './agent.js';
 import { v1Client } from './client.js';
 import type { AcpClient } from './contract.js';
+import { v1Error } from './v1-errors.js';
+import { v1Prompt } from './input.js';
 
 /**
  * Stable ACP v1 over the same Host backend as v2. Prompts remain pending until
@@ -10,6 +12,23 @@ import type { AcpClient } from './contract.js';
  */
 export function createAcpV1Agent(options: AcpAgentOptions): acp.AgentApp {
   const app = acp.agent({ name: 'term2' });
+  let capabilities: acp.InitializeRequest['clientCapabilities'];
+  const onRequest = <Method extends acp.AgentRequestMethod>(
+    method: Method,
+    handler: acp.AgentRequestHandlersByMethod[Method],
+  ): void => {
+    const guarded: acp.AgentRequestHandler<
+      acp.AgentRequestParamsByMethod[Method],
+      acp.AgentRequestResponsesByMethod[Method]
+    > = async (context) => {
+      try {
+        return await (handler as unknown as typeof guarded)(context);
+      } catch (error) {
+        throw v1Error(error);
+      }
+    };
+    app.onRequest(method, guarded as unknown as acp.AgentRequestHandlersByMethod[Method]);
+  };
   const clients = new Map<string, AcpClient>();
   const active = new Map<string, AbortController>();
   const configurationVersions = new Map<string, number>();
@@ -48,44 +67,51 @@ export function createAcpV1Agent(options: AcpAgentOptions): acp.AgentApp {
     return { configOptions };
   };
   const extensions = (params: { mcpServers?: unknown[]; additionalDirectories?: unknown[] }): void => {
-    if (params.mcpServers?.length || params.additionalDirectories?.length)
-      throw acp.RequestError.invalidParams(undefined, 'MCP servers and additional directories are not supported');
+    if (params.additionalDirectories?.length)
+      throw acp.RequestError.invalidParams(undefined, 'Additional directories are not supported');
   };
-  app.onRequest(acp.methods.agent.initialize, () => ({
-    protocolVersion: 1,
-    agentInfo: { name: 'term2', title: 'Term2', version: options.version },
-    authMethods: [],
-    agentCapabilities: {
-      loadSession: true,
-      promptCapabilities: { image: true, embeddedContext: true },
-      sessionCapabilities: { list: {}, resume: {}, close: {} },
-    },
-  }));
-  app.onRequest(acp.methods.agent.session.new, async ({ params, client }) => {
+  onRequest(acp.methods.agent.initialize, ({ params }) => {
+    capabilities = params.clientCapabilities;
+    return {
+      protocolVersion: 1,
+      agentInfo: { name: 'term2', title: 'Term2', version: options.version },
+      authMethods: [],
+      agentCapabilities: {
+        loadSession: true,
+        ...(options.backend.mcpCapabilities ? { mcpCapabilities: options.backend.mcpCapabilities } : {}),
+        promptCapabilities: { image: true, embeddedContext: true },
+        sessionCapabilities: { list: {}, resume: {}, close: {} },
+      },
+    };
+  });
+  onRequest(acp.methods.agent.session.new, async ({ params, client }) => {
     extensions(params);
-    const adapted = v1Client(client);
-    const session = await options.backend.createSession({ cwd: params.cwd }, adapted);
+    const adapted = v1Client(client, { cwd: params.cwd, capabilities });
+    const session = await options.backend.createSession({ cwd: params.cwd, mcpServers: params.mcpServers }, adapted);
     clients.set(session.sessionId, adapted);
     return { sessionId: session.sessionId, ...(await configuration(session.sessionId, adapted, client)) };
   });
-  app.onRequest(acp.methods.agent.session.list, async ({ params }) => await options.backend.listSessions(params));
-  app.onRequest(acp.methods.agent.session.load, async ({ params, client }) => {
+  onRequest(acp.methods.agent.session.list, async ({ params }) => await options.backend.listSessions(params));
+  onRequest(acp.methods.agent.session.load, async ({ params, client }) => {
     extensions(params);
     if (active.has(params.sessionId)) throw new acp.RequestError(-32000, 'Cannot load an active ACP prompt');
-    const adapted = v1Client(client);
+    const adapted = v1Client(client, { cwd: params.cwd, capabilities });
     await options.backend.resumeSession({ ...params, replayFrom: { type: 'start' } }, adapted);
     clients.set(params.sessionId, adapted);
     return await configuration(params.sessionId, adapted, client);
   });
-  app.onRequest(acp.methods.agent.session.resume, async ({ params, client }) => {
+  onRequest(acp.methods.agent.session.resume, async ({ params, client }) => {
     extensions(params);
     if (active.has(params.sessionId)) throw new acp.RequestError(-32000, 'Cannot resume an active ACP prompt');
-    const adapted = v1Client(client);
-    await options.backend.resumeSession({ sessionId: params.sessionId, cwd: params.cwd }, adapted);
+    const adapted = v1Client(client, { cwd: params.cwd, capabilities });
+    await options.backend.resumeSession(
+      { sessionId: params.sessionId, cwd: params.cwd, mcpServers: params.mcpServers },
+      adapted,
+    );
     clients.set(params.sessionId, adapted);
     return await configuration(params.sessionId, adapted, client);
   });
-  app.onRequest(acp.methods.agent.session.setConfigOption, async ({ params }) => {
+  onRequest(acp.methods.agent.session.setConfigOption, async ({ params }) => {
     if (!clients.has(params.sessionId)) throw new acp.RequestError(-32001, `Session not found: ${params.sessionId}`);
     if (!options.backend.setConfigOption) throw acp.RequestError.methodNotFound('session/set_config_option');
     configurationVersions.set(params.sessionId, (configurationVersions.get(params.sessionId) ?? 0) + 1);
@@ -97,7 +123,7 @@ export function createAcpV1Agent(options: AcpAgentOptions): acp.AgentApp {
       if (configurationChanges.get(params.sessionId) === change) configurationChanges.delete(params.sessionId);
     }
   });
-  app.onRequest(acp.methods.agent.session.prompt, async ({ params }) => {
+  onRequest(acp.methods.agent.session.prompt, async ({ params }) => {
     if (active.has(params.sessionId))
       throw new acp.RequestError(-32000, 'Session is already processing foreground work');
     const adapted = clients.get(params.sessionId);
@@ -105,7 +131,7 @@ export function createAcpV1Agent(options: AcpAgentOptions): acp.AgentApp {
     const controller = new AbortController();
     active.set(params.sessionId, controller);
     try {
-      const execution = await options.backend.preparePrompt(params);
+      const execution = await options.backend.preparePrompt({ ...params, prompt: v1Prompt(params.prompt) });
       const result = await execution.run(
         (update) => adapted.update({ sessionId: params.sessionId, update }),
         controller.signal,
@@ -129,7 +155,7 @@ export function createAcpV1Agent(options: AcpAgentOptions): acp.AgentApp {
     active.get(params.sessionId)?.abort();
     await options.backend.cancelSession(params.sessionId);
   });
-  app.onRequest(acp.methods.agent.session.close, async ({ params }) => {
+  onRequest(acp.methods.agent.session.close, async ({ params }) => {
     active.get(params.sessionId)?.abort();
     await options.backend.closeSession(params.sessionId);
     clients.delete(params.sessionId);

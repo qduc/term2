@@ -1,5 +1,6 @@
 import type * as v1 from '@agentclientprotocol/sdk';
 import type * as v2 from '@agentclientprotocol/sdk/experimental/v2';
+import { V1Terminals, type V1Display } from './v1-terminals.js';
 
 /**
  * Convert the renderer's upserts to v1 append-only chunks. Remember displayed
@@ -10,6 +11,11 @@ export class V1Output {
   private readonly messages = new Map<string, v1.ContentBlock[]>();
   private readonly tools = new Set<string>();
   private readonly submitted = new Set<string>();
+  private readonly terminals: V1Terminals;
+
+  constructor(display: V1Display) {
+    this.terminals = new V1Terminals(display);
+  }
 
   /** V1 clients already display their own input; fresh load attachments still replay it. */
   promptAccepted(sessionId: string, messageId: string): void {
@@ -57,7 +63,8 @@ export class V1Output {
         const key = JSON.stringify([sessionId, tool.toolCallId]);
         const seen = this.tools.has(key);
         this.tools.add(key);
-        return [
+        return this.terminals.translate(
+          sessionId,
           seen
             ? { ...tool, sessionUpdate: 'tool_call_update' }
             : {
@@ -70,7 +77,7 @@ export class V1Output {
                 locations: tool.locations ?? undefined,
                 name: tool.name ?? undefined,
               },
-        ];
+        );
       }
       default:
         throw new Error(`ACP v1 cannot represent renderer update: ${update.sessionUpdate}`);

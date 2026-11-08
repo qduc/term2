@@ -16,8 +16,14 @@ export function v2Client(client: v2.AgentContext): AcpClient {
 }
 
 /** Translate permissions and append-only display for v1; unsupported forms keep the native stop fallback. */
-export function v1Client(client: v1.AgentContext): AcpClient {
-  const output = new V1Output();
+export function v1Client(
+  client: v1.AgentContext,
+  options: {
+    readonly cwd: string;
+    readonly capabilities?: v1.InitializeRequest['clientCapabilities'];
+  },
+): AcpClient {
+  const output = new V1Output(options);
   return {
     promptAccepted: (sessionId, messageId) => output.promptAccepted(sessionId, messageId),
     async update({ sessionId, update }) {
@@ -27,7 +33,7 @@ export function v1Client(client: v1.AgentContext): AcpClient {
     async permission(request, signal) {
       if (request.subject?.type !== 'tool_call') throw v1.RequestError.invalidParams();
       const subject = request.subject as v2.ToolCallPermissionSubject;
-      return await client.request(
+      const response: v1.RequestPermissionResponse = await client.request(
         v1.methods.client.session.requestPermission,
         {
           sessionId: request.sessionId,
@@ -39,10 +45,16 @@ export function v1Client(client: v1.AgentContext): AcpClient {
         },
         { cancellationSignal: signal },
       );
+      // A legacy alias must never authorize a choice this v1 client was not offered.
+      if (response.outcome.outcome === 'selected') {
+        const optionId = response.outcome.optionId;
+        if (!request.options.some((option) => option.optionId === optionId))
+          throw v1.RequestError.invalidParams(undefined, 'Permission option was not offered');
+      }
+      return response;
     },
-    supportsForms: async () => false,
-    elicit: async () => {
-      throw v1.RequestError.methodNotFound('elicitation/create');
-    },
+    supportsForms: async () => options.capabilities?.elicitation?.form != null,
+    elicit: (request, signal) =>
+      client.request(v1.methods.client.elicitation.create, request, { cancellationSignal: signal }),
   };
 }

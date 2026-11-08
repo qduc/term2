@@ -66,7 +66,7 @@ export async function serveAcp(options: AcpAgentOptions, io: AcpIo, signal?: Abo
         },
         cancel: () => source.cancel(),
       });
-      const message = first.value;
+      let message = first.value;
       const v1 =
         !Array.isArray(message) &&
         'method' in message &&
@@ -76,6 +76,39 @@ export async function serveAcp(options: AcpAgentOptions, io: AcpIo, signal?: Abo
         message.params !== null &&
         'protocolVersion' in message.params &&
         message.params.protocolVersion === 1;
+      if (
+        !v1 &&
+        !Array.isArray(message) &&
+        'method' in message &&
+        message.method === 'initialize' &&
+        'params' in message &&
+        typeof message.params === 'object' &&
+        message.params !== null &&
+        'protocolVersion' in message.params &&
+        typeof message.params.protocolVersion === 'number' &&
+        Number.isInteger(message.params.protocolVersion) &&
+        message.params.protocolVersion >= 0 &&
+        message.params.protocolVersion !== acp.PROTOCOL_VERSION
+      ) {
+        // The SDK only accepts its own version. Negotiate a valid unsupported
+        // offer to our latest supported version before its schema/lifecycle gate.
+        message = {
+          ...message,
+          params: {
+            ...message.params,
+            protocolVersion: acp.PROTOCOL_VERSION,
+            ...(!('info' in message.params)
+              ? {
+                  info:
+                    'clientInfo' in message.params
+                      ? message.params.clientInfo
+                      : { name: 'acp-client', version: 'unknown' },
+                }
+              : {}),
+          },
+        };
+        first.value = message;
+      }
       // v1 and v2 share individual JSON-RPC frames. A batch selects v2 and
       // remains under its SDK's validation; v1 never receives a batch here.
       connection = v1

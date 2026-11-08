@@ -29,6 +29,8 @@ const LIST_TIMEOUT_MS = 15_000;
 const CLOSE_TIMEOUT_MS = 5_000;
 
 export interface McpConnectionManagerOptions {
+  /** ACP credentials target the configured origin; reject HTTP redirects. */
+  httpRedirect?: RequestRedirect;
   servers: readonly ResolvedMcpServerConfig[];
   /** Path of the user config file, cited in the project-stdio opt-in error. */
   userConfigPath?: string;
@@ -108,6 +110,7 @@ export class McpConnectionManager implements McpToolSource {
   private readonly onNotice?: (message: string) => void;
   private readonly oauthStore?: McpOAuthStore;
   private readonly interactive: boolean;
+  private readonly httpRedirect?: RequestRedirect;
   private readonly noticedFailures = new Set<string>();
   private snapshotCache: readonly McpServerSnapshot[] = [];
   private started = false;
@@ -121,6 +124,7 @@ export class McpConnectionManager implements McpToolSource {
     this.onNotice = options.onNotice;
     this.oauthStore = options.oauthStore;
     this.interactive = options.interactive ?? true;
+    this.httpRedirect = options.httpRedirect;
     for (const config of options.servers) {
       if (this.connections.has(config.name)) {
         this.connections.set(config.name, {
@@ -434,7 +438,14 @@ export class McpConnectionManager implements McpToolSource {
     // nobody has logged in to yet. Present tokens refresh silently; an absent
     // one falls through to the 401 that `connectOne` maps to `needs-auth`.
     const authProvider = await this.refreshOnlyAuthProvider(config);
-    const options = { requestInit: { headers }, ...(authProvider ? { authProvider } : {}) };
+    // SSE's initial EventSource fetch does not inherit requestInit. Apply the
+    // redirect policy at the shared fetch boundary for both transports.
+    const httpFetch: typeof fetch = (input, init) => fetch(input, { ...init, redirect: this.httpRedirect });
+    const options = {
+      requestInit: { headers },
+      ...(this.httpRedirect ? { fetch: httpFetch } : {}),
+      ...(authProvider ? { authProvider } : {}),
+    };
     const transport =
       config.transport === 'sse'
         ? new loaded.SSEClientTransport(url, options)

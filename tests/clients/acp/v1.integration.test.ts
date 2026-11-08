@@ -34,6 +34,8 @@ async function fixture(
     holdCatalog?: boolean;
     holdReply?: boolean;
     shell?: boolean;
+    runCode?: string;
+    permission?: (params: acp.RequestPermissionRequest) => Promise<acp.RequestPermissionResponse>;
   } = {},
 ): Promise<void> {
   const temp = await mkdtemp(path.join(os.tmpdir(), 'term2-acp-direct-'));
@@ -62,7 +64,7 @@ async function fixture(
     req.on('end', async () => {
       requests.push(JSON.parse(raw));
       await replyReady;
-      const call = options.shell && requests.length === 1;
+      const call = options.runCode ? requests.length % 2 === 1 : options.shell && requests.length === 1;
       const delta = call
         ? {
             tool_calls: [
@@ -71,8 +73,12 @@ async function fixture(
                 id: 'shell-call',
                 type: 'function',
                 function: {
-                  name: 'shell',
-                  arguments: JSON.stringify({ command: 'printf acp-tool-visible' }),
+                  name: options.runCode ? 'run_code' : 'shell',
+                  arguments: JSON.stringify(
+                    options.runCode
+                      ? { code: options.runCode, description: 'Call fixture MCP' }
+                      : { command: 'printf acp-tool-visible' },
+                  ),
                 },
               },
             ],
@@ -148,6 +154,8 @@ async function fixture(
     });
   if (options.elicitation)
     app = app.onRequest(acp.methods.client.elicitation.create, ({ params }) => options.elicitation!(params));
+  if (options.permission)
+    app = app.onRequest(acp.methods.client.session.requestPermission, ({ params }) => options.permission!(params));
   const connection = app.connect(
     acp.ndJsonStream(
       Writable.toWeb(child.stdin) as WritableStream<Uint8Array>,
@@ -220,7 +228,10 @@ describe('ACP v1 built CLI compatibility for Air', () => {
       expect(text()).toBe('ACP fixture reply');
       expect(updates.filter(({ update }) => update.sessionUpdate === 'user_message_chunk')).toEqual([]);
       const list = await context.request(acp.methods.agent.session.list, { cwd: workspace });
-      expect(list.sessions.some((session) => session.sessionId === sessionId)).toBe(true);
+      expect(list.sessions.find((session) => session.sessionId === sessionId)).toMatchObject({
+        title: 'Hello Air',
+        updatedAt: expect.any(String),
+      });
       for (let index = 0; index < 2; index++) {
         updates.length = 0;
         await context.request(acp.methods.agent.session.load, { sessionId, cwd: workspace, mcpServers: [] });
@@ -270,6 +281,309 @@ describe('ACP v1 built CLI compatibility for Air', () => {
       { shell: true },
     );
   }, 30_000);
+
+  for (const channel of ['terminal_output_delta', 'terminal_output'] as const) {
+    it(`delivers command output once through ${channel}, including replay`, async () => {
+      await fixture(
+        async ({ context, workspace, updates }) => {
+          const { sessionId } = await context.request(acp.methods.agent.session.new, {
+            cwd: workspace,
+            mcpServers: [],
+          });
+          await context.request(acp.methods.agent.session.prompt, {
+            sessionId,
+            prompt: [{ type: 'text', text: 'Run command' }],
+          });
+          const check = () => {
+            const tools = updates.flatMap(({ update }) =>
+              update.sessionUpdate === 'tool_call' || update.sessionUpdate === 'tool_call_update' ? [update] : [],
+            );
+            const output = tools
+              .flatMap((tool) => (tool._meta?.[channel] ? [tool._meta[channel] as { data: string }] : []))
+              .map((part) => part.data)
+              .join('');
+            expect(output.match(/acp-tool-visible/g)).toHaveLength(1);
+            expect(tools[0]?.content).toEqual([{ type: 'terminal', terminalId: tools[0]?.toolCallId }]);
+            expect(tools[0]?._meta?.terminal_info).toEqual({ cwd: workspace, terminal_id: tools[0]?.toolCallId });
+            expect(tools.at(-1)).toMatchObject({
+              status: 'completed',
+              _meta: { terminal_exit: { exit_code: null, signal: null } },
+            });
+            expect(tools.filter((tool) => tool._meta?.terminal_exit)).toHaveLength(1);
+            expect(
+              tools.every(
+                (tool) => !tool._meta?.[channel === 'terminal_output' ? 'terminal_output_delta' : 'terminal_output'],
+              ),
+            ).toBe(true);
+          };
+          check();
+          updates.length = 0;
+          await context.request(acp.methods.agent.session.load, { sessionId, cwd: workspace, mcpServers: [] });
+          check();
+        },
+        { shell: true, capabilities: { _meta: { [channel]: true } } },
+      );
+    }, 30_000);
+  }
+
+  it('accepts schema-valid embedded binary resources without dropping their context', async () => {
+    await fixture(async ({ context, workspace, requests }) => {
+      const { sessionId } = await context.request(acp.methods.agent.session.new, { cwd: workspace, mcpServers: [] });
+      await context.request(acp.methods.agent.session.prompt, {
+        sessionId,
+        prompt: [
+          {
+            type: 'resource',
+            resource: { uri: 'file:///context.bin', mimeType: 'application/octet-stream', blob: 'AQID' },
+          },
+        ],
+      });
+      expect(JSON.stringify(requests[0].messages)).toContain('file:///context.bin');
+      expect(JSON.stringify(requests[0].messages)).toContain('AQID');
+      await expect(
+        context.request(acp.methods.agent.session.prompt, {
+          sessionId: 'missing-session',
+          prompt: [{ type: 'text', text: 'x' }],
+        }),
+      ).rejects.toMatchObject({ code: -32002 });
+    });
+  }, 30_000);
+
+  it('connects client MCP stdio in the session cwd, uses native approval, and reconnects after close', async () => {
+    await fixture(
+      async ({ context, workspace, requests, savedSettings }) => {
+        const preferences = await savedSettings();
+        const script = path.join(workspace, 'mcp.mjs');
+        await writeFile(
+          script,
+          `import readline from 'node:readline';
+        const reply = (id, result) => process.stdout.write(JSON.stringify({jsonrpc:'2.0', id, result})+'\\n');
+        readline.createInterface({input:process.stdin}).on('line', line => {
+          const m = JSON.parse(line); if (m.id === undefined) return;
+          if(m.method === 'initialize') reply(m.id, {protocolVersion:m.params.protocolVersion,capabilities:{tools:{}},serverInfo:{name:'fixture',version:'1'}});
+          else if(m.method === 'tools/list') reply(m.id, {tools:[{name:'echo', description:'Echo session context',inputSchema:{type:'object',properties:{}}}]});
+          else if(m.method === 'tools/call') reply(m.id, {content:[{type:'text',text:JSON.stringify({cwd:process.cwd(),token:process.env.MCP_SENTINEL})}]});
+          else reply(m.id, {});
+        });`,
+        );
+        const mcpServers: acp.McpServer[] = [
+          {
+            name: 'airfixture',
+            command: process.execPath,
+            args: [script],
+            env: [{ name: 'MCP_SENTINEL', value: 'session-mcp-visible' }],
+          },
+        ];
+        const { sessionId } = await context.request(acp.methods.agent.session.new, { cwd: workspace, mcpServers });
+        await context.request(acp.methods.agent.session.prompt, {
+          sessionId,
+          prompt: [{ type: 'text', text: 'Call fixture MCP' }],
+        });
+        expect(JSON.stringify(requests)).toContain('session-mcp-visible');
+        expect(JSON.stringify(requests)).toContain(workspace);
+        await expect(
+          context.request(acp.methods.agent.session.load, {
+            sessionId,
+            cwd: workspace,
+            mcpServers: [{ name: 'broken', command: process.execPath, args: ['/no-such-acp-fixture.mjs'], env: [] }],
+          }),
+        ).rejects.toMatchObject({ code: -32010 });
+        await context.request(acp.methods.agent.session.prompt, {
+          sessionId,
+          prompt: [{ type: 'text', text: 'Old MCP still works after failed replacement' }],
+        });
+        expect(
+          JSON.stringify(
+            requests
+              .at(-1)
+              .messages.filter((message: any) => message.role === 'tool')
+              .at(-1),
+          ),
+        ).toContain('session-mcp-visible');
+        await context.request(acp.methods.agent.session.close, { sessionId });
+        await context.request(acp.methods.agent.session.load, { sessionId, cwd: workspace, mcpServers });
+        await context.request(acp.methods.agent.session.prompt, {
+          sessionId,
+          prompt: [{ type: 'text', text: 'MCP after reopen' }],
+        });
+        expect(
+          JSON.stringify(
+            requests
+              .at(-1)
+              .messages.filter((message: any) => message.role === 'tool')
+              .at(-1),
+          ),
+        ).toContain('session-mcp-visible');
+        const other = await context.request(acp.methods.agent.session.new, {
+          cwd: workspace,
+          mcpServers: [{ ...mcpServers[0]!, env: [{ name: 'MCP_SENTINEL', value: 'sibling-mcp-visible' }] }],
+        });
+        await context.request(acp.methods.agent.session.prompt, {
+          sessionId: other.sessionId,
+          prompt: [{ type: 'text', text: 'Sibling MCP' }],
+        });
+        expect(JSON.stringify(requests.at(-1).messages)).toContain('sibling-mcp-visible');
+        expect(JSON.stringify(requests.at(-1).messages)).not.toContain('session-mcp-visible');
+        const empty = await context.request(acp.methods.agent.session.new, { cwd: workspace, mcpServers: [] });
+        const offset = requests.length;
+        await context.request(acp.methods.agent.session.prompt, {
+          sessionId: empty.sessionId,
+          prompt: [{ type: 'text', text: 'No MCP' }],
+        });
+        expect(JSON.stringify(requests[offset].tools)).not.toContain('airfixture__echo');
+        expect(await savedSettings()).toBe(preferences);
+      },
+      {
+        runCode: 'return await tools.airfixture__echo({});',
+        permission: async (params) => ({
+          outcome: {
+            outcome: 'selected',
+            optionId: params.options.find((option) => option.kind === 'allow_once')!.optionId,
+          },
+        }),
+      },
+    );
+  }, 45_000);
+
+  for (const transport of ['http', 'sse'] as const) {
+    it(`uses forwarded MCP ${transport} with supplied headers and native approvals`, async () => {
+      let stream: http.ServerResponse | undefined;
+      let initialized = 0;
+      let called = 0;
+      const headers: string[] = [];
+      const server = http.createServer(async (req, res) => {
+        headers.push(String(req.headers['x-acp-fixture']));
+        if (req.method === 'GET' && transport === 'sse') {
+          stream = res;
+          res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });
+          res.write('event: endpoint\ndata: /messages\n\n');
+          return;
+        }
+        if (req.method !== 'POST') {
+          res.writeHead(req.method === 'DELETE' ? 200 : 405);
+          res.end();
+          return;
+        }
+        let raw = '';
+        for await (const chunk of req) raw += String(chunk);
+        const message = JSON.parse(raw);
+        if (message.id === undefined) {
+          res.writeHead(202);
+          res.end();
+          return;
+        }
+        let result: unknown = {};
+        if (message.method === 'initialize') {
+          initialized++;
+          result = {
+            protocolVersion: message.params.protocolVersion,
+            capabilities: { tools: {} },
+            serverInfo: { name: 'network-fixture', version: '1' },
+          };
+        } else if (message.method === 'tools/list')
+          result = { tools: [{ name: 'echo', inputSchema: { type: 'object', properties: {} } }] };
+        else if (message.method === 'tools/call') {
+          called++;
+          result = { content: [{ type: 'text', text: 'network-mcp-visible' }] };
+        }
+        const response = JSON.stringify({ jsonrpc: '2.0', id: message.id, result });
+        if (transport === 'sse') {
+          stream!.write(`event: message\ndata: ${response}\n\n`);
+          res.writeHead(202);
+          res.end();
+        } else {
+          res.writeHead(200, { 'content-type': 'application/json' });
+          res.end(response);
+        }
+      });
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+      const address = server.address() as import('node:net').AddressInfo;
+      try {
+        await fixture(
+          async ({ context, workspace, requests }) => {
+            const mcpServers: acp.McpServer[] = [
+              {
+                name: 'airfixture',
+                type: transport,
+                url: `http://127.0.0.1:${address.port}/mcp`,
+                headers: [{ name: 'x-acp-fixture', value: 'header-visible' }],
+              },
+            ];
+            const { sessionId } = await context.request(acp.methods.agent.session.new, { cwd: workspace, mcpServers });
+            await context.request(acp.methods.agent.session.prompt, {
+              sessionId,
+              prompt: [{ type: 'text', text: 'Call network MCP' }],
+            });
+            expect(JSON.stringify(requests.at(-1).messages)).toContain('network-mcp-visible');
+            expect(called).toBe(1);
+            await context.request(acp.methods.agent.session.close, { sessionId });
+            await context.request(acp.methods.agent.session.resume, { sessionId, cwd: workspace, mcpServers });
+            expect(initialized).toBe(2);
+            await context.request(acp.methods.agent.session.close, { sessionId });
+          },
+          {
+            runCode: 'return await tools.airfixture__echo({});',
+            permission: async (params) => ({
+              outcome: {
+                outcome: 'selected',
+                optionId: params.options.find((option) => option.kind === 'allow_once')!.optionId,
+              },
+            }),
+          },
+        );
+        expect(headers.every((value) => value === 'header-visible')).toBe(true);
+      } finally {
+        stream?.end();
+        server.closeAllConnections();
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    }, 45_000);
+  }
+
+  it.each(['http', 'sse'] as const)(
+    'does not forward MCP %s headers through a redirect',
+    async (transport) => {
+      let reachedTarget = false;
+      const target = http.createServer((_req, res) => {
+        reachedTarget = true;
+        res.end();
+      });
+      await new Promise<void>((resolve) => target.listen(0, '127.0.0.1', resolve));
+      const address = target.address() as import('node:net').AddressInfo;
+      const redirect = http.createServer((_req, res) => {
+        res.writeHead(307, { location: `http://127.0.0.1:${address.port}/other` });
+        res.end();
+      });
+      await new Promise<void>((resolve) => redirect.listen(0, '127.0.0.1', resolve));
+      const origin = redirect.address() as import('node:net').AddressInfo;
+      try {
+        await fixture(async ({ context, workspace }) => {
+          await expect(
+            context.request(acp.methods.agent.session.new, {
+              cwd: workspace,
+              mcpServers: [
+                {
+                  name: 'redirect',
+                  type: transport,
+                  url: `http://127.0.0.1:${origin.port}/mcp`,
+                  headers: [{ name: 'x-fixture-token', value: 'must-not-leak' }],
+                },
+              ],
+            }),
+          ).rejects.toMatchObject({ code: -32010 });
+          expect(reachedTarget).toBe(false);
+        });
+      } finally {
+        redirect.closeAllConnections();
+        target.closeAllConnections();
+        await Promise.all([
+          new Promise<void>((resolve) => redirect.close(() => resolve())),
+          new Promise<void>((resolve) => target.close(() => resolve())),
+        ]);
+      }
+    },
+    30_000,
+  );
 
   it('shows a cold-cache selector before discovery finishes and applies/persists the selected inference model', async () => {
     await fixture(
@@ -328,7 +642,7 @@ describe('ACP v1 built CLI compatibility for Air', () => {
             configId: 'model',
             value: 'acpfixture/acp-model',
           }),
-        ).rejects.toMatchObject({ code: -32000 });
+        ).rejects.toMatchObject({ code: -32010 });
         releaseReply();
         await prompting;
         expect(requests.at(-1).model).toBe('vendor/second-model');
@@ -428,7 +742,7 @@ describe('ACP v1 built CLI compatibility for Air', () => {
         await expect(
           context.request(acp.methods.agent.session.new, {
             cwd: workspace,
-            mcpServers: [{ name: 'blocked', command: 'false', args: [], env: [] }],
+            mcpServers: [{ name: 'blocked', command: '', args: [], env: [] }],
           }),
         ).rejects.toMatchObject({ code: -32602 });
         const { sessionId } = await context.request(acp.methods.agent.session.new, { cwd: workspace, mcpServers: [] });

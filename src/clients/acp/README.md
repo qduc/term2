@@ -16,9 +16,10 @@ transport IDs and schema validation remain SDK-owned. The existing v2 surface re
 
 ## Stable v1 and JetBrains Air
 
-This adapter supports the v1 features below; it is not full v1 conformance.
-In particular, v1 session setup requires stdio MCP support, while this adapter
-currently rejects nonempty forwarded MCP lists.
+The v1 surface targets mandatory v1 behavior and the capabilities advertised below.
+Optional features are not implied by protocol version alone; see the audit matrix.
+Valid unsupported version offers receive the latest supported version (2); an
+exact offer of 1 or 2 retains its corresponding SDK contract.
 
 `term2 acp` also accepts `initialize.protocolVersion: 1` without a CLI flag.
 `v1-agent.ts` advertises `agentInfo`, `authMethods: []`, image/embedded-context
@@ -37,11 +38,17 @@ permission code preserves exact option IDs, scope, cancellation and provenance.
 streamed prefixes so final messages/snapshots do not duplicate text. Tool upserts
 become a first `tool_call` followed by `tool_call_update`, retaining the tool name.
 Shell titles describe the actual command; raw input/output remain available as
-structured metadata and output is sent as tool content (including when provider
-content is an empty array). The inspected Air execute renderer ignores raw fields
-and ordinary text tool content, so a valid output update does not guarantee a
-visible output panel in that client. Do not put tool output into assistant history
-to imitate such a panel.
+structured metadata. Without a display extension, output is standard text tool
+content, including when provider content is an empty array. `v1-terminals.ts`
+uses the declared Air/Zed agent-owned terminal convention: clients opting into
+`_meta.terminal_output_delta:true` receive suffixes on that channel; otherwise
+`_meta.terminal_output:true` selects Zed's chunk channel. Terminal references,
+`terminal_info` and `terminal_exit` bracket output. Each fresh load replays it
+once; repeated snapshots do not append it again. These are display extensions,
+not client terminal execution. The native result includes its formatted exit
+and runtime information; numeric terminal exit metadata remains null because
+the bridge has no separate authoritative numeric exit field. Do not parse a
+formatted result to invent one, or put tool output into assistant history.
 
 V1 clients already display submitted input. After native admission, the attachment
 marks that exact message ID before releasing its event gate; only that client's
@@ -52,9 +59,12 @@ V2-only state updates
 stay off the v1 wire. The translator fails explicitly if previously displayed
 content would need replacement; v1 has no replacement operation.
 
-V1 structured questions and budgets currently use the existing unsupported-form
-stop/decline fallbacks. No v1 form support, IDE filesystem/terminal delegation,
-MCP forwarding or provider management is advertised.
+V1 structured questions and budgets use form elicitation only when the client
+declares `clientCapabilities.elicitation.form`; otherwise they retain the
+stop/decline fallback. Filesystem/terminal execution delegation and provider
+management are not advertised. V1 selected permission IDs must match an offered
+option exactly; operational errors use -32010, distinct from reserved
+authentication-required -32000. Unknown sessions use -32002.
 The launcher retains the same sandbox and permission policy for both versions.
 
 `models.ts` owns selector values (`provider/model`, split at the first slash),
@@ -80,19 +90,22 @@ preserve the session's effort intent; global effort preferences are not written.
 Air's loading/sign-in timeout can mask initialization failure: the observed
 WebStorm Air log offered `protocolOffer=V1` then reported `Invalid params` against
 the former v2-only endpoint. Its later stdout `EPIPE` followed client shutdown;
-it was not evidence of missing provider credentials. Disable both
-`use_idea_mcp` and `use_custom_mcp` in Air's custom agent configuration because
-nonempty forwarded MCP requests remain unsupported. Some Air builds also
-contribute `jetbrains_air_ide` independently through their MCP catalog. Disable
-that entry in Air's MCP server settings if session creation still rejects MCP
-inputs. This catalog toggle affects all Air agents, unlike the per-agent flags.
+it was not evidence of missing provider credentials. The former workaround of
+disabling Air's forwarded MCP catalog is no longer required: app-owned
+`acp-sessions.ts` connects session-supplied stdio/HTTP/SSE servers through the
+existing manager, immutable catalog and `run_code` approval machinery. Server
+credentials remain process memory, are not copied into settings or display
+metadata, and are not provider credentials. Each session owns its connections;
+failed replacement preserves the accepted catalog. Retired managers remain
+alive for older native generations until explicit close drains the session.
+EOF drains application work before closing those resources.
 
 `AcpWorkspaces.authorize` resolves canonical cwd to an admitted workspace grant.
 `cwd(sessionId)` supplies canonical **direct** session workspace metadata under
 the same principal as Host. Resume checks cwd, but the connection snapshot has no
 workspace field. Neither callback may construct an adopted runtime or read old
-logs. List metadata comes only from Host; optional title/updatedAt remain omitted
-because the published direct-store list contract does not expose them.
+logs. List metadata comes only from Host, including its optional native title and
+updatedAt; neither value is fabricated when absent.
 
 The app owner's published launcher (`19ec1b69`) calls these real entry points with
 `surface: () => ({autoApprove:false,interactive:true,allowUnsandboxed:false})`
@@ -128,7 +141,10 @@ unsandboxed permission grants, even if a wrongly composed Session advertises one
   use image/\* MIME and raw padded RFC4648 base64, never a fetched path/URL or data
   URI. Representation is checked before admission without adding a size cap or
   provider permission policy. Image-only prompts and text after images retain
-  block order. Audio/blob resources remain unsupported.
+  block order. V1 embedded image blobs become image attachments with URI context;
+  other embedded blobs retain their URI/MIME/base64 as opaque text context, without
+  fetching the URI. This does not add PDF/audio interpretation to a model. Audio
+  blocks and v2 binary embedded resources remain unsupported.
 - Each permission, question or budget request owns a separate cancellable client
   exchange; it never blocks the event pump. Answers target exact request IDs.
   Root and task-owned native answers retain that provenance in their accepted
@@ -140,7 +156,7 @@ unsandboxed permission grants, even if a wrongly composed Session advertises one
   exact grant decisions, never collapsed to allow or cached. Unknown selections,
   cancellation and unsupported permission methods deny. Session owns real scope
   validation; no absent grant capability is invented.
-- Questions use ACP v2 `elicitation/create` form mode only when the initialized
+- Questions use ACP `elicitation/create` form mode only when the initialized
   client explicitly advertises a non-null elicitation.form capability. Budget
   forms use the same gate; unsupported clients receive native system fallbacks
   without an outbound elicitation request. Known stable-ID question
@@ -223,8 +239,10 @@ settle foreground work. Only actual terminalCause:budget_exhausted selects the
 budget-exhausted stop reason. Explicit cancel/close waits for any in-flight submission admission, captures
 that prompt ownership, and sends expectedTurnId for the observed turn and discardQueue:false; native admission performs the comparison.
 A no-op/abort receipt is not proof physical cleanup finished. Close observes a
-known terminal before detach. EOF/shutdown only detach subscriptions/requests;
-Host owns shared Session/background lifetime. There is no client shutdown timeout.
+known terminal, then the Host drains and releases the native Session (including
+background work) and app-owned MCP connections. Retained history can be reopened.
+EOF/shutdown detaches subscriptions/requests; application disposal owns native
+Session/background drain. There is no client shutdown timeout.
 
 ACP replayFrom:start means **fresh atomic snapshot plus subsequent live events**.
 Previously hidden history remains hidden on resume without replay; snapshot
@@ -239,8 +257,6 @@ rejects unknown variants and does not invent a cursor extension or client seq.
 
 ## Remaining seams and verification limits
 
-- Store/Host list title/updatedAt still need real owner data. No old-conversation
-  title or fabricated timestamp/order.
 - A numeric ACP cursor extension requires an agreed retained-state/watermark
   contract if that transport feature is required. Host tail and fresh replay are
   not interchangeable.
@@ -281,3 +297,27 @@ Build with `pnpm build`, then run
 `pnpm test:integration tests/clients/acp tests/clients/acp-v2/serve.integration.test.ts`.
 The live packed reference-client turn used Node environment proxy support
 (`NODE_USE_ENV_PROXY=1`) for the configured Google endpoint.
+
+## V1 audit matrix
+
+Audited against the [stable v1 specification](https://agentclientprotocol.com/protocol/v1/initialization),
+the pinned SDK 1.4.0 schema, and the upstream
+[Air/Zed display conventions](https://github.com/agentclientprotocol/codex-acp/blob/main/docs/air-extensions.md).
+GUI acceptance remains separate from these protocol and native-runtime checks.
+
+| Contract | Implementation and integration evidence |
+| --- | --- |
+| UTF-8 NDJSON, clean stdout, initialization/version negotiation | SDK framing and `serveAcp`; built CLI `negotiation.integration.test.ts`, `spec.integration.test.ts` |
+| Text and resource links; advertised image/embedded context | `promptInput`, `v1Prompt`; built CLI content/embedded-resource cases |
+| Mandatory stdio MCP; advertised HTTP/SSE | App `createAcpSessions`; actual MCP processes/loopback transports, explicit env/cwd/headers, approval, failed replacement and sibling isolation |
+| Pending prompt, cancel, exact terminal and late permission answers | `createAcpV1Agent`, native interaction/lifecycle suites |
+| Exact permission choices and negotiated forms | `v1Client`; native accept/deny/unoffered alias, question accept/decline/cancel/invalid cases |
+| Full load replay, resume without history, own-message suppression | `V1Output`; repeated live/load/resume and identity cases |
+| Tool title/input/result and opt-in terminal output | Shared renderer and `V1Terminals`; live and loaded command output on both channels and standard-content fallback |
+| Session close cancels/drains/frees resources; retained log reopen | Host `closeSession`, app resource ownership; built CLI close/load/MCP invocation and independent disposal-failure probe |
+| Model and thought-level configuration, session-local persistence | Native configure receipts; built CLI catalog/model/effort/default/load/resume cases |
+| Optional features not implemented | Audio blocks, extra workspace roots, session modes/fork/delete, slash commands, plans, provider management and delegated client FS/terminal execution are not advertised |
+
+The WebStorm Air plugin declares `terminal_output_delta`; the standalone Air app
+is a different consumer. Inspecting the standalone app's renderer does not
+establish what the WebStorm plugin displays.

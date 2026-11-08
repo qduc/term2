@@ -2,7 +2,14 @@ import type * as acp from '@agentclientprotocol/sdk/experimental/v2';
 import type { SessionConfigOption, SetSessionConfigOptionRequest } from '@agentclientprotocol/sdk';
 import type { WireModel, WireConfigureRequest } from '../../protocol/wire.js';
 import type { WireAnswerProvenance, WireDecision } from '../../protocol/wire.js';
-import type { DirectHost, Principal, WorkspaceGrant } from '../../host/in-process-direct-types.js';
+import type { DirectHost, DirectConnection, Principal, WorkspaceGrant } from '../../host/in-process-direct-types.js';
+import type { McpServer } from '@agentclientprotocol/sdk';
+
+export type AcpSessionSetup = {
+  readonly cwd: string;
+  readonly sessionId?: string;
+  readonly mcpServers?: readonly McpServer[];
+};
 
 /** Version-specific transports implement only the client operations used by the backend. */
 export interface AcpClient {
@@ -41,6 +48,11 @@ export type BackendOptions = {
   readonly workspaces: AcpWorkspaces;
   readonly logger: AcpLogger;
   readonly createRequestId?: () => string;
+  /** App owns supplied MCP processes, tool generations and lifetime; the backend only attaches. */
+  readonly sessions?: {
+    open(request: AcpSessionSetup, connect: () => Promise<DirectConnection>): Promise<DirectConnection>;
+    close(sessionId: string): Promise<void>;
+  };
   /** Cache-only for setup; refresh may contact credentialed provider catalogs. */
   readonly models?: (refresh: boolean) => Promise<readonly (WireModel & { readonly name?: string })[]>;
   /** Accepted session intent, preserving Default even when its effective effort is concrete. */
@@ -52,12 +64,13 @@ export type BackendOptions = {
 
 /** ACP lifecycle over owned connection subscriptions, never over a Session runtime. */
 export interface AcpBackend {
+  readonly mcpCapabilities?: { readonly http: boolean; readonly sse: boolean };
   configOptions?(sessionId: string, refresh?: boolean): Promise<SessionConfigOption[]>;
   setConfigOption?(request: SetSessionConfigOptionRequest): Promise<SessionConfigOption[]>;
-  createSession(request: Pick<acp.NewSessionRequest, 'cwd'>, client: AcpClient): Promise<acp.NewSessionResponse>;
+  createSession(request: AcpSessionSetup, client: AcpClient): Promise<acp.NewSessionResponse>;
   listSessions(request: acp.ListSessionsRequest): Promise<acp.ListSessionsResponse>;
   resumeSession(
-    request: Pick<acp.ResumeSessionRequest, 'sessionId' | 'cwd' | 'replayFrom'>,
+    request: Pick<acp.ResumeSessionRequest, 'sessionId' | 'cwd' | 'replayFrom'> & Pick<AcpSessionSetup, 'mcpServers'>,
     client: AcpClient,
   ): Promise<acp.ResumeSessionResponse>;
   preparePrompt(request: acp.PromptRequest): Promise<PromptExecution>;

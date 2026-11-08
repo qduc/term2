@@ -56,8 +56,16 @@ export function createAcpBackend(options: BackendOptions): AcpBackend {
       throw error;
     }
   };
+  const release = async (sessionId: string): Promise<void> => {
+    try {
+      await options.host.closeSession?.(options.principal, sessionId);
+    } finally {
+      await options.sessions?.close(sessionId);
+    }
+  };
 
   return {
+    ...(options.sessions ? { mcpCapabilities: { http: true, sse: true } } : {}),
     async configOptions(sessionId, refresh) {
       attached(sessionId);
       return await models.configOptions(sessionId, refresh);
@@ -70,8 +78,16 @@ export function createAcpBackend(options: BackendOptions): AcpBackend {
       available();
       const cwd = await canonicalCwd(request.cwd);
       const grant = await options.workspaces.authorize(cwd);
-      const connection = await options.host.createSession(options.principal, grant);
-      await attach(connection, client, false);
+      const connect = () => options.host.createSession(options.principal, grant);
+      if (!options.sessions && request.mcpServers?.length)
+        throw acp.RequestError.invalidParams(undefined, 'MCP session setup is unavailable');
+      const connection = options.sessions ? await options.sessions.open({ ...request, cwd }, connect) : await connect();
+      try {
+        await attach(connection, client, false);
+      } catch (error) {
+        await release(connection.sessionId);
+        throw error;
+      }
       return { sessionId: connection.sessionId };
     },
     async listSessions(request) {
@@ -85,6 +101,8 @@ export function createAcpBackend(options: BackendOptions): AcpBackend {
         sessions.push({
           sessionId: session.id,
           cwd: sessionCwd,
+          ...(session.title !== undefined ? { title: session.title } : {}),
+          ...(session.updatedAt !== undefined ? { updatedAt: session.updatedAt } : {}),
         });
       }
       return { sessions, ...(page.cursor ? { nextCursor: page.cursor } : {}) };
@@ -106,7 +124,12 @@ export function createAcpBackend(options: BackendOptions): AcpBackend {
         }
         // Connect first so a failed authorization/open does not destroy this
         // client's existing attachment. Replacement never closes the Session.
-        const connection = await options.host.connect(options.principal, request.sessionId);
+        const connect = () => options.host.connect(options.principal, request.sessionId);
+        if (!options.sessions && request.mcpServers?.length)
+          throw acp.RequestError.invalidParams(undefined, 'MCP session setup is unavailable');
+        const connection = options.sessions
+          ? await options.sessions.open({ ...request, cwd }, connect)
+          : await connect();
         try {
           attachments.get(request.sessionId)?.detach();
           attachments.delete(request.sessionId);
@@ -130,10 +153,13 @@ export function createAcpBackend(options: BackendOptions): AcpBackend {
       available();
       if (changing.has(sessionId)) throw new acp.RequestError(-32000, 'Session attachment is changing');
       const attachment = attachments.get(sessionId);
-      if (!attachment) return;
       changing.add(sessionId);
       try {
-        await attachment.close();
+        try {
+          await attachment?.close();
+        } finally {
+          await release(sessionId);
+        }
       } finally {
         attachments.delete(sessionId);
         changing.delete(sessionId);

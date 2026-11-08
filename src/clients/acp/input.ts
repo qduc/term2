@@ -1,7 +1,29 @@
 import * as acp from '@agentclientprotocol/sdk/experimental/v2';
 import type { WireContent } from '../../protocol/wire.js';
+import type { ContentBlock } from '@agentclientprotocol/sdk';
 
 export type PromptInput = { readonly text: string; readonly attachments: readonly WireContent[] };
+
+/** Preserve v1 embedded binary resources without fetching their URI or treating it as a file path. */
+export function v1Prompt(blocks: readonly ContentBlock[]): acp.PromptRequest['prompt'] {
+  return blocks.flatMap((block): ContentBlock[] => {
+    if (block.type !== 'resource' || !('blob' in block.resource)) return [block];
+    const { blob, mimeType, uri } = block.resource;
+    if (Buffer.from(blob, 'base64').toString('base64') !== blob)
+      throw acp.RequestError.invalidParams(undefined, 'Embedded blobs require padded RFC4648 base64');
+    if (mimeType?.startsWith('image/'))
+      return [
+        { type: 'text', text: `[Embedded image: ${uri}]` },
+        { type: 'image', data: blob, mimeType },
+      ];
+    return [
+      {
+        type: 'text',
+        text: `[Embedded resource: ${uri}; MIME: ${mimeType ?? 'application/octet-stream'}; encoding: base64]\n${blob}`,
+      },
+    ];
+  });
+}
 
 /** Convert ACP blocks without fetching resources or reinterpreting image data as paths/URLs. */
 export function promptInput(blocks: acp.PromptRequest['prompt']): PromptInput {

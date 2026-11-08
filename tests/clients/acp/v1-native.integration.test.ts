@@ -219,7 +219,7 @@ async function finished(facts: Fact[]) {
 }
 
 describe('ACP v1 native permissions and cancellation', () => {
-  it.each(['approve', 'reject', 'allow-folder-session', 'unsandboxed-once'])(
+  it.each(['approve', 'reject', 'allow-folder-session', 'unsandboxed-once', 'allow-once'])(
     'preserves approval policy and accepted provenance: %s',
     async (selection) => {
       await interactionFixture('approval', async ({ connect, observe, workspace, facts, requests }) => {
@@ -246,7 +246,7 @@ describe('ACP v1 native permissions and cancellation', () => {
         expect(facts.filter((fact) => fact.type === 'interaction_closed')).toMatchObject([
           {
             resolution: allowed ? { kind: 'allow' } : { kind: 'deny' },
-            resolutionSource: selection === 'unsandboxed-once' ? 'system' : 'user',
+            resolutionSource: ['unsandboxed-once', 'allow-once'].includes(selection) ? 'system' : 'user',
           },
         ]);
         if (allowed) {
@@ -291,7 +291,7 @@ describe('ACP v1 native permissions and cancellation', () => {
       });
       await expect.poll(() => opened).toBe(true);
       expect(settled).toBe(false);
-      await expect(sendPrompt(client.context, sessionId)).rejects.toMatchObject({ code: -32000 });
+      await expect(sendPrompt(client.context, sessionId)).rejects.toMatchObject({ code: -32010 });
       await client.context.notify(acp.methods.agent.session.cancel, { sessionId });
       expect(await prompt).toEqual({ stopReason: 'cancelled' });
       allow({ outcome: { outcome: 'selected', optionId: 'approve' } });
@@ -300,6 +300,85 @@ describe('ACP v1 native permissions and cancellation', () => {
       expect(facts.some((fact) => fact.type === 'turn_ended')).toBe(true);
     });
   }, 15_000);
+
+  it.each(['accept', 'decline', 'cancel', 'invalid'] as const)(
+    'uses negotiated v1 forms for questions: %s',
+    async (action) => {
+      await interactionFixture('question', async ({ connect, observe, workspace, facts }) => {
+        let requested = false;
+        const client = await connect({
+          capabilities: { elicitation: { form: {} } },
+          elicitation: async (request) => {
+            requested = true;
+            expect(request).toMatchObject({ mode: 'form', requestedSchema: { type: 'object' } });
+            return action === 'accept'
+              ? { action: 'accept', content: { q0: 'Blue', q1: ['A', 'B'], q2_custom: 'typed answer' } }
+              : action === 'invalid'
+              ? { action: 'accept', content: { q0: 'Purple' } }
+              : { action };
+          },
+        });
+        const { sessionId } = await client.context.request(acp.methods.agent.session.new, {
+          cwd: workspace,
+          mcpServers: [],
+        });
+        await observe(sessionId);
+        await sendPrompt(client.context, sessionId);
+        await finished(facts);
+        expect(requested).toBe(true);
+        const resolved = facts.filter((fact) => fact.type === 'interaction_closed');
+        expect(resolved).toHaveLength(1);
+        if (action === 'accept') {
+          expect(JSON.stringify(resolved)).toContain('Blue');
+          expect(JSON.stringify(resolved)).toContain('typed answer');
+        } else {
+          expect(resolved).toMatchObject([
+            {
+              resolution: {
+                kind: 'answer',
+                answer: 'User declined to answer.',
+                ...(action === 'decline' ? {} : { stopAfterApprovalResolution: true }),
+              },
+              resolutionSource: action === 'invalid' ? 'system' : 'user',
+            },
+          ]);
+        }
+      });
+    },
+    15_000,
+  );
+
+  it.each(['extend', 'stop', 'invalid'] as const)(
+    'uses negotiated budget form: %s',
+    async (choice) => {
+      await interactionFixture('budget', async ({ connect, observe, workspace, facts, requests }) => {
+        let elicited = 0;
+        const client = await connect({
+          capabilities: { elicitation: { form: {} } },
+          elicitation: async () => {
+            elicited++;
+            return { action: 'accept', content: { decision: choice === 'invalid' ? 'continue' : choice } };
+          },
+        });
+        const { sessionId } = await client.context.request(acp.methods.agent.session.new, {
+          cwd: workspace,
+          mcpServers: [],
+        });
+        await observe(sessionId);
+        await sendPrompt(client.context, sessionId);
+        await finished(facts);
+        expect(elicited).toBe(1);
+        expect(facts.filter((fact) => fact.type === 'budget_closed')).toMatchObject([
+          {
+            decision: choice === 'extend' ? { kind: 'extend', grantedBy: 'human' } : { kind: 'stop' },
+            source: choice === 'invalid' ? 'system' : 'user',
+          },
+        ]);
+        expect(requests).toHaveLength(choice === 'extend' ? 2 : 1);
+      });
+    },
+    15_000,
+  );
 
   it.each(['question', 'budget'] as const)(
     'stops unsupported %s interactions without requesting fabricated approval',

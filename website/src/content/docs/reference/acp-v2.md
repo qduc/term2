@@ -42,8 +42,8 @@ For the Air plugin in JetBrains IDEs, merge this entry into
     "Term2": {
       "command": "/absolute/path/to/term2",
       "args": ["acp"],
-      "use_idea_mcp": false,
-      "use_custom_mcp": false
+      "use_idea_mcp": true,
+      "use_custom_mcp": true
     }
   }
 }
@@ -58,8 +58,11 @@ V1 supports session new/list/load/resume/close, prompts, cancellation and tool
 permissions. Prompt responses wait for completion and contain `stopReason`.
 History loads replay retained messages; resume omits history. Message output
 uses append-only chunks, and tool permissions use v1's `toolCall` field.
-Structured questions and budget pauses currently stop/decline through the
-unsupported-form fallback. MCP forwarding remains unsupported.
+Structured questions and budget pauses use form elicitation when the client
+declares form support, and otherwise stop/decline. V1 connects forwarded stdio,
+HTTP and SSE MCP servers per session. MCP tools are available through `run_code`
+and retain Term2’s normal approvals; supplied environment/header values are not
+saved to settings. Failed MCP replacement preserves the working session catalog.
 
 Air's model selector uses the v1 session `configOptions` response and
 `session/set_config_option`. It starts with Term2's current model and cached
@@ -74,10 +77,19 @@ normal reasoning behavior. Changes apply to that session and leave your global
 effort preference unchanged. Both selectors are available to v1 clients such
 as Air and Zed.
 
-If Air still rejects session creation with an unsupported MCP error, disable
-`jetbrains_air_ide` in Air's MCP server catalog settings. Some Air builds
-contribute it independently of the per-agent flags above. The catalog setting
-affects all Air agents.
+Command output uses the terminal display channel declared by Air or Zed, with
+standard text tool content as the fallback for clients without the extension.
+Output and command details also replay on history load. Previously disabled
+Air MCP settings can be enabled again after installing this version.
+
+Embedded v1 resources accept text and binary content. Image blobs become image
+attachments; other binary blobs retain URI/MIME/base64 as opaque text context,
+without fetching their URI or adding document-format interpretation.
+
+The [implementation audit matrix](https://github.com/qduc/term2/blob/main/src/clients/acp/README.md#v1-audit-matrix)
+records the supported v1 boundaries. Optional modes, plans, audio blocks,
+additional workspace roots and delegated client filesystem/terminal execution
+are not advertised.
 
 The sections below describe the experimental v2 exchange and its limits.
 
@@ -138,8 +150,8 @@ selected model's capabilities.
 
 `cwd` must resolve to an existing absolute directory. It becomes the canonical
 workspace root. Resume requires the same canonical root and uses the existing
-native session ID. List results use Host metadata and omit unavailable titles
-and timestamps rather than inventing them.
+native session ID. List results carry Host-owned titles and timestamps when available; missing
+metadata is omitted.
 
 Resume without `replayFrom` attaches without replaying old transcript entities.
 Every attachment synchronizes its current foreground state. With
@@ -155,8 +167,8 @@ Only one local foreground prompt is accepted at a time. Native Session admission
 also rejects prompts when another client owns foreground work; inputs are not
 silently queued or steered. Cancel targets the known turn ID and preserves other
 clients' queued work. Close cancels known foreground work, waits for its actual
-terminal and detaches this client's subscription. Background-session shutdown
-semantics in newer drafts are not implemented by this attachment close operation.
+terminal, then drains and releases the native Session, background work and
+session-owned MCP connections. Retained conversation logs can be loaded again.
 
 ## Permissions, questions and budgets
 
@@ -193,7 +205,7 @@ prompt acknowledgement rather than the newer `messageId` response, and still
 supports the older `tool_call` announcement alongside `tool_call_update`.
 Updating these wire contracts requires a coordinated SDK/client migration.
 
-MCP, additional workspace directories, configuration methods, authentication,
+For v2, MCP, additional workspace directories, configuration methods, authentication,
 URL elicitation and numeric replay cursors are unsupported. Nonempty MCP or
 additional-directory requests are rejected with `-32602`. Presence in the full
 upstream schema is not evidence that term2 implements a feature.

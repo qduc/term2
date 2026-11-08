@@ -99,6 +99,8 @@ export async function requestQuestion(input: {
   readonly signal: AbortSignal;
 }): Promise<AcpAnswer> {
   try {
+    const { request } = await input.client.initialized;
+    if (request.capabilities?.elicitation?.form == null) return stopped();
     const { schema, fields } = form(input.interaction);
     const response = await input.client.request(
       acp.methods.client.elicitation.create,

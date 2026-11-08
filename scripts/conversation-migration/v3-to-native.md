@@ -75,7 +75,15 @@ existing same-turn physical payload sharing can operate. Exactly one final
 provider context is emitted as hidden `item` facts containing provider-bound
 `provider_input` Items, one per `normalizeApplicationInput(history)` part from
 `v3-provider-input.mjs`. This is the frozen v3 projection moved out of the removed
-run loop (#197), not the live engine's request builder.
+run loop (#197), not the live engine's request builder. It deliberately widens that
+run loop in two places, found by rehearsing on real v3 data: a bare single-part
+tool result output object is read as a one-part array, and `input_text` reasoning
+parts are read like `text`. Both are older Agents SDK encodings of the same text,
+and the run loop's refusal of them stranded most of one user's v3 conversations.
+For `codex` conversations, reasoning metadata saved flat before 2026-08-02 (the raw
+response item: `id`, `type`, `content`, `encrypted_content` and sometimes more) is
+moved unchanged under `codex`. The Codex provider then sends the same wire fields
+the old provider did, instead of refusing the resumed request as foreign metadata.
 No portable re-encoding strips signatures, encrypted/opaque items, provider
 metadata, raw arguments, reasoning or structured output from that normalized
 request. Normalization errors fail `normalization-refused`; native schema/replay

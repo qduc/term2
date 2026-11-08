@@ -126,6 +126,18 @@ export function convertValidatedV3(input, options = {}) {
     } catch {
       refuse('normalization-refused');
     }
+    // Codex reasoning saved before 2026-08-02 kept the raw response item flat in
+    // providerData, which the Codex provider then spread onto the wire. The
+    // provider now accepts only namespaced metadata, so namespace it unchanged.
+    if (provider === 'codex')
+      normalized = normalized.map((part) =>
+        part.type === 'reasoning' &&
+        object(part.providerMetadata) &&
+        !('codex' in part.providerMetadata) &&
+        Object.keys(part.providerMetadata).some((key) => key !== 'encrypted_content')
+          ? { ...part, providerMetadata: { codex: part.providerMetadata } }
+          : part,
+      );
     const entries = [];
     const add = (at, fact) => entries.push({ at, fact });
     const model = { provider, model: modelName };

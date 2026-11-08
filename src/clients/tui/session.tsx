@@ -185,6 +185,9 @@ export function TuiSession({
     turnInFlight: Boolean(state.activeTurnId),
   });
   const pending = useRef(false);
+  // A manual /compact in flight. Its summary request shows as the active turn, but that maintenance
+  // turn takes no steers: messages sent meanwhile are queued by the session and run after it (#221).
+  const compacting = useRef(false);
   const { waitUntilRenderFlush } = useApp();
   // Legacy clearInputBeforeReset paints the emptied composer, then printUsage writes under that frame.
   const resetHooks = {
@@ -270,9 +273,11 @@ export function TuiSession({
     input = menuStack.withPendingSkill(input);
     const clean = cleanImageMarkers(input);
     if (!clean.trim() && !submittedImages.length && !otherParts.length && !editing) return;
+    if (compacting.current && delivery === 'steer') delivery = 'auto';
     if (pending.current) {
-      // The composer is already empty and a send is in flight: keep this message as the draft instead of losing it.
-      replaceInput(editor.value ? `${input}\n${editor.value}` : input);
+      // A send is in flight: keep this message as the draft instead of losing it. The composer's own
+      // submit clears it only after this call, so editor.value can still be this same message.
+      replaceInput(editor.value && editor.value !== input ? `${input}\n${editor.value}` : input);
       setImages(submittedImages);
       return setNotice('Still sending the previous message. Press Enter again to send this one.');
     }
@@ -337,8 +342,18 @@ export function TuiSession({
         handoffFlow.start();
       } else if (/^\/providers(?:\s|$)/.test(command)) {
         if (!menuStack.openFrame('providers')) throw new Error('Provider management is unavailable.');
+      } else if (command.trim() === '/compact') {
+        // directSlashCommand announces 'Compacting context...' before the summary request starts. The
+        // request can run as long as a model turn, so it does not hold the composer: a message sent
+        // meanwhile is queued behind the compaction (#221). Its outcome arrives as a later notice.
+        compacting.current = true;
+        void directSlashCommand(connection, command, setNotice)
+          .then(
+            (notice) => notice !== null && setNotice(notice),
+            (error: unknown) => setNotice(error instanceof Error ? error.message : String(error)),
+          )
+          .finally(() => (compacting.current = false));
       } else if (typed.kind === 'command') {
-        // directSlashCommand announces /compact ('Compacting context...') before the summary request starts.
         const directNotice = await directSlashCommand(connection, command, setNotice);
         if (directNotice !== null) setNotice(directNotice);
         else {

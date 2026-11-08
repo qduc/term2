@@ -8,10 +8,10 @@ not describe current activation. Both consumers pin wire 0.2.2, whose task valid
 `task_question_opened`, `task_question_closed`, and strict `pendingQuestion`
 snapshots. The v2 gate stays closed pending combined native/BFF/browser
 background-question acceptance and independent activation approval.
-Native async `ask_orchestrator` can produce these facts. Extend both the shared
-change enum and task schema in the package owner's source, rebuild the artifact,
-and update both pins before repeating combined acceptance. Do not discard or
-relabel the facts to make the parser pass. The current contract and operator
+Native async `ask_orchestrator` can produce these facts. Repeat the combined
+native/BFF/browser background-question journey and obtain independent approval
+before opening `AGENT_WIRE_V2_RUNTIME_AVAILABLE`. Do not discard or relabel
+accepted facts to make the parser pass. The current contract and operator
 setup are [Contract 14](../../contracts/14-agent-wire-v2-server.md) and the
 [gateway setup](../../../website/src/content/docs/remote/web-gateway.md).
 

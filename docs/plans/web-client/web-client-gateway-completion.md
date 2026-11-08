@@ -2,18 +2,21 @@
 
 ## Resume here
 
-**Native follow-up (#80, 2026-11-07):** current application/host code is under
-`src/`, and the browser/BFF is `web-client/`. The historical milestones below do
-not describe current activation. Both consumers pin wire 0.2.2, whose task validator accepts native
-`task_question_opened`, `task_question_closed`, and strict `pendingQuestion`
-snapshots. The v2 gate stays closed pending combined native/BFF/browser
-background-question acceptance and independent activation approval.
-Native async `ask_orchestrator` can produce these facts. Repeat the combined
-native/BFF/browser background-question journey and obtain independent approval
-before opening `AGENT_WIRE_V2_RUNTIME_AVAILABLE`. Do not discard or relabel
-accepted facts to make the parser pass. The current contract and operator
-setup are [Contract 14](../../contracts/14-agent-wire-v2-server.md) and the
-[gateway setup](../../../website/src/content/docs/remote/web-gateway.md).
+**Native activation (#80):** current application/host code is under `src/`,
+and the browser/BFF is `web-client/`. Both consumers pin wire 0.2.3 and v2 is
+enabled after combined native/BFF/browser acceptance and independent review.
+The real background-question journey includes open, pending hydration/reconnect,
+correlated answer, close, child completion and settled hydration. Descriptors
+retain native tool tracking and activity observations as well as pendingQuestion.
+The current contract and operator setup are [Contract 14](../../contracts/14-agent-wire-v2-server.md)
+and the [gateway setup](../../../website/src/content/docs/remote/web-gateway.md).
+
+A minimal question fixture missed real child-tool tracking: native lifecycle
+projection carries `lastTool`, `lastToolName`, `toolCounts` and live
+`lastObservation` from the previous task descriptor. Wire 0.2.2 rejected these
+fields despite accepting the new question names. Wire 0.2.3 validates all four;
+the browser also accepts question transitions and question-kind notices. Keep
+actual child execution in acceptance; do not discard fields or relabel facts.
 
 Two browser/BFF integration traps found during this work: an idle v2 stream has
 no snapshot body to flush through a proxy, so send an immediate cursorless SSE

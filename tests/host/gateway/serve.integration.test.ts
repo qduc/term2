@@ -414,6 +414,15 @@ describe('term2 serve (child process)', () => {
     await rpc('GET', '/private/agent/v1/workspaces', undefined, 'workspace_list');
     await rpc('POST', '/', { workspaceId }, 'session_create', { workspaceId });
     const read = await rpc('POST', `/private/agent/v1/sessions/${sessionId}`, {}, 'session_read', { sessionId });
+    const v2Read = await rpc(
+      'POST',
+      `/private/agent/v1/sessions/${sessionId}?format=agent-wire-v2`,
+      {},
+      'session_read',
+      { sessionId },
+    );
+    expect(v2Read).toMatchObject({ schemaVersion: 2, kind: 'snapshot', sessionId });
+    expect(v2Read.snapshot.sessionId).toBe(sessionId);
     expect(read.session.id).toBe(sessionId);
     expect(
       (

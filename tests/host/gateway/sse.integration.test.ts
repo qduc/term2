@@ -232,8 +232,18 @@ it('disconnects a backpressured live reader and releases the native attachment',
 it('carries native orchestrator question lifecycle through HTTP SSE and the pinned browser parser', async () => {
   const { DirectTaskQuestions } = await import('../../../src/session/task-questions.js');
   const { taskFactEvent } = await import('../../../src/protocol/tasks.js');
+  const { directQuestionNotice } = await import('../../../src/session/notifications.js');
   const taskId = 'child' as DirectTaskId;
-  const task = { id: taskId, turnId: 'parent', status: 'running' as const, mode: 'background' as const };
+  const task = {
+    id: taskId,
+    turnId: 'parent',
+    status: 'running' as const,
+    mode: 'background' as const,
+    lastObservation: { kind: 'question_asked', at: 2 },
+    lastToolName: 'ask_orchestrator',
+    lastTool: { label: 'ask_orchestrator question', state: 'running' },
+    toolCounts: [{ toolName: 'ask_orchestrator', count: 1 }],
+  };
   const state = { sessionId: 'session-1', tasks: [task], pendingInteractions: [] };
   const events: WireEvent[] = [];
   const questions = new DirectTaskQuestions(
@@ -251,6 +261,18 @@ it('carries native orchestrator question lifecycle through HTTP SSE and the pinn
   const pending = questions.pending(taskId)!;
   expect(questions.answer(taskId, 'worker', 'Use the simple approach.', pending.messageId).ok).toBe(true);
   await expect(answer).resolves.toBe('Use the simple approach.');
+  const notice = directQuestionNotice(
+    { taskId, role: 'explorer', name: 'worker' } as Parameters<typeof directQuestionNotice>[0],
+    pending,
+  );
+  events.push({
+    sessionId: 'session-1',
+    seq: 3,
+    occurredAt: new Date(2).toISOString(),
+    turnId: null,
+    type: 'background_notice_enqueued',
+    payload: { notice },
+  });
   let closed = false;
   const connection = {
     sessionId: 'session-1',
@@ -287,15 +309,29 @@ it('carries native orchestrator question lifecycle through HTTP SSE and the pinn
         const data = frame.split('\n').find((line) => line.startsWith('data: '))!;
         return parseEventEnvelope(JSON.parse(data.slice(6)), 'session-1');
       });
-    expect(received.map((event) => event.changes[0].payload.change)).toEqual([
+    expect(received.slice(0, 2).map((event) => event.changes[0].payload.change)).toEqual([
       'task_question_opened',
       'task_question_closed',
     ]);
+    expect(received[2].changes[0].type).toBe('background_notice_enqueued');
     expect(received[0].changes[0].payload.task.pendingQuestion).toEqual(pending);
     expect(received[0].changes[0].payload.task.status).toBe('awaiting_interaction');
     expect(received[1].changes[0].payload.task).not.toHaveProperty('pendingQuestion');
     expect(received[1].changes[0].payload.task.status).toBe('running');
-    expect(received.map((event) => event.seq)).toEqual([1, 2]);
+    expect(received.map((event) => event.seq)).toEqual([1, 2, 3]);
+    const opened = applyTerm2Event(emptyTerm2SessionView('session-1'), received[0]);
+    expect(opened.nativeState?.tasks).toMatchObject([
+      { ...task, status: 'awaiting_interaction', pendingQuestion: pending },
+    ]);
+    const settled = applyTerm2Event(opened, received[1]);
+    expect(settled.nativeState?.tasks).toHaveLength(1);
+    expect(settled.nativeState?.tasks?.[0]).not.toHaveProperty('pendingQuestion');
+    expect(settled.nativeState?.tasks?.[0].status).toBe('running');
+    expect(settled.nativeState?.tasks?.[0]).toMatchObject(task);
+    expect(settled.lastAppliedSequence).toBe(2);
+    const notified = applyTerm2Event(settled, received[2]);
+    expect(notified.nativeState?.notifications?.notices).toEqual([notice]);
+    expect(notified.lastAppliedSequence).toBe(3);
     expect(closed).toBe(true);
   } finally {
     request?.destroy();

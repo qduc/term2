@@ -1,19 +1,17 @@
-# Contract 14 — agent-wire v2 server transport (gated)
+# Contract 14 — agent-wire v2 server transport
 
-**Status:** the root and browser/BFF pin the vendored `@qduc/agent-wire` 0.2.1
-artifact. `AGENT_WIRE_V2_RUNTIME_AVAILABLE` remains **false**. Explicit v2
-hydration, events and configuration mutations return `503
-agent_wire_v2_unavailable`; source and candidate acceptance checks do not advertise
-production support.
+**Status:** the root and browser/BFF pin the source-built vendored
+`@qduc/agent-wire` 0.2.3 artifact. `AGENT_WIRE_V2_RUNTIME_AVAILABLE` is **true**.
+Explicit v2 hydration, events and configuration mutations use the native
+Session contract below. Matching native/BFF/browser acceptance and independent
+activation review include background `ask_orchestrator` open/answer/close,
+pending and settled hydration, and accepted-cursor reconnect.
 
-The remaining shared-package blocker is concrete: native background
-`ask_orchestrator` accepts `task_question_opened` and `task_question_closed`.
-`taskFactEvent` projects each as `task_changed`; the opened descriptor also
-retains `{pendingQuestion:{messageId,question}}`. The installed shared parser
-rejects both change names and the descriptor field. Both schema extensions must
-be built in the independently owned wire package before activation. Dropping the
-facts, relabeling them as another task transition, or editing the vendored tarball
-is not a compatibility fix. See [wire package ownership](../../vendor/README.md).
+Task descriptors preserve `pendingQuestion`, native tool tracking and the last
+activity observation. These fields are validated by the shared package, not
+removed or relabeled to fit a parser. Wire 0.2.2 accepted question names but
+rejected the tracking carried by real child tool execution; 0.2.3 fixes that
+boundary. See [wire package ownership](../../vendor/README.md).
 
 ## Access and compatibility
 
@@ -119,7 +117,7 @@ V2 SSE, hydration and configuration use `?format=agent-wire-v2`. An optional
 SSE/configuration reject unknown or conflicting formats. `format=direct` remains
 the explicit native snapshot/live transport; it is not a browser fallback.
 Unqualified events are refused, rather than automatically upgraded to v2.
-While the gate is false, v2 requests return the unavailable response above.
+Older gated server builds refuse explicit v2 requests with `503 agent_wire_v2_unavailable`; use matching server and browser builds.
 
 ## Atomic events and reconnect
 

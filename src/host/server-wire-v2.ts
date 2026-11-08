@@ -1,6 +1,5 @@
 /** Server-owned agent-wire v2 envelope adaptation. This source imports the exact
- * shared v2 exports from the pinned 0.2.1 artifact, which provides them and is what compiles here.
- * Runtime activation is still gated off by AGENT_WIRE_V2_RUNTIME_AVAILABLE below.
+ * shared v2 exports from the pinned 0.2.3 artifact.
  * One accepted envelope is one real FactLine boundary and one SSE cursor.
  */
 import type {
@@ -30,10 +29,9 @@ import type { ServerInteractions } from './server-interactions.js';
 import { canonicalCandidate, canonicalCommandMessageCandidates, type CanonicalEventContext } from './server-events.js';
 import { ServerHttpError } from './server-errors.js';
 
-/** The pinned 0.2.1 parser rejects native task-question transitions and pendingQuestion.
- * Keep activation closed until the shared artifact is corrected and combined browser/BFF
- * evidence is independently accepted; see Contract 14. */
-export const AGENT_WIRE_V2_RUNTIME_AVAILABLE: boolean = false;
+/** Native/BFF/browser acceptance includes background questions and their tool tracking;
+ * the matching shared artifact and activation were independently reviewed. See Contract 14. */
+export const AGENT_WIRE_V2_RUNTIME_AVAILABLE: boolean = true;
 
 /** Public aliases to the exact shared v2 exports. No local vocabulary copy. */
 export type AgentWireV2ChangeType = AgentChangeTypeV2;

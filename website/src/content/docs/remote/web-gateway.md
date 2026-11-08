@@ -9,7 +9,7 @@ description: Running the private gateway for external clients and programmatic c
 
 The repository's `web-client/` directory is a separate private Next.js application, not part of the `@qduc/term2` npm package or this documentation site. Updating the npm CLI updates the gateway backend; update and rebuild the web client separately for frontend changes such as Markdown/code rendering, grouped tool calls, and the refreshed composer/sidebar.
 
-**Native browser activation remains gated.** The matching root and web builds pin `@qduc/agent-wire` 0.2.1, but its parser cannot consume native background-task question changes yet. Explicit v2 hydration/events/mutations return `503 agent_wire_v2_unavailable` in the shipped build. The setup below describes the matching topology; it is not an instruction to bypass the gate or a claim that the old published CLI is a compatible v1.0 server.
+**Native browser v2 is enabled in matching source builds.** The root and web builds pin `@qduc/agent-wire` 0.2.3, including native background-task questions, tool tracking and activity observations. Use a server built from this revision with the separately built web client. Older gated builds return `503 agent_wire_v2_unavailable`; installing an older published CLI does not provide this support.
 
 The browser hydrates one real accepted cut, then reconnects from its last fully applied accepted sequence. Accepted batches can have sparse sequences; live observations have no cursor. Reload never invents missing history or restarts a turn automatically. Tool effects are not undone by display replay.
 

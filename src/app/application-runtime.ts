@@ -51,6 +51,8 @@ export type DirectRuntimeOptions = {
    * preference must not reach these sessions.
    */
   readonly approvalAlwaysAsks?: boolean;
+  /** Require local shell isolation even when saved user settings disable it. */
+  readonly requireSandbox?: boolean;
   /** Stamped on every session this application creates, and required of every one it opens. */
   readonly sessionBinding?: DirectBinding;
   /** Bound to one session, never to whichever session a client shows now. Its workspace comes from authority. */
@@ -120,7 +122,7 @@ function keepLoadTimeMigrations(settings: SettingsService, launch: Pick<Settings
  * session's saved selection must not change another session's.
  */
 function sessionSettings(
-  { selection, profileExplicit, approvalAlwaysAsks }: DirectRuntimeOptions,
+  { selection, profileExplicit, approvalAlwaysAsks, requireSandbox }: DirectRuntimeOptions,
   { metadata, configuration, model }: DirectRuntimeContext,
 ): DirectSessionSettings {
   const continued = continuedSettings.getStore();
@@ -150,6 +152,7 @@ function sessionSettings(
   const temperature = configuration?.intent.temperature;
   if (temperature !== undefined) settings.set('agent.temperature', temperature, { persist: false });
   if (approvalAlwaysAsks) settings.set('shell.autoApproveMode', 'off', { persist: false });
+  if (requireSandbox) settings.set('sandbox.enabled', true, { persist: false });
   // From here on, what legacy's one service would save is saved through the app's settings owner.
   if (selection.settings instanceof SettingsService) settings.saveThrough(selection.settings);
   return settings;

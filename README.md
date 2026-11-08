@@ -89,6 +89,18 @@ See [approvals](https://qduc.github.io/term2/safety/approvals/) and [sandbox bou
 
 The interactive TUI and headless runs (including `--resume` and JSON output) are the supported core. SSH remote projects, the Discord bridge, ACP (`term2 acp`), the control socket (`term2 control`) and the web/server host (`term2 serve`) are experimental and may change between releases.
 
+For the experimental SDK 1.4.0 ACP v2 reference client:
+
+```sh
+term2 acp --provider <provider> --model <exact-model-id>
+```
+
+Connect the client to stdin/stdout; diagnostics go to stderr. ACP requires the
+shell sandbox and interactive approval for approval-required tools. See the
+[ACP reference](website/src/content/docs/reference/acp-v2.md) for session replay,
+client versions and acceptance limits.
+
+
 ## Develop from source
 
 Use Node 24 and pnpm 11:

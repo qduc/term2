@@ -284,6 +284,10 @@
     "src/delegation/run-code/run-code-runtime.ts": {
       "lines": 1169,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
+    },
+    "src/session/background.ts": {
+      "lines": 501,
+      "reason": "Session task lifecycle remains one coordinator; ACP answer provenance adds four signature lines to the existing answer forwarding method (497 to 501). Interaction validation and persistence already live in background-interactions.ts. Splitting this forwarding check into another file would add a boundary without moving an independent responsibility. Remove this ceiling when lifecycle work yields a substantive extraction."
     }
   },
   "messagePath": {

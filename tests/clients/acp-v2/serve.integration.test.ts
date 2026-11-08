@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Readable, Writable } from 'node:stream';
-import { afterAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 import * as acp from '@agentclientprotocol/sdk/experimental/v2';
 import { resolveSettingsDirectory } from '../../../src/config/settings/settings-path.js';
 import { createTestChildEnv } from '../../helpers/terminal-e2e.js';
@@ -38,12 +38,10 @@ const textTurnBody = [
 ].join('\n');
 
 /**
- * One OpenAI-compatible tool-call turn: a `shell` call with
- * `sandbox: 'unsandboxed'`, which `src/tools/system/shell.ts` makes
- * approval-required, so the child must ask its ACP client for permission.
+ * One real shell call; ACP must ask even when saved settings auto-approve.
  */
-function approvalToolTurnBody(command: string): string {
-  const arguments_ = JSON.stringify({ command, sandbox: 'unsandboxed' });
+function approvalToolTurnBody(command: string, toolName = 'shell', toolInput?: object): string {
+  const arguments_ = JSON.stringify(toolInput ?? { command, sandbox: 'unsandboxed' });
   return [
     `data: ${JSON.stringify({
       id: 'chatcmpl-acp-tool',
@@ -51,7 +49,7 @@ function approvalToolTurnBody(command: string): string {
         {
           delta: {
             tool_calls: [
-              { index: 0, id: 'call_1', type: 'function', function: { name: 'shell', arguments: arguments_ } },
+              { index: 0, id: 'call_1', type: 'function', function: { name: toolName, arguments: arguments_ } },
             ],
           },
         },
@@ -74,9 +72,9 @@ function approvalToolTurnBody(command: string): string {
  */
 async function startModelMock(
   modelIds: string[],
-  script?: { toolCommand: string },
+  script?: { toolCommand: string; toolName?: string; toolInput?: object },
 ): Promise<{ baseUrl: string; close: () => Promise<void> }> {
-  let toolCallIssued = false;
+  const toolTurns = new Set<number>();
   const server = http.createServer((req, res) => {
     if (req.method === 'GET' && req.url?.includes('/models')) {
       res.writeHead(200, { 'content-type': 'application/json' });
@@ -89,12 +87,14 @@ async function startModelMock(
     });
     req.on('end', () => {
       res.writeHead(200, { 'content-type': 'text/event-stream' });
-      // Only the first turn asks for the tool call; the turn after the tool
-      // result (which still carries the prompt in its history) must answer with
-      // text, or the model would loop on the same call.
-      if (script && !toolCallIssued && body.includes('run the tool')) {
-        toolCallIssued = true;
-        res.end(approvalToolTurnBody(script.toolCommand));
+      // Each admitted user prompt asks once; the continuation after its tool result
+      // answers with text. Repeated provider call IDs must not become execution IDs.
+      const users = (JSON.parse(body).messages ?? []).filter(
+        (message: { role: string }) => message.role === 'user',
+      ).length;
+      if (script && !toolTurns.has(users) && body.includes('run the tool')) {
+        toolTurns.add(users);
+        res.end(approvalToolTurnBody(script.toolCommand, script.toolName, script.toolInput));
         return;
       }
       res.end(textTurnBody);
@@ -117,17 +117,6 @@ afterAll(async () => {
   }
 });
 
-const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-
-const waitFor = async (condition: () => boolean, timeoutMs: number): Promise<boolean> => {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (condition()) return true;
-    await sleep(50);
-  }
-  return condition();
-};
-
 type ChildSession = {
   context: acp.ClientContext;
   sessionId: string;
@@ -146,6 +135,7 @@ type ChildSession = {
 const runAcpChild = async (
   permission: ((params: acp.RequestPermissionRequest) => Promise<acp.RequestPermissionResponse>) | undefined,
   body: (session: ChildSession) => Promise<void>,
+  options: { command?: string; sandbox?: boolean } = {},
 ): Promise<{
   stdoutText: string;
   stderr: string;
@@ -157,9 +147,10 @@ const runAcpChild = async (
   const workspace = path.join(tempHome, 'workspace');
   fs.mkdirSync(workspace, { recursive: true });
   const workspaceFile = path.join(workspace, 'probe.txt');
+  fs.mkdirSync(path.join(tempHome, 'scratch'));
   disposables.push(() => rmSync(tempHome, { recursive: true, force: true }));
 
-  const mock = await startModelMock(['acp-mock-model'], { toolCommand: 'echo written > probe.txt' });
+  const mock = await startModelMock(['acp-mock-model'], { toolCommand: options.command ?? 'echo written > probe.txt' });
   disposables.push(mock.close);
 
   const settingsDir = resolveSettingsDirectory({ homeDir: tempHome, env: { XDG_STATE_HOME: stateHome } });
@@ -169,7 +160,8 @@ const runAcpChild = async (
     JSON.stringify(
       {
         agent: { modelSelection: { provider: 'acpmock', model: 'acp-mock-model' }, retryAttempts: 0 },
-        sandbox: { enabled: false },
+        sandbox: { enabled: options.sandbox ?? false },
+        shell: { autoApproveMode: 'always' },
         providers: [{ name: 'acpmock', type: 'openai-compatible', baseUrl: mock.baseUrl, apiKey: 'test-key' }],
       },
       null,
@@ -189,6 +181,9 @@ const runAcpChild = async (
         TERM2_CONVERSATIONS_DIR: conversationsDir,
         TERM2_TEST_DB_DIR: conversationsDir,
         DISABLE_LOGGING: '1',
+        TMPDIR: path.join(tempHome, 'scratch'),
+        TEMP: path.join(tempHome, 'scratch'),
+        TMP: path.join(tempHome, 'scratch'),
       }),
       stdio: ['pipe', 'pipe', 'pipe'],
     },
@@ -233,21 +228,20 @@ const runAcpChild = async (
     });
   }
 
+  const connection = client.connect(
+    acp.ndJsonStream(new WritableStream<Uint8Array>({ write: (chunk) => stdinWriter.write(chunk) }), agentToClient),
+  );
   try {
-    await client.connectWith(
-      acp.ndJsonStream(new WritableStream<Uint8Array>({ write: (chunk) => stdinWriter.write(chunk) }), agentToClient),
-      async (context) => {
-        await context.request(acp.methods.agent.initialize, {
-          protocolVersion: acp.PROTOCOL_VERSION,
-          info: { name: 'acp-perm-e2e-client', version: '1.0.0' },
-        });
-        const created = await context.request(acp.methods.agent.session.new, { cwd: workspace });
-        await body({ context, sessionId: created.sessionId, workspace, workspaceFile, updates, permissionRequests });
-      },
-    );
+    const context = connection.agent;
+    const initialized = await context.request(acp.methods.agent.initialize, {
+      protocolVersion: acp.PROTOCOL_VERSION,
+      info: { name: 'acp-perm-e2e-client', version: '1.0.0' },
+    });
+    expect(initialized.info?.version).toBe(packageVersion);
+    const created = await context.request(acp.methods.agent.session.new, { cwd: workspace });
+    await body({ context, sessionId: created.sessionId, workspace, workspaceFile, updates, permissionRequests });
   } finally {
-    // Closing stdin is the client's disconnect: the launcher cancels and closes
-    // the session, then exits.
+    // Keep reading the protocol while EOF disposes the process-owned Host.
     await stdinWriter.close().catch(() => undefined);
   }
 
@@ -260,37 +254,146 @@ const runAcpChild = async (
   ]).finally(() => {
     if (timeout) clearTimeout(timeout);
   });
+  connection.close();
   return { stdoutText, stderr, exit };
 };
 
-describe('term2 acp permission round trips (child process)', () => {
-  // DEFECT: the child never sends `session/request_permission`. Its sessions are
-  // built by `createProductionRuntimeFactory`, and `session-backend.ts` reads the
-  // pending interaction from `turn.session.resources.runtime`, which that path
-  // never sets -- so every approval-required call falls through to the M1
-  // fail-closed default and the client's allow can never be honored.
-  it('asks the client for permission and writes the file when allowed', async () => {
-    await runAcpChild(
-      async () => ({ outcome: { outcome: 'selected', optionId: 'allow-once' } }),
+function assertTransport(result: Awaited<ReturnType<typeof runAcpChild>>): void {
+  expect(result.exit, result.stderr).toEqual({ code: 0, signal: null });
+  for (const line of result.stdoutText.trim().split('\n')) expect(JSON.parse(line)).toMatchObject({ jsonrpc: '2.0' });
+  expect(result.stderr).not.toContain('detach failed');
+}
+
+async function toolTurn(session: ChildSession): Promise<void> {
+  const from = session.updates.length;
+  expect(
+    await session.context.request(acp.methods.agent.session.prompt, {
+      sessionId: session.sessionId,
+      prompt: [{ type: 'text', text: 'run the tool' }],
+    }),
+  ).toEqual({});
+  await expect
+    .poll(
+      () =>
+        session.updates
+          .slice(from)
+          .some(({ update }) => update.sessionUpdate === 'state_update' && update.state === 'idle'),
+      { timeout: 15_000 },
+    )
+    .toBe(true);
+  expect(session.updates.slice(from).some(({ update }) => update.sessionUpdate === 'tool_call')).toBe(true);
+  expect(
+    session.updates
+      .slice(from)
+      .some(
+        ({ update }) =>
+          (update.sessionUpdate === 'tool_call' || update.sessionUpdate === 'tool_call_update') &&
+          (update.status === 'completed' || update.status === 'failed'),
+      ),
+  ).toBe(true);
+}
+
+describe('term2 acp real-tool permission round trips', () => {
+  it.each(['reject', 'unknown', 'unsandboxed-once', 'allow-remember', 'cancelled', 'malformed', 'unsupported'])(
+    'fails closed for %s without executing the shell',
+    async (reply) => {
+      const result = await runAcpChild(
+        reply === 'unsupported'
+          ? undefined
+          : async () => {
+              if (reply === 'malformed') return {} as acp.RequestPermissionResponse;
+              if (reply === 'cancelled') return { outcome: { outcome: 'cancelled' } };
+              return { outcome: { outcome: 'selected', optionId: reply } };
+            },
+        async (session) => {
+          await toolTurn(session);
+          if (reply !== 'unsupported') {
+            expect(session.permissionRequests).toHaveLength(1);
+            const request = session.permissionRequests[0]!;
+            expect(request.sessionId).toBe(session.sessionId);
+            expect(request.subject).toMatchObject({ type: 'tool_call', toolCall: { name: 'shell' } });
+            expect(request.options.map((option) => option.optionId)).toEqual(['approve', 'reject']);
+          }
+          expect(fs.existsSync(session.workspaceFile)).toBe(false);
+        },
+      );
+      assertTransport(result);
+    },
+    60_000,
+  );
+
+  it.each(['approve', 'allow-once'])(
+    'honors %s without granting an unsandboxed escape',
+    async (optionId) => {
+      const result = await runAcpChild(
+        async () => ({ outcome: { outcome: 'selected', optionId } }),
+        async (session) => {
+          await toolTurn(session);
+          expect(session.permissionRequests).toHaveLength(1);
+          const output = session.updates.filter(
+            ({ update }) => update.sessionUpdate === 'tool_call_update' || update.sessionUpdate === 'tool_call',
+          );
+          if (process.env.TERM2_ACP_REQUIRE_SHELL_SUCCESS === '1') {
+            expect(fs.existsSync(session.workspaceFile), JSON.stringify(session.updates)).toBe(true);
+          }
+          if (fs.existsSync(session.workspaceFile)) {
+            expect(fs.readFileSync(session.workspaceFile, 'utf8').trim()).toBe('written');
+          } else {
+            // Hosts without working sandbox support must refuse, even after approval.
+            expect(JSON.stringify(output)).toMatch(/sandbox|bwrap/i);
+          }
+        },
+      );
+      assertTransport(result);
+    },
+    60_000,
+  );
+
+  it('asks again after allow-once and resume, with distinct native execution IDs', async () => {
+    let decisions = 0;
+    const result = await runAcpChild(
+      async () => ({
+        outcome: {
+          outcome: 'selected',
+          optionId: decisions++ === 0 ? 'approve' : 'reject',
+        },
+      }),
       async (session) => {
-        await session.context.request(acp.methods.agent.session.prompt, {
+        await toolTurn(session);
+        await session.context.request(acp.methods.agent.session.close, { sessionId: session.sessionId });
+        await session.context.request(acp.methods.agent.session.resume, {
           sessionId: session.sessionId,
-          prompt: [{ type: 'text', text: 'run the tool' }],
+          cwd: session.workspace,
+          replayFrom: { type: 'start' },
         });
-
-        const arrived = await waitFor(() => session.permissionRequests.length > 0, 5_000);
-        // Observed while this test was written: instead of a permission request the
-        // client sees state_update running -> tool_call pending -> two
-        // `tool_call_update` failed updates carrying the fallback reason
-        // 'Approval is not yet supported over ACP.', and no terminal state_update.
-        expect(arrived, 'DEFECT: term2 acp never sent session/request_permission to its client').toBe(true);
-        expect(session.permissionRequests[0]!.options.map((option) => option.optionId)).not.toContain(
-          'unsandboxed-once',
-        );
-
-        const written = await waitFor(() => fs.existsSync(session.workspaceFile), 5_000);
-        expect(written, 'an allowed shell call must run').toBe(true);
+        await toolTurn(session);
+        expect(session.permissionRequests).toHaveLength(2);
+        const ids = session.permissionRequests.map((request) => {
+          expect(request.subject?.type).toBe('tool_call');
+          return (request.subject as acp.RequestPermissionRequest['subject'] & { toolCall: { toolCallId: string } })
+            .toolCall.toolCallId;
+        });
+        expect(new Set(ids).size).toBe(2);
+        if (process.env.TERM2_ACP_REQUIRE_SHELL_SUCCESS === '1') {
+          expect(fs.readFileSync(session.workspaceFile, 'utf8')).toBe('written\n');
+        }
       },
+      { command: 'echo written >> probe.txt' },
     );
-  }, 180_000);
+    assertTransport(result);
+  }, 60_000);
+
+  it('does not let saved sandbox=false or auto-approval run outside the required sandbox', async () => {
+    const result = await runAcpChild(
+      async () => ({ outcome: { outcome: 'selected', optionId: 'approve' } }),
+      async (session) => {
+        await toolTurn(session);
+        expect(session.permissionRequests).toHaveLength(1);
+        // The target is outside both the workspace and isolated child scratch.
+        expect(fs.existsSync(path.join(path.dirname(session.workspace), 'escaped.txt'))).toBe(false);
+      },
+      { command: 'echo escaped > ../escaped.txt', sandbox: false },
+    );
+    assertTransport(result);
+  }, 60_000);
 });

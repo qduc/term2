@@ -150,3 +150,11 @@ next human can still receive timing context after rollover or successor resume.
 The brief neither advances the clock nor generates a notice itself. This does
 not repair already-created legacy successors with no baseline. The record
 describes wall-clock observations; it does not measure model experience or promise a spoken reminder.
+
+Task-owned tool interaction answers also retain `AnswerProvenance` through
+`Conversation.answer`, `DirectBackgroundTasks.answer` and
+`DirectBackgroundInteractions.answer`. The accepted `task_interaction_closed`
+fact carries optional `resolutionSource` and `automaticApproval`, and the Host
+projects them as `interaction_resolved.provenance`. Old facts without those fields
+remain readable; absence does not imply a human answer. The decision is persisted
+before releasing the exact task waiter, as for root interactions.

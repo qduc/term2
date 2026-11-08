@@ -406,6 +406,9 @@ export const nativeSchemas: Record<string, FactSchema> = {
     validateFact({ type: 'interaction_opened', turnId: request['turnId'], request }, where);
   },
   task_interaction_closed: (fact, check) => {
+    if ('resolutionSource' in fact && !['user', 'policy', 'system'].includes(fact['resolutionSource'] as string))
+      check.fail('resolutionSource');
+    if ('automaticApproval' in fact && typeof fact['automaticApproval'] !== 'boolean') check.fail('automaticApproval');
     check.text(fact['taskId'], 'taskId');
     check.text(fact['requestId'], 'requestId');
     const value = check.object(fact['resolution'], 'resolution');

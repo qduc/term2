@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { InteractionDecision, InteractionRequestId } from '../tools/index.js';
-import type { AnswerResult } from './types.js';
+import type { AnswerProvenance, AnswerResult } from './types.js';
 import type {
   DirectBackgroundFact,
   DirectTaskId,
@@ -76,7 +76,11 @@ export class DirectBackgroundInteractions {
   }
 
   /** Persist the supported decision before resuming; stale IDs never select a sibling. */
-  answer(requestId: InteractionRequestId, decision: InteractionDecision): AnswerResult {
+  answer(
+    requestId: InteractionRequestId,
+    decision: InteractionDecision,
+    provenance: AnswerProvenance = { source: 'system' },
+  ): AnswerResult {
     const entry = this.#pending.get(requestId);
     if (!entry) return { kind: 'stale' };
     if (!validDecision(entry.request, decision)) {
@@ -96,6 +100,8 @@ export class DirectBackgroundInteractions {
         taskId: entry.request.taskId,
         requestId,
         resolution: { kind: 'decision', decision: acceptedDecision },
+        resolutionSource: provenance.source,
+        ...(provenance.automaticApproval !== undefined ? { automaticApproval: provenance.automaticApproval } : {}),
       });
     } catch (error) {
       // The owner poisons the writer; never release the decision on append failure.

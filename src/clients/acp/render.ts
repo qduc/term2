@@ -8,6 +8,17 @@ import type {
   WireToolResult,
 } from '../../protocol/wire.js';
 
+/** Display fields shared by root snapshots and accepted native branch snapshots. */
+type RenderSnapshot = Pick<
+  WireSnapshot,
+  'messages' | 'tools' | 'unmatchedToolResults' | 'timeline' | 'reasoningIdentity'
+> & {
+  readonly reasoning: string | null;
+  readonly activeTurnId?: string | null;
+  readonly turnId?: string;
+  readonly sessionId?: string;
+};
+
 /** Surface a missing direct contract as an explicit ACP error, not fake success. */
 export class MissingAcpWireContract extends acp.RequestError {
   constructor(detail: string) {
@@ -44,8 +55,12 @@ function toolOutput(output: string | undefined, content: readonly WireContent[] 
   return parts.map((part) => ({ type: 'content', content: contentBlock(part) }));
 }
 
-function thoughtId(snapshot: WireSnapshot): string {
-  return snapshot.reasoningIdentity?.messageId ?? `${snapshot.activeTurnId ?? snapshot.sessionId}:thought`;
+function thoughtId(snapshot: RenderSnapshot): string {
+  const identity = snapshot.reasoningIdentity?.messageId;
+  if (identity) return identity;
+  const turn = snapshot.activeTurnId ?? snapshot.turnId ?? snapshot.sessionId;
+  if (!turn) throw new MissingAcpWireContract('reasoning display identity');
+  return `${turn}:thought`;
 }
 
 type Entry =
@@ -55,7 +70,7 @@ type Entry =
 const messageKey = (id: string): string => `message:${id}`;
 const toolKey = (id: string): string => `tool:${id}`;
 
-function entries(snapshot: WireSnapshot): readonly Entry[] {
+function entries(snapshot: RenderSnapshot): readonly Entry[] {
   const messages = new Map(
     snapshot.messages.filter((message) => message.role !== 'tool').map((message) => [message.id, message]),
   );
@@ -107,7 +122,7 @@ export class AcpRenderer {
   private readonly hiddenThoughts = new Set<string>();
 
   /** Seed an atomic fresh attachment. Replay must use authoritative mixed ordering. */
-  snapshot(snapshot: WireSnapshot, replay: boolean): acp.SessionUpdate[] {
+  snapshot(snapshot: RenderSnapshot, replay: boolean): acp.SessionUpdate[] {
     const ordered = replay ? entries(snapshot) : [];
     this.seed(snapshot);
     this.hiddenThoughts.clear();
@@ -179,7 +194,7 @@ export class AcpRenderer {
     }
   }
 
-  private seed(snapshot: WireSnapshot): void {
+  private seed(snapshot: RenderSnapshot): void {
     this.drafts.clear();
     this.completed.clear();
     this.tools.clear();
@@ -219,7 +234,7 @@ export class AcpRenderer {
     }
   }
 
-  private refresh(snapshot: WireSnapshot): acp.SessionUpdate[] {
+  refresh(snapshot: RenderSnapshot): acp.SessionUpdate[] {
     const previous = new Map(this.known);
     const previousTools = new Set(this.tools);
     const all: Entry[] = [
@@ -256,7 +271,7 @@ export class AcpRenderer {
     return updates;
   }
 
-  private reasoning(snapshot: WireSnapshot): acp.SessionUpdate[] {
+  private reasoning(snapshot: RenderSnapshot): acp.SessionUpdate[] {
     return snapshot.reasoning && !this.hiddenThoughts.has(thoughtId(snapshot))
       ? [
           {

@@ -126,6 +126,9 @@ export type DirectBackgroundFact =
       readonly taskId: DirectTaskId;
       readonly requestId: InteractionRequestId;
       readonly resolution: DirectTaskInteractionResolution;
+      /** Optional in older logs; absence is not evidence of a human decision. */
+      readonly resolutionSource?: 'user' | 'policy' | 'system';
+      readonly automaticApproval?: boolean;
     };
 export type DirectBackgroundProgress = {
   readonly type: 'task_progress';

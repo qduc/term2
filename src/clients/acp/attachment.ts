@@ -1,6 +1,12 @@
 import * as acp from '@agentclientprotocol/sdk/experimental/v2';
 import type { DirectConnection } from '../../host/in-process-direct-types.js';
-import type { WireBudgetRequest, WireCommand, WireEvent, WireInteraction } from '../../protocol/wire.js';
+import type {
+  WireBranchSnapshot,
+  WireBudgetRequest,
+  WireCommand,
+  WireEvent,
+  WireInteraction,
+} from '../../protocol/wire.js';
 import { reduceWireEvent } from '../../protocol/reducer.js';
 import type { AcpLogger, EmitUpdate, PromptExecution, PromptOutcome } from './contract.js';
 import { errorMessage } from './contract.js';
@@ -14,6 +20,8 @@ type ActivePrompt = {
   messageId: string | null;
   readonly ready: Promise<void>;
   release(): void;
+  readonly admitted: Promise<void>;
+  finishAdmission(): void;
   readonly outcome: Promise<PromptOutcome>;
   resolve(outcome: PromptOutcome): void;
   reject(error: unknown): void;
@@ -23,6 +31,7 @@ type ActivePrompt = {
 
 function reservePrompt(): ActivePrompt {
   let release!: () => void;
+  let finishAdmission!: () => void;
   let resolve!: (outcome: PromptOutcome) => void;
   let reject!: (error: unknown) => void;
   const ready = new Promise<void>((done) => {
@@ -32,9 +41,12 @@ function reservePrompt(): ActivePrompt {
     resolve = done;
     reject = fail;
   });
+  const admitted = new Promise<void>((done) => {
+    finishAdmission = done;
+  });
   // Admission or a broken subscription can fail before the scheduled run starts.
   void outcome.catch(() => undefined);
-  return { turnId: null, messageId: null, ready, release, outcome, resolve, reject };
+  return { turnId: null, messageId: null, ready, release, admitted, finishAdmission, outcome, resolve, reject };
 }
 
 type RequestTask = {
@@ -74,6 +86,7 @@ export class AcpAttachment {
   /** Replay a current snapshot before consuming its strictly subsequent events. */
   async start(replay: boolean): Promise<void> {
     for (const update of this.renderer.snapshot(this.connection.snapshot, replay)) await this.emit(update);
+    await this.syncBranches(this.connection.snapshot.branches, replay);
     // Current activity is live synchronization, even when history is omitted.
     await this.emit({
       sessionUpdate: 'state_update',
@@ -117,6 +130,8 @@ export class AcpAttachment {
       prompt.reject(error);
       prompt.release();
       throw error;
+    } finally {
+      prompt.finishAdmission();
     }
     let ran = false;
     return {
@@ -139,7 +154,12 @@ export class AcpAttachment {
 
   /** Cancel foreground work explicitly; only its actual terminal settles the prompt. */
   async cancel(): Promise<void> {
-    const turnId = this.active?.turnId ?? this.foregroundTurnId;
+    // Capture ownership before awaiting admission. A cancel received while
+    // submit is in flight must target that prompt, never a replacement turn.
+    const prompt = this.active;
+    const foregroundTurnId = this.foregroundTurnId;
+    await prompt?.admitted;
+    const turnId = prompt ? prompt.turnId : foregroundTurnId;
     if (!turnId) return;
     for (const task of this.requests.values()) {
       if (task.turnId === turnId) task.controller.abort();
@@ -248,6 +268,7 @@ export class AcpAttachment {
       for (const interaction of snapshot.pendingInteractions) this.openPermission(interaction);
       for (const request of snapshot.pendingBudgets ?? []) this.openBudget(request);
     }
+    if (!nested && event.type === 'snapshot') await this.syncBranches(event.payload.snapshot.branches);
     for (const update of renderer.event(event)) await (this.active?.emit ?? this.emit.bind(this))(update);
     if (event.type === 'interaction_opened') {
       this.openPermission(event.payload.interaction);
@@ -274,6 +295,20 @@ export class AcpAttachment {
         if (!this.active)
           await this.emit({ sessionUpdate: 'state_update', state: 'idle', ...terminalOutcome(event.payload) });
       }
+    }
+  }
+
+  /** Each accepted branch retains its own display aliases and mixed transcript order. */
+  private async syncBranches(branches: readonly WireBranchSnapshot[] | undefined, replay = true): Promise<void> {
+    for (const snapshot of branches ?? []) {
+      let renderer = this.branchRenderers.get(snapshot.branchId);
+      const fresh = !renderer;
+      if (!renderer) {
+        renderer = new AcpRenderer();
+        this.branchRenderers.set(snapshot.branchId, renderer);
+      }
+      const updates = fresh ? renderer.snapshot(snapshot, replay) : renderer.refresh(snapshot);
+      for (const update of updates) await (this.active?.emit ?? this.emit.bind(this))(update);
     }
   }
 

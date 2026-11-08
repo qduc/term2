@@ -1,13 +1,14 @@
 import * as acp from '@agentclientprotocol/sdk';
 import { randomUUID } from 'node:crypto';
 import type { DirectConnection } from '../../host/in-process-direct-types.js';
-import type { WireModel, WireNativeCommandOutcome } from '../../protocol/wire.js';
+import type { WireConfigureRequest, WireModel, WireNativeCommandOutcome } from '../../protocol/wire.js';
+import { VALID_REASONING_EFFORTS } from '../../model/models/reasoning-effort.js';
 import type { BackendOptions } from './contract.js';
 
 const modelId = (model: WireModel): string => `${model.provider}/${model.model}`;
 
 /**
- * Model selectors are session-local native configuration. Catalog entries grant
+ * Model and thinking selectors are session-local native configuration. Catalog entries grant
  * no authority: Host authorizes every read/write and Session validates configure.
  * Separate short-lived subscriptions observe exact command receipts without
  * competing with the display attachment's event consumer.
@@ -38,40 +39,58 @@ export class AcpModels {
     const catalog = (await this.options.models?.(refresh)) ?? [];
     const connection = await this.connect(sessionId);
     const current = connection.snapshot.model;
+    const reasoning = connection.snapshot.configuration.reasoning ?? 'default';
     this.close(connection);
+    const configuration = (await this.options.configuration?.(sessionId)) ?? { model: current, reasoning };
     const models = new Map(catalog.map((model) => [modelId(model), model]));
-    models.set(modelId(current), models.get(modelId(current)) ?? current);
+    models.set(modelId(configuration.model), models.get(modelId(configuration.model)) ?? configuration.model);
     return [
       {
         id: 'model',
         name: 'Model',
         category: 'model',
         type: 'select',
-        currentValue: modelId(current),
+        currentValue: modelId(configuration.model),
         options: [...models.values()].map((model) => ({
           value: modelId(model),
           name: `${model.name ?? model.model} (${model.provider})`,
+        })),
+      },
+      {
+        id: 'thinking_level',
+        name: 'Thinking level',
+        category: 'thought_level',
+        type: 'select',
+        description:
+          'Reasoning effort. Default uses the model/provider default; supported levels depend on the provider.',
+        currentValue: configuration.reasoning,
+        options: VALID_REASONING_EFFORTS.map((value) => ({
+          value,
+          name: value === 'xhigh' ? 'Extra high' : value[0].toUpperCase() + value.slice(1),
         })),
       },
     ];
   }
 
   async setConfigOption(request: acp.SetSessionConfigOptionRequest): Promise<acp.SessionConfigOption[]> {
-    if (request.configId !== 'model' || typeof request.value !== 'string')
-      throw acp.RequestError.invalidParams(undefined, 'Unknown model configuration option');
+    if (typeof request.value !== 'string')
+      throw acp.RequestError.invalidParams(undefined, 'Expected a configuration selection');
     const catalog = await this.configOptions(request.sessionId);
-    const selector = catalog[0];
+    const selector = catalog.find((option) => option.id === request.configId);
     if (
-      selector.type !== 'select' ||
+      selector?.type !== 'select' ||
       !selector.options.some((option) => 'value' in option && option.value === request.value)
     )
-      throw acp.RequestError.invalidParams(undefined, 'Model is not in the available catalog');
+      throw acp.RequestError.invalidParams(undefined, 'Unknown configuration option or value');
     const separator = request.value.indexOf('/');
-    const model = { provider: request.value.slice(0, separator), model: request.value.slice(separator + 1) };
+    const configuration: WireConfigureRequest =
+      request.configId === 'model'
+        ? { model: { provider: request.value.slice(0, separator), model: request.value.slice(separator + 1) } }
+        : { reasoning: request.value as NonNullable<WireConfigureRequest['reasoning']> };
     const connection = await this.connect(request.sessionId);
     const commandId = randomUUID();
     try {
-      const result = await connection.send({ type: 'configure', commandId, configuration: { model } });
+      const result = await connection.send({ type: 'configure', commandId, configuration });
       if (!result.ok) throw new acp.RequestError(-32000, result.message);
       let outcome: WireNativeCommandOutcome | undefined;
       if (result.kind === 'command_finished') outcome = result.receipt.outcome;
@@ -86,10 +105,20 @@ export class AcpModels {
       if (outcome?.kind !== 'configured')
         throw new acp.RequestError(
           -32000,
-          outcome?.kind === 'rejected' ? outcome.message : 'Model change was not confirmed',
+          outcome?.kind === 'rejected' ? outcome.message : 'Configuration change was not confirmed',
         );
-      if (outcome.configuration.model.provider !== model.provider || outcome.configuration.model.model !== model.model)
+      if (
+        configuration.model &&
+        (outcome.configuration.model.provider !== configuration.model.provider ||
+          outcome.configuration.model.model !== configuration.model.model)
+      )
         throw new acp.RequestError(-32000, 'Session confirmed a different model');
+      if (
+        configuration.reasoning &&
+        configuration.reasoning !== 'default' &&
+        outcome.configuration.reasoning !== configuration.reasoning
+      )
+        throw new acp.RequestError(-32000, 'Session confirmed a different thinking level');
       return await this.configOptions(request.sessionId);
     } finally {
       this.close(connection);

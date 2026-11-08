@@ -19,7 +19,7 @@ transport IDs and schema validation remain SDK-owned. The existing v2 surface re
 `term2 acp` also accepts `initialize.protocolVersion: 1` without a CLI flag.
 `v1-agent.ts` advertises `agentInfo`, `authMethods: []`, image/embedded-context
 prompts, session load/list/resume/close. Provider credentials remain native Term2
-configuration. Setup responses include a `model` select config option;
+configuration. Setup responses include `model` and `thinking_level` select config options;
 `session/set_config_option` applies a per-session native configure command and
 waits for its exact completed receipt, including the accepted model identity.
 A v1 prompt stays pending until its real
@@ -50,6 +50,15 @@ replaced attachments are discarded; publication waits for pending selections
 and reads the latest accepted model before updating the client. Changes affect
 only the named session and survive native load/resume; global preferences stay
 unchanged. Discovery failure preserves the current model and cached options.
+
+Thinking level uses the standard `thought_level` category and native effort
+vocabulary: Default, None, Minimal, Low, Medium, High and Extra high. Provider
+support varies, as in Term2's native effort settings. The app supplies accepted
+session intent through `BackendOptions.configuration`, so Default remains
+selected even when the provider resolves it to a concrete effective effort.
+Explicit effort changes must be confirmed by the native configure receipt.
+Choosing Default restores native provider/model default behavior. Model changes
+preserve the session's effort intent; global effort preferences are not written.
 
 Air's loading/sign-in timeout can mask initialization failure: the observed
 WebStorm Air log offered `protocolOffer=V1` then reported `Invalid params` against

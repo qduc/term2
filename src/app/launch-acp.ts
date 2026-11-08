@@ -97,6 +97,7 @@ export async function launchAcp(request: AcpRequest): Promise<number> {
     surface: () => ({ autoApprove: false, interactive: true, allowUnsandboxed: false }),
     approvalAlwaysAsks: true,
     requireSandbox: true,
+    persistSessionConfiguration: false,
     authorizeModel(next, previous) {
       if (next.provider === previous.provider && next.model === previous.model) return;
       if (
@@ -161,6 +162,10 @@ export async function launchAcp(request: AcpRequest): Promise<number> {
       workspaces: acpWorkspaces(app),
       logger,
       models,
+      async configuration(sessionId) {
+        const state = await app.sessionConfiguration(sessionId);
+        return { model: state.model, reasoning: state.reasoningEffort };
+      },
     });
     exitCode = await serveAcp({ backend, logger, version: installationVersion }, io, shutdown.signal);
   } finally {

@@ -31,8 +31,14 @@ and persistence policies.
 settings and tool generations. `approvalAlwaysAsks` pins the session's saved
 shell auto-approval mode to `off`; `requireSandbox` pins `sandbox.enabled:true`
 after restoring session configuration. ACP sets both options. These overrides
-are in-memory policy and do not rewrite user preferences. `createDirectConfigSettings` in
-`config-settings.ts` produces a read-only, source-schema-validated settings
+are in-memory policy and do not rewrite user preferences.
+`persistSessionConfiguration:false` also keeps native configuration changes
+session-local; ACP opts out while the terminal UI retains saved defaults. The
+native generation's install step records settings through `SessionSettingsService`,
+whose ordinary writes save through to the global owner. A client-side promise
+of session-local selection therefore requires this opt-out at the install step,
+not merely an isolated settings snapshot or unchanged initial launch settings.
+`createDirectConfigSettings` in `config-settings.ts` produces a read-only, source-schema-validated settings
 snapshot; it does not persist selection changes. Its
 `prepareDirectSessionConfigurationCommand` validates HTTP selection intent,
 retains request identity and expected revision, and rejects unknown or empty

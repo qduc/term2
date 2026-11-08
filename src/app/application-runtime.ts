@@ -54,6 +54,8 @@ export type DirectRuntimeOptions = {
   readonly approvalAlwaysAsks?: boolean;
   /** Require local shell isolation even when saved user settings disable it. */
   readonly requireSandbox?: boolean;
+  /** False keeps native model/effort/profile/temperature changes out of global defaults. */
+  readonly persistSessionConfiguration?: boolean;
   /** Stamped on every session this application creates, and required of every one it opens. */
   readonly sessionBinding?: DirectBinding;
   /** Bound to one session, never to whichever session a client shows now. Its workspace comes from authority. */
@@ -385,7 +387,11 @@ export function createDirectRuntimes(
                   settings.setDynamic(
                     key,
                     value,
-                    isLaunch || isDeepStrictEqual(settings.getDynamic(key), value) ? { persist: false } : {},
+                    isLaunch ||
+                      options.persistSessionConfiguration === false ||
+                      isDeepStrictEqual(settings.getDynamic(key), value)
+                      ? { persist: false }
+                      : {},
                   );
                 record('app.activeProfileId', nextProfile.id);
                 record('agent.modelSelection', intent.modelSelection);

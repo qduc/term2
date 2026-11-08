@@ -1,6 +1,6 @@
 import type * as acp from '@agentclientprotocol/sdk/experimental/v2';
 import type { SessionConfigOption, SetSessionConfigOptionRequest } from '@agentclientprotocol/sdk';
-import type { WireModel } from '../../protocol/wire.js';
+import type { WireModel, WireConfigureRequest } from '../../protocol/wire.js';
 import type { WireAnswerProvenance, WireDecision } from '../../protocol/wire.js';
 import type { DirectHost, Principal, WorkspaceGrant } from '../../host/in-process-direct-types.js';
 
@@ -41,6 +41,11 @@ export type BackendOptions = {
   readonly createRequestId?: () => string;
   /** Cache-only for setup; refresh may contact credentialed provider catalogs. */
   readonly models?: (refresh: boolean) => Promise<readonly (WireModel & { readonly name?: string })[]>;
+  /** Accepted session intent, preserving Default even when its effective effort is concrete. */
+  readonly configuration?: (sessionId: string) => Promise<{
+    readonly model: WireModel;
+    readonly reasoning: NonNullable<WireConfigureRequest['reasoning']>;
+  }>;
 };
 
 /** ACP lifecycle over owned connection subscriptions, never over a Session runtime. */

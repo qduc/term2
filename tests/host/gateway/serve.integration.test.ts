@@ -13,6 +13,32 @@ import { resolveSettingsDirectory } from '../../../src/config/settings/settings-
 import { createTestChildEnv } from '../../helpers/terminal-e2e.js';
 import type { WireEvent } from '../../../src/protocol/wire.js';
 import { readFacts } from '../../../src/session/log.js';
+import { ASSERTION_PURPOSES, type AssertionPurpose } from '../../../src/host/server-contracts.js';
+
+// Independent route inventory: do not generate expected purposes from the matcher.
+const PRIVATE_ROUTES: readonly [AssertionPurpose, string, string][] = [
+  ['workspace_list', 'GET', '/workspaces'],
+  ['workspace_candidate_validate', 'POST', '/workspace/candidates/validate'],
+  ['workspace_candidate_browse', 'POST', '/workspace/candidates/browse'],
+  ['workspace_candidate_select', 'POST', '/workspace/candidates/select'],
+  ['settings_read', 'GET', '/settings'],
+  ['settings_write', 'PUT', '/settings'],
+  ['credential_write', 'POST', '/credentials/test'],
+  ['credential_delete', 'DELETE', '/credentials/test'],
+  ['oauth_login', 'POST', '/oauth/codex/login'],
+  ['oauth_select', 'POST', '/oauth/codex/select'],
+  ['oauth_delete', 'DELETE', '/oauth/codex/accounts/test'],
+  ['session_update', 'POST', '/sessions/SESSION/config'],
+  ['session_list', 'GET', '/sessions'],
+  ['model_list', 'GET', '/models'],
+  ['session_create', 'POST', '/sessions'],
+  ['session_read', 'POST', '/sessions/SESSION'],
+  ['message_submit', 'POST', '/sessions/SESSION/messages'],
+  ['command_invoke', 'POST', '/sessions/SESSION/commands'],
+  ['interaction_resolve', 'POST', '/sessions/SESSION/interactions/turn-1:approval:1'],
+  ['abort', 'POST', '/sessions/SESSION/abort'],
+  ['events_connect', 'GET', '/sessions/SESSION/events?format=direct'],
+];
 
 // The launcher is exercised as a real child process: pair with a pre-shared
 // BFF key, admit a dynamic workspace, run one turn against a settings-defined
@@ -69,7 +95,10 @@ function socketRequest(
 ): Promise<{ status: number; raw: string }> {
   return new Promise((resolve, reject) => {
     const headers: Record<string, string> = { accept: 'application/json' };
-    if (body !== undefined) headers['content-type'] = 'application/json';
+    if (body !== undefined) {
+      headers['content-type'] = 'application/json';
+      headers['content-length'] = String(Buffer.byteLength(JSON.stringify(body)));
+    }
     if (assertion !== undefined) headers['x-term2-assertion'] = assertion;
     const req = http.request({ socketPath, method, path: requestPath, headers }, (res) => {
       let raw = '';
@@ -343,6 +372,69 @@ describe('term2 serve (child process)', () => {
     const created = await rpc('POST', '/private/agent/v1/sessions', { workspaceId }, 'session_create', { workspaceId });
     const sessionId = created.session?.id as string;
     expect(sessionId).toBeTruthy();
+    expect(PRIVATE_ROUTES.map(([purpose]) => purpose).sort()).toEqual([...ASSERTION_PURPOSES].sort());
+    for (const [purpose, method, suffix] of PRIVATE_ROUTES) {
+      const route = `/private/agent/v1${suffix.replace('SESSION', sessionId)}`;
+      const unauthenticated = await socketRequest(socketPath, method, route, {});
+      expect(unauthenticated.status, `${purpose}: ${unauthenticated.raw}`).toBe(401);
+      const wrongPurpose = purpose === 'model_list' ? 'workspace_list' : 'model_list';
+      const mismatch = await socketRequest(socketPath, method, route, {}, sign('user-1', wrongPurpose));
+      expect(mismatch.status, `${purpose}: ${mismatch.raw}`).toBe(400);
+      expect(jsonBody(mismatch).error.code).toBe('protocol_conflict');
+      if (suffix.includes('SESSION')) {
+        const wrongSession = await socketRequest(
+          socketPath,
+          method,
+          route,
+          {},
+          sign('user-1', purpose, { sessionId: 'different-session' }),
+        );
+        expect(wrongSession.status, purpose).toBe(400);
+        const otherOwner = await socketRequest(
+          socketPath,
+          method,
+          route,
+          {},
+          sign('other-owner', purpose, { sessionId }),
+        );
+        expect(otherOwner.status, `${purpose}: ${otherOwner.raw}`).toBe(404);
+      } else if (/^(settings|credential|oauth)_/.test(purpose)) {
+        const otherOwner = await socketRequest(socketPath, method, route, {}, sign('other-owner', purpose));
+        expect(otherOwner.status, purpose).toBe(403);
+        expect(jsonBody(otherOwner).error.code).toBe('settings_forbidden');
+      }
+    }
+    const replayAssertion = sign('user-1', 'workspace_list');
+    expect(
+      (await socketRequest(socketPath, 'GET', '/private/agent/v1/workspaces', undefined, replayAssertion)).status,
+    ).toBe(200);
+    expect(
+      (await socketRequest(socketPath, 'GET', '/private/agent/v1/workspaces', undefined, replayAssertion)).status,
+    ).toBe(401);
+    await rpc('GET', '/private/agent/v1/workspaces', undefined, 'workspace_list');
+    await rpc('POST', '/', { workspaceId }, 'session_create', { workspaceId });
+    const read = await rpc('POST', `/private/agent/v1/sessions/${sessionId}`, {}, 'session_read', { sessionId });
+    const v2Read = await rpc(
+      'POST',
+      `/private/agent/v1/sessions/${sessionId}?format=agent-wire-v2`,
+      {},
+      'session_read',
+      { sessionId },
+    );
+    expect(v2Read).toMatchObject({ schemaVersion: 2, kind: 'snapshot', sessionId });
+    expect(v2Read.snapshot.sessionId).toBe(sessionId);
+    expect(read.session.id).toBe(sessionId);
+    expect(
+      (
+        await socketRequest(
+          socketPath,
+          'GET',
+          `/private/agent/v1/sessions/${sessionId}`,
+          undefined,
+          sign('user-1', 'session_read', { sessionId }),
+        )
+      ).status,
+    ).toBe(404);
     const logPath = path.join(stateDir, 'conversations', `${sessionId}.jsonl`);
     expect(readFacts(logPath)[0]).toMatchObject({
       type: 'session_started',
@@ -354,6 +446,32 @@ describe('term2 serve (child process)', () => {
 
     // #149: dropped HTTP modes fail atomically; retained aliases still configure the real Session.
     const configPath = `/private/agent/v1/sessions/${sessionId}/config?format=direct`;
+    const unqualifiedEvents = await socketRequest(
+      socketPath,
+      'GET',
+      `/private/agent/v1/sessions/${sessionId}/events`,
+      undefined,
+      sign('user-1', 'events_connect', { sessionId }),
+    );
+    expect(unqualifiedEvents.status).toBe(400);
+    expect(jsonBody(unqualifiedEvents).error).toMatchObject({
+      code: 'protocol_upgrade_required',
+      retryable: false,
+      details: { requiredFormat: 'agent-wire-v2' },
+    });
+    const unkeyedConfig = await socketRequest(
+      socketPath,
+      'POST',
+      configPath,
+      { mode: 'bare' },
+      sign('user-1', 'session_update', { sessionId }),
+    );
+    expect(unkeyedConfig.status).toBe(400);
+    expect(jsonBody(unkeyedConfig).error).toMatchObject({
+      code: 'protocol_upgrade_required',
+      retryable: false,
+      details: { requiredFields: ['clientRequestId', 'expectedRevision'] },
+    });
     let config = await rpc('POST', configPath, {}, 'session_update', { sessionId });
     expect(config.mode).toBe('bare');
     for (const mode of ['plan', 'pair', 'mentor', 'orchestrator']) {

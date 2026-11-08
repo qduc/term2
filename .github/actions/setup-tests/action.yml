@@ -31,7 +31,7 @@ runs:
         echo "$prefix/bin" >> "$GITHUB_PATH"
         # This action owns dependency state. Otherwise a later `pnpm run` or
         # `pnpm exec` reinstalls whenever the checkout is newer than the
-        # restored installation, ignoring the filter below and adding web-client.
+        # restored installation, repeating the setup action's dependency work.
         echo "pnpm_config_verify_deps_before_run=false" >> "$GITHUB_ENV"
     - name: Identify runner image
       id: image
@@ -39,18 +39,18 @@ runs:
       run: |
         echo "image=${ImageOS}" >> "$GITHUB_OUTPUT"
         echo "version=${ImageVersion}" >> "$GITHUB_OUTPUT"
-    # No test or build step uses web-client; installing it downloaded Next.js
-    # and its native compiler on every cold install.
+    # Browser integration tests import web-client server modules, so restore both workspaces.
     - name: Restore locked dependency installation
       id: deps
       uses: actions/cache@v6
       with:
         path: |
           node_modules
+          web-client/node_modules
           !node_modules/.cache
           !node_modules/.vite
           !node_modules/.vite-temp
-        key: test-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.image.outputs.image }}-node${{ steps.node.outputs.node-version }}-pnpm11.7.0-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json', 'web-client/package.json', '.npmrc', 'web-client/.npmrc', 'vendor/*.tgz') }}
+        key: test-deps-v3-${{ runner.os }}-${{ runner.arch }}-${{ steps.image.outputs.image }}-node${{ steps.node.outputs.node-version }}-pnpm11.7.0-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json', 'web-client/package.json', '.npmrc', 'web-client/.npmrc', 'vendor/*.tgz') }}
     # The installation key is exact, so any lockfile change misses it. A
     # prefix-restored package store limits that miss to the changed packages.
     - name: Locate package store
@@ -79,7 +79,7 @@ runs:
       # No `pnpm store prune`: run directly after this install it still evicted
       # 5 in-use packages (808 files, 101 MB) in CI, so the saved store missed
       # them. Bump the store key to reset accumulated packages instead.
-      run: pnpm install --frozen-lockfile --filter @qduc/term2
+      run: pnpm install --frozen-lockfile
     - name: Verify native addons and clean build inputs
       shell: bash
       run: |

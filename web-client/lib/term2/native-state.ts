@@ -112,7 +112,7 @@ function verification(value: unknown): Fields {
 function notice(value: unknown): Fields { const result = object(value); string(result.kind); string(result.message); return result; }
 function backgroundNotice(value: unknown): Fields {
   const result = object(value); identity(result.id); string(result.text);
-  oneOf(result.kind, ['completion', 'control', 'check_in']); array(result.taskIds, identity);
+  oneOf(result.kind, ['completion', 'control', 'check_in', 'question']); array(result.taskIds, identity);
   return result;
 }
 function delivery(value: unknown): Fields {
@@ -160,7 +160,7 @@ export function applyNativeState(previous: NativeState | undefined, change: Term
       return { ...state, messages: upsertMessage(state.messages ?? [], next) };
     }
     case 'task_changed': {
-      oneOf(payload.change, ['task_started', 'task_backgrounded', 'task_stop_requested', 'task_finished']);
+      oneOf(payload.change, ['task_started', 'task_backgrounded', 'task_stop_requested', 'task_finished', 'task_question_opened', 'task_question_closed']);
       if (finite(payload.at) < 0) fail();
       const next = task(payload.task);
       const tasks = state.tasks ?? [];

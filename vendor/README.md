@@ -1,5 +1,13 @@
 # Pre-publication shared package artifacts
 
+The root and web-client pin `qduc-agent-wire-0.2.3.tgz`; the lockfile records
+its integrity. The artifact was built and packed from
+[`qduc/agent-runtime` commit `489272d`](https://github.com/qduc/agent-runtime/commit/489272dcef0aa3d41072248d09e7c203b92c04c0).
+It includes native task-question transitions, strict `pendingQuestion`, tool
+tracking and activity observation validation. Combined native/BFF/browser
+question acceptance and independent activation review passed before enabling v2.
+The 0.1.0 provenance below is historical.
+
 `qduc-agent-wire-0.1.0.tgz` was built and packed from the independent
 `qduc/agent-runtime` repository at commit
 `b2e2ae6` (`Make standalone builds independent of parent dependency trees`).

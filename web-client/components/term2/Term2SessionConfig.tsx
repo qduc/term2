@@ -87,7 +87,7 @@ export function Term2SessionConfig({ config, settings, sessionId, onDiscovered, 
           <label>Mode <select aria-label="Session mode" value={config.mode} disabled={blocked}
             onChange={(event) => update({ mode: event.target.value as SessionConfigRecord['mode'] })} className="ml-1 rounded border px-1 py-0.5">
             {config.mode === 'pair' && <option value="pair" disabled>pair (current)</option>}
-            {['standard', 'bare', 'lite', 'plan', 'mentor', 'orchestrator'].map(value => <option key={value} value={value}>{value}</option>)}
+            {['standard', 'bare', 'lite'].map(value => <option key={value} value={value}>{value}</option>)}
           </select></label>
         </div>
       </details>}

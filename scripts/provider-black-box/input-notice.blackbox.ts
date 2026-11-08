@@ -101,6 +101,9 @@ it.skipIf(process.platform !== 'linux')('retries the original pasted image and c
     complete(0);
     await child.waitForVisibleOutput('NOTICE_DONE_0');
     const nextIdle = await child.waitForIdleInput({ after: idle });
+    // A fast provider can finish before the submit acknowledgement clears the controlled
+    // image draft. Idle means keys are accepted, not that the previous draft is consumed.
+    await child.waitForComposerValue('', { afterRevision: 0 });
     // Sample only this fixture's composer; atomic snapshots may skip intermediate revisions.
     const started = Date.now();
     const timeline: { ms: number; state: ReturnType<typeof readHarnessComposerState> }[] = [];
@@ -138,6 +141,7 @@ it.skipIf(process.platform !== 'linux')('retries the original pasted image and c
     complete(1);
     await child.waitForVisibleOutput('NOTICE_DONE_1');
     const retryIdle = await child.waitForIdleInput({ after: nextIdle });
+    await child.waitForComposerValue('', { afterRevision: 0 });
     await writePtyTextAndSubmit(child, 'SECOND_NOTICE_INPUT');
     await child.waitForState(() => requests.length === 3);
     expect(JSON.stringify(requests[2]!.input)).toContain('SECOND_NOTICE_INPUT');

@@ -81,9 +81,14 @@ tool result output object is read as a one-part array, and `input_text` reasonin
 parts are read like `text`. Both are older Agents SDK encodings of the same text,
 and the run loop's refusal of them stranded most of one user's v3 conversations.
 For `codex` conversations, reasoning metadata saved flat before 2026-08-02 (the raw
-response item: `id`, `type`, `content`, `encrypted_content` and sometimes more) is
-moved unchanged under `codex`. The Codex provider then sends the same wire fields
-the old provider did, instead of refusing the resumed request as foreign metadata.
+response item, recognised by `type: 'reasoning'`, with `id`, `content`,
+`encrypted_content` and sometimes `internal_chat_message_metadata_passthrough` and
+`metadata`) is moved unchanged under `codex`. The Codex provider then sends the raw
+item's fields, including `encrypted_content`, instead of refusing the resumed request
+as foreign metadata. As for all Codex reasoning, it rebuilds `summary` from the
+reasoning text and uses the item ID, so the wire is not byte-identical to the
+pre-2026-08-02 provider's. Logs already migrated by an earlier migrator keep the flat
+form; re-migrate them into a fresh destination.
 No portable re-encoding strips signatures, encrypted/opaque items, provider
 metadata, raw arguments, reasoning or structured output from that normalized
 request. Normalization errors fail `normalization-refused`; native schema/replay

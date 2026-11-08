@@ -1,6 +1,6 @@
 # Direct ACP client boundary
 
-This subtree implements experimental ACP v2 against the published direct
+This subtree supports stable ACP v1 and implements experimental ACP v2 against the published direct
 protocol through `82d37ded91705090bc6b253301c7411ac5d5e389` (including
 `77bca90b`/`5451b43c`) and native keyed-command Session `f14c9baa`. Imports target
 `protocol/wire.ts` and `host/in-process-direct-types.ts`.
@@ -11,10 +11,38 @@ The app composes this implementation directly; see the public ACP reference for 
 The app composes `DirectHost`, an authenticated `Principal`, a diagnostic logger,
 and `AcpWorkspaces`, then calls `createAcpBackend`. Pass that backend and the app
 version to `createAcpAgent` or `serveAcp`. `createStdioAcpIo` adapts Node stdio;
-`serveAcp` uses SDK 1.4.0 experimental-v2 `ndJsonStream`. JSON-RPC framing,
-transport IDs and schema validation remain SDK-owned. Initialize, session
-new/list/resume/prompt/close, cancellation, permissions and session updates retain
-their ACP v2 method names.
+`serveAcp` selects the SDK 1.4.0 v1 or experimental-v2 agent from the first initialize request, using SDK-owned `ndJsonStream` framing. JSON-RPC framing,
+transport IDs and schema validation remain SDK-owned. The existing v2 surface retains its method names and acknowledgement/idle contract.
+
+## Stable v1 and JetBrains Air
+
+`term2 acp` also accepts `initialize.protocolVersion: 1` without a CLI flag.
+`v1-agent.ts` advertises `agentInfo`, `authMethods: []`, image/embedded-context
+prompts, session load/list/resume/close. Provider credentials and model selection
+remain native Term2 configuration. A v1 prompt stays pending until its real
+terminal and returns `stopReason`; native failures become JSON-RPC errors.
+`session/load` creates a fresh display attachment and replays retained history;
+resume attaches without replay. Repeated loads replay each time.
+
+`client.ts` translates v1 permission `toolCall` requests while the shared
+permission code preserves exact option IDs, scope, cancellation and provenance.
+`v1-output.ts` converts whole message upserts to append-only chunks, retaining
+streamed prefixes so final messages/snapshots do not duplicate text. Tool upserts
+become a first `tool_call` followed by `tool_call_update`. V2-only state updates
+stay off the v1 wire. The translator fails explicitly if previously displayed
+content would need replacement; v1 has no replacement operation.
+
+V1 structured questions and budgets currently use the existing unsupported-form
+stop/decline fallbacks. No v1 form support, IDE filesystem/terminal delegation,
+MCP forwarding, provider management or model configuration is advertised.
+The launcher retains the same sandbox and permission policy for both versions.
+
+Air's loading/sign-in timeout can mask initialization failure: the observed
+WebStorm Air log offered `protocolOffer=V1` then reported `Invalid params` against
+the former v2-only endpoint. Its later stdout `EPIPE` followed client shutdown;
+it was not evidence of missing provider credentials. Disable both
+`use_idea_mcp` and `use_custom_mcp` in Air's custom agent configuration because
+nonempty forwarded MCP requests remain unsupported.
 
 `AcpWorkspaces.authorize` resolves canonical cwd to an admitted workspace grant.
 `cwd(sessionId)` supplies canonical **direct** session workspace metadata under

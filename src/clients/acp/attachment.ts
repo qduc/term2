@@ -1,3 +1,4 @@
+import type { AcpClient } from './contract.js';
 import * as acp from '@agentclientprotocol/sdk/experimental/v2';
 import type { DirectConnection } from '../../host/in-process-direct-types.js';
 import type {
@@ -75,7 +76,7 @@ export class AcpAttachment {
 
   constructor(
     readonly connection: DirectConnection,
-    private readonly client: acp.AgentContext,
+    private readonly client: AcpClient,
     private readonly logger: AcpLogger,
   ) {
     this.foregroundTurnId = connection.snapshot.activeTurnId;
@@ -209,7 +210,7 @@ export class AcpAttachment {
   }
 
   private emit(update: acp.SessionUpdate): Promise<void> {
-    return this.client.notify(acp.methods.client.session.update, { sessionId: this.connection.sessionId, update });
+    return this.client.update({ sessionId: this.connection.sessionId, update });
   }
 
   private async consume(): Promise<void> {

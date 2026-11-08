@@ -1,3 +1,4 @@
+import type { AcpClient } from './contract.js';
 import { randomUUID } from 'node:crypto';
 import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -39,7 +40,7 @@ export function createAcpBackend(options: BackendOptions): AcpBackend {
     if (!attachment) throw new acp.RequestError(-32001, `Session not found: ${id}`);
     return attachment;
   };
-  const attach = async (connection: DirectConnection, client: acp.AgentContext, replay: boolean): Promise<void> => {
+  const attach = async (connection: DirectConnection, client: AcpClient, replay: boolean): Promise<void> => {
     const attachment = new AcpAttachment(connection, client, options.logger);
     try {
       available();

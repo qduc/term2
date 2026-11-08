@@ -2,6 +2,14 @@ import type * as acp from '@agentclientprotocol/sdk/experimental/v2';
 import type { WireAnswerProvenance, WireDecision } from '../../protocol/wire.js';
 import type { DirectHost, Principal, WorkspaceGrant } from '../../host/in-process-direct-types.js';
 
+/** Version-specific transports implement only the client operations used by the backend. */
+export interface AcpClient {
+  update(notification: acp.UpdateSessionNotification): Promise<void>;
+  permission(request: acp.RequestPermissionRequest, signal: AbortSignal): Promise<acp.RequestPermissionResponse>;
+  supportsForms(): Promise<boolean>;
+  elicit(request: acp.CreateElicitationRequest, signal: AbortSignal): Promise<acp.CreateElicitationResponse>;
+}
+
 /** Preserve whether an answer came from a client action or a local failure fallback. */
 export type AcpAnswer = { readonly decision: WireDecision; readonly provenance: WireAnswerProvenance };
 
@@ -33,11 +41,11 @@ export type BackendOptions = {
 
 /** ACP lifecycle over owned connection subscriptions, never over a Session runtime. */
 export interface AcpBackend {
-  createSession(request: Pick<acp.NewSessionRequest, 'cwd'>, client: acp.AgentContext): Promise<acp.NewSessionResponse>;
+  createSession(request: Pick<acp.NewSessionRequest, 'cwd'>, client: AcpClient): Promise<acp.NewSessionResponse>;
   listSessions(request: acp.ListSessionsRequest): Promise<acp.ListSessionsResponse>;
   resumeSession(
     request: Pick<acp.ResumeSessionRequest, 'sessionId' | 'cwd' | 'replayFrom'>,
-    client: acp.AgentContext,
+    client: AcpClient,
   ): Promise<acp.ResumeSessionResponse>;
   preparePrompt(request: acp.PromptRequest): Promise<PromptExecution>;
   cancelSession(sessionId: string): Promise<void>;

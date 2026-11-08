@@ -1,4 +1,5 @@
-import * as acp from '@agentclientprotocol/sdk/experimental/v2';
+import type { AcpClient } from './contract.js';
+import type * as acp from '@agentclientprotocol/sdk/experimental/v2';
 import type { WireGrant, WireInteraction } from '../../protocol/wire.js';
 
 import type { AcpAnswer } from './contract.js';
@@ -29,7 +30,7 @@ const GRANTS: Partial<Record<WireGrant, { name: string; kind: acp.PermissionOpti
 export async function requestPermission(input: {
   readonly sessionId: string;
   readonly interaction: WireInteraction;
-  readonly client: acp.AgentContext;
+  readonly client: AcpClient;
   readonly signal: AbortSignal;
 }): Promise<AcpAnswer> {
   const interaction = input.interaction;
@@ -40,8 +41,7 @@ export async function requestPermission(input: {
   const grants = interaction.supportedGrants.filter((grant) => GRANTS[grant]);
   const options = [...OPTIONS, ...grants.map((grant) => ({ optionId: grant, ...GRANTS[grant]! }))];
   try {
-    const response = await input.client.request(
-      acp.methods.client.session.requestPermission,
+    const response = await input.client.permission(
       {
         sessionId: input.sessionId,
         title: interaction.toolName,
@@ -58,7 +58,7 @@ export async function requestPermission(input: {
         },
         options,
       },
-      { cancellationSignal: input.signal },
+      input.signal,
     );
     if (input.signal.aborted) {
       return {

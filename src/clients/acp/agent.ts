@@ -1,5 +1,6 @@
 import * as acp from '@agentclientprotocol/sdk/experimental/v2';
 import type { AcpBackend, AcpLogger, PromptExecution } from './contract.js';
+import { v2Client } from './client.js';
 import { errorMessage } from './contract.js';
 
 export type AcpAgentOptions = {
@@ -48,13 +49,13 @@ export function createAcpAgent(options: AcpAgentOptions): acp.AgentApp {
   }));
   app.onRequest(acp.methods.agent.session.new, async ({ params, client }) => {
     assertSessionExtensions(params);
-    return await options.backend.createSession({ cwd: params.cwd }, client);
+    return await options.backend.createSession({ cwd: params.cwd }, v2Client(client));
   });
   app.onRequest(acp.methods.agent.session.list, async ({ params }) => await options.backend.listSessions(params));
   app.onRequest(acp.methods.agent.session.resume, async ({ params, client }) => {
     assertSessionExtensions(params);
     if (active.has(params.sessionId)) throw new acp.RequestError(-32000, 'Cannot resume an active ACP prompt');
-    return await options.backend.resumeSession(params, client);
+    return await options.backend.resumeSession(params, v2Client(client));
   });
   app.onRequest(acp.methods.agent.session.prompt, async ({ params, client }) => {
     const prompt = reserve(active, params.sessionId);

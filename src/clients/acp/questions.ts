@@ -1,3 +1,4 @@
+import type { AcpClient } from './contract.js';
 import * as acp from '@agentclientprotocol/sdk/experimental/v2';
 import type { WireInteraction, WireQuestion, WireQuestionAnswer } from '../../protocol/wire.js';
 
@@ -95,15 +96,13 @@ function answers(fields: readonly Field[], content: Record<string, unknown>): re
 export async function requestQuestion(input: {
   readonly sessionId: string;
   readonly interaction: WireInteraction;
-  readonly client: acp.AgentContext;
+  readonly client: AcpClient;
   readonly signal: AbortSignal;
 }): Promise<AcpAnswer> {
   try {
-    const { request } = await input.client.initialized;
-    if (request.capabilities?.elicitation?.form == null) return stopped();
+    if (!(await input.client.supportsForms())) return stopped();
     const { schema, fields } = form(input.interaction);
-    const response = await input.client.request(
-      acp.methods.client.elicitation.create,
+    const response = await input.client.elicit(
       {
         mode: 'form',
         sessionId: input.sessionId,
@@ -111,7 +110,7 @@ export async function requestQuestion(input: {
         message: input.interaction.detail ?? input.interaction.summary,
         requestedSchema: schema,
       },
-      { cancellationSignal: input.signal },
+      input.signal,
     );
     if (input.signal.aborted) return stopped();
     if (response.action === 'decline') return { decision: { kind: 'decline' }, provenance: { source: 'user' } };

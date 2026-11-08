@@ -1,13 +1,12 @@
 ---
-title: Agent Client Protocol v2
-description: The experimental ACP v2 subset for editor and coding-agent clients.
+title: Agent Client Protocol
+description: Stable ACP v1 and experimental ACP v2 for editor and coding-agent clients.
 ---
 
 term2's direct ACP adapter connects editors and other interactive clients to the
-native Host/session protocol. It uses `@agentclientprotocol/sdk` **1.4.0**,
+native Host/session protocol. It uses `@agentclientprotocol/sdk` **1.4.0**, supporting stable v1 and
 `experimental/v2`. The [upstream v2 specification](https://agentclientprotocol.com/protocol/v2/overview)
-is a changing draft; this is not an ACP v1 endpoint or a claim of compatibility
-with every revision of v2.
+is a changing draft; the v2 adapter does not claim compatibility with every draft revision.
 
 ## Launch
 
@@ -26,6 +25,43 @@ EOF or SIGINT/SIGTERM closes the connection, detaches subscriptions and disposes
 the process-owned application. There is no fixed shutdown deadline. Detaching
 an ACP subscription does not itself cancel a shared session; explicit cancel
 and close have separate behavior.
+
+## JetBrains Air and stable ACP v1
+
+The same `term2 acp` command selects v1 when the editor initializes with
+`protocolVersion: 1`; there is no version flag. It returns `agentInfo`,
+`agentCapabilities` and an empty `authMethods` list. Configure provider
+credentials in Term2 before launching through the editor.
+
+For the Air plugin in JetBrains IDEs, merge this entry into
+`~/.jetbrains/acp.json` (replace the executable path with your installed Term2):
+
+```json
+{
+  "agent_servers": {
+    "Term2": {
+      "command": "/absolute/path/to/term2",
+      "args": ["acp"],
+      "use_idea_mcp": false,
+      "use_custom_mcp": false
+    }
+  }
+}
+```
+
+For standalone Air, use **Add ACP Agent** in the agent selector and edit the
+configuration file Air opens. If Term2 uses an nvm Node installation, ensure
+its `bin` directory is in the agent process's `env.PATH`, since the executable
+uses Node from PATH. Provider/model overrides use the same launch flags above.
+
+V1 supports session new/list/load/resume/close, prompts, cancellation and tool
+permissions. Prompt responses wait for completion and contain `stopReason`.
+History loads replay retained messages; resume omits history. Message output
+uses append-only chunks, and tool permissions use v1's `toolCall` field.
+Structured questions and budget pauses currently stop/decline through the
+unsupported-form fallback. MCP forwarding remains unsupported.
+
+The sections below describe the experimental v2 exchange and its limits.
 
 ## Supported exchange
 

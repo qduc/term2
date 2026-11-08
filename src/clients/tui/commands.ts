@@ -281,6 +281,32 @@ export async function directSlashCommand(
   }
 }
 
+/**
+ * A manual /compact runs as long as a model turn, so it does not hold the composer (#221).
+ * Its summary request shows as the active turn, but that maintenance turn takes no steers:
+ * while one is in flight, a steer is sent as `auto`, which the session queues behind the
+ * command and runs against the compacted context. Counted rather than flagged, so a second
+ * /compact refused as busy does not end the first one's window.
+ */
+export function compactTracker() {
+  let inFlight = 0;
+  return {
+    /** Start /compact; 'Compacting context...' shows at once and its outcome as a later notice. */
+    start(connection: TuiConnection, command: string, notice: (text: string) => void): void {
+      inFlight += 1;
+      void directSlashCommand(connection, command, notice)
+        .then(
+          (text) => text !== null && notice(text),
+          (error: unknown) => notice(error instanceof Error ? error.message : String(error)),
+        )
+        .finally(() => (inFlight -= 1));
+    },
+    delivery(requested: WireSubmission['delivery']): WireSubmission['delivery'] {
+      return inFlight > 0 && requested === 'steer' ? 'auto' : requested;
+    },
+  };
+}
+
 /** Perform a typed queued-message operation; unavailable remains an error. */
 export async function queueAction(
   connection: TuiConnection,

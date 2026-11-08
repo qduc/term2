@@ -175,6 +175,28 @@ get_changelog_top_version() {
     return 1
 }
 
+# True when CHANGELOG.md's first "## " heading is [Unreleased] and at least
+# one non-blank line follows it before the next "## " heading.
+unreleased_has_notes() {
+    [ -f CHANGELOG.md ] || return 1
+    awk '
+        /^## / { if (seen) exit; if ($0 ~ /^## \[Unreleased\][[:space:]]*$/) { seen = 1; next } else exit 1 }
+        seen && NF { found = 1 }
+        END { exit !(seen && found) }
+    ' CHANGELOG.md
+}
+
+# Rename the leading "## [Unreleased]" heading to "## [$1] - <today>".
+promote_unreleased() {
+    local heading
+    heading="## [$1] - $(date +%Y-%m-%d)"
+    awk -v heading="$heading" '
+        !done && /^## \[Unreleased\][[:space:]]*$/ { print heading; done = 1; next }
+        { print }
+    ' CHANGELOG.md > CHANGELOG.tmp
+    mv CHANGELOG.tmp CHANGELOG.md
+}
+
 get_package_version() {
     node -p "require('./package.json').version"
 }
@@ -539,6 +561,15 @@ fi
 
 if changelog_has_version "$NEW_VERSION"; then
     CHANGELOG_DONE=true
+fi
+
+# Hand-written notes under a leading "## [Unreleased]" heading are the release
+# entry: promote that heading to this version instead of generating a second
+# entry above it, which would strand the curated notes under Unreleased.
+if [[ "$CHANGELOG_DONE" != "true" ]] && unreleased_has_notes; then
+    promote_unreleased "$NEW_VERSION"
+    CHANGELOG_DONE=true
+    echo -e "${GREEN}Promoted the [Unreleased] changelog notes to v$NEW_VERSION.${NC}"
 fi
 
 echo -e "Preparing release for version: ${GREEN}$NEW_VERSION${NC}"

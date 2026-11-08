@@ -39,6 +39,7 @@ import { useHandoff, type HandoffHolder } from './use-handoff.js';
 import { useGoalClosedNotice } from './goal-closed-notice.js';
 import { useLargeUncachedAdvisory } from './large-uncached-advisory.js';
 import { directSlashCommand, listRewindTargets, submitText, previewSendHold, WireCommandFailure } from './commands.js';
+import { compactTracker } from './commands.js';
 export function TuiSession({
   connection,
   header,
@@ -185,6 +186,7 @@ export function TuiSession({
     turnInFlight: Boolean(state.activeTurnId),
   });
   const pending = useRef(false);
+  const compact = useRef(compactTracker()).current;
   const { waitUntilRenderFlush } = useApp();
   // Legacy clearInputBeforeReset paints the emptied composer, then printUsage writes under that frame.
   const resetHooks = {
@@ -266,12 +268,16 @@ export function TuiSession({
     fromMenu = false, // legacy's menus clear the input first, so their commands' failures only report
   ): Promise<void> => {
     if (handoffFlow.submit(input)) return;
+    const typedInput = input;
     input = menuStack.withPendingSkill(input);
     const clean = cleanImageMarkers(input);
     if (!clean.trim() && !submittedImages.length && !otherParts.length && !editing) return;
+    delivery = compact.delivery(delivery);
     if (pending.current) {
-      // The composer is already empty and a send is in flight: keep this message as the draft instead of losing it.
-      replaceInput(editor.value ? `${input}\n${editor.value}` : input);
+      // A send is in flight: keep this message as the draft instead of losing it. The composer's own
+      // submit clears it only after this call, so editor.value can still be this same message.
+      const rest = editor.value === typedInput ? '' : editor.value;
+      replaceInput(rest ? `${input}\n${rest}` : input);
       setImages(submittedImages);
       return setNotice('Still sending the previous message. Press Enter again to send this one.');
     }
@@ -336,8 +342,9 @@ export function TuiSession({
         handoffFlow.start();
       } else if (/^\/providers(?:\s|$)/.test(command)) {
         if (!menuStack.openFrame('providers')) throw new Error('Provider management is unavailable.');
+      } else if (command.trim() === '/compact') {
+        compact.start(connection, command, setNotice);
       } else if (typed.kind === 'command') {
-        // directSlashCommand announces /compact ('Compacting context...') before the summary request starts.
         const directNotice = await directSlashCommand(connection, command, setNotice);
         if (directNotice !== null) setNotice(directNotice);
         else {

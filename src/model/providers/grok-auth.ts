@@ -8,7 +8,13 @@ import type { PkceLoginConfig, PkceLoginOptions } from './oauth-pkce.js';
 import { OAuthAccountStore } from './oauth-account-store.js';
 import type { AccountIdentity, OAuthAccount } from './oauth-account-store.js';
 import { getJwtClaims } from './jwt-claims.js';
-import { recordSessionAccount } from './oauth-session-account.js';
+import {
+  recordSessionAccount,
+  createSessionAccountStore,
+  getSessionAccount,
+  withSessionAccountRefresh,
+  waitForSessionAccountRefresh,
+} from './oauth-session-account.js';
 import type { SessionAccountStore } from './oauth-session-account.js';
 import { ProviderReauthenticationRequiredError } from './common/provider-errors.js';
 
@@ -244,23 +250,27 @@ export class GrokTokenManager {
   private readonly fetchImpl: typeof fetch;
   private readonly authPath: string;
   private readonly cliAuthPathResolver: () => string | null;
-  private readonly sessionAccountStore?: SessionAccountStore;
+  private readonly sessionAccountStore: SessionAccountStore;
+  private readonly refreshTimeoutMs: number;
 
   constructor(options?: {
     fetchImpl?: typeof fetch;
     authPath?: string;
     cliAuthPathResolver?: () => string | null;
     sessionAccountStore?: SessionAccountStore;
+    refreshTimeoutMs?: number;
   }) {
     this.fetchImpl = options?.fetchImpl || globalThis.fetch;
     this.authPath = options?.authPath || resolveGrokAuthPath();
     this.cliAuthPathResolver = options?.cliAuthPathResolver || resolveGrokCliAuthPath;
-    this.sessionAccountStore = options?.sessionAccountStore;
+    this.sessionAccountStore = options?.sessionAccountStore ?? createSessionAccountStore();
+    this.refreshTimeoutMs = options?.refreshTimeoutMs ?? 30_000;
   }
 
   private load(): GrokTokens | null {
     const store = createGrokAccountStore(this.authPath);
-    const pinned = this.pinnedAccountId ? store.get(this.pinnedAccountId) : null;
+    const pinnedId = getSessionAccount('grok', this.sessionAccountStore) ?? this.pinnedAccountId;
+    const pinned = pinnedId ? store.get(pinnedId) : null;
     // Falls back to the active account if the pinned one was signed out.
     const account = pinned ?? store.getActive();
     if (account) {
@@ -277,7 +287,43 @@ export class GrokTokenManager {
     return this.pinnedAccountId;
   }
 
-  async getOrRefreshAccessToken(): Promise<string> {
+  async getOrRefreshAccessToken(signal?: AbortSignal): Promise<string> {
+    signal?.throwIfAborted();
+    if (this.activeRefresh) return waitForSessionAccountRefresh(this.activeRefresh, signal);
+    const refresh = this.loadOrRefreshAccessToken();
+    this.activeRefresh = refresh;
+    void refresh
+      .finally(() => {
+        if (this.activeRefresh === refresh) this.activeRefresh = null;
+      })
+      .catch(() => {});
+    return waitForSessionAccountRefresh(refresh, signal);
+  }
+
+  private async loadOrRefreshAccessToken(): Promise<string> {
+    for (;;) {
+      const tokens = this.loadTokens();
+      const valid = this.currentAccessToken(tokens);
+      if (valid !== undefined) return valid;
+      const account = this.pinnedAccountId;
+      const refreshed = await withSessionAccountRefresh(
+        this.sessionAccountStore,
+        'grok',
+        this.authPath,
+        account,
+        async () => {
+          const latest = this.loadTokens();
+          // A removed pin may select a different account while this request waits.
+          // Release this account's admission before acquiring the fallback account.
+          if (this.pinnedAccountId !== account) return undefined;
+          return this.currentAccessToken(latest) ?? this.refreshAccessToken(latest);
+        },
+      );
+      if (refreshed !== undefined) return refreshed;
+    }
+  }
+
+  private loadTokens(): GrokTokens {
     const tokens = this.load();
     if (!tokens) {
       throw new ProviderReauthenticationRequiredError(
@@ -285,6 +331,10 @@ export class GrokTokenManager {
       );
     }
 
+    return tokens;
+  }
+
+  private currentAccessToken(tokens: GrokTokens): string | undefined {
     const expiringSoon = tokens.expires_at !== undefined && Date.now() + REFRESH_SKEW_MS >= tokens.expires_at;
     if (!expiringSoon) return tokens.access_token;
 
@@ -296,48 +346,45 @@ export class GrokTokenManager {
       );
     }
 
-    if (this.activeRefresh) return this.activeRefresh;
+    return undefined;
+  }
 
-    this.activeRefresh = (async () => {
-      try {
-        const response = await this.fetchImpl(GROK_TOKEN_ENDPOINT, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({
-            grant_type: 'refresh_token',
-            refresh_token: tokens.refresh_token!,
-            client_id: GROK_OIDC_CLIENT_ID,
-          }).toString(),
-        });
-        if (!response.ok) {
-          throw new Error(`Grok token refresh failed with status ${response.status}`);
-        }
-        const body = await response.json();
-        if (!body?.access_token) {
-          throw new Error('Grok refresh response did not contain access_token');
-        }
-        const refreshed = toTokens(body, tokens);
-        // Refresh the account this session is pinned to, not whichever the
-        // user has since selected.
-        const store = createGrokAccountStore(this.authPath);
-        // Cross-process guard: if another term2 instance already refreshed
-        // this account with the same single-use refresh_token, its write
-        // will have changed the stored refresh_token. Don't overwrite it.
-        const current = this.pinnedAccountId
-          ? (store.get(this.pinnedAccountId)?.tokens as GrokTokens | undefined)
-          : (store.getActive()?.tokens as GrokTokens | undefined);
-        if (current?.refresh_token && current.refresh_token !== tokens.refresh_token) {
-          return current.access_token;
-        }
-        if (this.pinnedAccountId) store.updateTokens(this.pinnedAccountId, refreshed);
-        else store.updateActiveTokens(refreshed);
-        return refreshed.access_token;
-      } finally {
-        this.activeRefresh = null;
-      }
-    })();
-
-    return this.activeRefresh;
+  private async refreshAccessToken(tokens: GrokTokens): Promise<string> {
+    const response = await this.fetchImpl(GROK_TOKEN_ENDPOINT, {
+      method: 'POST',
+      signal: AbortSignal.timeout(this.refreshTimeoutMs),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: tokens.refresh_token!,
+        client_id: GROK_OIDC_CLIENT_ID,
+      }).toString(),
+    });
+    if (!response.ok) {
+      throw new Error(`Grok token refresh failed with status ${response.status}`);
+    }
+    const body = await response.json();
+    if (!body?.access_token) {
+      throw new Error('Grok refresh response did not contain access_token');
+    }
+    const refreshed = toTokens(body, tokens);
+    // Refresh the account this session is pinned to, not whichever the
+    // user has since selected.
+    const store = createGrokAccountStore(this.authPath);
+    // Cross-process guard: if another term2 instance already refreshed
+    // this account with the same single-use refresh_token, its write
+    // will have changed the stored refresh_token. Don't overwrite it.
+    const current = this.pinnedAccountId
+      ? (store.get(this.pinnedAccountId)?.tokens as GrokTokens | undefined)
+      : (store.getActive()?.tokens as GrokTokens | undefined);
+    // Signing out during an admitted rotation must not recreate the account.
+    if (this.pinnedAccountId && !current) return refreshed.access_token;
+    if (current?.refresh_token && current.refresh_token !== tokens.refresh_token) {
+      return current.access_token;
+    }
+    if (this.pinnedAccountId) store.updateTokens(this.pinnedAccountId, refreshed);
+    else store.updateActiveTokens(refreshed);
+    return refreshed.access_token;
   }
 }
 

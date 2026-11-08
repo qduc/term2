@@ -5,7 +5,7 @@ import type { ModelRequestCost } from '../../shared/cost/model-cost.js';
 import type { SubagentResult } from '../../tools/subagents/types.js';
 import type { PersistedAssistantTurnItem } from './conversation-persistence-types.js';
 import type { CodexRateLimitInfo } from '../../model/streamed-model-turn.js';
-import type { RunBudgetEvent } from '../../engine/agent-runtime/run-budget.js';
+import type { RunBudgetEvent } from '../agent-runtime/run-budget.js';
 import type { RunTerminationCause } from '../../shared/contracts/run-termination.js';
 import type { InjectedMemory, MemoryRecallProvenance } from '../../tools/memory/memory-capabilities.js';
 import type { BackgroundTaskActivity, BackgroundTaskObservation } from '../../tools/background-task-activity.js';

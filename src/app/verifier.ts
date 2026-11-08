@@ -10,9 +10,9 @@ import {
   proposalSchema,
   type VerificationReport,
   type VerificationRequest,
-} from '../engine/completion-verification/contracts.js';
-import { VERIFIER_VERSION } from '../engine/completion-verification/verifier.js';
-import { readVerificationFile, verificationGit } from '../engine/completion-verification/workspace.js';
+} from '../session/completion-verification/contracts.js';
+import { VERIFIER_VERSION } from '../session/completion-verification/verifier.js';
+import { readVerificationFile, verificationGit } from '../session/completion-verification/workspace.js';
 import { parseUsdMicros } from '../shared/cost/model-cost.js';
 import type {
   Item,
@@ -177,6 +177,7 @@ async function runDirectVerifier(
   for (let turn = 1; turn <= MAX_TURNS; turn++) {
     const spec: ModelRequest = {
       model: options.model,
+      affinity: { conversationKey: `verifier:${request.attemptId}`, cacheKey: `verifier:${request.attemptId}` },
       instructions: INSTRUCTIONS,
       input: history,
       tools: [PROBE_TOOL],

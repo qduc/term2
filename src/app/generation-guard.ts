@@ -1,5 +1,5 @@
 /** Per-request generation limits wrapped around every model the direct application resolves. */
-import { GenerationGuard, GenerationStreamDeadlines } from '../engine/agent-runtime/generation-guard.js';
+import { GenerationGuard, GenerationStreamDeadlines } from '../session/agent-runtime/generation-guard.js';
 import type { Model, ModelEvent, ModelRegistry, ModelRequest } from '../model/index.js';
 import type { ProfileSelection } from './tool-contract.js';
 

@@ -1,6 +1,6 @@
 export { ASK_USER_NO_ANSWER_RESULT } from '../tools/adopted/ask-user-constants.js';
 /** Direct public protocol. No engine tokens, provider history or live callbacks cross this boundary. */
-import type { ModelRequestCost } from '../engine/recovery-budget.js';
+import type { ModelRequestCost } from '../session/recovery-budget.js';
 import type { DirectFinalWindow } from '../session/final.js';
 
 // Keep this public import path stable while envelopes have their own vocabulary owners.

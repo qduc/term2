@@ -1,3 +1,5 @@
+import type { Term2ToolAppContext, ToolContextSeed } from '../tools/index.js';
+import type { Term2ToolPorts } from './tool-context.js';
 /** Direct Session boundary; no engine acceptance tokens reach callers. */
 import type { InteractionDecision, InteractionRequestId, TurnDeps, TurnEvent, TurnSpec } from '../engine/index.js';
 import type { DirectContextFactory } from './capabilities.js';
@@ -103,24 +105,26 @@ export type Conversation = {
   /** Cancels/drains any live turn before releasing the log writer. */
   close(): Promise<void>;
 };
-export type ConversationDeps = TurnDeps & {
-  readonly log: ConversationLog;
-  readonly context?: DirectContextFactory;
-  /** Prepare without installation/publication; Session drains and owns acceptance. */
-  readonly configure?: (
-    configuration: import('./command-types.js').DirectCommandConfiguration,
-    signal: AbortSignal,
-  ) => Promise<import('./configuration.js').DirectPreparedConfiguration>;
-  /** Prepare only under the command reservation; native owns rotation and admission. */
-  readonly rollover?: import('./session-rotation.js').DirectRolloverPreparer;
-  /** Store-owned physical boundary, never supplied by app as write authority. */
-  readonly rotationBoundary?: () => import('./rolling-log.js').DirectLogBoundary;
-  readonly authorizeNested?: import('./branches.js').DirectNestedAuthorizer;
-  /** Store-owned live publishers: they forward transients to the session's subscribers, never to the log. */
-  readonly publishNotice?: (notice: import('./memory.js').DirectAutomaticMemoryNotice) => void;
-  readonly publishBranch?: (event: import('./facade-types.js').DirectBranchTransient) => void;
-  readonly publishTask?: (event: import('./background-types.js').DirectBackgroundProgress) => void;
-};
+export type ConversationDeps = Omit<TurnDeps<Term2ToolAppContext>, 'toolContext' | 'createToolContext'> &
+  Term2ToolPorts & {
+    readonly toolContext?: ToolContextSeed;
+    readonly log: ConversationLog;
+    readonly context?: DirectContextFactory;
+    /** Prepare without installation/publication; Session drains and owns acceptance. */
+    readonly configure?: (
+      configuration: import('./command-types.js').DirectCommandConfiguration,
+      signal: AbortSignal,
+    ) => Promise<import('./configuration.js').DirectPreparedConfiguration>;
+    /** Prepare only under the command reservation; native owns rotation and admission. */
+    readonly rollover?: import('./session-rotation.js').DirectRolloverPreparer;
+    /** Store-owned physical boundary, never supplied by app as write authority. */
+    readonly rotationBoundary?: () => import('./rolling-log.js').DirectLogBoundary;
+    readonly authorizeNested?: import('./branches.js').DirectNestedAuthorizer;
+    /** Store-owned live publishers: they forward transients to the session's subscribers, never to the log. */
+    readonly publishNotice?: (notice: import('./memory.js').DirectAutomaticMemoryNotice) => void;
+    readonly publishBranch?: (event: import('./facade-types.js').DirectBranchTransient) => void;
+    readonly publishTask?: (event: import('./background-types.js').DirectBackgroundProgress) => void;
+  };
 export type ReplayedConversation = {
   readonly status: 'idle' | 'interrupted';
   readonly history: readonly import('../model/index.js').Item[];

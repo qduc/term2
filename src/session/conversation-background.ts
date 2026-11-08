@@ -109,7 +109,7 @@ export class ConversationBackground {
     this.admission.closed || this.journal.failure
       ? { ok: false, code: 'not_active' }
       : this.checkIns.configure(target, policy);
-  shellTaskPort(parent: Parameters<NonNullable<TurnDeps['shellTasks']>>[0], origin?: DirectOrigin) {
+  shellTaskPort(parent: Parameters<NonNullable<ConversationDeps['shellTasks']>>[0], origin?: DirectOrigin) {
     return directShellTasks(this.tasks, parent, origin, (task, key, text) => {
       if (this.admission.closed || this.journal.failure) return;
       if (
@@ -193,7 +193,7 @@ export class ConversationBackground {
     };
     return runNested;
   }
-  readonly subagentPort: NonNullable<TurnDeps['subagents']> = (parent) => {
+  readonly subagentPort: NonNullable<ConversationDeps['subagents']> = (parent) => {
     const check = (): void => {
       parent.signal.throwIfAborted();
       if (this.admission.closed || this.journal.failure)

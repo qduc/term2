@@ -12,7 +12,7 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
     label,
     isRuntimeDefined: true,
     defaultReasoningLevel: neuralwattDefaultReasoningLevel(providerId),
-    createStreamedModel: async (model, { settingsService, loggingService, sessionContextService }) => {
+    createStreamedModel: async (model, { settingsService, loggingService, sessionContextService, onDispatched }) => {
       const { createCustomProviderModelProvider } = await import('./openai-compatible.provider.js');
       const list = settingsService.getDynamic('providers');
       const entry = Array.isArray(list)
@@ -31,6 +31,7 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
         loggingService,
         sessionContextService,
         settingsService,
+        onDispatched,
       });
       if (!('getStreamedModel' in provider) || typeof provider.getStreamedModel !== 'function') {
         throw new Error(`Custom provider '${providerId}' has no application-owned streamed model`);

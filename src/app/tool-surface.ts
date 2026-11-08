@@ -5,11 +5,10 @@ import { randomUUID } from 'node:crypto';
 import { buildAgent, buildAgentTools, type AgentFactoryDeps } from './lib/agent-factory.js';
 import { createEditorImpl } from '../tools/editor-impl.js';
 import { getCatalogModel } from '../model/providers/model-catalog/catalog.js';
-import { resolveRequestOutput } from '../engine/agent-runtime/model-context-policy.js';
+import { resolveRequestOutput } from '../session/agent-runtime/model-context-policy.js';
 import { NonInteractiveApprovalPolicy } from '../session/approval/non-interactive-approval-policy.js';
 import { ToolApprovalPolicyRegistry } from '../session/approval/tool-approval-policy-registry.js';
 import { isAutoApprovableTool, ShellAutoApprovalResolver } from '../session/approval/shell-auto-approval-resolver.js';
-import type { ShellAutoApprovalAgentClient } from '../session/conversation-agent-client.js';
 import type { ExecutionContext } from '../tools/execution-context.js';
 import { LocalExecutionContext } from './tool-contract.js';
 import { installPlanModeInterceptor } from '../tools/plan-mode-interceptor.js';
@@ -20,10 +19,11 @@ import { TOOL_NAME_DESCRIBE } from '../tools/system/run-code/script-surface.js';
 import type { AnyToolDefinition } from '../tools/types.js';
 import { InvalidatableShellChildRegistry } from '../tools/shell/shell-child-registry.js';
 import type { ProviderInputItem } from '../shared/contracts/provider-input.js';
-import type { ToolContextSeed } from '../engine/index.js';
+import type { ToolContextSeed } from '../tools/index.js';
 import type { Workspace } from '../tools/index.js';
-import type { Item, ItemId, ModelRegistry, ReasoningEffort } from '../model/index.js';
+import type { Item, ReasoningEffort } from '../model/index.js';
 import { createProviderRegistry } from '../model/provider.js';
+import { createApprovalModelClient } from './lib/approval-model.js';
 import { createDirectSubagentTools } from '../delegation/index.js';
 import { createDirectShellTools } from './shell-tools.js';
 import { createSourceToolRegistry, executeSourceChild, sourceToolSpec, sourceToolContext } from './source-tools.js';
@@ -122,7 +122,12 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     targetInvocation,
     remoteUnavailable: SSH_LOCAL_ONLY_TOOLS,
     sessionBrowser,
-    advisoryClient: advisoryClient(createProviderRegistry(selection), selection, advisoryAbort.signal),
+    advisoryClient: createApprovalModelClient(
+      createProviderRegistry(selection),
+      selection,
+      advisoryAbort.signal,
+      options.affinity ?? { conversationKey: sessionId, cacheKey: sessionId },
+    ),
   });
   const shell = createDirectShellTools();
   const allowBackgroundShell = options.interactive === true && !remote;
@@ -209,7 +214,12 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
   const reasoning = (modelSettings?.reasoning as { effort?: ReasoningEffort } | undefined)?.effort;
   const providerOptions = modelSettings?.providerData as AgentSurface['providerOptions'];
   const temperature = modelSettings?.temperature as number | undefined;
-  const agentClient = advisoryClient(createProviderRegistry(selection), selection, advisoryAbort.signal);
+  const agentClient = createApprovalModelClient(
+    createProviderRegistry(selection),
+    selection,
+    advisoryAbort.signal,
+    options.affinity ?? { conversationKey: sessionId, cacheKey: sessionId },
+  );
   // Legacy's in-loop advisory (approval batch coordinator): it sees the pending
   // call in history and caches per call id; `auto` mode may approve from it.
   let advisoryHistory: ProviderInputItem[] = [];
@@ -441,59 +451,6 @@ function approvalHistory(history: readonly Item[]): ProviderInputItem[] {
         return [];
     }
   });
-}
-
-/** One tool-free model request for the existing approval evaluator; never starts an agent loop. */
-function advisoryClient(
-  models: ModelRegistry,
-  { settings }: ProfileSelection,
-  surfaceSignal: AbortSignal,
-): ShellAutoApprovalAgentClient {
-  return {
-    async chat(message, options = {}) {
-      const configured = settings.get('agent.modelSelection');
-      const model = { provider: options.provider ?? configured.provider, model: options.model ?? configured.model };
-      const effort = options.reasoningEffort;
-      const signal = options.signal ? AbortSignal.any([options.signal, surfaceSignal]) : surfaceSignal;
-      signal.throwIfAborted();
-      let deltas = '';
-      const completed: string[] = [];
-      let ended = false;
-      for await (const event of models.resolve(model).stream(
-        {
-          model,
-          instructions: options.instructions ?? '',
-          tools: [],
-          input: [
-            {
-              type: 'user_message',
-              id: `approval:${randomUUID()}` as ItemId,
-              content: [{ type: 'text', text: message }],
-            },
-          ],
-          ...(effort && effort !== 'default' ? { reasoning: effort } : {}),
-          ...(options.maxTokens !== undefined ? { maxOutputTokens: options.maxTokens } : {}),
-        },
-        signal,
-      )) {
-        if (event.type === 'text_delta') deltas += event.delta;
-        if (event.type === 'item' && event.item.type === 'assistant_message') {
-          completed.push(
-            event.item.content
-              .filter((part) => part.type === 'text')
-              .map((part) => part.text)
-              .join(''),
-          );
-        }
-        if (event.type === 'done') {
-          if (event.stopReason !== 'end_turn') throw new Error(`Approval model stopped with ${event.stopReason}`);
-          ended = true;
-        }
-      }
-      if (!ended) throw new Error('Approval model ended without a completion');
-      return completed.length > 0 ? completed.join('') : deltas;
-    },
-  };
 }
 
 /** The Session renders the goal per request (planDirectInstructions); drop the unbound source copy. */

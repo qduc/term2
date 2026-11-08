@@ -178,6 +178,18 @@ or old store. Listings count current visible native user messages, deduplicate
 observed/derived display by message ID, and do not count hidden restoration input.
 They omit text previews so warm listing needs metadata rather than log replay.
 
+`DirectApplication.sessionAccount(sessionId, providerId)` reads the attached
+session's current root Model registry. TUI account lists and removal warnings use
+that getter, so selecting another stored account does not relabel a registry that
+still authenticates with its original pin. Configured generations install their
+account getter with the rest of their runtime and retain the logical session's
+authentication pin store. Advisory registries share that pin while keeping their
+history and cache identity separate. The application owns a credential refresh
+coordinator shared across those session stores: sessions sharing a credential file
+serialize refreshes and reread their own pinned account inside that queue. Failed
+refreshes release the queue so later requests can retry. Independent application
+instances/processes require coordination at their shared credential-store owner.
+
 `cli-account-commands.ts` owns global account/catalog ports as well as login and model-catalog subcommands, including
 source OAuth prompts and catalogue diagnostics. They do not open a conversation;
 `cli.ts` retains process startup, mode selection and signal ownership.
@@ -212,6 +224,16 @@ Legacy command-safety helpers that default to the process-global root do not
 follow these local leases: sibling-worktree reads can require extra approval.
 Sandbox configuration and file tools receive the explicit execution root; do not
 restore global publication to avoid those extra prompts.
+
+`lib/agent-model-settings.ts` owns provider capability resolution and the
+model-facing request settings built from a settings snapshot: output allocation,
+retry/stream limits, explicit reasoning/temperature, flex tier and compaction.
+`lib/agent-factory.ts` keeps agent/tool graph assembly and invocation wrapping.
+
+`createApprovalModelClient` in `lib/approval-model.ts` bridges the existing
+approval evaluator to one tool-free model request. It retains the surface's
+cancellation signal and explicit affinity, accepts only a completed model turn,
+and prefers completed assistant text over streamed deltas.
 
 `createToolSurface` in `tool-surface.ts` builds the offered tools and matching
 execution and approval capabilities together. Source tool and headless approval callbacks
@@ -284,7 +306,7 @@ wording, while persistence keeps native task/branch facts and delivery receipts.
 only for background launches; the source factory still excludes mentor and
 reviewer. Foreground/result-only children do not acquire the capability, even
 if later moved to background. The callback reaches the executing child's
-`ToolContext.askOrchestrator`, not a user question or a legacy subagent registry.
+`ToolContext.app.askOrchestrator`, not a user question or a legacy subagent registry.
 
 `DirectBackgroundTasks` owns one correlated pending question per task. Session
 accepts `task_question_opened` together with a planning notice; its existing
@@ -308,7 +330,7 @@ interactive shell jobs require their own actual-session verification.
 Subagent background controls are not shell-job controls.
 
 `createDirectShellTools` adapts the source shell's prepared runner to the
-engine-injected `ToolContext.shellTasks` port. The adapter does not instantiate
+engine-injected `ToolContext.app.shellTasks` port. The adapter does not instantiate
 the source lifecycle registry: the native Session admits a `kind: 'shell'` task
 before running a command, and the source job ID is that task's canonical ID.
 Foreground leases use the same task when moved to background. Source command

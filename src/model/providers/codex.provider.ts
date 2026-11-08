@@ -1,3 +1,4 @@
+import { CodexTokenManager } from './runtime/codex-token-manager.js';
 import type { ContextCompactionSessionState, StreamedModelTurn } from '../streamed-model-turn.js';
 import OpenAI from 'openai';
 import { randomUUID } from 'node:crypto';
@@ -16,250 +17,18 @@ import { NULL_SESSION_CONTEXT_SERVICE } from '../traffic-context.js';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import envPaths from 'env-paths';
-import {
-  CODEX_OAUTH_CLIENT_ID,
-  CODEX_TOKEN_ENDPOINT,
-  readCodexCliTokens,
-  resolveCodexTokenPath,
-  resolveTerm2CodexAuthPath,
-  createCodexAccountStore,
-} from './codex-auth.js';
-import type { CodexTokens } from './codex-auth.js';
-import { getJwtClaims, getJwtExpiry } from './jwt-claims.js';
-import { recordSessionAccount } from './oauth-session-account.js';
-import type { SessionAccountStore } from './oauth-session-account.js';
-import { ProviderReauthenticationRequiredError } from './common/provider-errors.js';
 import type { ProviderRetryInfo } from './retrying-model.js';
 
 const DEFAULT_CODEX_MODEL = 'gpt-5.3-codex';
 
-// Re-exported so the provider's existing callers and tests keep one import site.
-export { getJwtExpiry } from './jwt-claims.js';
-
-// Extracts accountId from claims in the order of precedence
-export function extractAccountIdFromClaims(claims: any): string | null {
-  if (!claims || typeof claims !== 'object') return null;
-  if (typeof claims.chatgpt_account_id === 'string' && claims.chatgpt_account_id) {
-    return claims.chatgpt_account_id;
-  }
-  const authClaim = claims['https://api.openai.com/auth'];
-  if (
-    authClaim &&
-    typeof authClaim === 'object' &&
-    typeof authClaim.chatgpt_account_id === 'string' &&
-    authClaim.chatgpt_account_id
-  ) {
-    return authClaim.chatgpt_account_id;
-  }
-  if (Array.isArray(claims.organizations) && claims.organizations.length > 0) {
-    const firstOrg = claims.organizations[0];
-    if (firstOrg && typeof firstOrg === 'object' && typeof firstOrg.id === 'string' && firstOrg.id) {
-      return firstOrg.id;
-    }
-  }
-  return null;
-}
-
-// Extracts account ID from id_token, falling back to access_token
-export function extractAccountId(idToken?: string, accessToken?: string): string | null {
-  if (idToken) {
-    const claims = getJwtClaims(idToken);
-    const accountId = extractAccountIdFromClaims(claims);
-    if (accountId) return accountId;
-  }
-  if (accessToken) {
-    const claims = getJwtClaims(accessToken);
-    const accountId = extractAccountIdFromClaims(claims);
-    if (accountId) return accountId;
-  }
-  return null;
-}
-
-// Kept as a compatibility export for the provider's existing callers/tests.
-export const resolveTokenPath = resolveCodexTokenPath;
-
-/**
- * Resolves a live Codex access token.
- *
- * term2 keeps its own credential store and **never writes to the codex CLI's
- * `auth.json`.** OpenAI rotates refresh tokens, so two processes refreshing
- * from one file are two writers on one rotation chain and the loser is silently
- * logged out. The CLI's file is read as a one-way grace only: we take its
- * short-lived access token, never its refresh token, and once that expires the
- * user runs `term2 --codex-login` to get a rotation chain of our own.
- */
-export class CodexTokenManager {
-  private activeRefreshPromise: Promise<string> | null = null;
-  private tokenPathResolver: () => string | null;
-  private authPath: string;
-  private fetchImpl: typeof fetch;
-  private accountId: string | null = null;
-  private installationId: string | null | undefined;
-  /**
-   * The account this manager resolved first, held for its whole lifetime.
-   *
-   * Selecting a different account in the UI changes the store's active pointer,
-   * but a running session keeps authenticating as whoever it started as —
-   * provider response chaining is bound to that identity, so swapping it
-   * mid-session would break the chain.
-   */
-  private pinnedAccountId: string | null = null;
-  private readonly sessionAccountStore?: SessionAccountStore;
-
-  constructor(options?: {
-    tokenPathResolver?: () => string | null;
-    authPath?: string;
-    fetchImpl?: typeof fetch;
-    sessionAccountStore?: SessionAccountStore;
-  }) {
-    this.tokenPathResolver = options?.tokenPathResolver || resolveTokenPath;
-    this.authPath = options?.authPath || resolveTerm2CodexAuthPath();
-    this.fetchImpl = options?.fetchImpl || globalThis.fetch;
-    this.sessionAccountStore = options?.sessionAccountStore;
-  }
-
-  getAccountId(): string | null {
-    return this.accountId;
-  }
-
-  getInstallationId(): string | null {
-    if (this.installationId !== undefined) {
-      return this.installationId;
-    }
-
-    // The installation id is a codex CLI artifact, so it is read from the CLI's
-    // directory even when the credential itself is term2's own.
-    const tokenPath = this.tokenPathResolver();
-    if (!tokenPath) {
-      this.installationId = null;
-      return this.installationId;
-    }
-
-    try {
-      const installationPath = path.join(path.dirname(tokenPath), 'installation_id');
-      const installationId = fs.readFileSync(installationPath, 'utf8').trim();
-      this.installationId = installationId || null;
-    } catch {
-      this.installationId = null;
-    }
-
-    return this.installationId;
-  }
-
-  private load(): CodexTokens | null {
-    const store = createCodexAccountStore(this.authPath);
-    const pinned = this.pinnedAccountId ? store.get(this.pinnedAccountId) : null;
-    // Falls back to the active account if the pinned one was signed out.
-    const account = pinned ?? store.getActive();
-    if (account) {
-      this.pinnedAccountId = account.id;
-      recordSessionAccount('codex', account.id, this.sessionAccountStore);
-      return account.tokens;
-    }
-    const cliPath = this.tokenPathResolver();
-    return cliPath ? readCodexCliTokens(cliPath) : null;
-  }
-
-  /** The account id this session is authenticating as, once it has resolved one. */
-  getPinnedAccountId(): string | null {
-    return this.pinnedAccountId;
-  }
-
-  async getOrRefreshAccessToken(): Promise<string> {
-    const tokens = this.load();
-    if (!tokens) {
-      throw new ProviderReauthenticationRequiredError(
-        'Not logged in to Codex. Run `term2 --codex-login` (or `npx @openai/codex login`) first, or set CHATGPT_LOCAL_HOME/CODEX_HOME.',
-      );
-    }
-
-    const { access_token: accessToken, refresh_token: refreshToken, id_token: idToken } = tokens;
-
-    const resolvedAccountId = extractAccountId(idToken, accessToken) || tokens.account_id;
-    if (resolvedAccountId) {
-      this.accountId = resolvedAccountId;
-    }
-
-    const expiryMs = getJwtExpiry(accessToken);
-    const isExpiredOrSoon = expiryMs !== null && Date.now() + 5 * 60 * 1000 >= expiryMs;
-
-    if (!isExpiredOrSoon) {
-      return accessToken;
-    }
-
-    if (!refreshToken) {
-      throw new ProviderReauthenticationRequiredError(
-        tokens.imported
-          ? 'The access token imported from the `codex` CLI has expired. Run `term2 --codex-login` so term2 holds its own credential.'
-          : 'Codex access token is expired or expiring soon, but no refresh token is stored. Run `term2 --codex-login` again.',
-      );
-    }
-
-    if (this.activeRefreshPromise) {
-      return this.activeRefreshPromise;
-    }
-
-    this.activeRefreshPromise = (async () => {
-      try {
-        const response = await this.fetchImpl(CODEX_TOKEN_ENDPOINT, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            grant_type: 'refresh_token',
-            refresh_token: refreshToken,
-            client_id: CODEX_OAUTH_CLIENT_ID,
-            scope: 'openid profile email offline_access',
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error(`OpenAI token refresh failed with status ${response.status}`);
-        }
-
-        const resBody = await response.json();
-        const newAccessToken = resBody.access_token;
-        if (!newAccessToken) {
-          throw new Error('Refresh response did not contain access_token');
-        }
-
-        const newIdToken = resBody.id_token || idToken;
-        const refreshedAccountId = extractAccountId(newIdToken, newAccessToken) || tokens.account_id;
-        if (refreshedAccountId) {
-          this.accountId = refreshedAccountId;
-        }
-
-        // Refresh the account this session is pinned to, not whichever the
-        // user has since selected.
-        const store = createCodexAccountStore(this.authPath);
-        // Cross-process guard: single-use refresh_token — don't overwrite a
-        // newer rotation already written by another term2 instance.
-        const refreshTarget = this.pinnedAccountId;
-        const current = refreshTarget
-          ? (store.get(refreshTarget)?.tokens as CodexTokens | undefined)
-          : (store.getActive()?.tokens as CodexTokens | undefined);
-        if (current?.refresh_token && current.refresh_token !== refreshToken) {
-          return current.access_token;
-        }
-        const nextTokens = {
-          access_token: newAccessToken,
-          refresh_token: resBody.refresh_token || refreshToken,
-          id_token: newIdToken,
-          ...(refreshedAccountId ? { account_id: refreshedAccountId } : {}),
-        };
-        if (refreshTarget) store.updateTokens(refreshTarget, nextTokens);
-        else store.updateActiveTokens(nextTokens);
-
-        return newAccessToken;
-      } finally {
-        this.activeRefreshPromise = null;
-      }
-    })();
-
-    return this.activeRefreshPromise;
-  }
-}
+// Compatibility surface; credentials are owned separately from model transport.
+export {
+  CodexTokenManager,
+  getJwtExpiry,
+  extractAccountIdFromClaims,
+  extractAccountId,
+  resolveTokenPath,
+} from './runtime/codex-token-manager.js';
 
 const execAsync = promisify(exec);
 
@@ -413,7 +182,7 @@ async function fetchCodexModels(
   fetchImpl: ProviderFetch = fetch,
 ): Promise<Array<{ id: string; name?: string; default_reasoning_level?: string }>> {
   const tokenManager = new CodexTokenManager({ fetchImpl });
-  const accessToken = await tokenManager.getOrRefreshAccessToken();
+  const accessToken = await tokenManager.getOrRefreshAccessToken(deps.signal);
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -546,7 +315,7 @@ function codexAuthMiddleware(
 ): FetchMiddleware {
   return async (ctx, next) => {
     try {
-      const accessToken = await tokenManager.getOrRefreshAccessToken();
+      const accessToken = await tokenManager.getOrRefreshAccessToken(ctx.init?.signal ?? undefined);
       const rawHeaders = ctx.init?.headers;
       const headers: Record<string, string> = {};
       if (rawHeaders) {
@@ -587,6 +356,7 @@ export function addCodexCompactHeaders(
   headers: HeadersInit,
   sessionId: string | undefined,
   body?: BodyInit | null,
+  routingKey?: string,
 ): Record<string, string> {
   const normalizedHeaders: Record<string, string> = {};
   if (headers instanceof Headers) {
@@ -624,10 +394,10 @@ export function addCodexCompactHeaders(
   });
   return {
     ...normalizedHeaders,
-    'x-client-request-id': threadId,
-    'session-id': sessionId,
-    'thread-id': threadId,
-    'x-codex-window-id': windowId,
+    'x-client-request-id': routingKey ?? threadId,
+    'session-id': routingKey ?? sessionId,
+    'thread-id': routingKey ?? threadId,
+    'x-codex-window-id': routingKey ? `${routingKey}:1` : windowId,
     'x-codex-turn-metadata': turnMetadata,
     'x-codex-beta-features': 'remote_compaction_v2',
     'OpenAI-Beta': 'responses=experimental',
@@ -662,23 +432,10 @@ export function codexHeadersMiddleware(sessionContextService?: ISessionContextSe
       injectHeaders(ctx.init?.headers, extraHeaders),
       providerHistoryKey,
       ctx.init?.body,
+      trafficContext?.providerRoutingKey,
     );
     return next({ url: ctx.url, init: { ...ctx.init, headers: mergedHeaders } });
   };
-}
-
-// The application run loop resolves its model once per internal turn. Keep the
-// provider instance session-scoped so Codex's server-history maps survive the
-// tool execution and continuation turns.
-const streamedProviders = new WeakMap<object, { fingerprint: string; provider: CodexProvider }>();
-
-function codexProviderFingerprint(settingsService: { get(key: string): unknown }, retryAttempts?: number): string {
-  return JSON.stringify([
-    settingsService.get('agent.transport') ?? 'websocket',
-    retryAttempts ?? settingsService.get('agent.retryAttempts') ?? 2,
-    settingsService.get('agent.codex.websocketFirstFrameTimeoutMs') ?? 90_000,
-    settingsService.get('agent.codex.websocketInterFrameTimeoutMs') ?? 600_000,
-  ]);
 }
 
 // Register Codex provider
@@ -696,26 +453,10 @@ registerProvider(
         retryAttempts,
         contextCompactionSessionState,
         sessionAccountStore,
+        onDispatched,
       },
     ) => {
       const defaultModel = settingsService.get('agent.modelSelection').model || 'gpt-5.3-codex';
-      // A session context is the ownership boundary for continuation state. Do
-      // not fall back to the settings service: it can be shared by independent
-      // sessions, which would leak server-managed response history.
-      const cacheKey = sessionContextService as object | undefined;
-      const fingerprint = codexProviderFingerprint(settingsService, retryAttempts);
-      const cached = cacheKey ? streamedProviders.get(cacheKey) : undefined;
-      if (cached) {
-        if (cached.fingerprint !== fingerprint) {
-          throw new Error(
-            'Codex transport or retry settings changed while this session was active. Start a new session before continuing so server-managed tool-call state is not lost.',
-          );
-        }
-        // The cache is session-scoped, but retry observers are client-scoped.
-        cached.provider.setRetryCallback(onRetry);
-        return cached.provider.getStreamedModel(model || defaultModel);
-      }
-
       const tokenManager = new CodexTokenManager({ sessionAccountStore });
 
       const openAIClient = new OpenAI({
@@ -728,6 +469,7 @@ registerProvider(
           deps: {
             loggingService,
             sessionContextService: sessionContextService ?? NULL_SESSION_CONTEXT_SERVICE,
+            onDispatched,
           },
           middlewares: [
             codexAuthMiddleware(tokenManager, loggingService),
@@ -751,7 +493,6 @@ registerProvider(
         onRetry,
         contextCompactionSessionState,
       );
-      if (cacheKey) streamedProviders.set(cacheKey, { fingerprint, provider });
       return provider.getStreamedModel(model || defaultModel);
     },
     defaultModelSettings: () => ({ store: false, include: ['reasoning.encrypted_content'] }),

@@ -10,7 +10,7 @@ import type { Tool, ToolContext } from '../../../src/tools/index.js';
 import { withActiveWorkspaceRoot } from '../../../src/tools/workspace/active-workspace-root.js';
 import { createMockSettingsService } from '../../helpers/settings-service.mock.js';
 import { createApplyPatchToolDefinition } from '../../../src/tools/file/apply-patch.js';
-import { resolveAncillaryModelTier } from '../../../src/engine/agent-runtime/model-resolver.js';
+import { resolveAncillaryModelTier } from '../../../src/session/agent-runtime/model-resolver.js';
 import type { AnyToolDefinition } from '../../../src/tools/types.js';
 import { buildAgentTools, type AgentFactoryDeps } from '../../../src/app/lib/agent-factory.js';
 import { createEditorImpl } from '../../../src/tools/editor-impl.js';
@@ -89,8 +89,10 @@ function adapt(
   });
   cleanups.push(() => registry.dispose());
   const context: ToolContext = {
-    workspace: { root: cwd, target: 'local', access: 'read_write' },
-    settings: { get: (key) => settings.getDynamic(key) as never, watch: () => () => {} },
+    app: {
+      workspace: { root: cwd, target: 'local', access: 'read_write' },
+      settings: { get: (key) => settings.getDynamic(key) as never, watch: () => () => {} },
+    },
     signal: new AbortController().signal,
     progress() {},
     runNested: async () => {

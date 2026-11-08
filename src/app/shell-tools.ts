@@ -120,8 +120,8 @@ export function createDirectShellTools() {
   };
   const withInvocation: NonNullable<AgentFactoryDeps['withToolInvocation']> = (_name, invocation, operation) => {
     const context = sourceToolContext(invocation);
-    if (!context.shellTasks) return operation();
-    return scope.run(context.shellTasks, operation);
+    if (!context.app.shellTasks) return operation();
+    return scope.run(context.app.shellTasks, operation);
   };
   // One retained surface can serve several Sessions. A watch ID alone must not
   // grant control over another Session's output subscription.

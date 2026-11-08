@@ -45,8 +45,6 @@ const GROK_STABLE_VERSION_URLS = [
 const GROK_VERSION_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const GROK_VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
 
-let clientVersionPromise: Promise<string> | undefined;
-
 function grokVersionCachePath(cacheDir?: string): string {
   return path.join(cacheDir || process.env.TERM2_CACHE_DIR || envPaths('term2').cache, 'grok-client-version.json');
 }
@@ -104,10 +102,9 @@ export async function lookupGrokClientVersion(options?: {
   return cached?.version ?? (await getInstalledGrokVersion()) ?? GROK_CLIENT_VERSION_FALLBACK;
 }
 
-/** Resolved once per process. */
+/** The persistent version cache is consulted outside a model instance. */
 export function resolveGrokClientVersion(): Promise<string> {
-  clientVersionPromise ??= lookupGrokClientVersion();
-  return clientVersionPromise;
+  return lookupGrokClientVersion();
 }
 
 /**
@@ -144,7 +141,7 @@ function grokAuthMiddleware(
 ): FetchMiddleware {
   return async (ctx, next) => {
     try {
-      const accessToken = await tokenManager.getOrRefreshAccessToken();
+      const accessToken = await tokenManager.getOrRefreshAccessToken(ctx.init?.signal ?? undefined);
       const headers = injectHeaders(ctx.init?.headers, { Authorization: `Bearer ${accessToken}` });
       return next({ url: ctx.url, init: { ...ctx.init, headers } });
     } catch (err: any) {
@@ -155,11 +152,13 @@ function grokAuthMiddleware(
 }
 
 function grokHeadersMiddleware(sessionContextService?: ISessionContextService): FetchMiddleware {
+  let clientVersionPromise: Promise<string> | undefined;
   return async (ctx, next) => {
-    const clientVersion = await resolveGrokClientVersion();
+    const clientVersion = await (clientVersionPromise ??= resolveGrokClientVersion());
     const context = sessionContextService?.getContext();
     const sessionId = context?.sessionId;
     const cacheAffinity =
+      context?.providerRoutingKey ??
       (context?.rootContextCompaction ? undefined : context?.providerHistoryKey) ??
       (context?.evaluator ? String(sessionId) + ':evaluator' : context?.promptCacheKey ?? sessionId);
     const headers = injectHeaders(ctx.init?.headers, {
@@ -182,6 +181,7 @@ export function buildGrokFetch(deps: ProviderDeps, tokenManager: GrokTokenManage
     deps: {
       loggingService: deps.loggingService,
       sessionContextService: deps.sessionContextService ?? NULL_SESSION_CONTEXT_SERVICE,
+      onDispatched: deps.onDispatched,
     },
     middlewares: [
       grokAuthMiddleware(tokenManager, deps.loggingService),
@@ -195,7 +195,7 @@ export async function fetchGrokModels(
   fetchImpl: ProviderFetch = fetch,
 ): Promise<Array<{ id: string; name?: string; default_reasoning_level?: string }>> {
   const tokenManager = new GrokTokenManager({ fetchImpl, sessionAccountStore: deps.sessionAccountStore });
-  const accessToken = await tokenManager.getOrRefreshAccessToken();
+  const accessToken = await tokenManager.getOrRefreshAccessToken(deps.signal);
 
   const response = await fetchImpl(`${GROK_BASE_URL}/models`, {
     headers: {

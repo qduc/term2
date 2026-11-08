@@ -39,10 +39,16 @@ export const useProviderSelection = (
   const providerSession = useMemo(() => ({ list: () => api.list(sessionId) }), [api, sessionId]);
   const getProviderLabel = api.label;
   const isOAuthAccountProvider = api.isOAuthAccountProvider;
-  const listOAuthAccounts = api.listAccounts;
+  const listOAuthAccounts = useCallback(
+    (providerId: string) => api.listAccounts(sessionId, providerId),
+    [api, sessionId],
+  );
   const removeOAuthAccount = api.removeAccount;
   const setActiveOAuthAccount = api.setActiveAccount;
-  const getSessionAccount = api.sessionAccount;
+  const getSessionAccount = useCallback(
+    (providerId: string) => api.sessionAccount(sessionId, providerId),
+    [api, sessionId],
+  );
 
   const [phase, setPhase] = useState<ProviderSelectionPhase>('list');
   const [items, setItems] = useState<ProviderSelectionItem[]>([]);

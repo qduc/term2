@@ -25,7 +25,7 @@ result is a decision about the next step, not proof that unit tests are unnecess
    Explicit user-authorized exception: the [generated verification pilot](../generated-verification/README.md)
    may retain bounded generated properties/tooling. This does not authorize a restored
    example-based unit suite or change the remaining required tiers.
-2. Integration, e2e, provider black-box tests and the seven static repository guards stay and keep running
+2. Integration, e2e, provider black-box tests and the static repository guards stay and keep running
    in CI.
 3. Every change gets verification proportional to its risk.
 4. Agents choose their own verification methods (the `verification` skill gives the standard, not the

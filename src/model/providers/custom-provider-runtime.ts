@@ -13,6 +13,7 @@ export type CustomProviderConfig = {
 
 export type CustomProviderRuntimeDeps = {
   defaultModel: string;
+  onDispatched?: () => void;
   fetch?: typeof fetch;
   loggingService?: ILoggingService;
   sessionContextService?: ISessionContextService;
@@ -42,6 +43,7 @@ export function buildProviderFetch(
           clearCorrelationId: () => {},
         } as ILoggingService),
       sessionContextService,
+      onDispatched: deps.onDispatched,
     },
     middlewares,
     fetchImpl: deps.fetch,

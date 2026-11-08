@@ -8,7 +8,7 @@ import { SandboxedCodeHostImpl } from '../../tools/sandboxed-code-host/sandboxed
 import type { CapabilityHandler, CapabilityOutcome, JsonValue } from '../../tools/sandboxed-code-host/host-types.js';
 import type { ILoggingService, ISSHService } from '../../shared/service-interfaces.js';
 import { quoteShellArg } from '../../tools/ssh-service.js';
-import type { ToolInvocationContext } from '../../engine/agent-runtime/tool-invocation-context.js';
+import type { ToolInvocationContext } from '../../session/agent-runtime/tool-invocation-context.js';
 import type { ToolApprovalPolicyRegistry } from '../../session/approval/tool-approval-policy-registry.js';
 import type { NestedApprovalOwner } from '../../session/approval/nested-approval-owner.js';
 import { applyApprovalGrant } from '../../session/approval/approval-grant-executor.js';
@@ -28,7 +28,7 @@ import {
   scriptedReturnContractJsonSchema,
   validateScriptedReturn,
 } from '../../tools/scripted-return-contract.js';
-import type { AgentSpecAuthoritySnapshot } from '../../engine/agent-runtime/permission-boundary.js';
+import type { AgentSpecAuthoritySnapshot } from '../../session/agent-runtime/permission-boundary.js';
 import {
   createRunCodeAgentCapability,
   isRunCodeAgentBridgeActive,

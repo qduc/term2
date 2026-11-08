@@ -2,8 +2,9 @@
 
 This describes term2's source tree, `src/`, which began as the term2-next
 rewrite. Its production entry is `src/app/cli.ts`, built by `pnpm build` to
-`dist/src/app/cli.js` and started by the package's `dist/cli.js` (#86). All production code lives in
-`src/`: legacy code the CLI no longer reached was deleted (#88) and the rest of
+`dist/src/app/cli.js` and started by the package's `dist/cli.js` (#86). Term2 application code lives in
+`src/`; the reusable turn loop and contracts live in
+`packages/agent-harness-core/src/`. Legacy code the CLI no longer reached was deleted (#88) and the rest of
 the old `source/` tree was moved into these layers (#87). Tests live in the
 root `tests/` folder, laid out by the same layer names.
 
@@ -24,8 +25,8 @@ reached from the CLI.
 | `host/`     | Transport and access: in-process host, HTTP server, auth      | protocol, session              |
 | `protocol/` | The one public event and command format, one projection       | session and everything below   |
 | `delegation/` | Child agents, roles/pools, runners and workflow execution   | session and everything below   |
-| `session/`  | One durable conversation: append-only log, replay, recovery policy | engine, model, tools           |
-| `engine/`   | The turn loop: waits for answers, compacts, recovery mechanics | model, tools                   |
+| `session/`  | One durable conversation and its host policy: log, replay, branches, permissions, completion and billing | engine, model, tools |
+| `engine/`   | Compatibility types and continuity/history helpers for the portable harness | portable package contracts |
 | `tools/`    | Tool contracts: schema, approval policy and execute function  | model                          |
 | `model/`    | Providers behind one streaming interface, item format         | nothing                        |
 | `config/`   | Pure schemas, defaults and profile definitions                | nothing (pure leaf)            |
@@ -42,6 +43,14 @@ addressed pay-as-you-go when those components are next touched. Each edge and it
 Phase 3 row and what removes it, live in `scripts/layer-allowlist.json` rather than here, so the reason sits
 next to the entry it justifies. `node scripts/gate-exceptions.mjs layer-direction` prints them.
 `check-layers.mjs` fails on any unlisted edge and prints listed edges that no longer exist.
+
+The portable harness owns turn mechanics and imports only its own contracts,
+Node builtins and optional schema dependencies. `src/engine` contains only its
+compatibility surfaces and has an empty import-exception baseline. Term2-specific
+agent resolution, permission scopes, budgets, completion verification, prompt
+notices and history presentation live in `session/`. These host modules configure
+the harness; they are not part of the reusable package. Their source moves in
+#224 preserve existing policy and call paths.
 
 `delegation/` sits between protocol and session; session does not import it.
 The app injects its concrete launcher/evaluator implementations into tools.
@@ -154,12 +163,12 @@ socket attach to the same host the same way.
    (`applyDirectCommand`), the only wire-to-domain translation, which calls
    `submit` on the live `DirectSession` (`session/session.ts`).
 4. The session's `Conversation` (`session/conversation.ts`) appends the
-   admission facts and starts an engine turn with `startTurn`
-   (`engine/turn.ts`). `session/conversation-turn.ts` is the only reader of that
+   admission facts and starts a portable turn through `session/harness.ts`
+   (`packages/agent-harness-core/src/engine/turn.ts`). `session/conversation-turn.ts` is the only reader of that
    turn's events: it appends each event's facts to the log and then calls
    `accept(token)`, and the turn does not advance past an event until it is
    accepted.
-5. `engine/turn-model.ts` asks for the model through the registry the app
+5. `packages/agent-harness-core/src/engine/turn-model.ts` asks for the model through the registry the app
    built (`app/application-models.ts`, wrapped by
    `app/generation-guard.ts`). `model/provider.ts` streams from the
    provider in `model/providers/`, retrying through `model/retry.ts`.
@@ -201,11 +210,14 @@ measurable:
 - `bench/hops.mts` runs the real entry in-process against a local fake
   provider, sends one headless prompt, and records the chain of files active
   when the provider's HTTP request goes out, starting at the client's submit.
-  It fails when that chain gets longer (hops) or touches more files. Today it is
-  14 hops through 14 files, each layer once: `clients/headless/direct.ts`,
+  It fails when that chain gets longer (hops) or touches more files. The portable
+  package's `src/engine` modules are classified as the engine layer; their package
+  location does not change the hop or file count. Today it is 14 hops through
+  14 files, each layer once: `clients/headless/direct.ts`,
   `host/in-process-direct.ts`, `protocol/commands.ts`,
-  `session/session.ts`, `session/conversation-turn.ts`, `engine/turn.ts`,
-  `engine/turn-model.ts`, `app/generation-guard.ts`,
+  `session/session.ts`, `session/conversation-turn.ts`,
+  `packages/agent-harness-core/src/engine/turn.ts`,
+  `packages/agent-harness-core/src/engine/turn-model.ts`, `app/generation-guard.ts`,
   `app/application-models.ts`, `model/provider.ts`, and four
   `model/providers/` files. `app/` appears below `engine/` because the engine
   calls the model registry the app injected, not because `engine/` imports

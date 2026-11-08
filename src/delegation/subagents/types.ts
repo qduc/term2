@@ -1,6 +1,6 @@
-import type { ExecutionBudget } from '../../engine/agent-runtime/execution-budget.js';
+import type { ExecutionBudget } from '../../session/agent-runtime/execution-budget.js';
 
-import type { AgentSpec } from '../../engine/agent-runtime/types.js';
+import type { AgentSpec } from '../../session/agent-runtime/types.js';
 
 import type { SubagentRole } from '../../tools/subagents/types.js';
 

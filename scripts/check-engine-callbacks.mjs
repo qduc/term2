@@ -2,7 +2,7 @@
 // The engine waits instead of calling up (docs/architecture/layers.md, audit F1): a turn's durable facts reach the
 // log through its events, which session/conversation-turn.ts (or the branch reader in session/branches.ts) appends
 // before accepting each one. A callback the engine invokes (a function-typed member of TurnDeps or TurnBudget in
-// engine/types.ts) that writes the log is a second write path whose position in the log depends on when the engine
+// the harness package's engine/types.ts) that writes the log is a second write path whose position in the log depends on when the engine
 // chose to call it, so each one is recorded in rule-baseline.json (engineCallbackWrites) with the reason it must
 // stay synchronous.
 //
@@ -36,12 +36,26 @@ const config = ts.getParsedCommandLineOfConfigFile(
     },
   },
 );
-const program = ts.createProgram({ rootNames: config.fileNames, options: { ...config.options, noEmit: true } });
+// Resolve the package to source for this analysis: the declarations consumed by
+// application builds must not hide callback bodies or point at stale dist files.
+const harness = path.join(repo, 'packages/agent-harness-core/src');
+const program = ts.createProgram({
+  rootNames: config.fileNames,
+  options: {
+    ...config.options,
+    noEmit: true,
+    baseUrl: repo,
+    paths: { ...config.options.paths, '@qduc/agent-harness-core': [path.join(harness, 'index.ts')] },
+  },
+});
 const checker = program.getTypeChecker();
 const src = path.join(repo, 'src') + path.sep;
 const rel = (file) => path.relative(repo, file).split(path.sep).join('/');
 const inSrc = (node) => node.getSourceFile().fileName.startsWith(src);
-const inEngine = (node) => rel(node.getSourceFile().fileName).startsWith('src/engine/');
+const inEngine = (node) => {
+  const file = rel(node.getSourceFile().fileName);
+  return file.startsWith('src/engine/') || file.startsWith('packages/agent-harness-core/src/');
+};
 const where = (node) => {
   const sf = node.getSourceFile();
   return `${rel(sf.fileName)}:${sf.getLineAndCharacterOfPosition(node.getStart()).line + 1}`;
@@ -49,8 +63,8 @@ const where = (node) => {
 
 // 1. The callbacks: function-typed members of TurnDeps and TurnBudget, plus the methods of object-typed members
 // (contextMilestones.observe). Keyed by their declaration so a supply site can be matched exactly.
-const types = program.getSourceFile(path.join(repo, 'src/engine/types.ts'));
-if (!types) report('engine-callbacks: could not load src/engine/types.ts');
+const types = program.getSourceFile(path.join(harness, 'engine/types.ts'));
+if (!types) report('engine-callbacks: could not load harness engine/types.ts');
 const callbacks = new Map(); // declaration node -> "TurnDeps.name"
 const callable = (type) => checker.getNonNullableType(type).getCallSignatures().length > 0;
 for (const statement of types?.statements ?? []) {
@@ -73,7 +87,7 @@ for (const statement of types?.statements ?? []) {
       }
   }
 }
-if (callbacks.size < 8) report(`engine-callbacks: found only ${callbacks.size} callbacks in src/engine/types.ts`);
+if (callbacks.size < 8) report(`engine-callbacks: found only ${callbacks.size} callbacks in harness engine/types.ts`);
 
 // 2. Writers.
 const journal = program.getSourceFile(path.join(repo, 'src/session/conversation-journal.ts'));

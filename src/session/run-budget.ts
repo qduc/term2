@@ -1,6 +1,6 @@
 /** Session-owned logical-run clocks and stable physical-request tree accounting. */
 import type { TurnDeps, TurnId } from '../engine/index.js';
-import { RunBudget, clampRunBudgetPolicy, type ModelRequestCost } from '../engine/recovery-budget.js';
+import { RunBudget, clampRunBudgetPolicy, type ModelRequestCost } from './recovery-budget.js';
 import type { DirectTaskState } from './background-types.js';
 import type { DirectRequestCostFact, Fact } from './facts.js';
 

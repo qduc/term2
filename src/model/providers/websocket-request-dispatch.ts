@@ -17,15 +17,27 @@ export type WebSocketDispatchState =
   /** The send path could not observe the socket. Must be treated as ambiguous. */
   | 'unknown';
 
-const dispatchStates = new WeakMap<object, WebSocketDispatchState>();
+const dispatchEvidence = Symbol('websocketDispatchEvidence');
+type DispatchRequest = { readonly [dispatchEvidence]?: { state: WebSocketDispatchState } };
 
 export function recordWebSocketDispatch(request: object, state: WebSocketDispatchState): void {
-  dispatchStates.set(request, state);
+  const evidence = (request as DispatchRequest)[dispatchEvidence];
+  if (evidence) evidence.state = state;
+  else {
+    try {
+      // Runtime metadata is request-owned and omitted by JSON/object spreads.
+      // Keep the inner cell mutable if the envelope is later frozen.
+      Object.defineProperty(request, dispatchEvidence, { value: { state } });
+    } catch {
+      // A request frozen before recording has unknown dispatch evidence. Never
+      // turn inability to record a physical send into replay permission.
+    }
+  }
 }
 
 /** Unrecorded requests read as `unknown`, so a missing record never authorizes a replay. */
 export function readWebSocketDispatch(request: object): WebSocketDispatchState {
-  return dispatchStates.get(request) ?? 'unknown';
+  return (request as DispatchRequest)[dispatchEvidence]?.state ?? 'unknown';
 }
 
 /**

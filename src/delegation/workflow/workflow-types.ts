@@ -1,5 +1,5 @@
 import type { NormalizedUsage } from '../../shared/utils/ai/token-usage.js';
-import type { RunOutputFormat } from '../../engine/agent-runtime/types.js';
+import type { RunOutputFormat } from '../../session/agent-runtime/types.js';
 
 import type { JsonValue } from '../../shared/utils/json-value.js';
 

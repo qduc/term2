@@ -19,10 +19,6 @@
       "files": 67,
       "reason": "Interactive modal and settings menus share picker and option contracts. Includes use-menu-interaction.ts, added on main to register all twelve menu handlers in the render commit; duplicating that layout-effect contract risks reviving the input race. Keep it with its callers and lower this ceiling when a cohesive menu group moves together."
     },
-    "src/engine": {
-      "files": 21,
-      "reason": "Core turn execution loop, retry decision classifiers, and prompt assemblers; cohesive turn mechanics across providers."
-    },
     "src/host": {
       "files": 28,
       "reason": "Server gateway, socket dispatch, and transport endpoints; combines direct SSE host and control socket routes."
@@ -32,7 +28,7 @@
       "reason": "Model domain types, token usage tracking, and streaming completion contracts; core vocabulary for all provider adapters."
     },
     "src/model/providers": {
-      "files": 60,
+      "files": 58,
       "reason": "Loopback, cloud, and local AI provider implementations and fixtures; each provider file implements ModelProvider independently."
     },
     "src/protocol": {
@@ -40,8 +36,8 @@
       "reason": "Cross-client event envelopes, serialization codecs, and projection types; stable schemas shared by TUI, headless, and ACP."
     },
     "src/session": {
-      "files": 82,
-      "reason": "Root session directory holds loose session lifecycle, queue, and stream files; burndown planned in #197 and Phase 3."
+      "files": 87,
+      "reason": "Session lifecycle, queue and stream ownership plus the two application-context/pricing composition files and three existing host policy helpers moved from engine for #224. The engine is now only portable package contract surfaces; further Session root decomposition remains planned in #197 and Phase 3."
     },
     "src/session/conversation": {
       "files": 19,
@@ -73,18 +69,6 @@
       "lines": 1145,
       "reason": "Verbatim port of legacy source/components/prompt/ApprovalPrompt.tsx (every approval and ask_user layout and key path); only its data access changed, so it matches legacy by construction."
     },
-    "src/engine/turn-tools.ts": {
-      "lines": 514,
-      "reason": "One per-call Execution record carries a call's planning, admission, interaction answers and settlement; the chosen approval grant rides it like the batch-asked answer, so splitting would pass that record across files."
-    },
-    "src/app/tool-surface.ts": {
-      "lines": 503,
-      "reason": "Builds one agent's tool surface, including session-browser and worker advisory binding. Delegation owns preparation; its injected registry/context ports close over this same surface's workspace, answers and interceptors, so their composition stays here."
-    },
-    "src/engine/turn-model.ts": {
-      "lines": 509,
-      "reason": "One model step with its recovery loop; candidate 2 joins the replacement-boundary projection with legacy's retry notices and model_retrying observation, which share the loop's state."
-    },
     "src/protocol/wire.ts": {
       "lines": 501,
       "reason": "The wire type catalogue; candidate 2 adds the task's live tool state fields beside the others, and usage carries OpenRouter's upstream provider."
@@ -102,8 +86,8 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/app/lib/agent-factory.ts": {
-      "lines": 673,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
+      "lines": 555,
+      "reason": "Agent graph assembly and tool invocation wrappers retain their existing shared execution/approval dependencies. Provider capability resolution and model request settings now live in app/lib/agent-model-settings.ts; this lowered ceiling records the remaining assembly body without authorizing growth."
     },
     "src/clients/control-socket/control-socket.ts": {
       "lines": 889,
@@ -129,12 +113,12 @@
       "lines": 543,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "src/engine/agent-runtime/permission-boundary.ts": {
+    "src/session/agent-runtime/permission-boundary.ts": {
       "lines": 660,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "src/engine/agent-runtime/scope-resolver.ts": {
-      "lines": 717,
+    "src/session/agent-runtime/scope-resolver.ts": {
+      "lines": 700,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/model/failure/retry-error-classification.ts": {
@@ -150,12 +134,12 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/model/providers/codex-responses-model.ts": {
-      "lines": 2450,
+      "lines": 2398,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Responses Lite reconnect checks the existing response chain before filtering unpaired tool items; this remains part of the same wire request preparation."
     },
     "src/model/providers/codex.provider.ts": {
-      "lines": 765,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
+      "lines": 506,
+      "reason": "OAuth token-manager lifecycle and claim parsing now live in providers/runtime/codex-token-manager.ts; this remaining provider transport assembly is ratcheted from 745 to 506 lines."
     },
     "src/model/providers/model-catalog/catalog.generated.ts": {
       "lines": 3789,
@@ -166,7 +150,7 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/model/providers/openai-responses-model.ts": {
-      "lines": 928,
+      "lines": 889,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/session/approval/shell-auto-approval-evaluator.ts": {
@@ -274,8 +258,8 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/delegation/subagents/tool-policy.ts": {
-      "lines": 1450,
-      "reason": "Inherited source child capability factory/policy, moved to delegation with import formatting and explicit healing-model injection; runner authority and safety policy are unchanged."
+      "lines": 1399,
+      "reason": "Inherited child capability factory and policy wrappers, with validation evidence capture now owned by subagents/validation-evidence.ts. The remaining authority checks, scope enforcement, and provider-compatible wrappers still share one graph; this lower ceiling records that existing cohesive body without authorizing further growth."
     },
     "src/delegation/run-code/run-code-agent-capability.ts": {
       "lines": 529,

@@ -3,6 +3,13 @@
 Status: **plan.** Design only. Phase 1 is tracked in [#224](https://github.com/qduc/term2/issues/224); the
 open questions below are waiting on a decision before their parts are implemented.
 
+Implementation location update: the portable driver and contracts now live in
+`packages/agent-harness-core/src/`. Term2-specific agent resolution, scopes,
+completion verification, billing composition and notices live in `src/session/`.
+`src/engine` retains only contract and continuity/history compatibility surfaces;
+its import-exception baseline is empty. The “today” source paths below describe
+the pre-extraction design snapshot.
+
 Drafted 2026-11-08 against Term2 `ec59cf0` and ChatForge (`qduc/chat`) at the same date. Verify every
 claim about current code against the source before acting on it.
 

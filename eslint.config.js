@@ -22,6 +22,7 @@ export default tseslint.config(
       'dist.bak',
       'dist.bak/**',
       'dist/**',
+      'packages/*/dist/**',
       'coverage/**',
       'generated/**',
       'docs/**/*.ts',
@@ -54,7 +55,7 @@ export default tseslint.config(
     languageOptions: {
       parser: tseslint.parser,
       parserOptions: {
-        project: ['./tsconfig.json', './packages/core/tsconfig.json'],
+        project: ['./tsconfig.json', './packages/agent-harness-core/tsconfig.json'],
         tsconfigRootDir: import.meta.dirname,
       },
       globals: {

@@ -1,3 +1,4 @@
+import type { SessionAccountStore } from '../model/providers/oauth-session-account.js';
 /** Actual configure preparation. Session alone accepts/persists/installs a generation. */
 import { getProfileMetadata } from '../config/profiles/active-profile.js';
 import type { ModelRef } from '../model/index.js';
@@ -23,6 +24,7 @@ import { withGenerationGuard } from './generation-guard.js';
 import type { AgentSurface, ProfileSelection, ToolSurfaceOptions } from './tool-contract.js';
 
 export type DirectConfiguredGeneration = {
+  readonly sessionAccount: (providerId: string) => string | null;
   /** Effective values from the real source-built agent, not the user's raw patch. */
   readonly configuration: DirectAcceptedConfiguration;
   /** Persist alongside effective values to restore default-effort semantics on reopen. */
@@ -37,6 +39,7 @@ export type DirectConfiguredGeneration = {
   dispose(): Promise<void>;
 };
 export type DirectConfigurationOptions = {
+  readonly sessionAccountStore: SessionAccountStore;
   readonly context: DirectRuntimeContext;
   /** The current session's full settings, never application defaults. */
   readonly selection: ProfileSelection;
@@ -67,20 +70,32 @@ export async function prepareDirectConfiguration(
   const { settings, intent } = createDirectConfigSettings(options.selection.settings, options.configuration);
   const model = intent.modelSelection;
   await options.authorizeModel(model, options.context.model);
-  const selection: ProfileSelection = { ...options.selection, settings };
+  const selection: ProfileSelection = {
+    ...options.selection,
+    settings,
+    sessionAccountStore: options.sessionAccountStore,
+  };
   const context: DirectRuntimeContext = { ...options.context, model };
   const profile = getProfileMetadata(String(settings.get('app.activeProfileId')));
   const surface = createToolSurface(
     selection,
     borrowDirectConfigSurfaceOptions({
       ...options.surfaceOptions,
+      affinity: { conversationKey: context.id, cacheKey: context.id },
       includeMemory: false,
       promptMemoryEnabled: context.workspace.target === 'local' && directMainMemoryEnabled(settings),
       workspace: context.workspace,
     }),
   );
   try {
-    const models = withGenerationGuard(withSessionScope(createProviderRegistry(selection), options.scope), selection);
+    const providerModels = createProviderRegistry({ ...selection, sessionAccountStore: options.sessionAccountStore });
+    const models = withGenerationGuard(
+      withSessionScope(providerModels, options.scope, {
+        conversationKey: context.id,
+        cacheKey: context.id,
+      }),
+      selection,
+    );
     // Resolve validates the actual application provider without dispatching a request.
     models.resolve(model);
     const rebound = {
@@ -119,12 +134,13 @@ export async function prepareDirectConfiguration(
       },
       settings,
       surface,
+      sessionAccount: providerModels.sessionAccount,
       deps: {
         models,
         tools: runtime.tools,
         toolContext: runtime.toolContext,
         maxParallelToolCalls: runtime.maxParallelToolCalls,
-        ...runPolicy(settings, context.id, model),
+        ...runPolicy(settings, context.id, model, providerModels.sessionAccount),
         authorizeNested: createNestedAuthorizer(runtime.resolveNestedAuthority),
       },
       request: {

@@ -10,7 +10,7 @@ import { getShellSandboxAddendum } from '../../session/prompts/shell-sandbox.js'
 import { getSearchViaShellAddendum } from '../../session/prompts/search-via-shell.js';
 import type { SkillsService } from '../../tools/skills/skills-service.js';
 import { MemoryCapabilityBuilder } from '../../tools/memory/memory-capabilities.js';
-import { resolveAncillaryModelTier } from '../../engine/agent-runtime/model-resolver.js';
+import { resolveAncillaryModelTier } from '../../session/agent-runtime/model-resolver.js';
 import { getAncillaryTierForRole } from './subagent-pool-config.js';
 import { ModelSelectionSchema } from '../../config/settings/model-selection.js';
 

@@ -1,6 +1,6 @@
 import type { Worker } from 'node:worker_threads';
-import type { AgentLauncher } from '../../engine/agent-runtime/types.js';
-import type { AgentConfig, RunResult } from '../../engine/agent-runtime/types.js';
+import type { AgentLauncher } from '../../session/agent-runtime/types.js';
+import type { AgentConfig, RunResult } from '../../session/agent-runtime/types.js';
 import { SandboxedCodeHostImpl } from '../../tools/sandboxed-code-host/sandboxed-code-host.js';
 import type { CapabilityHandler, CapabilityOutcome } from '../../tools/sandboxed-code-host/host-types.js';
 import {

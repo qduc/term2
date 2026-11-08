@@ -1,7 +1,7 @@
-import type { ResolvedAgentDefinition } from '../../engine/agent-runtime/resolved-agent.js';
+import type { ResolvedAgentDefinition } from '../../session/agent-runtime/resolved-agent.js';
 import type { SubagentDefinition } from '../subagents/types.js';
 
-import type { ExecutionBudget } from '../../engine/agent-runtime/execution-budget.js';
+import type { ExecutionBudget } from '../../session/agent-runtime/execution-budget.js';
 
 /**
  * Convert a ResolvedAgentDefinition back to the SubagentDefinition shape that

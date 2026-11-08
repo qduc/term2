@@ -7,6 +7,6 @@ source service or settings schema.
 
 Production settings are the source `SettingsService`, which `app/` constructs
 (`app/settings.ts`, `createSettingsService`) and owns, with its directory, logger and
-persistence policies. Tools read settings through `ToolContext.settings`;
+persistence policies. Tools read settings through `ToolContext.app.settings`;
 `app/tool-surface.ts` builds that reader over the session's settings service, so
 a tool sees the session's settings without importing the service.

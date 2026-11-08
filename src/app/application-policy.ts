@@ -5,27 +5,29 @@
  * full history, which is always correct.
  */
 import { getActiveCodexAccount } from '../model/providers/codex-auth.js';
-import { getSessionAccount } from '../model/providers/oauth-session-account.js';
-import { readRunBudgetPolicy } from '../engine/recovery-budget.js';
+import { readRunBudgetPolicy } from '../session/recovery-budget.js';
 import { DirectContinuity } from '../engine/recovery-continuity.js';
 import type { ModelRef } from '../model/index.js';
 import type { DirectConversationRuntime } from '../session/store.js';
-import { ContextMilestoneReminder } from '../engine/agent-runtime/context-compaction/context-milestone-reminder.js';
+import { ContextMilestoneReminder } from '../session/agent-runtime/context-compaction/context-milestone-reminder.js';
 import type { ProfileSelection } from './tool-contract.js';
 
 type RuntimeDeps = DirectConversationRuntime['deps'];
 
 /**
  * Only OpenAI and Codex chain responses. Both URLs are the ones their clients
- * use. A Codex response chain belongs to one account, and a running process stays
+ * use. A Codex response chain belongs to one account, and a running session stays
  * pinned to the first account it authenticates as. Before that first request the
  * pin is whichever account is selected. No account means the Codex CLI's own
  * credentials; legacy chains on those too, so they bind as one `cli` account.
  */
-function continuityEndpoint({ provider }: ModelRef): string | undefined {
+function continuityEndpoint(
+  { provider }: ModelRef,
+  sessionAccount: (providerId: string) => string | null,
+): string | undefined {
   if (provider === 'openai') return `openai:${process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1'}`;
   if (provider !== 'codex') return undefined;
-  const account = getSessionAccount('codex') ?? getActiveCodexAccount()?.id ?? 'cli';
+  const account = sessionAccount('codex') ?? getActiveCodexAccount()?.id ?? 'cli';
   return `codex:${process.env.CODEX_BASE_URL || 'https://chatgpt.com/backend-api/codex'}:${account}`;
 }
 
@@ -33,8 +35,9 @@ export function runPolicy(
   settings: ProfileSelection['settings'],
   sessionId: string,
   model: ModelRef,
+  sessionAccount: (providerId: string) => string | null = () => null,
 ): Pick<RuntimeDeps, 'recovery' | 'budget' | 'compaction' | 'continuity'> {
-  const endpoint = continuityEndpoint(model);
+  const endpoint = continuityEndpoint(model, sessionAccount);
   return {
     recovery: { maxTransientRetries: settings.get('agent.retryAttempts') },
     budget: { policy: readRunBudgetPolicy(settings) },

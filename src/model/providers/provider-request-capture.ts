@@ -1,4 +1,11 @@
-import type { OpenAIRequestPrefixBinding, OpenAIRequestPrefixBindingOutcome } from './openai-request-prefix-binding.js';
+export type OpenAIRequestPrefixBinding = Readonly<{
+  snapshotIdentity: string;
+  snapshotRevision: number;
+  /** Captured while planning the request; never read from live session state. */
+  lineage: number;
+}>;
+
+export type OpenAIRequestPrefixBindingOutcome = 'not_prepared' | 'already_consumed' | 'input_mismatch';
 
 /**
  * Optional Stage 0 instrumentation for recording the exact provider request

@@ -31,6 +31,7 @@ async function createOpenRouterModel(deps: ProviderDeps, model: string) {
         deps: {
           loggingService,
           sessionContextService: sessionContextService ?? NULL_SESSION_CONTEXT_SERVICE,
+          onDispatched: deps.onDispatched,
         },
         middlewares: [openRouterPreprocessingMiddleware],
       }),

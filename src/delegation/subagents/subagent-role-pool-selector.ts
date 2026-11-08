@@ -1,7 +1,7 @@
 import type { ISettingsService } from '../../shared/service-interfaces.js';
 import type { SubagentDefinition, SupportedSubagentRole } from './types.js';
 import { getSubagentPoolSettingKeyForRole } from './subagent-pool-config.js';
-import { toTierModelPoolEntries } from '../../engine/agent-runtime/model-resolver.js';
+import { toTierModelPoolEntries } from '../../session/agent-runtime/model-resolver.js';
 
 export const POOL_ENTRY_COOLDOWN_MS = 10 * 60 * 1000;
 export type PoolEntryFailure = 'balance' | 'authentication';

@@ -1,4 +1,4 @@
-import { notifyProviderRequestDispatched } from './request-dispatch.js';
+import { OpenAIRequestLifecycle as Lifecycle } from './runtime/openai-lifecycle.js';
 import { ResponseToolArgumentScopes } from './tool-argument-stream-scope.js';
 import type {
   StreamedModelTurn,
@@ -12,63 +12,12 @@ import type {
 } from '../streamed-model-turn.js';
 import type { ProviderRequestCapture } from './provider-request-capture.js';
 import { OPENAI_RESPONSES_OPAQUE_TAG, isForeignProviderOpaque } from './provider-opaque-compatibility.js';
-import { consumeOpenAIRequestPrefixBindingWithOutcome } from './openai-request-prefix-binding.js';
-import { observeOpenAIRequestLifecycle, type OpenAIRequestLifecycleObservation } from './provider-request-capture.js';
-import { randomUUID } from 'node:crypto';
 import { ResponsesWS } from 'openai/resources/responses/ws';
 import { getModelContextWindow } from './model-catalog/catalog.js';
 import { ResponsesWebSocketSessions } from './responses-websocket-sessions.js';
 import { WebSocketClosedEarlyError, readWebSocketCloseFrame } from './websocket-close-evidence.js';
 import { raceWebSocketAbort } from './websocket-abort-race.js';
 import { filterChainedModelInput } from '../../shared/lib/chained-input-filter.js';
-
-const endpointOf = (client: any): string => {
-  const value = client?.baseURL ?? client?._options?.baseURL;
-  return typeof value === 'string' && value ? value.replace(/\/$/, '') : 'https://api.openai.com/v1';
-};
-
-type Attempt = Omit<OpenAIRequestLifecycleObservation, 'phase' | 'responseId'>;
-
-class Lifecycle {
-  #attempts = new WeakMap<object, Attempt>();
-
-  begin(request: StreamedModelTurnRequest, transport: 'http' | 'websocket', model: string, client: any): void {
-    this.#attempts.set(request as object, {
-      token: randomUUID(),
-      provider: 'openai',
-      transport,
-      model,
-      endpoint: endpointOf(client),
-      requestData: {},
-    });
-  }
-
-  bind(request: StreamedModelTurnRequest, capture?: ProviderRequestCapture): void {
-    const attempt = this.#attempts.get(request as object);
-    if (!attempt) return;
-    try {
-      attempt.requestData = { input: structuredClone(request.input) };
-      const binding = consumeOpenAIRequestPrefixBindingWithOutcome(request.input);
-      attempt.prefixBinding = binding.binding;
-      attempt.prefixBindingOutcome = binding.outcome;
-      observeOpenAIRequestLifecycle(capture, { ...attempt, phase: 'request-built' });
-    } catch {
-      /* lifecycle observation is non-authoritative */
-    }
-  }
-
-  finish(
-    request: StreamedModelTurnRequest,
-    phase: 'terminal' | 'failed' | 'abandoned',
-    capture?: ProviderRequestCapture,
-    responseId?: string,
-  ): void {
-    const attempt = this.#attempts.get(request as object);
-    if (!attempt) return;
-    this.#attempts.delete(request as object);
-    observeOpenAIRequestLifecycle(capture, { ...attempt, phase, ...(responseId ? { responseId } : {}) });
-  }
-}
 
 /**
  * Build the Responses image_url/file_id reference for an application image
@@ -764,7 +713,7 @@ export class OpenAIResponsesModelWithPromptCacheKey implements StreamedModelTurn
           this._model,
           false,
           this.supportsContextCompaction,
-          this.contextCompactionSessionState,
+          request.contextCompactionState ?? this.contextCompactionSessionState,
           this.lane,
         ),
         {
@@ -779,7 +728,11 @@ export class OpenAIResponsesModelWithPromptCacheKey implements StreamedModelTurn
       this.lifecycle.finish(request, 'terminal', this.capture, completion.responseId);
       return completion;
     } catch (error) {
-      markContextCompactionFailure(error, request, this.contextCompactionSessionState);
+      markContextCompactionFailure(
+        error,
+        request,
+        request.contextCompactionState ?? this.contextCompactionSessionState,
+      );
       this.lifecycle.finish(request, 'failed', this.capture);
       throw error;
     }
@@ -800,7 +753,7 @@ export class OpenAIResponsesModelWithPromptCacheKey implements StreamedModelTurn
           this._model,
           true,
           this.supportsContextCompaction,
-          this.contextCompactionSessionState,
+          request.contextCompactionState ?? this.contextCompactionSessionState,
           this.lane,
         ),
         {
@@ -821,7 +774,11 @@ export class OpenAIResponsesModelWithPromptCacheKey implements StreamedModelTurn
       }
       if (!terminal) throw new Error('OpenAI streamed response ended without a completion.');
     } catch (error) {
-      markContextCompactionFailure(error, request, this.contextCompactionSessionState);
+      markContextCompactionFailure(
+        error,
+        request,
+        request.contextCompactionState ?? this.contextCompactionSessionState,
+      );
       if (!terminal) this.lifecycle.finish(request, 'failed', this.capture);
       throw error;
     } finally {
@@ -865,11 +822,11 @@ export class OpenAIResponsesWSModelWithPromptCacheKey extends OpenAIResponsesMod
           this._model,
           true,
           this.supportsContextCompaction,
-          this.contextCompactionSessionState,
+          request.contextCompactionState ?? this.contextCompactionSessionState,
           this.lane,
         ),
       } as any);
-      notifyProviderRequestDispatched();
+      request.onDispatched?.();
       const normalizationState = createResponseEventNormalizationState();
       iterator = socket.stream()[Symbol.asyncIterator]();
       while (true) {
@@ -901,7 +858,11 @@ export class OpenAIResponsesWSModelWithPromptCacheKey extends OpenAIResponsesMod
       if (!terminal) throw new WebSocketClosedEarlyError({});
     } catch (error) {
       release(false);
-      markContextCompactionFailure(error, request, this.contextCompactionSessionState);
+      markContextCompactionFailure(
+        error,
+        request,
+        request.contextCompactionState ?? this.contextCompactionSessionState,
+      );
       if (!terminal) this.lifecycle.finish(request, 'failed', this.capture);
       throw error;
     } finally {

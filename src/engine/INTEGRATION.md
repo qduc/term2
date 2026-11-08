@@ -1,4 +1,12 @@
-# Native engine: selected-stop admission
+# Native engine integration contracts
+
+The implementation lives in `packages/agent-harness-core/src/engine`; this
+directory holds compatibility type surfaces and continuity/history helpers. Term2 host
+policy lives in `src/session`, including `agent-runtime`, completion verification,
+budget composition and prompt notices. The mechanics below describe the portable
+implementation and its Session integration.
+
+## Selected-stop admission
 
 `InteractionDecision.stopAfterApprovalResolution` selects the decision/body/result
 that must settle before later work and root model continuation stop. It does not
@@ -77,3 +85,19 @@ retained-work pause.
 Compaction scheduling is not admission: disabled compaction and histories with no
 complete cold turn must still pass the final-envelope guard. The same rule applies
 to root requests before continuity slicing and to auxiliary summary envelopes.
+
+## Application tool context
+
+`ToolContext<AppCtx>` carries host data in `ctx.app`; the engine supplies signal,
+progress, interactions, nested runs and physical child execution separately.
+`Tool`, `ToolRegistry` and `TurnDeps` carry the same app-context type. A host may
+supply `TurnDeps.toolContext` as plain data or `createToolContext(binding)` for
+execution-bound capabilities. A factory exception ends the turn before the tool
+body starts. The binding's execution ID follows the active scripted leaf; its
+assertions and parked callback preserve the engine's admission and lifecycle
+checks. Hosts snapshot the execution identity before detaching background work.
+
+Term2's workspace, settings, subagent controls, shell task controls and
+orchestrator questions are defined in `src/tools/index.ts`. Session binds their task
+ports in `src/session/tool-context.ts`; the core imports only its own portable
+contracts in `packages/agent-harness-core/src/tools/contracts.ts`.

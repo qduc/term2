@@ -7,21 +7,6 @@ import { registerProvider } from './registry.js';
 import { createOpenAIModelCatalog } from './openai-model-catalog.js';
 import { createProviderFetch } from './fetch/composer.js';
 import { NULL_SESSION_CONTEXT_SERVICE } from '../traffic-context.js';
-import type { StreamedModelTurn } from '../streamed-model-turn.js';
-
-const streamedModels = new WeakMap<object, { fingerprint: string; model: StreamedModelTurn }>();
-
-function openaiStreamedModelFingerprint(
-  settingsService: { get(key: string): unknown },
-  model: string,
-  retryAttempts?: number,
-): string {
-  return JSON.stringify([
-    settingsService.get('agent.transport') ?? 'websocket',
-    model,
-    retryAttempts ?? settingsService.get('agent.retryAttempts') ?? 2,
-  ]);
-}
 
 export {
   OpenAIResponsesModelWithPromptCacheKey,
@@ -80,19 +65,11 @@ registerProvider(
         retryAttempts,
         requestCapture,
         contextCompactionSessionState,
+        onDispatched,
       },
     ) => {
       const defaultModel = settingsService.get('agent.modelSelection').model || 'gpt-4o';
       const resolvedModel = model || defaultModel;
-      const cacheKey = sessionContextService as object | undefined;
-      const fingerprint = openaiStreamedModelFingerprint(settingsService, resolvedModel, retryAttempts);
-      const cached = cacheKey ? streamedModels.get(cacheKey) : undefined;
-      if (cached?.fingerprint === fingerprint) {
-        return cached.model;
-      }
-      if (cached) {
-        void (cached.model as { close?: () => Promise<void> }).close?.();
-      }
       const apiKey = settingsService.get('agent.openai.apiKey') || process.env.OPENAI_API_KEY;
       const configuredRetries = retryAttempts ?? settingsService.get('agent.retryAttempts') ?? 2;
       const openAIClient = new OpenAI({
@@ -102,7 +79,11 @@ registerProvider(
           createProviderFetch({
             providerId: 'openai',
             defaultModel,
-            deps: { loggingService, sessionContextService: sessionContextService ?? NULL_SESSION_CONTEXT_SERVICE },
+            deps: {
+              loggingService,
+              sessionContextService: sessionContextService ?? NULL_SESSION_CONTEXT_SERVICE,
+              onDispatched,
+            },
           }),
           onRetry,
           configuredRetries,
@@ -125,7 +106,6 @@ registerProvider(
               OPENAI_CAPABILITIES.supportsContextCompaction,
               contextCompactionSessionState,
             );
-      if (cacheKey) streamedModels.set(cacheKey, { fingerprint, model: selectedModel });
       return selectedModel;
     },
     fetchModels: createOpenAIModelCatalog(),

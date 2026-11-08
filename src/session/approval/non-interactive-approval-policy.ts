@@ -7,7 +7,7 @@ import { TOOL_NAME_PROPOSE_GOAL } from '../../tools/tool-names.js';
 import { CHECK_IN_TOOL_NAME } from '../../tools/conversation.js';
 import { SafetyStatus } from '../../tools/shell/command-safety/constants.js';
 import { evaluateShellAutoApprovalAdvisories } from './shell-auto-approval-evaluator.js';
-import { getTierModelPool } from '../../engine/agent-runtime/model-resolver.js';
+import { getTierModelPool } from '../agent-runtime/model-resolver.js';
 
 const NON_INTERACTIVE_REJECTION_REASON = 'Non-interactive mode: use --auto-approve to allow tool execution';
 

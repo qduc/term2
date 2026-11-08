@@ -39,6 +39,7 @@ import { useHandoff, type HandoffHolder } from './use-handoff.js';
 import { useGoalClosedNotice } from './goal-closed-notice.js';
 import { useLargeUncachedAdvisory } from './large-uncached-advisory.js';
 import { directSlashCommand, listRewindTargets, submitText, previewSendHold, WireCommandFailure } from './commands.js';
+import { compactTracker } from './commands.js';
 export function TuiSession({
   connection,
   header,
@@ -185,10 +186,7 @@ export function TuiSession({
     turnInFlight: Boolean(state.activeTurnId),
   });
   const pending = useRef(false);
-  // A manual /compact in flight. Its summary request shows as the active turn, but that maintenance
-  // turn takes no steers: messages sent meanwhile are queued by the session and run after it (#221).
-  // A count, not a flag: a second /compact rejected as busy must not end the first one's window.
-  const compacting = useRef(0);
+  const compact = useRef(compactTracker()).current;
   const { waitUntilRenderFlush } = useApp();
   // Legacy clearInputBeforeReset paints the emptied composer, then printUsage writes under that frame.
   const resetHooks = {
@@ -274,7 +272,7 @@ export function TuiSession({
     input = menuStack.withPendingSkill(input);
     const clean = cleanImageMarkers(input);
     if (!clean.trim() && !submittedImages.length && !otherParts.length && !editing) return;
-    if (compacting.current > 0 && delivery === 'steer') delivery = 'auto';
+    delivery = compact.delivery(delivery);
     if (pending.current) {
       // A send is in flight: keep this message as the draft instead of losing it. The composer's own
       // submit clears it only after this call, so editor.value can still be this same message.
@@ -345,16 +343,7 @@ export function TuiSession({
       } else if (/^\/providers(?:\s|$)/.test(command)) {
         if (!menuStack.openFrame('providers')) throw new Error('Provider management is unavailable.');
       } else if (command.trim() === '/compact') {
-        // directSlashCommand announces 'Compacting context...' before the summary request starts. The
-        // request can run as long as a model turn, so it does not hold the composer: a message sent
-        // meanwhile is queued behind the compaction (#221). Its outcome arrives as a later notice.
-        compacting.current += 1;
-        void directSlashCommand(connection, command, setNotice)
-          .then(
-            (notice) => notice !== null && setNotice(notice),
-            (error: unknown) => setNotice(error instanceof Error ? error.message : String(error)),
-          )
-          .finally(() => (compacting.current -= 1));
+        compact.start(connection, command, setNotice);
       } else if (typed.kind === 'command') {
         const directNotice = await directSlashCommand(connection, command, setNotice);
         if (directNotice !== null) setNotice(directNotice);

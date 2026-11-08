@@ -149,7 +149,7 @@ term2 settings can be configured via:
 | `ui.theme` | `auto \\| dark \\| light \\| high-contrast \\| mono` | `"auto"` | ✓ Yes | — | Colour theme; auto follows the terminal background and honours NO_COLOR |
 | `ui.skin` | `classic \\| rail \\| cards \\| ledger \\| zen` | `"classic"` | ✓ Yes | — | Layout skin: how messages, tool calls, approvals and the status bar are drawn |
 | `app.shellPath` | `string` | — | No | `SHELL, COMSPEC` | Path to shell executable |
-| `app.activeProfileId` | `string` | `"builtin:standard"` | ✓ Yes | — | Active profile identifier (builtin:standard, builtin:plan, etc.) |
+| `app.activeProfileId` | `string` | `"builtin:bare"` | ✓ Yes | — | Active profile identifier (builtin:bare, builtin:plan, etc.) |
 | `app.mentorMode` | `boolean` | `false` | ✓ Yes | — | Legacy mentor mode flag (mapped to active profile) |
 | `app.liteMode` | `boolean` | `false` | ✓ Yes | — | Legacy lite mode flag (selects the Bare profile) |
 | `app.planMode` | `boolean` | `false` | ✓ Yes | — | Plan mode: read-only research and implementation planning (true\|false) |

@@ -1,13 +1,12 @@
-# Discord bridge (candidate)
+# Discord bridge
 
 One bot in one private channel can speak to multiple **existing term2 terminal
 sessions**. Live, explicitly opted-in sessions are addressable by their control
 socket name while they run; this does not create a chatbot or a new conversation
-per message. This candidate needs independent auth/session review
-and authorized live Discord validation before acceptance. No live bot setup was
-performed during implementation.
+per message. The auth/session path has been independently reviewed, and a live
+mobile exercise checked the scoped flows described below.
 
-## First-run checklist (candidate)
+## First-run checklist
 
 **Discord replies are explicit, not automatic.** Ordinary final answers stay in
 term2. Ask, for example: **“Summarize the result and send it to this channel using
@@ -15,6 +14,10 @@ term2. Ask, for example: **“Summarize the result and send it to this channel u
 readiness/error diagnostics, approvals and questions must be checked in the local
 terminal; a quiet Discord channel does not mean nothing happened. Discord cannot
 approve a tool call or answer a local approval prompt.
+
+An opted-in session can call `discord_send` without a per-send terminal approval,
+including for proactive notifications. Prompt-injected content may therefore cause
+it to post to the configured channel; opt in only sessions trusted with that access.
 
 1. **Create/install a dedicated bot into your server**, only after authorization.
    Follow Discord's official [Getting Started guide](https://docs.discord.com/developers/quick-start/getting-started)
@@ -56,7 +59,7 @@ approve a tool call or answer a local approval prompt.
    config path). Once authorized to test live, send a harmless question from the
    configured human in the configured channel, explicitly requesting
    `discord_send`. Check the terminal for status, errors and approvals if no reply
-   arrives. Live bot/mobile behavior remains unverified by the offline fixture.
+   arrives. Offline fixtures do not establish live bot/mobile behavior.
 
 `term2 discord --help` summarizes these entry points without reading config or
 credentials or connecting to Discord. Setup failures distinguish non-absolute config paths, missing config,
@@ -328,8 +331,8 @@ reinterpreting it.
   **not** a human instruction or approval. It may reply explicitly `@coord ...`.
   When that peer route is part of a newly admitted human Discord job, the bridge
   carries the configured human ID and original Discord message ID through the
-  causal job chain; the next recipient sees `human <id>, relayed via <alias>` and
-  the original message ID, and admission follows the human steer path. This root
+  causal job chain; the next recipient sees the relaying agent and the original
+  human and message ID as provenance, and admission uses a queued follow-up. This root
   provenance is attached by bridge ingress, not inferred from agent text or a
   self-asserted origin. Peer jobs without that bridge-recorded root remain
   `agent session <alias>` data and use queued follow-up admission.
@@ -350,10 +353,8 @@ retains its own tool/approval posture; do not opt in a session whose autonomous
 capabilities you do not want remotely reachable.
 
 Human input uses term2's existing steer admission when a turn is busy and ordinary
-submission when idle. An explicitly routed peer delivery inherits human authority
-only while its bridge job retains the verified Discord human/message causal root;
-that delivery also uses steer admission. Peer-agent input without that root remains
-a queued follow-up. Steering does
+submission when idle. An explicitly routed peer delivery is agent data and uses
+queued follow-up admission, even when it retains a human/message causal root. Steering does
 not abort a running tool: input becomes visible at a supported request boundary,
 or falls back to a queued turn if the active turn cannot take it. Each accepted
 human request observes the terminal result of the turn it joined, not the steer
@@ -361,6 +362,9 @@ admission acknowledgment or a later unrelated turn. Multiple human requests that
 join the same turn each settle against that turn's final (not separate model turns).
 These results are internal accounting/routing data, not Discord posts.
 Approval pauses still require the terminal; Discord input cannot answer them.
+Previously persisted peer relays from older versions retain their original text,
+which may label them as human. Inspect or clear old queued bridge work before
+resuming if that attribution matters; upgrading does not rewrite session history.
 Busy-session admission records `queued` internally and runs when admitted. Remote input—human or
 peer—never answers an outstanding question/approval. The bridge refuses it with a local diagnostic;
 resolve or cancel through the terminal, then send a new request if wanted. Existing
@@ -623,10 +627,20 @@ image staging limits, and SIGINT/SIGTERM drain. They use loopback fakes, with no
 tokens, production provider calls or external Discord traffic.
 
 The former bridge routing fixture (`source/services/discord/discord-bridge.integration.test.ts`,
-66 cases covering unauthorized users and channels, alias routing, peer hops,
-approval refusal, pause/stop and restart dedupe) was deleted with the legacy
-`source/` tree in #88 and has no successor. Those behaviours currently have no
-offline regression coverage.
+66 cases) was deleted with the legacy `source/` tree in #88. Its full coverage has
+not been restored. `tests/clients/discord/discord-routing.integration.test.ts`
+checks author filtering and wrong-channel responses against the real bridge ingress;
+`scripts/provider-black-box/discord-relay.blackbox.ts` checks relay attribution,
+admission and recovery through the built CLI and control socket.
+
+A November 2026 live exercise used two opted-in Codex sessions and the owner's
+mobile Discord client. It checked explicit replies from both aliases, one internal
+peer handoff, terminal-only approval, pause/resume, stop/resume, and bridge restart
+against the same sessions and journal without an observed duplicate reply. The owner
+waived live tests with another user and another channel because neither was available;
+the offline checks above do not substitute for live evidence. Two-way peer routing,
+network interruption during an in-flight delivery, image rendering, and token rotation
+were not exercised live.
 
 After independent review and authorized bot/channel access, verify **on mobile**:
 
@@ -648,10 +662,9 @@ After independent review and authorized bot/channel access, verify **on mobile**
 7. Revoke/rotate token only with authorization; confirm safe errors, no raw token in
    source/log/journal, and correct recovery with the same non-secret config.
 
-Live compatibility, Message Content Intent availability, true Discord pagination and
-rate-limit behavior, actual mobile rendering and actual AI-to-AI reasoning remain
-unverified until this authorized exercise is performed. Offline fixtures do not
-establish them.
+Compatibility beyond the setup exercised above, true Discord pagination and
+rate-limit behavior, mobile image rendering, and two-way AI-to-AI reasoning remain
+unverified. Offline fixtures do not establish them.
 
 No automatic receipts, final replies, readiness or bridge-origin refusals/errors
 are posted. Previously persisted automatic outbox entries are retained but withheld;

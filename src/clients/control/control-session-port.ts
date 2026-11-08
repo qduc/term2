@@ -85,7 +85,7 @@ class DirectControlPort implements DirectControlSessionPort {
         text: bridgeText(params),
         origin: {
           kind: 'discord',
-          source: params.origin.kind,
+          source: params.origin.kind === 'human' && params.origin.relayedBy ? 'agent' : params.origin.kind,
           sender: params.origin.sender,
           ...(params.origin.kind === 'human' && params.origin.discordMessageId !== undefined
             ? { discordMessageId: params.origin.discordMessageId }
@@ -95,7 +95,7 @@ class DirectControlPort implements DirectControlSessionPort {
             : {}),
         },
       },
-      params.origin.kind === 'human' ? 'steer' : 'follow_up',
+      params.origin.kind === 'human' && !params.origin.relayedBy ? 'steer' : 'follow_up',
       { complete },
     );
   }

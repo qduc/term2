@@ -4,6 +4,7 @@
 - **Node.js 24 or newer is required.** `engines.node` is now `>=24`, matching the only version CI and the publish workflow test.
 - **New runtime and conversation store.** term2 now runs on the rewritten "next" runtime (#86) and saves conversations in a separate `conversations-next` data directory. The old `conversations` directory is never written to and is not read automatically, so conversations saved by 0.40.0 and earlier do not appear in `term2 --resume ls` after upgrading.
 - **Profiles removed.** Plan, Pair, Mentor and Orchestrator are gone (#149), along with `/plan` and the `Shift+Tab` plan toggle. Saved settings and sessions that name a removed profile fall back to Bare without rewriting their history. Standard/`full` and Lite also resolve to Bare.
+- **Discord peer relays are agent data.** A session's routed response no longer inherits the originating human's authority or steers a busy peer. The original message remains attached as provenance and the peer receives a queued follow-up.
 
 ### Improvements
 - Startup reaches an idle composer about 35% sooner by loading startup-only work on demand and caching compiled bundle code (#192, #195).
@@ -13,6 +14,7 @@
 - Correct ACP embedded text-resource handling and capability advertisement, gate question/budget forms on client support, and synchronize activity on resume and around native interactions. Preserve SDK 1.4.0 experimental v2 wire shapes.
 - Fix native web/BFF pairing races, idle stream connection, accepted user-message delivery, truncated-frame checkpoints, native interaction IDs, settled abort responses and result-only hydration. Preserve native command/replay errors and remove unsupported profile choices. Enable native browser v2 with wire 0.2.3, preserving background task questions, tool tracking and activity observations (#80).
 - Restore per-session cost accounting and the footer cost display.
+- Resume native sessions after changes to a built-in profile, and accept additional older provider and profile formats when migrating copied conversation stores.
 - Honor startup settings for shared tool output limits (#178).
 - Suppress notices for denied recovery retries (#177).
 - Validate messages imported from the session browser (#176).

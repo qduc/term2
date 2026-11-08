@@ -178,7 +178,7 @@ export class ControlRequests {
         }
         const body = hashBody({
           sessionId: params.sessionId,
-          delivery: params.origin.kind === 'human' ? 'steer' : 'follow_up',
+          delivery: params.origin.kind === 'human' && !params.origin.relayedBy ? 'steer' : 'follow_up',
           text: params.text,
           origin: {
             kind: params.origin.kind,

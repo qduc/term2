@@ -77,5 +77,7 @@ export function directOriginKey(origin?: DirectOrigin): readonly unknown[] | nul
 
 /** Automatic control/agent/reaction input never opens a fresh human decision window. */
 export function isDirectHumanOrigin(origin?: DirectOrigin): boolean {
-  return !origin || (origin.kind === 'discord' ? origin.source === 'human' : origin.kind !== 'control');
+  return (
+    !origin || (origin.kind === 'discord' ? origin.source === 'human' && !origin.relayedBy : origin.kind !== 'control')
+  );
 }

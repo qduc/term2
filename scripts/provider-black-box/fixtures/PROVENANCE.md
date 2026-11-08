@@ -16,6 +16,12 @@ for changes after capture.
 
 ## Remaining live captures
 
+- **Release smoke CLI turn (`cli-release-turn-v1`)** — not captured yet. `pnpm release:smoke --record`
+  runs the installed tarball through a loopback recording proxy to a real provider: one
+  `read_file` tool call and the final answer. Prepare and accept it like any other capture; later
+  releases replay it with `pnpm release:smoke --tgz <tarball>`. Request bodies are not compared on
+  replay (the CLI prompt changes between releases); recapture when the provider's wire output or
+  the CLI's provider transport changes.
 - **Generic Chat Completions fixture** — `chat-pilot.json` remains hand-authored; decide
   whether replacing it adds value now that the live OpenCode chat path is covered.
 - **Direct Anthropic API** — remains optional and credit-gated; Anthropic wire

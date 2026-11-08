@@ -187,7 +187,8 @@ export function TuiSession({
   const pending = useRef(false);
   // A manual /compact in flight. Its summary request shows as the active turn, but that maintenance
   // turn takes no steers: messages sent meanwhile are queued by the session and run after it (#221).
-  const compacting = useRef(false);
+  // A count, not a flag: a second /compact rejected as busy must not end the first one's window.
+  const compacting = useRef(0);
   const { waitUntilRenderFlush } = useApp();
   // Legacy clearInputBeforeReset paints the emptied composer, then printUsage writes under that frame.
   const resetHooks = {
@@ -270,14 +271,16 @@ export function TuiSession({
     fromMenu = false, // legacy's menus clear the input first, so their commands' failures only report
   ): Promise<void> => {
     if (handoffFlow.submit(input)) return;
+    const typedInput = input;
     input = menuStack.withPendingSkill(input);
     const clean = cleanImageMarkers(input);
     if (!clean.trim() && !submittedImages.length && !otherParts.length && !editing) return;
-    if (compacting.current && delivery === 'steer') delivery = 'auto';
+    if (compacting.current > 0 && delivery === 'steer') delivery = 'auto';
     if (pending.current) {
       // A send is in flight: keep this message as the draft instead of losing it. The composer's own
       // submit clears it only after this call, so editor.value can still be this same message.
-      replaceInput(editor.value && editor.value !== input ? `${input}\n${editor.value}` : input);
+      const rest = editor.value === typedInput ? '' : editor.value;
+      replaceInput(rest ? `${input}\n${rest}` : input);
       setImages(submittedImages);
       return setNotice('Still sending the previous message. Press Enter again to send this one.');
     }
@@ -346,13 +349,13 @@ export function TuiSession({
         // directSlashCommand announces 'Compacting context...' before the summary request starts. The
         // request can run as long as a model turn, so it does not hold the composer: a message sent
         // meanwhile is queued behind the compaction (#221). Its outcome arrives as a later notice.
-        compacting.current = true;
+        compacting.current += 1;
         void directSlashCommand(connection, command, setNotice)
           .then(
             (notice) => notice !== null && setNotice(notice),
             (error: unknown) => setNotice(error instanceof Error ? error.message : String(error)),
           )
-          .finally(() => (compacting.current = false));
+          .finally(() => (compacting.current -= 1));
       } else if (typed.kind === 'command') {
         const directNotice = await directSlashCommand(connection, command, setNotice);
         if (directNotice !== null) setNotice(directNotice);

@@ -86,6 +86,7 @@ export async function launchAcp(request: AcpRequest): Promise<number> {
     selection,
     surface: () => ({ autoApprove: false, interactive: true, allowUnsandboxed: false }),
     approvalAlwaysAsks: true,
+    requireSandbox: true,
     authority: createLocalAuthority((root) => {
       try {
         return fs.statSync(root).isDirectory();

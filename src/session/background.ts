@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { createCodenameRunId } from './codename-run-id.js';
 import type { ModelError } from '../model/index.js';
 import type { InteractionDecision, InteractionRequestId, SubagentMessageResult } from '../tools/index.js';
-import type { AnswerResult } from './types.js';
+import type { AnswerProvenance, AnswerResult } from './types.js';
 import { DirectBackgroundInteractions } from './background-interactions.js';
 import { DirectTaskQuestions } from './task-questions.js';
 import { directTaskAbortError, directTaskError } from './background-types.js';
@@ -158,9 +158,13 @@ export class DirectBackgroundTasks {
   }
 
   /** Session routes background answers here after selecting this exact request ID. */
-  answer(requestId: InteractionRequestId, decision: InteractionDecision): AnswerResult {
+  answer(
+    requestId: InteractionRequestId,
+    decision: InteractionDecision,
+    provenance: AnswerProvenance = { source: 'system' },
+  ): AnswerResult {
     if (this.#failure) return { kind: 'failed', error: this.#failure };
-    return this.#interactions.answer(requestId, decision);
+    return this.#interactions.answer(requestId, decision, provenance);
   }
 
   /** Reply to the exact live child question. No general steering mailbox is invented. */

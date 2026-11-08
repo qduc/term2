@@ -28,7 +28,10 @@ separate and remains enabled. This is startup policy, not a runtime toggle.
 and persistence policies.
 
 `createDirectRuntimes` in `application-runtime.ts` builds session-owned
-settings and tool generations. `createDirectConfigSettings` in
+settings and tool generations. `approvalAlwaysAsks` pins the session's saved
+shell auto-approval mode to `off`; `requireSandbox` pins `sandbox.enabled:true`
+after restoring session configuration. ACP sets both options. These overrides
+are in-memory policy and do not rewrite user preferences. `createDirectConfigSettings` in
 `config-settings.ts` produces a read-only, source-schema-validated settings
 snapshot; it does not persist selection changes. Its
 `prepareDirectSessionConfigurationCommand` validates HTTP selection intent,

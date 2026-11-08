@@ -491,7 +491,7 @@ function conversation(
       const root = active?.answer(requestId, decision, provenance);
       if (root?.kind === 'accepted') questionCancel.answered(decision);
       if (root && root.kind !== 'stale') return root;
-      return tasks!.answer(requestId, decision);
+      return tasks!.answer(requestId, decision, provenance);
     },
     async close() {
       closed = true;

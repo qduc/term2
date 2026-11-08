@@ -67,6 +67,11 @@ async function nativeQuestionFixture(
     async *stream(request) {
       requests.push(request);
       if (requests.length === 1) {
+        yield { type: 'text_delta', delta: 'Before ' };
+        yield {
+          type: 'item',
+          item: { type: 'assistant_message', id: 'before' as ItemId, content: [{ type: 'text', text: 'Before tool' }] },
+        };
         yield {
           type: 'item',
           item: {
@@ -78,11 +83,12 @@ async function nativeQuestionFixture(
           },
         };
       } else {
+        yield { type: 'text_delta', delta: 'Question ' };
         yield {
           type: 'item',
           item: {
             type: 'assistant_message',
-            id: 'answer' as ItemId,
+            id: `answer-${requests.length}` as ItemId,
             content: [{ type: 'text', text: 'Question resolved' }],
           },
         };
@@ -281,6 +287,27 @@ async function idle(updates: acp.UpdateSessionNotification[], from: number): Pro
 }
 
 describe('ACP v2 compatibility over SDK NDJSON and native Host', () => {
+  it('rejects automatic approval flags with diagnostics only on stderr', async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), 'acp-invalid-flags-'));
+    const child = spawn(process.execPath, [integrationCliPath(), 'acp', '--auto-approve'], {
+      env: createTestChildEnv({ HOME: directory, XDG_STATE_HOME: directory, DISABLE_LOGGING: '1' }),
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => (stdout += String(chunk)));
+    child.stderr.on('data', (chunk) => (stderr += String(chunk)));
+    try {
+      const code = await new Promise((resolve) => child.once('close', resolve));
+      expect(code).toBe(1);
+      expect(stdout).toBe('');
+      expect(stderr).toMatch(/unknown.*auto-approve/i);
+    } finally {
+      child.kill('SIGKILL');
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 30_000);
+
   it('accepts standard embedded text and synchronizes resume without replaying history', async () => {
     await fixture(async ({ context, workspace, updates, requests }) => {
       const created = await context.request(acp.methods.agent.session.new, { cwd: workspace });
@@ -324,6 +351,60 @@ describe('ACP v2 compatibility over SDK NDJSON and native Host', () => {
       });
       await expect(
         context.request(acp.methods.agent.session.new, { cwd: workspace, additionalDirectories: [workspace] }),
+      ).rejects.toMatchObject({ code: -32602 });
+      // Image bytes and trailing text cross the built CLI/provider boundary in order.
+      const imageStart = updates.length;
+      const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aCFsAAAAASUVORK5CYII=';
+      await context.request(acp.methods.agent.session.prompt, {
+        sessionId: created.sessionId,
+        prompt: [
+          { type: 'text', text: 'before image' },
+          { type: 'image', mimeType: 'image/png', data: png },
+          { type: 'text', text: 'after image' },
+        ],
+      });
+      await idle(updates, imageStart);
+      const message = requests.at(-1).messages.findLast((message: any) => message.role === 'user');
+      expect(message.content).toEqual([
+        { type: 'text', text: 'before image' },
+        { type: 'image_url', image_url: { url: `data:image/png;base64,${png}` } },
+        { type: 'text', text: 'after image' },
+      ]);
+      const admitted = requests.length;
+      for (const prompt of [
+        [],
+        [{ type: 'text', text: '   ' }],
+        [{ type: 'image', mimeType: 'text/plain', data: 'YQ==' }],
+        [{ type: 'image', mimeType: 'image/png', data: 'YQ' }],
+        [{ type: 'image', mimeType: 'image/png', data: 'data:image/png;base64,YQ==' }],
+        [{ type: 'audio', mimeType: 'audio/wav', data: 'YQ==' }],
+      ]) {
+        await expect(
+          context.request(acp.methods.agent.session.prompt, {
+            sessionId: created.sessionId,
+            prompt: prompt as acp.PromptRequest['prompt'],
+          }),
+        ).rejects.toMatchObject({ code: -32602 });
+      }
+      expect(requests.length).toBe(admitted);
+      await expect(
+        context.request(acp.methods.agent.session.resume, {
+          sessionId: created.sessionId,
+          cwd: path.dirname(workspace),
+        }),
+      ).rejects.toMatchObject({ code: -32602 });
+      await expect(
+        context.request(acp.methods.agent.session.new, {
+          cwd: workspace,
+          mcpServers: [{ type: 'stdio', name: 'unsupported', command: 'false', args: [], env: [] }],
+        }),
+      ).rejects.toMatchObject({ code: -32602 });
+      await expect(
+        context.request(acp.methods.agent.session.resume, {
+          sessionId: created.sessionId,
+          cwd: workspace,
+          replayFrom: { type: 'cursor', cursor: '1' } as any,
+        }),
       ).rejects.toMatchObject({ code: -32602 });
       await context.request(acp.methods.agent.session.close, { sessionId: created.sessionId });
     });
@@ -436,6 +517,51 @@ describe('ACP v2 compatibility over SDK NDJSON and native Host', () => {
         expect(states.slice(blocked + 1)).toContain('running');
         expect(states.at(-1)).toBe('idle');
         expect(JSON.stringify(requests.slice(1))).toContain('Blue');
+        const live = updates.slice(from).map(({ update }) => update);
+        const draftIds = live.flatMap((update) =>
+          update.sessionUpdate === 'agent_message_chunk' ? [update.messageId] : [],
+        );
+        expect(new Set(draftIds).size).toBe(2);
+        const before = updates.length;
+        await context.request(acp.methods.agent.session.resume, {
+          sessionId,
+          cwd: workspace,
+          replayFrom: { type: 'start' },
+        });
+        const replayed = updates.slice(before).map(({ update }) => update);
+        const messages = replayed.filter(
+          (update): update is acp.SessionUpdate & { sessionUpdate: 'agent_message' } =>
+            update.sessionUpdate === 'agent_message',
+        );
+        expect(messages.map((update) => update.messageId)).toEqual([...new Set(draftIds)]);
+        expect(messages.map((update) => update.content)).toEqual([
+          [{ type: 'text', text: 'Before tool' }],
+          [{ type: 'text', text: 'Question resolved' }],
+        ]);
+        const tool = replayed.findIndex((update) => update.sessionUpdate === 'tool_call');
+        const first = replayed.findIndex((update) => update.sessionUpdate === 'agent_message');
+        const last =
+          replayed.length - 1 - [...replayed].reverse().findIndex((update) => update.sessionUpdate === 'agent_message');
+        expect(first).toBeLessThan(tool);
+        expect(tool).toBeLessThan(last);
+        const tail = updates.length;
+        await context.request(acp.methods.agent.session.prompt, {
+          sessionId,
+          prompt: [{ type: 'text', text: 'next turn' }],
+        });
+        await idle(updates, tail);
+        // Snapshot upserts may repeat an existing ID, but must not append its text twice.
+        const oldIds = new Set(messages.map((message) => message.messageId));
+        expect(
+          updates
+            .slice(tail)
+            .some(({ update }) => update.sessionUpdate === 'agent_message_chunk' && oldIds.has(update.messageId)),
+        ).toBe(false);
+        for (const { update } of updates.slice(tail)) {
+          if (update.sessionUpdate === 'agent_message' && oldIds.has(update.messageId)) {
+            expect(update.content).toEqual(messages.find((message) => message.messageId === update.messageId)!.content);
+          }
+        }
       },
       {
         question: true,

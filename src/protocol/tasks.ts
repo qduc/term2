@@ -155,6 +155,14 @@ export function taskFactEvent(fact: DirectBackgroundFact, state: WireSnapshot, s
         taskOwner: publicTaskOwner(task),
         requestId: fact.requestId,
         resolution: fact.resolution.kind === 'decision' ? fact.resolution.decision : fact.resolution,
+        ...(fact.resolutionSource
+          ? {
+              provenance: {
+                source: fact.resolutionSource,
+                ...(fact.automaticApproval !== undefined ? { automaticApproval: fact.automaticApproval } : {}),
+              },
+            }
+          : {}),
       },
     };
   }

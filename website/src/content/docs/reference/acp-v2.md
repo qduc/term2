@@ -91,7 +91,9 @@ Resume without `replayFrom` attaches without replaying old transcript entities.
 Every attachment synchronizes its current foreground state. With
 `replayFrom: {"type":"start"}`, retained history is replayed from an atomic
 snapshot, followed by current activity and subsequent live events. Mixed
-message/tool order and streamed-to-final identity are preserved. Numeric replay
+message/tool order and streamed-to-final identity are preserved within each
+root or branch transcript. Accepted branch snapshots replay through separate
+renderers using their real identities; no cross-branch chronology is inferred. Numeric replay
 cursors are unsupported and rejected; do not treat a Host sequence number as an
 ACP cursor.
 
@@ -104,8 +106,12 @@ semantics in newer drafts are not implemented by this attachment close operation
 
 ## Permissions, questions and budgets
 
-The launcher fixes `autoApprove: false`, `allowUnsandboxed: false` and
-`approvalAlwaysAsks: true`. ACP does not provide an automatic approval flag or
+The launcher fixes `autoApprove: false`, `allowUnsandboxed: false`,
+`approvalAlwaysAsks: true` and `requireSandbox: true`. Each ACP session pins
+`shell.autoApproveMode: off` and `sandbox.enabled: true` in memory, including on
+resume; saved user settings are not rewritten. Commands that the native tool
+policy considers safe do not require a permission exchange; approval-required
+calls always go to the client. ACP does not provide an automatic approval flag or
 an unsandboxed permission option. If the shell sandbox cannot run, the launcher
 warns on stderr; shell execution cannot gain an unsandboxed fallback through ACP.
 
@@ -138,11 +144,25 @@ URL elicitation and numeric replay cursors are unsupported. Nonempty MCP or
 additional-directory requests are rejected with `-32602`. Presence in the full
 upstream schema is not evidence that term2 implements a feature.
 
-The automated compatibility client is the pinned SDK 1.4.0. Built-CLI cases use
-real stdio and a loopback model fixture for input, replay and shutdown. Question
-cases use SDK NDJSON with a filesystem-backed native Session/Host and fixture
-model/tool; Bare does not expose `ask_user` through the current CLI. Before the source-tree migration was incorporated, a separate SDK 1.4.0 stdio smoke
-also completed a Gemini 3.8 Flash turn against the configured Google endpoint.
-The cloud smoke required Node's environment proxy support (`NODE_USE_ENV_PROXY=1`).
-A packed-install smoke check and editor acceptance remain separate release
-requirements; these checks do not establish general editor compatibility.
+The verified client is the SDK **1.4.0 experimental/v2** reference client over
+NDJSON stdio (Node **24.19.0**, Linux). On 2026-11-08 a tarball installed outside
+the source checkout completed a live **Google Gemini 3.8 Flash** text turn,
+observed `idle/end_turn`, closed its session and exited zero with protocol-only
+stdout. Node environment proxy support (`NODE_USE_ENV_PROXY=1`) was required in
+the cloud environment. This establishes reference-client compatibility; no GUI
+editor version has been validated.
+
+The packed installation also runs the deterministic process cases: input,
+permissions, replay/resume, EOF and signals. Filesystem-backed native Host/Session
+checks cover question sets, budget provenance, shared admission and cancellation
+races, close and disconnect. Only the external model/tool behavior is scripted in
+those native interaction checks; the process cases invoke the real shell tool.
+
+The default agent command sandbox lacked `socat` and prohibited nested namespace
+setup, providing the sandbox-unavailable refusal check. A separate managed-host
+run outside that command sandbox used **Bubblewrap** and the official Debian
+**socat 1.8.0.3** package, extracted locally. Both `approve` and `allow-once`
+completed real sandboxed workspace writes; an outside-workspace write remained
+blocked despite approval and saved `sandbox.enabled:false`. The process suite's
+`TERM2_ACP_REQUIRE_SHELL_SUCCESS=1` option makes successful writes mandatory on
+hosts equipped to exercise that path.

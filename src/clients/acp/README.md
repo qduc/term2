@@ -26,7 +26,10 @@ because the published direct-store list contract does not expose them.
 The app owner's published launcher (`19ec1b69`) calls these real entry points with
 `surface: () => ({autoApprove:false,interactive:true,allowUnsandboxed:false})`
 and `approvalAlwaysAsks:true`. Its runtime pins per-session
-`shell.autoApproveMode` to `off`, without writing user settings. Lead `1451f8f8`
+`shell.autoApproveMode` to `off` and `sandbox.enabled` to `true`, without writing
+user settings. `requireSandbox:true` closes the saved `sandbox.enabled:false`
+bypass: an explicit permission cannot grant a default shell call unsandboxed
+execution. Native safe-command policy still determines which calls need consent. Lead `1451f8f8`
 now declares and forwards `allowUnsandboxed` into source tool assembly, intersected
 with workspace read-only/remote authority. Those are the actual published
 composition seams, not policies manufactured by ACP's workspace grant. The launcher pins these policies; real-tool and editor acceptance remain distinct from adapter-level verification.
@@ -57,7 +60,8 @@ unsandboxed permission grants, even if a wrongly composed Session advertises one
   block order. Audio/blob resources remain unsupported.
 - Each permission, question or budget request owns a separate cancellable client
   exchange; it never blocks the event pump. Answers target exact request IDs.
-  Known client actions send `provenance:{source:'user'}`; unsupported methods,
+  Root and task-owned native answers retain that provenance in their accepted
+  resolution facts and Host events. Known client actions send `provenance:{source:'user'}`; unsupported methods,
   malformed responses and local error fallbacks send `source:'system'`. Missing
   provenance is never treated as evidence of a human decision.
 - Approvals retain approve/reject option IDs and the allow-once alias. Recognized
@@ -124,7 +128,10 @@ public JSON display survive live/nested/snapshot output; opaque provider frames
 never reach ACP. Progress accumulates because ACP content updates replace rather
 than append. Finished tools use actual accepted name/input when supplied, and
 otherwise remain unnamed output updates. Tool result messages do not duplicate
-execution display. Branch renderers are isolated by supplied branch/agent identity;
+execution display. Fresh attachment and snapshot refresh also consume accepted `snapshot.branches`
+through renderers keyed by real branch identity. They preserve each branch
+transcript order without inventing a total root/branch chronology. Branch
+renderers are isolated by supplied branch/agent identity;
 a child snapshot or terminal cannot replace root renderer/foreground state.
 
 Unmatched tool results are retained by execution ID, without a made-up name. The
@@ -142,8 +149,8 @@ wire event, sequence, journal or ACP extension is involved.
 Snapshots use real activeTurnId, drafts, terminal and historical turnResults.
 Observed terminal outcomes, not submit/cancel receipts or queue disappearance,
 settle foreground work. Only actual terminalCause:budget_exhausted selects the
-budget-exhausted stop reason. Explicit cancel/close sends expectedTurnId for the
-observed turn and discardQueue:false; native admission performs the comparison.
+budget-exhausted stop reason. Explicit cancel/close waits for any in-flight submission admission, captures
+that prompt ownership, and sends expectedTurnId for the observed turn and discardQueue:false; native admission performs the comparison.
 A no-op/abort receipt is not proof physical cleanup finished. Close observes a
 known terminal before detach. EOF/shutdown only detach subscriptions/requests;
 Host owns shared Session/background lifetime. There is no client shutdown timeout.
@@ -169,14 +176,21 @@ rejects unknown variants and does not invent a cursor extension or client seq.
 - Budget/history/response/branch wire data is not legacy private provider history
   or an aggregate settled price. Events without an ACP display equivalent remain
   telemetry, not invented transcript entries or control capabilities.
-- The built-CLI stdio integration cases cover embedded input, replay, idle
-  resume, EOF and signal shutdown. Separate filesystem-backed native Session/Host
-  cases over SDK NDJSON cover client form negotiation, successful question
-  answers, local busy rejection and cancellation/late answers. Independent
-  SDK/native projection probes also cover budget form negotiation/provenance
-  and state transitions. These checks do not establish real-tool sandbox
-  enforcement, shared-client races, nested replay, packed-install or editor
-  compatibility. Those remain release acceptance requirements in issue #84.
+- Process cases in `tests/clients/acp/spec.integration.test.ts` and
+  `tests/clients/acp-v2/serve.integration.test.ts` cover SDK stdio, image/embedded
+  input, rejected extensions, replay, real shell permissions, EOF and signals.
+  Native filesystem-backed SDK suites in `tests/clients/acp/` cover question
+  sets, budgets, provenance and lifecycle races; no permanent unit suite is added.
+- A packed npm installation outside the checkout passed the process cases and a
+  live Gemini 3.8 Flash turn through the SDK 1.4.0 experimental/v2 reference
+  client on Node 24.19.0/Linux (2026-11-08). No GUI editor was validated.
+- The default agent command sandbox lacks `socat` and prevents nested namespace
+  setup. Those runs verify approved shell calls fail closed. A second run on
+  the managed host, outside that command sandbox with a locally extracted
+  official Debian socat 1.8.0.3, requires successful workspace writes for both
+  `approve` and `allow-once` and verifies outside-workspace writes remain blocked.
+  Use `TERM2_ACP_REQUIRE_SHELL_SUCCESS=1` on a sandbox-capable host to make the
+  success path mandatory rather than accepting sandbox refusal.
 
 ## Draft comparison and current activity
 
@@ -192,10 +206,7 @@ interactions and background task distinctions. The adapter reports
 requires_action while blocked and running when progress resumes. Historical
 stop reasons are not re-announced as new completions during attachment.
 
-`tests/clients/acp/spec.integration.test.ts` exercises the built executable over
-SDK stdio with a loopback provider, plus native question handling through a
-filesystem-backed Session/Host and fixture model/tool over SDK NDJSON. Run `pnpm build`, then
-`pnpm test:integration tests/clients/acp/spec.integration.test.ts`. Before incorporating the source-tree migration, the SDK 1.4.0
-stdio client also completed a Gemini 3.8 Flash turn against the configured Google
-endpoint (Node environment proxy support enabled in the cloud). Packed-install
-and editor acceptance remain outstanding.
+Build with `pnpm build`, then run
+`pnpm test:integration tests/clients/acp tests/clients/acp-v2/serve.integration.test.ts`.
+The live packed reference-client turn used Node environment proxy support
+(`NODE_USE_ENV_PROXY=1`) for the configured Google endpoint.

@@ -611,16 +611,22 @@ established by them.
 
 ```sh
 pnpm typecheck
-NODE_ENV=test pnpm exec vitest run --reporter=minimal --config vitest.integration.config.ts source/services/discord/discord-bridge.integration.test.ts
+pnpm build
+NODE_ENV=test TERM2_TEST_CLI=dist/src/app/cli.js pnpm exec vitest run --reporter=minimal --config vitest.integration.config.ts tests/clients/discord
+NODE_ENV=test TERM2_TEST_CLI=dist/src/app/cli.js pnpm exec vitest run --reporter=minimal --config vitest.e2e.config.ts tests/clients/discord
 pnpm test:provider-black-box
 ```
 
-The command above selects only the Discord integration file under pnpm (no `--`
-separator). The other commands are separate, broader checks.
+The Discord files cover the `term2 discord` command's push, REST-only and
+blackhole recovery/stop modes, Gateway identify/resume/zombie/auth failure,
+image staging limits, and SIGINT/SIGTERM drain. They use loopback fakes, with no
+tokens, production provider calls or external Discord traffic.
 
-The Discord integration fixture uses a loopback fake Discord HTTP API, real Unix sockets,
-real ConversationService/Orchestrator/AgentClient and a provider-boundary fixture.
-No tokens, production provider calls or external Discord traffic.
+The former bridge routing fixture (`source/services/discord/discord-bridge.integration.test.ts`,
+66 cases covering unauthorized users and channels, alias routing, peer hops,
+approval refusal, pause/stop and restart dedupe) was deleted with the legacy
+`source/` tree in #88 and has no successor. Those behaviours currently have no
+offline regression coverage.
 
 After independent review and authorized bot/channel access, verify **on mobile**:
 

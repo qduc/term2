@@ -16,12 +16,6 @@ for changes after capture.
 
 ## Remaining live captures
 
-- **Release smoke CLI turn (`cli-release-turn-v1`)** — not captured yet. `pnpm release:smoke --record`
-  runs the installed tarball through a loopback recording proxy to a real provider: one
-  `read_file` tool call and the final answer. Prepare and accept it like any other capture; later
-  releases replay it with `pnpm release:smoke --tgz <tarball>`. Request bodies are not compared on
-  replay (the CLI prompt changes between releases); recapture when the provider's wire output or
-  the CLI's provider transport changes.
 - **Generic Chat Completions fixture** — `chat-pilot.json` remains hand-authored; decide
   whether replacing it adds value now that the live OpenCode chat path is covered.
 - **Direct Anthropic API** — remains optional and credit-gated; Anthropic wire
@@ -59,6 +53,14 @@ for changes after capture.
 - **opencode/tool-continuation-v1.json** — captured 2026-08-01T12:23:52.400Z via OpenCode Go; SDK openai@6.37.0; model `deepseek-v4-flash`; probe `tool-continuation-v1`; reviewer fixture maintainer. Recapture when the wire family or transport-relevant SDK major/minor changes.
 
 - **opencode/tool-continuation-v1-anthropic.json** — captured 2026-08-01T12:18:50.067Z; SDK @ai-sdk/anthropic@3.0.76; model family opencode; probe `tool-continuation-v1`; reviewer fixture maintainer. Recapture when the wire family or transport-relevant SDK major/minor changes.
+
+- **google/cli-release-turn-v1-google.json** — captured 2026-11-08T05:03:56.914Z from the packed
+  term2 0.40.0 CLI via `pnpm release:smoke --record`; model `gemini-3.8-flash`; probe
+  `cli-release-turn-v1`. Two exchanges: the model read `smoke.txt` through `run_code` calling
+  `tools.read_file`, then answered with its contents. API key header redacted; reviewed for
+  secrets and personal paths. Later releases replay it with `pnpm release:smoke --tgz <tarball>`;
+  request bodies are not compared. Recapture when Google's wire output or the CLI's provider
+  transport changes.
 
 ## Recapture
 

@@ -139,7 +139,7 @@ export const CONTROL_USAGE =
   'Usage: term2 control list [--status] | status <name> [--json] | get <name> <topic> [--json] | submit|steer <name> --id <id> | interrupt <name> | wait-turn <name> --message-id <id>\n';
 
 // Copied from src/clients/discord/discord-command.ts, whose module pulls in the old bridge runtime.
-export const DISCORD_HELP = `Discord bridge (candidate) — attach existing opted-in terminal sessions.
+export const DISCORD_HELP = `Discord bridge — attach existing opted-in terminal sessions.
 
 Usage:
   term2 discord [ /absolute/path/discord.json ]
@@ -161,7 +161,7 @@ Ask: "Reply in Discord using discord_send." Status, approvals and questions stay
 
 First-run checklist and reference: docs/reference/discord-bridge.md
 https://github.com/qduc/term2/blob/main/docs/reference/discord-bridge.md
-Candidate: live Discord/mobile validation is still outstanding.
+See the Discord bridge guide for tested setup and compatibility limits.
 `;
 
 /** Public help for the shipped executable. Compatibility profile flags stay parseable but hidden. */
@@ -175,7 +175,7 @@ export const helpText = (): string => `
     $ term2 --resume <conversation-id>
     $ term2 --resume <conversation-id> "Follow-up prompt"
     $ term2 --help
-    $ term2 discord --help  (candidate bridge; explicit sends, local approvals)
+    $ term2 discord --help  (explicit sends, local approvals)
 
   Usage
     $ term2 [options] [prompt...]

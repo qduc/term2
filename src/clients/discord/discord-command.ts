@@ -11,7 +11,7 @@ import { DiscordBridge, discordStateErrorCode, parseDiscordBridgeConfig } from '
 import { DiscordGatewayNudge } from './discord-gateway.js';
 
 const reference = 'docs/reference/discord-bridge.md';
-const help = `Discord bridge (candidate) — attach existing opted-in terminal sessions.
+const help = `Discord bridge — attach existing opted-in terminal sessions.
 
 Usage:
   term2 discord [ /absolute/path/discord.json ]
@@ -33,7 +33,7 @@ Ask: "Reply in Discord using discord_send." Status, approvals and questions stay
 
 First-run checklist and reference: ${reference}
 https://github.com/qduc/term2/blob/main/${reference}
-Candidate: live Discord/mobile validation is still outstanding.
+See the Discord bridge guide for tested setup and compatibility limits.
 `;
 
 /** Run the opt-in bridge until SIGINT/SIGTERM; credentials stay at the bridge boundary and are never logged. */

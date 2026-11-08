@@ -117,6 +117,8 @@ function normalizeToolResultPart(value) {
 function normalizeToolResultOutput(value) {
   if (typeof value === 'string') return value;
   if (value === undefined || value === null) return '';
+  // Older Agents SDK logs store a single output part as a bare object.
+  if (asRecord(value)) value = [value];
   if (!Array.isArray(value)) unsupportedInput('tool result output');
   return value.map(normalizeToolResultPart);
 }
@@ -129,7 +131,7 @@ function normalizeReasoningText(value) {
       const record = asRecord(part);
       if (
         !record ||
-        !['reasoning_text', 'text', 'summary_text'].includes(String(record.type)) ||
+        !['reasoning_text', 'text', 'summary_text', 'input_text'].includes(String(record.type)) ||
         typeof record.text !== 'string'
       ) {
         return unsupportedInput('reasoning content part');

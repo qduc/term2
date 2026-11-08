@@ -17,13 +17,13 @@ Alternatively, start the TUI with `--control-socket=<name> --discord-input`. A l
 
 The bridge uses Discord Gateway push as a wake-up signal for cursor-based REST reads. While push is connected, the REST safety poll runs every 30 seconds instead of every second. Message content and delivery cursors still come from REST; push is not a second content source. Set `TERM2_DISCORD_GATEWAY=off` in the bridge process environment to use polling only.
 
-Ingress remains in Discord while the configured default coordinator is unavailable, rather than being consumed without a destination. These changes have offline fixture coverage, not completed live Discord/mobile acceptance.
+Ingress remains in Discord while the configured default coordinator is unavailable, rather than being consumed without a destination. This recovery path has offline fixture coverage.
 
 ## Replies and local controls
 
-Channel output requires an explicit `discord_send` call; ordinary assistant finals are not automatically mirrored. Capable, opted-in agents receive Discord communication guidance, but wording alone does not prove a message was sent. Approvals, questions, and status output remain local. Plan mode blocks Discord sends.
+Channel output requires an explicit `discord_send` call; ordinary assistant finals are not automatically mirrored. An opted-in session can send without a per-send approval, so prompt-injected content could cause a post to the configured channel. Approvals, questions, and status output remain local.
 
-Offline socket/API fixtures and local attachment checks do not validate real-account Discord delivery, bot permissions, or mobile behavior. Those live checks remain outstanding; follow the guide's live checklist before relying on them.
+Live mobile checks covered two session routes, explicit replies, a peer handoff, terminal approval, pause/stop and bridge restart. Another-user and other-channel live checks were waived because those resources were unavailable; the guide records the remaining limits and offline evidence.
 
 ## Image attachments
 

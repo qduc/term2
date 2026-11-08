@@ -70,10 +70,11 @@ Every session uses the same default experience: a minimal prompt with subagent d
 
 A command-line prompt runs non-interactively, with tool execution disabled by default. `--auto-approve` enables tools without interactive confirmation; use it only when you intend unattended execution. See [scripting](https://qduc.github.io/term2/using-term2/non-interactive/) and [SSH setup](https://qduc.github.io/term2/remote/ssh/).
 
-The optional [Discord bridge (candidate)](docs/reference/discord-bridge.md#first-run-checklist-candidate)
+The optional [Discord bridge](docs/reference/discord-bridge.md#first-run-checklist)
 attaches existing opted-in terminal sessions. Start with `term2 discord --help`.
 Replies require explicit `discord_send`; status, approvals and questions stay local.
-Live Discord/mobile validation is still outstanding.
+Live mobile checks covered routing, explicit replies, local approval, pause/stop and
+bridge restart. See the guide for tested scope and remaining limits.
 
 `/restart` reloads the built CLI in place and resumes the conversation, recovering durably queued text (not unsaved editor drafts). It requires POSIX Node with `process.execve` support, a built `dist/cli.js` entry, and no Node flags, loaders, or `NODE_OPTIONS`. Live background work blocks restart unless you explicitly use `/restart stop`; active workspace leases reset to home scope. Finish foreground shell commands and pending input confirmations first. See [session restart](https://qduc.github.io/term2/using-term2/sessions/#restart-the-built-cli) for recovery limits.
 
@@ -87,9 +88,16 @@ See [approvals](https://qduc.github.io/term2/safety/approvals/) and [sandbox bou
 
 ## Status
 
-The interactive TUI and headless runs (including `--resume` and JSON output) are the supported core. SSH remote projects, the Discord bridge, ACP (`term2 acp`), the control socket (`term2 control`) and the web/server host (`term2 serve`) are experimental and may change between releases.
+Supported:
 
-For the experimental SDK 1.4.0 ACP v2 reference client:
+- The interactive TUI and headless runs, including `--resume` and JSON output.
+- The web/server host (`term2 serve`) with the separately built [`web-client/`](web-client/) from the same source revision. See [gateway setup](https://qduc.github.io/term2/remote/web-gateway/) for pairing, BFF keys and remote-access limits.
+- The ACP subset described below. ACP v2 is itself an upstream experimental protocol; only the SDK 1.4.0 reference client was verified, and no GUI editor was tested.
+- The Discord bridge for opted-in interactive sessions, subject to the tested scope and limits in its guide.
+
+Experimental, and may change between releases: SSH remote projects and the standalone control socket (`term2 control`).
+
+For the SDK 1.4.0 ACP v2 reference client:
 
 ```sh
 term2 acp --provider <provider> --model <exact-model-id>

@@ -1,7 +1,8 @@
 import { isDeepStrictEqual } from 'node:util';
 import { normalizeApplicationInput } from './v3-provider-input.mjs';
 import { getProfileMetadata } from '../../dist/src/config/profiles/active-profile.js';
-import { profileIdFromLegacyMode } from '../../dist/src/config/profiles/legacy-adapter.js';
+import { BARE_PROFILE_ID, profileIdFromLegacyMode } from '../../dist/src/config/profiles/legacy-adapter.js';
+import { isDroppedProfile } from '../../dist/src/app/dropped-profiles.js';
 import { itemToInput } from '../../dist/src/model/provider-items.js';
 import { validateFact } from '../../dist/src/session/log-facts.js';
 import { replay } from '../../dist/src/session/replay.js';
@@ -66,7 +67,8 @@ function visible(message) {
  * Pure, deterministic reader-result -> regular native facts. Success is private
  * content {id, entries, fidelity}; failure is only {status:'failed', error:{code}}.
  * options.fallback supplies missing provider/model/profileId/workspace only;
- * existing source configuration is never overridden. No I/O or live authority.
+ * existing source configuration is never overridden. A profile missing from both
+ * source and fallback defaults to Bare. No I/O or live authority.
  */
 export function convertValidatedV3(input, options = {}) {
   try {
@@ -92,7 +94,8 @@ export function convertValidatedV3(input, options = {}) {
     const derivedProfile = state.activeProfileId === undefined && state.appMode !== undefined;
     if (derivedProfile && !object(state.appMode)) refuse('missing-configuration');
     const profileId =
-      state.activeProfileId ?? (derivedProfile ? profileIdFromLegacyMode(state.appMode) : fallback.profileId);
+      state.activeProfileId ??
+      (derivedProfile ? profileIdFromLegacyMode(state.appMode) : fallback.profileId ?? BARE_PROFILE_ID);
     const workspace = state.projectPath ?? fallback.workspace;
     if (![provider, modelName, profileId, workspace].every(text)) refuse('missing-configuration');
     if (!workspace.startsWith('/')) refuse('unsupported-workspace');
@@ -101,7 +104,8 @@ export function convertValidatedV3(input, options = {}) {
     const nativeReasoning = reasoning === 'default' ? undefined : reasoning;
     let metadata;
     try {
-      metadata = getProfileMetadata(profileId);
+      // The app continues dropped workflow profiles under Bare (src/app/dropped-profiles.ts).
+      metadata = getProfileMetadata(isDroppedProfile(profileId) ? BARE_PROFILE_ID : profileId);
     } catch {
       refuse('unsupported-profile');
     }
@@ -111,14 +115,19 @@ export function convertValidatedV3(input, options = {}) {
       digest: metadata.activeProfileDigest,
     };
     // Metadata on the selected init is evidence, not permission to substitute a
-    // changed registry profile with the same name.
+    // changed profile with the same name. Bare, retired Standard/Lite/Full and the
+    // dropped workflow profiles all continue under today's Bare, whose prompt
+    // changes between releases, with the recorded identity kept in the notice.
+    // Only a non-Bare built-in can still fail (custom IDs are unsupported-profile).
     const init = envelopes.filter(({ event }) => event.type === 'session_init').at(-1)?.event;
-    if (
-      (init?.activeProfileId === profileId || (derivedProfile && init?.activeProfileId === undefined)) &&
-      ((init.activeProfileVersion !== undefined && init.activeProfileVersion !== profile.version) ||
-        (init.activeProfileDigest !== undefined && init.activeProfileDigest !== profile.digest))
-    )
-      refuse('profile-mismatch');
+    const recordedProfile =
+      init?.activeProfileId === profileId || (init && init.activeProfileId === undefined)
+        ? { version: init.activeProfileVersion, digest: init.activeProfileDigest }
+        : {};
+    const profileDrift =
+      (recordedProfile.version !== undefined && recordedProfile.version !== profile.version) ||
+      (recordedProfile.digest !== undefined && recordedProfile.digest !== profile.digest);
+    if (profileDrift && profile.id !== BARE_PROFILE_ID) refuse('profile-mismatch');
     if (!Array.isArray(state.messages) || !Array.isArray(state.history)) refuse('invalid-input');
     let normalized;
     try {
@@ -126,6 +135,19 @@ export function convertValidatedV3(input, options = {}) {
     } catch {
       refuse('normalization-refused');
     }
+    // Codex reasoning saved before 2026-08-02 kept the raw response item flat in
+    // providerData, which the Codex provider then spread onto the wire. The
+    // provider now accepts only namespaced metadata, so namespace it unchanged.
+    // Only raw Codex reasoning items qualify, not another provider's metadata.
+    if (provider === 'codex')
+      normalized = normalized.map((part) =>
+        part.type === 'reasoning' &&
+        object(part.providerMetadata) &&
+        !('codex' in part.providerMetadata) &&
+        part.providerMetadata.type === 'reasoning'
+          ? { ...part, providerMetadata: { codex: part.providerMetadata } }
+          : part,
+      );
     const entries = [];
     const add = (at, fact) => entries.push({ at, fact });
     const model = { provider, model: modelName };
@@ -218,6 +240,8 @@ export function convertValidatedV3(input, options = {}) {
           sourceSettings: {
             ...(state.appMode !== undefined ? { appMode: state.appMode } : {}),
             ...(state.activeProfileId !== undefined ? { activeProfileId: state.activeProfileId } : {}),
+            ...(recordedProfile.version !== undefined ? { activeProfileVersion: recordedProfile.version } : {}),
+            ...(recordedProfile.digest !== undefined ? { activeProfileDigest: recordedProfile.digest } : {}),
             ...(state.reasoningEffort !== undefined ? { reasoningEffort: state.reasoningEffort } : {}),
             ...(state.temperature !== undefined ? { temperature: state.temperature } : {}),
           },
@@ -279,6 +303,7 @@ export function convertValidatedV3(input, options = {}) {
         costRecordCount: costs.length,
         ambiguousMessageTimestamps,
         derivedProfileCount: Number(derivedProfile),
+        profileRebasedCount: Number(profileDrift || profile.id !== profileId),
         remappedObservationIdentityCount,
         restorationTurnCount: 1,
         continuationBroken: true,

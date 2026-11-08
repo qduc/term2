@@ -12,7 +12,7 @@
  * Recording runs the installed CLI against a loopback proxy that forwards to the real
  * provider and keeps every request/response as a fixture envelope. Sanitize and review it
  * with `pnpm provider:fixture:prepare <file>` (then `--accept`), which files it as
- * `scripts/provider-black-box/fixtures/<type>/cli-release-turn-v1.json`. Replay serves those
+ * `scripts/provider-black-box/fixtures/<type>/cli-release-turn-v1-<type>.json`. Replay serves those
  * real responses from loopback to a fresh install and checks the turn completes with the
  * token the model read through the tool. Request bodies are not compared: the CLI's prompt
  * changes between releases, while this check is about the shipped artifact handling real

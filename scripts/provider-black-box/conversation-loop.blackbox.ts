@@ -73,21 +73,26 @@ it('edits and retracts pending steering while one turn crosses two manual approv
     await child.waitForIdleInput();
     await writePtyTextAndSubmit(child, 'FIRST_LOOP_INPUT');
     await child.waitForState(() => requests.length === 1);
+    let revision = child.readComposerRevision();
     await writePtyTextAndSubmit(child, 'ORIGINAL_STEER');
-    await child.waitForComposerValue('');
+    await child.waitForComposerValue('', { afterRevision: revision });
     await child.waitForVisibleOutput('ORIGINAL_STEER');
     await child.write('\u001b[A');
     await child.waitForVisibleOutput('e edit');
+    revision = child.readComposerRevision();
     await child.write('e');
-    await child.waitForComposerValue('ORIGINAL_STEER');
+    await child.waitForComposerValue('ORIGINAL_STEER', { afterRevision: revision });
     for (let remaining = 'ORIGINAL_STEER'.length - 1; remaining >= 0; remaining--) {
+      revision = child.readComposerRevision();
       await child.write('\u007f');
-      await child.waitForComposerValue('ORIGINAL_STEER'.slice(0, remaining));
+      await child.waitForComposerValue('ORIGINAL_STEER'.slice(0, remaining), { afterRevision: revision });
     }
+    revision = child.readComposerRevision();
     await writePtyTextAndSubmit(child, 'EDITED_STEER');
-    await child.waitForComposerValue('');
+    await child.waitForComposerValue('', { afterRevision: revision });
+    revision = child.readComposerRevision();
     await writePtyTextAndSubmit(child, 'RETRACTED_STEER');
-    await child.waitForComposerValue('');
+    await child.waitForComposerValue('', { afterRevision: revision });
     const selectMarker = child.getOutput().length;
     await child.write('\u001b[A');
     await child.waitForState((s) => s.output.slice(selectMarker).includes('e edit'));
@@ -130,8 +135,9 @@ it('edits and retracts pending steering while one turn crosses two manual approv
     const idle = child.readIdleGeneration();
     await writePtyTextAndSubmit(child, 'FALLBACK_PARENT');
     await child.waitForState(() => requests.length === 4);
+    revision = child.readComposerRevision();
     await writePtyTextAndSubmit(child, 'RELEASED_FOLLOWUP');
-    await child.waitForComposerValue('');
+    await child.waitForComposerValue('', { afterRevision: revision });
     complete(3, [message('PARENT_DONE')]);
     await child.waitForState(() => requests.length === 5);
     expect(JSON.stringify(requests[4]!.input).match(/RELEASED_FOLLOWUP/g)).toHaveLength(1);
@@ -142,8 +148,9 @@ it('edits and retracts pending steering while one turn crosses two manual approv
     const beforeStop = child.readIdleGeneration();
     await writePtyTextAndSubmit(child, 'STOP_PARENT');
     await child.waitForState(() => requests.length === 6);
+    revision = child.readComposerRevision();
     await writePtyTextAndSubmit(child, 'CANCELLED_STEER');
-    await child.waitForComposerValue('');
+    await child.waitForComposerValue('', { afterRevision: revision });
     await child.write('\u0003');
     await child.waitForIdleInput({ after: beforeStop });
     expect(pending[5]!.destroyed).toBe(true);

@@ -4,8 +4,7 @@ This subtree implements experimental ACP v2 against the published direct
 protocol through `82d37ded91705090bc6b253301c7411ac5d5e389` (including
 `77bca90b`/`5451b43c`) and native keyed-command Session `f14c9baa`. Imports target
 `protocol/wire.ts` and `host/in-process-direct-types.ts`.
-Shared owner commits were inspected read-only, not copied/cherry-picked into this
-worker's older base. This is implementation, not M6 acceptance.
+The app composes this implementation directly; see the public ACP reference for the supported SDK contract and remaining release acceptance limits.
 
 ## App integration and security
 
@@ -30,8 +29,7 @@ and `approvalAlwaysAsks:true`. Its runtime pins per-session
 `shell.autoApproveMode` to `off`, without writing user settings. Lead `1451f8f8`
 now declares and forwards `allowUnsandboxed` into source tool assembly, intersected
 with workspace read-only/remote authority. Those are the actual published
-composition seams, not policies manufactured by ACP's workspace grant. Combined
-approval/sandbox behavior remains unverified under the after-M6 deferral.
+composition seams, not policies manufactured by ACP's workspace grant. The launcher pins these policies; real-tool and editor acceptance remain distinct from adapter-level verification.
 
 App keeps diagnostics off stdout, supplies process shutdown signals and disposes
 Host after serving returns. No production factory, global signal handler,
@@ -50,8 +48,10 @@ unsandboxed permission grants, even if a wrongly composed Session advertises one
   not acknowledge engine work or prove completion. Started work waits for its
   exact real terminal. Real input message/turn identities correlate admission;
   no client sequence replaces durable seq.
-- Text, resource links and text resources retain existing interpretation. Images
-  use image/* MIME and raw padded RFC4648 base64, never a fetched path/URL or data
+- Text and resource links are baseline input. Embedded text resources are advertised
+  through prompt.embeddedContext and read from resource.text (there is no nested
+  resource.type discriminator). Images
+  use image/\* MIME and raw padded RFC4648 base64, never a fetched path/URL or data
   URI. Representation is checked before admission without adding a size cap or
   provider permission policy. Image-only prompts and text after images retain
   block order. Audio/blob resources remain unsupported.
@@ -65,7 +65,10 @@ unsandboxed permission grants, even if a wrongly composed Session advertises one
   exact grant decisions, never collapsed to allow or cached. Unknown selections,
   cancellation and unsupported permission methods deny. Session owns real scope
   validation; no absent grant capability is invented.
-- Questions use ACP v2 `elicitation/create` form mode. Known stable-ID question
+- Questions use ACP v2 `elicitation/create` form mode only when the initialized
+  client explicitly advertises a non-null elicitation.form capability. Budget
+  forms use the same gate; unsupported clients receive native system fallbacks
+  without an outbound elicitation request. Known stable-ID question
   sets preserve single/multiple choices, descriptions where supported, and custom
   text. The entire answer set is sent once; Session owns canonical serialization.
   Explicit decline differs from cancel/invalid/unsupported responses, which send
@@ -158,8 +161,6 @@ rejects unknown variants and does not invent a cursor extension or client seq.
 
 ## Remaining seams and verification limits
 
-- Coordinator must assemble the actual shared dependency set with this owned
-  delta. This worker intentionally did not pull shared owner files into its base.
 - Store/Host list title/updatedAt still need real owner data. No old-conversation
   title or fabricated timestamp/order.
 - A numeric ACP cursor extension requires an agreed retained-state/watermark
@@ -168,10 +169,33 @@ rejects unknown variants and does not invent a cursor extension or client seq.
 - Budget/history/response/branch wire data is not legacy private provider history
   or an aggregate settled price. Events without an ACP display equivalent remain
   telemetry, not invented transcript entries or control capabilities.
-- No tests, probes, typechecks/lint/guards, builds, reviews or cold reads ran, per
-  user direction. Author source/type inspection is implementation work, not
-  behavioral evidence. End-of-M6 verification must exercise this direct backend
-  and stdio entry, including native busy admission, mixed replay/aliases,
-  provenance, budget pauses, approval/sandbox enforcement, nested output,
-  cancellation/terminal observation, close and EOF. Legacy passes do not establish
-  direct acceptance.
+- The built-CLI stdio integration cases cover embedded input, replay, idle
+  resume, EOF and signal shutdown. Separate filesystem-backed native Session/Host
+  cases over SDK NDJSON cover client form negotiation, successful question
+  answers, local busy rejection and cancellation/late answers. Independent
+  SDK/native projection probes also cover budget form negotiation/provenance
+  and state transitions. These checks do not establish real-tool sandbox
+  enforcement, shared-client races, nested replay, packed-install or editor
+  compatibility. Those remain release acceptance requirements in issue #84.
+
+## Draft comparison and current activity
+
+The online v2 draft evolves independently of SDK 1.4.0. Preserve this pinned
+SDK's empty prompt acknowledgement, exact-v2 initialization and tool_call
+announcement shapes until a coordinated SDK/client migration. These differ
+from the current online draft and are not claims of full draft compliance.
+
+Every attachment sends a current state snapshot even without history replay.
+Native interaction events do not require a separate status_changed event: the
+shared protocol reducer supplies foreground state, including concurrent
+interactions and background task distinctions. The adapter reports
+requires_action while blocked and running when progress resumes. Historical
+stop reasons are not re-announced as new completions during attachment.
+
+`tests/clients/acp/spec.integration.test.ts` exercises the built executable over
+SDK stdio with a loopback provider, plus native question handling through a
+filesystem-backed Session/Host and fixture model/tool over SDK NDJSON. Run `pnpm build`, then
+`pnpm test:integration tests/clients/acp/spec.integration.test.ts`. Before incorporating the source-tree migration, the SDK 1.4.0
+stdio client also completed a Gemini 3.8 Flash turn against the configured Google
+endpoint (Node environment proxy support enabled in the cloud). Packed-install
+and editor acceptance remain outstanding.

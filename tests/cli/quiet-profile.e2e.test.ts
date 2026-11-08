@@ -9,7 +9,7 @@ import { createTestChildEnv, testCliPath } from '../helpers/terminal-e2e.js';
 import { resolveSettingsDirectory } from '../../src/config/settings/settings-path.js';
 
 // Built direct CLI. `--quiet` is documented to suppress non-error diagnostics.
-// The profile announcement is one of those; a failed turn still reports its error.
+// Routine profile labels are absent even without --quiet; real errors remain visible.
 const cli = testCliPath(fileURLToPath(new URL('../../dist/src/app/cli.js', import.meta.url)));
 
 let root = '';
@@ -85,7 +85,7 @@ function run(
   workspace: string,
 ): Promise<{ code: number | null; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
-    const child = spawn('node', [cli, '--profile', 'bare', '-p', 'mockprov', '-m', 'mock-alpha', ...args], {
+    const child = spawn('node', [cli, '-p', 'mockprov', '-m', 'mock-alpha', ...args], {
       cwd: workspace,
       env,
     });
@@ -104,7 +104,7 @@ function run(
   });
 }
 
-it('omits the profile line from stderr when --quiet is set', { timeout: 120_000 }, async () => {
+it('omits routine profile lines with and without --quiet, preserving JSON metadata', { timeout: 120_000 }, async () => {
   const baseUrl = await startProvider(200, 'PONG');
   const { env, workspace } = prepare(baseUrl);
   const quiet = await run(['--json', '-q', 'Reply with the single word PONG.'], env, workspace);
@@ -115,7 +115,7 @@ it('omits the profile line from stderr when --quiet is set', { timeout: 120_000 
 
   const announced = await run(['--json', 'Reply with the single word PONG.'], env, workspace);
   expect(announced.code).toBe(0);
-  expect(announced.stderr).toContain('Profile: bare');
+  expect(announced.stderr).not.toMatch(/Profile:/);
   expect(announced.stdout).toContain('"type":"completed"');
 });
 
@@ -135,7 +135,7 @@ it('omits an MCP config notice under --quiet and still prints it otherwise', { t
   expect(announced.code).toBe(0);
   expect(announced.stderr).toMatch(/^MCP: /m);
   expect(announced.stderr).toContain('is not valid JSON');
-  expect(announced.stderr).toContain('Profile: bare');
+  expect(announced.stderr).not.toMatch(/Profile:/);
 });
 
 it('keeps the fork line under --quiet', { timeout: 120_000 }, async () => {
@@ -169,4 +169,69 @@ it('still prints a plain-mode error under --quiet', { timeout: 120_000 }, async 
   expect(failed.stderr).toMatch(/^error /m);
   expect(failed.stderr).not.toMatch(/Profile:/);
   expect(failed.stderr).toContain('quiet-boom');
+});
+
+for (const flags of [
+  [],
+  ['--profile', 'bare'],
+  ['--profile', 'standard'],
+  ['--profile', 'full'],
+  ['--profile', 'lite'],
+  ['--lite'],
+  ['-l'],
+]) {
+  it(
+    `keeps hidden CLI compatibility and metadata for ${flags.join(' ') || 'default'}`,
+    { timeout: 120_000 },
+    async () => {
+      const { env, workspace } = prepare(await startProvider(200, 'PONG'));
+      const settingsFile = path.join(
+        resolveSettingsDirectory({ homeDir: path.join(root, 'home'), env }),
+        'settings.json',
+      );
+      const before = fs.readFileSync(settingsFile, 'utf8');
+      const result = await run([...flags, '--json', 'Reply PONG'], env, workspace);
+      expect(result.code, result.stderr).toBe(0);
+      expect(result.stderr).not.toMatch(/Profile:/);
+      const events = result.stdout
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line));
+      expect(events[0]).toMatchObject({
+        type: 'session_start',
+        activeProfileId: 'builtin:bare',
+        activeProfileVersion: '2.0.0',
+      });
+      expect(events[0].activeProfileDigest).toMatch(/^[a-f0-9]{64}$/);
+      const file = fs.readdirSync(env.TERM2_CONVERSATIONS_DIR!).find((name) => name.endsWith('.jsonl'))!;
+      const rows = fs
+        .readFileSync(path.join(env.TERM2_CONVERSATIONS_DIR!, file), 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line));
+      expect(rows[0].fact.profile).toMatchObject({
+        id: 'builtin:bare',
+        version: '2.0.0',
+        digest: events[0].activeProfileDigest,
+      });
+      expect(fs.readFileSync(settingsFile, 'utf8')).toBe(before);
+    },
+  );
+}
+
+it('hides compatibility flags from help and keeps dropped selections invalid', { timeout: 120_000 }, async () => {
+  const { env, workspace } = prepare(await startProvider(200, 'PONG'));
+  const help = await run(['--help'], env, workspace);
+  expect(help.code).toBe(0);
+  expect(help.stdout).not.toMatch(/--profile|--lite|profile chooser|non-lite/);
+  const refused = await run([], env, workspace);
+  expect(refused.code).not.toBe(0);
+  expect(refused.stderr).toContain('interactive terminal');
+  expect(refused.stderr).not.toMatch(/Profile:/);
+  for (const name of ['plan', 'pair', 'mentor', 'orchestrator', 'unknown']) {
+    const result = await run(['--profile', name, 'Reply'], env, workspace);
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain('Profile');
+    expect(result.stderr).not.toMatch(/Profile:/);
+  }
 });

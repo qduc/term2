@@ -1,53 +1,22 @@
 ---
-title: Operating Modes
-description: The built-in profiles and how to switch between them.
+title: Default Experience
+description: One default experience, with model selection and subagent delegation.
 ---
 
-term2 provides built-in profiles for different stages of development and system administration.
+Every term2 session starts with the same default experience. It uses a minimal
+prompt, local project instructions, the skills catalog and environment context.
+Use the shell for codebase work and delegate bounded tasks to
+[subagents](/term2/modes/subagents/). Additional capabilities are exposed through
+`run_code` where available. Approval and sandbox policies still apply.
 
-## Operating Profiles
+Choose a model with `/model` or `Ctrl+O`, and reasoning effort with `/effort`.
+There is no profile picker or mode toggle. Plan, Pair, Mentor and Orchestrator
+are no longer selectable. To start by exploring, ask the assistant to inspect
+and explain a project before proposing changes; this request does not change
+runtime permissions.
 
-| Profile | Activation | Purpose | Observable Capabilities & Restrictions |
-| :--- | :--- | :--- | :--- |
-| **Standard** | Default (`term2`), `/profile standard` | Primary engineering mode for everyday development. | Full codebase context, file reading and editing, shell execution, subagents. |
-| **Bare** | `--profile bare`, `/profile bare` | Minimal system prompt baseline while retaining essential quality safeguards and completion verification. | Shell-led codebase work, subagent delegation, `read_file` for images, project instructions, the skills catalog, and environment context; selected web, memory, session, MCP, and background-task capabilities are available through `run_code`. |
-| **Plan** | `/plan`, `Shift+Tab`, `/profile plan` | Architecture design, research, and code review. | Read-only operation: file modifications, file creations, and mutating shell commands are prevented. |
-| **Lite** | `term2 --lite`, `/lite`, `/profile lite` | Compatibility alias for Bare. | Uses the same profile and capabilities as Bare. |
-| **Pair** | `/profile pair` | Work step by step with the user leading. | Standard tools with instructions to agree on the next step before acting. |
-| **Mentor** | `/mentor`, `/profile mentor` | Collaborative second-opinion consulting. Pairs primary model with an advisory strategic model. | Full codebase context, all standard development tools plus the `ask_mentor` advisory tool. |
-| **Orchestrator** | `/orchestrator`, `/profile orchestrator` | High-level task coordination and multi-agent delegation. | All implementation work is delegated to specialized subagents. |
-
-## Switching Modes
-
-- **Toggling Plan Mode (`Shift+Tab` or `/plan`)**:
-  Pressing `Shift+Tab` toggles between Standard mode and Plan mode. In Plan mode, write operations (file editing, file creation, and mutating shell commands) are safely blocked, allowing you to design and explore without risk of unintentional modifications.
-- **Switching Profiles (`/profile <name>`)**:
-  Run `/profile` followed by the profile name (`standard`, `bare`, `plan`, `lite`, `pair`, `mentor`, `orchestrator`) or run bare `/profile` to open the interactive selection menu.
-- **Dedicated Slash Commands**:
-  - `/plan`: Toggle Plan mode on or off.
-  - `/lite`: Toggle Bare mode on or off (the Lite name is retained for compatibility).
-  - `/mentor`: Toggle Mentor mode on or off.
-  - `/orchestrator`: Toggle Orchestrator mode on or off.
-
-## Plan Mode Restrictions
-
-When Plan mode is active:
-- **Read-Only Operation**: File edits, file creations, and workspace mutations are disabled.
-- **Safe Command Execution**: Only read-only inspection commands (such as directory listings, search, and status checks) are permitted; destructive or mutating shell commands are blocked.
-- **Structured Planning**: The agent focuses on reading code, gathering context, and outlining architecture plans or implementation steps for your review before you switch back to Standard mode to execute them.
-
-## Profile Identifiers in Configuration (`builtin:`)
-
-When configuring your default profile in `settings.json` via the `app.activeProfileId` setting (or when specifying full identifiers in `/profile <id>`), term2 uses the `builtin:` prefixed profile identifier:
-
-| Profile Name | Configuration Identifier (`app.activeProfileId`) |
-| :--- | :--- |
-| **Standard** | `builtin:standard` (default) |
-| **Bare** | `builtin:bare` |
-| **Plan** | `builtin:plan` |
-| **Lite** | `builtin:lite` |
-| **Pair** | `builtin:pair` |
-| **Mentor** | `builtin:mentor` |
-| **Orchestrator** | `builtin:orchestrator` |
-
-Everyday CLI flags and slash commands (`/profile standard`, `/plan`, `--lite`) accept the short visible profile names directly.
+The internal profile backend and historical session metadata remain for
+compatibility. Existing Standard/full/Lite selections normalize to the default,
+and saved dropped-profile sessions restore using the existing fallback policy.
+See the [backend compatibility documentation](https://github.com/qduc/term2/blob/main/docs/profiles/README.md)
+for legacy inputs and stored profile identity, version and digest.

@@ -8,7 +8,7 @@ import { LEGACY_COMMANDS } from './menus/legacy-commands.js';
 
 /** Typed commands this client still runs by their exact name although legacy's table does not list them. */
 // /plan, /mentor and /orchestrator switched to dropped profiles (#149), so they resolve like any unknown name.
-const OTHER_COMMANDS = new Set(['sandbox', 'mcp', 'mcp-login']);
+const OTHER_COMMANDS = new Set(['sandbox', 'mcp', 'mcp-login', 'profile', 'bare', 'lite']);
 
 export type TypedCommand =
   | { readonly kind: 'message' }
@@ -54,7 +54,7 @@ export function resolveTypedCommand(input: string): TypedCommand {
     const entry = candidates[0]!;
     return { kind: 'command', input: `/${entry.runs ?? entry.name}${rest}` };
   }
-  if (OTHER_COMMANDS.has(name)) return { kind: 'command', input };
+  if (OTHER_COMMANDS.has(lower)) return { kind: 'command', input: `/${lower}${rest}` };
   if (candidates.length > 1)
     return {
       kind: 'refused',

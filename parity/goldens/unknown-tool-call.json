@@ -4,7 +4,7 @@
     {
       "exitCode": 0,
       "stdout": "I cannot read files directly here.\n",
-      "stderr": "Profile: bare\n[tool] read_file: notes.txt\n",
+      "stderr": "[tool] read_file: notes.txt\n",
       "requests": [
         {
           "model": "mock-alpha",

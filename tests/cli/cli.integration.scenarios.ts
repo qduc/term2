@@ -559,7 +559,7 @@ export function registerCliScenarios(group: 'startup' | 'headless'): void {
             workspace,
           );
           expect(result.status, result.stderr).toBe(0);
-          expect(result.stderr).toContain('Profile: bare');
+          expect(result.stderr).not.toMatch(/Profile:/);
           expect(fs.readFileSync(settingsFile, 'utf8')).toBe(settingsBefore);
           expect(mock.capturedRequests()).toHaveLength(1);
           const request = mock.capturedRequests()[0]!;
@@ -729,7 +729,8 @@ fs.createWriteStream = (filename, options) => {
       expect(help).toContain('-r, --reasoning <effort>');
       expect(help).toContain('--goal <text>');
       expect(help).toContain('--goal-criteria <text>');
-      expect(help).toContain('-l, --lite');
+      expect(help).not.toContain('--lite');
+      expect(help).not.toContain('--profile');
       expect(help).toContain('--auto-approve');
       expect(help).toContain('--ssh <user@host>');
       expect(help).toContain('--remote-dir <path>');
@@ -1513,8 +1514,8 @@ fs.createWriteStream = (filename, options) => {
       expect(stdout.includes('hello this is a test prompt')).toBe(true);
       expect(stdout.includes('1 message')).toBe(true);
       expect(stdout.includes('model: gpt-4o')).toBe(true);
-      // A session saved as legacy Lite resumes as Bare, so the list labels it bare.
-      expect(stdout.includes('mode: bare')).toBe(true);
+      // Historical profile metadata stays out of the plain-text resume list.
+      expect(stdout).not.toContain('mode:');
       expect(stdout.includes(`term2 --resume ${convId}`)).toBe(true);
     });
 
@@ -2351,7 +2352,7 @@ fs.createWriteStream = (filename, options) => {
             repo,
           );
           expect(result.status, result.stderr).toBe(0);
-          expect(result.stderr).toContain('Profile: bare');
+          expect(result.stderr).not.toMatch(/Profile:/);
           expect(
             fs.existsSync(path.join(repo, 'result.txt')),
             JSON.stringify(lastWireToolExchange(mock.capturedRequests())),
@@ -2485,7 +2486,7 @@ fs.createWriteStream = (filename, options) => {
           expect(result.status, result.stderr).toBe(2);
           expect(result.stdout).toContain('Completion verification blocked');
           expect(result.stdout).toContain('durable goal remains active');
-          expect(result.stderr).toContain(`Profile: ${['standard', 'full'].includes(profile) ? 'bare' : profile}`);
+          expect(result.stderr).not.toMatch(/Profile:/);
         } finally {
           await mock.close();
         }

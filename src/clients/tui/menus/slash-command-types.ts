@@ -4,8 +4,7 @@ export type SlashCommandCompletion =
   | { type: 'settings'; trigger: string; resetTrigger: string }
   | { type: 'setting-value'; trigger: string; settingKey: string }
   | { type: 'skills'; trigger: string }
-  | { type: 'resume'; trigger: string }
-  | { type: 'profile'; trigger: string };
+  | { type: 'resume'; trigger: string };
 
 export interface SlashCommand {
   name: string;

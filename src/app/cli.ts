@@ -312,7 +312,7 @@ async function runHeadless(prompt: string, options: SessionOptions): Promise<num
     stderr.write(`${modelOverrides}\n`);
     return 1;
   }
-  // The profile is announced by the app after a resumed selection is restored; announcing here would show the pre-restore value.
+  // Resolve compatibility flags before creating or restoring the session.
   chooseProfile(options, settings);
 
   const io: HeadlessIo = { stdout, stderr };
@@ -453,11 +453,11 @@ async function main(argv: readonly string[]): Promise<number> {
           stderr.write(`${HOME_DIRECTORY_START_WARNING.trimEnd()}\nCancelled.\n`);
           return 1;
         }
-        // A resume opens its session first so the refusal follows the resume and profile lines, as the current CLI does.
+        // A resume opens its session before reporting the terminal refusal.
         if (options.goal === null && options.resumeId === null) {
-          // The current CLI announces the profile it would have started with before refusing.
+          // Validate hidden compatibility flags even when a terminal is unavailable.
           const settings = createSettingsService({ env: buildEnvOverrides(), disableFilePersistence: true });
-          stderr.write(`Profile: ${chooseProfile(options, settings).replace(/^builtin:/, '')}\n`);
+          chooseProfile(options, settings);
           stderr.write(`${INTERACTIVE_TERMINAL_REQUIRED}\n`);
           return 1;
         }

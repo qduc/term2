@@ -130,7 +130,7 @@ it.each(['expiry', 'configuration', 'secondary'] as const)(
           .poll(
             () => {
               const updates = terminal.getVisibleOutput().slice(mark);
-              const at = updates.lastIndexOf('Bare │ Codex/');
+              const at = updates.lastIndexOf('Codex/');
               return at >= 0 && !updates.slice(at).includes('7D 37%');
             },
             { timeout: 30000, interval: 100 },
@@ -145,8 +145,8 @@ it.each(['expiry', 'configuration', 'secondary'] as const)(
       }
       if (clearBy !== 'secondary') {
         const updates = terminal.getVisibleOutput().slice(mark);
-        expect(updates).toContain('Bare │ Codex/');
-        expect(updates.slice(updates.lastIndexOf('Bare │ Codex/'))).not.toContain('7D 37%');
+        expect(updates).toContain('Codex/');
+        expect(updates.slice(updates.lastIndexOf('Codex/'))).not.toContain('7D 37%');
       }
       const logs = fs
         .readdirSync(path.join(root, 'conversations'))

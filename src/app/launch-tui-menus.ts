@@ -3,7 +3,6 @@
  * same legacy services their source counterparts called. Session settings are
  * the attached session's live settings, never launch defaults.
  */
-import { isDroppedProfile } from './dropped-profiles.js';
 import {
   getAllSettingDescriptions,
   getSettingLabel,
@@ -93,27 +92,10 @@ import type {
 } from '../clients/tui/integration.js';
 import type { DirectApplication } from './application.js';
 
-import { canonicalProfileId, profileIdFromLegacyMode } from '../config/profiles/legacy-adapter.js';
-import { builtinProfiles } from '../config/profiles/registry.js';
-import { resolveActiveProfile } from '../config/profiles/active-profile.js';
-import { getProfileLabel } from '../config/profiles/labels.js';
 import { displaySessionId } from '../protocol/session-id.js';
 
 /** Legacy listRecentConversations' limit (source/app.tsx listSavedConversations). */
 const RECENT_CONVERSATIONS = 10;
-
-/** Legacy use-profile-selection.ts PROFILE_DETAILS, less the dropped profiles. */
-const PROFILE_DETAILS: Record<string, string> = {
-  bare: 'Default: shell-only, short prompt; other tools via run_code',
-};
-
-/** Legacy PROFILE_OPTIONS without the profiles next dropped. */
-const PROFILE_OPTIONS = builtinProfiles
-  .map((profile) => {
-    const shortId = profile.id.includes(':') ? profile.id.split(':').at(-1)! : profile.id;
-    return { id: `builtin:${shortId}`, shortId, displayName: profile.name, detail: PROFILE_DETAILS[shortId] ?? '' };
-  })
-  .filter((option) => !isDroppedProfile(option.shortId));
 
 type MenuOptions = {
   readonly app: Pick<DirectApplication, 'liveSettings' | 'skills' | 'listWorkspaceSessions'>;
@@ -228,14 +210,6 @@ export function createDirectTuiMenus(options: MenuOptions): TuiMenus {
   const bySession = new Map<string, { live: ISettingsService; settings: TuiModelSettings }>();
   const services = new Map<string, MenuSettingsService>();
   return {
-    profile: {
-      options: PROFILE_OPTIONS,
-      canonicalId: canonicalProfileId,
-      activeId(sessionId) {
-        const settings = app.liveSettings(sessionId);
-        return settings ? resolveActiveProfile(settings).identity.id : null;
-      },
-    },
     copy: copyToClipboard,
     skills: { list: () => [...app.skills(root)] },
     resume: {
@@ -260,8 +234,6 @@ export function createDirectTuiMenus(options: MenuOptions): TuiMenus {
             }),
           );
       },
-      profileLabel: (activeProfileId, appMode) =>
-        getProfileLabel(activeProfileId ?? profileIdFromLegacyMode(appMode as never)),
     },
     settings: {
       lib: {

@@ -9,6 +9,7 @@
 - Startup reaches an idle composer about 35% sooner by loading startup-only work on demand and caching compiled bundle code (#192, #195).
 
 ### Bug Fixes
+- Correct ACP embedded text-resource handling and capability advertisement, gate question/budget forms on client support, and synchronize activity on resume and around native interactions. Preserve SDK 1.4.0 experimental v2 wire shapes.
 - Restore per-session cost accounting and the footer cost display.
 - Honor startup settings for shared tool output limits (#178).
 - Suppress notices for denied recovery retries (#177).

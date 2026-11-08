@@ -150,11 +150,12 @@ it.each([160, 60])(
     // Legacy shows the bare UUID (the head only: a narrow detail column wraps the rest).
     expect(frame).toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-/);
     expect(frame).not.toContain('conv_');
+    expect(frame).not.toContain('mode:');
     expect(frame).toContain('Updated:');
     expect(frame).toContain('↑↓ navigate │ ⏎ resume │ Esc cancel');
     if (columns > 100) {
       expect(frame).toMatch(/previous unique prompt · (?:\d+ seconds? ago|now) · 2 msgs/);
-      expect(frame).toContain('Local • 2 msgs • mock-alpha • mode: bare');
+      expect(frame).toContain('Local • 2 msgs • mock-alpha');
       expect(frame).toContain('"previous unique prompt"');
     }
     const offset = session.getVisibleOutput().length;
@@ -250,7 +251,8 @@ it.each([160])(
     // Legacy shows the bare UUID (the head only: a narrow detail column wraps the rest).
     expect(frame).toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-/);
     expect(frame).not.toContain('conv_');
-    expect(frame).toContain('Local • 2 msgs • gpt-6.1-terra • mode: bare');
+    expect(frame).toContain('Local • 2 msgs • gpt-6.1-terra');
+    expect(frame).not.toContain('mode:');
     expect(frame).toContain('Updated:');
     const offset = session.getVisibleOutput().length;
     session.write('\r');
@@ -350,7 +352,8 @@ it.each([160])(
     // Legacy shows the bare UUID (the head only: a narrow detail column wraps the rest).
     expect(frame).toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-/);
     expect(frame).not.toContain('conv_');
-    expect(frame).toContain('Local • 2 msgs • mock-beta • mode: bare');
+    expect(frame).toContain('Local • 2 msgs • mock-beta');
+    expect(frame).not.toContain('mode:');
     expect(frame).toContain('Updated:');
     const offset = session.getVisibleOutput().length;
     session.write('\r');
@@ -460,7 +463,7 @@ it.each([160])('a failed resume leaves the composer usable at %i columns', { tim
   // Legacy shows the bare UUID (the head only: a narrow detail column wraps the rest).
   expect(frame).toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-/);
   expect(frame).not.toContain('conv_');
-  expect(frame).toContain('Local • 2 msgs • gpt-6.1-terra • mode: bare');
+  expect(frame).toContain('Local • 2 msgs • gpt-6.1-terra');
   expect(frame).toContain('Updated:');
   const offset = session.getVisibleOutput().length;
   session.write('\r');

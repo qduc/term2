@@ -4,7 +4,7 @@
     {
       "exitCode": 0,
       "stdout": "Read and searched notes.txt, created shell.txt, and edited notes.txt.\n",
-      "stderr": "Profile: bare\n[tool] run_code: const read = await tools.shell({\"command\": \"cat notes.txt\", …\n",
+      "stderr": "[tool] run_code: const read = await tools.shell({\"command\": \"cat notes.txt\", …\n",
       "requests": [
         {
           "model": "mock-alpha",

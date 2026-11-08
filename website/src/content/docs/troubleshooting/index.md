@@ -64,7 +64,7 @@ OAuth tokens are stored separately under `envPaths('term2').config` (Linux examp
 
 **Explanation**: Starting term2 in your root home directory exposes your entire user tree (downloads, desktop, documents, hidden configs) to file searches and commands.
 
-**Fix**: Navigate to a specific project directory (`cd ~/projects/my-app && term2`) before launching. For text-only questions without filesystem or shell tools, use `term2 --lite`.
+**Fix**: Navigate to a specific project directory (`cd ~/projects/my-app && term2`) before launching.
 
 ### 4. Non-Interactive Tool Execution Fails
 

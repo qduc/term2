@@ -17,7 +17,7 @@ Execute one-off queries with stdout output:
 term2 "Explain the purpose of package.json in this project"
 ```
 
-A new positional-prompt session without `--auto-approve` uses `builtin:bare` by default (unless `--profile` is specified or a persisted Mentor or Orchestrator profile takes precedence). Tool execution is disabled without `--auto-approve`, independently of the selected profile. `--auto-approve` opts out of that implicit Bare selection and enables tools. It applies GREEN/YELLOW heuristic policy; it is not the same as `/auto-approve always`, and RED shell commands are still refused.
+Every new session uses the same default experience. Tool execution is disabled without `--auto-approve`. That flag enables tools under GREEN/YELLOW heuristic policy; it is not the same as `/auto-approve always`, and RED shell commands are still refused.
 
 The output streams directly to standard output. Non-error diagnostic logs are printed to standard error.
 
@@ -57,12 +57,12 @@ Stream thinking/reasoning deltas from reasoning-capable models (e.g. o1, o3, Gro
 term2 --show-reasoning "Solve this mathematical recurrence relation"
 ```
 
-### Minimal-Prompt Execution (`--lite`)
+### Default Execution
 
-`--lite` (or `-l`) is a compatibility alias for `--profile bare`. Bare uses a minimal prompt with project instructions included; it retains codebase tools and exposes selected capabilities through `run_code`. Tools still require `--auto-approve` in non-interactive mode:
+The default experience uses a minimal prompt with project instructions included, shell-led codebase work and selected capabilities through `run_code`. Tools still require `--auto-approve` in non-interactive mode:
 
 ```bash
-term2 --lite "Explain the difference between disk usage and apparent file size"
+term2 "Explain the difference between disk usage and apparent file size"
 ```
 
 ## Pauses and Exit Codes

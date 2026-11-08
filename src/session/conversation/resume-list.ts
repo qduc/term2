@@ -2,8 +2,6 @@ import chalk from 'chalk';
 import { getResumeCommand } from './conversation-persistence.js';
 
 import type { SavedAppMode } from './conversation-persistence-types.js';
-import { profileIdFromLegacyMode } from '../../config/profiles/legacy-adapter.js';
-import { getProfileLabel } from '../../config/profiles/labels.js';
 
 interface ConversationListEntry {
   id: string;
@@ -17,10 +15,6 @@ interface ConversationListEntry {
   model?: string;
   provider?: string;
   messageCount?: number;
-}
-
-function getActiveMode(activeProfileId?: string, appMode?: SavedAppMode): string {
-  return getProfileLabel(activeProfileId ?? profileIdFromLegacyMode(appMode));
 }
 
 export function formatResumeList(
@@ -64,10 +58,6 @@ export function formatResumeList(
     }
     if (entry.model) {
       metaParts.push(`model: ${entry.model}`);
-    }
-    const activeMode = getActiveMode(entry.activeProfileId, entry.appMode);
-    if (activeMode !== 'standard') {
-      metaParts.push(`mode: ${activeMode}`);
     }
     const metaLine = `   Updated: ${chalk.yellow(dateStr)} (${chalk.dim(metaParts.join(', '))})`;
     lines.push(`${chalk.green(num)} ${idStr}`);

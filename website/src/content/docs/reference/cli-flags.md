@@ -16,14 +16,12 @@ Usage:
 | `--model <model>` | `-m` | String | Configured | Model pattern or ID. Supports `provider/id` and optional `:<thinking>` (e.g. `o3-mini:high`). Bare `-m`/`--model` opens the interactive picker in a TTY. |
 | `--provider <provider>` | `-p` | String | Configured | Override the configured provider (e.g. `openai`, `openrouter`, `grok`, `codex`). |
 | `--reasoning <effort>` | `-r` | String | Configured | Set reasoning effort (`default`, `none`, `minimal`, `low`, `medium`, `high`, `xhigh`). |
-| `--profile <name>` | — | String | Configured | Select `full`, `bare`, `plan`, `pair`, `mentor`, or `orchestrator`; `lite` is an alias for `bare`. |
-| `--lite` | `-l` | Boolean | `false` | Compatibility alias for `--profile bare` (minimal prompt with project instructions included). |
-| `--auto-approve` | — | Boolean | `false` | Opt out of implicit Bare selection and enable tools in non-interactive mode. This uses GREEN/YELLOW heuristic policy, not `/auto-approve always`; RED shell commands remain refused. |
+| `--auto-approve` | — | Boolean | `false` | Enable tools in non-interactive mode. This uses GREEN/YELLOW heuristic policy, not `/auto-approve always`; RED shell commands remain refused. |
 | `--quiet` | `-q` | Boolean | `false` | Suppress non-error diagnostics on stderr in non-interactive mode. |
 | `--show-reasoning` | — | Boolean | `false` | Stream reasoning/thinking deltas to stderr in non-interactive mode. |
 | `--json` | — | Boolean | `false` | Emit newline-delimited JSON (NDJSON) events on stdout in non-interactive mode. |
 | `--ssh <user@host>` | — | String | — | Enable SSH mode for a remote host. |
-| `--remote-dir <path>` | — | String | — | Remote working directory (required for non-lite SSH sessions). |
+| `--remote-dir <path>` | — | String | — | Remote working directory. |
 | `--ssh-port <port>` | — | Number | `22` | SSH port. |
 | `--grok-login` | — | Boolean | `false` | Log in to xAI Grok via browser PKCE OAuth and exit. |
 | `--codex-login` | — | Boolean | `false` | Log in to OpenAI Codex/ChatGPT via browser PKCE OAuth and exit. |
@@ -32,7 +30,6 @@ Usage:
 | `--resume [id\|ls]` | `-R` | Boolean / String | `false` | Resume the last conversation, a specific ID, or list recent conversations (`ls`). Add a prompt after an explicit ID (or `last`) for a headless continuation. |
 | `--goal <text>` | — | String | — | Set a durable session outcome (up to 2,000 characters). |
 | `--goal-criteria <text>` | — | String | — | Optional success criteria (up to 2,000 characters); requires `--goal`. |
-| `--profile <name>` | — | String | Configured | Select an operating profile (`full`, `bare`, `lite`, `plan`, `pair`, `mentor`, `orchestrator`). |
 | `--discord-input` | — | Boolean | `false` | Opt the interactive session into Discord input; requires a local control socket. See the [Discord bridge](/term2/remote/discord/). |
 | `--control-socket[=<name>]` | — | Boolean / String | `false` | Enable a local control socket for the interactive TUI. |
 | `--fork` | — | Boolean | `false` | Fork the resumed conversation into a new session branch (requires `--resume`). |

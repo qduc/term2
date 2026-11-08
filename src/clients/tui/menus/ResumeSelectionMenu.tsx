@@ -4,7 +4,6 @@ import type { MenuConversationEntry as ConversationListEntry } from '../integrat
 import { MenuFooter, MenuScrollbar, SelectionMarker } from './MenuContainer.js';
 import { useTheme } from '../presentation/components/theme.js';
 import { useSkin } from '../presentation/skins/SkinContext.js';
-import { useInputContext } from './input-context.js';
 
 type Props = {
   items: ConversationListEntry[];
@@ -55,8 +54,6 @@ function formatRelativeTime(dateString: string): string {
 
 const ResumeSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset = 0, query, loading, error }) => {
   const theme = useTheme();
-  // getProfileLabel(activeProfileId ?? profileIdFromLegacyMode(appMode)), served by the app.
-  const getActiveMode = useInputContext().menus.resume!.profileLabel;
   const { MenuFrame } = useSkin();
   if (loading || error || items.length === 0) {
     return (
@@ -167,7 +164,6 @@ const ResumeSelectionMenu: FC<Props> = ({ items, selectedIndex, scrollOffset = 0
                     {selectedEntry.messageCount !== undefined &&
                       ` • ${selectedEntry.messageCount} msg${selectedEntry.messageCount === 1 ? '' : 's'}`}
                     {selectedEntry.model && ` • ${selectedEntry.model}`}
-                    {` • mode: ${getActiveMode(selectedEntry.activeProfileId, selectedEntry.appMode)}`}
                   </Text>
                 </Box>
                 {selectedEntry.firstUserMessage && (

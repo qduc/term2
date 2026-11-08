@@ -307,7 +307,7 @@ row(
       const r = await runCli(s, ['say hello']);
       assert.equal(r.code, 0, r.stderr);
       assert.equal(r.stdout, 'Hello there.\n');
-      assert.equal(r.stderr, 'Profile: bare\n');
+      assert.equal(r.stderr, '');
       const file = onlyFile(s.convDir);
       checkFormat(file);
       const facts = readFacts(file);
@@ -353,7 +353,7 @@ row('R2', 'follow-up after success: prior user is raw, notice only on the live r
     const r = await runCli(s, ['say hello']);
     assert.equal(r.code, 0, r.stderr);
     assert.equal(r.stdout, 'Hello there.\n');
-    assert.equal(r.stderr, 'Profile: bare\n');
+    assert.equal(r.stderr, '');
     const wire = lastUserText(s.requests[0]);
     const prompt = 'say hello';
     assert.doesNotMatch(wire, /Mode is ON/, 'Bare sends no workflow notice');
@@ -387,7 +387,7 @@ row('R3', 'HTTP 500: exact stderr, failed terminal, follow-up request is user, u
     const r = await runCli(s, ['say hello']);
     assert.equal(r.code, 1);
     assert.equal(r.stdout, '');
-    assert.equal(r.stderr, 'Profile: bare\nerror 500 boom\n');
+    assert.equal(r.stderr, 'error 500 boom\n');
     assert.equal(s.requests.length, 1);
     const file = onlyFile(s.convDir);
     checkFormat(file);
@@ -419,9 +419,8 @@ row('R4', 'truncated stream: stdout exactly "partial", one error line, follow-up
     assert.equal(r.code, 1);
     assert.equal(r.stdout, 'partial');
     const lines = r.stderr.split('\n').filter(Boolean);
-    assert.equal(lines[0], 'Profile: bare');
-    assert.equal(lines.length, 2, `stderr: ${JSON.stringify(r.stderr)}`);
-    assert.ok(lines[1].startsWith('error '), lines[1]);
+    assert.equal(lines.length, 1, `stderr: ${JSON.stringify(r.stderr)}`);
+    assert.ok(lines[0].startsWith('error '), lines[0]);
     const file = onlyFile(s.convDir);
     checkFormat(file);
     const facts = readFacts(file);
@@ -878,8 +877,8 @@ row('R13', 'flags: --version and --help exit 0 without a provider call; headless
     assert.notEqual(version.stdout.trim(), '');
     const help = await runCli(s, ['--help']);
     assert.equal(help.code, 0);
-    for (const flag of ['--auto-approve', '--profile', '--lite'])
-      assert.ok(help.stdout.includes(flag), `help lists ${flag}`);
+    assert.ok(help.stdout.includes('--auto-approve'), 'help lists --auto-approve');
+    assert.doesNotMatch(help.stdout, /--profile|--lite/, 'removed profile flags stay out of help');
     assert.equal(s.requests.length, 0);
   } finally {
     await s.close();
@@ -908,10 +907,7 @@ row('R15', 'stalled stream: idle limit ends the turn as failed, text kept, no re
     assert.equal(r.code, 1, r.stderr);
     assert.equal(r.stdout, 'partial');
     assert.equal(s.requests.length, 1, 'a stall is not retried');
-    assert.match(
-      r.stderr,
-      /^Profile: bare\nerror Model request stalled with no streamed output[^\n]*\(text 7, [^\n]*\n$/,
-    );
+    assert.match(r.stderr, /^error Model request stalled with no streamed output[^\n]*\(text 7, [^\n]*\n$/);
     const file = onlyFile(s.convDir);
     const facts = readFacts(file);
     assert.equal(facts.at(-1).outcome, 'failed');
@@ -937,7 +933,7 @@ row('R16', 'output cap: text over the limit is neither shown nor logged, turn fa
     const r = await runCli(s, ['say hello']);
     assert.equal(r.code, 1, r.stderr);
     assert.equal(r.stdout, 'kept ');
-    assert.equal(r.stderr, 'Profile: bare\nerror Model output was stopped because text exceeded its limit.\n');
+    assert.equal(r.stderr, 'error Model output was stopped because text exceeded its limit.\n');
     const facts = readFacts(onlyFile(s.convDir));
     assert.equal(facts.at(-1).outcome, 'failed');
     assert.equal(deltas(facts), 'kept ');
@@ -1048,7 +1044,7 @@ for (const [index, { configured, args, reject }] of [
       const r = await runCli(s, [...args, 'select the configured profile']);
       assert.equal(r.code, 0, r.stderr);
       assert.equal(r.stdout, 'Profile selected.\n');
-      assert.equal(r.stderr, `Profile: ${expected}\n`);
+      assert.equal(r.stderr, '');
       assert.equal(s.requests.length, 1);
       const wire = JSON.stringify(s.requests[0]);
       assert.ok(wire.includes('HEADLESS_PROFILE_CONTEXT_MARKER'), 'project context reaches the provider');

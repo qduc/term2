@@ -4,7 +4,7 @@
     {
       "exitCode": 0,
       "stdout": "The explorer started.\nThe explorer finished and found notes.txt.\n",
-      "stderr": "Profile: bare\n[tool] run_subagent: background\n",
+      "stderr": "[tool] run_subagent: background\n",
       "requests": [
         {
           "model": "mock-alpha",

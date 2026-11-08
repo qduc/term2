@@ -4,7 +4,7 @@
     {
       "exitCode": 0,
       "stdout": "Noted: kiwi.\n",
-      "stderr": "Profile: bare\n",
+      "stderr": "",
       "requests": [
         {
           "model": "mock-alpha",
@@ -54,7 +54,7 @@
     {
       "exitCode": 0,
       "stdout": "You asked me to remember kiwi.\n",
-      "stderr": "Profile: bare\n",
+      "stderr": "",
       "requests": [
         {
           "model": "mock-alpha",

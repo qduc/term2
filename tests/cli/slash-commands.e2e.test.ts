@@ -341,9 +341,10 @@ async function runCommand(
     await step('\t\t', 'Some providers failed: brokenprov');
     session.write('\x1b');
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 60_000 });
-    session.write('/model ');
+    // The prior picker is still in the terminal transcript. Wait for this opening's frame
+    // before sending navigation, not just the composer value or an old menu heading.
+    await step('/model ', 'Select model');
     await waitForHarnessComposerValue(idlePath, '/model ', { timeoutMs: 60_000 });
-    await session.waitForOutput('Select model', 30_000);
     await step('\x1b[B', '❯   mock-beta');
     await step('\x06', '❯ ★ mock-beta');
     await step('\x0e', 'Nickname for mock-beta:');

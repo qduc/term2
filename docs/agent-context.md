@@ -11,6 +11,7 @@ Read the relevant documents before touching these areas, starting with **Resume 
 - **Architecture and turn flow:** [Layers](architecture/layers.md) (layers, message path, rule checks), [overview](architecture/architecture-overview.md) (the one live turn path, and the legacy code that never runs). [Archived conversation core](architecture/conversation-core.md) and [conversation loop](architecture/conversation-loop.md) describe that legacy runtime, for rationale only
 - **Reference guides:** [Logging](reference/logging.md), [public hooks](reference/public-hooks.md), [model discovery](reference/agent-model-discovery.md), [Docker sandbox](reference/docker-host-control-sandbox.md), and [workflow evolution](reference/workflow-evolution.md)
 - **Agent assembly:** [Bounded feature composition and deferral criteria](plans/agent-runtime/agent-assembly-migration.md)
+- **Agent harness core:** [Core contracts, seams and extraction rollout](plans/agent-runtime/agent-harness-core-contracts.md)
 - **Gateway:** [Web client gateway](plans/web-client/web-client-gateway-completion.md)
 - **`run_code` runtime:** [Lifecycle and contracts](plans/tools/run-code/run-code-codemode-improvements.md)
 - **Nested approval:** [Inline approval](plans/tools/run-code/run-code-nested-approval.md)

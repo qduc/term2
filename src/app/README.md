@@ -187,8 +187,11 @@ through CLI, TUI, native configure, or HTTP. Saved settings and session metadata
 fall back to Bare at runtime, without rewriting historical facts or the settings
 file. CLI help hides profile inputs; Bare/Standard/Full/Lite aliases remain parseable for compatibility. The direct
 tool surface keeps root goal checks but no longer installs goal proposal or
-startup workflow notices. The store validates the exact current Bare identity
-only for these retired profiles; all other restore identity, reasoning and temperature checks remain.
+startup workflow notices. On restore, the store expects the identity the runtime
+will install: current Bare for these retired profiles, and the current version and
+digest for any other built-in, whose prompt edits change its digest between
+releases. A stored profile that does not resolve keeps exact validation, as do the
+reasoning and temperature checks.
 Generic request notices remain supported; retry only reapplies a saved notice
 when its original mode matches the current mode, so dropped workflows stay off.
 

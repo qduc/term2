@@ -129,10 +129,21 @@ export async function createDirectApplication(options: DirectApplicationOptions)
     directory: options.conversationsDir,
     resolveWorkspace: (root, identity) => authority.resolveStored(root, identity),
     createRuntime: (context) => runtimes.create(context),
+    // A built-in profile's version and digest change with its prompt, and the
+    // runtime restores today's identity for the stored ID (application-runtime.ts).
+    // Expect that identity, so a prompt change does not strand earlier sessions.
     restoreProfile: (stored) => {
-      if (!isDroppedProfile(stored.id)) return stored;
-      const bare = getProfileMetadata(BARE_PROFILE_ID);
-      return { id: bare.activeProfileId, version: bare.activeProfileVersion, digest: bare.activeProfileDigest };
+      let current;
+      try {
+        current = getProfileMetadata(isDroppedProfile(stored.id) ? BARE_PROFILE_ID : stored.id);
+      } catch {
+        return stored;
+      }
+      return {
+        id: current.activeProfileId,
+        version: current.activeProfileVersion,
+        digest: current.activeProfileDigest,
+      };
     },
   });
   const refresh = options.mcpCatalog

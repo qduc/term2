@@ -6,6 +6,8 @@ import type { DirectHost, Principal, WorkspaceGrant } from '../../host/in-proces
 
 /** Version-specific transports implement only the client operations used by the backend. */
 export interface AcpClient {
+  /** Mark the exact locally submitted message before opening its output gate. */
+  promptAccepted?(sessionId: string, messageId: string): void;
   update(notification: acp.UpdateSessionNotification): Promise<void>;
   permission(request: acp.RequestPermissionRequest, signal: AbortSignal): Promise<acp.RequestPermissionResponse>;
   supportsForms(): Promise<boolean>;

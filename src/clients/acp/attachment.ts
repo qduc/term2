@@ -121,6 +121,7 @@ export class AcpAttachment {
       if (admission.kind === 'duplicate')
         throw new acp.RequestError(-32009, 'ACP client request id was already admitted');
       prompt.messageId = admission.messageId;
+      this.client.promptAccepted?.(this.connection.sessionId, admission.messageId);
       prompt.turnId = admission.turnId ?? null;
       if (admission.kind !== 'started') {
         throw new MissingAcpWireContract('reject_if_busy must not queue or steer admitted ACP input');

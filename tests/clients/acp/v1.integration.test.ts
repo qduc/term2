@@ -33,6 +33,7 @@ async function fixture(
     signal?: 'SIGINT' | 'SIGTERM';
     holdCatalog?: boolean;
     holdReply?: boolean;
+    shell?: boolean;
   } = {},
 ): Promise<void> {
   const temp = await mkdtemp(path.join(os.tmpdir(), 'term2-acp-direct-'));
@@ -61,14 +62,29 @@ async function fixture(
     req.on('end', async () => {
       requests.push(JSON.parse(raw));
       await replyReady;
-      const delta = { content: 'ACP fixture reply' };
+      const call = options.shell && requests.length === 1;
+      const delta = call
+        ? {
+            tool_calls: [
+              {
+                index: 0,
+                id: 'shell-call',
+                type: 'function',
+                function: {
+                  name: 'shell',
+                  arguments: JSON.stringify({ command: 'printf acp-tool-visible' }),
+                },
+              },
+            ],
+          }
+        : { content: 'ACP fixture reply' };
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       res.end(
         [
           `data: ${JSON.stringify({ id: 'reply', choices: [{ delta }] })}`,
           `data: ${JSON.stringify({
             id: 'reply',
-            choices: [{ delta: {}, finish_reason: 'stop' }],
+            choices: [{ delta: {}, finish_reason: call ? 'tool_calls' : 'stop' }],
           })}`,
           'data: [DONE]',
         ].join('\n\n') + '\n\n',
@@ -193,20 +209,66 @@ describe('ACP v1 built CLI compatibility for Air', () => {
           )
           .join('');
       expect(text()).toBe('ACP fixture reply');
+      expect(updates.filter(({ update }) => update.sessionUpdate === 'user_message_chunk')).toEqual([]);
       expect(requests).toHaveLength(1);
+      // Identical text is a distinct accepted message, never a deduplication key.
+      updates.length = 0;
+      await context.request(acp.methods.agent.session.prompt, {
+        sessionId,
+        prompt: [{ type: 'text', text: 'Hello Air' }],
+      });
+      expect(text()).toBe('ACP fixture reply');
+      expect(updates.filter(({ update }) => update.sessionUpdate === 'user_message_chunk')).toEqual([]);
       const list = await context.request(acp.methods.agent.session.list, { cwd: workspace });
       expect(list.sessions.some((session) => session.sessionId === sessionId)).toBe(true);
       for (let index = 0; index < 2; index++) {
         updates.length = 0;
         await context.request(acp.methods.agent.session.load, { sessionId, cwd: workspace, mcpServers: [] });
-        expect(text()).toBe('ACP fixture reply');
-        expect(updates.some(({ update }) => update.sessionUpdate === 'user_message_chunk')).toBe(true);
+        expect(text()).toBe('ACP fixture replyACP fixture reply');
+        const users = updates.flatMap(({ update }) => (update.sessionUpdate === 'user_message_chunk' ? [update] : []));
+        expect(users.map((update) => update.content)).toEqual([
+          { type: 'text', text: 'Hello Air' },
+          { type: 'text', text: 'Hello Air' },
+        ]);
+        expect(new Set(users.map((update) => update.messageId)).size).toBe(2);
       }
       updates.length = 0;
       await context.request(acp.methods.agent.session.resume, { sessionId, cwd: workspace, mcpServers: [] });
       expect(updates.every(({ update }) => update.sessionUpdate === 'config_option_update')).toBe(true);
       await context.request(acp.methods.agent.session.close, { sessionId });
     });
+  }, 30_000);
+
+  it('reports the shell invocation and result in live and loaded tool updates', async () => {
+    await fixture(
+      async ({ context, workspace, updates }) => {
+        const { sessionId } = await context.request(acp.methods.agent.session.new, { cwd: workspace, mcpServers: [] });
+        await context.request(acp.methods.agent.session.prompt, {
+          sessionId,
+          prompt: [{ type: 'text', text: 'Run the fixture command' }],
+        });
+        const checkTools = () => {
+          const tools = updates.flatMap(({ update }) =>
+            update.sessionUpdate === 'tool_call' || update.sessionUpdate === 'tool_call_update' ? [update] : [],
+          );
+          const created = tools.filter((tool) => tool.sessionUpdate === 'tool_call');
+          expect(created).toHaveLength(1);
+          expect(created[0]).toMatchObject({
+            title: 'printf acp-tool-visible',
+            name: 'shell',
+            kind: 'execute',
+            rawInput: { command: 'printf acp-tool-visible' },
+          });
+          expect(tools.at(-1)).toMatchObject({ toolCallId: created[0]!.toolCallId, status: 'completed' });
+          expect(JSON.stringify(tools.at(-1)?.content)).toContain('acp-tool-visible');
+        };
+        checkTools();
+        updates.length = 0;
+        await context.request(acp.methods.agent.session.load, { sessionId, cwd: workspace, mcpServers: [] });
+        checkTools();
+      },
+      { shell: true },
+    );
   }, 30_000);
 
   it('shows a cold-cache selector before discovery finishes and applies/persists the selected inference model', async () => {

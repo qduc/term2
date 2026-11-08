@@ -63,7 +63,8 @@ async function interactionFixture(
         : { kind: 'none' },
     async execute(input, context) {
       if (mode === 'budget') return { output: 'Tool complete', isError: false };
-      if (mode === 'approval') return { output: `Grant received: ${context.approvalGrant}`, isError: false };
+      if (mode === 'approval')
+        return { output: `Grant received: ${context.approvalGrant}`, isError: false, providerOutput: [] };
       const decision = await context.interact!({
         kind: 'question',
         toolName: 'ask_user',
@@ -248,8 +249,18 @@ describe('ACP v1 native permissions and cancellation', () => {
             resolutionSource: selection === 'unsandboxed-once' ? 'system' : 'user',
           },
         ]);
-        if (allowed) expect(JSON.stringify(requests[1]?.input)).toContain('Grant received:');
-        else expect(JSON.stringify(requests)).not.toContain('Grant received:');
+        if (allowed) {
+          const completed = client.updates.flatMap(({ update }) =>
+            (update.sessionUpdate === 'tool_call_update' || update.sessionUpdate === 'tool_call') &&
+            update.status === 'completed'
+              ? [update]
+              : [],
+          );
+          expect(completed.at(-1)?.content).toEqual([
+            { type: 'content', content: { type: 'text', text: expect.stringContaining('Grant received:') } },
+          ]);
+          expect(JSON.stringify(requests[1]?.input)).toContain('Grant received:');
+        } else expect(JSON.stringify(requests)).not.toContain('Grant received:');
         expect(client.updates.some(({ update }) => update.sessionUpdate === 'tool_call')).toBe(true);
         expect(client.updates.some(({ update }) => update.sessionUpdate === 'tool_call_update')).toBe(true);
       });

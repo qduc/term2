@@ -9,8 +9,19 @@ import type * as v2 from '@agentclientprotocol/sdk/experimental/v2';
 export class V1Output {
   private readonly messages = new Map<string, v1.ContentBlock[]>();
   private readonly tools = new Set<string>();
+  private readonly submitted = new Set<string>();
+
+  /** V1 clients already display their own input; fresh load attachments still replay it. */
+  promptAccepted(sessionId: string, messageId: string): void {
+    this.submitted.add(JSON.stringify([sessionId, messageId]));
+  }
 
   translate(sessionId: string, update: v2.SessionUpdate): v1.SessionUpdate[] {
+    if (
+      (update.sessionUpdate === 'user_message' || update.sessionUpdate === 'user_message_chunk') &&
+      this.submitted.has(JSON.stringify([sessionId, (update as v2.ContentChunk).messageId]))
+    )
+      return [];
     switch (update.sessionUpdate) {
       case 'state_update':
         return []; // v1 completion belongs to the pending prompt response.
@@ -110,6 +121,7 @@ export function v1Tool(tool: v2.ToolCallUpdate): v1.ToolCallUpdate {
   return {
     toolCallId: tool.toolCallId,
     title: tool.title,
+    name: tool.name,
     rawInput: tool.rawInput,
     rawOutput: tool.rawOutput,
     locations: tool.locations,

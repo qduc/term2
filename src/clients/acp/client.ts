@@ -19,6 +19,7 @@ export function v2Client(client: v2.AgentContext): AcpClient {
 export function v1Client(client: v1.AgentContext): AcpClient {
   const output = new V1Output();
   return {
+    promptAccepted: (sessionId, messageId) => output.promptAccepted(sessionId, messageId),
     async update({ sessionId, update }) {
       for (const translated of output.translate(sessionId, update))
         await client.notify(v1.methods.client.session.update, { sessionId, update: translated });

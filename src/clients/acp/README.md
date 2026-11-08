@@ -16,6 +16,10 @@ transport IDs and schema validation remain SDK-owned. The existing v2 surface re
 
 ## Stable v1 and JetBrains Air
 
+This adapter supports the v1 features below; it is not full v1 conformance.
+In particular, v1 session setup requires stdio MCP support, while this adapter
+currently rejects nonempty forwarded MCP lists.
+
 `term2 acp` also accepts `initialize.protocolVersion: 1` without a CLI flag.
 `v1-agent.ts` advertises `agentInfo`, `authMethods: []`, image/embedded-context
 prompts, session load/list/resume/close. Provider credentials remain native Term2
@@ -31,7 +35,20 @@ resume attaches without replay. Repeated loads replay each time.
 permission code preserves exact option IDs, scope, cancellation and provenance.
 `v1-output.ts` converts whole message upserts to append-only chunks, retaining
 streamed prefixes so final messages/snapshots do not duplicate text. Tool upserts
-become a first `tool_call` followed by `tool_call_update`. V2-only state updates
+become a first `tool_call` followed by `tool_call_update`, retaining the tool name.
+Shell titles describe the actual command; raw input/output remain available as
+structured metadata and output is sent as tool content (including when provider
+content is an empty array). The inspected Air execute renderer ignores raw fields
+and ordinary text tool content, so a valid output update does not guarantee a
+visible output panel in that client. Do not put tool output into assistant history
+to imitate such a panel.
+
+V1 clients already display submitted input. After native admission, the attachment
+marks that exact message ID before releasing its event gate; only that client's
+own user-message echoes are suppressed, even in later snapshots. Suppression is
+scoped to the v1 display attachment, so a fresh load replays every user message,
+including distinct messages with identical text. V2 user-message delivery is unchanged.
+V2-only state updates
 stay off the v1 wire. The translator fails explicitly if previously displayed
 content would need replacement; v1 has no replacement operation.
 

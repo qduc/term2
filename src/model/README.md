@@ -4,6 +4,16 @@
 contract from `index.ts` using registered source streamed-model factories. It
 owns request/item translation; the engine owns recovery admission and history.
 
+`provider.ts` owns the physical async iterator, per-pull request scope, dispatch
+notification and cancellation. `providers/runtime/model-events.ts` projects each received
+provider event synchronously and verifies terminal completion. Projection state
+is separate for each physical attempt; usage, completed tool metadata and final
+continuation remain in their original order. A mapper that drove the provider
+through another async generator, together with a separate scope iterator wrapper,
+added two long-lived module boundaries to the measured dispatch path. Keeping
+iteration at the registry boundary avoids that extra chain. Event conversion
+and request identity retain their separate owners.
+
 Provider-side compaction rejection state belongs to one turn's recovery budget.
 Retries within that turn share it, while concurrent turns do not. A later turn
 may try compaction again, including when a previous turn found it unsupported.

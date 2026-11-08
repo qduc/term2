@@ -163,12 +163,12 @@ socket attach to the same host the same way.
    (`applyDirectCommand`), the only wire-to-domain translation, which calls
    `submit` on the live `DirectSession` (`session/session.ts`).
 4. The session's `Conversation` (`session/conversation.ts`) appends the
-   admission facts and starts an engine turn with `startTurn`
-   (`engine/turn.ts`). `session/conversation-turn.ts` is the only reader of that
+   admission facts and starts a portable turn through `session/harness.ts`
+   (`packages/agent-harness-core/src/engine/turn.ts`). `session/conversation-turn.ts` is the only reader of that
    turn's events: it appends each event's facts to the log and then calls
    `accept(token)`, and the turn does not advance past an event until it is
    accepted.
-5. `engine/turn-model.ts` asks for the model through the registry the app
+5. `packages/agent-harness-core/src/engine/turn-model.ts` asks for the model through the registry the app
    built (`app/application-models.ts`, wrapped by
    `app/generation-guard.ts`). `model/provider.ts` streams from the
    provider in `model/providers/`, retrying through `model/retry.ts`.
@@ -210,11 +210,14 @@ measurable:
 - `bench/hops.mts` runs the real entry in-process against a local fake
   provider, sends one headless prompt, and records the chain of files active
   when the provider's HTTP request goes out, starting at the client's submit.
-  It fails when that chain gets longer (hops) or touches more files. Today it is
-  14 hops through 14 files, each layer once: `clients/headless/direct.ts`,
+  It fails when that chain gets longer (hops) or touches more files. The portable
+  package's `src/engine` modules are classified as the engine layer; their package
+  location does not change the hop or file count. Today it is 14 hops through
+  14 files, each layer once: `clients/headless/direct.ts`,
   `host/in-process-direct.ts`, `protocol/commands.ts`,
-  `session/session.ts`, `session/conversation-turn.ts`, `engine/turn.ts`,
-  `engine/turn-model.ts`, `app/generation-guard.ts`,
+  `session/session.ts`, `session/conversation-turn.ts`,
+  `packages/agent-harness-core/src/engine/turn.ts`,
+  `packages/agent-harness-core/src/engine/turn-model.ts`, `app/generation-guard.ts`,
   `app/application-models.ts`, `model/provider.ts`, and four
   `model/providers/` files. `app/` appears below `engine/` because the engine
   calls the model registry the app injected, not because `engine/` imports

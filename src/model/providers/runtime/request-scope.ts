@@ -49,29 +49,3 @@ export class ProviderRequestScope implements ISessionContextService {
     this.#storage.getStore()?.onDispatched?.();
   }
 }
-
-/** Async generator bodies re-enter the request's scope on every consumer step. */
-export function scopeProviderStream<T>(
-  contexts: ProviderRequestScope,
-  context: SessionTrafficContext,
-  onDispatched: (() => void) | undefined,
-  create: (onDispatched: () => void) => AsyncIterable<T>,
-): AsyncIterable<T> {
-  return {
-    [Symbol.asyncIterator]() {
-      let dispatched = false;
-      const notify = () => {
-        if (dispatched) return;
-        dispatched = true;
-        onDispatched?.();
-      };
-      const run = <T>(operation: () => T) => contexts.runRequest(context, notify, operation);
-      const iterator = run(() => create(notify)[Symbol.asyncIterator]());
-      return {
-        next: () => run(() => iterator.next()),
-        return: (value?: unknown) =>
-          run(() => iterator.return?.(value) ?? Promise.resolve({ done: true as const, value })),
-      };
-    },
-  };
-}

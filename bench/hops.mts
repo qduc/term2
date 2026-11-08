@@ -158,7 +158,8 @@ for (const file of sequence.slice(sequence.indexOf(START))) {
   else files.push(file);
 }
 const distinct = [...new Set(files)];
-const layerOf = (file: string) => /^src\/([^/]+)\//.exec(file)?.[1] ?? 'other';
+const layerOf = (file: string) =>
+  file.startsWith('packages/agent-harness-core/src/engine/') ? 'engine' : /^src\/([^/]+)\//.exec(file)?.[1] ?? 'other';
 const layers = files.map(layerOf).filter((layer, index, all) => layer !== all[index - 1]);
 
 console.log(

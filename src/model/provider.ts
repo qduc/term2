@@ -1,4 +1,4 @@
-import { modelEvents, type ResponseContinuation } from './providers/runtime/model-events.js';
+import { ModelEventProjection, type ResponseContinuation } from './providers/runtime/model-events.js';
 import {
   createSessionAccountStore,
   getSessionAccount,
@@ -26,13 +26,18 @@ import { stringArray } from './provider-settings.js';
  */
 
 import { randomUUID } from 'node:crypto';
-import { requestTrafficContext, scopeProviderStream, ProviderRequestScope } from './providers/runtime/request-scope.js';
+import { requestTrafficContext, ProviderRequestScope } from './providers/runtime/request-scope.js';
 import type {
   ContextCompactionSessionState,
   StreamedModelTurn,
   StreamedModelTurnRequest,
 } from './streamed-model-turn.js';
-import type { ILoggingService, ISessionContextService, ISettingsService } from '../shared/service-interfaces.js';
+import type {
+  ILoggingService,
+  ISessionContextService,
+  ISettingsService,
+  SessionTrafficContext,
+} from '../shared/service-interfaces.js';
 import type { ProviderDefinition, ProviderRegistry as SourceProviderRegistry } from './providers/registry.js';
 import { createProviderRegistry as createSourceProviderRegistry } from './providers/index.js';
 import { createOpenAICompatibleProviderDefinition } from './providers/openai-compatible-lazy.js';
@@ -221,17 +226,20 @@ function lazyModel(
               linked.throwIfAborted();
               const turn = await providerContext.runWithContext(identity, () => turnModel(transport));
               linked.throwIfAborted();
-              yield* scopeProviderStream(providerContext, identity, onDispatched, (notify) =>
-                modelEvents(
-                  turn,
-                  { ...prepared, signal: linked, onDispatched: notify },
-                  ref.provider,
-                  linked,
-                  capabilities.continuity
-                    ? { kind: 'direct_response', owner, provider: ref.provider, model: ref.model, transport }
-                    : undefined,
-                ),
+              const projection = new ModelEventProjection(
+                ref.provider,
+                capabilities.continuity
+                  ? { kind: 'direct_response', owner, provider: ref.provider, model: ref.model, transport }
+                  : undefined,
               );
+              const events = scopeProviderStream(providerContext, identity, onDispatched, (notify) =>
+                turn.stream({ ...prepared, signal: linked, onDispatched: notify }),
+              );
+              for await (const event of events) {
+                linked.throwIfAborted();
+                yield* projection.project(event);
+              }
+              projection.finish();
             } finally {
               // Returning early from a generator alone does not close HTTP/WS.
               stopped.abort();
@@ -410,4 +418,30 @@ function resolveContinuation(
 
 function isRecord(value: unknown): value is Record<string, any> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+/** Async generator bodies re-enter the request's scope on every consumer step. */
+function scopeProviderStream<T>(
+  contexts: ProviderRequestScope,
+  context: SessionTrafficContext,
+  onDispatched: (() => void) | undefined,
+  create: (onDispatched: () => void) => AsyncIterable<T>,
+): AsyncIterable<T> {
+  return {
+    [Symbol.asyncIterator]() {
+      let dispatched = false;
+      const notify = () => {
+        if (dispatched) return;
+        dispatched = true;
+        onDispatched?.();
+      };
+      const run = <T>(operation: () => T) => contexts.runRequest(context, notify, operation);
+      const iterator = run(() => create(notify)[Symbol.asyncIterator]());
+      return {
+        next: () => run(() => iterator.next()),
+        return: (value?: unknown) =>
+          run(() => iterator.return?.(value) ?? Promise.resolve({ done: true as const, value })),
+      };
+    },
+  };
 }

@@ -1,5 +1,5 @@
 /** Provider events translated at the ModelRegistry boundary, independent of registry lifetime. */
-import type { StreamedModelTurn, StreamedModelTurnEvent, StreamedModelTurnRequest } from '../../streamed-model-turn.js';
+import type { StreamedModelTurnEvent } from '../../streamed-model-turn.js';
 import type { ModelEvent, ModelError, ToolCallId } from '../../index.js';
 import { weeklyQuota } from '../../provider-quota.js';
 import { extractAiSdkUpstreamProvider } from '../ai-sdk-streamed-model.js';
@@ -17,30 +17,27 @@ export type ResponseContinuation = ResponseIdentity & { readonly responseId: str
 
 // ---------- Provider stream -> ModelEvent ----------
 
-export async function* modelEvents(
-  turn: StreamedModelTurn,
-  request: StreamedModelTurnRequest,
-  providerId: string,
-  signal: AbortSignal,
-  continuation?: ResponseIdentity,
-): AsyncIterable<ModelEvent> {
-  const streamedToolCalls = new Map<string, Extract<StreamedModelTurnEvent, { type: 'tool_call' }>>();
-  let completed = false;
-  const speed = new StreamingSpeedTracker();
-  let streamedReasoning = false;
-  for await (const event of turn.stream(request)) {
-    signal.throwIfAborted();
+/** Maps one received event at a time; the provider boundary owns the async iterator. */
+export class ModelEventProjection {
+  readonly #streamedToolCalls = new Map<string, Extract<StreamedModelTurnEvent, { type: 'tool_call' }>>();
+  #completed = false;
+  readonly #speed = new StreamingSpeedTracker();
+  #streamedReasoning = false;
+
+  constructor(readonly providerId: string, readonly continuation?: ResponseIdentity) {}
+
+  *project(event: StreamedModelTurnEvent): Generator<ModelEvent> {
     switch (event.type) {
       case 'codex_rate_limits':
-        if (providerId === 'codex') yield { type: 'codex_quota', quota: weeklyQuota(event.rateLimits) };
+        if (this.providerId === 'codex') yield { type: 'codex_quota', quota: weeklyQuota(event.rateLimits) };
         break;
       case 'text_delta':
-        speed.recordDelta(event.text);
+        this.#speed.recordDelta(event.text);
         yield { type: 'text_delta', delta: event.text, ...(event.partId ? { partId: event.partId } : {}) };
         break;
       case 'reasoning_delta':
-        if (event.text) streamedReasoning = true;
-        speed.recordDelta(event.text);
+        if (event.text) this.#streamedReasoning = true;
+        this.#speed.recordDelta(event.text);
         yield {
           type: 'reasoning_delta',
           delta: event.text,
@@ -49,7 +46,7 @@ export async function* modelEvents(
         };
         break;
       case 'tool_call_streaming_delta':
-        speed.recordCumulativeChars(event.argumentCharCount);
+        this.#speed.recordCumulativeChars(event.argumentCharCount);
         yield {
           type: 'tool_call_streaming_delta',
           argumentCharCount: event.argumentCharCount,
@@ -61,14 +58,14 @@ export async function* modelEvents(
         break;
       case 'tool_call':
         // The completion's output is authoritative. Keep the streamed call as a fallback.
-        streamedToolCalls.set(event.id, event);
+        this.#streamedToolCalls.set(event.id, event);
         break;
       case 'completion': {
-        completed = true;
+        this.#completed = true;
         if (event.usage) {
-          const measured = speed.getSettledTps({
+          const measured = this.#speed.getSettledTps({
             completionTokens: event.usage.outputTokens,
-            reasoningTokens: streamedReasoning ? undefined : event.usage.reasoningTokens,
+            reasoningTokens: this.#streamedReasoning ? undefined : event.usage.reasoningTokens,
           });
           // Legacy application-run-loop: the upstream an aggregator reports rides on the request's usage.
           const upstreamProvider = extractAiSdkUpstreamProvider(event.providerMetadata);
@@ -83,7 +80,7 @@ export async function* modelEvents(
         const completedToolCalls = new Set<string>();
         for (const output of event.output) {
           if (output.type === 'tool_call') {
-            const streamed = streamedToolCalls.get(output.id);
+            const streamed = this.#streamedToolCalls.get(output.id);
             if (streamed) completedToolCalls.add(output.id);
             const merged = streamed
               ? {
@@ -95,19 +92,19 @@ export async function* modelEvents(
                   ...(streamed.toolType ? { toolType: streamed.toolType } : {}),
                 }
               : output;
-            yield { type: 'item', item: outputToItem(merged, providerId) };
+            yield { type: 'item', item: outputToItem(merged, this.providerId) };
             continue;
           }
-          yield { type: 'item', item: outputToItem(output, providerId) };
+          yield { type: 'item', item: outputToItem(output, this.providerId) };
         }
-        for (const [callId, streamed] of streamedToolCalls) {
-          if (!completedToolCalls.has(callId)) yield { type: 'item', item: outputToItem(streamed, providerId) };
+        for (const [callId, streamed] of this.#streamedToolCalls) {
+          if (!completedToolCalls.has(callId)) yield { type: 'item', item: outputToItem(streamed, this.providerId) };
         }
         yield {
           type: 'done',
           stopReason: stopReason(event.finishReason),
-          ...(continuation && event.responseId
-            ? { continuation: { ...continuation, responseId: event.responseId } satisfies ResponseContinuation }
+          ...(this.continuation && event.responseId
+            ? { continuation: { ...this.continuation, responseId: event.responseId } satisfies ResponseContinuation }
             : {}),
           ...(event.providerMetadata ? { providerMetadata: event.providerMetadata } : {}),
           ...(event.costUsd !== undefined ? { costUsd: event.costUsd } : {}),
@@ -118,13 +115,16 @@ export async function* modelEvents(
         break;
     }
   }
-  // A stream that ends without its completion is a failure, not a finished answer.
-  if (!completed) {
-    const truncated: ModelError = {
-      kind: 'network',
-      message: 'Model stream ended before the response completed.',
-      retryable: false,
-    };
-    throw truncated;
+
+  finish(): void {
+    // A stream that ends without its completion is a failure, not a finished answer.
+    if (!this.#completed) {
+      const truncated: ModelError = {
+        kind: 'network',
+        message: 'Model stream ended before the response completed.',
+        retryable: false,
+      };
+      throw truncated;
+    }
   }
 }

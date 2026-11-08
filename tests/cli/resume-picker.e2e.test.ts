@@ -448,7 +448,8 @@ it.each([160])('a failed resume leaves the composer usable at %i columns', { tim
   const changed = lines.find((line) => line.fact?.type === 'configuration_changed');
   changed.fact.configuration.model = { provider: 'codex', model: 'gpt-6.1-terra' };
   changed.fact.configuration.reasoning = 'low';
-  changed.fact.profile.digest = 'wrong-digest';
+  // A profile that no longer resolves cannot be restored; a stale built-in digest now resumes.
+  changed.fact.profile = { ...changed.fact.profile, id: 'user:missing' };
   changed.fact.intent.modelSelection = { provider: 'codex', model: 'gpt-6.1-terra' };
   fs.writeFileSync(file, lines.map((line) => JSON.stringify(line)).join('\n') + '\n');
   fs.rmSync(idlePath, { force: true });
@@ -467,7 +468,7 @@ it.each([160])('a failed resume leaves the composer usable at %i columns', { tim
   expect(frame).toContain('Updated:');
   const offset = session.getVisibleOutput().length;
   session.write('\r');
-  await session.waitForOutput('direct runtime did not restore the stored profile/reasoning', 30_000);
+  await session.waitForOutput("Missing parent or Profile 'user:missing'", 30_000);
   await send('/help');
   await session.waitForOutput('/retry-tool — Retry the last tool call', 30_000);
 });

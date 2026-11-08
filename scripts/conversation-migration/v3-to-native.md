@@ -27,14 +27,21 @@ and `createdAt` are required; noncanonical instants fail `invalid-timestamp`.
 or `workspace`. Existing values win, including invalid values that must fail;
 fallback is not an override. When profile ID is absent but appMode is recorded,
 the compiled `profileIdFromLegacyMode` selects the profile before fallback is
-considered; absent both, only an explicit fallback may supply it. Missing required configuration fails
+considered; absent both, an explicit fallback supplies it, otherwise Bare (36 of one
+user's ssh-host logs predate both fields). Missing required configuration fails
 `missing-configuration`. Workspaces must be absolute local paths. Any recorded
 `sshHost` fails `unsupported-remote-identity`, rather than granting local access
 for a remote source. No workspace grant or binding is synthesized.
 
 The native profile header uses actual compiled `getProfileMetadata`. Unknown
-profiles fail `unsupported-profile`; a conflicting version/digest on the selected
-init fails `profile-mismatch`. Unsupported reasoning fails
+profiles fail `unsupported-profile`. Built-in profiles, including the retired
+Standard/Lite/Full, now all resolve to Bare, whose version and digest change
+whenever its prompt does; a rehearsal on one user's ssh-host store found six
+older Bare digests across 354 logs. Those continue under today's Bare, as a resumed
+native conversation would, and the import notice's `sourceSettings` keeps the
+recorded `activeProfileVersion`/`activeProfileDigest`; `fidelity.profileRebasedCount`
+marks them. A conflicting version/digest for a profile that does not resolve to
+Bare (a custom profile changed since) still fails `profile-mismatch`. Unsupported reasoning fails
 `unsupported-reasoning`. Explicit `default` is retained as intent and in the
 notice, but omitted from native effort fields. Model/provider identifiers are preserved, not guessed
 from a catalog. The native `configuration_changed` retains model, reasoning and

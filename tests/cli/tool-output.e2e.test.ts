@@ -255,21 +255,21 @@ it(
     expect(visible, visible).toMatch(/Bare[^\n]*mockprov\/mock-alpha[^\n]*YOLO/);
     expect(visible, visible).not.toContain('isApprovalRejection');
     expect(visible, visible).toContain('Created b.txt and read it back: hi.');
-    // Inline code is a chip: padded on the background where a space stood, none before the full stop.
-    expect(session.getOutput()).toMatch(/m b\.txt \x1b\[/);
-    // Two chips with one space between them stay two chips with one padding column between them.
+    // Adjacent prose retains its spaces outside the code background and punctuation stays adjacent.
+    expect(session.getOutput()).toMatch(/Created \x1b\[40m\x1b\[93mb\.txt\x1b\[39m\x1b\[49m and/);
+    // Two chips with one space between them stay two chips with one uncolored space between them.
     expect(visible, visible).toContain('Flags: --foo --bar first turn done');
     expect(visible, visible).toMatch(/Bold\s+BOLDCHIP here\. End ENDCHIP\./);
     expect(visible, visible).toContain('List: ONECHIP TWOCHIP end.');
     expect(visible, visible).toContain('• LISTCHIP starts here.');
     const raw = session.getOutput();
-    // The spaces on either side of bold code carry its background; punctuation does not.
-    expect(raw).toMatch(/\x1b\[40m\x1b\[93m BOLDCHIP \x1b/);
-    expect(raw).toMatch(/\x1b\[40m\x1b\[93m ENDCHIP\x1b/);
-    expect(raw).toMatch(/\x1b\[40m\x1b\[93m ONECHIP \x1b\[22mTWOCHIP /);
-    expect(raw).toMatch(/\x1b\[40m\x1b\[93m ITALICCHIP \x1b/);
+    // Bold and italic wrappers also leave adjacent spaces and punctuation outside the background.
+    expect(raw).toMatch(/Bold \x1b\[1m\x1b\[40m\x1b\[93mBOLDCHIP\x1b\[39m\x1b\[49m\x1b\[22m here/);
+    expect(raw).toMatch(/ENDCHIP\x1b\[39m\x1b\[49m\x1b\[22m\./);
+    expect(raw).toMatch(/ONECHIP\x1b\[39m\x1b\[49m\x1b\[22m \x1b\[40m\x1b\[93mTWOCHIP/);
+    expect(raw).toMatch(/Italic \x1b\[3m\x1b\[40m\x1b\[93mITALICCHIP\x1b\[39m\x1b\[49m\x1b\[23m end/);
     // The bullet supplies its own separator; do not add a second column.
-    expect(raw).toMatch(/•\x1b\[39m \x1b\[40m\x1b\[93mLISTCHIP /);
+    expect(raw).toMatch(/•\x1b\[39m \x1b\[40m\x1b\[93mLISTCHIP\x1b\[39m\x1b\[49m starts/);
 
     // The current frame collapses the known failed call, even though earlier live frames may contain its input.
     const settledFrame = visible.slice(beforeSettled);

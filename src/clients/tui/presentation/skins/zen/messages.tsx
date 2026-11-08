@@ -6,19 +6,9 @@ import { MARKER_COLUMNS, useZenStyles } from './style.js';
 
 /**
  * The answer is the page, so the banner is only a signature: the name, the
- * version beside it, and one muted line saying what it is talking to. The mode
- * only gets a word when it is not the default; its absence is the signal.
+ * version beside it, and one muted line saying what it is talking to.
  */
-export const ZenBanner: FC<BannerView> = ({
-  version,
-  mode,
-  mentor,
-  providerLabel,
-  model,
-  reasoningEffort,
-  mentorModel,
-  mentorReasoningEffort,
-}) => {
+export const ZenBanner: FC<BannerView> = ({ version, providerLabel, model, reasoningEffort }) => {
   const theme = useTheme();
   const { quiet, faint } = useZenStyles();
   return (
@@ -28,28 +18,10 @@ export const ZenBanner: FC<BannerView> = ({
           term²
         </Text>
         <Text {...faint}> v{version}</Text>
-        {mode !== 'STANDARD' && (
-          <Text color={theme.accent} bold>
-            {'  '}
-            {mode}
-          </Text>
-        )}
-        {mentor && (
-          <Text color={theme.accentAlt} bold>
-            {'  '}MENTOR
-          </Text>
-        )}
       </Text>
       <Text {...quiet}>
         {providerLabel}/{model ?? '—'}
         {reasoningEffort !== 'none' && <Text {...faint}> ({reasoningEffort})</Text>}
-        {mentor && mentorModel && (
-          <>
-            <Text {...faint}> · mentor </Text>
-            {mentorModel}
-            {mentorReasoningEffort !== 'none' && <Text {...faint}> ({mentorReasoningEffort})</Text>}
-          </>
-        )}
       </Text>
     </Box>
   );

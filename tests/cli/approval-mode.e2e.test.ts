@@ -222,7 +222,6 @@ async function runCommand(
     | 'prefix-enter'
     | 'pick-enter'
     | 'model-picker'
-    | 'bare-clear-history'
     | 'quit-hint' = false,
   withUsage = false,
   expectedDraft?: string,
@@ -285,9 +284,6 @@ async function runCommand(
       // Sandbox off and GREEN commands: both run without an approval prompt.
       sandbox: { enabled: false },
       shell: { autoApproveMode: 'off' },
-      // Pair is a dropped profile (#149), but one the settings already name still runs; leaving it is the one
-      // switch out of a non-Bare profile that next can still make.
-      ...(exerciseMenu === 'bare-clear-history' ? { app: { activeProfileId: 'builtin:pair' } } : {}),
     }),
   );
 
@@ -329,7 +325,6 @@ async function runCommand(
     expect(identity.version).toBe(`${manifest.version}-dev+${identity.commit.slice(0, 7)}`);
   await session.waitForOutput(`v${identity.version}`, 30_000);
   await session.waitForOutput('term²', 30_000);
-  await session.waitForOutput(exerciseMenu === 'bare-clear-history' ? 'PAIR' : 'BARE', 30_000);
   await session.waitForOutput('mockprov', 30_000);
   await session.waitForOutput('mock-alpha', 30_000);
 
@@ -481,40 +476,6 @@ async function runCommand(
     await waitForHarnessComposerValue(idlePath, '/resu', { timeoutMs: 60_000 });
     session.write('\r');
     await session.waitForOutput('Resume Conversation', 30_000);
-    return;
-  }
-  if (exerciseMenu === 'bare-clear-history') {
-    // Legacy mode-commands: /bare with history asks before it clears, defaulting to No.
-    let offset = session.getVisibleOutput().length;
-    const since = () => session!.getVisibleOutput().slice(offset);
-    const waitSince = async (predicate: () => boolean) => {
-      const deadline = Date.now() + 30_000;
-      while (!predicate() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 25));
-      expect(predicate()).toBe(true);
-    };
-    await submit('/bare');
-    await waitSince(() => since().includes('Clear session and switch to Bare mode?'));
-    expect(since()).toContain('Switching to Bare mode requires clearing the current session.');
-    await waitSince(() => since().includes('❯ No'));
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    offset = session.getVisibleOutput().length;
-    session.write('\r');
-    // Declining closes the prompt and keeps the profile.
-    await waitSince(() => since().includes('/ commands'));
-    expect(since()).not.toContain('Clear session and switch');
-    expect(since()).toContain('Pair │');
-    offset = session.getVisibleOutput().length;
-    await submit('/bare');
-    await waitSince(() => since().includes('❯ No'));
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    offset = session.getVisibleOutput().length;
-    session.write('\x1b[A');
-    await waitSince(() => since().includes('❯ Yes'));
-    offset = session.getVisibleOutput().length;
-    session.write('\r');
-    await waitSince(() => since().includes('BARE'));
-    // Confirming clears the conversation, then switches.
-    expect(since()).not.toContain('hello');
     return;
   }
   if (exerciseMenu === 'quit-hint') {
@@ -708,11 +669,6 @@ it('last-request context survives resume without becoming cumulative usage', { t
   await session.waitForOutput('Ctx 12k', 30_000);
   expect(session.getVisibleOutput()).not.toContain('Ctx 90k');
 });
-
-// Accepted difference (#149): Pair is no longer a selectable direct CLI profile.
-it.skip('/bare confirms a clear before leaving a non-Bare profile with history', { timeout: TIMEOUT_MS }, () =>
-  runCommand('', '', 'hello', 'bare-clear-history'),
-);
 
 it('quitting a conversation prints a usable resume hint', { timeout: TIMEOUT_MS }, () =>
   runCommand('', '', 'hello', 'quit-hint'),

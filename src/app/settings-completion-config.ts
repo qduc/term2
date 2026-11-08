@@ -38,7 +38,7 @@ export const SETTING_DESCRIPTIONS: Record<string, string> = getAllSettingDescrip
 
 /**
  * Settings that never appear in the menu, not even in search: legacy flags,
- * process plumbing, and values owned by another command (`/profile`).
+ * process plumbing, and retained profile compatibility fields.
  */
 export const HIDDEN_SETTINGS = new Set<string>([
   SETTING_KEYS.AGENT_MENTOR_REASONING_EFFORT,

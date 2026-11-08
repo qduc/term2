@@ -1,7 +1,6 @@
 import React, { type FC } from 'react';
 import { Box, Text } from 'ink';
 import { useTheme } from '../../components/theme.js';
-import type { ModeBadge } from '../../theme/palettes.js';
 import { MODEL_LABEL_MAX } from '../shared/limits.js';
 import type { AssistantFrameProps, BannerView, UserMessageView } from '../types.js';
 import { Card } from './card.js';
@@ -17,30 +16,11 @@ export const ASSISTANT_GUTTER = 2;
 const truncateModel = (name: string): string =>
   name.length > MODEL_LABEL_MAX ? `${name.slice(0, MODEL_LABEL_MAX - 1)}…` : name;
 
-const Badge: FC<{ mode: ModeBadge }> = ({ mode }) => {
-  const theme = useTheme();
-  return (
-    <Text backgroundColor={theme.modeBadge[mode]} color={theme.modeBadgeForeground} bold>
-      {' '}
-      {mode}{' '}
-    </Text>
-  );
-};
-
 /**
  * A small card that shrinks to its content: name and version on the border, the
- * model on the first row, the mode (and mentor) badges beneath.
+ * provider, model and reasoning effort on the first row.
  */
-export const CardsBanner: FC<BannerView> = ({
-  version,
-  mode,
-  mentor,
-  providerLabel,
-  model,
-  reasoningEffort,
-  mentorModel,
-  mentorReasoningEffort,
-}) => {
+export const CardsBanner: FC<BannerView> = ({ version, providerLabel, model, reasoningEffort }) => {
   const theme = useTheme();
   return (
     <Box flexDirection="column" paddingTop={1} marginBottom={1}>
@@ -64,17 +44,6 @@ export const CardsBanner: FC<BannerView> = ({
           </Text>
           {reasoningEffort !== 'none' && <Text color={theme.textSubtle}> ({reasoningEffort})</Text>}
         </Text>
-        <Box flexWrap="wrap" columnGap={1}>
-          <Badge mode={mode} />
-          {mentor && <Badge mode="MENTOR" />}
-          {mentor && mentorModel && (
-            <Text>
-              <Text color={theme.textSubtle}>mentor </Text>
-              <Text color={theme.accentAlt}>{truncateModel(mentorModel)}</Text>
-              {mentorReasoningEffort !== 'none' && <Text color={theme.textSubtle}> ({mentorReasoningEffort})</Text>}
-            </Text>
-          )}
-        </Box>
       </Card>
     </Box>
   );

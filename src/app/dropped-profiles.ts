@@ -1,6 +1,6 @@
 /**
  * Profiles next does not offer or enter (owner decision, #149): legacy's plan, pair, mentor and orchestrator. The
- * /profile menu leaves them out and explicit selections treat them as unknown. Saved settings and sessions
+ * consumer UI has no profile menu and explicit selections treat them as unknown. Saved settings and sessions
  * that name one fall back to Bare without rewriting their persisted history.
  */
 const DROPPED = new Set(['plan', 'pair', 'mentor', 'orchestrator']);

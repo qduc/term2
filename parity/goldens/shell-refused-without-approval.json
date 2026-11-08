@@ -4,7 +4,7 @@
     {
       "exitCode": 0,
       "stdout": "I could not remove the file.\n",
-      "stderr": "Profile: bare\n[tool] shell: rm victim.txt\n[approval required] shell\n",
+      "stderr": "[tool] shell: rm victim.txt\n[approval required] shell\n",
       "requests": [
         {
           "model": "mock-alpha",

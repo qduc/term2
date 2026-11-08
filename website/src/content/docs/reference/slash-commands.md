@@ -12,11 +12,6 @@ Slash commands are entered directly in the prompt composer starting with `/`. Pr
 | **`/bridge`** | `[status\|connect [name]\|disconnect]` | Inspect or change local Discord session attachment. Connectivity to Discord is not verified by attachment status. |
 | **`/model`** | `[model-name]` | Change the active model (shortcut: `Ctrl+O`). |
 | **`/effort`** | `[level]` | Set reasoning effort (`default`, `none`, `minimal`, `low`, `medium`, `high`, `xhigh`) (shortcut: `Ctrl+T`). |
-| **`/plan`** | — | Toggle read-only Plan mode (shortcut: `Shift+Tab`). |
-| **`/lite`** | — | Toggle Bare (compatibility alias retained from Lite). |
-| **`/mentor`** | — | Toggle collaborative Mentor mode with dual-model consultation. |
-| **`/orchestrator`** | — | Toggle prompt-guided Orchestrator mode (delegates all tool-backed work). |
-| **`/profile`** | `[name]` | Switch the active operating profile (`standard`, `bare`, `plan`, `pair`, `mentor`, `orchestrator`; `lite` aliases `bare`). |
 | **`/auto-approve`** | `[off\|advisory\|auto\|always]` | Set shell and tool auto-approval policy. `always` disables `sandbox.enabled`. |
 | **`/sandbox`** | — | Toggle shell sandbox isolation on or off. |
 | **`/compact`** | — | Compact older conversation turns into a local summary. |
@@ -51,10 +46,6 @@ Slash commands are entered directly in the prompt composer starting with `/`. Pr
 - **Usage**: `/effort high`, `/effort medium`, `/effort none`
 - **Shortcut**: `Ctrl+T`
 - Sets the reasoning effort level passed to models supporting variable reasoning tokens.
-
-### `/profile [profile-name]`
-- **Usage**: `/profile`, `/profile standard`, `/profile bare`, `/profile plan`, `/profile lite`, `/profile pair`, `/profile mentor`, `/profile orchestrator`
-- Switches the active operating profile. `lite` is a compatibility alias for `bare`. Switching to or from Bare mid-session prompts for confirmation or recommends `/clear`.
 
 ### `/auto-approve [mode]`
 - **Usage**: `/auto-approve off`, `/auto-approve advisory`, `/auto-approve auto`, `/auto-approve always`

@@ -252,7 +252,7 @@ it(
       'Locating the unique workspace fixture',
     );
     // The bar under the composer names the profile, model and approval mode (this run is YOLO).
-    expect(visible, visible).toMatch(/Bare[^\n]*mockprov\/mock-alpha[^\n]*YOLO/);
+    expect(visible, visible).toMatch(/mockprov\/mock-alpha[^\n]*YOLO/);
     expect(visible, visible).not.toContain('isApprovalRejection');
     expect(visible, visible).toContain('Created b.txt and read it back: hi.');
     // Adjacent prose retains its spaces outside the code background and punctuation stays adjacent.

@@ -22,8 +22,6 @@ export type BridgeStatus = {
   };
 };
 export type TuiStatusInfo = {
-  /** Display name of the active profile, e.g. `Bare`. */
-  readonly profile: string;
   readonly contextWindow?: number;
   readonly effort: string | undefined;
   readonly approval: 'off' | 'advisory' | 'auto' | 'always';
@@ -53,15 +51,6 @@ export type MenuModelInfo = {
   unavailableReason?: 'missing-credentials' | 'missing-codex-login' | 'missing-grok-login';
   default_reasoning_level?: string;
   contextWindow?: number;
-};
-/** Legacy `ProfileOption` (source/hooks/use-profile-selection.ts). */
-export type MenuProfileOption = {
-  /** Canonical id, e.g. `builtin:bare`. */
-  id: string;
-  /** Short id accepted by `/profile`, e.g. `bare`. */
-  shortId: string;
-  displayName: string;
-  detail: string;
 };
 /** The fields of legacy `SkillInfo` the skills menu reads. */
 export type MenuSkillInfo = { name: string; description: string; isProjectLevel: boolean };
@@ -248,12 +237,6 @@ export interface TuiMenus {
     /** The same object for a session across calls; reading it touches no disk. */
     service(sessionId: string): MenuSettingsService;
   };
-  /** Legacy PROFILE_OPTIONS less the dropped profiles; `activeId` reads the session's live settings. */
-  readonly profile: {
-    readonly options: readonly MenuProfileOption[];
-    canonicalId(id: string): string;
-    activeId(sessionId: string): string | null;
-  };
   /** Legacy app.tsx handleCopySelection's clipboard write. */
   copy(text: string): Promise<void>;
   /** Legacy skillsService.getAvailableSkills(): this workspace's skills, read from disk once per mount. */
@@ -261,8 +244,6 @@ export interface TuiMenus {
   /** Legacy listConversations for the resume menu: this workspace's other saved conversations, newest first. */
   readonly resume?: {
     list(sessionId: string): Promise<MenuConversationEntry[]>;
-    /** Legacy getProfileLabel(activeProfileId ?? profileIdFromLegacyMode(appMode)); pure. */
-    profileLabel(activeProfileId?: string, appMode?: MenuConversationEntry['appMode']): string;
   };
   /** `/providers` manager; absent means `/providers` has no menu. */
   readonly providers?: TuiProviderMenu;
@@ -340,8 +321,6 @@ export interface TuiIntegration {
   readonly menus?: TuiMenus;
   /** Run an explicit user shell command in the selected workspace, without a model turn. */
   shell?(sessionId: string, command: string): Promise<ShellResult>;
-  /** A confirmed `confirmClear`: a new session, then the profile switch. */
-  clearAndSwitch?(connection: TuiConnection, profileId: string): Promise<{ message?: string }>;
   /** Legacy printUsage: the usage summary written to stdout as a conversation is left for a new one. */
   printUsage?(): void;
   /** Read the attached session's effective preferences on each render, including live /settings changes. */
@@ -361,8 +340,6 @@ export interface TuiIntegration {
     readonly applied?: boolean;
     /** A frame for the menu stack to open, as legacy commands called openCopyMenu. */
     readonly menu?: { readonly kind: 'copy'; readonly items: CopySelection[] };
-    /** Legacy requestModeSwitchConfirm: the switch needs a new session; `line` follows its welcome. */
-    readonly confirmClear?: { readonly profileId: string; readonly enable: boolean; readonly line: string };
   }>;
   /** App owns socket lifecycle and returns the current actual attachment state. */
   readonly bridge?: {

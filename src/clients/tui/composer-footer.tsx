@@ -45,7 +45,7 @@ function providerModelText(model: string, provider: TuiStatusInfo['provider'], u
 }
 
 /**
- * The bar the old terminal shows under the composer: profile, provider/model, effort and approval mode, then
+ * The bar the old terminal shows under the composer: provider/model, effort and approval mode, then
  * session token totals and measured provider telemetry when available.
  */
 export function directStatusView(
@@ -108,7 +108,6 @@ export function directStatusView(
     speedText = `(${formatStatusBarRate(liveTps, false)})`;
   }
   const config: StatusSegmentView[] = [
-    { id: 'mode', text: info.profile, tone: 'accent', bold: true, separator: 'group' },
     {
       id: 'queue',
       text: state.queue.some((item) => item.delivery === 'queued')

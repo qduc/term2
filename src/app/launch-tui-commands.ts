@@ -1,6 +1,5 @@
 import { printUsage, sessionUsage } from './usage-report.js';
 import { VALID_REASONING_EFFORTS } from '../model/models/reasoning-effort.js';
-import { resetSession } from '../clients/tui/commands.js';
 import { parseModelProviderArg } from '../shared/utils/ai/model-provider-arg.js';
 /**
  * The slash commands no wire command covers by itself. Each one is either a real
@@ -330,37 +329,8 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
     return options.mcp;
   };
 
-  /** Legacy handleModeSwitchConfirm: print usage, start a new session, then switch it. */
-  const clearThen = async (
-    connection: TuiConnection,
-    apply: (next: DirectConnection) => Promise<CommandResult>,
-  ): Promise<{ message?: string }> => {
-    printUsage(latest()); // through clearConversationAndRefreshBanner
-    const id = await resetSession(connection);
-    try {
-      const next = await host.connect(principal, id);
-      const result = await apply(next);
-      if (result.applied !== true) {
-        next.close();
-        throw new Error(result.message ?? 'Mode configuration did not finish.');
-      }
-      await bridge.rebind(id);
-      publish(next);
-      return { message: result.message };
-    } catch (error) {
-      throw new Error(
-        `Session ${displaySessionId(id)} was created but mode switching failed: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    }
-  };
-
   return {
     printUsage: () => printUsage(latest()),
-    clearAndSwitch(connection, profileId) {
-      return clearThen(connection, (next) => configuration.profile(next, profileId));
-    },
     async command(connection, input) {
       const [name, ...rest] = input.trim().slice(1).split(/\s+/);
       const argument = rest[0];
@@ -390,10 +360,8 @@ export function createDirectTuiCommands(options: DirectTuiCommandOptions): TuiIn
           return configuration.settings(connection, rest.join(' '));
         case 'bare':
         case 'lite':
-          return configuration.toggle(connection, name);
+          return configuration.profile(connection);
         case 'profile':
-          // Legacy's bare /profile reopens its menu: the command puts its trigger back in the input.
-          if (!argument) return { draft: { text: '/profile ', attachments: [] } };
           return configuration.profile(connection, argument);
         case 'skills':
           return skills(connection, input);

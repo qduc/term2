@@ -45,9 +45,9 @@ type. Reads redact values through `safeValue`; writes enforce the allowlist,
 revision, and persistence result before returning a new projection. The public
 value union is not permission to serialize arbitrary settings objects.
 
-`createDirectTuiSettings` in `launch-tui-settings.ts` prevents structural
-profile changes once wire messages exist. Wire history has no system-message
-role to exclude. Its `/auto-approve` and `/sandbox` commands save the applied
+`createDirectTuiSettings` in `launch-tui-settings.ts` acknowledges hidden profile
+compatibility aliases without switching or clearing history. Dropped/unknown
+selections remain errors. Its `/auto-approve` and `/sandbox` commands save the applied
 preference through `DirectApplication.saveApprovalPreference`, using the global
 settings owner for targeted file updates rather than persisting session model or
 profile overrides. A rejected rebuild does not save; an uncertain rebuild does
@@ -158,7 +158,7 @@ store/runtime still enforce the current workspace grant on writable open.
 
 Exact native IDs and lowercase raw UUID aliases are resolved before the non-TTY
 follow-up-prompt check, so missing
-and foreign-project references report their real diagnostic. Profile/model labels
+and foreign-project references report their real diagnostic. Model labels
 use the latest accepted configuration where present. Goal/profile restoration is
 still Session/runtime-owned: discovery neither rewrites facts nor substitutes
 launcher defaults. A resumed generation restores accepted effective reasoning and
@@ -182,7 +182,7 @@ source OAuth prompts and catalogue diagnostics. They do not open a conversation;
 Dropped workflow profiles (Plan, Pair, Mentor, Orchestrator; #149) cannot be selected
 through CLI, TUI, native configure, or HTTP. Saved settings and session metadata
 fall back to Bare at runtime, without rewriting historical facts or the settings
-file. CLI help advertises only Bare and its Standard/Full/Lite aliases. The direct
+file. CLI help hides profile inputs; Bare/Standard/Full/Lite aliases remain parseable for compatibility. The direct
 tool surface keeps root goal checks but no longer installs goal proposal or
 startup workflow notices. The store validates the exact current Bare identity
 only for these retired profiles; all other restore identity, reasoning and temperature checks remain.

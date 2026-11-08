@@ -4,14 +4,12 @@ import { formatShellExecutionOutput } from '../shared/utils/shell/shell-output.j
 import fs from 'node:fs';
 import { stderr, stdin, stdout } from 'node:process';
 import { collectProviderModels } from '../model/models/model-listing.js';
-import { resolveActiveProfile } from '../config/profiles/active-profile.js';
 import React, { useMemo, useRef, useState, type ReactNode } from 'react';
 import { Box, render } from 'ink';
 import Banner from '../clients/tui/presentation/components/layout/Banner.js';
 import { SettingsSkinProvider } from '../clients/tui/presentation/skins/SkinContext.js';
 import { SettingsThemeProvider } from '../clients/tui/presentation/theme/ThemeContext.js';
 import { getInkRenderOptions } from '../shared/utils/ink-render-options.js';
-import { getProfileLabel } from '../config/profiles/labels.js';
 import { getProvider } from '../model/providers/registry.js';
 import type { WireSnapshot } from '../protocol/wire.js';
 import { useTerminalFocusNotifier } from '../clients/tui/presentation/hooks/use-terminal-focus-notifier.js';
@@ -33,9 +31,6 @@ import { INTERACTIVE_TERMINAL_REQUIRED } from './launch.js';
 import { openDirectApplicationMcp } from './application-mcp.js';
 import type { DirectMcp } from './mcp.js';
 import { displaySessionId } from '../protocol/session-id.js';
-
-/** Footer profile labels by the selected profile setting (a profile id resolves to the same label). */
-const profileLabels = new Map<unknown, string>();
 
 type InteractiveRequest = Extract<DirectLaunchRequest, { readonly kind: 'interactive' }>;
 
@@ -106,15 +101,7 @@ function DirectTui({
       status(sessionId) {
         const current = app.liveSettings(sessionId);
         if (!current) throw new Error('The attached session has no live settings.');
-        // The footer asks on every render; resolving the profile each time cost about a tenth of a streaming frame.
-        const selected = current.get('app.activeProfileId');
-        let profile = profileLabels.get(selected);
-        if (profile === undefined) {
-          const label = getProfileLabel(resolveActiveProfile(current).identity.id);
-          profileLabels.set(selected, (profile = label.charAt(0).toUpperCase() + label.slice(1)));
-        }
         return {
-          profile,
           contextWindow: app.contextWindow(latest.current.model) ?? undefined,
           effort: current.get('agent.reasoningEffort'),
           approval: current.get('shell.autoApproveMode'),
@@ -224,10 +211,6 @@ async function runTui(
       sessionId === undefined
         ? await app.host.createSession(app.principal, target.grant)
         : await app.host.connect(app.principal, sessionId);
-    // Read the opened session, not the launch defaults: resume may restore a different profile. Legacy (cli.tsx)
-    // announces it before "Resumed conversation", and both before refusing a non-interactive terminal.
-    const { profileId } = await app.sessionConfiguration(initial.sessionId);
-    stderr.write(`Profile: ${profileId.replace(/^builtin:/, '')}\n`);
     if (sessionId !== undefined) stdout.write(`Resumed conversation: ${displaySessionId(initial.sessionId)}\n`);
     if (request.goal) await app.setGoal(initial.sessionId, request.goal, 'launcher');
 

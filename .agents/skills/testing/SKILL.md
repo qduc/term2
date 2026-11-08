@@ -206,6 +206,12 @@ and `68ef50ff` (local-only evidence), not a result file to resume appending.
   tests must isolate persisted config/task storage and inherited `XDG_STATE_HOME`.
   macOS fixtures also exposed `/tmp` canonicalization, Linux-only XDG paths,
   `/dev/full` assumptions, Yoga headless startup and wrapped terminal text.
+- **Shared build-output race:** `pnpm test:provider-black-box` rebuilds the CLI
+  before testing. Do not run that command concurrently with integration/e2e
+  readers in the same worktree: the build moves `dist` aside, so readers can
+  see missing `dist/src/app/cli.js` or prompt assets. Build first, then run
+  reader tiers against stable output (or use isolated worktrees). These missing
+  files are setup failures, not behavioral red proof.
 - **Toolchain unlike CI:** CI's `setup-tests` installs Node 24.21.0, pnpm 11,
   `bubblewrap` and `socat`, and does not run as root. A cloud container may
   differ on each, and the same failures appear on the base. Lane failures this

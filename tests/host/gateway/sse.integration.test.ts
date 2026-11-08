@@ -10,6 +10,7 @@ import type { GatewayAssertionClaims } from '../../../src/host/server-contracts.
 import { ServerInteractions } from '../../../src/host/server-interactions.js';
 import { encodeAgentWireV2 } from '../../../src/host/server-wire-v2.js';
 import type { WireEvent } from '../../../src/protocol/wire.js';
+import type { DirectTaskId } from '../../../src/session/background-types.js';
 const browserModule = (name: string) =>
   import(new URL(`../../../web-client/lib/term2/${name}.ts`, import.meta.url).href);
 const { parseEventEnvelope } = await browserModule('types');
@@ -222,6 +223,81 @@ it('disconnects a backpressured live reader and releases the native attachment',
     ]);
   } finally {
     clearTimeout(timer);
+    request?.destroy();
+    await transport.stop();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+it('carries native orchestrator question lifecycle through HTTP SSE and the pinned browser parser', async () => {
+  const { DirectTaskQuestions } = await import('../../../src/session/task-questions.js');
+  const { taskFactEvent } = await import('../../../src/protocol/tasks.js');
+  const taskId = 'child' as DirectTaskId;
+  const task = { id: taskId, turnId: 'parent', status: 'running' as const, mode: 'background' as const };
+  const state = { sessionId: 'session-1', tasks: [task], pendingInteractions: [] };
+  const events: WireEvent[] = [];
+  const questions = new DirectTaskQuestions(
+    (fact) => {
+      if (fact.type !== 'task_question_opened' && fact.type !== 'task_question_closed')
+        throw new Error('Unexpected non-question fact');
+      events.push({
+        ...taskFactEvent(fact, state as unknown as Parameters<typeof taskFactEvent>[1], events.length + 1),
+        occurredAt: new Date(fact.at).toISOString(),
+      });
+    },
+    () => 2,
+  );
+  const answer = questions.ask(taskId, 'Which approach?');
+  const pending = questions.pending(taskId)!;
+  expect(questions.answer(taskId, 'worker', 'Use the simple approach.', pending.messageId).ok).toBe(true);
+  await expect(answer).resolves.toBe('Use the simple approach.');
+  let closed = false;
+  const connection = {
+    sessionId: 'session-1',
+    events: {
+      async *[Symbol.asyncIterator]() {
+        yield* events;
+      },
+    },
+    close() {
+      closed = true;
+    },
+  } as unknown as DirectConnection;
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'question-v2-'));
+  const socketPath = path.join(directory, 'gateway.sock');
+  const interactions = new ServerInteractions();
+  const transport = new DirectServerTransport({
+    socketPath,
+    authentication: { verify: () => ({ sub: 'owner', purpose: 'events_connect' } as GatewayAssertionClaims) },
+    handler: async () => agentWireV2EventStream(connection, (event) => encodeAgentWireV2(event, interactions)),
+  });
+  let request: http.ClientRequest | undefined;
+  try {
+    await transport.start();
+    const response = await new Promise<http.IncomingMessage>((resolve, reject) => {
+      request = http.get({ socketPath, path: '/', headers: { 'x-term2-assertion': 'transport-fixture' } }, resolve);
+      request.on('error', reject);
+    });
+    let frames = '';
+    for await (const chunk of response) frames += chunk.toString();
+    const received = frames
+      .split('\n\n')
+      .filter((frame) => frame.split('\n').some((line) => line.startsWith('id:')))
+      .map((frame) => {
+        const data = frame.split('\n').find((line) => line.startsWith('data: '))!;
+        return parseEventEnvelope(JSON.parse(data.slice(6)), 'session-1');
+      });
+    expect(received.map((event) => event.changes[0].payload.change)).toEqual([
+      'task_question_opened',
+      'task_question_closed',
+    ]);
+    expect(received[0].changes[0].payload.task.pendingQuestion).toEqual(pending);
+    expect(received[0].changes[0].payload.task.status).toBe('awaiting_interaction');
+    expect(received[1].changes[0].payload.task).not.toHaveProperty('pendingQuestion');
+    expect(received[1].changes[0].payload.task.status).toBe('running');
+    expect(received.map((event) => event.seq)).toEqual([1, 2]);
+    expect(closed).toBe(true);
+  } finally {
     request?.destroy();
     await transport.stop();
     await rm(directory, { recursive: true, force: true });

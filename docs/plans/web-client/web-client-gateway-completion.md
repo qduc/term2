@@ -4,9 +4,10 @@
 
 **Native follow-up (#80, 2026-11-07):** current application/host code is under
 `src/`, and the browser/BFF is `web-client/`. The historical milestones below do
-not describe current activation. Both consumers pin wire 0.2.1; the v2 gate stays
-closed because its task validator rejects native `task_question_opened` and
-`task_question_closed`, plus the opened task's `pendingQuestion` descriptor.
+not describe current activation. Both consumers pin wire 0.2.2, whose task validator accepts native
+`task_question_opened`, `task_question_closed`, and strict `pendingQuestion`
+snapshots. The v2 gate stays closed pending combined native/BFF/browser
+background-question acceptance and independent activation approval.
 Native async `ask_orchestrator` can produce these facts. Extend both the shared
 change enum and task schema in the package owner's source, rebuild the artifact,
 and update both pins before repeating combined acceptance. Do not discard or

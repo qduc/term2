@@ -61,6 +61,17 @@ uses append-only chunks, and tool permissions use v1's `toolCall` field.
 Structured questions and budget pauses currently stop/decline through the
 unsupported-form fallback. MCP forwarding remains unsupported.
 
+Air's model selector uses the v1 session `configOptions` response and
+`session/set_config_option`. It starts with Term2's current model and cached
+catalogs, then updates as configured providers finish discovery. Model changes
+apply to that session, persist across load/resume, and use Term2's own provider
+credentials. They do not change your global default model.
+
+If Air still rejects session creation with an unsupported MCP error, disable
+`jetbrains_air_ide` in Air's MCP server catalog settings. Some Air builds
+contribute it independently of the per-agent flags above. The catalog setting
+affects all Air agents.
+
 The sections below describe the experimental v2 exchange and its limits.
 
 ## Supported exchange

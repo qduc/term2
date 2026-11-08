@@ -6,12 +6,47 @@ import type { AcpClient } from './contract.js';
 /**
  * Stable ACP v1 over the same Host backend as v2. Prompts remain pending until
  * the native terminal, and session/load replays retained history as v1 chunks.
- * Credentials and model selection come from Term2, not an IDE login flow.
+ * Credentials come from Term2; model selection configures its native session.
  */
 export function createAcpV1Agent(options: AcpAgentOptions): acp.AgentApp {
   const app = acp.agent({ name: 'term2' });
   const clients = new Map<string, AcpClient>();
   const active = new Map<string, AbortController>();
+  const configurationVersions = new Map<string, number>();
+  const configurationChanges = new Map<string, Promise<acp.SessionConfigOption[]>>();
+  const configuration = async (sessionId: string, adapted: AcpClient, client: acp.AgentContext) => {
+    if (!options.backend.configOptions) return {};
+    const configOptions = await options.backend.configOptions(sessionId);
+    // Setup never waits for provider network I/O. Publish discovery only once
+    // the client knows this session, and discard results for old attachments.
+    setTimeout(() => {
+      void options.backend.configOptions!(sessionId, true)
+        .then(async () => {
+          // Discovery may finish while a choice is being prepared. Read its
+          // accepted selection after settlement, including rejected choices,
+          // so a fast choice cannot hide the newly discovered catalog.
+          while (clients.get(sessionId) === adapted) {
+            await configurationChanges.get(sessionId)?.catch(() => undefined);
+            const version = configurationVersions.get(sessionId);
+            const refreshed = await options.backend.configOptions!(sessionId);
+            if (clients.get(sessionId) !== adapted) return;
+            if (configurationVersions.get(sessionId) !== version || configurationChanges.has(sessionId)) continue;
+            await client.notify(acp.methods.client.session.update, {
+              sessionId,
+              update: { sessionUpdate: 'config_option_update', configOptions: refreshed },
+            });
+            return;
+          }
+        })
+        .catch((error: unknown) =>
+          options.logger.error('ACP model catalog refresh failed', {
+            sessionId,
+            errorMessage: error instanceof Error ? error.message : String(error),
+          }),
+        );
+    }, 0);
+    return { configOptions };
+  };
   const extensions = (params: { mcpServers?: unknown[]; additionalDirectories?: unknown[] }): void => {
     if (params.mcpServers?.length || params.additionalDirectories?.length)
       throw acp.RequestError.invalidParams(undefined, 'MCP servers and additional directories are not supported');
@@ -31,7 +66,7 @@ export function createAcpV1Agent(options: AcpAgentOptions): acp.AgentApp {
     const adapted = v1Client(client);
     const session = await options.backend.createSession({ cwd: params.cwd }, adapted);
     clients.set(session.sessionId, adapted);
-    return { sessionId: session.sessionId };
+    return { sessionId: session.sessionId, ...(await configuration(session.sessionId, adapted, client)) };
   });
   app.onRequest(acp.methods.agent.session.list, async ({ params }) => await options.backend.listSessions(params));
   app.onRequest(acp.methods.agent.session.load, async ({ params, client }) => {
@@ -40,7 +75,7 @@ export function createAcpV1Agent(options: AcpAgentOptions): acp.AgentApp {
     const adapted = v1Client(client);
     await options.backend.resumeSession({ ...params, replayFrom: { type: 'start' } }, adapted);
     clients.set(params.sessionId, adapted);
-    return {};
+    return await configuration(params.sessionId, adapted, client);
   });
   app.onRequest(acp.methods.agent.session.resume, async ({ params, client }) => {
     extensions(params);
@@ -48,7 +83,19 @@ export function createAcpV1Agent(options: AcpAgentOptions): acp.AgentApp {
     const adapted = v1Client(client);
     await options.backend.resumeSession({ sessionId: params.sessionId, cwd: params.cwd }, adapted);
     clients.set(params.sessionId, adapted);
-    return {};
+    return await configuration(params.sessionId, adapted, client);
+  });
+  app.onRequest(acp.methods.agent.session.setConfigOption, async ({ params }) => {
+    if (!clients.has(params.sessionId)) throw new acp.RequestError(-32001, `Session not found: ${params.sessionId}`);
+    if (!options.backend.setConfigOption) throw acp.RequestError.methodNotFound('session/set_config_option');
+    configurationVersions.set(params.sessionId, (configurationVersions.get(params.sessionId) ?? 0) + 1);
+    const change = options.backend.setConfigOption(params);
+    configurationChanges.set(params.sessionId, change);
+    try {
+      return { configOptions: await change };
+    } finally {
+      if (configurationChanges.get(params.sessionId) === change) configurationChanges.delete(params.sessionId);
+    }
   });
   app.onRequest(acp.methods.agent.session.prompt, async ({ params }) => {
     if (active.has(params.sessionId))
@@ -86,6 +133,7 @@ export function createAcpV1Agent(options: AcpAgentOptions): acp.AgentApp {
     active.get(params.sessionId)?.abort();
     await options.backend.closeSession(params.sessionId);
     clients.delete(params.sessionId);
+    configurationVersions.delete(params.sessionId);
     return {};
   });
   return app;

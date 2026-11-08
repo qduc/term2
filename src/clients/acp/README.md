@@ -18,8 +18,11 @@ transport IDs and schema validation remain SDK-owned. The existing v2 surface re
 
 `term2 acp` also accepts `initialize.protocolVersion: 1` without a CLI flag.
 `v1-agent.ts` advertises `agentInfo`, `authMethods: []`, image/embedded-context
-prompts, session load/list/resume/close. Provider credentials and model selection
-remain native Term2 configuration. A v1 prompt stays pending until its real
+prompts, session load/list/resume/close. Provider credentials remain native Term2
+configuration. Setup responses include a `model` select config option;
+`session/set_config_option` applies a per-session native configure command and
+waits for its exact completed receipt, including the accepted model identity.
+A v1 prompt stays pending until its real
 terminal and returns `stopReason`; native failures become JSON-RPC errors.
 `session/load` creates a fresh display attachment and replays retained history;
 resume attaches without replay. Repeated loads replay each time.
@@ -34,15 +37,29 @@ content would need replacement; v1 has no replacement operation.
 
 V1 structured questions and budgets currently use the existing unsupported-form
 stop/decline fallbacks. No v1 form support, IDE filesystem/terminal delegation,
-MCP forwarding, provider management or model configuration is advertised.
+MCP forwarding or provider management is advertised.
 The launcher retains the same sandbox and permission policy for both versions.
+
+`models.ts` owns selector values (`provider/model`, split at the first slash),
+catalog validation and short-lived Host subscriptions for configure receipts.
+The app supplies enabled, credentialed streamed-provider catalogs. Setup reads
+only cached entries and always includes the actual current model, even when its
+provider is no longer ready. Provider discovery runs after setup and sends
+`config_option_update`; it cannot hold up the connection. Refresh results for
+replaced attachments are discarded; publication waits for pending selections
+and reads the latest accepted model before updating the client. Changes affect
+only the named session and survive native load/resume; global preferences stay
+unchanged. Discovery failure preserves the current model and cached options.
 
 Air's loading/sign-in timeout can mask initialization failure: the observed
 WebStorm Air log offered `protocolOffer=V1` then reported `Invalid params` against
 the former v2-only endpoint. Its later stdout `EPIPE` followed client shutdown;
 it was not evidence of missing provider credentials. Disable both
 `use_idea_mcp` and `use_custom_mcp` in Air's custom agent configuration because
-nonempty forwarded MCP requests remain unsupported.
+nonempty forwarded MCP requests remain unsupported. Some Air builds also
+contribute `jetbrains_air_ide` independently through their MCP catalog. Disable
+that entry in Air's MCP server settings if session creation still rejects MCP
+inputs. This catalog toggle affects all Air agents, unlike the per-agent flags.
 
 `AcpWorkspaces.authorize` resolves canonical cwd to an admitted workspace grant.
 `cwd(sessionId)` supplies canonical **direct** session workspace metadata under

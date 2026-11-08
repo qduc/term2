@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { Readable, Writable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import * as acp from '@agentclientprotocol/sdk';
 import { resolveSettingsDirectory } from '../../../src/config/settings/settings-path.js';
 import { createTestChildEnv } from '../../helpers/terminal-e2e.js';
@@ -19,6 +19,8 @@ type Fixture = {
   workspace: string;
   updates: acp.SessionNotification[];
   requests: any[];
+  releaseCatalog(): void;
+  releaseReply(): void;
 };
 
 async function fixture(
@@ -28,22 +30,36 @@ async function fixture(
     elicitation?: (params: acp.CreateElicitationRequest) => Promise<acp.CreateElicitationResponse>;
     question?: boolean;
     signal?: 'SIGINT' | 'SIGTERM';
+    holdCatalog?: boolean;
+    holdReply?: boolean;
   } = {},
 ): Promise<void> {
   const temp = await mkdtemp(path.join(os.tmpdir(), 'term2-acp-direct-'));
   const workspace = path.join(temp, 'workspace');
   await mkdir(workspace);
   const requests: any[] = [];
-  const server = http.createServer((req, res) => {
+  let releaseCatalog!: () => void;
+  const catalogReady = new Promise<void>((resolve) => {
+    releaseCatalog = resolve;
+  });
+  if (!options.holdCatalog) releaseCatalog();
+  let releaseReply!: () => void;
+  const replyReady = new Promise<void>((resolve) => {
+    releaseReply = resolve;
+  });
+  if (!options.holdReply) releaseReply();
+  const server = http.createServer(async (req, res) => {
     if (req.method === 'GET') {
+      await catalogReady;
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ data: [{ id: 'acp-model' }] }));
+      res.end(JSON.stringify({ data: [{ id: 'acp-model' }, { id: 'vendor/second-model' }] }));
       return;
     }
     let raw = '';
     req.on('data', (chunk) => (raw += String(chunk)));
-    req.on('end', () => {
+    req.on('end', async () => {
       requests.push(JSON.parse(raw));
+      await replyReady;
       const delta = { content: 'ACP fixture reply' };
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       res.end(
@@ -84,13 +100,14 @@ async function fixture(
   );
   const child = spawn(
     process.execPath,
-    [integrationCliPath(), 'acp', '--provider', 'acpfixture', '--model', 'acp-model'],
+    [integrationCliPath(), 'acp', ...(options.holdCatalog ? [] : ['--provider', 'acpfixture', '--model', 'acp-model'])],
     {
       cwd: root,
       env: createTestChildEnv({
         HOME: home,
         XDG_STATE_HOME: state,
         TERM2_CONVERSATIONS_DIR: path.join(temp, 'sessions'),
+        TERM2_CACHE_DIR: path.join(temp, 'cache'),
         DISABLE_LOGGING: '1',
       }),
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -132,13 +149,15 @@ async function fixture(
       agentInfo: { name: 'term2' },
       agentCapabilities: { loadSession: true },
     });
-    await body({ context: connection.agent, workspace, updates, requests });
+    await body({ context: connection.agent, workspace, updates, requests, releaseCatalog, releaseReply });
     if (options.signal) child.kill(options.signal);
     else child.stdin.end();
     await expect(exited).resolves.toEqual({ code: 0, signal: null });
     for (const line of stdout.trim().split('\n')) expect(JSON.parse(line)).toMatchObject({ jsonrpc: '2.0' });
     expect(stderr).not.toContain('detach failed');
   } finally {
+    releaseCatalog();
+    releaseReply();
     connection.close();
     child.kill('SIGKILL');
     await exited;
@@ -151,7 +170,7 @@ describe('ACP v1 built CLI compatibility for Air', () => {
   it('initializes without IDE auth, streams once, completes prompts and replays each load', async () => {
     await fixture(async ({ context, workspace, updates, requests }) => {
       const { sessionId } = await context.request(acp.methods.agent.session.new, { cwd: workspace, mcpServers: [] });
-      expect(updates).toEqual([]); // v2 state_update must never leak to a v1 client.
+      expect(updates.every(({ update }) => update.sessionUpdate === 'config_option_update')).toBe(true);
       const result = await context.request(acp.methods.agent.session.prompt, {
         sessionId,
         prompt: [{ type: 'text', text: 'Hello Air' }],
@@ -176,9 +195,93 @@ describe('ACP v1 built CLI compatibility for Air', () => {
       }
       updates.length = 0;
       await context.request(acp.methods.agent.session.resume, { sessionId, cwd: workspace, mcpServers: [] });
-      expect(updates).toEqual([]);
+      expect(updates.every(({ update }) => update.sessionUpdate === 'config_option_update')).toBe(true);
       await context.request(acp.methods.agent.session.close, { sessionId });
     });
+  }, 30_000);
+
+  it('shows a cold-cache selector before discovery finishes and applies/persists the selected inference model', async () => {
+    await fixture(
+      async ({ context, workspace, updates, requests, releaseCatalog, releaseReply }) => {
+        const created = await context.request(acp.methods.agent.session.new, { cwd: workspace, mcpServers: [] });
+        expect(created.configOptions).toMatchObject([
+          {
+            id: 'model',
+            type: 'select',
+            category: 'model',
+            currentValue: 'acpfixture/acp-model',
+            options: [{ value: 'acpfixture/acp-model' }],
+          },
+        ]);
+        releaseCatalog();
+        await vi.waitFor(() =>
+          expect(
+            updates.some(
+              ({ update }) =>
+                update.sessionUpdate === 'config_option_update' &&
+                JSON.stringify(update.configOptions).includes('vendor/second-model'),
+            ),
+          ).toBe(true),
+        );
+        const sessionId = created.sessionId;
+        await expect(
+          context.request(acp.methods.agent.session.setConfigOption, {
+            sessionId,
+            configId: 'model',
+            value: 'unconfigured/arbitrary',
+          }),
+        ).rejects.toMatchObject({ code: -32602 });
+        await expect(
+          context.request(acp.methods.agent.session.setConfigOption, {
+            sessionId,
+            configId: 'unknown',
+            value: 'acpfixture/acp-model',
+          }),
+        ).rejects.toMatchObject({ code: -32602 });
+        const changed = await context.request(acp.methods.agent.session.setConfigOption, {
+          sessionId,
+          configId: 'model',
+          value: 'acpfixture/vendor/second-model',
+        });
+        expect(changed.configOptions[0]).toMatchObject({ currentValue: 'acpfixture/vendor/second-model' });
+        const prompting = context.request(acp.methods.agent.session.prompt, {
+          sessionId,
+          prompt: [{ type: 'text', text: 'Use the selected model' }],
+        });
+        await vi.waitFor(() => expect(requests).toHaveLength(1));
+        await expect(
+          context.request(acp.methods.agent.session.setConfigOption, {
+            sessionId,
+            configId: 'model',
+            value: 'acpfixture/acp-model',
+          }),
+        ).rejects.toMatchObject({ code: -32000 });
+        releaseReply();
+        await prompting;
+        expect(requests.at(-1).model).toBe('vendor/second-model');
+        const other = await context.request(acp.methods.agent.session.new, { cwd: workspace, mcpServers: [] });
+        expect(other.configOptions?.[0]).toMatchObject({ currentValue: 'acpfixture/acp-model' });
+        await context.request(acp.methods.agent.session.close, { sessionId });
+        const loaded = await context.request(acp.methods.agent.session.load, {
+          sessionId,
+          cwd: workspace,
+          mcpServers: [],
+        });
+        expect(loaded.configOptions?.[0]).toMatchObject({ currentValue: 'acpfixture/vendor/second-model' });
+        const resumed = await context.request(acp.methods.agent.session.resume, {
+          sessionId,
+          cwd: workspace,
+          mcpServers: [],
+        });
+        expect(resumed.configOptions?.[0]).toMatchObject({ currentValue: 'acpfixture/vendor/second-model' });
+        await context.request(acp.methods.agent.session.prompt, {
+          sessionId,
+          prompt: [{ type: 'text', text: 'Still selected after resume' }],
+        });
+        expect(requests.at(-1).model).toBe('vendor/second-model');
+      },
+      { holdCatalog: true, holdReply: true },
+    );
   }, 30_000);
 
   it('rejects unsupported workspace/MCP inputs before admission and exits cleanly on SIGTERM', async () => {

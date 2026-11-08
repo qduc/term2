@@ -7,6 +7,7 @@ import type { DirectConnection } from '../../host/in-process-direct-types.js';
 import type { AcpBackend, BackendOptions } from './contract.js';
 import { AcpAttachment } from './attachment.js';
 import { promptInput } from './input.js';
+import { AcpModels } from './models.js';
 
 async function canonicalCwd(cwd: string): Promise<string> {
   if (!path.isAbsolute(cwd)) throw acp.RequestError.invalidParams(undefined, 'cwd must be an absolute path');
@@ -24,6 +25,7 @@ async function canonicalCwd(cwd: string): Promise<string> {
  * No host factory, Session, provider, persistence or legacy runtime is created.
  */
 export function createAcpBackend(options: BackendOptions): AcpBackend {
+  const models = new AcpModels(options);
   const attachments = new Map<string, AcpAttachment>();
   // Lifecycle mutations for a session must not race replacement and close.
   const changing = new Set<string>();
@@ -56,6 +58,14 @@ export function createAcpBackend(options: BackendOptions): AcpBackend {
   };
 
   return {
+    async configOptions(sessionId, refresh) {
+      attached(sessionId);
+      return await models.configOptions(sessionId, refresh);
+    },
+    async setConfigOption(request) {
+      attached(request.sessionId);
+      return await models.setConfigOption(request);
+    },
     async createSession(request, client) {
       available();
       const cwd = await canonicalCwd(request.cwd);
@@ -131,6 +141,7 @@ export function createAcpBackend(options: BackendOptions): AcpBackend {
     },
     async shutdown() {
       stopped = true;
+      models.shutdown();
       const failures: unknown[] = [];
       for (const attachment of attachments.values()) {
         try {

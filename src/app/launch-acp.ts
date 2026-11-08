@@ -12,6 +12,9 @@ import { createDirectApplication, type DirectApplication } from './application.j
 import { createLocalAuthority, LOCAL_PRINCIPAL, localGrant } from './application-workspaces.js';
 import type { DirectLaunchRequest } from './launch-types.js';
 import { warnIfSandboxUnavailable } from './sandbox-warning.js';
+import { isProviderDisabled, resolveProviderCredentials } from '../model/provider-credentials.js';
+import { fetchModels, peekCachedModels } from '../model/model-service.js';
+import type { WireModel } from '../protocol/wire.js';
 
 type AcpRequest = Extract<DirectLaunchRequest, { readonly kind: 'acp' }>;
 
@@ -81,12 +84,28 @@ export async function launchAcp(request: AcpRequest): Promise<number> {
   await warnIfSandboxUnavailable('acp', (line) => io.writeStderr(line));
 
   const { conversationsDir, selection } = request;
+  const selectableProviders = () =>
+    getAllProviders().filter(
+      (provider) =>
+        provider.createStreamedModel &&
+        !isProviderDisabled(selection.settings, provider.id) &&
+        resolveProviderCredentials(selection.settings, provider.id).configured,
+    );
   const app = await createDirectApplication({
     conversationsDir,
     selection,
     surface: () => ({ autoApprove: false, interactive: true, allowUnsandboxed: false }),
     approvalAlwaysAsks: true,
     requireSandbox: true,
+    authorizeModel(next, previous) {
+      if (next.provider === previous.provider && next.model === previous.model) return;
+      if (
+        selectableProviders().some((provider) => provider.id === next.provider) &&
+        peekCachedModels(next.provider)?.some((model) => model.id === next.model)
+      )
+        return;
+      throw new Error('Model is not available from a configured ACP provider.');
+    },
     authority: createLocalAuthority((root) => {
       try {
         return fs.statSync(root).isDirectory();
@@ -101,6 +120,37 @@ export async function launchAcp(request: AcpRequest): Promise<number> {
   process.once('SIGINT', onSignal);
   process.once('SIGTERM', onSignal);
   let exitCode = 1;
+  let discovery: Promise<readonly (WireModel & { name?: string })[]> | undefined;
+  const models = async (refresh: boolean) => {
+    const providers = selectableProviders();
+    const rows = (provider: string, entries: readonly { id: string; name?: string }[]) =>
+      entries.map((entry) => ({ provider, model: entry.id, ...(entry.name ? { name: entry.name } : {}) }));
+    if (!refresh) return providers.flatMap((provider) => rows(provider.id, peekCachedModels(provider.id) ?? []));
+    discovery ??= Promise.all(
+      providers.map(async (provider) => {
+        try {
+          return rows(
+            provider.id,
+            await fetchModels(
+              {
+                settingsService: selection.settings,
+                loggingService: selection.logger,
+                signal: shutdown.signal,
+              },
+              provider.id,
+            ),
+          );
+        } catch {
+          return rows(provider.id, peekCachedModels(provider.id) ?? []);
+        }
+      }),
+    )
+      .then((groups) => groups.flat())
+      .finally(() => {
+        discovery = undefined;
+      });
+    return await discovery;
+  };
   try {
     const logger = {
       error: (message: string, fields: Readonly<Record<string, unknown>>) => selection.logger.error(message, fields),
@@ -110,9 +160,11 @@ export async function launchAcp(request: AcpRequest): Promise<number> {
       principal: app.principal,
       workspaces: acpWorkspaces(app),
       logger,
+      models,
     });
     exitCode = await serveAcp({ backend, logger, version: installationVersion }, io, shutdown.signal);
   } finally {
+    shutdown.abort();
     process.removeListener('SIGINT', onSignal);
     process.removeListener('SIGTERM', onSignal);
     try {

@@ -1,4 +1,4 @@
-## [Unreleased]
+## [1.0.0] - 2026-11-08
 
 ### Breaking Changes
 - **Node.js 24 or newer is required.** `engines.node` is now `>=24`, matching the only version CI and the publish workflow test.

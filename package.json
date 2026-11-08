@@ -1,6 +1,6 @@
 {
   "name": "@qduc/term2",
-  "version": "0.40.0",
+  "version": "1.0.0",
   "description": "A terminal-based AI assistant that can help you get things done on your computer",
   "license": "MIT",
   "author": "qduc",
@@ -113,6 +113,7 @@
   "devDependencies": {
     "@eslint/js": "^9.39.4",
     "@modelcontextprotocol/server": "2.0.0",
+    "@qduc/agent-harness-core": "workspace:*",
     "@qduc/agent-wire": "file:vendor/qduc-agent-wire-0.2.3.tgz",
     "@types/better-sqlite3": "^9.6.0",
     "@types/env-paths": "^1.0.2",
@@ -138,8 +139,7 @@
     "typescript": "npm:@typescript/typescript6@^6.0.1",
     "typescript-7": "npm:typescript@7.0.2",
     "typescript-eslint": "^8.62.0",
-    "vitest": "^4.1.9",
-    "@qduc/agent-harness-core": "workspace:*"
+    "vitest": "^4.1.9"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx}": [

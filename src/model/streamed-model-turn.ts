@@ -108,6 +108,8 @@ export interface StreamedModelTurn {
 }
 
 export interface StreamedModelTurnRequest {
+  /** Runtime-only physical dispatch observer; adapters must not serialize it. */
+  readonly onDispatched?: () => void;
   readonly instructions?: string;
   /** Provider response to continue from when the provider supports server-side history. */
   readonly previousResponseId?: string | null;
@@ -130,6 +132,8 @@ export interface StreamedModelTurnRequest {
   readonly signal?: AbortSignal;
   /** Runtime-only recovery capability; provider adapters must not serialize it. */
   readonly recoveryBudget?: RetryRecoveryBudget;
+  /** Per-request runtime state; never serialized to a provider. */
+  readonly contextCompactionState?: ContextCompactionSessionState;
   /**
    * Skip previous_response_id and transport history compression for this
    * request. Recovery uses this to send one self-contained full-history

@@ -11,8 +11,8 @@ import {
   type GateDecision,
   type VerificationReport,
   type VerificationRequest,
-} from '../engine/completion-verification/contracts.js';
-import { mandatoryVerification } from '../engine/completion-verification/gate.js';
+} from './completion-verification/contracts.js';
+import { mandatoryVerification } from './completion-verification/gate.js';
 import type { DirectGoalCheck, DirectGoalState } from './goal.js';
 import type { DirectGoalVerificationVerdict } from './goal-stop.js';
 

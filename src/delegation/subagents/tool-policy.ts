@@ -4,10 +4,11 @@ import { healSearchReplaceParams } from '../../tools/file/edit-healing.js';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import fs from 'node:fs';
-import type { ToolInvocationContext } from '../../engine/agent-runtime/tool-invocation-context.js';
+import type { ToolInvocationContext } from '../../session/agent-runtime/tool-invocation-context.js';
 import type { ILoggingService, ISettingsService, ISessionContextService } from '../../shared/service-interfaces.js';
 import type { ExecutionContext } from '../../tools/execution-context.js';
-import type { SubagentDefinition, ValidationEvidence } from './types.js';
+import type { SubagentDefinition } from './types.js';
+import { captureValidationIfMatch, type ValidationCapture } from './validation-evidence.js';
 import type {
   AnyToolDefinition,
   CommandMessage,
@@ -19,7 +20,8 @@ import { isZodToolParameterSchema } from '../../tools/types.js';
 import type { z, ZodTypeAny } from 'zod';
 import { parse } from 'unbash';
 import type { Word, WordPart } from 'unbash';
-import { isPathInScopeSafe, isHostInScope } from '../../engine/agent-runtime/scope-resolver.js';
+import { isPathInScopeSafe, isHostInScope } from '../../session/agent-runtime/scope-resolver.js';
+import { getActiveWorkspaceRoot } from '../../tools/workspace/active-workspace-root.js';
 import { getProvider } from '../../model/providers/index.js';
 import { wrapToolInvoke, wrapNeedsApproval } from '../../tools/tool-invoke.js';
 import { toOpenAIStrictToolSchema } from '../../shared/lib/openai-strict-tool-schema.js';
@@ -37,7 +39,7 @@ import {
   type FeatureSelection,
 } from '../../tools/assembly/feature-selection.js';
 import { createApplyPatchToolDefinition } from '../../tools/file/apply-patch.js';
-import { resolveAncillaryModelTier } from '../../engine/agent-runtime/model-resolver.js';
+import { resolveAncillaryModelTier } from '../../session/agent-runtime/model-resolver.js';
 import { extractPatchPaths } from '../../tools/file/upstream-apply-patch.js';
 import { createSearchReplaceToolDefinition } from '../../tools/file/search-replace.js';
 import { createCreateFileToolDefinition } from '../../tools/file/create-file.js';
@@ -47,7 +49,7 @@ import { createRunExplorerToolDefinition, type ExplorerRunner } from '../../tool
 import type { SkillsService } from '../../tools/skills/skills-service.js';
 import { registerToolFormatters } from '../../tools/command-message-formatters.js';
 import { trimToolOutput } from '../../shared/utils/output/trim-tool-output.js';
-import { injectRunBudgetWarning } from '../../engine/inject-warning-into-tool-output.js';
+import { injectRunBudgetWarning } from '../../session/inject-warning-into-tool-output.js';
 import { tryAcquireFileLock } from '../../tools/file/file-locks.js';
 import { classifyCommand, SafetyStatus } from '../../tools/shell/command-safety/index.js';
 import { evaluateShellAutoApprovalAdvisories } from '../../session/approval/shell-auto-approval-evaluator.js';
@@ -62,11 +64,6 @@ import type { SessionBrowser } from '../../session/conversation/session-browser.
 import { createSessionBrowserToolDefinitions } from '../../tools/session-browser/session-browser-tools.js';
 
 const MODEL_FACING_EDITOR_TOOLS = new Set(['apply_patch', 'search_replace', 'create_file']);
-
-/** A mutable holder for the last validation evidence captured from a shell run. */
-export interface ValidationCapture {
-  value?: ValidationEvidence;
-}
 
 export type SubagentRunContext = {
   agentId: string;
@@ -153,49 +150,6 @@ function getShellCommand(params: unknown): string {
   if (!params || typeof params !== 'object') return '';
   const command = (params as Record<string, unknown>).command;
   return typeof command === 'string' ? command : '';
-}
-
-/** Heuristic for validation-shaped shell commands (test/lint/typecheck/build/tsc). */
-const VALIDATION_COMMAND_PATTERNS = [
-  /\bnpm\s+run\s+(test|lint|typecheck|tsc|build|check)\b/i,
-  /\bnpx\s+(vitest|jest|tsc|eslint|prettier)\b/i,
-  /\bpnpm\s+(run\s+)?(test|lint|typecheck|tsc|build|check)\b/i,
-  /\byarn\s+(test|lint|typecheck|tsc|build|check)\b/i,
-  /\bvitest\b/i,
-  /\bjest\b/i,
-  /\btsc\b/i,
-  /\beslint\b/i,
-  /\bprettier\b/i,
-  /\b(test|lint|typecheck|build)\s*$/i,
-  /\bpnpm\s+test\b/i,
-  /\bnpm\s+test\b/i,
-];
-
-function isValidationCommand(command: string): boolean {
-  return VALIDATION_COMMAND_PATTERNS.some((re) => re.test(command));
-}
-
-const MAX_VALIDATION_EXCERPT = 2000;
-
-/**
- * Parse the terminal status line emitted by the shell tool.
- *
- * This deliberately only considers the first line. The remaining output is
- * command-owned text and can mention exit codes (or claim success) without
- * being evidence of how the command terminated.
- */
-function parseExitStatus(result: string): number | undefined {
-  const terminalStatus = result.split(/\r?\n/, 1)[0]?.trim() ?? '';
-  const exitMatch = terminalStatus.match(/^exit\s+(\d+)$/i);
-  if (exitMatch) return parseInt(exitMatch[1], 10);
-  return undefined;
-}
-
-function buildValidationEvidence(command: string, result: string): ValidationEvidence {
-  const exitStatus = parseExitStatus(result) ?? 'unknown';
-  const excerpt =
-    result.length > MAX_VALIDATION_EXCERPT ? result.slice(-(MAX_VALIDATION_EXCERPT - 20)) + '\n...(truncated)' : result;
-  return { command, exitStatus, outputExcerpt: excerpt };
 }
 
 /**
@@ -484,19 +438,6 @@ function inspectShellWriteTargets(command: string, cwd: string): ShellWriteTarge
   }
   return { paths: [...new Set(paths)], hasUnresolvedWrite, parseUnknown: false };
 }
-
-export function captureValidationIfMatch(
-  capture: ValidationCapture | undefined,
-  command: string,
-  result: unknown,
-): void {
-  if (!capture) return;
-  if (!isValidationCommand(command)) return;
-  const resultStr = typeof result === 'string' ? result : String(result ?? '');
-  capture.value = buildValidationEvidence(command, resultStr);
-}
-
-export { isValidationCommand };
 
 export class SubagentToolPolicy {
   #settings: ISettingsService;
@@ -905,7 +846,11 @@ export class SubagentToolPolicy {
       execute: async (params: z.infer<S>, context?: unknown, details?: unknown) => {
         const filePath = extractPath(params);
         if (filePath) {
-          const safe = await isPathInScopeSafe(filePath, scopePatterns, this.#executionContext?.getCwd());
+          const safe = await isPathInScopeSafe(
+            filePath,
+            scopePatterns,
+            this.#executionContext?.getCwd() ?? getActiveWorkspaceRoot(),
+          );
           if (!safe) {
             return `Error: Path "${filePath}" is outside the allowed filesystem read scope.`;
           }
@@ -936,7 +881,11 @@ export class SubagentToolPolicy {
       execute: async (params: z.infer<S>, context?: unknown, details?: unknown) => {
         const paths = extractPaths(params);
         for (const filePath of paths) {
-          const safe = await isPathInScopeSafe(filePath, scopePatterns, this.#executionContext?.getCwd());
+          const safe = await isPathInScopeSafe(
+            filePath,
+            scopePatterns,
+            this.#executionContext?.getCwd() ?? getActiveWorkspaceRoot(),
+          );
           if (!safe) {
             return `Error: Path "${filePath}" is outside the allowed filesystem write scope.`;
           }

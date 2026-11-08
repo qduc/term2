@@ -2,7 +2,7 @@
 import type { Item as PublicAssistantItem } from '../shared/contracts/conversation-items.js';
 import type { CommandMessage } from '../tools/types.js';
 import type { TurnId } from '../engine/index.js';
-import type { ModelRequestCost } from '../engine/recovery-budget.js';
+import type { ModelRequestCost } from './recovery-budget.js';
 import type { Item, Usage } from '../model/index.js';
 import type { Fact } from './facts.js';
 

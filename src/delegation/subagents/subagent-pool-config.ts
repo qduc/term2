@@ -1,5 +1,5 @@
 import { SETTING_KEYS } from '../../config/settings/settings-schema.js';
-import type { AncillaryModelTier } from '../../engine/agent-runtime/model-resolver.js';
+import type { AncillaryModelTier } from '../../session/agent-runtime/model-resolver.js';
 import type { SupportedSubagentRole } from './types.js';
 
 /**

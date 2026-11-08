@@ -15,7 +15,7 @@ import { createDirectShellTools } from '../../../../src/app/shell-tools.js';
 import { createSourceToolRegistry, executeSourceChild } from '../../../../src/app/source-tools.js';
 import { DirectBackgroundTasks } from '../../../../src/session/background.js';
 import { directShellTasks } from '../../../../src/session/shell-tasks.js';
-import type { TurnDeps } from '../../../../src/engine/index.js';
+import type { ConversationDeps } from '../../../../src/session/types.js';
 import type { InteractionDecision, ToolContext, ToolInteractionRequest } from '../../../../src/tools/index.js';
 import { ToolApprovalPolicyRegistry } from '../../../../src/session/approval/tool-approval-policy-registry.js';
 import { SessionAccessState } from '../../../../src/session/session/session-access-state.js';
@@ -128,16 +128,20 @@ async function harness(
   });
   cleanups.push(() => registry.dispose());
   const context = (signal: AbortSignal): ToolContext => {
-    const parent: Parameters<NonNullable<TurnDeps['shellTasks']>>[0] = {
-      turnId: 'test-turn' as Parameters<NonNullable<TurnDeps['shellTasks']>>[0]['turnId'],
-      parentExecutionId: 'test-execution' as Parameters<NonNullable<TurnDeps['shellTasks']>>[0]['parentExecutionId'],
+    const parent: Parameters<NonNullable<ConversationDeps['shellTasks']>>[0] = {
+      turnId: 'test-turn' as Parameters<NonNullable<ConversationDeps['shellTasks']>>[0]['turnId'],
+      parentExecutionId: 'test-execution' as Parameters<
+        NonNullable<ConversationDeps['shellTasks']>
+      >[0]['parentExecutionId'],
       signal,
     };
     return {
-      workspace: { root: cwd, access: 'read_write', target: 'local' },
-      settings: { get: () => undefined, watch: () => () => {} },
+      app: {
+        workspace: { root: cwd, access: 'read_write', target: 'local' },
+        settings: { get: () => undefined, watch: () => () => {} },
+        shellTasks: directShellTasks(tasks, parent),
+      },
       signal,
-      shellTasks: directShellTasks(tasks, parent),
       runNested: async () => {
         throw new Error('Unexpected nested run');
       },

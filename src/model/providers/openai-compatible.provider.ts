@@ -190,6 +190,7 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
         loggingService: deps.loggingService,
         sessionContextService: deps.sessionContextService,
         settingsService: deps.settingsService,
+        onDispatched: deps.onDispatched,
       });
       if (!('getStreamedModel' in provider) || typeof provider.getStreamedModel !== 'function') {
         throw new Error(`Custom provider '${providerId}' has no application-owned streamed model`);

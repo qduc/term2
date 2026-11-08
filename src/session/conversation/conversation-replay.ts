@@ -37,7 +37,7 @@ import {
   isToolCallHistoryItem,
   isToolResultHistoryItem,
 } from '../tool-execution-ledger.js';
-import { projectConversationMessage } from '../../engine/conversation-message-projection.js';
+import { projectConversationMessage } from '../conversation-message-projection.js';
 import { deriveLocalCheckpointRequestHistory } from './local-checkpoint-projection.js';
 import {
   legacyModeFromProfileId,

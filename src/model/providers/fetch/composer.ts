@@ -1,4 +1,3 @@
-import { notifyProviderRequestDispatched } from '../request-dispatch.js';
 import { composeFetch, FetchMiddleware } from './compose.js';
 import { createLoggingMiddleware } from './logging-middleware.js';
 import { createRateLimitMiddleware } from './rate-limit-middleware.js';
@@ -17,6 +16,7 @@ export type CreateProviderFetchOptions = {
   deps: {
     loggingService: ILoggingService;
     sessionContextService?: any;
+    onDispatched?: () => void;
   };
   middlewares?: FetchMiddleware[];
   fetchImpl?: typeof fetch;
@@ -31,7 +31,7 @@ export function createProviderFetch({
 }: CreateProviderFetchOptions): typeof fetch {
   const dispatchFetch: typeof fetch = (input, init) => {
     const response = fetchImpl(input, init);
-    notifyProviderRequestDispatched();
+    deps.onDispatched?.();
     return response;
   };
   return composeFetch(dispatchFetch, [

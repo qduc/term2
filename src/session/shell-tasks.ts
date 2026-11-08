@@ -1,4 +1,4 @@
-import type { TurnDeps } from '../engine/index.js';
+import type { ConversationDeps } from './types.js';
 import type { ShellTaskPort, ShellTaskState, ShellTaskStart } from '../tools/index.js';
 import type { DirectBackgroundTasks } from './background.js';
 import type { DirectTaskState } from './background-types.js';
@@ -8,7 +8,7 @@ import type { DirectOrigin } from './facade-types.js';
  * No process, controller or lifecycle state is retained by this adapter. */
 export function directShellTasks(
   tasks: DirectBackgroundTasks,
-  parent: Parameters<NonNullable<TurnDeps['shellTasks']>>[0],
+  parent: Parameters<NonNullable<ConversationDeps['shellTasks']>>[0],
   origin?: DirectOrigin,
   notify?: (task: DirectTaskState, key: string, text: string) => void,
 ): ShellTaskPort {

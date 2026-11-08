@@ -1,7 +1,7 @@
 import type { ProviderInputItem } from '../../shared/contracts/provider-input.js';
 import { normalizeUserTurn, type UserTurn } from '../../shared/types/user-turn.js';
 import { conversationTimeGap } from '../../shared/conversation/conversation-time-gap.js';
-import { withSteeringNotice } from '../../engine/prompts/steering-notice.js';
+import { withSteeringNotice } from '../prompts/steering-notice.js';
 
 /**
  * The provider representation of one user turn.

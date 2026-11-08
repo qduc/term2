@@ -1,6 +1,5 @@
 import { getActiveCodexAccount, listCodexAccounts, removeCodexAccount, setActiveCodexAccount } from './codex-auth.js';
 import { getActiveGrokAccount, listGrokAccounts, removeGrokAccount, setActiveGrokAccount } from './grok-auth.js';
-import { getSessionAccount } from './oauth-session-account.js';
 
 /**
  * The provider-neutral view of stored OAuth logins, so the account switcher UI
@@ -30,12 +29,14 @@ export function oauthLoginCommand(providerId: OAuthAccountProviderId): string {
   return providerId === 'codex' ? 'term2 --codex-login' : 'term2 --grok-login';
 }
 
-export function listOAuthAccounts(providerId: OAuthAccountProviderId): OAuthAccountSummary[] {
+export function listOAuthAccounts(
+  providerId: OAuthAccountProviderId,
+  inUse: string | null = null,
+): OAuthAccountSummary[] {
   const [accounts, active] =
     providerId === 'codex'
       ? [listCodexAccounts(), getActiveCodexAccount()]
       : [listGrokAccounts(), getActiveGrokAccount()];
-  const inUse = getSessionAccount(providerId);
   return accounts.map((account) => ({
     id: account.id,
     label: account.label,

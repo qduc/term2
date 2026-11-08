@@ -9,7 +9,7 @@ import type {
   TurnId,
   TurnResult,
 } from '../engine/index.js';
-import type { ModelRequestCost } from '../engine/recovery-budget.js';
+import type { ModelRequestCost } from './recovery-budget.js';
 import type { Item, ModelError } from '../model/index.js';
 import type { Fact, DirectTurnFact, DirectHistoryFact, DirectRequestCostFact } from './facts.js';
 import type { Turn, TurnRequest, AnswerResult, AnswerProvenance, ConversationDeps } from './types.js';

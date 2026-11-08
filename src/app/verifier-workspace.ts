@@ -5,7 +5,7 @@ import {
   UnsupportedWorkspaceError,
   verificationGit,
   type WorkspaceSnapshot,
-} from '../engine/completion-verification/workspace.js';
+} from '../session/completion-verification/workspace.js';
 import type { Workspace } from '../tools/index.js';
 
 /** Check between non-abortable filesystem reads too; never return a cancelled PASS. */

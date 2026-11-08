@@ -1,6 +1,6 @@
 /** Context planning and pure replay projection. This is not a Session or a writer. */
 import { z } from 'zod';
-import { proposalSchema, decisionSchema, reportSchema } from '../engine/completion-verification/contracts.js';
+import { proposalSchema, decisionSchema, reportSchema } from './completion-verification/contracts.js';
 import { directRolloverFactSchema, type DirectRolloverFact } from './rollover.js';
 import { directSessionRotationSchema, type DirectSessionRotationFact } from './session-rotation.js';
 import type { Fact } from './facts.js';

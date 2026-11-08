@@ -1,9 +1,11 @@
+import { bindTerm2ToolContext } from './tool-context.js';
+import type { ConversationDeps } from './types.js';
 /** Same-engine branches; only the owning Session can admit their physical events. */
-import { startNestedTurn } from '../engine/turn.js';
-import type { TurnDeps, TurnEvent, TurnHandle, TurnId, TurnResult } from '../engine/index.js';
+import { startNestedTurn } from './harness.js';
+import type { TurnEvent, TurnHandle, TurnId, TurnResult } from '../engine/index.js';
 import type { ExecutionId, NestedRunRequest, NestedRunResult, ToolRegistry, Workspace } from '../tools/index.js';
 import type { Item } from '../model/index.js';
-import type { ModelRequestCost } from '../engine/recovery-budget.js';
+import type { ModelRequestCost } from './recovery-budget.js';
 import type { DirectBranchFact, DirectTurnFact, DirectHistoryFact, Fact } from './facts.js';
 import type { DirectSubagentContext, DirectSubagentDriver } from './subagent.js';
 import { replay } from './replay.js';
@@ -26,7 +28,7 @@ export type DirectNestedAuthorizer = (
 
 /** Reuses startNestedTurn/startTurn; this adapter accepts, never drives its own model loop. */
 export function createDirectBranchDriver(options: {
-  readonly createDeps: (turnId: TurnId) => TurnDeps;
+  readonly createDeps: (turnId: TurnId) => ConversationDeps;
   readonly parentTurnId: TurnId;
   readonly rootTurnId: TurnId;
   readonly authority: DirectNestedAuthority;
@@ -61,9 +63,11 @@ export function createDirectBranchDriver(options: {
         input: request.items,
       });
       const deps = options.createDeps(turnId);
+      if (!deps.toolContext) throw new Error('A branch requires an authorized workspace and settings');
       const handle = startNestedTurn(request, {
         turnId,
-        deps: {
+        affinity: { conversationKey: turnId, cacheKey: turnId, routingKey: turnId },
+        deps: bindTerm2ToolContext({
           ...deps,
           tools: options.authority.tools,
           askOrchestrator: request.mode === 'background' ? context.askOrchestrator : undefined,
@@ -73,7 +77,7 @@ export function createDirectBranchDriver(options: {
           prepareRequest: undefined,
           normalStop: undefined,
           continuity: undefined,
-        },
+        }),
       });
       options.handles.add(handle);
       const cancel = () => handle.cancel();

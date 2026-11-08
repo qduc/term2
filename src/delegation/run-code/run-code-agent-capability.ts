@@ -4,7 +4,7 @@ import {
   resolveAgentSpecForChild,
   type AgentSpecAuthoritySnapshot,
   type AgentSpecBoundaryResult,
-} from '../../engine/agent-runtime/permission-boundary.js';
+} from '../../session/agent-runtime/permission-boundary.js';
 import type {
   NestedSubagentResult,
   SubagentCancelAcknowledgement,

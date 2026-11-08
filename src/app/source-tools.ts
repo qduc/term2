@@ -334,7 +334,7 @@ function adaptTool(definition: AnyToolDefinition, options: SourceToolOptions, ow
         applyApprovalGrant(access, { answer: grant, toolName: definition.name, rawArguments: input });
       } else if (dockerApproval(definition.name, input, options)) {
         const command = (input as { command: string }).command;
-        options.sessionAccess.grantDocker(command, context.workspace.root, 'once');
+        options.sessionAccess.grantDocker(command, context.app.workspace.root, 'once');
       }
       const callId = `direct:${randomUUID()}`;
       const invocation = invocationFor(context, options.sessionId);

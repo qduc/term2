@@ -18,6 +18,7 @@ export const GUARDS = new Set([
   'tests/guards/model-contract-retirement.test.ts',
   'tests/guards/no-manual-stdout-sync.guard.test.ts',
   'tests/guards/application-stream-boundary.test.ts',
+  'tests/guards/engine-import-boundary.test.ts',
   'tests/guards/no-raw-colors.guard.test.ts',
   'tests/guards/run-code-runtime-boundary.test.ts',
 ]);

@@ -37,6 +37,8 @@ export type SessionTrafficContext = {
   /** Stable root prompt-cache affinity; logical sessionId may rotate on rollover. */
   promptCacheKey?: string;
   providerHistoryKey?: string;
+  /** Explicit routing affinity supplied by a Model request, ahead of legacy scope markers. */
+  providerRoutingKey?: string;
   /** Root-only, serialized compaction helper: isolate history but retain the root's physical cache affinity. */
   rootContextCompaction?: true;
   mode?: string;

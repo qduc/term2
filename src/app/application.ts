@@ -100,6 +100,8 @@ export type DirectApplication = {
   contextWindow(model: ModelRef): number | null;
   /** The live settings of a session without reading its log each time; for code that runs on every render. */
   liveSettings(sessionId: string): DirectSessionDetails['settings'];
+  /** Account actually used by this session's current root model registry. */
+  sessionAccount(sessionId: string, providerId: string): string | null;
   /**
    * Save an applied interactive preference: the approval mode, sandbox, or a `/model` selection (legacy
    * model-command.ts saves it). Never startup or profile overrides.
@@ -266,6 +268,9 @@ export async function createDirectApplication(options: DirectApplicationOptions)
       } finally {
         capture.unsubscribe();
       }
+    },
+    sessionAccount(sessionId, providerId) {
+      return runtimes.get(sessionId)?.sessionAccount(providerId) ?? null;
     },
     liveSettings(sessionId) {
       return runtimes.get(sessionId)?.settings ?? null;

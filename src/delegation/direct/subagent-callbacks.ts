@@ -2,8 +2,8 @@
  * authority or lifecycle is created here; result/status presentation uses accepted
  * task snapshots and actual execution evidence supplied by the tool surface.
  */
-import type { ResolvedAgentDefinition } from '../../engine/agent-runtime/resolved-agent.js';
-import type { AgentSpecBoundaryResult } from '../../engine/agent-runtime/permission-boundary.js';
+import type { ResolvedAgentDefinition } from '../../session/agent-runtime/resolved-agent.js';
+import type { AgentSpecBoundaryResult } from '../../session/agent-runtime/permission-boundary.js';
 import type { SubagentDefinition } from '../subagents/types.js';
 import type { ForegroundSubagentApprovalCallback } from '../../tools/subagents/control-contract.js';
 
@@ -17,7 +17,7 @@ export interface ResolvedSubagentLaunch {
   continue_run_id?: string;
   foregroundChildApproval?: ForegroundSubagentApprovalCallback;
 }
-import type { AgentSpec } from '../../engine/agent-runtime/types.js';
+import type { AgentSpec } from '../../session/agent-runtime/types.js';
 import { SubagentPoolEntrySchema } from '../../config/settings/settings-schema.js';
 import type {
   SubagentResult,
@@ -27,7 +27,7 @@ import type {
   SubagentSteerAcknowledgement,
 } from '../../tools/subagents/types.js';
 import { buildDiffStat, truncateResultText } from '../subagent-result.js';
-import type { ValidationCapture } from '../subagents/tool-policy.js';
+import type { ValidationCapture } from '../subagents/validation-evidence.js';
 import { buildTurnBudgetExhaustedFinalText, formatSubagentResult } from '../../tools/subagents/utils.js';
 import type { Item } from '../../model/index.js';
 import type { NestedRunResult, SubagentTaskState, ToolContext } from '../../tools/index.js';
@@ -85,8 +85,8 @@ export function createDirectDelegationCallbacks(
   const { current, run, start } = ports;
   const controls = () => {
     const context = current();
-    if (!context.subagents) throw new Error('Session subagent controls are unavailable');
-    return context.subagents;
+    if (!context.app.subagents) throw new Error('Session subagent controls are unavailable');
+    return context.app.subagents;
   };
   const resolved = (params: ResolvedSubagentLaunch): Launch => {
     const value = params.resolvedDefinition;

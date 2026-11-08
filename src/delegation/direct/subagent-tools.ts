@@ -2,13 +2,13 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import { getCatalogModel } from '../../model/providers/model-catalog/catalog.js';
-import { resolveOutputAllocation } from '../../engine/agent-runtime/model-context-policy.js';
+import { resolveOutputAllocation } from '../../session/agent-runtime/model-context-policy.js';
 import { adaptLegacyDefinition } from '../runtime/legacy-adapter.js';
-import { resolveAgent } from '../../engine/agent-runtime/agent-resolver.js';
-import { agentSpecToConfig } from '../../engine/agent-runtime/agent-spec.js';
-import type { AgentSpec } from '../../engine/agent-runtime/types.js';
-import { createRootBudget } from '../../engine/agent-runtime/execution-budget.js';
-import type { ResolvedAgentDefinition } from '../../engine/agent-runtime/resolved-agent.js';
+import { resolveAgent } from '../../session/agent-runtime/agent-resolver.js';
+import { agentSpecToConfig } from '../../session/agent-runtime/agent-spec.js';
+import type { AgentSpec } from '../../session/agent-runtime/types.js';
+import { createRootBudget } from '../../session/agent-runtime/execution-budget.js';
+import type { ResolvedAgentDefinition } from '../../session/agent-runtime/resolved-agent.js';
 import type { ISubagentClient } from '../subagents/subagent-client-types.js';
 import { ToolApprovalPolicyRegistry } from '../../session/approval/tool-approval-policy-registry.js';
 import type { ExecutionContext } from '../../tools/execution-context.js';
@@ -17,7 +17,8 @@ import { SubagentPoolEntrySchema } from '../../config/settings/settings-schema.j
 import { SkillsService } from '../../tools/skills/skills-service.js';
 import { buildInstructions, loadRoleDefinition, resolveSubagentSearchViaShell } from '../subagents/role-loader.js';
 import { SubagentRolePoolSelector } from '../subagents/subagent-role-pool-selector.js';
-import { SubagentToolFactory, SubagentToolPolicy, type ValidationCapture } from '../subagents/tool-policy.js';
+import { SubagentToolFactory, SubagentToolPolicy } from '../subagents/tool-policy.js';
+import type { ValidationCapture } from '../subagents/validation-evidence.js';
 import type { SubagentResult, SubagentDefinition, SubagentRunHandle } from '../subagents/types.js';
 import { SUBAGENT_ROLES } from '../../tools/subagents/types.js';
 import { DirectSubagentSessions } from './subagent-sessions.js';
@@ -152,7 +153,7 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
     params: Launch,
     mode: 'foreground' | 'background',
   ): Promise<NestedRunRequest & { readonly input: string }> => {
-    const prior = sessions.prior(params, mode, current().subagents);
+    const prior = sessions.prior(params, mode, current().app.subagents);
     const planMode = resolveActiveEnforcement(settings).denials.has('filesystem-mutation');
     let definition: SubagentDefinition;
     let task: string;
@@ -253,7 +254,7 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
     const askOrchestrator =
       mode === 'background'
         ? (question: string) => {
-            const ask = current().askOrchestrator;
+            const ask = current().app.askOrchestrator;
             if (!ask) throw new Error('Session orchestrator question port is unavailable');
             return ask(question);
           }
@@ -344,7 +345,7 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
         const tool = registry.get(name);
         return tool ? counted(tool) : undefined;
       },
-      available: (context: Pick<ToolContext, 'workspace' | 'settings'>) => registry.available(context).map(counted),
+      available: (context: ToolContext['app']) => registry.available(context).map(counted),
     };
     // Preserve the source child policy: explicit role allocation wins. Legacy's background runner otherwise
     // inherits the configured setting with the catalog default clamp; its foreground runner sends none.
@@ -417,7 +418,7 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
     const name = params.name;
     if (name !== undefined && !SUBAGENT_RUN_NAME_PATTERN.test(name))
       throw new SubagentRegistryError('invalid_name', `Invalid async subagent name: ${name}`);
-    if (name !== undefined && context.subagents?.list().some((task) => task.name === name && !task.result))
+    if (name !== undefined && context.app.subagents?.list().some((task) => task.name === name && !task.result))
       throw new SubagentRegistryError('name_in_use', `Async subagent name is already active: ${name}`);
     const result = await context.runNested(request);
     if (result.outcome.kind !== 'background')

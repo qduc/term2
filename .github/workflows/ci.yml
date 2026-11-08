@@ -142,6 +142,7 @@ jobs:
       - uses: ./.github/actions/setup-tests
       - name: Typecheck production and check layer boundaries
         run: |
+          pnpm build:core
           pnpm exec tsc -p tsconfig.build.json --noEmit
           node scripts/check-layers.mjs
           node scripts/check-reachability.mjs

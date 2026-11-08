@@ -14,6 +14,13 @@ const dist = path.join(repo, 'dist');
 const inputs = buildInputs(repo, 'direct');
 // Never certify obsolete modules left behind by a source deletion, a failed build or an older layout.
 fs.rmSync(dist, { recursive: true, force: true });
+const core = spawnSync('pnpm', ['--filter', '@qduc/agent-harness-core', 'build'], {
+  cwd: repo,
+  stdio: 'inherit',
+  shell: process.platform === 'win32',
+});
+if (core.error) throw core.error;
+if (core.status !== 0) process.exit(core.status ?? 1);
 const result = spawnSync('pnpm', ['exec', 'tsc', '-p', 'tsconfig.build.json'], {
   cwd: repo,
   stdio: 'inherit',
@@ -51,6 +58,12 @@ fs.writeFileSync(path.join(dist, 'cli.d.ts'), 'export {};\n');
 const embed = spawnSync(process.execPath, ['scripts/embed-agent-wire.mjs'], { cwd: repo, stdio: 'inherit' });
 if (embed.error) throw embed.error;
 if (embed.status !== 0) process.exit(embed.status ?? 1);
+// The harness incubates locally, so ship its public package beside the emitted modules.
+const harness = path.join(repo, 'packages/agent-harness-core');
+const embeddedHarness = path.join(dist, 'node_modules/@qduc/agent-harness-core');
+fs.mkdirSync(embeddedHarness, { recursive: true });
+fs.cpSync(path.join(harness, 'dist'), path.join(embeddedHarness, 'dist'), { recursive: true });
+fs.copyFileSync(path.join(harness, 'package.json'), path.join(embeddedHarness, 'package.json'));
 // After the embed: the gateway's @qduc/agent-wire import resolves to that copy.
 await bundleEntry(dist);
 

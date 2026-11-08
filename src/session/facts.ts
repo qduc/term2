@@ -20,7 +20,7 @@ import type { DirectContextFact } from './context.js';
 import type { DirectNotificationFact } from './notifications.js';
 import type { DirectCommandFact } from './command-types.js';
 import type { BudgetDecision } from '../engine/types.js';
-import type { ModelRequestCost, RunBudgetEvent, RunBudgetSnapshot } from '../engine/recovery-budget.js';
+import type { ModelRequestCost, RunBudgetEvent, RunBudgetSnapshot } from './recovery-budget.js';
 import type { StopReason } from '../model/index.js';
 import type { ToolResult } from '../tools/index.js';
 import type { DirectBinding, DirectOrigin } from './facade-types.js';

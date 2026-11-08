@@ -15,7 +15,9 @@ points are:
   headless run, ACP or the server; `pnpm build` emits it to
   `dist/src/app/cli.js`, which the `term2` bin (`dist/cli.js`) imports.
 - `src/app/application.ts` wires the layers together; `src/session/`
-  owns a conversation's append-only log and `src/engine/` runs the turn.
+  owns a conversation's append-only log and Term2 host policy;
+  `packages/agent-harness-core/src/engine/` runs the turn. `src/engine/` contains
+  only compatibility contracts and history/continuity helpers.
 - `src/session/prompts/prompt-constructor.ts` assembles prompts; `prompt-profiles.ts`
   maps models to base profiles. Prompts and tool descriptions are product behavior.
 

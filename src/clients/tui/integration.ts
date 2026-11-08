@@ -309,11 +309,11 @@ export interface TuiProviderMenu {
   isDisabled(sessionId: string, providerId: string): boolean;
   setDisabled(sessionId: string, providerId: string, disabled: boolean): void;
   isOAuthAccountProvider(providerId: string): boolean;
-  listAccounts(providerId: string): MenuOAuthAccount[];
+  listAccounts(sessionId: string, providerId: string): MenuOAuthAccount[];
   loginCommand(providerId: string): string;
   removeAccount(providerId: string, accountId: string): boolean;
   setActiveAccount(providerId: string, accountId: string): boolean;
-  sessionAccount(providerId: string): string | null;
+  sessionAccount(sessionId: string, providerId: string): string | null;
 }
 
 export interface TuiIntegration {

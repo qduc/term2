@@ -60,7 +60,6 @@ import {
   removeOAuthAccount,
   setActiveOAuthAccount,
 } from '../model/providers/oauth-accounts.js';
-import { getSessionAccount } from '../model/providers/oauth-session-account.js';
 import { PROVIDER_PRESETS } from '../model/providers/provider-presets.js';
 import { getAllProviders, getProvider, getProviderIds } from '../model/providers/index.js';
 import { filterModels } from '../model/model-service.js';
@@ -98,7 +97,7 @@ import { displaySessionId } from '../protocol/session-id.js';
 const RECENT_CONVERSATIONS = 10;
 
 type MenuOptions = {
-  readonly app: Pick<DirectApplication, 'liveSettings' | 'skills' | 'listWorkspaceSessions'>;
+  readonly app: Pick<DirectApplication, 'liveSettings' | 'skills' | 'listWorkspaceSessions' | 'sessionAccount'>;
   /** The settings file; favorite, nickname and provider edits are saved there as legacy did. */
   readonly persistentSettings: ISettingsService;
   readonly logger: LoggingService;
@@ -130,7 +129,11 @@ function providerSettings(persistent: ISettingsService, live: ISettingsService |
   };
 }
 
-function createProviderMenu(persistent: ISettingsService, live: (sessionId: string) => ISettingsService | null) {
+function createProviderMenu(
+  persistent: ISettingsService,
+  live: (sessionId: string) => ISettingsService | null,
+  sessionAccount: DirectApplication['sessionAccount'],
+) {
   const settings = (sessionId: string) => providerSettings(persistent, live(sessionId));
   const menu: TuiProviderMenu = {
     types: PROVIDER_TYPES,
@@ -153,11 +156,12 @@ function createProviderMenu(persistent: ISettingsService, live: (sessionId: stri
     isDisabled: (sessionId, id) => isProviderDisabled(settings(sessionId), id),
     setDisabled: (sessionId, id, disabled) => setProviderDisabled(settings(sessionId), id, disabled),
     isOAuthAccountProvider,
-    listAccounts: (id) => (isOAuthAccountProvider(id) ? listOAuthAccounts(id) : []),
+    listAccounts: (sessionId, id) =>
+      isOAuthAccountProvider(id) ? listOAuthAccounts(id, sessionAccount(sessionId, id)) : [],
     loginCommand: (id) => (isOAuthAccountProvider(id) ? oauthLoginCommand(id) : ''),
     removeAccount: (id, account) => isOAuthAccountProvider(id) && removeOAuthAccount(id, account),
     setActiveAccount: (id, account) => isOAuthAccountProvider(id) && setActiveOAuthAccount(id, account),
-    sessionAccount: (id) => getSessionAccount(id),
+    sessionAccount,
   };
   return menu;
 }
@@ -287,7 +291,11 @@ export function createDirectTuiMenus(options: MenuOptions): TuiMenus {
         return service;
       },
     },
-    providers: createProviderMenu(persistentSettings, (sessionId) => app.liveSettings(sessionId) ?? null),
+    providers: createProviderMenu(
+      persistentSettings,
+      (sessionId) => app.liveSettings(sessionId) ?? null,
+      (sessionId, providerId) => app.sessionAccount(sessionId, providerId),
+    ),
     models: {
       settings(sessionId) {
         const live = options.app.liveSettings(sessionId);

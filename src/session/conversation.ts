@@ -1,3 +1,4 @@
+import { bindTerm2ToolContext } from './tool-context.js';
 import { abortConversation } from './conversation-abort.js';
 import { ASK_USER_NO_ANSWER_RESULT, QuestionCancelNotice } from './conversation-question-cancel.js';
 import { ConversationBackground } from './conversation-background.js';
@@ -13,7 +14,7 @@ import { prepareConversationNotice } from './conversation-notice.js';
  */
 import { randomUUID } from 'node:crypto';
 import type { TurnId } from '../engine/index.js';
-import { startCompaction, startTurn } from '../engine/index.js';
+import { startCompaction, startTurn } from './harness.js';
 import type { Item, ModelError } from '../model/index.js';
 import { ConversationGeneration, type PreparedConversationGeneration } from './conversation-generation.js';
 import { bindDirectCapabilities } from './capabilities.js';
@@ -286,7 +287,7 @@ function conversation(
           ...(snapshot.compactionState ? { compactionState: snapshot.compactionState } : {}),
           newItems: sentInput,
         },
-        {
+        bindTerm2ToolContext({
           ...turnDeps,
           onTurnBoundary: ({ turnId }) => tasks!.releaseParent(turnId),
           budget: runBudgets.open(turnId, undefined, turnDeps.budget),
@@ -302,7 +303,7 @@ function conversation(
           runNested,
           subagents: background!.subagentPort,
           shellTasks: (parent) => background!.shellTaskPort(parent, request.submission?.origin),
-        },
+        }),
       );
       const turn = ownConversationTurn(turnId, handle, journal, {
         requestCost: (record) => runBudgets.costFact(turnId, record),

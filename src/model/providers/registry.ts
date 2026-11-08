@@ -12,6 +12,8 @@ export interface ProviderDeps {
   /** Abort signal for provider discovery or model preparation. */
   signal?: AbortSignal;
   onRetry?: (info?: ProviderRetryInfo) => void;
+  /** Instance-owned physical dispatch observer; never serialized. */
+  onDispatched?: () => void;
   /** Per-client retry budget for direct streamed models. */
   retryAttempts?: number;
   /** Root-session-only observational seam. Omitted for all other clients. */

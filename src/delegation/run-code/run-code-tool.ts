@@ -6,7 +6,7 @@ import type { ToolApprovalPolicyRegistry } from '../../session/approval/tool-app
 import type { NestedApprovalOwner } from '../../session/approval/nested-approval-owner.js';
 import type { SessionAccessState } from '../../session/session/session-access-state.js';
 import type { NestedToolCompatibilityState } from '../../session/session/nested-tool-compatibility-state.js';
-import type { AgentSpecAuthoritySnapshot } from '../../engine/agent-runtime/permission-boundary.js';
+import type { AgentSpecAuthoritySnapshot } from '../../session/agent-runtime/permission-boundary.js';
 import { createRunCodeToolDefinition as createDefinition } from '../../tools/system/run-code/run-code.js';
 import { RUN_CODE_LIMITS } from '../../tools/system/run-code/script-surface.js';
 import { createRunCodeRuntime } from './run-code-runtime.js';

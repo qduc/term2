@@ -1,3 +1,4 @@
+import * as oauthAccounts from '../model/providers/oauth-session-account.js';
 /** Assembles one Session's runtime from the real tool surface. Runs no provider and no tool. */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { isDeepStrictEqual } from 'node:util';
@@ -18,11 +19,11 @@ import type { DirectBinding } from '../session/facade-types.js';
 import type { DirectPreparedConfiguration } from '../session/configuration.js';
 import type { DirectRolloverPreparer } from '../session/session-rotation.js';
 import type { DirectVerificationOperations } from '../session/goal-verification.js';
-import { DEFAULT_BUDGETS } from '../engine/completion-verification/contracts.js';
+import { DEFAULT_BUDGETS } from '../session/completion-verification/contracts.js';
 import type { DirectConversationRuntime, DirectRuntimeContext } from '../session/store.js';
 import { createToolSurface } from './tool-surface.js';
 import type { DirectHookRuntime } from './application-hooks.js';
-import { withSessionScope, type SessionScope } from './application-models.js';
+import { withSessionScope, createSessionScope, type SessionScope } from './application-models.js';
 import { createNestedAuthorizer } from './application-nested.js';
 import { prepareSessionRollover } from './application-rollover.js';
 import { createDirectConfigMemoryBinding } from './config-memory.js';
@@ -65,6 +66,7 @@ export type DirectRuntimeOptions = {
 
 /** What the app holds for one open session. */
 export type DirectRuntimeRecord = {
+  readonly sessionAccount: (providerId: string) => string | null;
   readonly surface: AgentSurface;
   readonly scope: SessionScope;
   /** The session's own settings, and the one place a change is written. */
@@ -190,13 +192,9 @@ export function createDirectRuntimes(
 ): DirectRuntimes {
   const launchConfiguration = createLaunchConfigurationScope(options.authorizeModel);
   const records = new Map<string, DirectRuntimeRecord>();
+  const accountRefreshes = new oauthAccounts.OAuthAccountRefreshCoordinator();
   const { logger, sessionContext } = options.selection;
   const { authorizeModel } = launchConfiguration;
-
-  const scopeFor = (id: string, startedAt: string): SessionScope => {
-    const context = { sessionId: id, sessionStartedAt: startedAt, promptCacheKey: id };
-    return (operation) => sessionContext.runWithContext(context, operation);
-  };
 
   return {
     authorizeModel,
@@ -212,7 +210,9 @@ export function createDirectRuntimes(
         throw new Error('resume conversation belongs to a different SSH workspace');
       }
       const settings = sessionSettings(options, context);
-      const selection = { settings, logger, sessionContext };
+      const sessionAccountStore = oauthAccounts.createSessionAccountStore(accountRefreshes);
+      const selection = { settings, logger, sessionContext, sessionAccountStore };
+      const providerModels = createProviderRegistry(selection);
       const trimConfig = {
         maxCharacters: settings.get('shell.maxOutputChars'),
         maxLines: settings.get('shell.maxOutputLines'),
@@ -250,12 +250,13 @@ export function createDirectRuntimes(
         selection,
         borrowDirectConfigSurfaceOptions({
           ...surfaceOptions,
+          affinity: { conversationKey: context.id, cacheKey: context.id },
           includeMemory: false,
           promptMemoryEnabled,
           workspace: context.workspace,
         }),
       );
-      const scope = scopeFor(context.id, new Date().toISOString());
+      const scope = createSessionScope(sessionContext, context.id, new Date().toISOString());
       const profile = getProfileMetadata(String(settings.get('app.activeProfileId')));
       const { notice, profileName: _profileName, runtime, decideInteraction: _decide, ...request } = surface;
       let tasks: DirectBackgroundTasks | undefined;
@@ -265,12 +266,14 @@ export function createDirectRuntimes(
         profileId: string,
         rebuilt: boolean,
         configurationSettings: ProfileSelection['settings'],
+        sessionAccount: (providerId: string) => string | null = providerModels.sessionAccount,
       ): void => {
         records.set(context.id, {
           surface: published,
           scope,
           settings,
           configurationSettings,
+          sessionAccount,
           profileId,
           rebuilt,
           tasks: () => tasks,
@@ -278,7 +281,13 @@ export function createDirectRuntimes(
       };
       publish(surface, profile.activeProfileId, false, initialSettings);
       options.onSurface?.(surface, profile);
-      const models = withGenerationGuard(withSessionScope(createProviderRegistry(selection), scope), selection);
+      const models = withGenerationGuard(
+        withSessionScope(providerModels, scope, {
+          conversationKey: context.id,
+          cacheKey: context.id,
+        }),
+        selection,
+      );
       const verification = verificationOperations(selection, models, context);
       const interactive = surfaceOptions.interactive === true;
       const memoryBinding = createDirectConfigMemoryBinding();
@@ -312,6 +321,7 @@ export function createDirectRuntimes(
           context: installed.context,
           selection,
           scope,
+          sessionAccountStore,
           surfaceOptions,
           configuration,
           capabilities: bound.capabilities,
@@ -366,7 +376,7 @@ export function createDirectRuntimes(
               bound: { port: bound.port, capabilities },
             };
             generations.push(dispose);
-            publish(generation.surface, nextProfile.id, true, generation.settings);
+            publish(generation.surface, nextProfile.id, true, generation.settings, generation.sessionAccount);
             queueMicrotask(() => {
               try {
                 // Generations are read-only copies, so the next one has to start from this. A changed value is
@@ -446,7 +456,7 @@ export function createDirectRuntimes(
           tools: runtime.tools,
           toolContext: runtime.toolContext,
           maxParallelToolCalls: runtime.maxParallelToolCalls,
-          ...runPolicy(settings, context.id, context.model),
+          ...runPolicy(settings, context.id, context.model, providerModels.sessionAccount),
           context: contextFactory,
           authorizeNested: createNestedAuthorizer(runtime.resolveNestedAuthority),
           rollover,

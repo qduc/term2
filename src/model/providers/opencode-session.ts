@@ -68,6 +68,7 @@ function resolveOpencodeSessionId(options: {
   fallbackSessionIdOverride?: string;
 }): string | undefined {
   const context = options.sessionContextService?.getContext();
+  if (context?.providerRoutingKey) return generateOpencodeSessionId(context.providerRoutingKey);
 
   // Checked ahead of the override: the override is conversation-scoped by
   // construction, so honouring it here would put nested runs back in the

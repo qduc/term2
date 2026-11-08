@@ -19,6 +19,11 @@ owns source-definition adaptation, local execution-context construction, and
 the bridge from physical invocation to native tool context; these are injected
 ports, not imports back into app.
 
+Filesystem scope checks use the execution context's workspace root, or the
+active session root when no execution context is available. The resolver takes
+that root explicitly and resolves symlinks before comparing paths, so concurrent
+child policies do not share a mutable workspace root.
+
 Session owns durable branch/task admission, IDs, accepted history, approvals,
 cancellation and completion delivery. `DirectSubagentSessions` retains the
 compatibility continuation/shared-role history policy over those accepted
@@ -41,6 +46,14 @@ The `run_agent_workflow` leaf receives only its `evaluate` callback. Interactive
 approval is still unavailable inside workflows; denied capabilities reject
 rather than pausing. Script/workflow time, admission, concurrency, output and
 console limits are unchanged by the ownership move.
+
+## Shell validation evidence
+
+`subagents/validation-evidence.ts` owns validation-command recognition and the
+last captured shell result. It reads exit status only from the shell tool's first
+terminal status line and bounds the retained output excerpt. Tool policy supplies
+the actual command result and mutable capture holder; it keeps execution,
+approval, scope checks, and file-change attribution.
 
 ## Shared result policy
 

@@ -1,4 +1,4 @@
-import { notifyProviderRequestDispatched } from './request-dispatch.js';
+import { buildCodexWebSocketIdentity, type CodexWebSocketIdentity } from './runtime/codex-identity.js';
 import { ResponseToolArgumentScopes } from './tool-argument-stream-scope.js';
 import { randomUUID } from 'node:crypto';
 import { ResponsesWS } from 'openai/resources/responses/ws';
@@ -262,7 +262,7 @@ export class CodexResponsesTransport {
           if (request.signal?.aborted) return;
           const readyState = (socket as any).socket?.readyState;
           socket.send(requestEvent);
-          notifyProviderRequestDispatched();
+          request.onDispatched?.();
           recordWebSocketDispatch(request, readyState === WEBSOCKET_OPEN ? 'flushed' : 'unknown');
         };
         if ((socket as any).socket?.readyState === WEBSOCKET_CONNECTING) {
@@ -270,7 +270,7 @@ export class CodexResponsesTransport {
         } else {
           dispatchRequestEvent();
         }
-        const sessionState = this.options.contextCompactionSessionState;
+        const sessionState = request.contextCompactionState ?? this.options.contextCompactionSessionState;
         const sessions = this.#sessions;
         return (async function* () {
           let terminalReceived = false;
@@ -347,7 +347,11 @@ export class CodexResponsesTransport {
         ...(request.providerOptions?.extraHeaders ? { headers: request.providerOptions.extraHeaders } : {}),
       });
     } catch (error) {
-      markContextCompactionFailure(error, request, this.options.contextCompactionSessionState);
+      markContextCompactionFailure(
+        error,
+        request,
+        request.contextCompactionState ?? this.options.contextCompactionSessionState,
+      );
       throw error;
     }
   }
@@ -1238,16 +1242,6 @@ type PreparedCodexRequest = {
   request: any;
 };
 
-type CodexWebSocketIdentity = {
-  sessionId: string;
-  threadId: string;
-  turnId: string;
-  windowId: string;
-  turnMetadata: string;
-  clientMetadata: Record<string, string>;
-  headers: Record<string, string>;
-};
-
 export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
   private readonly codexPreviousResponseIds = new Map<string, string>();
   private readonly codexConsumedToolResultCallIdsByResponseId = new Map<string, Set<string>>();
@@ -1868,63 +1862,17 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
     return trafficContext?.providerHistoryKey ?? trafficContext?.sessionId ?? trafficContext?.traceId ?? null;
   }
 
-  #buildCodexWebSocketIdentity(requestId: string, request: any): CodexWebSocketIdentity | undefined {
-    const installationId = this.tokenManager.getInstallationId?.();
-    if (typeof installationId !== 'string' || installationId.length === 0) {
-      return undefined;
-    }
-
-    const sessionContext = this.sessionContextService?.getContext();
-    const logicalSessionId = sessionContext?.providerHistoryKey ?? sessionContext?.sessionId ?? requestId;
-    // A nested run must not reuse a sibling's socket: chained responses may
-    // be rejected when their IDs are continued on a different connection.
-    // Root rollovers still retain their physical cache affinity.
-    const cacheAffinity = request.codex?.promptCacheKey ?? sessionContext?.promptCacheKey ?? logicalSessionId;
-    const transportSessionId =
-      sessionContext?.providerHistoryKey &&
-      sessionContext.providerHistoryKey !== sessionContext.sessionId &&
-      !sessionContext.rootContextCompaction
-        ? logicalSessionId
-        : cacheAffinity;
-    const threadId = logicalSessionId;
-    const hasPreviousResponseId =
-      typeof request?.previousResponseId === 'string' && request.previousResponseId.length > 0;
-    const turnId = hasPreviousResponseId
-      ? this.codexTurnIdsBySession.get(logicalSessionId) ?? randomUUID()
-      : randomUUID();
-    this.codexTurnIdsBySession.set(logicalSessionId, turnId);
-    const windowId = `${threadId}:1`;
-    const turnMetadata = JSON.stringify({
-      installation_id: installationId,
-      session_id: logicalSessionId,
-      thread_id: threadId,
-      turn_id: turnId,
-      window_id: windowId,
-      request_kind: 'turn',
+  #buildCodexWebSocketIdentity(
+    requestId: string,
+    request: StreamedModelTurnRequest,
+  ): CodexWebSocketIdentity | undefined {
+    return buildCodexWebSocketIdentity({
+      installationId: this.tokenManager.getInstallationId?.(),
+      sessionContext: this.sessionContextService?.getContext(),
+      requestId,
+      request,
+      turnIds: this.codexTurnIdsBySession,
     });
-
-    return {
-      sessionId: logicalSessionId,
-      threadId,
-      turnId,
-      windowId,
-      turnMetadata,
-      clientMetadata: {
-        'x-codex-installation-id': installationId,
-        session_id: logicalSessionId,
-        thread_id: threadId,
-        'x-codex-window-id': windowId,
-        turn_id: turnId,
-        'x-codex-turn-metadata': turnMetadata,
-      },
-      headers: {
-        'x-client-request-id': transportSessionId,
-        'session-id': transportSessionId,
-        'thread-id': transportSessionId,
-        'x-codex-window-id': transportSessionId + ':1',
-        'x-codex-turn-metadata': turnMetadata,
-      },
-    };
   }
 
   #withoutCodexServerHistory(request: any): any {
@@ -2121,7 +2069,7 @@ export class CodexResponsesWSModel extends OpenAIResponsesWSModel {
       ? this.#getCodexServerHistoryKey() ?? undefined
       : undefined;
 
-    const accessToken = await this.tokenManager.getOrRefreshAccessToken();
+    const accessToken = await this.tokenManager.getOrRefreshAccessToken(request.signal);
     const accountId = this.tokenManager.getAccountId();
 
     const codexIdentity = this.#buildCodexWebSocketIdentity(requestId, request);

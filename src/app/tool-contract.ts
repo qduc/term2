@@ -1,15 +1,22 @@
+import type { ISessionContextService } from '../shared/service-interfaces.js';
+import type { ToolContextSeed } from '../tools/index.js';
 /** Shared assembly result owned by the direct app, implemented in tool-surface.ts. */
 import path from 'node:path';
 import { ExecutionContext } from '../tools/execution-context.js';
-import type { InteractionDecision, InteractionRequest, ToolContextSeed } from '../engine/index.js';
-import type { Item, ReasoningEffort, ToolSpec } from '../model/index.js';
+import type { InteractionDecision, InteractionRequest } from '../engine/index.js';
+import type { Item, ReasoningEffort, ToolSpec, ModelAffinity } from '../model/index.js';
 import type { DirectRemoteWorkspace } from './remote.js';
 import type { LoggingService } from '../session/logging/logging-service.js';
 import type { ProviderRegistryDeps } from '../model/provider.js';
 import type { ToolRegistry, Workspace } from '../tools/index.js';
 /** App settings generations share the concrete logger whose configuration they update. */
-export type ProfileSelection = ProviderRegistryDeps & { readonly logger: LoggingService };
+export type ProfileSelection = ProviderRegistryDeps & {
+  readonly logger: LoggingService;
+  readonly sessionContext: ISessionContextService;
+};
 export type ToolSurfaceOptions = {
+  /** Explicit identity for this surface's root and advisory requests. */
+  readonly affinity?: ModelAffinity;
   /** Runtime-only source output limit, owned by this session. */
   readonly trimConfig?: () => { maxCharacters: number; maxLines: number };
   /** App-owned local manager, shared across sessions/configured generations.

@@ -22,6 +22,7 @@ import type { DurableGoal } from '../session/goal.js';
 import type { DirectBinding, DirectSession, DirectSessionState } from '../session/facade-types.js';
 import { listDirectResumeSessions } from '../session/resume-list.js';
 import { nativeIndexer } from './native-catalogue.js';
+import type { AgentSurface } from './tool-contract.js';
 import type { InteractionDecision } from '../engine/index.js';
 import type { ModelRef } from '../model/index.js';
 import type { Workspace } from '../tools/index.js';
@@ -79,6 +80,11 @@ export type DirectApplication = {
   readonly host: DirectHost;
   readonly principal: Principal;
   /** Non-interactive policy for one attached session; its answer still goes through the wire. */
+  reviewShellApproval(
+    sessionId: string,
+    requestId: string,
+    signal: AbortSignal,
+  ): ReturnType<NonNullable<AgentSurface['reviewShellApproval']>>;
   headlessPolicy(sessionId: string, autoApprove: boolean, signal: AbortSignal): HeadlessApprovalDecider;
   /** Caller authorizes logical ownership before requesting current selection. */
   sessionConfiguration(sessionId: string): Promise<DirectSessionConfiguration>;
@@ -192,6 +198,17 @@ export async function createDirectApplication(options: DirectApplicationOptions)
       // Only the app's real file owner can attest that a preference was saved.
       if (!(selection.settings instanceof SettingsService)) return { status: 'not-persisted', reason: 'disabled' };
       return selection.settings.setDynamic(key, settings.getDynamic(key));
+    },
+    async reviewShellApproval(sessionId, requestId, signal) {
+      if (signal.aborted || !runtimes.get(sessionId)) return;
+      const session = await store.open(sessionId);
+      const runtime = runtimes.get(session.id);
+      if (signal.aborted || !runtime?.surface.reviewShellApproval) return;
+      const { state, unsubscribe } = session.capture(() => undefined);
+      unsubscribe();
+      const request = state.pendingInteractions.find((pending) => pending.requestId === requestId);
+      if (!request || request.turnId !== state.activeTurnId || request.parentExecutionId) return;
+      return runtime.scope(() => runtime.surface.reviewShellApproval!(request, session.acceptedHistory(), signal));
     },
     headlessPolicy: (sessionId, autoApprove, signal) =>
       headlessPolicy({ store, runtimes, directory: options.conversationsDir, sessionId, autoApprove, signal }),

@@ -1,7 +1,7 @@
 /**
  * `term2 acp` on the direct host. stdout is the protocol channel and nothing else
- * writes to it. Security posture is fixed here, not configured: no auto-approval,
- * no unsandboxed escape, and approvals go through `session/request_permission`.
+ * writes to it. Shell isolation is mandatory and ACP sessions start with
+ * interactive permission requests for tools that require approval.
  */
 import fs from 'node:fs';
 import { getAllProviders, getProviderIds } from '../model/providers/index.js';
@@ -93,6 +93,7 @@ export async function launchAcp(request: AcpRequest): Promise<number> {
         resolveProviderCredentials(selection.settings, provider.id).configured,
     );
   const sessions = createAcpSessions();
+  let protocolVersion: 1 | 2 = 2;
   const app = await createDirectApplication({
     conversationsDir,
     selection,
@@ -100,6 +101,7 @@ export async function launchAcp(request: AcpRequest): Promise<number> {
       autoApprove: false,
       interactive: true,
       allowUnsandboxed: false,
+      confirmRiskyShell: protocolVersion === 1,
       mcp: sessions.surface(sessionId),
     }),
     mcpCatalog: sessions,
@@ -171,12 +173,25 @@ export async function launchAcp(request: AcpRequest): Promise<number> {
       logger,
       models,
       sessions,
+      reviewApproval: (sessionId, interaction, signal) =>
+        app.reviewShellApproval(sessionId, interaction.requestId, signal),
       async configuration(sessionId) {
         const state = await app.sessionConfiguration(sessionId);
         return { model: state.model, reasoning: state.reasoningEffort };
       },
     });
-    exitCode = await serveAcp({ backend, logger, version: installationVersion }, io, shutdown.signal);
+    exitCode = await serveAcp(
+      {
+        backend,
+        logger,
+        version: installationVersion,
+        onProtocolVersion: (version) => {
+          protocolVersion = version;
+        },
+      },
+      io,
+      shutdown.signal,
+    );
   } finally {
     shutdown.abort();
     process.removeListener('SIGINT', onSignal);

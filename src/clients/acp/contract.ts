@@ -1,6 +1,6 @@
 import type * as acp from '@agentclientprotocol/sdk/experimental/v2';
 import type { SessionConfigOption, SetSessionConfigOptionRequest } from '@agentclientprotocol/sdk';
-import type { WireModel, WireConfigureRequest } from '../../protocol/wire.js';
+import type { WireModel, WireConfigureRequest, WireInteraction } from '../../protocol/wire.js';
 import type { WireAnswerProvenance, WireDecision } from '../../protocol/wire.js';
 import type { DirectHost, DirectConnection, Principal, WorkspaceGrant } from '../../host/in-process-direct-types.js';
 import type { McpServer } from '@agentclientprotocol/sdk';
@@ -42,7 +42,15 @@ export type AcpLogger = {
   error(message: string, fields: Readonly<Record<string, unknown>>): void;
 };
 
+export type AcpApprovalReview = { readonly approved: boolean; readonly description: string };
+
 export type BackendOptions = {
+  /** Review eligible native shell requests using accepted conversation context. */
+  readonly reviewApproval?: (
+    sessionId: string,
+    interaction: WireInteraction,
+    signal: AbortSignal,
+  ) => Promise<AcpApprovalReview | undefined>;
   readonly host: DirectHost;
   readonly principal: Principal;
   readonly workspaces: AcpWorkspaces;

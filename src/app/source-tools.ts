@@ -47,6 +47,7 @@ type SourceToolOptions = {
   readonly sessionAccess: SessionAccessState;
   readonly sessionId: string;
   readonly checkInterceptors?: (name: string, input: unknown) => Promise<string | null>;
+  readonly confirmShell?: (command: string) => boolean;
   readonly withAnswer: <T>(answer: string, operation: () => Promise<T>) => Promise<T>;
 };
 
@@ -138,7 +139,15 @@ async function approvalFor(
   // response's other approvals; execute() then reads that answer.
   if (definition.name === 'ask_user') return { kind: 'question', request: questionRequest(definition, input) };
   if (
-    policy.kind === 'auto_approve' ||
+    (policy.kind === 'auto_approve' &&
+      !(
+        definition.name === 'shell' &&
+        input &&
+        typeof input === 'object' &&
+        'command' in input &&
+        typeof input.command === 'string' &&
+        options.confirmShell?.(input.command)
+      )) ||
     shouldBypassToolApproval(definition.name, options.settings.get('shell.autoApproveMode'))
   ) {
     // Legacy stages every call whose definition needs approval, even when policy then approves it.

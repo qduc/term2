@@ -64,7 +64,19 @@ export function createAcpV1Agent(options: AcpAgentOptions): acp.AgentApp {
           }),
         );
     }, 0);
-    return { configOptions };
+    const mode = configOptions.find((option) => option.id === 'mode');
+    const modes =
+      mode?.type === 'select'
+        ? {
+            currentModeId: mode.currentValue,
+            availableModes: mode.options.flatMap((option) => {
+              if (!('value' in option)) return [];
+              const { value, ...details } = option;
+              return [{ id: value, ...details }];
+            }),
+          }
+        : undefined;
+    return { configOptions, ...(modes ? { modes } : {}) };
   };
   const extensions = (params: { mcpServers?: unknown[]; additionalDirectories?: unknown[] }): void => {
     if (params.additionalDirectories?.length)
@@ -111,7 +123,7 @@ export function createAcpV1Agent(options: AcpAgentOptions): acp.AgentApp {
     clients.set(params.sessionId, adapted);
     return await configuration(params.sessionId, adapted, client);
   });
-  onRequest(acp.methods.agent.session.setConfigOption, async ({ params }) => {
+  const setConfigOption = async (params: acp.SetSessionConfigOptionRequest) => {
     if (!clients.has(params.sessionId)) throw new acp.RequestError(-32001, `Session not found: ${params.sessionId}`);
     if (!options.backend.setConfigOption) throw acp.RequestError.methodNotFound('session/set_config_option');
     configurationVersions.set(params.sessionId, (configurationVersions.get(params.sessionId) ?? 0) + 1);
@@ -122,6 +134,28 @@ export function createAcpV1Agent(options: AcpAgentOptions): acp.AgentApp {
     } finally {
       if (configurationChanges.get(params.sessionId) === change) configurationChanges.delete(params.sessionId);
     }
+  };
+  onRequest(acp.methods.agent.session.setConfigOption, async ({ params, client }) => {
+    const result = await setConfigOption(params);
+    if (params.configId === 'mode' && typeof params.value === 'string') {
+      await client.notify(acp.methods.client.session.update, {
+        sessionId: params.sessionId,
+        update: { sessionUpdate: 'current_mode_update', currentModeId: params.value },
+      });
+    }
+    return result;
+  });
+  onRequest(acp.methods.agent.session.setMode, async ({ params, client }) => {
+    const { configOptions } = await setConfigOption({
+      sessionId: params.sessionId,
+      configId: 'mode',
+      value: params.modeId,
+    });
+    await client.notify(acp.methods.client.session.update, {
+      sessionId: params.sessionId,
+      update: { sessionUpdate: 'config_option_update', configOptions },
+    });
+    return {};
   });
   onRequest(acp.methods.agent.session.prompt, async ({ params }) => {
     if (active.has(params.sessionId))

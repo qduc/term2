@@ -32,6 +32,7 @@ export async function requestPermission(input: {
   readonly interaction: WireInteraction;
   readonly client: AcpClient;
   readonly signal: AbortSignal;
+  readonly advisory?: string;
 }): Promise<AcpAnswer> {
   const interaction = input.interaction;
   if (interaction.kind === 'question') return await requestQuestion(input);
@@ -45,7 +46,7 @@ export async function requestPermission(input: {
       {
         sessionId: input.sessionId,
         title: interaction.toolName,
-        description: interaction.detail ?? interaction.summary,
+        description: [interaction.detail ?? interaction.summary, input.advisory].filter(Boolean).join('\n\n'),
         subject: {
           type: 'tool_call',
           toolCall: {

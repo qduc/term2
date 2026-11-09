@@ -457,6 +457,7 @@ export async function evaluateShellAutoApprovalAdvisories({
   logger,
   sessionContextService,
   sessionAccess,
+  enabled = settingsService?.get('shell.autoApproveMode') !== 'off',
   throwOnError = false,
   retryOptions,
   decisionShadow = evaluateDecisionShadow,
@@ -470,6 +471,7 @@ export async function evaluateShellAutoApprovalAdvisories({
   logger: ILoggingService;
   sessionContextService: ISessionContextService;
   sessionAccess?: SessionAccessState;
+  enabled?: boolean;
   throwOnError?: boolean;
   retryOptions?: {
     sleep?: (ms: number) => Promise<void>;
@@ -479,10 +481,7 @@ export async function evaluateShellAutoApprovalAdvisories({
 }): Promise<Map<string, ShellAutoApprovalAdvisory>> {
   void retryOptions;
   const out = new Map<string, ShellAutoApprovalAdvisory>();
-  if (!settingsService) return out;
-
-  const mode = settingsService.get('shell.autoApproveMode');
-  if (mode === 'off') return out;
+  if (!settingsService || !enabled) return out;
 
   const { model: autoApproveModel, provider: autoApproveProvider } = resolveAncillaryModelTier(
     'chore',

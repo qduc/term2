@@ -161,13 +161,13 @@ export class ShellAutoApprovalResolver {
     return sandboxEnabled && (mode === 'advisory' || mode === 'auto');
   }
 
-  shouldAutoApprove(advisory: LLMAdvisory | undefined): boolean {
-    if (this.getAutoApproveMode() === 'always') {
+  shouldAutoApprove(advisory: LLMAdvisory | undefined, mode = this.getAutoApproveMode()): boolean {
+    if (mode === 'always') {
       // YOLO: bypass the LLM gate entirely and approve every shell command.
       return true;
     }
     return (
-      this.getAutoApproveMode() === 'auto' &&
+      mode === 'auto' &&
       advisory?.approved === true &&
       advisory.source === 'llm' &&
       (advisory.riskLevel === 'low' || advisory.riskLevel === 'medium') &&

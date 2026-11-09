@@ -34,6 +34,8 @@ async function fixture(
     holdCatalog?: boolean;
     holdReply?: boolean;
     shell?: boolean;
+    shellInput?: { command: string; sandbox?: 'default' | 'unsandboxed' };
+    review?: string;
     runCode?: string;
     permission?: (params: acp.RequestPermissionRequest) => Promise<acp.RequestPermissionResponse>;
   } = {},
@@ -62,9 +64,13 @@ async function fixture(
     let raw = '';
     req.on('data', (chunk) => (raw += String(chunk)));
     req.on('end', async () => {
-      requests.push(JSON.parse(raw));
+      const request = JSON.parse(raw);
+      requests.push(request);
+      const reviewing = JSON.stringify(request.messages).includes('riskLevel');
       await replyReady;
-      const call = options.runCode ? requests.length % 2 === 1 : options.shell && requests.length === 1;
+      const call = options.runCode
+        ? requests.length % 2 === 1
+        : (options.shell || options.shellInput) && requests.length === 1;
       const delta = call
         ? {
             tool_calls: [
@@ -77,13 +83,13 @@ async function fixture(
                   arguments: JSON.stringify(
                     options.runCode
                       ? { code: options.runCode, description: 'Call fixture MCP' }
-                      : { command: 'printf acp-tool-visible' },
+                      : options.shellInput ?? { command: 'printf acp-tool-visible' },
                   ),
                 },
               },
             ],
           }
-        : { content: 'ACP fixture reply' };
+        : { content: reviewing ? options.review ?? 'ACP fixture reply' : 'ACP fixture reply' };
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       res.end(
         [
@@ -622,6 +628,7 @@ describe('ACP v1 built CLI compatibility for Air', () => {
             options: [{ value: 'acpfixture/acp-model' }],
           },
           { id: 'thinking_level', type: 'select', category: 'thought_level', currentValue: 'default' },
+          { id: 'mode', type: 'select', category: 'mode', currentValue: 'off' },
         ]);
         releaseCatalog();
         await vi.waitFor(() =>
@@ -755,6 +762,107 @@ describe('ACP v1 built CLI compatibility for Air', () => {
       expect(await savedSettings()).toBe(preferences);
     });
   }, 30_000);
+
+  it.each([
+    { mode: 'off', reviewed: false, asked: true },
+    { mode: 'advisory', reviewed: true, asked: true },
+    { mode: 'auto', reviewed: true, asked: false },
+    { mode: 'auto', reviewed: true, asked: true, invalidReview: true },
+    { mode: 'auto', reviewed: false, asked: true, unsandboxed: true },
+  ])(
+    'applies ACP shell approval mode $mode (reviewed=$reviewed, asked=$asked)',
+    async ({ mode, reviewed, asked, invalidReview, unsandboxed }) => {
+      const permissionTitles: string[] = [];
+      await fixture(
+        async ({ context, workspace, requests, savedSettings, updates }) => {
+          const setup = { cwd: workspace, mcpServers: [] };
+          const preferences = await savedSettings();
+          const created = await context.request<acp.NewSessionResponse>(acp.methods.agent.session.new, setup);
+          const { sessionId } = created;
+          expect(created.modes).toMatchObject({
+            currentModeId: 'off',
+            availableModes: ['off', 'advisory', 'auto'].map((id) => ({ id })),
+          });
+          await expect(
+            context.request<acp.SetSessionConfigOptionResponse>(acp.methods.agent.session.setConfigOption, {
+              sessionId,
+              configId: 'mode',
+              value: 'always',
+            }),
+          ).rejects.toMatchObject({ code: -32602 });
+          if (mode === 'advisory') {
+            await context.request(acp.methods.agent.session.setMode, { sessionId, modeId: mode });
+          } else {
+            const changed = await context.request<acp.SetSessionConfigOptionResponse>(
+              acp.methods.agent.session.setConfigOption,
+              {
+                sessionId,
+                configId: 'mode',
+                value: mode,
+              },
+            );
+            expect(changed.configOptions.find((option) => option.id === 'mode')).toMatchObject({ currentValue: mode });
+          }
+          const resumed = await context.request<acp.ResumeSessionResponse>(acp.methods.agent.session.resume, {
+            sessionId,
+            ...setup,
+          });
+          expect(resumed.modes?.currentModeId).toBe(mode);
+          const sibling = await context.request<acp.NewSessionResponse>(acp.methods.agent.session.new, setup);
+          expect(sibling.modes?.currentModeId).toBe('off');
+          await context.request(acp.methods.agent.session.prompt, {
+            sessionId,
+            prompt: [{ type: 'text', text: 'Write the fixture marker in the workspace.' }],
+          });
+          expect(requests.some((request) => JSON.stringify(request.messages).includes('riskLevel'))).toBe(reviewed);
+          expect(permissionTitles).toHaveLength(asked ? 1 : 0);
+          const marker = path.join(workspace, 'marker.txt');
+          if (asked) {
+            await expect(readFile(marker, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+          } else {
+            const contents = await readFile(marker, 'utf8').catch((error: NodeJS.ErrnoException) => {
+              if (error.code !== 'ENOENT' || process.env.TERM2_ACP_REQUIRE_SHELL_SUCCESS === '1') throw error;
+              return null;
+            });
+            if (contents === null) {
+              const tools = updates.filter(({ update }) => update.sessionUpdate === 'tool_call_update');
+              expect(JSON.stringify(tools)).toMatch(/sandbox|bwrap/i);
+            } else {
+              expect(contents).toBe('acp-mode\n');
+            }
+          }
+          if (mode === 'advisory') expect(permissionTitles[0]).toContain('Shell review: Authorized workspace write');
+          expect(await savedSettings()).toBe(preferences);
+          await context.request(acp.methods.agent.session.close, { sessionId });
+          const loaded = await context.request<acp.LoadSessionResponse>(acp.methods.agent.session.load, {
+            sessionId,
+            ...setup,
+          });
+          expect(loaded.modes?.currentModeId).toBe('off');
+        },
+        {
+          shellInput: { command: 'echo acp-mode | tee marker.txt', ...(unsandboxed ? { sandbox: 'unsandboxed' } : {}) },
+          review: invalidReview
+            ? 'invalid review'
+            : JSON.stringify({
+                results: [
+                  {
+                    reasoning: 'Authorized workspace write',
+                    riskLevel: 'low',
+                    authorization: 'explicit',
+                    confidence: 'high',
+                  },
+                ],
+              }),
+          async permission({ toolCall }) {
+            permissionTitles.push(toolCall.title ?? '');
+            return { outcome: { outcome: 'selected', optionId: 'reject' } };
+          },
+        },
+      );
+    },
+    30_000,
+  );
 
   it('rejects unsupported workspace/MCP inputs before admission and exits cleanly on SIGTERM', async () => {
     await fixture(

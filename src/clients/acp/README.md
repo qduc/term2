@@ -24,9 +24,10 @@ exact offer of 1 or 2 retains its corresponding SDK contract.
 `term2 acp` also accepts `initialize.protocolVersion: 1` without a CLI flag.
 `v1-agent.ts` advertises `agentInfo`, `authMethods: []`, image/embedded-context
 prompts, session load/list/resume/close. Provider credentials remain native Term2
-configuration. Setup responses include `model` and `thinking_level` select config options;
-`session/set_config_option` applies a per-session native configure command and
-waits for its exact completed receipt, including the accepted model identity.
+configuration. Setup responses include `model`, `thinking_level`, and `mode`
+select config options. Model and thinking selections through
+`session/set_config_option` wait for the native configure command's completed
+receipt, including the accepted model identity.
 A v1 prompt stays pending until its real
 terminal and returns `stopReason`; native failures become JSON-RPC errors.
 `session/load` creates a fresh display attachment and replays retained history;
@@ -65,7 +66,7 @@ stop/decline fallback. Filesystem/terminal execution delegation and provider
 management are not advertised. V1 selected permission IDs must match an offered
 option exactly; operational errors use -32010, distinct from reserved
 authentication-required -32000. Unknown sessions use -32002.
-The launcher retains the same sandbox and permission policy for both versions.
+The launcher requires sandboxing for both versions. The mode selector is v1-only.
 
 `models.ts` owns selector values (`provider/model`, split at the first slash),
 catalog validation and short-lived Host subscriptions for configure receipts.
@@ -86,6 +87,19 @@ selected even when the provider resolves it to a concrete effective effort.
 Explicit effort changes must be confirmed by the native configure receipt.
 Choosing Default restores native provider/model default behavior. Model changes
 preserve the session's effort intent; global effort preferences are not written.
+
+Approval mode uses the standard `mode` category and mirrors the same state in
+legacy `modes` / `session/set_mode`. ACP v1 asks for consent when the native
+command classifier flags a root shell command, even inside the sandbox. Off
+is the default and sends those approvals to the client. Advisory shows the
+native shell risk review in the permission prompt. Auto can resolve an eligible
+foreground sandboxed shell request with policy provenance when the reviewer
+finds explicit or implied authorization, low or medium risk, and high
+confidence. Missing or uncertain reviews use the client permission prompt.
+Explicit decisions, scoped grants, and nested or background interactions stay
+on the ordinary permission path. Mode selection is in memory for the ACP
+session, survives reattachment, and resets to Off on close or process restart.
+Changing modes revokes pending reviews from the previous selection.
 
 Air's loading/sign-in timeout can mask initialization failure: the observed
 WebStorm Air log offered `protocolOffer=V1` then reported `Invalid params` against
@@ -111,8 +125,9 @@ updatedAt; neither value is fabricated when absent.
 The app owner's published launcher (`19ec1b69`) calls these real entry points with
 `surface: () => ({autoApprove:false,interactive:true,allowUnsandboxed:false})`
 and `approvalAlwaysAsks:true`. Its runtime pins per-session
-`shell.autoApproveMode` to `off` and `sandbox.enabled` to `true`, without writing
-user settings. `requireSandbox:true` closes the saved `sandbox.enabled:false`
+`shell.autoApproveMode` to `off` and `sandbox.enabled` to `true`. The ACP mode
+selector adds a separate per-request shell review on top of those defaults.
+Always is unavailable because native Always disables sandboxing. `requireSandbox:true` closes the saved `sandbox.enabled:false`
 bypass: an explicit permission cannot grant a default shell call unsandboxed
 execution. Native safe-command policy still determines which calls need consent. Lead `1451f8f8`
 now declares and forwards `allowUnsandboxed` into source tool assembly, intersected
@@ -317,7 +332,8 @@ GUI acceptance remains separate from these protocol and native-runtime checks.
 | Tool title/input/result and opt-in terminal output | Shared renderer and `V1Terminals`; live and loaded command output on both channels and standard-content fallback |
 | Session close cancels/drains/frees resources; retained log reopen | Host `closeSession`, app resource ownership; built CLI close/load/MCP invocation and independent disposal-failure probe |
 | Model and thought-level configuration, session-local persistence | Native configure receipts; built CLI catalog/model/effort/default/load/resume cases |
-| Optional features not implemented | Audio blocks, extra workspace roots, session modes/fork/delete, slash commands, plans, provider management and delegated client FS/terminal execution are not advertised |
+| Approval mode and permission fallback | Built CLI shell reviewer, selection, resume and close cases |
+| Optional features not implemented | Audio blocks, extra workspace roots, session fork/delete, slash commands, plans, provider management and delegated client FS/terminal execution are not advertised |
 
 The WebStorm Air plugin declares `terminal_output_delta`; the standalone Air app
 is a different consumer. Inspecting the standalone app's renderer does not

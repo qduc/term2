@@ -36,7 +36,11 @@ export function createStdioAcpIo(): AcpIo {
  * dispose its direct Host afterward. No global signal handlers, runtime fallback
  * or shutdown deadline are installed here. Diagnostics use stderr only.
  */
-export async function serveAcp(options: AcpAgentOptions, io: AcpIo, signal?: AbortSignal): Promise<number> {
+export async function serveAcp(
+  options: AcpAgentOptions & { readonly onProtocolVersion?: (version: 1 | 2) => void },
+  io: AcpIo,
+  signal?: AbortSignal,
+): Promise<number> {
   let connection: acp.AgentConnection | V1Connection | undefined;
   let reader: ReadableStreamDefaultReader<acp.AnyWireMessage> | undefined;
   const close = (): void => {
@@ -111,6 +115,7 @@ export async function serveAcp(options: AcpAgentOptions, io: AcpIo, signal?: Abo
       }
       // v1 and v2 share individual JSON-RPC frames. A batch selects v2 and
       // remains under its SDK's validation; v1 never receives a batch here.
+      options.onProtocolVersion?.(v1 ? 1 : 2);
       connection = v1
         ? createAcpV1Agent(options).connect({ writable: stream.writable, readable } as V1Stream)
         : createAcpAgent(options).connect({ writable: stream.writable, readable });

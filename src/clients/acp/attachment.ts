@@ -1,4 +1,4 @@
-import type { AcpClient } from './contract.js';
+import type { AcpApprovalReview, AcpClient } from './contract.js';
 import * as acp from '@agentclientprotocol/sdk/experimental/v2';
 import type { DirectConnection } from '../../host/in-process-direct-types.js';
 import type {
@@ -78,6 +78,10 @@ export class AcpAttachment {
     readonly connection: DirectConnection,
     private readonly client: AcpClient,
     private readonly logger: AcpLogger,
+    private readonly reviewApproval?: (
+      interaction: WireInteraction,
+      signal: AbortSignal,
+    ) => Promise<(AcpApprovalReview & { signal: AbortSignal }) | undefined>,
   ) {
     this.foregroundTurnId = connection.snapshot.activeTurnId;
     this.status = connection.snapshot.status;
@@ -326,39 +330,60 @@ export class AcpAttachment {
   }
 
   private openPermission(interaction: WireInteraction): void {
-    this.openRequest(interaction.requestId, interaction.turnId, async (signal) => ({
-      type: 'answer',
-      requestId: interaction.requestId,
-      ...(await requestPermission({ sessionId: this.connection.sessionId, interaction, client: this.client, signal })),
-    }));
+    this.openRequest(interaction.requestId, interaction.turnId, async (signal) => {
+      const review = interaction.kind === 'approval' ? await this.reviewApproval?.(interaction, signal) : undefined;
+      if (signal.aborted) return;
+      const requestId = interaction.requestId;
+      // Check selection and send in the same continuation, so switching to Off
+      // revokes a verdict that has arrived but has not been sent to Session.
+      if (review?.approved && !review.signal.aborted) {
+        return this.sendAnswer(
+          {
+            type: 'answer',
+            requestId,
+            decision: { kind: 'allow' },
+            provenance: { source: 'policy', automaticApproval: true },
+          },
+          signal,
+        );
+      }
+      const answer = await requestPermission({
+        sessionId: this.connection.sessionId,
+        interaction,
+        client: this.client,
+        signal,
+        advisory: review?.signal.aborted ? undefined : review?.description,
+      });
+      return this.sendAnswer({ type: 'answer', requestId, ...answer }, signal);
+    });
   }
 
   private openBudget(request: WireBudgetRequest): void {
-    this.openRequest(request.requestId, request.turnId, async (signal) => ({
-      type: 'answer_budget',
-      requestId: request.requestId,
-      ...(await requestBudget({ sessionId: this.connection.sessionId, request, client: this.client, signal })),
-    }));
+    this.openRequest(request.requestId, request.turnId, async (signal) => {
+      const answer = await requestBudget({
+        sessionId: this.connection.sessionId,
+        request,
+        client: this.client,
+        signal,
+      });
+      return this.sendAnswer({ type: 'answer_budget', requestId: request.requestId, ...answer }, signal);
+    });
   }
 
   /** Each real request owns one cancellable client exchange and one targeted native answer. */
-  private openRequest(requestId: string, turnId: string, command: (signal: AbortSignal) => Promise<WireCommand>): void {
+  private openRequest(requestId: string, turnId: string, answer: (signal: AbortSignal) => Promise<void>): void {
     if (this.closed || this.requests.has(requestId)) return;
     const controller = new AbortController();
     const signals = [this.lifetime.signal, controller.signal];
     if (this.active?.turnId === turnId && this.active?.signal) signals.push(this.active.signal);
     const signal = AbortSignal.any(signals);
-    const done = this.answerRequest(command, signal).catch((error: unknown) => {
+    const done = answer(signal).catch((error: unknown) => {
       if (!signal.aborted) this.fail(error);
     });
     this.requests.set(requestId, { turnId, controller, done });
   }
 
-  private async answerRequest(
-    command: (signal: AbortSignal) => Promise<WireCommand>,
-    signal: AbortSignal,
-  ): Promise<void> {
-    const answer = await command(signal);
+  private async sendAnswer(answer: WireCommand, signal: AbortSignal): Promise<void> {
     // A resolved request or detached subscription has no remaining owner to answer.
     if (signal.aborted) return;
     const result = await this.connection.send(answer);

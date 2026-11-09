@@ -6,6 +6,7 @@ import { buildAgent, buildAgentTools, type AgentFactoryDeps } from './lib/agent-
 import { createEditorImpl } from '../tools/editor-impl.js';
 import { getCatalogModel } from '../model/providers/model-catalog/catalog.js';
 import { resolveRequestOutput } from '../session/agent-runtime/model-context-policy.js';
+import { evaluateShellAutoApprovalAdvisories } from '../session/approval/shell-auto-approval-evaluator.js';
 import { NonInteractiveApprovalPolicy } from '../session/approval/non-interactive-approval-policy.js';
 import { ToolApprovalPolicyRegistry } from '../session/approval/tool-approval-policy-registry.js';
 import { isAutoApprovableTool, ShellAutoApprovalResolver } from '../session/approval/shell-auto-approval-resolver.js';
@@ -25,6 +26,7 @@ import type { Item, ReasoningEffort } from '../model/index.js';
 import { createProviderRegistry } from '../model/provider.js';
 import { createApprovalModelClient } from './lib/approval-model.js';
 import { createDirectSubagentTools } from '../delegation/index.js';
+import { isMutatingCommand } from '../tools/system/shell.js';
 import { createDirectShellTools } from './shell-tools.js';
 import { createSourceToolRegistry, executeSourceChild, sourceToolSpec, sourceToolContext } from './source-tools.js';
 import type { AgentSurface, ProfileSelection, ToolSurfaceOptions } from './tool-contract.js';
@@ -205,6 +207,12 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     sessionId,
     withAnswer: (answer, operation) => answers.run(answer, operation),
     checkInterceptors: deps.checkToolInterceptors,
+    ...(options.confirmRiskyShell
+      ? {
+          confirmShell: (command: string) =>
+            withWorkspace(() => isMutatingCommand(command, executionContext.getCwd(), logger)),
+        }
+      : {}),
   });
   const modelSettings = agent.modelSettings;
   const maxOutputTokens = resolveRequestOutput(
@@ -297,6 +305,49 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
         answers.disable();
         await remote?.close();
       },
+    },
+    async reviewShellApproval(request, history, signal) {
+      if (signal.aborted) return;
+      const { input, toolName, presentation } = request;
+      if (
+        request.kind !== 'approval' ||
+        toolName !== 'shell' ||
+        options.allowUnsandboxed !== false ||
+        settings.get('sandbox.enabled') !== true ||
+        request.grants?.length ||
+        presentation?.requiresExplicitUser === true ||
+        presentation?.dockerHostControl === true ||
+        presentation?.deniedRead ||
+        !input ||
+        typeof input !== 'object' ||
+        !('command' in input) ||
+        typeof input.command !== 'string' ||
+        ('sandbox' in input && input.sandbox !== undefined && input.sandbox !== 'default') ||
+        isDockerRequest(toolName, input, sessionAccess)
+      )
+        return;
+      const command = input.command;
+      const client = createApprovalModelClient(
+        createProviderRegistry(selection),
+        selection,
+        AbortSignal.any([signal, advisoryAbort.signal]),
+        options.affinity ?? { conversationKey: sessionId, cacheKey: sessionId },
+      );
+      const reviews = await withWorkspace(() =>
+        evaluateShellAutoApprovalAdvisories({
+          commands: [{ id: request.requestId, command, toolName }],
+          history: approvalHistory(history),
+          settingsService: settings,
+          agentClient: client,
+          logger,
+          sessionContextService: selection.sessionContext,
+          sessionAccess,
+          enabled: true,
+        }),
+      );
+      const review = reviews.get(request.requestId);
+      if (!review || review.isError) return;
+      return { approved: advisor.shouldAutoApprove(review, 'auto'), description: `Shell review: ${review.reasoning}` };
     },
     async decideInteraction(request, history) {
       if (request.presentation?.requiresExplicitUser === true)

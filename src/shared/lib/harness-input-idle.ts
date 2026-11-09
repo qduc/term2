@@ -139,16 +139,6 @@ export function publishHarnessApprovalReady(callId: string): void {
   writeAtomically(`${path}.approval`, `${JSON.stringify({ revision: approvalRevision, callId })}\n`);
 }
 
-/** The TUI's held-send confirmation readiness (`src/clients/tui/harness-input.ts`); null before any. */
-export function readHarnessConfirmationReady(path: string): { revision: number; kind: string } | null {
-  try {
-    const state = JSON.parse(readFileSync(`${path}.confirmation`, 'utf8'));
-    return Number.isInteger(state.revision) && state.revision > 0 && typeof state.kind === 'string' ? state : null;
-  } catch {
-    return null;
-  }
-}
-
 export function readHarnessApprovalReady(path: string): { revision: number; callId: string } | null {
   try {
     const state = JSON.parse(readFileSync(`${path}.approval`, 'utf8'));

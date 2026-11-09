@@ -1,5 +1,5 @@
 import { PYTHON_DA1_RESPONDER, testCliPath } from '../../tests/helpers/terminal-e2e.js';
-import { appendFileSync, createWriteStream, existsSync, rmSync, unlinkSync } from 'node:fs';
+import { appendFileSync, createWriteStream, existsSync, readFileSync, rmSync, unlinkSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,7 +11,6 @@ import { resolveSettingsDirectory } from '../../src/config/settings/settings-pat
 import {
   HARNESS_IDLE_ENV,
   readHarnessComposerState,
-  readHarnessConfirmationReady,
   readHarnessIdleGeneration,
   waitForHarnessComposerValue,
   waitForHarnessIdleGeneration,
@@ -1007,6 +1006,19 @@ async function terminateProcess(child: ChildProcess): Promise<ChildExit> {
 }
 
 /** Bounded tail of a child's visible output for self-diagnosing wait failures. */
+/**
+ * Held-send confirmation readiness written by `publishHarnessConfirmationReady` in
+ * `src/clients/tui/harness-input.ts`; null before any. Only this harness reads it.
+ */
+function readHarnessConfirmationReady(idlePath: string): { revision: number; kind: string } | null {
+  try {
+    const state = JSON.parse(readFileSync(`${idlePath}.confirmation`, 'utf8'));
+    return Number.isInteger(state.revision) && state.revision > 0 && typeof state.kind === 'string' ? state : null;
+  } catch {
+    return null;
+  }
+}
+
 function tailOfVisibleOutput(visible: string, max = 2_000): string {
   return visible.length > max ? visible.slice(-max) : visible;
 }

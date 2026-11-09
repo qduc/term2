@@ -189,13 +189,20 @@ it('Ctrl+G leaves a foreground approval on its prompt', { timeout: TIMEOUT_MS },
       await expect
         .poll(() => session!.getVisibleOutput(), { timeout: 30_000 })
         .toMatch(new RegExp(`❯\\s+(★\\s+)?${picked}|No models match`));
-    // Every provider's catalog lands in turn; let the list settle as a person reading it would.
+    // sleep-ok: the picked row stays highlighted; the catalog can reload after it is drawn (its effect reruns
+    // when credentialRevision rebuilds providerIds) and empty the list: without this pause two of 18 loaded runs
+    // showed "Loading models" at Enter and set the typed id. Nothing publishes the end; 500 ms had no such failure.
     if (picked) await new Promise((resolve) => setTimeout(resolve, 500));
     session!.write('\r');
   };
   await submit('request approval');
   await session.waitForOutput('Allow once', 60_000);
   session.write('\x07');
+  // Ctrl+G must reach the TUI as its own read. Written back to back with the next key, the two arrive as one
+  // chunk that the editor takes as text (a probe left the draft as "draft\u0007-x"), so the next key cannot be
+  // the sync point, and nothing is published for a key that does nothing.
+  // sleep-ok: Ctrl+G opens nothing and leaves the prompt up; a no-op key is read and drawn within milliseconds,
+  // so 500 ms also keeps it out of the next key's read under load.
   await new Promise((resolve) => setTimeout(resolve, 500));
   expect(session.getVisibleOutput()).toContain('Allow this action?');
   expect(session.getVisibleOutput()).not.toContain('/answer 1 <choice number>');
@@ -338,7 +345,9 @@ async function runCommand(
       await expect
         .poll(() => session!.getVisibleOutput(), { timeout: 30_000 })
         .toMatch(new RegExp(`❯\\s+(★\\s+)?${picked}|No models match`));
-    // Every provider's catalog lands in turn; let the list settle as a person reading it would.
+    // sleep-ok: the picked row stays highlighted; the catalog can reload after it is drawn (its effect reruns
+    // when credentialRevision rebuilds providerIds) and empty the list: without this pause two of 18 loaded runs
+    // showed "Loading models" at Enter and set the typed id. Nothing publishes the end; 500 ms had no such failure.
     if (picked) await new Promise((resolve) => setTimeout(resolve, 500));
     session!.write('\r');
   };
@@ -364,7 +373,7 @@ async function runCommand(
     await submit('/effort bogus');
     await session.waitForOutput('"bogus" is not one of the options', 30_000);
     await waitForHarnessComposerValue(idlePath, '/effort bogus', { timeoutMs: 5_000 });
-    await new Promise((resolve) => setTimeout(resolve, 2_100));
+    // No earlier Ctrl+C armed the exit window, so this one only clears the draft.
     session.write('\x03');
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 5_000 });
     // As in legacy, the first Enter closes the slash menu (no match) and the second submits.
@@ -397,10 +406,13 @@ async function runCommand(
   }
   if (exerciseMenu === 'ctrl-u') {
     // The cursor position settles asynchronously after each arrow key; pace Ctrl+U so it reads the settled cursor.
+    // ink-prompt reports the cursor to the composer from a passive effect, and nothing publishes it.
     session.write('abcXYZ');
     await waitForHarnessComposerValue(idlePath, 'abcXYZ', { timeoutMs: 10_000 });
     for (let i = 0; i < 3; i++) {
       session.write('\x1b[D');
+      // sleep-ok: the cursor move reaches the composer's cursor ref (no published signal); a render and its
+      // effects take milliseconds, and 300 ms held under the loaded runs that once flaked Ctrl+U.
       await new Promise((resolve) => setTimeout(resolve, 300));
     }
     session.write('\x15');
@@ -439,6 +451,7 @@ async function runCommand(
     session.write('\x15');
     await waitForHarnessComposerValue(idlePath, 'XYZ', { timeoutMs: 30_000 });
     session.write('\x05');
+    // sleep-ok: Ctrl+E's cursor move reaches the composer's cursor ref (no published signal); 300 ms as above.
     await new Promise((resolve) => setTimeout(resolve, 300));
     session.write('\x15');
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
@@ -446,14 +459,18 @@ async function runCommand(
     await waitForHarnessComposerValue(idlePath, 'first\nsecondXYZ', { timeoutMs: 30_000 });
     for (let i = 0; i < 3; i++) {
       session.write('\x1b[D');
+      // sleep-ok: the cursor move reaches the composer's cursor ref (no published signal); 300 ms as above.
       await new Promise((resolve) => setTimeout(resolve, 300));
     }
     session.write('\x15');
     await waitForHarnessComposerValue(idlePath, 'first\nXYZ', { timeoutMs: 30_000 });
     // At buffer offset zero, Ctrl+U is a no-op.
     session.write('\x1b\\');
+    // sleep-ok: the move to offset zero reaches the composer's cursor ref (no published signal); 300 ms as above.
     await new Promise((resolve) => setTimeout(resolve, 300));
     session.write('\x15');
+    // sleep-ok: Ctrl+U at offset zero changes nothing, so no revision is published; 300 ms keeps it in its own
+    // read before `Z`, whose revision then shows the draft was left whole.
     await new Promise((resolve) => setTimeout(resolve, 300));
     session.write('Z');
     await waitForHarnessComposerValue(idlePath, 'Zfirst\nXYZ', { timeoutMs: 30_000 });
@@ -569,12 +586,13 @@ async function runCommand(
     const step = async (keys: string, expected: string) => {
       const offset = session!.getVisibleOutput().length;
       session!.write(keys);
-      const started = Date.now();
-      while (Date.now() - started < 30_000) {
-        if (session!.getVisibleOutput().slice(offset).includes(expected)) return;
-        await new Promise((resolve) => setTimeout(resolve, 25));
-      }
-      throw new Error(`No new terminal output containing ${expected}: ${session!.getVisibleOutput().slice(-1200)}`);
+      await expect
+        .poll(() => session!.getVisibleOutput().slice(offset), {
+          timeout: 30_000,
+          interval: 25,
+          message: `No new terminal output containing ${expected}`,
+        })
+        .toContain(expected);
     };
     await step('\t\t', 'Some providers failed: brokenprov'); // The All tab lists every provider.
     session.write('\x1b');

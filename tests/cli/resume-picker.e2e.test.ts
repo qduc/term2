@@ -124,7 +124,9 @@ it.each([160, 60])(
         await expect
           .poll(() => session!.getVisibleOutput(), { timeout: 30_000 })
           .toMatch(new RegExp(`❯\\s+(★\\s+)?${picked}|No models match`));
-      // Every provider's catalog lands in turn; let the list settle as a person reading it would.
+      // sleep-ok: the picked row stays highlighted; the catalog can reload after it is drawn (its effect reruns
+      // when credentialRevision rebuilds providerIds) and empty the list: without this pause two of 18 loaded runs
+      // showed "Loading models" at Enter and set the typed id. Nothing publishes the end; 500 ms had no such failure.
       if (picked) await new Promise((resolve) => setTimeout(resolve, 500));
       session!.write('\r');
     };
@@ -160,10 +162,9 @@ it.each([160, 60])(
     }
     const offset = session.getVisibleOutput().length;
     session.write('\r');
-    const started = Date.now();
-    while (Date.now() - started < 30_000 && !session.getVisibleOutput().slice(offset).includes('PREVIOUS-ANSWER'))
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    expect(session.getVisibleOutput().slice(offset)).toContain('PREVIOUS-ANSWER');
+    await expect
+      .poll(() => session!.getVisibleOutput().slice(offset), { timeout: 30_000, interval: 25 })
+      .toContain('PREVIOUS-ANSWER');
   },
 );
 
@@ -212,7 +213,9 @@ it.each([160])(
         await expect
           .poll(() => session!.getVisibleOutput(), { timeout: 30_000 })
           .toMatch(new RegExp(`❯\\s+(★\\s+)?${picked}|No models match`));
-      // Every provider's catalog lands in turn; let the list settle as a person reading it would.
+      // sleep-ok: the picked row stays highlighted; the catalog can reload after it is drawn (its effect reruns
+      // when credentialRevision rebuilds providerIds) and empty the list: without this pause two of 18 loaded runs
+      // showed "Loading models" at Enter and set the typed id. Nothing publishes the end; 500 ms had no such failure.
       if (picked) await new Promise((resolve) => setTimeout(resolve, 500));
       session!.write('\r');
     };
@@ -256,10 +259,9 @@ it.each([160])(
     expect(frame).toContain('Updated:');
     const offset = session.getVisibleOutput().length;
     session.write('\r');
-    const started = Date.now();
-    while (Date.now() - started < 30_000 && !session.getVisibleOutput().slice(offset).includes('PREVIOUS-ANSWER'))
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    expect(session.getVisibleOutput().slice(offset)).toContain('PREVIOUS-ANSWER');
+    await expect
+      .poll(() => session!.getVisibleOutput().slice(offset), { timeout: 30_000, interval: 25 })
+      .toContain('PREVIOUS-ANSWER');
     expect(session.getVisibleOutput().slice(offset)).toContain('Codex/gpt-6.1-terra');
   },
 );
@@ -309,7 +311,9 @@ it.each([160])(
         await expect
           .poll(() => session!.getVisibleOutput(), { timeout: 30_000 })
           .toMatch(new RegExp(`❯\\s+(★\\s+)?${picked}|No models match`));
-      // Every provider's catalog lands in turn; let the list settle as a person reading it would.
+      // sleep-ok: the picked row stays highlighted; the catalog can reload after it is drawn (its effect reruns
+      // when credentialRevision rebuilds providerIds) and empty the list: without this pause two of 18 loaded runs
+      // showed "Loading models" at Enter and set the typed id. Nothing publishes the end; 500 ms had no such failure.
       if (picked) await new Promise((resolve) => setTimeout(resolve, 500));
       session!.write('\r');
     };
@@ -357,10 +361,9 @@ it.each([160])(
     expect(frame).toContain('Updated:');
     const offset = session.getVisibleOutput().length;
     session.write('\r');
-    const started = Date.now();
-    while (Date.now() - started < 30_000 && !session.getVisibleOutput().slice(offset).includes('PREVIOUS-ANSWER'))
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    expect(session.getVisibleOutput().slice(offset)).toContain('PREVIOUS-ANSWER');
+    await expect
+      .poll(() => session!.getVisibleOutput().slice(offset), { timeout: 30_000, interval: 25 })
+      .toContain('PREVIOUS-ANSWER');
     expect(session.getVisibleOutput().slice(offset)).toContain('mockprov/mock-beta');
     let generation = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
     await send('resumed request');
@@ -372,10 +375,7 @@ it.each([160])(
     await session.waitForOutput('Set model to mock-alpha (mockprov)', 30_000);
     const priorRequests = requestBodies.length;
     await send('after model change');
-    const deadline = Date.now() + 30_000;
-    while (requestBodies.length === priorRequests && Date.now() < deadline)
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    expect(requestBodies.length).toBeGreaterThan(priorRequests);
+    await expect.poll(() => requestBodies.length, { timeout: 30_000, interval: 25 }).toBeGreaterThan(priorRequests);
     await waitForHarnessIdleGeneration(idlePath, { after: generation, timeoutMs: 60_000 });
     expect(requestBodies.at(-1).model).toBe('mock-alpha');
   },
@@ -423,7 +423,9 @@ it.each([160])('a failed resume leaves the composer usable at %i columns', { tim
       await expect
         .poll(() => session!.getVisibleOutput(), { timeout: 30_000 })
         .toMatch(new RegExp(`❯\\s+(★\\s+)?${picked}|No models match`));
-    // Every provider's catalog lands in turn; let the list settle as a person reading it would.
+    // sleep-ok: the picked row stays highlighted; the catalog can reload after it is drawn (its effect reruns
+    // when credentialRevision rebuilds providerIds) and empty the list: without this pause two of 18 loaded runs
+    // showed "Loading models" at Enter and set the typed id. Nothing publishes the end; 500 ms had no such failure.
     if (picked) await new Promise((resolve) => setTimeout(resolve, 500));
     session!.write('\r');
   };

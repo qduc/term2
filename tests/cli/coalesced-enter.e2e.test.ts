@@ -165,8 +165,8 @@ async function start(replies: Reply[], retryAttempts = 0, withSkill = false): Pr
 
 const composer = (idlePath: string) => readHarnessComposerState(idlePath)?.value;
 async function until(check: () => boolean, what: string): Promise<void> {
-  for (let i = 0; i < 60 && !check(); i++) await new Promise((resolve) => setTimeout(resolve, 250));
-  expect(check(), what).toBe(true);
+  // Same 15 s budget as before, polled at the harness waits' cadence: a 250 ms step added up to 250 ms per wait.
+  await expect.poll(check, { timeout: 15_000, interval: 25, message: what }).toBe(true);
 }
 
 it('text and Enter in one write submit while a turn is streaming', { timeout: TIMEOUT_MS }, async () => {
@@ -211,6 +211,8 @@ it('retries a steered turn after a dropped connection', { timeout: TIMEOUT_MS },
   await session!.waitForOutput('Connection to the model dropped.', 60_000);
   await session!.waitForOutput('/retry to try again.', 60_000);
   expect(session!.getVisibleOutput()).not.toContain('WebSocket connection closed before a terminal response event');
+  // sleep-ok: no automatic retry request follows the dropped connection (retryAttempts 0); a retry would be sent
+  // at once to the local fixture, well inside 500 ms.
   await new Promise((resolve) => setTimeout(resolve, 500));
   expect(received).toHaveLength(2);
   session!.write('/retry');
@@ -339,9 +341,11 @@ it(
     const { idlePath } = await start([{ text: 'REPLY-TO-ABCDEF' }]);
     session!.write('abc');
     await waitForHarnessComposerValue(idlePath, 'abc', { timeoutMs: 60_000 });
+    const idleBeforeSend = readHarnessIdleGeneration(idlePath);
     session!.write('def\r');
     await session!.waitForOutput('REPLY-TO-ABCDEF', 30_000);
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    // Read the draft once the turn is over and the composer owns input again, not after a fixed 1.5 s.
+    await waitForHarnessIdleGeneration(idlePath, { after: idleBeforeSend, timeoutMs: 30_000 });
     expect(composer(idlePath), 'the old draft text was cleared with the send').toBe('');
     const logs = fs.readdirSync(path.join(root, 'conversations')).filter((name) => name.endsWith('.jsonl'));
     expect(logs.map((name) => fs.readFileSync(path.join(root, 'conversations', name), 'utf8')).join('\n')).toContain(
@@ -378,6 +382,8 @@ it('a second message sent while the first is still being sent is kept, not lost'
   await session!.waitForOutput('STREAMING-TEXT', 60_000);
   // Two messages a few milliseconds apart: the second arrives while the first send may still be in flight.
   session!.write('steer alpha\r');
+  // sleep-ok: not a wait but the gap under test, two sends a few milliseconds apart; 15 ms keeps them in separate
+  // reads while the first send is still in flight.
   await new Promise((resolve) => setTimeout(resolve, 15));
   session!.write('steer bravo\r');
   const logged = () =>
@@ -443,6 +449,8 @@ it.skipIf(process.platform !== 'linux')(
     await session!.waitForOutput('[Skill: dogfood]', 30_000);
     expect(session!.getVisibleOutput()).not.toContain('QUEUE_SKILL_SENTINEL');
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
+    // sleep-ok: the send's reply has to land before Up reaches the composer (a pending send keeps it inactive), and
+    // mid-turn nothing publishes that; the local reply takes milliseconds, so 500 ms covers a loaded runner.
     await new Promise((resolve) => setTimeout(resolve, 500));
     // Select the pending request through the legacy queue keyboard interaction.
     session!.write('\x1b[A');
@@ -455,6 +463,8 @@ it.skipIf(process.platform !== 'linux')(
     await session!.waitForOutput('[Pasted Image #1]', 30_000);
     expect(session!.getVisibleOutput()).not.toContain('QUEUE_SKILL_SENTINEL');
     // The editor re-renders after an image paste; keystrokes written during that remount are lost under load.
+    // sleep-ok: the remounted editor has to subscribe before `-EDITED` (no published signal for the remount); 600 ms
+    // is what stopped the loss under load.
     await new Promise((resolve) => setTimeout(resolve, 600));
     session!.write('-EDITED');
     await until(() => composer(idlePath)?.includes('-EDITED') === true, 'edited request with pasted image');
@@ -462,6 +472,7 @@ it.skipIf(process.platform !== 'linux')(
     // Legacy saves a queued edit without a notice; the emptied composer below marks it saved.
     expect(session!.getVisibleOutput()).not.toContain('QUEUE_SKILL_SENTINEL');
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
+    // sleep-ok: the queued edit's save reply has to land before Up (no published signal mid-turn); 500 ms as above.
     await new Promise((resolve) => setTimeout(resolve, 500));
     // A second edit through the same keys: select, Enter, append, Enter.
     session!.write('\x1b[A');
@@ -479,6 +490,8 @@ it.skipIf(process.platform !== 'linux')(
     session!.write('\x1b');
     await session!.waitForOutput('Queue paused: 1 item pending.', 30_000);
     const requestsAtCancel = received.length;
+    // sleep-ok: the paused queue sends nothing until `r`; a wrongly released item is sent as soon as the turn
+    // stops, so 1.5 s after the pause prompt is far past when it would reach the local fixture.
     await new Promise((resolve) => setTimeout(resolve, 1500));
     expect(received).toHaveLength(requestsAtCancel);
     session!.write('r');

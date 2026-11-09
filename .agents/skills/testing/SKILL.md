@@ -62,6 +62,12 @@ unless every changed file in a pull request is inert (the `changes` job in
 `.github/workflows/ci.yml` defines inert); then only the expensive test work skips. The required
 `test` job still checks the root allowlist and rejects committed unit tests before dependency
 setup. `integration` owns `bench/headless.mjs` and `bench/hops.mts`; `e2e` owns golden parity.
+`bench/headless.mjs` runs its isolated rows through a core-sized pool (`HEADLESS_CONCURRENCY=1`
+for serial debugging); serially it added ~30 s to the integration lane's critical path. The
+heaviest e2e files run in the `test` lane (`owner()` in `scripts/run-ci-lane.mjs`); rebalance
+there when one lane finishes well after the others. Do not move PTY-driven e2e files onto
+`provider-black-box`: two of them took that lane from ~62 s to 94 s locally and tipped a heavy
+provider case past its ~40 s deadline, the same timeout class that already flakes there in CI.
 `port` is a compatibility aggregate requiring quality and test success, plus successful behavioral
 lanes or skips justified by an inert pull request. Known docs/evidence formats may skip tests;
 unknown extensions and executable scripts under `docs/` run every tier. Follow any late CI failure

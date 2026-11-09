@@ -1071,19 +1071,38 @@ for (const [index, { configured, args, reject }] of [
 
 // ---------- Runner ----------
 
-let pass = 0;
-let fail = 0;
-for (const { id, name, fn } of rows) {
-  const started = Date.now();
-  try {
-    await fn();
-    pass += 1;
-    console.log(`PASS    ${id} ${name} (${Date.now() - started} ms)`);
-  } catch (error) {
-    const message = (error.message ?? String(error)).split('\n').slice(0, 8).join('\n          ');
-    fail += 1;
-    console.log(`FAIL    ${id} ${name}\n          ${message}`);
+// Every row owns its temp root, fake provider port and CLI processes, and R8 injects its
+// failing log by argument, so rows share no state. Run them through a bounded pool: serially
+// they took ~30s on the CI critical path. The pool only waits on child processes and sockets,
+// so it matches the core count. HEADLESS_CONCURRENCY=1 restores serial runs for debugging.
+const concurrency = Math.max(1, Number(process.env.HEADLESS_CONCURRENCY) || os.availableParallelism());
+const results = new Array(rows.length);
+let printed = 0;
+let next = 0;
+// Print in row order as soon as a prefix completes, so the log reads like a serial run.
+const flush = () => {
+  while (printed < rows.length && results[printed]) console.log(results[printed++]);
+};
+async function worker() {
+  while (next < rows.length) {
+    const index = next++;
+    const { id, name, fn } = rows[index];
+    const started = Date.now();
+    try {
+      await fn();
+      results[index] = `PASS    ${id} ${name} (${Date.now() - started} ms)`;
+    } catch (error) {
+      const message = (error.message ?? String(error)).split('\n').slice(0, 8).join('\n          ');
+      results[index] = `FAIL    ${id} ${name}\n          ${message}`;
+    }
+    flush();
   }
 }
-console.log(`\n${pass} passed, ${fail} failed, of ${rows.length} rows`);
+const started = Date.now();
+await Promise.all(Array.from({ length: Math.min(concurrency, rows.length) }, worker));
+const pass = results.filter((line) => line.startsWith('PASS')).length;
+const fail = rows.length - pass;
+console.log(
+  `\n${pass} passed, ${fail} failed, of ${rows.length} rows (${concurrency} concurrent, ${Date.now() - started} ms)`,
+);
 process.exit(pass === rows.length ? 0 : 1);

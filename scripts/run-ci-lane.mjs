@@ -31,7 +31,13 @@ function owner(tier, file) {
   if (tier === 'guards') return 'quality';
   if (tier === 'integration')
     return /^tests\/cli\/cli(?:-headless)?\.integration\.test\.ts$/.test(file) ? 'test' : 'integration';
-  if (tier === 'e2e') return 'e2e';
+  if (tier === 'e2e') {
+    // The e2e lane outgrew the others (~100s of cases on 2026-11-08 vs ~50s for test), so its
+    // heaviest files run in the test lane. Not provider-black-box: its heavy cases have ~40s
+    // deadlines that PTY-driven e2e load pushed over. See the testing skill before rebalancing.
+    if (/^tests\/cli\/(?:slash-commands|coalesced-enter|resume-picker)\.e2e\.test\.ts$/.test(file)) return 'test';
+    return 'e2e';
+  }
   if (file.endsWith('/provider-session-stateless.blackbox.ts')) return 'integration';
   if (/\/(?:provider-ordinary-safety|reference-approval)\.blackbox\.ts$/.test(file)) return 'test';
   if (/\/provider-session-responses(?:-tools|-failures)?\.blackbox\.ts$/.test(file)) return 'test';

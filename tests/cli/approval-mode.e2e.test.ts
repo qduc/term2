@@ -189,8 +189,10 @@ it('Ctrl+G leaves a foreground approval on its prompt', { timeout: TIMEOUT_MS },
       await expect
         .poll(() => session!.getVisibleOutput(), { timeout: 30_000 })
         .toMatch(new RegExp(`❯\\s+(★\\s+)?${picked}|No models match`));
-    // No settle pause: the selection follows the highlighted model as later catalogs land, and the menu
-    // registers its key handler in a layout effect, so Enter reaches the interaction drawn on screen.
+    // sleep-ok: the picked row stays highlighted; the catalog can reload after it is drawn (its effect reruns
+    // when credentialRevision rebuilds providerIds) and empty the list: without this pause two of 18 loaded runs
+    // showed "Loading models" at Enter and set the typed id. Nothing publishes the end; 500 ms had no such failure.
+    if (picked) await new Promise((resolve) => setTimeout(resolve, 500));
     session!.write('\r');
   };
   await submit('request approval');
@@ -343,8 +345,10 @@ async function runCommand(
       await expect
         .poll(() => session!.getVisibleOutput(), { timeout: 30_000 })
         .toMatch(new RegExp(`❯\\s+(★\\s+)?${picked}|No models match`));
-    // No settle pause: the selection follows the highlighted model as later catalogs land, and the menu
-    // registers its key handler in a layout effect, so Enter reaches the interaction drawn on screen.
+    // sleep-ok: the picked row stays highlighted; the catalog can reload after it is drawn (its effect reruns
+    // when credentialRevision rebuilds providerIds) and empty the list: without this pause two of 18 loaded runs
+    // showed "Loading models" at Enter and set the typed id. Nothing publishes the end; 500 ms had no such failure.
+    if (picked) await new Promise((resolve) => setTimeout(resolve, 500));
     session!.write('\r');
   };
 

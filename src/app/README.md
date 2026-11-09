@@ -31,8 +31,18 @@ and persistence policies.
 settings and tool generations. `approvalAlwaysAsks` pins the session's saved
 shell auto-approval mode to `off`; `requireSandbox` pins `sandbox.enabled:true`
 after restoring session configuration. ACP sets both options. These overrides
-are in-memory policy and do not rewrite user preferences. `createDirectConfigSettings` in
-`config-settings.ts` produces a read-only, source-schema-validated settings
+are in-memory policy and do not rewrite user preferences. ACP v1 can select
+another approval mode through the app's idle configuration scope. It rebuilds
+the session's policy and sandbox settings together. The choice stays in the
+live runtime. In Ask and Assisted, a local foreground shell receives its
+invocation-scoped escape capability only after the distinct one-time grant.
+`persistSessionConfiguration:false` also keeps native configuration changes
+session-local; ACP opts out while the terminal UI retains saved defaults. The
+native generation's install step records settings through `SessionSettingsService`,
+whose ordinary writes save through to the global owner. A client-side promise
+of session-local selection therefore requires this opt-out at the install step,
+not merely an isolated settings snapshot or unchanged initial launch settings.
+`createDirectConfigSettings` in `config-settings.ts` produces a read-only, source-schema-validated settings
 snapshot; it does not persist selection changes. Its
 `prepareDirectSessionConfigurationCommand` validates HTTP selection intent,
 retains request identity and expected revision, and rejects unknown or empty
@@ -363,3 +373,23 @@ introduced by this bridge.
 The direct CLI supports the standalone `control` client and `--control-socket=<name>` interactive startup. Both use the private `XDG_RUNTIME_DIR` advertisement and the same socket protocol; the help must not mark control, or any other dispatched subcommand, as unavailable. A socket is opt-in, not started by a normal launch.
 
 The direct `/settings` command presents a category index and three-item category pages (`/settings <category> [page]`) with descriptions and redacted secret values instead of dumping all settings into the unscrollable notice. Existing `/settings <key> [value]` and reset routes remain the editing interface and retain their session/restart restrictions.
+
+## ACP session resources
+
+`createAcpSessions` in `acp/acp-sessions.ts` owns ACP-supplied MCP managers per native
+session. `open` validates the full list, starts connections with explicit cwd,
+environment and HTTP headers, and installs the immutable source through initial
+creation or an exact accepted native configure receipt. An async-local candidate
+is visible only to that creation/configuration, not sibling sessions. MCP calls
+remain script-only and require the ordinary native permission exchange. No
+client-supplied credentials are persisted in settings. ACP selects the manager’s
+`httpRedirect:error` policy so forwarded HTTP headers cannot follow redirects.
+
+Failed preparation leaves the existing source intact. After native acceptance,
+the source stays owned even if obtaining a fresh Host view fails. Older managers
+are retained until explicit Session drain because older tool generations may
+still reference them. `drain` rejects new setup and waits for admitted setup
+operations before `app.close`; `shutdown` then closes managers. Host
+`closeSession` releases native work/attachments without deleting retained logs.
+A reopened session replaces the old entry in `createDirectMcpRefresh` so later
+catalog notifications target the new runtime.

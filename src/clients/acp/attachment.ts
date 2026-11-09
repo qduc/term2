@@ -1,3 +1,4 @@
+import type { AcpClient } from './contract.js';
 import * as acp from '@agentclientprotocol/sdk/experimental/v2';
 import type { DirectConnection } from '../../host/in-process-direct-types.js';
 import type {
@@ -10,7 +11,8 @@ import type {
 import { reduceWireEvent } from '../../protocol/reducer.js';
 import type { AcpLogger, EmitUpdate, PromptExecution, PromptOutcome } from './contract.js';
 import { errorMessage } from './contract.js';
-import { AcpRenderer, MissingAcpWireContract, terminalOutcome } from './render.js';
+import { AcpRenderer, MissingAcpWireContract } from './render.js';
+import { idleUpdate, terminalOutcome } from './turn-errors.js';
 import { requestPermission } from './permissions.js';
 import { requestBudget } from './budget.js';
 import type { PromptInput } from './input.js';
@@ -75,8 +77,9 @@ export class AcpAttachment {
 
   constructor(
     readonly connection: DirectConnection,
-    private readonly client: acp.AgentContext,
+    private readonly client: AcpClient,
     private readonly logger: AcpLogger,
+    private readonly reviewApproval?: (requestId: string, signal: AbortSignal) => Promise<boolean>,
   ) {
     this.foregroundTurnId = connection.snapshot.activeTurnId;
     this.status = connection.snapshot.status;
@@ -120,6 +123,7 @@ export class AcpAttachment {
       if (admission.kind === 'duplicate')
         throw new acp.RequestError(-32009, 'ACP client request id was already admitted');
       prompt.messageId = admission.messageId;
+      this.client.promptAccepted?.(this.connection.sessionId, admission.messageId);
       prompt.turnId = admission.turnId ?? null;
       if (admission.kind !== 'started') {
         throw new MissingAcpWireContract('reject_if_busy must not queue or steer admitted ACP input');
@@ -209,7 +213,7 @@ export class AcpAttachment {
   }
 
   private emit(update: acp.SessionUpdate): Promise<void> {
-    return this.client.notify(acp.methods.client.session.update, { sessionId: this.connection.sessionId, update });
+    return this.client.update({ sessionId: this.connection.sessionId, update });
   }
 
   private async consume(): Promise<void> {
@@ -292,8 +296,7 @@ export class AcpAttachment {
       if (this.foregroundTurnId === event.turnId) {
         this.foregroundTurnId = null;
         this.status = 'idle';
-        if (!this.active)
-          await this.emit({ sessionUpdate: 'state_update', state: 'idle', ...terminalOutcome(event.payload) });
+        if (!this.active) await this.emit(idleUpdate(terminalOutcome(event.payload)));
       }
     }
   }
@@ -324,11 +327,32 @@ export class AcpAttachment {
   }
 
   private openPermission(interaction: WireInteraction): void {
-    this.openRequest(interaction.requestId, interaction.turnId, async (signal) => ({
-      type: 'answer',
-      requestId: interaction.requestId,
-      ...(await requestPermission({ sessionId: this.connection.sessionId, interaction, client: this.client, signal })),
-    }));
+    const { sessionId } = this.connection;
+    this.openRequest(interaction.requestId, interaction.turnId, async (signal) => {
+      const { requestId } = interaction;
+      const approved =
+        interaction.kind === 'approval' &&
+        !interaction.supportedGrants.includes('unsandboxed-once') &&
+        (await this.reviewApproval?.(requestId, signal).catch((error: unknown) => {
+          if (!signal.aborted)
+            this.logger.error('ACP approval review failed', { sessionId, error: errorMessage(error) });
+          return false;
+        }));
+      signal.throwIfAborted();
+      if (approved) {
+        return {
+          type: 'answer',
+          requestId,
+          decision: { kind: 'allow' },
+          provenance: { source: 'policy', automaticApproval: true },
+        };
+      }
+      return {
+        type: 'answer',
+        requestId,
+        ...(await requestPermission({ sessionId, interaction, client: this.client, signal })),
+      };
+    });
   }
 
   private openBudget(request: WireBudgetRequest): void {

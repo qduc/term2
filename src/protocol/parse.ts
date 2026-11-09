@@ -1,4 +1,5 @@
 /** Runtime command decoding shared by local and remote transports. Invalid input has no effect. */
+import { WIRE_REASONING_SELECTIONS } from './wire-commands.js';
 import type {
   WireAnswerProvenance,
   WireBudgetDecision,
@@ -231,13 +232,7 @@ function configureRequest(raw: unknown): WireConfigureRequest {
   return {
     ...(model ? { model } : {}),
     ...(value.reasoning !== undefined
-      ? {
-          reasoning: choice(
-            value.reasoning,
-            ['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const,
-            'reasoning',
-          ),
-        }
+      ? { reasoning: choice(value.reasoning, WIRE_REASONING_SELECTIONS, 'reasoning') }
       : {}),
     ...(value.temperature !== undefined ? { temperature: value.temperature as number } : {}),
     ...(value.profileId !== undefined ? { profileId: id(value.profileId, 'profileId') } : {}),

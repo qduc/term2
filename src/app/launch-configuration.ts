@@ -1,7 +1,7 @@
 /** Per-application, asynchronous authority for one explicit CLI selection. */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { ModelRef } from '../model/index.js';
-import type { DirectCommandConfiguration } from '../session/command-types.js';
+import type { DirectAppConfiguration } from './config-settings.js';
 
 type AuthorizeModel = (next: ModelRef, previous: ModelRef) => void | Promise<void>;
 
@@ -12,11 +12,15 @@ function sameModelOnly(next: ModelRef, previous: ModelRef): void {
 }
 
 export function createLaunchConfigurationScope(authorizeModel: AuthorizeModel = sameModelOnly) {
-  const context = new AsyncLocalStorage<{ sessionId: string; configuration: DirectCommandConfiguration }>();
+  const context = new AsyncLocalStorage<{ sessionId: string; configuration: DirectAppConfiguration }>();
   return {
     authorizeModel,
-    run<Result>(sessionId: string, configuration: DirectCommandConfiguration, operation: () => Promise<Result>) {
+    run<Result>(sessionId: string, configuration: DirectAppConfiguration, operation: () => Promise<Result>) {
       return context.run({ sessionId, configuration }, operation);
+    },
+    approvalMode(sessionId: string) {
+      const launch = context.getStore();
+      return launch?.sessionId === sessionId ? launch.configuration.approvalMode : undefined;
     },
     active(sessionId: string): boolean {
       return context.getStore()?.sessionId === sessionId;

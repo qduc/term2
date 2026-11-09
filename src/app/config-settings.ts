@@ -1,5 +1,6 @@
 /** Isolated, source-schema-validated settings for one prepared runtime generation. */
 import { z } from 'zod';
+import { isDeepStrictEqual } from 'node:util';
 import { isDroppedProfile } from './dropped-profiles.js';
 import { getProfileMetadata } from '../config/profiles/active-profile.js';
 import { canonicalProfileId, legacyModeFromProfileId } from '../config/profiles/legacy-adapter.js';
@@ -16,9 +17,13 @@ import type { DirectCommandConfiguration } from '../session/command-types.js';
 
 /** App preparation accepts selection intent. Native/protocol ingress must retain
  * both fields; effective accepted configuration remains source-resolved values. */
+export type DirectApprovalMode = Extract<SettingValue<'shell.autoApproveMode'>, 'off' | 'auto' | 'always'>;
+
 export type DirectAppConfiguration = Omit<DirectCommandConfiguration, 'reasoning'> & {
   readonly reasoning?: SettingValue<'agent.reasoningEffort'>;
   readonly profileId?: string;
+  /** App-only launch intent. Never accepted from a native wire configuration. */
+  readonly approvalMode?: DirectApprovalMode;
 };
 
 const sessionUpdate = z
@@ -125,6 +130,12 @@ export function createDirectConfigSettings(
       // SettingsService likewise leaves custom-profile compatibility flags alone.
     }
   }
+  if (patch.approvalMode !== undefined) {
+    (snapshot.shell as Record<string, unknown>).autoApproveMode = patch.approvalMode;
+    (snapshot.sandbox as Record<string, unknown>).enabled = patch.approvalMode !== 'always';
+    sources.set('shell.autoApproveMode', 'cli');
+    sources.set('sandbox.enabled', 'cli');
+  }
   const data = SettingsSchema.parse(snapshot);
   const read = (key: string): unknown => {
     const value = key.split('.').reduce<unknown>((parent, part) => {
@@ -155,4 +166,27 @@ export function createDirectConfigSettings(
       ...(settings.get('agent.temperature') !== undefined ? { temperature: settings.get('agent.temperature') } : {}),
     },
   };
+}
+
+/** Carry accepted settings into later tool generations. Approval policy is live only. */
+export function recordDirectConfigSettings(
+  settings: ISettingsService,
+  intent: DirectConfigurationIntent,
+  profileId: string,
+  options: { readonly persist: boolean; readonly approvalMode?: DirectApprovalMode },
+): void {
+  const record = (key: string, value: unknown) =>
+    settings.setDynamic(
+      key,
+      value,
+      options.persist && !isDeepStrictEqual(settings.getDynamic(key), value) ? {} : { persist: false },
+    );
+  record('app.activeProfileId', profileId);
+  if (options.approvalMode !== undefined) {
+    settings.set('shell.autoApproveMode', options.approvalMode, { persist: false });
+    settings.set('sandbox.enabled', options.approvalMode !== 'always', { persist: false });
+  }
+  record('agent.modelSelection', intent.modelSelection);
+  record('agent.reasoningEffort', intent.reasoningEffort);
+  if (intent.temperature !== undefined) record('agent.temperature', intent.temperature);
 }

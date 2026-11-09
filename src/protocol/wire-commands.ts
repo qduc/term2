@@ -6,15 +6,26 @@ import type {
   WireCancelTarget,
   WireCommandPreconditions,
   WireCommandReceipt,
-  WireConfigureRequest,
   WireContent,
   WireDecision,
+  WireModel,
   WireNativeCommandOutcome,
   WireNotificationDrainResult,
   WireNotice,
   WireOrigin,
   WireRewindTarget,
 } from './wire.js';
+
+/** Selectable reasoning values for the configure command, including provider default. */
+export const WIRE_REASONING_SELECTIONS = ['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const;
+
+/** Requested configure selection only. Accepted output uses WireConfiguration. */
+export type WireConfigureRequest = {
+  readonly model?: WireModel;
+  readonly reasoning?: (typeof WIRE_REASONING_SELECTIONS)[number];
+  readonly temperature?: number;
+  readonly profileId?: string;
+};
 
 export type WireSubmission = {
   readonly requestId: string;

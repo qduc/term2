@@ -1,4 +1,6 @@
 import { Readable, Writable } from 'node:stream';
+import type { AgentConnection as V1Connection, Stream as V1Stream } from '@agentclientprotocol/sdk';
+import { createAcpV1Agent } from './v1/v1-agent.js';
 import * as acp from '@agentclientprotocol/sdk/experimental/v2';
 import { createAcpAgent, type AcpAgentOptions } from './agent.js';
 import { errorMessage } from './contract.js';
@@ -29,28 +31,104 @@ export function createStdioAcpIo(): AcpIo {
 }
 
 /**
- * Serve ACP v2 NDJSON using the same SDK/framing as the existing executable.
+ * Negotiate ACP v1 or v2 from initialize, retaining SDK-owned NDJSON framing.
  * EOF or the caller's shutdown signal detaches ACP subscriptions; the app must
  * dispose its direct Host afterward. No global signal handlers, runtime fallback
  * or shutdown deadline are installed here. Diagnostics use stderr only.
  */
-export async function serveAcp(options: AcpAgentOptions, io: AcpIo, signal?: AbortSignal): Promise<number> {
-  let connection: acp.AgentConnection | undefined;
+export async function serveAcp(
+  options: AcpAgentOptions & { readonly onProtocolVersion?: (version: 1 | 2) => void },
+  io: AcpIo,
+  signal?: AbortSignal,
+): Promise<number> {
+  let connection: acp.AgentConnection | V1Connection | undefined;
+  let reader: ReadableStreamDefaultReader<acp.AnyWireMessage> | undefined;
   const close = (): void => {
     connection?.close();
+    if (!connection) void reader?.cancel().catch(() => undefined);
   };
   let exitCode = 0;
   try {
-    connection = createAcpAgent(options).connect(acp.ndJsonStream(io.stdout, io.stdin));
+    const stream = acp.ndJsonStream(io.stdout, io.stdin);
+    reader = stream.readable.getReader();
     signal?.addEventListener('abort', close, { once: true });
     if (signal?.aborted) close();
-    await connection.closed;
+    const first = await reader.read();
+    if (!first.done && !signal?.aborted) {
+      const source = reader;
+      let initial = true;
+      const readable = new ReadableStream<acp.AnyWireMessage>({
+        async pull(controller) {
+          if (initial) {
+            initial = false;
+            controller.enqueue(first.value);
+            return;
+          }
+          const next = await source.read();
+          if (next.done) controller.close();
+          else controller.enqueue(next.value);
+        },
+        cancel: () => source.cancel(),
+      });
+      let message = first.value;
+      const v1 =
+        !Array.isArray(message) &&
+        'method' in message &&
+        message.method === 'initialize' &&
+        'params' in message &&
+        typeof message.params === 'object' &&
+        message.params !== null &&
+        'protocolVersion' in message.params &&
+        message.params.protocolVersion === 1;
+      if (
+        !v1 &&
+        !Array.isArray(message) &&
+        'method' in message &&
+        message.method === 'initialize' &&
+        'params' in message &&
+        typeof message.params === 'object' &&
+        message.params !== null &&
+        'protocolVersion' in message.params &&
+        typeof message.params.protocolVersion === 'number' &&
+        Number.isInteger(message.params.protocolVersion) &&
+        message.params.protocolVersion >= 0 &&
+        message.params.protocolVersion !== acp.PROTOCOL_VERSION
+      ) {
+        // The SDK only accepts its own version. Negotiate a valid unsupported
+        // offer to our latest supported version before its schema/lifecycle gate.
+        message = {
+          ...message,
+          params: {
+            ...message.params,
+            protocolVersion: acp.PROTOCOL_VERSION,
+            ...(!('info' in message.params)
+              ? {
+                  info:
+                    'clientInfo' in message.params
+                      ? message.params.clientInfo
+                      : { name: 'acp-client', version: 'unknown' },
+                }
+              : {}),
+          },
+        };
+        first.value = message;
+      }
+      // v1 and v2 share individual JSON-RPC frames. A batch selects v2 and
+      // remains under its SDK's validation; v1 never receives a batch here.
+      options.onProtocolVersion?.(v1 ? 1 : 2);
+      connection = v1
+        ? createAcpV1Agent(options).connect({ writable: stream.writable, readable } as V1Stream)
+        : createAcpAgent(options).connect({ writable: stream.writable, readable });
+      if (signal?.aborted) close();
+      await connection.closed;
+    }
   } catch (error) {
     io.writeStderr(`term2 acp: ${errorMessage(error)}`);
     exitCode = 1;
   } finally {
     signal?.removeEventListener('abort', close);
     connection?.close();
+    await reader?.cancel().catch(() => undefined);
     try {
       await options.backend.shutdown();
     } catch (error) {

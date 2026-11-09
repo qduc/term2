@@ -1,6 +1,8 @@
 import * as acp from '@agentclientprotocol/sdk/experimental/v2';
-import type { AcpBackend, AcpLogger, PromptExecution } from './contract.js';
+import type { AcpBackend, AcpLogger, PromptExecution, PromptOutcome } from './contract.js';
+import { v2Client } from './client.js';
 import { errorMessage } from './contract.js';
+import { failedExecution, idleUpdate } from './turn-errors.js';
 
 export type AcpAgentOptions = {
   readonly backend: AcpBackend;
@@ -48,13 +50,16 @@ export function createAcpAgent(options: AcpAgentOptions): acp.AgentApp {
   }));
   app.onRequest(acp.methods.agent.session.new, async ({ params, client }) => {
     assertSessionExtensions(params);
-    return await options.backend.createSession({ cwd: params.cwd }, client);
+    return await options.backend.createSession({ cwd: params.cwd }, v2Client(client));
   });
   app.onRequest(acp.methods.agent.session.list, async ({ params }) => await options.backend.listSessions(params));
   app.onRequest(acp.methods.agent.session.resume, async ({ params, client }) => {
     assertSessionExtensions(params);
     if (active.has(params.sessionId)) throw new acp.RequestError(-32000, 'Cannot resume an active ACP prompt');
-    return await options.backend.resumeSession(params, client);
+    return await options.backend.resumeSession(
+      { sessionId: params.sessionId, cwd: params.cwd, replayFrom: params.replayFrom },
+      v2Client(client),
+    );
   });
   app.onRequest(acp.methods.agent.session.prompt, async ({ params, client }) => {
     const prompt = reserve(active, params.sessionId);
@@ -116,30 +121,24 @@ async function runPrompt(input: {
   readonly client: acp.AgentContext;
   readonly sessionId: string;
 }): Promise<void> {
-  let stopReason: acp.StopReason = '_term2_error';
+  let outcome: PromptOutcome;
   try {
-    const result = await input.execution.run(async (update) => {
+    outcome = await input.execution.run(async (update) => {
       await input.client.notify(acp.methods.client.session.update, { sessionId: input.sessionId, update });
     }, input.prompt.controller.signal);
-    stopReason = result.stopReason;
   } catch (error) {
-    input.options.logger.error('Direct ACP prompt execution failed', {
-      eventType: 'acp.prompt.failed',
+    outcome = failedExecution(input.options.logger, input.sessionId, input.prompt.controller.signal, error);
+  }
+  try {
+    await input.client.notify(acp.methods.client.session.update, {
       sessionId: input.sessionId,
-      errorMessage: errorMessage(error),
+      update: idleUpdate(outcome),
     });
+  } catch {
+    // A disconnected client cannot receive idle; the direct log remains the
+    // source of truth and the host owns continued Session lifetime.
   } finally {
-    try {
-      await input.client.notify(acp.methods.client.session.update, {
-        sessionId: input.sessionId,
-        update: { sessionUpdate: 'state_update', state: 'idle', stopReason },
-      });
-    } catch {
-      // A disconnected client cannot receive idle; the direct log remains the
-      // source of truth and the host owns continued Session lifetime.
-    } finally {
-      if (input.active.get(input.sessionId) === input.prompt) input.active.delete(input.sessionId);
-      input.prompt.settle();
-    }
+    if (input.active.get(input.sessionId) === input.prompt) input.active.delete(input.sessionId);
+    input.prompt.settle();
   }
 }

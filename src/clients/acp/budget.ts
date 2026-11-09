@@ -1,4 +1,4 @@
-import * as acp from '@agentclientprotocol/sdk/experimental/v2';
+import type { AcpClient } from './contract.js';
 import type { WireAnswerProvenance, WireBudgetDecision, WireBudgetRequest } from '../../protocol/wire.js';
 
 type BudgetAnswer = { readonly decision: WireBudgetDecision; readonly provenance: WireAnswerProvenance };
@@ -8,14 +8,12 @@ const stop = (source: 'user' | 'system'): BudgetAnswer => ({ decision: { kind: '
 export async function requestBudget(input: {
   readonly sessionId: string;
   readonly request: WireBudgetRequest;
-  readonly client: acp.AgentContext;
+  readonly client: AcpClient;
   readonly signal: AbortSignal;
 }): Promise<BudgetAnswer> {
   try {
-    const { request } = await input.client.initialized;
-    if (request.capabilities?.elicitation?.form == null) return stop('system');
-    const response = await input.client.request(
-      acp.methods.client.elicitation.create,
+    if (!(await input.client.supportsForms())) return stop('system');
+    const response = await input.client.elicit(
       {
         mode: 'form',
         sessionId: input.sessionId,
@@ -38,7 +36,7 @@ export async function requestBudget(input: {
           required: ['decision'],
         },
       },
-      { cancellationSignal: input.signal },
+      input.signal,
     );
     if (input.signal.aborted) return stop('system');
     if (response.action === 'decline' || response.action === 'cancel') return stop('user');

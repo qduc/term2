@@ -55,6 +55,9 @@ import type {
 const READ_ONLY_REQUIRES_SANDBOX_ERROR =
   'Error: shell is unavailable in a read-only session unless it runs inside the sandbox. Enable sandbox.enabled, or use a read_write workspace. Command not executed.';
 
+/** Native approval evidence attached to one direct invocation, never model input. */
+export const APPROVED_SHELL_ESCAPE = Symbol('approved shell escape');
+
 const shellSandboxModeSchema = z.enum(['default', 'unsandboxed']).optional().default('default');
 
 const monitorOptionsSchema = z.object({
@@ -512,7 +515,7 @@ function stripRedundantCd(command: string, cwd: string): string {
   return command;
 }
 
-function isMutatingCommand(command: string, cwd: string, log: ILoggingService): boolean {
+export function isMutatingCommand(command: string, cwd: string, log: ILoggingService): boolean {
   return validateCommandSafety(stripRedundantCd(command, cwd), log); // true = YELLOW/RED
 }
 
@@ -841,8 +844,15 @@ export function createShellToolDefinition(deps: {
         (_context as { readonly signal?: AbortSignal } | undefined)?.signal ??
         (details as { signal?: AbortSignal } | undefined)?.signal;
       const cwd = executionContext?.getCwd() || process.cwd();
+      const escapeCwd =
+        _context !== null && typeof _context === 'object' && APPROVED_SHELL_ESCAPE in _context
+          ? _context[APPROVED_SHELL_ESCAPE]
+          : undefined;
       if (sandbox === 'unsandboxed' && !allowUnsandboxed) {
-        sandbox = 'default';
+        if (escapeCwd === undefined) sandbox = 'default';
+        else if (background || escapeCwd !== cwd) {
+          return 'Error: Outside-sandbox approval does not match this foreground command directory.';
+        }
       }
       const sessionId = getConversationSessionId(_context);
       const sandboxEnabled = isSandboxEnabled();

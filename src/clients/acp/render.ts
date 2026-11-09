@@ -35,6 +35,20 @@ function toolKind(name: string): acp.ToolKind {
   return 'other';
 }
 
+/** Describe the invocation in clients that display titles rather than raw tool inputs. */
+function toolTitle(name: string, input: unknown): string {
+  if (
+    name === 'shell' &&
+    input &&
+    typeof input === 'object' &&
+    'command' in input &&
+    typeof input.command === 'string' &&
+    input.command.trim()
+  )
+    return input.command.trim();
+  return name;
+}
+
 function contentBlock(content: WireContent): acp.ContentBlock {
   return content.type === 'text'
     ? { type: 'text', text: content.text }
@@ -51,7 +65,7 @@ function wholeMessage(message: WireMessage, id = message.id): acp.SessionUpdate 
 }
 
 function toolOutput(output: string | undefined, content: readonly WireContent[] | undefined): acp.ToolCallContent[] {
-  const parts = content ?? (output === undefined ? [] : [{ type: 'text' as const, text: output }]);
+  const parts = content?.length ? content : output === undefined ? [] : [{ type: 'text' as const, text: output }];
   return parts.map((part) => ({ type: 'content', content: contentBlock(part) }));
 }
 
@@ -324,7 +338,7 @@ export class AcpRenderer {
       : {
           sessionUpdate: 'tool_call',
           ...fields,
-          title: toolName,
+          title: toolTitle(toolName, input),
           name: toolName,
           kind: toolKind(toolName),
           ...(input !== undefined ? { rawInput: input } : {}),
@@ -346,7 +360,7 @@ export class AcpRenderer {
     return {
       sessionUpdate: exists ? 'tool_call_update' : 'tool_call',
       toolCallId: tool.executionId,
-      title: tool.toolName,
+      title: toolTitle(tool.toolName, tool.input),
       name: tool.toolName,
       kind: toolKind(tool.toolName),
       status,
@@ -359,12 +373,4 @@ export class AcpRenderer {
       content: toolOutput(tool.output ?? tool.progress, tool.content),
     };
   }
-}
-
-/** Snapshot terminals and live terminals share exact outcomes; receipts are not terminals. */
-export function terminalOutcome(
-  terminal: NonNullable<WireSnapshot['terminal']> | Extract<WireEvent, { type: 'turn_ended' }>['payload'],
-): { stopReason: acp.StopReason } {
-  if (terminal.outcome === 'cancelled' || terminal.outcome === 'interrupted') return { stopReason: 'cancelled' };
-  return { stopReason: terminal.outcome === 'failed' ? '_term2_error' : 'end_turn' };
 }

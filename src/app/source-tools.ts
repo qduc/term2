@@ -6,6 +6,7 @@ import { normalizeToolInput, runToolInputDiagnostics } from '../tools/tool-invok
 import { isCancellationError, isHarnessInvariantError } from '../shared/lib/harness-invariant-error.js';
 import type { ToolApprovalPolicyRegistry } from '../session/approval/tool-approval-policy-registry.js';
 import { NestedApprovalOwner, type NestedApprovalSnapshot } from '../session/approval/nested-approval-owner.js';
+import { APPROVED_SHELL_ESCAPE } from '../tools/system/shell.js';
 import { isDockerHostControlShellApproval } from '../session/approval/shell-sandbox-approval.js';
 import type { SessionAccessState } from '../session/session/session-access-state.js';
 import { DOCKER_HOST_CONTROL_APPROVE_ANSWERS, supportsFolderSessionRead } from '../tools/conversation.js';
@@ -47,6 +48,8 @@ type SourceToolOptions = {
   readonly sessionAccess: SessionAccessState;
   readonly sessionId: string;
   readonly checkInterceptors?: (name: string, input: unknown) => Promise<string | null>;
+  readonly shellEscapeCwd?: () => string;
+  readonly confirmSandboxedShell?: (command: string) => boolean;
   readonly withAnswer: <T>(answer: string, operation: () => Promise<T>) => Promise<T>;
 };
 
@@ -118,6 +121,26 @@ function dockerApproval(name: string, input: unknown, options: SourceToolOptions
   return isDockerHostControlShellApproval(name, input, options.sessionId, options.sessionAccess);
 }
 
+const shellEscapeCwds = new WeakMap<object, string>();
+
+function shellEscape(
+  toolName: string,
+  input: unknown,
+  options: SourceToolOptions,
+): input is { command: string; sandbox: 'unsandboxed'; background?: boolean } {
+  return (
+    options.shellEscapeCwd !== undefined &&
+    options.settings.get('sandbox.enabled') !== false &&
+    toolName === 'shell' &&
+    input !== null &&
+    typeof input === 'object' &&
+    'command' in input &&
+    typeof input.command === 'string' &&
+    'sandbox' in input &&
+    input.sandbox === 'unsandboxed'
+  );
+}
+
 async function approvalFor(
   definition: AnyToolDefinition,
   input: unknown,
@@ -137,15 +160,45 @@ async function approvalFor(
   // ask_user is a question, not consent to execute. Legacy asks it with the
   // response's other approvals; execute() then reads that answer.
   if (definition.name === 'ask_user') return { kind: 'question', request: questionRequest(definition, input) };
+  const docker = dockerApproval(definition.name, input, options);
+  if (shellEscape(definition.name, input, options)) {
+    if (input.background || docker) {
+      return {
+        kind: 'deny',
+        reason: 'Outside-sandbox requests require a foreground shell without Docker host control.',
+      };
+    }
+    const cwd = options.shellEscapeCwd!();
+    shellEscapeCwds.set(input, cwd);
+    return {
+      kind: 'ask',
+      summary: 'Run shell command outside sandbox once',
+      detail: `Run outside sandbox once in ${cwd}: ${input.command}`,
+      risk: 'high',
+      grants: ['unsandboxed-once'],
+    };
+  }
+  // The sandbox runner fails closed when it cannot confine a default command.
+  if (options.shellEscapeCwd && definition.name === 'shell' && !docker) {
+    if (
+      input !== null &&
+      typeof input === 'object' &&
+      'command' in input &&
+      typeof input.command === 'string' &&
+      options.confirmSandboxedShell?.(input.command)
+    )
+      return { kind: 'ask', summary: 'Review sandboxed shell command', detail: input.command };
+    return { kind: 'none' };
+  }
   if (
     policy.kind === 'auto_approve' ||
-    shouldBypassToolApproval(definition.name, options.settings.get('shell.autoApproveMode'))
+    ((!docker || !options.shellEscapeCwd) &&
+      shouldBypassToolApproval(definition.name, options.settings.get('shell.autoApproveMode')))
   ) {
     // Legacy stages every call whose definition needs approval, even when policy then approves it.
     const invocation = invocationFor(context, options.sessionId);
     return (await definition.needsApproval(input, invocation)) ? { kind: 'none', batched: true } : { kind: 'none' };
   }
-  const docker = dockerApproval(definition.name, input, options);
   return {
     kind: 'ask',
     summary: docker
@@ -329,7 +382,22 @@ function adaptTool(definition: AnyToolDefinition, options: SourceToolOptions, ow
       // A chosen session grant is applied by legacy's own grant executor; a plain allow means one execution
       // only, including the separate Docker capability.
       const grant = context.approvalGrant;
-      if (grant) {
+      let escapeCwd: string | undefined;
+      if (shellEscape(definition.name, input, options)) {
+        escapeCwd = shellEscapeCwds.get(input);
+        shellEscapeCwds.delete(input);
+        if (
+          grant !== 'unsandboxed-once' ||
+          escapeCwd === undefined ||
+          escapeCwd !== options.shellEscapeCwd?.() ||
+          dockerApproval(definition.name, input, options)
+        ) {
+          return {
+            output: 'An explicit outside-sandbox grant for the current working directory is required.',
+            isError: true,
+          };
+        }
+      } else if (grant) {
         const access = { sessionId: options.sessionId, sessionAccess: options.sessionAccess };
         applyApprovalGrant(access, { answer: grant, toolName: definition.name, rawArguments: input });
       } else if (dockerApproval(definition.name, input, options)) {
@@ -337,7 +405,10 @@ function adaptTool(definition: AnyToolDefinition, options: SourceToolOptions, ow
         options.sessionAccess.grantDocker(command, context.app.workspace.root, 'once');
       }
       const callId = `direct:${randomUUID()}`;
-      const invocation = invocationFor(context, options.sessionId);
+      const invocation = {
+        ...invocationFor(context, options.sessionId),
+        ...(escapeCwd === undefined ? {} : { [APPROVED_SHELL_ESCAPE]: escapeCwd }),
+      };
       let result: unknown;
       try {
         result = await withNestedApprovals(definition, context, options, owners, () =>

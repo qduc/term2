@@ -1,3 +1,5 @@
+import type { SessionConfigOption } from '@agentclientprotocol/sdk';
+import type { AcpApprovalMode, AcpClient } from './contract.js';
 import { randomUUID } from 'node:crypto';
 import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -6,6 +8,17 @@ import type { DirectConnection } from '../../host/in-process-direct-types.js';
 import type { AcpBackend, BackendOptions } from './contract.js';
 import { AcpAttachment } from './attachment.js';
 import { promptInput } from './input.js';
+import { AcpModels } from './models.js';
+
+const approvalModes = [
+  { value: 'ask', name: 'Ask', description: 'Keep the sandbox on and ask when an action requires approval.' },
+  { value: 'assisted', name: 'Assisted', description: 'Keep the sandbox on and review eligible low-risk approvals.' },
+  {
+    value: 'always',
+    name: 'Always · Sandbox off',
+    description: 'Run shell commands outside the sandbox and skip routine approvals.',
+  },
+] as const satisfies readonly { value: AcpApprovalMode; name: string; description: string }[];
 
 async function canonicalCwd(cwd: string): Promise<string> {
   if (!path.isAbsolute(cwd)) throw acp.RequestError.invalidParams(undefined, 'cwd must be an absolute path');
@@ -23,6 +36,7 @@ async function canonicalCwd(cwd: string): Promise<string> {
  * No host factory, Session, provider, persistence or legacy runtime is created.
  */
 export function createAcpBackend(options: BackendOptions): AcpBackend {
+  const models = new AcpModels(options);
   const attachments = new Map<string, AcpAttachment>();
   // Lifecycle mutations for a session must not race replacement and close.
   const changing = new Set<string>();
@@ -39,8 +53,14 @@ export function createAcpBackend(options: BackendOptions): AcpBackend {
     if (!attachment) throw new acp.RequestError(-32001, `Session not found: ${id}`);
     return attachment;
   };
-  const attach = async (connection: DirectConnection, client: acp.AgentContext, replay: boolean): Promise<void> => {
-    const attachment = new AcpAttachment(connection, client, options.logger);
+  const attach = async (connection: DirectConnection, client: AcpClient, replay: boolean): Promise<void> => {
+    const review = client.supportsShellEscape ? options.approval?.review : undefined;
+    const attachment = new AcpAttachment(
+      connection,
+      client,
+      options.logger,
+      review ? (requestId, signal) => review(connection.sessionId, requestId, signal) : undefined,
+    );
     try {
       available();
       if (attachments.has(connection.sessionId)) throw new acp.RequestError(-32000, 'Session is already attached');
@@ -53,14 +73,65 @@ export function createAcpBackend(options: BackendOptions): AcpBackend {
       throw error;
     }
   };
+  const release = async (sessionId: string): Promise<void> => {
+    try {
+      await options.host.closeSession?.(options.principal, sessionId);
+    } finally {
+      await options.sessions?.close(sessionId);
+    }
+  };
 
+  const configOptions = async (sessionId: string, refresh = false): Promise<SessionConfigOption[]> => {
+    const config = await models.configOptions(sessionId, refresh);
+    if (options.approval) {
+      config.push({
+        id: 'approval_mode',
+        name: 'Approval mode',
+        type: 'select',
+        category: 'mode',
+        currentValue: await options.approval.get(sessionId),
+        options: [...approvalModes],
+      });
+    }
+    return config;
+  };
   return {
+    ...(options.sessions ? { mcpCapabilities: { http: true, sse: true } } : {}),
+    async configOptions(sessionId, refresh) {
+      attached(sessionId);
+      return await configOptions(sessionId, refresh);
+    },
+    async setConfigOption(request) {
+      const { sessionId } = request;
+      attached(sessionId);
+      if (request.configId === 'approval_mode') {
+        const selected = approvalModes.find(({ value }) => value === request.value);
+        if (!options.approval || !selected) throw acp.RequestError.invalidParams(undefined, 'Unknown approval mode');
+        changing.add(sessionId);
+        try {
+          await options.approval.set(sessionId, selected.value);
+          return await configOptions(sessionId);
+        } finally {
+          changing.delete(sessionId);
+        }
+      }
+      await models.setConfigOption(request);
+      return await configOptions(sessionId);
+    },
     async createSession(request, client) {
       available();
       const cwd = await canonicalCwd(request.cwd);
       const grant = await options.workspaces.authorize(cwd);
-      const connection = await options.host.createSession(options.principal, grant);
-      await attach(connection, client, false);
+      const connect = () => options.host.createSession(options.principal, grant);
+      if (!options.sessions && request.mcpServers?.length)
+        throw acp.RequestError.invalidParams(undefined, 'MCP session setup is unavailable');
+      const connection = options.sessions ? await options.sessions.open({ ...request, cwd }, connect) : await connect();
+      try {
+        await attach(connection, client, false);
+      } catch (error) {
+        await release(connection.sessionId);
+        throw error;
+      }
       return { sessionId: connection.sessionId };
     },
     async listSessions(request) {
@@ -74,6 +145,8 @@ export function createAcpBackend(options: BackendOptions): AcpBackend {
         sessions.push({
           sessionId: session.id,
           cwd: sessionCwd,
+          ...(session.title !== undefined ? { title: session.title } : {}),
+          ...(session.updatedAt !== undefined ? { updatedAt: session.updatedAt } : {}),
         });
       }
       return { sessions, ...(page.cursor ? { nextCursor: page.cursor } : {}) };
@@ -95,7 +168,12 @@ export function createAcpBackend(options: BackendOptions): AcpBackend {
         }
         // Connect first so a failed authorization/open does not destroy this
         // client's existing attachment. Replacement never closes the Session.
-        const connection = await options.host.connect(options.principal, request.sessionId);
+        const connect = () => options.host.connect(options.principal, request.sessionId);
+        if (!options.sessions && request.mcpServers?.length)
+          throw acp.RequestError.invalidParams(undefined, 'MCP session setup is unavailable');
+        const connection = options.sessions
+          ? await options.sessions.open({ ...request, cwd }, connect)
+          : await connect();
         try {
           attachments.get(request.sessionId)?.detach();
           attachments.delete(request.sessionId);
@@ -119,10 +197,13 @@ export function createAcpBackend(options: BackendOptions): AcpBackend {
       available();
       if (changing.has(sessionId)) throw new acp.RequestError(-32000, 'Session attachment is changing');
       const attachment = attachments.get(sessionId);
-      if (!attachment) return;
       changing.add(sessionId);
       try {
-        await attachment.close();
+        try {
+          await attachment?.close();
+        } finally {
+          await release(sessionId);
+        }
       } finally {
         attachments.delete(sessionId);
         changing.delete(sessionId);
@@ -130,6 +211,7 @@ export function createAcpBackend(options: BackendOptions): AcpBackend {
     },
     async shutdown() {
       stopped = true;
+      models.shutdown();
       const failures: unknown[] = [];
       for (const attachment of attachments.values()) {
         try {

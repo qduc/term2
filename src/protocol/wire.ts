@@ -2,9 +2,16 @@ export { ASK_USER_NO_ANSWER_RESULT } from '../tools/adopted/ask-user-constants.j
 /** Direct public protocol. No engine tokens, provider history or live callbacks cross this boundary. */
 import type { ModelRequestCost } from '../session/recovery-budget.js';
 import type { DirectFinalWindow } from '../session/final.js';
+import type { WIRE_REASONING_SELECTIONS, WireConfigureRequest } from './wire-commands.js';
 
 // Keep this public import path stable while envelopes have their own vocabulary owners.
-export type { WireCommand, WireCommandErrorCode, WireCommandResult, WireSubmission } from './wire-commands.js';
+export type {
+  WireCommand,
+  WireCommandErrorCode,
+  WireCommandResult,
+  WireConfigureRequest,
+  WireSubmission,
+} from './wire-commands.js';
 export type { WireBranchSnapshot, WireEvent, WireEventPayloads, WireEventType, WireSnapshot } from './wire-events.js';
 
 export const DIRECT_PROTOCOL_VERSION = 1 as const;
@@ -365,15 +372,8 @@ export type WireVerification = {
 };
 export type WireConfiguration = {
   readonly model?: WireModel;
-  readonly reasoning?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+  readonly reasoning?: Exclude<(typeof WIRE_REASONING_SELECTIONS)[number], 'default'>;
   readonly temperature?: number;
-};
-/** Requested configure selection only. Accepted output uses WireConfiguration. */
-export type WireConfigureRequest = {
-  readonly model?: WireModel;
-  readonly reasoning?: 'default' | 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
-  readonly temperature?: number;
-  readonly profileId?: string;
 };
 /** Native context estimates; these are not measured provider usage. */
 export type WireCompactionEstimate = {

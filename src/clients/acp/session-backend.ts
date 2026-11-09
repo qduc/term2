@@ -9,17 +9,6 @@ import { AcpAttachment } from './attachment.js';
 import { promptInput } from './input.js';
 import { AcpModels } from './models.js';
 
-const approvalModes = [
-  { value: 'off', name: 'Off', description: 'Ask when a tool requires approval.' },
-  { value: 'advisory', name: 'Advisory', description: 'Show a risk assessment for eligible shell approvals.' },
-  {
-    value: 'auto',
-    name: 'Auto',
-    description:
-      'Automatically approve eligible shell commands when the reviewer is confident they are authorized and low or medium risk.',
-  },
-] as const;
-
 async function canonicalCwd(cwd: string): Promise<string> {
   if (!path.isAbsolute(cwd)) throw acp.RequestError.invalidParams(undefined, 'cwd must be an absolute path');
   try {
@@ -37,7 +26,6 @@ async function canonicalCwd(cwd: string): Promise<string> {
  */
 export function createAcpBackend(options: BackendOptions): AcpBackend {
   const models = new AcpModels(options);
-  const approval = new Map<string, { value: (typeof approvalModes)[number]['value']; lifetime: AbortController }>();
   const attachments = new Map<string, AcpAttachment>();
   // Lifecycle mutations for a session must not race replacement and close.
   const changing = new Set<string>();
@@ -54,36 +42,8 @@ export function createAcpBackend(options: BackendOptions): AcpBackend {
     if (!attachment) throw new acp.RequestError(-32001, `Session not found: ${id}`);
     return attachment;
   };
-  const configOptions: NonNullable<AcpBackend['configOptions']> = async (sessionId, refresh) => {
-    const attachment = attached(sessionId);
-    const config = await models.configOptions(sessionId, refresh);
-    if (attached(sessionId) !== attachment) throw new acp.RequestError(-32000, 'Session attachment changed');
-    if (options.reviewApproval) {
-      config.push({
-        id: 'mode',
-        name: 'Approval mode',
-        category: 'mode',
-        type: 'select',
-        currentValue: approval.get(sessionId)?.value ?? 'off',
-        options: [...approvalModes],
-      });
-    }
-    return config;
-  };
   const attach = async (connection: DirectConnection, client: AcpClient, replay: boolean): Promise<void> => {
-    const sessionId = connection.sessionId;
-    const attachment = new AcpAttachment(connection, client, options.logger, async (interaction, signal) => {
-      const mode = approval.get(sessionId);
-      if (!mode || mode.value === 'off') return;
-      const reviewSignal = AbortSignal.any([signal, mode.lifetime.signal]);
-      const result = await options.reviewApproval?.(sessionId, interaction, reviewSignal).catch((error: unknown) => {
-        if (!reviewSignal.aborted)
-          options.logger.error('ACP shell approval review failed', { sessionId, errorMessage: String(error) });
-        return undefined;
-      });
-      if (!result || reviewSignal.aborted) return;
-      return { ...result, approved: mode.value === 'auto' && result.approved, signal: reviewSignal };
-    });
+    const attachment = new AcpAttachment(connection, client, options.logger);
     try {
       available();
       if (attachments.has(connection.sessionId)) throw new acp.RequestError(-32000, 'Session is already attached');
@@ -106,22 +66,13 @@ export function createAcpBackend(options: BackendOptions): AcpBackend {
 
   return {
     ...(options.sessions ? { mcpCapabilities: { http: true, sse: true } } : {}),
-    configOptions,
+    async configOptions(sessionId, refresh) {
+      attached(sessionId);
+      return await models.configOptions(sessionId, refresh);
+    },
     async setConfigOption(request) {
       attached(request.sessionId);
-      if (request.configId === 'mode') {
-        const mode = approvalModes.find(({ value }) => value === request.value);
-        if (!options.reviewApproval || !mode) throw acp.RequestError.invalidParams(undefined, 'Unknown approval mode');
-        const config = await configOptions(request.sessionId);
-        const selector = config.find((option) => option.id === 'mode');
-        if (selector?.type !== 'select') throw acp.RequestError.invalidParams(undefined, 'Approval mode unavailable');
-        approval.get(request.sessionId)?.lifetime.abort();
-        approval.set(request.sessionId, { value: mode.value, lifetime: new AbortController() });
-        selector.currentValue = mode.value;
-        return config;
-      }
-      await models.setConfigOption(request);
-      return await configOptions(request.sessionId);
+      return await models.setConfigOption(request);
     },
     async createSession(request, client) {
       available();
@@ -211,8 +162,6 @@ export function createAcpBackend(options: BackendOptions): AcpBackend {
         }
       } finally {
         attachments.delete(sessionId);
-        approval.get(sessionId)?.lifetime.abort();
-        approval.delete(sessionId);
         changing.delete(sessionId);
       }
     },
@@ -228,8 +177,6 @@ export function createAcpBackend(options: BackendOptions): AcpBackend {
         }
       }
       attachments.clear();
-      for (const mode of approval.values()) mode.lifetime.abort();
-      approval.clear();
       if (failures.length) throw new AggregateError(failures, 'Direct ACP detach failed');
     },
   };

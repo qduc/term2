@@ -25,6 +25,7 @@ export function v1Client(
 ): AcpClient {
   const output = new V1Output(options);
   return {
+    supportsShellEscape: true,
     promptAccepted: (sessionId, messageId) => output.promptAccepted(sessionId, messageId),
     async update({ sessionId, update }) {
       for (const translated of output.translate(sessionId, update))

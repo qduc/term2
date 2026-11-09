@@ -118,14 +118,7 @@ export async function prepareDirectConfiguration(
             ...(rebound.verification?.limits ? { limits: rebound.verification.limits } : {}),
           }
         : undefined;
-    const {
-      notice: _notice,
-      profileName: _profileName,
-      runtime,
-      reviewShellApproval: _reviewShell,
-      decideInteraction: _decide,
-      ...request
-    } = surface;
+    const { notice: _notice, profileName: _profileName, runtime, decideInteraction: _decide, ...request } = surface;
     let disposed = false;
     return {
       configuration: {

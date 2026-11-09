@@ -260,14 +260,7 @@ export function createDirectRuntimes(
       );
       const scope = createSessionScope(sessionContext, context.id, new Date().toISOString());
       const profile = getProfileMetadata(String(settings.get('app.activeProfileId')));
-      const {
-        notice,
-        profileName: _profileName,
-        runtime,
-        reviewShellApproval: _reviewShell,
-        decideInteraction: _decide,
-        ...request
-      } = surface;
+      const { notice, profileName: _profileName, runtime, decideInteraction: _decide, ...request } = surface;
       let tasks: DirectBackgroundTasks | undefined;
       const initialSettings = createDirectConfigSettings(settings, {}).settings;
       const publish = (

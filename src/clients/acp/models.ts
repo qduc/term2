@@ -72,7 +72,7 @@ export class AcpModels {
     ];
   }
 
-  async setConfigOption(request: acp.SetSessionConfigOptionRequest): Promise<void> {
+  async setConfigOption(request: acp.SetSessionConfigOptionRequest): Promise<acp.SessionConfigOption[]> {
     if (typeof request.value !== 'string')
       throw acp.RequestError.invalidParams(undefined, 'Expected a configuration selection');
     const catalog = await this.configOptions(request.sessionId);
@@ -119,6 +119,7 @@ export class AcpModels {
         outcome.configuration.reasoning !== configuration.reasoning
       )
         throw new acp.RequestError(-32000, 'Session confirmed a different thinking level');
+      return await this.configOptions(request.sessionId);
     } finally {
       this.close(connection);
     }

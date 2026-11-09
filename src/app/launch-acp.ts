@@ -1,7 +1,7 @@
 /**
  * `term2 acp` on the direct host. stdout is the protocol channel and nothing else
- * writes to it. Shell isolation is mandatory and ACP sessions start with
- * interactive permission requests for tools that require approval.
+ * writes to it. The shell defaults to the required sandbox. ACP v1 can request
+ * an explicit one-time grant for a foreground shell command outside it.
  */
 import fs from 'node:fs';
 import { getAllProviders, getProviderIds } from '../model/providers/index.js';
@@ -101,7 +101,7 @@ export async function launchAcp(request: AcpRequest): Promise<number> {
       autoApprove: false,
       interactive: true,
       allowUnsandboxed: false,
-      confirmRiskyShell: protocolVersion === 1,
+      shellEscapeApproval: protocolVersion === 1,
       mcp: sessions.surface(sessionId),
     }),
     mcpCatalog: sessions,
@@ -173,8 +173,6 @@ export async function launchAcp(request: AcpRequest): Promise<number> {
       logger,
       models,
       sessions,
-      reviewApproval: (sessionId, interaction, signal) =>
-        app.reviewShellApproval(sessionId, interaction.requestId, signal),
       async configuration(sessionId) {
         const state = await app.sessionConfiguration(sessionId);
         return { model: state.model, reasoning: state.reasoningEffort };

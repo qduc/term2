@@ -31,11 +31,10 @@ and persistence policies.
 settings and tool generations. `approvalAlwaysAsks` pins the session's saved
 shell auto-approval mode to `off`; `requireSandbox` pins `sandbox.enabled:true`
 after restoring session configuration. ACP sets both options. These overrides
-are in-memory policy and do not rewrite user preferences. ACP v1 adds a
-consent check for root shell calls flagged by the native command classifier.
-Its opt-in reviewer uses the accepted foreground request and conversation
-context through the app. The ACP attachment submits an approved verdict with
-policy provenance, while Session owns settlement and tool execution.
+are in-memory policy and do not rewrite user preferences. ACP v1 passes the
+local foreground shell an invocation-scoped escape capability only after the
+native request receives its distinct one-time grant. The default sandbox
+continues to fail closed.
 `persistSessionConfiguration:false` also keeps native configuration changes
 session-local; ACP opts out while the terminal UI retains saved defaults. The
 native generation's install step records settings through `SessionSettingsService`,

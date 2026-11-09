@@ -32,21 +32,31 @@ export async function requestPermission(input: {
   readonly interaction: WireInteraction;
   readonly client: AcpClient;
   readonly signal: AbortSignal;
-  readonly advisory?: string;
 }): Promise<AcpAnswer> {
   const interaction = input.interaction;
   if (interaction.kind === 'question') return await requestQuestion(input);
-  // Unsandboxed grants remain excluded from ACP's security posture even if an
-  // incorrectly composed Session advertises them. Other grants need exact scope
-  // validation by the actual wire capability, never a conversion to allow.
-  const grants = interaction.supportedGrants.filter((grant) => GRANTS[grant]);
-  const options = [...OPTIONS, ...grants.map((grant) => ({ optionId: grant, ...GRANTS[grant]! }))];
+  // A shell escape needs its own grant. A plain Allow once never grants it.
+  const escape =
+    input.client.supportsShellEscape === true &&
+    interaction.toolName === 'shell' &&
+    !interaction.parentExecutionId &&
+    !interaction.taskId &&
+    interaction.input !== null &&
+    typeof interaction.input === 'object' &&
+    'sandbox' in interaction.input &&
+    interaction.input.sandbox === 'unsandboxed' &&
+    !('background' in interaction.input && interaction.input.background) &&
+    interaction.supportedGrants.includes('unsandboxed-once');
+  const grants = escape ? ['unsandboxed-once' as const] : interaction.supportedGrants.filter((grant) => GRANTS[grant]);
+  const options: acp.PermissionOption[] = escape
+    ? [{ optionId: 'unsandboxed-once', name: 'Run outside sandbox once', kind: 'allow_once' }, OPTIONS[1]!]
+    : [...OPTIONS, ...grants.map((grant) => ({ optionId: grant, ...GRANTS[grant]! }))];
   try {
     const response = await input.client.permission(
       {
         sessionId: input.sessionId,
         title: interaction.toolName,
-        description: [interaction.detail ?? interaction.summary, input.advisory].filter(Boolean).join('\n\n'),
+        description: interaction.detail ?? interaction.summary,
         subject: {
           type: 'tool_call',
           toolCall: {
@@ -81,7 +91,12 @@ export async function requestPermission(input: {
     switch (optionId) {
       case 'approve':
       case 'allow-once':
-        return { decision: { kind: 'allow' }, provenance: { source: 'user' } };
+        return escape
+          ? {
+              decision: { kind: 'deny', reason: 'An explicit outside-sandbox grant is required.' },
+              provenance: { source: 'system' },
+            }
+          : { decision: { kind: 'allow' }, provenance: { source: 'user' } };
       case 'reject':
         return { decision: { kind: 'deny', reason: 'Permission denied by client.' }, provenance: { source: 'user' } };
       default: {

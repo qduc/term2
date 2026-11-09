@@ -57,8 +57,8 @@ export type ToolSurfaceOptions = {
    * Never enables source memory tools; it only keeps the source prompt truthful. */
   readonly promptMemoryEnabled?: boolean;
   readonly allowUnsandboxed?: boolean;
-  /** Require consent for root shell commands the native safety classifier flags. */
-  readonly confirmRiskyShell?: boolean;
+  /** Require a distinct one-time grant for foreground shell escape. */
+  readonly shellEscapeApproval?: boolean;
   readonly discordSend?: import('../clients/discord/discord-outbound.js').DiscordSend;
   readonly isDiscordInputEnabled?: () => boolean;
 };
@@ -95,12 +95,6 @@ export type AgentSurface = {
     readonly maxParallelToolCalls: number;
     dispose?(): void | Promise<void>;
   };
-  /** Review an accepted ACP shell interaction within this surface's sandbox policy. */
-  reviewShellApproval?(
-    request: InteractionRequest,
-    history: readonly Item[],
-    signal: AbortSignal,
-  ): Promise<{ readonly approved: boolean; readonly description: string } | undefined>;
   /** Headless policy only; caller commits its decision through Session's Turn.answer. */
   decideInteraction(request: InteractionRequest, history: readonly Item[]): Promise<InteractionDecision>;
 };

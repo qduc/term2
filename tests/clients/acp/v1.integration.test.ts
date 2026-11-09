@@ -34,8 +34,7 @@ async function fixture(
     holdCatalog?: boolean;
     holdReply?: boolean;
     shell?: boolean;
-    shellInput?: { command: string; sandbox?: 'default' | 'unsandboxed' };
-    review?: string;
+    shellCalls?: readonly { command: string; sandbox?: 'unsandboxed'; background?: boolean }[];
     runCode?: string;
     permission?: (params: acp.RequestPermissionRequest) => Promise<acp.RequestPermissionResponse>;
   } = {},
@@ -64,32 +63,29 @@ async function fixture(
     let raw = '';
     req.on('data', (chunk) => (raw += String(chunk)));
     req.on('end', async () => {
-      const request = JSON.parse(raw);
-      requests.push(request);
-      const reviewing = JSON.stringify(request.messages).includes('riskLevel');
+      requests.push(JSON.parse(raw));
       await replyReady;
-      const call = options.runCode
-        ? requests.length % 2 === 1
-        : (options.shell || options.shellInput) && requests.length === 1;
+      const shellInput =
+        options.shellCalls?.[requests.length - 1] ??
+        (options.shell && requests.length === 1 ? { command: 'printf acp-tool-visible' } : undefined);
+      const call = options.runCode ? requests.length % 2 === 1 : shellInput !== undefined;
       const delta = call
         ? {
             tool_calls: [
               {
                 index: 0,
-                id: 'shell-call',
+                id: `shell-call-${requests.length}`,
                 type: 'function',
                 function: {
                   name: options.runCode ? 'run_code' : 'shell',
                   arguments: JSON.stringify(
-                    options.runCode
-                      ? { code: options.runCode, description: 'Call fixture MCP' }
-                      : options.shellInput ?? { command: 'printf acp-tool-visible' },
+                    options.runCode ? { code: options.runCode, description: 'Call fixture MCP' } : shellInput,
                   ),
                 },
               },
             ],
           }
-        : { content: reviewing ? options.review ?? 'ACP fixture reply' : 'ACP fixture reply' };
+        : { content: 'ACP fixture reply' };
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       res.end(
         [
@@ -110,6 +106,8 @@ async function fixture(
   const address = server.address() as import('node:net').AddressInfo;
   const home = path.join(temp, 'home');
   const state = path.join(temp, 'state');
+  const scratch = path.join(temp, 'scratch');
+  if (options.shellCalls) await mkdir(scratch);
   const settingsDir = resolveSettingsDirectory({ homeDir: home, env: { XDG_STATE_HOME: state } });
   await mkdir(settingsDir, { recursive: true });
   await writeFile(
@@ -138,6 +136,7 @@ async function fixture(
         TERM2_CONVERSATIONS_DIR: path.join(temp, 'sessions'),
         TERM2_CACHE_DIR: path.join(temp, 'cache'),
         DISABLE_LOGGING: '1',
+        ...(options.shellCalls ? { TMPDIR: scratch, TMP: scratch, TEMP: scratch } : {}),
       }),
       stdio: ['pipe', 'pipe', 'pipe'],
     },
@@ -628,7 +627,6 @@ describe('ACP v1 built CLI compatibility for Air', () => {
             options: [{ value: 'acpfixture/acp-model' }],
           },
           { id: 'thinking_level', type: 'select', category: 'thought_level', currentValue: 'default' },
-          { id: 'mode', type: 'select', category: 'mode', currentValue: 'off' },
         ]);
         releaseCatalog();
         await vi.waitFor(() =>
@@ -763,100 +761,57 @@ describe('ACP v1 built CLI compatibility for Air', () => {
     });
   }, 30_000);
 
-  it.each([
-    { mode: 'off', reviewed: false, asked: true },
-    { mode: 'advisory', reviewed: true, asked: true },
-    { mode: 'auto', reviewed: true, asked: false },
-    { mode: 'auto', reviewed: true, asked: true, invalidReview: true },
-    { mode: 'auto', reviewed: false, asked: true, unsandboxed: true },
-  ])(
-    'applies ACP shell approval mode $mode (reviewed=$reviewed, asked=$asked)',
-    async ({ mode, reviewed, asked, invalidReview, unsandboxed }) => {
-      const permissionTitles: string[] = [];
+  it.each(['unsandboxed-once', 'approve'])(
+    'runs sandboxed shell without prompts and requires a distinct grant to retry outside (%s)',
+    async (selection) => {
+      const permissions: acp.RequestPermissionRequest[] = [];
+      const command = 'echo escaped >> ../escaped.txt';
       await fixture(
-        async ({ context, workspace, requests, savedSettings, updates }) => {
-          const setup = { cwd: workspace, mcpServers: [] };
-          const preferences = await savedSettings();
-          const created = await context.request<acp.NewSessionResponse>(acp.methods.agent.session.new, setup);
-          const { sessionId } = created;
-          expect(created.modes).toMatchObject({
-            currentModeId: 'off',
-            availableModes: ['off', 'advisory', 'auto'].map((id) => ({ id })),
+        async ({ context, workspace, updates, requests }) => {
+          const { sessionId } = await context.request(acp.methods.agent.session.new, {
+            cwd: workspace,
+            mcpServers: [],
           });
-          await expect(
-            context.request<acp.SetSessionConfigOptionResponse>(acp.methods.agent.session.setConfigOption, {
-              sessionId,
-              configId: 'mode',
-              value: 'always',
-            }),
-          ).rejects.toMatchObject({ code: -32602 });
-          if (mode === 'advisory') {
-            await context.request(acp.methods.agent.session.setMode, { sessionId, modeId: mode });
-          } else {
-            const changed = await context.request<acp.SetSessionConfigOptionResponse>(
-              acp.methods.agent.session.setConfigOption,
-              {
-                sessionId,
-                configId: 'mode',
-                value: mode,
-              },
-            );
-            expect(changed.configOptions.find((option) => option.id === 'mode')).toMatchObject({ currentValue: mode });
-          }
-          const resumed = await context.request<acp.ResumeSessionResponse>(acp.methods.agent.session.resume, {
-            sessionId,
-            ...setup,
-          });
-          expect(resumed.modes?.currentModeId).toBe(mode);
-          const sibling = await context.request<acp.NewSessionResponse>(acp.methods.agent.session.new, setup);
-          expect(sibling.modes?.currentModeId).toBe('off');
           await context.request(acp.methods.agent.session.prompt, {
             sessionId,
-            prompt: [{ type: 'text', text: 'Write the fixture marker in the workspace.' }],
+            prompt: [{ type: 'text', text: 'Run the workspace check and the requested outside write.' }],
           });
-          expect(requests.some((request) => JSON.stringify(request.messages).includes('riskLevel'))).toBe(reviewed);
-          expect(permissionTitles).toHaveLength(asked ? 1 : 0);
-          const marker = path.join(workspace, 'marker.txt');
-          if (asked) {
-            await expect(readFile(marker, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
-          } else {
-            const contents = await readFile(marker, 'utf8').catch((error: NodeJS.ErrnoException) => {
-              if (error.code !== 'ENOENT' || process.env.TERM2_ACP_REQUIRE_SHELL_SUCCESS === '1') throw error;
-              return null;
-            });
-            if (contents === null) {
-              const tools = updates.filter(({ update }) => update.sessionUpdate === 'tool_call_update');
-              expect(JSON.stringify(tools)).toMatch(/sandbox|bwrap/i);
-            } else {
-              expect(contents).toBe('acp-mode\n');
-            }
+          expect(permissions).toHaveLength(2);
+          expect(new Set(permissions.map(({ toolCall }) => toolCall.toolCallId)).size).toBe(2);
+          for (const { toolCall, options } of permissions) {
+            expect(toolCall.title).toContain(`Run outside sandbox once in ${workspace}: ${command}`);
+            expect(toolCall.rawInput).toMatchObject({ command, sandbox: 'unsandboxed' });
+            expect(options.map(({ optionId, kind }) => [optionId, kind])).toEqual([
+              ['unsandboxed-once', 'allow_once'],
+              ['reject', 'reject_once'],
+            ]);
           }
-          if (mode === 'advisory') expect(permissionTitles[0]).toContain('Shell review: Authorized workspace write');
-          expect(await savedSettings()).toBe(preferences);
-          await context.request(acp.methods.agent.session.close, { sessionId });
-          const loaded = await context.request<acp.LoadSessionResponse>(acp.methods.agent.session.load, {
-            sessionId,
-            ...setup,
+          expect(JSON.stringify(requests[2].messages.at(-1))).toMatch(
+            /sandbox|operation not permitted|permission denied/i,
+          );
+          expect(JSON.stringify(requests.at(-1).messages.at(-1))).toContain('require a foreground shell');
+          const inside = path.join(workspace, 'inside.txt');
+          const contents = await readFile(inside, 'utf8').catch((error: NodeJS.ErrnoException) => {
+            if (error.code !== 'ENOENT' || process.env.TERM2_ACP_REQUIRE_SHELL_SUCCESS === '1') throw error;
+            return null;
           });
-          expect(loaded.modes?.currentModeId).toBe('off');
+          if (contents === null) expect(JSON.stringify(updates)).toMatch(/sandbox|bwrap/i);
+          else expect(contents).toBe('inside\n');
+          const outside = path.join(workspace, '..', 'escaped.txt');
+          if (selection === 'unsandboxed-once') await expect(readFile(outside, 'utf8')).resolves.toBe('escaped\n');
+          else await expect(readFile(outside, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
         },
         {
-          shellInput: { command: 'echo acp-mode | tee marker.txt', ...(unsandboxed ? { sandbox: 'unsandboxed' } : {}) },
-          review: invalidReview
-            ? 'invalid review'
-            : JSON.stringify({
-                results: [
-                  {
-                    reasoning: 'Authorized workspace write',
-                    riskLevel: 'low',
-                    authorization: 'explicit',
-                    confidence: 'high',
-                  },
-                ],
-              }),
-          async permission({ toolCall }) {
-            permissionTitles.push(toolCall.title ?? '');
-            return { outcome: { outcome: 'selected', optionId: 'reject' } };
+          shellCalls: [
+            { command: 'echo inside | tee inside.txt' },
+            { command },
+            { command, sandbox: 'unsandboxed' },
+            { command, sandbox: 'unsandboxed' },
+            { command, sandbox: 'unsandboxed', background: true },
+          ],
+          async permission(params) {
+            permissions.push(params);
+            return { outcome: { outcome: 'selected', optionId: permissions.length === 1 ? selection : 'reject' } };
           },
         },
       );

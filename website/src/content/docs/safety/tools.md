@@ -3,7 +3,9 @@ title: Agent Tools
 description: Tools for reading and editing files, running shell commands and JavaScript, and searching the web.
 ---
 
-Tool availability depends on the session. Tools follow its approval and sandbox settings.
+Ask term2 for the task you want to complete; it chooses available tools to read files, make changes, run commands, or search the web. You can review tool calls and their output in the conversation. Tool availability depends on the session, and tools follow its approval and sandbox settings. See [approvals](/term2/safety/approvals/) and [shell sandbox](/term2/safety/sandbox/) for the controls.
+
+For example, ask “Find where this error is reported, explain the cause, and suggest a fix.” To have term2 make the change, include that in your request and specify how you want it checked. The lists below are a reference for the tools it may use.
 
 ## Filesystem Tools
 

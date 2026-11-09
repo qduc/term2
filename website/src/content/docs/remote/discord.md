@@ -3,15 +3,23 @@ title: Discord Bridge
 description: Receive Discord messages and send replies from an existing terminal session.
 ---
 
-Start an interactive session with a provider and model, then attach it to the Discord bridge. The bridge accepts messages from the users and channels on your allowlist.
+Connect an existing interactive term2 session to a private Discord channel so you can send it messages from Discord. Keep the term2 session running: approvals, questions, and status remain in its terminal.
 
-Use `term2 discord --help` for the bridge's configuration and private token-enrollment options. The [repository bridge guide](https://github.com/qduc/term2/blob/main/docs/reference/discord-bridge.md) contains the configuration schema, bot setup, first-run checklist, and offline integration command.
+<a id="attach-a-terminal-session"></a>
 
-## Attach a terminal session
+## Connect your session
 
-In an existing interactive session, `/bridge connect [name]` creates a local control socket and enables Discord input. `/bridge status` reports the attachment; `/bridge disconnect` detaches a socket created at runtime. Startup sockets cannot be disconnected by that command.
+1. Create a dedicated Discord bot and install it in your server. Give it access to your private channel with View Channel, Read Message History, and Send Messages; enable Message Content Intent where Discord requires it.
+2. Find your Discord user ID and channel ID. Create the private bridge configuration with those IDs, a fresh absolute `stateDir`, and a coordinator socket name such as `coord`. Follow the [configuration example and bot setup](https://github.com/qduc/term2/blob/main/docs/reference/discord-bridge.md#discord-setup-only-after-authorization). Keep the directory user-owned and private, and do not put the bot token in JSON.
+3. In a terminal, run `term2 discord --save-token` and enter the token when prompted. For a custom config path, pass the same absolute path to enrollment and startup. Enrollment saves the token beside the config and exits without connecting.
+4. Start term2, finish provider setup, and open the conversation you want to use. In that session, run `/bridge connect coord`, then `/bridge status` to check the local attachment. Keep this terminal open.
+5. In a separate terminal, start the bridge with `term2 discord` (or pass your absolute config path). From the allowed Discord account and channel, send a harmless request such as: “Summarize this session and send the result to this channel using `discord_send`.”
 
-Alternatively, start the TUI with `--control-socket=<name> --discord-input`. A local attachment is not proof that the standalone bridge is connected to Discord. Run and configure the standalone bridge separately as described in the guide.
+Ordinary assistant replies stay in the terminal; posting to Discord requires an explicit `discord_send` call. Check the local terminal for errors or approval prompts if no reply appears. An opted-in session can send without a per-send approval, so prompt-injected content could cause a post; only attach sessions you trust with access to the channel.
+
+Use `term2 discord --help` for command options and the [complete first-run checklist](https://github.com/qduc/term2/blob/main/docs/reference/discord-bridge.md#first-run-checklist) for bot setup, IDs, configuration and troubleshooting. Offline fixtures do not establish live Discord behavior.
+
+To detach a socket created at runtime, use `/bridge disconnect`. A startup socket cannot be disconnected with that command. Alternatively, start the TUI with `--control-socket=<name> --discord-input`. A local attachment alone does not mean the standalone bridge is connected.
 
 ## Push Wake-up and REST Delivery
 

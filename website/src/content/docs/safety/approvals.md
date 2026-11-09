@@ -3,6 +3,12 @@ title: Approvals & Run Budgets
 description: Interactive tool approvals, auto-approve modes, and execution budgets.
 ---
 
+When term2 wants to run a shell command in an interactive session, it normally asks for your approval. Read the proposed action and choose from the options in the prompt. Valid edits inside the local workspace can apply without a prompt; file tools have their own authorization and boundary checks.
+
+To change how often shell commands need your approval, run `/auto-approve` in a session. Keep `off` if you want to review each command, choose `advisory` for an explanation with each prompt, or choose `auto` to approve commands classified as safe while still reviewing risky ones. The `always` mode disables the shell sandbox and skips tool approval prompts; use it only in an isolated, disposable environment.
+
+For a non-interactive prompt, `--auto-approve` is a separate option. See [non-interactive use](/term2/using-term2/non-interactive/) before enabling tool execution there.
+
 ## Auto-Approval Modes (`/auto-approve`)
 
 Configure shell auto-approval using `/auto-approve` or `shell.autoApproveMode`. The CLI `--auto-approve` flag is separate and applies only to non-interactive prompts.
@@ -15,6 +21,10 @@ Configure shell auto-approval using `/auto-approve` or `shell.autoApproveMode`. 
 | **`always`** | `/auto-approve always` | Disables the shell sandbox and skips tool approval prompts. `ask_user` can still ask questions. Use only in an isolated, disposable environment. |
 
 > **Sandbox Interaction:** `always` and `sandbox.enabled` are mutually exclusive: selecting `always` disables the shell sandbox, and enabling the sandbox (`/sandbox` or `sandbox.enabled = true`) immediately demotes `always` to `auto`.
+
+## Manage a long run
+
+Run budgets can warn or pause a run based on cost, time, tokens, or signs of a stall. By default they warn rather than enforce a hard cap. Configure `agent.runBudget.escalation` if you want a pause instead, and review the thresholds below before relying on them.
 
 ## Run Budgets (`agent.runBudget`)
 

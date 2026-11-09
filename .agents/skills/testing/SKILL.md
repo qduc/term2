@@ -138,18 +138,21 @@ CPU. The attribution and measurements are in
   sleep costs its full length on every run. Where the product publishes a
   harness signal under `TERM2_HARNESS_IDLE_PATH` (idle generation, `.composer`
   revision, `.approval` readiness), prefer it to matching screen text.
-- **Don't add a "settle" sleep after a wait that succeeded.** In
-  `approval-mode.e2e.test.ts` the model-picker step polls until the picked row is
-  visible, then sleeps 500 ms "as a person reading it would": the poll already
-  proved the state. If the next key could reach a component before it listens
-  (Ink subscribes `useInput` in a passive effect, after the frame shows), wait for
-  the harness readiness signal instead: `.approval` for approval prompts and
-  `.confirmation` for held-send prompts (#233).
+- **Don't add a "settle" sleep after a wait that succeeded,** unless you can
+  name what changes after the wait passes. If the next key could reach a
+  component before it listens (Ink subscribes `useInput` in a passive effect,
+  after the frame shows), wait for the harness readiness signal instead:
+  `.approval` for approval prompts and `.confirmation` for held-send prompts
+  (#233). The model-picker 500 ms pause in `approval-mode.e2e.test.ts` (and its
+  copies) looked like a settle sleep but is load-bearing: the catalog can reload
+  after the picked row is drawn, and without the pause 2 of 18 loaded runs hit
+  Enter on "Loading models" (#234). Its `sleep-ok` comment says why.
 - **Shorten the Ctrl+C exit window instead of sleeping past it.** The root's
   double-Ctrl+C exit arm (`Tui` in `src/clients/tui/index.tsx`) lasts
   `TERM2_EXIT_CONFIRM_WINDOW_MS`, 2000 ms by default. `cancel-resume` and
-  `slash-commands` launch with 300 ms and wait 350 ms; `tool-output.e2e.test.ts` still sleeps 2.5 s
-  "outside the root's double-interrupt window" on the default.
+  `slash-commands` launch with 300 ms and `tool-output` with 1000 ms;
+  `cancel-resume` and `tool-output` sleep only what remains of the window after
+  the Ctrl+C was seen handled.
 - **A later key is not a free sync point for a key that should do nothing.** Bytes
   written back to back can reach the TUI in one read and parse as text: in
   `tool-output.e2e.test.ts`, Ctrl+G followed at once by `-x` left `draft\u0007-x` in

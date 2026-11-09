@@ -33,6 +33,7 @@ async function fixture(
     signal?: 'SIGINT' | 'SIGTERM';
     holdCatalog?: boolean;
     holdReply?: boolean;
+    providerFailure?: { status: number; message: string };
     shell?: boolean;
     shellCalls?: readonly ({ command: string; sandbox?: 'unsandboxed'; background?: boolean } | undefined)[];
     approvalReviews?: readonly ('low' | 'high')[];
@@ -70,6 +71,12 @@ async function fixture(
       const request = JSON.parse(raw);
       requests.push(request);
       await replyReady;
+      if (options.providerFailure && requests.length === 1) {
+        const { status, message } = options.providerFailure;
+        res.writeHead(status, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: { message } }));
+        return;
+      }
       const reviewing = options.approvalReviews !== undefined && !request.tools?.length;
       if (reviewing) await options.beforeApprovalReview?.();
       const index = reviewing ? -1 : inferenceCount++;
@@ -226,6 +233,28 @@ async function fixture(
 }
 
 describe('ACP v1 built CLI compatibility for Air', () => {
+  it('returns a safe provider failure message on session/prompt and can run the next prompt', async () => {
+    await fixture(
+      async ({ context, workspace, updates }) => {
+        const { sessionId } = await context.request(acp.methods.agent.session.new, { cwd: workspace, mcpServers: [] });
+        const prompt = () =>
+          context.request(acp.methods.agent.session.prompt, {
+            sessionId,
+            prompt: [{ type: 'text', text: 'Send the scripted request' }],
+          });
+        const failure = await prompt().catch((error: unknown) => error);
+        expect(failure).toMatchObject({
+          code: -32603,
+          message: 'The model provider rejected the request due to insufficient balance. Check your provider billing.',
+          data: { kind: 'insufficient_balance', retryable: false },
+        });
+        expect(JSON.stringify(updates)).not.toContain('opaque-fixture-secret');
+        await expect(prompt()).resolves.toEqual({ stopReason: 'end_turn' });
+      },
+      { providerFailure: { status: 402, message: 'Insufficient balance. Request data: opaque-fixture-secret' } },
+    );
+  });
+
   it('initializes without IDE auth, streams once, completes prompts and replays each load', async () => {
     await fixture(async ({ context, workspace, updates, requests }) => {
       const { sessionId } = await context.request(acp.methods.agent.session.new, { cwd: workspace, mcpServers: [] });

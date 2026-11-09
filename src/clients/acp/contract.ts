@@ -26,7 +26,14 @@ export interface AcpClient {
 export type AcpAnswer = { readonly decision: WireDecision; readonly provenance: WireAnswerProvenance };
 
 export type EmitUpdate = (update: acp.SessionUpdate) => Promise<void>;
-export type PromptOutcome = { readonly stopReason: acp.StopReason };
+export type PromptOutcome = {
+  readonly stopReason: acp.StopReason;
+  readonly error?: {
+    readonly code: number;
+    readonly message: string;
+    readonly data: { readonly kind: string; readonly retryable: boolean };
+  };
+};
 export type PromptExecution = {
   /** Opens the output gate after the ACP prompt acknowledgement has been sent. */
   run(emit: EmitUpdate, signal: AbortSignal): Promise<PromptOutcome>;

@@ -28,7 +28,9 @@ configuration. Setup responses include `model` and `thinking_level` select confi
 `session/set_config_option` applies a per-session native configure command and
 waits for its exact completed receipt, including the accepted model identity.
 A v1 prompt stays pending until its real
-terminal and returns `stopReason`; native failures become JSON-RPC errors.
+terminal and returns `stopReason`. Turn failures return a JSON-RPC error with
+a client-facing message and structured `kind` and `retryable` fields. These
+messages use Term2 wording so private provider response text stays local.
 `session/load` creates a fresh display attachment and replays retained history;
 resume attaches without replay. Repeated loads replay each time.
 
@@ -305,6 +307,9 @@ shared protocol reducer supplies foreground state, including concurrent
 interactions and background task distinctions. The adapter reports
 requires_action while blocked and running when progress resumes. Historical
 stop reasons are not re-announced as new completions during attachment.
+Failed turns report idle with `stopReason: "error"` and a JSON-RPC error object.
+The pinned experimental SDK preserves the same details under `_meta.term2.error`
+when decoding the update.
 
 Build with `pnpm build`, then run
 `pnpm test:integration tests/clients/acp tests/clients/acp-v2/serve.integration.test.ts`.

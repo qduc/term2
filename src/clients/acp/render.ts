@@ -374,11 +374,3 @@ export class AcpRenderer {
     };
   }
 }
-
-/** Snapshot terminals and live terminals share exact outcomes; receipts are not terminals. */
-export function terminalOutcome(
-  terminal: NonNullable<WireSnapshot['terminal']> | Extract<WireEvent, { type: 'turn_ended' }>['payload'],
-): { stopReason: acp.StopReason } {
-  if (terminal.outcome === 'cancelled' || terminal.outcome === 'interrupted') return { stopReason: 'cancelled' };
-  return { stopReason: terminal.outcome === 'failed' ? '_term2_error' : 'end_turn' };
-}

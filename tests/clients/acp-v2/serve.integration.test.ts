@@ -72,7 +72,7 @@ function approvalToolTurnBody(command: string, toolName = 'shell', toolInput?: o
  */
 async function startModelMock(
   modelIds: string[],
-  script?: { toolCommand: string; toolName?: string; toolInput?: object },
+  script?: { toolCommand: string; toolName?: string; toolInput?: object; providerFailure?: string },
 ): Promise<{ baseUrl: string; close: () => Promise<void> }> {
   const toolTurns = new Set<number>();
   const server = http.createServer((req, res) => {
@@ -86,6 +86,11 @@ async function startModelMock(
       body += String(chunk);
     });
     req.on('end', () => {
+      if (script?.providerFailure) {
+        res.writeHead(402, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: { message: script.providerFailure } }));
+        return;
+      }
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       // Each admitted user prompt asks once; the continuation after its tool result
       // answers with text. Repeated provider call IDs must not become execution IDs.
@@ -135,7 +140,7 @@ type ChildSession = {
 const runAcpChild = async (
   permission: ((params: acp.RequestPermissionRequest) => Promise<acp.RequestPermissionResponse>) | undefined,
   body: (session: ChildSession) => Promise<void>,
-  options: { command?: string; sandbox?: boolean } = {},
+  options: { command?: string; sandbox?: boolean; providerFailure?: string } = {},
 ): Promise<{
   stdoutText: string;
   stderr: string;
@@ -150,7 +155,10 @@ const runAcpChild = async (
   fs.mkdirSync(path.join(tempHome, 'scratch'));
   disposables.push(() => rmSync(tempHome, { recursive: true, force: true }));
 
-  const mock = await startModelMock(['acp-mock-model'], { toolCommand: options.command ?? 'echo written > probe.txt' });
+  const mock = await startModelMock(['acp-mock-model'], {
+    toolCommand: options.command ?? 'echo written > probe.txt',
+    providerFailure: options.providerFailure,
+  });
   disposables.push(mock.close);
 
   const settingsDir = resolveSettingsDirectory({ homeDir: tempHome, env: { XDG_STATE_HOME: stateHome } });
@@ -292,6 +300,42 @@ async function toolTurn(session: ChildSession): Promise<void> {
       ),
   ).toBe(true);
 }
+
+it('reports the provider failure after acknowledging the ACP v2 prompt', async () => {
+  const error = {
+    code: -32603,
+    message: 'The model provider rejected the request due to insufficient balance. Check your provider billing.',
+    data: { kind: 'insufficient_balance', retryable: false },
+  };
+  const result = await runAcpChild(
+    undefined,
+    async ({ context, sessionId, updates }) => {
+      expect(
+        await context.request(acp.methods.agent.session.prompt, {
+          sessionId,
+          prompt: [{ type: 'text', text: 'Send the scripted request' }],
+        }),
+      ).toEqual({});
+      await expect
+        .poll(() =>
+          updates
+            .map(({ update }) => update)
+            .find((update) => update.sessionUpdate === 'state_update' && update.state === 'idle' && update.stopReason),
+        )
+        .toMatchObject({ stopReason: 'error', _meta: { term2: { error } } });
+    },
+    { providerFailure: 'Insufficient balance. Request data: opaque-fixture-secret' },
+  );
+  assertTransport(result);
+  const updates = result.stdoutText
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line));
+  expect(updates.map((frame) => frame.params?.update)).toContainEqual(
+    expect.objectContaining({ sessionUpdate: 'state_update', state: 'idle', stopReason: 'error', error }),
+  );
+  expect(result.stdoutText).not.toContain('opaque-fixture-secret');
+});
 
 describe('term2 acp real-tool permission round trips', () => {
   it.each(['reject', 'unknown', 'unsandboxed-once', 'allow-remember', 'cancelled', 'malformed', 'unsupported'])(

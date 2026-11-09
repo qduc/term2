@@ -11,7 +11,8 @@ import type {
 import { reduceWireEvent } from '../../protocol/reducer.js';
 import type { AcpLogger, EmitUpdate, PromptExecution, PromptOutcome } from './contract.js';
 import { errorMessage } from './contract.js';
-import { AcpRenderer, MissingAcpWireContract, terminalOutcome } from './render.js';
+import { AcpRenderer, MissingAcpWireContract } from './render.js';
+import { idleUpdate, terminalOutcome } from './turn-errors.js';
 import { requestPermission } from './permissions.js';
 import { requestBudget } from './budget.js';
 import type { PromptInput } from './input.js';
@@ -295,8 +296,7 @@ export class AcpAttachment {
       if (this.foregroundTurnId === event.turnId) {
         this.foregroundTurnId = null;
         this.status = 'idle';
-        if (!this.active)
-          await this.emit({ sessionUpdate: 'state_update', state: 'idle', ...terminalOutcome(event.payload) });
+        if (!this.active) await this.emit(idleUpdate(terminalOutcome(event.payload)));
       }
     }
   }

@@ -4,6 +4,7 @@ import { v1Client } from '../client.js';
 import type { AcpClient } from '../contract.js';
 import { v1Error } from './v1-errors.js';
 import { v1Prompt } from '../input.js';
+import { failedExecution } from '../turn-errors.js';
 
 /**
  * Stable ACP v1 over the same Host backend as v2. Prompts remain pending until
@@ -136,11 +137,13 @@ export function createAcpV1Agent(options: AcpAgentOptions): acp.AgentApp {
     active.set(params.sessionId, controller);
     try {
       const execution = await options.backend.preparePrompt({ ...params, prompt: v1Prompt(params.prompt) });
-      const result = await execution.run(
-        (update) => adapted.update({ sessionId: params.sessionId, update }),
-        controller.signal,
-      );
-      if (result.stopReason === '_term2_error') throw new acp.RequestError(-32603, 'Term2 turn failed; see Term2 logs');
+      const result = await execution
+        .run((update) => adapted.update({ sessionId: params.sessionId, update }), controller.signal)
+        .catch((error: unknown) => failedExecution(options.logger, params.sessionId, controller.signal, error));
+      if (result.error) {
+        const { code, message, data } = result.error;
+        throw new acp.RequestError(code, message, data);
+      }
       switch (result.stopReason) {
         case 'end_turn':
         case 'cancelled':

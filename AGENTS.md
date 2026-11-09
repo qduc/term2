@@ -35,6 +35,10 @@ failure lessons and debugging evidence in the relevant existing docs instead.
 The experiment README contains the testing policy and decision criteria; historical unit-test
 references point to tag `unit-suite-baseline`.
 
+**GitHub-first workflow:** Work in isolated branches/worktrees and deliver changes
+through PRs. Do not merge locally into `main`, push directly to it, or merge a PR
+unless explicitly asked. Preserve the shared checkout and other agents’ work.
+
 Several agents share the primary checkout. Bug fixes and features use worktrees
 under `.worktrees/` because sibling checkouts fall outside the shell sandbox's
 write scope. Each worktree needs its own `pnpm install`; symlinked `node_modules`

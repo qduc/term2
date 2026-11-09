@@ -96,7 +96,8 @@ disabling Air's forwarded MCP catalog is no longer required: app-owned
 existing manager, immutable catalog and `run_code` approval machinery. Server
 credentials remain process memory, are not copied into settings or display
 metadata, and are not provider credentials. Each session owns its connections;
-failed replacement preserves the accepted catalog. Retired managers remain
+opening or reopening a session proceeds with reachable servers when others
+fail to connect. Failed replacement preserves the accepted catalog. Retired managers remain
 alive for older native generations until explicit close drains the session.
 EOF drains application work before closing those resources.
 

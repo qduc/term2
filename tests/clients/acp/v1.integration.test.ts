@@ -373,6 +373,12 @@ describe('ACP v1 built CLI compatibility for Air', () => {
             args: [script],
             env: [{ name: 'MCP_SENTINEL', value: 'session-mcp-visible' }],
           },
+          {
+            name: 'offline-fixture',
+            command: process.execPath,
+            args: ['-e', 'process.exit(1)'],
+            env: [],
+          },
         ];
         const { sessionId } = await context.request(acp.methods.agent.session.new, { cwd: workspace, mcpServers });
         await context.request(acp.methods.agent.session.prompt, {
@@ -453,6 +459,11 @@ describe('ACP v1 built CLI compatibility for Air', () => {
       const headers: string[] = [];
       const server = http.createServer(async (req, res) => {
         headers.push(String(req.headers['x-acp-fixture']));
+        if (req.url === '/offline') {
+          res.writeHead(500);
+          res.end('private-startup-error-sentinel');
+          return;
+        }
         if (req.method === 'GET' && transport === 'sse') {
           stream = res;
           res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });
@@ -508,6 +519,12 @@ describe('ACP v1 built CLI compatibility for Air', () => {
                 url: `http://127.0.0.1:${address.port}/mcp`,
                 headers: [{ name: 'x-acp-fixture', value: 'header-visible' }],
               },
+              {
+                name: 'offline-http',
+                type: 'http',
+                url: `http://127.0.0.1:${address.port}/offline`,
+                headers: [{ name: 'x-acp-fixture', value: 'header-visible' }],
+              },
             ];
             const { sessionId } = await context.request(acp.methods.agent.session.new, { cwd: workspace, mcpServers });
             await context.request(acp.methods.agent.session.prompt, {
@@ -516,6 +533,8 @@ describe('ACP v1 built CLI compatibility for Air', () => {
             });
             expect(JSON.stringify(requests.at(-1).messages)).toContain('network-mcp-visible');
             expect(called).toBe(1);
+            expect(JSON.stringify(requests[0].tools)).toContain('offline-http: failed, 0 tools');
+            expect(JSON.stringify(requests)).not.toContain('private-startup-error-sentinel');
             await context.request(acp.methods.agent.session.close, { sessionId });
             await context.request(acp.methods.agent.session.resume, { sessionId, cwd: workspace, mcpServers });
             expect(initialized).toBe(2);
@@ -558,19 +577,23 @@ describe('ACP v1 built CLI compatibility for Air', () => {
       const origin = redirect.address() as import('node:net').AddressInfo;
       try {
         await fixture(async ({ context, workspace }) => {
+          const { sessionId } = await context.request(acp.methods.agent.session.new, {
+            cwd: workspace,
+            mcpServers: [
+              {
+                name: 'redirect',
+                type: transport,
+                url: `http://127.0.0.1:${origin.port}/mcp`,
+                headers: [{ name: 'x-fixture-token', value: 'must-not-leak' }],
+              },
+            ],
+          });
           await expect(
-            context.request(acp.methods.agent.session.new, {
-              cwd: workspace,
-              mcpServers: [
-                {
-                  name: 'redirect',
-                  type: transport,
-                  url: `http://127.0.0.1:${origin.port}/mcp`,
-                  headers: [{ name: 'x-fixture-token', value: 'must-not-leak' }],
-                },
-              ],
+            context.request(acp.methods.agent.session.prompt, {
+              sessionId,
+              prompt: [{ type: 'text', text: 'Continue without the unavailable server' }],
             }),
-          ).rejects.toMatchObject({ code: -32010 });
+          ).resolves.toMatchObject({ stopReason: 'end_turn' });
           expect(reachedTarget).toBe(false);
         });
       } finally {

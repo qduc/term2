@@ -122,7 +122,17 @@ export function createAcpSessions() {
             pending && (!pending.sessionId || pending.sessionId === sessionId)
               ? pending.resource
               : current.get(sessionId);
-          return captureDirectMcpSource(resource?.manager ?? empty, []);
+          if (!resource) return captureDirectMcpSource(empty, []);
+          const { manager } = resource;
+          return captureDirectMcpSource(
+            {
+              // Startup errors can include subprocess stderr or HTTP response bodies.
+              snapshot: () => manager.snapshot().map(({ error: _error, ...server }) => server),
+              callTool: (...args) => manager.callTool(...args),
+              onCatalogChanged: (listener) => manager.onCatalogChanged(listener),
+            },
+            [],
+          );
         },
       };
     },
@@ -164,7 +174,9 @@ export function createAcpSessions() {
         await resource.manager.whenSettled();
         if (stopped) throw new acp.RequestError(-32010, 'ACP session resources are closed');
         const failed = resource.manager.snapshot().find((server) => server.state !== 'ready');
-        if (failed) throw new acp.RequestError(-32010, `Could not connect MCP server: ${failed.name}`);
+        // An unavailable optional server must not block opening a session.
+        // Replacing an existing catalog remains atomic.
+        if (previous && failed) throw new acp.RequestError(-32010, `Could not connect MCP server: ${failed.name}`);
         return await preparation.run({ sessionId: request.sessionId, resource }, async () => {
           connection = await connect();
           if (request.sessionId) {

@@ -108,13 +108,24 @@ workspace field. Neither callback may construct an adopted runtime or read old
 logs. List metadata comes only from Host, including its optional native title and
 updatedAt; neither value is fabricated when absent.
 
-The launcher sets `approvalAlwaysAsks:true` and `requireSandbox:true`.
-Per-session settings keep automatic approval off and sandboxing enabled, including
-when saved preferences differ. Ordinary ACP v1 shell commands run in the sandbox
-without a pre-run prompt. A missing or failed sandbox stops the command. Scoped
-capabilities such as Docker host control have their own approval path.
+ACP v1 adds one **Approval mode** selector alongside model and thinking level.
+**Ask** is the default. Ordinary shell commands run sandboxed; a missing or
+failed sandbox stops the command. **Assisted** keeps confinement and uses
+Term2's approval evaluator for eligible foreground approvals, including
+sandboxed shell mutations flagged by the command safety classifier. Only a
+high-confidence, authorized, low-risk result auto-approves; other results
+fall back to the client's permission request. **Always · Sandbox off** runs
+shell commands outside the sandbox and skips routine approval prompts.
+Questions and explicitly scoped capabilities, including forwarded MCP calls,
+retain their own approval policy.
 
-The model can retry a blocked command with `sandbox: "unsandboxed"`. Only a
+Changes use native idle configuration admission and install the tool policy and
+sandbox setting together. Mode changes also require background work to settle.
+A live session retains the selection across attachment changes and model or
+effort updates. Closing or reopening the runtime resets it to Ask. Global
+preferences and persisted configuration omit the approval selection.
+
+In Ask or Assisted, the model can retry a blocked command with `sandbox: "unsandboxed"`. Only a
 foreground shell in the main ACP v1 agent can request **Run outside sandbox once**.
 The request includes the exact command and working directory. The distinct
 `unsandboxed-once` grant applies to that invocation and directory. A plain Allow

@@ -114,6 +114,10 @@ export function createAcpV1Agent(options: AcpAgentOptions): acp.AgentApp {
   onRequest(acp.methods.agent.session.setConfigOption, async ({ params }) => {
     if (!clients.has(params.sessionId)) throw new acp.RequestError(-32001, `Session not found: ${params.sessionId}`);
     if (!options.backend.setConfigOption) throw acp.RequestError.methodNotFound('session/set_config_option');
+    if (configurationChanges.has(params.sessionId))
+      throw new acp.RequestError(-32010, 'Session configuration is already changing');
+    if (params.configId === 'approval_mode' && active.has(params.sessionId))
+      throw new acp.RequestError(-32010, 'Finish or cancel the active prompt before changing approval mode');
     configurationVersions.set(params.sessionId, (configurationVersions.get(params.sessionId) ?? 0) + 1);
     const change = options.backend.setConfigOption(params);
     configurationChanges.set(params.sessionId, change);

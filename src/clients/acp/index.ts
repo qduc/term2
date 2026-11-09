@@ -4,4 +4,4 @@ export type { AcpAgentOptions } from './agent.js';
 export { createAcpBackend } from './session-backend.js';
 export { createStdioAcpIo, serveAcp } from './serve.js';
 export type { AcpIo } from './serve.js';
-export type { AcpBackend, AcpLogger, AcpWorkspaces, BackendOptions } from './contract.js';
+export type { AcpApprovalMode, AcpBackend, AcpLogger, AcpWorkspaces, BackendOptions } from './contract.js';

@@ -95,6 +95,8 @@ export type AgentSurface = {
     readonly maxParallelToolCalls: number;
     dispose?(): void | Promise<void>;
   };
+  /** Review eligible ordinary foreground approvals using the accepted session history. */
+  reviewApproval?(request: InteractionRequest, history: readonly Item[], signal: AbortSignal): Promise<boolean>;
   /** Headless policy only; caller commits its decision through Session's Turn.answer. */
   decideInteraction(request: InteractionRequest, history: readonly Item[]): Promise<InteractionDecision>;
 };

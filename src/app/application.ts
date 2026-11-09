@@ -34,10 +34,11 @@ import {
 } from './application-runtime.js';
 import { LOCAL_PRINCIPAL, type DirectAuthority, type DirectAuthorityFactory } from './application-workspaces.js';
 import type { DirectCommandConfiguration } from '../session/command-types.js';
-import type { DirectConfigurationIntent } from './config-settings.js';
+import type { DirectApprovalMode, DirectConfigurationIntent } from './config-settings.js';
 import { createDirectInputPreview } from './input-preview.js';
 import { createDirectMcpRefresh } from './application-mcp.js';
 import type { DirectMcp } from './mcp.js';
+import { reviewLiveApproval } from './lib/approval-model.js';
 
 export type DirectApplicationOptions = Omit<DirectRuntimeOptions, 'canRun'> & {
   readonly conversationsDir: string;
@@ -73,6 +74,7 @@ export type DirectSessionConfiguration = {
   readonly model: ModelRef;
   readonly reasoningEffort: DirectConfigurationIntent['reasoningEffort'];
   readonly profileId: string;
+  readonly approvalMode: DirectApprovalMode | 'advisory';
 };
 
 export type DirectApplication = {
@@ -89,7 +91,13 @@ export type DirectApplication = {
   /** Copies a session this mode may run into a new one, without opening the source. Returns the new id. */
   forkSession(sourceId: string): Promise<string>;
   /** Apply explicit local CLI selection through Session acceptance, without saving defaults. */
-  applyLaunchConfiguration(sessionId: string, configuration: DirectCommandConfiguration): Promise<void>;
+  applyLaunchConfiguration(
+    sessionId: string,
+    configuration: DirectCommandConfiguration,
+    approvalMode?: DirectApprovalMode,
+  ): Promise<void>;
+  /** Review an exact, live foreground approval in the installed Assisted generation. */
+  reviewApproval(sessionId: string, requestId: string, signal: AbortSignal): Promise<boolean>;
   /** `undefined` clears it. Throws if another write got there first. */
   setGoal(sessionId: string, goal: DurableGoal | undefined, source: 'user' | 'launcher'): Promise<void>;
   /** The durable goal of a session, and whether one is set at all. */
@@ -224,17 +232,27 @@ export async function createDirectApplication(options: DirectApplicationOptions)
       });
       return id;
     },
-    async applyLaunchConfiguration(sessionId, configuration) {
-      if (Object.keys(configuration).length === 0) return;
+    async applyLaunchConfiguration(sessionId, configuration, approvalMode) {
+      if (approvalMode === undefined && Object.keys(configuration).length === 0) return;
       await authority.authorize(LOCAL_PRINCIPAL, { kind: 'write', sessionId });
       const session = await sessions.open(sessionId);
       const current = stateOf(session).model;
       const record = runtimes.get(session.id);
       if (!record) throw new Error('Session configuration runtime is unavailable.');
+      if (
+        approvalMode !== undefined &&
+        record
+          .tasks()
+          ?.list()
+          .some((task) => !task.result)
+      ) {
+        throw new Error('Finish or cancel background work before changing approval mode.');
+      }
       // Restart carries the current selection as CLI flags. Equal selection intent
       // is not a change: preserve both the log and the accepted effective request.
       // In particular, compare effort intent, not its model-resolved effective value.
       if (
+        (approvalMode === undefined || approvalMode === record.configurationSettings.get('shell.autoApproveMode')) &&
         configuration.profileId === undefined &&
         configuration.temperature === undefined &&
         (configuration.model === undefined ||
@@ -243,11 +261,14 @@ export async function createDirectApplication(options: DirectApplicationOptions)
           configuration.reasoning === record.configurationSettings.get('agent.reasoningEffort'))
       )
         return;
-      const result = await runtimes.launching(session.id, configuration, () =>
+      const result = await runtimes.launching(session.id, { ...configuration, approvalMode }, () =>
         session.command({
           commandId: randomUUID(),
           admission: 'idle',
-          operation: { kind: 'configure', configuration },
+          operation: {
+            kind: 'configure',
+            configuration: approvalMode === undefined ? configuration : { model: current, ...configuration },
+          },
         }),
       );
       if (result.kind === 'finished' && result.receipt.outcome?.kind === 'configured') return;
@@ -255,6 +276,11 @@ export async function createDirectApplication(options: DirectApplicationOptions)
       throw new Error(
         outcome?.kind === 'rejected' ? outcome.message : 'Could not apply the requested resume configuration.',
       );
+    },
+    async reviewApproval(sessionId, requestId, signal) {
+      if (signal.aborted || !runtimes.get(sessionId)) return false;
+      const session = await store.open(sessionId);
+      return await reviewLiveApproval(session, runtimes.get(sessionId), requestId, signal);
     },
     async setGoal(sessionId, goal, source) {
       writeGoal(await store.open(sessionId), goal, source);
@@ -275,6 +301,7 @@ export async function createDirectApplication(options: DirectApplicationOptions)
           model: capture.state.model,
           reasoningEffort: record.configurationSettings.get('agent.reasoningEffort'),
           profileId: record.profileId,
+          approvalMode: record.configurationSettings.get('shell.autoApproveMode'),
         };
       } finally {
         capture.unsubscribe();

@@ -1,4 +1,5 @@
-import type { AcpClient } from './contract.js';
+import type { SessionConfigOption } from '@agentclientprotocol/sdk';
+import type { AcpApprovalMode, AcpClient } from './contract.js';
 import { randomUUID } from 'node:crypto';
 import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -8,6 +9,16 @@ import type { AcpBackend, BackendOptions } from './contract.js';
 import { AcpAttachment } from './attachment.js';
 import { promptInput } from './input.js';
 import { AcpModels } from './models.js';
+
+const approvalModes = [
+  { value: 'ask', name: 'Ask', description: 'Keep the sandbox on and ask when an action requires approval.' },
+  { value: 'assisted', name: 'Assisted', description: 'Keep the sandbox on and review eligible low-risk approvals.' },
+  {
+    value: 'always',
+    name: 'Always · Sandbox off',
+    description: 'Run shell commands outside the sandbox and skip routine approvals.',
+  },
+] as const satisfies readonly { value: AcpApprovalMode; name: string; description: string }[];
 
 async function canonicalCwd(cwd: string): Promise<string> {
   if (!path.isAbsolute(cwd)) throw acp.RequestError.invalidParams(undefined, 'cwd must be an absolute path');
@@ -43,7 +54,13 @@ export function createAcpBackend(options: BackendOptions): AcpBackend {
     return attachment;
   };
   const attach = async (connection: DirectConnection, client: AcpClient, replay: boolean): Promise<void> => {
-    const attachment = new AcpAttachment(connection, client, options.logger);
+    const review = client.supportsShellEscape ? options.approval?.review : undefined;
+    const attachment = new AcpAttachment(
+      connection,
+      client,
+      options.logger,
+      review ? (requestId, signal) => review(connection.sessionId, requestId, signal) : undefined,
+    );
     try {
       available();
       if (attachments.has(connection.sessionId)) throw new acp.RequestError(-32000, 'Session is already attached');
@@ -64,15 +81,42 @@ export function createAcpBackend(options: BackendOptions): AcpBackend {
     }
   };
 
+  const configOptions = async (sessionId: string, refresh = false): Promise<SessionConfigOption[]> => {
+    const config = await models.configOptions(sessionId, refresh);
+    if (options.approval) {
+      config.push({
+        id: 'approval_mode',
+        name: 'Approval mode',
+        type: 'select',
+        category: 'mode',
+        currentValue: await options.approval.get(sessionId),
+        options: [...approvalModes],
+      });
+    }
+    return config;
+  };
   return {
     ...(options.sessions ? { mcpCapabilities: { http: true, sse: true } } : {}),
     async configOptions(sessionId, refresh) {
       attached(sessionId);
-      return await models.configOptions(sessionId, refresh);
+      return await configOptions(sessionId, refresh);
     },
     async setConfigOption(request) {
-      attached(request.sessionId);
-      return await models.setConfigOption(request);
+      const { sessionId } = request;
+      attached(sessionId);
+      if (request.configId === 'approval_mode') {
+        const selected = approvalModes.find(({ value }) => value === request.value);
+        if (!options.approval || !selected) throw acp.RequestError.invalidParams(undefined, 'Unknown approval mode');
+        changing.add(sessionId);
+        try {
+          await options.approval.set(sessionId, selected.value);
+          return await configOptions(sessionId);
+        } finally {
+          changing.delete(sessionId);
+        }
+      }
+      await models.setConfigOption(request);
+      return await configOptions(sessionId);
     },
     async createSession(request, client) {
       available();

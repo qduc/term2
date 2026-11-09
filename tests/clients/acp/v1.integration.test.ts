@@ -34,7 +34,9 @@ async function fixture(
     holdCatalog?: boolean;
     holdReply?: boolean;
     shell?: boolean;
-    shellCalls?: readonly { command: string; sandbox?: 'unsandboxed'; background?: boolean }[];
+    shellCalls?: readonly ({ command: string; sandbox?: 'unsandboxed'; background?: boolean } | undefined)[];
+    approvalReviews?: readonly ('low' | 'high')[];
+    beforeApprovalReview?: () => Promise<void>;
     runCode?: string;
     permission?: (params: acp.RequestPermissionRequest) => Promise<acp.RequestPermissionResponse>;
   } = {},
@@ -43,6 +45,8 @@ async function fixture(
   const workspace = path.join(temp, 'workspace');
   await mkdir(workspace);
   const requests: any[] = [];
+  let inferenceCount = 0;
+  let reviewCount = 0;
   let releaseCatalog!: () => void;
   const catalogReady = new Promise<void>((resolve) => {
     releaseCatalog = resolve;
@@ -63,12 +67,16 @@ async function fixture(
     let raw = '';
     req.on('data', (chunk) => (raw += String(chunk)));
     req.on('end', async () => {
-      requests.push(JSON.parse(raw));
+      const request = JSON.parse(raw);
+      requests.push(request);
       await replyReady;
+      const reviewing = options.approvalReviews !== undefined && !request.tools?.length;
+      if (reviewing) await options.beforeApprovalReview?.();
+      const index = reviewing ? -1 : inferenceCount++;
       const shellInput =
-        options.shellCalls?.[requests.length - 1] ??
-        (options.shell && requests.length === 1 ? { command: 'printf acp-tool-visible' } : undefined);
-      const call = options.runCode ? requests.length % 2 === 1 : shellInput !== undefined;
+        options.shellCalls?.[index] ??
+        (options.shell && index === 0 ? { command: 'printf acp-tool-visible' } : undefined);
+      const call = options.runCode ? index % 2 === 0 : shellInput !== undefined;
       const delta = call
         ? {
             tool_calls: [
@@ -85,7 +93,20 @@ async function fixture(
               },
             ],
           }
-        : { content: 'ACP fixture reply' };
+        : {
+            content: reviewing
+              ? JSON.stringify({
+                  results: [
+                    {
+                      reasoning: 'Deterministic approval review',
+                      riskLevel: options.approvalReviews?.[reviewCount++],
+                      authorization: 'explicit',
+                      confidence: 'high',
+                    },
+                  ],
+                })
+              : 'ACP fixture reply',
+          };
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       res.end(
         [
@@ -627,6 +648,7 @@ describe('ACP v1 built CLI compatibility for Air', () => {
             options: [{ value: 'acpfixture/acp-model' }],
           },
           { id: 'thinking_level', type: 'select', category: 'thought_level', currentValue: 'default' },
+          { id: 'approval_mode', type: 'select', category: 'mode', currentValue: 'ask' },
         ]);
         releaseCatalog();
         await vi.waitFor(() =>
@@ -759,6 +781,146 @@ describe('ACP v1 built CLI compatibility for Air', () => {
       expect(requests.at(-1)).not.toHaveProperty('reasoning_effort');
       expect(await savedSettings()).toBe(preferences);
     });
+  }, 30_000);
+
+  it('changes the live approval and sandbox policy together through one ACP selector', async () => {
+    const permissions: acp.RequestPermissionRequest[] = [];
+    const command = 'echo mode-test >> ../approval-mode.txt';
+    const configId = 'approval_mode';
+    await fixture(
+      async ({ context, workspace, requests, savedSettings }) => {
+        const setup: acp.NewSessionRequest = { cwd: workspace, mcpServers: [] };
+        const created = await context.request(acp.methods.agent.session.new, setup);
+        const { sessionId } = created;
+        const mode = (response: { configOptions?: acp.SessionConfigOption[] | null }) =>
+          response.configOptions?.find(({ id }) => id === configId);
+        const setMode = (value: string) =>
+          context.request(acp.methods.agent.session.setConfigOption, { sessionId, configId, value });
+        const prompt = (id: string) =>
+          context.request(acp.methods.agent.session.prompt, {
+            sessionId: id,
+            prompt: [{ type: 'text', text: 'Append mode-test to the scratch file beside the workspace.' }],
+          });
+        const outside = path.resolve(workspace, '..', 'approval-mode.txt');
+        const expectConfined = () => expect(readFile(outside, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+        const reviews = () => requests.filter((request) => !request.tools?.length);
+        const original = await savedSettings();
+        expect(mode(created)).toMatchObject({
+          category: 'mode',
+          currentValue: 'ask',
+          options: [
+            { value: 'ask', name: 'Ask' },
+            { value: 'assisted', name: 'Assisted' },
+            { value: 'always', name: 'Always · Sandbox off' },
+          ],
+        });
+        await expect(setMode('invalid')).rejects.toMatchObject({ code: -32602 });
+        await prompt(sessionId);
+        await expectConfined();
+        expect(permissions).toHaveLength(0);
+        expect(reviews()).toHaveLength(0);
+
+        expect(mode(await setMode('assisted'))).toMatchObject({ currentValue: 'assisted' });
+        await prompt(sessionId);
+        expect(await readFile(path.join(workspace, 'assisted.txt'), 'utf8')).toBe('mode-test\n');
+        await expectConfined();
+        expect(reviews()).toHaveLength(1);
+        expect(permissions).toHaveLength(0);
+        await prompt(sessionId);
+        await expectConfined();
+        expect(reviews()).toHaveLength(2);
+        expect(permissions).toHaveLength(1);
+
+        expect(mode(await setMode('always'))).toMatchObject({ currentValue: 'always' });
+        const sibling = await context.request(acp.methods.agent.session.new, setup);
+        expect(mode(sibling)).toMatchObject({ currentValue: 'ask' });
+        await prompt(sibling.sessionId);
+        await expectConfined();
+        await prompt(sessionId);
+        expect(await readFile(outside, 'utf8')).toBe('mode-test\n');
+        expect(permissions).toHaveLength(1);
+        expect(reviews()).toHaveLength(2);
+
+        expect(mode(await setMode('ask'))).toMatchObject({ currentValue: 'ask' });
+        await prompt(sessionId);
+        expect(await readFile(outside, 'utf8')).toBe('mode-test\n');
+        expect(mode(await setMode('always'))).toMatchObject({ currentValue: 'always' });
+        await context.request(acp.methods.agent.session.close, { sessionId });
+        const loaded = await context.request(acp.methods.agent.session.load, { sessionId, ...setup });
+        expect(loaded.configOptions?.find(({ id }) => id === configId)).toMatchObject({ currentValue: 'ask' });
+        expect(await savedSettings()).toBe(original);
+      },
+      {
+        approvalReviews: ['low', 'high'],
+        shellCalls: [
+          { command },
+          undefined,
+          { command: 'echo mode-test | tee assisted.txt' },
+          undefined,
+          { command },
+          undefined,
+          { command },
+          undefined,
+          { command },
+          undefined,
+          { command },
+        ],
+        async permission(params) {
+          permissions.push(params);
+          return { outcome: { outcome: 'selected', optionId: 'reject' } };
+        },
+      },
+    );
+  }, 45_000);
+
+  it('cancels an in-flight Assisted review without requesting client permission', async () => {
+    let releaseReview!: () => void;
+    const review = new Promise<void>((resolve) => {
+      releaseReview = resolve;
+    });
+    const permission = vi.fn(
+      async (): Promise<acp.RequestPermissionResponse> => ({
+        outcome: { outcome: 'selected', optionId: 'approve' },
+      }),
+    );
+    try {
+      await fixture(
+        async ({ context, workspace, requests }) => {
+          const { sessionId } = await context.request(acp.methods.agent.session.new, {
+            cwd: workspace,
+            mcpServers: [],
+          });
+          await context.request(acp.methods.agent.session.setConfigOption, {
+            sessionId,
+            configId: 'approval_mode',
+            value: 'assisted',
+          });
+          const prompt = () =>
+            context.request(acp.methods.agent.session.prompt, {
+              sessionId,
+              prompt: [{ type: 'text', text: 'Run the scripted command.' }],
+            });
+          const pending = prompt();
+          await vi.waitFor(() => expect(requests.some((request) => !request.tools?.length)).toBe(true));
+          await context.notify(acp.methods.agent.session.cancel, { sessionId });
+          await expect(pending).resolves.toEqual({ stopReason: 'cancelled' });
+          releaseReview();
+          await expect(prompt()).resolves.toEqual({ stopReason: 'end_turn' });
+          expect(permission).not.toHaveBeenCalled();
+          await expect(readFile(path.join(workspace, 'cancelled.txt'), 'utf8')).rejects.toMatchObject({
+            code: 'ENOENT',
+          });
+        },
+        {
+          shellCalls: [{ command: 'echo cancelled | tee cancelled.txt' }],
+          approvalReviews: ['low'],
+          beforeApprovalReview: () => review,
+          permission,
+        },
+      );
+    } finally {
+      releaseReview();
+    }
   }, 30_000);
 
   it.each(['unsandboxed-once', 'approve'])(

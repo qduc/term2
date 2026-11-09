@@ -1,7 +1,7 @@
 /**
  * `term2 acp` on the direct host. stdout is the protocol channel and nothing else
- * writes to it. The shell defaults to the required sandbox. ACP v1 can request
- * an explicit one-time grant for a foreground shell command outside it.
+ * writes to it. ACP v1 starts in Ask mode and may change its session approval policy.
+ * The v2 shell stays in the required sandbox.
  */
 import fs from 'node:fs';
 import { getAllProviders, getProviderIds } from '../../model/providers/index.js';
@@ -11,6 +11,7 @@ import {
   createAcpBackend,
   createStdioAcpIo,
   serveAcp,
+  type AcpApprovalMode,
   type AcpIo,
   type AcpWorkspaces,
 } from '../../clients/acp/index.js';
@@ -22,6 +23,8 @@ import { isProviderDisabled, resolveProviderCredentials } from '../../model/prov
 import { fetchModels, peekCachedModels } from '../../model/model-service.js';
 import type { WireModel } from '../../protocol/wire.js';
 import { createAcpSessions } from './acp-sessions.js';
+
+const nativeApprovalMode = { ask: 'off', assisted: 'auto', always: 'always' } as const;
 
 type AcpRequest = Extract<DirectLaunchRequest, { readonly kind: 'acp' }>;
 
@@ -179,6 +182,17 @@ export async function launchAcp(request: AcpRequest): Promise<number> {
       logger,
       models,
       sessions,
+      approval: {
+        async get(sessionId): Promise<AcpApprovalMode> {
+          const { approvalMode } = await app.sessionConfiguration(sessionId);
+          return approvalMode === 'always' ? 'always' : approvalMode === 'auto' ? 'assisted' : 'ask';
+        },
+        async set(sessionId, mode) {
+          if (protocolVersion !== 1) throw new Error('Approval mode is available only in ACP v1.');
+          await app.applyLaunchConfiguration(sessionId, {}, nativeApprovalMode[mode]);
+        },
+        review: app.reviewApproval,
+      },
       async configuration(sessionId) {
         const state = await app.sessionConfiguration(sessionId);
         return { model: state.model, reasoning: state.reasoningEffort };

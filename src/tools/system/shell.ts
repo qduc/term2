@@ -515,7 +515,7 @@ function stripRedundantCd(command: string, cwd: string): string {
   return command;
 }
 
-function isMutatingCommand(command: string, cwd: string, log: ILoggingService): boolean {
+export function isMutatingCommand(command: string, cwd: string, log: ILoggingService): boolean {
   return validateCommandSafety(stripRedundantCd(command, cwd), log); // true = YELLOW/RED
 }
 

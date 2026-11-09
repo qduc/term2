@@ -172,14 +172,21 @@ session-owned MCP connections. Retained conversation logs can be loaded again.
 
 ## Permissions, questions and budgets
 
-The launcher fixes `autoApprove: false`, `allowUnsandboxed: false`,
-`approvalAlwaysAsks: true` and `requireSandbox: true`. Each ACP session pins
-`shell.autoApproveMode: off` and `sandbox.enabled: true` in memory, including on
-resume; saved user settings are not rewritten. Commands that the native tool
-policy considers safe do not require a permission exchange; approval-required
-calls always go to the client. ACP does not provide an automatic approval flag or
-an unsandboxed permission option. If the shell sandbox cannot run, the launcher
-warns on stderr; shell execution cannot gain an unsandboxed fallback through ACP.
+ACP v1 offers a session-local **Approval mode** selector.
+
+| Mode | Shell sandbox | Approval behavior |
+| --- | --- | --- |
+| Ask (default) | On | Ask for actions that require approval. |
+| Assisted | On | Review eligible foreground approvals, including flagged sandboxed shell mutations, and auto-approve high-confidence, authorized, low-risk actions. Other actions requiring approval go to the client. |
+| Always · Sandbox off | Off | Run shell commands outside the sandbox and skip routine approvals. |
+
+In Ask and Assisted, a foreground shell can request **Run outside sandbox once**
+for a specific command and working directory. This always requires explicit
+consent. Forwarded MCP calls keep their own approval requirement in every mode.
+Change modes after active work settles. The selection applies to the
+live session and resets to Ask after closing or reopening the runtime.
+ACP v2 keeps shell confinement and sends approval-required calls to the client.
+A missing or failed sandbox stops commands that require confinement.
 
 Approvals use real native request/execution IDs. The base options are `approve`
 (allow once) and `reject` (deny once); the older `allow-once` reply remains an

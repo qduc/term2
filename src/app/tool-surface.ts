@@ -17,13 +17,19 @@ import { SkillsService } from '../tools/skills/skills-service.js';
 import { bindRunCodeRegistry } from '../tools/system/run-code/run-code.js';
 import { TOOL_NAME_DESCRIBE } from '../tools/system/run-code/script-surface.js';
 import type { AnyToolDefinition } from '../tools/types.js';
+import { isMutatingCommand } from '../tools/system/shell.js';
 import { InvalidatableShellChildRegistry } from '../tools/shell/shell-child-registry.js';
 import type { ProviderInputItem } from '../shared/contracts/provider-input.js';
 import type { ToolContextSeed } from '../tools/index.js';
 import type { Workspace } from '../tools/index.js';
 import type { Item, ReasoningEffort } from '../model/index.js';
 import { createProviderRegistry } from '../model/provider.js';
-import { createApprovalModelClient } from './lib/approval-model.js';
+import {
+  approvalHistory,
+  createApprovalModelClient,
+  createAssistedApprovalReview,
+  isDockerRequest,
+} from './lib/approval-model.js';
 import { createDirectSubagentTools } from '../delegation/index.js';
 import { createDirectShellTools } from './shell-tools.js';
 import { createSourceToolRegistry, executeSourceChild, sourceToolSpec, sourceToolContext } from './source-tools.js';
@@ -206,6 +212,10 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     withAnswer: (answer, operation) => answers.run(answer, operation),
     checkInterceptors: deps.checkToolInterceptors,
     shellEscapeCwd: options.shellEscapeApproval && !remote && !readOnly ? () => executionContext.getCwd() : undefined,
+    confirmSandboxedShell:
+      options.shellEscapeApproval && settings.get('shell.autoApproveMode') === 'auto'
+        ? (command) => withWorkspace(() => isMutatingCommand(command, executionContext.getCwd(), logger))
+        : undefined,
   });
   const modelSettings = agent.modelSettings;
   const maxOutputTokens = resolveRequestOutput(
@@ -299,6 +309,16 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
         await remote?.close();
       },
     },
+    reviewApproval: options.shellEscapeApproval
+      ? createAssistedApprovalReview({
+          agentClient,
+          settings,
+          logger,
+          sessionContext: selection.sessionContext,
+          sessionAccess,
+          withWorkspace,
+        })
+      : undefined,
     async decideInteraction(request, history) {
       if (request.presentation?.requiresExplicitUser === true)
         return { kind: 'deny', reason: 'This decision requires an explicit user answer' };
@@ -406,52 +426,10 @@ function approvalArguments(name: string, input: unknown): string {
   return JSON.stringify(input) ?? '';
 }
 
-function isDockerRequest(name: string, input: unknown, access: SessionAccessState): boolean {
-  return (
-    name === 'shell' &&
-    !!input &&
-    typeof input === 'object' &&
-    'command' in input &&
-    typeof input.command === 'string' &&
-    access.requiresDockerApproval(input.command)
-  );
-}
-
 /** History without tool calls that have no result yet. */
 function settledHistory(history: readonly Item[]): readonly Item[] {
   const settled = new Set(history.flatMap((item) => (item.type === 'tool_result' ? [item.callId] : [])));
   return history.filter((item) => item.type !== 'tool_call' || settled.has(item.callId));
-}
-
-function approvalHistory(history: readonly Item[]): ProviderInputItem[] {
-  return history.flatMap((item): ProviderInputItem[] => {
-    switch (item.type) {
-      case 'user_message':
-      case 'assistant_message':
-        return [
-          {
-            type: 'message',
-            role: item.type === 'user_message' ? 'user' : 'assistant',
-            content: item.content
-              .filter((part) => part.type === 'text')
-              .map((part) => ({ type: 'input_text', text: part.text })),
-          },
-        ];
-      case 'tool_call':
-        return [
-          {
-            type: 'function_call',
-            name: item.toolName,
-            call_id: item.callId,
-            arguments: item.rawArguments ?? JSON.stringify(item.input),
-          },
-        ];
-      case 'tool_result':
-        return [{ type: 'function_call_output', call_id: item.callId, output: item.output }];
-      default:
-        return [];
-    }
-  });
 }
 
 /** The Session renders the goal per request (planDirectInstructions); drop the unbound source copy. */

@@ -49,6 +49,7 @@ type SourceToolOptions = {
   readonly sessionId: string;
   readonly checkInterceptors?: (name: string, input: unknown) => Promise<string | null>;
   readonly shellEscapeCwd?: () => string;
+  readonly confirmSandboxedShell?: (command: string) => boolean;
   readonly withAnswer: <T>(answer: string, operation: () => Promise<T>) => Promise<T>;
 };
 
@@ -129,6 +130,7 @@ function shellEscape(
 ): input is { command: string; sandbox: 'unsandboxed'; background?: boolean } {
   return (
     options.shellEscapeCwd !== undefined &&
+    options.settings.get('sandbox.enabled') !== false &&
     toolName === 'shell' &&
     input !== null &&
     typeof input === 'object' &&
@@ -177,10 +179,21 @@ async function approvalFor(
     };
   }
   // The sandbox runner fails closed when it cannot confine a default command.
-  if (options.shellEscapeCwd && definition.name === 'shell' && !docker) return { kind: 'none' };
+  if (options.shellEscapeCwd && definition.name === 'shell' && !docker) {
+    if (
+      input !== null &&
+      typeof input === 'object' &&
+      'command' in input &&
+      typeof input.command === 'string' &&
+      options.confirmSandboxedShell?.(input.command)
+    )
+      return { kind: 'ask', summary: 'Review sandboxed shell command', detail: input.command };
+    return { kind: 'none' };
+  }
   if (
     policy.kind === 'auto_approve' ||
-    shouldBypassToolApproval(definition.name, options.settings.get('shell.autoApproveMode'))
+    ((!docker || !options.shellEscapeCwd) &&
+      shouldBypassToolApproval(definition.name, options.settings.get('shell.autoApproveMode')))
   ) {
     // Legacy stages every call whose definition needs approval, even when policy then approves it.
     const invocation = invocationFor(context, options.sessionId);

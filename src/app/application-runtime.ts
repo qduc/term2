@@ -29,7 +29,11 @@ import { prepareSessionRollover } from './application-rollover.js';
 import { createDirectConfigMemoryBinding } from './config-memory.js';
 import { borrowDirectConfigSurfaceOptions } from './config-remote.js';
 import { prepareDirectConfiguration } from './config-runtime.js';
-import { createDirectConfigSettings, type DirectAppConfiguration } from './config-settings.js';
+import {
+  createDirectConfigSettings,
+  recordDirectConfigSettings,
+  type DirectAppConfiguration,
+} from './config-settings.js';
 import { readDirectInputPreviewConfiguration } from './input-preview.js';
 import { createDirectSessionMemory, directMainMemoryEnabled } from './memory.js';
 import { contextMilestones, runPolicy } from './application-policy.js';
@@ -260,7 +264,14 @@ export function createDirectRuntimes(
       );
       const scope = createSessionScope(sessionContext, context.id, new Date().toISOString());
       const profile = getProfileMetadata(String(settings.get('app.activeProfileId')));
-      const { notice, profileName: _profileName, runtime, decideInteraction: _decide, ...request } = surface;
+      const {
+        notice,
+        profileName: _profileName,
+        runtime,
+        decideInteraction: _decide,
+        reviewApproval: _review,
+        ...request
+      } = surface;
       let tasks: DirectBackgroundTasks | undefined;
       const initialSettings = createDirectConfigSettings(settings, {}).settings;
       const publish = (
@@ -317,6 +328,7 @@ export function createDirectRuntimes(
       };
       const configure = async (configuration: DirectAppConfiguration): Promise<DirectPreparedConfiguration> => {
         const isLaunch = launchConfiguration.active(context.id);
+        const approvalMode = launchConfiguration.approvalMode(context.id);
         const { bound } = installed;
         if (!bound) throw new Error('This session has not finished starting.');
         const generation = await prepareDirectConfiguration({
@@ -325,7 +337,7 @@ export function createDirectRuntimes(
           scope,
           sessionAccountStore,
           surfaceOptions,
-          configuration,
+          configuration: { ...configuration, approvalMode },
           capabilities: bound.capabilities,
           memoryBinding,
           authorizeModel: (next, previous) => launchConfiguration.authorize(context.id, next, previous),
@@ -381,22 +393,10 @@ export function createDirectRuntimes(
             publish(generation.surface, nextProfile.id, true, generation.settings, generation.sessionAccount);
             queueMicrotask(() => {
               try {
-                // Generations are read-only copies, so the next one has to start from this. A changed value is
-                // saved, as legacy's configuration service saves a picked model, effort, profile or temperature.
-                const record = (key: string, value: unknown) =>
-                  settings.setDynamic(
-                    key,
-                    value,
-                    isLaunch ||
-                      options.persistSessionConfiguration === false ||
-                      isDeepStrictEqual(settings.getDynamic(key), value)
-                      ? { persist: false }
-                      : {},
-                  );
-                record('app.activeProfileId', nextProfile.id);
-                record('agent.modelSelection', intent.modelSelection);
-                record('agent.reasoningEffort', intent.reasoningEffort);
-                if (intent.temperature !== undefined) record('agent.temperature', intent.temperature);
+                recordDirectConfigSettings(settings, intent, nextProfile.id, {
+                  persist: !isLaunch && options.persistSessionConfiguration !== false,
+                  approvalMode,
+                });
                 options.onSurface?.(generation.surface, getProfileMetadata(nextProfile.id));
               } catch (error) {
                 logger.warn(`Could not record the new configuration: ${String(error)}`);

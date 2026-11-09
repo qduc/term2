@@ -43,6 +43,8 @@ export type AcpLogger = {
   error(message: string, fields: Readonly<Record<string, unknown>>): void;
 };
 
+export type AcpApprovalMode = 'ask' | 'assisted' | 'always';
+
 export type BackendOptions = {
   readonly host: DirectHost;
   readonly principal: Principal;
@@ -56,6 +58,12 @@ export type BackendOptions = {
   };
   /** Cache-only for setup; refresh may contact credentialed provider catalogs. */
   readonly models?: (refresh: boolean) => Promise<readonly (WireModel & { readonly name?: string })[]>;
+  /** App-owned v1 policy and accepted configuration. */
+  readonly approval?: {
+    get(sessionId: string): Promise<AcpApprovalMode>;
+    set(sessionId: string, mode: AcpApprovalMode): Promise<void>;
+    review(sessionId: string, requestId: string, signal: AbortSignal): Promise<boolean>;
+  };
   /** Accepted session intent, preserving Default even when its effective effort is concrete. */
   readonly configuration?: (sessionId: string) => Promise<{
     readonly model: WireModel;

@@ -78,6 +78,7 @@ export class AcpAttachment {
     readonly connection: DirectConnection,
     private readonly client: AcpClient,
     private readonly logger: AcpLogger,
+    private readonly reviewApproval?: (requestId: string, signal: AbortSignal) => Promise<boolean>,
   ) {
     this.foregroundTurnId = connection.snapshot.activeTurnId;
     this.status = connection.snapshot.status;
@@ -326,11 +327,32 @@ export class AcpAttachment {
   }
 
   private openPermission(interaction: WireInteraction): void {
-    this.openRequest(interaction.requestId, interaction.turnId, async (signal) => ({
-      type: 'answer',
-      requestId: interaction.requestId,
-      ...(await requestPermission({ sessionId: this.connection.sessionId, interaction, client: this.client, signal })),
-    }));
+    const { sessionId } = this.connection;
+    this.openRequest(interaction.requestId, interaction.turnId, async (signal) => {
+      const { requestId } = interaction;
+      const approved =
+        interaction.kind === 'approval' &&
+        !interaction.supportedGrants.includes('unsandboxed-once') &&
+        (await this.reviewApproval?.(requestId, signal).catch((error: unknown) => {
+          if (!signal.aborted)
+            this.logger.error('ACP approval review failed', { sessionId, error: errorMessage(error) });
+          return false;
+        }));
+      signal.throwIfAborted();
+      if (approved) {
+        return {
+          type: 'answer',
+          requestId,
+          decision: { kind: 'allow' },
+          provenance: { source: 'policy', automaticApproval: true },
+        };
+      }
+      return {
+        type: 'answer',
+        requestId,
+        ...(await requestPermission({ sessionId, interaction, client: this.client, signal })),
+      };
+    });
   }
 
   private openBudget(request: WireBudgetRequest): void {

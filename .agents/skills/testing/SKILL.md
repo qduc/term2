@@ -61,7 +61,8 @@ for golden changes. It does not wait for behavioral lanes. Every behavioral tier
 unless every changed file in a pull request is inert (the `changes` job in
 `.github/workflows/ci.yml` defines inert); then only the expensive test work skips. The required
 `test` job still checks the root allowlist and rejects committed unit tests before dependency
-setup. `integration` owns `bench/headless.mjs` and `bench/hops.mts`; `e2e` owns golden parity.
+setup. The `bench` job owns `bench/headless.mjs` and `bench/hops.mts` on its own runner (they need
+only a build, and after the integration cases they lengthened the slowest job); `e2e` owns golden parity.
 `bench/headless.mjs` runs its isolated rows through a core-sized pool (`HEADLESS_CONCURRENCY=1`
 for serial debugging); serially it added ~30 s to the integration lane's critical path. The
 heaviest e2e files run in the `test` lane (`owner()` in `scripts/run-ci-lane.mjs`); rebalance

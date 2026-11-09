@@ -32,6 +32,7 @@ type PanelTask = {
   /** The shell command or the subagent's task text. */
   readonly text: string;
   readonly name?: string;
+  readonly model?: string;
   readonly status: PanelStatus;
   readonly error?: string;
   readonly startedAt?: number;
@@ -69,6 +70,7 @@ function panelRow(view: TaskView): Row {
       role: wire?.role ?? view.role ?? '',
       text: (kind === 'shell' ? wire?.label : wire?.input ?? wire?.label) ?? view.label,
       ...(wire?.name ? { name: wire.name } : {}),
+      ...(kind === 'subagent' && wire?.model ? { model: wire.model.model } : {}),
       ...(kind === 'subagent' && wire?.lastTool ? { lastTool: wire.lastTool } : {}),
       status,
       ...(wire?.result?.error?.message ? { error: wire.result.error.message } : {}),
@@ -213,6 +215,11 @@ const TaskRows: FC<{ readonly state: TuiState; readonly gap: boolean }> = ({ sta
                 <Text color={theme.textSubtle}>• </Text>
                 <Text color={theme.accentAlt}>{row.badge}</Text> <Text>{row.identity}</Text> · <Text>{row.phase}</Text>
               </Text>
+              {task.model ? (
+                <Text color={theme.textMuted}>
+                  {truncateTerminalText(`  Model: ${task.model}`, Math.max(1, columns))}
+                </Text>
+              ) : null}
               {tool && toolStatus ? (
                 <Text color={theme.textMuted}>
                   {'  └ '}

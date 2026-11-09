@@ -2113,5 +2113,132 @@
       "callback": "TurnDeps.createToolContext",
       "reason": "Consolidates the former askOrchestrator, subagents and shellTasks callbacks into Term2's app context factory. Creating the context itself does not write; the returned methods must synchronously return task controls and route questions to Session's task registry. The gate follows their closures into task_question_opened, task stop/answer facts, and background_notice_enqueued. Task facts fold per task in replay-background.ts; notices reach the parent model only at its next steering boundary; the calling tool's result still follows as an accepted turn event. Keep this deviation while these app-owned task controls write synchronously; retire it if task operations gain an explicit accepted-event protocol."
     }
+  ],
+  "fixedSleeps": [
+    {
+      "file": "scripts/fake-codex-server.e2e.test.ts",
+      "count": 2,
+      "reason": "Sleeps written before the fixed-sleeps rule (2026-11-09) and not yet audited site by site. Each is a settle pause, a pause before a negative assertion, a fixture timing gap or a hand-written poll loop; when the file is next touched, replace each with a condition wait or justify it with a sleep-ok comment, and lower the count."
+    },
+    {
+      "file": "scripts/provider-black-box/fake-provider-websocket-server.test.ts",
+      "count": 2,
+      "reason": "Sleeps written before the fixed-sleeps rule (2026-11-09) and not yet audited site by site. Each is a settle pause, a pause before a negative assertion, a fixture timing gap or a hand-written poll loop; when the file is next touched, replace each with a condition wait or justify it with a sleep-ok comment, and lower the count."
+    },
+    {
+      "file": "scripts/provider-black-box/native-crash-window.blackbox.ts",
+      "count": 1,
+      "reason": "Sleeps written before the fixed-sleeps rule (2026-11-09) and not yet audited site by site. Each is a settle pause, a pause before a negative assertion, a fixture timing gap or a hand-written poll loop; when the file is next touched, replace each with a condition wait or justify it with a sleep-ok comment, and lower the count."
+    },
+    {
+      "file": "scripts/provider-black-box/provider-crash-window.blackbox.ts",
+      "count": 1,
+      "reason": "Sleeps written before the fixed-sleeps rule (2026-11-09) and not yet audited site by site. Each is a settle pause, a pause before a negative assertion, a fixture timing gap or a hand-written poll loop; when the file is next touched, replace each with a condition wait or justify it with a sleep-ok comment, and lower the count."
+    },
+    {
+      "file": "scripts/provider-black-box/provider-test-harness.test.ts",
+      "count": 1,
+      "reason": "Sleeps written before the fixed-sleeps rule (2026-11-09) and not yet audited site by site. Each is a settle pause, a pause before a negative assertion, a fixture timing gap or a hand-written poll loop; when the file is next touched, replace each with a condition wait or justify it with a sleep-ok comment, and lower the count."
+    },
+    {
+      "file": "tests/cli/background-approval-stop.e2e.test.ts",
+      "count": 1,
+      "reason": "Sleeps written before the fixed-sleeps rule (2026-11-09) and not yet audited site by site. Each is a settle pause, a pause before a negative assertion, a fixture timing gap or a hand-written poll loop; when the file is next touched, replace each with a condition wait or justify it with a sleep-ok comment, and lower the count."
+    },
+    {
+      "file": "tests/cli/cancel-timing.e2e.test.ts",
+      "count": 2,
+      "reason": "Sleeps written before the fixed-sleeps rule (2026-11-09) and not yet audited site by site. Each is a settle pause, a pause before a negative assertion, a fixture timing gap or a hand-written poll loop; when the file is next touched, replace each with a condition wait or justify it with a sleep-ok comment, and lower the count."
+    },
+    {
+      "file": "tests/cli/code-block.e2e.test.ts",
+      "count": 2,
+      "reason": "Sleeps written before the fixed-sleeps rule (2026-11-09) and not yet audited site by site. Each is a settle pause, a pause before a negative assertion, a fixture timing gap or a hand-written poll loop; when the file is next touched, replace each with a condition wait or justify it with a sleep-ok comment, and lower the count."
+    },
+    {
+      "file": "tests/cli/compact-queue.e2e.test.ts",
+      "count": 3,
+      "reason": "Sleeps written before the fixed-sleeps rule (2026-11-09) and not yet audited site by site. Each is a settle pause, a pause before a negative assertion, a fixture timing gap or a hand-written poll loop; when the file is next touched, replace each with a condition wait or justify it with a sleep-ok comment, and lower the count."
+    },
+    {
+      "file": "tests/cli/compact-receipts.e2e.test.ts",
+      "count": 4,
+      "reason": "Sleeps written before the fixed-sleeps rule (2026-11-09) and not yet audited site by site. Each is a settle pause, a pause before a negative assertion, a fixture timing gap or a hand-written poll loop; when the file is next touched, replace each with a condition wait or justify it with a sleep-ok comment, and lower the count."
+    },
+    {
+      "file": "tests/cli/effort-picker.e2e.test.ts",
+      "count": 2,
+      "reason": "Sleeps written before the fixed-sleeps rule (2026-11-09) and not yet audited site by site. Each is a settle pause, a pause before a negative assertion, a fixture timing gap or a hand-written poll loop; when the file is next touched, replace each with a condition wait or justify it with a sleep-ok comment, and lower the count."
+    },
+    {
+      "file": "tests/cli/finished-row-waiting.e2e.test.ts",
+      "count": 2,
+      "reason": "Sleeps written before the fixed-sleeps rule (2026-11-09) and not yet audited site by site. Each is a settle pause, a pause before a negative assertion, a fixture timing gap or a hand-written poll loop; when the file is next touched, replace each with a condition wait or justify it with a sleep-ok comment, and lower the count."
+    },
+    {
+      "file": "tests/cli/help-reachability.e2e.test.ts",
+      "count": 2,
+      "reason": "Sleeps written before the fixed-sleeps rule (2026-11-09) and not yet audited site by site. Each is a settle pause, a pause before a negative assertion, a fixture timing gap or a hand-written poll loop; when the file is next touched, replace each with a condition wait or justify it with a sleep-ok comment, and lower the count."
+    },
+    {
+      "file": "tests/cli/model-id.e2e.test.ts",
+      "count": 1,
+      "reason": "Sleeps written before the fixed-sleeps rule (2026-11-09) and not yet audited site by site. Each is a settle pause, a pause before a negative assertion, a fixture timing gap or a hand-written poll loop; when the file is next touched, replace each with a condition wait or justify it with a sleep-ok comment, and lower the count."
+    },
+    {
+      "file": "tests/cli/path-completion.e2e.test.ts",
+      "count": 4,
+      "reason": "Sleeps written before the fixed-sleeps rule (2026-11-09) and not yet audited site by site. Each is a settle pause, a pause before a negative assertion, a fixture timing gap or a hand-written poll loop; when the file is next touched, replace each with a condition wait or justify it with a sleep-ok comment, and lower the count."
+    },
+    {
+      "file": "tests/cli/settings.e2e.test.ts",
+      "count": 2,
+      "reason": "Sleeps written before the fixed-sleeps rule (2026-11-09) and not yet audited site by site. Each is a settle pause, a pause before a negative assertion, a fixture timing gap or a hand-written poll loop; when the file is next touched, replace each with a condition wait or justify it with a sleep-ok comment, and lower the count."
+    },
+    {
+      "file": "tests/cli/subagent-events.e2e.test.ts",
+      "count": 1,
+      "reason": "Sleeps written before the fixed-sleeps rule (2026-11-09) and not yet audited site by site. Each is a settle pause, a pause before a negative assertion, a fixture timing gap or a hand-written poll loop; when the file is next touched, replace each with a condition wait or justify it with a sleep-ok comment, and lower the count."
+    },
+    {
+      "file": "tests/cli/task-menu-row-wrap.e2e.test.ts",
+      "count": 2,
+      "reason": "Sleeps written before the fixed-sleeps rule (2026-11-09) and not yet audited site by site. Each is a settle pause, a pause before a negative assertion, a fixture timing gap or a hand-written poll loop; when the file is next touched, replace each with a condition wait or justify it with a sleep-ok comment, and lower the count."
+    },
+    {
+      "file": "tests/cli/unknown-tool-row.e2e.test.ts",
+      "count": 1,
+      "reason": "Sleeps written before the fixed-sleeps rule (2026-11-09) and not yet audited site by site. Each is a settle pause, a pause before a negative assertion, a fixture timing gap or a hand-written poll loop; when the file is next touched, replace each with a condition wait or justify it with a sleep-ok comment, and lower the count."
+    },
+    {
+      "file": "tests/cli/usage-stream.e2e.test.ts",
+      "count": 6,
+      "reason": "Sleeps written before the fixed-sleeps rule (2026-11-09) and not yet audited site by site. Each is a settle pause, a pause before a negative assertion, a fixture timing gap or a hand-written poll loop; when the file is next touched, replace each with a condition wait or justify it with a sleep-ok comment, and lower the count."
+    },
+    {
+      "file": "tests/clients/acp-v2/serve.integration.test.ts",
+      "count": 1,
+      "reason": "Sleeps written before the fixed-sleeps rule (2026-11-09) and not yet audited site by site. Each is a settle pause, a pause before a negative assertion, a fixture timing gap or a hand-written poll loop; when the file is next touched, replace each with a condition wait or justify it with a sleep-ok comment, and lower the count."
+    },
+    {
+      "file": "tests/clients/discord/discord-command.integration.test.ts",
+      "count": 1,
+      "reason": "Sleeps written before the fixed-sleeps rule (2026-11-09) and not yet audited site by site. Each is a settle pause, a pause before a negative assertion, a fixture timing gap or a hand-written poll loop; when the file is next touched, replace each with a condition wait or justify it with a sleep-ok comment, and lower the count."
+    },
+    {
+      "file": "tests/clients/discord/discord-gateway.integration.test.ts",
+      "count": 2,
+      "reason": "Sleeps written before the fixed-sleeps rule (2026-11-09) and not yet audited site by site. Each is a settle pause, a pause before a negative assertion, a fixture timing gap or a hand-written poll loop; when the file is next touched, replace each with a condition wait or justify it with a sleep-ok comment, and lower the count."
+    },
+    {
+      "file": "tests/host/gateway/serve.integration.test.ts",
+      "count": 2,
+      "reason": "Sleeps written before the fixed-sleeps rule (2026-11-09) and not yet audited site by site. Each is a settle pause, a pause before a negative assertion, a fixture timing gap or a hand-written poll loop; when the file is next touched, replace each with a condition wait or justify it with a sleep-ok comment, and lower the count."
+    },
+    {
+      "file": "tests/tools/system/run-code/shell.integration.test.ts",
+      "count": 3,
+      "reason": "Sleeps written before the fixed-sleeps rule (2026-11-09) and not yet audited site by site. Each is a settle pause, a pause before a negative assertion, a fixture timing gap or a hand-written poll loop; when the file is next touched, replace each with a condition wait or justify it with a sleep-ok comment, and lower the count."
+    }
   ]
 }

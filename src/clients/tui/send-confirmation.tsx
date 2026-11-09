@@ -4,6 +4,7 @@ import ModeSwitchConfirmationPrompt from './presentation/components/prompt/ModeS
 import InputSurgeConfirmationPrompt from './presentation/components/prompt/InputSurgeConfirmationPrompt.js';
 import LargeUncachedConfirmationPrompt from './presentation/components/prompt/LargeUncachedConfirmationPrompt.js';
 import type { SendHold } from './commands.js';
+import { publishHarnessConfirmationReady } from './harness-input.js';
 
 type Held = {
   message: string;
@@ -49,6 +50,14 @@ export function useSendConfirmation(interactionActive: boolean): {
   useEffect(() => {
     if (!interactionActive) handoffAt.current = performance.now();
   }, [interactionActive]);
+  // Test-only readiness for prompts that read their own keys. Ink subscribes `useInput` in a passive
+  // effect after it draws the prompt, so a key sent on sight can be dropped. The prompt is a descendant
+  // mounted in the same commit, and React runs its effects before this one: the handler is now in place.
+  const selfReading = held !== null && (Boolean(held.mode) || held.surge !== undefined || held.large !== undefined);
+  useEffect(() => {
+    if (held && owned && selfReading)
+      publishHarnessConfirmationReady(held.large ? 'large' : held.surge !== undefined ? 'surge' : 'mode');
+  }, [held, owned, selfReading]);
   return {
     pending: held !== null,
     hold: (message, proceed, mode, enable) => {

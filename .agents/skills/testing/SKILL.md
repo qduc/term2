@@ -61,7 +61,21 @@ for golden changes. It does not wait for behavioral lanes. Every behavioral tier
 unless every changed file in a pull request is inert (the `changes` job in
 `.github/workflows/ci.yml` defines inert); then only the expensive test work skips. The required
 `test` job still checks the root allowlist and rejects committed unit tests before dependency
-setup. `integration` owns `bench/headless.mjs` and `bench/hops.mts`; `e2e` owns golden parity.
+setup. The `bench` job owns `bench/headless.mjs` and `bench/hops.mts` on its own runner (they need
+only a build, and after the integration cases they lengthened the slowest job); `e2e` owns golden parity.
+`bench/headless.mjs` runs its isolated rows through a core-sized pool (`HEADLESS_CONCURRENCY=1`
+for serial debugging); serially it added ~30 s to the integration lane's critical path. The
+heaviest e2e files run in the `test` lane (`owner()` in `scripts/run-ci-lane.mjs`); rebalance
+there when one lane finishes well after the others. Do not move PTY-driven e2e files onto
+`provider-black-box`: two of them took that lane from ~62 s to 94 s locally and tipped a heavy
+provider case past its ~40 s deadline, the same timeout class that already flakes there in CI.
+The setup action installs only `@qduc/term2` and its workspace dependencies unless a job passes
+`web-client: 'true'`; only `integration` does, for the gateway cases that import web-client
+server modules. A new case that imports web-client must run in that lane.
+Each behavioral job restores its lane's Vitest results cache (`lane` input of the setup action),
+and `vitest.ci.config.ts` orders every file by recorded duration across projects. Without it, a
+30 s sleeping Discord download case started late and a later-named project waited behind the
+others, adding ~11 s to the integration lane. A new long file runs early from its second run on.
 `port` is a compatibility aggregate requiring quality and test success, plus successful behavioral
 lanes or skips justified by an inert pull request. Known docs/evidence formats may skip tests;
 unknown extensions and executable scripts under `docs/` run every tier. Follow any late CI failure
@@ -78,6 +92,12 @@ explicit finite timeout and wait for the completion notification rather than pol
 - Deterministic and independent: no real provider network, no shared fixed temp paths,
   no writes into the repository tree, runnable in any order.
 - Mock only at external boundaries (provider fixtures, the network guard).
+- Cheap: a test's wall time is paid on every CI run, so cost is part of the standard,
+  not a later optimisation. Before committing a new or changed test in these tiers,
+  check it against "Keeping the slow tiers fast" below and report its Vitest duration
+  and its built-CLI launch count in the handoff. Don't copy a fixed sleep from a
+  neighbouring test: the e2e files still carry sleeps written before that guidance
+  (`5202455`, 2026-11-05, against `6ff90c5`, 2026-11-07). They are debt, not precedent.
 
 ## Keeping the slow tiers fast
 
@@ -118,6 +138,26 @@ CPU. The attribution and measurements are in
   sleep costs its full length on every run. Where the product publishes a
   harness signal under `TERM2_HARNESS_IDLE_PATH` (idle generation, `.composer`
   revision, `.approval` readiness), prefer it to matching screen text.
+- **Don't add a "settle" sleep after a wait that succeeded,** unless you can
+  name what changes after the wait passes. If the next key could reach a
+  component before it listens (Ink subscribes `useInput` in a passive effect,
+  after the frame shows), wait for the harness readiness signal instead:
+  `.approval` for approval prompts and `.confirmation` for held-send prompts
+  (#233). The model-picker 500 ms pause in `approval-mode.e2e.test.ts` (and its
+  copies) looked like a settle sleep but is load-bearing: the catalog can reload
+  after the picked row is drawn, and without the pause 2 of 18 loaded runs hit
+  Enter on "Loading models" (#234). Its `sleep-ok` comment says why.
+- **Shorten the Ctrl+C exit window instead of sleeping past it.** The root's
+  double-Ctrl+C exit arm (`Tui` in `src/clients/tui/index.tsx`) lasts
+  `TERM2_EXIT_CONFIRM_WINDOW_MS`, 2000 ms by default. `cancel-resume` and
+  `slash-commands` launch with 300 ms and `tool-output` with 1000 ms;
+  `cancel-resume` and `tool-output` sleep only what remains of the window after
+  the Ctrl+C was seen handled.
+- **A later key is not a free sync point for a key that should do nothing.** Bytes
+  written back to back can reach the TUI in one read and parse as text: in
+  `tool-output.e2e.test.ts`, Ctrl+G followed at once by `-x` left `draft\u0007-x` in
+  the composer instead of being handled as a shortcut (#234). Its 500 ms pause
+  before the next key therefore stays, with a `sleep-ok` comment.
 - **Sleep only to observe that nothing happened,** and say in a comment why that
   length is enough. About 60 s of such windows remain in the e2e lane; they are
   the next thing to replace with a deterministic quiescence signal, so don't
@@ -143,6 +183,19 @@ CPU. The attribution and measurements are in
   repack the waiting. A temporary Vitest setup file that recorded each CLI
   spawn and each test-file `setTimeout` found the causes above; `node
   --cpu-prof` on the built CLI shows where startup goes.
+- **`check-rules` blocks new fixed sleeps in these tiers** (rule `fixed-sleeps`,
+  `scripts/gates/fixed-sleeps.mjs`; scope comes from the three tier configs'
+  `include` globs). It sees only the shapes its failure message lists: a
+  `setTimeout`-resolved `new Promise`, a `sleep`/`delay` call, an awaited
+  `timers/promises` `setTimeout`, and any of those inside a loop. A sleep that
+  only observes that nothing happens stays with a comment directly above it,
+  `// sleep-ok: <what absence or window is observed>; <why this length is enough>`.
+  Sleeps not yet audited are per-file ceilings in `scripts/rule-baseline.json`
+  (`fixedSleeps`); lower the count when you remove one. Sleeps the gate does not
+  recognise are still debt, not precedent. Keys sent back to back can arrive as
+  one read: a Ctrl+G written straight before `-x` left the draft as
+  `"draft\u0007-x"`, so a key that does nothing still needs its own read before
+  the next one.
 
 ## Recurring verification traps
 
@@ -170,9 +223,14 @@ and `68ef50ff` (local-only evidence), not a result file to resume appending.
   phase the same day, in a full provider lane on Node 24. The second Large request
   prompt was visible, but typing `y` sent no request within 40,000ms. In 14 reruns
   on each build, half beside busy loops, plus another full lane on each, it passed
-  on both the change and its `main` base.
-  Unchanged-source reruns passed, but the recurring signatures' root causes were
-  not established. Do not increase product deadlines or declare concurrency the
+  on both the change and its `main` base. **Cause established 2026-11-09:** Ink
+  draws a newly mounted prompt at commit but subscribes its `useInput` in a
+  passive effect. A trace on the 2/75 loaded failures showed the root listener
+  receive `y` with the confirmation pending 0.6ms before the prompt subscribed,
+  so the prompt never saw the key. Seeing a prompt does not prove it owns input.
+  Wait on that prompt's own readiness channel (`waitForConfirmationReady`, or the
+  approval channel in `turn-decisions`) before you send a key. That brought it to 0/120.
+  The other signatures above remain unexplained. Do not increase product deadlines or declare concurrency the
   cause from that alone. A separate fixed harness defect missed an already
   captured HTTP request when no later PTY event woke its waiter; test HTTP-only
   wakeup and an unmet-predicate timeout, not just terminal output.

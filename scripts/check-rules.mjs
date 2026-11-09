@@ -8,11 +8,15 @@
 //      Existing ones are recorded in rule-baseline.json (reason: still to delete or wire); new ones need a reason.
 //   4. One fold: only session/fold-fact.ts imports the leaf fact reducers (queue replay and the queue barrel are its legs).
 //   5. Duplicate basenames: files under src/ do not share basenames (excluding index, types, README, INTEGRATION).
+//   6. Fixed sleeps: integration, e2e and provider black-box tests wait for conditions; a sleep needs a
+//      `// sleep-ok: <observed>; <why long enough>` comment or a per-file ceiling in rule-baseline.json
+//      (shapes detected are listed in scripts/gates/fixed-sleeps.mjs).
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { exceptionKeys, failureMap, reportAndExit } from './gates/rules.mjs';
+import { findFixedSleeps, slowTierFiles } from './gates/fixed-sleeps.mjs';
 
 const scripts = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(scripts, '..');
@@ -232,8 +236,39 @@ if (staleDups.length)
     } duplicate-basename exceptions that are no longer duplicated or gone; remove:\n  ${staleDups.join('\n  ')}`,
   );
 
+// 6. Fixed sleeps in the slow test tiers. The baseline holds a per-file ceiling that only goes down.
+const sleeps = add('fixed-sleeps');
+const sleepCeilings = new Map();
+for (const entry of baseline.fixedSleeps ?? []) {
+  const [file] = exceptionKeys([entry], 'file', sleeps);
+  if (file === undefined) continue;
+  if (!Number.isInteger(entry.count) || entry.count < 1)
+    sleeps(`rule-baseline.json fixedSleeps ${file} needs a positive integer "count"`);
+  else sleepCeilings.set(file, entry.count);
+}
+const tierFiles = slowTierFiles(repo);
+const sleepScan = findFixedSleeps(repo, tierFiles);
+for (const { file, line, problem } of sleepScan.badComments) sleeps(`${file}:${line}: ${problem}`);
+const sleepsByFile = Map.groupBy(sleepScan.unjustified, (site) => site.file);
+for (const [file, sites] of sleepsByFile) {
+  const ceiling = sleepCeilings.get(file) ?? 0;
+  if (sites.length > ceiling)
+    for (const { line, shape } of sites)
+      sleeps(`${file}:${line}: fixed sleep (${shape}); ${sites.length} unjustified in this file, ${ceiling} recorded`);
+}
+for (const [file, ceiling] of sleepCeilings) {
+  const now = sleepsByFile.get(file)?.length ?? 0;
+  if (!tierFiles.includes(file))
+    sleeps(`rule-baseline.json fixedSleeps names ${file}, not a slow-tier test; remove it`);
+  else if (now < ceiling)
+    sleeps(
+      `rule-baseline.json fixedSleeps ${file}: ${now} unjustified sleeps now, ${ceiling} recorded; lower the count`,
+    );
+}
+
 reportAndExit(
   failures,
   `rule check passed (${found.size} recorded unused exports, ${wireAllowed.size} recorded wire-event exceptions, ` +
-    `${duplicateAllowed.size} recorded duplicate basenames)`,
+    `${duplicateAllowed.size} recorded duplicate basenames, ${sleepScan.justified} sleep-ok sleeps, ` +
+    `${sleepScan.unjustified.length} recorded fixed sleeps in ${sleepCeilings.size} files)`,
 );

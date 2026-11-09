@@ -22,7 +22,6 @@ const projectRoot = fileURLToPath(new URL('../..', import.meta.url));
 const builtCli = testCliPath(path.join(projectRoot, 'dist', 'src', 'app', 'cli.js'));
 const TIMEOUT_MS = 120_000;
 const EXIT_CONFIRM_WINDOW_MS = '300';
-const EXIT_CONFIRM_WAIT_MS = 350;
 
 let session: TerminalSession | null = null;
 let root = '';
@@ -210,6 +209,9 @@ async function runCommand(
       await expect
         .poll(() => session!.getVisibleOutput(), { timeout: 30_000 })
         .toMatch(new RegExp(`❯\\s+(★\\s+)?${picked}|No models match`));
+    // sleep-ok: the picked row stays highlighted; the catalog can reload after it is drawn (its effect reruns
+    // when credentialRevision rebuilds providerIds) and empty the list: without this pause two of 18 loaded runs
+    // showed "Loading models" at Enter and set the typed id. Nothing publishes the end; 500 ms had no such failure.
     if (picked) await new Promise((resolve) => setTimeout(resolve, 500));
     session!.write('\r');
   };
@@ -232,7 +234,7 @@ async function runCommand(
     await submit('/effort bogus');
     await session.waitForOutput('"bogus" is not one of the options', 30_000);
     await waitForHarnessComposerValue(idlePath, '/effort bogus', { timeoutMs: 5_000 });
-    await new Promise((resolve) => setTimeout(resolve, EXIT_CONFIRM_WAIT_MS));
+    // No earlier Ctrl+C armed the exit window, so this one only clears the draft.
     session.write('\x03');
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 5_000 });
     session.write('/not-a-real-command');
@@ -331,12 +333,13 @@ async function runCommand(
     const step = async (keys: string, expected: string) => {
       offset = session!.getVisibleOutput().length;
       session!.write(keys);
-      const started = Date.now();
-      while (Date.now() - started < 30_000) {
-        if (session!.getVisibleOutput().slice(offset).includes(expected)) return;
-        await new Promise((resolve) => setTimeout(resolve, 25));
-      }
-      throw new Error(`No new terminal output containing ${expected}: ${session!.getVisibleOutput().slice(-1200)}`);
+      await expect
+        .poll(() => session!.getVisibleOutput().slice(offset), {
+          timeout: 30_000,
+          interval: 25,
+          message: `No new terminal output containing ${expected}`,
+        })
+        .toContain(expected);
     };
     await step('\t\t', 'Some providers failed: brokenprov');
     session.write('\x1b');

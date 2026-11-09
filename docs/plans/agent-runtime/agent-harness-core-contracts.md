@@ -1,7 +1,26 @@
 # Agent harness core contracts
 
-Status: **plan.** Design only. Phase 1 is tracked in [#224](https://github.com/qduc/term2/issues/224); the
-open questions below are waiting on a decision before their parts are implemented.
+Status: **in progress.** Phase 1 shipped in merge `41bbca5` ([#226](https://github.com/qduc/term2/pull/226)) as
+`@qduc/agent-harness-core` in `packages/agent-harness-core/`. Phase 2, ChatForge adoption, is tracked in
+[qduc/chat#40](https://github.com/qduc/chat/issues/40). The open questions below are still undecided.
+
+## Resume here
+
+- **Package state.** `packages/agent-harness-core/package.json` is version `0.1.0` and is not on npm. Term2
+  consumes it as a workspace package and bundles it into its own build.
+- **Next: first npm alpha.** The npm name is undecided between `@qduc/agent-harness-core` and
+  `@qduc/agent-core`. `@qduc/agent-core` `0.1.0` was published on 2026-11-08 from the retired
+  `qduc/agent-runtime` snapshot and then unpublished, so that version can never be reused. The plan is
+  `0.2.0-alpha.1` published with `npm publish --tag next`; the package needs `"publishConfig": {"access":
+  "public"}` first, because scoped packages default to restricted. Renaming means updating the package name
+  and Term2's imports of it.
+- **ChatForge.** Part A of qduc/chat#40 (provider and tool wrappers, event mapping) builds to the contracts
+  without the package. Part B installs the alpha with an exact version pin.
+- **Decisions #226 left implicit.** The package exports the run budget (`src/engine/agent-runtime/run-budget.ts`)
+  and cost accounting (`src/shared/cost/model-cost.ts`), both under `packages/agent-harness-core/`. The design leaves budget as an open question and never placed cost
+  accounting in core; decide both before the API leaves alpha.
+- **Before leaving alpha.** Contract change 7: `codex_quota` and the OpenAI-only `ModelRequest` flags are
+  still on the core types.
 
 Implementation location update: the portable driver and contracts now live in
 `packages/agent-harness-core/src/`. Term2-specific agent resolution, scopes,
@@ -194,16 +213,17 @@ needs them.
 
 ### Before anything
 
-- [ ] Merge the stacked wire PRs in `qduc/agent-runtime`
-  ([#1](https://github.com/qduc/agent-runtime/pull/1), then [#2](https://github.com/qduc/agent-runtime/pull/2))
-  so `main` matches the `0.2.3` tarball Term2 ships. Tracked in
-  [qduc/agent-runtime#3](https://github.com/qduc/agent-runtime/issues/3).
-- [ ] Check the Node version ChatForge runs in Docker and Electron. Term2 requires Node 24; if ChatForge is
-  older, upgrade it as a separate change now.
+- [x] Merge the stacked wire PRs in `qduc/agent-runtime` so `main` matches the `0.2.3` tarball Term2 ships.
+  Done: [qduc/agent-runtime#2](https://github.com/qduc/agent-runtime/pull/2) was retargeted to `main` and
+  merged in `857322c`; the snapshot was retired in `5755992`
+  ([qduc/agent-runtime#3](https://github.com/qduc/agent-runtime/issues/3)). npm still has wire `0.2.2`.
+- [x] Check the Node version ChatForge runs in Docker and Electron. Done: Electron moved to a Node 24 runtime
+  in [qduc/chat#39](https://github.com/qduc/chat/pull/39); Docker images use `node:24.16.0`.
 
 ### Phase 1: Term2, the minimal set
 
-Tracked in [#224](https://github.com/qduc/term2/issues/224).
+Shipped in merge `41bbca5` ([#226](https://github.com/qduc/term2/pull/226)), closing
+[#224](https://github.com/qduc/term2/issues/224).
 
 1. Make core and `Model` implementations instance-local (contract change 1), starting with the provider
    registry's shared compaction state, the ambient cache key, and `src/engine/agent-runtime/scope-resolver.ts`.
@@ -221,7 +241,10 @@ Compaction stays inside the core for now, opt-in.
 
 ### Phase 2: ChatForge, one package at a time
 
-1. **Engine.** Wrap ChatForge's own providers as `Model` and its tools against the `Tool` contract. Replace
+ChatForge installs the package from npm as an exact-pinned prerelease. Each API fix it needs ships from
+Term2 as the next alpha.
+
+1. **Engine** ([qduc/chat#40](https://github.com/qduc/chat/issues/40)). Wrap ChatForge's own providers as `Model` and its tools against the `Tool` contract. Replace
    the streaming tool loop first, behind a flag, and keep the old path until they match. Comparison mode
    follows; JSON mode and the OpenAI-compatible proxy come last.
 2. **Providers (optional).** Swap ChatForge's adapters for Term2's, one provider at a time.
@@ -232,5 +255,7 @@ Compaction stays inside the core for now, opt-in.
 
 - Contract changes 2, 5, 6 and 7: replace-history seam and compaction extraction, the tool-debt helper,
   partial-output rules, Term2 renames.
-- Graduation: a package moves to `qduc/agent-runtime` and npm once its API stops changing week to week and
-  both apps use it.
+- Graduation: a package moves to `qduc/agent-runtime` and gets a stable `latest` release once its API stops
+  changing week to week and both apps use it. Alphas on npm's `next` tag come before graduation, not after:
+  publishing early avoids vendoring tarballs between repos, while the `0.x` prerelease and the `next` tag make
+  no stability promise.

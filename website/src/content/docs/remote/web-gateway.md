@@ -3,15 +3,15 @@ title: Web Gateway (term2 serve)
 description: Running the private gateway for external clients and programmatic control.
 ---
 
-`term2 serve` runs a private gateway service designed to connect external client applications, web interfaces, and local processes directly to an authenticated term2 agent runtime. **One of `--pairing` or `--bff-key` is required.**
+`term2 serve` starts a private gateway for clients that need to manage term2 sessions. Start it with `--pairing` or `--bff-key`.
 
 ## Separate Web Client
 
-The repository's `web-client/` directory is a separate private Next.js application, not part of the `@qduc/term2` npm package or this documentation site. Updating the npm CLI updates the gateway backend; update and rebuild the web client separately for frontend changes such as Markdown/code rendering, grouped tool calls, and the refreshed composer/sidebar.
+The gateway ships with `@qduc/term2`. The Next.js app in `web-client/` has its own build.
 
 **Native browser v2 is enabled in matching source builds.** The root and web builds pin `@qduc/agent-wire` 0.2.3, including native background-task questions, tool tracking and activity observations. Use a server built from this revision with the separately built web client. Older gated builds return `503 agent_wire_v2_unavailable`; installing an older published CLI does not provide this support.
 
-The browser hydrates one real accepted cut, then reconnects from its last fully applied accepted sequence. Accepted batches can have sparse sequences; live observations have no cursor. Reload never invents missing history or restarts a turn automatically. Tool effects are not undone by display replay.
+The browser loads a session snapshot and reconnects from the last sequence it applied. Stored event sequences can have gaps. Live observations have no cursor. Reload restores recorded history without restarting the turn or undoing tool effects.
 
 See [shell sandbox restrictions](/term2/safety/sandbox/#read-only-gateway-sessions) for read-only workspace grants. A physically writable directory may be granted read-only access without granting runtime write permission.
 
@@ -116,7 +116,4 @@ With `--bff-key`, the browser must not pair and must not call the gateway direct
 
 For the complete client contract, see the [Web Gateway API Reference](/term2/reference/gateway-api/).
 
-For editor integrations, term2 is also developing a separate
-[Agent Client Protocol v2 adapter](/term2/reference/acp-v2/). It is not an
-alternative transport for `term2 serve`; the Web Gateway remains the browser/BFF
-integration surface.
+Editors can connect through [Agent Client Protocol](/term2/reference/acp-v2/).

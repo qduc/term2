@@ -3,9 +3,8 @@ title: Agent Client Protocol
 description: Stable ACP v1 and experimental ACP v2 for editor and coding-agent clients.
 ---
 
-term2's direct ACP adapter connects editors and other interactive clients to the
-native Host/session protocol. It uses `@agentclientprotocol/sdk` **1.4.0**, supporting stable v1 and
-`experimental/v2`. The [upstream v2 specification](https://agentclientprotocol.com/protocol/v2/overview)
+Use ACP to connect an editor to term2. The adapter uses
+`@agentclientprotocol/sdk` **1.4.0** for stable v1 and `experimental/v2`. The [upstream v2 specification](https://agentclientprotocol.com/protocol/v2/overview)
 is a changing draft; the v2 adapter does not claim compatibility with every draft revision.
 
 ## Launch
@@ -130,7 +129,7 @@ The adapter supports `session/new`, `session/list`, `session/resume`,
 {"jsonrpc":"2.0","id":3,"method":"session/prompt","params":{"sessionId":"<returned sessionId>","prompt":[{"type":"text","text":"Explain this project"}]}}
 ```
 
-Use the actual returned session ID. Listen for updates before sending a prompt.
+Use the session ID returned by `session/new`. Listen for updates before sending a prompt.
 In this SDK revision the prompt response is an empty acknowledgement; completion
 arrives separately as `state_update` with `state: "idle"`. Work reports `running`
 and blocked native foreground interactions report `requires_action`, then
@@ -210,7 +209,7 @@ The pinned SDK differs from the latest online v2 draft. It requires exact
 protocol version 2 and one initialization per connection, returns an empty
 prompt acknowledgement rather than the newer `messageId` response, and still
 supports the older `tool_call` announcement alongside `tool_call_update`.
-Updating these wire contracts requires a coordinated SDK/client migration.
+Upgrade the SDK and client together when changing these message formats.
 
 For v2, MCP, additional workspace directories, configuration methods, authentication,
 URL elicitation and numeric replay cursors are unsupported. Nonempty MCP or

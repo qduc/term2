@@ -5,7 +5,7 @@ description: Authenticating term2 using API keys and browser-based PKCE OAuth.
 
 ## Browser PKCE OAuth
 
-term2 includes browser-based PKCE OAuth logins for OpenAI Codex / ChatGPT and xAI Grok. Provider account eligibility, billing, and usage limits apply. Login stores credentials; choose a model from that provider with `term2 --model` or `/model` before sending a request.
+Sign in to Codex or Grok in your browser. After signing in, use `term2 --model` or `/model` to choose a model from that provider. Your account’s billing and usage limits apply.
 
 ### Logging in to Grok
 
@@ -48,14 +48,12 @@ API keys can be provided through environment variables. Direct Anthropic and Gem
 
 ## Persisting Credentials in Settings
 
-You can also store API keys permanently in your `settings.json` via the `/settings` menu or by setting:
+Use `/settings` to save an API key in `settings.json`.
 
 ```bash
 # In interactive session:
 /settings agent.openai.apiKey sk-...
 /settings agent.openrouter.apiKey sk-or-v1-...
 ```
-
-Keys stored in `settings.json` persist across shell sessions and reboot cycles.
 
 These keys are plaintext in `settings.json` (not guaranteed mode `0600`), and the standard sandbox does not deny term2's settings/OAuth paths. Prefer environment variables or OAuth for credentials.

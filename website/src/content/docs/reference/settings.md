@@ -1,21 +1,22 @@
 ---
 title: Settings Reference
-description: Complete reference of term2 configuration settings, defaults, runtime modifiability, and environment variables.
+description: term2 settings, default values, and environment variable overrides.
 ---
-
-> **Auto-generated Reference:** This page is generated directly by evaluating `DEFAULT_SETTINGS`, schema definitions, and metadata from `src/config/settings/`. Run `pnpm --dir website build` to re-extract settings.
-
-term2 settings can be configured via:
-1. **Interactive Settings Menu**: Run `/settings` or `/settings <key>` in the interactive TUI.
-2. **Configuration File**: Stored in `settings.json` in your platform's application state directory.
-3. **Environment Variables**: Overrides for API keys, logging, and environment options.
 
 ## Modifying Settings
 
-- In interactive mode: type `/settings <key> <value>` or browse with `/settings`.
-- Settings marked as **Runtime Modifiable** can be changed mid-session without restarting.
-- Non-runtime modifiable settings require restarting term2 to take effect.
-- Reset any setting to its default in the settings menu using `Ctrl+D`.
+Run `/settings` to browse settings or `/settings <key> <value>` to change one.
+In the settings menu, press `Ctrl+D` to reset the selected setting.
+
+You can also edit `settings.json` in your platform’s application state directory.
+The tables list environment variables where available. Settings marked as
+**Runtime Modifiable** can take effect during a session. Restart term2 to apply
+other changes.
+
+Legacy profile fields remain in the schema for [compatibility](https://github.com/qduc/term2/blob/main/docs/profiles/README.md).
+See [session defaults](/term2/modes/) for the controls available in the terminal.
+
+This page is generated from `src/config/settings/` by `pnpm --dir website build`.
 
 ---
 

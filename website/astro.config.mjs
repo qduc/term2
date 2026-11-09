@@ -73,7 +73,7 @@ export default defineConfig({
             { label: 'CLI Flags', link: '/reference/cli-flags/' },
             { label: 'Settings Reference', link: '/reference/settings/' },
             { label: 'Web Gateway API', link: '/reference/gateway-api/' },
-            { label: 'Agent Client Protocol v2', link: '/reference/acp-v2/' },
+            { label: 'Agent Client Protocol', link: '/reference/acp-v2/' },
           ],
         },
         {

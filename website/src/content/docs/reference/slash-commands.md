@@ -1,9 +1,9 @@
 ---
 title: Slash Commands Reference
-description: Complete reference of all interactive slash commands registered in term2.
+description: Interactive slash commands and their arguments.
 ---
 
-Slash commands are entered directly in the prompt composer starting with `/`. Pressing `/` at the start of a prompt opens an interactive completion menu.
+Type `/` at the start of a prompt to open the command menu.
 
 ## Command Index
 
@@ -15,7 +15,7 @@ Slash commands are entered directly in the prompt composer starting with `/`. Pr
 | **`/auto-approve`** | `[off\|advisory\|auto\|always]` | Set shell and tool auto-approval policy. `always` disables `sandbox.enabled`. |
 | **`/sandbox`** | — | Toggle shell sandbox isolation on or off. |
 | **`/compact`** | — | Compact older conversation turns into a local summary. |
-| **`/rewind`** | `[last\|<turn>] [edit\|resend]` | Rewind conversation history with interactive discard inspection. |
+| **`/rewind`** | `[last\|<turn>] [edit\|resend]` | Choose a turn and review what will be discarded before rewinding. |
 | **`/undo`** | — | Alias for `/rewind edit` (places target turn back in composer for revision). |
 | **`/retry`** | — | Alias for `/rewind resend` (immediately resends the last user turn). |
 | **`/retry-turn`** | — | Regenerate the latest user turn from its original prompt. |
@@ -69,4 +69,4 @@ Slash commands are entered directly in the prompt composer starting with `/`. Pr
 
 ### `/handoff`
 - **Usage**: `/handoff`
-- Captures and passes the latest assistant response to the interactive handoff flow.
+- Passes the latest assistant response to another model.

@@ -68,6 +68,9 @@ heaviest e2e files run in the `test` lane (`owner()` in `scripts/run-ci-lane.mjs
 there when one lane finishes well after the others. Do not move PTY-driven e2e files onto
 `provider-black-box`: two of them took that lane from ~62 s to 94 s locally and tipped a heavy
 provider case past its ~40 s deadline, the same timeout class that already flakes there in CI.
+The setup action installs only `@qduc/term2` and its workspace dependencies unless a job passes
+`web-client: 'true'`; only `integration` does, for the gateway cases that import web-client
+server modules. A new case that imports web-client must run in that lane.
 `port` is a compatibility aggregate requiring quality and test success, plus successful behavioral
 lanes or skips justified by an inert pull request. Known docs/evidence formats may skip tests;
 unknown extensions and executable scripts under `docs/` run every tier. Follow any late CI failure

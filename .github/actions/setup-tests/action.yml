@@ -4,9 +4,22 @@ inputs:
   ripgrep:
     description: Install the search binary needed by integration cases.
     default: 'false'
+  web-client:
+    description: Also install the web-client workspace, for gateway cases that import its server modules.
+    default: 'false'
 runs:
   using: composite
   steps:
+    # Runner images do not ship this exact patch, so setup-node downloaded it in
+    # every job: 4-5s each, and 63s on 2026-11-08 when its GitHub release host
+    # returned 504 three times before the nodejs.org fallback. A toolcache hit
+    # (version dir plus its .complete marker) makes setup-node skip the download.
+    # Keep the version here equal to node-version below.
+    - name: Restore Node toolcache
+      uses: actions/cache@v6
+      with:
+        path: ${{ runner.tool_cache }}/node/24.21.0
+        key: test-node-toolcache-v1-${{ runner.os }}-${{ runner.arch }}-24.21.0
     - uses: actions/setup-node@v7
       id: node
       with:
@@ -39,18 +52,51 @@ runs:
       run: |
         echo "image=${ImageOS}" >> "$GITHUB_OUTPUT"
         echo "version=${ImageVersion}" >> "$GITHUB_OUTPUT"
-    # Browser integration tests import web-client server modules, so restore both workspaces.
+    # Key the installation on what can change it. Hashing whole package.json files
+    # made every release (version bump) and script edit a cold install in every
+    # job. --frozen-lockfile still rejects dependency fields the lockfile lacks.
+    - name: Hash install-relevant manifest fields
+      id: manifests
+      shell: bash
+      run: |
+        node --input-type=module >> "$GITHUB_OUTPUT" <<'NODE'
+        import { createHash } from 'node:crypto';
+        import { existsSync, readFileSync } from 'node:fs';
+        const fields = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies',
+          'peerDependenciesMeta', 'bundledDependencies', 'pnpm', 'overrides', 'resolutions',
+          'engines', 'devEngines', 'engineStrict'];
+        const hooks = ['preinstall', 'install', 'postinstall', 'prepare'];
+        const pick = (file) => {
+          if (!existsSync(file)) return null;
+          const json = JSON.parse(readFileSync(file, 'utf8'));
+          const picked = Object.fromEntries(fields.filter((key) => key in json).map((key) => [key, json[key]]));
+          picked.scripts = Object.fromEntries(hooks.filter((key) => json.scripts?.[key]).map((key) => [key, json.scripts[key]]));
+          return picked;
+        };
+        // Key order carries no install meaning; a release once only moved one entry.
+        const canonical = (value) =>
+          Array.isArray(value) ? value.map(canonical)
+          : value && typeof value === 'object'
+            ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonical(value[key])]))
+            : value;
+        const manifests = ['package.json', 'web-client/package.json', 'packages/agent-harness-core/package.json'];
+        const hash = createHash('sha256').update(JSON.stringify(canonical(manifests.map(pick)))).digest('hex');
+        console.log(`hash=${hash}`);
+        NODE
+    # Only the gateway cases (integration lane) import web-client server modules.
+    # Its Next.js, SWC and icon packages doubled the cached installation (76 MB to
+    # 162 MB compressed, 28k to 44k files) that every other job restored unused.
     - name: Restore locked dependency installation
       id: deps
       uses: actions/cache@v6
       with:
         path: |
           node_modules
-          web-client/node_modules
+          ${{ inputs.web-client == 'true' && 'web-client/node_modules' || '!web-client/node_modules' }}
           !node_modules/.cache
           !node_modules/.vite
           !node_modules/.vite-temp
-        key: test-deps-v3-${{ runner.os }}-${{ runner.arch }}-${{ steps.image.outputs.image }}-node${{ steps.node.outputs.node-version }}-pnpm11.7.0-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json', 'web-client/package.json', '.npmrc', 'web-client/.npmrc', 'vendor/*.tgz') }}
+        key: test-deps-v4-${{ inputs.web-client == 'true' && 'web' || 'cli' }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.image.outputs.image }}-node${{ steps.node.outputs.node-version }}-pnpm11.7.0-${{ steps.manifests.outputs.hash }}-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', '.npmrc', 'web-client/.npmrc', 'vendor/*.tgz') }}
     # The installation key is exact, so any lockfile change misses it. A
     # prefix-restored package store limits that miss to the changed packages.
     - name: Locate package store
@@ -76,10 +122,14 @@ runs:
         pnpm_config_fetch_retries: '4'
         pnpm_config_fetch_retry_mintimeout: '2000'
         pnpm_config_fetch_retry_maxtimeout: '10000'
+        WEB_CLIENT: ${{ inputs.web-client }}
       # No `pnpm store prune`: run directly after this install it still evicted
       # 5 in-use packages (808 files, 101 MB) in CI, so the saved store missed
       # them. Bump the store key to reset accumulated packages instead.
-      run: pnpm install --frozen-lockfile
+      # The filter keeps the CLI and its workspace dependencies (agent-harness-core).
+      run: |
+        if [[ "$WEB_CLIENT" == 'true' ]]; then pnpm install --frozen-lockfile
+        else pnpm install --frozen-lockfile --filter '@qduc/term2...'; fi
     - name: Verify native addons and clean build inputs
       shell: bash
       run: |

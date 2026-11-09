@@ -95,7 +95,6 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref || github.sha }}
-          fetch-depth: 0
       - name: Check repository policy
         run: |
           node scripts/check-root.mjs
@@ -190,11 +189,11 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref || github.sha }}
-          fetch-depth: 0
       - uses: ./.github/actions/setup-tests
         id: setup
         with:
           ripgrep: 'true'
+          web-client: 'true'
       - name: Run remaining integration and stateless provider cases
         run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs integration
       - name: Check the headless path

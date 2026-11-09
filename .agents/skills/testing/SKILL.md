@@ -170,9 +170,14 @@ and `68ef50ff` (local-only evidence), not a result file to resume appending.
   phase the same day, in a full provider lane on Node 24. The second Large request
   prompt was visible, but typing `y` sent no request within 40,000ms. In 14 reruns
   on each build, half beside busy loops, plus another full lane on each, it passed
-  on both the change and its `main` base.
-  Unchanged-source reruns passed, but the recurring signatures' root causes were
-  not established. Do not increase product deadlines or declare concurrency the
+  on both the change and its `main` base. **Cause established 2026-11-09:** Ink
+  draws a newly mounted prompt at commit but subscribes its `useInput` in a
+  passive effect. A trace on the 2/75 loaded failures showed the root listener
+  receive `y` with the confirmation pending 0.6ms before the prompt subscribed,
+  so the prompt never saw the key. Seeing a prompt does not prove it owns input.
+  Wait on that prompt's own readiness channel (`waitForConfirmationReady`, or the
+  approval channel in `turn-decisions`) before you send a key. That brought it to 0/120.
+  The other signatures above remain unexplained. Do not increase product deadlines or declare concurrency the
   cause from that alone. A separate fixed harness defect missed an already
   captured HTTP request when no later PTY event woke its waiter; test HTTP-only
   wakeup and an unmet-predicate timeout, not just terminal output.

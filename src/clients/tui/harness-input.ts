@@ -7,6 +7,7 @@ let generation = 0;
 let lastComposerValue: string | null = null;
 let composerRevision = 0;
 let approvalRevision = 0;
+let confirmationRevision = 0;
 
 /** Publish opt-in native composer acknowledgments in the harness's idle/composer file format. */
 export function useHarnessInput(active: boolean, processing: boolean, value: string, mounted = true): void {
@@ -36,6 +37,18 @@ export function publishHarnessApprovalReady(callId: string): void {
   if (!path) return;
   approvalRevision += 1;
   writeAtomically(`${path}.approval`, `${JSON.stringify({ revision: approvalRevision, callId })}\n`);
+}
+
+/**
+ * Opt-in signal for a held-send confirmation that reads its own keys: published after
+ * that prompt's input handler is in place. Ink draws the prompt at commit but subscribes
+ * `useInput` in a passive effect, so a key sent on sight of the prompt can be dropped.
+ */
+export function publishHarnessConfirmationReady(kind: string): void {
+  const path = process.env['TERM2_HARNESS_IDLE_PATH'];
+  if (!path) return;
+  confirmationRevision += 1;
+  writeAtomically(`${path}.confirmation`, `${JSON.stringify({ revision: confirmationRevision, kind })}\n`);
 }
 
 function publishComposer(path: string, value: string): void {

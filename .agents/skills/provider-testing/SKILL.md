@@ -69,6 +69,13 @@ scenario is the one whose CLI never reached the state it waits for.
   submitting the restored draft. A matching value with `afterRevision: 0` is not
   an input-listener handoff. A cache-guard trace showed this stale value returning
   before the confirmation unmounted; buffered input happened to make that run pass.
+  Answering a held-send confirmation (large-uncached, input-surge, mode-switch)
+  has the reverse handoff. Ink draws the prompt before its `useInput` subscribes,
+  so a `y`/`n` sent as soon as the prompt text is visible can be dropped. Capture
+  `child.readConfirmationRevision()` before the Enter that raises the prompt, then
+  await `child.waitForConfirmationReady({ after })` before you answer. The TUI
+  publishes `<idle path>.confirmation` from `send-confirmation.tsx` once the
+  prompt's handler is in place, like the approval prompt's `.approval` channel.
 - `scripts/provider-black-box/provider-capability-matrix.ts` and
   `provider-session-capability-manifest.ts` own the test-side capability rows,
   typed lifecycle ledgers, and aggregate accounting.

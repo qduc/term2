@@ -676,7 +676,7 @@ describe('ACP v1 built CLI compatibility for Air', () => {
             currentValue: 'acpfixture/acp-model',
             options: [{ value: 'acpfixture/acp-model' }],
           },
-          { id: 'thinking_level', type: 'select', category: 'thought_level', currentValue: 'default' },
+          { id: 'thinking_level', type: 'select', category: 'thought_level', currentValue: 'medium' },
           { id: 'approval_mode', type: 'select', category: 'mode', currentValue: 'ask' },
         ]);
         releaseCatalog();
@@ -751,7 +751,7 @@ describe('ACP v1 built CLI compatibility for Air', () => {
     );
   }, 30_000);
 
-  it('applies thinking levels to inference, retains session selection and restores Default', async () => {
+  it('offers four thinking levels, applies them to inference and retains the session selection', async () => {
     await fixture(async ({ context, workspace, requests, savedSettings }) => {
       const { sessionId, configOptions } = await context.request(acp.methods.agent.session.new, {
         cwd: workspace,
@@ -760,8 +760,22 @@ describe('ACP v1 built CLI compatibility for Air', () => {
       const thinking = (options: acp.SessionConfigOption[] | null | undefined) =>
         options?.find((option) => option.id === 'thinking_level');
       const preferences = await savedSettings();
-      expect(thinking(configOptions)).toMatchObject({ category: 'thought_level', currentValue: 'default' });
-      for (const value of ['none', 'minimal', 'low', 'medium', 'high', 'xhigh']) {
+      expect(thinking(configOptions)).toMatchObject({
+        category: 'thought_level',
+        currentValue: 'medium',
+        options: [
+          { value: 'low', name: 'Low' },
+          { value: 'medium', name: 'Medium' },
+          { value: 'high', name: 'High' },
+          { value: 'xhigh', name: 'Extra high' },
+        ],
+      });
+      await context.request(acp.methods.agent.session.prompt, {
+        sessionId,
+        prompt: [{ type: 'text', text: 'Use the initial thinking level' }],
+      });
+      expect(requests.at(-1).reasoning_effort).toBe('medium');
+      for (const value of ['low', 'medium', 'high', 'xhigh']) {
         const changed = await context.request(acp.methods.agent.session.setConfigOption, {
           sessionId,
           configId: 'thinking_level',
@@ -774,7 +788,7 @@ describe('ACP v1 built CLI compatibility for Air', () => {
         });
         expect(requests.at(-1).reasoning_effort).toBe(value);
       }
-      for (const value of ['maximum', true]) {
+      for (const value of ['default', 'none', 'off', 'minimal', 'maximum', true]) {
         await expect(
           context.request(acp.methods.agent.session.setConfigOption, {
             sessionId,
@@ -796,18 +810,7 @@ describe('ACP v1 built CLI compatibility for Air', () => {
       });
       expect(thinking(modelChanged.configOptions)).toMatchObject({ currentValue: 'xhigh' });
       const other = await context.request(acp.methods.agent.session.new, { cwd: workspace, mcpServers: [] });
-      expect(thinking(other.configOptions)).toMatchObject({ currentValue: 'default' });
-      const restored = await context.request(acp.methods.agent.session.setConfigOption, {
-        sessionId,
-        configId: 'thinking_level',
-        value: 'default',
-      });
-      expect(thinking(restored.configOptions)).toMatchObject({ currentValue: 'default' });
-      await context.request(acp.methods.agent.session.prompt, {
-        sessionId,
-        prompt: [{ type: 'text', text: 'Use provider default' }],
-      });
-      expect(requests.at(-1)).not.toHaveProperty('reasoning_effort');
+      expect(thinking(other.configOptions)).toMatchObject({ currentValue: 'medium' });
       expect(await savedSettings()).toBe(preferences);
     });
   }, 30_000);

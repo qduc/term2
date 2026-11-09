@@ -80,14 +80,12 @@ and reads the latest accepted model before updating the client. Changes affect
 only the named session and survive native load/resume; global preferences stay
 unchanged. Discovery failure preserves the current model and cached options.
 
-Thinking level uses the standard `thought_level` category and native effort
-vocabulary: Default, None, Minimal, Low, Medium, High and Extra high. Provider
-support varies, as in Term2's native effort settings. The app supplies accepted
-session intent through `BackendOptions.configuration`, so Default remains
-selected even when the provider resolves it to a concrete effective effort.
-Explicit effort changes must be confirmed by the native configure receipt.
-Choosing Default restores native provider/model default behavior. Model changes
-preserve the session's effort intent; global effort preferences are not written.
+Thinking level uses the standard `thought_level` category and offers Low,
+Medium, High and Extra high. Provider support varies. When ACP v1 attaches a
+session with a legacy effort, Default becomes Medium and None or Minimal
+become Low. The native configure receipt confirms the selected level. Model
+changes preserve the session's effort, and global effort preferences stay
+unchanged.
 
 Air's loading/sign-in timeout can mask initialization failure: the observed
 WebStorm Air log offered `protocolOffer=V1` then reported `Invalid params` against

@@ -1,9 +1,15 @@
 import * as acp from '@agentclientprotocol/sdk';
 import { randomUUID } from 'node:crypto';
 import type { DirectConnection } from '../../host/in-process-direct-types.js';
-import { WIRE_REASONING_SELECTIONS } from '../../protocol/wire-commands.js';
 import type { WireConfigureRequest, WireModel, WireNativeCommandOutcome } from '../../protocol/wire.js';
 import type { BackendOptions } from './contract.js';
+
+const thinkingLevels = [
+  { value: 'low', name: 'Low' },
+  { value: 'medium', name: 'Medium' },
+  { value: 'high', name: 'High' },
+  { value: 'xhigh', name: 'Extra high' },
+] as const satisfies readonly { value: NonNullable<WireConfigureRequest['reasoning']>; name: string }[];
 
 const modelId = (model: WireModel): string => `${model.provider}/${model.model}`;
 
@@ -42,9 +48,16 @@ export class AcpModels {
     const reasoning = connection.snapshot.configuration.reasoning ?? 'default';
     this.close(connection);
     const configuration = (await this.options.configuration?.(sessionId)) ?? { model: current, reasoning };
+    // ACP select options must include the actual current value. Move legacy
+    // selections to a visible level through the same native configure command.
+    const { reasoning: selected } = configuration;
+    const thinking =
+      selected === 'default' ? 'medium' : selected === 'none' || selected === 'minimal' ? 'low' : selected;
+    const publishThinking = thinking === selected || this.options.configuration !== undefined;
+    if (publishThinking && thinking !== selected) await this.configure(sessionId, { reasoning: thinking });
     const models = new Map(catalog.map((model) => [modelId(model), model]));
     models.set(modelId(configuration.model), models.get(modelId(configuration.model)) ?? configuration.model);
-    return [
+    const options: acp.SessionConfigOption[] = [
       {
         id: 'model',
         name: 'Model',
@@ -56,23 +69,22 @@ export class AcpModels {
           name: `${model.name ?? model.model} (${model.provider})`,
         })),
       },
-      {
+    ];
+    if (publishThinking) {
+      options.push({
         id: 'thinking_level',
         name: 'Thinking level',
         category: 'thought_level',
         type: 'select',
-        description:
-          'Reasoning effort. Default uses the model/provider default; supported levels depend on the provider.',
-        currentValue: configuration.reasoning,
-        options: WIRE_REASONING_SELECTIONS.map((value) => ({
-          value,
-          name: value === 'xhigh' ? 'Extra high' : value[0].toUpperCase() + value.slice(1),
-        })),
-      },
-    ];
+        description: 'Reasoning effort. Supported levels depend on the provider.',
+        currentValue: thinking,
+        options: [...thinkingLevels],
+      });
+    }
+    return options;
   }
 
-  async setConfigOption(request: acp.SetSessionConfigOptionRequest): Promise<acp.SessionConfigOption[]> {
+  async setConfigOption(request: acp.SetSessionConfigOptionRequest): Promise<void> {
     if (typeof request.value !== 'string')
       throw acp.RequestError.invalidParams(undefined, 'Expected a configuration selection');
     const catalog = await this.configOptions(request.sessionId);
@@ -87,7 +99,11 @@ export class AcpModels {
       request.configId === 'model'
         ? { model: { provider: request.value.slice(0, separator), model: request.value.slice(separator + 1) } }
         : { reasoning: request.value as NonNullable<WireConfigureRequest['reasoning']> };
-    const connection = await this.connect(request.sessionId);
+    await this.configure(request.sessionId, configuration);
+  }
+
+  private async configure(sessionId: string, configuration: WireConfigureRequest): Promise<void> {
+    const connection = await this.connect(sessionId);
     const commandId = randomUUID();
     try {
       const result = await connection.send({ type: 'configure', commandId, configuration });
@@ -113,13 +129,8 @@ export class AcpModels {
           outcome.configuration.model.model !== configuration.model.model)
       )
         throw new acp.RequestError(-32000, 'Session confirmed a different model');
-      if (
-        configuration.reasoning &&
-        configuration.reasoning !== 'default' &&
-        outcome.configuration.reasoning !== configuration.reasoning
-      )
+      if (configuration.reasoning && outcome.configuration.reasoning !== configuration.reasoning)
         throw new acp.RequestError(-32000, 'Session confirmed a different thinking level');
-      return await this.configOptions(request.sessionId);
     } finally {
       this.close(connection);
     }

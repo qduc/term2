@@ -71,9 +71,9 @@ apply to that session, persist across load/resume, and use Term2's own provider
 credentials. They do not change your global default model.
 
 The **Thinking level** selector uses the same session configuration exchange
-and Term2's native effort values: Default, None, Minimal, Low, Medium, High and
-Extra high. Provider support varies. Default restores the model/provider's
-normal reasoning behavior. Changes apply to that session and leave your global
+and offers Low, Medium, High and Extra high. Provider support varies. When an
+ACP v1 session uses a legacy effort, Default becomes Medium and None or Minimal
+become Low. Changes apply to that session and leave your global
 effort preference unchanged. Both selectors are available to v1 clients such
 as Air and Zed.
 

@@ -71,6 +71,10 @@ provider case past its ~40 s deadline, the same timeout class that already flake
 The setup action installs only `@qduc/term2` and its workspace dependencies unless a job passes
 `web-client: 'true'`; only `integration` does, for the gateway cases that import web-client
 server modules. A new case that imports web-client must run in that lane.
+Each behavioral job restores its lane's Vitest results cache (`lane` input of the setup action),
+and `vitest.ci.config.ts` orders every file by recorded duration across projects. Without it, a
+30 s sleeping Discord download case started late and a later-named project waited behind the
+others, adding ~11 s to the integration lane. A new long file runs early from its second run on.
 `port` is a compatibility aggregate requiring quality and test success, plus successful behavioral
 lanes or skips justified by an inert pull request. Known docs/evidence formats may skip tests;
 unknown extensions and executable scripts under `docs/` run every tier. Follow any late CI failure

@@ -103,6 +103,7 @@ jobs:
         if: needs.changes.outputs.run != 'false'
         with:
           ripgrep: 'true'
+          lane: test
       - name: Run CLI integration, safety and responses provider cases
         if: needs.changes.outputs.run != 'false'
         run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs test
@@ -194,6 +195,7 @@ jobs:
         with:
           ripgrep: 'true'
           web-client: 'true'
+          lane: integration
       - name: Run remaining integration and stateless provider cases
         run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs integration
       - name: Check the headless path
@@ -214,6 +216,8 @@ jobs:
           ref: ${{ inputs.ref || github.sha }}
       - uses: ./.github/actions/setup-tests
         id: setup
+        with:
+          lane: e2e
       - name: Run E2E process cases
         run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs e2e
       - name: Check golden parity
@@ -230,5 +234,7 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha }}
       - uses: ./.github/actions/setup-tests
+        with:
+          lane: provider-black-box
       - name: Run resilience and remaining provider cases
         run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs provider-black-box

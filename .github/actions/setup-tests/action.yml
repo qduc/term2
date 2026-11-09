@@ -7,6 +7,9 @@ inputs:
   web-client:
     description: Also install the web-client workspace, for gateway cases that import its server modules.
     default: 'false'
+  lane:
+    description: CI lane whose Vitest file timings to reuse for scheduling; empty skips them.
+    default: ''
 runs:
   using: composite
   steps:
@@ -146,6 +149,18 @@ runs:
         new ssh2.Client();
         createRequire(require.resolve('ssh2'))('cpu-features')();
         NODE
+    # Vitest schedules files longest-first only from its results cache; without
+    # one it runs larger files first. The integration lane's 30s stalled-download
+    # case then started ~38s into the run and its sleep became the lane's last
+    # 15s (2026-11-09). Durations only order files; they never skip or pass one.
+    # Restored after the install so a cold install cannot discard it.
+    - name: Restore test file timings
+      if: inputs.lane != ''
+      uses: actions/cache@v6
+      with:
+        path: node_modules/.vite/vitest/da39a3ee5e6b4b0d3255bfef95601890afd80709/results.json
+        key: test-vitest-timings-v1-${{ inputs.lane }}-${{ github.run_id }}-${{ github.run_attempt }}
+        restore-keys: test-vitest-timings-v1-${{ inputs.lane }}-
     # Cache package archives, then extract them only under RUNNER_TEMP.
     # Do not install host configuration or execute package maintainer scripts.
     - name: Restore shell sandbox packages

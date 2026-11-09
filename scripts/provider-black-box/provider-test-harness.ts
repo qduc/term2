@@ -11,6 +11,7 @@ import { resolveSettingsDirectory } from '../../src/config/settings/settings-pat
 import {
   HARNESS_IDLE_ENV,
   readHarnessComposerState,
+  readHarnessConfirmationReady,
   readHarnessIdleGeneration,
   waitForHarnessComposerValue,
   waitForHarnessIdleGeneration,
@@ -187,6 +188,10 @@ export interface PtyChildDriver {
   readComposerRevision(): number;
   /** Wait for a new committed idle generation; not a model-completion signal. */
   waitForIdleInput(options?: { after?: number; timeoutMs?: number }): Promise<number>;
+  /** Latest held-send confirmation readiness revision, or 0 before one has been published. */
+  readConfirmationRevision(): number;
+  /** Wait until a held-send confirmation newer than `after` has its key handler in place. */
+  waitForConfirmationReady(options: { after: number; timeoutMs?: number }): Promise<void>;
   /** Wait for a fresh committed composer value; not a panel handshake. */
   waitForComposerValue(value: string, options?: { afterRevision?: number; timeoutMs?: number }): Promise<void>;
   waitForExit(timeoutMs?: number): Promise<ChildExit>;
@@ -820,6 +825,22 @@ function createPtyChild(options: {
           idlePath,
         )}.`,
       );
+    },
+    readConfirmationRevision: () => (idlePath ? readHarnessConfirmationReady(idlePath)?.revision ?? 0 : 0),
+    waitForConfirmationReady: async ({ after, timeoutMs }) => {
+      if (!idlePath) {
+        throw new Error(`${HARNESS_IDLE_ENV} is required to wait for a confirmation prompt.`);
+      }
+      try {
+        await waitForState(() => (readHarnessConfirmationReady(idlePath)?.revision ?? 0) > after, timeoutMs);
+      } catch (error) {
+        throw new Error(
+          `Confirmation readiness failed after revision ${after}; current ${JSON.stringify(
+            readHarnessConfirmationReady(idlePath),
+          )}.`,
+          { cause: error },
+        );
+      }
     },
     waitForComposerValue: async (value, { afterRevision, timeoutMs = READINESS_TIMEOUT_MS } = {}) => {
       if (!idlePath) {

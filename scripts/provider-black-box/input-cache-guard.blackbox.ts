@@ -114,8 +114,11 @@ it.skipIf(process.platform !== 'linux')('confirms a large uncached request after
     await child.waitForVisibleOutput('Paste text #1');
     await child.waitForVisibleOutput('cache miss risk');
     expect(requests).toHaveLength(2);
+    const firstConfirmation = child.readConfirmationRevision();
     await child.write('\r');
     await child.waitForVisibleOutput('Large request');
+    // Ink draws the prompt before its useInput effect subscribes; a key sent on sight can be dropped.
+    await child.waitForConfirmationReady({ after: firstConfirmation });
     expect(requests).toHaveLength(2);
     const heldIdle = child.readIdleGeneration();
     await child.write('n');
@@ -128,8 +131,10 @@ it.skipIf(process.platform !== 'linux')('confirms a large uncached request after
     expect(requests).toHaveLength(2);
     phase = 'second large-request prompt';
     const confirmationMarker = child.getOutput().length;
+    const secondConfirmation = child.readConfirmationRevision();
     await child.write('\r');
     await child.waitForState((state) => state.output.slice(confirmationMarker).includes('Large request'));
+    await child.waitForConfirmationReady({ after: secondConfirmation });
     phase = 'third request after confirmation';
     await child.write('y');
     await child.waitForState(() => requests.length === 3);

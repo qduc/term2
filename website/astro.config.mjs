@@ -44,10 +44,10 @@ export default defineConfig({
           ],
         },
         {
-          label: 'Modes & Profiles',
+          label: 'Sessions & Subagents',
           items: [
-            { label: 'Operating Modes', link: '/modes/' },
-            { label: 'Subagent Swarms', link: '/modes/subagents/' },
+            { label: 'Session defaults', link: '/modes/' },
+            { label: 'Subagents', link: '/modes/subagents/' },
           ],
         },
         {

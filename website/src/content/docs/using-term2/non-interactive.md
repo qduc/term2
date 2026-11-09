@@ -17,7 +17,7 @@ Execute one-off queries with stdout output:
 term2 "Explain the purpose of package.json in this project"
 ```
 
-Every new session uses the same default experience. Tool execution is disabled without `--auto-approve`. That flag enables tools under GREEN/YELLOW heuristic policy; it is not the same as `/auto-approve always`, and RED shell commands are still refused.
+Tool execution requires `--auto-approve`. That flag enables tools under GREEN/YELLOW heuristic policy; it is not the same as `/auto-approve always`, and RED shell commands are still refused.
 
 The output streams directly to standard output. Non-error diagnostic logs are printed to standard error.
 
@@ -59,7 +59,7 @@ term2 --show-reasoning "Solve this mathematical recurrence relation"
 
 ### Default Execution
 
-The default experience uses a minimal prompt with project instructions included, shell-led codebase work and selected capabilities through `run_code`. Tools still require `--auto-approve` in non-interactive mode:
+A headless session loads project instructions and can use the shell and `run_code` when you pass `--auto-approve`.
 
 ```bash
 term2 "Explain the difference between disk usage and apparent file size"

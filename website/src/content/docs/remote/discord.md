@@ -1,9 +1,9 @@
 ---
 title: Discord Bridge
-description: Opt existing terminal sessions into Discord input and explicit channel replies.
+description: Receive Discord messages and send replies from an existing terminal session.
 ---
 
-The optional Discord bridge connects existing opted-in interactive sessions to allowlisted Discord users and channels. It does not start a model session for you. Configure a provider and model in the terminal first.
+Start an interactive session with a provider and model, then attach it to the Discord bridge. The bridge accepts messages from the users and channels on your allowlist.
 
 Use `term2 discord --help` for the bridge's configuration and private token-enrollment options. The [repository bridge guide](https://github.com/qduc/term2/blob/main/docs/reference/discord-bridge.md) contains the configuration schema, bot setup, first-run checklist, and offline integration command.
 
@@ -17,13 +17,13 @@ Alternatively, start the TUI with `--control-socket=<name> --discord-input`. A l
 
 The bridge uses Discord Gateway push as a wake-up signal for cursor-based REST reads. While push is connected, the REST safety poll runs every 30 seconds instead of every second. Message content and delivery cursors still come from REST; push is not a second content source. Set `TERM2_DISCORD_GATEWAY=off` in the bridge process environment to use polling only.
 
-Ingress remains in Discord while the configured default coordinator is unavailable, rather than being consumed without a destination. This recovery path has offline fixture coverage.
+Messages stay in Discord until the configured default coordinator is available.
 
 ## Replies and local controls
 
 Channel output requires an explicit `discord_send` call; ordinary assistant finals are not automatically mirrored. An opted-in session can send without a per-send approval, so prompt-injected content could cause a post to the configured channel. Approvals, questions, and status output remain local.
 
-Live mobile checks covered two session routes, explicit replies, a peer handoff, terminal approval, pause/stop and bridge restart. Another-user and other-channel live checks were waived because those resources were unavailable; the guide records the remaining limits and offline evidence.
+See the [bridge guide’s verification notes](https://github.com/qduc/term2/blob/main/docs/reference/discord-bridge.md#offline-evidence-and-optional-authorized-live-smoke) for what was tested on Discord and offline.
 
 ## Image attachments
 

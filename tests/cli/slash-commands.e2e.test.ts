@@ -329,12 +329,13 @@ async function runCommand(
     const step = async (keys: string, expected: string) => {
       offset = session!.getVisibleOutput().length;
       session!.write(keys);
-      const started = Date.now();
-      while (Date.now() - started < 30_000) {
-        if (session!.getVisibleOutput().slice(offset).includes(expected)) return;
-        await new Promise((resolve) => setTimeout(resolve, 25));
-      }
-      throw new Error(`No new terminal output containing ${expected}: ${session!.getVisibleOutput().slice(-1200)}`);
+      await expect
+        .poll(() => session!.getVisibleOutput().slice(offset), {
+          timeout: 30_000,
+          interval: 25,
+          message: `No new terminal output containing ${expected}`,
+        })
+        .toContain(expected);
     };
     await step('\t\t', 'Some providers failed: brokenprov');
     session.write('\x1b');

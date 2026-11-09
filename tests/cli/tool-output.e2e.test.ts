@@ -312,9 +312,11 @@ it(
     // Legacy BackgroundTaskManager opens only with live work: with none, Ctrl+G leaves the draft alone.
     const beforeCtrlG = session.getVisibleOutput().length;
     session.write('\x07');
-    // Kept: Ctrl+G must reach the TUI as its own read. Written back to back with `-after`, the two arrive as one
-    // chunk that the editor takes as text (a probe left the draft as "draft\u0007-x"), so `-after` cannot be
-    // the sync point; and nothing is published for a key that does nothing.
+    // Ctrl+G must reach the TUI as its own read. Written back to back with `-after`, the two arrive as one chunk
+    // that the editor takes as text (a probe left the draft as "draft\u0007-x"), so `-after` cannot be the sync
+    // point, and nothing is published for a key that does nothing.
+    // sleep-ok: Ctrl+G opens no task manager without live work; it is read and drawn within milliseconds, so
+    // 500 ms also keeps it out of the next key's read under load.
     await new Promise((resolve) => setTimeout(resolve, 500));
     expect(session.getVisibleOutput().slice(beforeCtrlG)).not.toContain('Manage background tasks');
     session.write('-after');
@@ -331,7 +333,8 @@ it(
     expect(receipt.messageId).toBeTruthy();
     await session.waitForOutput('control reply sentinel', 60_000);
     expect(providerRequests.some((body) => body.includes('a control message'))).toBe(true);
-    // Keep the closing Ctrl+C outside the draft-clearing one's exit window; the control turn usually outlasts it.
+    // sleep-ok: the draft-clearing Ctrl+C's exit window has to lapse, and nothing publishes its end; only the
+    // remainder after the control turn is slept, 50 ms past the 1 s window.
     await new Promise((resolve) => setTimeout(resolve, Math.max(0, exitWindowEnds - Date.now())));
     // Quit the way a user does, so the app finishes its writes before the test removes its directories.
     session.write('\x03');

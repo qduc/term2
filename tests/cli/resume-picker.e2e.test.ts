@@ -160,10 +160,9 @@ it.each([160, 60])(
     }
     const offset = session.getVisibleOutput().length;
     session.write('\r');
-    const started = Date.now();
-    while (Date.now() - started < 30_000 && !session.getVisibleOutput().slice(offset).includes('PREVIOUS-ANSWER'))
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    expect(session.getVisibleOutput().slice(offset)).toContain('PREVIOUS-ANSWER');
+    await expect
+      .poll(() => session!.getVisibleOutput().slice(offset), { timeout: 30_000, interval: 25 })
+      .toContain('PREVIOUS-ANSWER');
   },
 );
 
@@ -256,10 +255,9 @@ it.each([160])(
     expect(frame).toContain('Updated:');
     const offset = session.getVisibleOutput().length;
     session.write('\r');
-    const started = Date.now();
-    while (Date.now() - started < 30_000 && !session.getVisibleOutput().slice(offset).includes('PREVIOUS-ANSWER'))
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    expect(session.getVisibleOutput().slice(offset)).toContain('PREVIOUS-ANSWER');
+    await expect
+      .poll(() => session!.getVisibleOutput().slice(offset), { timeout: 30_000, interval: 25 })
+      .toContain('PREVIOUS-ANSWER');
     expect(session.getVisibleOutput().slice(offset)).toContain('Codex/gpt-6.1-terra');
   },
 );
@@ -357,10 +355,9 @@ it.each([160])(
     expect(frame).toContain('Updated:');
     const offset = session.getVisibleOutput().length;
     session.write('\r');
-    const started = Date.now();
-    while (Date.now() - started < 30_000 && !session.getVisibleOutput().slice(offset).includes('PREVIOUS-ANSWER'))
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    expect(session.getVisibleOutput().slice(offset)).toContain('PREVIOUS-ANSWER');
+    await expect
+      .poll(() => session!.getVisibleOutput().slice(offset), { timeout: 30_000, interval: 25 })
+      .toContain('PREVIOUS-ANSWER');
     expect(session.getVisibleOutput().slice(offset)).toContain('mockprov/mock-beta');
     let generation = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
     await send('resumed request');
@@ -372,10 +369,7 @@ it.each([160])(
     await session.waitForOutput('Set model to mock-alpha (mockprov)', 30_000);
     const priorRequests = requestBodies.length;
     await send('after model change');
-    const deadline = Date.now() + 30_000;
-    while (requestBodies.length === priorRequests && Date.now() < deadline)
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    expect(requestBodies.length).toBeGreaterThan(priorRequests);
+    await expect.poll(() => requestBodies.length, { timeout: 30_000, interval: 25 }).toBeGreaterThan(priorRequests);
     await waitForHarnessIdleGeneration(idlePath, { after: generation, timeoutMs: 60_000 });
     expect(requestBodies.at(-1).model).toBe('mock-alpha');
   },

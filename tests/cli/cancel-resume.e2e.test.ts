@@ -27,6 +27,8 @@ const EXIT_CONFIRM_WAIT_MS = 350;
  */
 async function waitOutExitWindow(handledBy: number): Promise<void> {
   const remaining = handledBy + EXIT_CONFIRM_WAIT_MS - Date.now();
+  // sleep-ok: the product's exit window has to lapse, and nothing publishes its end; the remainder of 350 ms
+  // after handling covers the 300 ms window.
   if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
 }
 
@@ -248,8 +250,8 @@ it('Esc stops a streaming answer without a turn-id cleanup notice', { timeout: T
   expect(liveFrame).not.toContain('Stopped');
   session.write('\x1b');
   await session.waitForOutput('Stopped', 30_000);
-  // The cancel notice asserted absent below would come from the cancel request's own reply, which nothing
-  // published orders against the idle signal; 200 ms is ample for a local wire reply that already stopped the turn.
+  // sleep-ok: the cancel notice asserted absent below would come from the cancel request's own reply, which
+  // nothing published orders against the idle signal; 200 ms is ample for a local reply that already stopped the turn.
   await new Promise((resolve) => setTimeout(resolve, 200));
   await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 30_000 });
   const output = session.getVisibleOutput();
@@ -315,6 +317,8 @@ it.each(['esc', 'ctrl-c', 'editing', 'only-steers'] as const)(
       await session.waitForOutput('UNIQUE-FOLLOWUP', 30_000);
       await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
       // Queue projection can lead the send acknowledgement; avoid overlapping the next physical input.
+      // sleep-ok: the follow-up send's reply has to land before the next send (a pending send keeps the draft), and
+      // mid-turn nothing publishes that; the local reply takes milliseconds, so 500 ms covers a loaded runner.
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
     await send('UNIQUE-QUEUED-STEER');
@@ -349,8 +353,8 @@ it.each(['esc', 'ctrl-c', 'editing', 'only-steers'] as const)(
       const previousOutputLength = session.getVisibleOutput().length;
       session.write('\x03');
       await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 5_000 });
-      // Observes that no stop follows. A wrongly cancelled turn would show Stopped once the abort reaches the
-      // local fixture and back, well inside 500 ms; no signal marks that it will not come.
+      // sleep-ok: no stop follows this Ctrl+C. A wrongly cancelled turn would show Stopped once the abort reaches
+      // the local fixture and back, well inside 500 ms; no signal marks that it will not come.
       await new Promise((resolve) => setTimeout(resolve, 500));
       const screen = session.getVisibleOutput().slice(previousOutputLength);
       expect(screen).toContain('UNIQUE-QUEUED-STEER');
@@ -374,6 +378,8 @@ it.each(['esc', 'ctrl-c', 'editing', 'only-steers'] as const)(
     // The follow-up's hold is checked in the log below (no queue_started); it only runs after `r` in legacy's
     // paused-queue prompt.
     if (mode !== 'only-steers') await session.waitForOutput('Queue paused: 1 item pending.', 5_000);
+    // sleep-ok: dropped steers stay out of the composer; a returned steer would come with the cancel's reply,
+    // which has already stopped the turn, so 600 ms (inside the 2 s bound checked next) is ample.
     await new Promise((resolve) => setTimeout(resolve, 600));
     expect(Date.now() - cancelAt).toBeLessThan(2_000);
     expect(readHarnessComposerState(idlePath)?.value ?? '').toBe('');

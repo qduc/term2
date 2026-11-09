@@ -165,7 +165,8 @@ async function start(replies: Reply[], retryAttempts = 0, withSkill = false): Pr
 
 const composer = (idlePath: string) => readHarnessComposerState(idlePath)?.value;
 async function until(check: () => boolean, what: string): Promise<void> {
-  for (let i = 0; i < 60 && !check(); i++) await new Promise((resolve) => setTimeout(resolve, 250));
+  // Same 15 s budget as before, polled at the harness waits' cadence: a 250 ms step added up to 250 ms per wait.
+  for (let i = 0; i < 600 && !check(); i++) await new Promise((resolve) => setTimeout(resolve, 25));
   expect(check(), what).toBe(true);
 }
 
@@ -339,9 +340,11 @@ it(
     const { idlePath } = await start([{ text: 'REPLY-TO-ABCDEF' }]);
     session!.write('abc');
     await waitForHarnessComposerValue(idlePath, 'abc', { timeoutMs: 60_000 });
+    const idleBeforeSend = readHarnessIdleGeneration(idlePath);
     session!.write('def\r');
     await session!.waitForOutput('REPLY-TO-ABCDEF', 30_000);
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    // Read the draft once the turn is over and the composer owns input again, not after a fixed 1.5 s.
+    await waitForHarnessIdleGeneration(idlePath, { after: idleBeforeSend, timeoutMs: 30_000 });
     expect(composer(idlePath), 'the old draft text was cleared with the send').toBe('');
     const logs = fs.readdirSync(path.join(root, 'conversations')).filter((name) => name.endsWith('.jsonl'));
     expect(logs.map((name) => fs.readFileSync(path.join(root, 'conversations', name), 'utf8')).join('\n')).toContain(

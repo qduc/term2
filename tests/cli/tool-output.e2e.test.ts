@@ -20,6 +20,8 @@ import { resolveSettingsDirectory } from '../../src/config/settings/settings-pat
 const projectRoot = fileURLToPath(new URL('../..', import.meta.url));
 const builtCli = testCliPath(path.join(projectRoot, 'dist', 'src', 'app', 'cli.js'));
 const TIMEOUT_MS = 120_000;
+// Long enough that the closing double Ctrl+C lands inside it on a loaded runner; short enough to wait out.
+const EXIT_CONFIRM_WINDOW_MS = 1_000;
 
 let session: TerminalSession | null = null;
 let root = '';
@@ -179,6 +181,8 @@ it(
       TERM2_CACHE_DIR: path.join(home, '.cache', 'term2'),
       TERM2_CONVERSATIONS_DIR: path.join(root, 'conversations'),
       DISABLE_LOGGING: '1',
+      // The draft-clearing Ctrl+C below arms the exit window; the closing pair must fit inside it.
+      TERM2_EXIT_CONFIRM_WINDOW_MS: String(EXIT_CONFIRM_WINDOW_MS),
       [HARNESS_IDLE_ENV]: idlePath,
       // Ink suppresses dynamic terminal updates in CI mode; this test needs an interactive TUI.
       CI: 'false',
@@ -308,14 +312,17 @@ it(
     // Legacy BackgroundTaskManager opens only with live work: with none, Ctrl+G leaves the draft alone.
     const beforeCtrlG = session.getVisibleOutput().length;
     session.write('\x07');
+    // Kept: Ctrl+G must reach the TUI as its own read. Written back to back with `-after`, the two arrive as one
+    // chunk that the editor takes as text (a probe left the draft as "draft\u0007-x"), so `-after` cannot be
+    // the sync point; and nothing is published for a key that does nothing.
     await new Promise((resolve) => setTimeout(resolve, 500));
     expect(session.getVisibleOutput().slice(beforeCtrlG)).not.toContain('Manage background tasks');
     session.write('-after');
     await waitForHarnessComposerValue(idlePath, 'output-draft-after', { timeoutMs: 30_000 });
     session.write('\x03');
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
-    // Keep the next test-exit Ctrl+C outside the root's double-interrupt window.
-    await new Promise((resolve) => setTimeout(resolve, 2500));
+    // That Ctrl+C was handled by now, so its exit window ends within EXIT_CONFIRM_WINDOW_MS of this moment.
+    const exitWindowEnds = Date.now() + EXIT_CONFIRM_WINDOW_MS + 50;
 
     const receipt = JSON.parse(
       await control(['submit', 'coord', '--id', 'control-test', '--json'], env, workspace, 'a control message'),
@@ -324,6 +331,8 @@ it(
     expect(receipt.messageId).toBeTruthy();
     await session.waitForOutput('control reply sentinel', 60_000);
     expect(providerRequests.some((body) => body.includes('a control message'))).toBe(true);
+    // Keep the closing Ctrl+C outside the draft-clearing one's exit window; the control turn usually outlasts it.
+    await new Promise((resolve) => setTimeout(resolve, Math.max(0, exitWindowEnds - Date.now())));
     // Quit the way a user does, so the app finishes its writes before the test removes its directories.
     session.write('\x03');
     await session.waitForOutput('Press Ctrl+C again to exit', 30_000);

@@ -189,13 +189,16 @@ it('Ctrl+G leaves a foreground approval on its prompt', { timeout: TIMEOUT_MS },
       await expect
         .poll(() => session!.getVisibleOutput(), { timeout: 30_000 })
         .toMatch(new RegExp(`❯\\s+(★\\s+)?${picked}|No models match`));
-    // Every provider's catalog lands in turn; let the list settle as a person reading it would.
-    if (picked) await new Promise((resolve) => setTimeout(resolve, 500));
+    // No settle pause: the selection follows the highlighted model as later catalogs land, and the menu
+    // registers its key handler in a layout effect, so Enter reaches the interaction drawn on screen.
     session!.write('\r');
   };
   await submit('request approval');
   await session.waitForOutput('Allow once', 60_000);
   session.write('\x07');
+  // Kept: Ctrl+G must reach the TUI as its own read. Written back to back with the next key, the two arrive as
+  // one chunk that the editor takes as text (a probe left the draft as "draft\u0007-x"), so the next key
+  // cannot be the sync point; and nothing is published for a key that does nothing.
   await new Promise((resolve) => setTimeout(resolve, 500));
   expect(session.getVisibleOutput()).toContain('Allow this action?');
   expect(session.getVisibleOutput()).not.toContain('/answer 1 <choice number>');
@@ -338,8 +341,8 @@ async function runCommand(
       await expect
         .poll(() => session!.getVisibleOutput(), { timeout: 30_000 })
         .toMatch(new RegExp(`❯\\s+(★\\s+)?${picked}|No models match`));
-    // Every provider's catalog lands in turn; let the list settle as a person reading it would.
-    if (picked) await new Promise((resolve) => setTimeout(resolve, 500));
+    // No settle pause: the selection follows the highlighted model as later catalogs land, and the menu
+    // registers its key handler in a layout effect, so Enter reaches the interaction drawn on screen.
     session!.write('\r');
   };
 
@@ -364,7 +367,7 @@ async function runCommand(
     await submit('/effort bogus');
     await session.waitForOutput('"bogus" is not one of the options', 30_000);
     await waitForHarnessComposerValue(idlePath, '/effort bogus', { timeoutMs: 5_000 });
-    await new Promise((resolve) => setTimeout(resolve, 2_100));
+    // No earlier Ctrl+C armed the exit window, so this one only clears the draft.
     session.write('\x03');
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 5_000 });
     // As in legacy, the first Enter closes the slash menu (no match) and the second submits.

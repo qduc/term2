@@ -124,8 +124,8 @@ it.each([160, 60])(
         await expect
           .poll(() => session!.getVisibleOutput(), { timeout: 30_000 })
           .toMatch(new RegExp(`❯\\s+(★\\s+)?${picked}|No models match`));
-      // Every provider's catalog lands in turn; let the list settle as a person reading it would.
-      if (picked) await new Promise((resolve) => setTimeout(resolve, 500));
+      // No settle pause: the selection follows the highlighted model as later catalogs land, and the menu
+      // registers its key handler in a layout effect, so Enter reaches the interaction drawn on screen.
       session!.write('\r');
     };
     session = start();
@@ -212,8 +212,8 @@ it.each([160])(
         await expect
           .poll(() => session!.getVisibleOutput(), { timeout: 30_000 })
           .toMatch(new RegExp(`❯\\s+(★\\s+)?${picked}|No models match`));
-      // Every provider's catalog lands in turn; let the list settle as a person reading it would.
-      if (picked) await new Promise((resolve) => setTimeout(resolve, 500));
+      // No settle pause: the selection follows the highlighted model as later catalogs land, and the menu
+      // registers its key handler in a layout effect, so Enter reaches the interaction drawn on screen.
       session!.write('\r');
     };
     session = start();
@@ -309,8 +309,8 @@ it.each([160])(
         await expect
           .poll(() => session!.getVisibleOutput(), { timeout: 30_000 })
           .toMatch(new RegExp(`❯\\s+(★\\s+)?${picked}|No models match`));
-      // Every provider's catalog lands in turn; let the list settle as a person reading it would.
-      if (picked) await new Promise((resolve) => setTimeout(resolve, 500));
+      // No settle pause: the selection follows the highlighted model as later catalogs land, and the menu
+      // registers its key handler in a layout effect, so Enter reaches the interaction drawn on screen.
       session!.write('\r');
     };
     session = start();
@@ -423,8 +423,8 @@ it.each([160])('a failed resume leaves the composer usable at %i columns', { tim
       await expect
         .poll(() => session!.getVisibleOutput(), { timeout: 30_000 })
         .toMatch(new RegExp(`❯\\s+(★\\s+)?${picked}|No models match`));
-    // Every provider's catalog lands in turn; let the list settle as a person reading it would.
-    if (picked) await new Promise((resolve) => setTimeout(resolve, 500));
+    // No settle pause: the selection follows the highlighted model as later catalogs land, and the menu
+    // registers its key handler in a layout effect, so Enter reaches the interaction drawn on screen.
     session!.write('\r');
   };
   session = start();

@@ -22,7 +22,6 @@ const projectRoot = fileURLToPath(new URL('../..', import.meta.url));
 const builtCli = testCliPath(path.join(projectRoot, 'dist', 'src', 'app', 'cli.js'));
 const TIMEOUT_MS = 120_000;
 const EXIT_CONFIRM_WINDOW_MS = '300';
-const EXIT_CONFIRM_WAIT_MS = 350;
 
 let session: TerminalSession | null = null;
 let root = '';
@@ -210,7 +209,6 @@ async function runCommand(
       await expect
         .poll(() => session!.getVisibleOutput(), { timeout: 30_000 })
         .toMatch(new RegExp(`❯\\s+(★\\s+)?${picked}|No models match`));
-    if (picked) await new Promise((resolve) => setTimeout(resolve, 500));
     session!.write('\r');
   };
 
@@ -232,7 +230,7 @@ async function runCommand(
     await submit('/effort bogus');
     await session.waitForOutput('"bogus" is not one of the options', 30_000);
     await waitForHarnessComposerValue(idlePath, '/effort bogus', { timeoutMs: 5_000 });
-    await new Promise((resolve) => setTimeout(resolve, EXIT_CONFIRM_WAIT_MS));
+    // No earlier Ctrl+C armed the exit window, so this one only clears the draft.
     session.write('\x03');
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 5_000 });
     session.write('/not-a-real-command');

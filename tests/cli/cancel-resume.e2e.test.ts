@@ -21,6 +21,15 @@ const TIMEOUT_MS = 120_000;
 const EXIT_CONFIRM_WINDOW_MS = '300';
 const EXIT_CONFIRM_WAIT_MS = 350;
 
+/**
+ * Every Ctrl+C arms the root's exit window. `handledBy` is a moment the test observed that Ctrl+C's effect
+ * (so it was handled no later), and the window ends EXIT_CONFIRM_WINDOW_MS after handling: sleep only the rest.
+ */
+async function waitOutExitWindow(handledBy: number): Promise<void> {
+  const remaining = handledBy + EXIT_CONFIRM_WAIT_MS - Date.now();
+  if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
+}
+
 let session: TerminalSession | null = null;
 let root = '';
 let server: http.Server | null = null;
@@ -127,35 +136,36 @@ it(
     let idle = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
     await send('first question');
     await session.waitForOutput('PARTIAL-ANSWER', 60_000);
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    const live = session.getVisibleOutput();
-    const liveFrame = live.slice(live.lastIndexOf('▌ term²'));
-    expect(liveFrame).not.toContain('Stopped');
     // Legacy use-app-keyboard-shortcuts: Ctrl+C clears a draft first, even mid-turn; the next one stops the turn.
     session.write('half typed');
     await waitForHarnessComposerValue(idlePath, 'half typed', { timeoutMs: 30_000 });
     session.write('\x03');
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
     // Every Ctrl+C arms the exit confirmation window, so the stopping one waits it out.
-    await new Promise((resolve) => setTimeout(resolve, EXIT_CONFIRM_WAIT_MS));
+    await waitOutExitWindow(Date.now());
+    // The live turn is not marked stopped at any point before the stopping key (checked last, over that whole span).
+    const live = session.getVisibleOutput();
+    const liveFrame = live.slice(live.lastIndexOf('▌ term²'));
+    expect(liveFrame).toContain('PARTIAL-ANSWER');
+    expect(liveFrame).not.toContain('Stopped');
     session.write('\x03');
     idle = await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
     await session.waitForOutput('Stopped', 30_000);
+    const stoppedAt = Date.now();
     const stoppedOutput = session.getVisibleOutput();
     const stoppedFrame = stoppedOutput.slice(stoppedOutput.lastIndexOf('▌ term²'));
     expect(stoppedFrame).toContain('PARTIAL-ANSWER');
     expect(stoppedFrame.match(/Stopped/g)).toHaveLength(1);
     expect(stoppedFrame).not.toContain('Cancellation requested');
     expect(stoppedFrame).toMatch(/^ {0,8}Stopped\s*$/m);
-    // (A further Ctrl+C inside the confirm window would exit the app, so let that window pass.)
-    await new Promise((resolve) => setTimeout(resolve, EXIT_CONFIRM_WAIT_MS));
     await send('second question');
     await session.waitForOutput('SECOND-REPLY', 30_000);
     let screen = session.getVisibleOutput();
     expect(screen.lastIndexOf('SECOND-REPLY'), 'the reply shows after the stopped partial text').toBeGreaterThan(
       screen.lastIndexOf('PARTIAL-ANSWER'),
     );
-    await new Promise((resolve) => setTimeout(resolve, EXIT_CONFIRM_WAIT_MS));
+    // A further Ctrl+C inside the stopping one's window would exit at once instead of showing the hint.
+    await waitOutExitWindow(stoppedAt);
     session.write('\x03');
     await session.waitForOutput('Press Ctrl+C again to exit', 30_000);
     session.write('\x03');
@@ -228,15 +238,18 @@ it('Esc stops a streaming answer without a turn-id cleanup notice', { timeout: T
   const idle = await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
   await send('first question');
   await session.waitForOutput('PARTIAL-ANSWER', 60_000);
-  await new Promise((resolve) => setTimeout(resolve, 500));
-  const live = session.getVisibleOutput();
-  const liveFrame = live.slice(live.lastIndexOf('▌ term²'));
-  expect(liveFrame).not.toContain('Stopped');
   // Legacy interrupts with Esc twice.
   session.write('\x1b');
   await session.waitForOutput('Press Esc again to interrupt', 30_000);
+  // The live turn is not marked stopped at any point before the stopping key (checked last, over that whole span).
+  const live = session.getVisibleOutput();
+  const liveFrame = live.slice(live.lastIndexOf('▌ term²'));
+  expect(liveFrame).toContain('PARTIAL-ANSWER');
+  expect(liveFrame).not.toContain('Stopped');
   session.write('\x1b');
   await session.waitForOutput('Stopped', 30_000);
+  // The cancel notice asserted absent below would come from the cancel request's own reply, which nothing
+  // published orders against the idle signal; 200 ms is ample for a local wire reply that already stopped the turn.
   await new Promise((resolve) => setTimeout(resolve, 200));
   await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 30_000 });
   const output = session.getVisibleOutput();
@@ -310,10 +323,14 @@ it.each(['esc', 'ctrl-c', 'editing', 'only-steers'] as const)(
     await send('UNIQUE-SECOND-STEER');
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
     if (mode === 'editing') {
-      // Legacy selects the first steer after the follow-up and second steer.
-      for (let i = 0; i < 3; i++) {
+      // Legacy selects the first steer after the follow-up and second steer. An Up that lands before the
+      // previous selection renders reaches the editor instead, so wait for each selection's marker.
+      for (const selected of ['UNIQUE-FOLLOWUP', 'UNIQUE-SECOND-STEER', 'UNIQUE-QUEUED-STEER']) {
+        const before = session.getVisibleOutput().length;
         session.write('\x1b[A');
-        await new Promise((resolve) => setTimeout(resolve, 700));
+        await expect
+          .poll(() => session!.getVisibleOutput().slice(before), { timeout: 30_000 })
+          .toMatch(new RegExp(`❯ ${selected}`));
       }
       session.write('e');
       await waitForHarnessComposerValue(idlePath, 'UNIQUE-QUEUED-STEER', { timeoutMs: 30_000 });
@@ -332,6 +349,8 @@ it.each(['esc', 'ctrl-c', 'editing', 'only-steers'] as const)(
       const previousOutputLength = session.getVisibleOutput().length;
       session.write('\x03');
       await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 5_000 });
+      // Observes that no stop follows. A wrongly cancelled turn would show Stopped once the abort reaches the
+      // local fixture and back, well inside 500 ms; no signal marks that it will not come.
       await new Promise((resolve) => setTimeout(resolve, 500));
       const screen = session.getVisibleOutput().slice(previousOutputLength);
       expect(screen).toContain('UNIQUE-QUEUED-STEER');
@@ -344,7 +363,7 @@ it.each(['esc', 'ctrl-c', 'editing', 'only-steers'] as const)(
       session.write('\x03');
       await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 5_000 });
       // That Ctrl+C armed the exit confirmation window; the stopping one waits it out.
-      await new Promise((resolve) => setTimeout(resolve, EXIT_CONFIRM_WAIT_MS));
+      await waitOutExitWindow(Date.now());
     }
     const cancelAt = Date.now();
     session.write(mode === 'ctrl-c' ? '\x03' : '\x1b');
@@ -529,7 +548,7 @@ it.skipIf(process.platform !== 'linux')(
     session.write('\x03');
     await waitForHarnessIdleGeneration(idlePath, { after: idle, timeoutMs: 60_000 });
     await session.waitForOutput('Stopped', 30_000);
-    await new Promise((resolve) => setTimeout(resolve, EXIT_CONFIRM_WAIT_MS));
+    // `/quit` exits by command, not by a second Ctrl+C, so the armed exit window does not matter.
     await send('/quit');
     await session.waitForExit(30_000);
     const id = fs

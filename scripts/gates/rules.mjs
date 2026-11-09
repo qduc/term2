@@ -175,6 +175,31 @@ export const RULES = {
       note: 'when raising an existing ceiling, rewrite its reason to cover the new files',
     },
   },
+  'fixed-sleeps': {
+    title: 'The slow test tiers wait for conditions, not durations',
+    why:
+      'A fixed sleep in an integration, e2e or provider black-box test costs its whole length on every CI run, ' +
+      'and these tiers already spend most of their time waiting. A wait for a condition costs only what the ' +
+      'condition takes. Shapes detected (the list is not complete: a sleep in another shape is not seen): ' +
+      '`new Promise((resolve) => setTimeout(resolve, n))`, a call to a function named sleep or delay, ' +
+      '`await setTimeout(n)` from node:timers/promises, and any of these inside a for/while/do loop (a ' +
+      'fixed-interval poll). Callback timers that nothing awaits, such as a fixture pausing a stream, are not flagged.',
+    fix:
+      'Wait for what the sleep stood for: waitForOutput, expect.poll, or a harness signal (idle generation, ' +
+      '`.composer` revision, `.approval`/`.confirmation` readiness), and turn a hand-written poll loop into ' +
+      'expect.poll. A sleep that only observes that nothing happens, where no signal exists, stays with a ' +
+      'comment on the line(s) directly above it: `// sleep-ok: <what absence or window is observed>; <why this ' +
+      'length is enough>` (both parts required). See the testing skill, "Keeping the slow tiers fast".',
+    avoid:
+      'Do not hide the sleep in another shape (a renamed helper, a busy loop, a timer the checker does not ' +
+      'recognise), do not write a sleep-ok reason that only says it is needed, and do not shorten a sleep until ' +
+      'the test only passes on a fast machine.',
+    exceptions: {
+      file: 'scripts/rule-baseline.json',
+      entry: 'fixedSleeps: { "file": "<test file>", "count": N, "reason": "..." }',
+      note: 'the count is a per-file ceiling that only goes down; prefer a sleep-ok comment',
+    },
+  },
   baselines: {
     title: 'Recorded deviations carry reasons',
     why:
@@ -277,6 +302,8 @@ export function readDeviations(read) {
     add('unused-exports', 'scripts/rule-baseline.json', entry, 'export', 'unusedExports');
   for (const entry of rules?.duplicateBasenames ?? [])
     add('duplicate-basenames', 'scripts/rule-baseline.json', entry, 'file', 'duplicateBasenames');
+  for (const entry of rules?.fixedSleeps ?? [])
+    add('fixed-sleeps', 'scripts/rule-baseline.json', entry, 'file', 'fixedSleeps', { count: entry?.count });
   for (const entry of rules?.engineCallbackWrites ?? [])
     add('engine-callback-writes', 'scripts/rule-baseline.json', entry, 'callback', 'engineCallbackWrites');
 

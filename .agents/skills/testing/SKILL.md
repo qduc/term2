@@ -143,6 +143,19 @@ CPU. The attribution and measurements are in
   repack the waiting. A temporary Vitest setup file that recorded each CLI
   spawn and each test-file `setTimeout` found the causes above; `node
   --cpu-prof` on the built CLI shows where startup goes.
+- **`check-rules` blocks new fixed sleeps in these tiers** (rule `fixed-sleeps`,
+  `scripts/gates/fixed-sleeps.mjs`; scope comes from the three tier configs'
+  `include` globs). It sees only the shapes its failure message lists: a
+  `setTimeout`-resolved `new Promise`, a `sleep`/`delay` call, an awaited
+  `timers/promises` `setTimeout`, and any of those inside a loop. A sleep that
+  only observes that nothing happens stays with a comment directly above it,
+  `// sleep-ok: <what absence or window is observed>; <why this length is enough>`.
+  Sleeps not yet audited are per-file ceilings in `scripts/rule-baseline.json`
+  (`fixedSleeps`); lower the count when you remove one. Sleeps the gate does not
+  recognise are still debt, not precedent. Keys sent back to back can arrive as
+  one read: a Ctrl+G written straight before `-x` left the draft as
+  `"draft\u0007-x"`, so a key that does nothing still needs its own read before
+  the next one.
 
 ## Recurring verification traps
 

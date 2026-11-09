@@ -3,7 +3,25 @@ title: Subagents
 description: Subagent roles, model settings, and background tasks.
 ---
 
-The assistant can delegate work to subagents. Each subagent runs in a separate conversation.
+The assistant can delegate parts of a task to subagents, each in a separate conversation. Ask for the work you want done and describe any boundaries. For example:
+
+> Use subagents to investigate the login failure and review the proposed fix. Keep the investigation read-only.
+
+The assistant chooses how to delegate. An explorer can investigate without editing files; a worker can edit and run tests. Review the results and any file changes as you normally would. Tool approvals and workspace boundaries still apply.
+
+<a id="background-task-manager-ctrlg"></a>
+
+## Follow or stop a task
+
+Press `Ctrl+G` to open the Background Task Manager. Select a task with the arrow keys and press `Enter` to inspect its output. To move a foreground task to the background, select it and press `b` then `Enter`; to request that a running background task stop, press `x` then `Enter`. Close the manager with `Ctrl+G` or `Escape`.
+
+<a id="background-check-ins"></a>
+
+term2 checks background tasks periodically and notifies the parent agent when one finishes or needs input.
+
+## Choose models for delegated work
+
+Use `/settings` to configure the model and provider tiers described below. The role determines which tier and permissions a subagent receives.
 
 ## Subagent Roles
 
@@ -47,18 +65,3 @@ Subagent roles are mapped to configurable tiers in your settings:
 - **`agent.choreModel` / `agent.choreProvider`**: Narrow utility model for patch self-healing and auto-approval evaluation.
 
 Pool values are configured in the settings UI or as arrays in the corresponding tier settings. Non-subagent consumers use the first configured model.
-
-## Background Task Manager (`Ctrl+G`)
-
-Subagents can run in the foreground or background.
-
-- Press `Ctrl+G` to open the Background Task Manager.
-- Use `Up` and `Down` arrow keys to browse active and completed tasks.
-- Press `Enter` to inspect output streams and execution logs.
-- Press `b` + `Enter` on a foreground task to move it to the background.
-- Press `x` + `Enter` on a running background task to request a graceful stop.
-- Press `Ctrl+G` or `Escape` to close the manager.
-
-## Background Check-Ins
-
-term2 checks background tasks periodically and notifies the parent agent when a task finishes or needs input.

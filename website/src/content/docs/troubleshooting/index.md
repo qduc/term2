@@ -3,31 +3,7 @@ title: Troubleshooting & FAQ
 description: Common issues, file locations, stale cache recovery, and debugging steps.
 ---
 
-## File & Directory Locations
-
-### Configuration (`settings.json`)
-- **Linux**: `~/.local/state/term2-nodejs/settings.json` (or `$XDG_STATE_HOME/term2-nodejs/settings.json`)
-- **macOS**: `~/Library/Logs/term2-nodejs/settings.json`
-- **Windows**: `%LOCALAPPDATA%\term2-nodejs\Log\settings.json`
-
-OAuth tokens are stored separately under `envPaths('term2').config` (Linux example: `~/.config/term2-nodejs/`; macOS Preferences). `TERM2_CONFIG_DIR` overrides it; this is not the settings state/log directory.
-
-### Application Logs
-- **Linux**: `~/.local/state/term2-nodejs/logs/` (or `$XDG_STATE_HOME/term2-nodejs/logs/`)
-- **macOS**: `~/Library/Logs/term2-nodejs/logs/`
-- **Windows**: `%LOCALAPPDATA%\term2-nodejs\Log\logs\`
-
-### Conversation History
-- **Linux**: `~/.local/share/term2-nodejs/conversations/` (or `$XDG_DATA_HOME/term2-nodejs/conversations/`)
-- **macOS**: `~/Library/Application Support/term2-nodejs/conversations/`
-- **Windows**: `%LOCALAPPDATA%\term2-nodejs\Data\conversations\`
-
-### Model Catalog Cache
-- **Linux**: `~/.cache/term2-nodejs/models/` (or `$XDG_CACHE_HOME/term2-nodejs/models/`)
-- **macOS**: `~/Library/Caches/term2-nodejs/models/`
-- **Windows**: `%LOCALAPPDATA%\term2-nodejs\Cache\models\`
-
----
+Start with the symptom that matches what you see. If you need a configuration file, log, conversation, or model cache, see [file and directory locations](#file--directory-locations) below.
 
 ## Common Issues & Solutions
 
@@ -93,3 +69,27 @@ Requests are checked against the model catalog's context window before sending, 
 New installations enable local context compaction in auto mode, but upgrades retain saved settings. If your settings contain `agent.contextCompaction.enabled: false`, enable it to opt in. Earlier releases saved `agent.maxOutputTokens: 32000`; that remains an explicit allocation. Lower it for small-window models, or remove the key from `settings.json` to use the adaptive cap (at most a quarter of a known context window and 32,000 tokens).
 
 Non-interactive context pauses exit with code 2 and a resume hint. Review the limit before resuming; do not blindly repeat a command that may already have changed files.
+
+## File & Directory Locations
+
+### Configuration (`settings.json`)
+- **Linux**: `~/.local/state/term2-nodejs/settings.json` (or `$XDG_STATE_HOME/term2-nodejs/settings.json`)
+- **macOS**: `~/Library/Logs/term2-nodejs/settings.json`
+- **Windows**: `%LOCALAPPDATA%\term2-nodejs\Log\settings.json`
+
+OAuth tokens are stored separately under `envPaths('term2').config` (Linux example: `~/.config/term2-nodejs/`; macOS Preferences). `TERM2_CONFIG_DIR` overrides it; this is not the settings state/log directory.
+
+### Application Logs
+- **Linux**: `~/.local/state/term2-nodejs/logs/` (or `$XDG_STATE_HOME/term2-nodejs/logs/`)
+- **macOS**: `~/Library/Logs/term2-nodejs/logs/`
+- **Windows**: `%LOCALAPPDATA%\term2-nodejs\Log\logs\`
+
+### Conversation History
+- **Linux**: `~/.local/share/term2-nodejs/conversations/` (or `$XDG_DATA_HOME/term2-nodejs/conversations/`)
+- **macOS**: `~/Library/Application Support/term2-nodejs/conversations/`
+- **Windows**: `%LOCALAPPDATA%\term2-nodejs\Data\conversations\`
+
+### Model Catalog Cache
+- **Linux**: `~/.cache/term2-nodejs/models/` (or `$XDG_CACHE_HOME/term2-nodejs/models/`)
+- **macOS**: `~/Library/Caches/term2-nodejs/models/`
+- **Windows**: `%LOCALAPPDATA%\term2-nodejs\Cache\models\`

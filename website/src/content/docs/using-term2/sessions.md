@@ -47,6 +47,14 @@ Or fork the most recent session:
 term2 --resume --fork
 ```
 
+## Choose what to do next
+
+- **Revisit an earlier point:** Use `/rewind` to inspect earlier turns and affected files before confirming. See the command details below before discarding anything.
+- **Retry a response or tool call:** Use `/retry-turn` or `/retry-tool`; check for effects that may already have happened before retrying a tool.
+- **Reload the installed CLI:** Use `/restart` to resume the same conversation in a new process. Save or submit drafts first, and see the restrictions below.
+- **Keep a longer outcome in view:** Use `/goal set <outcome>` and `/goal` to inspect it later.
+- **Continue from a script:** Add a prompt after `term2 --resume <conversation-id>`; examples appear below.
+
 ## Time-Travel Rewind (`/rewind`, `/undo`, `/retry`)
 
 - **Interactive Rewind Picker (`/rewind`)**: Opens a menu detailing previous turns and modified files so you can inspect discards before confirming.

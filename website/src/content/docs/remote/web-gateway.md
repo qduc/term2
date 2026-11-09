@@ -5,11 +5,21 @@ description: Running the private gateway for external clients and programmatic c
 
 `term2 serve` starts a private gateway for clients that need to manage term2 sessions. Start it with `--pairing` or `--bff-key`.
 
+## Start a local gateway
+
+For a local client, start a gateway with a one-time pairing code:
+
+```bash
+term2 serve --local-owner developer --pairing
+```
+
+The gateway stays in the foreground and prints the pairing code to stderr. Configure the code in the client backend, not in a browser; it expires after five minutes. Workspace access is read-only by default. To use the separate web client, follow the matching server and client setup below. Stop the gateway with `Ctrl+C`.
+
 ## Separate Web Client
 
 The gateway ships with `@qduc/term2`. The Next.js app in `web-client/` has its own build.
 
-**Native browser v2 is enabled in matching source builds.** The root and web builds pin `@qduc/agent-wire` 0.2.3, including native background-task questions, tool tracking and activity observations. Use a server built from this revision with the separately built web client. Older gated builds return `503 agent_wire_v2_unavailable`; installing an older published CLI does not provide this support.
+**Use matching source builds of the server and web client.** Older published or gated builds may not support the browser client and can return `503 agent_wire_v2_unavailable`. The root and web builds at this revision pin `@qduc/agent-wire` 0.2.3.
 
 The browser loads a session snapshot and reconnects from the last sequence it applied. Stored event sequences can have gaps. Live observations have no cursor. Reload restores recorded history without restarting the turn or undoing tool effects.
 

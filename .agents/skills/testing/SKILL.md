@@ -150,13 +150,11 @@ CPU. The attribution and measurements are in
   `TERM2_EXIT_CONFIRM_WINDOW_MS`, 2000 ms by default. `cancel-resume` and
   `slash-commands` launch with 300 ms and wait 350 ms; `tool-output.e2e.test.ts` still sleeps 2.5 s
   "outside the root's double-interrupt window" on the default.
-- **Prefer a later key to a pause when proving that a key did nothing.** Keys reach
-  the TUI in order, so once a following key's effect is committed (for example
-  `waitForHarnessComposerValue`), a handler that would have acted synchronously on
-  the earlier key has already run. `tool-output.e2e.test.ts` presses Ctrl+G, sleeps
-  500 ms, asserts no task menu opened, then types `-after` and waits for the
-  composer; moving the assertion after that wait is a candidate for dropping the
-  sleep, if the menu would open synchronously. Check that before relying on it.
+- **A later key is not a free sync point for a key that should do nothing.** Bytes
+  written back to back can reach the TUI in one read and parse as text: in
+  `tool-output.e2e.test.ts`, Ctrl+G followed at once by `-x` left `draft\u0007-x` in
+  the composer instead of being handled as a shortcut (#234). Its 500 ms pause
+  before the next key therefore stays, with a `sleep-ok` comment.
 - **Sleep only to observe that nothing happened,** and say in a comment why that
   length is enough. About 60 s of such windows remain in the e2e lane; they are
   the next thing to replace with a deterministic quiescence signal, so don't

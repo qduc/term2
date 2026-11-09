@@ -4,7 +4,7 @@
   "maxFolderFiles": 15,
   "folderCeilings": {
     "src/app": {
-      "files": 78,
+      "files": 77,
       "reason": "Direct CLI application composition root, command dispatch, and setup workflows; to be decomposed into domain submodules in Phase 3."
     },
     "src/clients/control": {
@@ -84,6 +84,10 @@
     "src/app/agent.ts": {
       "lines": 810,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
+    },
+    "src/app/application-runtime.ts": {
+      "lines": 505,
+      "reason": "The direct runtime commits each model configuration change and decides in the same commit whether global defaults should be persisted. ACP sessions keep their changes local. Lower the ceiling when the model reconfiguration transaction can move together with its settings writes."
     },
     "src/app/lib/agent-factory.ts": {
       "lines": 555,
@@ -234,8 +238,8 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/tools/mcp/mcp-connection-manager.ts": {
-      "lines": 595,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
+      "lines": 606,
+      "reason": "ACP-supplied credentials require the manager to enforce redirect policy on every fetch for both HTTP and SSE, including the initial EventSource request. Keep this beside transport creation so credential scope cannot diverge across the two paths. Lower the ceiling when HTTP transport construction and credential handling move together."
     },
     "src/tools/memory/memory-store.ts": {
       "lines": 648,
@@ -254,8 +258,8 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/tools/system/shell.ts": {
-      "lines": 1463,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
+      "lines": 1473,
+      "reason": "The shell executor checks one-use escape evidence against the actual cwd and foreground invocation at the point where it selects sandbox mode. Moving only that check would separate it from the execution context that enforces it. Lower the ceiling when the shell execution pipeline can move as a whole."
     },
     "src/delegation/subagents/tool-policy.ts": {
       "lines": 1399,

@@ -14,7 +14,7 @@ is a changing draft; the v2 adapter does not claim compatibility with every draf
 term2 acp --provider <provider> --model <exact-model-id> [--effort <effort>]
 ```
 
-The launcher is `src/app/launch-acp.ts`; the adapter lives in
+The launcher is `src/app/acp/launch-acp.ts`; the adapter lives in
 `src/clients/acp/`. Build a source checkout with `pnpm build`, then invoke
 `node dist/cli.js acp`. Flags are parsed by `src/app/serve-args.ts`. Unknown flags,
 including `--auto-approve`, fail with diagnostics on stderr. Model resolution is

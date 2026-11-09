@@ -1,8 +1,8 @@
 import * as acp from '@agentclientprotocol/sdk';
 import { randomUUID } from 'node:crypto';
 import type { DirectConnection } from '../../host/in-process-direct-types.js';
+import { WIRE_REASONING_SELECTIONS } from '../../protocol/wire-commands.js';
 import type { WireConfigureRequest, WireModel, WireNativeCommandOutcome } from '../../protocol/wire.js';
-import { VALID_REASONING_EFFORTS } from '../../model/models/reasoning-effort.js';
 import type { BackendOptions } from './contract.js';
 
 const modelId = (model: WireModel): string => `${model.provider}/${model.model}`;
@@ -64,7 +64,7 @@ export class AcpModels {
         description:
           'Reasoning effort. Default uses the model/provider default; supported levels depend on the provider.',
         currentValue: configuration.reasoning,
-        options: VALID_REASONING_EFFORTS.map((value) => ({
+        options: WIRE_REASONING_SELECTIONS.map((value) => ({
           value,
           name: value === 'xhigh' ? 'Extra high' : value[0].toUpperCase() + value.slice(1),
         })),

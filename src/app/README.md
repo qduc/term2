@@ -375,7 +375,7 @@ The direct `/settings` command presents a category index and three-item category
 
 ## ACP session resources
 
-`createAcpSessions` in `acp-sessions.ts` owns ACP-supplied MCP managers per native
+`createAcpSessions` in `acp/acp-sessions.ts` owns ACP-supplied MCP managers per native
 session. `open` validates the full list, starts connections with explicit cwd,
 environment and HTTP headers, and installs the immutable source through initial
 creation or an exact accepted native configure receipt. An async-local candidate

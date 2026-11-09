@@ -3,13 +3,13 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import * as acp from '@agentclientprotocol/sdk';
-import type { AcpSessionSetup } from '../clients/acp/contract.js';
-import type { DirectConnection } from '../host/in-process-direct-types.js';
-import type { WireNativeCommandOutcome } from '../protocol/wire.js';
-import { McpConnectionManager } from '../tools/mcp/mcp-connection-manager.js';
-import type { ResolvedMcpServerConfig } from '../tools/mcp/mcp-config.js';
-import { McpCallError, type McpToolSource } from '../tools/mcp/mcp-tool-source.js';
-import { captureDirectMcpSource } from './mcp-source.js';
+import type { AcpSessionSetup } from '../../clients/acp/contract.js';
+import type { DirectConnection } from '../../host/in-process-direct-types.js';
+import type { WireNativeCommandOutcome } from '../../protocol/wire.js';
+import { McpConnectionManager } from '../../tools/mcp/mcp-connection-manager.js';
+import type { ResolvedMcpServerConfig } from '../../tools/mcp/mcp-config.js';
+import { McpCallError, type McpToolSource } from '../../tools/mcp/mcp-tool-source.js';
+import { captureDirectMcpSource } from '../mcp-source.js';
 
 type Resource = {
   readonly servers: NonNullable<AcpSessionSetup['mcpServers']>;

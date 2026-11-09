@@ -22,7 +22,7 @@ Valid unsupported version offers receive the latest supported version (2); an
 exact offer of 1 or 2 retains its corresponding SDK contract.
 
 `term2 acp` also accepts `initialize.protocolVersion: 1` without a CLI flag.
-`v1-agent.ts` advertises `agentInfo`, `authMethods: []`, image/embedded-context
+`v1/v1-agent.ts` advertises `agentInfo`, `authMethods: []`, image/embedded-context
 prompts, session load/list/resume/close. Provider credentials remain native Term2
 configuration. Setup responses include `model` and `thinking_level` select config options;
 `session/set_config_option` applies a per-session native configure command and
@@ -34,12 +34,12 @@ resume attaches without replay. Repeated loads replay each time.
 
 `client.ts` translates v1 permission `toolCall` requests while the shared
 permission code preserves exact option IDs, scope, cancellation and provenance.
-`v1-output.ts` converts whole message upserts to append-only chunks, retaining
+`v1/v1-output.ts` converts whole message upserts to append-only chunks, retaining
 streamed prefixes so final messages/snapshots do not duplicate text. Tool upserts
 become a first `tool_call` followed by `tool_call_update`, retaining the tool name.
 Shell titles describe the actual command; raw input/output remain available as
 structured metadata. Without a display extension, output is standard text tool
-content, including when provider content is an empty array. `v1-terminals.ts`
+content, including when provider content is an empty array. `v1/v1-terminals.ts`
 uses the declared Air/Zed agent-owned terminal convention: clients opting into
 `_meta.terminal_output_delta:true` receive suffixes on that channel; otherwise
 `_meta.terminal_output:true` selects Zed's chunk channel. Terminal references,
@@ -92,7 +92,7 @@ WebStorm Air log offered `protocolOffer=V1` then reported `Invalid params` again
 the former v2-only endpoint. Its later stdout `EPIPE` followed client shutdown;
 it was not evidence of missing provider credentials. The former workaround of
 disabling Air's forwarded MCP catalog is no longer required: app-owned
-`acp-sessions.ts` connects session-supplied stdio/HTTP/SSE servers through the
+`app/acp/acp-sessions.ts` connects session-supplied stdio/HTTP/SSE servers through the
 existing manager, immutable catalog and `run_code` approval machinery. Server
 credentials remain process memory, are not copied into settings or display
 metadata, and are not provider credentials. Each session owns its connections;

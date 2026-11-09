@@ -323,7 +323,7 @@ behaves as it does today.
   metadata, legacy aliases, subagent `ask_orchestrator` and the retained mentor
   catalog remain.
 - **ACP — dropped from parity work, still wired.** `term2 acp` dispatches to
-  `app/launch-acp.ts`, with `clients/acp/` as the adapter for session
+  `app/acp/launch-acp.ts`, with `clients/acp/` as the adapter for session
   attachment, rendering and permission/question mapping.
 - **Sandbox execution — dropped from parity work, still present.** The TUI's
   `/sandbox` command and the tool surface's `allowUnsandboxed` posture

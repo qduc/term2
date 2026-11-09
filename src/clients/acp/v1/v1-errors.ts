@@ -1,5 +1,5 @@
 import * as acp from '@agentclientprotocol/sdk';
-import { DirectProtocolError } from '../../protocol/errors.js';
+import { DirectProtocolError } from '../../../protocol/errors.js';
 
 /** Keep v1 operational failures distinct from the reserved authentication error. */
 export function v1Error(error: unknown): unknown {

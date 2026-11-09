@@ -787,7 +787,7 @@ describe('ACP v1 built CLI compatibility for Air', () => {
             ]);
           }
           expect(JSON.stringify(requests[2].messages.at(-1))).toMatch(
-            /sandbox|operation not permitted|permission denied/i,
+            /sandbox|operation not permitted|permission denied|read-only file system/i,
           );
           expect(JSON.stringify(requests.at(-1).messages.at(-1))).toContain('require a foreground shell');
           const inside = path.join(workspace, 'inside.txt');

@@ -1,7 +1,7 @@
 import * as v1 from '@agentclientprotocol/sdk';
 import * as v2 from '@agentclientprotocol/sdk/experimental/v2';
 import type { AcpClient } from './contract.js';
-import { v1Tool, V1Output } from './v1-output.js';
+import { v1Tool, V1Output } from './v1/v1-output.js';
 
 /** Preserve the existing v2 context behind the backend's transport-independent operations. */
 export function v2Client(client: v2.AgentContext): AcpClient {

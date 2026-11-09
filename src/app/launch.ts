@@ -23,7 +23,7 @@ export async function launchDirect(request: DirectLaunchRequest): Promise<number
       return (await import('./launch-tui.js')).launchTui(request, terminal.background);
     }
     case 'acp':
-      return (await import('./launch-acp.js')).launchAcp(request);
+      return (await import('./acp/launch-acp.js')).launchAcp(request);
     case 'control':
       return (await import('./launch-control.js')).launchControl(request.argv);
     case 'discord':

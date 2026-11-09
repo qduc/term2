@@ -4,17 +4,23 @@
  * an explicit one-time grant for a foreground shell command outside it.
  */
 import fs from 'node:fs';
-import { getAllProviders, getProviderIds } from '../model/providers/index.js';
-import { installationVersion } from '../model/providers/fetch/logging-middleware.js';
-import { resolveModelFlag } from '../model/models/model-resolution.js';
-import { createAcpBackend, createStdioAcpIo, serveAcp, type AcpIo, type AcpWorkspaces } from '../clients/acp/index.js';
-import { createDirectApplication, type DirectApplication } from './application.js';
-import { createLocalAuthority, LOCAL_PRINCIPAL, localGrant } from './application-workspaces.js';
-import type { DirectLaunchRequest } from './launch-types.js';
-import { warnIfSandboxUnavailable } from './sandbox-warning.js';
-import { isProviderDisabled, resolveProviderCredentials } from '../model/provider-credentials.js';
-import { fetchModels, peekCachedModels } from '../model/model-service.js';
-import type { WireModel } from '../protocol/wire.js';
+import { getAllProviders, getProviderIds } from '../../model/providers/index.js';
+import { installationVersion } from '../../model/providers/fetch/logging-middleware.js';
+import { resolveModelFlag } from '../../model/models/model-resolution.js';
+import {
+  createAcpBackend,
+  createStdioAcpIo,
+  serveAcp,
+  type AcpIo,
+  type AcpWorkspaces,
+} from '../../clients/acp/index.js';
+import { createDirectApplication, type DirectApplication } from '../application.js';
+import { createLocalAuthority, LOCAL_PRINCIPAL, localGrant } from '../application-workspaces.js';
+import type { DirectLaunchRequest } from '../launch-types.js';
+import { warnIfSandboxUnavailable } from '../sandbox-warning.js';
+import { isProviderDisabled, resolveProviderCredentials } from '../../model/provider-credentials.js';
+import { fetchModels, peekCachedModels } from '../../model/model-service.js';
+import type { WireModel } from '../../protocol/wire.js';
 import { createAcpSessions } from './acp-sessions.js';
 
 type AcpRequest = Extract<DirectLaunchRequest, { readonly kind: 'acp' }>;

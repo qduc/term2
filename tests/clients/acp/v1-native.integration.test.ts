@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import * as acp from '@agentclientprotocol/sdk';
-import { createAcpV1Agent } from '../../../src/clients/acp/v1-agent.js';
+import { createAcpV1Agent } from '../../../src/clients/acp/v1/v1-agent.js';
 import { createAcpBackend } from '../../../src/clients/acp/session-backend.js';
 import { createDirectInProcessHost } from '../../../src/host/in-process-direct.js';
 import { createDirectSessionStore } from '../../../src/session/store.js';

@@ -1,6 +1,6 @@
 import { Readable, Writable } from 'node:stream';
 import type { AgentConnection as V1Connection, Stream as V1Stream } from '@agentclientprotocol/sdk';
-import { createAcpV1Agent } from './v1-agent.js';
+import { createAcpV1Agent } from './v1/v1-agent.js';
 import * as acp from '@agentclientprotocol/sdk/experimental/v2';
 import { createAcpAgent, type AcpAgentOptions } from './agent.js';
 import { errorMessage } from './contract.js';

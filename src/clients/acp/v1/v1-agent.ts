@@ -1,9 +1,9 @@
 import * as acp from '@agentclientprotocol/sdk';
-import type { AcpAgentOptions } from './agent.js';
-import { v1Client } from './client.js';
-import type { AcpClient } from './contract.js';
+import type { AcpAgentOptions } from '../agent.js';
+import { v1Client } from '../client.js';
+import type { AcpClient } from '../contract.js';
 import { v1Error } from './v1-errors.js';
-import { v1Prompt } from './input.js';
+import { v1Prompt } from '../input.js';
 
 /**
  * Stable ACP v1 over the same Host backend as v2. Prompts remain pending until

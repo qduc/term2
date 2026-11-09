@@ -34,7 +34,7 @@ concurrency:
   cancel-in-progress: true
 
 # Each tier keeps its configuration and module isolation. The lane runner
-# assigns every discovered file once; only behavioral lanes build dist/.
+# assigns every discovered file once; only behavioral lanes and bench build dist/.
 jobs:
   # Docs-only pull requests used to pay for the whole matrix. Inert means prose
   # and known evidence/image formats the tests never read. Unknown docs formats
@@ -95,7 +95,6 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref || github.sha }}
-          fetch-depth: 0
       - name: Check repository policy
         run: |
           node scripts/check-root.mjs
@@ -104,6 +103,7 @@ jobs:
         if: needs.changes.outputs.run != 'false'
         with:
           ripgrep: 'true'
+          lane: test
       - name: Run CLI integration, safety and responses provider cases
         if: needs.changes.outputs.run != 'false'
         run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs test
@@ -157,7 +157,7 @@ jobs:
   # Explicit status handling also covers push/workflow_call's skipped changes job.
   # An unexpected skipped, failed or cancelled lane must never make this pass.
   port:
-    needs: [changes, quality, test, integration, e2e, provider-black-box]
+    needs: [changes, quality, test, integration, bench, e2e, provider-black-box]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -171,6 +171,7 @@ jobs:
           const inert = needs.changes.result === 'success' && needs.changes.outputs.run === 'false';
           const expected = { quality: 'success', test: 'success',
             integration: inert ? 'skipped' : 'success',
+            bench: inert ? 'skipped' : 'success',
             e2e: inert ? 'skipped' : 'success',
             'provider-black-box': inert ? 'skipped' : 'success' };
           for (const [lane, result] of Object.entries(expected)) {
@@ -190,15 +191,33 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref || github.sha }}
-          fetch-depth: 0
+      - uses: ./.github/actions/setup-tests
+        with:
+          ripgrep: 'true'
+          web-client: 'true'
+          lane: integration
+      - name: Run remaining integration and stateless provider cases
+        run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs integration
+
+  # The benches ran after the integration cases on that runner, adding ~19s to
+  # the slowest job (2026-11-09). They read only a fresh build, not test output,
+  # so they run on their own runner with the integration job's tools.
+  bench:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
       - uses: ./.github/actions/setup-tests
         id: setup
         with:
           ripgrep: 'true'
-      - name: Run remaining integration and stateless provider cases
-        run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs integration
+      - name: Build the CLI
+        run: node scripts/build.mjs
       - name: Check the headless path
-        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: node bench/headless.mjs
       - name: Check the production message path budget
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
@@ -215,6 +234,8 @@ jobs:
           ref: ${{ inputs.ref || github.sha }}
       - uses: ./.github/actions/setup-tests
         id: setup
+        with:
+          lane: e2e
       - name: Run E2E process cases
         run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs e2e
       - name: Check golden parity
@@ -231,5 +252,7 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha }}
       - uses: ./.github/actions/setup-tests
+        with:
+          lane: provider-black-box
       - name: Run resilience and remaining provider cases
         run: /usr/bin/time -v pnpm exec node scripts/run-ci-lane.mjs provider-black-box

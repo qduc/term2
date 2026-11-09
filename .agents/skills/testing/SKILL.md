@@ -61,7 +61,21 @@ for golden changes. It does not wait for behavioral lanes. Every behavioral tier
 unless every changed file in a pull request is inert (the `changes` job in
 `.github/workflows/ci.yml` defines inert); then only the expensive test work skips. The required
 `test` job still checks the root allowlist and rejects committed unit tests before dependency
-setup. `integration` owns `bench/headless.mjs` and `bench/hops.mts`; `e2e` owns golden parity.
+setup. The `bench` job owns `bench/headless.mjs` and `bench/hops.mts` on its own runner (they need
+only a build, and after the integration cases they lengthened the slowest job); `e2e` owns golden parity.
+`bench/headless.mjs` runs its isolated rows through a core-sized pool (`HEADLESS_CONCURRENCY=1`
+for serial debugging); serially it added ~30 s to the integration lane's critical path. The
+heaviest e2e files run in the `test` lane (`owner()` in `scripts/run-ci-lane.mjs`); rebalance
+there when one lane finishes well after the others. Do not move PTY-driven e2e files onto
+`provider-black-box`: two of them took that lane from ~62 s to 94 s locally and tipped a heavy
+provider case past its ~40 s deadline, the same timeout class that already flakes there in CI.
+The setup action installs only `@qduc/term2` and its workspace dependencies unless a job passes
+`web-client: 'true'`; only `integration` does, for the gateway cases that import web-client
+server modules. A new case that imports web-client must run in that lane.
+Each behavioral job restores its lane's Vitest results cache (`lane` input of the setup action),
+and `vitest.ci.config.ts` orders every file by recorded duration across projects. Without it, a
+30 s sleeping Discord download case started late and a later-named project waited behind the
+others, adding ~11 s to the integration lane. A new long file runs early from its second run on.
 `port` is a compatibility aggregate requiring quality and test success, plus successful behavioral
 lanes or skips justified by an inert pull request. Known docs/evidence formats may skip tests;
 unknown extensions and executable scripts under `docs/` run every tier. Follow any late CI failure
@@ -78,6 +92,12 @@ explicit finite timeout and wait for the completion notification rather than pol
 - Deterministic and independent: no real provider network, no shared fixed temp paths,
   no writes into the repository tree, runnable in any order.
 - Mock only at external boundaries (provider fixtures, the network guard).
+- Cheap: a test's wall time is paid on every CI run, so cost is part of the standard,
+  not a later optimisation. Before committing a new or changed test in these tiers,
+  check it against "Keeping the slow tiers fast" below and report its Vitest duration
+  and its built-CLI launch count in the handoff. Don't copy a fixed sleep from a
+  neighbouring test: the e2e files still carry sleeps written before that guidance
+  (`5202455`, 2026-11-05, against `6ff90c5`, 2026-11-07). They are debt, not precedent.
 
 ## Keeping the slow tiers fast
 
@@ -118,6 +138,23 @@ CPU. The attribution and measurements are in
   sleep costs its full length on every run. Where the product publishes a
   harness signal under `TERM2_HARNESS_IDLE_PATH` (idle generation, `.composer`
   revision, `.approval` readiness), prefer it to matching screen text.
+- **Don't add a "settle" sleep after a wait that succeeded.** In
+  `approval-mode.e2e.test.ts` the model-picker step polls until the picked row is
+  visible, then sleeps 500 ms "as a person reading it would": the poll already
+  proved the state. If the next key could reach a component before it listens
+  (Ink subscribes `useInput` in a passive effect, after the frame shows), wait for
+  the harness readiness signal instead: `.approval` for approval prompts and
+  `.confirmation` for held-send prompts (#233).
+- **Shorten the Ctrl+C exit window instead of sleeping past it.** The root's
+  double-Ctrl+C exit arm (`Tui` in `src/clients/tui/index.tsx`) lasts
+  `TERM2_EXIT_CONFIRM_WINDOW_MS`, 2000 ms by default. `cancel-resume` and
+  `slash-commands` launch with 300 ms and wait 350 ms; `tool-output.e2e.test.ts` still sleeps 2.5 s
+  "outside the root's double-interrupt window" on the default.
+- **A later key is not a free sync point for a key that should do nothing.** Bytes
+  written back to back can reach the TUI in one read and parse as text: in
+  `tool-output.e2e.test.ts`, Ctrl+G followed at once by `-x` left `draft\u0007-x` in
+  the composer instead of being handled as a shortcut (#234). Its 500 ms pause
+  before the next key therefore stays, with a `sleep-ok` comment.
 - **Sleep only to observe that nothing happened,** and say in a comment why that
   length is enough. About 60 s of such windows remain in the e2e lane; they are
   the next thing to replace with a deterministic quiescence signal, so don't

@@ -1,4 +1,5 @@
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFile, spawn, spawnSync } from 'node:child_process';
+import { promisify } from 'node:util';
 import { relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -31,32 +32,48 @@ function owner(tier, file) {
   if (tier === 'guards') return 'quality';
   if (tier === 'integration')
     return /^tests\/cli\/cli(?:-headless)?\.integration\.test\.ts$/.test(file) ? 'test' : 'integration';
-  if (tier === 'e2e') return 'e2e';
+  if (tier === 'e2e') {
+    // The e2e lane outgrew the others (~100s of cases on 2026-11-08 vs ~50s for test), so its
+    // heaviest files run in the test lane. Not provider-black-box: its heavy cases have ~40s
+    // deadlines that PTY-driven e2e load pushed over. See the testing skill before rebalancing.
+    if (/^tests\/cli\/(?:slash-commands|coalesced-enter|resume-picker)\.e2e\.test\.ts$/.test(file)) return 'test';
+    return 'e2e';
+  }
   if (file.endsWith('/provider-session-stateless.blackbox.ts')) return 'integration';
   if (/\/(?:provider-ordinary-safety|reference-approval)\.blackbox\.ts$/.test(file)) return 'test';
   if (/\/provider-session-responses(?:-tools|-failures)?\.blackbox\.ts$/.test(file)) return 'test';
   return 'provider-black-box';
 }
 
-const plan = tiers.map(([tier, config]) => {
-  const files = JSON.parse(
-    execFileSync(process.execPath, [vitest, 'list', '--config', config, '--filesOnly', '--json'], {
-      env,
-      encoding: 'utf8',
-      timeout: 60_000,
-      maxBuffer: 8 * 1024 * 1024,
-    }),
-  ).map(({ file }) => relative(process.cwd(), file).replaceAll('\\', '/'));
-  if (files.length === 0 || new Set(files).size !== files.length) throw new Error(`Invalid ${tier} inventory`);
-  return { tier, config, total: files.length, files: files.filter((file) => owner(tier, file) === lane).sort() };
-});
+// The build and the four inventories are independent; sequentially they cost ~7s before any
+// test ran (2026-11-09: ~2s of `vitest list`, ~5s of build), so they overlap.
+const build =
+  !listOnly && lane !== 'quality'
+    ? new Promise((done, fail) => {
+        const child = spawn(process.execPath, ['scripts/build.mjs'], { env, stdio: 'inherit' });
+        child.on('error', (error) => fail(new Error(`CLI build failed: ${error.message}`)));
+        child.on('exit', (code, signal) =>
+          code === 0 ? done() : fail(new Error(`CLI build failed: ${signal ?? code}`)),
+        );
+      })
+    : Promise.resolve();
+// Rejection is handled by the `await build` below; this only avoids an unhandled-rejection crash first.
+build.catch(() => {});
+const plan = await Promise.all(
+  tiers.map(async ([tier, config]) => {
+    const { stdout } = await promisify(execFile)(
+      process.execPath,
+      [vitest, 'list', '--config', config, '--filesOnly', '--json'],
+      { env, encoding: 'utf8', timeout: 60_000, maxBuffer: 8 * 1024 * 1024 },
+    );
+    const files = JSON.parse(stdout).map(({ file }) => relative(process.cwd(), file).replaceAll('\\', '/'));
+    if (files.length === 0 || new Set(files).size !== files.length) throw new Error(`Invalid ${tier} inventory`);
+    return { tier, config, total: files.length, files: files.filter((file) => owner(tier, file) === lane).sort() };
+  }),
+);
 console.log(JSON.stringify({ lane, maxWorkers, plan }, null, 2));
+await build;
 if (!listOnly) {
-  if (lane !== 'quality') {
-    const build = spawnSync(process.execPath, ['scripts/build.mjs'], { env, stdio: 'inherit' });
-    if (build.status !== 0 || build.error)
-      throw new Error(`CLI build failed: ${build.error?.message ?? build.signal ?? build.status}`);
-  }
   const result = spawnSync(process.execPath, [vitest, 'run', '--config', 'vitest.ci.config.ts', '--reporter=verbose'], {
     env: {
       ...env,

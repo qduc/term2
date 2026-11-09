@@ -5,8 +5,6 @@ description: Common issues, file locations, stale cache recovery, and debugging 
 
 ## File & Directory Locations
 
-term2 stores logs, sessions, settings, and caches in platform-standard directories:
-
 ### Configuration (`settings.json`)
 - **Linux**: `~/.local/state/term2-nodejs/settings.json` (or `$XDG_STATE_HOME/term2-nodejs/settings.json`)
 - **macOS**: `~/Library/Logs/term2-nodejs/settings.json`
@@ -70,7 +68,7 @@ OAuth tokens are stored separately under `envPaths('term2').config` (Linux examp
 
 **Symptom**: Running `term2 "do something that writes a file"` outputs text but makes no modifications.
 
-**Explanation**: A positional prompt without `--auto-approve` selects `builtin:lite` (except persisted Mentor/Orchestrator), so tools are unavailable. `--auto-approve` opts out of implicit Lite and enables GREEN/YELLOW heuristic policy, not `/auto-approve always`; RED shell remains refused, and the process may still exit 0. Inspect stderr or JSON `approval_rejected`.
+**Explanation**: Headless runs need `--auto-approve` to use tools. That flag allows GREEN and YELLOW shell commands. For a refused RED command, check stderr or the JSON event `approval_rejected`. The process can still exit with code 0.
 
 **Fix**: Pass `--auto-approve`:
 ```bash

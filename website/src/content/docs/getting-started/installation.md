@@ -19,11 +19,11 @@ term2 --help
 
 You can also install with `pnpm add --global @qduc/term2` if your pnpm global bin directory is configured. If `term2` is not found, check that your package manager's global bin directory is on `PATH`.
 
-Check `term2 --version` for your installation and `npm view @qduc/term2 version` for the latest published release. See [what's new](/term2/getting-started/whats-new/) for release highlights.
+To compare your version with the latest npm release, run `npm view @qduc/term2 version`. See the [release notes](/term2/getting-started/whats-new/).
 
 ## Shell sandbox prerequisites
 
-The shell sandbox is enabled by default. term2 checks whether its runtime and dependencies are available and refuses sandboxed shell execution if they are missing.
+The shell sandbox is on by default. Commands that require it fail if its dependencies are missing.
 
 - **Linux / WSL2:** install `bubblewrap` (`bwrap`), `socat`, and `ripgrep` (`rg`) using your OS package manager. The environment must permit the namespaces bubblewrap needs; restricted containers may not.
 - **macOS:** the runtime uses the system's `sandbox-exec` facility.
@@ -33,7 +33,7 @@ See [sandbox boundaries](/term2/safety/sandbox/) for policy details.
 
 ## Other tools
 
-- **git** for version control and worktree workflows.
+- **git** for version control and worktrees.
 - **fd** (`fd` or `fdfind`) for faster file discovery.
 - **SSH access and credentials** for [remote sessions](/term2/remote/ssh/).
 

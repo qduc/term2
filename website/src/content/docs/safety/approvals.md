@@ -3,18 +3,16 @@ title: Approvals & Run Budgets
 description: Interactive tool approvals, auto-approve modes, and execution budgets.
 ---
 
-term2 balances velocity with security by giving you fine-grained control over which operations execute automatically and which require interactive human approval.
-
 ## Auto-Approval Modes (`/auto-approve`)
 
 Configure shell auto-approval using `/auto-approve` or `shell.autoApproveMode`. The CLI `--auto-approve` flag is separate and applies only to non-interactive prompts.
 
-| Mode | Command | Behavior | Safety Guarantee |
-| :--- | :--- | :--- | :--- |
-| **`off`** *(Default)* | `/auto-approve off` | Shell commands prompt for interactive confirmation. Valid local workspace edits can apply without a prompt; file tools have separate boundary and authorization checks. | Shell confirmation under the default interactive policy. |
-| **`advisory`** | `/auto-approve advisory` | Prompts for confirmation on every command, accompanied by a real-time safety explanation. | High safety with consequence analysis. |
-| **`auto`** | `/auto-approve auto` | Opt-in smart approval mode. Automatically approves safe read-only operations and workspace file modifications. Risky commands (e.g. `rm -rf`, `git reset --hard`, network requests, system path edits) are strictly gated for confirmation. | Balanced velocity. Eliminates repetitive prompts on benign actions while intercepting destructive commands. |
-| **`always`** | `/auto-approve always` | Completely unattended execution mode. Every tool runs without prompts except `ask_user`. Selecting `always` automatically disables the shell sandbox (`sandbox.enabled = false`). | For isolated, disposable environments only. |
+| Mode | Command | Behavior |
+| :--- | :--- | :--- |
+| **`off`** *(Default)* | `/auto-approve off` | Shell commands prompt for interactive confirmation. Valid local workspace edits can apply without a prompt; file tools have separate boundary and authorization checks. |
+| **`advisory`** | `/auto-approve advisory` | Prompts before each command and shows a safety explanation. |
+| **`auto`** | `/auto-approve auto` | Approves commands classified as safe, such as read-only commands and workspace edits. Commands classified as risky still require approval. |
+| **`always`** | `/auto-approve always` | Disables the shell sandbox and skips tool approval prompts. `ask_user` can still ask questions. Use only in an isolated, disposable environment. |
 
 > **Sandbox Interaction:** `always` and `sandbox.enabled` are mutually exclusive: selecting `always` disables the shell sandbox, and enabling the sandbox (`/sandbox` or `sandbox.enabled = true`) immediately demotes `always` to `auto`.
 

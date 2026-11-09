@@ -1,9 +1,9 @@
 ---
 title: First Run
-description: Connect a provider, pick a model, and explore a project before making a change.
+description: Connect a provider and send your first prompt.
 ---
 
-[Install term2](/term2/getting-started/installation/) first. For your first session, use a project you can inspect and choose one of these authentication paths.
+[Install term2](/term2/getting-started/installation/), then sign in or set an API key.
 
 ## 1. Connect a provider
 
@@ -13,7 +13,7 @@ description: Connect a provider, pick a model, and explore a project before maki
 term2 --codex-login
 ```
 
-Complete the browser login with an account that has access to the provider. Login stores credentials; it does not select Codex as the active provider. You will choose a Codex model in the next step.
+Sign in with an eligible ChatGPT account. This saves your credentials. Choose a Codex model in the next step.
 
 ### OpenAI API key
 
@@ -40,15 +40,15 @@ During a session, `/model` or `Ctrl+O` opens model selection; `/providers` manag
 
 > Explain how this project starts. Point me to the entry points and the command for running its tests.
 
-Ask the assistant to inspect before making changes. This request does not change runtime permissions. Review the files and commands the agent uses, then compare its answer with the project itself. A useful first result names the actual entry points and test command, rather than guessing a generic setup.
+Open the files the assistant cites and check the test command against the project’s own instructions.
 
 ## 4. Make one small change
 
-Describe a narrow change and how to check it, for example:
+Ask for a change and specify how to test it.
 
 > Add a test for this edge case, fix the failure, and run that test. Explain the resulting diff.
 
-Default interactive settings prompt for shell commands. Valid local workspace edits can apply without a prompt; file operations outside that boundary or needing additional authorization can ask for approval. Review approval requests, the resulting diff, and check output. Keep the defaults for your first session; see [approvals](/term2/safety/approvals/) and [shell sandboxing](/term2/safety/sandbox/) before changing them.
+By default, term2 asks before running a shell command in an interactive session. Edits within the local workspace can apply without a prompt. Review the diff and test output. See [approvals](/term2/safety/approvals/) and [shell sandboxing](/term2/safety/sandbox/) for the rules.
 
 ## 5. Pick up later
 

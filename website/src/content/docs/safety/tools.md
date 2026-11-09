@@ -1,19 +1,19 @@
 ---
 title: Agent Tools
-description: Built-in tools for file management, shell execution, code context, and sandboxed code running.
+description: Tools for reading and editing files, running shell commands and JavaScript, and searching the web.
 ---
 
-term2 exposes a controlled set of tools to the agent, gated by the active profile and sandbox policies.
+Tool availability depends on the session. Tools follow its approval and sandbox settings.
 
 ## Filesystem Tools
 
 - **`read_file`**: Reads file contents with support for line-number ranges (`start_line` and `end_line`, inclusive and 1-based) and size bounds.
 - **`apply_patch`**: Applies unified patches to files with preview and self-healing syntax recovery.
-- **`search_replace`**: Performs precise contiguous block replacements within a file.
+- **`search_replace`**: Replaces a block of text in a file.
 - **`create_file`**: Creates a new file in the workspace (or overwrites an existing file if explicitly approved).
-- **`glob`**: Finds files and directories using glob patterns (leveraging `fd` when installed).
-- **`grep`**: Performs regex or literal text searches across files (leveraging `ripgrep` when installed).
-- **`read_code_outline`**: Generates high-level symbol outlines (classes, functions, interfaces) for rapid file comprehension.
+- **`glob`**: Finds files and directories using glob patterns (uses `fd` when installed).
+- **`grep`**: Performs regex or literal text searches across files (uses `ripgrep` when installed).
+- **`read_code_outline`**: Lists symbols such as classes, functions, and interfaces.
 - **`code_context_search`**: Searches code symbols and definitions across the codebase.
 
 ## Shell Execution
@@ -40,7 +40,7 @@ term2 exposes a controlled set of tools to the agent, gated by the active profil
 
 - **`ask_user`**: Asks clarifying questions to the user with an interactive prompt and selectable choices.
 - **`ask_mentor`**: Consults the higher-tier mentor model for architectural guidance or code review.
-- **`activate_skill`**: Loads specialized instruction sets and workflows for domain-specific tasks.
+- **`activate_skill`**: Loads instructions from a skill’s `SKILL.md` file.
 - **`list_models`**: Discovers available models and registered providers with pagination, credential readiness, and local session usage stats.
 
 ## Web Research

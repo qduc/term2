@@ -3,11 +3,9 @@ title: Interactive TUI
 description: Using the terminal user interface, prompt composer, queueing, and steering.
 ---
 
-term2's interactive interface combines an input composer with real-time streaming, collapsible tool calls, and unified diff previews.
+The terminal shows replies as they arrive. You can expand tool calls and view file changes as unified diffs.
 
 ## The Prompt Composer
-
-The composer supports multiline input, path completion, and command triggers:
 
 - **Multiline text**: Press `Enter` to submit. Use `Shift+Enter` to insert a newline in terminals that send a supported newline sequence, or paste multiline text.
 - **File & Path completion (`@`)**: Type `@` anywhere in the composer to open the interactive path completion menu. Search for files in the repository and press `Enter` to insert the path into your prompt.
@@ -16,9 +14,7 @@ The composer supports multiline input, path completion, and command triggers:
 
 ## Mid-Turn Prompt Queueing & Steering
 
-While the agent is actively executing a turn (generating responses or executing tools):
-
-- **Steering (`Enter`)**: Type an instruction and press `Enter`. This delivers a real-time steering message at the next request boundary, redirecting the agent without restarting the turn.
+- **Steering (`Enter`)**: Press `Enter` to send an instruction with the next model request in the current turn.
 - **Queueing Follow-Up Prompts (`Alt+Enter` / `Esc+Enter`)**: Press `Alt+Enter` (or `Esc` followed by `Enter`) to queue instructions to run after the active turn finishes.
 - **Queue Editing**: When prompts are queued:
   - Press `Up` arrow while the input is empty to navigate queued items.

@@ -1,6 +1,6 @@
 ---
 title: CLI Flags Reference
-description: Complete reference of command-line flags for term2 and term2 serve.
+description: Command-line flags for term2 and term2 serve.
 ---
 
 ## Interactive & Non-Interactive CLI (`term2`)
@@ -48,7 +48,7 @@ Usage:
 | Flag | Type | Required | Description |
 | :--- | :--- | :---: | :--- |
 | `--local-owner <userId>` | String | **Yes** | Local operator user ID owning the gateway and workspaces. |
-| `--state-dir <dir>` | String | No | Gateway state directory. Defaults to `$XDG_STATE_HOME/term2-nodejs/gateway`. |
+| `--state-dir <dir>` | String | No | Gateway state directory. On Linux, the default is `gateway-next` under `$XDG_STATE_HOME/term2-nodejs` or `~/.local/state/term2-nodejs`. |
 | `--socket <path>` | String | No | Unix domain socket path (default: `<state-dir>/gateway.sock`, mode 0660). Mutually exclusive with `--listen`. |
 | `--listen <host:port>` | String | No | TCP host:port for TLS network mode. Mutually exclusive with `--socket`. Requires `--tls-cert` and `--tls-key`. |
 | `--tls-cert <pem>` | String | Conditional | TLS certificate PEM path (required with `--listen`). |
@@ -59,6 +59,6 @@ Usage:
 | `--workspace-root <dir>` | String | No | Allowed absolute workspace root directories (repeatable). Defaults to user home directory. |
 | `--issuer <iss>` | String | No | Expected token issuer value for client authentication. |
 | `--audience <aud>` | String | No | Expected token audience value for client authentication. |
-| `--allow-write` | Boolean | No | Admit `read_write` workspace grants. Use only with an explicit root narrower than `$HOME`; otherwise roots are strictly read-only. |
+| `--allow-write` | Boolean | No | Allow `read_write` workspace grants. Use with an explicit workspace root narrower than `$HOME`. Without this flag, workspace grants are read-only. |
 
 Gateway examples must include either `--pairing` or `--bff-key`. In BFF-only mode, the browser does not pair or call the gateway directly; the BFF holds the key. BFF-key clients may assert `--local-owner`.

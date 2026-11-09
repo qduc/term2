@@ -11,15 +11,15 @@ term2 [options] [prompt...]
 
 ## Basic Non-Interactive Queries
 
-Execute one-off queries with stdout output:
+Pass a prompt as a command-line argument.
 
 ```bash
 term2 "Explain the purpose of package.json in this project"
 ```
 
-Every new session uses the same default experience. Tool execution is disabled without `--auto-approve`. That flag enables tools under GREEN/YELLOW heuristic policy; it is not the same as `/auto-approve always`, and RED shell commands are still refused.
+Tool execution requires `--auto-approve`. That flag enables tools under GREEN/YELLOW heuristic policy; it is not the same as `/auto-approve always`, and RED shell commands are still refused.
 
-The output streams directly to standard output. Non-error diagnostic logs are printed to standard error.
+Replies stream to stdout. Diagnostic logs go to stderr.
 
 ## Enabling Tool Execution (`--auto-approve`)
 
@@ -33,7 +33,7 @@ term2 --auto-approve "Run pnpm typecheck and fix any trivial lint errors"
 
 ### Quiet Mode (`-q`, `--quiet`)
 
-Suppress non-error diagnostics on stderr to cleanly capture tool output in shell variables:
+Use `-q` to suppress non-error diagnostics on stderr.
 
 ```bash
 SUMMARY=$(term2 -q "Explain what a TODO comment is")
@@ -41,7 +41,7 @@ SUMMARY=$(term2 -q "Explain what a TODO comment is")
 
 ### JSON Mode (`--json`)
 
-Emit newline-delimited JSON (NDJSON) events on standard output for machine consumption:
+Use `--json` to write one JSON event per line to stdout.
 
 ```bash
 term2 --json "Explain common authentication security risks"
@@ -59,7 +59,7 @@ term2 --show-reasoning "Solve this mathematical recurrence relation"
 
 ### Default Execution
 
-The default experience uses a minimal prompt with project instructions included, shell-led codebase work and selected capabilities through `run_code`. Tools still require `--auto-approve` in non-interactive mode:
+A headless session loads project instructions and can use the shell and `run_code` when you pass `--auto-approve`.
 
 ```bash
 term2 "Explain the difference between disk usage and apparent file size"

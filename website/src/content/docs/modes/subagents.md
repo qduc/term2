@@ -1,30 +1,30 @@
 ---
-title: Subagent Swarms
-description: Multi-agent delegation, specialized roles, model tiers, and background task management.
+title: Subagents
+description: Subagent roles, model settings, and background tasks.
 ---
 
-term2 features a modular subagent execution system that isolates computational, search, or modification workloads from the main conversation transcript.
+The assistant can delegate work to subagents. Each subagent runs in a separate conversation.
 
 ## Subagent Roles
 
-Subagents run under distinct role profiles with explicit permission boundaries and execution limits:
+The role sets the subagent’s default model and tool permissions.
 
 ### 1. Explorer
-- **Purpose**: Fast codebase reconnaissance, symbol lookup, file discovery, and dependency mapping.
+- **Purpose**: Find files and symbols, and trace dependencies.
 - **Permissions**: Read-only (`canRead: true`, `canWrite: false`, `canSearchWeb: true`, `canRunShell: true`).
 - **Safety**: Restricted to read operations and non-destructive shell commands (`rg`, `fd`, `git status`).
 - **Default Model Tier**: `agent.cheapModel` (fast and token-efficient).
 
 ### 2. Worker
-- **Purpose**: Autonomous implementation of discrete tasks, writing file patches, refactoring, and running tests.
+- **Purpose**: Edit files and run tests.
 - **Permissions**: Read/Write (`canRead: true`, `canWrite: true`, `canRunShell: true`).
 - **Safety**: Sandboxed to the workspace root. Supports Git worktree isolation to keep experimental work separate from the main branch.
 - **Default Model Tier**: `agent.balancedModel`.
 
 ### 3. Mentor
-- **Purpose**: High-level architectural consultation and second-opinion code review.
+- **Purpose**: Answer design questions and review code.
 - **Permissions**: Advisory only (`canRead: false`, `canWrite: false`, `canRunShell: false`).
-- **Safety**: Receives questions via the `ask_mentor` tool and returns structured recommendations without polluting turn history.
+- **Safety**: The assistant calls `ask_mentor` to get a recommendation.
 - **Default Model Tier**: `agent.smartModel`.
 
 ### 4. Librarian
@@ -33,7 +33,7 @@ Subagents run under distinct role profiles with explicit permission boundaries a
 - **Default Model Tier**: `agent.cheapModel`.
 
 ### 5. Reviewer
-- **Purpose**: Independent review of a change, plan, or design, using explorers to gather evidence before reporting concrete findings.
+- **Purpose**: Review a change, plan, or design. The reviewer can ask explorers to inspect the code.
 - **Permissions**: Delegation is limited to bounded read-only explorers; the reviewer does not edit the workspace.
 - **Default Model Tier**: `agent.smartModel`.
 
@@ -50,7 +50,7 @@ Pool values are configured in the settings UI or as arrays in the corresponding 
 
 ## Background Task Manager (`Ctrl+G`)
 
-Subagents can execute synchronously in the foreground or asynchronously in the background.
+Subagents can run in the foreground or background.
 
 - Press `Ctrl+G` to open the Background Task Manager.
 - Use `Up` and `Down` arrow keys to browse active and completed tasks.
@@ -61,4 +61,4 @@ Subagents can execute synchronously in the foreground or asynchronously in the b
 
 ## Background Check-Ins
 
-The background check-in scheduler periodically notifies the parent agent when background tasks finish or require input, ensuring you are updated without manual polling.
+term2 checks background tasks periodically and notifies the parent agent when a task finishes or needs input.

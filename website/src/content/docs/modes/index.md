@@ -1,19 +1,17 @@
 ---
-title: Default Experience
-description: One default experience, with model selection and subagent delegation.
+title: Session defaults
+description: The default prompt, tools, and model controls in a term2 session.
 ---
 
-Every term2 session starts with the same default experience. It uses a minimal
-prompt, local project instructions, the skills catalog and environment context.
-Use the shell for codebase work and delegate bounded tasks to
-[subagents](/term2/modes/subagents/). Additional capabilities are exposed through
-`run_code` where available. Approval and sandbox policies still apply.
+A new session loads the default prompt, project instructions, the skills catalog,
+and environment details. The assistant can use the shell, delegate tasks to
+[subagents](/term2/modes/subagents/), and call additional tools through
+`run_code` where available. Tools follow the session’s approval and sandbox settings.
 
 Choose a model with `/model` or `Ctrl+O`, and reasoning effort with `/effort`.
 There is no profile picker or mode toggle. Plan, Pair, Mentor and Orchestrator
-are no longer selectable. To start by exploring, ask the assistant to inspect
-and explain a project before proposing changes; this request does not change
-runtime permissions.
+are no longer selectable. You can ask the assistant to explain a project before proposing changes.
+Tool permissions stay the same.
 
 The internal profile backend and historical session metadata remain for
 compatibility. Existing Standard/full/Lite selections normalize to the default,

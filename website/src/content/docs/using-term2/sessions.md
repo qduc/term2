@@ -3,13 +3,13 @@ title: Sessions & Resumption
 description: Resuming, rewinding, forking, and inspecting conversation history.
 ---
 
-term2 persists sessions using append-only event streams. Saved conversation history supports resumption after a terminal closes or a process crashes; a tool interrupted before its outcome was recorded must be verified before retrying. Git checkouts and their worktrees share project-scoped session history.
+term2 saves session events as they happen. You can reopen the conversation after closing the terminal or after a crash. If a tool was interrupted before term2 recorded its result, check what it did before retrying. Git worktrees share the repository’s session history.
 
 ## Resuming Sessions
 
 ### Resuming the Latest Session
 
-To pick up exactly where you left off in the current project directory:
+Run this from the project directory to resume its latest session.
 
 ```bash
 term2 --resume
@@ -49,8 +49,6 @@ term2 --resume --fork
 
 ## Time-Travel Rewind (`/rewind`, `/undo`, `/retry`)
 
-term2 provides granular control over conversation history:
-
 - **Interactive Rewind Picker (`/rewind`)**: Opens a menu detailing previous turns and modified files so you can inspect discards before confirming.
 - **Undo (`/undo`)**: An alias for `/rewind edit`. Discards subsequent turns and places the selected user prompt back into the input composer for editing.
 - **Retry Turn (`/retry`)**: An alias for `/rewind resend`. Discards subsequent turns and immediately re-submits the last prompt to the model.
@@ -59,7 +57,7 @@ term2 provides granular control over conversation history:
 
 ## Restart the Built CLI
 
-Use `/restart` in the interactive terminal to reload the built CLI in place and resume the same saved conversation. This reloads the installed build; it does not install an update or compile source changes. Durably queued text is recovered from storage rather than submitted again automatically. Unsaved composer and queue-edit drafts are not part of that durable handoff; submit or save them before restarting.
+Use `/restart` in the interactive terminal to reload the built CLI in place and resume the same saved conversation. This reloads the installed build; it does not install an update or compile source changes. Restart restores saved queued text without submitting it again. Submit or save any unsaved drafts before restarting.
 
 - Requires POSIX Node with `process.execve` support and a built `dist/cli.js` entry.
 - Windows, Node flags/loaders, and non-empty `NODE_OPTIONS` are not supported. Unsupported launch contexts are refused with a manual resume command.
@@ -78,8 +76,7 @@ While a goal is active, the agent reports a `goal_check` before ending a turn. A
 
 ## Handoff (`/handoff`)
 
-To pass the assistant's final response into a new session or switch to another model:
-- Run `/handoff` to capture and pass the latest assistant response directly to the handoff flow.
+Run `/handoff` to pass the latest assistant response to another model.
 
 ## Continue Without the Terminal UI
 

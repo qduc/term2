@@ -88,19 +88,6 @@ starlight-tabs [role='tab'] {
   box-shadow: 0 8px 24px var(--term2-glow);
 }
 
-/* Homepage section labels. */
-.term2-eyebrow {
-  font-family: var(--sl-font-mono);
-  font-size: var(--sl-text-sm);
-  color: var(--sl-color-accent);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  margin-bottom: 0;
-}
-.term2-eyebrow + h2 {
-  margin-top: 0.25rem;
-}
-
 /* "Works with" provider row. */
 .term2-providers {
   display: flex;

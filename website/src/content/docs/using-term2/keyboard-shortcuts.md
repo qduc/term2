@@ -1,6 +1,6 @@
 ---
 title: Keyboard Shortcuts
-description: Complete reference of keyboard shortcuts in term2.
+description: Keyboard shortcuts for input, approvals, menus, and tasks.
 ---
 
 ## Composer & Input Shortcuts
@@ -9,7 +9,7 @@ description: Complete reference of keyboard shortcuts in term2.
 | :--- | :--- | :--- |
 | `Enter` | Composer (idle) | Submit prompt to model. |
 | `Shift + Enter` | Composer (idle) | Insert a newline in terminals that send a supported newline sequence (including the Alt+Enter sequence). |
-| `Enter` | Composer (active turn) | Steer the active turn in real time at the next request boundary. |
+| `Enter` | Composer (active turn) | Send an instruction with the next model request in the current turn. |
 | `Alt + Enter` / `Esc + Enter` | Composer (active turn) | Queue prompt to execute after the current turn completes. |
 | `@` | Composer | Open interactive file / path completion menu. |
 | `!` prefix | Composer (empty) | Enter direct shell mode. Prompt turns red (`! `). |
@@ -18,7 +18,6 @@ description: Complete reference of keyboard shortcuts in term2.
 | `Ctrl + O` | Composer | Open interactive model picker menu. |
 | `Ctrl + T` | Composer | Open reasoning effort selection menu. |
 | `Ctrl + G` | Global / Composer | Toggle Background Task Manager. |
-| `Shift + Tab` | Global / Composer | Toggle between Standard and Plan operating mode. |
 | `Escape` | Composer | First press shows an Escape hint; a second press clears typed text. With an empty composer during a turn, double Escape interrupts the turn. |
 | `Up` / `Down` | Composer (empty) | Navigate input history (or queued messages if any are pending). |
 | `Ctrl + C` | Global | Clear the draft first, or interrupt the active turn when the draft is empty. Press again within 2 seconds to exit with the usage summary. |

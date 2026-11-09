@@ -1,24 +1,22 @@
 ---
 title: Providers Overview
-description: Supported providers, models, and custom endpoint integration.
+description: Built-in model providers and how to add a custom endpoint.
 ---
-
-term2 features a provider-neutral model layer supporting major commercial LLM APIs, browser OAuth logins, and local endpoints.
 
 ## Built-in Providers
 
-The following providers are registered natively and selectable directly via the `-p` CLI flag:
+Use `-p` with one of these provider IDs.
 
 | Provider | Identifier (`-p`) | Connection Method | Auth Mechanism | Notes |
 | :--- | :--- | :--- | :--- | :--- |
 | **OpenAI** | `openai` | WebSocket Responses / Chat Completions | `OPENAI_API_KEY` or `agent.openai.apiKey` | Default provider. Supports native server-side context management. |
 | **ChatGPT / Codex** | `codex` | WebSocket Responses | PKCE OAuth (`term2 --codex-login`) | Direct login with ChatGPT subscription credentials. |
 | **xAI Grok** | `grok` | Responses API | PKCE OAuth (`term2 --grok-login`) | Encrypted reasoning tokens round-tripped with full continuity. |
-| **OpenRouter** | `openrouter` | HTTP Streaming | `OPENROUTER_API_KEY` or `agent.openrouter.apiKey` | Unified gateway to Claude, Gemini, DeepSeek, Llama, and hundreds more. |
+| **OpenRouter** | `openrouter` | HTTP Streaming | `OPENROUTER_API_KEY` or `agent.openrouter.apiKey` | Offers models from multiple vendors, including Claude, Gemini, DeepSeek, and Llama. |
 
 ## Custom Configured Providers (Anthropic, Gemini, Local Models)
 
-Anthropic and Google Gemini are supported through runtime custom provider adapters (`KNOWN_CUSTOM_PROVIDER_TYPES`), rather than fixed built-in `-p` identifiers. To use direct Anthropic or Google Gemini models (or local models like Ollama / llama.cpp), add them to the `providers` list in `settings.json` or configure them via the interactive `/providers` menu:
+To connect directly to Anthropic, Gemini, or a local server such as Ollama or llama.cpp, add an entry under `providers` in `settings.json` or use the `/providers` menu.
 
 ```json
 {

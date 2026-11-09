@@ -68,8 +68,8 @@ See the [0.35.0 changelog](https://github.com/qduc/term2/blob/v0.35.0/CHANGELOG.
 ## 0.34.0 - October 19, 2026
 
 - Adaptive independent verification for durable goals: `goal_check` proposals can be gated by an independent verifier before goals are closed (`agent.completionVerification`).
-- Reworked interactive settings menu: `/settings` categorizes settings into curated tabs (Models, Providers, Context, Safety, Tools, UI, Hooks) with human-readable labels, dollar-denominated budget editing, masked API keys, and in-place boolean toggling.
-- Declarative provider preset inventory: provider configuration leverages presets for straightforward setup and connection management.
+- `/settings` groups options by category. You can edit budgets in dollars and toggle settings directly. API keys appear masked.
+- Provider setup offers presets.
 - Runtime agent model discovery: agents and `run_code` scripts can query models and providers via `list_models` with filtering, pagination, and credential readiness.
 - Grok client version resolution: resolves the CLI client version dynamically to avoid API version floor rejections.
 
@@ -125,7 +125,7 @@ See the [0.31.1 changelog](https://github.com/qduc/term2/blob/v0.31.1/CHANGELOG.
 - **Themes and skins:** configurable colour themes with automatic terminal-background detection through `ui.theme`, and classic, rail, cards, ledger, and zen layout skins through `ui.skin`.
 - **Interactive input:** queued input and drafts survive approval prompts and queued-message editing.
 - **Web sessions:** live turn status is exposed on reconnect, local errors are preserved, and active chat-completions streams cancel correctly.
-- **Background work:** background-shell watches surface matching output before retention eviction, and completed background agents release their pending approvals.
+- **Background work:** shell watches report matching output before older output is discarded, and completed background agents release their pending approvals.
 
 See the [0.31.0 changelog](https://github.com/qduc/term2/blob/v0.31.0/CHANGELOG.md) for details.
 
@@ -133,7 +133,7 @@ See the [0.31.0 changelog](https://github.com/qduc/term2/blob/v0.31.0/CHANGELOG.
 
 Highlights from 0.30.0:
 
-- **More flexible delegated tasks:** subagents accept a per-invocation specification with a goal, context, tools, constraints, completion criterion, model policy, and budget. Existing roles remain as presets.
+- **Subagent task settings.** Each call can specify a goal, context, tools, constraints, completion criterion, model policy, and budget. Existing roles are available as presets.
 - **Compose child agents in `run_code`:** scripts can start, inspect, collect, and cancel child agents. Child permissions are narrowed to the parent's authority, and approval requests use the session's normal prompt.
 - **Session goal proposals:** the agent can suggest a goal with `propose_goal`; the user must approve it.
 - **More web search options:** Firecrawl and SearXNG join the configurable search providers.

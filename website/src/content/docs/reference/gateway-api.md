@@ -9,11 +9,8 @@ public web API: in a browser deployment the browser talks to your backend-for-fr
 (BFF), and the BFF talks to this API. Keep the private key and paired key material in
 the BFF; never ship them to browser JavaScript.
 
-The source of truth for this page is the live gateway implementation (`source/gateway/`),
-including `contracts.ts`, `assertion.ts`, `server.ts`, `gateway.ts`,
-`interaction-protocol.ts`, and the persistence contracts. Response projections can
-contain provider- or settings-specific values; clients should preserve unknown fields
-and should not assume that every provider exposes the same model/settings fields.
+Model and settings fields can vary by provider. Preserve fields your client does
+not recognize.
 
 ## Transports
 
@@ -189,7 +186,8 @@ null cursor (passing `cursor` is `400 invalid_cursor`). It returns:
 {"workspaces":[{"workspaceId":"...","label":"Project","access":"read"}],"nextCursor":null}
 ```
 
-Workspace discovery is an explicit three-step flow. Validate with
+To find a workspace, validate a path, browse its entries, and select a directory.
+Validate with
 `{"absolutePath":"/absolute/path"}`. A valid response contains
 `{valid:true,candidateId,displayName,expiresAt,checks:[...]}`; invalid responses
 contain `valid:false`, `checks`, `reasonCode`, and `reason`. Browse with
@@ -227,9 +225,8 @@ sandbox, approval, network, and workspace access. Treat the projection as extens
 {"expectedRevision":"<revision>","changes":[{"key":"logging.logLevel","value":"debug"}]}
 ```
 
-At most 100 changes are accepted, values are null, scalar JSON values, or arrays of
-strings, and only the persistable safe surface is writable (currently
-`logging.logLevel`). A successful response is
+Send at most 100 changes. Values can be null, scalar JSON values, or arrays of
+strings. The writable setting is `logging.logLevel`. A successful response is
 `{committed:true,revision,projection}`. A stale revision is `409 settings_conflict`
 with `details.currentRevision` and a current `details.projection`; disallowed keys
 are `403 settings_forbidden`.
@@ -392,9 +389,7 @@ If the cursor was compacted, the initial HTTP response is `410 cursor_compacted`
 `retryable:true`, `details.reloadRequired:true`, `details.latestSequence`, and a
 fresh `details.session` projection. Other journal/generation failures return
 `503 gateway_unavailable` with the same reload hint. Reload the session projection,
-then reconnect from that projection's `projectionSequence`. This cursor is the
-projection-covered boundary and avoids replaying events already represented by the
-reloaded projection. While a turn is still streaming, the transcript holds only its
+then reconnect from that projection's `projectionSequence`. This skips events already included in the reloaded projection. While a turn is still streaming, the transcript holds only its
 user message (the reply is written when the turn settles), so `projectionSequence`
 stops just before that turn's `assistant_started` and replay delivers the turn's text,
 tools, and usage. Omitting `after` means start live from the current high-water

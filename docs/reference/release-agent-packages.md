@@ -2,7 +2,7 @@
 
 > **Superseded for `@qduc/agent-core`.** Since 2026-11-10 that npm name belongs to the harness package
 > developed and released in `qduc/agent-runtime` `packages/core` (prereleases on the `next` tag) and
-> vendored here like wire. The other core sections
+> consumed here as an npm runtime dependency. The other core sections
 > below describe the retired session-runtime snapshot. See
 > [Agent harness core contracts](../plans/agent-runtime/agent-harness-core-contracts.md#resume-here).
 

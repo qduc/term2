@@ -1,4 +1,4 @@
-/** Watch Term2's sources. @qduc/agent-core is a vendored package (vendor/), not built here. */
+/** Watch Term2's sources. @qduc/agent-core is an npm dependency, not built here. */
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 

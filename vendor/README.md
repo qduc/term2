@@ -24,6 +24,7 @@ adding its runtime dependency; see `docs/reference/release-agent-wire.md`.
 
 ## @qduc/agent-core
 
+Term2 consumes `@qduc/agent-core` as a pinned npm runtime dependency. The previous
 `qduc-agent-core-0.2.0-alpha.2.tgz` was packed from agent-runtime commit
 `f56a4d9` and adds tool selection control for local summaries.
 
@@ -32,6 +33,5 @@ repository (formerly `packages/agent-harness-core/`). It was packed with
 `pnpm --filter @qduc/agent-core pack` from
 [`qduc/agent-runtime` commit `3e322ba`](https://github.com/qduc/agent-runtime/commit/3e322ba)
 (branch `ccr-c2e20a05-677q07`). The root CLI pins it as a development dependency
-and `scripts/embed-agent-packages.mjs` ships it beside the build. Change the
-harness in agent-runtime, pack a new version there, add the tarball here and
-update the pin and lockfile together; do not edit the tarball.
+was formerly shipped beside the build. Change the harness in agent-runtime,
+publish a new version there, and update Term2's pin and lockfile together.

@@ -87,6 +87,7 @@
     "@anthropic-ai/sandbox-runtime": "^0.0.56",
     "@modelcontextprotocol/client": "2.0.0",
     "@openrouter/ai-sdk-provider": "^2.9.0",
+    "@qduc/agent-core": "0.2.0-alpha.2",
     "@qduc/web-fetch": "^0.1.4",
     "ai": "^6.0.177",
     "better-sqlite3": "^12.4.1",
@@ -112,7 +113,6 @@
   "devDependencies": {
     "@eslint/js": "^9.39.4",
     "@modelcontextprotocol/server": "2.0.0",
-    "@qduc/agent-core": "file:vendor/qduc-agent-core-0.2.0-alpha.2.tgz",
     "@qduc/agent-wire": "file:vendor/qduc-agent-wire-0.2.3.tgz",
     "@types/better-sqlite3": "^9.6.0",
     "@types/env-paths": "^1.0.2",

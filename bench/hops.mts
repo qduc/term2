@@ -158,7 +158,7 @@ for (const file of sequence.slice(sequence.indexOf(START))) {
   else files.push(file);
 }
 const distinct = [...new Set(files)];
-// Frames in @qduc/agent-core (a vendored package under node_modules) are skipped above, so engine
+// Frames in @qduc/agent-core (a package under node_modules) are skipped above, so engine
 // hops inside the package are not counted; only Term2's own layers are.
 const layerOf = (file: string) => /^src\/([^/]+)\//.exec(file)?.[1] ?? 'other';
 const layers = files.map(layerOf).filter((layer, index, all) => layer !== all[index - 1]);

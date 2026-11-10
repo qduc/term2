@@ -47,7 +47,7 @@ fs.writeFileSync(
   { mode: 0o755 },
 );
 fs.writeFileSync(path.join(dist, 'cli.d.ts'), 'export {};\n');
-// @qduc/agent-core and @qduc/agent-wire are vendored dev dependencies; ship a copy of each beside the build.
+// Ship the vendored @qduc/agent-wire beside the build.
 const embed = spawnSync(process.execPath, ['scripts/embed-agent-packages.mjs'], { cwd: repo, stdio: 'inherit' });
 if (embed.error) throw embed.error;
 if (embed.status !== 0) process.exit(embed.status ?? 1);

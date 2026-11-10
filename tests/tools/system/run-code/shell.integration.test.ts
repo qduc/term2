@@ -212,6 +212,28 @@ function sandboxFixture() {
 }
 
 describe('shell inside run_code through the wrapped tool graph', () => {
+  it('reports missing sandbox dependencies and refuses to execute the command', async () => {
+    let wrapped = false;
+    const f = await harness({
+      approve: () => 'y',
+      sandboxRunner: {
+        availability: async () => ({ type: 'missing_dependency', reason: 'socat not installed' }),
+        wrap: async (command) => {
+          wrapped = true;
+          return { command };
+        },
+        annotateFailure: (_command, stderr) => stderr,
+      },
+    });
+    const target = join(f.cwd, 'must-not-exist.txt');
+    const command = `printf unexpected > ${quote(target)}`;
+    const result = await f.run(`return await tools.shell({ command: ${JSON.stringify(command)} });`);
+    expect(result).toContain('Shell sandbox unavailable (missing_dependency): socat not installed');
+    expect(result).toContain('sandbox="unsandboxed"');
+    expect(wrapped).toBe(false);
+    expect(existsSync(target)).toBe(false);
+  });
+
   it('keeps canonical validation and normalization when bare advertises fewer shell options', async () => {
     const graph = await harness({ bare: true });
     const shell = graph.registry.get('shell')!;

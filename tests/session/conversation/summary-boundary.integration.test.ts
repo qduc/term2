@@ -50,7 +50,9 @@ function fixture() {
     catalogContextWindow: 100_000,
     async *stream(request) {
       requests.push(structuredClone(request));
-      const summary = JSON.stringify(request.input).includes('[Host context-compaction request]');
+      const input = JSON.stringify(request.input);
+      const summary =
+        input.includes('[Host context-compaction request]') || input.includes('# Historical transcript chunk');
       if (summary && failSummary) throw new Error('Fixture summary failed');
       yield {
         type: 'text_delta',
@@ -63,6 +65,7 @@ function fixture() {
     models: { resolve: () => model, list: () => [modelRef] },
     compaction: {
       contextWindow: 100_000,
+      maxRequestInputTokens: undefined as number | undefined,
       settings: { enabled: false, mode: 'local' as const, compactThreshold: 0.8, compactThresholdTokens: null },
     },
   };
@@ -85,6 +88,7 @@ function fixture() {
     log,
     failSummary: () => (failSummary = true),
     allowSummary: () => (failSummary = false),
+    limitSummary: (limit: number) => (deps.compaction.maxRequestInputTokens = limit),
     async reopen() {
       await conversation.close();
       const reopened = openConversation({ ...deps, log: openLog(log.path), facts: readFacts(log.path) });
@@ -144,6 +148,34 @@ it.each<Item>([
   expect(f.requests.at(-1)!.input.some((item) => item.id === original[0]!.id)).toBe(false);
 });
 
+it('keeps chunk summaries tool-free after session preparation and restores normal tools afterward', async () => {
+  const f = fixture();
+  const request = {
+    ...settings,
+    tools: [{ name: 'fixture_tool', description: 'schema padding '.repeat(1500), inputSchema: { type: 'object' } }],
+  };
+  for (const id of ['first', 'second', 'third']) await drain(f.conversation.run({ ...request, input: [user(id)] }));
+  f.limitSummary(8000);
+  const result = await f.conversation.command(
+    { commandId: 'chunked-compaction', operation: { kind: 'compact' } },
+    request,
+    async () => {},
+  );
+  expect(result.result).toMatchObject({ kind: 'finished', receipt: { outcome: { kind: 'compacted' } } });
+  const summaries = f.requests.filter((request) =>
+    JSON.stringify(request.input).includes('# Historical transcript chunk'),
+  );
+  expect(summaries.length).toBeGreaterThan(0);
+  for (const summary of summaries) {
+    expect(summary.tools).toEqual([]);
+    expect(summary.toolChoice).toBe('none');
+  }
+  const reopened = await f.reopen();
+  await drain(reopened.run({ ...request, input: [user('after-chunked-compaction')] }));
+  expect(f.requests.at(-1)!.tools.map((tool) => tool.name)).toEqual(['fixture_tool', 'goal_check']);
+  expect(f.requests.at(-1)!.toolChoice).toBeUndefined();
+});
+
 it('lets accepted history_replaced own an empty-replaces checkpoint', async () => {
   const f = fixture();
   await drain(f.conversation.run({ ...settings, input: original }));
@@ -175,10 +207,15 @@ it('keeps failed local compaction transactional and replays a successful checkpo
   const result = await compact('successful-compaction');
   expect(result.result).toMatchObject({ kind: 'finished', receipt: { outcome: { kind: 'compacted' } } });
   const replacement = f.conversation.acceptedHistory();
+  const summaryRequest = f.requests.at(-1)!;
+  expect(summaryRequest.toolChoice).toBe('none');
+  // Live-prefix summaries retain the prepared schemas for cache affinity.
+  expect(summaryRequest.tools).toEqual(f.requests[0]!.tools);
   expect(replacement[0]).toMatchObject({ type: 'summary' });
   expect(replacement.filter((item) => item.type === 'user_message')).toEqual(['first', 'second', 'third'].map(user));
   expect(replacement.some((item) => item.type === 'assistant_message' && item.id === before[1]!.id)).toBe(false);
   const reopened = await f.reopen();
   await drain(reopened.run({ ...settings, input: [user('after-compaction')] }));
   expect(f.requests.at(-1)!.input).toEqual([...replacement, user('after-compaction')]);
+  expect(f.requests.at(-1)!.toolChoice).toBeUndefined();
 });

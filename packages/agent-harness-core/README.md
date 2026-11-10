@@ -59,6 +59,12 @@ policy and continuity are optional. A host can supply `accounting` pricing and
 subscription callbacks; without them, actual provider charges are retained and
 unknown rates stay unpriced. No provider catalog or host settings are loaded.
 
+Local summaries set `ModelRequest.toolChoice` to `none`. Live-prefix summaries
+retain their tool schemas for cache matching; chunk summaries keep an empty
+tool list. Auxiliary preparation preserves these tool lists and the selection
+override even when the host normally adds session tools. Provider adapters must
+forward the override; an unexpected summary tool call still fails without execution.
+
 `startNestedTurn` scopes offered tools and enforces native branch limits. Hosts
 own tool-name policy; Term2 applies its root-only tool restriction in Session.
 The public continuity, tool-pair repair check, context policy, budget, and cost

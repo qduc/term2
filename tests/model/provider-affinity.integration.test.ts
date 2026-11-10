@@ -33,7 +33,7 @@ import { withSessionScope } from '../../src/app/application-models.js';
 import { createToolSurface } from '../../src/app/tool-surface.js';
 import type { ProfileSelection } from '../../src/app/tool-contract.js';
 import type { InteractionRequest } from '../../src/engine/index.js';
-import type { Model, ModelAffinity } from '../../src/model/index.js';
+import type { Model, ModelAffinity, ModelRequest } from '../../src/model/index.js';
 import { createMockSettingsService } from '../helpers/settings-service.mock.js';
 
 const logger = {
@@ -149,11 +149,11 @@ function install(definition: ProviderDefinition) {
     previous ? registerProvider(previous, { allowOverride: true }) : unregisterProvider(definition.id),
   );
 }
-async function collect(model: Model, affinity?: ModelAffinity) {
+async function collect(model: Model, affinity?: ModelAffinity, overrides: Partial<ModelRequest> = {}) {
   const events = [];
   let dispatches = 0;
   for await (const event of model.stream(
-    { model: model.ref, input: [], instructions: 'test', tools: [], ...(affinity ? { affinity } : {}) },
+    { model: model.ref, input: [], instructions: 'test', tools: [], ...(affinity ? { affinity } : {}), ...overrides },
     new AbortController().signal,
     () => dispatches++,
   ))
@@ -161,6 +161,34 @@ async function collect(model: Model, affinity?: ModelAffinity) {
   expect(events.at(-1)?.type).toBe('done');
   expect(dispatches).toBe(1);
 }
+
+it('carries tool suppression to OpenRouter and compatible HTTP requests without changing ordinary turns', async () => {
+  const { receipts, baseURL } = await fixture();
+  const settings = createMockSettingsService({
+    'agent.retryAttempts': 0,
+    'agent.openrouter.apiKey': 'fixture',
+    'agent.openrouter.baseUrl': baseURL,
+    providers: [{ name: 'tool-choice-fixture', type: 'openai-compatible', baseUrl: baseURL, apiKey: 'fixture' }],
+  });
+  const registry = createProviderRegistry({ settings, logger });
+  for (const provider of ['openrouter', 'tool-choice-fixture']) {
+    const model = registry.resolve({ provider, model: 'fixture' });
+    const request = {
+      model: model.ref,
+      instructions: 'Summarize without actions.',
+      input: [],
+      tools: [{ name: 'fixture_tool', description: 'Keep this schema.', inputSchema: { type: 'object' } }],
+    };
+    await collect(model, undefined, { ...request, toolChoice: 'none' });
+    expect(receipts.at(-1)!.body).toMatchObject({
+      tool_choice: 'none',
+      tools: [{ function: { name: 'fixture_tool' } }],
+    });
+    await collect(model, undefined, request);
+    expect(receipts.at(-1)!.body).not.toHaveProperty('tool_choice');
+    expect(receipts.at(-1)!.body).toHaveProperty('tools');
+  }
+});
 
 it('uses explicit request affinity across cached provider adapters and independent ambient sessions', async () => {
   const { receipts, baseURL } = await fixture();

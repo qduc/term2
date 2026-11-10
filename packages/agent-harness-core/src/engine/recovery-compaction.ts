@@ -304,6 +304,7 @@ async function compactLocally(
   );
   const liveRequest = selfContained({
     ...input.request,
+    toolChoice: 'none',
     input: [...input.request.input, summaryMessage(CONTEXT_COMPACTION_REQUEST)],
     maxOutputTokens: summaryOutputCap,
   });
@@ -334,6 +335,7 @@ async function compactLocally(
         ...input.request,
         instructions: CONTEXT_COMPACTION_INSTRUCTIONS,
         tools: [],
+        toolChoice: 'none',
         input: [summaryMessage(buildContextCompactionInput(summaryText || null, JSON.stringify(chunk)))],
         maxOutputTokens: summaryOutputCap,
       });

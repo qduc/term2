@@ -331,9 +331,16 @@ export class TurnModel<AppCtx = unknown> {
       signal: this.signal,
     });
     if (this.signal.aborted) throw cancelled();
-    // Like legacy, the live-prefix summary keeps the session's instructions and tools (its prompt says not to call
-    // them); chunk summaries arrive with their own compaction instructions and no tools.
-    const prepared = this.#withRecovery(selfContained(surface?.request ?? canonical));
+    // Keep live-prefix schemas for caching and chunk summaries tool-free. Host
+    // preparation may add session tools; auxiliary work must retain its own
+    // tool surface and selection policy rather than acquiring new capabilities.
+    const prepared = this.#withRecovery(
+      selfContained({
+        ...(surface?.request ?? canonical),
+        tools: canonical.tools,
+        ...(canonical.toolChoice ? { toolChoice: canonical.toolChoice } : {}),
+      }),
+    );
     this.#admit(prepared);
     return { request: prepared, modelStep };
   }

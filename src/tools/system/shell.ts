@@ -1073,7 +1073,7 @@ export function createShellToolDefinition(deps: {
                 'Shell sandbox initialization failed; refusing unsandboxed fallback',
                 withExecutionCorrelation({ error: error instanceof Error ? error.message : String(error) }),
               );
-              return `Error: ${SANDBOX_ESCAPE_INSTRUCTION}`;
+              return `Error: Shell sandbox initialization failed. Check Term2 logs for details. ${SANDBOX_ESCAPE_INSTRUCTION}`;
             }
           } else {
             loggingService.warn(
@@ -1083,7 +1083,8 @@ export function createShellToolDefinition(deps: {
                 reason: 'reason' in sandboxAvailability ? sandboxAvailability.reason : undefined,
               }),
             );
-            return `Error: ${SANDBOX_ESCAPE_INSTRUCTION}`;
+            const reason = 'reason' in sandboxAvailability ? `: ${sandboxAvailability.reason}` : '';
+            return `Error: Shell sandbox unavailable (${sandboxAvailability.type})${reason}. ${SANDBOX_ESCAPE_INSTRUCTION}`;
           }
         }
 

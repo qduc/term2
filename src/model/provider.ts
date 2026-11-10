@@ -358,6 +358,7 @@ function toProviderRequest(
     instructions: request.instructions,
     input: historyToInput(request.input, ref.provider),
     tools: request.tools.map(toolDefinition),
+    ...(request.toolChoice ? { toolChoice: request.toolChoice } : {}),
     ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
     ...(request.reasoning ? { reasoning: { effort: request.reasoning, summary: 'auto' as const } } : {}),
     ...(request.maxOutputTokens !== undefined ? { maxTokens: request.maxOutputTokens } : {}),

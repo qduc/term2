@@ -122,6 +122,8 @@ export type ModelRequest = {
   readonly instructions: string;
   readonly input: readonly Item[];
   readonly tools: readonly ToolSpec[];
+  /** Suppress tool selection for auxiliary text generation without changing cached tool schemas. */
+  readonly toolChoice?: 'none';
   readonly reasoning?: ReasoningEffort;
   readonly maxOutputTokens?: number;
   readonly temperature?: number;

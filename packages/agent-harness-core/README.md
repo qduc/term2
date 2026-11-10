@@ -1,5 +1,10 @@
 # Agent harness core
 
+Development copy. Releases of `@qduc/agent-core` are published from
+[qduc/agent-runtime](https://github.com/qduc/agent-runtime) `packages/core`; copy this
+`src/` there for a release (see its `docs/release.md`). This copy is `private` so it
+cannot be published from Term2.
+
 The portable, application-owned turn loop used by Term2. Hosts own history,
 persistence, providers, tools, and application context. This ESM package requires
 Node 24 and has no runtime dependencies. Import only

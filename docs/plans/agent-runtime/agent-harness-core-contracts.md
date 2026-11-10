@@ -10,8 +10,9 @@ still undecided.
 - **Package name.** Decided 2026-11-10: `@qduc/agent-core`. The directory stays
   `packages/agent-harness-core/` so build, guard and provenance paths are unchanged. Term2 consumes it as a
   workspace package and bundles it into its own build.
-- **First npm alpha.** The manifest is `0.2.0-alpha.1` with `publishConfig` `{"access": "public", "tag":
-  "next"}`, so a plain `npm publish` from the package directory goes to the `next` tag. `0.1.0` was
+- **First npm alpha.** `0.2.0-alpha.1`, published from `qduc/agent-runtime` `packages/core` through its
+  manual `publish-agent-packages.yml` (input `package: core`), always on the `next` dist-tag. This directory
+  is the development copy and is `private`; copy its `src/` there for each release. `0.1.0` was
   published on 2026-11-08 from the retired `qduc/agent-runtime` snapshot and then unpublished, so that
   version can never be reused. Publishing needs the owner's npm credentials; check `npm view @qduc/agent-core
   dist-tags` to see whether it has happened.

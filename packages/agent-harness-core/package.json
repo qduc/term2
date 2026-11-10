@@ -1,6 +1,7 @@
 {
   "name": "@qduc/agent-core",
   "version": "0.2.0-alpha.1",
+  "private": true,
   "description": "Portable, application-owned agent turn harness",
   "license": "MIT",
   "type": "module",
@@ -21,10 +22,6 @@
   "files": [
     "dist"
   ],
-  "publishConfig": {
-    "access": "public",
-    "tag": "next"
-  },
   "scripts": {
     "build": "node scripts/build.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"

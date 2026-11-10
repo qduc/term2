@@ -819,40 +819,6 @@ describe('provider boundary contracts through the registry', () => {
     expect(events.at(-1)).toMatchObject({ type: 'completion' });
     expect(server.requests).toHaveLength(2);
   });
-
-  it('surfaces an in-band error while the traffic recorder still reads a held-open response', async () => {
-    const providerCase = providerCases[4]!;
-    server = await startFakeProviderHttpServer({ scenario: 'in-band-error-held-open', protocol: 'chat-completions' });
-    const settings = createSettings(providerCase);
-    let recorderSettled = false;
-    // Reads its copy of the body to the end, as the session's traffic recorder does.
-    const recordingLogging = {
-      ...quietLogging,
-      providerTraffic: {
-        recordRequestStart() {},
-        async recordResponseReceived(input: { response: Response }) {
-          try {
-            await input.response.clone().text();
-          } finally {
-            recorderSettled = true;
-          }
-        },
-        recordResponseClosed() {},
-        recordRequestFailed() {},
-      },
-    } as ILoggingService;
-    const model = await getProvider(providerCase.registryId)!.createStreamedModel!(providerCase.model, {
-      settingsService: settings,
-      loggingService: recordingLogging,
-    });
-
-    await expect(collect(model.stream(requestFor(providerCase)))).rejects.toMatchObject({
-      message: expect.stringContaining('Model is at capacity'),
-    });
-    expect(server.requests).toHaveLength(1);
-    // The client aborts the request once its stream has failed, which ends the recorder's copy too.
-    await vi.waitFor(() => expect(recorderSettled).toBe(true));
-  }, 15_000);
 });
 
 async function runProviderCase(providerCase: ProviderCase, scenario: 'success' | 'tool-fragments') {

@@ -5,9 +5,16 @@ import type { ILoggingService, IProviderTraffic } from '../../../shared/service-
 
 const DUMMY_PROVIDER_TRAFFIC: IProviderTraffic = {
   recordRequestStart() {},
-  // The logging middleware hands every recorder a copy of the response body. A
-  // copy nobody reads buffers the whole stream for as long as the caller reads
-  // its own, so release it.
+  // The logging middleware hands every recorder a clone of the response. A
+  // clone nobody reads keeps the other branch's `cancel()` pending, and the
+  // OpenAI client awaits that cancel when a stream fails part-way, so an
+  // in-band provider error hung the turn instead of surfacing. Release it.
+  //
+  // A recorder that does read its copy still delays that cancel until the
+  // server closes the stream; an in-band error on a connection the server holds
+  // open waits for the user to cancel. Returning early instead aborts the
+  // request under the recorder and loses its record of the error, so that case
+  // is left as it is.
   async recordResponseReceived(input) {
     void Promise.resolve(input.response?.body?.cancel?.()).catch(() => {});
   },

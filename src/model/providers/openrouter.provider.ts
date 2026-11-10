@@ -68,6 +68,10 @@ const MAX_UPSTREAM_ERROR_DETAIL_LENGTH = 500;
  * OpenRouter's own message for an upstream failure is often just "Provider
  * returned error"; which upstream failed and what it said are in
  * `error.metadata`. Append them so the message a user sees names the cause.
+ *
+ * Failure classification reads the message for words such as "abort" or
+ * "connection error", so upstream text can steer it. The SDK this replaced put
+ * the same text in the message, so that exposure is unchanged.
  */
 function withUpstreamErrorDetail(error: unknown): unknown {
   if (!(error instanceof Error)) return error;
@@ -76,7 +80,7 @@ function withUpstreamErrorDetail(error: unknown): unknown {
   if (!metadata) return error;
   const upstream = typeof metadata.provider_name === 'string' ? metadata.provider_name.trim() : '';
   const raw =
-    typeof metadata.raw === 'string' ? metadata.raw : metadata.raw === undefined ? '' : JSON.stringify(metadata.raw);
+    typeof metadata.raw === 'string' ? metadata.raw : metadata.raw == null ? '' : JSON.stringify(metadata.raw);
   const detail = [upstream ? `[${upstream}]` : '', raw.trim().slice(0, MAX_UPSTREAM_ERROR_DETAIL_LENGTH)]
     .filter(Boolean)
     .join(' ');

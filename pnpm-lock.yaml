@@ -319,8 +319,8 @@ importers:
         specifier: 2.0.0
         version: 2.0.0
       '@qduc/agent-core':
-        specifier: file:vendor/qduc-agent-core-0.2.0-alpha.1.tgz
-        version: file:vendor/qduc-agent-core-0.2.0-alpha.1.tgz
+        specifier: file:vendor/qduc-agent-core-0.2.0-alpha.2.tgz
+        version: file:vendor/qduc-agent-core-0.2.0-alpha.2.tgz
       '@qduc/agent-wire':
         specifier: file:vendor/qduc-agent-wire-0.2.3.tgz
         version: file:vendor/qduc-agent-wire-0.2.3.tgz
@@ -1129,9 +1129,9 @@ packages:
   '@pondwader/socks5-server@1.0.10':
     resolution: {integrity: sha512-bQY06wzzR8D2+vVCUoBsr5QS2U6UgPUQRmErNwtsuI6vLcyRKkafjkr3KxbtGFf9aBBIV2mcvlsKD1UYaIV+sg==}
 
-  '@qduc/agent-core@file:vendor/qduc-agent-core-0.2.0-alpha.1.tgz':
-    resolution: {integrity: sha512-JGyOJ37naa/mGGzuPkB4inDMCn6hXOKO4Co1KVK/cls7by52PwAA1K2beLxkiGENjFOD0sckuZBKNZyyEvSvcw==, tarball: file:vendor/qduc-agent-core-0.2.0-alpha.1.tgz}
-    version: 0.2.0-alpha.1
+  '@qduc/agent-core@file:vendor/qduc-agent-core-0.2.0-alpha.2.tgz':
+    resolution: {integrity: sha512-5JZ5f1uFXRaNP4IVvRfIJegxNZfzE3eu5GXw4hGOd3moIRmLqrZdklxAOSMmKe9gss5rgB7eSFqNsFQHQ7nSPw==, tarball: file:vendor/qduc-agent-core-0.2.0-alpha.2.tgz}
+    version: 0.2.0-alpha.2
     engines: {node: '>=24'}
 
   '@qduc/agent-wire@file:vendor/qduc-agent-wire-0.2.3.tgz':
@@ -4811,7 +4811,7 @@ snapshots:
 
   '@pondwader/socks5-server@1.0.10': {}
 
-  '@qduc/agent-core@file:vendor/qduc-agent-core-0.2.0-alpha.1.tgz': {}
+  '@qduc/agent-core@file:vendor/qduc-agent-core-0.2.0-alpha.2.tgz': {}
 
   '@qduc/agent-wire@file:vendor/qduc-agent-wire-0.2.3.tgz': {}
 

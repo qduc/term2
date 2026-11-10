@@ -108,7 +108,12 @@ sticky-routing keys for marked helpers rather than routing by the disposable
 helper-history key. Helper chain bookkeeping is released by its exact key after
 success or failure; the shared root transport is not closed. A live call through the implemented generator
 reported 115,840 cached tokens out of 115,920 input tokens, with one paid request
-and unchanged source history. Summary tool schemas stay present for prefix matching, but their
+and unchanged source history. Live-prefix summary tool schemas stay present for prefix matching,
+with `toolChoice: 'none'` forwarded to the provider. Chunk summaries retain no tools after
+host request preparation; session goal, memory and rollover tools must not leak into them.
+The model must return text even when historical messages contain tool calls. An observed
+OpenRouter run repeatedly attempted shell calls during summaries when selection was left
+implicit, so prompt instructions alone are insufficient. Summary tools'
 executable bodies and approval callbacks are replaced: an unexpected tool call
 fails the helper rather than executing a session tool. Native compaction is
 unchanged. Parallel reduction and structured patch-based reduction remain later

@@ -5,6 +5,8 @@ description: Shell sandboxing policies, path protections, and network isolation.
 
 The shell sandbox restricts which files a command can read or write and which network hosts it can reach. Commands that require the sandbox fail if its runtime is unavailable.
 
+If term2 reports a missing sandbox dependency, install the named program and make sure it is on the `PATH` inherited by term2. On Linux this includes `bwrap` and `socat`. For initialization failures, check the term2 logs. A failed sandbox does not automatically allow the command to run outside it; an unsandboxed run still requires explicit approval.
+
 For most projects, keep the default `standard` policy: commands can write inside the workspace and authorized temporary directories, while sensitive paths are protected. Use `/sandbox` to toggle the sandbox, or `/settings` to change its policy. Choose `strict` if you also want to restrict general reads outside the workspace.
 
 If a command needs documentation outside the workspace, add a read allowance below. If it needs network access, see the network setting before changing it. Sandbox settings apply to shell commands; see [approvals](/term2/safety/approvals/) for when term2 asks to run them.

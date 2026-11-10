@@ -1,6 +1,11 @@
 import type { SandboxManager as RuntimeSandboxManager, SandboxRuntimeConfig } from '@anthropic-ai/sandbox-runtime';
 import { SANDBOX_TEMP_DIR } from '../../../shared/utils/shell/temp-dir.js';
-import { createSandboxRuntimeConfig, type SandboxAvailability, type ShellSandboxRunner } from './sandbox-policy.js';
+import {
+  createSandboxRuntimeConfig,
+  SANDBOX_ESCAPE_INSTRUCTION,
+  type SandboxAvailability,
+  type ShellSandboxRunner,
+} from './sandbox-policy.js';
 import { requestSandboxNetworkApproval } from './sandbox-network-approval.js';
 
 /**
@@ -13,6 +18,14 @@ let loadedManager: typeof RuntimeSandboxManager | undefined;
 async function sandboxManager(): Promise<typeof RuntimeSandboxManager> {
   loadedManager ??= (await import('@anthropic-ai/sandbox-runtime')).SandboxManager;
   return loadedManager;
+}
+
+/** Distinguish missing runtime prerequisites from a command denied by a working sandbox. */
+export function sandboxFailure(availability?: Exclude<SandboxAvailability, { type: 'available' }>): string {
+  const problem = availability
+    ? `Shell sandbox unavailable (${availability.type})${'reason' in availability ? `: ${availability.reason}` : ''}.`
+    : 'Shell sandbox initialization failed. Check Term2 logs for details.';
+  return `Error: ${problem} ${SANDBOX_ESCAPE_INSTRUCTION}`;
 }
 
 export class AnthropicShellSandboxRunner implements ShellSandboxRunner {

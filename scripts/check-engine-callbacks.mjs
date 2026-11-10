@@ -81,7 +81,8 @@ for (const statement of types?.statements ?? []) {
       }
   }
 }
-if (callbacks.size < 8) report(`engine-callbacks: found only ${callbacks.size} callbacks in @qduc/agent-core engine/types.d.ts`);
+if (callbacks.size < 8)
+  report(`engine-callbacks: found only ${callbacks.size} callbacks in @qduc/agent-core engine/types.d.ts`);
 
 // 2. Writers.
 const journal = program.getSourceFile(path.join(repo, 'src/session/conversation-journal.ts'));

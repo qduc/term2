@@ -8,10 +8,7 @@ import { spawnSync } from 'node:child_process';
 const receiptName = '.term2-build-provenance.json';
 const outputs = { direct: 'dist' };
 const commonInputs = ['scripts', 'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'tsconfig.json'];
-const directInputs = [
-  'src',
-  'tsconfig.build.json',
-];
+const directInputs = ['src', 'tsconfig.build.json'];
 
 /** Stable path+content digest. Refuse links rather than miss a compiler-read target. */
 function digest(root, entries, exclude = '') {

@@ -24,6 +24,9 @@ adding its runtime dependency; see `docs/reference/release-agent-wire.md`.
 
 ## @qduc/agent-core
 
+`qduc-agent-core-0.2.0-alpha.2.tgz` was packed from agent-runtime commit
+`f56a4d9` and adds tool selection control for local summaries.
+
 `qduc-agent-core-0.2.0-alpha.1.tgz` is the turn harness that graduated from this
 repository (formerly `packages/agent-harness-core/`). It was packed with
 `pnpm --filter @qduc/agent-core pack` from

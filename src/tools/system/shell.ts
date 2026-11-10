@@ -29,7 +29,7 @@ import {
   type SandboxAvailability,
   type ShellSandboxRunner,
 } from '../shell/sandbox/sandbox-policy.js';
-import { getDefaultShellSandboxRunner } from '../shell/sandbox/shell-sandbox-runner.js';
+import { getDefaultShellSandboxRunner, sandboxFailure } from '../shell/sandbox/shell-sandbox-runner.js';
 import { DETAILED_DENIED_READ_INSTRUCTION } from '../shell/sandbox/denied-read-detector.js';
 import type { DeniedReadInfo } from '../shell/sandbox/denied-read-detector.js';
 import { getProjectAllowReadStore } from '../shell/sandbox/denied-read-stores.js';
@@ -1073,7 +1073,7 @@ export function createShellToolDefinition(deps: {
                 'Shell sandbox initialization failed; refusing unsandboxed fallback',
                 withExecutionCorrelation({ error: error instanceof Error ? error.message : String(error) }),
               );
-              return `Error: Shell sandbox initialization failed. Check Term2 logs for details. ${SANDBOX_ESCAPE_INSTRUCTION}`;
+              return sandboxFailure();
             }
           } else {
             loggingService.warn(
@@ -1083,8 +1083,7 @@ export function createShellToolDefinition(deps: {
                 reason: 'reason' in sandboxAvailability ? sandboxAvailability.reason : undefined,
               }),
             );
-            const reason = 'reason' in sandboxAvailability ? `: ${sandboxAvailability.reason}` : '';
-            return `Error: Shell sandbox unavailable (${sandboxAvailability.type})${reason}. ${SANDBOX_ESCAPE_INSTRUCTION}`;
+            return sandboxFailure(sandboxAvailability);
           }
         }
 

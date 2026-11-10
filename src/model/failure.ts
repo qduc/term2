@@ -24,8 +24,8 @@ import { isRetryRecoveryBudgetExhaustedError } from './failure/retry-recovery-bu
 const PROVIDER_CONTEXT_OVERFLOW =
   'Provider rejected context capacity. Work is retained. Compact or choose a model with verified larger capacity before resuming.';
 
-import { ModelFailure, type ModelRecoveryEvidence } from '@qduc/agent-harness-core';
-export { ModelFailure, type ModelRecoveryEvidence } from '@qduc/agent-harness-core';
+import { ModelFailure, type ModelRecoveryEvidence } from '@qduc/agent-core';
+export { ModelFailure, type ModelRecoveryEvidence } from '@qduc/agent-core';
 
 export type FailureScope = {
   readonly capabilities: ModelCapabilities;

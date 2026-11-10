@@ -318,9 +318,9 @@ importers:
       '@modelcontextprotocol/server':
         specifier: 2.0.0
         version: 2.0.0
-      '@qduc/agent-harness-core':
-        specifier: workspace:*
-        version: link:packages/agent-harness-core
+      '@qduc/agent-core':
+        specifier: file:vendor/qduc-agent-core-0.2.0-alpha.1.tgz
+        version: file:vendor/qduc-agent-core-0.2.0-alpha.1.tgz
       '@qduc/agent-wire':
         specifier: file:vendor/qduc-agent-wire-0.2.3.tgz
         version: file:vendor/qduc-agent-wire-0.2.3.tgz
@@ -399,8 +399,6 @@ importers:
       vitest:
         specifier: ^4.1.9
         version: 4.1.9(@opentelemetry/api@1.9.0)(@types/node@24.10.1)(@vitest/coverage-v8@4.1.9)(jsdom@27.4.0)(vite@8.0.16(@types/node@24.10.1)(esbuild@0.25.12)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0))
-
-  packages/agent-harness-core: {}
 
   web-client:
     dependencies:
@@ -1130,6 +1128,11 @@ packages:
 
   '@pondwader/socks5-server@1.0.10':
     resolution: {integrity: sha512-bQY06wzzR8D2+vVCUoBsr5QS2U6UgPUQRmErNwtsuI6vLcyRKkafjkr3KxbtGFf9aBBIV2mcvlsKD1UYaIV+sg==}
+
+  '@qduc/agent-core@file:vendor/qduc-agent-core-0.2.0-alpha.1.tgz':
+    resolution: {integrity: sha512-JGyOJ37naa/mGGzuPkB4inDMCn6hXOKO4Co1KVK/cls7by52PwAA1K2beLxkiGENjFOD0sckuZBKNZyyEvSvcw==, tarball: file:vendor/qduc-agent-core-0.2.0-alpha.1.tgz}
+    version: 0.2.0-alpha.1
+    engines: {node: '>=24'}
 
   '@qduc/agent-wire@file:vendor/qduc-agent-wire-0.2.3.tgz':
     resolution: {integrity: sha512-+nw7QiaXKHj82Wq6MM8AHdb4EJW4Z9bY0j80FbZkBSrHPakM1qE/1/nWPUwv2HgQYEOINwkCD8MijlevZyyNyw==, tarball: file:vendor/qduc-agent-wire-0.2.3.tgz}
@@ -4807,6 +4810,8 @@ snapshots:
   '@oxc-project/types@0.133.0': {}
 
   '@pondwader/socks5-server@1.0.10': {}
+
+  '@qduc/agent-core@file:vendor/qduc-agent-core-0.2.0-alpha.1.tgz': {}
 
   '@qduc/agent-wire@file:vendor/qduc-agent-wire-0.2.3.tgz': {}
 

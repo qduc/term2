@@ -1,5 +1,5 @@
 /** Term2 compatibility surface; implementation lives in the portable harness package. */
-export { clampRunBudgetPolicy } from '@qduc/agent-harness-core';
+export { clampRunBudgetPolicy } from '@qduc/agent-core';
 export type {
   RunBudgetPolicy,
   RunBudgetEvent,
@@ -7,5 +7,5 @@ export type {
   RunBudgetSnapshot,
   ToolStallObservation,
   ModelRequestCost,
-} from '@qduc/agent-harness-core';
+} from '@qduc/agent-core';
 export { RunBudget, readRunBudgetPolicy } from './agent-runtime/run-budget.js';

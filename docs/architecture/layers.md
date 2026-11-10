@@ -3,8 +3,9 @@
 This describes term2's source tree, `src/`, which began as the term2-next
 rewrite. Its production entry is `src/app/cli.ts`, built by `pnpm build` to
 `dist/src/app/cli.js` and started by the package's `dist/cli.js` (#86). Term2 application code lives in
-`src/`; the reusable turn loop and contracts live in
-`packages/agent-harness-core/src/`. Legacy code the CLI no longer reached was deleted (#88) and the rest of
+`src/`; the reusable turn loop and contracts live in `@qduc/agent-core`, developed in
+[qduc/agent-runtime](https://github.com/qduc/agent-runtime) and vendored here (paths below written
+`agent-runtime/packages/core/src/...` are in that repository). Legacy code the CLI no longer reached was deleted (#88) and the rest of
 the old `source/` tree was moved into these layers (#87). Tests live in the
 root `tests/` folder, laid out by the same layer names.
 
@@ -164,11 +165,11 @@ socket attach to the same host the same way.
    `submit` on the live `DirectSession` (`session/session.ts`).
 4. The session's `Conversation` (`session/conversation.ts`) appends the
    admission facts and starts a portable turn through `session/harness.ts`
-   (`packages/agent-harness-core/src/engine/turn.ts`). `session/conversation-turn.ts` is the only reader of that
+   (`agent-runtime/packages/core/src/engine/turn.ts`). `session/conversation-turn.ts` is the only reader of that
    turn's events: it appends each event's facts to the log and then calls
    `accept(token)`, and the turn does not advance past an event until it is
    accepted.
-5. `packages/agent-harness-core/src/engine/turn-model.ts` asks for the model through the registry the app
+5. `agent-runtime/packages/core/src/engine/turn-model.ts` asks for the model through the registry the app
    built (`app/application-models.ts`, wrapped by
    `app/generation-guard.ts`). `model/provider.ts` streams from the
    provider in `model/providers/`, retrying through `model/retry.ts`.
@@ -216,8 +217,8 @@ measurable:
   14 files, each layer once: `clients/headless/direct.ts`,
   `host/in-process-direct.ts`, `protocol/commands.ts`,
   `session/session.ts`, `session/conversation-turn.ts`,
-  `packages/agent-harness-core/src/engine/turn.ts`,
-  `packages/agent-harness-core/src/engine/turn-model.ts`, `app/generation-guard.ts`,
+  `agent-runtime/packages/core/src/engine/turn.ts`,
+  `agent-runtime/packages/core/src/engine/turn-model.ts`, `app/generation-guard.ts`,
   `app/application-models.ts`, `model/provider.ts`, and four
   `model/providers/` files. `app/` appears below `engine/` because the engine
   calls the model registry the app injected, not because `engine/` imports

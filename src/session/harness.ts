@@ -6,10 +6,10 @@ import {
   type TurnDeps,
   type TurnSpec,
   type NestedRunRequest,
-} from '@qduc/agent-harness-core';
+} from '@qduc/agent-core';
 import { getModelPricing, getModelPricingVersion } from '../model/cost/pricing.js';
 import { isSubscriptionProvider } from '../model/cost/subscription-providers.js';
-export type { TurnSpec, TurnResult, TurnEvent, TurnHandle } from '@qduc/agent-harness-core';
+export type { TurnSpec, TurnResult, TurnEvent, TurnHandle } from '@qduc/agent-core';
 function withAccounting<AppCtx>(deps: TurnDeps<AppCtx>): TurnDeps<AppCtx> {
   return {
     ...deps,

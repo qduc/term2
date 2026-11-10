@@ -1,6 +1,7 @@
 # Native engine integration contracts
 
-The implementation lives in `packages/agent-harness-core/src/engine`; this
+The implementation lives in `@qduc/agent-core` (qduc/agent-runtime
+`packages/core/src/engine`); this
 directory holds compatibility type surfaces and continuity/history helpers. Term2 host
 policy lives in `src/session`, including `agent-runtime`, completion verification,
 budget composition and prompt notices. The mechanics below describe the portable
@@ -100,4 +101,4 @@ checks. Hosts snapshot the execution identity before detaching background work.
 Term2's workspace, settings, subagent controls, shell task controls and
 orchestrator questions are defined in `src/tools/index.ts`. Session binds their task
 ports in `src/session/tool-context.ts`; the core imports only its own portable
-contracts in `packages/agent-harness-core/src/tools/contracts.ts`.
+contracts in `agent-runtime/packages/core/src/tools/contracts.ts`.

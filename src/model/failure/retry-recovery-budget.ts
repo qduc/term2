@@ -3,9 +3,5 @@ export {
   RetryRecoveryBudget,
   RetryRecoveryBudgetExhaustedError,
   isRetryRecoveryBudgetExhaustedError,
-} from '@qduc/agent-harness-core';
-export type {
-  RetryRecoveryBudgetOptions,
-  RetryRecoveryBudgetSnapshot,
-  RetryRecoveryAdmission,
-} from '@qduc/agent-harness-core';
+} from '@qduc/agent-core';
+export type { RetryRecoveryBudgetOptions, RetryRecoveryBudgetSnapshot, RetryRecoveryAdmission } from '@qduc/agent-core';

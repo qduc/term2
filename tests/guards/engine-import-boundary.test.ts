@@ -5,7 +5,6 @@ import ts from 'typescript';
 import { expect, it } from 'vitest';
 
 const root = path.resolve('src/engine');
-const packageRoot = path.resolve('packages/agent-harness-core/src');
 
 async function sources(directory: string): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -23,21 +22,16 @@ it('keeps engine imports within the shrinking boundary', async () => {
   const actual = new Set<string>();
   const violations: string[] = [];
   const builtins = new Set(builtinModules.map((name) => name.replace(/^node:/, '')));
-  for (const file of [...(await sources(root)), ...(await sources(packageRoot))]) {
+  for (const file of await sources(root)) {
     const source = ts.createSourceFile(file, await readFile(file, 'utf8'), ts.ScriptTarget.Latest, true);
-    const portable = file.startsWith(packageRoot + path.sep);
-    const boundary = portable ? packageRoot : root;
-    const relative = path.relative(boundary, file);
+    const relative = path.relative(root, file);
     const check = (specifier: string): void => {
       if (specifier.startsWith('.')) {
         const target = path.resolve(path.dirname(file), specifier);
-        if (target !== boundary && !target.startsWith(boundary + path.sep)) {
-          if (portable) violations.push(`package/${relative}: ${specifier}`);
-          else actual.add(`${relative}: ${specifier}`);
-        }
+        if (target !== root && !target.startsWith(root + path.sep)) actual.add(`${relative}: ${specifier}`);
       } else if (
         specifier !== 'zod' &&
-        !(specifier === '@qduc/agent-harness-core' && !portable) &&
+        specifier !== '@qduc/agent-core' &&
         !builtins.has(specifier.replace(/^node:/, ''))
       ) {
         violations.push(`${relative}: ${specifier}`);

@@ -1,5 +1,5 @@
 /** Term2 compatibility surface; implementation lives in the portable harness package. */
-export { ModelFailure, DEFAULT_ASSUMED_CONTEXT_WINDOW } from '@qduc/agent-harness-core';
+export { ModelFailure, DEFAULT_ASSUMED_CONTEXT_WINDOW } from '@qduc/agent-core';
 export type {
   ModelRecoveryEvidence,
   ModelRecoveryBudget,
@@ -24,4 +24,4 @@ export type {
   ModelCapabilities,
   Model,
   ModelRegistry,
-} from '@qduc/agent-harness-core';
+} from '@qduc/agent-core';

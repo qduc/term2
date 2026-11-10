@@ -1,6 +1,6 @@
 /** Term2 session aggregation and presentation around portable cost arithmetic. */
 import { addTokenUsage, formatUsageLine, type NormalizedUsage } from '../utils/ai/token-usage.js';
-import type { ModelRequestCost, SessionCostSummary, ModelUsageBreakdown } from '@qduc/agent-harness-core';
+import type { ModelRequestCost, SessionCostSummary, ModelUsageBreakdown } from '@qduc/agent-core';
 export {
   type CostSource,
   type ServiceTier,
@@ -18,7 +18,7 @@ export {
   parseUsdMicros,
   resolveBillableTokens,
   computeModelCost,
-} from '@qduc/agent-harness-core';
+} from '@qduc/agent-core';
 const USD_MICROS_PER_DOLLAR = 1_000_000;
 const USD_MICROS_PER_CENT = 10_000;
 const MICRO_FRACTION_DIGITS = 6;

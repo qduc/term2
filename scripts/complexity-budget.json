@@ -253,10 +253,6 @@
       "lines": 523,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "src/tools/system/run-code/run-code.ts": {
-      "lines": 552,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
-    },
     "src/tools/system/shell.ts": {
       "lines": 1473,
       "reason": "The shell executor checks one-use escape evidence against the actual cwd and foreground invocation at the point where it selects sandbox mode. Moving only that check would separate it from the execution context that enforces it. Lower the ceiling when the shell execution pipeline can move as a whole."

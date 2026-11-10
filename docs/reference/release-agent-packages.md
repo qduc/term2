@@ -1,5 +1,11 @@
 # Shared agent package ownership and release handoff
 
+> **Superseded for `@qduc/agent-core`.** Since 2026-11-10 that npm name belongs to the harness package
+> developed and released in `qduc/agent-runtime` `packages/core` (prereleases on the `next` tag) and
+> vendored here like wire. The other core sections
+> below describe the retired session-runtime snapshot. See
+> [Agent harness core contracts](../plans/agent-runtime/agent-harness-core-contracts.md#resume-here).
+
 `@qduc/agent-core` and `@qduc/agent-wire` belong to the independent
 `qduc/agent-runtime` repository, with the local checkout at
 `/home/qduc/agent-runtime`. The GitHub repository must be created and pushed
@@ -19,7 +25,7 @@ the root npm tarball self-contained without depending on an unpublished package
 or a sibling checkout. No shared-package build runs during Term2 installation.
 
 After the wire release is visible on npm, switch it to a runtime registry
-dependency and remove `scripts/embed-agent-wire.mjs` and its build step together.
+dependency and remove that package from `scripts/embed-agent-packages.mjs` (the script and its build step once both are on npm).
 Validate the root CLI tarball before releasing Term2.
 
 ## Core migration is a separate boundary change

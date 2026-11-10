@@ -29,6 +29,10 @@ export class V1Output {
     )
       return [];
     switch (update.sessionUpdate) {
+      case 'session_info_update': {
+        const info = update as v2.SessionInfoUpdate;
+        return [{ sessionUpdate: 'session_info_update', title: info.title, updatedAt: info.updatedAt }];
+      }
       case 'state_update':
         return []; // v1 completion belongs to the pending prompt response.
       case 'user_message':

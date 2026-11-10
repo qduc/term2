@@ -4,4 +4,4 @@ export {
   WebSocketReceiveTimeoutError,
   getZeroFrameAmbiguousTimeout,
   ConversationStateNoProgressError,
-} from '@qduc/agent-harness-core';
+} from '@qduc/agent-core';

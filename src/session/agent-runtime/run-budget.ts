@@ -1,5 +1,5 @@
 /** Term2 supplies its subscription billing policy to the portable accounting clock. */
-import { RunBudget as CoreRunBudget, type RunBudgetPolicy } from '@qduc/agent-harness-core';
+import { RunBudget as CoreRunBudget, type RunBudgetPolicy } from '@qduc/agent-core';
 import { isSubscriptionProvider } from '../../model/cost/subscription-providers.js';
 export {
   clampRunBudgetPolicy,
@@ -11,7 +11,7 @@ export {
   type RunBudgetInteraction,
   type RunBudgetSnapshot,
   type ToolStallObservation,
-} from '@qduc/agent-harness-core';
+} from '@qduc/agent-core';
 export class RunBudget extends CoreRunBudget {
   constructor(policy: RunBudgetPolicy, now = Date.now()) {
     super(policy, now, isSubscriptionProvider);

@@ -327,9 +327,16 @@ describe('ACP v2 compatibility over SDK NDJSON and native Host', () => {
       ).toBe(true);
       const listed = await context.request(acp.methods.agent.session.list, { cwd: workspace });
       expect(listed.sessions.map((session) => session.sessionId)).toContain(created.sessionId);
+      expect(updates.filter(({ update }) => update.sessionUpdate === 'session_info_update')).toEqual([
+        {
+          sessionId: created.sessionId,
+          update: { sessionUpdate: 'session_info_update', title: 'embedded ACP sentinel' },
+        },
+      ]);
       const resumed = updates.length;
       await context.request(acp.methods.agent.session.resume, { sessionId: created.sessionId, cwd: workspace });
       expect(updates.slice(resumed).map(({ update }) => update)).toEqual([
+        { sessionUpdate: 'session_info_update', title: 'embedded ACP sentinel' },
         { sessionUpdate: 'state_update', state: 'idle' },
       ]);
       const replay = updates.length;
@@ -364,6 +371,9 @@ describe('ACP v2 compatibility over SDK NDJSON and native Host', () => {
         ],
       });
       await idle(updates, imageStart);
+      expect(updates.slice(imageStart).filter(({ update }) => update.sessionUpdate === 'session_info_update')).toEqual(
+        [],
+      );
       const message = requests.at(-1).messages.findLast((message: any) => message.role === 'user');
       expect(message.content).toEqual([
         { type: 'text', text: 'before image' },

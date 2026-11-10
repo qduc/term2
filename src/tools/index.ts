@@ -6,7 +6,7 @@ import type {
   ToolContext as HarnessToolContext,
   Tool as HarnessTool,
   ToolRegistry as HarnessToolRegistry,
-} from '@qduc/agent-harness-core';
+} from '@qduc/agent-core';
 export type {
   NestedRunBudget,
   NestedRunOutcome,
@@ -19,7 +19,7 @@ export type {
   Risk,
   ApprovalRequirement,
   ToolResult,
-} from '@qduc/agent-harness-core';
+} from '@qduc/agent-core';
 
 export type Workspace = {
   readonly root: string;

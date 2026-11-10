@@ -1,7 +1,7 @@
 # Turn model and tool boundaries
 
-These implementation modules now live under
-`packages/agent-harness-core/src/engine`. `src/engine` re-exports only public
+These implementation modules now live in `@qduc/agent-core`
+(qduc/agent-runtime `packages/core/src/engine`). `src/engine` re-exports only public
 package contracts and continuity/history helpers. Session composes turn entry
 points with Term2 policy.
 

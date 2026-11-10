@@ -16,8 +16,11 @@ points are:
   `dist/src/app/cli.js`, which the `term2` bin (`dist/cli.js`) imports.
 - `src/app/application.ts` wires the layers together; `src/session/`
   owns a conversation's append-only log and Term2 host policy;
-  `packages/agent-harness-core/src/engine/` runs the turn. `src/engine/` contains
-  only compatibility contracts and history/continuity helpers.
+  `@qduc/agent-core` runs the turn. It graduated to
+  [qduc/agent-runtime](https://github.com/qduc/agent-runtime) (`packages/core/`) and is
+  vendored here as `vendor/qduc-agent-core-*.tgz`: change it there, pack it, and
+  replace the tarball. `src/engine/` contains only compatibility contracts and
+  history/continuity helpers.
 - `src/session/prompts/prompt-constructor.ts` assembles prompts; `prompt-profiles.ts`
   maps models to base profiles. Prompts and tool descriptions are product behavior.
 

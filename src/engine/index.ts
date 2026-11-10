@@ -16,4 +16,4 @@ export type {
   Tool,
   ToolContext,
   ToolRegistry,
-} from '@qduc/agent-harness-core';
+} from '@qduc/agent-core';

@@ -1524,10 +1524,6 @@
       "reason": "Internal tools constant or variable \"formatRunCodeCommandMessage\" in tools/system/run-code/run-code.ts used within its file; export keyword retained pending Phase 3 module cleanup."
     },
     {
-      "export": "tools/system/run-code/run-code.ts runCodeParametersSchema",
-      "reason": "Internal tools constant or variable \"runCodeParametersSchema\" in tools/system/run-code/run-code.ts used within its file; export keyword retained pending Phase 3 module cleanup."
-    },
-    {
       "export": "tools/system/run-code/tools-header.ts RUN_CODE_ESSENTIAL_TOOLS",
       "reason": "Internal tools constant or variable \"RUN_CODE_ESSENTIAL_TOOLS\" in tools/system/run-code/tools-header.ts used within its file; export keyword retained pending Phase 3 module cleanup."
     },

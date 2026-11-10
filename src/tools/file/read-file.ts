@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import * as fs from 'fs/promises';
-import { resolveWorkspacePath, relaxedNumber } from '../utils.js';
+import { resolveWorkspacePath, resolveWorkspacePathPhysically, relaxedNumber } from '../utils.js';
 import type { ScriptedToolDefinition, FormatCommandMessage } from '../types.js';
 import { isSessionReadGranted } from './read-access.js';
 import type { ISettingsService } from '../../shared/service-interfaces.js';
@@ -213,11 +213,19 @@ export const createReadFileToolDefinition = (
       try {
         const cwd = executionContext?.getCwd() || process.cwd();
         const resolvedPath = resolveWorkspacePath(params.path, cwd, { allowOutsideWorkspace: true });
-        if (isSessionReadGranted(resolvedPath, cwd, context, { sessionAccess, nestedCompatibility })) {
+        // A lexical workspace path can point outside through a symlink. Match
+        // the physical authority check used by scripted reads before deciding
+        // that a local direct read needs no approval. Never resolve an SSH path
+        // against this host's filesystem.
+        const remote = executionContext?.isRemote() ?? false;
+        const target = remote ? resolvedPath : await resolveWorkspacePathPhysically(resolvedPath, cwd);
+        const root = remote ? cwd : await resolveWorkspacePathPhysically(cwd, cwd);
+        if (!target || !root) return true;
+        if (isSessionReadGranted(target, root, context, { sessionAccess, nestedCompatibility })) {
           return false;
         }
 
-        resolveWorkspacePath(params.path, cwd, {
+        resolveWorkspacePath(target, root, {
           allowDiscoveredSkillFolders: true,
         });
         return false;

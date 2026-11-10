@@ -412,8 +412,8 @@ export function buildAgentTools({
   bindRunCodeRegistry(tools);
 
   // Profiles without run_code keep their existing direct surface. When the
-  // script path exists, shell remains on both surfaces; the other direct
-  // tools are structurally prohibited inside scripts.
+  // script path exists, file tools and shell keep the same wrapped validation,
+  // approvals and execution on either surface. Workflow tools cannot be scripted.
   if (!hasRunCode) return tools;
   return tools.filter(isDirectlyCallable);
 }

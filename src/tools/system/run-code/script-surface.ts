@@ -33,7 +33,9 @@ const PROHIBITED_TOOL_NAMES: readonly ProhibitedToolName[] = [
 ];
 export const RUN_CODE_PROHIBITED_TOOLS: ReadonlySet<string> = new Set(PROHIBITED_TOOL_NAMES);
 
-/** Shell remains callable directly as well as from scripts. */
+const DIRECT_FILE_TOOLS: ReadonlySet<string> = new Set(['read_file', 'create_file', 'search_replace', 'apply_patch']);
+
+/** File tools and shell retain the same wrapped execution on either surface. */
 export function isDirectlyCallable(tool: Pick<AnyToolDefinition, 'name'>): boolean {
-  return tool.name === 'shell' || RUN_CODE_PROHIBITED_TOOLS.has(tool.name);
+  return tool.name === 'shell' || DIRECT_FILE_TOOLS.has(tool.name) || RUN_CODE_PROHIBITED_TOOLS.has(tool.name);
 }

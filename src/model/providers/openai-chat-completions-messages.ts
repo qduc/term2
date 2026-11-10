@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { acceptsProviderOpaqueTag } from './provider-opaque-compatibility.js';
 import type { StreamedModelTurnRequest } from '../streamed-model-turn.js';
 
@@ -16,6 +17,30 @@ const isOwnOpaqueTag = (tag: unknown, providerId: string): boolean =>
 
 const opaqueMarkerOf = (item: any): { provider: unknown } | undefined =>
   item.providerOpaque ?? (item.type === 'provider_opaque' ? { provider: item.provider } : undefined);
+
+/** The SDK stored these on reasoning items and the first tool call, not opaque items. */
+function legacyOpenRouterDetails(item: any, providerId: string): unknown[] | undefined {
+  if (providerId !== 'openrouter') return undefined;
+  const details = item.providerMetadata?.openrouter?.reasoning_details;
+  return Array.isArray(details) ? details : undefined;
+}
+
+function appendLegacyDetails(existing: unknown[], incoming: unknown[]): unknown[] {
+  const result = [...existing];
+  for (const detail of incoming) {
+    // Old tool-call copies can contain null-data encrypted placeholders. The
+    // SDK rejected those; retain the complete reasoning-item copy instead.
+    if (!detail || typeof detail !== 'object') continue;
+    if (
+      'type' in detail &&
+      detail.type === 'reasoning.encrypted' &&
+      (!('data' in detail) || typeof detail.data !== 'string')
+    )
+      continue;
+    if (!result.some((previous) => isDeepStrictEqual(previous, detail))) result.push(detail);
+  }
+  return result;
+}
 
 /** Build the chat-completions image_url for an application image reference. */
 function toChatImageUrl(image: unknown): string | undefined {
@@ -85,6 +110,32 @@ export function openAICompatibleMessages(
   // Native reasoning restored from a conversation persisted before the opaque
   // lane existed, recognized by its `providerMetadata` marker.
   let pendingLegacyNativeReasoning = '';
+  let pendingLegacyOpenRouter = false;
+  let pendingLegacyOpenRouterDetails: unknown[] = [];
+  let pendingLegacyOpenRouterText = '';
+  const legacyAssistantGroups = new Set<unknown>();
+
+  const attachLegacyOpenRouter = (message: any, item: any): void => {
+    const details = legacyOpenRouterDetails(item, providerId);
+    if (!pendingLegacyOpenRouter && details === undefined) return;
+    const merged = appendLegacyDetails(
+      appendLegacyDetails(message.reasoning_details ?? [], pendingLegacyOpenRouterDetails),
+      details ?? [],
+    );
+    if (merged.length) {
+      message.reasoning_details = merged;
+      if (pendingLegacyOpenRouterText) message.reasoning = pendingLegacyOpenRouterText;
+      if (!('content' in message)) message.content = null;
+    }
+    legacyAssistantGroups.add(message);
+    // An explicit legacy group is complete, even when its state array is empty.
+    // A subsequent leading opaque payload belongs to the next assistant group.
+    if (pendingOpaqueTarget === message) pendingOpaqueTarget = undefined;
+    leadingPayloadGroupOpen = false;
+    pendingLegacyOpenRouter = false;
+    pendingLegacyOpenRouterDetails = [];
+    pendingLegacyOpenRouterText = '';
+  };
 
   // Whether this history carries any continuity payload of ours. When it does,
   // every bare `reasoning` item in it is the normalized twin of a payload
@@ -127,6 +178,13 @@ export function openAICompatibleMessages(
       continue;
     }
     if (item.type === 'reasoning') {
+      const legacyDetails = legacyOpenRouterDetails(item, providerId);
+      if (legacyDetails !== undefined) {
+        pendingLegacyOpenRouter = true;
+        pendingLegacyOpenRouterDetails = appendLegacyDetails(pendingLegacyOpenRouterDetails, legacyDetails);
+        if (typeof item.text === 'string') pendingLegacyOpenRouterText += item.text;
+        continue;
+      }
       const directNativeReasoning = item.providerMetadata?.reasoning_content;
       // Persistence intentionally removes the duplicate text field from a
       // standalone reasoning item, so the marker is what identifies restored
@@ -168,8 +226,14 @@ export function openAICompatibleMessages(
         pendingOpaqueTarget = undefined;
         pendingOpaquePayload = undefined;
         leadingPayloadGroupOpen = false;
+        pendingLegacyOpenRouter = false;
+        pendingLegacyOpenRouterDetails = [];
+        pendingLegacyOpenRouterText = '';
       }
-      if (item.role === 'assistant') registerAssistant(message);
+      if (item.role === 'assistant') {
+        registerAssistant(message);
+        attachLegacyOpenRouter(message, item);
+      }
       if (item.role === 'assistant') pendingLegacyNativeReasoning = '';
       continue;
     }
@@ -178,6 +242,7 @@ export function openAICompatibleMessages(
       const previous = messages[messages.length - 1];
       if (previous?.role === 'assistant' && Array.isArray(previous.tool_calls)) {
         previous.tool_calls.push(toolCall);
+        attachLegacyOpenRouter(previous, item);
       } else if (previous?.role === 'assistant' && previous.content != null) {
         // Prose the same turn produced, immediately before its tool calls: a
         // user or tool message would separate two different turns. One turn
@@ -185,6 +250,7 @@ export function openAICompatibleMessages(
         // calls remain on the same wire message.
         previous.tool_calls = [toolCall];
         registerAssistant(previous);
+        attachLegacyOpenRouter(previous, item);
       } else {
         const message = {
           role: 'assistant',
@@ -193,6 +259,7 @@ export function openAICompatibleMessages(
         };
         messages.push(message);
         registerAssistant(message);
+        attachLegacyOpenRouter(message, item);
       }
       pendingLegacyNativeReasoning = '';
       continue;
@@ -210,7 +277,7 @@ export function openAICompatibleMessages(
   // message/tool call, not a valid standalone message; if no such item follows
   // — an interrupted turn — omit it rather than inventing a message to carry
   // it or back-dating it onto an earlier one that did not produce it.
-  return coalesceReasoningToolCallBatches(messages);
+  return coalesceReasoningToolCallBatches(messages, legacyAssistantGroups);
 }
 
 function attachOpaquePayload(target: any, payload: Record<string, unknown>): void {
@@ -229,14 +296,16 @@ function attachOpaquePayload(target: any, payload: Record<string, unknown>): voi
   if (Array.isArray(target.tool_calls) && !('content' in target)) target.content = null;
 }
 
-function coalesceReasoningToolCallBatches(messages: any[]): any[] {
+function coalesceReasoningToolCallBatches(messages: any[], legacyAssistantGroups: ReadonlySet<unknown>): any[] {
   const result: any[] = [];
   for (let index = 0; index < messages.length; index += 1) {
     const message = messages[index];
     const hasReasoning =
       message?.role === 'assistant' &&
       (message.reasoning_content != null || message.reasoning != null || message.reasoning_details != null);
-    if (!hasReasoning || !Array.isArray(message.tool_calls)) {
+    // Legacy groups are already formed from consecutive assistant/tool-call
+    // items. Do not absorb a later response across their tool-result boundary.
+    if (!hasReasoning || !Array.isArray(message.tool_calls) || legacyAssistantGroups.has(message)) {
       result.push(message);
       continue;
     }
@@ -251,6 +320,7 @@ function coalesceReasoningToolCallBatches(messages: any[]): any[] {
       }
       if (
         next?.role === 'assistant' &&
+        !legacyAssistantGroups.has(next) &&
         Array.isArray(next.tool_calls) &&
         next.reasoning_content == null &&
         next.reasoning == null &&

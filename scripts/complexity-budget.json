@@ -149,10 +149,6 @@
       "lines": 3789,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "src/model/providers/openai-chat-completions-model.ts": {
-      "lines": 673,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
-    },
     "src/model/providers/openai-responses-model.ts": {
       "lines": 889,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."

@@ -4,39 +4,83 @@ import type { ProviderDeps, ProviderFetch } from './registry.js';
 import { createProviderFetch } from './fetch/composer.js';
 import type { FetchMiddleware } from './fetch/compose.js';
 import { addCacheControlToLastTwoMessages } from './anthropic-chat-caching.js';
+import type { CostTrailerCapture } from './openai-compatible-response-normalizer.js';
 import { NULL_SESSION_CONTEXT_SERVICE } from '../traffic-context.js';
-import type { StreamedModelTurn } from '../streamed-model-turn.js';
+import type { StreamedModelTurn, StreamedModelTurnRequest } from '../streamed-model-turn.js';
 
-async function createOpenRouterModel(deps: ProviderDeps, model: string) {
+async function createOpenRouterModel(deps: ProviderDeps, model: string): Promise<StreamedModelTurn | null> {
   const { settingsService, loggingService, sessionContextService } = deps;
   const apiKey = settingsService.get('agent.openrouter.apiKey') || process.env.OPENROUTER_API_KEY;
   if (!apiKey) return null;
 
-  // The OpenRouter AI SDK took ~15 ms to initialize on every start; load it with the first model.
-  const { AiSdkOpenRouterProvider } = await import('./ai-sdk-openrouter.provider.js');
-  return new AiSdkOpenRouterProvider({
-    defaultModel: model,
-    resolveConfig: () => ({
-      baseURL: settingsService.get('agent.openrouter.baseUrl') || 'https://openrouter.ai/api/v1',
-      apiKey,
-      headers: {
-        'HTTP-Referer': settingsService.get('agent.openrouter.referrer') || 'https://github.com/qduc/term2',
-        'X-Title': settingsService.get('agent.openrouter.title') || 'term2',
+  // Loaded with the first model rather than at startup, like the other chat-completions providers.
+  const [
+    { default: OpenAI },
+    { OpenAIChatCompletionsModel },
+    { applyClientResponseNormalization },
+    { createOpenAICompatibleMiddleware },
+  ] = await Promise.all([
+    import('openai'),
+    import('./openai-chat-completions-model.js'),
+    import('./openai-compatible-response-normalizer.js'),
+    import('./openai-compatible-middleware.js'),
+  ]);
+  const referrer = settingsService.get('agent.openrouter.referrer') || 'https://github.com/qduc/term2';
+  const title = settingsService.get('agent.openrouter.title') || 'term2';
+  const client = new OpenAI({
+    baseURL: settingsService.get('agent.openrouter.baseUrl') || 'https://openrouter.ai/api/v1',
+    apiKey,
+    // The caller owns retries (RetryingModel below, or the engine). A second
+    // retry loop inside the client would multiply attempts and hide them.
+    maxRetries: 0,
+    defaultHeaders: { 'HTTP-Referer': referrer, 'X-Title': title, 'X-OpenRouter-Title': title },
+    fetch: createProviderFetch({
+      providerId: 'openrouter',
+      defaultModel: settingsService.get('agent.modelSelection').model || model,
+      deps: {
+        loggingService,
+        sessionContextService: sessionContextService ?? NULL_SESSION_CONTEXT_SERVICE,
+        onDispatched: deps.onDispatched,
       },
-      appUrl: settingsService.get('agent.openrouter.referrer') || 'https://github.com/qduc/term2',
-      appName: settingsService.get('agent.openrouter.title') || 'term2',
-      fetch: createProviderFetch({
-        providerId: 'openrouter',
-        defaultModel: settingsService.get('agent.modelSelection').model || model,
-        deps: {
-          loggingService,
-          sessionContextService: sessionContextService ?? NULL_SESSION_CONTEXT_SERVICE,
-          onDispatched: deps.onDispatched,
-        },
-        middlewares: [openRouterPreprocessingMiddleware],
-      }),
+      middlewares: [createOpenAICompatibleMiddleware(), openRouterPreprocessingMiddleware],
     }),
   });
+  const costCapture: CostTrailerCapture = {};
+  applyClientResponseNormalization(client, loggingService, costCapture);
+  return new OpenAIChatCompletionsModel(client, model, costCapture, 'openrouter', {
+    requestOptions: openRouterRequestOptions,
+    reportsUpstreamProvider: true,
+  });
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/**
+ * OpenRouter's body fields for the selected effort and the caller's options.
+ *
+ * Options reach this provider in three spellings that must all land flat in
+ * the request body: top-level keys, an `openrouter` namespace, and an
+ * `openrouter` namespace under a nested `providerOptions`. Later spellings win,
+ * except that a top-level `reasoning` beats a namespaced one.
+ * Effort is `reasoning: { effort }` here rather than `reasoning_effort`, and an
+ * explicit `reasoning` in any spelling replaces the selected effort.
+ */
+function openRouterRequestOptions(request: StreamedModelTurnRequest): Record<string, unknown> {
+  const {
+    providerOptions: nested,
+    openrouter: direct,
+    reasoning: topLevelReasoning,
+    ...rest
+  } = (request.providerOptions ?? {}) as Record<string, unknown>;
+  const namespaced = {
+    ...(isRecord(direct) ? direct : {}),
+    ...(isRecord(nested) && isRecord(nested.openrouter) ? nested.openrouter : {}),
+  };
+  const effort = request.reasoning?.effort;
+  const reasoning =
+    topLevelReasoning ?? namespaced.reasoning ?? (effort && effort !== 'default' ? { effort } : undefined);
+  return { ...rest, ...namespaced, ...(reasoning ? { reasoning } : {}) };
 }
 
 function sanitizeOpenRouterReasoningDetails(messages: any[]): void {
@@ -123,9 +167,8 @@ registerProvider(
     id: 'openrouter',
     label: 'OpenRouter',
     createStreamedModel: async (model, deps): Promise<StreamedModelTurn> => {
-      const provider = await createOpenRouterModel(deps, model);
-      if (!provider) throw new Error('OpenRouter API key is not configured');
-      const streamedModel = provider.getStreamedModel(model);
+      const streamedModel = await createOpenRouterModel(deps, model);
+      if (!streamedModel) throw new Error('OpenRouter API key is not configured');
       const retryAttempts = deps.retryAttempts ?? deps.settingsService.get('agent.retryAttempts') ?? 2;
       return new RetryingModel(streamedModel, {
         retryAttempts,

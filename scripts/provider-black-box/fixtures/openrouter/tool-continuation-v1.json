@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "kind": "real-traffic-recording",
   "provider": "openrouter",
-  "wireFamily": "ai-sdk",
+  "wireFamily": "openai-chat",
   "transport": "http-sse",
   "capture": {
-    "sdkPackage": "@openrouter/ai-sdk-provider",
-    "apiSdkVersion": "2.9.0",
+    "sdkPackage": "openai",
+    "apiSdkVersion": "6.37.0",
     "model": "openai/gpt-oss-20b",
     "modelFamily": "openrouter",
     "capturedAt": "2026-08-01T11:27:52.049Z",
@@ -24,7 +24,7 @@
             "authorization": "[REDACTED]",
             "content-type": "application/json",
             "http-referer": "https://github.com/qduc/term2",
-            "user-agent": "ai-sdk/openrouter/2.9.0 ai-sdk/provider-utils/4.0.23 runtime/node.js/24",
+            "user-agent": "OpenAI/JS 6.37.0",
             "x-openrouter-title": "term2",
             "x-title": "term2"
           },
@@ -33,9 +33,18 @@
             "messages": [
               {
                 "role": "user",
-                "content": "Use the fixture tool and then summarize its result."
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Use the fixture tool and then summarize its result."
+                  }
+                ]
               }
             ],
+            "stream": true,
+            "stream_options": {
+              "include_usage": true
+            },
             "tools": [
               {
                 "type": "function",
@@ -54,11 +63,7 @@
                   }
                 }
               }
-            ],
-            "stream": true,
-            "stream_options": {
-              "include_usage": true
-            }
+            ]
           },
           "seq": 0
         },
@@ -3005,7 +3010,7 @@
             "authorization": "[REDACTED]",
             "content-type": "application/json",
             "http-referer": "https://github.com/qduc/term2",
-            "user-agent": "ai-sdk/openrouter/2.9.0 ai-sdk/provider-utils/4.0.23 runtime/node.js/24",
+            "user-agent": "OpenAI/JS 6.37.0",
             "x-openrouter-title": "term2",
             "x-title": "term2"
           },
@@ -3014,18 +3019,22 @@
             "messages": [
               {
                 "role": "user",
-                "content": "Use the fixture tool and then summarize its result."
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Use the fixture tool and then summarize its result."
+                  }
+                ]
               },
               {
                 "role": "assistant",
-                "content": "",
                 "tool_calls": [
                   {
                     "id": "chatcmpl_<2>",
                     "type": "function",
                     "function": {
                       "name": "fixture",
-                      "arguments": "{\"a\":10}"
+                      "arguments": "{\"a\": 10}"
                     }
                   }
                 ]
@@ -3033,14 +3042,22 @@
               {
                 "role": "tool",
                 "tool_call_id": "chatcmpl_<2>",
-                "content": "{\"ok\":true,\"value\":1}",
-                "name": "fixture"
+                "content": "{\"ok\":true,\"value\":1}"
               },
               {
                 "role": "user",
-                "content": "The fixture tool returned its deterministic result. Give the final summary."
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "The fixture tool returned its deterministic result. Give the final summary."
+                  }
+                ]
               }
             ],
+            "stream": true,
+            "stream_options": {
+              "include_usage": true
+            },
             "tools": [
               {
                 "type": "function",
@@ -3059,11 +3076,7 @@
                   }
                 }
               }
-            ],
-            "stream": true,
-            "stream_options": {
-              "include_usage": true
-            }
+            ]
           },
           "seq": 0
         },

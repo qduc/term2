@@ -318,7 +318,7 @@ importers:
       '@modelcontextprotocol/server':
         specifier: 2.0.0
         version: 2.0.0
-      '@qduc/agent-harness-core':
+      '@qduc/agent-core':
         specifier: workspace:*
         version: link:packages/agent-harness-core
       '@qduc/agent-wire':

@@ -1,9 +1,14 @@
 {
-  "name": "@qduc/agent-harness-core",
-  "version": "0.1.0",
+  "name": "@qduc/agent-core",
+  "version": "0.2.0-alpha.1",
   "description": "Portable, application-owned agent turn harness",
   "license": "MIT",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/qduc/term2.git",
+    "directory": "packages/agent-harness-core"
+  },
   "engines": {
     "node": ">=24"
   },
@@ -16,6 +21,10 @@
   "files": [
     "dist"
   ],
+  "publishConfig": {
+    "access": "public",
+    "tag": "next"
+  },
   "scripts": {
     "build": "node scripts/build.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"

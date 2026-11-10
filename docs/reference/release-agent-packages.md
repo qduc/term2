@@ -1,5 +1,10 @@
 # Shared agent package ownership and release handoff
 
+> **Superseded for `@qduc/agent-core`.** Since 2026-11-10 that npm name belongs to the harness package
+> incubating in this repository at `packages/agent-harness-core/` (prereleases on the `next` tag). The
+> core sections below describe the retired `qduc/agent-runtime` snapshot. See
+> [Agent harness core contracts](../plans/agent-runtime/agent-harness-core-contracts.md#resume-here).
+
 `@qduc/agent-core` and `@qduc/agent-wire` belong to the independent
 `qduc/agent-runtime` repository, with the local checkout at
 `/home/qduc/agent-runtime`. The GitHub repository must be created and pushed

@@ -84,14 +84,14 @@ export interface ApplicationAgent {
   readonly tools: ToolRegistry;
 }
 
-import type { RunBudgetPolicy, RunBudgetEvent } from '@qduc/agent-harness-core';
+import type { RunBudgetPolicy, RunBudgetEvent } from '@qduc/agent-core';
 export type {
   RunBudgetPolicy,
   RunBudgetStage,
   RunBudgetDimension,
   RunBudgetEvidence,
   RunBudgetEvent,
-} from '@qduc/agent-harness-core';
+} from '@qduc/agent-core';
 
 export interface NestedApprovalLedger {
   approveTool(item: { toolName: string; callId: string }, options?: { alwaysApprove?: boolean }): void;

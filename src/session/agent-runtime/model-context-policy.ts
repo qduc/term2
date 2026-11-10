@@ -14,7 +14,7 @@ export function resolveOutputAllocation(
   );
 }
 
-export { resolveModelContextPolicy } from '@qduc/agent-harness-core';
+export { resolveModelContextPolicy } from '@qduc/agent-core';
 
 /** Same inherited output selection for direct agents and prepared dispatches. */
 export function resolveRequestOutput(

@@ -45,7 +45,7 @@ const program = ts.createProgram({
     ...config.options,
     noEmit: true,
     baseUrl: repo,
-    paths: { ...config.options.paths, '@qduc/agent-harness-core': [path.join(harness, 'index.ts')] },
+    paths: { ...config.options.paths, '@qduc/agent-core': [path.join(harness, 'index.ts')] },
   },
 });
 const checker = program.getTypeChecker();

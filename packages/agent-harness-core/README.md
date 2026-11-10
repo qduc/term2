@@ -3,7 +3,7 @@
 The portable, application-owned turn loop used by Term2. Hosts own history,
 persistence, providers, tools, and application context. This ESM package requires
 Node 24 and has no runtime dependencies. Import only
-`@qduc/agent-harness-core`; implementation subpaths are not exported.
+`@qduc/agent-core`; implementation subpaths are not exported.
 
 ## Running a turn
 
@@ -69,8 +69,12 @@ implementation helpers remain private.
 
 ## Workspace and distribution
 
-The package incubates in this workspace and is embedded in Term2's distribution
-until independent publication. `pnpm build:core` builds its JavaScript and
+The package incubates in this workspace (directory `packages/agent-harness-core/`)
+and is embedded in Term2's distribution. Prereleases go to npm under the `next`
+dist-tag (`publishConfig` sets it), so `npm install @qduc/agent-core` without a
+version or tag installs nothing until a stable release exists; consumers pin an
+exact prerelease version. `0.1.0` was used by an earlier, unpublished snapshot
+and cannot be republished. `pnpm build:core` builds its JavaScript and
 self-contained declarations; `pnpm build` builds it before Term2 and embeds it
 under `dist/node_modules`. Build receipts cover package source and configuration. `pnpm dev` watches both
 the package and Term2, so edits to package contracts rebuild their consumer.

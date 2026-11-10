@@ -1,21 +1,22 @@
 # Agent harness core contracts
 
 Status: **in progress.** Phase 1 shipped in merge `41bbca5` ([#226](https://github.com/qduc/term2/pull/226)) as
-`@qduc/agent-harness-core` in `packages/agent-harness-core/`. Phase 2, ChatForge adoption, is tracked in
-[qduc/chat#40](https://github.com/qduc/chat/issues/40). The open questions below are still undecided.
+a workspace package in `packages/agent-harness-core/`, since renamed `@qduc/agent-core`. Phase 2, ChatForge
+adoption, is tracked in [qduc/chat#40](https://github.com/qduc/chat/issues/40). The open questions below are
+still undecided.
 
 ## Resume here
 
-- **Package state.** `packages/agent-harness-core/package.json` is version `0.1.0` and is not on npm. Term2
-  consumes it as a workspace package and bundles it into its own build.
-- **Next: first npm alpha.** The npm name is undecided between `@qduc/agent-harness-core` and
-  `@qduc/agent-core`. `@qduc/agent-core` `0.1.0` was published on 2026-11-08 from the retired
-  `qduc/agent-runtime` snapshot and then unpublished, so that version can never be reused. The plan is
-  `0.2.0-alpha.1` published with `npm publish --tag next`; the package needs `"publishConfig": {"access":
-  "public"}` first, because scoped packages default to restricted. Renaming means updating the package name
-  and Term2's imports of it.
+- **Package name.** Decided 2026-11-10: `@qduc/agent-core`. The directory stays
+  `packages/agent-harness-core/` so build, guard and provenance paths are unchanged. Term2 consumes it as a
+  workspace package and bundles it into its own build.
+- **First npm alpha.** The manifest is `0.2.0-alpha.1` with `publishConfig` `{"access": "public", "tag":
+  "next"}`, so a plain `npm publish` from the package directory goes to the `next` tag. `0.1.0` was
+  published on 2026-11-08 from the retired `qduc/agent-runtime` snapshot and then unpublished, so that
+  version can never be reused. Publishing needs the owner's npm credentials; check `npm view @qduc/agent-core
+  dist-tags` to see whether it has happened.
 - **ChatForge.** Part A of qduc/chat#40 (provider and tool wrappers, event mapping) builds to the contracts
-  without the package. Part B installs the alpha with an exact version pin.
+  without the package. Part B installs `@qduc/agent-core@0.2.0-alpha.1` with an exact version pin.
 - **Decisions #226 left implicit.** The package exports the run budget (`src/engine/agent-runtime/run-budget.ts`)
   and cost accounting (`src/shared/cost/model-cost.ts`), both under `packages/agent-harness-core/`. The design leaves budget as an open question and never placed cost
   accounting in core; decide both before the API leaves alpha.

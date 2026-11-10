@@ -2,8 +2,8 @@
  * Token usage normalization and extraction utilities.
  * Ported from backend/src/lib/utils/usage.js
  */
-import type { NormalizedUsage } from '@qduc/agent-harness-core';
-export type { NormalizedUsage } from '@qduc/agent-harness-core';
+import type { NormalizedUsage } from '@qduc/agent-core';
+export type { NormalizedUsage } from '@qduc/agent-core';
 
 export interface UsageAccumulator {
   add(usage: NormalizedUsage | null | undefined, options?: { alreadyBillable?: boolean }): void;

@@ -37,7 +37,7 @@ it('keeps engine imports within the shrinking boundary', async () => {
         }
       } else if (
         specifier !== 'zod' &&
-        !(specifier === '@qduc/agent-harness-core' && !portable) &&
+        !(specifier === '@qduc/agent-core' && !portable) &&
         !builtins.has(specifier.replace(/^node:/, ''))
       ) {
         violations.push(`${relative}: ${specifier}`);

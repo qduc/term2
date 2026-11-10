@@ -14,7 +14,7 @@ const dist = path.join(repo, 'dist');
 const inputs = buildInputs(repo, 'direct');
 // Never certify obsolete modules left behind by a source deletion, a failed build or an older layout.
 fs.rmSync(dist, { recursive: true, force: true });
-const core = spawnSync('pnpm', ['--filter', '@qduc/agent-harness-core', 'build'], {
+const core = spawnSync('pnpm', ['--filter', '@qduc/agent-core', 'build'], {
   cwd: repo,
   stdio: 'inherit',
   shell: process.platform === 'win32',
@@ -60,7 +60,7 @@ if (embed.error) throw embed.error;
 if (embed.status !== 0) process.exit(embed.status ?? 1);
 // The harness incubates locally, so ship its public package beside the emitted modules.
 const harness = path.join(repo, 'packages/agent-harness-core');
-const embeddedHarness = path.join(dist, 'node_modules/@qduc/agent-harness-core');
+const embeddedHarness = path.join(dist, 'node_modules/@qduc/agent-core');
 fs.mkdirSync(embeddedHarness, { recursive: true });
 fs.cpSync(path.join(harness, 'dist'), path.join(embeddedHarness, 'dist'), { recursive: true });
 fs.copyFileSync(path.join(harness, 'package.json'), path.join(embeddedHarness, 'package.json'));

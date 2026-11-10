@@ -20,5 +20,5 @@ keeps host presentation separate from provider history.
 
 These host modules moved from `engine/` in #224 with their behavior unchanged.
 `src/engine` is now limited to compatibility surfaces for
-`@qduc/agent-harness-core`. Session may depend on engine, model, tools and pure
+`@qduc/agent-core`. Session may depend on engine, model, tools and pure
 shared/config modules; it does not import delegation or app.

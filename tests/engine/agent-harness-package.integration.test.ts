@@ -43,7 +43,7 @@ it('runs isolated concurrent turns from the packed public package in plain JavaS
       path.join(scratch, 'consumer.mjs'),
       String.raw`
 import assert from 'node:assert/strict';
-import { startTurn } from '@qduc/agent-harness-core';
+import { startTurn } from '@qduc/agent-core';
 
 let entered = 0;
 let release;

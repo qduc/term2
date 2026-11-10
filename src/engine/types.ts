@@ -17,4 +17,4 @@ export type {
   TurnEvent,
   AcceptedTurnEvent,
   TurnHandle,
-} from '@qduc/agent-harness-core';
+} from '@qduc/agent-core';

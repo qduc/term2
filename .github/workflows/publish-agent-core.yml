@@ -1,0 +1,77 @@
+name: Publish agent-core
+
+# Publishes packages/agent-harness-core as @qduc/agent-core. Separate from
+# publish.yml, which publishes only the root @qduc/term2 package on v* tags.
+# Trigger: push a tag `agent-core-v<version>` matching the package manifest,
+# e.g. agent-core-v0.2.0-alpha.1. Prereleases land on the `next` dist-tag via
+# the manifest's publishConfig.
+on:
+  push:
+    tags:
+      - 'agent-core-v*'
+  # Retry a failed tag run; the selected ref must still be the release tag.
+  workflow_dispatch:
+
+# npm Trusted Publishing exchanges a short-lived OIDC token for publish
+# authentication. No npm token secret is needed.
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: publish-agent-core-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          # npm Trusted Publishing requires npm 11.5.1+; Node 24 ships it.
+          node-version: 24
+          registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.7.0
+          run_install: false
+
+      - name: Require a tag that matches the manifest version
+        run: |
+          version="$(node -p "require('./packages/agent-harness-core/package.json').version")"
+          expected="refs/tags/agent-core-v${version}"
+          if [[ "$GITHUB_REF" != "$expected" ]]; then
+            echo "Ref $GITHUB_REF does not match manifest version $version (expected $expected)."
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build and typecheck the package
+        run: |
+          pnpm build:core
+          pnpm --filter @qduc/agent-core typecheck
+
+      # Packs the package, installs the tarball in a plain JS project and runs
+      # two concurrent turns through the public entry point.
+      - name: Run the installed-tarball check
+        run: pnpm exec vitest run --reporter=minimal --config vitest.integration.config.ts tests/engine/agent-harness-package.integration.test.ts
+        env:
+          NODE_ENV: test
+
+      - name: Publish package
+        working-directory: packages/agent-harness-core
+        # publishConfig supplies access=public and tag=next. npm generates
+        # provenance automatically for GitHub OIDC publishing.
+        run: npm publish --provenance

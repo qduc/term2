@@ -264,6 +264,8 @@ describe('ACP v1 built CLI compatibility for Air', () => {
         prompt: [{ type: 'text', text: 'Hello Air' }],
       });
       expect(result).toEqual({ stopReason: 'end_turn' });
+      const titles = () => updates.filter(({ update }) => update.sessionUpdate === 'session_info_update');
+      expect(titles()).toEqual([{ sessionId, update: { sessionUpdate: 'session_info_update', title: 'Hello Air' } }]);
       const text = () =>
         updates
           .filter(({ update }) => update.sessionUpdate === 'agent_message_chunk')
@@ -282,6 +284,7 @@ describe('ACP v1 built CLI compatibility for Air', () => {
       });
       expect(text()).toBe('ACP fixture reply');
       expect(updates.filter(({ update }) => update.sessionUpdate === 'user_message_chunk')).toEqual([]);
+      expect(titles()).toEqual([]);
       const list = await context.request(acp.methods.agent.session.list, { cwd: workspace });
       expect(list.sessions.find((session) => session.sessionId === sessionId)).toMatchObject({
         title: 'Hello Air',
@@ -290,6 +293,7 @@ describe('ACP v1 built CLI compatibility for Air', () => {
       for (let index = 0; index < 2; index++) {
         updates.length = 0;
         await context.request(acp.methods.agent.session.load, { sessionId, cwd: workspace, mcpServers: [] });
+        expect(titles()).toEqual([{ sessionId, update: { sessionUpdate: 'session_info_update', title: 'Hello Air' } }]);
         expect(text()).toBe('ACP fixture replyACP fixture reply');
         const users = updates.flatMap(({ update }) => (update.sessionUpdate === 'user_message_chunk' ? [update] : []));
         expect(users.map((update) => update.content)).toEqual([
@@ -300,7 +304,32 @@ describe('ACP v1 built CLI compatibility for Air', () => {
       }
       updates.length = 0;
       await context.request(acp.methods.agent.session.resume, { sessionId, cwd: workspace, mcpServers: [] });
-      expect(updates.every(({ update }) => update.sessionUpdate === 'config_option_update')).toBe(true);
+      expect(titles()).toEqual([{ sessionId, update: { sessionUpdate: 'session_info_update', title: 'Hello Air' } }]);
+      expect(
+        updates.every(({ update }) => ['session_info_update', 'config_option_update'].includes(update.sessionUpdate)),
+      ).toBe(true);
+      await context.request(acp.methods.agent.session.close, { sessionId });
+      updates.length = 0;
+      await context.request(acp.methods.agent.session.load, { sessionId, cwd: workspace, mcpServers: [] });
+      expect(titles()).toEqual([{ sessionId, update: { sessionUpdate: 'session_info_update', title: 'Hello Air' } }]);
+      await context.request(acp.methods.agent.session.close, { sessionId });
+    });
+  }, 30_000);
+
+  it('publishes the same normalized, shortened title as the persisted session catalogue', async () => {
+    await fixture(async ({ context, workspace, updates }) => {
+      const { sessionId } = await context.request(acp.methods.agent.session.new, { cwd: workspace, mcpServers: [] });
+      await context.request(acp.methods.agent.session.prompt, {
+        sessionId,
+        prompt: [{ type: 'text', text: `  Plan\n  the implementation ${'carefully '.repeat(12)}  ` }],
+      });
+      const list = await context.request(acp.methods.agent.session.list, { cwd: workspace });
+      const title = list.sessions.find((session) => session.sessionId === sessionId)?.title;
+      expect(title).toHaveLength(60);
+      expect(title).toMatch(/^Plan the implementation .*…$/);
+      expect(updates.filter(({ update }) => update.sessionUpdate === 'session_info_update')).toEqual([
+        { sessionId, update: { sessionUpdate: 'session_info_update', title } },
+      ]);
       await context.request(acp.methods.agent.session.close, { sessionId });
     });
   }, 30_000);

@@ -7,6 +7,24 @@ description: Published release highlights and changes available only on main.
 
 Use `term2 --version` to check your installation and `npm view @qduc/term2 version` for the latest published release.
 
+## 1.1.0 - November 10, 2026
+
+- `term2 acp` now serves stable [ACP v1](/term2/reference/acp-v2/#jetbrains-air-and-stable-acp-v1) editors such as JetBrains Air and Zed, alongside experimental v2. The protocol version comes from the editor; no flag is needed.
+- ACP v1 sessions have Model, Thinking level and Approval mode selectors. Model and thinking level persist across load/resume for that session only; approval mode resets to Ask when the runtime reopens.
+- ACP turn failures return a readable error with `kind` and `retryable` fields, and sessions open even when a configured MCP server is unavailable.
+- The task panel shows the model each subagent is running.
+
+See the [1.1.0 changelog](https://github.com/qduc/term2/blob/v1.1.0/CHANGELOG.md) for details.
+
+## 1.0.0 - November 8, 2026
+
+- **Breaking:** Node.js 24 or newer is required.
+- **Breaking:** term2 runs on a rewritten runtime and saves conversations in a new `conversations-next` directory. Conversations from 0.40.0 and earlier are not shown by `term2 --resume ls`; back up your data directory before upgrading.
+- **Breaking:** the Plan, Pair, Mentor and Orchestrator profiles, `/plan` and the `Shift+Tab` plan toggle were removed. Saved settings and sessions naming a removed profile fall back to Bare.
+- Startup reaches an idle composer about 35% sooner.
+
+See the [1.0.0 changelog](https://github.com/qduc/term2/blob/v1.0.0/CHANGELOG.md) for upgrade steps and the full list of fixes.
+
 ## 0.40.0 - October 29, 2026
 
 - Bare now supports subagent delegation while retaining its minimal shell-led prompt.
@@ -146,4 +164,4 @@ This documentation site builds from `main`, so it can describe work ahead of the
 
 The `web-client/` application is separate from this documentation site and connects through the private `term2 serve` gateway. Follow [gateway setup](/term2/remote/web-gateway/) for integration requirements.
 
-For the complete release history, see the [repository changelog](https://github.com/qduc/term2/blob/main/CHANGELOG.md). For changes on main since 0.39.0, see the [tag-to-main comparison](https://github.com/qduc/term2/compare/v0.39.0...main).
+For the complete release history, see the [repository changelog](https://github.com/qduc/term2/blob/main/CHANGELOG.md). For changes on main since 1.1.0, see the [tag-to-main comparison](https://github.com/qduc/term2/compare/v1.1.0...main).

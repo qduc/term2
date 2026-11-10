@@ -1,3 +1,19 @@
+## [Unreleased]
+
+### Features
+- **Stable ACP v1 for editors.** `term2 acp` now also serves ACP v1 clients such as JetBrains Air and Zed; the protocol version is chosen from the editor's `initialize` request, with no extra flag. V1 sessions support new/list/load/resume/close, prompts, cancellation, tool permissions, form-based questions and budget pauses, and forwarded stdio/HTTP/SSE MCP servers (#231).
+- ACP v1 sessions offer **Model**, **Thinking level** and **Approval mode** selectors. Model and thinking-level changes apply only to that session and persist across load/resume. Approval mode (Ask, Assisted, or Always · Sandbox off) is live-session only and resets to Ask when the runtime reopens (#231).
+- The task panel shows the model each subagent is running (#229).
+
+### Improvements
+- ACP turn failures return a client-facing JSON-RPC error with structured `kind` and `retryable` fields, without forwarding private provider response text (#231).
+- In ACP v1, a sandboxed foreground shell asks the editor for permission only when a command explicitly requests to run outside the sandbox once (#231).
+- ACP sessions open even when a configured MCP server is unavailable (#231).
+- Website guides were reorganized around tasks (#236, #237).
+
+### Bug Fixes
+- Fix ACP v1 prompt echoes and tool-invocation display, and interoperability issues with Air and Zed (#231).
+
 ## [1.0.0] - 2026-11-08
 
 ### Breaking Changes

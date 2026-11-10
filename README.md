@@ -92,19 +92,22 @@ Supported:
 
 - The interactive TUI and headless runs, including `--resume` and JSON output.
 - The web/server host (`term2 serve`) with the separately built [`web-client/`](web-client/) from the same source revision. See [gateway setup](https://qduc.github.io/term2/remote/web-gateway/) for pairing, BFF keys and remote-access limits.
-- The ACP subset described below. ACP v2 is itself an upstream experimental protocol; only the SDK 1.4.0 reference client was verified, and no GUI editor was tested.
+- The ACP subset described below: stable ACP v1 for editors such as JetBrains Air and Zed, and experimental ACP v2, an upstream draft verified only against the SDK 1.4.0 reference client.
 - The Discord bridge for opted-in interactive sessions, subject to the tested scope and limits in its guide.
 
 Experimental, and may change between releases: SSH remote projects and the standalone control socket (`term2 control`).
 
-For the SDK 1.4.0 ACP v2 reference client:
+Point an ACP client at:
 
 ```sh
 term2 acp --provider <provider> --model <exact-model-id>
 ```
 
-Connect the client to stdin/stdout; diagnostics go to stderr. ACP requires the
-shell sandbox and interactive approval for approval-required tools. See the
+The same command serves v1 and v2; the version comes from the client's
+`initialize` request. Connect the client to stdin/stdout; diagnostics go to
+stderr. ACP v2 requires the shell sandbox and sends approval-required tools to
+the client. ACP v1 defaults to the same behavior, and its session-local approval
+mode can switch to Assisted or turn the sandbox off. See the
 [ACP reference](website/src/content/docs/reference/acp-v2.md) for session replay,
 client versions and acceptance limits.
 

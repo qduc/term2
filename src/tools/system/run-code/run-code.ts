@@ -1,6 +1,5 @@
-import { z } from 'zod';
-import { relaxedNumber } from '../../utils.js';
-import type { JsonValue } from '../../sandboxed-code-host/host-types.js';
+import { DEFAULT_TIMEOUT_MS, runCodeParametersSchema, runCodeProviderParametersSchema } from './run-code-parameters.js';
+export { runCodeParametersSchema, type RunCodeParams } from './run-code-parameters.js';
 import {
   type AnyToolDefinition,
   type FormatCommandMessage,
@@ -37,86 +36,7 @@ export {
 } from './script-surface.js';
 export type { RunCodeActionOutcome, RunCodeActionReceipt, RunCodeCallRecord } from './run-code-runtime-contract.js';
 
-const DEFAULT_TIMEOUT_MS = 120_000;
-/** Node `setTimeout` wraps delays above `2**31-1` to ~1 ms. */
-const MAX_TIMEOUT_MS = 2_147_483_647;
 const MAX_OUTPUT_CHARS = 30_000;
-
-const encodeInputKeysForValidation = (value: unknown): unknown => {
-  if (Array.isArray(value)) return value.map(encodeInputKeysForValidation);
-  if (value === null || typeof value !== 'object') return value;
-  const encoded = Object.create(null) as Record<string, unknown>;
-  for (const [key, item] of Object.entries(value)) {
-    Object.defineProperty(encoded, `$${key}`, {
-      value: encodeInputKeysForValidation(item),
-      enumerable: true,
-      configurable: true,
-      writable: true,
-    });
-  }
-  return encoded;
-};
-
-const decodeValidatedInputKeys = (value: Record<string, JsonValue>): Record<string, JsonValue> => {
-  const decode = (item: JsonValue): JsonValue => {
-    if (Array.isArray(item)) return item.map(decode);
-    if (item === null || typeof item !== 'object') return item;
-    const decoded = Object.create(null) as Record<string, JsonValue>;
-    for (const [key, nested] of Object.entries(item)) {
-      Object.defineProperty(decoded, key.slice(1), {
-        value: decode(nested),
-        enumerable: true,
-        configurable: true,
-        writable: true,
-      });
-    }
-    return decoded;
-  };
-  return decode(value) as Record<string, JsonValue>;
-};
-
-const runCodeInputsSchema = z
-  .preprocess(encodeInputKeysForValidation, z.record(z.string(), z.json()))
-  // Zod records omit `__proto__`; prefixing every key before validation and
-  // removing exactly one prefix afterward keeps all JSON object keys inert.
-  .overwrite(decodeValidatedInputKeys);
-
-/**
- * Script-shaped limits. They are deliberately not the workflow's: a workflow
- * spawns a handful of agents, while a script's whole point is looping over many
- * cheap tool calls.
- */
-
-export const runCodeParametersSchema = z.object({
-  code: z
-    .string()
-    .min(1)
-    .describe(
-      'JavaScript (not TypeScript) executed as the body of an async function. Top-level await is available. ' +
-        'Return the value you want the model to receive. Use console.log only for debugging.',
-    ),
-  inputs: runCodeInputsSchema
-    .optional()
-    .describe(
-      'JSON data exposed to the script as the global `inputs`. Use this for patch or file text. ' +
-        'Code and serialized inputs share the 65,536-byte admission limit.',
-    ),
-  include_console: z
-    .boolean()
-    .optional()
-    .describe('Include console.log debugging trace in the successful result. Defaults to false.'),
-  // Non-positive is rejected because `setTimeout(fn, 0)` fires promptly; it
-  // does not disable the timer. Values above 2**31-1 wrap to ~1 ms in Node.
-  timeout_ms: relaxedNumber
-    .int()
-    .positive()
-    .max(MAX_TIMEOUT_MS)
-    .optional()
-    .describe(`Wall-clock limit for the script. Defaults to ${DEFAULT_TIMEOUT_MS}.`),
-  description: z.string().describe('One short line describing what the script does, shown to the user.'),
-});
-
-export type RunCodeParams = z.infer<typeof runCodeParametersSchema>;
 
 const RUN_CODE_DESCRIPTION =
   'Write a JavaScript program and execute it. Return the value you want the model to receive; that completion value is ' +
@@ -323,7 +243,7 @@ export const formatRunCodeCommandMessage: FormatCommandMessage = (item, index, t
 
 export function createRunCodeToolDefinition(
   options: CreateRunCodeToolOptions,
-): SchemaToolDefinition<typeof runCodeParametersSchema, 'run_code'> {
+): SchemaToolDefinition<typeof runCodeProviderParametersSchema, 'run_code'> {
   // Set by bindRunCodeRegistry once the policy layer has wrapped every tool.
   let boundRegistry: ToolRegistry | undefined;
   const registeredMcpPolicies = new Set<string>();
@@ -357,7 +277,7 @@ export function createRunCodeToolDefinition(
       graphIdentity: boundRegistry ?? registry,
     });
 
-  const definition: SchemaToolDefinition<typeof runCodeParametersSchema, 'run_code'> = {
+  const definition: SchemaToolDefinition<typeof runCodeProviderParametersSchema, 'run_code'> = {
     name: TOOL_NAME_RUN_CODE,
     // Read late, after bindRunCodeRegistry, so the model is told which tools
     // the script can actually reach rather than a guess made before wrapping.
@@ -372,12 +292,19 @@ export function createRunCodeToolDefinition(
       const agentSection = options.agentCapabilitySection?.() ?? '';
       return [RUN_CODE_DESCRIPTION, header, mcpHeader, agentSection].filter(Boolean).join('\n\n');
     },
-    parameters: runCodeParametersSchema,
+    parameters: runCodeProviderParametersSchema,
+    canonicalParameters: runCodeParametersSchema,
     effect: 'mutating',
     canRequireApproval: true,
     needsApproval: () => false,
     execute: async (params, context, details) => {
-      const { code, inputs = {}, timeout_ms, description, include_console = false } = params;
+      const {
+        code,
+        inputs = {},
+        timeout_ms,
+        description,
+        include_console = false,
+      } = runCodeParametersSchema.parse(params);
       const timeout = timeout_ms ?? DEFAULT_TIMEOUT_MS;
       const callerSignal = (context as { signal?: AbortSignal } | undefined)?.signal;
       const registry = exposedTools();

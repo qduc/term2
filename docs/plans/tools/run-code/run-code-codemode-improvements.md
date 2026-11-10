@@ -33,6 +33,11 @@ optional JSON `inputs` object as a VM-realm global, so syntax-heavy patch and fi
 text can cross as data instead. `run_code` supplies `{}` when the parameter is
 omitted; other `SandboxedCodeHost` callers retain no `inputs` global. Executable
 source and serialized inputs share the existing 65,536-byte admission budget.
+The provider-facing `inputs` schema describes an object with arbitrary JSON
+properties without recursive references, because some providers reject recursive
+tool schemas before inference. The canonical execution schema still validates
+nested JSON and preserves inert `__proto__` keys. Provider presentation must not
+replace canonical validation or change the script realm's data boundary.
 The evidence and follow-up measurement decision are recorded in
 [`run-code` failure and recovery audit (historical)](https://github.com/qduc/term2/blob/3eb1659181eeda00bb32f971ef15096911380172/docs/reports/run-code-failure-recovery-audit-2026-09-13.md).
 

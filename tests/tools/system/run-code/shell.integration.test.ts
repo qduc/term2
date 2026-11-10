@@ -168,12 +168,17 @@ async function harness(
           }),
     };
   };
-  const run = async (script: string, signal = new AbortController().signal, timeout = 3000) => {
+  const run = async (script: string, signal = new AbortController().signal, timeout = 3000, inputs?: unknown) => {
     const tool = registry.get('run_code')!;
     try {
       return (
         await tool.execute(
-          tool.parse({ code: script, description: 'shell integration', timeout_ms: timeout }),
+          tool.parse({
+            code: script,
+            description: 'shell integration',
+            timeout_ms: timeout,
+            ...(inputs === undefined ? {} : { inputs }),
+          }),
           context(signal),
         )
       ).output;
@@ -212,6 +217,19 @@ function sandboxFixture() {
 }
 
 describe('shell inside run_code through the wrapped tool graph', () => {
+  it('keeps nested JSON and prototype-like input keys as data in the script realm', async () => {
+    const f = await harness();
+    const inputs = JSON.parse('{"nested":[{"name":"Bob","values":[null,true,3]}],"__proto__":{"polluted":"data"}}');
+    const result = await f.run(
+      'return [inputs.nested[0].name, inputs.nested[0].values[0] === null, inputs.nested[0].values[1], inputs.nested[0].values[2], Object.hasOwn(inputs, "__proto__"), inputs.__proto__.polluted, Object.getPrototypeOf(inputs).polluted === undefined].join("|");',
+      undefined,
+      3000,
+      inputs,
+    );
+    expect(result).toContain('Bob|true|true|3|true|data|true');
+    expect(f.seen).toEqual([]);
+  });
+
   it('keeps canonical validation and normalization when bare advertises fewer shell options', async () => {
     const graph = await harness({ bare: true });
     const shell = graph.registry.get('shell')!;

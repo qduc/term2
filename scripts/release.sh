@@ -503,7 +503,7 @@ if [[ -z "$NEW_VERSION" ]]; then
     VALIDATED=true
 
     if [[ -n "$RELEASE_SELECTOR" ]]; then
-        pnpm version "$RELEASE_SELECTOR" --no-git-tag-version --no-commit-hooks >/dev/null
+        pnpm version "$RELEASE_SELECTOR" --no-git-tag-version --no-git-checks --no-commit-hooks >/dev/null
         NEW_VERSION=$(get_package_version)
     elif [[ "$NON_INTERACTIVE" == "true" ]]; then
         echo -e "${RED}Non-interactive mode needs --patch, --minor, --major, or VERSION.${NC}"
@@ -514,23 +514,23 @@ if [[ -z "$NEW_VERSION" ]]; then
         select opt in "${options[@]}"; do
             case $opt in
                 "Patch")
-                    pnpm version patch --no-git-tag-version --no-commit-hooks >/dev/null
+                    pnpm version patch --no-git-tag-version --no-git-checks --no-commit-hooks >/dev/null
                     NEW_VERSION=$(get_package_version)
                     break
                     ;;
                 "Minor")
-                    pnpm version minor --no-git-tag-version --no-commit-hooks >/dev/null
+                    pnpm version minor --no-git-tag-version --no-git-checks --no-commit-hooks >/dev/null
                     NEW_VERSION=$(get_package_version)
                     break
                     ;;
                 "Major")
-                    pnpm version major --no-git-tag-version --no-commit-hooks >/dev/null
+                    pnpm version major --no-git-tag-version --no-git-checks --no-commit-hooks >/dev/null
                     NEW_VERSION=$(get_package_version)
                     break
                     ;;
                 "Custom")
                     read -r -p "Enter version: " NEW_VERSION
-                    pnpm version "$NEW_VERSION" --no-git-tag-version --no-commit-hooks >/dev/null
+                    pnpm version "$NEW_VERSION" --no-git-tag-version --no-git-checks --no-commit-hooks >/dev/null
                     NEW_VERSION=$(get_package_version)
                     break
                     ;;

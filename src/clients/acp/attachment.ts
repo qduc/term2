@@ -74,12 +74,14 @@ export class AcpAttachment {
   private activity: DirectConnection['snapshot'];
   private closeWaiter: { readonly turnId: string; resolve(): void; reject(error: unknown): void } | null = null;
   private pump: Promise<void> = Promise.resolve();
+  private title: string | undefined;
 
   constructor(
     readonly connection: DirectConnection,
     private readonly client: AcpClient,
     private readonly logger: AcpLogger,
     private readonly reviewApproval?: (requestId: string, signal: AbortSignal) => Promise<boolean>,
+    private readonly readTitle?: () => Promise<string | undefined>,
   ) {
     this.foregroundTurnId = connection.snapshot.activeTurnId;
     this.status = connection.snapshot.status;
@@ -88,6 +90,7 @@ export class AcpAttachment {
 
   /** Replay a current snapshot before consuming its strictly subsequent events. */
   async start(replay: boolean): Promise<void> {
+    await this.syncTitle();
     for (const update of this.renderer.snapshot(this.connection.snapshot, replay)) await this.emit(update);
     await this.syncBranches(this.connection.snapshot.branches, replay);
     // Current activity is live synchronization, even when history is omitted.
@@ -216,6 +219,24 @@ export class AcpAttachment {
     return this.client.update({ sessionId: this.connection.sessionId, update });
   }
 
+  /** The catalogue retains the original title across context compaction and log rotation. */
+  private async syncTitle(): Promise<void> {
+    if (this.title !== undefined) return;
+    let title: string | undefined;
+    try {
+      title = await this.readTitle?.();
+    } catch (error) {
+      this.logger.error('ACP conversation title lookup failed', {
+        sessionId: this.connection.sessionId,
+        errorMessage: errorMessage(error),
+      });
+      return;
+    }
+    if (title === undefined) return;
+    await this.emit({ sessionUpdate: 'session_info_update', title });
+    this.title = title;
+  }
+
   private async consume(): Promise<void> {
     for await (const event of this.connection.events) {
       // The host keeps accepting/persisting independently; this is an ACP output
@@ -247,12 +268,14 @@ export class AcpAttachment {
       await this.updateStatus(this.activity.status);
     }
     if (!nested && event.type === 'turn_started') {
+      await this.syncTitle();
       if (event.payload.foreground) this.foregroundTurnId = event.turnId;
       if (this.active?.messageId && event.payload.input.some((message) => message.id === this.active?.messageId)) {
         this.active.turnId = event.turnId;
       }
     }
     if (!nested && event.type === 'snapshot') {
+      await this.syncTitle();
       this.foregroundTurnId = event.payload.snapshot.activeTurnId;
       const snapshot = event.payload.snapshot;
       for (const terminal of [...(snapshot.turnResults ?? []), ...(snapshot.terminal ? [snapshot.terminal] : [])]) {

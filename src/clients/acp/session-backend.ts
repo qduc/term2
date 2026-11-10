@@ -60,6 +60,16 @@ export function createAcpBackend(options: BackendOptions): AcpBackend {
       client,
       options.logger,
       review ? (requestId, signal) => review(connection.sessionId, requestId, signal) : undefined,
+      async () => {
+        let cursor: string | undefined;
+        do {
+          const page = await options.host.listSessions(options.principal, cursor);
+          const session = page.sessions.find(({ id }) => id === connection.sessionId);
+          if (session) return session.title;
+          cursor = page.cursor;
+        } while (cursor !== undefined);
+        return undefined;
+      },
     );
     try {
       available();

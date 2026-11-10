@@ -108,6 +108,12 @@ workspace field. Neither callback may construct an adopted runtime or read old
 logs. List metadata comes only from Host, including its optional native title and
 updatedAt; neither value is fabricated when absent.
 
+Each ACP attachment also sends `session_info_update` with the authoritative
+session catalogue title, preserving its original name across log rotation. It sends
+the title when the first prompt is admitted and when attaching to existing
+history, even without replay. Later prompts and nested branch messages do not
+rename the conversation; both v1 and v2 clients receive the metadata update.
+
 ACP v1 adds one **Approval mode** selector alongside model and thinking level.
 **Ask** is the default. Ordinary shell commands run sandboxed; a missing or
 failed sandbox stops the command. **Assisted** keeps confinement and uses

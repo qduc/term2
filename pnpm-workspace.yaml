@@ -1,5 +1,4 @@
 packages:
-  - packages/*
   - web-client
 allowBuilds:
   better-sqlite3: true

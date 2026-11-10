@@ -82,7 +82,7 @@ runs:
           : value && typeof value === 'object'
             ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonical(value[key])]))
             : value;
-        const manifests = ['package.json', 'web-client/package.json', 'packages/agent-harness-core/package.json'];
+        const manifests = ['package.json', 'web-client/package.json'];
         const hash = createHash('sha256').update(JSON.stringify(canonical(manifests.map(pick)))).digest('hex');
         console.log(`hash=${hash}`);
         NODE
@@ -129,7 +129,6 @@ runs:
       # No `pnpm store prune`: run directly after this install it still evicted
       # 5 in-use packages (808 files, 101 MB) in CI, so the saved store missed
       # them. Bump the store key to reset accumulated packages instead.
-      # The filter keeps the CLI and its workspace dependencies (agent-harness-core).
       run: |
         if [[ "$WEB_CLIENT" == 'true' ]]; then pnpm install --frozen-lockfile
         else pnpm install --frozen-lockfile --filter '@qduc/term2...'; fi

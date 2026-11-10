@@ -21,3 +21,14 @@ artifacts in agent-runtime and update the lockfile integrity when replacing one.
 After the package is visible on npm, migrate consumers to registry dependencies.
 For the CLI, remove the embedded wire copy and build step at the same time as
 adding its runtime dependency; see `docs/reference/release-agent-wire.md`.
+
+## @qduc/agent-core
+
+`qduc-agent-core-0.2.0-alpha.1.tgz` is the turn harness that graduated from this
+repository (formerly `packages/agent-harness-core/`). It was packed with
+`pnpm --filter @qduc/agent-core pack` from
+[`qduc/agent-runtime` commit `3e322ba`](https://github.com/qduc/agent-runtime/commit/3e322ba)
+(branch `ccr-c2e20a05-677q07`). The root CLI pins it as a development dependency
+and `scripts/embed-agent-packages.mjs` ships it beside the build. Change the
+harness in agent-runtime, pack a new version there, add the tarball here and
+update the pin and lockfile together; do not edit the tarball.

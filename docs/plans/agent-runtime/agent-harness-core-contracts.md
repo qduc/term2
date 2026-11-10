@@ -1,31 +1,32 @@
 # Agent harness core contracts
 
 Status: **in progress.** Phase 1 shipped in merge `41bbca5` ([#226](https://github.com/qduc/term2/pull/226)) as
-a workspace package in `packages/agent-harness-core/`, since renamed `@qduc/agent-core`. Phase 2, ChatForge
+a workspace package in `packages/agent-harness-core/`, since renamed `@qduc/agent-core` and graduated to
+`qduc/agent-runtime` `packages/core/` (2026-11-10). Phase 2, ChatForge
 adoption, is tracked in [qduc/chat#40](https://github.com/qduc/chat/issues/40). The open questions below are
 still undecided.
 
 ## Resume here
 
-- **Package name.** Decided 2026-11-10: `@qduc/agent-core`. The directory stays
-  `packages/agent-harness-core/` so build, guard and provenance paths are unchanged. Term2 consumes it as a
-  workspace package and bundles it into its own build.
-- **First npm alpha.** `0.2.0-alpha.1`, published from `qduc/agent-runtime` `packages/core` through its
-  manual `publish-agent-packages.yml` (input `package: core`), always on the `next` dist-tag. This directory
-  is the development copy and is `private`; copy its `src/` there for each release. `0.1.0` was
+- **Package name and home.** Decided 2026-11-10: `@qduc/agent-core`, graduated the same day to
+  `qduc/agent-runtime` `packages/core/`, which owns its source, import guard and tarball smoke. Term2 vendors
+  packed tarballs (`vendor/qduc-agent-core-*.tgz`, see `vendor/README.md`) and embeds the package in its
+  build, as it does wire. A harness change is made in agent-runtime, packed, and vendored here.
+- **First npm alpha.** `0.2.0-alpha.1`, published from `qduc/agent-runtime` through its manual
+  `publish-agent-packages.yml` (input `package: core`), always on the `next` dist-tag. `0.1.0` was
   published on 2026-11-08 from the retired `qduc/agent-runtime` snapshot and then unpublished, so that
   version can never be reused. Publishing needs the owner's npm credentials; check `npm view @qduc/agent-core
   dist-tags` to see whether it has happened.
 - **ChatForge.** Part A of qduc/chat#40 (provider and tool wrappers, event mapping) builds to the contracts
   without the package. Part B installs `@qduc/agent-core@0.2.0-alpha.1` with an exact version pin.
 - **Decisions #226 left implicit.** The package exports the run budget (`src/engine/agent-runtime/run-budget.ts`)
-  and cost accounting (`src/shared/cost/model-cost.ts`), both under `packages/agent-harness-core/`. The design leaves budget as an open question and never placed cost
+  and cost accounting (`src/shared/cost/model-cost.ts`), both in the package (agent-runtime `packages/core/`). The design leaves budget as an open question and never placed cost
   accounting in core; decide both before the API leaves alpha.
 - **Before leaving alpha.** Contract change 7: `codex_quota` and the OpenAI-only `ModelRequest` flags are
   still on the core types.
 
 Implementation location update: the portable driver and contracts now live in
-`packages/agent-harness-core/src/`. Term2-specific agent resolution, scopes,
+`@qduc/agent-core` (agent-runtime `packages/core/src/`). Term2-specific agent resolution, scopes,
 completion verification, billing composition and notices live in `src/session/`.
 `src/engine` retains only contract and continuity/history compatibility surfaces;
 its import-exception baseline is empty. The “today” source paths below describe

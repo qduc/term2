@@ -1,4 +1,4 @@
-## [Unreleased]
+## [1.1.0] - 2026-11-10
 
 ### Features
 - **Stable ACP v1 for editors.** `term2 acp` now also serves ACP v1 clients such as JetBrains Air and Zed; the protocol version is chosen from the editor's `initialize` request, with no extra flag. V1 sessions support new/list/load/resume/close, prompts, cancellation, tool permissions, form-based questions and budget pauses, and forwarded stdio/HTTP/SSE MCP servers (#231).

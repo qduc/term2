@@ -90,7 +90,10 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
         ...(request.frequencyPenalty !== undefined ? { frequency_penalty: request.frequencyPenalty } : {}),
         ...(request.presencePenalty !== undefined ? { presence_penalty: request.presencePenalty } : {}),
         ...(request.maxTokens !== undefined ? { max_tokens: request.maxTokens } : {}),
-        ...(request.toolChoice !== undefined ? { tool_choice: toChatToolChoice(request.toolChoice) } : {}),
+        // Some upstreams reject a tool choice that has no tools to choose from.
+        ...(request.toolChoice !== undefined && request.tools.length
+          ? { tool_choice: toChatToolChoice(request.toolChoice) }
+          : {}),
         ...(this.dialect.requestOptions ?? defaultRequestOptions)(request),
         ...(request.outputType && request.outputType !== 'text'
           ? { response_format: toChatResponseFormat(request.outputType) }

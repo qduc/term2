@@ -113,7 +113,7 @@ dropped because nobody had enumerated it.
 5. **Narrow the middleware.** `preserveReasoningContentForOpenAICompatibleMessages`
    stops rewriting `reasoning` → `reasoning_content` for providers that sent
    `reasoning`. Determine first what still depends on it — the AI SDK OpenRouter
-   provider (`ai-sdk-openrouter.provider.ts:56`) passes a `reasoning` field
+   provider (`ai-sdk-openrouter.provider.ts:56`, removed 2026-11-10) passed a `reasoning` field
    through on a different lane, and `mergeAssistantMessages` handles both
    spellings.
 

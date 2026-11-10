@@ -12,6 +12,8 @@ export type FakeProviderScenario =
   | 'tool-fragments'
   | 'reasoning'
   | 'in-band-error-retry'
+  // An in-band error after which the server leaves the connection open.
+  | 'in-band-error-held-open'
   // OpenRouter-style gateways spell chat-completions reasoning `reasoning`
   // rather than `reasoning_content`.
   | 'reasoning-field';
@@ -97,6 +99,7 @@ export async function startFakeProviderHttpServer(options: {
     res.writeHead(200, { 'content-type': 'text/event-stream', connection: 'close', 'cache-control': 'no-cache' });
     for (const frame of framesFor(options.protocol ?? 'chat-completions', scenario, requests.length))
       res.write(`data: ${JSON.stringify(frame)}\n\n`);
+    if (scenario === 'in-band-error-held-open') return;
     if (scenario !== 'incomplete') res.write('data: [DONE]\n\n');
     res.end();
   });
@@ -111,7 +114,12 @@ export async function startFakeProviderHttpServer(options: {
     baseUrl: `http://127.0.0.1:${address.port}`,
     requests,
     comparisonFailures,
-    close: () => new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve()))),
+    close: () =>
+      new Promise((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+        // A held-open scenario would otherwise keep close() waiting on its socket.
+        server.closeAllConnections();
+      }),
     assertReplayValid: () => {
       if (comparisonFailures.length) throw new Error(comparisonFailures.join('\n'));
       if (
@@ -224,7 +232,7 @@ export function framesFor(
       { id: 'chatcmpl_fake', choices: [{ index: 0, delta: { reasoning: 'Need gateway reasoning.' } }] },
       { id: 'chatcmpl_fake', choices: [{ index: 0, delta: { content: 'hello' }, finish_reason: 'stop' }] },
     ];
-  if (scenario === 'in-band-error-retry' && requestNumber === 1)
+  if (scenario === 'in-band-error-held-open' || (scenario === 'in-band-error-retry' && requestNumber === 1))
     return [
       {
         id: 'chatcmpl_fake',

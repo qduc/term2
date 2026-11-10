@@ -157,6 +157,9 @@ export function createLoggingMiddleware(options: CreateLoggingMiddlewareOptions)
       throw error;
     }
 
+    // The recorder reads its own copy of the body. Taken before the caller's
+    // copy is rewrapped below, while the body is still unlocked.
+    const recorded = response.clone();
     // Fire-and-forget async logging so it never blocks the caller
     Promise.resolve()
       .then(async () => {
@@ -165,7 +168,7 @@ export function createLoggingMiddleware(options: CreateLoggingMiddlewareOptions)
           provider,
           model: requestModel,
           status: response.status,
-          response: response.clone(),
+          response: recorded,
         });
       })
       .catch((error: unknown) => {
@@ -191,8 +194,42 @@ export function createLoggingMiddleware(options: CreateLoggingMiddlewareOptions)
         }
       });
 
-    return response;
+    return withDetachedCancel(response);
   };
+}
+
+/**
+ * Returns `response` with a body whose `cancel()` settles at once.
+ *
+ * Cloning tees the body, and cancelling one tee branch does not settle until
+ * the other branch is cancelled or the source ends. The OpenAI client awaits
+ * that cancel when a stream fails part-way, before it aborts the request. With
+ * the recorder still reading its copy and a server that keeps the connection
+ * open after an in-band error, the await never returned and the turn hung. The
+ * caller's cancel is still forwarded; it is only no longer waited on, so the
+ * client goes on to abort the request, which ends the recorder's copy too.
+ */
+function withDetachedCancel(response: Response): Response {
+  if (!response.body) return response;
+  const reader = response.body.getReader();
+  const body = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      const { done, value } = await reader.read();
+      if (done) controller.close();
+      else controller.enqueue(value);
+    },
+    cancel(reason) {
+      void reader.cancel(reason).catch(() => {});
+    },
+  });
+  const detached = new Response(body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
+  // A constructed Response has no URL; callers that log or branch on it keep the original.
+  Object.defineProperty(detached, 'url', { value: response.url });
+  return detached;
 }
 
 function attemptForSignal(

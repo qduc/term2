@@ -47,10 +47,41 @@ async function createOpenRouterModel(deps: ProviderDeps, model: string): Promise
   });
   const costCapture: CostTrailerCapture = {};
   applyClientResponseNormalization(client, loggingService, costCapture);
-  return new OpenAIChatCompletionsModel(client, model, costCapture, 'openrouter', {
+  const turn = new OpenAIChatCompletionsModel(client, model, costCapture, 'openrouter', {
     requestOptions: openRouterRequestOptions,
     reportsUpstreamProvider: true,
   });
+  return {
+    async *stream(request) {
+      try {
+        yield* turn.stream(request);
+      } catch (error) {
+        throw withUpstreamErrorDetail(error);
+      }
+    },
+  };
+}
+
+const MAX_UPSTREAM_ERROR_DETAIL_LENGTH = 500;
+
+/**
+ * OpenRouter's own message for an upstream failure is often just "Provider
+ * returned error"; which upstream failed and what it said are in
+ * `error.metadata`. Append them so the message a user sees names the cause.
+ */
+function withUpstreamErrorDetail(error: unknown): unknown {
+  if (!(error instanceof Error)) return error;
+  const body = (error as { error?: unknown }).error;
+  const metadata = isRecord(body) && isRecord(body.metadata) ? body.metadata : undefined;
+  if (!metadata) return error;
+  const upstream = typeof metadata.provider_name === 'string' ? metadata.provider_name.trim() : '';
+  const raw =
+    typeof metadata.raw === 'string' ? metadata.raw : metadata.raw === undefined ? '' : JSON.stringify(metadata.raw);
+  const detail = [upstream ? `[${upstream}]` : '', raw.trim().slice(0, MAX_UPSTREAM_ERROR_DETAIL_LENGTH)]
+    .filter(Boolean)
+    .join(' ');
+  if (detail && !error.message.includes(detail)) error.message = `${error.message}: ${detail}`;
+  return error;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>

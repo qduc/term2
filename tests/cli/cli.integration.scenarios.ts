@@ -574,9 +574,12 @@ export function registerCliScenarios(group: 'startup' | 'headless'): void {
           expect(wire).not.toMatch(/(?:Plan|Pair|Mentor|Orchestrator) Mode is ON/);
           expect(wire).not.toContain('propose_goal');
           expect((request.tools as { function: { name: string } }[]).map((tool) => tool.function.name).sort()).toEqual([
+            'create_file',
             'goal_check',
+            'read_file',
             'run_code',
             'run_subagent',
+            'search_replace',
             'shell',
           ]);
           const emitted = result.stdout
@@ -2367,8 +2370,16 @@ fs.createWriteStream = (filename, options) => {
             expect(fs.readFileSync(resumePath, 'utf8').startsWith(savedHistory)).toBe(true);
           }
           const names = (request.tools as { function: { name: string } }[]).map((t) => t.function.name).sort();
-          // Bare has no editors or activate_skill: the shell does both.
-          expect(names).toEqual(['goal_check', 'run_code', 'run_subagent', 'shell']);
+          // Bare offers the file tools directly; it has no activate_skill, which the shell covers.
+          expect(names).toEqual([
+            'create_file',
+            'goal_check',
+            'read_file',
+            'run_code',
+            'run_subagent',
+            'search_replace',
+            'shell',
+          ]);
           const runCode = (request.tools as { function: { name: string; description: string } }[]).find(
             (t) => t.function.name === 'run_code',
           )!;
@@ -2405,7 +2416,7 @@ fs.createWriteStream = (filename, options) => {
           expect(emitted[0]).toMatchObject({
             type: 'session_start',
             activeProfileId: 'builtin:bare',
-            activeProfileVersion: '2.0.0',
+            activeProfileVersion: '3.0.0',
             activeProfileDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
           });
           const saved = fs.readdirSync(conversationsDir).find((name) => name.endsWith('.jsonl'))!;

@@ -3,7 +3,7 @@
   "runs": [
     {
       "exitCode": 0,
-      "stdout": "{\"type\":\"session_start\",\"activeProfileId\":\"builtin:bare\",\"activeProfileVersion\":\"2.0.0\",\"activeProfileDigest\":\"4ea566d1d75c03e6bb87743862f1016d5680568f77d6ebff267cb1e7b3d19ea4\"}\n{\"type\":\"tool_call_streaming_delta\",\"toolName\":\"shell\",\"argumentCharCount\":43}\n{\"type\":\"cost_update\",\"record\":{\"requestId\":\"req-1\",\"provider\":\"mockprov\",\"model\":\"mock-alpha\",\"serviceTier\":\"standard\",\"outcome\":\"completed\",\"unpricedReason\":\"missing_usage\"}}\n{\"type\":\"tool_started\",\"toolCallId\":\"call_1_0\",\"toolName\":\"shell\",\"arguments\":{\"command\":\"ls\",\"description\":\"List files\"}}\n{\"type\":\"tool_dispatched\",\"toolCallId\":\"call_1_0\",\"toolName\":\"shell\"}\n{\"type\":\"command_message\",\"message\":{\"id\":\"call_1_0-0\",\"sender\":\"command\",\"status\":\"completed\",\"isApprovalRejection\":false,\"callId\":\"call_1_0\",\"command\":\"List files\",\"output\":\"Runtime: <DURATION>\\na.txt\",\"success\":true,\"toolName\":\"shell\"}}\n{\"type\":\"text_delta\",\"delta\":\"There is one file: a.txt.\",\"fullText\":\"There is one file: a.txt.\"}\n{\"type\":\"cost_update\",\"record\":{\"requestId\":\"req-2\",\"provider\":\"mockprov\",\"model\":\"mock-alpha\",\"serviceTier\":\"standard\",\"outcome\":\"completed\",\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12},\"unpricedReason\":\"unknown_provider\"}}\n{\"type\":\"usage_update\",\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12}}\n{\"type\":\"usage_update\",\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12}}\n{\"type\":\"final\",\"finalText\":\"There is one file: a.txt.\",\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12},\"costRecords\":[{\"requestId\":\"req-1\",\"provider\":\"mockprov\",\"model\":\"mock-alpha\",\"serviceTier\":\"standard\",\"outcome\":\"completed\",\"unpricedReason\":\"missing_usage\"},{\"requestId\":\"req-2\",\"provider\":\"mockprov\",\"model\":\"mock-alpha\",\"serviceTier\":\"standard\",\"outcome\":\"completed\",\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12},\"unpricedReason\":\"unknown_provider\"}],\"turnItems\":[{\"type\":\"tool_result\",\"callId\":\"call_1_0\",\"toolName\":\"shell\",\"status\":\"completed\",\"output\":\"exit 0\\nRuntime: <DURATION>\\na.txt\",\"providerItem\":{\"type\":\"function_call_result\",\"callId\":\"call_1_0\",\"name\":\"shell\",\"output\":\"exit 0\\nRuntime: <DURATION>\\na.txt\"}},{\"type\":\"assistant_text\",\"text\":\"There is one file: a.txt.\"}]}\n{\"type\":\"completed\",\"finalText\":\"There is one file: a.txt.\"}\n",
+      "stdout": "{\"type\":\"session_start\",\"activeProfileId\":\"builtin:bare\",\"activeProfileVersion\":\"3.0.0\",\"activeProfileDigest\":\"6a2030330912fce43756ff5e1f02875dd1c5102628ad68b54e10062af2ab1065\"}\n{\"type\":\"tool_call_streaming_delta\",\"toolName\":\"shell\",\"argumentCharCount\":43}\n{\"type\":\"cost_update\",\"record\":{\"requestId\":\"req-1\",\"provider\":\"mockprov\",\"model\":\"mock-alpha\",\"serviceTier\":\"standard\",\"outcome\":\"completed\",\"unpricedReason\":\"missing_usage\"}}\n{\"type\":\"tool_started\",\"toolCallId\":\"call_1_0\",\"toolName\":\"shell\",\"arguments\":{\"command\":\"ls\",\"description\":\"List files\"}}\n{\"type\":\"tool_dispatched\",\"toolCallId\":\"call_1_0\",\"toolName\":\"shell\"}\n{\"type\":\"command_message\",\"message\":{\"id\":\"call_1_0-0\",\"sender\":\"command\",\"status\":\"completed\",\"isApprovalRejection\":false,\"callId\":\"call_1_0\",\"command\":\"List files\",\"output\":\"Runtime: <DURATION>\\na.txt\",\"success\":true,\"toolName\":\"shell\"}}\n{\"type\":\"text_delta\",\"delta\":\"There is one file: a.txt.\",\"fullText\":\"There is one file: a.txt.\"}\n{\"type\":\"cost_update\",\"record\":{\"requestId\":\"req-2\",\"provider\":\"mockprov\",\"model\":\"mock-alpha\",\"serviceTier\":\"standard\",\"outcome\":\"completed\",\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12},\"unpricedReason\":\"unknown_provider\"}}\n{\"type\":\"usage_update\",\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12}}\n{\"type\":\"usage_update\",\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12}}\n{\"type\":\"final\",\"finalText\":\"There is one file: a.txt.\",\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12},\"costRecords\":[{\"requestId\":\"req-1\",\"provider\":\"mockprov\",\"model\":\"mock-alpha\",\"serviceTier\":\"standard\",\"outcome\":\"completed\",\"unpricedReason\":\"missing_usage\"},{\"requestId\":\"req-2\",\"provider\":\"mockprov\",\"model\":\"mock-alpha\",\"serviceTier\":\"standard\",\"outcome\":\"completed\",\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12},\"unpricedReason\":\"unknown_provider\"}],\"turnItems\":[{\"type\":\"tool_result\",\"callId\":\"call_1_0\",\"toolName\":\"shell\",\"status\":\"completed\",\"output\":\"exit 0\\nRuntime: <DURATION>\\na.txt\",\"providerItem\":{\"type\":\"function_call_result\",\"callId\":\"call_1_0\",\"name\":\"shell\",\"output\":\"exit 0\\nRuntime: <DURATION>\\na.txt\"}},{\"type\":\"assistant_text\",\"text\":\"There is one file: a.txt.\"}]}\n{\"type\":\"completed\",\"finalText\":\"There is one file: a.txt.\"}\n",
       "stderr": "",
       "requests": [
         {
@@ -34,12 +34,24 @@
               "schema": "f01466518d95a1dc"
             },
             {
+              "name": "read_file",
+              "schema": "812d0e3375822a63"
+            },
+            {
+              "name": "create_file",
+              "schema": "d47b2c57674d3820"
+            },
+            {
+              "name": "search_replace",
+              "schema": "c47dfed554fe21c5"
+            },
+            {
               "name": "run_subagent",
               "schema": "b45d1b1b0a8ed3fa"
             },
             {
               "name": "run_code",
-              "schema": "80cc8f43b1ad9d6a"
+              "schema": "e9d63177f7a19d3d"
             }
           ],
           "other": {
@@ -92,12 +104,24 @@
               "schema": "f01466518d95a1dc"
             },
             {
+              "name": "read_file",
+              "schema": "812d0e3375822a63"
+            },
+            {
+              "name": "create_file",
+              "schema": "d47b2c57674d3820"
+            },
+            {
+              "name": "search_replace",
+              "schema": "c47dfed554fe21c5"
+            },
+            {
               "name": "run_subagent",
               "schema": "b45d1b1b0a8ed3fa"
             },
             {
               "name": "run_code",
-              "schema": "80cc8f43b1ad9d6a"
+              "schema": "e9d63177f7a19d3d"
             }
           ],
           "other": {

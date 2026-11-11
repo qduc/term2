@@ -247,10 +247,9 @@ it(
     expect(visible).toContain('first turn done');
     // Settled Ink Static rows retain one separator, not a padding line per row.
     // Concise display folds the settled run into legacy's one summary line, with the failures named below it.
-    // Bare doesn't offer create_file or search_replace: those calls never ran, so they count among the failures
-    // (#136 item 14, a confirmed legacy bug; legacy lists only the shell failure here).
+    // Bare offers create_file and search_replace directly, so only the shell probe failed.
     expect(visible).toMatch(
-      /✓ Ran 2 shell commands, created 1 file, edited 1 file\r?\n[^\n]*✗ 3 failed: Check failure/,
+      /✓ Ran 2 shell commands, created 1 file, edited 1 file\r?\n[^\n]*✗ 1 failed: Check failure/,
     );
     expect(visible.slice(visible.lastIndexOf('first turn done'))).not.toContain(
       'Locating the unique workspace fixture',

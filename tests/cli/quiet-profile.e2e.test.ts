@@ -200,7 +200,7 @@ for (const flags of [
       expect(events[0]).toMatchObject({
         type: 'session_start',
         activeProfileId: 'builtin:bare',
-        activeProfileVersion: '2.0.0',
+        activeProfileVersion: '3.0.0',
       });
       expect(events[0].activeProfileDigest).toMatch(/^[a-f0-9]{64}$/);
       const file = fs.readdirSync(env.TERM2_CONVERSATIONS_DIR!).find((name) => name.endsWith('.jsonl'))!;
@@ -211,7 +211,7 @@ for (const flags of [
         .map((line) => JSON.parse(line));
       expect(rows[0].fact.profile).toMatchObject({
         id: 'builtin:bare',
-        version: '2.0.0',
+        version: '3.0.0',
         digest: events[0].activeProfileDigest,
       });
       expect(fs.readFileSync(settingsFile, 'utf8')).toBe(before);

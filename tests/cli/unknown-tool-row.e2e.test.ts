@@ -77,8 +77,8 @@ function startProvider(tool: string, args: Record<string, unknown>): Promise<str
 it.each([
   // A name no profile has.
   ['frobnicate', {}, '✗ frobnicate'],
-  // A real tool Bare doesn't offer: its row must not claim the file was created.
-  ['create_file', { path: 'note.txt', content: 'hello\n' }, '✗ Created "note.txt"'],
+  // A real tool Bare doesn't offer directly: its row must not claim the search ran.
+  ['grep', { pattern: 'hello' }, '✗ Searched for "hello" in "."'],
 ] as const)('an unknown tool call (%s) is drawn as a failed row', { timeout: 120_000 }, async (tool, args, row) => {
   root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-unknown-tool-')));
   const home = path.join(root, 'home');
@@ -121,7 +121,7 @@ it.each([
   expect(toolResults).toEqual([`Unknown tool: ${tool}`]);
   expect(visible).toContain(row);
   expect(visible).toContain(`Unknown tool: ${tool}`);
-  expect(visible).not.toMatch(new RegExp(`✓ (${tool}|Created)`));
+  expect(visible).not.toMatch(new RegExp(`✓ (${tool}|Searched)`));
   // Nothing ran.
   expect(fs.readdirSync(work)).toEqual([]);
 });

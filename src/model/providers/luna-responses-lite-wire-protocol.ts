@@ -130,3 +130,38 @@ export class LunaResponsesLiteWireProtocol implements ChainedWireProtocol {
     return rest;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Request projection
+// ---------------------------------------------------------------------------
+
+/** The only built-in OpenAI model that takes tools and instructions as conversation input. */
+export const NATIVE_CONVERSATION_INPUT_MODEL = 'gpt-6-luna';
+
+/**
+ * Rewrite a classic Responses request body into native conversation input, in
+ * place: tools and instructions become an initial developer prefix, and the
+ * requested reasoning effort becomes a trailing `configuration_update`.
+ *
+ * The model is read from the finished body, so an extra-body model override
+ * that leaves the native model keeps the classic format.
+ */
+export function applyNativeConversationInput(body: any): void {
+  if (body.model !== NATIVE_CONVERSATION_INPUT_MODEL) return;
+  const prefix: unknown[] = [];
+  // Core continuity clears the anchor when instructions or tools change.
+  // A chained continuation inherits this prefix instead of accumulating it.
+  if (!body.previous_response_id) {
+    if (body.tools?.length) prefix.push({ type: 'additional_tools', role: 'developer', tools: body.tools });
+    if (body.instructions) {
+      prefix.push({ type: 'message', role: 'developer', content: [{ type: 'input_text', text: body.instructions }] });
+    }
+  }
+  const input = Array.isArray(body.input) ? body.input : [{ type: 'message', role: 'user', content: body.input }];
+  body.input = [...prefix, ...input];
+  if (body.reasoning?.effort !== undefined) {
+    body.input.push({ type: 'configuration_update', reasoning: { effort: body.reasoning.effort } });
+  }
+  delete body.tools;
+  delete body.instructions;
+}

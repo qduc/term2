@@ -245,9 +245,6 @@ importers:
       '@modelcontextprotocol/client':
         specifier: 2.0.0
         version: 2.0.0
-      '@openrouter/ai-sdk-provider':
-        specifier: ^2.9.0
-        version: 2.9.0(ai@6.0.177(zod@4.1.13))(zod@4.1.13)
       '@qduc/agent-core':
         specifier: 0.2.0-alpha.2
         version: 0.2.0-alpha.2
@@ -1111,13 +1108,6 @@ packages:
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [win32]
-
-  '@openrouter/ai-sdk-provider@2.9.0':
-    resolution: {integrity: sha512-Seva+NCa0WUQnJIUE5GzHsUv1WTIeyqwz0ELl2VtS6NP+eF+77yCXGFVOMbvoCM7QMjlnhv7931e89R+8pJdcQ==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      ai: ^6.0.0
-      zod: ^3.25.0 || ^4.0.0
 
   '@opentelemetry/api@1.9.0':
     resolution: {integrity: sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg==}
@@ -4798,11 +4788,6 @@ snapshots:
 
   '@next/swc-win32-x64-msvc@16.2.4':
     optional: true
-
-  '@openrouter/ai-sdk-provider@2.9.0(ai@6.0.177(zod@4.1.13))(zod@4.1.13)':
-    dependencies:
-      ai: 6.0.177(zod@4.1.13)
-      zod: 4.1.13
 
   '@opentelemetry/api@1.9.0': {}
 

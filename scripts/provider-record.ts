@@ -210,8 +210,6 @@ function sdkPackageFor(id: string, modelId?: string): string {
     ? '@ai-sdk/anthropic'
     : id === 'google' || id === 'gemini'
     ? '@ai-sdk/google'
-    : id === 'openrouter'
-    ? '@openrouter/ai-sdk-provider'
     : 'openai';
 }
 function installedVersion(packageName: string): string {
@@ -271,7 +269,7 @@ function runtimeProviderConfig(id: string):
 
 function wireFamilyFor(providerId: string, modelId: string): string {
   if (providerId === 'openai') return 'openai-responses';
-  if (providerId === 'openrouter') return 'ai-sdk';
+  if (providerId === 'openrouter') return 'openai-chat';
   if (providerId === 'anthropic') return 'anthropic';
   if (providerId === 'google' || providerId === 'gemini') return 'google';
   if (providerId === 'opencode')

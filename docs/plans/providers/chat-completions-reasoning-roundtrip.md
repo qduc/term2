@@ -113,7 +113,7 @@ dropped because nobody had enumerated it.
 5. **Narrow the middleware.** `preserveReasoningContentForOpenAICompatibleMessages`
    stops rewriting `reasoning` → `reasoning_content` for providers that sent
    `reasoning`. Determine first what still depends on it — the AI SDK OpenRouter
-   provider (`ai-sdk-openrouter.provider.ts:56`) passes a `reasoning` field
+   provider (`ai-sdk-openrouter.provider.ts:56`, removed 2026-11-10) passed a `reasoning` field
    through on a different lane, and `mergeAssistantMessages` handles both
    spellings.
 
@@ -179,7 +179,7 @@ the legacy trailing order. The two shapes cannot be told apart by position:
 parallel batch that history split into pairs.
 
 The producer now stamps the payload with the tool call ids of the response that
-emitted it (`OPAQUE_TURN_TOOL_CALL_IDS_KEY` in `openai-chat-completions-model.ts`,
+emitted it (`OPAQUE_TURN_TOOL_CALL_IDS_KEY` in `openai-chat-completions-messages.ts`,
 `[]` for a text-only response) and replay strips the key before the payload
 reaches the wire. Ids alone do not name a turn, because a provider may restart
 call ids in every response; the first version matched the first message
@@ -208,9 +208,13 @@ sequences of turns with and without payloads.
 
 ## Open questions
 
-- **Does narrowing the middleware regress the AI SDK OpenRouter lane?** Unknown;
-  that lane produces `message.reasoning` from a different path and may rely on
-  the rewrite. Answer before touching the middleware.
+- **Does narrowing the middleware regress the AI SDK OpenRouter lane?** Moot
+  since 2026-11-10: that lane is gone. The built-in OpenRouter provider now runs
+  on this chat-completions lane (`openrouter.provider.ts`, tagged `openrouter`),
+  so its reasoning round-trips through the opaque payload like any other
+  gateway's. Conversations recorded on the old lane hold reasoning as plain
+  `reasoning` items with no payload; they replay as assistant text, the same
+  fallback a provider switch gets.
 - **Should the opaque payload replace or accompany the
   `openai_compatible_reasoning_content` marker?** The marker distinguishes
   native reasoning from generic reasoning that has no chat-completions wire

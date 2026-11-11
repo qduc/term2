@@ -24,7 +24,6 @@ export { RESILIENCE_CAPABILITY_EXECUTIONS as PROVIDER_SESSION_RESILIENCE_EXECUTE
 type HttpWireFamily =
   | 'openai-responses'
   | 'codex-responses'
-  | 'ai-sdk-chat'
   | 'chat-completions'
   | 'anthropic-messages'
   | 'google-generate-content';
@@ -105,7 +104,7 @@ const HTTP_ROUTES: readonly { family: HttpWireFamily; route: ProviderRoute }[] =
     },
   },
   {
-    family: 'ai-sdk-chat',
+    family: 'chat-completions',
     route: {
       rowId: 'openrouter-http',
       provider: 'openrouter',
@@ -1016,7 +1015,7 @@ function nativeErrorUsesHttpStatus(family: HttpWireFamily): boolean {
 }
 
 function isChatFamily(family: HttpWireFamily): boolean {
-  return family === 'ai-sdk-chat' || family === 'chat-completions';
+  return family === 'chat-completions';
 }
 
 function contentTypeFor(): string {

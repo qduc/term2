@@ -67,6 +67,7 @@ export function createAiSdkStreamedModel(
           ...(usage.outputTokens?.total !== undefined ? { outputTokens: usage.outputTokens.total } : {}),
           ...(usage.inputTokens?.cacheRead !== undefined ? { cachedInputTokens: usage.inputTokens.cacheRead } : {}),
           ...(usage.inputTokens?.cacheWrite !== undefined ? { cacheWriteTokens: usage.inputTokens.cacheWrite } : {}),
+          ...cacheTtlUsage(usage),
           ...(usage.outputTokens?.reasoning !== undefined ? { reasoningTokens: usage.outputTokens.reasoning } : {}),
         },
         ...(costUsd !== undefined ? { costUsd } : {}),
@@ -243,6 +244,7 @@ export function createAiSdkStreamedModel(
               ...(part.usage.inputTokens.cacheWrite !== undefined
                 ? { cacheWriteTokens: part.usage.inputTokens.cacheWrite }
                 : {}),
+              ...cacheTtlUsage(part.usage),
               ...(part.usage.outputTokens.reasoning !== undefined
                 ? { reasoningTokens: part.usage.outputTokens.reasoning }
                 : {}),
@@ -520,4 +522,11 @@ export function extractAiSdkUpstreamProvider(providerMetadata?: Record<string, u
   }
 
   return undefined;
+}
+
+/** Anthropic reports TTL subsets in raw usage; other SDK adapters leave this absent. */
+function cacheTtlUsage(usage: unknown): { cacheWrite1hTokens?: number } {
+  const raw = (usage as { raw?: { cache_creation?: { ephemeral_1h_input_tokens?: unknown } } })?.raw;
+  const tokens = raw?.cache_creation?.ephemeral_1h_input_tokens;
+  return typeof tokens === 'number' && Number.isFinite(tokens) && tokens >= 0 ? { cacheWrite1hTokens: tokens } : {};
 }

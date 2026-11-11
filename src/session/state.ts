@@ -463,6 +463,12 @@ function addUsage(left: Usage, right: Usage): Usage {
     inputTokens: left.inputTokens + right.inputTokens,
     outputTokens: left.outputTokens + right.outputTokens,
     cachedInputTokens: left.cachedInputTokens + right.cachedInputTokens,
+    ...(left.cacheWriteTokens !== undefined || right.cacheWriteTokens !== undefined
+      ? { cacheWriteTokens: (left.cacheWriteTokens ?? 0) + (right.cacheWriteTokens ?? 0) }
+      : {}),
+    ...(left.cacheWrite1hTokens !== undefined || right.cacheWrite1hTokens !== undefined
+      ? { cacheWrite1hTokens: (left.cacheWrite1hTokens ?? 0) + (right.cacheWrite1hTokens ?? 0) }
+      : {}),
   };
 }
 

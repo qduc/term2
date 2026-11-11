@@ -220,7 +220,7 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
-  '@qduc/agent-core@0.2.0-alpha.2': c252cac19d865b7b0bbb9e35caedbe5cf1daa35fec18533b1f1a28aa6ff0c35f
+  '@qduc/agent-core@0.2.0-alpha.2': ef95128188f936db3a4c8d9625de24e87521332d1272c8e154719c841de9168e
   ink-prompt@0.4.3: 9a2e81dec6a8878201fd23aa9fa2d0c30dfc6ad2b6d5c2709c8cf9bca45a5044
   ink@7.0.1: 6909b90a22bc668163e76d57ce5206652acdf6f94f1351a17d71e1b25fd690fc
 
@@ -248,7 +248,7 @@ importers:
         version: 2.0.0
       '@qduc/agent-core':
         specifier: 0.2.0-alpha.2
-        version: 0.2.0-alpha.2(patch_hash=c252cac19d865b7b0bbb9e35caedbe5cf1daa35fec18533b1f1a28aa6ff0c35f)
+        version: 0.2.0-alpha.2(patch_hash=ef95128188f936db3a4c8d9625de24e87521332d1272c8e154719c841de9168e)
       '@qduc/web-fetch':
         specifier: ^0.1.4
         version: 0.1.4
@@ -4796,7 +4796,7 @@ snapshots:
 
   '@pondwader/socks5-server@1.0.10': {}
 
-  '@qduc/agent-core@0.2.0-alpha.2(patch_hash=c252cac19d865b7b0bbb9e35caedbe5cf1daa35fec18533b1f1a28aa6ff0c35f)': {}
+  '@qduc/agent-core@0.2.0-alpha.2(patch_hash=ef95128188f936db3a4c8d9625de24e87521332d1272c8e154719c841de9168e)': {}
 
   '@qduc/agent-wire@file:vendor/qduc-agent-wire-0.2.3.tgz': {}
 

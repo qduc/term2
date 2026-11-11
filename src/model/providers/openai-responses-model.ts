@@ -324,7 +324,10 @@ function normalizeUsage(usage: any): StreamedModelUsage | undefined {
   const inputTokens = usage.input_tokens ?? usage.inputTokens;
   const outputTokens = usage.output_tokens ?? usage.outputTokens;
   const cachedInputTokens = usage.input_tokens_details?.cached_tokens ?? usage.cachedInputTokens;
-  const cacheWriteTokens = usage.input_tokens_details?.cache_creation_tokens ?? usage.cacheWriteTokens;
+  const cacheWriteTokens =
+    usage.input_tokens_details?.cache_write_tokens ??
+    usage.input_tokens_details?.cache_creation_tokens ??
+    usage.cacheWriteTokens;
   const reasoningTokens =
     usage.output_tokens_details?.reasoning_tokens ??
     usage.outputTokensDetails?.reasoningTokens ??

@@ -148,6 +148,12 @@ export function captureDirectFinalWindow(
         inputTokens: (usage?.inputTokens ?? 0) + fact.usage.inputTokens,
         outputTokens: (usage?.outputTokens ?? 0) + fact.usage.outputTokens,
         cachedInputTokens: (usage?.cachedInputTokens ?? 0) + fact.usage.cachedInputTokens,
+        ...(usage?.cacheWriteTokens !== undefined || fact.usage.cacheWriteTokens !== undefined
+          ? { cacheWriteTokens: (usage?.cacheWriteTokens ?? 0) + (fact.usage.cacheWriteTokens ?? 0) }
+          : {}),
+        ...(usage?.cacheWrite1hTokens !== undefined || fact.usage.cacheWrite1hTokens !== undefined
+          ? { cacheWrite1hTokens: (usage?.cacheWrite1hTokens ?? 0) + (fact.usage.cacheWrite1hTokens ?? 0) }
+          : {}),
       };
     }
     if (fact.type === 'tool_started') executions.set(fact.executionId, fact.toolName);
@@ -225,7 +231,9 @@ export function captureDirectFinalWindow(
       ...(usage
         ? {
             usage: {
-              prompt_tokens: usage.inputTokens,
+              prompt_tokens: usage.inputTokens - (usage.cacheWriteTokens ?? 0),
+              ...(usage.cacheWriteTokens !== undefined ? { cache_creation_tokens: usage.cacheWriteTokens } : {}),
+              ...(usage.cacheWrite1hTokens !== undefined ? { cache_creation_1h_tokens: usage.cacheWrite1hTokens } : {}),
               completion_tokens: usage.outputTokens,
               total_tokens: usage.inputTokens + usage.outputTokens,
               cache_read_tokens: usage.cachedInputTokens,

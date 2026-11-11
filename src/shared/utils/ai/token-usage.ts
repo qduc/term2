@@ -46,7 +46,7 @@ function asUsageContainer(value: unknown): Record<string, any> | undefined {
 export function normalizeUsage(usage: any): NormalizedUsage | undefined {
   if (!usage || typeof usage !== 'object') return undefined;
 
-  const promptTokens = coalesceNumber(
+  let promptTokens = coalesceNumber(
     usage.prompt_tokens,
     usage.input_tokens,
     usage.input_token_count,
@@ -77,7 +77,13 @@ export function normalizeUsage(usage: any): NormalizedUsage | undefined {
     usage.cacheCreationTokens,
     usage.cache_write_tokens,
     usage.cacheWriteTokens,
-    sumDetailField(usage.inputTokensDetails ?? usage.input_tokens_details, ['cache_write_tokens', 'cacheWriteTokens']),
+    sumDetailField(
+      usage.prompt_tokens_details ??
+        usage.promptTokensDetails ??
+        usage.inputTokensDetails ??
+        usage.input_tokens_details,
+      ['cache_write_tokens', 'cacheWriteTokens'],
+    ),
     usage.cacheWrite5mTokens,
     usage.cacheWrite1hTokens,
   );
@@ -91,12 +97,45 @@ export function normalizeUsage(usage: any): NormalizedUsage | undefined {
     usage.cachedInputTokens,
     usage.cached_input_tokens,
     usage.inputTokensDetails?.cached_tokens,
+    usage.input_tokens_details?.cached_tokens,
     usage.prompt_tokens_details?.cached_tokens,
     usage.promptTokensDetails?.cachedTokens,
     usage.cachedContentTokenCount,
     usage.cached_content_token_count,
     usage.cacheReadTokens,
   );
+
+  // Raw Chat Completions includes creation in prompt_tokens. A canonical
+  // cache_creation_tokens record already excludes it; do not subtract twice on
+  // replay or when normalizeUsage receives its own output.
+  const rawChatWrites = coalesceNumber(
+    usage.cache_write_tokens,
+    usage.cacheWriteTokens,
+    sumDetailField(
+      usage.prompt_tokens_details ??
+        usage.promptTokensDetails ??
+        usage.inputTokensDetails ??
+        usage.input_tokens_details,
+      ['cache_write_tokens', 'cacheWriteTokens'],
+    ),
+  );
+  if (
+    usage.prompt_tokens != null &&
+    usage.cache_creation_tokens == null &&
+    usage.cacheCreationTokens == null &&
+    rawChatWrites != null &&
+    promptTokens != null
+  )
+    promptTokens -= rawChatWrites;
+
+  // Native Anthropic excludes cached input; Responses and canonical Usage include
+  // all cache tokens. Normalized prompt_tokens excludes writes and includes reads.
+  if (usage.prompt_tokens == null && promptTokens != null) {
+    if (usage.cache_read_input_tokens !== undefined || usage.cache_creation_input_tokens !== undefined)
+      promptTokens += cacheReadTokens ?? 0;
+    else if (usage.input_tokens_details !== undefined || typeof usage.inputTokens === 'number')
+      promptTokens -= cacheCreationTokens ?? 0;
+  }
 
   const totalTokens =
     coalesceNumber(usage.total_tokens, usage.total_token_count, usage.totalTokenCount, usage.totalTokens) ??
@@ -144,6 +183,8 @@ export function normalizeUsage(usage: any): NormalizedUsage | undefined {
   if (reasoningTokens != null) mapped.reasoning_tokens = reasoningTokens;
   if (cacheReadTokens != null) mapped.cache_read_tokens = cacheReadTokens;
   if (cacheCreationTokens != null) mapped.cache_creation_tokens = cacheCreationTokens;
+  const longWrites = coalesceNumber(usage.cache_creation_1h_tokens, usage.cacheWrite1hTokens);
+  if (longWrites != null) mapped.cache_creation_1h_tokens = longWrites;
   if (promptMs != null) mapped.prompt_ms = promptMs;
   if (completionMs != null) mapped.completion_ms = completionMs;
   if (tokensPerSecond != null) mapped.tokens_per_second = tokensPerSecond;
@@ -254,7 +295,7 @@ export function normalizeAgentRunUsage(stateUsage: any): NormalizedUsage | undef
   const usage = asUsageContainer(stateUsage);
   if (!usage) return undefined;
 
-  const promptTokens = coalesceNumber(usage.inputTokens, usage.input_tokens);
+  const fullInputTokens = coalesceNumber(usage.inputTokens, usage.input_tokens);
   const completionTokens = coalesceNumber(usage.outputTokens, usage.output_tokens);
   // Application-owned run state stores these as cumulative scalar totals. Prefer
   // them when present; detail arrays are the legacy SDK fallback and must not be
@@ -280,6 +321,7 @@ export function normalizeAgentRunUsage(stateUsage: any): NormalizedUsage | undef
     'reasoning_tokens',
     'reasoningTokens',
   ]);
+  const promptTokens = fullInputTokens == null ? undefined : fullInputTokens - (cacheCreationTokens ?? 0);
   // Match normalizeUsage(): cache creation represents billable input and is
   // included in the total whenever a provider did not supply a native total.
   const totalTokens =
@@ -293,6 +335,8 @@ export function normalizeAgentRunUsage(stateUsage: any): NormalizedUsage | undef
   if (reasoningTokens != null) mapped.reasoning_tokens = reasoningTokens;
   if (cacheReadTokens != null) mapped.cache_read_tokens = cacheReadTokens;
   if (cacheCreationTokens != null) mapped.cache_creation_tokens = cacheCreationTokens;
+  const longWrites = coalesceNumber(usage.cache_creation_1h_tokens, usage.cacheWrite1hTokens);
+  if (longWrites != null) mapped.cache_creation_1h_tokens = longWrites;
 
   // An all-zero accumulator means the provider never reported usage; treat as absent
   // so callers can fall back to other extraction paths.
@@ -319,7 +363,7 @@ export function formatFooterUsage(
 
   const parts: string[] = [];
   if (usage.prompt_tokens != null) {
-    let promptPart = `${usage.prompt_tokens.toLocaleString()} in`;
+    let promptPart = `${(usage.prompt_tokens + (usage.cache_creation_tokens ?? 0)).toLocaleString()} in`;
     const promptDetails: string[] = [];
     if (usage.cache_read_tokens != null) {
       const cacheLabel = options.cacheWarning ? 'uncached' : 'cached';
@@ -369,6 +413,7 @@ export function addTokenUsage(
     | 'reasoning_tokens'
     | 'cache_read_tokens'
     | 'cache_creation_tokens'
+    | 'cache_creation_1h_tokens'
     | 'prompt_ms'
     | 'completion_ms';
 
@@ -384,6 +429,7 @@ export function addTokenUsage(
   addField('reasoning_tokens');
   addField('cache_read_tokens');
   addField('cache_creation_tokens');
+  addField('cache_creation_1h_tokens');
   addField('prompt_ms');
   addField('completion_ms');
 
@@ -434,7 +480,7 @@ export function createUsageAccumulator(initialUsage?: NormalizedUsage | null): U
 }
 
 export function formatSessionTokenUsage(usage: NormalizedUsage | null | undefined): string {
-  const promptTokens = usage?.prompt_tokens ?? 0;
+  const promptTokens = (usage?.prompt_tokens ?? 0) + (usage?.cache_creation_tokens ?? 0);
   const completionTokens = usage?.completion_tokens ?? 0;
   const cachedTokens = usage?.cache_read_tokens ?? 0;
 
@@ -443,7 +489,7 @@ export function formatSessionTokenUsage(usage: NormalizedUsage | null | undefine
 }
 
 export function formatUsageLine(label: string, usage: NormalizedUsage | null | undefined): string {
-  const promptTokens = usage?.prompt_tokens ?? 0;
+  const promptTokens = (usage?.prompt_tokens ?? 0) + (usage?.cache_creation_tokens ?? 0);
   const completionTokens = usage?.completion_tokens ?? 0;
   const cachedTokens = usage?.cache_read_tokens ?? 0;
 

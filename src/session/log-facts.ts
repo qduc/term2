@@ -247,7 +247,9 @@ export function validateCompactionFact(fact: Record<string, unknown>, fail: (fie
     if ('usage' in request) {
       const usage = objectRecord(request['usage'], fail, 'requests.usage');
       const keys = ['inputTokens', 'outputTokens', 'cachedInputTokens'];
-      exact(usage, keys, [], 'requests.usage');
+      exact(usage, keys, ['cacheWriteTokens', 'cacheWrite1hTokens'], 'requests.usage');
+      for (const key of ['cacheWriteTokens', 'cacheWrite1hTokens'])
+        if (key in usage) number(usage[key], `requests.usage.${key}`);
       for (const key of keys) number(usage[key], `requests.usage.${key}`);
     }
     if ('costUsd' in request) validateProviderCost(request['costUsd'], fail, 'requests.costUsd');
@@ -422,6 +424,7 @@ export function validateRequestCost(value: unknown, where: string): void {
       'reasoning_tokens',
       'cache_read_tokens',
       'cache_creation_tokens',
+      'cache_creation_1h_tokens',
       'prompt_ms',
       'completion_ms',
       'tokens_per_second',

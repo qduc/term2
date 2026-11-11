@@ -183,3 +183,16 @@ setting through the built application, not merely inspect translated options:
 setting-off, setting-on, unsupported-provider and 503-to-default recovery are
 distinct controls. Explicit overrides additionally need a `ModelRegistry` probe
 because the CLI does not expose request provider options.
+
+## Anthropic reasoning
+
+The Anthropic-format adapter uses adaptive thinking for `claude-haiku-5-5`
+and its dated model IDs when the user requests a named thinking effort. Haiku
+5.5 rejects the older fixed-token `thinking.type: enabled` format. Adaptive
+requests pass the effort through the SDK's Anthropic `effort` option; `minimal`
+maps to `low`, the lowest adaptive level. Explicit provider thinking and effort
+options retain precedence. Unspecified effort retains the existing provider
+defaults, and other models retain their fixed thinking budgets.
+
+Adaptive thinking does not add a separate thinking budget to the requested
+output ceiling. The model's reasoning and answer share that ceiling.

@@ -182,13 +182,16 @@ export class AiSdkAnthropicProvider {
 
     return createAiSdkStreamedModel(
       withForwardedProviderSettings(model, (options) => forwardExplicitProviderSettings(options, 'anthropic')),
-      resolveReasoningOptions,
+      (request) => resolveReasoningOptions(request, /^claude-haiku-5-5(?:-|$)/.test(resolvedModelName)),
     );
   }
 }
 
 /** Apply anthropic's reasoning options before crossing the SDK boundary. */
-function resolveReasoningOptions(request: StreamedModelTurnRequest): SharedV3ProviderOptions | undefined {
+function resolveReasoningOptions(
+  request: StreamedModelTurnRequest,
+  adaptiveThinking: boolean,
+): SharedV3ProviderOptions | undefined {
   const budget = resolveThinkingBudget(request.reasoning?.effort);
   if (budget === undefined) return request.providerOptions as SharedV3ProviderOptions | undefined;
   const providerOptions: SharedV3ProviderOptions = {
@@ -196,7 +199,16 @@ function resolveReasoningOptions(request: StreamedModelTurnRequest): SharedV3Pro
   };
   providerOptions.anthropic = {
     ...(providerOptions.anthropic ?? {}),
-    thinking: providerOptions.anthropic?.thinking ?? { type: 'enabled', budgetTokens: budget },
+    thinking:
+      providerOptions.anthropic?.thinking ??
+      (adaptiveThinking ? { type: 'adaptive' } : { type: 'enabled', budgetTokens: budget }),
+    ...(adaptiveThinking
+      ? {
+          effort:
+            providerOptions.anthropic?.effort ??
+            (request.reasoning?.effort === 'minimal' ? 'low' : request.reasoning?.effort),
+        }
+      : {}),
   };
   return providerOptions;
 }

@@ -150,8 +150,8 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/model/providers/openai-responses-model.ts": {
-      "lines": 889,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
+      "lines": 915,
+      "reason": "The Responses adapter includes the native Luna conversation projection added in #250. The 26 new lines extend its existing shared request builder and HTTP/unary/WebSocket option plumbing; extracting only this conditional would separate one wire projection across files. Retire this exception when the complete request projection is extracted as an independently testable provider boundary."
     },
     "src/session/approval/shell-auto-approval-evaluator.ts": {
       "lines": 797,

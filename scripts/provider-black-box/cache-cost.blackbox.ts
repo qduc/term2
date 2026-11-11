@@ -1,5 +1,10 @@
 import { createServer } from 'node:http';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile, readdir, readFile } from 'node:fs/promises';
+import { normalizeUsage, formatFooterUsage } from '../../src/shared/utils/ai/token-usage.js';
+import {
+  normalizeUsage as normalizeTuiUsage,
+  formatFooterUsage as formatTuiFooterUsage,
+} from '../../src/clients/tui/presentation/utils/ai/token-usage.js';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { createIsolatedWorkspaceLease } from './provider-test-harness.js';
@@ -9,6 +14,7 @@ import { createIsolatedWorkspaceLease } from './provider-test-harness.js';
 it('accounts for cache creation, whole-request context tiers and one-hour writes', async () => {
   const cases = [
     { provider: 'openai', model: 'gpt-6-luna', input: 1000, read: 600, write: 300, long: 0, micros: 104 },
+    { provider: 'chat-cost-fixture', model: 'gpt-6-luna', input: 200, read: 50, write: 100, long: 0, micros: 24 },
     { provider: 'anthropic', model: 'claude-haiku-5-5', input: 3, read: 99997, write: 0, long: 0, micros: 1050 },
     { provider: 'anthropic', model: 'claude-haiku-5-5', input: 3, read: 99998, write: 0, long: 0, micros: 5252 },
     {
@@ -23,6 +29,7 @@ it('accounts for cache creation, whole-request context tiers and one-hour writes
   ];
   for (const fixture of cases) {
     let requests = 0;
+    const output = fixture.provider === 'chat-cost-fixture' ? 10 : 100;
     const server = createServer(async (req, res) => {
       if (req.method === 'GET') {
         res.setHeader('content-type', 'application/json');
@@ -36,6 +43,28 @@ it('accounts for cache creation, whole-request context tiers and one-hour writes
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       const emit = (event: Record<string, unknown>) =>
         res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+      if (fixture.provider === 'chat-cost-fixture') {
+        const usage = {
+          prompt_tokens: fixture.input,
+          completion_tokens: output,
+          total_tokens: fixture.input + output,
+          cache_write_tokens: fixture.write,
+          prompt_tokens_details: { cached_tokens: fixture.read },
+        };
+        res.end(
+          `data: ${JSON.stringify({
+            id: 'chat_cost',
+            model: fixture.model,
+            choices: [{ delta: { role: 'assistant', content: 'COST_OK' }, finish_reason: null }],
+          })}\n\ndata: ${JSON.stringify({
+            id: 'chat_cost',
+            model: fixture.model,
+            choices: [{ delta: {}, finish_reason: 'stop' }],
+            usage,
+          })}\n\ndata: [DONE]\n\n`,
+        );
+        return;
+      }
       if (fixture.provider === 'openai') {
         const item = {
           type: 'message',
@@ -52,8 +81,8 @@ it('accounts for cache creation, whole-request context tiers and one-hour writes
           output: [item],
           usage: {
             input_tokens: fixture.input,
-            output_tokens: 100,
-            total_tokens: fixture.input + 100,
+            output_tokens: output,
+            total_tokens: fixture.input + output,
             input_tokens_details: { cached_tokens: fixture.read, cache_write_tokens: fixture.write },
           },
         };
@@ -118,6 +147,8 @@ it('accounts for cache creation, whole-request context tiers and one-hour writes
             providers:
               fixture.provider === 'anthropic'
                 ? [{ id: 'anthropic', name: 'Anthropic', type: 'anthropic', baseUrl, apiKey: 'fixture' }]
+                : fixture.provider === 'chat-cost-fixture'
+                ? [{ id: fixture.provider, name: 'Chat fixture', type: 'openai', baseUrl, apiKey: 'fixture' }]
                 : [],
           }),
         );
@@ -152,12 +183,38 @@ it('accounts for cache creation, whole-request context tiers and one-hour writes
       expect(cost?.usdMicros).toBe(fixture.micros);
       expect(cost?.usage.cache_creation_tokens ?? 0).toBe(fixture.write);
       if (fixture.provider === 'anthropic') expect(cost?.usage.cache_creation_1h_tokens).toBe(fixture.long);
-      const fullInput = fixture.provider === 'openai' ? fixture.input : fixture.input + fixture.read + fixture.write;
+      const fullInput = fixture.provider === 'anthropic' ? fixture.input + fixture.read + fixture.write : fixture.input;
       expect(cost?.usage.prompt_tokens + (cost?.usage.cache_creation_tokens ?? 0)).toBe(fullInput);
-      expect(cost?.usage.total_tokens).toBe(fullInput + 100);
+      expect(cost?.usage.total_tokens).toBe(fullInput + output);
       const final = events.find((event) => event.type === 'final');
       expect(final?.usage.prompt_tokens + (final?.usage.cache_creation_tokens ?? 0)).toBe(fullInput);
-      expect(final?.usage.total_tokens).toBe(fullInput + 100);
+      expect(final?.usage.total_tokens).toBe(fullInput + output);
+      if (fixture.provider === 'chat-cost-fixture') {
+        // Consume the actual persisted provider response, rather than a hand-built
+        // normalized object, through both presentation paths. This catches the raw
+        // chat vs canonical split and ensures replay normalization is idempotent.
+        const traffic = join(lease.paths.logDir, 'logs', 'provider-traffic');
+        const files = await readdir(traffic, { recursive: true });
+        const usages = [];
+        for (const file of files) {
+          if (!file.endsWith('.json')) continue;
+          const record = JSON.parse(await readFile(join(traffic, file), 'utf8'));
+          const usage = record.received?.summary?.payload?.usage;
+          if (usage?.cache_write_tokens === fixture.write) usages.push(usage);
+        }
+        expect(usages).toHaveLength(1);
+        for (const [normalize, format] of [
+          [normalizeUsage, formatFooterUsage],
+          [normalizeTuiUsage, formatTuiFooterUsage],
+        ] as const) {
+          const once = normalize(usages[0]);
+          const twice = normalize(once);
+          expect(once).toEqual(cost.usage);
+          expect(twice).toEqual(once);
+          expect(format(once)).toContain('200 in');
+          expect(format(twice)).toBe(format(once));
+        }
+      }
     } finally {
       await lease.cleanup();
       server.closeAllConnections();

@@ -97,7 +97,13 @@ export function normalizeUsage(usage: any): NormalizedUsage | undefined {
     usage.cacheCreationTokens,
     usage.cache_write_tokens,
     usage.cacheWriteTokens,
-    sumDetailField(usage.inputTokensDetails ?? usage.input_tokens_details, ['cache_write_tokens', 'cacheWriteTokens']),
+    sumDetailField(
+      usage.prompt_tokens_details ??
+        usage.promptTokensDetails ??
+        usage.inputTokensDetails ??
+        usage.input_tokens_details,
+      ['cache_write_tokens', 'cacheWriteTokens'],
+    ),
     usage.cacheWrite5mTokens,
     usage.cacheWrite1hTokens,
   );
@@ -118,6 +124,29 @@ export function normalizeUsage(usage: any): NormalizedUsage | undefined {
     usage.cached_content_token_count,
     usage.cacheReadTokens,
   );
+
+  // Raw Chat Completions includes creation in prompt_tokens. A canonical
+  // cache_creation_tokens record already excludes it; do not subtract twice on
+  // replay or when normalizeUsage receives its own output.
+  const rawChatWrites = coalesceNumber(
+    usage.cache_write_tokens,
+    usage.cacheWriteTokens,
+    sumDetailField(
+      usage.prompt_tokens_details ??
+        usage.promptTokensDetails ??
+        usage.inputTokensDetails ??
+        usage.input_tokens_details,
+      ['cache_write_tokens', 'cacheWriteTokens'],
+    ),
+  );
+  if (
+    usage.prompt_tokens != null &&
+    usage.cache_creation_tokens == null &&
+    usage.cacheCreationTokens == null &&
+    rawChatWrites != null &&
+    promptTokens != null
+  )
+    promptTokens -= rawChatWrites;
 
   // Native Anthropic excludes cached input; Responses and canonical Usage include
   // all cache tokens. Normalized prompt_tokens excludes writes and includes reads.

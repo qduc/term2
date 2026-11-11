@@ -88,7 +88,12 @@ export function createProviderRegistry(deps: ProviderRegistryDeps): ModelRegistr
       }
       const model = lazyModel(ref, provider, deps, sessionAccounts);
       if (model.catalogContextWindow === undefined)
-        deps.logger.warn('Model context window unknown; automatic compaction assumes 128,000 tokens', ref);
+        deps.logger.warn(
+          `Model context window unknown; automatic compaction assumes ${DEFAULT_ASSUMED_CONTEXT_WINDOW.toLocaleString(
+            'en-US',
+          )} tokens`,
+          ref,
+        );
       models.set(key, model);
       return model;
     },

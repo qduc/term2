@@ -14,5 +14,6 @@ minimumReleaseAgeExclude:
   - '@qduc/agent-core@0.2.0-alpha.2'
 
 patchedDependencies:
+  '@qduc/agent-core@0.2.0-alpha.2': patches/@qduc__agent-core@0.2.0-alpha.2.patch
   ink-prompt@0.4.3: patches/ink-prompt@0.4.3.patch
   ink@7.0.1: patches/ink@7.0.1.patch

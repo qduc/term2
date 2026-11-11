@@ -130,8 +130,14 @@ Bare offers the existing file tools directly as well as through `run_code`:
 `apply_patch` editing surface. File-read/write settings and read-only authority
 still determine availability. Both routes use the same validation and approvals;
 local direct reads resolve physical workspace boundaries before bypassing approval.
-Search and skill loading can still use the shell. The remaining model-facing tools
-include the shell, `goal_check` (root sessions), `run_code`, and, in interactive
+Search and skill loading can still use the shell.
+
+Bare's short prompt recommends the available native file tools for inspection
+and targeted edits, and the shell for searches and commands. Its tool list and
+rules follow the effective read, write, shell, and patch/editor surface rather
+than advertising tools disabled by settings or authority.
+
+The remaining model-facing tools include the shell, `goal_check` (root sessions), `run_code`, and, in interactive
 sessions, `session_rollover`, which scripts cannot call.
 The frozen provider surface omits Bare's proposed `ask_mentor`, `ask_user`,
 and `enter_worktree`/`exit_worktree` add-backs; see [the merge decision](lite-bare-merge.md).

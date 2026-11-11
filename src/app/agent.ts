@@ -403,7 +403,6 @@ export const getAgentDefinition = (
     model: resolvedModel,
     profile,
     searchViaShell,
-    codeContextEnabled: codeContextEnabled && hasCapability('code-context'),
     runSubagentEnabled: hasCapability('subagents') && (Boolean(runSubagent) || asyncSubagentEnabled),
     runSubagentForegroundEnabled: hasCapability('subagents') && runSubagentForegroundEnabled,
     runSubagentAsyncEnabled: hasCapability('subagents') && asyncSubagentEnabled,
@@ -417,6 +416,7 @@ export const getAgentDefinition = (
     executionContext,
     runCodeEnabled: hasCapability('shell'),
     editorSurface: filesystemWriteEnabled ? (usesPatchEditingSurface ? 'patch' : 'editors') : 'none',
+    fileReadEnabled: filesystemReadEnabled,
   });
   let prompt = promptSpec.basePromptContent ?? resolvePrompt(path.join(BASE_PROMPT_PATH, promptSpec.basePromptFile!));
 

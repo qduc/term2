@@ -174,7 +174,7 @@ it
       await writePtyTextAndSubmit(child, '/retry-turn');
       await child.waitForState(() => requests.length === 2);
       expect(requests[1]!.input).toEqual(requests[0]!.input);
-      expect(JSON.stringify(requests[1])).toContain('Use the shell to read, search, and edit files');
+      expect(JSON.stringify(requests[1])).toContain('You are a coding assistant running inside Term2');
       expect(JSON.stringify(requests[1])).not.toContain(oldNotice);
       expect(JSON.stringify(requests[1])).not.toMatch(/(?:Plan|Pair|Mentor|Orchestrator) Mode is ON/);
       expect(JSON.stringify(requests[1])).not.toContain('propose_goal');

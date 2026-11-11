@@ -2158,6 +2158,39 @@ fs.createWriteStream = (filename, options) => {
       },
     );
 
+    it.each(['RED', 'YELLOW'] as const)(
+      'keeps a rejected %s shell command out of the provider tool result',
+      { timeout: 90_000 },
+      async (level) => {
+        const marker = `REJECTION_PAYLOAD_${'x'.repeat(4_000)}`;
+        const run = await runShellCallsScenario(
+          [
+            {
+              callId: { kind: 'provider', id: 'denied-long-command' },
+              args: (workspace) => ({
+                command:
+                  level === 'RED'
+                    ? `rm ${path.join(workspace, 'victim.txt')} # ${marker}`
+                    : `cat > ${path.join(workspace, 'victim.txt')} <<'EOF'\n${marker}\nEOF`,
+              }),
+            },
+          ],
+          { 'victim.txt': 'must survive\n' },
+        );
+
+        expect(run.status, run.stderr).toBe(0);
+        expect(run.files['victim.txt']).toBe('must survive\n');
+        expect(run.toolLines).toEqual([expectedToolLine(run.commands[0]!).split('\n')[0]]);
+        expect(run.savedPlannedCommands).toEqual(run.commands);
+        expect(run.savedCommandRecords[0]).toMatchObject({ isApprovalRejection: true, success: false });
+        const { calls, results } = lastWireToolExchange(run.requests);
+        expect(JSON.parse(calls[0]!.function.arguments).command).toBe(run.commands[0]);
+        expect(results[0]?.content).toContain(`command is ${level}`);
+        expect(results[0]?.content).not.toContain(marker);
+        expect(results[0]?.content.length).toBeLessThan(512);
+      },
+    );
+
     it.each([
       ['omits tool call ids', { kind: 'omitted' } as const],
       ['sends empty tool call ids', { kind: 'empty' } as const],

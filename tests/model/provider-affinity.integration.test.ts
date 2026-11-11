@@ -645,3 +645,44 @@ it('derives custom providers from each instance settings and excludes another ho
   expect(firstWire.receipts).toHaveLength(1);
   expect(secondWire.receipts).toHaveLength(1);
 });
+
+it('sends adaptive Haiku thinking and preserves older models and explicit options through the Anthropic SDK', async () => {
+  const { receipts, baseURL } = await fixture();
+  const settings = createMockSettingsService({
+    'agent.retryAttempts': 0,
+    providers: [{ id: 'haiku-fixture', name: 'Haiku fixture', type: 'anthropic', baseUrl: baseURL, apiKey: 'fixture' }],
+  });
+  const registry = createProviderRegistry({ settings, logger });
+  for (const [modelId, effort, expected] of [
+    ['claude-haiku-5-5', 'medium', 'medium'],
+    ['claude-haiku-5-5-20261001', 'high', 'high'],
+    ['claude-haiku-5-5', 'minimal', 'low'],
+  ] as const) {
+    await collect(registry.resolve({ provider: 'haiku-fixture', model: modelId }), undefined, {
+      reasoning: effort,
+      maxOutputTokens: 128,
+    });
+    expect(receipts.at(-1)!.body).toMatchObject({
+      model: modelId,
+      max_tokens: 128,
+      thinking: { type: 'adaptive' },
+      output_config: { effort: expected },
+    });
+    expect(receipts.at(-1)!.body.thinking).not.toHaveProperty('budget_tokens');
+  }
+
+  const haiku = registry.resolve({ provider: 'haiku-fixture', model: 'claude-haiku-5-5' });
+  await collect(haiku, undefined, {
+    reasoning: 'medium',
+    providerOptions: { anthropic: { thinking: { type: 'adaptive' }, effort: 'high' } },
+  });
+  expect(receipts.at(-1)!.body).toMatchObject({ thinking: { type: 'adaptive' }, output_config: { effort: 'high' } });
+  await collect(haiku);
+  expect(receipts.at(-1)!.body).not.toHaveProperty('thinking');
+
+  await collect(registry.resolve({ provider: 'haiku-fixture', model: 'claude-haiku-4-5-20251001' }), undefined, {
+    reasoning: 'medium',
+  });
+  expect(receipts.at(-1)!.body).toMatchObject({ thinking: { type: 'enabled', budget_tokens: 4096 } });
+  expect(receipts.at(-1)!.body).not.toHaveProperty('output_config');
+});

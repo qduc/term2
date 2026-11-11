@@ -9,6 +9,16 @@ import type { StreamedModelTurnRequest } from '../streamed-model-turn.js';
  * `openai-chat-completions-model.ts`.
  */
 
+/**
+ * Term2's own key inside a chat-completions `provider_opaque` payload: the tool
+ * call ids of the response that produced it (`[]` for a response without tool
+ * calls). Replay matches the payload to its turn by these ids and strips the key
+ * before the payload reaches the wire. Payloads persisted before the key existed
+ * lack it and fall back to positional matching, which cannot tell a payload-less
+ * earlier turn from a split parallel batch.
+ */
+export const OPAQUE_TURN_TOOL_CALL_IDS_KEY = 'term2_turn_tool_call_ids';
+
 /** The wire spellings a continuity payload may use for reasoning. */
 const REASONING_WIRE_FIELDS = ['reasoning_content', 'reasoning', 'reasoning_details'] as const;
 
@@ -97,6 +107,12 @@ export function openAICompatibleMessages(
   let pendingOpaqueTarget: any | undefined;
   let pendingOpaquePayload: Record<string, unknown> | undefined;
   let leadingPayloadGroupOpen = false;
+  // Payloads stamped with their turn's tool call ids attach by id after the
+  // walk, whichever side of their turn they sit on. A stamped payload with no
+  // ids belongs to a text-only turn and attaches to the next assistant message.
+  const identifiedPayloads: { callIds: ReadonlySet<string>; payload: Record<string, unknown>; position: number }[] = [];
+  let pendingTextTurnPayload: Record<string, unknown> | undefined;
+  const turnCallIds = new WeakMap<object, ReadonlySet<string>>();
   const registerAssistant = (message: any): void => {
     if (pendingOpaquePayload) {
       attachOpaquePayload(message, pendingOpaquePayload);
@@ -159,7 +175,29 @@ export function openAICompatibleMessages(
       // the history. See `provider-opaque-compatibility.ts`.
       if (!isOwnOpaqueTag(tag, providerId)) continue;
       const rawPayload = item.type === 'provider_opaque' ? item.item : item;
-      const { providerOpaque: _marker, type: _type, ...payload } = rawPayload as any;
+      const {
+        providerOpaque: _marker,
+        type: _type,
+        [OPAQUE_TURN_TOOL_CALL_IDS_KEY]: stampedCallIds,
+        ...payload
+      } = rawPayload as any;
+      if (Array.isArray(stampedCallIds)) {
+        // A stamped payload names its own turn, so it also retires whatever the
+        // positional fallback was holding for an older, payload-less turn.
+        pendingOpaqueTarget = undefined;
+        pendingOpaquePayload = undefined;
+        leadingPayloadGroupOpen = false;
+        if (stampedCallIds.length > 0) {
+          identifiedPayloads.push({
+            callIds: new Set(stampedCallIds.map(String)),
+            payload,
+            position: messages.length,
+          });
+        } else {
+          pendingTextTurnPayload = payload;
+        }
+        continue;
+      }
       // A normalized reasoning item immediately before the payload is its
       // leading twin. It is also an explicit boundary that retires any older
       // assistant group which emitted no opaque payload.
@@ -225,13 +263,17 @@ export function openAICompatibleMessages(
       if (item.role === 'user') {
         pendingOpaqueTarget = undefined;
         pendingOpaquePayload = undefined;
+        pendingTextTurnPayload = undefined;
         leadingPayloadGroupOpen = false;
         pendingLegacyOpenRouter = false;
         pendingLegacyOpenRouterDetails = [];
         pendingLegacyOpenRouterText = '';
       }
       if (item.role === 'assistant') {
-        registerAssistant(message);
+        if (pendingTextTurnPayload) {
+          attachOpaquePayload(message, pendingTextTurnPayload);
+          pendingTextTurnPayload = undefined;
+        } else registerAssistant(message);
         attachLegacyOpenRouter(message, item);
       }
       if (item.role === 'assistant') pendingLegacyNativeReasoning = '';
@@ -277,7 +319,52 @@ export function openAICompatibleMessages(
   // message/tool call, not a valid standalone message; if no such item follows
   // — an interrupted turn — omit it rather than inventing a message to carry
   // it or back-dating it onto an earlier one that did not produce it.
-  return coalesceReasoningToolCallBatches(messages, legacyAssistantGroups);
+  // Providers may reuse tool call ids across responses, so an id alone does not
+  // name a turn. Search outward from where the payload sat, only as far as the
+  // nearest user message or other stamped payload: forward first (the order the
+  // producer emits), then backward (a payload trailing its turn's results).
+  const boundaries = new Set<number>(identifiedPayloads.map(({ position }) => position));
+  messages.forEach((message, index) => {
+    if (message.role === 'user') boundaries.add(index);
+  });
+  const ownsCall = (message: any, callIds: ReadonlySet<string>): boolean =>
+    message.role === 'assistant' &&
+    !turnCallIds.has(message) &&
+    Array.isArray(message.tool_calls) &&
+    message.tool_calls.some((call: any) => callIds.has(call.id));
+  for (const { callIds, payload, position } of identifiedPayloads) {
+    let target: any;
+    for (let index = position; index < messages.length && !target; index += 1) {
+      if ((index > position && boundaries.has(index)) || messages[index].role === 'user') break;
+      if (ownsCall(messages[index], callIds)) target = messages[index];
+    }
+    // Trailing: the payload follows its turn's results. A batch that history
+    // split into call/result pairs is several messages, so keep walking back to
+    // the earliest of them (coalescing re-merges the rest forward), but stop at
+    // a repeated id, which belongs to an earlier turn.
+    const seen = new Set<string>();
+    for (let index = position - 1; index >= 0 && target === undefined; index -= 1) {
+      if (!ownsCall(messages[index], callIds)) {
+        if (boundaries.has(index)) break;
+        continue;
+      }
+      let earliest = index;
+      for (let earlier = index; earlier >= 0; earlier -= 1) {
+        const message = messages[earlier];
+        if (message.role === 'tool') continue;
+        if (!ownsCall(message, callIds)) break;
+        const ids = message.tool_calls.map((call: any) => call.id);
+        if (ids.some((id: string) => seen.has(id))) break;
+        ids.forEach((id: string) => seen.add(id));
+        earliest = earlier;
+      }
+      target = messages[earliest];
+    }
+    if (!target) continue;
+    attachOpaquePayload(target, payload);
+    turnCallIds.set(target, callIds);
+  }
+  return coalesceReasoningToolCallBatches(messages, legacyAssistantGroups, turnCallIds);
 }
 
 function attachOpaquePayload(target: any, payload: Record<string, unknown>): void {
@@ -296,7 +383,17 @@ function attachOpaquePayload(target: any, payload: Record<string, unknown>): voi
   if (Array.isArray(target.tool_calls) && !('content' in target)) target.content = null;
 }
 
-function coalesceReasoningToolCallBatches(messages: any[], legacyAssistantGroups: ReadonlySet<unknown>): any[] {
+/**
+ * Re-merge a reasoning turn's tool calls that history split across several
+ * assistant messages. When the turn's call ids are known (`turnCallIds`), only
+ * messages whose calls all belong to that turn merge; otherwise any following
+ * payload-less tool-call message does, which is the positional fallback.
+ */
+function coalesceReasoningToolCallBatches(
+  messages: any[],
+  legacyAssistantGroups: ReadonlySet<unknown>,
+  turnCallIds: WeakMap<object, ReadonlySet<string>>,
+): any[] {
   const result: any[] = [];
   for (let index = 0; index < messages.length; index += 1) {
     const message = messages[index];
@@ -310,6 +407,7 @@ function coalesceReasoningToolCallBatches(messages: any[], legacyAssistantGroups
       continue;
     }
 
+    const ownCallIds = turnCallIds.get(message);
     const toolResults: any[] = [];
     while (index + 1 < messages.length) {
       const next = messages[index + 1];
@@ -325,7 +423,12 @@ function coalesceReasoningToolCallBatches(messages: any[], legacyAssistantGroups
         next.reasoning_content == null &&
         next.reasoning == null &&
         next.reasoning_details == null &&
-        next.content == null
+        next.content == null &&
+        (!ownCallIds ||
+          next.tool_calls.every(
+            (call: any) =>
+              ownCallIds.has(call.id) && !message.tool_calls.some((existing: any) => existing.id === call.id),
+          ))
       ) {
         message.tool_calls.push(...next.tool_calls);
         index += 1;

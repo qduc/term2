@@ -152,9 +152,8 @@ them are consequences of the design sketch above being read too literally.
   *after* the turn's tool calls were dispatched into history, so the opaque item
   trails its own turn's tool results (`application-run-loop.ts`, the
   `provider_opaque` loop). Anchoring it on the last message therefore lands on a
-  `tool` message or a previous turn's assistant message. It is now attached
-  after `coalesceReasoningToolCallBatches` has re-merged the turn's split
-  tool-call messages, matching payloads to assistant messages in turn order.
+  `tool` message or a previous turn's assistant message. Positional matching
+  replaced that, and was itself wrong; see the next section.
 
 - **`reasoning_details` entries must merge on `index`.** The field taxonomy
   above says "captured verbatim"; the first implementation concatenated the
@@ -167,6 +166,45 @@ them are consequences of the design sketch above being read too literally.
   chat-completions wire form was emitted as `reasoning_content` — or, when a
   user message followed it, dropped entirely. The marker is retained and still
   distinguishes legacy native reasoning; a payload supersedes it when present.
+
+## Payloads now name their turn
+
+Positional matching assumed every assistant turn has a payload. When an earlier
+tool turn had none (no reasoning) and a later one did (encrypted-only
+`reasoning_details` is the realistic case), the later payload attached to the
+earlier turn, and coalescing then merged the later turn's tool calls into it.
+The agent-core order (payload ahead of its own output) hit this too, not only
+the legacy trailing order. The two shapes cannot be told apart by position:
+`call A, result A, call B, result B, payload` is either two turns or one
+parallel batch that history split into pairs.
+
+The producer now stamps the payload with the tool call ids of the response that
+emitted it (`OPAQUE_TURN_TOOL_CALL_IDS_KEY` in `openai-chat-completions-messages.ts`,
+`[]` for a text-only response) and replay strips the key before the payload
+reaches the wire. Ids alone do not name a turn, because a provider may restart
+call ids in every response; the first version matched the first message
+anywhere holding an id and an independent verifier showed two reasoning turns
+that both used `call_0` merging and losing a payload. Replay therefore searches
+outward from where the payload sat, no further than the nearest user message or
+other stamped payload: forward first (the producer's order), then backward (a
+payload trailing its turn's results, walking back to the earliest message of a
+batch history split into call/result pairs, but not across a repeated id), and
+a message claims one payload only.
+Coalescing under a stamped message only absorbs messages whose calls are all in
+its own id set and not already on it, so a later payload-less turn is not merged
+into an earlier reasoning turn either. With reused ids a payload trailing one
+turn sits where the next turn's leading payload would; that case resolves
+forward, which is correct for every payload the producer emits. A
+text-only stamped payload has no ids to match on and attaches to the next
+assistant message, which is the order the producer emits it in.
+
+The stamp lives inside `item` because the opaque envelope has no other free
+field and is shared with `@qduc/agent-core`'s `Item`. Payloads persisted before
+the stamp keep the positional fallback, so legacy history with a payload-less
+turn ahead of a payload-bearing one can still misattribute. Black-box evidence
+is in `provider-contract.test.ts` (encrypted-only payload after a payload-less
+tool turn); `opaque.turn-attribution` in `pnpm verify:generated` covers mixed
+sequences of turns with and without payloads.
 
 ## Open questions
 

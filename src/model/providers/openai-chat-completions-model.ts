@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { assertValidOpenAICompatibleMessages } from './common/openai-compatible-message-contract.js';
 import { OpenAICompatibleError } from './common/provider-errors.js';
-import { openAICompatibleMessages } from './openai-chat-completions-messages.js';
+import { OPAQUE_TURN_TOOL_CALL_IDS_KEY, openAICompatibleMessages } from './openai-chat-completions-messages.js';
 import type { CostTrailerCapture } from './openai-compatible-response-normalizer.js';
 import type {
   StreamedModelTurn,
@@ -268,7 +268,10 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
       output.push({
         type: 'provider_opaque',
         provider: this.providerId,
-        item: rawContinuityMetadata,
+        // Stamp the payload with the turn it belongs to. Replay cannot tell by
+        // position alone: a turn without a payload followed by one with a
+        // payload looks the same as one parallel batch split across items.
+        item: { ...rawContinuityMetadata, [OPAQUE_TURN_TOOL_CALL_IDS_KEY]: [...calls.values()].map((c) => c.id!) },
       });
     }
     // A choice may carry prose and tool calls together. Emitting only the tool

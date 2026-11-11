@@ -231,7 +231,10 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
       output.push({
         type: 'provider_opaque',
         provider: this.providerId,
-        item: rawContinuityMetadata,
+        // Stamp the payload with the turn it belongs to. Replay cannot tell by
+        // position alone: a turn without a payload followed by one with a
+        // payload looks the same as one parallel batch split across items.
+        item: { ...rawContinuityMetadata, [OPAQUE_TURN_TOOL_CALL_IDS_KEY]: [...calls.values()].map((c) => c.id!) },
       });
     }
     // A choice may carry prose and tool calls together. Emitting only the tool
@@ -415,6 +418,16 @@ function mergeEntryFields(base: Record<string, unknown>, incoming: Record<string
   return merged;
 }
 
+/**
+ * Term2's own key inside a chat-completions `provider_opaque` payload: the tool
+ * call ids of the response that produced it (`[]` for a response without tool
+ * calls). Replay matches the payload to its turn by these ids and strips the key
+ * before the payload reaches the wire. Payloads persisted before the key existed
+ * lack it and fall back to positional matching, which cannot tell a payload-less
+ * earlier turn from a split parallel batch.
+ */
+const OPAQUE_TURN_TOOL_CALL_IDS_KEY = 'term2_turn_tool_call_ids';
+
 /** The wire spellings a continuity payload may use for reasoning. */
 const REASONING_WIRE_FIELDS = ['reasoning_content', 'reasoning', 'reasoning_details'] as const;
 
@@ -476,6 +489,12 @@ function openAICompatibleMessages(input: StreamedModelTurnRequest['input'], prov
   let pendingOpaqueTarget: any | undefined;
   let pendingOpaquePayload: Record<string, unknown> | undefined;
   let leadingPayloadGroupOpen = false;
+  // Payloads stamped with their turn's tool call ids attach by id after the
+  // walk, whichever side of their turn they sit on. A stamped payload with no
+  // ids belongs to a text-only turn and attaches to the next assistant message.
+  const identifiedPayloads: { callIds: ReadonlySet<string>; payload: Record<string, unknown> }[] = [];
+  let pendingTextTurnPayload: Record<string, unknown> | undefined;
+  const turnCallIds = new WeakMap<object, ReadonlySet<string>>();
   const registerAssistant = (message: any): void => {
     if (pendingOpaquePayload) {
       attachOpaquePayload(message, pendingOpaquePayload);
@@ -512,7 +531,25 @@ function openAICompatibleMessages(input: StreamedModelTurnRequest['input'], prov
       // the history. See `provider-opaque-compatibility.ts`.
       if (!isOwnOpaqueTag(tag, providerId)) continue;
       const rawPayload = item.type === 'provider_opaque' ? item.item : item;
-      const { providerOpaque: _marker, type: _type, ...payload } = rawPayload as any;
+      const {
+        providerOpaque: _marker,
+        type: _type,
+        [OPAQUE_TURN_TOOL_CALL_IDS_KEY]: stampedCallIds,
+        ...payload
+      } = rawPayload as any;
+      if (Array.isArray(stampedCallIds)) {
+        // A stamped payload names its own turn, so it also retires whatever the
+        // positional fallback was holding for an older, payload-less turn.
+        pendingOpaqueTarget = undefined;
+        pendingOpaquePayload = undefined;
+        leadingPayloadGroupOpen = false;
+        if (stampedCallIds.length > 0) {
+          identifiedPayloads.push({ callIds: new Set(stampedCallIds.map(String)), payload });
+        } else {
+          pendingTextTurnPayload = payload;
+        }
+        continue;
+      }
       // A normalized reasoning item immediately before the payload is its
       // leading twin. It is also an explicit boundary that retires any older
       // assistant group which emitted no opaque payload.
@@ -571,9 +608,13 @@ function openAICompatibleMessages(input: StreamedModelTurnRequest['input'], prov
       if (item.role === 'user') {
         pendingOpaqueTarget = undefined;
         pendingOpaquePayload = undefined;
+        pendingTextTurnPayload = undefined;
         leadingPayloadGroupOpen = false;
       }
-      if (item.role === 'assistant') registerAssistant(message);
+      if (item.role === 'assistant' && pendingTextTurnPayload) {
+        attachOpaquePayload(message, pendingTextTurnPayload);
+        pendingTextTurnPayload = undefined;
+      } else if (item.role === 'assistant') registerAssistant(message);
       if (item.role === 'assistant') pendingLegacyNativeReasoning = '';
       continue;
     }
@@ -614,7 +655,18 @@ function openAICompatibleMessages(input: StreamedModelTurnRequest['input'], prov
   // message/tool call, not a valid standalone message; if no such item follows
   // — an interrupted turn — omit it rather than inventing a message to carry
   // it or back-dating it onto an earlier one that did not produce it.
-  return coalesceReasoningToolCallBatches(messages);
+  for (const { callIds, payload } of identifiedPayloads) {
+    const target = messages.find(
+      (message) =>
+        message.role === 'assistant' &&
+        Array.isArray(message.tool_calls) &&
+        message.tool_calls.some((call: any) => callIds.has(call.id)),
+    );
+    if (!target) continue;
+    attachOpaquePayload(target, payload);
+    turnCallIds.set(target, callIds);
+  }
+  return coalesceReasoningToolCallBatches(messages, turnCallIds);
 }
 
 function attachOpaquePayload(target: any, payload: Record<string, unknown>): void {
@@ -633,7 +685,16 @@ function attachOpaquePayload(target: any, payload: Record<string, unknown>): voi
   if (Array.isArray(target.tool_calls) && !('content' in target)) target.content = null;
 }
 
-function coalesceReasoningToolCallBatches(messages: any[]): any[] {
+/**
+ * Re-merge a reasoning turn's tool calls that history split across several
+ * assistant messages. When the turn's call ids are known (`turnCallIds`), only
+ * messages whose calls all belong to that turn merge; otherwise any following
+ * payload-less tool-call message does, which is the positional fallback.
+ */
+function coalesceReasoningToolCallBatches(
+  messages: any[],
+  turnCallIds: WeakMap<object, ReadonlySet<string>> = new WeakMap(),
+): any[] {
   const result: any[] = [];
   for (let index = 0; index < messages.length; index += 1) {
     const message = messages[index];
@@ -645,6 +706,7 @@ function coalesceReasoningToolCallBatches(messages: any[]): any[] {
       continue;
     }
 
+    const ownCallIds = turnCallIds.get(message);
     const toolResults: any[] = [];
     while (index + 1 < messages.length) {
       const next = messages[index + 1];
@@ -659,7 +721,8 @@ function coalesceReasoningToolCallBatches(messages: any[]): any[] {
         next.reasoning_content == null &&
         next.reasoning == null &&
         next.reasoning_details == null &&
-        next.content == null
+        next.content == null &&
+        (!ownCallIds || next.tool_calls.every((call: any) => ownCallIds.has(call.id)))
       ) {
         message.tool_calls.push(...next.tool_calls);
         index += 1;

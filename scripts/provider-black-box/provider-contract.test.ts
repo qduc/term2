@@ -687,10 +687,12 @@ describe('provider boundary contracts through the registry', () => {
       type: 'reasoning',
       text: 'Need native reasoning.',
     });
+    // The payload carries the producing turn's tool call ids (none here) so
+    // replay can match it to its own turn.
     expect(opaque).toEqual({
       type: 'provider_opaque',
       provider: 'fixture-openai-compatible-reasoning',
-      item: { reasoning_content: 'Need native reasoning.' },
+      item: { reasoning_content: 'Need native reasoning.', term2_turn_tool_call_ids: [] },
     });
 
     await collect(
@@ -753,10 +755,12 @@ describe('provider boundary contracts through the registry', () => {
       type: 'reasoning',
       text: 'Need gateway reasoning.',
     });
+    // The payload carries the producing turn's tool call ids (none here) so
+    // replay can match it to its own turn.
     expect(opaque).toEqual({
       type: 'provider_opaque',
       provider: 'fixture-openai-compatible-reasoning-field',
-      item: { reasoning: 'Need gateway reasoning.' },
+      item: { reasoning: 'Need gateway reasoning.', term2_turn_tool_call_ids: [] },
     });
 
     await collect(
@@ -786,6 +790,91 @@ describe('provider boundary contracts through the registry', () => {
       reasoning: 'Need gateway reasoning.',
       tool_calls: [{ id: 'call_reasoning', type: 'function', function: { name: fixtureTool.name, arguments: '{}' } }],
     });
+  });
+
+  it('replays an encrypted-only reasoning payload on its own turn after a payload-less tool turn', async () => {
+    server = await startFakeProviderHttpServer({
+      scenario: 'mixed-reasoning-tool-turns',
+      protocol: 'chat-completions',
+    });
+    const providerCase: ProviderCase = {
+      name: 'Gateway encrypted reasoning fixture',
+      registryId: 'fixture-openai-compatible-gateway',
+      model: 'google/gemini-fixture',
+      protocol: 'chat-completions',
+      expectedRoles: [],
+      runtimeType: 'openai-compatible',
+      providerOptions: {},
+    };
+    const settings = createSettings(providerCase);
+    registerRuntimeProvider(providerCase, settings);
+    const model = await getProvider(providerCase.registryId)!.createStreamedModel!(providerCase.model, {
+      settingsService: settings,
+      loggingService: quietLogging,
+    });
+    const user = { type: 'message', role: 'user', content: [{ type: 'text', text: 'go' }] };
+    const completionOutput = (events: any[]) => events.find((event) => event.type === 'completion')!.output as any[];
+    const resultFor = (id: string) => ({ type: 'tool_result', id, output: `result ${id}` });
+
+    const turnA = completionOutput(await collect(model.stream({ ...fixtureRequest, input: [user] } as any)));
+    expect(turnA.map((item) => item.type)).toEqual(['tool_call']);
+    const turnB = completionOutput(
+      await collect(model.stream({ ...fixtureRequest, input: [user, ...turnA, resultFor('call_turn_a')] } as any)),
+    );
+    const opaqueB = turnB.find((item) => item.type === 'provider_opaque');
+    const callB = turnB.find((item) => item.type === 'tool_call');
+    expect(callB).toMatchObject({ id: 'call_turn_b' });
+    expect(opaqueB).toMatchObject({ type: 'provider_opaque', provider: providerCase.registryId });
+
+    const toolCall = (id: string) => ({ id, type: 'function', function: { name: fixtureTool.name, arguments: '{}' } });
+    const expected = [
+      { role: 'user', content: [{ type: 'text', text: 'go' }] },
+      { role: 'assistant', tool_calls: [toolCall('call_turn_a')] },
+      { role: 'tool', tool_call_id: 'call_turn_a', content: 'result call_turn_a' },
+      {
+        role: 'assistant',
+        content: null,
+        reasoning_details: [{ type: 'reasoning.encrypted', data: 'B-signature', format: 'google-gemini-v1', index: 0 }],
+        tool_calls: [toolCall('call_turn_b')],
+      },
+      { role: 'tool', tool_call_id: 'call_turn_b', content: 'result call_turn_b' },
+    ];
+    const histories = {
+      // The order agent-core appends: the completion's output, then the results.
+      runtime: [user, ...turnA, resultFor('call_turn_a'), ...turnB, resultFor('call_turn_b')],
+      // A payload trailing its own turn's results.
+      trailing: [user, ...turnA, resultFor('call_turn_a'), callB, resultFor('call_turn_b'), opaqueB],
+    };
+    for (const [order, input] of Object.entries(histories)) {
+      const before = server.requests.length;
+      await collect(model.stream({ ...fixtureRequest, input } as any));
+      expect(server.requests).toHaveLength(before + 1);
+      expect((server.requests.at(-1)!.body as any).messages, order).toEqual(expected);
+    }
+
+    // A parallel batch stamped on one payload still re-merges when history
+    // splits it into one call/result pair per item.
+    const stampKey = Object.keys(opaqueB.item).find((key) => key !== 'reasoning_details')!;
+    const batchOpaque = { ...opaqueB, item: { ...opaqueB.item, [stampKey]: ['call_b1', 'call_b2'] } };
+    const batchCall = (id: string) => ({ type: 'tool_call', id, name: fixtureTool.name, arguments: '{}' });
+    await collect(
+      model.stream({
+        ...fixtureRequest,
+        input: [
+          user,
+          batchOpaque,
+          batchCall('call_b1'),
+          resultFor('call_b1'),
+          batchCall('call_b2'),
+          resultFor('call_b2'),
+        ],
+      } as any),
+    );
+    expect((server.requests.at(-1)!.body as any).messages.slice(1)).toEqual([
+      { ...expected[3], tool_calls: [toolCall('call_b1'), toolCall('call_b2')] },
+      { role: 'tool', tool_call_id: 'call_b1', content: 'result call_b1' },
+      { role: 'tool', tool_call_id: 'call_b2', content: 'result call_b2' },
+    ]);
   });
 
   it('reassembles Chat Completions tool fragments with the authoritative tool ID', async () => {

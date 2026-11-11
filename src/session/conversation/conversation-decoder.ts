@@ -137,6 +137,7 @@ const isNormalizedUsage = (value: unknown): boolean => {
     'reasoning_tokens',
     'cache_read_tokens',
     'cache_creation_tokens',
+    'cache_creation_1h_tokens',
   ];
   const floatKeys = ['prompt_ms', 'completion_ms', 'tokens_per_second', 'ttft_ms'];
   const boolKeys = ['tokens_per_second_estimated', 'tokens_per_second_burst'];

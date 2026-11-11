@@ -22,3 +22,10 @@ These host modules moved from `engine/` in #224 with their behavior unchanged.
 `src/engine` is now limited to compatibility surfaces for
 `@qduc/agent-core`. Session may depend on engine, model, tools and pure
 shared/config modules; it does not import delegation or app.
+
+Cache creation counters survive accepted Usage facts, compaction request records,
+replay aggregation and final/legacy JSON projection. Usage facts count all input
+(including reads and writes); normalized cost/final records split creation into
+`cache_creation_tokens`, with `cache_creation_1h_tokens` its TTL subset. UI input
+formatting recombines creation once, while total tokens count each token once.
+Old facts without optional creation counters remain readable.

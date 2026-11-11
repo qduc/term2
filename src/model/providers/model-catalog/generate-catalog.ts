@@ -6,6 +6,16 @@
  */
 
 /** A model entry as it appears in a pi-ai provider data file. */
+export interface PiCatalogCost {
+  input?: number;
+  output?: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+  /** Optional explicit one-hour price; native Anthropic otherwise uses 2×input. */
+  cacheWrite1h?: number;
+  tiers?: (Omit<PiCatalogCost, 'tiers'> & { inputTokensAbove: number })[];
+}
+
 export interface PiCatalogModel {
   contextWindow?: number;
   maxTokens?: number;
@@ -15,12 +25,7 @@ export interface PiCatalogModel {
    * required for a model to be priced; `cacheRead`/`cacheWrite` are
    * optional extra dimensions.
    */
-  cost?: {
-    input?: number;
-    output?: number;
-    cacheRead?: number;
-    cacheWrite?: number;
-  };
+  cost?: PiCatalogCost;
 }
 
 /** A pi-ai provider data file: api type -> model id -> model entry. */
@@ -91,14 +96,15 @@ function isValidRate(rate: number | undefined): rate is number {
  * would turn unknown cache pricing into the runtime's absent-rate zero.
  * Model metadata remains available even when pricing is unknown.
  */
-function renderPricingFields(entry: PiCatalogModel): string[] {
+function renderPricingFields(entry: PiCatalogModel, anthropic = false): string[] {
   const cost = entry.cost;
   if (
     !cost ||
     !isValidRate(cost.input) ||
     !isValidRate(cost.output) ||
     (cost.cacheRead !== undefined && !isValidRate(cost.cacheRead)) ||
-    (cost.cacheWrite !== undefined && !isValidRate(cost.cacheWrite))
+    (cost.cacheWrite !== undefined && !isValidRate(cost.cacheWrite)) ||
+    (cost.cacheWrite1h !== undefined && !isValidRate(cost.cacheWrite1h))
   ) {
     return [];
   }
@@ -109,15 +115,41 @@ function renderPricingFields(entry: PiCatalogModel): string[] {
   if (typeof cost.cacheWrite === 'number') {
     fields.push(`cacheWritePricePerMTok: ${cost.cacheWrite}`);
   }
+  const oneHourRate = cost.cacheWrite1h ?? (anthropic && cost.cacheWrite !== undefined ? cost.input! * 2 : undefined);
+  if (oneHourRate !== undefined) fields.push(`cacheWrite1hPricePerMTok: ${oneHourRate}`);
+  if (cost.tiers !== undefined) {
+    if (
+      !Array.isArray(cost.tiers) ||
+      cost.tiers.some(
+        (tier) =>
+          tier === null ||
+          typeof tier !== 'object' ||
+          !Number.isFinite(tier.inputTokensAbove) ||
+          tier.inputTokensAbove < 0 ||
+          'tiers' in tier ||
+          renderPricingFields({ cost: { ...cost, ...tier, tiers: undefined } }, anthropic).length === 0,
+      ) ||
+      new Set(cost.tiers.map((tier) => tier.inputTokensAbove)).size !== cost.tiers.length
+    )
+      return [];
+    const tiers = cost.tiers.map(
+      (tier) =>
+        `{ inputTokensAbove: ${tier.inputTokensAbove}, ${renderPricingFields(
+          { cost: { ...cost, ...tier, tiers: undefined } },
+          anthropic,
+        ).join(', ')} }`,
+    );
+    fields.push(`pricingTiers: [${tiers.join(', ')}]`);
+  }
   return fields;
 }
 
-function renderModel(modelId: string, entry: PiCatalogModel): string {
+function renderModel(modelId: string, entry: PiCatalogModel, anthropic: boolean): string {
   const fields = [`contextWindow: ${entry.contextWindow}`];
   if (entry.maxTokens !== undefined) {
     fields.push(`maxTokens: ${entry.maxTokens}`);
   }
-  fields.push(...renderPricingFields(entry));
+  fields.push(...renderPricingFields(entry, anthropic));
   return `    '${modelId}': { ${fields.join(', ')} },`;
 }
 
@@ -142,6 +174,10 @@ export function generateCatalogSource(piData: Record<string, PiProviderData>, me
   lines.push(`  outputPricePerMTok?: number;`);
   lines.push(`  cacheReadPricePerMTok?: number;`);
   lines.push(`  cacheWritePricePerMTok?: number;`);
+  lines.push(`  cacheWrite1hPricePerMTok?: number;`);
+  lines.push(
+    `  pricingTiers?: readonly (Omit<GeneratedCatalogModel, 'contextWindow' | 'maxTokens' | 'pricingTiers'> & { inputTokensAbove: number })[];`,
+  );
   lines.push(`}`);
   lines.push('');
   lines.push(`export const MODEL_CATALOG = {`);
@@ -167,7 +203,7 @@ export function generateCatalogSource(piData: Record<string, PiProviderData>, me
     lines.push(`  ${provider}: {`);
     for (const modelId of sortedIds) {
       const entry = applyCatalogFixups(provider, modelId, models.get(modelId)!);
-      lines.push(renderModel(modelId, entry));
+      lines.push(renderModel(modelId, entry, provider === 'anthropic'));
     }
     lines.push(`  },`);
   }

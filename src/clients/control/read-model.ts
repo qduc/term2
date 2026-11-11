@@ -170,7 +170,10 @@ export function controlGet(state: WireSnapshot, topic: ControlTopic, options: Di
           prompt_tokens: state.usage.inputTokens,
           completion_tokens: state.usage.outputTokens,
           cache_read_tokens: state.usage.cachedInputTokens,
-          cache_creation_tokens: metadata.cacheCreationTokens ?? null,
+          cache_creation_tokens: state.usage.cacheWriteTokens ?? metadata.cacheCreationTokens ?? null,
+          ...(state.usage.cacheWrite1hTokens !== undefined
+            ? { cache_creation_1h_tokens: state.usage.cacheWrite1hTokens }
+            : {}),
         },
         contextWindow: metadata.contextWindow ?? null,
         cost: metadata.cost ?? null,

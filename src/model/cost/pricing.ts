@@ -80,12 +80,25 @@ function entryToCatalogPrice(entry: {
   outputPricePerMTok?: number;
   cacheReadPricePerMTok?: number;
   cacheWritePricePerMTok?: number;
+  cacheWrite1hPricePerMTok?: number;
+  pricingTiers?: readonly (Omit<GeneratedCatalogModel, 'contextWindow' | 'maxTokens' | 'pricingTiers'> & {
+    inputTokensAbove: number;
+  })[];
 }): CatalogPrice | undefined {
-  const price = {
+  const price: Partial<CatalogPrice> = {
     inputPerMTok: entry.inputPricePerMTok,
     outputPerMTok: entry.outputPricePerMTok,
     ...(entry.cacheReadPricePerMTok !== undefined ? { cacheReadPerMTok: entry.cacheReadPricePerMTok } : {}),
     ...(entry.cacheWritePricePerMTok !== undefined ? { cacheWritePerMTok: entry.cacheWritePricePerMTok } : {}),
+    ...(entry.cacheWrite1hPricePerMTok !== undefined ? { cacheWrite1hPerMTok: entry.cacheWrite1hPricePerMTok } : {}),
+    ...(entry.pricingTiers !== undefined
+      ? {
+          tiers: entry.pricingTiers.map((tier) => ({
+            ...entryToCatalogPrice(tier)!,
+            inputTokensAbove: tier.inputTokensAbove,
+          })),
+        }
+      : {}),
   };
   return isValidCatalogPrice(price) ? price : undefined;
 }

@@ -31,3 +31,19 @@ The patch was derived from that source's built package. Term2 still installs the
 published prerelease, with no vendored core tarball or unpublished dependency.
 Remove the patch and update the pin/lockfile when a published core version
 includes the source change. Package publication remains a separate operation.
+
+## Temporary cache accounting bridge
+
+The same published alpha.2 pnpm patch also carries the owner-source cache usage
+and context-price tier changes from owner commit
+[`9b8a4dd`](https://github.com/qduc/agent-runtime/commit/9b8a4ddec731650264f6852be0548df8a6040c04)
+in `qduc/agent-runtime`. It preserves the existing PR #7 500,000-token assumption.
+The accounting hunks are derived from that owner's built `dist` JavaScript and
+declarations; Term2 does not carry a second engine implementation. The owner commit is the source provenance for the accounting bridge.
+
+The optional public Usage counters, billable normalization, compaction accounting
+and tier selection need the owner package change. The consumer preserves raw
+write counts, supplies catalog tiers and projects durable totals. Publication is
+separate; remove the bridge only after the pinned published version contains both
+the accounting changes and PR #7. Catalog costs remain estimates rounded to
+integer micros per billable dimension, not provider invoice totals.

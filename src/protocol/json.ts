@@ -197,7 +197,9 @@ export function legacyUsageUpdate(usage: UsageUpdateEvent['usage']): UsageUpdate
 /** Translate the accepted camel-case Usage fact into the old normalized DTO. */
 export function legacyAcceptedUsage(usage: WireUsage): UsageUpdateEvent {
   return legacyUsageUpdate({
-    prompt_tokens: usage.inputTokens,
+    prompt_tokens: usage.inputTokens - (usage.cacheWriteTokens ?? 0),
+    ...(usage.cacheWriteTokens !== undefined ? { cache_creation_tokens: usage.cacheWriteTokens } : {}),
+    ...(usage.cacheWrite1hTokens !== undefined ? { cache_creation_1h_tokens: usage.cacheWrite1hTokens } : {}),
     completion_tokens: usage.outputTokens,
     ...(usage.cachedInputTokens !== 0 ? { cache_read_tokens: usage.cachedInputTokens } : {}),
     total_tokens: usage.inputTokens + usage.outputTokens,

@@ -1,8 +1,43 @@
-diff --git a/dist/model/index.d.ts b/dist/model/index.d.ts
-index 1fe3d0338375aefb4174b7cf59841818818ff552..c4f28fbe586b8f49e4183f39c2643156b7ed34f4 100644
+--- a/dist/engine/turn-budget.js
++++ b/dist/engine/turn-budget.js
+@@ -76,9 +76,13 @@
+             ...(input.usage
+                 ? {
+                     usage: {
+-                        prompt_tokens: input.usage.inputTokens,
++                        prompt_tokens: input.usage.inputTokens - (input.usage.cacheWriteTokens ?? 0),
+                         completion_tokens: input.usage.outputTokens,
+                         cache_read_tokens: input.usage.cachedInputTokens,
++                        ...(input.usage.cacheWriteTokens !== undefined
++                            ? { cache_creation_tokens: input.usage.cacheWriteTokens } : {}),
++                        ...(input.usage.cacheWrite1hTokens !== undefined
++                            ? { cache_creation_1h_tokens: input.usage.cacheWrite1hTokens } : {}),
+                         total_tokens: input.usage.inputTokens + input.usage.outputTokens,
+                     },
+                 }
+--- a/dist/engine/turn-model-compaction.js
++++ b/dist/engine/turn-model-compaction.js
+@@ -286,7 +286,7 @@
+                 requestId,
+                 modelStep: prepared.modelStep,
+                 model: prepared.request.model,
+-                // The persisted record holds the three counters only (log-facts validates them exactly); the upstream
++                // Preserve optional billable cache dimensions too; the upstream
+                 // provider OpenRouter usage carries belongs to the status bar, not to the compaction record.
+                 ...(usage !== undefined
+                     ? {
+@@ -294,6 +294,8 @@
+                             inputTokens: usage.inputTokens,
+                             outputTokens: usage.outputTokens,
+                             cachedInputTokens: usage.cachedInputTokens,
++                            ...(usage.cacheWriteTokens !== undefined ? { cacheWriteTokens: usage.cacheWriteTokens } : {}),
++                            ...(usage.cacheWrite1hTokens !== undefined ? { cacheWrite1hTokens: usage.cacheWrite1hTokens } : {}),
+                         },
+                     }
+                     : {}),
 --- a/dist/model/index.d.ts
 +++ b/dist/model/index.d.ts
-@@ -10,7 +10,7 @@ export { ModelFailure } from './failure.js';
+@@ -10,7 +10,7 @@
  export type { ModelRecoveryEvidence } from './failure.js';
  export type ModelRecoveryBudget = RetryRecoveryBudget;
  /** Scheduling assumption only; not evidence of provider capacity. */
@@ -11,8 +46,20 @@ index 1fe3d0338375aefb4174b7cf59841818818ff552..c4f28fbe586b8f49e4183f39c2643156
  export type ItemId = string & {
      readonly __brand: 'ItemId';
  };
-diff --git a/dist/model/index.js b/dist/model/index.js
-index 7e5f9e8c4c77d695278063cebfbcc17850bcc228..03f185a3bdcc3f664a37f3ae364541b61853b002 100644
+@@ -147,9 +147,13 @@
+     readonly downgradeTransport?: boolean;
+ };
+ export type Usage = {
++    /** Total input including cache reads and cache writes. */
+     readonly inputTokens: number;
+     readonly outputTokens: number;
+     readonly cachedInputTokens: number;
++    readonly cacheWriteTokens?: number;
++    /** Subset of cacheWriteTokens created with a one-hour TTL. */
++    readonly cacheWrite1hTokens?: number;
+     /** The provider an aggregator routed this request to (OpenRouter's `provider`), when it reports one. */
+     readonly upstreamProvider?: string;
+ };
 --- a/dist/model/index.js
 +++ b/dist/model/index.js
 @@ -7,4 +7,4 @@
@@ -21,3 +68,149 @@ index 7e5f9e8c4c77d695278063cebfbcc17850bcc228..03f185a3bdcc3f664a37f3ae364541b6
  /** Scheduling assumption only; not evidence of provider capacity. */
 -export const DEFAULT_ASSUMED_CONTEXT_WINDOW = 128_000;
 +export const DEFAULT_ASSUMED_CONTEXT_WINDOW = 500_000;
+--- a/dist/shared/cost/model-cost.d.ts
++++ b/dist/shared/cost/model-cost.d.ts
+@@ -8,8 +8,8 @@
+  *
+  * Costs are accumulated and persisted as integer USD micros (1/1_000_000 of a
+  * USD). Provider decimal charges are converted without binary floating-point
+- * arithmetic; each model request is rounded exactly once, then integers are
+- * added.
++ * arithmetic. Catalog estimates round each billable dimension to micros;
++ * request and session records add those integers.
+  */
+ /**
+  * Provider-neutral model-request cost accounting.
+@@ -21,8 +21,8 @@
+  *
+  * Costs are accumulated and persisted as integer USD micros (1/1_000_000 of a
+  * USD). Provider decimal charges are converted without binary floating-point
+- * arithmetic; each model request is rounded exactly once, then integers are
+- * added.
++ * arithmetic. Catalog estimates round each billable dimension to micros;
++ * request and session records add those integers.
+  */
+ import type { NormalizedUsage } from '../utils/ai/token-usage.js';
+ /** Where a request's USD charge came from. */
+@@ -78,6 +78,12 @@
+     cacheReadPerMTok?: number;
+     /** Cache-write/creation rate when the provider charges cache creation separately. */
+     cacheWritePerMTok?: number;
++    /** Explicit one-hour cache creation price; absent with reported long writes is unpriced. */
++    cacheWrite1hPerMTok?: number;
++    /** Entire-request rates above a full-input threshold, including all cache tokens. */
++    tiers?: readonly (Omit<CatalogPrice, 'tiers'> & {
++        inputTokensAbove: number;
++    })[];
+ }
+ /**
+  * Catalog rates must be finite and nonnegative. Optional cache dimensions may
+@@ -130,6 +136,7 @@
+     uncachedInputTokens: number;
+     cachedInputTokens: number;
+     cacheWriteTokens: number;
++    cacheWrite1hTokens?: number;
+     outputTokens: number;
+ }
+ export type BillableTokensResult = BillableTokens | 'missing' | 'ambiguous';
+--- a/dist/shared/cost/model-cost.js
++++ b/dist/shared/cost/model-cost.js
+@@ -6,7 +6,22 @@
+ export function isValidCatalogPrice(price) {
+     return (price.inputPerMTok !== undefined &&
+         price.outputPerMTok !== undefined &&
+-        [price.inputPerMTok, price.outputPerMTok, price.cacheReadPerMTok, price.cacheWritePerMTok].every((rate) => rate === undefined || (Number.isFinite(rate) && rate >= 0)));
++        [
++            price.inputPerMTok,
++            price.outputPerMTok,
++            price.cacheReadPerMTok,
++            price.cacheWritePerMTok,
++            price.cacheWrite1hPerMTok,
++        ].every((rate) => rate === undefined || (Number.isFinite(rate) && rate >= 0)) &&
++        (price.tiers === undefined ||
++            (Array.isArray(price.tiers) &&
++                price.tiers.every((tier) => tier !== null &&
++                    typeof tier === 'object' &&
++                    Number.isFinite(tier.inputTokensAbove) &&
++                    tier.inputTokensAbove >= 0 &&
++                    !('tiers' in tier) &&
++                    isValidCatalogPrice(tier)) &&
++                new Set(price.tiers.map((tier) => tier.inputTokensAbove)).size === price.tiers.length)));
+ }
+ const USD_MICROS_PER_DOLLAR = 1_000_000;
+ const MICRO_FRACTION_DIGITS = 6;
+@@ -71,12 +86,23 @@
+         return 'missing';
+     const cachedInputTokens = usage.cache_read_tokens ?? 0;
+     const cacheWriteTokens = usage.cache_creation_tokens ?? 0;
++    const cacheWrite1hTokens = usage.cache_creation_1h_tokens ?? 0;
++    if ([usage.prompt_tokens, usage.completion_tokens, cachedInputTokens, cacheWriteTokens, cacheWrite1hTokens].some((value) => value !== undefined && (!Number.isFinite(value) || value < 0)) ||
++        cacheWrite1hTokens > cacheWriteTokens ||
++        (usage.prompt_tokens != null && cachedInputTokens > usage.prompt_tokens))
++        return 'ambiguous';
+     // The uncached share requires the provider to report the full prompt input.
+     const uncachedInputTokens = usage.prompt_tokens != null ? Math.max(0, usage.prompt_tokens - cachedInputTokens) : undefined;
+     const outputTokens = usage.completion_tokens;
+     if (uncachedInputTokens === undefined || outputTokens === undefined)
+         return 'ambiguous';
+-    return { uncachedInputTokens, cachedInputTokens, cacheWriteTokens, outputTokens };
++    return {
++        uncachedInputTokens,
++        cachedInputTokens,
++        cacheWriteTokens,
++        ...(usage.cache_creation_1h_tokens !== undefined ? { cacheWrite1hTokens } : {}),
++        outputTokens,
++    };
+ }
+ function toMicros(dollarsPerMTok, tokens) {
+     // tokens/1e6 * dollarsPerMTok * 1e6 micros = tokens * dollarsPerMTok micros.
+@@ -111,16 +137,30 @@
+     const lookup = input.getPrice(input.provider, input.model, input.serviceTier);
+     if (!lookup.found)
+         return { ...base, unpricedReason: lookup.reason };
+-    const { price } = lookup;
++    let { price } = lookup;
+     if (!isValidCatalogPrice(price))
++        return { ...base, unpricedReason: 'unknown_model' };
++    const fullInputTokens = tokens.uncachedInputTokens + tokens.cachedInputTokens + tokens.cacheWriteTokens;
++    let matchedThreshold = -1;
++    for (const tier of price.tiers ?? []) {
++        if (fullInputTokens > tier.inputTokensAbove && tier.inputTokensAbove > matchedThreshold) {
++            matchedThreshold = tier.inputTokensAbove;
++            price = tier;
++        }
++    }
++    const longWriteTokens = tokens.cacheWrite1hTokens ?? 0;
++    if (tokens.cacheWriteTokens - longWriteTokens > 0 && price.cacheWritePerMTok === undefined)
++        return { ...base, unpricedReason: 'unknown_model' };
++    if (longWriteTokens > 0 && price.cacheWrite1hPerMTok === undefined)
+         return { ...base, unpricedReason: 'unknown_model' };
+     const uncachedMicros = toMicros(price.inputPerMTok, tokens.uncachedInputTokens);
+     const cachedMicros = price.cacheReadPerMTok != null ? toMicros(price.cacheReadPerMTok, tokens.cachedInputTokens) : 0;
+-    const cacheWriteMicros = price.cacheWritePerMTok != null ? toMicros(price.cacheWritePerMTok, tokens.cacheWriteTokens) : 0;
++    const cacheWriteMicros = price.cacheWritePerMTok != null ? toMicros(price.cacheWritePerMTok, tokens.cacheWriteTokens - longWriteTokens) : 0;
++    const longWriteMicros = toMicros(price.cacheWrite1hPerMTok ?? 0, longWriteTokens);
+     const outputMicros = toMicros(price.outputPerMTok, tokens.outputTokens);
+     return {
+         ...base,
+-        usdMicros: uncachedMicros + cachedMicros + cacheWriteMicros + outputMicros,
++        usdMicros: uncachedMicros + cachedMicros + cacheWriteMicros + longWriteMicros + outputMicros,
+         source: 'catalog',
+         ...(input.pricingVersion ? { pricingVersion: input.pricingVersion } : {}),
+         ...(lookup.pricedFromProvider ? { pricedFromProvider: lookup.pricedFromProvider } : {}),
+--- a/dist/shared/utils/ai/token-usage.d.ts
++++ b/dist/shared/utils/ai/token-usage.d.ts
+@@ -1,10 +1,13 @@
+ export interface NormalizedUsage {
++    /** Input including cache reads, excluding separately counted cache creation. */
+     prompt_tokens?: number;
+     completion_tokens?: number;
+     total_tokens?: number;
+     reasoning_tokens?: number;
+     cache_read_tokens?: number;
+     cache_creation_tokens?: number;
++    /** Subset of cache_creation_tokens with one-hour TTL. */
++    cache_creation_1h_tokens?: number;
+     prompt_ms?: number;
+     completion_ms?: number;
+     tokens_per_second?: number;

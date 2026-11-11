@@ -174,6 +174,8 @@ export function toUsage(usage: StreamedModelUsage): Usage {
     inputTokens: usage.inputTokens ?? 0,
     outputTokens: usage.outputTokens ?? 0,
     cachedInputTokens: usage.cachedInputTokens ?? 0,
+    ...(usage.cacheWriteTokens !== undefined ? { cacheWriteTokens: usage.cacheWriteTokens } : {}),
+    ...(usage.cacheWrite1hTokens !== undefined ? { cacheWrite1hTokens: usage.cacheWrite1hTokens } : {}),
   };
 }
 

@@ -196,3 +196,25 @@ defaults, and other models retain their fixed thinking budgets.
 
 Adaptive thinking does not add a separate thinking budget to the requested
 output ceiling. The model's reasoning and answer share that ceiling.
+
+## Cache usage and prices
+
+Provider adapters emit total input including cache reads and creation in
+`StreamedModelUsage.inputTokens`. `toUsage` preserves optional cache-write and
+one-hour-write counters across the public core boundary. Native Responses reads
+`input_tokens_details.cache_write_tokens`; Anthropic's SDK supplies total input
+and preserves native cache TTL subsets in raw usage. One-hour writes use native
+Anthropic's documented 2×input price; the core requires that rate explicitly.
+
+Core cost facts use the historical `NormalizedUsage` convention: prompt tokens
+include reads but exclude separately counted creation. Billable dimensions and
+context thresholds therefore include creation exactly once. The app carries
+whole-request context-price tiers from pi-ai; thresholds are strict `>` and all
+input, read, write and output rates change together. Provider-reported charges
+remain authoritative. Displayed input totals include creation.
+
+The current catalog preserves pi-ai 1.3.0 model capacities and base prices and
+supplements matching-rate context tiers from the recorded pi-ai 1.5.2 snapshot.
+A changed-rate OpenRouter `~openai/gpt-terra-latest` entry retains its old snapshot
+price rather than mixing old base and newer context rates. `catalog:update`
+regenerates tiers from whichever pi-ai data snapshot it is given.

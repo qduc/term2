@@ -12,6 +12,10 @@ export interface CatalogModelInfo {
   cacheReadPricePerMTok?: number;
   /** Per-million-token USD cache-write price; absent when not distinguished. */
   cacheWritePricePerMTok?: number;
+  cacheWrite1hPricePerMTok?: number;
+  pricingTiers?: readonly (Omit<CatalogModelInfo, 'contextWindow' | 'maxTokens' | 'pricingTiers'> & {
+    inputTokensAbove: number;
+  })[];
 }
 
 /** provider id -> model id -> model metadata */

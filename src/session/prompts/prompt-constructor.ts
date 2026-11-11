@@ -5,7 +5,11 @@ import { getSearchViaShellAddendum } from './search-via-shell.js';
 import { getSubagentDelegationAddendum } from './subagent-delegation.js';
 import { getShellSandboxAddendum } from './shell-sandbox.js';
 import { getBackgroundShellAddendum } from './background-shell.js';
-import { getDirectEditorToolsAddendum, getScriptPrimaryToolsAddendum } from './tool-surface-guidance.js';
+import {
+  getDirectEditorToolsAddendum,
+  getScriptPrimaryToolsAddendum,
+  renderBareToolGuidance,
+} from './tool-surface-guidance.js';
 import type { ScriptEditorSurface } from './tool-surface-guidance.js';
 
 type PromptConstructorBaseOptions = {
@@ -24,6 +28,8 @@ type PromptConstructorBaseOptions = {
   memoryContext?: string;
   sessionBrowserEnabled?: boolean;
   executionContext?: ExecutionContext;
+  fileReadEnabled?: boolean;
+  shellEnabled?: boolean;
 };
 
 export type PromptConstructorOptions = PromptConstructorBaseOptions &
@@ -63,11 +69,16 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     executionContext,
     runCodeEnabled = false,
     editorSurface = 'none',
+    fileReadEnabled = false,
+    shellEnabled = false,
   } = options;
 
   if (isBareProfile(profile)) {
     return {
-      basePromptContent: profile.instructions.identity.kind === 'markdown' ? profile.instructions.identity.content : '',
+      basePromptContent: renderBareToolGuidance(
+        profile.instructions.identity.kind === 'markdown' ? profile.instructions.identity.content : '',
+        { fileReadEnabled, shellEnabled, editorSurface },
+      ),
       fragmentFiles: [],
       inlineSections: [],
     };

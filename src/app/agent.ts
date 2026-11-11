@@ -417,6 +417,8 @@ export const getAgentDefinition = (
     executionContext,
     runCodeEnabled: hasCapability('shell'),
     editorSurface: filesystemWriteEnabled ? (usesPatchEditingSurface ? 'patch' : 'editors') : 'none',
+    fileReadEnabled: filesystemReadEnabled,
+    shellEnabled: hasCapability('shell'),
   });
   let prompt = promptSpec.basePromptContent ?? resolvePrompt(path.join(BASE_PROMPT_PATH, promptSpec.basePromptFile!));
 

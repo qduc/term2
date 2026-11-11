@@ -1048,7 +1048,7 @@ for (const [index, { configured, args, reject }] of [
       assert.equal(s.requests.length, 1);
       const wire = JSON.stringify(s.requests[0]);
       assert.ok(wire.includes('HEADLESS_PROFILE_CONTEXT_MARKER'), 'project context reaches the provider');
-      const bareIdentity = "You are a coding assistant working in the user's checkout.";
+      const bareIdentity = 'You are a coding assistant running inside Term2, a coding agent harness.';
       assert.ok(wire.includes(bareIdentity), 'Bare instruction identity');
       assert.doesNotMatch(wire, /Mode is ON/, 'Bare carries no workflow notice');
       const facts = readFacts(onlyFile(s.convDir));

@@ -29,7 +29,6 @@ type PromptConstructorBaseOptions = {
   sessionBrowserEnabled?: boolean;
   executionContext?: ExecutionContext;
   fileReadEnabled?: boolean;
-  shellEnabled?: boolean;
 };
 
 export type PromptConstructorOptions = PromptConstructorBaseOptions &
@@ -70,14 +69,13 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     runCodeEnabled = false,
     editorSurface = 'none',
     fileReadEnabled = false,
-    shellEnabled = false,
   } = options;
 
   if (isBareProfile(profile)) {
     return {
       basePromptContent: renderBareToolGuidance(
         profile.instructions.identity.kind === 'markdown' ? profile.instructions.identity.content : '',
-        { fileReadEnabled, shellEnabled, editorSurface },
+        { fileReadEnabled, shellEnabled: runCodeEnabled, editorSurface },
       ),
       fragmentFiles: [],
       inlineSections: [],

@@ -569,7 +569,7 @@ export function registerCliScenarios(group: 'startup' | 'headless'): void {
             .filter((message) => message.role === 'system')
             .map((message) => message.content)
             .join('\n');
-          expect(system).toContain('Use the shell to read, search, and edit files');
+          expect(system).toContain('You are a coding assistant running inside Term2');
           expect(system).toContain('Unattended mode: Never ask');
           expect(wire).not.toMatch(/(?:Plan|Pair|Mentor|Orchestrator) Mode is ON/);
           expect(wire).not.toContain('propose_goal');
@@ -2406,7 +2406,7 @@ fs.createWriteStream = (filename, options) => {
           expect(system).toContain('read the SKILL.md at its\nlocation with the shell');
           expect(system).not.toContain('activate_skill');
           expect(system).toContain(`cwd (you're already here, don't \`cd\` to it): ${repo}`);
-          expect(system).toContain('Use the shell to read, search, and edit files');
+          expect(system).toContain('You are a coding assistant running inside Term2');
           expect(system).not.toContain('run_code');
           expect(mock.capturedModels()).toHaveLength(2);
           const emitted = result.stdout

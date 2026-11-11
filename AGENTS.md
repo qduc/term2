@@ -18,8 +18,8 @@ points are:
   owns a conversation's append-only log and Term2 host policy;
   `@qduc/agent-core` runs the turn. It graduated to
   [qduc/agent-runtime](https://github.com/qduc/agent-runtime) (`packages/core/`) and is
-  vendored here as `vendor/qduc-agent-core-*.tgz`: change it there, pack it, and
-  replace the tarball. `src/engine/` contains only compatibility contracts and
+  consumed here as an exact-pinned npm prerelease: change it there, publish a
+  release, then update the pin in `package.json` and `pnpm-lock.yaml`. `src/engine/` contains only compatibility contracts and
   history/continuity helpers.
 - `src/session/prompts/prompt-constructor.ts` assembles prompts; `prompt-profiles.ts`
   maps models to base profiles. Prompts and tool descriptions are product behavior.

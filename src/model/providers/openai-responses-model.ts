@@ -18,6 +18,7 @@ import { ResponsesWebSocketSessions } from './responses-websocket-sessions.js';
 import { WebSocketClosedEarlyError, readWebSocketCloseFrame } from './websocket-close-evidence.js';
 import { raceWebSocketAbort } from './websocket-abort-race.js';
 import { filterChainedModelInput } from '../../shared/lib/chained-input-filter.js';
+import { applyNativeConversationInput } from './luna-responses-lite-wire-protocol.js';
 
 /**
  * Build the Responses image_url/file_id reference for an application image
@@ -308,24 +309,7 @@ function requestBody(
     ...(contextManagement ? { context_management: contextManagement } : {}),
   } as any;
 
-  if (conversationConfiguration && body.model === 'gpt-6-luna') {
-    const prefix: unknown[] = [];
-    // Core continuity clears the anchor when instructions or tools change.
-    // A chained continuation inherits this prefix instead of accumulating it.
-    if (!body.previous_response_id) {
-      if (body.tools?.length) prefix.push({ type: 'additional_tools', role: 'developer', tools: body.tools });
-      if (body.instructions) {
-        prefix.push({ type: 'message', role: 'developer', content: [{ type: 'input_text', text: body.instructions }] });
-      }
-    }
-    const input = Array.isArray(body.input) ? body.input : [{ type: 'message', role: 'user', content: body.input }];
-    body.input = [...prefix, ...input];
-    if (body.reasoning?.effort !== undefined) {
-      body.input.push({ type: 'configuration_update', reasoning: { effort: body.reasoning.effort } });
-    }
-    delete body.tools;
-    delete body.instructions;
-  }
+  if (conversationConfiguration) applyNativeConversationInput(body);
 
   // Encrypted reasoning is only returned when explicitly requested by the
   // Responses API. Merge this provider requirement with caller/extra-body

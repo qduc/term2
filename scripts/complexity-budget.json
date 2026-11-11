@@ -150,8 +150,8 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/model/providers/openai-responses-model.ts": {
-      "lines": 915,
-      "reason": "The Responses adapter includes the native Luna conversation projection added in #250. The 26 new lines extend its existing shared request builder and HTTP/unary/WebSocket option plumbing; extracting only this conditional would separate one wire projection across files. Retire this exception when the complete request projection is extracted as an independently testable provider boundary."
+      "lines": 899,
+      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Ten lines since then are the GPT-6 Luna native conversation-input opt-in (#250): one flag carried from the constructor to the three places that build a request body (unary, HTTP stream, WebSocket). The projection itself is a separate job and lives in luna-responses-lite-wire-protocol.ts, beside the code that reads the same prefix back; the flag has to travel with the other per-model request arguments, so moving it would add indirection, not a seam. Lower the ceiling when the three transports share one request-body builder or the file is split by transport."
     },
     "src/session/approval/shell-auto-approval-evaluator.ts": {
       "lines": 797,

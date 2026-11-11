@@ -857,24 +857,18 @@ describe('provider boundary contracts through the registry', () => {
     const stampKey = Object.keys(opaqueB.item).find((key) => key !== 'reasoning_details')!;
     const batchOpaque = { ...opaqueB, item: { ...opaqueB.item, [stampKey]: ['call_b1', 'call_b2'] } };
     const batchCall = (id: string) => ({ type: 'tool_call', id, name: fixtureTool.name, arguments: '{}' });
-    await collect(
-      model.stream({
-        ...fixtureRequest,
-        input: [
-          user,
-          batchOpaque,
-          batchCall('call_b1'),
-          resultFor('call_b1'),
-          batchCall('call_b2'),
-          resultFor('call_b2'),
-        ],
-      } as any),
-    );
-    expect((server.requests.at(-1)!.body as any).messages.slice(1)).toEqual([
-      { ...expected[3], tool_calls: [toolCall('call_b1'), toolCall('call_b2')] },
-      { role: 'tool', tool_call_id: 'call_b1', content: 'result call_b1' },
-      { role: 'tool', tool_call_id: 'call_b2', content: 'result call_b2' },
-    ]);
+    const splitBatch = [batchCall('call_b1'), resultFor('call_b1'), batchCall('call_b2'), resultFor('call_b2')];
+    for (const input of [
+      [user, batchOpaque, ...splitBatch],
+      [user, ...splitBatch, batchOpaque],
+    ]) {
+      await collect(model.stream({ ...fixtureRequest, input } as any));
+      expect((server.requests.at(-1)!.body as any).messages.slice(1)).toEqual([
+        { ...expected[3], tool_calls: [toolCall('call_b1'), toolCall('call_b2')] },
+        { role: 'tool', tool_call_id: 'call_b1', content: 'result call_b1' },
+        { role: 'tool', tool_call_id: 'call_b2', content: 'result call_b2' },
+      ]);
+    }
 
     // Providers may restart tool call ids per response: two reasoning turns
     // that both used `call_0` stay two turns, each with its own payload.

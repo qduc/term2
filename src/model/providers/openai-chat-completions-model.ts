@@ -675,12 +675,30 @@ function openAICompatibleMessages(input: StreamedModelTurnRequest['input'], prov
   for (const { callIds, payload, position } of identifiedPayloads) {
     let target: any;
     for (let index = position; index < messages.length && !target; index += 1) {
-      if (index > position && boundaries.has(index)) break;
+      if ((index > position && boundaries.has(index)) || messages[index].role === 'user') break;
       if (ownsCall(messages[index], callIds)) target = messages[index];
     }
-    for (let index = position - 1; index >= 0 && !target; index -= 1) {
-      if (ownsCall(messages[index], callIds)) target = messages[index];
-      else if (boundaries.has(index)) break;
+    // Trailing: the payload follows its turn's results. A batch that history
+    // split into call/result pairs is several messages, so keep walking back to
+    // the earliest of them (coalescing re-merges the rest forward), but stop at
+    // a repeated id, which belongs to an earlier turn.
+    const seen = new Set<string>();
+    for (let index = position - 1; index >= 0 && target === undefined; index -= 1) {
+      if (!ownsCall(messages[index], callIds)) {
+        if (boundaries.has(index)) break;
+        continue;
+      }
+      let earliest = index;
+      for (let earlier = index; earlier >= 0; earlier -= 1) {
+        const message = messages[earlier];
+        if (message.role === 'tool') continue;
+        if (!ownsCall(message, callIds)) break;
+        const ids = message.tool_calls.map((call: any) => call.id);
+        if (ids.some((id: string) => seen.has(id))) break;
+        ids.forEach((id: string) => seen.add(id));
+        earliest = earlier;
+      }
+      target = messages[earliest];
     }
     if (!target) continue;
     attachOpaquePayload(target, payload);

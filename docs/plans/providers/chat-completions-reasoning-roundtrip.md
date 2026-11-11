@@ -187,7 +187,9 @@ anywhere holding an id and an independent verifier showed two reasoning turns
 that both used `call_0` merging and losing a payload. Replay therefore searches
 outward from where the payload sat, no further than the nearest user message or
 other stamped payload: forward first (the producer's order), then backward (a
-payload trailing its turn's results), and a message claims one payload only.
+payload trailing its turn's results, walking back to the earliest message of a
+batch history split into call/result pairs, but not across a repeated id), and
+a message claims one payload only.
 Coalescing under a stamped message only absorbs messages whose calls are all in
 its own id set and not already on it, so a later payload-less turn is not merged
 into an earlier reasoning turn either. With reused ids a payload trailing one

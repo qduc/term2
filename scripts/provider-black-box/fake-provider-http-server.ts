@@ -14,7 +14,11 @@ export type FakeProviderScenario =
   | 'in-band-error-retry'
   // OpenRouter-style gateways spell chat-completions reasoning `reasoning`
   // rather than `reasoning_content`.
-  | 'reasoning-field';
+  | 'reasoning-field'
+  // Request 1 is a tool call with no reasoning; request 2 is a tool call whose
+  // only reasoning is an encrypted `reasoning_details` entry; later requests
+  // answer with text. Exercises payload-to-turn matching on replay.
+  | 'mixed-reasoning-tool-turns';
 export type FakeProviderProtocol = 'chat-completions' | 'responses' | 'anthropic' | 'google';
 export type CapturedHttpRequest = {
   method: string;
@@ -224,6 +228,40 @@ export function framesFor(
       { id: 'chatcmpl_fake', choices: [{ index: 0, delta: { reasoning: 'Need gateway reasoning.' } }] },
       { id: 'chatcmpl_fake', choices: [{ index: 0, delta: { content: 'hello' }, finish_reason: 'stop' }] },
     ];
+  if (scenario === 'mixed-reasoning-tool-turns' && requestNumber <= 2) {
+    const callId = requestNumber === 1 ? 'call_turn_a' : 'call_turn_b';
+    return [
+      ...(requestNumber === 2
+        ? [
+            {
+              id: 'chatcmpl_fake',
+              choices: [
+                {
+                  index: 0,
+                  delta: {
+                    reasoning_details: [
+                      { type: 'reasoning.encrypted', data: 'B-signature', format: 'google-gemini-v1', index: 0 },
+                    ],
+                  },
+                },
+              ],
+            },
+          ]
+        : []),
+      {
+        id: 'chatcmpl_fake',
+        choices: [
+          {
+            index: 0,
+            delta: {
+              tool_calls: [{ index: 0, id: callId, type: 'function', function: { name: 'fixture', arguments: '{}' } }],
+            },
+          },
+        ],
+      },
+      { id: 'chatcmpl_fake', choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }] },
+    ];
+  }
   if (scenario === 'in-band-error-retry' && requestNumber === 1)
     return [
       {

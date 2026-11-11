@@ -69,6 +69,16 @@ or obtain human agreement to defer them. Independently verify high-risk fixes.
   ordinary content survive. Responses/Codex backend-origin pins are checked.
   Chat checks lane tags only. Disputed legacy `openai-compatible` -> Grok
   acceptance is excluded, not approved or changed.
+- `opaque.turn-attribution`: generated sequences of chat-completions turns, each
+  with or without tool calls, prose and an encrypted reasoning payload, produced
+  by the real adapter and replayed through the real history bridge
+  (`historyToInput`). Cases either use unique call ids or restart them per
+  response. With unique ids a tool turn's payload sits either in completion
+  order or after its own results. Turns must replay in order, each as exactly
+  one assistant message holding exactly its own calls, its text and only its
+  own payload, followed by its own results; the turn stamp must not reach the
+  wire. Text-only steps are followed by a user message, as a run
+  ends there; legacy unstamped payloads are not generated.
 
 The `compaction.plan-cut`, `compaction.unsafe-pairs` and `continuity.debt-filter`
 properties, plus `history.ledger-settlement`, `history.ledger-reconciliation`

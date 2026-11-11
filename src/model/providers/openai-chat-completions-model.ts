@@ -492,7 +492,7 @@ function openAICompatibleMessages(input: StreamedModelTurnRequest['input'], prov
   // Payloads stamped with their turn's tool call ids attach by id after the
   // walk, whichever side of their turn they sit on. A stamped payload with no
   // ids belongs to a text-only turn and attaches to the next assistant message.
-  const identifiedPayloads: { callIds: ReadonlySet<string>; payload: Record<string, unknown> }[] = [];
+  const identifiedPayloads: { callIds: ReadonlySet<string>; payload: Record<string, unknown>; position: number }[] = [];
   let pendingTextTurnPayload: Record<string, unknown> | undefined;
   const turnCallIds = new WeakMap<object, ReadonlySet<string>>();
   const registerAssistant = (message: any): void => {
@@ -544,7 +544,11 @@ function openAICompatibleMessages(input: StreamedModelTurnRequest['input'], prov
         pendingOpaquePayload = undefined;
         leadingPayloadGroupOpen = false;
         if (stampedCallIds.length > 0) {
-          identifiedPayloads.push({ callIds: new Set(stampedCallIds.map(String)), payload });
+          identifiedPayloads.push({
+            callIds: new Set(stampedCallIds.map(String)),
+            payload,
+            position: messages.length,
+          });
         } else {
           pendingTextTurnPayload = payload;
         }
@@ -655,13 +659,29 @@ function openAICompatibleMessages(input: StreamedModelTurnRequest['input'], prov
   // message/tool call, not a valid standalone message; if no such item follows
   // — an interrupted turn — omit it rather than inventing a message to carry
   // it or back-dating it onto an earlier one that did not produce it.
-  for (const { callIds, payload } of identifiedPayloads) {
-    const target = messages.find(
-      (message) =>
-        message.role === 'assistant' &&
-        Array.isArray(message.tool_calls) &&
-        message.tool_calls.some((call: any) => callIds.has(call.id)),
-    );
+  // Providers may reuse tool call ids across responses, so an id alone does not
+  // name a turn. Search outward from where the payload sat, only as far as the
+  // nearest user message or other stamped payload: forward first (the order the
+  // producer emits), then backward (a payload trailing its turn's results).
+  const boundaries = new Set<number>(identifiedPayloads.map(({ position }) => position));
+  messages.forEach((message, index) => {
+    if (message.role === 'user') boundaries.add(index);
+  });
+  const ownsCall = (message: any, callIds: ReadonlySet<string>): boolean =>
+    message.role === 'assistant' &&
+    !turnCallIds.has(message) &&
+    Array.isArray(message.tool_calls) &&
+    message.tool_calls.some((call: any) => callIds.has(call.id));
+  for (const { callIds, payload, position } of identifiedPayloads) {
+    let target: any;
+    for (let index = position; index < messages.length && !target; index += 1) {
+      if (index > position && boundaries.has(index)) break;
+      if (ownsCall(messages[index], callIds)) target = messages[index];
+    }
+    for (let index = position - 1; index >= 0 && !target; index -= 1) {
+      if (ownsCall(messages[index], callIds)) target = messages[index];
+      else if (boundaries.has(index)) break;
+    }
     if (!target) continue;
     attachOpaquePayload(target, payload);
     turnCallIds.set(target, callIds);
@@ -722,7 +742,11 @@ function coalesceReasoningToolCallBatches(
         next.reasoning == null &&
         next.reasoning_details == null &&
         next.content == null &&
-        (!ownCallIds || next.tool_calls.every((call: any) => ownCallIds.has(call.id)))
+        (!ownCallIds ||
+          next.tool_calls.every(
+            (call: any) =>
+              ownCallIds.has(call.id) && !message.tool_calls.some((existing: any) => existing.id === call.id),
+          ))
       ) {
         message.tool_calls.push(...next.tool_calls);
         index += 1;

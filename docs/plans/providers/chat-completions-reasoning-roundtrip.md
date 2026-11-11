@@ -180,11 +180,19 @@ parallel batch that history split into pairs.
 
 The producer now stamps the payload with the tool call ids of the response that
 emitted it (`OPAQUE_TURN_TOOL_CALL_IDS_KEY` in `openai-chat-completions-model.ts`,
-`[]` for a text-only response). Replay attaches a stamped payload to the
-assistant message carrying those ids, wherever the payload sits, and strips
-the key before the payload reaches the wire. Coalescing under a stamped message
-only absorbs messages whose calls are all in its own id set, so a later
-payload-less turn is not merged into an earlier reasoning turn either. A
+`[]` for a text-only response) and replay strips the key before the payload
+reaches the wire. Ids alone do not name a turn, because a provider may restart
+call ids in every response; the first version matched the first message
+anywhere holding an id and an independent verifier showed two reasoning turns
+that both used `call_0` merging and losing a payload. Replay therefore searches
+outward from where the payload sat, no further than the nearest user message or
+other stamped payload: forward first (the producer's order), then backward (a
+payload trailing its turn's results), and a message claims one payload only.
+Coalescing under a stamped message only absorbs messages whose calls are all in
+its own id set and not already on it, so a later payload-less turn is not merged
+into an earlier reasoning turn either. With reused ids a payload trailing one
+turn sits where the next turn's leading payload would; that case resolves
+forward, which is correct for every payload the producer emits. A
 text-only stamped payload has no ids to match on and attaches to the next
 assistant message, which is the order the producer emits it in.
 

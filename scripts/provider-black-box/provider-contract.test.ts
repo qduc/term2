@@ -875,6 +875,36 @@ describe('provider boundary contracts through the registry', () => {
       { role: 'tool', tool_call_id: 'call_b1', content: 'result call_b1' },
       { role: 'tool', tool_call_id: 'call_b2', content: 'result call_b2' },
     ]);
+
+    // Providers may restart tool call ids per response: two reasoning turns
+    // that both used `call_0` stay two turns, each with its own payload.
+    const reusedTurn = (signature: string) => [
+      {
+        ...opaqueB,
+        item: {
+          [stampKey]: ['call_0'],
+          reasoning_details: [{ type: 'reasoning.encrypted', data: signature, index: 0 }],
+        },
+      },
+      batchCall('call_0'),
+      resultFor('call_0'),
+    ];
+    await collect(
+      model.stream({ ...fixtureRequest, input: [user, ...reusedTurn('A-sig'), ...reusedTurn('B-sig')] } as any),
+    );
+    const reusedTurnWire = (signature: string) => [
+      {
+        role: 'assistant',
+        content: null,
+        reasoning_details: [{ type: 'reasoning.encrypted', data: signature, index: 0 }],
+        tool_calls: [toolCall('call_0')],
+      },
+      { role: 'tool', tool_call_id: 'call_0', content: 'result call_0' },
+    ];
+    expect((server.requests.at(-1)!.body as any).messages.slice(1)).toEqual([
+      ...reusedTurnWire('A-sig'),
+      ...reusedTurnWire('B-sig'),
+    ]);
   });
 
   it('reassembles Chat Completions tool fragments with the authoritative tool ID', async () => {

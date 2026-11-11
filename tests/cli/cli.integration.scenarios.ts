@@ -2430,11 +2430,14 @@ fs.createWriteStream = (filename, options) => {
             savedLog.format === 'native'
               ? {
                   type: 'session_started',
-                  profile: {
-                    id: 'builtin:bare',
-                    version: emitted[0].activeProfileVersion,
-                    digest: emitted[0].activeProfileDigest,
-                  },
+                  // Resuming emits the current profile but must preserve the original start fact.
+                  profile: savedHistory
+                    ? JSON.parse(savedHistory.split('\n')[0]!).fact.profile
+                    : {
+                        id: 'builtin:bare',
+                        version: emitted[0].activeProfileVersion,
+                        digest: emitted[0].activeProfileDigest,
+                      },
                 }
               : {
                   type: 'session_init',

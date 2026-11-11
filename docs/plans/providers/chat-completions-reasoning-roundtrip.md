@@ -212,9 +212,14 @@ sequences of turns with and without payloads.
   since 2026-11-10: that lane is gone. The built-in OpenRouter provider now runs
   on this chat-completions lane (`openrouter.provider.ts`, tagged `openrouter`),
   so its reasoning round-trips through the opaque payload like any other
-  gateway's. Conversations recorded on the old lane hold reasoning as plain
-  `reasoning` items with no payload; they replay as assistant text, the same
-  fallback a provider switch gets.
+  gateway's. SDK-era conversations can instead hold encrypted details under
+  `providerMetadata.openrouter.reasoning_details` on reasoning and tool-call
+  items. The OpenRouter lane replays those onto their assistant group, retaining
+  valid details exactly and deduplicating only identical copies within that
+  group. Null-data encrypted placeholders are excluded as they were by the SDK.
+  Legacy groups remain separate from later opaque-payload turns. This recovery
+  is scoped to OpenRouter; unmarked reasoning keeps the existing fallback rules,
+  and other providers never inherit OpenRouter's private state.
 - **Should the opaque payload replace or accompany the
   `openai_compatible_reasoning_content` marker?** The marker distinguishes
   native reasoning from generic reasoning that has no chat-completions wire

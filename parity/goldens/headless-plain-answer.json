@@ -34,12 +34,24 @@
               "schema": "f01466518d95a1dc"
             },
             {
+              "name": "read_file",
+              "schema": "812d0e3375822a63"
+            },
+            {
+              "name": "create_file",
+              "schema": "d47b2c57674d3820"
+            },
+            {
+              "name": "search_replace",
+              "schema": "c47dfed554fe21c5"
+            },
+            {
               "name": "run_subagent",
               "schema": "b45d1b1b0a8ed3fa"
             },
             {
               "name": "run_code",
-              "schema": "80cc8f43b1ad9d6a"
+              "schema": "e9d63177f7a19d3d"
             }
           ],
           "other": {

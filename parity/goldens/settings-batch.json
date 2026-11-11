@@ -32,6 +32,14 @@
             {
               "name": "read_file",
               "schema": "812d0e3375822a63"
+            },
+            {
+              "name": "grep",
+              "schema": "bc84595369bcaca6"
+            },
+            {
+              "name": "glob",
+              "schema": "74b21b28732d082e"
             }
           ],
           "other": {

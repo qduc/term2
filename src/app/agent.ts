@@ -592,7 +592,7 @@ export const getAgentDefinition = (
   }
 
   {
-    if (filesystemReadEnabled || bareMode) {
+    if (filesystemReadEnabled) {
       tools.push(createReadFileToolDefinition({ executionContext, sessionAccess, settingsService }));
       // Search is a read capability: it is gated on read plus the setting, never
       // on write authority or the editing surface.

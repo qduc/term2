@@ -99,7 +99,7 @@ it.sequential.each([
       expect(headers).toHaveLength(1);
       expect(headers[0]).toMatchObject({
         activeProfileId: 'builtin:bare',
-        activeProfileVersion: '2.0.0',
+        activeProfileVersion: '3.0.0',
       });
       expect(headers[0].activeProfileDigest).toMatch(/^[a-f0-9]{64}$/);
     }

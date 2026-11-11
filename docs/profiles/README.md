@@ -125,10 +125,14 @@ personal-memory section, refreshed before each provider request, without the
 full-context/global-memory prompt. See [personal memory context](../reference/personal-memory-context.md)
 for scope, opt-out and privacy; no profile switch is required.
 
-Bare carries no tool for what the shell can do: file reads, search, edits, and
-skill loading all go through the shell, so the sandbox is Bare's write boundary.
-The model-facing tools are the shell, `goal_check` (root sessions), `run_code`, and,
-in interactive sessions, `session_rollover`, which scripts cannot call.
+Bare offers the existing file tools directly as well as through `run_code`:
+`read_file` for inspection and the configured `search_replace`/`create_file` or
+`apply_patch` editing surface. File-read/write settings and read-only authority
+still determine availability. Both routes use the same validation and approvals;
+local direct reads resolve physical workspace boundaries before bypassing approval.
+Search and skill loading can still use the shell. The remaining model-facing tools
+include the shell, `goal_check` (root sessions), `run_code`, and, in interactive
+sessions, `session_rollover`, which scripts cannot call.
 The frozen provider surface omits Bare's proposed `ask_mentor`, `ask_user`,
 and `enter_worktree`/`exit_worktree` add-backs; see [the merge decision](lite-bare-merge.md).
 Web, memory,
@@ -156,7 +160,8 @@ Sandbox authority, approval policy, cancellation, output bounds, request deadlin
 and compaction remain authoritative. `agent.completionVerification=false` remains
 an explicit operator override of the runtime completion gate.
 
-Bare's profile version is `2.0.0` (the Lite merge and `run_code`; `1.3.0` was the last direct-surface version). Its original minimal definition and comparison
+Bare's profile version is `3.0.0` (native file tools alongside `run_code`; `2.0.0`
+introduced the Lite merge and `run_code`). Its original minimal definition and comparison
 protocol are recorded in
 [the Bare experiment notes (historical)](https://github.com/qduc/term2/blob/1cca21b541b3d2e9a55ddd81e3514c17ff5e1503/experiments/bare-profile/README.md). Skills were
 restored after the cheap-additions experiment: on one skill-discovery task, three

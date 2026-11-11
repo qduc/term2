@@ -145,16 +145,14 @@ export const builtinProfiles: readonly ProfileDefinition[] = [
           { id: 'environment', source: 'environment' },
         ],
       },
-      // Bare exposes read_file for visual image inspection; other file reads,
-      // search, edits, and skill loading (skills supplies only the catalog) go
-      // through the shell. web, memory, sessions, and mcp have no shell
-      // equivalent; they are run_code script tools, so they add catalogue
-      // entries rather than direct schemas. background-tasks adds the shell's
-      // background option where a job registry exists; the job get/cancel
-      // tools are script-only too.
+      // Keep file operations on the existing validated tools instead of asking
+      // the model to quote edit programs through the shell. Search and skill
+      // loading still use shell; other capabilities remain script tools.
       tools: {
         kind: 'tools',
         include: [
+          'filesystem-read-workspace',
+          'filesystem-write',
           'shell',
           'skills',
           'web',
@@ -169,7 +167,7 @@ export const builtinProfiles: readonly ProfileDefinition[] = [
       enforcement: { kind: 'enforcement', policies: [BUILTIN_ENFORCEMENT_POLICIES[0]] },
       presentation: { kind: 'presentation', displayName: 'Bare', label: 'BARE', color: 'cyan' },
     }),
-    version: '2.0.0',
+    version: '3.0.0',
   },
   builtinProfile('plan', {
     ...workflowBaseBlocks,

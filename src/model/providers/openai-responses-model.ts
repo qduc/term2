@@ -269,6 +269,7 @@ function requestBody(
   providerSupportsContextCompaction = false,
   sessionState?: ContextCompactionSessionState,
   lane: string = OPENAI_RESPONSES_OPAQUE_TAG,
+  conversationConfiguration = false,
 ): any {
   const providerOptions = request.providerOptions ?? {};
   // context_management is capability-gated below. Do not let the generic
@@ -306,6 +307,25 @@ function requestBody(
     ...extraBody,
     ...(contextManagement ? { context_management: contextManagement } : {}),
   } as any;
+
+  if (conversationConfiguration && body.model === 'gpt-6-luna') {
+    const prefix: unknown[] = [];
+    // Core continuity clears the anchor when instructions or tools change.
+    // A chained continuation inherits this prefix instead of accumulating it.
+    if (!body.previous_response_id) {
+      if (body.tools?.length) prefix.push({ type: 'additional_tools', role: 'developer', tools: body.tools });
+      if (body.instructions) {
+        prefix.push({ type: 'message', role: 'developer', content: [{ type: 'input_text', text: body.instructions }] });
+      }
+    }
+    const input = Array.isArray(body.input) ? body.input : [{ type: 'message', role: 'user', content: body.input }];
+    body.input = [...prefix, ...input];
+    if (body.reasoning?.effort !== undefined) {
+      body.input.push({ type: 'configuration_update', reasoning: { effort: body.reasoning.effort } });
+    }
+    delete body.tools;
+    delete body.instructions;
+  }
 
   // Encrypted reasoning is only returned when explicitly requested by the
   // Responses API. Merge this provider requirement with caller/extra-body
@@ -684,6 +704,7 @@ export class OpenAIResponsesModelWithPromptCacheKey implements StreamedModelTurn
    * encrypted reasoning must not cross into an OpenAI request.
    */
   protected readonly lane: string;
+  protected readonly conversationConfiguration: boolean;
 
   constructor(
     _client: any,
@@ -692,6 +713,7 @@ export class OpenAIResponsesModelWithPromptCacheKey implements StreamedModelTurn
     supportsContextCompaction = false,
     contextCompactionSessionState?: ContextCompactionSessionState,
     lane: string = OPENAI_RESPONSES_OPAQUE_TAG,
+    conversationConfiguration = false,
   ) {
     this._client = _client;
     this._model = _model.trim();
@@ -699,6 +721,7 @@ export class OpenAIResponsesModelWithPromptCacheKey implements StreamedModelTurn
     this.supportsContextCompaction = supportsContextCompaction;
     this.contextCompactionSessionState = contextCompactionSessionState;
     this.lane = lane;
+    this.conversationConfiguration = conversationConfiguration;
   }
 
   async getResponse(
@@ -715,6 +738,7 @@ export class OpenAIResponsesModelWithPromptCacheKey implements StreamedModelTurn
           this.supportsContextCompaction,
           request.contextCompactionState ?? this.contextCompactionSessionState,
           this.lane,
+          this.conversationConfiguration,
         ),
         {
           ...(request.signal ? { signal: request.signal } : {}),
@@ -755,6 +779,7 @@ export class OpenAIResponsesModelWithPromptCacheKey implements StreamedModelTurn
           this.supportsContextCompaction,
           request.contextCompactionState ?? this.contextCompactionSessionState,
           this.lane,
+          this.conversationConfiguration,
         ),
         {
           ...(request.signal ? { signal: request.signal } : {}),
@@ -824,6 +849,7 @@ export class OpenAIResponsesWSModelWithPromptCacheKey extends OpenAIResponsesMod
           this.supportsContextCompaction,
           request.contextCompactionState ?? this.contextCompactionSessionState,
           this.lane,
+          this.conversationConfiguration,
         ),
       } as any);
       request.onDispatched?.();

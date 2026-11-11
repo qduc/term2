@@ -190,6 +190,59 @@ it('carries tool suppression to OpenRouter and compatible HTTP requests without 
   }
 });
 
+it('uses native Luna conversation configuration over HTTP without changing other OpenAI models', async () => {
+  const { receipts, baseURL } = await fixture();
+  vi.stubEnv('OPENAI_BASE_URL', baseURL);
+  const settings = createMockSettingsService({
+    'agent.transport': 'http',
+    'agent.retryAttempts': 0,
+    'agent.openai.apiKey': 'fixture',
+  });
+  const registry = createProviderRegistry({ settings, logger });
+  const request: Partial<ModelRequest> = {
+    instructions: 'Use the fixture tool.',
+    reasoning: 'medium',
+    maxOutputTokens: 128,
+    tools: [{ name: 'fixture_tool', description: 'Keep this schema.', inputSchema: { type: 'object' } }],
+  };
+  const luna = registry.resolve({ provider: 'openai', model: 'gpt-6-luna' });
+  await collect(luna, undefined, request);
+  const first = receipts.at(-1)!.body;
+  expect(first).not.toHaveProperty('tools');
+  expect(first).not.toHaveProperty('instructions');
+  expect(first).toMatchObject({
+    max_output_tokens: 128,
+    reasoning: { effort: 'medium', summary: 'auto' },
+    input: [
+      {
+        type: 'additional_tools',
+        role: 'developer',
+        tools: [{ type: 'function', name: 'fixture_tool', parameters: { type: 'object' } }],
+      },
+      { type: 'message', role: 'developer', content: [{ type: 'input_text', text: request.instructions }] },
+      { type: 'configuration_update', reasoning: { effort: 'medium' } },
+    ],
+  });
+  await collect(luna, undefined, { ...request, previousResponseId: 'resp_test' });
+  expect(receipts.at(-1)!.body).toMatchObject({
+    previous_response_id: 'resp_test',
+    input: [{ type: 'configuration_update', reasoning: { effort: 'medium' } }],
+  });
+
+  const other = registry.resolve({ provider: 'openai', model: 'gpt-6-sol' });
+  await collect(other, undefined, request);
+  expect(receipts.at(-1)!.body).toMatchObject({
+    instructions: request.instructions,
+    tools: [{ name: 'fixture_tool' }],
+  });
+  await collect(luna, undefined, { ...request, providerOptions: { extraBody: { model: 'gpt-6-sol' } } });
+  expect(receipts.at(-1)!.body).toMatchObject({
+    model: 'gpt-6-sol',
+    instructions: request.instructions,
+    tools: [{ name: 'fixture_tool' }],
+  });
+});
+
 it('uses explicit request affinity across cached provider adapters and independent ambient sessions', async () => {
   const { receipts, baseURL } = await fixture();
   const cache = await mkdtemp(path.join(tmpdir(), 'grok-affinity-'));

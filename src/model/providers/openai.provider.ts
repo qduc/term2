@@ -7,6 +7,7 @@ import { registerProvider } from './registry.js';
 import { createOpenAIModelCatalog } from './openai-model-catalog.js';
 import { createProviderFetch } from './fetch/composer.js';
 import { NULL_SESSION_CONTEXT_SERVICE } from '../traffic-context.js';
+import { OPENAI_RESPONSES_OPAQUE_TAG } from './provider-opaque-compatibility.js';
 
 export {
   OpenAIResponsesModelWithPromptCacheKey,
@@ -98,6 +99,8 @@ registerProvider(
               requestCapture,
               OPENAI_CAPABILITIES.supportsContextCompaction,
               contextCompactionSessionState,
+              OPENAI_RESPONSES_OPAQUE_TAG,
+              resolvedModel === 'gpt-6-luna',
             )
           : new OpenAIResponsesWSModelWithPromptCacheKey(
               openAIClient,
@@ -105,6 +108,8 @@ registerProvider(
               requestCapture,
               OPENAI_CAPABILITIES.supportsContextCompaction,
               contextCompactionSessionState,
+              OPENAI_RESPONSES_OPAQUE_TAG,
+              resolvedModel === 'gpt-6-luna',
             );
       return selectedModel;
     },

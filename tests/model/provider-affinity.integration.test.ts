@@ -646,7 +646,7 @@ it('derives custom providers from each instance settings and excludes another ho
   expect(secondWire.receipts).toHaveLength(1);
 });
 
-it('sends adaptive Haiku thinking and preserves older models and explicit options through the Anthropic SDK', async () => {
+it('sends adaptive Haiku and Sonnet 5.5 thinking and preserves older models and explicit options through the Anthropic SDK', async () => {
   const { receipts, baseURL } = await fixture();
   const settings = createMockSettingsService({
     'agent.retryAttempts': 0,
@@ -657,6 +657,9 @@ it('sends adaptive Haiku thinking and preserves older models and explicit option
     ['claude-haiku-5-5', 'medium', 'medium'],
     ['claude-haiku-5-5-20261001', 'high', 'high'],
     ['claude-haiku-5-5', 'minimal', 'low'],
+    ['claude-sonnet-5-5', 'medium', 'medium'],
+    ['claude-sonnet-5-5-20261101', 'high', 'high'],
+    ['claude-sonnet-5-5', 'minimal', 'low'],
   ] as const) {
     await collect(registry.resolve({ provider: 'haiku-fixture', model: modelId }), undefined, {
       reasoning: effort,
@@ -680,7 +683,21 @@ it('sends adaptive Haiku thinking and preserves older models and explicit option
   await collect(haiku);
   expect(receipts.at(-1)!.body).not.toHaveProperty('thinking');
 
+  const sonnet = registry.resolve({ provider: 'haiku-fixture', model: 'claude-sonnet-5-5' });
+  await collect(sonnet, undefined, {
+    reasoning: 'medium',
+    providerOptions: { anthropic: { thinking: { type: 'adaptive' }, effort: 'high' } },
+  });
+  expect(receipts.at(-1)!.body).toMatchObject({ thinking: { type: 'adaptive' }, output_config: { effort: 'high' } });
+  await collect(sonnet);
+  expect(receipts.at(-1)!.body).not.toHaveProperty('thinking');
+
   await collect(registry.resolve({ provider: 'haiku-fixture', model: 'claude-haiku-4-5-20251001' }), undefined, {
+    reasoning: 'medium',
+  });
+  expect(receipts.at(-1)!.body).toMatchObject({ thinking: { type: 'enabled', budget_tokens: 4096 } });
+  expect(receipts.at(-1)!.body).not.toHaveProperty('output_config');
+  await collect(registry.resolve({ provider: 'haiku-fixture', model: 'claude-sonnet-4-6' }), undefined, {
     reasoning: 'medium',
   });
   expect(receipts.at(-1)!.body).toMatchObject({ thinking: { type: 'enabled', budget_tokens: 4096 } });

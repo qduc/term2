@@ -16,9 +16,12 @@ tools or configuration change, so the next full request declares a fresh prefix.
 contract from `index.ts` using registered source streamed-model factories. It
 owns request/item translation; the engine owns recovery admission and history.
 
-Known catalogue context windows take precedence. An uncatalogued model uses the
-core's shared 500,000-token scheduling assumption, without acquiring a catalogue
-capacity or a hard admission limit. Explicit host input ceilings still apply.
+Known catalogue context windows take precedence. For an uncatalogued model,
+Term2 sets `Model.contextWindow` to its own 500,000-token scheduling assumption
+(`UNKNOWN_MODEL_CONTEXT_WINDOW` in `provider.ts`); the core has no default of its
+own and uses that value only to schedule automatic compaction. The model acquires
+no `catalogContextWindow` and no hard admission limit. Explicit host input
+ceilings still apply.
 
 `provider.ts` owns the physical async iterator, per-pull request scope, dispatch
 notification and cancellation. `providers/runtime/model-events.ts` projects each received

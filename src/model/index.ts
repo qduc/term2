@@ -1,5 +1,5 @@
-/** Term2 compatibility surface; implementation lives in the portable harness package. */
-export { ModelFailure, DEFAULT_ASSUMED_CONTEXT_WINDOW } from '@qduc/agent-core';
+/** Term2 compatibility surface (types only); implementation lives in the portable harness package.
+ * Runtime code takes `ModelFailure` from `./failure.js`. */
 export type {
   ModelRecoveryEvidence,
   ModelRecoveryBudget,

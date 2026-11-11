@@ -4,8 +4,14 @@ import {
   getSessionAccount,
   type SessionAccountStore,
 } from './providers/oauth-session-account.js';
-import { DEFAULT_ASSUMED_CONTEXT_WINDOW } from './index.js';
 import { stringArray } from './provider-settings.js';
+
+/**
+ * Term2's scheduling assumption for models it cannot size from the catalogue,
+ * supplied to the core as `Model.contextWindow`. It only schedules automatic
+ * compaction; it is not provider capacity or an admission limit.
+ */
+const UNKNOWN_MODEL_CONTEXT_WINDOW = 500_000;
 /**
  * Real providers behind `ModelRegistry`, without the adopted adapter. The only
  * place that sees provider shapes: `Item` converts here and nowhere else.
@@ -89,7 +95,7 @@ export function createProviderRegistry(deps: ProviderRegistryDeps): ModelRegistr
       const model = lazyModel(ref, provider, deps, sessionAccounts);
       if (model.catalogContextWindow === undefined)
         deps.logger.warn(
-          `Model context window unknown; automatic compaction assumes ${DEFAULT_ASSUMED_CONTEXT_WINDOW.toLocaleString(
+          `Model context window unknown; automatic compaction assumes ${UNKNOWN_MODEL_CONTEXT_WINDOW.toLocaleString(
             'en-US',
           )} tokens`,
           ref,
@@ -172,7 +178,7 @@ function lazyModel(
   return {
     ref,
     capabilities,
-    contextWindow: catalogContextWindow ?? DEFAULT_ASSUMED_CONTEXT_WINDOW,
+    contextWindow: catalogContextWindow ?? UNKNOWN_MODEL_CONTEXT_WINDOW,
     ...(catalogContextWindow !== undefined ? { catalogContextWindow } : {}),
     // Legacy uses Codex's compact endpoint for native compaction; other providers compact locally.
     ...(ref.provider === 'codex'

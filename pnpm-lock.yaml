@@ -220,7 +220,6 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
-  '@qduc/agent-core@0.2.0-alpha.2': ef95128188f936db3a4c8d9625de24e87521332d1272c8e154719c841de9168e
   ink-prompt@0.4.3: 9a2e81dec6a8878201fd23aa9fa2d0c30dfc6ad2b6d5c2709c8cf9bca45a5044
   ink@7.0.1: 6909b90a22bc668163e76d57ce5206652acdf6f94f1351a17d71e1b25fd690fc
 
@@ -247,8 +246,8 @@ importers:
         specifier: 2.0.0
         version: 2.0.0
       '@qduc/agent-core':
-        specifier: 0.2.0-alpha.2
-        version: 0.2.0-alpha.2(patch_hash=ef95128188f936db3a4c8d9625de24e87521332d1272c8e154719c841de9168e)
+        specifier: 0.2.0-alpha.3
+        version: 0.2.0-alpha.3
       '@qduc/web-fetch':
         specifier: ^0.1.4
         version: 0.1.4
@@ -1120,8 +1119,8 @@ packages:
   '@pondwader/socks5-server@1.0.10':
     resolution: {integrity: sha512-bQY06wzzR8D2+vVCUoBsr5QS2U6UgPUQRmErNwtsuI6vLcyRKkafjkr3KxbtGFf9aBBIV2mcvlsKD1UYaIV+sg==}
 
-  '@qduc/agent-core@0.2.0-alpha.2':
-    resolution: {integrity: sha512-EsLT3bgfRQ3NI+JqH8YIghBVFt+06JdzUDLohrm6XmTMjefG8vFhTDyNL7wpjqWgtPoHi9FPxurqwe801HeJmg==}
+  '@qduc/agent-core@0.2.0-alpha.3':
+    resolution: {integrity: sha512-0TSEWTfwJT9uU8OCEplXkCYVKC4pxzyG++fN1Pun0Jn0Jb7LGKtHkCNl5nRnx02O02yEu3A3JyTxhxx41nPwtQ==}
     engines: {node: '>=24'}
 
   '@qduc/agent-wire@file:vendor/qduc-agent-wire-0.2.3.tgz':
@@ -4796,7 +4795,7 @@ snapshots:
 
   '@pondwader/socks5-server@1.0.10': {}
 
-  '@qduc/agent-core@0.2.0-alpha.2(patch_hash=ef95128188f936db3a4c8d9625de24e87521332d1272c8e154719c841de9168e)': {}
+  '@qduc/agent-core@0.2.0-alpha.3': {}
 
   '@qduc/agent-wire@file:vendor/qduc-agent-wire-0.2.3.tgz': {}
 

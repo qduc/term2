@@ -124,7 +124,7 @@ before any term2 code runs, whichever command was given; bundled modules
 initialize when their importer does. So a package needed only by one mode
 or on demand is imported where it is used: `ssh2` (`SSHService`), the sandbox
 runtime (`shell-sandbox-runner.ts`), the MCP SDK (`tools/mcp/mcp-sdk.ts`), the
-OpenRouter SDK and `@qduc/web-fetch`. That last one is external: its jsdom stays
+OpenRouter model adapter (`openrouter.provider.ts`) and `@qduc/web-fetch`. That last one is external: its jsdom stays
 out of the bundle and finds its own worker file, which it could not do when it
 was bundled. `launch.ts` loads each launcher, the headless one included, only for its
 mode. Until 2026-11-07 they were static imports, paid on every start; see

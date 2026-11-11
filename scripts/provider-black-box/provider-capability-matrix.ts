@@ -3,7 +3,6 @@ export type CapabilityChainingMode = 'server-managed' | 'stateless';
 export type CapabilityWireFamily =
   | 'openai-responses'
   | 'codex-responses'
-  | 'ai-sdk-chat'
   | 'chat-completions'
   | 'anthropic-messages'
   | 'google-generate-content';
@@ -139,7 +138,7 @@ export const PROVIDER_CAPABILITY_MATRIX: readonly ProviderCapability[] = [
     id: 'openrouter-http',
     label: 'Built-in OpenRouter',
     registryRoute: { kind: 'built-in', providerId: 'openrouter' },
-    wireFamily: 'ai-sdk-chat',
+    wireFamily: 'chat-completions',
     transport: 'http-sse',
     chainingMode: 'stateless',
     toolSupport: { supportsTools: true, supportsApproval: true },

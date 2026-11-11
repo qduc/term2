@@ -4,6 +4,10 @@
 contract from `index.ts` using registered source streamed-model factories. It
 owns request/item translation; the engine owns recovery admission and history.
 
+Known catalogue context windows take precedence. An uncatalogued model uses the
+core's shared 500,000-token scheduling assumption, without acquiring a catalogue
+capacity or a hard admission limit. Explicit host input ceilings still apply.
+
 `provider.ts` owns the physical async iterator, per-pull request scope, dispatch
 notification and cancellation. `providers/runtime/model-events.ts` projects each received
 provider event synchronously and verifies terminal completion. Projection state

@@ -1,0 +1,23 @@
+diff --git a/dist/model/index.d.ts b/dist/model/index.d.ts
+index 1fe3d0338375aefb4174b7cf59841818818ff552..c4f28fbe586b8f49e4183f39c2643156b7ed34f4 100644
+--- a/dist/model/index.d.ts
++++ b/dist/model/index.d.ts
+@@ -10,7 +10,7 @@ export { ModelFailure } from './failure.js';
+ export type { ModelRecoveryEvidence } from './failure.js';
+ export type ModelRecoveryBudget = RetryRecoveryBudget;
+ /** Scheduling assumption only; not evidence of provider capacity. */
+-export declare const DEFAULT_ASSUMED_CONTEXT_WINDOW = 128000;
++export declare const DEFAULT_ASSUMED_CONTEXT_WINDOW = 500000;
+ export type ItemId = string & {
+     readonly __brand: 'ItemId';
+ };
+diff --git a/dist/model/index.js b/dist/model/index.js
+index 7e5f9e8c4c77d695278063cebfbcc17850bcc228..03f185a3bdcc3f664a37f3ae364541b61853b002 100644
+--- a/dist/model/index.js
++++ b/dist/model/index.js
+@@ -7,4 +7,4 @@
+  */
+ export { ModelFailure } from './failure.js';
+ /** Scheduling assumption only; not evidence of provider capacity. */
+-export const DEFAULT_ASSUMED_CONTEXT_WINDOW = 128_000;
++export const DEFAULT_ASSUMED_CONTEXT_WINDOW = 500_000;

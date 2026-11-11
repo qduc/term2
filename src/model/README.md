@@ -1,5 +1,17 @@
 # Native provider boundary
 
+The built-in OpenAI `gpt-6-luna` model declares tools with an initial
+`additional_tools` input, followed by developer instructions. Its named reasoning
+effort also travels in a `configuration_update` input. HTTP, unary requests and
+WebSocket requests share this projection; other models and compatible providers
+retain their existing request format. Tool schemas and implementations do not
+change.
+
+Response chaining remains enabled. Continuations send new input and the effort
+update without repeating the initial tool/instruction prefix. Core continuity
+compares the complete request envelope and drops the anchor when instructions,
+tools or configuration change, so the next full request declares a fresh prefix.
+
 `createProviderRegistry` in `provider.ts` implements the native `ModelRegistry`
 contract from `index.ts` using registered source streamed-model factories. It
 owns request/item translation; the engine owns recovery admission and history.

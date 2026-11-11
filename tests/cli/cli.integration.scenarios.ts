@@ -250,8 +250,8 @@ function writeNativeSeed(
       model: seed.model ?? { model: 'gpt-4o', provider: 'openai' },
       profile: {
         id: 'builtin:bare',
-        version: '2.0.0',
-        digest: '4ea566d1d75c03e6bb87743862f1016d5680568f77d6ebff267cb1e7b3d19ea4',
+        version: '3.0.0',
+        digest: '6a2030330912fce43756ff5e1f02875dd1c5102628ad68b54e10062af2ab1065',
       },
       appVersion: '0.40.0',
     },
@@ -1418,8 +1418,8 @@ fs.createWriteStream = (filename, options) => {
               model: { model: 'gpt-4o', provider: 'openai' },
               profile: {
                 id: 'builtin:bare',
-                version: '2.0.0',
-                digest: '4ea566d1d75c03e6bb87743862f1016d5680568f77d6ebff267cb1e7b3d19ea4',
+                version: '3.0.0',
+                digest: '6a2030330912fce43756ff5e1f02875dd1c5102628ad68b54e10062af2ab1065',
               },
               appVersion: '0.40.0',
             },
@@ -2383,8 +2383,8 @@ fs.createWriteStream = (filename, options) => {
           const runCode = (request.tools as { function: { name: string; description: string } }[]).find(
             (t) => t.function.name === 'run_code',
           )!;
-          // Script-only add-backs are listed by name; no editor is reachable.
-          expect(runCode.function.description).not.toContain('create_file');
+          // The editors are scriptable too; script-only add-backs are listed by name.
+          expect(runCode.function.description).toContain('tools.create_file(');
           expect(runCode.function.description).not.toContain('activate_skill');
           expect(runCode.function.description).toMatch(
             /Other tools \(call tools\.describe\(name\) before use\): .*web_search/,

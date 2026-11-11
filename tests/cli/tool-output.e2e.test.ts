@@ -277,8 +277,8 @@ it(
     // The current frame collapses the known failed call, even though earlier live frames may contain its input.
     const settledFrame = visible.slice(beforeSettled);
     const summaryLines = settledFrame.split('\n');
-    // Three failures: the shell probe plus the two calls Bare doesn't offer (#136 item 14).
-    const summaryIndex = summaryLines.findIndex((line) => line.includes('✗') && line.includes('3 failed:'));
+    // One failure: the shell probe. Bare runs the create_file and search_replace calls itself.
+    const summaryIndex = summaryLines.findIndex((line) => line.includes('✗') && line.includes('1 failed:'));
     expect(summaryIndex).toBeGreaterThanOrEqual(0);
     expect(summaryLines[summaryIndex + 1]?.trim() ?? '').not.toMatch(/^H/);
     expect(settledFrame).not.toContain(failureOutput);

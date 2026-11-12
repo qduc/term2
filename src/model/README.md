@@ -46,6 +46,18 @@ Retries within that turn share it, while concurrent turns do not. A later turn
 may try compaction again, including when a previous turn found it unsupported.
 Direct model requests without a recovery budget have independent state per call.
 
+## Anthropic prompt caching
+
+Native Anthropic requests mark the last function-tool definition for a five-minute
+cache, in addition to the existing system/user/tool-message breakpoints. This
+makes the stable tool prefix eligible for reuse when later system context changes;
+it does not guarantee a provider cache hit or lower total task cost. Schemas,
+descriptions, execution and approval behavior are unchanged. The adapter skips
+the added tool mark when a caller supplies tool or automatic cache controls,
+message marks already fill the four-breakpoint allowance, or a later message
+uses a one-hour TTL (Anthropic requires longer-lived caches before shorter ones).
+Nonmatching models retain their existing behavior.
+
 ## Explicit request affinity
 
 `ModelRequest.affinity` supplies logical history, prefix-cache and routing keys.

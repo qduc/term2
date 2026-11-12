@@ -235,7 +235,7 @@ export class SkillsService {
     const loadInstruction =
       options.loadVia === 'shell'
         ? `When a task matches a skill's description, read the SKILL.md at its
-location with the shell to load its full instructions.`
+location with read_file when available, otherwise with the shell, to load its full instructions.`
         : `When a task matches a skill's description, call the activate_skill tool
 with the skill's name to load its full instructions.`;
 

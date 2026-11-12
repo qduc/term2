@@ -40,7 +40,7 @@ export function presentBareShell(
     ...tool,
     description:
       'Run shell commands for reads, searches and local checks. Combine known dependent steps in one command; ' +
-      'batch independent reads and return only relevant evidence. Make file edits with the shell too. ' +
+      'batch independent reads and return only relevant evidence. Use file editing tools when available. ' +
       (options.background
         ? 'Set background: true for long-running work; add monitor in the same call and wait for shell_output notifications instead of polling. '
         : 'Foreground execution only. ') +

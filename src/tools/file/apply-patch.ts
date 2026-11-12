@@ -159,6 +159,7 @@ export const formatApplyPatchCommandMessage: FormatCommandMessage = (item, index
 
 const APPLY_PATCH_DESCRIPTION =
   'Apply file changes with a patch script. Write the patch directly — no JSON escaping of the body.\n\n' +
+  'For a complete rewrite, put *** Delete File: <path> then *** Add File: <path> in the same patch.\n\n' +
   '```\n' +
   '*** Begin Patch\n' +
   '*** Add File: <path>     — create a file; every following line is a + line\n' +

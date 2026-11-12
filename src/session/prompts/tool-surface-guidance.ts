@@ -18,18 +18,19 @@ export function renderBareToolGuidance(
   if (options.editorSurface === 'editors') {
     tools.push(
       '- search_replace: Make precise edits to existing files using exact text replacement',
-      '- create_file: Create files',
+      '- create_file: Create files or completely rewrite them with overwrite=true',
     );
     rules.push(
       "- Use search_replace for targeted changes. Match the tool's exact replacement schema.",
       '- Keep replacement matches short and unique; avoid including large unchanged regions.',
-      '- Use create_file for new files.',
+      '- For a complete rewrite of an existing file, call create_file once with overwrite=true and the full content.',
     );
   } else if (options.editorSurface === 'patch') {
     tools.push('- apply_patch: Apply patches to edit, create, or delete files');
     rules.push(
       '- Use apply_patch for targeted changes and new files. Match the patch format in its tool description.',
       '- Keep patches focused; avoid including large unchanged regions.',
+      '- For a complete rewrite, put Delete File and Add File for the same path in one apply_patch call.',
     );
   }
   return content.replace('{{bare_tool_list}}', tools.join('\n')).replace('{{bare_tool_rules}}', rules.join('\n'));

@@ -18,8 +18,8 @@ import {
 import { ExecutionContext } from '../execution-context.js';
 
 const CREATE_FILE_DESCRIPTION =
-  'Create a new file with the specified content. Replace existing files requires setting overwrite=true. ' +
-  'Do NOT use this to edit existing files; inside run_code, use tools.search_replace(...) instead. ' +
+  'Create a new file, or rewrite an existing file completely in one call with overwrite=true. ' +
+  'For targeted edits use search_replace instead. ' +
   'Returns Created <path>, Overwrote <path>, or Error: <reason>.';
 
 const createFileParametersSchema = z.object({

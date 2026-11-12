@@ -45,7 +45,7 @@ export type PromptSpec = {
   inlineSections: string[];
 };
 
-/** Bare owns its whole prompt: no model-family base, fragments, or inline sections. */
+/** Bare owns its prompt; only concise capability guidance is added. */
 export function isBareProfile(profile: ResolvedProfile): boolean {
   return profile.identity.id === 'builtin:bare';
 }
@@ -78,7 +78,10 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
         { fileReadEnabled, shellEnabled: runCodeEnabled, editorSurface },
       ),
       fragmentFiles: [],
-      inlineSections: [],
+      inlineSections:
+        sandboxEnabled && runCodeEnabled && !executionContext?.isRemote()
+          ? ['Sandboxed shell writes are allowed only inside the workspace and $TMPDIR. Use $TMPDIR for scratch files.']
+          : [],
     };
   }
   // Runtime modes are intentionally absent from model-family profile selection.

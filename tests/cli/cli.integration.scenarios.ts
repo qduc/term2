@@ -2278,7 +2278,7 @@ fs.createWriteStream = (filename, options) => {
         expect(run.toolLines, report).toEqual([expectedToolLine(refusedCommand), expectedToolLine(ranCommand)]);
         // Only the first call was refused.
         expect(run.stderr.match(/Approval Rejected:/g), report).toHaveLength(1);
-        expect(run.stderr, report).toContain(`cannot be executed automatically: ${refusedCommand}`);
+        expect(run.stderr, report).toContain('command is RED (dangerous) and cannot be executed automatically');
         expect(run.savedCommandRecords).toEqual([
           { command: refusedCommand, isApprovalRejection: true, success: expect.anything() },
           { command: ranCommand, isApprovalRejection: false, success: true },

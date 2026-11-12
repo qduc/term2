@@ -92,7 +92,8 @@ export function createCustomProviderModelProvider(config: CustomProviderConfig, 
       const openAIClient = new OpenAI({
         apiKey: config.apiKey,
         baseURL: config.baseUrl ? normalizeBaseUrl(config.baseUrl) : undefined,
-        maxRetries: normalizedDeps.settingsService?.get('agent.retryAttempts') ?? 2,
+        // RetryingModel or the engine owns retries; SDK retries hide physical attempts.
+        maxRetries: 0,
         fetch: buildProviderFetch(config, normalizedDeps, [createOpenAIResponsesMiddleware()]),
       });
       return new OpenAIChatCompletionsModel(
@@ -141,7 +142,7 @@ export function createCustomProviderModelProvider(config: CustomProviderConfig, 
       const openAIClient = new OpenAI({
         baseURL: normalizeBaseUrl(runtimeConfig.baseUrl),
         apiKey: runtimeConfig.apiKey || 'no-key',
-        maxRetries: normalizedDeps.settingsService?.get('agent.retryAttempts') ?? 2,
+        maxRetries: 0,
         fetch: buildProviderFetch(config, normalizedDeps, [
           createOpenAICompatibleMiddleware(),
           createAnthropicChatCachingMiddleware(),

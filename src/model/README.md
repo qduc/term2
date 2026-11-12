@@ -46,6 +46,21 @@ Retries within that turn share it, while concurrent turns do not. A later turn
 may try compaction again, including when a previous turn found it unsupported.
 Direct model requests without a recovery budget have independent state per call.
 
+## Retry ownership
+
+Custom OpenAI-compatible and OpenCode Chat/Responses clients disable SDK retries.
+Their enclosing `RetryingModel` or `physicalModelStream` owns recovery; requests
+with an engine recovery reservation return each failed HTTP attempt to the
+engine before another dispatch. Reading `agent.retryAttempts` inside those SDK
+clients previously multiplied standalone exhaustion from three to nine POSTs
+when two retries were configured, and hid three POSTs inside one engine dispatch.
+`tests/model/custom-provider-retries.integration.test.ts` reproduces this over
+loopback HTTP and checks explicit recovery with updated instructions. HTTP request
+counts establish retry ownership, not billable token savings or model task quality.
+Actual OpenAI SDK HTTP 408/409 errors remain retryable in the shared classifier;
+generic vendor status objects keep their existing policy. Server SDK retry hints
+do not bypass Term2's authentication, invalid-request or long-delay refusal.
+
 ## Anthropic prompt caching
 
 Native Anthropic requests mark the last function-tool definition for a five-minute

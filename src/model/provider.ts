@@ -162,8 +162,8 @@ function lazyModel(
           sessionContextService: sessionContext,
           onDispatched: () => providerContext.dispatched(),
           sessionAccountStore,
-          // No provider RetryingModel: the engine owns retries. The SDK keeps legacy's
-          // pre-response retries of one HTTP request (same posts and backoff).
+          // No provider/SDK retry loop: engine-owned requests must re-enter
+          // request preparation before every recovery dispatch.
           retryAttempts: 0,
         }),
       )

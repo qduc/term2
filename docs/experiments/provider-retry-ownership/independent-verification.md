@@ -1,0 +1,13 @@
+Independent verifier: accept the scoped retry-ownership change.
+
+Reviewed dirty branch codex/cache-lookback over d285292b752a0e40c8ab37648b088a0289310b9a. Reviewed all production changes, caller ownership (both lazy and eager custom definitions), the new real-HTTP integration test, and the model-area documentation.
+
+Executed author regression cases independently: initially 16/16 pass (363 ms test time, zero built-CLI launches). Final run after the compatibility correction: 66/66 pass across the author's 20 persistent cases and 46 independent temporary cases. Results: verifier-final.json. Temporary independent source retained as verifier-final-probe.txt; removed from tests before handoff.
+
+Independent controls cover all four affected routes: custom OpenAI, custom compatible, OpenCode Responses, OpenCode chat. They check retryAttempts=0 and 1; nonretryable HTTP400; cancellation at the retry boundary before redispatch; eager-source callers retain one retry owner; SDK HTTP408/409 propagate as retryable after exactly one engine-owned dispatch, preserving Retry-After; generic vendor408/409 remain nonretryable; x-should-retry:true cannot override HTTP400/401 or a long429 wait; false503 still uses the enclosing recovery policy. Author cases cover bounded exhaustion, visible standalone retries, successful recovery, and explicit re-entry with updated instructions and unchanged tools.
+
+The first proposal dropped SDK recovery for408/409. Independent HTTP probes demonstrated eight product failures on408/409→200, while two installed-SDK controls succeeded. The author corrected classification specifically for OpenAI APIError instances. Rechecked both successful standalone recovery and one-attempt engine propagation after that correction. Earlier rejected controls: verifier-status.json and verifier-sdk-baseline.json.
+
+The baseline gate passed against d285292 before and after the correction and recorded no added deviations. The permanent tests cross actual loopback HTTP via the real registry and SDK; they are integration tests rather than unit tests disguised by filename. No production changes were made by the verifier.
+
+Limits: these fixtures do not establish live provider billing, cache hits, completed coding-task quality, or Pi parity. They do not independently rerun the full provider suite, TypeScript/lint checks, CI, or end-to-end tools/approval/sandbox journeys; those remain separate author/CI evidence. The reviewed diff does not change tool definitions, skill catalogs, delegation, approvals or sandbox code. Source inspection establishes that scope, not universal behavior acceptance.

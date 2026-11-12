@@ -26,15 +26,20 @@ async function sandboxManager(): Promise<typeof RuntimeSandboxManager> {
  * the runtime can bind it.
  */
 const RUNTIME_TMPDIR_ENV = 'CLAUDE_CODE_TMPDIR';
+// Wraps under one held lease may overlap, so the variable is restored only when the last one finishes.
+let runtimeTempDirHolders = 0;
+let runtimeTempDirPrevious: string | undefined;
 async function withRuntimeTempDir<T>(operation: () => Promise<T>): Promise<T> {
   fs.mkdirSync(SANDBOX_TEMP_DIR, { recursive: true, mode: 0o700 });
-  const previous = process.env[RUNTIME_TMPDIR_ENV];
+  if (runtimeTempDirHolders++ === 0) runtimeTempDirPrevious = process.env[RUNTIME_TMPDIR_ENV];
   process.env[RUNTIME_TMPDIR_ENV] = SANDBOX_TEMP_DIR;
   try {
     return await operation();
   } finally {
-    if (previous === undefined) delete process.env[RUNTIME_TMPDIR_ENV];
-    else process.env[RUNTIME_TMPDIR_ENV] = previous;
+    if (--runtimeTempDirHolders === 0) {
+      if (runtimeTempDirPrevious === undefined) delete process.env[RUNTIME_TMPDIR_ENV];
+      else process.env[RUNTIME_TMPDIR_ENV] = runtimeTempDirPrevious;
+    }
   }
 }
 

@@ -1,0 +1,11 @@
+--- a/quote.js
++++ b/quote.js
+@@ -54,7 +54,7 @@
+ 			return "'" + s.replace(/(['])/g, '\\$1') + "'";
+ 		}
+ 		if ((/["'\s]/).test(s)) {
+-			return '"' + s.replace(/(["\\$`!])/g, '\\$1') + '"';
++			return '"' + s.replace(/(["\\$`])/g, '\\$1').replace(/!/g, '"\'!\'"') + '"';
+ 		}
+ 		return String(s).replace(/([A-Za-z]:)?([#!"$&'()*,:;<=>?@[\\\]^`{|}])/g, '$1\\$2');
+ 	}).join(' ');

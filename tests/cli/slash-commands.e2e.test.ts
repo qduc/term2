@@ -344,9 +344,9 @@ async function runCommand(
     await step('\t\t', 'Some providers failed: brokenprov');
     session.write('\x1b');
     await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 60_000 });
-    // The prior picker is still in the terminal transcript. Wait for this opening's frame
-    // before sending navigation, not just the composer value or an old menu heading.
-    await step('/model ', 'Select model');
+    // The heading can render with only the pinned current model while catalogs
+    // load. Wait for this opening's second row before testing navigation to it.
+    await step('/model ', 'mock-beta');
     await waitForHarnessComposerValue(idlePath, '/model ', { timeoutMs: 60_000 });
     await step('\x1b[B', '❯   mock-beta');
     await step('\x06', '❯ ★ mock-beta');

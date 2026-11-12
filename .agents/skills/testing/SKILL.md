@@ -243,6 +243,12 @@ and `68ef50ff` (local-only evidence), not a result file to resume appending.
   a no-reopen mutation must fail at the reset assertion. A controlled
   hook/controller/Ink probe reproduced this mechanism; the original full-CLI
   CI timing was not reproduced locally.
+- **Model-picker catalog readiness:** the reopened heading can appear with only
+  the pinned current model while provider catalogs load. Before Arrow Down to
+  a second model, wait for that model's row in fresh output, not the heading.
+  A 1,000 ms delayed-catalog probe reproduced the alpha-stays-selected failure
+  on both baseline and candidate; waiting for the beta row preserved the full
+  navigation/favorite/nickname journey. The CI timing itself was not traced.
 - **Direct e2e teardown race (fixed 2026-11-07):** `tests/cli/settings.e2e.test.ts`
   failed intermittently with `ENOTEMPTY: directory not empty, rmdir
   '<tmp>/term2-tool-rows-e2e-*/home'` (or `home/.local`) and no assertion

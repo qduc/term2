@@ -220,6 +220,7 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
+  shell-quote@1.8.4: 17909cefdd8c972fcbc648bae7ae47fbec1e43f4719f04d6869ca6eaea919122
   ink-prompt@0.4.3: 9a2e81dec6a8878201fd23aa9fa2d0c30dfc6ad2b6d5c2709c8cf9bca45a5044
   ink@7.0.1: 6909b90a22bc668163e76d57ce5206652acdf6f94f1351a17d71e1b25fd690fc
 
@@ -4285,7 +4286,7 @@ snapshots:
       '@pondwader/socks5-server': 1.0.10
       commander: 12.1.0
       node-forge: 1.4.0
-      shell-quote: 1.8.4
+      shell-quote: 1.8.4(patch_hash=17909cefdd8c972fcbc648bae7ae47fbec1e43f4719f04d6869ca6eaea919122)
       zod: 3.25.76
 
   '@asamuzakjp/css-color@3.2.0':
@@ -7663,7 +7664,7 @@ snapshots:
 
   shebang-regex@3.0.0: {}
 
-  shell-quote@1.8.4: {}
+  shell-quote@1.8.4(patch_hash=17909cefdd8c972fcbc648bae7ae47fbec1e43f4719f04d6869ca6eaea919122): {}
 
   side-channel-list@1.0.0:
     dependencies:

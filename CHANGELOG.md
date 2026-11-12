@@ -1,3 +1,24 @@
+## [Unreleased]
+
+### Features
+- Bare exposes the native file tools directly alongside `run_code`, and its prompt describes the read, write, shell and patch tools that are actually available instead of routing every file operation through the shell (#245, #249).
+- Native OpenAI GPT-6 Luna requests use the model's conversation input (tools and instructions as developer input, followed by the requested reasoning effort) on the unary, HTTP and WebSocket paths. Other models are unchanged (#250).
+- Cost estimates count cache writes, including one-hour writes, and apply long-context price tiers. Totals for earlier sessions are not rewritten, and a provider-reported charge still takes precedence (#253).
+
+### Improvements
+- OpenRouter runs on the OpenAI chat-completions client instead of the AI SDK provider. Upstream failure detail is included in error messages, and conversations saved by earlier versions replay their stored reasoning details (#245, #246).
+- Models missing from the catalog are assumed to have a 500,000-token context window when scheduling automatic compaction, up from 128,000. Catalog capacities and explicit input ceilings still apply, and the assumption is not an admission limit (#248, #254).
+- When a non-interactive run automatically denies a shell command, the rejection sent back to the model names the risk level without repeating the command (#256).
+- A shell sandbox that cannot start now reports that the command was not run and whether a dependency is missing or initialization failed, instead of saying the sandbox blocked the command. Running outside the sandbox still requires explicit approval (#242, #257).
+- ACP sessions publish the conversation title to the editor after the first accepted prompt and on load/resume, so clients no longer show the `conv_…` id (#241).
+
+### Bug Fixes
+- Fix native Claude Haiku 5.5 rejecting a named reasoning effort: it now receives adaptive thinking with the requested effort; `minimal` maps to `low` (#251).
+- Fix local context summaries asking the provider to call tools instead of summarizing (#242).
+- Fix providers that reject recursive JSON schemas refusing `run_code` requests; nested JSON inputs are still accepted (#243).
+- Fix encrypted reasoning from chat-completions providers being replayed on the wrong tool turn (#247).
+- Stop sending `tool_choice` to chat-completions providers when no tools are available (#246).
+
 ## [1.1.0] - 2026-11-10
 
 ### Features

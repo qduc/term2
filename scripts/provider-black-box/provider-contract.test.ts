@@ -89,6 +89,98 @@ afterEach(async () => {
 });
 
 describe('provider boundary contracts through the registry', () => {
+  it('Anthropic marks identical tools across changed system context within four breakpoints', async () => {
+    const providerCase = providerCases[2]!;
+    server = await startFakeProviderHttpServer({ scenario: 'success', protocol: 'anthropic' });
+    const settings = createSettings(providerCase);
+    registerRuntimeProvider(providerCase, settings);
+    const model = await getProvider(providerCase.registryId)!.createStreamedModel!(providerCase.model, {
+      settingsService: settings,
+      loggingService: quietLogging,
+    });
+    const tools = [fixtureTool, { ...fixtureTool, name: 'second_fixture' }];
+    for (const instructions of ['workspace one', 'workspace two']) {
+      const events = await collect(
+        model.stream({
+          ...fixtureRequest,
+          instructions,
+          tools,
+          input: [
+            ...fixtureRequest.input,
+            { type: 'tool_call', id: 'call_prior', name: fixtureTool.name, arguments: '{"a":1}' },
+            { type: 'tool_result', id: 'call_prior', output: 'prior result' },
+          ],
+        }),
+      );
+      expect(events.at(-1)).toMatchObject({ type: 'completion' });
+      const body = server.requests.at(-1)!.body as Record<string, any>;
+      expect(body.tools[0].cache_control).toBeUndefined();
+      expect(body.tools[1]).toMatchObject({
+        name: 'second_fixture',
+        input_schema: fixtureTool.parameters,
+        cache_control: { type: 'ephemeral' },
+      });
+      const countBreakpoints = (value: unknown): number => {
+        if (!value || typeof value !== 'object') return 0;
+        return Object.entries(value).reduce(
+          (sum, [key, nested]) => sum + (key === 'cache_control' ? 1 : countBreakpoints(nested)),
+          0,
+        );
+      };
+      expect(countBreakpoints(body)).toBe(4);
+    }
+    expect((server.requests[0]!.body as any).tools).toEqual((server.requests[1]!.body as any).tools);
+    expect(tools).toEqual([fixtureTool, { ...fixtureTool, name: 'second_fixture' }]);
+  });
+
+  it('Anthropic preserves explicit automatic caching without adding a tool breakpoint', async () => {
+    const providerCase = providerCases[2]!;
+    server = await startFakeProviderHttpServer({ scenario: 'success', protocol: 'anthropic' });
+    const settings = createSettings(providerCase);
+    registerRuntimeProvider(providerCase, settings);
+    const model = await getProvider(providerCase.registryId)!.createStreamedModel!(providerCase.model, {
+      settingsService: settings,
+      loggingService: quietLogging,
+    });
+    await collect(
+      model.stream({
+        ...fixtureRequest,
+        providerOptions: { anthropic: { cacheControl: { type: 'ephemeral', ttl: '1h' } } },
+      }),
+    );
+    const body = server.requests.at(-1)!.body as Record<string, any>;
+    expect(body.cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
+    expect(body.tools[0].cache_control).toBeUndefined();
+  });
+
+  it('Anthropic preserves a caller 1h content cache before its generated 5m message cache', async () => {
+    const providerCase = providerCases[2]!;
+    server = await startFakeProviderHttpServer({ scenario: 'success', protocol: 'anthropic' });
+    const settings = createSettings(providerCase);
+    registerRuntimeProvider(providerCase, settings);
+    const model = await getProvider(providerCase.registryId)!.createStreamedModel!(providerCase.model, {
+      settingsService: settings,
+      loggingService: quietLogging,
+    });
+    const cachedContent = {
+      type: 'text' as const,
+      text: 'long-lived context',
+      providerOptions: { anthropic: { cacheControl: { type: 'ephemeral', ttl: '1h' } } },
+    };
+    await collect(
+      model.stream({
+        ...fixtureRequest,
+        input: [{ type: 'message', role: 'user', content: [cachedContent, { type: 'text', text: 'latest input' }] }],
+      }),
+    );
+    const body = server.requests.at(-1)!.body as Record<string, any>;
+    expect(body.tools[0].cache_control).toBeUndefined();
+    expect(body.messages[0].content.map((part: any) => part.cache_control)).toEqual([
+      { type: 'ephemeral', ttl: '1h' },
+      { type: 'ephemeral' },
+    ]);
+  });
+
   it.each(['llama.cpp', 'openai-compatible'] as const)(
     '%s keeps reasoning translation scoped to its adapter',
     async (runtimeType) => {

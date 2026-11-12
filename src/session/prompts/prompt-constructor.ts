@@ -79,8 +79,8 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
       ),
       fragmentFiles: [],
       inlineSections:
-        sandboxEnabled && runCodeEnabled
-          ? ['Shell writes are allowed only inside the workspace and $TMPDIR. Use $TMPDIR for scratch files.']
+        sandboxEnabled && runCodeEnabled && !executionContext?.isRemote()
+          ? ['Sandboxed shell writes are allowed only inside the workspace and $TMPDIR. Use $TMPDIR for scratch files.']
           : [],
     };
   }

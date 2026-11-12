@@ -7,6 +7,18 @@ description: Published release highlights and changes available only on main.
 
 Use `term2 --version` to check your installation and `npm view @qduc/term2 version` for the latest published release.
 
+## 1.2.0 - November 12, 2026
+
+- Bare offers the native file tools directly alongside `run_code`, with a prompt that matches the tools available.
+- OpenRouter runs on the OpenAI chat-completions client. Upstream error detail is shown, and conversations saved by earlier versions still replay.
+- Cost estimates include cache writes and long-context price tiers.
+- Models missing from the catalog are assumed to have a 500,000-token context window for automatic compaction, up from 128,000.
+- Native Claude Haiku 5.5 accepts a named reasoning effort, and GPT-6 Luna uses its native conversation input.
+- A shell sandbox that cannot start says the command was not run and why. See [Shell Sandbox](/term2/safety/sandbox/).
+- ACP editors show the conversation title instead of its id.
+
+See the [1.2.0 changelog](https://github.com/qduc/term2/blob/v1.2.0/CHANGELOG.md) for details.
+
 ## 1.1.0 - November 10, 2026
 
 - `term2 acp` now serves stable [ACP v1](/term2/reference/acp-v2/#jetbrains-air-and-stable-acp-v1) editors such as JetBrains Air and Zed, alongside experimental v2. The protocol version comes from the editor; no flag is needed.

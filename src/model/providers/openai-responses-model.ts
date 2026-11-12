@@ -341,6 +341,24 @@ function normalizeUsage(usage: any): StreamedModelUsage | undefined {
   };
 }
 
+/** Preserve complete accounting before a terminal failure is thrown. */
+function failedResponseUsage(event: any): Extract<StreamedModelTurnEvent, { type: 'usage' }> | undefined {
+  if (event?.type !== 'response.failed' && event?.type !== 'response.incomplete') return undefined;
+  const usage = normalizeUsage((event.response ?? event).usage);
+  // Partial/missing usage must stay unknown, rather than defaulting an absent
+  // input or output total to zero at the public Usage boundary.
+  if (
+    typeof usage?.inputTokens !== 'number' ||
+    !Number.isFinite(usage.inputTokens) ||
+    usage.inputTokens < 0 ||
+    typeof usage.outputTokens !== 'number' ||
+    !Number.isFinite(usage.outputTokens) ||
+    usage.outputTokens < 0
+  )
+    return undefined;
+  return { type: 'usage', usage };
+}
+
 function reasoningText(item: any): string {
   const summary = item?.summary ?? item?.content ?? item?.rawContent;
   if (typeof summary === 'string') return summary;
@@ -777,6 +795,8 @@ export class OpenAIResponsesModelWithPromptCacheKey implements StreamedModelTurn
       );
       const normalizationState = createResponseEventNormalizationState();
       for await (const event of source) {
+        const failedUsage = failedResponseUsage(event);
+        if (failedUsage) yield failedUsage;
         const normalized = normalizeResponseEvent(event, normalizationState, this.lane);
         if (normalized?.type === 'completion') {
           terminal = true;
@@ -858,6 +878,8 @@ export class OpenAIResponsesWSModelWithPromptCacheKey extends OpenAIResponsesMod
         // ambiguous here: capture the code, but never claim it was unsent.
         if (message.type === 'close') throw new WebSocketClosedEarlyError(readWebSocketCloseFrame(message));
         if (message.type !== 'message') continue;
+        const failedUsage = failedResponseUsage(message.message);
+        if (failedUsage) yield failedUsage;
         const normalized = normalizeResponseEvent(message.message, normalizationState, this.lane);
         if (normalized?.type === 'completion') {
           terminal = true;

@@ -56,6 +56,23 @@ state is `unknown`, not "probably failed, try again."
 - Sandbox write policy (`utils/shell/sandbox/sandbox-policy.ts`) bounds where
   spooled output may be written.
 
+### Shell command quoting at the sandbox boundary
+
+The sandbox runtime uses `shell-quote` repeatedly to carry a command through
+nested shells. Version 1.8.4 backslash-escaped `!` inside double quotes, where
+non-interactive Bash preserves that backslash. Commands containing both quote
+styles could therefore turn Python `!=` or `!r` into invalid source, causing
+the agent to regenerate otherwise valid validation scripts. The pinned patch
+emits a single-quoted bang between double-quoted segments, preserving the
+argument bytes without interpreting shell metacharacters. Remove it when the
+upstream dependency provides equivalent byte-preserving quoting.
+
+`tests/tools/shell/sandbox-quoting.integration.test.ts` exercises the real
+sandbox and child processes, including quoted heredocs, literal arguments and
+genuine interpreter failure. Mocking the wrapper misses this defect. When
+investigating similar failures, compare the original command, the wrapped
+command and the interpreter's received bytes before changing model guidance.
+
 ### Source shell output preferences
 
 The source `createShellToolDefinition` and `executeFormattedShellCommand` pass the effective

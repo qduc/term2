@@ -227,6 +227,8 @@ export interface StreamedModelToolArgumentScope {
 }
 
 export type StreamedModelTurnEvent =
+  /** Accounting evidence for an attempt that can still fail; never a completion. */
+  | { readonly type: 'usage'; readonly usage: StreamedModelUsage }
   | { readonly type: 'text_delta'; readonly text: string; readonly partId?: string }
   | { readonly type: 'codex_rate_limits'; readonly rateLimits: CodexRateLimitInfo }
   /** Signals that the model has begun a reasoning item before or without summary text deltas. */

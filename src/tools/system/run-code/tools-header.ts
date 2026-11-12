@@ -66,8 +66,12 @@ export function renderSchemaType(node: JsonSchemaNode | undefined, depth = 0): s
     case 'number':
     case 'integer':
       return 'number';
-    case 'array':
-      return `${renderSchemaType(Array.isArray(node.items) ? node.items[0] : node.items, depth)}[]`;
+    case 'array': {
+      const itemType = renderSchemaType(Array.isArray(node.items) ? node.items[0] : node.items, depth);
+      // Array binds more tightly than union: A|B[] means A or an array of B,
+      // not an array whose elements can be A or B.
+      return `${itemType.includes('|') ? `(${itemType})` : itemType}[]`;
+    }
     case 'object':
     default:
       return node.properties && depth < MAX_OBJECT_DEPTH ? `{ ${renderFields(node, depth + 1).join(', ')} }` : 'object';

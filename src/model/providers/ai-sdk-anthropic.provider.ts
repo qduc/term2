@@ -1,7 +1,7 @@
 import type { SharedV3ProviderOptions } from '@ai-sdk/provider';
 import { createAnthropic, type AnthropicProviderSettings } from '@ai-sdk/anthropic';
 import { wrapLanguageModel, type LanguageModelMiddleware } from 'ai';
-import type { LanguageModelV3 } from '@ai-sdk/provider';
+import type { LanguageModelV3, LanguageModelV3CallOptions } from '@ai-sdk/provider';
 import {
   forwardExplicitProviderSettings,
   withForwardedProviderSettings,
@@ -79,8 +79,7 @@ function createAnthropicPromptCachingMiddleware(
       }
 
       const modelId = typeof model === 'string' ? model : model?.modelId;
-
-      return {
+      const next = {
         ...input,
         ...(Array.isArray(input.messages)
           ? { messages: addAnthropicPromptCachingToMessages(input.messages, modelId, shouldApplyPromptCaching) }
@@ -89,7 +88,47 @@ function createAnthropicPromptCachingMiddleware(
           ? { prompt: addAnthropicPromptCachingToMessages(input.prompt, modelId, shouldApplyPromptCaching) }
           : {}),
       };
+      return modelId && shouldApplyPromptCaching(modelId) ? cacheToolPrefix(next) : next;
     },
+  };
+}
+
+/** Cache the stable tool prefix even when later system context changes. */
+function cacheToolPrefix(params: LanguageModelV3CallOptions): LanguageModelV3CallOptions {
+  if (!Array.isArray(params.prompt)) return params;
+  const tools = params.tools;
+  const last = tools?.at(-1);
+  const cacheControl = (options: SharedV3ProviderOptions | undefined) =>
+    options?.anthropic?.cacheControl ?? options?.anthropic?.cache_control;
+  // Keep caller-owned tool breakpoints and automatic caching unchanged. The
+  // SDK cannot attach this metadata to provider-defined tools.
+  if (!tools || !last || last.type !== 'function' || cacheControl(params.providerOptions)) return params;
+  if (tools.some((tool) => tool.type === 'function' && cacheControl(tool.providerOptions))) return params;
+  const messageBreakpoints = params.prompt.flatMap((message) => [
+    message.providerOptions,
+    ...(Array.isArray(message.content) ? message.content.map((part) => part.providerOptions) : []),
+  ]);
+  const controls = messageBreakpoints.map(cacheControl).filter(Boolean);
+  // Anthropic requires 1h breakpoints before 5m breakpoints. Do not insert a
+  // short-lived tool breakpoint ahead of a caller's long-lived message cache.
+  if (
+    controls.length >= 4 ||
+    controls.some((control) => control && typeof control === 'object' && 'ttl' in control && control.ttl === '1h')
+  )
+    return params;
+  return {
+    ...params,
+    tools: tools.map((tool, index) =>
+      index === tools.length - 1 && tool.type === 'function'
+        ? {
+            ...tool,
+            providerOptions: {
+              ...tool.providerOptions,
+              anthropic: { ...tool.providerOptions?.anthropic, cacheControl: { type: 'ephemeral' } },
+            },
+          }
+        : tool,
+    ),
   };
 }
 
@@ -182,7 +221,7 @@ export class AiSdkAnthropicProvider {
 
     return createAiSdkStreamedModel(
       withForwardedProviderSettings(model, (options) => forwardExplicitProviderSettings(options, 'anthropic')),
-      (request) => resolveReasoningOptions(request, /^claude-haiku-5-5(?:-|$)/.test(resolvedModelName)),
+      (request) => resolveReasoningOptions(request, /^claude-(?:haiku|sonnet)-5-5(?:-|$)/.test(resolvedModelName)),
     );
   }
 }

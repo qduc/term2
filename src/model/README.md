@@ -1,5 +1,13 @@
 # Native provider boundary
 
+The Chat Completions adapter uses `max_completion_tokens` when the SDK client's
+actual endpoint hostname is `api.openai.com`. Other compatible endpoints retain
+`max_tokens`, and a dialect can explicitly select its wire convention. A defined
+caller limit in either spelling suppresses the inferred field, so an override
+does not accidentally send both. An undefined option retains the requested cap.
+This does not infer support from model-version
+names or change reasoning settings, tools, or the Responses API.
+
 The built-in OpenAI `gpt-6-luna` model declares tools with an initial
 `additional_tools` input, followed by developer instructions. Its named reasoning
 effort also travels in a `configuration_update` input. HTTP, unary requests and
@@ -52,6 +60,18 @@ counts establish retry ownership, not billable token savings or model task quali
 Actual OpenAI SDK HTTP 408/409 errors remain retryable in the shared classifier;
 generic vendor status objects keep their existing policy. Server SDK retry hints
 do not bypass Term2's authentication, invalid-request or long-delay refusal.
+
+## Anthropic prompt caching
+
+Native Anthropic requests mark the last function-tool definition for a five-minute
+cache, in addition to the existing system/user/tool-message breakpoints. This
+makes the stable tool prefix eligible for reuse when later system context changes;
+it does not guarantee a provider cache hit or lower total task cost. Schemas,
+descriptions, execution and approval behavior are unchanged. The adapter skips
+the added tool mark when a caller supplies tool or automatic cache controls,
+message marks already fill the four-breakpoint allowance, or a later message
+uses a one-hour TTL (Anthropic requires longer-lived caches before shorter ones).
+Nonmatching models retain their existing behavior.
 
 ## Explicit request affinity
 
@@ -204,9 +224,9 @@ because the CLI does not expose request provider options.
 
 ## Anthropic reasoning
 
-The Anthropic-format adapter uses adaptive thinking for `claude-haiku-5-5`
-and its dated model IDs when the user requests a named thinking effort. Haiku
-5.5 rejects the older fixed-token `thinking.type: enabled` format. Adaptive
+The Anthropic-format adapter uses adaptive thinking for `claude-haiku-5-5`,
+`claude-sonnet-5-5`, and their dated model IDs when the user requests a named
+thinking effort. These models reject the older fixed-token `thinking.type: enabled` format. Adaptive
 requests pass the effort through the SDK's Anthropic `effort` option; `minimal`
 maps to `low`, the lowest adaptive level. Explicit provider thinking and effort
 options retain precedence. Unspecified effort retains the existing provider
@@ -216,6 +236,16 @@ Adaptive thinking does not add a separate thinking budget to the requested
 output ceiling. The model's reasoning and answer share that ceiling.
 
 ## Cache usage and prices
+
+Native Responses HTTP and WebSocket streams emit a separate accounting-only
+usage event before rejecting a provider `response.failed` or `response.incomplete`
+frame that contains complete input/output usage. The registry forwards it as
+ordinary usage without emitting completed output, tool items, or a successful
+terminal event. The core can therefore settle the failed attempt's cost instead
+of marking reported usage missing. Successful completions keep their existing
+single usage event; absent, invalid, or partial failure usage remains unknown.
+The unary API still rejects failed/incomplete responses without returning a
+completion payload.
 
 Provider adapters emit total input including cache reads and creation in
 `StreamedModelUsage.inputTokens`. `toUsage` preserves optional cache-write and
@@ -236,3 +266,14 @@ supplements matching-rate context tiers from the recorded pi-ai 1.5.2 snapshot.
 A changed-rate OpenRouter `~openai/gpt-terra-latest` entry retains its old snapshot
 price rather than mixing old base and newer context rates. `catalog:update`
 regenerates tiers from whichever pi-ai data snapshot it is given.
+
+## Google reasoning controls
+
+The native Google adapter sends `thinkingLevel` for Gemini 3 Flash, 3.x Pro/Flash and
+Gemini 4 or later model IDs, including the optional `models/` prefix. Named
+low/medium/high efforts retain their names; minimal uses low conservatively
+because support for minimal varies by model, and xhigh uses high. A caller can
+select model-specific minimal support through explicit `thinkingConfig`. Older and unrecognized model IDs retain the existing token-budget
+mapping. Explicit `google.thinkingConfig` remains caller-owned, and requests
+without a named effort do not acquire an automatic thinking configuration.
+The adapter does not infer capabilities from mutable `latest` aliases.

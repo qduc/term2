@@ -41,7 +41,7 @@ export class AiSdkGoogleProvider {
           forwardExplicitProviderSettings(options, 'google'),
         ),
       ),
-      resolveReasoningOptions,
+      (request) => resolveReasoningOptions(request, modelName || this.#defaultModel),
     );
   }
 }
@@ -68,7 +68,10 @@ async function* withResponseId(stream: Awaited<ReturnType<LanguageModelV3['doStr
 }
 
 /** Apply google's reasoning options before crossing the SDK boundary. */
-function resolveReasoningOptions(request: StreamedModelTurnRequest): SharedV3ProviderOptions | undefined {
+function resolveReasoningOptions(
+  request: StreamedModelTurnRequest,
+  modelId: string,
+): SharedV3ProviderOptions | undefined {
   const budget = resolveThinkingBudget(request.reasoning?.effort);
   if (budget === undefined) return request.providerOptions as SharedV3ProviderOptions | undefined;
   const providerOptions: SharedV3ProviderOptions = {
@@ -76,7 +79,24 @@ function resolveReasoningOptions(request: StreamedModelTurnRequest): SharedV3Pro
   };
   providerOptions.google = {
     ...(providerOptions.google ?? {}),
-    thinkingConfig: providerOptions.google?.thinkingConfig ?? { thinkingBudget: budget, includeThoughts: true },
+    thinkingConfig:
+      providerOptions.google?.thinkingConfig ??
+      (usesThinkingLevel(modelId)
+        ? {
+            thinkingLevel:
+              request.reasoning?.effort === 'minimal'
+                ? 'low'
+                : request.reasoning?.effort === 'xhigh'
+                ? 'high'
+                : request.reasoning?.effort,
+            includeThoughts: true,
+          }
+        : { thinkingBudget: budget, includeThoughts: true }),
   };
   return providerOptions;
+}
+
+/** Current Gemini 3 Flash/3.x Pro/Flash and Gemini 4+ use named levels; older/unknown IDs keep token budgets. */
+function usesThinkingLevel(modelId: string): boolean {
+  return /^(?:models\/)?gemini-(?:3(?:-flash|\.\d+-(?:pro|flash))(?:-|$)|(?:[4-9]|[1-9]\d)(?:\.\d+)?-)/i.test(modelId);
 }

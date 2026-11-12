@@ -28,6 +28,9 @@ export class ModelEventProjection {
 
   *project(event: StreamedModelTurnEvent): Generator<ModelEvent> {
     switch (event.type) {
+      case 'usage':
+        yield { type: 'usage', usage: toUsage(event.usage) };
+        break;
       case 'codex_rate_limits':
         if (this.providerId === 'codex') yield { type: 'codex_quota', quota: weeklyQuota(event.rateLimits) };
         break;

@@ -12,6 +12,26 @@ output = Path(sys.argv[2] if len(sys.argv) > 2 else 'docs/experiments/live-effic
 workspaces = Path('/workspace/scratch/term2-pi-workspaces')
 handoff = campaign.parent
 entries = {}
+baseline = Path(sys.argv[3]).resolve() if len(sys.argv) > 3 else None
+if (campaign / 'wire-live/active.lock').exists():
+    raise RuntimeError('Live coordinator still holds ledger lock; export only settled evidence')
+if baseline:
+    # Preserve the already-published historical receipt/lockfiles and exact
+    # evidence bytes. Current native captures supersede the shared ledger only.
+    with zipfile.ZipFile(baseline) as archive:
+        recorded = json.loads(archive.read('manifest.json'))
+        for name, expected in recorded.items():
+            data = archive.read(name)
+            if hashlib.sha256(data).hexdigest() != expected['sha256']:
+                raise RuntimeError(f'Historical archive hash mismatch: {name}')
+            if name.startswith('wire-live/') and name != 'wire-live/ledger.json':
+                # Immutable native exchanges are present in the shared directory.
+                current = campaign / name
+                if not current.is_file() or current.read_bytes() != data:
+                    raise RuntimeError(f'Historical native capture changed: {name}')
+                continue
+            entries['historical/' + name] = data
+        entries['historical/original-manifest.json'] = archive.read('manifest.json')
 
 
 def add(source, target):
@@ -34,8 +54,9 @@ for directory in sorted((campaign / 'runs').iterdir()):
     if not (directory / 'result.json').exists():
         continue
     result = json.loads((directory / 'result.json').read_text())
+    prefix = 'runs' if result['mode'] == 'live' else 'preflights/current-main/runs'
     for name in ['manifest.json', 'result.json', 'prompt.txt', 'stdout.jsonl', 'stderr.txt', 'public-tests.txt', 'hidden-grader.txt']:
-        add(directory / name, f'runs/{directory.name}/{name}')
+        add(directory / name, f'{prefix}/{directory.name}/{name}')
     workspace = (workspaces / directory.name).resolve()
     for name, expected in result['files'].items():
         source = workspace / name
@@ -44,7 +65,9 @@ for directory in sorted((campaign / 'runs').iterdir()):
         actual = hashlib.sha256(source.read_bytes()).hexdigest()
         if actual != expected:
             raise RuntimeError(f'Artifact changed after measurement: {directory.name}/{name}')
-        add(source, f'runs/{directory.name}/workspace/{name}')
+        add(source, f'{prefix}/{directory.name}/workspace/{name}')
+for source in sorted((campaign / 'wire-fixture').glob('*.json')):
+    add(source, 'preflights/current-main/wire-fixture/' + source.name)
 for version in ['live-comparison', 'live-comparison-fixture-v2', 'live-comparison-fixture-v3']:
     base = handoff / version
     if not base.exists():

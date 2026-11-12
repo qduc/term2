@@ -12,6 +12,8 @@ import { WORKLOADS, prepareWorkload } from './workloads.mjs';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../../..');
 const root = path.resolve(process.env.BENCH_ROOT ?? path.join(repo, '.handoff/live-comparison'));
+const cohort = process.env.BENCH_COHORT_TAG ?? '';
+if (cohort && !/^[a-z0-9-]+$/.test(cohort)) throw new Error('Invalid cohort tag');
 const piCli =
   process.env.BENCH_PI_CLI ??
   '/workspace/scratch/pi-comparison/node_modules/@earendil-works/pi-coding-agent/dist/cli.js';
@@ -27,7 +29,15 @@ for (let rep = 1; rep <= 2; rep++)
   for (const [i, task] of Object.keys(WORKLOADS).entries())
     for (const provider of ['openai', 'anthropic']) {
       const arms = (i + rep) % 2 ? ['t2', 'pi'] : ['pi', 't2'];
-      for (const arm of arms) plan.push({ id: `${provider}-${task}-r${rep}-${arm}`, provider, task, rep, arm });
+      for (const arm of arms)
+        plan.push({
+          id: `${cohort ? cohort + '-' : ''}${provider}-${task}-r${rep}-${arm}`,
+          provider,
+          task,
+          rep,
+          arm,
+          cohort,
+        });
     }
 
 async function fakeProvider() {
@@ -192,7 +202,7 @@ export async function runCandidate(spec, gateway, { fixture = false } = {}) {
     ...spec,
     runId,
     mode: fixture ? 'fixture' : 'live',
-    sourceCommit: '66dda24dada62cdf0c3d0e8efb5786d3e8d8d167',
+    sourceCommit: process.env.BENCH_MEASURED_SOURCE_COMMIT ?? '66dda24dada62cdf0c3d0e8efb5786d3e8d8d167',
     model: MODEL_IDS[spec.provider],
     reasoning: 'medium',
     maxOutputTokens: 32000,

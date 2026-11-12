@@ -1,5 +1,94 @@
 # Term2 / Pi live quality and API-cost comparison
 
+**The same-or-lower-cost goal remains unmet in this sample.** On current main,
+Term2 and Pi each passed **11/12** frozen rubrics. Term2 cost **$0.093413645**;
+Pi cost **$0.070037710**: Term2 was **33.4% more expensive**.
+Term2 passed 209/212 individual checks versus Pi’s 210/212; equal rubric totals
+do not establish equivalent quality.
+All costs include failed tasks and natural repairs. No paid grader or feedback-driven
+repair was added.
+
+| Current-main provider | Term2 rubric passes / cost | Pi rubric passes / cost |
+| --- | --- | --- |
+| OpenAI Luna | 5/6 / $0.038867965 | 5/6 / $0.026724635 |
+| Anthropic Haiku | 6/6 / $0.054545680 | 6/6 / $0.043313075 |
+| Total | 11/12 / $0.093413645 | 11/12 / $0.070037710 |
+
+The follow-up has **24 live runs / 216 native requests**. Across both cohorts,
+**48 runs / 416 requests** cost **$0.320432550**, all with reconciled
+native usage and artifact hashes. The earlier uncaptured setup request reported
+$0.000176925, making known/reported usage $0.320609475; setup cannot be fully
+reconciled to native captures or invoices. Keeping its full **$5.286 conservative
+reserve**, total exposure is **$5.606432550**, below the
+approved **$10** total cap. Both coordinators are closed and paid work stopped.
+
+
+The frozen checks cover three constructed Node coding tasks, two repetitions per
+provider/runner. They do not establish general quality equivalence, long-horizon
+reliability, or delegation quality. Capabilities remained available, but these
+tasks did not require every capability. Costs use captured native usage at
+verified published rates; provider invoices were not available.
+
+On current main, Term2 sent fewer OpenAI requests (69 versus 71) but still cost
+45.4% more on that provider. Cache writes account for about **89.1% of its OpenAI
+cost gap**, cache reads 7.7%, and output 3.2%, with a tiny fresh-input offset.
+Anthropic’s gap is about 38.7% cache reads, 26.8% cache writes and 34.5% output.
+These decompose native usage costs at published rates; they do not prove which prompt
+or tool change would reduce costs without losing task quality. The old hypothesis
+that extra OpenAI output explains most of the gap is unsupported in both cohorts.
+The current static-tool cache marker is present, but initial cache hits remain
+uneven; no causal cache-policy ablation was run.
+
+## Current-main cohort and evidence boundary
+
+The current-main cohort measures Term2 production source
+`da42e92a33e3c7ec1762fb9a10b23fac68839969` against pinned Pi 1.5.2. It includes
+PR263 (Anthropic static-tool cache breakpoint), PR265 (array guidance), and PR266
+(single retry owner). The build receipt names `ed4ad68e9b15e3038d209c8cf6f9c27926fbae56`,
+which adds historical evidence atop that source. `assertFreshBuild` verified exact
+input and emitted-output digests before the cohort. No production bundle changed
+within either cohort.
+
+The follow-up was added because the first investigation missed the already-open
+PR263, which merged during the historical campaign. The historical cohort remains
+published below and in the archive. This was one fixed 24-run refresh, using the
+same tasks, graders, runner order, effort, output limits, Pi version and physical
+budget ledger. Only cohort IDs and measured-source metadata changed in the harness.
+We stopped after the two declared cohorts, including all failures. Several source
+changes and fresh stochastic model outputs separate them; the difference cannot
+be attributed to PR263 or any single change.
+
+Deliverables: [current summary](current-main-summary.json),
+[historical summary](summary.json), [cohort comparison](comparison.json),
+[current independent review](current-main-independent-review.md),
+[historical review](independent-review.md), [combined evidence](evidence.zip),
+and [checksum](evidence.zip.sha256). The archive contains both frozen harnesses,
+source/build identities, native exchanges, initial/final task files and CLI traces.
+Historical metadata/runtime/ledger are under `historical/`; shared immutable
+native exchanges and the final full ledger are under `wire-live/`; current run
+artifacts are under `runs/`. Fixtures are kept under `preflights/` and are excluded
+from live counts/costs. The original historical archive SHA256 is
+`bbc53852c36656d4e76260877298adc8f14e02c75431814fdb136595f0b66438`, retained on
+branch `codex/live-efficiency-comparison` at `9d17db998bcccb7a75f0937b74a073c37ee8c4e9`.
+
+The current-main invocation was:
+
+```bash
+BENCH_LIVE_APPROVED_CAP_USD=10 BENCH_COHORT_TAG=current-main BENCH_MEASURED_SOURCE_COMMIT=da42e92a33e3c7ec1762fb9a10b23fac68839969 BENCH_ROOT=/workspace/term2/.worktrees/cache-lookback/.handoff/current-main-campaign NODE_USE_ENV_PROXY=1 node docs/experiments/live-efficiency-20261112/run-comparison.mjs --live
+```
+
+`current-main-campaign/wire-live` resolves to the original `live-campaign/wire-live`
+directory, retaining every earlier charge and the $5.286 external exposure bound.
+Do not replace it with a fresh ledger. To re-aggregate existing evidence without
+any inference, run `summarize.mjs` on each campaign root and
+`compare-cohorts.mjs <historical-summary> <current-summary>`. To export settled
+evidence, run `archive-evidence.py <current-root> <output.zip> <original-historical.zip>`.
+The exporter rejects an active coordinator, changed artifact/native hashes, and
+potential credentials. Runtime client state and auth files are excluded.
+
+## Historical source cohort (66dda24da)
+
+
 **The quality/cost goal was not met in this sample.** Across the 24 live coding
 runs, Term2 passed 9/12 frozen rubrics and cost $0.096294990; Pi passed 10/12 and
 cost $0.060686205. Term2 cost **58.7% more**, including the failed tasks. No extra
@@ -20,11 +109,11 @@ the independent supplementary audit found additional defects described below.
 
 Captured comparison cost is **$0.156981195 total**. With the earlier uncaptured
 preflight's conservative $5.286 reserve retained, exposure is **$5.442981195**,
-below the approved $10 cap. The coordinator is closed and paid work stopped at
-the predeclared 24 runs. This is a live-inference study on constructed coding
+below the approved $10 cap. The historical coordinator closed after its predeclared 24 runs.
+A separately pinned current-main cohort was then added as described above. This is a live-inference study on constructed coding
 repositories, not a claim about all production work.
 
-This experiment compares source-built Term2 at `66dda24da` with
+This historical cohort compares source-built Term2 at `66dda24da` with
 `@earendil-works/pi-coding-agent@1.5.2` on three small Node.js coding tasks.
 The approved spending limit is **US$10 total across OpenAI and Anthropic**.
 It does not authorize a merge, release, deployment or account change.
@@ -202,8 +291,10 @@ smaller catalogue or different caching policy would save while preserving qualit
 Fresh sessions were not uniformly cold caches. Five of six Anthropic/Pi initial
 requests read 1,310 cached tokens; Term2's initial requests read zero. Pi marks
 the last initial tool as a cache breakpoint; Term2 marks system/user messages
-but not tools. A separate static-tool breakpoint is a concrete future lead that
-preserves capabilities, not an implemented saving. Even replacing those five
+but not tools in this historical source. **PR263 already implemented a static-tool
+breakpoint and merged during this campaign.** The initial investigation missed
+that open PR; the current-main follow-up includes it rather than duplicating it.
+Even replacing those five
 Pi hits with cold five-minute writes adds only $0.00075325 and does not reverse
 the observed cost comparison.
 
@@ -211,7 +302,9 @@ the observed cost comparison.
 its CI passed. This live cohort contains no failed HTTP attempts, so it does not
 demonstrate live dollar savings from that fix. Its retry reduction remains
 fixture evidence. [PR265](https://github.com/qduc/term2/pull/265) is separate and
-is not silently included in the measured source pin.
+is absent from the historical pin and present in the current-main follow-up.
+PR263, PR265 and PR266 are all included in the current-main source; differences
+between cohorts do not isolate any one PR or prove its causal savings.
 
 ## Quality limits and supplementary checks
 
@@ -228,4 +321,5 @@ for exact coverage and locators.
 Local loopback/guard/rubric checks, the measured production source's passing CI,
 and these live model outcomes are separate evidence. Grading used local checks,
 with no additional model-judge requests on the configured provider keys. No merge,
-release, deployment or account change was performed.
+release, deployment or account change was performed by this investigation.
+Maintainers merged the cited source PRs independently.

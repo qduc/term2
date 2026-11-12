@@ -12,6 +12,7 @@ const runs = fs.readdirSync(path.join(root, 'runs')).flatMap((id) => {
   const file = path.join(root, 'runs', id, 'result.json');
   if (!fs.existsSync(file)) return [];
   const result = read(file);
+  if (result.mode !== 'live') return [];
   const entries = ledger.filter((e) => e.runId === id);
   const manifest = read(path.join(root, 'runs', id, 'manifest.json'));
   const artifacts = Object.fromEntries(
@@ -107,6 +108,7 @@ const summary = {
   budget: {
     approvedCapUsd: 10,
     meteredComparisonUsd: metered.reduce((n, e) => n + (e.priced?.usd ?? 0), 0),
+    thisCohortMeteredUsd: runs.reduce((n, r) => n + r.totals.usd, 0),
     newUnknownUsageRequests: metered.filter((e) => !e.priced).map((e) => e.id),
     priorUncapturedExposureUsd: ledger.filter((e) => e.mode !== 'live').reduce((n, e) => n + e.reservedUsd, 0),
     priorReportedPiCostUsd: ledger.filter((e) => e.mode !== 'live').reduce((n, e) => n + (e.reportedPiCostUsd ?? 0), 0),

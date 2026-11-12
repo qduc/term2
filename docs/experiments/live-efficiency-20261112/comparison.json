@@ -1,0 +1,195 @@
+{
+  "cohorts": [
+    {
+      "cohort": "historical",
+      "sourceCommits": ["66dda24dada62cdf0c3d0e8efb5786d3e8d8d167"],
+      "arms": [
+        {
+          "arm": "t2",
+          "passes": 9,
+          "runs": 12,
+          "usd": 0.09629499000000001
+        },
+        {
+          "arm": "pi",
+          "passes": 10,
+          "runs": 12,
+          "usd": 0.06068620500000001
+        }
+      ],
+      "term2CostPremiumPercent": 58.676901941718064,
+      "sampleGoalMet": false,
+      "groups": [
+        {
+          "provider": "openai",
+          "arm": "t2",
+          "runs": 6,
+          "qualityPasses": 4,
+          "checksPassed": 100,
+          "checksTotal": 106,
+          "elapsedMs": 425536,
+          "requests": 66,
+          "totalInput": 550578,
+          "uncachedInput": 198,
+          "cacheRead": 416761,
+          "cacheWrite": 133619,
+          "output": 26894,
+          "usd": 0.03433678500000001,
+          "unknownUsage": 0
+        },
+        {
+          "provider": "openai",
+          "arm": "pi",
+          "runs": 6,
+          "qualityPasses": 5,
+          "checksPassed": 105,
+          "checksTotal": 106,
+          "elapsedMs": 315925,
+          "requests": 49,
+          "totalInput": 219642,
+          "uncachedInput": 147,
+          "cacheRead": 175655,
+          "cacheWrite": 43840,
+          "output": 23974,
+          "usd": 0.019238250000000002,
+          "unknownUsage": 0
+        },
+        {
+          "provider": "anthropic",
+          "arm": "t2",
+          "runs": 6,
+          "qualityPasses": 5,
+          "checksPassed": 105,
+          "checksTotal": 106,
+          "elapsedMs": 313385,
+          "requests": 53,
+          "totalInput": 956490,
+          "uncachedInput": 118,
+          "cacheRead": 815053,
+          "cacheWrite": 141319,
+          "output": 72262,
+          "usd": 0.061958205,
+          "unknownUsage": 0
+        },
+        {
+          "provider": "anthropic",
+          "arm": "pi",
+          "runs": 6,
+          "qualityPasses": 5,
+          "checksPassed": 105,
+          "checksTotal": 106,
+          "elapsedMs": 268782,
+          "requests": 32,
+          "totalInput": 272680,
+          "uncachedInput": 76,
+          "cacheRead": 195023,
+          "cacheWrite": 77581,
+          "output": 59585,
+          "usd": 0.041447955,
+          "unknownUsage": 0
+        }
+      ]
+    },
+    {
+      "cohort": "current-main",
+      "sourceCommits": ["da42e92a33e3c7ec1762fb9a10b23fac68839969"],
+      "arms": [
+        {
+          "arm": "t2",
+          "passes": 11,
+          "runs": 12,
+          "usd": 0.09341364499999999
+        },
+        {
+          "arm": "pi",
+          "passes": 11,
+          "runs": 12,
+          "usd": 0.07003771
+        }
+      ],
+      "term2CostPremiumPercent": 33.376212614604306,
+      "sampleGoalMet": false,
+      "groups": [
+        {
+          "provider": "openai",
+          "arm": "t2",
+          "runs": 6,
+          "qualityPasses": 5,
+          "checksPassed": 103,
+          "checksTotal": 106,
+          "elapsedMs": 468832,
+          "requests": 69,
+          "totalInput": 621058,
+          "uncachedInput": 207,
+          "cacheRead": 476914,
+          "cacheWrite": 143937,
+          "output": 32172,
+          "usd": 0.038867965000000004,
+          "unknownUsage": 0
+        },
+        {
+          "provider": "openai",
+          "arm": "pi",
+          "runs": 6,
+          "qualityPasses": 5,
+          "checksPassed": 104,
+          "checksTotal": 106,
+          "elapsedMs": 416289,
+          "requests": 71,
+          "totalInput": 440983,
+          "uncachedInput": 213,
+          "cacheRead": 383421,
+          "cacheWrite": 57349,
+          "output": 31401,
+          "usd": 0.026724634999999997,
+          "unknownUsage": 0
+        },
+        {
+          "provider": "anthropic",
+          "arm": "t2",
+          "runs": 6,
+          "qualityPasses": 6,
+          "checksPassed": 106,
+          "checksTotal": 106,
+          "elapsedMs": 299193,
+          "requests": 44,
+          "totalInput": 761139,
+          "uncachedInput": 100,
+          "cacheRead": 656393,
+          "cacheWrite": 104646,
+          "output": 69782,
+          "usd": 0.05454567999999999,
+          "unknownUsage": 0
+        },
+        {
+          "provider": "anthropic",
+          "arm": "pi",
+          "runs": 6,
+          "qualityPasses": 6,
+          "checksPassed": 106,
+          "checksTotal": 106,
+          "elapsedMs": 272345,
+          "requests": 32,
+          "totalInput": 302772,
+          "uncachedInput": 76,
+          "cacheRead": 222135,
+          "cacheWrite": 80561,
+          "output": 62028,
+          "usd": 0.043313075,
+          "unknownUsage": 0
+        }
+      ]
+    }
+  ],
+  "budget": {
+    "approvedCapUsd": 10,
+    "meteredComparisonUsd": 0.3204325499999999,
+    "thisCohortMeteredUsd": 0.16345135500000002,
+    "newUnknownUsageRequests": [],
+    "priorUncapturedExposureUsd": 5.286,
+    "priorReportedPiCostUsd": 0.000176925,
+    "totalConservativeExposureUsd": 5.606432549999996,
+    "costBasis": "Verified published standard prices applied to captured native usage, not provider invoices; prior uncaptured preflight held separately at its conservative maximum"
+  },
+  "interpretation": "Frozen rubric outcomes and full captured usage including failed tasks. Published-rate costs are not invoices; setup exposure remains separately reserved. Cohort differences do not isolate source changes."
+}

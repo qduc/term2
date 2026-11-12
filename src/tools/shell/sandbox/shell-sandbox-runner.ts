@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import type { SandboxManager as RuntimeSandboxManager, SandboxRuntimeConfig } from '@anthropic-ai/sandbox-runtime';
 import { SANDBOX_TEMP_DIR } from '../../../shared/utils/shell/temp-dir.js';
 import { createSandboxRuntimeConfig, type SandboxAvailability, type ShellSandboxRunner } from './sandbox-policy.js';
@@ -13,6 +14,33 @@ let loadedManager: typeof RuntimeSandboxManager | undefined;
 async function sandboxManager(): Promise<typeof RuntimeSandboxManager> {
   loadedManager ??= (await import('@anthropic-ai/sandbox-runtime')).SandboxManager;
   return loadedManager;
+}
+
+/**
+ * The runtime puts its own `TMPDIR` into every wrapped command that gets the
+ * network proxy, overriding the one the shell tool passes: `/tmp/claude` unless
+ * `CLAUDE_CODE_TMPDIR` names another directory. Term2 never creates
+ * `/tmp/claude`, so inside the sandbox `mktemp` and anything else honouring
+ * `$TMPDIR` failed with ENOENT while the writable temp directory went unused.
+ * Name that directory for the duration of the wrap, and make sure it exists so
+ * the runtime can bind it.
+ */
+const RUNTIME_TMPDIR_ENV = 'CLAUDE_CODE_TMPDIR';
+// Wraps under one held lease may overlap, so the variable is restored only when the last one finishes.
+let runtimeTempDirHolders = 0;
+let runtimeTempDirPrevious: string | undefined;
+async function withRuntimeTempDir<T>(operation: () => Promise<T>): Promise<T> {
+  fs.mkdirSync(SANDBOX_TEMP_DIR, { recursive: true, mode: 0o700 });
+  if (runtimeTempDirHolders++ === 0) runtimeTempDirPrevious = process.env[RUNTIME_TMPDIR_ENV];
+  process.env[RUNTIME_TMPDIR_ENV] = SANDBOX_TEMP_DIR;
+  try {
+    return await operation();
+  } finally {
+    if (--runtimeTempDirHolders === 0) {
+      if (runtimeTempDirPrevious === undefined) delete process.env[RUNTIME_TMPDIR_ENV];
+      else process.env[RUNTIME_TMPDIR_ENV] = runtimeTempDirPrevious;
+    }
+  }
 }
 
 /** Distinguish missing runtime prerequisites from a command denied by a working sandbox. */
@@ -70,7 +98,9 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
     const operation = async () => {
       await this.#initialize(options.cwd, options.config);
       const SandboxManager = await sandboxManager();
-      const wrapped = await SandboxManager.wrapWithSandbox(command, undefined, undefined, options.signal);
+      const wrapped = await withRuntimeTempDir(() =>
+        SandboxManager.wrapWithSandbox(command, undefined, undefined, options.signal),
+      );
       const diagnostics = SandboxManager.getLinuxGlobPatternWarnings?.() ?? [];
       return { command: wrapped, diagnostics };
     };

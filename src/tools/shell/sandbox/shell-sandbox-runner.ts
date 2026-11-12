@@ -1,11 +1,6 @@
 import type { SandboxManager as RuntimeSandboxManager, SandboxRuntimeConfig } from '@anthropic-ai/sandbox-runtime';
 import { SANDBOX_TEMP_DIR } from '../../../shared/utils/shell/temp-dir.js';
-import {
-  createSandboxRuntimeConfig,
-  SANDBOX_ESCAPE_INSTRUCTION,
-  type SandboxAvailability,
-  type ShellSandboxRunner,
-} from './sandbox-policy.js';
+import { createSandboxRuntimeConfig, type SandboxAvailability, type ShellSandboxRunner } from './sandbox-policy.js';
 import { requestSandboxNetworkApproval } from './sandbox-network-approval.js';
 
 /**
@@ -25,7 +20,10 @@ export function sandboxFailure(availability?: Exclude<SandboxAvailability, { typ
   const problem = availability
     ? `Shell sandbox unavailable (${availability.type})${'reason' in availability ? `: ${availability.reason}` : ''}.`
     : 'Shell sandbox initialization failed. Check Term2 logs for details.';
-  return `Error: ${problem} ${SANDBOX_ESCAPE_INSTRUCTION}`;
+  return (
+    `Error: ${problem} The command was not run. Resolve the sandbox issue before retrying the sandboxed command. ` +
+    'If policy and interactive approval allow it, a one-shot run with sandbox="unsandboxed" may be requested; user approval is required.'
+  );
 }
 
 export class AnthropicShellSandboxRunner implements ShellSandboxRunner {

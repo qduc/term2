@@ -234,6 +234,9 @@ describe('shell inside run_code through the wrapped tool graph', () => {
     const command = `printf unexpected > ${quote(target)}`;
     const result = await f.run(`return await tools.shell({ command: ${JSON.stringify(command)} });`);
     expect(result).toContain('Shell sandbox unavailable (missing_dependency): socat not installed');
+    expect(result).toContain('The command was not run. Resolve the sandbox issue before retrying');
+    expect(result).toContain('If policy and interactive approval allow it');
+    expect(result).not.toContain('Sandbox blocked this command');
     expect(result).toContain('sandbox="unsandboxed"');
     expect(wrapped).toBe(false);
     expect(existsSync(target)).toBe(false);

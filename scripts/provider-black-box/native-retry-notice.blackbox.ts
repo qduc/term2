@@ -94,6 +94,7 @@ it.skipIf(process.platform !== 'linux')(
       await child.waitForComposerValue('FIRST_NOTICE_INPUT');
       await child.write('\u0016');
       await child.waitForVisibleOutput('Pasted Image #1');
+      const submittedDraftRevision = child.readComposerRevision();
       await child.write('\r');
       await child.waitForState(() => requests.length === 1);
       expect(JSON.stringify(requests[0]!.input)).toContain('FIRST_NOTICE_INPUT');
@@ -103,6 +104,7 @@ it.skipIf(process.platform !== 'linux')(
       expect(requests[0]!.input as unknown[]).toHaveLength(1);
       complete(0);
       await child.waitForVisibleOutput('NOTICE_DONE_0');
+      await child.waitForComposerValue('', { afterRevision: submittedDraftRevision });
       const nextIdle = await child.waitForIdleInput({ after: idle });
       phase = 'first retry';
       await writePtyTextAndSubmit(child, '/retry-turn');

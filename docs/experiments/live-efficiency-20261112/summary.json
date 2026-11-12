@@ -1,0 +1,4553 @@
+{
+  "generatedAt": "2026-11-12T11:07:58.598Z",
+  "plannedRuns": 24,
+  "completedRuns": 24,
+  "qualityPasses": 19,
+  "groups": [
+    {
+      "provider": "openai",
+      "arm": "t2",
+      "runs": 6,
+      "qualityPasses": 4,
+      "checksPassed": 100,
+      "checksTotal": 106,
+      "elapsedMs": 425536,
+      "requests": 66,
+      "totalInput": 550578,
+      "uncachedInput": 198,
+      "cacheRead": 416761,
+      "cacheWrite": 133619,
+      "output": 26894,
+      "usd": 0.03433678500000001,
+      "unknownUsage": 0
+    },
+    {
+      "provider": "openai",
+      "arm": "pi",
+      "runs": 6,
+      "qualityPasses": 5,
+      "checksPassed": 105,
+      "checksTotal": 106,
+      "elapsedMs": 315925,
+      "requests": 49,
+      "totalInput": 219642,
+      "uncachedInput": 147,
+      "cacheRead": 175655,
+      "cacheWrite": 43840,
+      "output": 23974,
+      "usd": 0.019238250000000002,
+      "unknownUsage": 0
+    },
+    {
+      "provider": "anthropic",
+      "arm": "t2",
+      "runs": 6,
+      "qualityPasses": 5,
+      "checksPassed": 105,
+      "checksTotal": 106,
+      "elapsedMs": 313385,
+      "requests": 53,
+      "totalInput": 956490,
+      "uncachedInput": 118,
+      "cacheRead": 815053,
+      "cacheWrite": 141319,
+      "output": 72262,
+      "usd": 0.061958205,
+      "unknownUsage": 0
+    },
+    {
+      "provider": "anthropic",
+      "arm": "pi",
+      "runs": 6,
+      "qualityPasses": 5,
+      "checksPassed": 105,
+      "checksTotal": 106,
+      "elapsedMs": 268782,
+      "requests": 32,
+      "totalInput": 272680,
+      "uncachedInput": 76,
+      "cacheRead": 195023,
+      "cacheWrite": 77581,
+      "output": 59585,
+      "usd": 0.041447955,
+      "unknownUsage": 0
+    }
+  ],
+  "runs": [
+    {
+      "id": "anthropic-classifier-r1-pi",
+      "provider": "anthropic",
+      "task": "classifier",
+      "rep": 1,
+      "arm": "pi",
+      "runId": "anthropic-classifier-r1-pi",
+      "mode": "live",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "elapsedMs": 61511,
+      "stdoutRawSha256": "8248224d40ef3242725d21cc71c1683c5014ec5d9aba2487f2a75cefc4030e44",
+      "stdoutSanitizedSha256": "8248224d40ef3242725d21cc71c1683c5014ec5d9aba2487f2a75cefc4030e44",
+      "files": {
+        ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+        "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+        "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+        "src/errors.mjs": "84945ac3444cf5d7fa997426f1012c2ca544e05d68a70aa07f9ccbec3f3a378f",
+        "src/retry.mjs": "dd5287097c97984655e91a849568f0947fbcfa44870404fa9eda82442828037f",
+        "test/public.test.mjs": "f68c79dcb0458fd731f9d21856d8066dfef88386250dfce7b17269c81664818b"
+      },
+      "unauthorizedChanges": [],
+      "publicTestsExitCode": 0,
+      "grade": {
+        "passed": 25,
+        "total": 26,
+        "pass": false,
+        "checks": [
+          {
+            "label": "module-exports",
+            "pass": true
+          },
+          {
+            "label": "http-402",
+            "pass": true
+          },
+          {
+            "label": "http-401",
+            "pass": true
+          },
+          {
+            "label": "http-403",
+            "pass": true
+          },
+          {
+            "label": "http-429",
+            "pass": true
+          },
+          {
+            "label": "http-408",
+            "pass": true
+          },
+          {
+            "label": "http-409",
+            "pass": true
+          },
+          {
+            "label": "http-500",
+            "pass": true
+          },
+          {
+            "label": "http-599",
+            "pass": true
+          },
+          {
+            "label": "http-400",
+            "pass": true
+          },
+          {
+            "label": "http-404",
+            "pass": true
+          },
+          {
+            "label": "http-413",
+            "pass": true
+          },
+          {
+            "label": "http-422",
+            "pass": true
+          },
+          {
+            "label": "nested-quota-codes",
+            "pass": true
+          },
+          {
+            "label": "status-shapes-priority",
+            "pass": true
+          },
+          {
+            "label": "numeric-prefix-quota",
+            "pass": true
+          },
+          {
+            "label": "vague-message-and-unknown",
+            "pass": true
+          },
+          {
+            "label": "network-codes",
+            "pass": true
+          },
+          {
+            "label": "header-seconds-ms-precedence",
+            "pass": true
+          },
+          {
+            "label": "header-date-and-invalid",
+            "pass": false,
+            "error": "The expression evaluated to a falsy value:\n\n  assert.ok(\n"
+          },
+          {
+            "label": "long-delay-refuses",
+            "pass": true
+          },
+          {
+            "label": "retry-success-and-delay",
+            "pass": true
+          },
+          {
+            "label": "exhaustion-exact-identity",
+            "pass": true
+          },
+          {
+            "label": "quota-no-retry",
+            "pass": true
+          },
+          {
+            "label": "retry-validation",
+            "pass": true
+          },
+          {
+            "label": "abort-boundaries",
+            "pass": true
+          }
+        ]
+      },
+      "qualityPass": false,
+      "requestIds": ["00053", "00054", "00055", "00056", "00057", "00058"],
+      "meteredUsd": 0.009363895,
+      "unknownUsageRequests": [],
+      "budgetExposureUsd": 5.331510814999999,
+      "manifest": {
+        "id": "anthropic-classifier-r1-pi",
+        "provider": "anthropic",
+        "task": "classifier",
+        "rep": 1,
+        "arm": "pi",
+        "runId": "anthropic-classifier-r1-pi",
+        "mode": "live",
+        "sourceCommit": "66dda24dada62cdf0c3d0e8efb5786d3e8d8d167",
+        "model": "claude-haiku-5-5",
+        "reasoning": "medium",
+        "maxOutputTokens": 32000,
+        "term2Profile": "builtin:bare (shipped default)",
+        "sandboxEnabled": true,
+        "promptSha256": "91ce925b6b33dc8efc9979f183e2d7880736eb8f29a7b0c016cdd4b767683a9d",
+        "initialFiles": {
+          "src/errors.mjs": "c380ac26dd6d05a2a60f7a9776d5d372c8dd3211d756201b9e7b33e756777bdb",
+          "src/retry.mjs": "d01ca99015607c96397141f2f995eef6a3884ee77e89d07a93920d589bad9f71",
+          "test/public.test.mjs": "f68c79dcb0458fd731f9d21856d8066dfef88386250dfce7b17269c81664818b",
+          "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872"
+        }
+      },
+      "artifacts": {
+        ".agents/skills/node-contracts/SKILL.md": {
+          "expected": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "actual": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "match": true
+        },
+        "AGENTS.md": {
+          "expected": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "actual": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "match": true
+        },
+        "package.json": {
+          "expected": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "actual": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "match": true
+        },
+        "src/errors.mjs": {
+          "expected": "84945ac3444cf5d7fa997426f1012c2ca544e05d68a70aa07f9ccbec3f3a378f",
+          "actual": "84945ac3444cf5d7fa997426f1012c2ca544e05d68a70aa07f9ccbec3f3a378f",
+          "match": true
+        },
+        "src/retry.mjs": {
+          "expected": "dd5287097c97984655e91a849568f0947fbcfa44870404fa9eda82442828037f",
+          "actual": "dd5287097c97984655e91a849568f0947fbcfa44870404fa9eda82442828037f",
+          "match": true
+        },
+        "test/public.test.mjs": {
+          "expected": "f68c79dcb0458fd731f9d21856d8066dfef88386250dfce7b17269c81664818b",
+          "actual": "f68c79dcb0458fd731f9d21856d8066dfef88386250dfce7b17269c81664818b",
+          "match": true
+        }
+      },
+      "accountingIdsMatch": true,
+      "allArtifactsMatch": true,
+      "firstRequest": {
+        "requestBytes": 9531,
+        "serializedToolsBytes": 3385,
+        "toolNames": ["read", "bash", "edit", "write", "__pi_deferred_placeholder__"],
+        "input": 3528,
+        "cacheRead": 1310,
+        "cacheWrite": 2214
+      },
+      "totals": {
+        "requests": 6,
+        "totalInput": 67134,
+        "uncachedInput": 14,
+        "cacheRead": 50587,
+        "cacheWrite": 16533,
+        "output": 13580,
+        "usd": 0.009363895,
+        "unknownUsage": 0
+      }
+    },
+    {
+      "id": "anthropic-classifier-r1-t2",
+      "provider": "anthropic",
+      "task": "classifier",
+      "rep": 1,
+      "arm": "t2",
+      "runId": "anthropic-classifier-r1-t2",
+      "mode": "live",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "elapsedMs": 71609,
+      "stdoutRawSha256": "a38bf7382f745e18f738234ef622e319765c45c9219b4ff1de570c02e0ac7519",
+      "stdoutSanitizedSha256": "a38bf7382f745e18f738234ef622e319765c45c9219b4ff1de570c02e0ac7519",
+      "files": {
+        ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+        "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+        "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+        "src/errors.mjs": "57d0ae0fbf5493737132b472516c91ad6e205d2be646e46ee9f11fecdc0ef443",
+        "src/retry.mjs": "e3a75ad2d7e0ee2466066b970380e93c6e91dda1f18ed7870ecf79c92a57d0a5",
+        "test/public.test.mjs": "f68c79dcb0458fd731f9d21856d8066dfef88386250dfce7b17269c81664818b"
+      },
+      "unauthorizedChanges": [],
+      "publicTestsExitCode": 0,
+      "grade": {
+        "passed": 25,
+        "total": 26,
+        "pass": false,
+        "checks": [
+          {
+            "label": "module-exports",
+            "pass": true
+          },
+          {
+            "label": "http-402",
+            "pass": true
+          },
+          {
+            "label": "http-401",
+            "pass": true
+          },
+          {
+            "label": "http-403",
+            "pass": true
+          },
+          {
+            "label": "http-429",
+            "pass": true
+          },
+          {
+            "label": "http-408",
+            "pass": true
+          },
+          {
+            "label": "http-409",
+            "pass": true
+          },
+          {
+            "label": "http-500",
+            "pass": true
+          },
+          {
+            "label": "http-599",
+            "pass": true
+          },
+          {
+            "label": "http-400",
+            "pass": true
+          },
+          {
+            "label": "http-404",
+            "pass": true
+          },
+          {
+            "label": "http-413",
+            "pass": true
+          },
+          {
+            "label": "http-422",
+            "pass": true
+          },
+          {
+            "label": "nested-quota-codes",
+            "pass": true
+          },
+          {
+            "label": "status-shapes-priority",
+            "pass": true
+          },
+          {
+            "label": "numeric-prefix-quota",
+            "pass": true
+          },
+          {
+            "label": "vague-message-and-unknown",
+            "pass": false,
+            "error": "Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ undefined\n- {\n-   kind: 'unknown',\n-   retryable: false\n- }\n"
+          },
+          {
+            "label": "network-codes",
+            "pass": true
+          },
+          {
+            "label": "header-seconds-ms-precedence",
+            "pass": true
+          },
+          {
+            "label": "header-date-and-invalid",
+            "pass": true
+          },
+          {
+            "label": "long-delay-refuses",
+            "pass": true
+          },
+          {
+            "label": "retry-success-and-delay",
+            "pass": true
+          },
+          {
+            "label": "exhaustion-exact-identity",
+            "pass": true
+          },
+          {
+            "label": "quota-no-retry",
+            "pass": true
+          },
+          {
+            "label": "retry-validation",
+            "pass": true
+          },
+          {
+            "label": "abort-boundaries",
+            "pass": true
+          }
+        ]
+      },
+      "qualityPass": false,
+      "requestIds": [
+        "00059",
+        "00060",
+        "00061",
+        "00062",
+        "00063",
+        "00064",
+        "00065",
+        "00066",
+        "00067",
+        "00068",
+        "00069",
+        "00070"
+      ],
+      "meteredUsd": 0.014544664999999997,
+      "unknownUsageRequests": [],
+      "budgetExposureUsd": 5.346055479999999,
+      "manifest": {
+        "id": "anthropic-classifier-r1-t2",
+        "provider": "anthropic",
+        "task": "classifier",
+        "rep": 1,
+        "arm": "t2",
+        "runId": "anthropic-classifier-r1-t2",
+        "mode": "live",
+        "sourceCommit": "66dda24dada62cdf0c3d0e8efb5786d3e8d8d167",
+        "model": "claude-haiku-5-5",
+        "reasoning": "medium",
+        "maxOutputTokens": 32000,
+        "term2Profile": "builtin:bare (shipped default)",
+        "sandboxEnabled": true,
+        "promptSha256": "91ce925b6b33dc8efc9979f183e2d7880736eb8f29a7b0c016cdd4b767683a9d",
+        "initialFiles": {
+          "src/errors.mjs": "c380ac26dd6d05a2a60f7a9776d5d372c8dd3211d756201b9e7b33e756777bdb",
+          "src/retry.mjs": "d01ca99015607c96397141f2f995eef6a3884ee77e89d07a93920d589bad9f71",
+          "test/public.test.mjs": "f68c79dcb0458fd731f9d21856d8066dfef88386250dfce7b17269c81664818b",
+          "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872"
+        }
+      },
+      "artifacts": {
+        ".agents/skills/node-contracts/SKILL.md": {
+          "expected": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "actual": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "match": true
+        },
+        "AGENTS.md": {
+          "expected": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "actual": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "match": true
+        },
+        "package.json": {
+          "expected": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "actual": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "match": true
+        },
+        "src/errors.mjs": {
+          "expected": "57d0ae0fbf5493737132b472516c91ad6e205d2be646e46ee9f11fecdc0ef443",
+          "actual": "57d0ae0fbf5493737132b472516c91ad6e205d2be646e46ee9f11fecdc0ef443",
+          "match": true
+        },
+        "src/retry.mjs": {
+          "expected": "e3a75ad2d7e0ee2466066b970380e93c6e91dda1f18ed7870ecf79c92a57d0a5",
+          "actual": "e3a75ad2d7e0ee2466066b970380e93c6e91dda1f18ed7870ecf79c92a57d0a5",
+          "match": true
+        },
+        "test/public.test.mjs": {
+          "expected": "f68c79dcb0458fd731f9d21856d8066dfef88386250dfce7b17269c81664818b",
+          "actual": "f68c79dcb0458fd731f9d21856d8066dfef88386250dfce7b17269c81664818b",
+          "match": true
+        }
+      },
+      "accountingIdsMatch": true,
+      "allArtifactsMatch": true,
+      "firstRequest": {
+        "requestBytes": 27795,
+        "serializedToolsBytes": 22935,
+        "toolNames": ["shell", "goal_check", "read_file", "create_file", "search_replace", "run_subagent", "run_code"],
+        "input": 9907,
+        "cacheRead": 0,
+        "cacheWrite": 9903
+      },
+      "totals": {
+        "requests": 12,
+        "totalInput": 267451,
+        "uncachedInput": 26,
+        "cacheRead": 237244,
+        "cacheWrite": 30181,
+        "output": 16794,
+        "usd": 0.014544664999999997,
+        "unknownUsage": 0
+      }
+    },
+    {
+      "id": "anthropic-classifier-r2-pi",
+      "provider": "anthropic",
+      "task": "classifier",
+      "rep": 2,
+      "arm": "pi",
+      "runId": "anthropic-classifier-r2-pi",
+      "mode": "live",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "elapsedMs": 56197,
+      "stdoutRawSha256": "d176a515f58f9ccb7d4c83240087fc94e52d40f7719b76399c8ea79d267831dd",
+      "stdoutSanitizedSha256": "d176a515f58f9ccb7d4c83240087fc94e52d40f7719b76399c8ea79d267831dd",
+      "files": {
+        ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+        "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+        "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+        "src/errors.mjs": "b34de9a08b75a2da33755bc04fd465d7c4ce632af22df498a6dbaa89459a8a07",
+        "src/retry.mjs": "09ad79db87c9a4b4c5870129416792893981bbe3b51244f024d6ba6d3518f151",
+        "test/public.test.mjs": "f68c79dcb0458fd731f9d21856d8066dfef88386250dfce7b17269c81664818b"
+      },
+      "unauthorizedChanges": [],
+      "publicTestsExitCode": 0,
+      "grade": {
+        "passed": 26,
+        "total": 26,
+        "pass": true,
+        "checks": [
+          {
+            "label": "module-exports",
+            "pass": true
+          },
+          {
+            "label": "http-402",
+            "pass": true
+          },
+          {
+            "label": "http-401",
+            "pass": true
+          },
+          {
+            "label": "http-403",
+            "pass": true
+          },
+          {
+            "label": "http-429",
+            "pass": true
+          },
+          {
+            "label": "http-408",
+            "pass": true
+          },
+          {
+            "label": "http-409",
+            "pass": true
+          },
+          {
+            "label": "http-500",
+            "pass": true
+          },
+          {
+            "label": "http-599",
+            "pass": true
+          },
+          {
+            "label": "http-400",
+            "pass": true
+          },
+          {
+            "label": "http-404",
+            "pass": true
+          },
+          {
+            "label": "http-413",
+            "pass": true
+          },
+          {
+            "label": "http-422",
+            "pass": true
+          },
+          {
+            "label": "nested-quota-codes",
+            "pass": true
+          },
+          {
+            "label": "status-shapes-priority",
+            "pass": true
+          },
+          {
+            "label": "numeric-prefix-quota",
+            "pass": true
+          },
+          {
+            "label": "vague-message-and-unknown",
+            "pass": true
+          },
+          {
+            "label": "network-codes",
+            "pass": true
+          },
+          {
+            "label": "header-seconds-ms-precedence",
+            "pass": true
+          },
+          {
+            "label": "header-date-and-invalid",
+            "pass": true
+          },
+          {
+            "label": "long-delay-refuses",
+            "pass": true
+          },
+          {
+            "label": "retry-success-and-delay",
+            "pass": true
+          },
+          {
+            "label": "exhaustion-exact-identity",
+            "pass": true
+          },
+          {
+            "label": "quota-no-retry",
+            "pass": true
+          },
+          {
+            "label": "retry-validation",
+            "pass": true
+          },
+          {
+            "label": "abort-boundaries",
+            "pass": true
+          }
+        ]
+      },
+      "qualityPass": true,
+      "requestIds": ["00162", "00163", "00164", "00165"],
+      "meteredUsd": 0.00845746,
+      "unknownUsageRequests": [],
+      "budgetExposureUsd": 5.416981014999998,
+      "manifest": {
+        "id": "anthropic-classifier-r2-pi",
+        "provider": "anthropic",
+        "task": "classifier",
+        "rep": 2,
+        "arm": "pi",
+        "runId": "anthropic-classifier-r2-pi",
+        "mode": "live",
+        "sourceCommit": "66dda24dada62cdf0c3d0e8efb5786d3e8d8d167",
+        "model": "claude-haiku-5-5",
+        "reasoning": "medium",
+        "maxOutputTokens": 32000,
+        "term2Profile": "builtin:bare (shipped default)",
+        "sandboxEnabled": true,
+        "promptSha256": "91ce925b6b33dc8efc9979f183e2d7880736eb8f29a7b0c016cdd4b767683a9d",
+        "initialFiles": {
+          "src/errors.mjs": "c380ac26dd6d05a2a60f7a9776d5d372c8dd3211d756201b9e7b33e756777bdb",
+          "src/retry.mjs": "d01ca99015607c96397141f2f995eef6a3884ee77e89d07a93920d589bad9f71",
+          "test/public.test.mjs": "f68c79dcb0458fd731f9d21856d8066dfef88386250dfce7b17269c81664818b",
+          "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872"
+        }
+      },
+      "artifacts": {
+        ".agents/skills/node-contracts/SKILL.md": {
+          "expected": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "actual": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "match": true
+        },
+        "AGENTS.md": {
+          "expected": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "actual": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "match": true
+        },
+        "package.json": {
+          "expected": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "actual": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "match": true
+        },
+        "src/errors.mjs": {
+          "expected": "b34de9a08b75a2da33755bc04fd465d7c4ce632af22df498a6dbaa89459a8a07",
+          "actual": "b34de9a08b75a2da33755bc04fd465d7c4ce632af22df498a6dbaa89459a8a07",
+          "match": true
+        },
+        "src/retry.mjs": {
+          "expected": "09ad79db87c9a4b4c5870129416792893981bbe3b51244f024d6ba6d3518f151",
+          "actual": "09ad79db87c9a4b4c5870129416792893981bbe3b51244f024d6ba6d3518f151",
+          "match": true
+        },
+        "test/public.test.mjs": {
+          "expected": "f68c79dcb0458fd731f9d21856d8066dfef88386250dfce7b17269c81664818b",
+          "actual": "f68c79dcb0458fd731f9d21856d8066dfef88386250dfce7b17269c81664818b",
+          "match": true
+        }
+      },
+      "accountingIdsMatch": true,
+      "allArtifactsMatch": true,
+      "firstRequest": {
+        "requestBytes": 9531,
+        "serializedToolsBytes": 3385,
+        "toolNames": ["read", "bash", "edit", "write", "__pi_deferred_placeholder__"],
+        "input": 3528,
+        "cacheRead": 1310,
+        "cacheWrite": 2214
+      },
+      "totals": {
+        "requests": 4,
+        "totalInput": 29414,
+        "uncachedInput": 10,
+        "cacheRead": 14096,
+        "cacheWrite": 15308,
+        "output": 12804,
+        "usd": 0.00845746,
+        "unknownUsage": 0
+      }
+    },
+    {
+      "id": "anthropic-classifier-r2-t2",
+      "provider": "anthropic",
+      "task": "classifier",
+      "rep": 2,
+      "arm": "t2",
+      "runId": "anthropic-classifier-r2-t2",
+      "mode": "live",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "elapsedMs": 51593,
+      "stdoutRawSha256": "d55e85e484117040351fa8cd1117b84eb7aeded2db8796e5e52db751386ecda0",
+      "stdoutSanitizedSha256": "d55e85e484117040351fa8cd1117b84eb7aeded2db8796e5e52db751386ecda0",
+      "files": {
+        ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+        "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+        "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+        "src/errors.mjs": "a6c84d466d9c60d46e83b4c6527ea07744575e844fd2bac1555b148b0c273021",
+        "src/retry.mjs": "6a46e3e35b311fb0cfffb129f2553d31c4fa992a6d754d470c9330c0f563b151",
+        "test/public.test.mjs": "f68c79dcb0458fd731f9d21856d8066dfef88386250dfce7b17269c81664818b"
+      },
+      "unauthorizedChanges": [],
+      "publicTestsExitCode": 0,
+      "grade": {
+        "passed": 26,
+        "total": 26,
+        "pass": true,
+        "checks": [
+          {
+            "label": "module-exports",
+            "pass": true
+          },
+          {
+            "label": "http-402",
+            "pass": true
+          },
+          {
+            "label": "http-401",
+            "pass": true
+          },
+          {
+            "label": "http-403",
+            "pass": true
+          },
+          {
+            "label": "http-429",
+            "pass": true
+          },
+          {
+            "label": "http-408",
+            "pass": true
+          },
+          {
+            "label": "http-409",
+            "pass": true
+          },
+          {
+            "label": "http-500",
+            "pass": true
+          },
+          {
+            "label": "http-599",
+            "pass": true
+          },
+          {
+            "label": "http-400",
+            "pass": true
+          },
+          {
+            "label": "http-404",
+            "pass": true
+          },
+          {
+            "label": "http-413",
+            "pass": true
+          },
+          {
+            "label": "http-422",
+            "pass": true
+          },
+          {
+            "label": "nested-quota-codes",
+            "pass": true
+          },
+          {
+            "label": "status-shapes-priority",
+            "pass": true
+          },
+          {
+            "label": "numeric-prefix-quota",
+            "pass": true
+          },
+          {
+            "label": "vague-message-and-unknown",
+            "pass": true
+          },
+          {
+            "label": "network-codes",
+            "pass": true
+          },
+          {
+            "label": "header-seconds-ms-precedence",
+            "pass": true
+          },
+          {
+            "label": "header-date-and-invalid",
+            "pass": true
+          },
+          {
+            "label": "long-delay-refuses",
+            "pass": true
+          },
+          {
+            "label": "retry-success-and-delay",
+            "pass": true
+          },
+          {
+            "label": "exhaustion-exact-identity",
+            "pass": true
+          },
+          {
+            "label": "quota-no-retry",
+            "pass": true
+          },
+          {
+            "label": "retry-validation",
+            "pass": true
+          },
+          {
+            "label": "abort-boundaries",
+            "pass": true
+          }
+        ]
+      },
+      "qualityPass": true,
+      "requestIds": ["00153", "00154", "00155", "00156", "00157", "00158", "00159", "00160", "00161"],
+      "meteredUsd": 0.009773875000000001,
+      "unknownUsageRequests": [],
+      "budgetExposureUsd": 5.408523554999999,
+      "manifest": {
+        "id": "anthropic-classifier-r2-t2",
+        "provider": "anthropic",
+        "task": "classifier",
+        "rep": 2,
+        "arm": "t2",
+        "runId": "anthropic-classifier-r2-t2",
+        "mode": "live",
+        "sourceCommit": "66dda24dada62cdf0c3d0e8efb5786d3e8d8d167",
+        "model": "claude-haiku-5-5",
+        "reasoning": "medium",
+        "maxOutputTokens": 32000,
+        "term2Profile": "builtin:bare (shipped default)",
+        "sandboxEnabled": true,
+        "promptSha256": "91ce925b6b33dc8efc9979f183e2d7880736eb8f29a7b0c016cdd4b767683a9d",
+        "initialFiles": {
+          "src/errors.mjs": "c380ac26dd6d05a2a60f7a9776d5d372c8dd3211d756201b9e7b33e756777bdb",
+          "src/retry.mjs": "d01ca99015607c96397141f2f995eef6a3884ee77e89d07a93920d589bad9f71",
+          "test/public.test.mjs": "f68c79dcb0458fd731f9d21856d8066dfef88386250dfce7b17269c81664818b",
+          "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872"
+        }
+      },
+      "artifacts": {
+        ".agents/skills/node-contracts/SKILL.md": {
+          "expected": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "actual": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "match": true
+        },
+        "AGENTS.md": {
+          "expected": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "actual": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "match": true
+        },
+        "package.json": {
+          "expected": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "actual": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "match": true
+        },
+        "src/errors.mjs": {
+          "expected": "a6c84d466d9c60d46e83b4c6527ea07744575e844fd2bac1555b148b0c273021",
+          "actual": "a6c84d466d9c60d46e83b4c6527ea07744575e844fd2bac1555b148b0c273021",
+          "match": true
+        },
+        "src/retry.mjs": {
+          "expected": "6a46e3e35b311fb0cfffb129f2553d31c4fa992a6d754d470c9330c0f563b151",
+          "actual": "6a46e3e35b311fb0cfffb129f2553d31c4fa992a6d754d470c9330c0f563b151",
+          "match": true
+        },
+        "test/public.test.mjs": {
+          "expected": "f68c79dcb0458fd731f9d21856d8066dfef88386250dfce7b17269c81664818b",
+          "actual": "f68c79dcb0458fd731f9d21856d8066dfef88386250dfce7b17269c81664818b",
+          "match": true
+        }
+      },
+      "accountingIdsMatch": true,
+      "allArtifactsMatch": true,
+      "firstRequest": {
+        "requestBytes": 27795,
+        "serializedToolsBytes": 22935,
+        "toolNames": ["shell", "goal_check", "read_file", "create_file", "search_replace", "run_subagent", "run_code"],
+        "input": 9907,
+        "cacheRead": 0,
+        "cacheWrite": 9903
+      },
+      "totals": {
+        "requests": 9,
+        "totalInput": 161672,
+        "uncachedInput": 20,
+        "cacheRead": 138875,
+        "cacheWrite": 22777,
+        "output": 11072,
+        "usd": 0.009773875000000001,
+        "unknownUsage": 0
+      }
+    },
+    {
+      "id": "anthropic-jsonl-r1-pi",
+      "provider": "anthropic",
+      "task": "jsonl",
+      "rep": 1,
+      "arm": "pi",
+      "runId": "anthropic-jsonl-r1-pi",
+      "mode": "live",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "elapsedMs": 33514,
+      "stdoutRawSha256": "504235e88d00cdaf73c2168df37e789ee4bed86e9b345986fe8efe218f33b459",
+      "stdoutSanitizedSha256": "504235e88d00cdaf73c2168df37e789ee4bed86e9b345986fe8efe218f33b459",
+      "files": {
+        ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+        "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+        "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+        "src/cli.mjs": "6169619c8edb99c40dabe9ab70e55ee8f84aebd91cba6a6121fbaba430abd968",
+        "src/summary.mjs": "e7c74fedb31a4f455266aca22b29f79a35c791f4e00d62f85ed5918bf433a6a4",
+        "test/public.test.mjs": "0670722c61e822300a154b9218b75f6d7b849b92283cc086791dadd01a3edee3"
+      },
+      "unauthorizedChanges": [],
+      "publicTestsExitCode": 0,
+      "grade": {
+        "passed": 13,
+        "total": 13,
+        "pass": true,
+        "checks": [
+          {
+            "label": "module-export",
+            "pass": true
+          },
+          {
+            "label": "empty-input",
+            "pass": true
+          },
+          {
+            "label": "cross-account-corrections",
+            "pass": true
+          },
+          {
+            "label": "tie-last-wins",
+            "pass": true
+          },
+          {
+            "label": "invalid-schema-lines",
+            "pass": true
+          },
+          {
+            "label": "code-unit-sort-and-spaces",
+            "pass": true
+          },
+          {
+            "label": "async-stream",
+            "pass": true
+          },
+          {
+            "label": "source-iterator-failure",
+            "pass": true
+          },
+          {
+            "label": "overflow-rejects",
+            "pass": true
+          },
+          {
+            "label": "cli-files-and-invalid-exit",
+            "pass": true
+          },
+          {
+            "label": "cli-stdin",
+            "pass": true
+          },
+          {
+            "label": "cli-invalid-args-and-io",
+            "pass": true
+          },
+          {
+            "label": "cli-uses-streams",
+            "pass": true
+          }
+        ]
+      },
+      "qualityPass": true,
+      "requestIds": ["00101", "00102", "00103", "00104", "00105", "00106"],
+      "meteredUsd": 0.00520125,
+      "unknownUsageRequests": [],
+      "budgetExposureUsd": 5.366752489999997,
+      "manifest": {
+        "id": "anthropic-jsonl-r1-pi",
+        "provider": "anthropic",
+        "task": "jsonl",
+        "rep": 1,
+        "arm": "pi",
+        "runId": "anthropic-jsonl-r1-pi",
+        "mode": "live",
+        "sourceCommit": "66dda24dada62cdf0c3d0e8efb5786d3e8d8d167",
+        "model": "claude-haiku-5-5",
+        "reasoning": "medium",
+        "maxOutputTokens": 32000,
+        "term2Profile": "builtin:bare (shipped default)",
+        "sandboxEnabled": true,
+        "promptSha256": "012d40aef3e9f1b48cc0d7e208dc040a92101c7372cf2030e0a87f2e6e6a8159",
+        "initialFiles": {
+          "src/summary.mjs": "b902a4b90808a28c0aa980e6d3096637927848a70f070b500367cf8cf6e7c1fc",
+          "src/cli.mjs": "8393d4ea57d33700ff61ef17bdf3f5c12533ec798a787cb59568833305d5a90e",
+          "test/public.test.mjs": "0670722c61e822300a154b9218b75f6d7b849b92283cc086791dadd01a3edee3",
+          "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872"
+        }
+      },
+      "artifacts": {
+        ".agents/skills/node-contracts/SKILL.md": {
+          "expected": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "actual": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "match": true
+        },
+        "AGENTS.md": {
+          "expected": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "actual": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "match": true
+        },
+        "package.json": {
+          "expected": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "actual": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "match": true
+        },
+        "src/cli.mjs": {
+          "expected": "6169619c8edb99c40dabe9ab70e55ee8f84aebd91cba6a6121fbaba430abd968",
+          "actual": "6169619c8edb99c40dabe9ab70e55ee8f84aebd91cba6a6121fbaba430abd968",
+          "match": true
+        },
+        "src/summary.mjs": {
+          "expected": "e7c74fedb31a4f455266aca22b29f79a35c791f4e00d62f85ed5918bf433a6a4",
+          "actual": "e7c74fedb31a4f455266aca22b29f79a35c791f4e00d62f85ed5918bf433a6a4",
+          "match": true
+        },
+        "test/public.test.mjs": {
+          "expected": "0670722c61e822300a154b9218b75f6d7b849b92283cc086791dadd01a3edee3",
+          "actual": "0670722c61e822300a154b9218b75f6d7b849b92283cc086791dadd01a3edee3",
+          "match": true
+        }
+      },
+      "accountingIdsMatch": true,
+      "allArtifactsMatch": true,
+      "firstRequest": {
+        "requestBytes": 9064,
+        "serializedToolsBytes": 3385,
+        "toolNames": ["read", "bash", "edit", "write", "__pi_deferred_placeholder__"],
+        "input": 3345,
+        "cacheRead": 1310,
+        "cacheWrite": 2031
+      },
+      "totals": {
+        "requests": 6,
+        "totalInput": 42191,
+        "uncachedInput": 14,
+        "cacheRead": 32185,
+        "cacheWrite": 9992,
+        "output": 7258,
+        "usd": 0.00520125,
+        "unknownUsage": 0
+      }
+    },
+    {
+      "id": "anthropic-jsonl-r1-t2",
+      "provider": "anthropic",
+      "task": "jsonl",
+      "rep": 1,
+      "arm": "t2",
+      "runId": "anthropic-jsonl-r1-t2",
+      "mode": "live",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "elapsedMs": 31385,
+      "stdoutRawSha256": "329f7f1c4acdad05d2cb440dca2de500ca594e6fec0fe02589fe160b210d2ed7",
+      "stdoutSanitizedSha256": "329f7f1c4acdad05d2cb440dca2de500ca594e6fec0fe02589fe160b210d2ed7",
+      "files": {
+        ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+        "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+        "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+        "src/cli.mjs": "ef522c6a2d427009178dead31accf3a4614e18ab6bd598a4da4be6c41d245a04",
+        "src/summary.mjs": "9cd3dfc6036a6abbdf13033101e226f09c55d05ffc7e07217303981ecf9b68a7",
+        "test/public.test.mjs": "0670722c61e822300a154b9218b75f6d7b849b92283cc086791dadd01a3edee3"
+      },
+      "unauthorizedChanges": [],
+      "publicTestsExitCode": 0,
+      "grade": {
+        "passed": 13,
+        "total": 13,
+        "pass": true,
+        "checks": [
+          {
+            "label": "module-export",
+            "pass": true
+          },
+          {
+            "label": "empty-input",
+            "pass": true
+          },
+          {
+            "label": "cross-account-corrections",
+            "pass": true
+          },
+          {
+            "label": "tie-last-wins",
+            "pass": true
+          },
+          {
+            "label": "invalid-schema-lines",
+            "pass": true
+          },
+          {
+            "label": "code-unit-sort-and-spaces",
+            "pass": true
+          },
+          {
+            "label": "async-stream",
+            "pass": true
+          },
+          {
+            "label": "source-iterator-failure",
+            "pass": true
+          },
+          {
+            "label": "overflow-rejects",
+            "pass": true
+          },
+          {
+            "label": "cli-files-and-invalid-exit",
+            "pass": true
+          },
+          {
+            "label": "cli-stdin",
+            "pass": true
+          },
+          {
+            "label": "cli-invalid-args-and-io",
+            "pass": true
+          },
+          {
+            "label": "cli-uses-streams",
+            "pass": true
+          }
+        ]
+      },
+      "qualityPass": true,
+      "requestIds": ["00093", "00094", "00095", "00096", "00097", "00098", "00099", "00100"],
+      "meteredUsd": 0.006374824999999999,
+      "unknownUsageRequests": [],
+      "budgetExposureUsd": 5.361551239999997,
+      "manifest": {
+        "id": "anthropic-jsonl-r1-t2",
+        "provider": "anthropic",
+        "task": "jsonl",
+        "rep": 1,
+        "arm": "t2",
+        "runId": "anthropic-jsonl-r1-t2",
+        "mode": "live",
+        "sourceCommit": "66dda24dada62cdf0c3d0e8efb5786d3e8d8d167",
+        "model": "claude-haiku-5-5",
+        "reasoning": "medium",
+        "maxOutputTokens": 32000,
+        "term2Profile": "builtin:bare (shipped default)",
+        "sandboxEnabled": true,
+        "promptSha256": "012d40aef3e9f1b48cc0d7e208dc040a92101c7372cf2030e0a87f2e6e6a8159",
+        "initialFiles": {
+          "src/summary.mjs": "b902a4b90808a28c0aa980e6d3096637927848a70f070b500367cf8cf6e7c1fc",
+          "src/cli.mjs": "8393d4ea57d33700ff61ef17bdf3f5c12533ec798a787cb59568833305d5a90e",
+          "test/public.test.mjs": "0670722c61e822300a154b9218b75f6d7b849b92283cc086791dadd01a3edee3",
+          "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872"
+        }
+      },
+      "artifacts": {
+        ".agents/skills/node-contracts/SKILL.md": {
+          "expected": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "actual": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "match": true
+        },
+        "AGENTS.md": {
+          "expected": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "actual": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "match": true
+        },
+        "package.json": {
+          "expected": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "actual": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "match": true
+        },
+        "src/cli.mjs": {
+          "expected": "ef522c6a2d427009178dead31accf3a4614e18ab6bd598a4da4be6c41d245a04",
+          "actual": "ef522c6a2d427009178dead31accf3a4614e18ab6bd598a4da4be6c41d245a04",
+          "match": true
+        },
+        "src/summary.mjs": {
+          "expected": "9cd3dfc6036a6abbdf13033101e226f09c55d05ffc7e07217303981ecf9b68a7",
+          "actual": "9cd3dfc6036a6abbdf13033101e226f09c55d05ffc7e07217303981ecf9b68a7",
+          "match": true
+        },
+        "test/public.test.mjs": {
+          "expected": "0670722c61e822300a154b9218b75f6d7b849b92283cc086791dadd01a3edee3",
+          "actual": "0670722c61e822300a154b9218b75f6d7b849b92283cc086791dadd01a3edee3",
+          "match": true
+        }
+      },
+      "accountingIdsMatch": true,
+      "allArtifactsMatch": true,
+      "firstRequest": {
+        "requestBytes": 27333,
+        "serializedToolsBytes": 22935,
+        "toolNames": ["shell", "goal_check", "read_file", "create_file", "search_replace", "run_subagent", "run_code"],
+        "input": 9723,
+        "cacheRead": 0,
+        "cacheWrite": 9719
+      },
+      "totals": {
+        "requests": 8,
+        "totalInput": 112331,
+        "uncachedInput": 18,
+        "cacheRead": 94740,
+        "cacheWrite": 17573,
+        "output": 6458,
+        "usd": 0.006374824999999999,
+        "unknownUsage": 0
+      }
+    },
+    {
+      "id": "anthropic-jsonl-r2-pi",
+      "provider": "anthropic",
+      "task": "jsonl",
+      "rep": 2,
+      "arm": "pi",
+      "runId": "anthropic-jsonl-r2-pi",
+      "mode": "live",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "elapsedMs": 38183,
+      "stdoutRawSha256": "87fef60b866914f583a2dfa7c4b039bac91a4d318aef492e6faf8e99d7ff4bd2",
+      "stdoutSanitizedSha256": "87fef60b866914f583a2dfa7c4b039bac91a4d318aef492e6faf8e99d7ff4bd2",
+      "files": {
+        ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+        "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+        "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+        "src/cli.mjs": "d0240ada4e1b1ab7071a9000923b69b2535049ba7e734b06d31af831fef2c05d",
+        "src/summary.mjs": "da003a04462068b495e0733c2c8e9dcde12a5b00b03162298d931d7cb593728e",
+        "test/public.test.mjs": "0670722c61e822300a154b9218b75f6d7b849b92283cc086791dadd01a3edee3"
+      },
+      "unauthorizedChanges": [],
+      "publicTestsExitCode": 0,
+      "grade": {
+        "passed": 13,
+        "total": 13,
+        "pass": true,
+        "checks": [
+          {
+            "label": "module-export",
+            "pass": true
+          },
+          {
+            "label": "empty-input",
+            "pass": true
+          },
+          {
+            "label": "cross-account-corrections",
+            "pass": true
+          },
+          {
+            "label": "tie-last-wins",
+            "pass": true
+          },
+          {
+            "label": "invalid-schema-lines",
+            "pass": true
+          },
+          {
+            "label": "code-unit-sort-and-spaces",
+            "pass": true
+          },
+          {
+            "label": "async-stream",
+            "pass": true
+          },
+          {
+            "label": "source-iterator-failure",
+            "pass": true
+          },
+          {
+            "label": "overflow-rejects",
+            "pass": true
+          },
+          {
+            "label": "cli-files-and-invalid-exit",
+            "pass": true
+          },
+          {
+            "label": "cli-stdin",
+            "pass": true
+          },
+          {
+            "label": "cli-invalid-args-and-io",
+            "pass": true
+          },
+          {
+            "label": "cli-uses-streams",
+            "pass": true
+          }
+        ]
+      },
+      "qualityPass": true,
+      "requestIds": ["00189", "00190", "00191", "00192", "00193"],
+      "meteredUsd": 0.005966630000000001,
+      "unknownUsageRequests": [],
+      "budgetExposureUsd": 5.432553054999998,
+      "manifest": {
+        "id": "anthropic-jsonl-r2-pi",
+        "provider": "anthropic",
+        "task": "jsonl",
+        "rep": 2,
+        "arm": "pi",
+        "runId": "anthropic-jsonl-r2-pi",
+        "mode": "live",
+        "sourceCommit": "66dda24dada62cdf0c3d0e8efb5786d3e8d8d167",
+        "model": "claude-haiku-5-5",
+        "reasoning": "medium",
+        "maxOutputTokens": 32000,
+        "term2Profile": "builtin:bare (shipped default)",
+        "sandboxEnabled": true,
+        "promptSha256": "012d40aef3e9f1b48cc0d7e208dc040a92101c7372cf2030e0a87f2e6e6a8159",
+        "initialFiles": {
+          "src/summary.mjs": "b902a4b90808a28c0aa980e6d3096637927848a70f070b500367cf8cf6e7c1fc",
+          "src/cli.mjs": "8393d4ea57d33700ff61ef17bdf3f5c12533ec798a787cb59568833305d5a90e",
+          "test/public.test.mjs": "0670722c61e822300a154b9218b75f6d7b849b92283cc086791dadd01a3edee3",
+          "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872"
+        }
+      },
+      "artifacts": {
+        ".agents/skills/node-contracts/SKILL.md": {
+          "expected": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "actual": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "match": true
+        },
+        "AGENTS.md": {
+          "expected": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "actual": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "match": true
+        },
+        "package.json": {
+          "expected": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "actual": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "match": true
+        },
+        "src/cli.mjs": {
+          "expected": "d0240ada4e1b1ab7071a9000923b69b2535049ba7e734b06d31af831fef2c05d",
+          "actual": "d0240ada4e1b1ab7071a9000923b69b2535049ba7e734b06d31af831fef2c05d",
+          "match": true
+        },
+        "src/summary.mjs": {
+          "expected": "da003a04462068b495e0733c2c8e9dcde12a5b00b03162298d931d7cb593728e",
+          "actual": "da003a04462068b495e0733c2c8e9dcde12a5b00b03162298d931d7cb593728e",
+          "match": true
+        },
+        "test/public.test.mjs": {
+          "expected": "0670722c61e822300a154b9218b75f6d7b849b92283cc086791dadd01a3edee3",
+          "actual": "0670722c61e822300a154b9218b75f6d7b849b92283cc086791dadd01a3edee3",
+          "match": true
+        }
+      },
+      "accountingIdsMatch": true,
+      "allArtifactsMatch": true,
+      "firstRequest": {
+        "requestBytes": 9064,
+        "serializedToolsBytes": 3385,
+        "toolNames": ["read", "bash", "edit", "write", "__pi_deferred_placeholder__"],
+        "input": 3345,
+        "cacheRead": 1310,
+        "cacheWrite": 2031
+      },
+      "totals": {
+        "requests": 5,
+        "totalInput": 42116,
+        "uncachedInput": 12,
+        "cacheRead": 30718,
+        "cacheWrite": 11386,
+        "output": 8470,
+        "usd": 0.005966630000000001,
+        "unknownUsage": 0
+      }
+    },
+    {
+      "id": "anthropic-jsonl-r2-t2",
+      "provider": "anthropic",
+      "task": "jsonl",
+      "rep": 2,
+      "arm": "t2",
+      "runId": "anthropic-jsonl-r2-t2",
+      "mode": "live",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "elapsedMs": 52799,
+      "stdoutRawSha256": "dbf125b99cadb1c7514d6385ce82c5d15e8a6e154572b4473f541be048c30dd5",
+      "stdoutSanitizedSha256": "dbf125b99cadb1c7514d6385ce82c5d15e8a6e154572b4473f541be048c30dd5",
+      "files": {
+        ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+        "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+        "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+        "src/cli.mjs": "97bfb838363eab0ed6f163f9c0e529255cf1d842a8aa2d01db78c96c0580d768",
+        "src/summary.mjs": "3e5890cc3282fc8ce75b19ce54165678df3db4a233691f28de08e633dd18fb30",
+        "test/public.test.mjs": "0670722c61e822300a154b9218b75f6d7b849b92283cc086791dadd01a3edee3"
+      },
+      "unauthorizedChanges": [],
+      "publicTestsExitCode": 0,
+      "grade": {
+        "passed": 13,
+        "total": 13,
+        "pass": true,
+        "checks": [
+          {
+            "label": "module-export",
+            "pass": true
+          },
+          {
+            "label": "empty-input",
+            "pass": true
+          },
+          {
+            "label": "cross-account-corrections",
+            "pass": true
+          },
+          {
+            "label": "tie-last-wins",
+            "pass": true
+          },
+          {
+            "label": "invalid-schema-lines",
+            "pass": true
+          },
+          {
+            "label": "code-unit-sort-and-spaces",
+            "pass": true
+          },
+          {
+            "label": "async-stream",
+            "pass": true
+          },
+          {
+            "label": "source-iterator-failure",
+            "pass": true
+          },
+          {
+            "label": "overflow-rejects",
+            "pass": true
+          },
+          {
+            "label": "cli-files-and-invalid-exit",
+            "pass": true
+          },
+          {
+            "label": "cli-stdin",
+            "pass": true
+          },
+          {
+            "label": "cli-invalid-args-and-io",
+            "pass": true
+          },
+          {
+            "label": "cli-uses-streams",
+            "pass": true
+          }
+        ]
+      },
+      "qualityPass": true,
+      "requestIds": ["00194", "00195", "00196", "00197", "00198", "00199", "00200", "00201", "00202"],
+      "meteredUsd": 0.010428139999999999,
+      "unknownUsageRequests": [],
+      "budgetExposureUsd": 5.442981194999998,
+      "manifest": {
+        "id": "anthropic-jsonl-r2-t2",
+        "provider": "anthropic",
+        "task": "jsonl",
+        "rep": 2,
+        "arm": "t2",
+        "runId": "anthropic-jsonl-r2-t2",
+        "mode": "live",
+        "sourceCommit": "66dda24dada62cdf0c3d0e8efb5786d3e8d8d167",
+        "model": "claude-haiku-5-5",
+        "reasoning": "medium",
+        "maxOutputTokens": 32000,
+        "term2Profile": "builtin:bare (shipped default)",
+        "sandboxEnabled": true,
+        "promptSha256": "012d40aef3e9f1b48cc0d7e208dc040a92101c7372cf2030e0a87f2e6e6a8159",
+        "initialFiles": {
+          "src/summary.mjs": "b902a4b90808a28c0aa980e6d3096637927848a70f070b500367cf8cf6e7c1fc",
+          "src/cli.mjs": "8393d4ea57d33700ff61ef17bdf3f5c12533ec798a787cb59568833305d5a90e",
+          "test/public.test.mjs": "0670722c61e822300a154b9218b75f6d7b849b92283cc086791dadd01a3edee3",
+          "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872"
+        }
+      },
+      "artifacts": {
+        ".agents/skills/node-contracts/SKILL.md": {
+          "expected": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "actual": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "match": true
+        },
+        "AGENTS.md": {
+          "expected": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "actual": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "match": true
+        },
+        "package.json": {
+          "expected": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "actual": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "match": true
+        },
+        "src/cli.mjs": {
+          "expected": "97bfb838363eab0ed6f163f9c0e529255cf1d842a8aa2d01db78c96c0580d768",
+          "actual": "97bfb838363eab0ed6f163f9c0e529255cf1d842a8aa2d01db78c96c0580d768",
+          "match": true
+        },
+        "src/summary.mjs": {
+          "expected": "3e5890cc3282fc8ce75b19ce54165678df3db4a233691f28de08e633dd18fb30",
+          "actual": "3e5890cc3282fc8ce75b19ce54165678df3db4a233691f28de08e633dd18fb30",
+          "match": true
+        },
+        "test/public.test.mjs": {
+          "expected": "0670722c61e822300a154b9218b75f6d7b849b92283cc086791dadd01a3edee3",
+          "actual": "0670722c61e822300a154b9218b75f6d7b849b92283cc086791dadd01a3edee3",
+          "match": true
+        }
+      },
+      "accountingIdsMatch": true,
+      "allArtifactsMatch": true,
+      "firstRequest": {
+        "requestBytes": 27333,
+        "serializedToolsBytes": 22935,
+        "toolNames": ["shell", "goal_check", "read_file", "create_file", "search_replace", "run_subagent", "run_code"],
+        "input": 9723,
+        "cacheRead": 0,
+        "cacheWrite": 9719
+      },
+      "totals": {
+        "requests": 9,
+        "totalInput": 158400,
+        "uncachedInput": 20,
+        "cacheRead": 135264,
+        "cacheWrite": 23116,
+        "output": 12368,
+        "usd": 0.010428139999999999,
+        "unknownUsage": 0
+      }
+    },
+    {
+      "id": "anthropic-pagination-r1-pi",
+      "provider": "anthropic",
+      "task": "pagination",
+      "rep": 1,
+      "arm": "pi",
+      "runId": "anthropic-pagination-r1-pi",
+      "mode": "live",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "elapsedMs": 39709,
+      "stdoutRawSha256": "3c39ef7622db606a5905fa506bf3b07419e8fe97cea992812e4206248b52a07a",
+      "stdoutSanitizedSha256": "3c39ef7622db606a5905fa506bf3b07419e8fe97cea992812e4206248b52a07a",
+      "files": {
+        ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+        "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+        "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+        "src/cli.mjs": "054e50b87d31fb5df53b5149ebe842f7ff13e614f98f3a0a0c2dbd70931f52d5",
+        "src/pages.mjs": "773040a3c73974d69185f9f7fc9f25a241e2609712e3cbd0707fbbb455544ae1",
+        "test/public.test.mjs": "0b77f9ab4f7adebb30b8a7ab372fd25d9796b0311e8183f60bbe251f4c9b4fb2"
+      },
+      "unauthorizedChanges": [],
+      "publicTestsExitCode": 0,
+      "grade": {
+        "passed": 14,
+        "total": 14,
+        "pass": true,
+        "checks": [
+          {
+            "label": "module-export",
+            "pass": true
+          },
+          {
+            "label": "falsy-cursors-empty-pages-order",
+            "pass": true
+          },
+          {
+            "label": "typed-cursors-distinct",
+            "pass": true
+          },
+          {
+            "label": "cycle-before-refetch",
+            "pass": true
+          },
+          {
+            "label": "max-pages-before-extra-fetch",
+            "pass": true
+          },
+          {
+            "label": "invalid-options-no-fetch",
+            "pass": true
+          },
+          {
+            "label": "malformed-pages",
+            "pass": true
+          },
+          {
+            "label": "abort-before-fetch",
+            "pass": true
+          },
+          {
+            "label": "abort-after-fetch",
+            "pass": true
+          },
+          {
+            "label": "does-not-mutate",
+            "pass": true
+          },
+          {
+            "label": "default-page-limit-is-100",
+            "pass": true
+          },
+          {
+            "label": "null-abort-reason",
+            "pass": true
+          },
+          {
+            "label": "cli-valid",
+            "pass": true
+          },
+          {
+            "label": "cli-error-clean-stdout",
+            "pass": true
+          }
+        ]
+      },
+      "qualityPass": true,
+      "requestIds": ["00027", "00028", "00029", "00030", "00031", "00032"],
+      "meteredUsd": 0.0060769100000000005,
+      "unknownUsageRequests": [],
+      "budgetExposureUsd": 5.31183943,
+      "manifest": {
+        "id": "anthropic-pagination-r1-pi",
+        "provider": "anthropic",
+        "task": "pagination",
+        "rep": 1,
+        "arm": "pi",
+        "runId": "anthropic-pagination-r1-pi",
+        "mode": "live",
+        "sourceCommit": "66dda24dada62cdf0c3d0e8efb5786d3e8d8d167",
+        "model": "claude-haiku-5-5",
+        "reasoning": "medium",
+        "maxOutputTokens": 32000,
+        "term2Profile": "builtin:bare (shipped default)",
+        "sandboxEnabled": true,
+        "promptSha256": "7dfb1538d7b62429c2a1b31416d164bdb735f6ce0aca7d36424c0e3f3a51832d",
+        "initialFiles": {
+          "src/pages.mjs": "34a0b01e3a18a8973320245e87bbaedac5097443439337f7ec7b2315a74400b9",
+          "src/cli.mjs": "1050f02b155fac2951a8b895a91961c5822c49eb0c7f6c14d2b999f5fafcda82",
+          "test/public.test.mjs": "0b77f9ab4f7adebb30b8a7ab372fd25d9796b0311e8183f60bbe251f4c9b4fb2",
+          "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872"
+        }
+      },
+      "artifacts": {
+        ".agents/skills/node-contracts/SKILL.md": {
+          "expected": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "actual": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "match": true
+        },
+        "AGENTS.md": {
+          "expected": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "actual": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "match": true
+        },
+        "package.json": {
+          "expected": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "actual": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "match": true
+        },
+        "src/cli.mjs": {
+          "expected": "054e50b87d31fb5df53b5149ebe842f7ff13e614f98f3a0a0c2dbd70931f52d5",
+          "actual": "054e50b87d31fb5df53b5149ebe842f7ff13e614f98f3a0a0c2dbd70931f52d5",
+          "match": true
+        },
+        "src/pages.mjs": {
+          "expected": "773040a3c73974d69185f9f7fc9f25a241e2609712e3cbd0707fbbb455544ae1",
+          "actual": "773040a3c73974d69185f9f7fc9f25a241e2609712e3cbd0707fbbb455544ae1",
+          "match": true
+        },
+        "test/public.test.mjs": {
+          "expected": "0b77f9ab4f7adebb30b8a7ab372fd25d9796b0311e8183f60bbe251f4c9b4fb2",
+          "actual": "0b77f9ab4f7adebb30b8a7ab372fd25d9796b0311e8183f60bbe251f4c9b4fb2",
+          "match": true
+        }
+      },
+      "accountingIdsMatch": true,
+      "allArtifactsMatch": true,
+      "firstRequest": {
+        "requestBytes": 8847,
+        "serializedToolsBytes": 3385,
+        "toolNames": ["read", "bash", "edit", "write", "__pi_deferred_placeholder__"],
+        "input": 3247,
+        "cacheRead": 0,
+        "cacheWrite": 3243
+      },
+      "totals": {
+        "requests": 6,
+        "totalInput": 50098,
+        "uncachedInput": 14,
+        "cacheRead": 37626,
+        "cacheWrite": 12458,
+        "output": 8284,
+        "usd": 0.0060769100000000005,
+        "unknownUsage": 0
+      }
+    },
+    {
+      "id": "anthropic-pagination-r1-t2",
+      "provider": "anthropic",
+      "task": "pagination",
+      "rep": 1,
+      "arm": "t2",
+      "runId": "anthropic-pagination-r1-t2",
+      "mode": "live",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "elapsedMs": 61214,
+      "stdoutRawSha256": "5b335d76463a6ca4486da67655c00eae5bdd4a30293fe9e34f9f62524d0943bc",
+      "stdoutSanitizedSha256": "5b335d76463a6ca4486da67655c00eae5bdd4a30293fe9e34f9f62524d0943bc",
+      "files": {
+        ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+        "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+        "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+        "src/cli.mjs": "f8060dff08609230a0ad51575ff5592d8942390df00762654234c4443f8e5d14",
+        "src/pages.mjs": "3afdd48fd6f15ce1927f8b0ce7ec090365cd0d67b64665c03cb516ab7730b15f",
+        "test/public.test.mjs": "0b77f9ab4f7adebb30b8a7ab372fd25d9796b0311e8183f60bbe251f4c9b4fb2"
+      },
+      "unauthorizedChanges": [],
+      "publicTestsExitCode": 0,
+      "grade": {
+        "passed": 14,
+        "total": 14,
+        "pass": true,
+        "checks": [
+          {
+            "label": "module-export",
+            "pass": true
+          },
+          {
+            "label": "falsy-cursors-empty-pages-order",
+            "pass": true
+          },
+          {
+            "label": "typed-cursors-distinct",
+            "pass": true
+          },
+          {
+            "label": "cycle-before-refetch",
+            "pass": true
+          },
+          {
+            "label": "max-pages-before-extra-fetch",
+            "pass": true
+          },
+          {
+            "label": "invalid-options-no-fetch",
+            "pass": true
+          },
+          {
+            "label": "malformed-pages",
+            "pass": true
+          },
+          {
+            "label": "abort-before-fetch",
+            "pass": true
+          },
+          {
+            "label": "abort-after-fetch",
+            "pass": true
+          },
+          {
+            "label": "does-not-mutate",
+            "pass": true
+          },
+          {
+            "label": "default-page-limit-is-100",
+            "pass": true
+          },
+          {
+            "label": "null-abort-reason",
+            "pass": true
+          },
+          {
+            "label": "cli-valid",
+            "pass": true
+          },
+          {
+            "label": "cli-error-clean-stdout",
+            "pass": true
+          }
+        ]
+      },
+      "qualityPass": true,
+      "requestIds": ["00019", "00020", "00021", "00022", "00023", "00024", "00025", "00026"],
+      "meteredUsd": 0.012058045000000002,
+      "unknownUsageRequests": [],
+      "budgetExposureUsd": 5.30576252,
+      "manifest": {
+        "id": "anthropic-pagination-r1-t2",
+        "provider": "anthropic",
+        "task": "pagination",
+        "rep": 1,
+        "arm": "t2",
+        "runId": "anthropic-pagination-r1-t2",
+        "mode": "live",
+        "sourceCommit": "66dda24dada62cdf0c3d0e8efb5786d3e8d8d167",
+        "model": "claude-haiku-5-5",
+        "reasoning": "medium",
+        "maxOutputTokens": 32000,
+        "term2Profile": "builtin:bare (shipped default)",
+        "sandboxEnabled": true,
+        "promptSha256": "7dfb1538d7b62429c2a1b31416d164bdb735f6ce0aca7d36424c0e3f3a51832d",
+        "initialFiles": {
+          "src/pages.mjs": "34a0b01e3a18a8973320245e87bbaedac5097443439337f7ec7b2315a74400b9",
+          "src/cli.mjs": "1050f02b155fac2951a8b895a91961c5822c49eb0c7f6c14d2b999f5fafcda82",
+          "test/public.test.mjs": "0b77f9ab4f7adebb30b8a7ab372fd25d9796b0311e8183f60bbe251f4c9b4fb2",
+          "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872"
+        }
+      },
+      "artifacts": {
+        ".agents/skills/node-contracts/SKILL.md": {
+          "expected": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "actual": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "match": true
+        },
+        "AGENTS.md": {
+          "expected": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "actual": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "match": true
+        },
+        "package.json": {
+          "expected": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "actual": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "match": true
+        },
+        "src/cli.mjs": {
+          "expected": "f8060dff08609230a0ad51575ff5592d8942390df00762654234c4443f8e5d14",
+          "actual": "f8060dff08609230a0ad51575ff5592d8942390df00762654234c4443f8e5d14",
+          "match": true
+        },
+        "src/pages.mjs": {
+          "expected": "3afdd48fd6f15ce1927f8b0ce7ec090365cd0d67b64665c03cb516ab7730b15f",
+          "actual": "3afdd48fd6f15ce1927f8b0ce7ec090365cd0d67b64665c03cb516ab7730b15f",
+          "match": true
+        },
+        "test/public.test.mjs": {
+          "expected": "0b77f9ab4f7adebb30b8a7ab372fd25d9796b0311e8183f60bbe251f4c9b4fb2",
+          "actual": "0b77f9ab4f7adebb30b8a7ab372fd25d9796b0311e8183f60bbe251f4c9b4fb2",
+          "match": true
+        }
+      },
+      "accountingIdsMatch": true,
+      "allArtifactsMatch": true,
+      "firstRequest": {
+        "requestBytes": 27111,
+        "serializedToolsBytes": 22935,
+        "toolNames": ["shell", "goal_check", "read_file", "create_file", "search_replace", "run_subagent", "run_code"],
+        "input": 9626,
+        "cacheRead": 0,
+        "cacheWrite": 9622
+      },
+      "totals": {
+        "requests": 8,
+        "totalInput": 145031,
+        "uncachedInput": 18,
+        "cacheRead": 119112,
+        "cacheWrite": 25901,
+        "output": 15255,
+        "usd": 0.012058045000000002,
+        "unknownUsage": 0
+      }
+    },
+    {
+      "id": "anthropic-pagination-r2-pi",
+      "provider": "anthropic",
+      "task": "pagination",
+      "rep": 2,
+      "arm": "pi",
+      "runId": "anthropic-pagination-r2-pi",
+      "mode": "live",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "elapsedMs": 39668,
+      "stdoutRawSha256": "1b7493d9792e22a63fe8fd996ad508a4cd669c531cd6a9a8cce4dd5467c6087c",
+      "stdoutSanitizedSha256": "1b7493d9792e22a63fe8fd996ad508a4cd669c531cd6a9a8cce4dd5467c6087c",
+      "files": {
+        ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+        "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+        "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+        "src/cli.mjs": "0f4aad01ba6127d8e45eb2d90ce127eb155315e8ae60b1c41ae167d1c9c0eaa4",
+        "src/pages.mjs": "25e0e425627b869215f577350e603286d98c71e99dfa2cfbe6e5ef3e12c27847",
+        "test/public.test.mjs": "0b77f9ab4f7adebb30b8a7ab372fd25d9796b0311e8183f60bbe251f4c9b4fb2"
+      },
+      "unauthorizedChanges": [],
+      "publicTestsExitCode": 0,
+      "grade": {
+        "passed": 14,
+        "total": 14,
+        "pass": true,
+        "checks": [
+          {
+            "label": "module-export",
+            "pass": true
+          },
+          {
+            "label": "falsy-cursors-empty-pages-order",
+            "pass": true
+          },
+          {
+            "label": "typed-cursors-distinct",
+            "pass": true
+          },
+          {
+            "label": "cycle-before-refetch",
+            "pass": true
+          },
+          {
+            "label": "max-pages-before-extra-fetch",
+            "pass": true
+          },
+          {
+            "label": "invalid-options-no-fetch",
+            "pass": true
+          },
+          {
+            "label": "malformed-pages",
+            "pass": true
+          },
+          {
+            "label": "abort-before-fetch",
+            "pass": true
+          },
+          {
+            "label": "abort-after-fetch",
+            "pass": true
+          },
+          {
+            "label": "does-not-mutate",
+            "pass": true
+          },
+          {
+            "label": "default-page-limit-is-100",
+            "pass": true
+          },
+          {
+            "label": "null-abort-reason",
+            "pass": true
+          },
+          {
+            "label": "cli-valid",
+            "pass": true
+          },
+          {
+            "label": "cli-error-clean-stdout",
+            "pass": true
+          }
+        ]
+      },
+      "qualityPass": true,
+      "requestIds": ["00123", "00124", "00125", "00126", "00127"],
+      "meteredUsd": 0.00638181,
+      "unknownUsageRequests": [],
+      "budgetExposureUsd": 5.380416634999995,
+      "manifest": {
+        "id": "anthropic-pagination-r2-pi",
+        "provider": "anthropic",
+        "task": "pagination",
+        "rep": 2,
+        "arm": "pi",
+        "runId": "anthropic-pagination-r2-pi",
+        "mode": "live",
+        "sourceCommit": "66dda24dada62cdf0c3d0e8efb5786d3e8d8d167",
+        "model": "claude-haiku-5-5",
+        "reasoning": "medium",
+        "maxOutputTokens": 32000,
+        "term2Profile": "builtin:bare (shipped default)",
+        "sandboxEnabled": true,
+        "promptSha256": "7dfb1538d7b62429c2a1b31416d164bdb735f6ce0aca7d36424c0e3f3a51832d",
+        "initialFiles": {
+          "src/pages.mjs": "34a0b01e3a18a8973320245e87bbaedac5097443439337f7ec7b2315a74400b9",
+          "src/cli.mjs": "1050f02b155fac2951a8b895a91961c5822c49eb0c7f6c14d2b999f5fafcda82",
+          "test/public.test.mjs": "0b77f9ab4f7adebb30b8a7ab372fd25d9796b0311e8183f60bbe251f4c9b4fb2",
+          "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872"
+        }
+      },
+      "artifacts": {
+        ".agents/skills/node-contracts/SKILL.md": {
+          "expected": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "actual": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "match": true
+        },
+        "AGENTS.md": {
+          "expected": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "actual": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "match": true
+        },
+        "package.json": {
+          "expected": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "actual": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "match": true
+        },
+        "src/cli.mjs": {
+          "expected": "0f4aad01ba6127d8e45eb2d90ce127eb155315e8ae60b1c41ae167d1c9c0eaa4",
+          "actual": "0f4aad01ba6127d8e45eb2d90ce127eb155315e8ae60b1c41ae167d1c9c0eaa4",
+          "match": true
+        },
+        "src/pages.mjs": {
+          "expected": "25e0e425627b869215f577350e603286d98c71e99dfa2cfbe6e5ef3e12c27847",
+          "actual": "25e0e425627b869215f577350e603286d98c71e99dfa2cfbe6e5ef3e12c27847",
+          "match": true
+        },
+        "test/public.test.mjs": {
+          "expected": "0b77f9ab4f7adebb30b8a7ab372fd25d9796b0311e8183f60bbe251f4c9b4fb2",
+          "actual": "0b77f9ab4f7adebb30b8a7ab372fd25d9796b0311e8183f60bbe251f4c9b4fb2",
+          "match": true
+        }
+      },
+      "accountingIdsMatch": true,
+      "allArtifactsMatch": true,
+      "firstRequest": {
+        "requestBytes": 8847,
+        "serializedToolsBytes": 3385,
+        "toolNames": ["read", "bash", "edit", "write", "__pi_deferred_placeholder__"],
+        "input": 3247,
+        "cacheRead": 1310,
+        "cacheWrite": 1933
+      },
+      "totals": {
+        "requests": 5,
+        "totalInput": 41727,
+        "uncachedInput": 12,
+        "cacheRead": 29811,
+        "cacheWrite": 11904,
+        "output": 9189,
+        "usd": 0.00638181,
+        "unknownUsage": 0
+      }
+    },
+    {
+      "id": "anthropic-pagination-r2-t2",
+      "provider": "anthropic",
+      "task": "pagination",
+      "rep": 2,
+      "arm": "t2",
+      "runId": "anthropic-pagination-r2-t2",
+      "mode": "live",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "elapsedMs": 44785,
+      "stdoutRawSha256": "e41f3d4fe54174527fe56b592608da6dc6c75e888f09bc363832b5d724828076",
+      "stdoutSanitizedSha256": "e41f3d4fe54174527fe56b592608da6dc6c75e888f09bc363832b5d724828076",
+      "files": {
+        ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+        "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+        "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+        "src/cli.mjs": "61d898a8244a4d38a70b5800ac64322c66f690452148670c8e166f084c9682f7",
+        "src/pages.mjs": "351d24a5cfcdd22560bad7ce9e54eb9a9a1e399b8200b45d6aea28e43feb3c9c",
+        "test/public.test.mjs": "0b77f9ab4f7adebb30b8a7ab372fd25d9796b0311e8183f60bbe251f4c9b4fb2"
+      },
+      "unauthorizedChanges": [],
+      "publicTestsExitCode": 0,
+      "grade": {
+        "passed": 14,
+        "total": 14,
+        "pass": true,
+        "checks": [
+          {
+            "label": "module-export",
+            "pass": true
+          },
+          {
+            "label": "falsy-cursors-empty-pages-order",
+            "pass": true
+          },
+          {
+            "label": "typed-cursors-distinct",
+            "pass": true
+          },
+          {
+            "label": "cycle-before-refetch",
+            "pass": true
+          },
+          {
+            "label": "max-pages-before-extra-fetch",
+            "pass": true
+          },
+          {
+            "label": "invalid-options-no-fetch",
+            "pass": true
+          },
+          {
+            "label": "malformed-pages",
+            "pass": true
+          },
+          {
+            "label": "abort-before-fetch",
+            "pass": true
+          },
+          {
+            "label": "abort-after-fetch",
+            "pass": true
+          },
+          {
+            "label": "does-not-mutate",
+            "pass": true
+          },
+          {
+            "label": "default-page-limit-is-100",
+            "pass": true
+          },
+          {
+            "label": "null-abort-reason",
+            "pass": true
+          },
+          {
+            "label": "cli-valid",
+            "pass": true
+          },
+          {
+            "label": "cli-error-clean-stdout",
+            "pass": true
+          }
+        ]
+      },
+      "qualityPass": true,
+      "requestIds": ["00128", "00129", "00130", "00131", "00132", "00133", "00134"],
+      "meteredUsd": 0.008778655,
+      "unknownUsageRequests": [],
+      "budgetExposureUsd": 5.389195289999996,
+      "manifest": {
+        "id": "anthropic-pagination-r2-t2",
+        "provider": "anthropic",
+        "task": "pagination",
+        "rep": 2,
+        "arm": "t2",
+        "runId": "anthropic-pagination-r2-t2",
+        "mode": "live",
+        "sourceCommit": "66dda24dada62cdf0c3d0e8efb5786d3e8d8d167",
+        "model": "claude-haiku-5-5",
+        "reasoning": "medium",
+        "maxOutputTokens": 32000,
+        "term2Profile": "builtin:bare (shipped default)",
+        "sandboxEnabled": true,
+        "promptSha256": "7dfb1538d7b62429c2a1b31416d164bdb735f6ce0aca7d36424c0e3f3a51832d",
+        "initialFiles": {
+          "src/pages.mjs": "34a0b01e3a18a8973320245e87bbaedac5097443439337f7ec7b2315a74400b9",
+          "src/cli.mjs": "1050f02b155fac2951a8b895a91961c5822c49eb0c7f6c14d2b999f5fafcda82",
+          "test/public.test.mjs": "0b77f9ab4f7adebb30b8a7ab372fd25d9796b0311e8183f60bbe251f4c9b4fb2",
+          "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872"
+        }
+      },
+      "artifacts": {
+        ".agents/skills/node-contracts/SKILL.md": {
+          "expected": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "actual": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "match": true
+        },
+        "AGENTS.md": {
+          "expected": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "actual": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "match": true
+        },
+        "package.json": {
+          "expected": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "actual": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "match": true
+        },
+        "src/cli.mjs": {
+          "expected": "61d898a8244a4d38a70b5800ac64322c66f690452148670c8e166f084c9682f7",
+          "actual": "61d898a8244a4d38a70b5800ac64322c66f690452148670c8e166f084c9682f7",
+          "match": true
+        },
+        "src/pages.mjs": {
+          "expected": "351d24a5cfcdd22560bad7ce9e54eb9a9a1e399b8200b45d6aea28e43feb3c9c",
+          "actual": "351d24a5cfcdd22560bad7ce9e54eb9a9a1e399b8200b45d6aea28e43feb3c9c",
+          "match": true
+        },
+        "test/public.test.mjs": {
+          "expected": "0b77f9ab4f7adebb30b8a7ab372fd25d9796b0311e8183f60bbe251f4c9b4fb2",
+          "actual": "0b77f9ab4f7adebb30b8a7ab372fd25d9796b0311e8183f60bbe251f4c9b4fb2",
+          "match": true
+        }
+      },
+      "accountingIdsMatch": true,
+      "allArtifactsMatch": true,
+      "firstRequest": {
+        "requestBytes": 27111,
+        "serializedToolsBytes": 22935,
+        "toolNames": ["shell", "goal_check", "read_file", "create_file", "search_replace", "run_subagent", "run_code"],
+        "input": 9626,
+        "cacheRead": 0,
+        "cacheWrite": 9622
+      },
+      "totals": {
+        "requests": 7,
+        "totalInput": 111605,
+        "uncachedInput": 16,
+        "cacheRead": 89818,
+        "cacheWrite": 21771,
+        "output": 10315,
+        "usd": 0.008778655,
+        "unknownUsage": 0
+      }
+    },
+    {
+      "id": "openai-classifier-r1-pi",
+      "provider": "openai",
+      "task": "classifier",
+      "rep": 1,
+      "arm": "pi",
+      "runId": "openai-classifier-r1-pi",
+      "mode": "live",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "elapsedMs": 58955,
+      "stdoutRawSha256": "957f15696aa0fcdfe3827d116b2bfc144dce428191eb9d28d35cce631a4976bc",
+      "stdoutSanitizedSha256": "957f15696aa0fcdfe3827d116b2bfc144dce428191eb9d28d35cce631a4976bc",
+      "files": {
+        ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+        "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+        "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+        "src/errors.mjs": "447670d12ad542fffc932f83fe4d6ec44069fa4187907d47dce598a9b1e4e9e2",
+        "src/retry.mjs": "9a09d9bde1dc429d7e9ec2ae565484c0a9c830f71ae663fc3e5e1ee85d44a026",
+        "test/public.test.mjs": "f68c79dcb0458fd731f9d21856d8066dfef88386250dfce7b17269c81664818b"
+      },
+      "unauthorizedChanges": [],
+      "publicTestsExitCode": 0,
+      "grade": {
+        "passed": 25,
+        "total": 26,
+        "pass": false,
+        "checks": [
+          {
+            "label": "module-exports",
+            "pass": true
+          },
+          {
+            "label": "http-402",
+            "pass": true
+          },
+          {
+            "label": "http-401",
+            "pass": true
+          },
+          {
+            "label": "http-403",
+            "pass": true
+          },
+          {
+            "label": "http-429",
+            "pass": true
+          },
+          {
+            "label": "http-408",
+            "pass": true
+          },
+          {
+            "label": "http-409",
+            "pass": true
+          },
+          {
+            "label": "http-500",
+            "pass": true
+          },
+          {
+            "label": "http-599",
+            "pass": true
+          },
+          {
+            "label": "http-400",
+            "pass": true
+          },
+          {
+            "label": "http-404",
+            "pass": true
+          },
+          {
+            "label": "http-413",
+            "pass": true
+          },
+          {
+            "label": "http-422",
+            "pass": true
+          },
+          {
+            "label": "nested-quota-codes",
+            "pass": true
+          },
+          {
+            "label": "status-shapes-priority",
+            "pass": true
+          },
+          {
+            "label": "numeric-prefix-quota",
+            "pass": true
+          },
+          {
+            "label": "vague-message-and-unknown",
+            "pass": true
+          },
+          {
+            "label": "network-codes",
+            "pass": true
+          },
+          {
+            "label": "header-seconds-ms-precedence",
+            "pass": true
+          },
+          {
+            "label": "header-date-and-invalid",
+            "pass": false,
+            "error": "The expression evaluated to a falsy value:\n\n  assert.ok(\n"
+          },
+          {
+            "label": "long-delay-refuses",
+            "pass": true
+          },
+          {
+            "label": "retry-success-and-delay",
+            "pass": true
+          },
+          {
+            "label": "exhaustion-exact-identity",
+            "pass": true
+          },
+          {
+            "label": "quota-no-retry",
+            "pass": true
+          },
+          {
+            "label": "retry-validation",
+            "pass": true
+          },
+          {
+            "label": "abort-boundaries",
+            "pass": true
+          }
+        ]
+      },
+      "qualityPass": false,
+      "requestIds": ["00033", "00034", "00035", "00036", "00037", "00038", "00039", "00040", "00041"],
+      "meteredUsd": 0.0040716,
+      "unknownUsageRequests": [],
+      "budgetExposureUsd": 5.3159110300000005,
+      "manifest": {
+        "id": "openai-classifier-r1-pi",
+        "provider": "openai",
+        "task": "classifier",
+        "rep": 1,
+        "arm": "pi",
+        "runId": "openai-classifier-r1-pi",
+        "mode": "live",
+        "sourceCommit": "66dda24dada62cdf0c3d0e8efb5786d3e8d8d167",
+        "model": "gpt-6-luna",
+        "reasoning": "medium",
+        "maxOutputTokens": 32000,
+        "term2Profile": "builtin:bare (shipped default)",
+        "sandboxEnabled": true,
+        "promptSha256": "91ce925b6b33dc8efc9979f183e2d7880736eb8f29a7b0c016cdd4b767683a9d",
+        "initialFiles": {
+          "src/errors.mjs": "c380ac26dd6d05a2a60f7a9776d5d372c8dd3211d756201b9e7b33e756777bdb",
+          "src/retry.mjs": "d01ca99015607c96397141f2f995eef6a3884ee77e89d07a93920d589bad9f71",
+          "test/public.test.mjs": "f68c79dcb0458fd731f9d21856d8066dfef88386250dfce7b17269c81664818b",
+          "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872"
+        }
+      },
+      "artifacts": {
+        ".agents/skills/node-contracts/SKILL.md": {
+          "expected": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "actual": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "match": true
+        },
+        "AGENTS.md": {
+          "expected": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "actual": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "match": true
+        },
+        "package.json": {
+          "expected": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "actual": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "match": true
+        },
+        "src/errors.mjs": {
+          "expected": "447670d12ad542fffc932f83fe4d6ec44069fa4187907d47dce598a9b1e4e9e2",
+          "actual": "447670d12ad542fffc932f83fe4d6ec44069fa4187907d47dce598a9b1e4e9e2",
+          "match": true
+        },
+        "src/retry.mjs": {
+          "expected": "9a09d9bde1dc429d7e9ec2ae565484c0a9c830f71ae663fc3e5e1ee85d44a026",
+          "actual": "9a09d9bde1dc429d7e9ec2ae565484c0a9c830f71ae663fc3e5e1ee85d44a026",
+          "match": true
+        },
+        "test/public.test.mjs": {
+          "expected": "f68c79dcb0458fd731f9d21856d8066dfef88386250dfce7b17269c81664818b",
+          "actual": "f68c79dcb0458fd731f9d21856d8066dfef88386250dfce7b17269c81664818b",
+          "match": true
+        }
+      },
+      "accountingIdsMatch": true,
+      "allArtifactsMatch": true,
+      "firstRequest": {
+        "requestBytes": 9200,
+        "serializedToolsBytes": 3101,
+        "toolNames": ["read", "bash", "edit", "write"],
+        "input": 1819,
+        "cacheRead": 0,
+        "cacheWrite": 1816
+      },
+      "totals": {
+        "requests": 9,
+        "totalInput": 46959,
+        "uncachedInput": 27,
+        "cacheRead": 38040,
+        "cacheWrite": 8892,
+        "output": 5154,
+        "usd": 0.0040716,
+        "unknownUsage": 0
+      }
+    },
+    {
+      "id": "openai-classifier-r1-t2",
+      "provider": "openai",
+      "task": "classifier",
+      "rep": 1,
+      "arm": "t2",
+      "runId": "openai-classifier-r1-t2",
+      "mode": "live",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "elapsedMs": 67548,
+      "stdoutRawSha256": "dcbec37d8279b5a3d75b8870d56c2abb2ae9668f6ec0a6ab81a0e1958e5c33b2",
+      "stdoutSanitizedSha256": "dcbec37d8279b5a3d75b8870d56c2abb2ae9668f6ec0a6ab81a0e1958e5c33b2",
+      "files": {
+        ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+        "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+        "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+        "src/errors.mjs": "b754063c9ce155c46e5f3dec63df4991bad3c7e155eac49abf631cf2de089c77",
+        "src/retry.mjs": "ddbc7d1257c3574fcc834e4282f6aa5d7da367510e8929698245280cc943ca02",
+        "test/public.test.mjs": "f68c79dcb0458fd731f9d21856d8066dfef88386250dfce7b17269c81664818b"
+      },
+      "unauthorizedChanges": [],
+      "publicTestsExitCode": 0,
+      "grade": {
+        "passed": 23,
+        "total": 26,
+        "pass": false,
+        "checks": [
+          {
+            "label": "module-exports",
+            "pass": true
+          },
+          {
+            "label": "http-402",
+            "pass": true
+          },
+          {
+            "label": "http-401",
+            "pass": true
+          },
+          {
+            "label": "http-403",
+            "pass": true
+          },
+          {
+            "label": "http-429",
+            "pass": true
+          },
+          {
+            "label": "http-408",
+            "pass": true
+          },
+          {
+            "label": "http-409",
+            "pass": true
+          },
+          {
+            "label": "http-500",
+            "pass": true
+          },
+          {
+            "label": "http-599",
+            "pass": true
+          },
+          {
+            "label": "http-400",
+            "pass": true
+          },
+          {
+            "label": "http-404",
+            "pass": true
+          },
+          {
+            "label": "http-413",
+            "pass": true
+          },
+          {
+            "label": "http-422",
+            "pass": true
+          },
+          {
+            "label": "nested-quota-codes",
+            "pass": true
+          },
+          {
+            "label": "status-shapes-priority",
+            "pass": false,
+            "error": "Expected values to be strictly equal:\n+ actual - expected\n\n+ 'unknown'\n- 'rate_limit'\n"
+          },
+          {
+            "label": "numeric-prefix-quota",
+            "pass": false,
+            "error": "Expected values to be strictly deep-equal:\n+ actual - expected\n\n  {\n+   kind: 'unknown',\n-   kind: 'quota',\n    retryable: false\n  }\n"
+          },
+          {
+            "label": "vague-message-and-unknown",
+            "pass": true
+          },
+          {
+            "label": "network-codes",
+            "pass": true
+          },
+          {
+            "label": "header-seconds-ms-precedence",
+            "pass": true
+          },
+          {
+            "label": "header-date-and-invalid",
+            "pass": false,
+            "error": "The expression evaluated to a falsy value:\n\n  assert.ok(\n"
+          },
+          {
+            "label": "long-delay-refuses",
+            "pass": true
+          },
+          {
+            "label": "retry-success-and-delay",
+            "pass": true
+          },
+          {
+            "label": "exhaustion-exact-identity",
+            "pass": true
+          },
+          {
+            "label": "quota-no-retry",
+            "pass": true
+          },
+          {
+            "label": "retry-validation",
+            "pass": true
+          },
+          {
+            "label": "abort-boundaries",
+            "pass": true
+          }
+        ]
+      },
+      "qualityPass": false,
+      "requestIds": ["00042", "00043", "00044", "00045", "00046", "00047", "00048", "00049", "00050", "00051", "00052"],
+      "meteredUsd": 0.006235889999999999,
+      "unknownUsageRequests": [],
+      "budgetExposureUsd": 5.322146919999999,
+      "manifest": {
+        "id": "openai-classifier-r1-t2",
+        "provider": "openai",
+        "task": "classifier",
+        "rep": 1,
+        "arm": "t2",
+        "runId": "openai-classifier-r1-t2",
+        "mode": "live",
+        "sourceCommit": "66dda24dada62cdf0c3d0e8efb5786d3e8d8d167",
+        "model": "gpt-6-luna",
+        "reasoning": "medium",
+        "maxOutputTokens": 32000,
+        "term2Profile": "builtin:bare (shipped default)",
+        "sandboxEnabled": true,
+        "promptSha256": "91ce925b6b33dc8efc9979f183e2d7880736eb8f29a7b0c016cdd4b767683a9d",
+        "initialFiles": {
+          "src/errors.mjs": "c380ac26dd6d05a2a60f7a9776d5d372c8dd3211d756201b9e7b33e756777bdb",
+          "src/retry.mjs": "d01ca99015607c96397141f2f995eef6a3884ee77e89d07a93920d589bad9f71",
+          "test/public.test.mjs": "f68c79dcb0458fd731f9d21856d8066dfef88386250dfce7b17269c81664818b",
+          "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872"
+        }
+      },
+      "artifacts": {
+        ".agents/skills/node-contracts/SKILL.md": {
+          "expected": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "actual": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "match": true
+        },
+        "AGENTS.md": {
+          "expected": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "actual": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "match": true
+        },
+        "package.json": {
+          "expected": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "actual": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "match": true
+        },
+        "src/errors.mjs": {
+          "expected": "b754063c9ce155c46e5f3dec63df4991bad3c7e155eac49abf631cf2de089c77",
+          "actual": "b754063c9ce155c46e5f3dec63df4991bad3c7e155eac49abf631cf2de089c77",
+          "match": true
+        },
+        "src/retry.mjs": {
+          "expected": "ddbc7d1257c3574fcc834e4282f6aa5d7da367510e8929698245280cc943ca02",
+          "actual": "ddbc7d1257c3574fcc834e4282f6aa5d7da367510e8929698245280cc943ca02",
+          "match": true
+        },
+        "test/public.test.mjs": {
+          "expected": "f68c79dcb0458fd731f9d21856d8066dfef88386250dfce7b17269c81664818b",
+          "actual": "f68c79dcb0458fd731f9d21856d8066dfef88386250dfce7b17269c81664818b",
+          "match": true
+        }
+      },
+      "accountingIdsMatch": true,
+      "allArtifactsMatch": true,
+      "firstRequest": {
+        "requestBytes": 27826,
+        "serializedToolsBytes": 22872,
+        "toolNames": ["shell", "goal_check", "read_file", "apply_patch", "run_subagent", "run_code"],
+        "input": 5555,
+        "cacheRead": 0,
+        "cacheWrite": 5552
+      },
+      "totals": {
+        "requests": 11,
+        "totalInput": 94722,
+        "uncachedInput": 33,
+        "cacheRead": 70109,
+        "cacheWrite": 24580,
+        "output": 4918,
+        "usd": 0.006235889999999999,
+        "unknownUsage": 0
+      }
+    },
+    {
+      "id": "openai-classifier-r2-pi",
+      "provider": "openai",
+      "task": "classifier",
+      "rep": 2,
+      "arm": "pi",
+      "runId": "openai-classifier-r2-pi",
+      "mode": "live",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "elapsedMs": 49540,
+      "stdoutRawSha256": "20ff96a520f9e704c527c747bcfff583599b3d25be83aa1fb64f5bfcbf200f5a",
+      "stdoutSanitizedSha256": "20ff96a520f9e704c527c747bcfff583599b3d25be83aa1fb64f5bfcbf200f5a",
+      "files": {
+        ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+        "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+        "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+        "src/errors.mjs": "e93edb2a36c1dbd082b65bd2132cb061782237ab62d0a648859c57ed95564581",
+        "src/retry.mjs": "4511786a1f1bb4460a1a654c26bd6b95e8744e0ecee7c11c2a215ebf94e8154b",
+        "test/public.test.mjs": "f68c79dcb0458fd731f9d21856d8066dfef88386250dfce7b17269c81664818b"
+      },
+      "unauthorizedChanges": [],
+      "publicTestsExitCode": 0,
+      "grade": {
+        "passed": 26,
+        "total": 26,
+        "pass": true,
+        "checks": [
+          {
+            "label": "module-exports",
+            "pass": true
+          },
+          {
+            "label": "http-402",
+            "pass": true
+          },
+          {
+            "label": "http-401",
+            "pass": true
+          },
+          {
+            "label": "http-403",
+            "pass": true
+          },
+          {
+            "label": "http-429",
+            "pass": true
+          },
+          {
+            "label": "http-408",
+            "pass": true
+          },
+          {
+            "label": "http-409",
+            "pass": true
+          },
+          {
+            "label": "http-500",
+            "pass": true
+          },
+          {
+            "label": "http-599",
+            "pass": true
+          },
+          {
+            "label": "http-400",
+            "pass": true
+          },
+          {
+            "label": "http-404",
+            "pass": true
+          },
+          {
+            "label": "http-413",
+            "pass": true
+          },
+          {
+            "label": "http-422",
+            "pass": true
+          },
+          {
+            "label": "nested-quota-codes",
+            "pass": true
+          },
+          {
+            "label": "status-shapes-priority",
+            "pass": true
+          },
+          {
+            "label": "numeric-prefix-quota",
+            "pass": true
+          },
+          {
+            "label": "vague-message-and-unknown",
+            "pass": true
+          },
+          {
+            "label": "network-codes",
+            "pass": true
+          },
+          {
+            "label": "header-seconds-ms-precedence",
+            "pass": true
+          },
+          {
+            "label": "header-date-and-invalid",
+            "pass": true
+          },
+          {
+            "label": "long-delay-refuses",
+            "pass": true
+          },
+          {
+            "label": "retry-success-and-delay",
+            "pass": true
+          },
+          {
+            "label": "exhaustion-exact-identity",
+            "pass": true
+          },
+          {
+            "label": "quota-no-retry",
+            "pass": true
+          },
+          {
+            "label": "retry-validation",
+            "pass": true
+          },
+          {
+            "label": "abort-boundaries",
+            "pass": true
+          }
+        ]
+      },
+      "qualityPass": true,
+      "requestIds": ["00146", "00147", "00148", "00149", "00150", "00151", "00152"],
+      "meteredUsd": 0.0036207049999999997,
+      "unknownUsageRequests": [],
+      "budgetExposureUsd": 5.398749679999998,
+      "manifest": {
+        "id": "openai-classifier-r2-pi",
+        "provider": "openai",
+        "task": "classifier",
+        "rep": 2,
+        "arm": "pi",
+        "runId": "openai-classifier-r2-pi",
+        "mode": "live",
+        "sourceCommit": "66dda24dada62cdf0c3d0e8efb5786d3e8d8d167",
+        "model": "gpt-6-luna",
+        "reasoning": "medium",
+        "maxOutputTokens": 32000,
+        "term2Profile": "builtin:bare (shipped default)",
+        "sandboxEnabled": true,
+        "promptSha256": "91ce925b6b33dc8efc9979f183e2d7880736eb8f29a7b0c016cdd4b767683a9d",
+        "initialFiles": {
+          "src/errors.mjs": "c380ac26dd6d05a2a60f7a9776d5d372c8dd3211d756201b9e7b33e756777bdb",
+          "src/retry.mjs": "d01ca99015607c96397141f2f995eef6a3884ee77e89d07a93920d589bad9f71",
+          "test/public.test.mjs": "f68c79dcb0458fd731f9d21856d8066dfef88386250dfce7b17269c81664818b",
+          "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872"
+        }
+      },
+      "artifacts": {
+        ".agents/skills/node-contracts/SKILL.md": {
+          "expected": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "actual": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "match": true
+        },
+        "AGENTS.md": {
+          "expected": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "actual": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "match": true
+        },
+        "package.json": {
+          "expected": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "actual": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "match": true
+        },
+        "src/errors.mjs": {
+          "expected": "e93edb2a36c1dbd082b65bd2132cb061782237ab62d0a648859c57ed95564581",
+          "actual": "e93edb2a36c1dbd082b65bd2132cb061782237ab62d0a648859c57ed95564581",
+          "match": true
+        },
+        "src/retry.mjs": {
+          "expected": "4511786a1f1bb4460a1a654c26bd6b95e8744e0ecee7c11c2a215ebf94e8154b",
+          "actual": "4511786a1f1bb4460a1a654c26bd6b95e8744e0ecee7c11c2a215ebf94e8154b",
+          "match": true
+        },
+        "test/public.test.mjs": {
+          "expected": "f68c79dcb0458fd731f9d21856d8066dfef88386250dfce7b17269c81664818b",
+          "actual": "f68c79dcb0458fd731f9d21856d8066dfef88386250dfce7b17269c81664818b",
+          "match": true
+        }
+      },
+      "accountingIdsMatch": true,
+      "allArtifactsMatch": true,
+      "firstRequest": {
+        "requestBytes": 9200,
+        "serializedToolsBytes": 3101,
+        "toolNames": ["read", "bash", "edit", "write"],
+        "input": 1819,
+        "cacheRead": 0,
+        "cacheWrite": 1816
+      },
+      "totals": {
+        "requests": 7,
+        "totalInput": 34920,
+        "uncachedInput": 21,
+        "cacheRead": 26198,
+        "cacheWrite": 8701,
+        "output": 4538,
+        "usd": 0.0036207049999999997,
+        "unknownUsage": 0
+      }
+    },
+    {
+      "id": "openai-classifier-r2-t2",
+      "provider": "openai",
+      "task": "classifier",
+      "rep": 2,
+      "arm": "t2",
+      "runId": "openai-classifier-r2-t2",
+      "mode": "live",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "elapsedMs": 64523,
+      "stdoutRawSha256": "f4c6febd11e7ef694ce88c4c4bc7925b48ac441cfe3c1cb88cb103d1e7609499",
+      "stdoutSanitizedSha256": "f4c6febd11e7ef694ce88c4c4bc7925b48ac441cfe3c1cb88cb103d1e7609499",
+      "files": {
+        ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+        "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+        "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+        "src/errors.mjs": "b28d7c36661a119b54c733a9fa89469f3be8e1d55e7122ebf9c7f6ecddba255f",
+        "src/retry.mjs": "daba307290a9f0e89be8847499a02b3f26fbc058320ed52dc62c121e1fff5eda",
+        "test/public.test.mjs": "f68c79dcb0458fd731f9d21856d8066dfef88386250dfce7b17269c81664818b"
+      },
+      "unauthorizedChanges": [],
+      "publicTestsExitCode": 0,
+      "grade": {
+        "passed": 23,
+        "total": 26,
+        "pass": false,
+        "checks": [
+          {
+            "label": "module-exports",
+            "pass": true
+          },
+          {
+            "label": "http-402",
+            "pass": true
+          },
+          {
+            "label": "http-401",
+            "pass": true
+          },
+          {
+            "label": "http-403",
+            "pass": true
+          },
+          {
+            "label": "http-429",
+            "pass": true
+          },
+          {
+            "label": "http-408",
+            "pass": true
+          },
+          {
+            "label": "http-409",
+            "pass": true
+          },
+          {
+            "label": "http-500",
+            "pass": true
+          },
+          {
+            "label": "http-599",
+            "pass": true
+          },
+          {
+            "label": "http-400",
+            "pass": true
+          },
+          {
+            "label": "http-404",
+            "pass": true
+          },
+          {
+            "label": "http-413",
+            "pass": true
+          },
+          {
+            "label": "http-422",
+            "pass": true
+          },
+          {
+            "label": "nested-quota-codes",
+            "pass": true
+          },
+          {
+            "label": "status-shapes-priority",
+            "pass": false,
+            "error": "Expected values to be strictly equal:\n+ actual - expected\n\n+ 'unknown'\n- 'rate_limit'\n"
+          },
+          {
+            "label": "numeric-prefix-quota",
+            "pass": false,
+            "error": "Expected values to be strictly deep-equal:\n+ actual - expected\n\n  {\n+   kind: 'unknown',\n-   kind: 'quota',\n    retryable: false\n  }\n"
+          },
+          {
+            "label": "vague-message-and-unknown",
+            "pass": true
+          },
+          {
+            "label": "network-codes",
+            "pass": true
+          },
+          {
+            "label": "header-seconds-ms-precedence",
+            "pass": true
+          },
+          {
+            "label": "header-date-and-invalid",
+            "pass": false,
+            "error": "The expression evaluated to a falsy value:\n\n  assert.ok(\n"
+          },
+          {
+            "label": "long-delay-refuses",
+            "pass": true
+          },
+          {
+            "label": "retry-success-and-delay",
+            "pass": true
+          },
+          {
+            "label": "exhaustion-exact-identity",
+            "pass": true
+          },
+          {
+            "label": "quota-no-retry",
+            "pass": true
+          },
+          {
+            "label": "retry-validation",
+            "pass": true
+          },
+          {
+            "label": "abort-boundaries",
+            "pass": true
+          }
+        ]
+      },
+      "qualityPass": false,
+      "requestIds": ["00135", "00136", "00137", "00138", "00139", "00140", "00141", "00142", "00143", "00144", "00145"],
+      "meteredUsd": 0.005933685000000001,
+      "unknownUsageRequests": [],
+      "budgetExposureUsd": 5.395128974999998,
+      "manifest": {
+        "id": "openai-classifier-r2-t2",
+        "provider": "openai",
+        "task": "classifier",
+        "rep": 2,
+        "arm": "t2",
+        "runId": "openai-classifier-r2-t2",
+        "mode": "live",
+        "sourceCommit": "66dda24dada62cdf0c3d0e8efb5786d3e8d8d167",
+        "model": "gpt-6-luna",
+        "reasoning": "medium",
+        "maxOutputTokens": 32000,
+        "term2Profile": "builtin:bare (shipped default)",
+        "sandboxEnabled": true,
+        "promptSha256": "91ce925b6b33dc8efc9979f183e2d7880736eb8f29a7b0c016cdd4b767683a9d",
+        "initialFiles": {
+          "src/errors.mjs": "c380ac26dd6d05a2a60f7a9776d5d372c8dd3211d756201b9e7b33e756777bdb",
+          "src/retry.mjs": "d01ca99015607c96397141f2f995eef6a3884ee77e89d07a93920d589bad9f71",
+          "test/public.test.mjs": "f68c79dcb0458fd731f9d21856d8066dfef88386250dfce7b17269c81664818b",
+          "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872"
+        }
+      },
+      "artifacts": {
+        ".agents/skills/node-contracts/SKILL.md": {
+          "expected": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "actual": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "match": true
+        },
+        "AGENTS.md": {
+          "expected": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "actual": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "match": true
+        },
+        "package.json": {
+          "expected": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "actual": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "match": true
+        },
+        "src/errors.mjs": {
+          "expected": "b28d7c36661a119b54c733a9fa89469f3be8e1d55e7122ebf9c7f6ecddba255f",
+          "actual": "b28d7c36661a119b54c733a9fa89469f3be8e1d55e7122ebf9c7f6ecddba255f",
+          "match": true
+        },
+        "src/retry.mjs": {
+          "expected": "daba307290a9f0e89be8847499a02b3f26fbc058320ed52dc62c121e1fff5eda",
+          "actual": "daba307290a9f0e89be8847499a02b3f26fbc058320ed52dc62c121e1fff5eda",
+          "match": true
+        },
+        "test/public.test.mjs": {
+          "expected": "f68c79dcb0458fd731f9d21856d8066dfef88386250dfce7b17269c81664818b",
+          "actual": "f68c79dcb0458fd731f9d21856d8066dfef88386250dfce7b17269c81664818b",
+          "match": true
+        }
+      },
+      "accountingIdsMatch": true,
+      "allArtifactsMatch": true,
+      "firstRequest": {
+        "requestBytes": 27826,
+        "serializedToolsBytes": 22872,
+        "toolNames": ["shell", "goal_check", "read_file", "apply_patch", "run_subagent", "run_code"],
+        "input": 5555,
+        "cacheRead": 0,
+        "cacheWrite": 5552
+      },
+      "totals": {
+        "requests": 11,
+        "totalInput": 92696,
+        "uncachedInput": 33,
+        "cacheRead": 71526,
+        "cacheWrite": 21137,
+        "output": 5146,
+        "usd": 0.005933685000000001,
+        "unknownUsage": 0
+      }
+    },
+    {
+      "id": "openai-jsonl-r1-pi",
+      "provider": "openai",
+      "task": "jsonl",
+      "rep": 1,
+      "arm": "pi",
+      "runId": "openai-jsonl-r1-pi",
+      "mode": "live",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "elapsedMs": 61727,
+      "stdoutRawSha256": "fe01eeed2196382dc1c1a365bff2001600048051f0340a094d000098ccdb9d1f",
+      "stdoutSanitizedSha256": "fe01eeed2196382dc1c1a365bff2001600048051f0340a094d000098ccdb9d1f",
+      "files": {
+        ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+        "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+        "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+        "src/cli.mjs": "a5c2c13166761cb6d48655896ca3dbdd28e012ebe38a125327945af5119f1435",
+        "src/summary.mjs": "c95c16e13696934bf2fb1935c1384a39ba3401db3764452df227e4da90706fbd",
+        "test/public.test.mjs": "0670722c61e822300a154b9218b75f6d7b849b92283cc086791dadd01a3edee3"
+      },
+      "unauthorizedChanges": [],
+      "publicTestsExitCode": 0,
+      "grade": {
+        "passed": 13,
+        "total": 13,
+        "pass": true,
+        "checks": [
+          {
+            "label": "module-export",
+            "pass": true
+          },
+          {
+            "label": "empty-input",
+            "pass": true
+          },
+          {
+            "label": "cross-account-corrections",
+            "pass": true
+          },
+          {
+            "label": "tie-last-wins",
+            "pass": true
+          },
+          {
+            "label": "invalid-schema-lines",
+            "pass": true
+          },
+          {
+            "label": "code-unit-sort-and-spaces",
+            "pass": true
+          },
+          {
+            "label": "async-stream",
+            "pass": true
+          },
+          {
+            "label": "source-iterator-failure",
+            "pass": true
+          },
+          {
+            "label": "overflow-rejects",
+            "pass": true
+          },
+          {
+            "label": "cli-files-and-invalid-exit",
+            "pass": true
+          },
+          {
+            "label": "cli-stdin",
+            "pass": true
+          },
+          {
+            "label": "cli-invalid-args-and-io",
+            "pass": true
+          },
+          {
+            "label": "cli-uses-streams",
+            "pass": true
+          }
+        ]
+      },
+      "qualityPass": true,
+      "requestIds": ["00084", "00085", "00086", "00087", "00088", "00089", "00090", "00091", "00092"],
+      "meteredUsd": 0.00285048,
+      "unknownUsageRequests": [],
+      "budgetExposureUsd": 5.355176414999997,
+      "manifest": {
+        "id": "openai-jsonl-r1-pi",
+        "provider": "openai",
+        "task": "jsonl",
+        "rep": 1,
+        "arm": "pi",
+        "runId": "openai-jsonl-r1-pi",
+        "mode": "live",
+        "sourceCommit": "66dda24dada62cdf0c3d0e8efb5786d3e8d8d167",
+        "model": "gpt-6-luna",
+        "reasoning": "medium",
+        "maxOutputTokens": 32000,
+        "term2Profile": "builtin:bare (shipped default)",
+        "sandboxEnabled": true,
+        "promptSha256": "012d40aef3e9f1b48cc0d7e208dc040a92101c7372cf2030e0a87f2e6e6a8159",
+        "initialFiles": {
+          "src/summary.mjs": "b902a4b90808a28c0aa980e6d3096637927848a70f070b500367cf8cf6e7c1fc",
+          "src/cli.mjs": "8393d4ea57d33700ff61ef17bdf3f5c12533ec798a787cb59568833305d5a90e",
+          "test/public.test.mjs": "0670722c61e822300a154b9218b75f6d7b849b92283cc086791dadd01a3edee3",
+          "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872"
+        }
+      },
+      "artifacts": {
+        ".agents/skills/node-contracts/SKILL.md": {
+          "expected": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "actual": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "match": true
+        },
+        "AGENTS.md": {
+          "expected": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "actual": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "match": true
+        },
+        "package.json": {
+          "expected": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "actual": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "match": true
+        },
+        "src/cli.mjs": {
+          "expected": "a5c2c13166761cb6d48655896ca3dbdd28e012ebe38a125327945af5119f1435",
+          "actual": "a5c2c13166761cb6d48655896ca3dbdd28e012ebe38a125327945af5119f1435",
+          "match": true
+        },
+        "src/summary.mjs": {
+          "expected": "c95c16e13696934bf2fb1935c1384a39ba3401db3764452df227e4da90706fbd",
+          "actual": "c95c16e13696934bf2fb1935c1384a39ba3401db3764452df227e4da90706fbd",
+          "match": true
+        },
+        "test/public.test.mjs": {
+          "expected": "0670722c61e822300a154b9218b75f6d7b849b92283cc086791dadd01a3edee3",
+          "actual": "0670722c61e822300a154b9218b75f6d7b849b92283cc086791dadd01a3edee3",
+          "match": true
+        }
+      },
+      "accountingIdsMatch": true,
+      "allArtifactsMatch": true,
+      "firstRequest": {
+        "requestBytes": 8733,
+        "serializedToolsBytes": 3101,
+        "toolNames": ["read", "bash", "edit", "write"],
+        "input": 1702,
+        "cacheRead": 0,
+        "cacheWrite": 1699
+      },
+      "totals": {
+        "requests": 9,
+        "totalInput": 39756,
+        "uncachedInput": 27,
+        "cacheRead": 33103,
+        "cacheWrite": 6626,
+        "output": 3377,
+        "usd": 0.00285048,
+        "unknownUsage": 0
+      }
+    },
+    {
+      "id": "openai-jsonl-r1-t2",
+      "provider": "openai",
+      "task": "jsonl",
+      "rep": 1,
+      "arm": "t2",
+      "runId": "openai-jsonl-r1-t2",
+      "mode": "live",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "elapsedMs": 79947,
+      "stdoutRawSha256": "90a66a91807f484d95984d56c8fde2489d68c0fb3fc8630f55b21751e8b69b36",
+      "stdoutSanitizedSha256": "90a66a91807f484d95984d56c8fde2489d68c0fb3fc8630f55b21751e8b69b36",
+      "files": {
+        ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+        "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+        "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+        "src/cli.mjs": "3f82d2514df2fc06a0164ad6254452c810bb3d110a35b741bf1df1ff5cb21bf3",
+        "src/summary.mjs": "1357901d22f46066654643469677c219f7601de203d29d1e153298448b6908e1",
+        "test/public.test.mjs": "0670722c61e822300a154b9218b75f6d7b849b92283cc086791dadd01a3edee3"
+      },
+      "unauthorizedChanges": [],
+      "publicTestsExitCode": 0,
+      "grade": {
+        "passed": 13,
+        "total": 13,
+        "pass": true,
+        "checks": [
+          {
+            "label": "module-export",
+            "pass": true
+          },
+          {
+            "label": "empty-input",
+            "pass": true
+          },
+          {
+            "label": "cross-account-corrections",
+            "pass": true
+          },
+          {
+            "label": "tie-last-wins",
+            "pass": true
+          },
+          {
+            "label": "invalid-schema-lines",
+            "pass": true
+          },
+          {
+            "label": "code-unit-sort-and-spaces",
+            "pass": true
+          },
+          {
+            "label": "async-stream",
+            "pass": true
+          },
+          {
+            "label": "source-iterator-failure",
+            "pass": true
+          },
+          {
+            "label": "overflow-rejects",
+            "pass": true
+          },
+          {
+            "label": "cli-files-and-invalid-exit",
+            "pass": true
+          },
+          {
+            "label": "cli-stdin",
+            "pass": true
+          },
+          {
+            "label": "cli-invalid-args-and-io",
+            "pass": true
+          },
+          {
+            "label": "cli-uses-streams",
+            "pass": true
+          }
+        ]
+      },
+      "qualityPass": true,
+      "requestIds": [
+        "00071",
+        "00072",
+        "00073",
+        "00074",
+        "00075",
+        "00076",
+        "00077",
+        "00078",
+        "00079",
+        "00080",
+        "00081",
+        "00082",
+        "00083"
+      ],
+      "meteredUsd": 0.006270455000000001,
+      "unknownUsageRequests": [],
+      "budgetExposureUsd": 5.352325934999998,
+      "manifest": {
+        "id": "openai-jsonl-r1-t2",
+        "provider": "openai",
+        "task": "jsonl",
+        "rep": 1,
+        "arm": "t2",
+        "runId": "openai-jsonl-r1-t2",
+        "mode": "live",
+        "sourceCommit": "66dda24dada62cdf0c3d0e8efb5786d3e8d8d167",
+        "model": "gpt-6-luna",
+        "reasoning": "medium",
+        "maxOutputTokens": 32000,
+        "term2Profile": "builtin:bare (shipped default)",
+        "sandboxEnabled": true,
+        "promptSha256": "012d40aef3e9f1b48cc0d7e208dc040a92101c7372cf2030e0a87f2e6e6a8159",
+        "initialFiles": {
+          "src/summary.mjs": "b902a4b90808a28c0aa980e6d3096637927848a70f070b500367cf8cf6e7c1fc",
+          "src/cli.mjs": "8393d4ea57d33700ff61ef17bdf3f5c12533ec798a787cb59568833305d5a90e",
+          "test/public.test.mjs": "0670722c61e822300a154b9218b75f6d7b849b92283cc086791dadd01a3edee3",
+          "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872"
+        }
+      },
+      "artifacts": {
+        ".agents/skills/node-contracts/SKILL.md": {
+          "expected": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "actual": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "match": true
+        },
+        "AGENTS.md": {
+          "expected": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "actual": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "match": true
+        },
+        "package.json": {
+          "expected": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "actual": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "match": true
+        },
+        "src/cli.mjs": {
+          "expected": "3f82d2514df2fc06a0164ad6254452c810bb3d110a35b741bf1df1ff5cb21bf3",
+          "actual": "3f82d2514df2fc06a0164ad6254452c810bb3d110a35b741bf1df1ff5cb21bf3",
+          "match": true
+        },
+        "src/summary.mjs": {
+          "expected": "1357901d22f46066654643469677c219f7601de203d29d1e153298448b6908e1",
+          "actual": "1357901d22f46066654643469677c219f7601de203d29d1e153298448b6908e1",
+          "match": true
+        },
+        "test/public.test.mjs": {
+          "expected": "0670722c61e822300a154b9218b75f6d7b849b92283cc086791dadd01a3edee3",
+          "actual": "0670722c61e822300a154b9218b75f6d7b849b92283cc086791dadd01a3edee3",
+          "match": true
+        }
+      },
+      "accountingIdsMatch": true,
+      "allArtifactsMatch": true,
+      "firstRequest": {
+        "requestBytes": 27364,
+        "serializedToolsBytes": 22872,
+        "toolNames": ["shell", "goal_check", "read_file", "apply_patch", "run_subagent", "run_code"],
+        "input": 5438,
+        "cacheRead": 0,
+        "cacheWrite": 5435
+      },
+      "totals": {
+        "requests": 13,
+        "totalInput": 112299,
+        "uncachedInput": 39,
+        "cacheRead": 87843,
+        "cacheWrite": 24417,
+        "output": 4672,
+        "usd": 0.006270455000000001,
+        "unknownUsage": 0
+      }
+    },
+    {
+      "id": "openai-jsonl-r2-pi",
+      "provider": "openai",
+      "task": "jsonl",
+      "rep": 2,
+      "arm": "pi",
+      "runId": "openai-jsonl-r2-pi",
+      "mode": "live",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "elapsedMs": 56816,
+      "stdoutRawSha256": "df4a715980eb2a50f67a02422d6ac7002e4f8f3e9fe33bcb09649ebe2d77e99a",
+      "stdoutSanitizedSha256": "df4a715980eb2a50f67a02422d6ac7002e4f8f3e9fe33bcb09649ebe2d77e99a",
+      "files": {
+        ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+        "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+        "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+        "src/cli.mjs": "4d5aeb61ee40e1c94c3e4384a5287ef33aaaa3077e7336624f91e76f6bbc5877",
+        "src/summary.mjs": "2eb4508f7d33ec9f9070f4217454a8321578236a84151ae66ad0fde7c2c57351",
+        "test/public.test.mjs": "0670722c61e822300a154b9218b75f6d7b849b92283cc086791dadd01a3edee3"
+      },
+      "unauthorizedChanges": [],
+      "publicTestsExitCode": 0,
+      "grade": {
+        "passed": 13,
+        "total": 13,
+        "pass": true,
+        "checks": [
+          {
+            "label": "module-export",
+            "pass": true
+          },
+          {
+            "label": "empty-input",
+            "pass": true
+          },
+          {
+            "label": "cross-account-corrections",
+            "pass": true
+          },
+          {
+            "label": "tie-last-wins",
+            "pass": true
+          },
+          {
+            "label": "invalid-schema-lines",
+            "pass": true
+          },
+          {
+            "label": "code-unit-sort-and-spaces",
+            "pass": true
+          },
+          {
+            "label": "async-stream",
+            "pass": true
+          },
+          {
+            "label": "source-iterator-failure",
+            "pass": true
+          },
+          {
+            "label": "overflow-rejects",
+            "pass": true
+          },
+          {
+            "label": "cli-files-and-invalid-exit",
+            "pass": true
+          },
+          {
+            "label": "cli-stdin",
+            "pass": true
+          },
+          {
+            "label": "cli-invalid-args-and-io",
+            "pass": true
+          },
+          {
+            "label": "cli-uses-streams",
+            "pass": true
+          }
+        ]
+      },
+      "qualityPass": true,
+      "requestIds": ["00166", "00167", "00168", "00169", "00170", "00171", "00172", "00173", "00174", "00175"],
+      "meteredUsd": 0.003848785,
+      "unknownUsageRequests": [],
+      "budgetExposureUsd": 5.420829799999998,
+      "manifest": {
+        "id": "openai-jsonl-r2-pi",
+        "provider": "openai",
+        "task": "jsonl",
+        "rep": 2,
+        "arm": "pi",
+        "runId": "openai-jsonl-r2-pi",
+        "mode": "live",
+        "sourceCommit": "66dda24dada62cdf0c3d0e8efb5786d3e8d8d167",
+        "model": "gpt-6-luna",
+        "reasoning": "medium",
+        "maxOutputTokens": 32000,
+        "term2Profile": "builtin:bare (shipped default)",
+        "sandboxEnabled": true,
+        "promptSha256": "012d40aef3e9f1b48cc0d7e208dc040a92101c7372cf2030e0a87f2e6e6a8159",
+        "initialFiles": {
+          "src/summary.mjs": "b902a4b90808a28c0aa980e6d3096637927848a70f070b500367cf8cf6e7c1fc",
+          "src/cli.mjs": "8393d4ea57d33700ff61ef17bdf3f5c12533ec798a787cb59568833305d5a90e",
+          "test/public.test.mjs": "0670722c61e822300a154b9218b75f6d7b849b92283cc086791dadd01a3edee3",
+          "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872"
+        }
+      },
+      "artifacts": {
+        ".agents/skills/node-contracts/SKILL.md": {
+          "expected": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "actual": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "match": true
+        },
+        "AGENTS.md": {
+          "expected": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "actual": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "match": true
+        },
+        "package.json": {
+          "expected": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "actual": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "match": true
+        },
+        "src/cli.mjs": {
+          "expected": "4d5aeb61ee40e1c94c3e4384a5287ef33aaaa3077e7336624f91e76f6bbc5877",
+          "actual": "4d5aeb61ee40e1c94c3e4384a5287ef33aaaa3077e7336624f91e76f6bbc5877",
+          "match": true
+        },
+        "src/summary.mjs": {
+          "expected": "2eb4508f7d33ec9f9070f4217454a8321578236a84151ae66ad0fde7c2c57351",
+          "actual": "2eb4508f7d33ec9f9070f4217454a8321578236a84151ae66ad0fde7c2c57351",
+          "match": true
+        },
+        "test/public.test.mjs": {
+          "expected": "0670722c61e822300a154b9218b75f6d7b849b92283cc086791dadd01a3edee3",
+          "actual": "0670722c61e822300a154b9218b75f6d7b849b92283cc086791dadd01a3edee3",
+          "match": true
+        }
+      },
+      "accountingIdsMatch": true,
+      "allArtifactsMatch": true,
+      "firstRequest": {
+        "requestBytes": 8733,
+        "serializedToolsBytes": 3101,
+        "toolNames": ["read", "bash", "edit", "write"],
+        "input": 1702,
+        "cacheRead": 0,
+        "cacheWrite": 1699
+      },
+      "totals": {
+        "requests": 10,
+        "totalInput": 49698,
+        "uncachedInput": 30,
+        "cacheRead": 41241,
+        "cacheWrite": 8427,
+        "output": 4760,
+        "usd": 0.003848785,
+        "unknownUsage": 0
+      }
+    },
+    {
+      "id": "openai-jsonl-r2-t2",
+      "provider": "openai",
+      "task": "jsonl",
+      "rep": 2,
+      "arm": "t2",
+      "runId": "openai-jsonl-r2-t2",
+      "mode": "live",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "elapsedMs": 79344,
+      "stdoutRawSha256": "0eca19c462f9f433a9c687686bada42219c41389edb6944ea489f74a554afa8b",
+      "stdoutSanitizedSha256": "0eca19c462f9f433a9c687686bada42219c41389edb6944ea489f74a554afa8b",
+      "files": {
+        ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+        "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+        "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+        "src/cli.mjs": "1ad3d7fb62f0d1d93a4930c5821a3d84272948cc568391203792139b68c5cb37",
+        "src/summary.mjs": "c6dae7b18b568c1443f4bbb1fd8ec5dffb4f987216f442fcb9c010c904b85705",
+        "test/public.test.mjs": "0670722c61e822300a154b9218b75f6d7b849b92283cc086791dadd01a3edee3"
+      },
+      "unauthorizedChanges": [],
+      "publicTestsExitCode": 0,
+      "grade": {
+        "passed": 13,
+        "total": 13,
+        "pass": true,
+        "checks": [
+          {
+            "label": "module-export",
+            "pass": true
+          },
+          {
+            "label": "empty-input",
+            "pass": true
+          },
+          {
+            "label": "cross-account-corrections",
+            "pass": true
+          },
+          {
+            "label": "tie-last-wins",
+            "pass": true
+          },
+          {
+            "label": "invalid-schema-lines",
+            "pass": true
+          },
+          {
+            "label": "code-unit-sort-and-spaces",
+            "pass": true
+          },
+          {
+            "label": "async-stream",
+            "pass": true
+          },
+          {
+            "label": "source-iterator-failure",
+            "pass": true
+          },
+          {
+            "label": "overflow-rejects",
+            "pass": true
+          },
+          {
+            "label": "cli-files-and-invalid-exit",
+            "pass": true
+          },
+          {
+            "label": "cli-stdin",
+            "pass": true
+          },
+          {
+            "label": "cli-invalid-args-and-io",
+            "pass": true
+          },
+          {
+            "label": "cli-uses-streams",
+            "pass": true
+          }
+        ]
+      },
+      "qualityPass": true,
+      "requestIds": [
+        "00176",
+        "00177",
+        "00178",
+        "00179",
+        "00180",
+        "00181",
+        "00182",
+        "00183",
+        "00184",
+        "00185",
+        "00186",
+        "00187",
+        "00188"
+      ],
+      "meteredUsd": 0.0057566250000000005,
+      "unknownUsageRequests": [],
+      "budgetExposureUsd": 5.426586424999998,
+      "manifest": {
+        "id": "openai-jsonl-r2-t2",
+        "provider": "openai",
+        "task": "jsonl",
+        "rep": 2,
+        "arm": "t2",
+        "runId": "openai-jsonl-r2-t2",
+        "mode": "live",
+        "sourceCommit": "66dda24dada62cdf0c3d0e8efb5786d3e8d8d167",
+        "model": "gpt-6-luna",
+        "reasoning": "medium",
+        "maxOutputTokens": 32000,
+        "term2Profile": "builtin:bare (shipped default)",
+        "sandboxEnabled": true,
+        "promptSha256": "012d40aef3e9f1b48cc0d7e208dc040a92101c7372cf2030e0a87f2e6e6a8159",
+        "initialFiles": {
+          "src/summary.mjs": "b902a4b90808a28c0aa980e6d3096637927848a70f070b500367cf8cf6e7c1fc",
+          "src/cli.mjs": "8393d4ea57d33700ff61ef17bdf3f5c12533ec798a787cb59568833305d5a90e",
+          "test/public.test.mjs": "0670722c61e822300a154b9218b75f6d7b849b92283cc086791dadd01a3edee3",
+          "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872"
+        }
+      },
+      "artifacts": {
+        ".agents/skills/node-contracts/SKILL.md": {
+          "expected": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "actual": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "match": true
+        },
+        "AGENTS.md": {
+          "expected": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "actual": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "match": true
+        },
+        "package.json": {
+          "expected": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "actual": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "match": true
+        },
+        "src/cli.mjs": {
+          "expected": "1ad3d7fb62f0d1d93a4930c5821a3d84272948cc568391203792139b68c5cb37",
+          "actual": "1ad3d7fb62f0d1d93a4930c5821a3d84272948cc568391203792139b68c5cb37",
+          "match": true
+        },
+        "src/summary.mjs": {
+          "expected": "c6dae7b18b568c1443f4bbb1fd8ec5dffb4f987216f442fcb9c010c904b85705",
+          "actual": "c6dae7b18b568c1443f4bbb1fd8ec5dffb4f987216f442fcb9c010c904b85705",
+          "match": true
+        },
+        "test/public.test.mjs": {
+          "expected": "0670722c61e822300a154b9218b75f6d7b849b92283cc086791dadd01a3edee3",
+          "actual": "0670722c61e822300a154b9218b75f6d7b849b92283cc086791dadd01a3edee3",
+          "match": true
+        }
+      },
+      "accountingIdsMatch": true,
+      "allArtifactsMatch": true,
+      "firstRequest": {
+        "requestBytes": 27364,
+        "serializedToolsBytes": 22872,
+        "toolNames": ["shell", "goal_check", "read_file", "apply_patch", "run_subagent", "run_code"],
+        "input": 5438,
+        "cacheRead": 0,
+        "cacheWrite": 5435
+      },
+      "totals": {
+        "requests": 13,
+        "totalInput": 108290,
+        "uncachedInput": 39,
+        "cacheRead": 86910,
+        "cacheWrite": 21341,
+        "output": 4432,
+        "usd": 0.0057566250000000005,
+        "unknownUsage": 0
+      }
+    },
+    {
+      "id": "openai-pagination-r1-pi",
+      "provider": "openai",
+      "task": "pagination",
+      "rep": 1,
+      "arm": "pi",
+      "runId": "openai-pagination-r1-pi",
+      "mode": "live",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "elapsedMs": 55013,
+      "stdoutRawSha256": "582d91798b9a6058cc978a3f09366e55bed4e88eff6615e16d1609ea4914fea7",
+      "stdoutSanitizedSha256": "582d91798b9a6058cc978a3f09366e55bed4e88eff6615e16d1609ea4914fea7",
+      "files": {
+        ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+        "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+        "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+        "src/cli.mjs": "5922410d95b0493153be3bfbe91c7f2122db350dff848049d2d847ccfc4eacb2",
+        "src/pages.mjs": "ef22680d6ca5f593e154913ae097c3450248bb631d2cb087a0da0f374b0ba4c2",
+        "test/public.test.mjs": "0b77f9ab4f7adebb30b8a7ab372fd25d9796b0311e8183f60bbe251f4c9b4fb2"
+      },
+      "unauthorizedChanges": [],
+      "publicTestsExitCode": 0,
+      "grade": {
+        "passed": 14,
+        "total": 14,
+        "pass": true,
+        "checks": [
+          {
+            "label": "module-export",
+            "pass": true
+          },
+          {
+            "label": "falsy-cursors-empty-pages-order",
+            "pass": true
+          },
+          {
+            "label": "typed-cursors-distinct",
+            "pass": true
+          },
+          {
+            "label": "cycle-before-refetch",
+            "pass": true
+          },
+          {
+            "label": "max-pages-before-extra-fetch",
+            "pass": true
+          },
+          {
+            "label": "invalid-options-no-fetch",
+            "pass": true
+          },
+          {
+            "label": "malformed-pages",
+            "pass": true
+          },
+          {
+            "label": "abort-before-fetch",
+            "pass": true
+          },
+          {
+            "label": "abort-after-fetch",
+            "pass": true
+          },
+          {
+            "label": "does-not-mutate",
+            "pass": true
+          },
+          {
+            "label": "default-page-limit-is-100",
+            "pass": true
+          },
+          {
+            "label": "null-abort-reason",
+            "pass": true
+          },
+          {
+            "label": "cli-valid",
+            "pass": true
+          },
+          {
+            "label": "cli-error-clean-stdout",
+            "pass": true
+          }
+        ]
+      },
+      "qualityPass": true,
+      "requestIds": ["00012", "00013", "00014", "00015", "00016", "00017", "00018"],
+      "meteredUsd": 0.0026668250000000003,
+      "unknownUsageRequests": [],
+      "budgetExposureUsd": 5.293704475000001,
+      "manifest": {
+        "id": "openai-pagination-r1-pi",
+        "provider": "openai",
+        "task": "pagination",
+        "rep": 1,
+        "arm": "pi",
+        "runId": "openai-pagination-r1-pi",
+        "mode": "live",
+        "sourceCommit": "66dda24dada62cdf0c3d0e8efb5786d3e8d8d167",
+        "model": "gpt-6-luna",
+        "reasoning": "medium",
+        "maxOutputTokens": 32000,
+        "term2Profile": "builtin:bare (shipped default)",
+        "sandboxEnabled": true,
+        "promptSha256": "7dfb1538d7b62429c2a1b31416d164bdb735f6ce0aca7d36424c0e3f3a51832d",
+        "initialFiles": {
+          "src/pages.mjs": "34a0b01e3a18a8973320245e87bbaedac5097443439337f7ec7b2315a74400b9",
+          "src/cli.mjs": "1050f02b155fac2951a8b895a91961c5822c49eb0c7f6c14d2b999f5fafcda82",
+          "test/public.test.mjs": "0b77f9ab4f7adebb30b8a7ab372fd25d9796b0311e8183f60bbe251f4c9b4fb2",
+          "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872"
+        }
+      },
+      "artifacts": {
+        ".agents/skills/node-contracts/SKILL.md": {
+          "expected": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "actual": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "match": true
+        },
+        "AGENTS.md": {
+          "expected": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "actual": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "match": true
+        },
+        "package.json": {
+          "expected": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "actual": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "match": true
+        },
+        "src/cli.mjs": {
+          "expected": "5922410d95b0493153be3bfbe91c7f2122db350dff848049d2d847ccfc4eacb2",
+          "actual": "5922410d95b0493153be3bfbe91c7f2122db350dff848049d2d847ccfc4eacb2",
+          "match": true
+        },
+        "src/pages.mjs": {
+          "expected": "ef22680d6ca5f593e154913ae097c3450248bb631d2cb087a0da0f374b0ba4c2",
+          "actual": "ef22680d6ca5f593e154913ae097c3450248bb631d2cb087a0da0f374b0ba4c2",
+          "match": true
+        },
+        "test/public.test.mjs": {
+          "expected": "0b77f9ab4f7adebb30b8a7ab372fd25d9796b0311e8183f60bbe251f4c9b4fb2",
+          "actual": "0b77f9ab4f7adebb30b8a7ab372fd25d9796b0311e8183f60bbe251f4c9b4fb2",
+          "match": true
+        }
+      },
+      "accountingIdsMatch": true,
+      "allArtifactsMatch": true,
+      "firstRequest": {
+        "requestBytes": 8516,
+        "serializedToolsBytes": 3101,
+        "toolNames": ["read", "bash", "edit", "write"],
+        "input": 1643,
+        "cacheRead": 0,
+        "cacheWrite": 1640
+      },
+      "totals": {
+        "requests": 7,
+        "totalInput": 24483,
+        "uncachedInput": 21,
+        "cacheRead": 18335,
+        "cacheWrite": 6127,
+        "output": 3431,
+        "usd": 0.0026668250000000003,
+        "unknownUsage": 0
+      }
+    },
+    {
+      "id": "openai-pagination-r1-t2",
+      "provider": "openai",
+      "task": "pagination",
+      "rep": 1,
+      "arm": "t2",
+      "runId": "openai-pagination-r1-t2",
+      "mode": "live",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "elapsedMs": 69551,
+      "stdoutRawSha256": "da8e47700655e9a69899125292554b7d8cadc0eb6b3e2fba2832804caa7ffd3e",
+      "stdoutSanitizedSha256": "da8e47700655e9a69899125292554b7d8cadc0eb6b3e2fba2832804caa7ffd3e",
+      "files": {
+        ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+        "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+        "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+        "src/cli.mjs": "24983fd63e16e6e9d48b1aaa1aaf6824e3b616829fb3f46ccace3b5324815eb6",
+        "src/pages.mjs": "4db6d6048af05f7c26aa80ca64f848172ae5566ba7f3baceaa7c22d231193f49",
+        "test/public.test.mjs": "0b77f9ab4f7adebb30b8a7ab372fd25d9796b0311e8183f60bbe251f4c9b4fb2"
+      },
+      "unauthorizedChanges": [],
+      "publicTestsExitCode": 0,
+      "grade": {
+        "passed": 14,
+        "total": 14,
+        "pass": true,
+        "checks": [
+          {
+            "label": "module-export",
+            "pass": true
+          },
+          {
+            "label": "falsy-cursors-empty-pages-order",
+            "pass": true
+          },
+          {
+            "label": "typed-cursors-distinct",
+            "pass": true
+          },
+          {
+            "label": "cycle-before-refetch",
+            "pass": true
+          },
+          {
+            "label": "max-pages-before-extra-fetch",
+            "pass": true
+          },
+          {
+            "label": "invalid-options-no-fetch",
+            "pass": true
+          },
+          {
+            "label": "malformed-pages",
+            "pass": true
+          },
+          {
+            "label": "abort-before-fetch",
+            "pass": true
+          },
+          {
+            "label": "abort-after-fetch",
+            "pass": true
+          },
+          {
+            "label": "does-not-mutate",
+            "pass": true
+          },
+          {
+            "label": "default-page-limit-is-100",
+            "pass": true
+          },
+          {
+            "label": "null-abort-reason",
+            "pass": true
+          },
+          {
+            "label": "cli-valid",
+            "pass": true
+          },
+          {
+            "label": "cli-error-clean-stdout",
+            "pass": true
+          }
+        ]
+      },
+      "qualityPass": true,
+      "requestIds": ["00003", "00004", "00005", "00006", "00007", "00008", "00009", "00010", "00011"],
+      "meteredUsd": 0.00503765,
+      "unknownUsageRequests": [],
+      "budgetExposureUsd": 5.29103765,
+      "manifest": {
+        "id": "openai-pagination-r1-t2",
+        "provider": "openai",
+        "task": "pagination",
+        "rep": 1,
+        "arm": "t2",
+        "runId": "openai-pagination-r1-t2",
+        "mode": "live",
+        "sourceCommit": "66dda24dada62cdf0c3d0e8efb5786d3e8d8d167",
+        "model": "gpt-6-luna",
+        "reasoning": "medium",
+        "maxOutputTokens": 32000,
+        "term2Profile": "builtin:bare (shipped default)",
+        "sandboxEnabled": true,
+        "promptSha256": "7dfb1538d7b62429c2a1b31416d164bdb735f6ce0aca7d36424c0e3f3a51832d",
+        "initialFiles": {
+          "src/pages.mjs": "34a0b01e3a18a8973320245e87bbaedac5097443439337f7ec7b2315a74400b9",
+          "src/cli.mjs": "1050f02b155fac2951a8b895a91961c5822c49eb0c7f6c14d2b999f5fafcda82",
+          "test/public.test.mjs": "0b77f9ab4f7adebb30b8a7ab372fd25d9796b0311e8183f60bbe251f4c9b4fb2",
+          "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872"
+        }
+      },
+      "artifacts": {
+        ".agents/skills/node-contracts/SKILL.md": {
+          "expected": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "actual": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "match": true
+        },
+        "AGENTS.md": {
+          "expected": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "actual": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "match": true
+        },
+        "package.json": {
+          "expected": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "actual": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "match": true
+        },
+        "src/cli.mjs": {
+          "expected": "24983fd63e16e6e9d48b1aaa1aaf6824e3b616829fb3f46ccace3b5324815eb6",
+          "actual": "24983fd63e16e6e9d48b1aaa1aaf6824e3b616829fb3f46ccace3b5324815eb6",
+          "match": true
+        },
+        "src/pages.mjs": {
+          "expected": "4db6d6048af05f7c26aa80ca64f848172ae5566ba7f3baceaa7c22d231193f49",
+          "actual": "4db6d6048af05f7c26aa80ca64f848172ae5566ba7f3baceaa7c22d231193f49",
+          "match": true
+        },
+        "test/public.test.mjs": {
+          "expected": "0b77f9ab4f7adebb30b8a7ab372fd25d9796b0311e8183f60bbe251f4c9b4fb2",
+          "actual": "0b77f9ab4f7adebb30b8a7ab372fd25d9796b0311e8183f60bbe251f4c9b4fb2",
+          "match": true
+        }
+      },
+      "accountingIdsMatch": true,
+      "allArtifactsMatch": true,
+      "firstRequest": {
+        "requestBytes": 27142,
+        "serializedToolsBytes": 22872,
+        "toolNames": ["shell", "goal_check", "read_file", "apply_patch", "run_subagent", "run_code"],
+        "input": 5380,
+        "cacheRead": 0,
+        "cacheWrite": 5377
+      },
+      "totals": {
+        "requests": 9,
+        "totalInput": 71416,
+        "uncachedInput": 27,
+        "cacheRead": 51245,
+        "cacheWrite": 20144,
+        "output": 4009,
+        "usd": 0.00503765,
+        "unknownUsage": 0
+      }
+    },
+    {
+      "id": "openai-pagination-r2-pi",
+      "provider": "openai",
+      "task": "pagination",
+      "rep": 2,
+      "arm": "pi",
+      "runId": "openai-pagination-r2-pi",
+      "mode": "live",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "elapsedMs": 33874,
+      "stdoutRawSha256": "465f95112e47a6dbc93ce7e120684d1c80e806dbd2a4e2e3f4e76b942d4d8f39",
+      "stdoutSanitizedSha256": "465f95112e47a6dbc93ce7e120684d1c80e806dbd2a4e2e3f4e76b942d4d8f39",
+      "files": {
+        ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+        "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+        "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+        "src/cli.mjs": "f87c8aabdaa50344451157b4ed30016054e5ce3408683fa3db4f56d4a5c8b4fd",
+        "src/pages.mjs": "18b98f30913acbcc098eedc01d14167b4857badd89c96aebfa7a5837ee3370ea",
+        "test/public.test.mjs": "0b77f9ab4f7adebb30b8a7ab372fd25d9796b0311e8183f60bbe251f4c9b4fb2"
+      },
+      "unauthorizedChanges": [],
+      "publicTestsExitCode": 0,
+      "grade": {
+        "passed": 14,
+        "total": 14,
+        "pass": true,
+        "checks": [
+          {
+            "label": "module-export",
+            "pass": true
+          },
+          {
+            "label": "falsy-cursors-empty-pages-order",
+            "pass": true
+          },
+          {
+            "label": "typed-cursors-distinct",
+            "pass": true
+          },
+          {
+            "label": "cycle-before-refetch",
+            "pass": true
+          },
+          {
+            "label": "max-pages-before-extra-fetch",
+            "pass": true
+          },
+          {
+            "label": "invalid-options-no-fetch",
+            "pass": true
+          },
+          {
+            "label": "malformed-pages",
+            "pass": true
+          },
+          {
+            "label": "abort-before-fetch",
+            "pass": true
+          },
+          {
+            "label": "abort-after-fetch",
+            "pass": true
+          },
+          {
+            "label": "does-not-mutate",
+            "pass": true
+          },
+          {
+            "label": "default-page-limit-is-100",
+            "pass": true
+          },
+          {
+            "label": "null-abort-reason",
+            "pass": true
+          },
+          {
+            "label": "cli-valid",
+            "pass": true
+          },
+          {
+            "label": "cli-error-clean-stdout",
+            "pass": true
+          }
+        ]
+      },
+      "qualityPass": true,
+      "requestIds": ["00107", "00108", "00109", "00110", "00111", "00112", "00113"],
+      "meteredUsd": 0.002179855,
+      "unknownUsageRequests": [],
+      "budgetExposureUsd": 5.368932344999997,
+      "manifest": {
+        "id": "openai-pagination-r2-pi",
+        "provider": "openai",
+        "task": "pagination",
+        "rep": 2,
+        "arm": "pi",
+        "runId": "openai-pagination-r2-pi",
+        "mode": "live",
+        "sourceCommit": "66dda24dada62cdf0c3d0e8efb5786d3e8d8d167",
+        "model": "gpt-6-luna",
+        "reasoning": "medium",
+        "maxOutputTokens": 32000,
+        "term2Profile": "builtin:bare (shipped default)",
+        "sandboxEnabled": true,
+        "promptSha256": "7dfb1538d7b62429c2a1b31416d164bdb735f6ce0aca7d36424c0e3f3a51832d",
+        "initialFiles": {
+          "src/pages.mjs": "34a0b01e3a18a8973320245e87bbaedac5097443439337f7ec7b2315a74400b9",
+          "src/cli.mjs": "1050f02b155fac2951a8b895a91961c5822c49eb0c7f6c14d2b999f5fafcda82",
+          "test/public.test.mjs": "0b77f9ab4f7adebb30b8a7ab372fd25d9796b0311e8183f60bbe251f4c9b4fb2",
+          "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872"
+        }
+      },
+      "artifacts": {
+        ".agents/skills/node-contracts/SKILL.md": {
+          "expected": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "actual": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "match": true
+        },
+        "AGENTS.md": {
+          "expected": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "actual": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "match": true
+        },
+        "package.json": {
+          "expected": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "actual": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "match": true
+        },
+        "src/cli.mjs": {
+          "expected": "f87c8aabdaa50344451157b4ed30016054e5ce3408683fa3db4f56d4a5c8b4fd",
+          "actual": "f87c8aabdaa50344451157b4ed30016054e5ce3408683fa3db4f56d4a5c8b4fd",
+          "match": true
+        },
+        "src/pages.mjs": {
+          "expected": "18b98f30913acbcc098eedc01d14167b4857badd89c96aebfa7a5837ee3370ea",
+          "actual": "18b98f30913acbcc098eedc01d14167b4857badd89c96aebfa7a5837ee3370ea",
+          "match": true
+        },
+        "test/public.test.mjs": {
+          "expected": "0b77f9ab4f7adebb30b8a7ab372fd25d9796b0311e8183f60bbe251f4c9b4fb2",
+          "actual": "0b77f9ab4f7adebb30b8a7ab372fd25d9796b0311e8183f60bbe251f4c9b4fb2",
+          "match": true
+        }
+      },
+      "accountingIdsMatch": true,
+      "allArtifactsMatch": true,
+      "firstRequest": {
+        "requestBytes": 8516,
+        "serializedToolsBytes": 3101,
+        "toolNames": ["read", "bash", "edit", "write"],
+        "input": 1643,
+        "cacheRead": 0,
+        "cacheWrite": 1640
+      },
+      "totals": {
+        "requests": 7,
+        "totalInput": 23826,
+        "uncachedInput": 21,
+        "cacheRead": 18738,
+        "cacheWrite": 5067,
+        "output": 2714,
+        "usd": 0.002179855,
+        "unknownUsage": 0
+      }
+    },
+    {
+      "id": "openai-pagination-r2-t2",
+      "provider": "openai",
+      "task": "pagination",
+      "rep": 2,
+      "arm": "t2",
+      "runId": "openai-pagination-r2-t2",
+      "mode": "live",
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "elapsedMs": 64623,
+      "stdoutRawSha256": "45d5b5144099457b40f8e036e17c02c163762c184ab50174700fa5e45895bbae",
+      "stdoutSanitizedSha256": "45d5b5144099457b40f8e036e17c02c163762c184ab50174700fa5e45895bbae",
+      "files": {
+        ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+        "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+        "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+        "src/cli.mjs": "66667a50c8c726942fc1a7cfd90231d25d3a6ae25d02114a6555199735d45495",
+        "src/pages.mjs": "827570933ffb0f4f7215919c7c62261c42e3ee92e15e6391da65e9df89903d24",
+        "test/public.test.mjs": "0b77f9ab4f7adebb30b8a7ab372fd25d9796b0311e8183f60bbe251f4c9b4fb2"
+      },
+      "unauthorizedChanges": [],
+      "publicTestsExitCode": 0,
+      "grade": {
+        "passed": 14,
+        "total": 14,
+        "pass": true,
+        "checks": [
+          {
+            "label": "module-export",
+            "pass": true
+          },
+          {
+            "label": "falsy-cursors-empty-pages-order",
+            "pass": true
+          },
+          {
+            "label": "typed-cursors-distinct",
+            "pass": true
+          },
+          {
+            "label": "cycle-before-refetch",
+            "pass": true
+          },
+          {
+            "label": "max-pages-before-extra-fetch",
+            "pass": true
+          },
+          {
+            "label": "invalid-options-no-fetch",
+            "pass": true
+          },
+          {
+            "label": "malformed-pages",
+            "pass": true
+          },
+          {
+            "label": "abort-before-fetch",
+            "pass": true
+          },
+          {
+            "label": "abort-after-fetch",
+            "pass": true
+          },
+          {
+            "label": "does-not-mutate",
+            "pass": true
+          },
+          {
+            "label": "default-page-limit-is-100",
+            "pass": true
+          },
+          {
+            "label": "null-abort-reason",
+            "pass": true
+          },
+          {
+            "label": "cli-valid",
+            "pass": true
+          },
+          {
+            "label": "cli-error-clean-stdout",
+            "pass": true
+          }
+        ]
+      },
+      "qualityPass": true,
+      "requestIds": ["00114", "00115", "00116", "00117", "00118", "00119", "00120", "00121", "00122"],
+      "meteredUsd": 0.00510248,
+      "unknownUsageRequests": [],
+      "budgetExposureUsd": 5.374034824999995,
+      "manifest": {
+        "id": "openai-pagination-r2-t2",
+        "provider": "openai",
+        "task": "pagination",
+        "rep": 2,
+        "arm": "t2",
+        "runId": "openai-pagination-r2-t2",
+        "mode": "live",
+        "sourceCommit": "66dda24dada62cdf0c3d0e8efb5786d3e8d8d167",
+        "model": "gpt-6-luna",
+        "reasoning": "medium",
+        "maxOutputTokens": 32000,
+        "term2Profile": "builtin:bare (shipped default)",
+        "sandboxEnabled": true,
+        "promptSha256": "7dfb1538d7b62429c2a1b31416d164bdb735f6ce0aca7d36424c0e3f3a51832d",
+        "initialFiles": {
+          "src/pages.mjs": "34a0b01e3a18a8973320245e87bbaedac5097443439337f7ec7b2315a74400b9",
+          "src/cli.mjs": "1050f02b155fac2951a8b895a91961c5822c49eb0c7f6c14d2b999f5fafcda82",
+          "test/public.test.mjs": "0b77f9ab4f7adebb30b8a7ab372fd25d9796b0311e8183f60bbe251f4c9b4fb2",
+          "AGENTS.md": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          ".agents/skills/node-contracts/SKILL.md": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "package.json": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872"
+        }
+      },
+      "artifacts": {
+        ".agents/skills/node-contracts/SKILL.md": {
+          "expected": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "actual": "c76d12f65cb590b9f0b33ae4306ddb7f2eabcc388760f340252e7ba01c80f06e",
+          "match": true
+        },
+        "AGENTS.md": {
+          "expected": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "actual": "801d521708ee9cd6f00f2cf203fe2af7cc700d24bb030fc7693fc5347a7e605d",
+          "match": true
+        },
+        "package.json": {
+          "expected": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "actual": "d79be46d70cef00440cf432b21d50fb324c27d8b7e36c08f5fd075ea47ccb872",
+          "match": true
+        },
+        "src/cli.mjs": {
+          "expected": "66667a50c8c726942fc1a7cfd90231d25d3a6ae25d02114a6555199735d45495",
+          "actual": "66667a50c8c726942fc1a7cfd90231d25d3a6ae25d02114a6555199735d45495",
+          "match": true
+        },
+        "src/pages.mjs": {
+          "expected": "827570933ffb0f4f7215919c7c62261c42e3ee92e15e6391da65e9df89903d24",
+          "actual": "827570933ffb0f4f7215919c7c62261c42e3ee92e15e6391da65e9df89903d24",
+          "match": true
+        },
+        "test/public.test.mjs": {
+          "expected": "0b77f9ab4f7adebb30b8a7ab372fd25d9796b0311e8183f60bbe251f4c9b4fb2",
+          "actual": "0b77f9ab4f7adebb30b8a7ab372fd25d9796b0311e8183f60bbe251f4c9b4fb2",
+          "match": true
+        }
+      },
+      "accountingIdsMatch": true,
+      "allArtifactsMatch": true,
+      "firstRequest": {
+        "requestBytes": 27142,
+        "serializedToolsBytes": 22872,
+        "toolNames": ["shell", "goal_check", "read_file", "apply_patch", "run_subagent", "run_code"],
+        "input": 5380,
+        "cacheRead": 0,
+        "cacheWrite": 5377
+      },
+      "totals": {
+        "requests": 9,
+        "totalInput": 71155,
+        "uncachedInput": 27,
+        "cacheRead": 49128,
+        "cacheWrite": 22000,
+        "output": 3717,
+        "usd": 0.00510248,
+        "unknownUsage": 0
+      }
+    }
+  ],
+  "budget": {
+    "approvedCapUsd": 10,
+    "meteredComparisonUsd": 0.156981195,
+    "newUnknownUsageRequests": [],
+    "priorUncapturedExposureUsd": 5.286,
+    "priorReportedPiCostUsd": 0.000176925,
+    "totalConservativeExposureUsd": 5.442981194999998,
+    "costBasis": "Verified published standard prices applied to captured native usage, not provider invoices; prior uncaptured preflight held separately at its conservative maximum"
+  },
+  "allAccountingIdsMatch": true,
+  "allArtifactsMatch": true,
+  "frozenHarnessSha256": {
+    "budget-gateway.mjs": "9931ea8ac32d87eb3483f542b49203e2e66c9d700ee563306dbde6a5775207fc",
+    "grade-candidate.mjs": "dcd75975a3a8f8a29a43380c9778783751f09152c546a05365416d6da6118bc4",
+    "workloads.mjs": "cca3ed5300ffc2ffce6973aea541f63f22aa89fbdd22cdbc4f246d56a296a5ff",
+    "run-comparison.mjs": "704b50f0d58b611198385b0aa19eeaeb8b6f67aa8ca99d31c4471165c6d83b88"
+  }
+}

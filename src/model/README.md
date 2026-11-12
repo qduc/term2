@@ -239,3 +239,14 @@ supplements matching-rate context tiers from the recorded pi-ai 1.5.2 snapshot.
 A changed-rate OpenRouter `~openai/gpt-terra-latest` entry retains its old snapshot
 price rather than mixing old base and newer context rates. `catalog:update`
 regenerates tiers from whichever pi-ai data snapshot it is given.
+
+## Google reasoning controls
+
+The native Google adapter sends `thinkingLevel` for Gemini 3 Flash, 3.x Pro/Flash and
+Gemini 4 or later model IDs, including the optional `models/` prefix. Named
+low/medium/high efforts retain their names; minimal uses low conservatively
+because support for minimal varies by model, and xhigh uses high. A caller can
+select model-specific minimal support through explicit `thinkingConfig`. Older and unrecognized model IDs retain the existing token-budget
+mapping. Explicit `google.thinkingConfig` remains caller-owned, and requests
+without a named effort do not acquire an automatic thinking configuration.
+The adapter does not infer capabilities from mutable `latest` aliases.

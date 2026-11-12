@@ -1,4 +1,4 @@
-## [Unreleased]
+## [1.2.0] - 2026-11-12
 
 ### Features
 - Bare exposes the native file tools directly alongside `run_code`, and its prompt describes the read, write, shell and patch tools that are actually available instead of routing every file operation through the shell (#245, #249).

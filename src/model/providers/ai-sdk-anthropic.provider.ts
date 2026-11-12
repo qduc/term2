@@ -182,7 +182,7 @@ export class AiSdkAnthropicProvider {
 
     return createAiSdkStreamedModel(
       withForwardedProviderSettings(model, (options) => forwardExplicitProviderSettings(options, 'anthropic')),
-      (request) => resolveReasoningOptions(request, /^claude-haiku-5-5(?:-|$)/.test(resolvedModelName)),
+      (request) => resolveReasoningOptions(request, /^claude-(?:haiku|sonnet)-5-5(?:-|$)/.test(resolvedModelName)),
     );
   }
 }

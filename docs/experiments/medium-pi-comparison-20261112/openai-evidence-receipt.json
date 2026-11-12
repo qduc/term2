@@ -1,0 +1,17 @@
+{
+  "stage": "OpenAI complete; Anthropic still running",
+  "completedOpenAiExecutions": 10,
+  "knownRequestsIncludingInterruptedAttempt": 798,
+  "nativeUsageUsdIncludingInterruptedAttempt": 0.942999315,
+  "interruptedAttemptUsd": 0.015769435,
+  "acceptedCompletions": 0,
+  "codingInference": "live native provider",
+  "grading": "frozen loopback HTTP/SSE and static guards, not live OpenRouter",
+  "fullOriginalInterruptedWall": "unknown/censored",
+  "ledgerNote": "Snapshot includes other campaigns and possibly active Anthropic reservation; only native records selected by included OpenAI IDs are bundled.",
+  "archiveBytes": 11466252,
+  "sha256": "cd0d9b22d1bbe00a4afa43937fe4012d1cb1b0d3929bbfe17e2b625469bec626",
+  "manifestFiles": 2141,
+  "knownCredentialScan": "passed",
+  "archive": "openai-evidence.tar.xz"
+}

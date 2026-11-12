@@ -1,0 +1,10 @@
+{
+  "archive": "evidence.tar.xz",
+  "bytes": 28492816,
+  "sha256": "222adbeb7e96440e871991da7a5d5b5f3ca57999a3d4d8aa91fd3a83ba2ad231",
+  "files": 5503,
+  "knownCredentialScan": "passed",
+  "allMediumLiveRequests": 2058,
+  "unresolvedMediumRequests": 6,
+  "completedPrimaryRuns": 18
+}

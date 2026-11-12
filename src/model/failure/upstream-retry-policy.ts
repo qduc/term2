@@ -6,7 +6,7 @@
  * retry paths. It does not cover model repair retries or the user-initiated
  * /retry command flow.
  */
-import { APIConnectionError, APIConnectionTimeoutError, InternalServerError, RateLimitError } from 'openai';
+import { APIConnectionError, APIConnectionTimeoutError, APIError, InternalServerError, RateLimitError } from 'openai';
 import { OpenAICompatibleError, OpenRouterError, LongRetryDelayError } from '../providers/common/provider-errors.js';
 
 export type UpstreamRetryClassification = {
@@ -136,6 +136,17 @@ function classifyUpstreamError(error: unknown): UpstreamRetryClassification {
   if (error instanceof LongRetryDelayError) {
     // Retry-after > 60s — don't retry, the user would wait too long
     return { retryable: false, reason: 'long-retry-delay' };
+  }
+
+  // Match the SDK's timeout/conflict recovery after disabling its hidden retry
+  // loop. Keep this scoped to SDK HTTP errors, not generic vendor status codes.
+  if (error instanceof APIError && (error.status === 408 || error.status === 409)) {
+    return {
+      retryable: true,
+      status: error.status,
+      retryAfterMs: getRetryAfterMs(error),
+      reason: 'openai-sdk',
+    };
   }
 
   if (error instanceof RateLimitError) {

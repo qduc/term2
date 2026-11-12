@@ -79,7 +79,8 @@ export class OpencodeAnthropicFormatProvider {
     const openAIClient = new OpenAI({
       baseURL: normalizeBaseUrl(runtimeConfig.baseUrl),
       apiKey: runtimeConfig.apiKey || 'no-key',
-      maxRetries: this.deps.settingsService?.get('agent.retryAttempts') ?? 2,
+      // RetryingModel or the engine owns retries across all OpenCode transports.
+      maxRetries: 0,
       fetch: buildProviderFetch(this.config, this.deps, [
         createOpenAIResponsesMiddleware(),
         createOpencodeSessionMiddleware(
@@ -101,7 +102,7 @@ export class OpencodeAnthropicFormatProvider {
     const openAIClient = new OpenAI({
       baseURL: normalizeBaseUrl(runtimeConfig.baseUrl),
       apiKey: runtimeConfig.apiKey || 'no-key',
-      maxRetries: this.deps.settingsService?.get('agent.retryAttempts') ?? 2,
+      maxRetries: 0,
       fetch: buildProviderFetch(this.config, this.deps, [
         createOpenAICompatibleMiddleware(),
         createAnthropicChatCachingMiddleware(),

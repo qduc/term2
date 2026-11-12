@@ -1,0 +1,740 @@
+{
+  "baseProductionCommit": "d285292b752a0e40c8ab37648b088a0289310b9a",
+  "environment": {
+    "node": "v24.19.0",
+    "platform": "linux",
+    "arch": "x64",
+    "pnpm": "11.19.0"
+  },
+  "evidenceKind": "Synthetic loopback HTTP through real registry, factories and SDK; no live inference",
+  "paidProviderRequests": 0,
+  "paidProviderSpendUsd": 0,
+  "regressionCliLaunches": 0,
+  "finalSourceSha256": {
+    "src/model/provider.ts": "e43848197a1e19a928e7e66b288cbab4a0e066c8476641f658c492093126c5cb",
+    "src/model/providers/openai-compatible.provider.ts": "23629fe4cadd2b7acfdb5b2887ff45a458f99bcf74602c002680afcc8b8bcdb8",
+    "src/model/providers/opencode-model-provider.ts": "b4c13af2542e771f457dccb9f25188f4968b5a6a43d68a51ce5b046542b3a5a3",
+    "src/model/failure/upstream-retry-policy.ts": "054e1f36456cdb0807b125744930201c60693fc668d7e81a0447133271347d78",
+    "tests/model/custom-provider-retries.integration.test.ts": "cd82301eb0ea3e7377e668a717f7449406afb112c32fb1a4576a716774b29c9b"
+  },
+  "originalProductionWithNew16Cases": {
+    "total": 16,
+    "passed": 0,
+    "failed": 16,
+    "cases": [
+      {
+        "name": "custom-openai exposes one failed HTTP attempt to the engine recovery owner",
+        "status": "failed",
+        "durationMs": 136.78515500000003,
+        "failure": "AssertionError: expected [ '/v1/chat/completions', …(2) ] to deeply equal [ '/v1/chat/completions' ]"
+      },
+      {
+        "name": "custom-compatible exposes one failed HTTP attempt to the engine recovery owner",
+        "status": "failed",
+        "durationMs": 27.581068999999843,
+        "failure": "AssertionError: expected [ '/v1/chat/completions', …(2) ] to deeply equal [ '/v1/chat/completions' ]"
+      },
+      {
+        "name": "opencode-responses exposes one failed HTTP attempt to the engine recovery owner",
+        "status": "failed",
+        "durationMs": 17.590220000000045,
+        "failure": "AssertionError: expected [ '/v1/responses', …(2) ] to deeply equal [ '/v1/responses' ]"
+      },
+      {
+        "name": "opencode-chat exposes one failed HTTP attempt to the engine recovery owner",
+        "status": "failed",
+        "durationMs": 14.713756999999987,
+        "failure": "AssertionError: expected [ '/v1/chat/completions', …(2) ] to deeply equal [ '/v1/chat/completions' ]"
+      },
+      {
+        "name": "custom-openai keeps standalone retries visible and bounded",
+        "status": "failed",
+        "durationMs": 16.969892000000073,
+        "failure": "AssertionError: expected [] to have a length of 2 but got +0"
+      },
+      {
+        "name": "custom-compatible keeps standalone retries visible and bounded",
+        "status": "failed",
+        "durationMs": 13.630748999999923,
+        "failure": "AssertionError: expected [] to have a length of 2 but got +0"
+      },
+      {
+        "name": "opencode-responses keeps standalone retries visible and bounded",
+        "status": "failed",
+        "durationMs": 12.639188999999988,
+        "failure": "AssertionError: expected [] to have a length of 2 but got +0"
+      },
+      {
+        "name": "opencode-chat keeps standalone retries visible and bounded",
+        "status": "failed",
+        "durationMs": 11.96922799999993,
+        "failure": "AssertionError: expected [] to have a length of 2 but got +0"
+      },
+      {
+        "name": "custom-openai exhausts standalone recovery after three HTTP attempts",
+        "status": "failed",
+        "durationMs": 35.31965700000001,
+        "failure": "AssertionError: expected [ { …(3) }, { …(3) }, { …(3) }, …(6) ] to have a length of 3 but got 9"
+      },
+      {
+        "name": "custom-compatible exhausts standalone recovery after three HTTP attempts",
+        "status": "failed",
+        "durationMs": 32.299737999999934,
+        "failure": "AssertionError: expected [ { …(3) }, { …(3) }, { …(3) }, …(6) ] to have a length of 3 but got 9"
+      },
+      {
+        "name": "opencode-responses exhausts standalone recovery after three HTTP attempts",
+        "status": "failed",
+        "durationMs": 32.42659200000003,
+        "failure": "AssertionError: expected [ Array(9) ] to have a length of 3 but got 9"
+      },
+      {
+        "name": "opencode-chat exhausts standalone recovery after three HTTP attempts",
+        "status": "failed",
+        "durationMs": 30.830175999999938,
+        "failure": "AssertionError: expected [ { …(3) }, { …(3) }, { …(3) }, …(6) ] to have a length of 3 but got 9"
+      },
+      {
+        "name": "custom-openai accepts updated instructions on an explicit recovery dispatch",
+        "status": "failed",
+        "durationMs": 8.188164000000143,
+        "failure": "Error: promise resolved \"[ { type: 'text_delta', …(1) }, …(3) ]\" instead of rejecting"
+      },
+      {
+        "name": "custom-compatible accepts updated instructions on an explicit recovery dispatch",
+        "status": "failed",
+        "durationMs": 7.521148000000039,
+        "failure": "Error: promise resolved \"[ { type: 'text_delta', …(1) }, …(3) ]\" instead of rejecting"
+      },
+      {
+        "name": "opencode-responses accepts updated instructions on an explicit recovery dispatch",
+        "status": "failed",
+        "durationMs": 7.088852000000088,
+        "failure": "Error: promise resolved \"[ …(3) ]\" instead of rejecting"
+      },
+      {
+        "name": "opencode-chat accepts updated instructions on an explicit recovery dispatch",
+        "status": "failed",
+        "durationMs": 7.014801999999918,
+        "failure": "Error: promise resolved \"[ { type: 'text_delta', …(1) }, …(3) ]\" instead of rejecting"
+      }
+    ]
+  },
+  "sdkDisabledBefore408409Correction": {
+    "total": 20,
+    "passed": 16,
+    "failed": 4,
+    "cases": [
+      {
+        "name": "custom-openai exposes one failed HTTP attempt to the engine recovery owner",
+        "status": "passed",
+        "durationMs": 118.21248700000001
+      },
+      {
+        "name": "custom-compatible exposes one failed HTTP attempt to the engine recovery owner",
+        "status": "passed",
+        "durationMs": 13.855877999999848
+      },
+      {
+        "name": "opencode-responses exposes one failed HTTP attempt to the engine recovery owner",
+        "status": "passed",
+        "durationMs": 11.805773999999928
+      },
+      {
+        "name": "opencode-chat exposes one failed HTTP attempt to the engine recovery owner",
+        "status": "passed",
+        "durationMs": 9.064431000000013
+      },
+      {
+        "name": "custom-openai keeps standalone retries visible and bounded",
+        "status": "passed",
+        "durationMs": 21.95528400000012
+      },
+      {
+        "name": "custom-compatible keeps standalone retries visible and bounded",
+        "status": "passed",
+        "durationMs": 22.43964700000015
+      },
+      {
+        "name": "opencode-responses keeps standalone retries visible and bounded",
+        "status": "passed",
+        "durationMs": 23.430996999999934
+      },
+      {
+        "name": "opencode-chat keeps standalone retries visible and bounded",
+        "status": "passed",
+        "durationMs": 18.50589500000001
+      },
+      {
+        "name": "custom-openai exhausts standalone recovery after three HTTP attempts",
+        "status": "passed",
+        "durationMs": 19.253240000000005
+      },
+      {
+        "name": "custom-compatible exhausts standalone recovery after three HTTP attempts",
+        "status": "passed",
+        "durationMs": 19.046411000000035
+      },
+      {
+        "name": "opencode-responses exhausts standalone recovery after three HTTP attempts",
+        "status": "passed",
+        "durationMs": 13.855763000000024
+      },
+      {
+        "name": "opencode-chat exhausts standalone recovery after three HTTP attempts",
+        "status": "passed",
+        "durationMs": 17.131562999999915
+      },
+      {
+        "name": "custom-openai accepts updated instructions on an explicit recovery dispatch",
+        "status": "passed",
+        "durationMs": 12.02247599999987
+      },
+      {
+        "name": "custom-compatible accepts updated instructions on an explicit recovery dispatch",
+        "status": "passed",
+        "durationMs": 11.492285999999922
+      },
+      {
+        "name": "opencode-responses accepts updated instructions on an explicit recovery dispatch",
+        "status": "passed",
+        "durationMs": 11.763038999999935
+      },
+      {
+        "name": "opencode-chat accepts updated instructions on an explicit recovery dispatch",
+        "status": "passed",
+        "durationMs": 12.34586800000011
+      },
+      {
+        "name": "custom-openai retains recovery for SDK timeout and conflict statuses",
+        "status": "failed",
+        "durationMs": 9.858525999999983,
+        "failure": "ModelFailure: 408 Fixture rate limit"
+      },
+      {
+        "name": "custom-compatible retains recovery for SDK timeout and conflict statuses",
+        "status": "failed",
+        "durationMs": 6.8210220000000845,
+        "failure": "ModelFailure: 408 Fixture rate limit"
+      },
+      {
+        "name": "opencode-responses retains recovery for SDK timeout and conflict statuses",
+        "status": "failed",
+        "durationMs": 7.801445999999942,
+        "failure": "ModelFailure: 408 Fixture rate limit"
+      },
+      {
+        "name": "opencode-chat retains recovery for SDK timeout and conflict statuses",
+        "status": "failed",
+        "durationMs": 7.063303000000133,
+        "failure": "ModelFailure: 408 Fixture rate limit"
+      }
+    ]
+  },
+  "finalAuthorFocusedIncludingExistingAffinityCases": {
+    "total": 29,
+    "passed": 29,
+    "failed": 0,
+    "cases": [
+      {
+        "name": "custom-openai exposes one failed HTTP attempt to the engine recovery owner",
+        "status": "passed",
+        "durationMs": 127.634141
+      },
+      {
+        "name": "custom-compatible exposes one failed HTTP attempt to the engine recovery owner",
+        "status": "passed",
+        "durationMs": 23.06435199999987
+      },
+      {
+        "name": "opencode-responses exposes one failed HTTP attempt to the engine recovery owner",
+        "status": "passed",
+        "durationMs": 18.46887199999992
+      },
+      {
+        "name": "opencode-chat exposes one failed HTTP attempt to the engine recovery owner",
+        "status": "passed",
+        "durationMs": 12.488835000000108
+      },
+      {
+        "name": "custom-openai keeps standalone retries visible and bounded",
+        "status": "passed",
+        "durationMs": 24.607144999999946
+      },
+      {
+        "name": "custom-compatible keeps standalone retries visible and bounded",
+        "status": "passed",
+        "durationMs": 22.20425799999998
+      },
+      {
+        "name": "opencode-responses keeps standalone retries visible and bounded",
+        "status": "passed",
+        "durationMs": 25.870012000000088
+      },
+      {
+        "name": "opencode-chat keeps standalone retries visible and bounded",
+        "status": "passed",
+        "durationMs": 14.71294499999999
+      },
+      {
+        "name": "custom-openai exhausts standalone recovery after three HTTP attempts",
+        "status": "passed",
+        "durationMs": 20.167305999999826
+      },
+      {
+        "name": "custom-compatible exhausts standalone recovery after three HTTP attempts",
+        "status": "passed",
+        "durationMs": 15.435328000000027
+      },
+      {
+        "name": "opencode-responses exhausts standalone recovery after three HTTP attempts",
+        "status": "passed",
+        "durationMs": 16.35943300000008
+      },
+      {
+        "name": "opencode-chat exhausts standalone recovery after three HTTP attempts",
+        "status": "passed",
+        "durationMs": 21.14365900000007
+      },
+      {
+        "name": "custom-openai accepts updated instructions on an explicit recovery dispatch",
+        "status": "passed",
+        "durationMs": 15.353249999999889
+      },
+      {
+        "name": "custom-compatible accepts updated instructions on an explicit recovery dispatch",
+        "status": "passed",
+        "durationMs": 14.651769000000058
+      },
+      {
+        "name": "opencode-responses accepts updated instructions on an explicit recovery dispatch",
+        "status": "passed",
+        "durationMs": 14.291895999999952
+      },
+      {
+        "name": "opencode-chat accepts updated instructions on an explicit recovery dispatch",
+        "status": "passed",
+        "durationMs": 15.135866000000078
+      },
+      {
+        "name": "custom-openai retains recovery for SDK timeout and conflict statuses",
+        "status": "passed",
+        "durationMs": 60.2593989999998
+      },
+      {
+        "name": "custom-compatible retains recovery for SDK timeout and conflict statuses",
+        "status": "passed",
+        "durationMs": 33.422334999999975
+      },
+      {
+        "name": "opencode-responses retains recovery for SDK timeout and conflict statuses",
+        "status": "passed",
+        "durationMs": 43.622736999999915
+      },
+      {
+        "name": "opencode-chat retains recovery for SDK timeout and conflict statuses",
+        "status": "passed",
+        "durationMs": 17.836393000000044
+      },
+      {
+        "name": "carries tool suppression to OpenRouter and compatible HTTP requests without changing ordinary turns",
+        "status": "passed",
+        "durationMs": 59.64331099999981
+      },
+      {
+        "name": "uses native Luna conversation configuration over HTTP without changing other OpenAI models",
+        "status": "passed",
+        "durationMs": 20.266005000000405
+      },
+      {
+        "name": "uses explicit request affinity across cached provider adapters and independent ambient sessions",
+        "status": "passed",
+        "durationMs": 95.32115399999975
+      },
+      {
+        "name": "carries root identity through native compaction and honors explicit isolated history/routing",
+        "status": "passed",
+        "durationMs": 9.134345999999823
+      },
+      {
+        "name": "gives approval advisory requests their own explicit affinity without an ambient session",
+        "status": "passed",
+        "durationMs": 36.246242000000166
+      },
+      {
+        "name": "notifies the correct request when a real WebSocket opens outside the request async scope",
+        "status": "passed",
+        "durationMs": 12.382705999999871
+      },
+      {
+        "name": "keeps provider registrations local to the registry generation that captured them",
+        "status": "passed",
+        "durationMs": 9.737837000000127
+      },
+      {
+        "name": "derives custom providers from each instance settings and excludes another host runtime registrations",
+        "status": "passed",
+        "durationMs": 16.93842799999993
+      },
+      {
+        "name": "sends adaptive Haiku thinking and preserves older models and explicit options through the Anthropic SDK",
+        "status": "passed",
+        "durationMs": 32.75851899999998
+      }
+    ]
+  },
+  "independentFinalIncludingAuthor20Cases": {
+    "total": 66,
+    "passed": 66,
+    "failed": 0,
+    "cases": [
+      {
+        "name": "openai/fixture: retryAttempts=0",
+        "status": "passed",
+        "durationMs": 64.246715
+      },
+      {
+        "name": "openai/fixture: retryAttempts=1",
+        "status": "passed",
+        "durationMs": 21.00821300000007
+      },
+      {
+        "name": "openai/fixture: nonretryable HTTP 400",
+        "status": "passed",
+        "durationMs": 9.760983000000124
+      },
+      {
+        "name": "openai/fixture: cancellation before retry dispatch",
+        "status": "passed",
+        "durationMs": 8.693948999999975
+      },
+      {
+        "name": "openai/fixture: eager source definition retains one retry owner",
+        "status": "passed",
+        "durationMs": 13.818568999999798
+      },
+      {
+        "name": "openai-compatible/fixture: retryAttempts=0",
+        "status": "passed",
+        "durationMs": 9.063421000000062
+      },
+      {
+        "name": "openai-compatible/fixture: retryAttempts=1",
+        "status": "passed",
+        "durationMs": 14.846745000000055
+      },
+      {
+        "name": "openai-compatible/fixture: nonretryable HTTP 400",
+        "status": "passed",
+        "durationMs": 11.642000000000053
+      },
+      {
+        "name": "openai-compatible/fixture: cancellation before retry dispatch",
+        "status": "passed",
+        "durationMs": 10.029153000000179
+      },
+      {
+        "name": "openai-compatible/fixture: eager source definition retains one retry owner",
+        "status": "passed",
+        "durationMs": 15.911325000000033
+      },
+      {
+        "name": "opencode/gpt-test: retryAttempts=0",
+        "status": "passed",
+        "durationMs": 15.285759999999982
+      },
+      {
+        "name": "opencode/gpt-test: retryAttempts=1",
+        "status": "passed",
+        "durationMs": 13.918349000000035
+      },
+      {
+        "name": "opencode/gpt-test: nonretryable HTTP 400",
+        "status": "passed",
+        "durationMs": 11.890491999999995
+      },
+      {
+        "name": "opencode/gpt-test: cancellation before retry dispatch",
+        "status": "passed",
+        "durationMs": 10.297373000000107
+      },
+      {
+        "name": "opencode/gpt-test: eager source definition retains one retry owner",
+        "status": "passed",
+        "durationMs": 12.264038999999912
+      },
+      {
+        "name": "opencode/deepseek-test: retryAttempts=0",
+        "status": "passed",
+        "durationMs": 8.679988000000094
+      },
+      {
+        "name": "opencode/deepseek-test: retryAttempts=1",
+        "status": "passed",
+        "durationMs": 16.65223100000003
+      },
+      {
+        "name": "opencode/deepseek-test: nonretryable HTTP 400",
+        "status": "passed",
+        "durationMs": 5.814601000000039
+      },
+      {
+        "name": "opencode/deepseek-test: cancellation before retry dispatch",
+        "status": "passed",
+        "durationMs": 5.924494999999979
+      },
+      {
+        "name": "opencode/deepseek-test: eager source definition retains one retry owner",
+        "status": "passed",
+        "durationMs": 7.543812000000116
+      },
+      {
+        "name": "generic vendor 408 remains nonretryable",
+        "status": "passed",
+        "durationMs": 0.4634320000000116
+      },
+      {
+        "name": "openai/fixture: engine owns HTTP 408 recovery",
+        "status": "passed",
+        "durationMs": 5.473160000000007
+      },
+      {
+        "name": "openai-compatible/fixture: engine owns HTTP 408 recovery",
+        "status": "passed",
+        "durationMs": 4.399918999999954
+      },
+      {
+        "name": "opencode/gpt-test: engine owns HTTP 408 recovery",
+        "status": "passed",
+        "durationMs": 5.031981999999971
+      },
+      {
+        "name": "opencode/deepseek-test: engine owns HTTP 408 recovery",
+        "status": "passed",
+        "durationMs": 5.3243480000001
+      },
+      {
+        "name": "generic vendor 409 remains nonretryable",
+        "status": "passed",
+        "durationMs": 0.6889079999998557
+      },
+      {
+        "name": "openai/fixture: engine owns HTTP 409 recovery",
+        "status": "passed",
+        "durationMs": 8.051770000000033
+      },
+      {
+        "name": "openai-compatible/fixture: engine owns HTTP 409 recovery",
+        "status": "passed",
+        "durationMs": 7.877259999999978
+      },
+      {
+        "name": "opencode/gpt-test: engine owns HTTP 409 recovery",
+        "status": "passed",
+        "durationMs": 7.608739000000014
+      },
+      {
+        "name": "opencode/deepseek-test: engine owns HTTP 409 recovery",
+        "status": "passed",
+        "durationMs": 9.461464999999862
+      },
+      {
+        "name": "openai/fixture: centralized policy for 400 retry hint",
+        "status": "passed",
+        "durationMs": 8.462964000000056
+      },
+      {
+        "name": "openai/fixture: centralized policy for 401 retry hint",
+        "status": "passed",
+        "durationMs": 7.257534999999962
+      },
+      {
+        "name": "openai/fixture: centralized policy for 503 retry hint",
+        "status": "passed",
+        "durationMs": 19.639458999999988
+      },
+      {
+        "name": "openai/fixture: centralized policy for 429 retry hint",
+        "status": "passed",
+        "durationMs": 8.348883999999998
+      },
+      {
+        "name": "openai-compatible/fixture: centralized policy for 400 retry hint",
+        "status": "passed",
+        "durationMs": 7.713154000000031
+      },
+      {
+        "name": "openai-compatible/fixture: centralized policy for 401 retry hint",
+        "status": "passed",
+        "durationMs": 7.955907000000025
+      },
+      {
+        "name": "openai-compatible/fixture: centralized policy for 503 retry hint",
+        "status": "passed",
+        "durationMs": 16.39676899999995
+      },
+      {
+        "name": "openai-compatible/fixture: centralized policy for 429 retry hint",
+        "status": "passed",
+        "durationMs": 14.154010000000198
+      },
+      {
+        "name": "opencode/gpt-test: centralized policy for 400 retry hint",
+        "status": "passed",
+        "durationMs": 8.271477999999888
+      },
+      {
+        "name": "opencode/gpt-test: centralized policy for 401 retry hint",
+        "status": "passed",
+        "durationMs": 7.6940669999999045
+      },
+      {
+        "name": "opencode/gpt-test: centralized policy for 503 retry hint",
+        "status": "passed",
+        "durationMs": 13.895725000000084
+      },
+      {
+        "name": "opencode/gpt-test: centralized policy for 429 retry hint",
+        "status": "passed",
+        "durationMs": 5.532058000000006
+      },
+      {
+        "name": "opencode/deepseek-test: centralized policy for 400 retry hint",
+        "status": "passed",
+        "durationMs": 5.374712999999929
+      },
+      {
+        "name": "opencode/deepseek-test: centralized policy for 401 retry hint",
+        "status": "passed",
+        "durationMs": 5.147605000000112
+      },
+      {
+        "name": "opencode/deepseek-test: centralized policy for 503 retry hint",
+        "status": "passed",
+        "durationMs": 11.93822299999988
+      },
+      {
+        "name": "opencode/deepseek-test: centralized policy for 429 retry hint",
+        "status": "passed",
+        "durationMs": 4.226128999999901
+      },
+      {
+        "name": "custom-openai exposes one failed HTTP attempt to the engine recovery owner",
+        "status": "passed",
+        "durationMs": 86.98417299999983
+      },
+      {
+        "name": "custom-compatible exposes one failed HTTP attempt to the engine recovery owner",
+        "status": "passed",
+        "durationMs": 15.684165000000121
+      },
+      {
+        "name": "opencode-responses exposes one failed HTTP attempt to the engine recovery owner",
+        "status": "passed",
+        "durationMs": 15.98489399999994
+      },
+      {
+        "name": "opencode-chat exposes one failed HTTP attempt to the engine recovery owner",
+        "status": "passed",
+        "durationMs": 12.255335999999943
+      },
+      {
+        "name": "custom-openai keeps standalone retries visible and bounded",
+        "status": "passed",
+        "durationMs": 24.076675000000023
+      },
+      {
+        "name": "custom-compatible keeps standalone retries visible and bounded",
+        "status": "passed",
+        "durationMs": 28.08030000000008
+      },
+      {
+        "name": "opencode-responses keeps standalone retries visible and bounded",
+        "status": "passed",
+        "durationMs": 24.155581999999868
+      },
+      {
+        "name": "opencode-chat keeps standalone retries visible and bounded",
+        "status": "passed",
+        "durationMs": 21.030275999999958
+      },
+      {
+        "name": "custom-openai exhausts standalone recovery after three HTTP attempts",
+        "status": "passed",
+        "durationMs": 28.52292699999998
+      },
+      {
+        "name": "custom-compatible exhausts standalone recovery after three HTTP attempts",
+        "status": "passed",
+        "durationMs": 26.748779000000013
+      },
+      {
+        "name": "opencode-responses exhausts standalone recovery after three HTTP attempts",
+        "status": "passed",
+        "durationMs": 20.509189000000106
+      },
+      {
+        "name": "opencode-chat exhausts standalone recovery after three HTTP attempts",
+        "status": "passed",
+        "durationMs": 18.253650000000107
+      },
+      {
+        "name": "custom-openai accepts updated instructions on an explicit recovery dispatch",
+        "status": "passed",
+        "durationMs": 11.727817999999843
+      },
+      {
+        "name": "custom-compatible accepts updated instructions on an explicit recovery dispatch",
+        "status": "passed",
+        "durationMs": 11.340220000000045
+      },
+      {
+        "name": "opencode-responses accepts updated instructions on an explicit recovery dispatch",
+        "status": "passed",
+        "durationMs": 24.30590600000005
+      },
+      {
+        "name": "opencode-chat accepts updated instructions on an explicit recovery dispatch",
+        "status": "passed",
+        "durationMs": 15.850292999999965
+      },
+      {
+        "name": "custom-openai retains recovery for SDK timeout and conflict statuses",
+        "status": "passed",
+        "durationMs": 23.841792999999825
+      },
+      {
+        "name": "custom-compatible retains recovery for SDK timeout and conflict statuses",
+        "status": "passed",
+        "durationMs": 25.214232000000038
+      },
+      {
+        "name": "opencode-responses retains recovery for SDK timeout and conflict statuses",
+        "status": "passed",
+        "durationMs": 27.4026530000001
+      },
+      {
+        "name": "opencode-chat retains recovery for SDK timeout and conflict statuses",
+        "status": "passed",
+        "durationMs": 28.596812999999884
+      }
+    ]
+  },
+  "independentInstalledSdk408409Baseline": {
+    "total": 2,
+    "passed": 2,
+    "failed": 0,
+    "cases": [
+      {
+        "name": "installed SDK baseline retries HTTP 408 before success",
+        "status": "passed",
+        "durationMs": 33.72444599999994
+      },
+      {
+        "name": "installed SDK baseline retries HTTP 409 before success",
+        "status": "passed",
+        "durationMs": 12.542395000000056
+      }
+    ]
+  }
+}

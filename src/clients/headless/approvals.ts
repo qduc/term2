@@ -30,25 +30,16 @@ export function decideHeadlessApproval(interaction: WireInteraction, autoApprove
     return { decision: { kind: 'allow' } };
   }
   if (interaction.risk === 'medium' || interaction.risk === 'high') {
-    const command = commandText(interaction.input);
     const level = interaction.risk === 'high' ? 'RED (dangerous)' : 'YELLOW (suspicious)';
     return {
       decision: {
         kind: 'deny',
-        reason: `Heuristic validation failed: command is ${level} and cannot be executed automatically${
-          command ? `: ${command}` : ''
-        }`,
+        reason: `Heuristic validation failed: command is ${level} and cannot be executed automatically`,
       },
       reportRejection: true,
     };
   }
   return { decision: { kind: 'allow' } };
-}
-
-function commandText(input: unknown): string {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) return '';
-  const command = (input as Record<string, unknown>)['command'];
-  return typeof command === 'string' ? command : '';
 }
 
 /** Settle snapshot/live interactions through the same policy. False means the

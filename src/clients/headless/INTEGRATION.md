@@ -135,6 +135,9 @@ state remains run-local, including across silent delivery turns.
 interaction requests and sends the policy decision. A false result means a
 failed answer with best-effort cancellation, not a terminal outcome.
 `decideHeadlessApproval` remains exported from `direct.ts` for existing callers.
+Its automatic shell-denial reasons identify the risk without repeating the
+command, which remains available in the original interaction and tool call.
+An injected approval decider's reason is passed through unchanged.
 The driver still owns signal handling and waits for accepted terminals.
 
 ## Background drain timing

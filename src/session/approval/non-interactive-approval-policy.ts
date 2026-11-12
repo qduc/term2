@@ -99,7 +99,7 @@ export class NonInteractiveApprovalPolicy {
     if (classification.status === SafetyStatus.RED) {
       return {
         answer: 'n',
-        rejectionReason: `Heuristic validation failed: command is RED (dangerous) and cannot be executed automatically: ${command}`,
+        rejectionReason: 'Heuristic validation failed: command is RED (dangerous) and cannot be executed automatically',
         reportRejection: true,
       };
     }
@@ -115,7 +115,8 @@ export class NonInteractiveApprovalPolicy {
     if (!autoApproveModel) {
       return {
         answer: 'n',
-        rejectionReason: `Heuristic validation failed: command is YELLOW (suspicious) and no auto-approve model is configured: ${command}`,
+        rejectionReason:
+          'Heuristic validation failed: command is YELLOW (suspicious) and no auto-approve model is configured',
         reportRejection: true,
       };
     }

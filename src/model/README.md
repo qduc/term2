@@ -1,5 +1,13 @@
 # Native provider boundary
 
+The Chat Completions adapter uses `max_completion_tokens` when the SDK client's
+actual endpoint hostname is `api.openai.com`. Other compatible endpoints retain
+`max_tokens`, and a dialect can explicitly select its wire convention. A defined
+caller limit in either spelling suppresses the inferred field, so an override
+does not accidentally send both. An undefined option retains the requested cap.
+This does not infer support from model-version
+names or change reasoning settings, tools, or the Responses API.
+
 The built-in OpenAI `gpt-6-luna` model declares tools with an initial
 `additional_tools` input, followed by developer instructions. Its named reasoning
 effort also travels in a `configuration_update` input. HTTP, unary requests and

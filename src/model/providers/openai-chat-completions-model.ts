@@ -18,6 +18,8 @@ function isTrivialWhitespace(text: string): boolean {
 
 /** Where one endpoint departs from the plain chat-completions conventions. */
 export type OpenAIChatCompletionsDialect = {
+  /** Explicit wire convention for endpoints that differ from the detected host. */
+  readonly maxTokensField?: 'max_tokens' | 'max_completion_tokens';
   /**
    * The body fields carrying the selected reasoning effort and the caller's
    * provider options. The default sends `reasoning_effort` and spreads the
@@ -37,6 +39,18 @@ const defaultRequestOptions = (request: StreamedModelTurnRequest): Record<string
   ...(request.reasoning?.effort ? { reasoning_effort: request.reasoning.effort } : {}),
   ...(request.providerOptions ?? {}),
 });
+
+function tokenLimitField(client: any): 'max_tokens' | 'max_completion_tokens' {
+  try {
+    // OpenAI's current Chat API uses max_completion_tokens. Compatible servers
+    // retain their own convention; neither provider labels nor model versions
+    // establish that their endpoint implements OpenAI's newer parameter.
+    if (new URL(client.baseURL).hostname === 'api.openai.com') return 'max_completion_tokens';
+  } catch {
+    // A non-URL test client or opaque custom endpoint retains the legacy field.
+  }
+  return 'max_tokens';
+}
 
 /** Application-owned adapter for OpenAI-compatible chat-completions endpoints. */
 export class OpenAIChatCompletionsModel implements StreamedModelTurn {
@@ -74,6 +88,15 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
       ...openAICompatibleMessages(request.input, this.providerId),
     ];
     assertValidOpenAICompatibleMessages(messages);
+    const providerOptions = (this.dialect.requestOptions ?? defaultRequestOptions)(request);
+    // A caller-supplied limit wins regardless of which spelling it uses. Do
+    // not add the other spelling alongside it: OpenAI rejects both together.
+    const limit =
+      request.maxTokens !== undefined &&
+      providerOptions.max_tokens === undefined &&
+      providerOptions.max_completion_tokens === undefined
+        ? { [this.dialect.maxTokensField ?? tokenLimitField(this.client)]: request.maxTokens }
+        : {};
     const response = await this.client.chat.completions.create(
       {
         model: this.model,
@@ -89,12 +112,12 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
         ...(request.topP !== undefined ? { top_p: request.topP } : {}),
         ...(request.frequencyPenalty !== undefined ? { frequency_penalty: request.frequencyPenalty } : {}),
         ...(request.presencePenalty !== undefined ? { presence_penalty: request.presencePenalty } : {}),
-        ...(request.maxTokens !== undefined ? { max_tokens: request.maxTokens } : {}),
         // Some upstreams reject a tool choice that has no tools to choose from.
         ...(request.toolChoice !== undefined && request.tools.length
           ? { tool_choice: toChatToolChoice(request.toolChoice) }
           : {}),
-        ...(this.dialect.requestOptions ?? defaultRequestOptions)(request),
+        ...providerOptions,
+        ...limit,
         ...(request.outputType && request.outputType !== 'text'
           ? { response_format: toChatResponseFormat(request.outputType) }
           : {}),

@@ -1,0 +1,23 @@
+{
+  "passiveOnly": true,
+  "archiveSha256": "222adbeb7e96440e871991da7a5d5b5f3ca57999a3d4d8aa91fd3a83ba2ad231",
+  "archiveBytes": 28492816,
+  "archiveFiles": 5503,
+  "manifestCoveredFiles": 5502,
+  "allNamesSizesSha256Match": true,
+  "safeUniqueRegularFilePaths": true,
+  "expandedBytesHashed": 810825551,
+  "requiredFinalReceiptsAndRecoveryLogsPresent": true,
+  "completedPrimaryResults": 18,
+  "all18ArtifactGradesFalse": true,
+  "mediumNativeAttemptRecords": 2058,
+  "nativeRequestCaptures": 2058,
+  "nativeResponseCaptures": 2053,
+  "fiveTransportAttemptsCorrectlyHaveNoResponse": true,
+  "allSixMediumUnknownUsageRowsRetained": true,
+  "bothInterruptedSourceReceiptsAndLineagesPresent": true,
+  "allFrozenProducerVersionsPresent": true,
+  "fullLedgerRetained": true,
+  "noExtractionModelsTestsGradesOrProviderCalls": true,
+  "scope": "Sealed archive integrity and required evidence membership only. No recursive repackaging or new execution."
+}

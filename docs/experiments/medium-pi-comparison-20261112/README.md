@@ -31,7 +31,12 @@ hashes, CLI outputs, native request/response captures, complete cumulative ledge
 recovery lineage, independent audit receipts and read-only summaries.
 [evidence-receipt.json](evidence-receipt.json) gives its size and SHA256. The archive's
 internal manifest hashes every other included file. Credentials are excluded and
-known configured credential values were scanned before packaging.
+known configured credential values were scanned before packaging. Independent
+[archive verification](final-medium-archive-integrity.json) matched all 5,502
+manifest entries, required receipts, 18 results and 2,058 medium native attempts.
+The passive [verification script](final-medium-archive-integrity.py) can be run
+from the repository root after creating `.handoff/verifier`; it hashes archive
+contents without extracting or executing them.
 
 The standalone [OpenAI snapshot](openai-evidence.tar.xz) and its
 [receipt](openai-evidence-receipt.json) preserve the earlier complete five-pair

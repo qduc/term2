@@ -485,6 +485,9 @@ export function TuiSession({
                       value={editor.value}
                       onChange={(value) => shell.change(value) || changeInput(value)}
                       onSubmit={(value, submittedImages = []) => {
+                        // The child's image edit can render before its passive onChange reaches this parent.
+                        // Capture that submitted value before beginSubmission snapshots the draft revision.
+                        if (!pending.current) changeInput(value);
                         if (
                           !shell.submit(value, submittedImages.length > 0, (command) =>
                             submit(command, submittedImages),

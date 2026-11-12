@@ -149,3 +149,12 @@ switching, rebuilding, saving settings or clearing history. Dropped and unknown
 profiles still fail. Profile/legacy mode settings stay hidden in browsing and
 search; explicit reads remain available for diagnostics. The protocol and stored
 profile identity, version and digest are unchanged.
+
+The ordinary editor captures the child `MultilineInput` value synchronously on
+Enter before a new submission snapshots its draft revision. Image edits can
+render before the child's passive `onChange` notifies the parent. Without this
+capture, that late notification looks like a newer user edit, so admission
+leaves the submitted text/image marker in the composer and a later command
+appends to it. Revision checks still preserve edits made after submission; an
+already pending send keeps its existing draft-preservation path. The image retry
+provider scenario observes an empty composer before submitting `/retry-turn`.

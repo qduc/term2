@@ -150,8 +150,8 @@
       "reason": "The generated model data now includes context-price tiers and explicit one-hour write rates while preserving every existing model capacity and base rate. A single artifact keeps regeneration and provenance review coherent; splitting at an arbitrary line count would fragment the generator output. Retire this ceiling if catalog generation is deliberately organized into provider artifacts."
     },
     "src/model/providers/openai-responses-model.ts": {
-      "lines": 902,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Ten lines since then carry the GPT-6 Luna native conversation-input flag (#250) through the constructor and three transports; the projection lives in luna-responses-lite-wire-protocol.ts. Three further lines recognize native cache-write usage in response normalization. Lower the ceiling when the transports share one request-body builder or the file is split by transport."
+      "lines": 924,
+      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Ten lines since then carry the GPT-6 Luna native conversation-input flag (#250) through the constructor and three transports; the projection lives in luna-responses-lite-wire-protocol.ts. Three further lines recognize native cache-write usage in response normalization. Lower the ceiling when the transports share one request-body builder or the file is split by transport. Twenty-two further lines validate failed/incomplete terminal usage and emit it before the existing error in both streaming transports. This belongs beside terminal normalization and the transport loops; extracting only the small guard would scatter their shared accounting contract without moving an independent responsibility. Retire this increment when complete Responses terminal normalization is extracted with its usage validation."
     },
     "src/session/approval/shell-auto-approval-evaluator.ts": {
       "lines": 797,

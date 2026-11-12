@@ -202,6 +202,16 @@ output ceiling. The model's reasoning and answer share that ceiling.
 
 ## Cache usage and prices
 
+Native Responses HTTP and WebSocket streams emit a separate accounting-only
+usage event before rejecting a provider `response.failed` or `response.incomplete`
+frame that contains complete input/output usage. The registry forwards it as
+ordinary usage without emitting completed output, tool items, or a successful
+terminal event. The core can therefore settle the failed attempt's cost instead
+of marking reported usage missing. Successful completions keep their existing
+single usage event; absent, invalid, or partial failure usage remains unknown.
+The unary API still rejects failed/incomplete responses without returning a
+completion payload.
+
 Provider adapters emit total input including cache reads and creation in
 `StreamedModelUsage.inputTokens`. `toUsage` preserves optional cache-write and
 one-hour-write counters across the public core boundary. Native Responses reads

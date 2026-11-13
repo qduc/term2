@@ -183,7 +183,7 @@ function normalizeRunSubagentShape(raw: unknown): Shape {
   const spec = raw.agent_spec;
   if (spec === undefined && (!stray.length || !task)) return { ok: true, value: raw };
   // Writing roles (and roles with no recorded mixed call) are never rewritten: a dropped scope could widen them.
-  if (!(role in READ_ONLY_ROLE_TOOLS))
+  if (!Object.hasOwn(READ_ONLY_ROLE_TOOLS, role))
     return reject(`role ${role} is not combined with ${spec !== undefined ? 'agent_spec' : stray.join(', ')}`);
 
   if (spec !== undefined) {

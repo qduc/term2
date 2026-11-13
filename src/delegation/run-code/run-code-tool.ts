@@ -95,33 +95,33 @@ function renderAgentCapabilitySection(bridge: RunCodeAgentSpecBridge): string {
   const lines: string[] = [
     '## Agent capability',
     '',
-    'When present, the `agent` global (not a `tools.*` entry) launches host-resolved agents from the script:',
+    'When present, a flat `agent` global (not a `tools.*` entry) launches host-resolved agents from the script:',
   ];
   if (members.includes('run')) {
     lines.push(
       '- `agent.run({ spec, worktree? })` awaits one foreground agent and resolves to its nested result ' +
-        '(status, finalText, filesChanged, toolsUsed, ...). Fan out with `Promise.all`, catching per-call ' +
-        'rejections (`agent.run failed: ...`). A script timeout or cancellation aborts the child. With a bound ' +
-        "session approval owner, the child's tool approval pauses reach the user and resume that exact child, and " +
-        'the work clock pauses only while all calls await approval; without one, or on a non-tool interruption, ' +
-        'the child rejects rather than reporting completion.',
+        '(status, finalText, filesChanged, toolsUsed, ...). Fan out with `Promise.all` and catch per-call ' +
+        'rejections (`agent.run failed: ...`). The host aborts the child if the script times out or is cancelled. ' +
+        'When a session approval owner is bound, child tool approval pauses surface to the user and resume ' +
+        'the exact child execution; the work clock pauses only while all calls await approval. ' +
+        'Without that owner, or for non-tool interruptions, the child rejects rather than reporting completion.',
     );
   }
   if (members.includes('start')) {
     lines.push(
-      "- `agent.start({ spec, name? })` resolves to `{ runId, name?, role, status: 'running' }` for a " +
-        'conversation-scoped background run that outlives this script and its timeout. It rejects ' +
-        '`continue_run_id` until stored-run authority can be verified.',
-      '- `agent.status({ runId? })` peeks at progress without blocking; `agent.result({ runId })` awaits the ' +
-        'settled result; `agent.cancel({ target })` requests cancellation. Background completion reaches the ' +
-        'session notification lane even after the script returns.',
+      '- `agent.start({ spec, name? })` starts a conversation-scoped background run and ' +
+        "resolves to `{ runId, name?, role, status: 'running' }`; it survives this script and its timeout. " +
+        '`continue_run_id` is rejected by this script capability until stored-run authority can be verified.',
+      '- `agent.status({ runId? })` peeks non-blocking progress; `agent.result({ runId })` awaits the settled ' +
+        'result; `agent.cancel({ target })` requests cancellation. Background completion reaches the session ' +
+        'notification lane even after this script returns.',
     );
   }
   lines.push(
     '- `spec` is a plain AgentSpec (`{ goal, tools?, permissions?, constraints?, doneWhen?, model?, budget? }`). ' +
-      "The host attenuates it to this session's authority before launch: asking for more than the parent's " +
-      'tools, scopes, or worktree scope rejects that call as `Agent specification rejected: ...`; the raw spec ' +
-      'never reaches a launch path.',
+      "The host attenuates it against this session's authority before launch: requests beyond parent tools, " +
+      'scopes, or the worktree scope reject per call as `Agent specification rejected: ...`; the raw spec is ' +
+      'never forwarded to any launch path.',
     `- Per-script limits, separate from the tools.* budget: at most ${RUN_CODE_LIMITS.maxAgentStarts} agent launches, ` +
       `${RUN_CODE_LIMITS.maxAgentConcurrency} parallel foreground runs, and ${RUN_CODE_LIMITS.maxAgentCalls} agent.* calls.`,
   );

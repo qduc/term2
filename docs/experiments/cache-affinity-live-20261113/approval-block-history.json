@@ -1,0 +1,19 @@
+{
+  "status": "blocked_before_execution",
+  "approvedInvestigationCapUsd": 100,
+  "operationalCeilingUsd": 2,
+  "liveControlRuns": 0,
+  "liveTreatmentRuns": 0,
+  "physicalLiveRequests": 0,
+  "confirmedSpendUsd": 0,
+  "nativeUsageEstimatedSpendUsd": 0,
+  "uncertainExposureUsd": 0,
+  "fixturePaidSpendUsd": 0,
+  "remainingCapUsd": 100,
+  "providerInvoice": "No requests executed; no invoice obtained",
+  "deniedLaunchAttempts": 2,
+  "pendingRequests": 0,
+  "deniedAction": "Launch run-comparison.mjs --live with configured OpenAI credential",
+  "destination": "https://api.openai.com/v1/responses",
+  "reason": "Automatic approval review requires approval of task/repository payload and external destination despite verified paid-call approval up to $100."
+}

@@ -1,0 +1,356 @@
+{
+  "verdict": "accept",
+  "verdictScope": "native accounting and retained artifact integrity only",
+  "experimentVerdict": "inconclusive; stopped capability guardrail failure",
+  "capabilityGuardrail": "failed; sandbox dependency missing and requested public tests denied",
+  "errors": [],
+  "confirmedNativeRequests": 24,
+  "nativeUsagePriceEstimateUsd": 0.009997785,
+  "uncertainExposureUsd": 0,
+  "summary": {
+    "baseline": {
+      "runs": 1,
+      "requests": 11,
+      "input": 87773,
+      "fresh": 33,
+      "cacheRead": 77071,
+      "cacheWrite": 10669,
+      "output": 3780,
+      "nanoUsd": 3997635,
+      "writesAboveLargestContext": 0,
+      "httpMs": 51629.0,
+      "toolCalls": 14,
+      "requestedUnsandboxedShellCalls": 3,
+      "sandboxMissingDependencyResults": 2,
+      "approvalDeniedResults": 2,
+      "zeroReadContinuations": 0,
+      "toolErrors": 5,
+      "usd": 0.003997635
+    },
+    "affinity": {
+      "runs": 2,
+      "requests": 13,
+      "input": 90557,
+      "fresh": 39,
+      "cacheRead": 73600,
+      "cacheWrite": 16918,
+      "output": 6291,
+      "nanoUsd": 6000150,
+      "writesAboveLargestContext": 0,
+      "httpMs": 67097.0,
+      "toolCalls": 17,
+      "requestedUnsandboxedShellCalls": 3,
+      "sandboxMissingDependencyResults": 2,
+      "approvalDeniedResults": 2,
+      "zeroReadContinuations": 0,
+      "toolErrors": 4,
+      "usd": 0.00600015
+    }
+  },
+  "runs": [
+    {
+      "runId": "affinity-openai-pagination-r1-baseline",
+      "arm": "baseline",
+      "requests": 11,
+      "input": 87773,
+      "fresh": 33,
+      "cacheRead": 77071,
+      "cacheWrite": 10669,
+      "output": 3780,
+      "nanoUsd": 3997635,
+      "largestContext": 10669,
+      "zeroReadContinuations": [],
+      "gapsMs": [228.0, 50.0, 28.0, 31.0, 21.0, 26.0, 33.0, 19.0, 21.0, 20.0],
+      "httpMs": 51629.0,
+      "toolCalls": 14,
+      "requestedUnsandboxedShellCalls": 3,
+      "sandboxMissingDependencyResults": 2,
+      "approvalDeniedResults": 2,
+      "toolErrors": [
+        {
+          "responseRequest": "00002",
+          "callId": "call_XpE1M7EbZAcfZkrvWoP14NEc",
+          "request": "00001",
+          "name": "shell",
+          "output": "Error: Shell sandbox unavailable (missing_dependency): socat not installed. The command was not run. Resolve the sandbox issue before retrying the sandboxed command. If policy and interactive approval allow it, a one-shot run with sandbox=\"unsandboxed\" may be requested; user approval is required."
+        },
+        {
+          "responseRequest": "00002",
+          "callId": "call_NEzA2nScsZnKapHodtsuNFs4",
+          "request": "00001",
+          "name": "shell",
+          "output": "Error: Shell sandbox unavailable (missing_dependency): socat not installed. The command was not run. Resolve the sandbox issue before retrying the sandboxed command. If policy and interactive approval allow it, a one-shot run with sandbox=\"unsandboxed\" may be requested; user approval is required."
+        },
+        {
+          "responseRequest": "00003",
+          "callId": "call_FmMlnsNNh8pQ0NCsq1IQmIXG",
+          "request": "00002",
+          "name": "shell",
+          "output": "exit 128\nRuntime: 13ms\n--- skill ---\n---\nname: node-contracts\ndescription: Implement and validate Node.js data-contract libraries and CLIs with exact input semantics.\n---\nRead the task's contract before editing. Distinguish missing values from falsy values.\nDo not mutate caller inputs. Preserve named exports. A null AbortSignal.reason\nis present and must be propagated. Validate integers without\ncoercion. Keep CLI stdout machine-readable, diagnostics on stderr, and propagate\nnonzero exit status. Exercise normal, boundary and failure behavior with built-ins.\n--- files ---\nsrc/cli.mjs\nsrc/pages.mjs\ntest/public.test.mjs\n--- status ---\nfatal: not a git repository (or any of the parent directories): .git"
+        },
+        {
+          "responseRequest": "00007",
+          "callId": "call_o8K5qxd0RVxuCm9duwyCbFrc",
+          "request": "00006",
+          "name": "shell",
+          "output": "Tool execution was not approved. User's reason: Heuristic validation failed: command is YELLOW (suspicious) and no auto-approve model is configured"
+        },
+        {
+          "responseRequest": "00009",
+          "callId": "call_YH0IsLThOptU0D1NwYgDBeSG",
+          "request": "00008",
+          "name": "shell",
+          "output": "Tool execution was not approved. User's reason: Heuristic validation failed: command is YELLOW (suspicious) and no auto-approve model is configured"
+        }
+      ],
+      "terminalStatus": [
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed"
+      ],
+      "initialCacheWrite": 5379,
+      "writesAboveLargestContext": 0,
+      "usd": 0.003997635,
+      "observedSkillRead": true,
+      "observedPublicTestSuccess": false,
+      "qualityPass": true,
+      "grade": {
+        "passed": 14,
+        "total": 14,
+        "pass": true,
+        "checks": [
+          {
+            "label": "module-export",
+            "pass": true
+          },
+          {
+            "label": "falsy-cursors-empty-pages-order",
+            "pass": true
+          },
+          {
+            "label": "typed-cursors-distinct",
+            "pass": true
+          },
+          {
+            "label": "cycle-before-refetch",
+            "pass": true
+          },
+          {
+            "label": "max-pages-before-extra-fetch",
+            "pass": true
+          },
+          {
+            "label": "invalid-options-no-fetch",
+            "pass": true
+          },
+          {
+            "label": "malformed-pages",
+            "pass": true
+          },
+          {
+            "label": "abort-before-fetch",
+            "pass": true
+          },
+          {
+            "label": "abort-after-fetch",
+            "pass": true
+          },
+          {
+            "label": "does-not-mutate",
+            "pass": true
+          },
+          {
+            "label": "default-page-limit-is-100",
+            "pass": true
+          },
+          {
+            "label": "null-abort-reason",
+            "pass": true
+          },
+          {
+            "label": "cli-valid",
+            "pass": true
+          },
+          {
+            "label": "cli-error-clean-stdout",
+            "pass": true
+          }
+        ]
+      },
+      "elapsedMsIncludingGrading": 53029
+    },
+    {
+      "runId": "affinity-openai-pagination-r1-affinity",
+      "arm": "affinity",
+      "requests": 8,
+      "input": 59763,
+      "fresh": 24,
+      "cacheRead": 49972,
+      "cacheWrite": 9767,
+      "output": 4093,
+      "nanoUsd": 3769495,
+      "largestContext": 9767,
+      "zeroReadContinuations": [],
+      "gapsMs": [203.0, 48.0, 28.0, 29.0, 30.0, 17.0, 17.0],
+      "httpMs": 44989.0,
+      "toolCalls": 10,
+      "requestedUnsandboxedShellCalls": 3,
+      "sandboxMissingDependencyResults": 1,
+      "approvalDeniedResults": 2,
+      "toolErrors": [
+        {
+          "responseRequest": "00013",
+          "callId": "call_OF7vTm0MATWqdvfakMlmZ86E",
+          "request": "00012",
+          "name": "shell",
+          "output": "Error: Shell sandbox unavailable (missing_dependency): socat not installed. The command was not run. Resolve the sandbox issue before retrying the sandboxed command. If policy and interactive approval allow it, a one-shot run with sandbox=\"unsandboxed\" may be requested; user approval is required."
+        },
+        {
+          "responseRequest": "00017",
+          "callId": "call_mF6nzzBsL9f7ufOnKZDJLoDj",
+          "request": "00016",
+          "name": "shell",
+          "output": "Tool execution was not approved. User's reason: Heuristic validation failed: command is RED (dangerous) and cannot be executed automatically"
+        },
+        {
+          "responseRequest": "00018",
+          "callId": "call_qt7bOu5TFZFrpOC6fAiOp4Qn",
+          "request": "00017",
+          "name": "shell",
+          "output": "Tool execution was not approved. User's reason: Heuristic validation failed: command is YELLOW (suspicious) and no auto-approve model is configured"
+        }
+      ],
+      "terminalStatus": [
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed"
+      ],
+      "initialCacheWrite": 5379,
+      "writesAboveLargestContext": 0,
+      "usd": 0.003769495,
+      "observedSkillRead": true,
+      "observedPublicTestSuccess": false,
+      "qualityPass": true,
+      "grade": {
+        "passed": 14,
+        "total": 14,
+        "pass": true,
+        "checks": [
+          {
+            "label": "module-export",
+            "pass": true
+          },
+          {
+            "label": "falsy-cursors-empty-pages-order",
+            "pass": true
+          },
+          {
+            "label": "typed-cursors-distinct",
+            "pass": true
+          },
+          {
+            "label": "cycle-before-refetch",
+            "pass": true
+          },
+          {
+            "label": "max-pages-before-extra-fetch",
+            "pass": true
+          },
+          {
+            "label": "invalid-options-no-fetch",
+            "pass": true
+          },
+          {
+            "label": "malformed-pages",
+            "pass": true
+          },
+          {
+            "label": "abort-before-fetch",
+            "pass": true
+          },
+          {
+            "label": "abort-after-fetch",
+            "pass": true
+          },
+          {
+            "label": "does-not-mutate",
+            "pass": true
+          },
+          {
+            "label": "default-page-limit-is-100",
+            "pass": true
+          },
+          {
+            "label": "null-abort-reason",
+            "pass": true
+          },
+          {
+            "label": "cli-valid",
+            "pass": true
+          },
+          {
+            "label": "cli-error-clean-stdout",
+            "pass": true
+          }
+        ]
+      },
+      "elapsedMsIncludingGrading": 46461
+    },
+    {
+      "runId": "affinity-openai-classifier-r1-affinity",
+      "arm": "affinity",
+      "requests": 5,
+      "input": 30794,
+      "fresh": 15,
+      "cacheRead": 23628,
+      "cacheWrite": 7151,
+      "output": 2198,
+      "nanoUsd": 2230655,
+      "largestContext": 7151,
+      "zeroReadContinuations": [],
+      "gapsMs": [152.0, 26.0, 39.0, 27.0],
+      "httpMs": 22108.0,
+      "toolCalls": 7,
+      "requestedUnsandboxedShellCalls": 0,
+      "sandboxMissingDependencyResults": 1,
+      "approvalDeniedResults": 0,
+      "toolErrors": [
+        {
+          "responseRequest": "00021",
+          "callId": "call_evqx9NzCOxkDyYthZIuMgIBE",
+          "request": "00020",
+          "name": "shell",
+          "output": "Error: Shell sandbox unavailable (missing_dependency): socat not installed. The command was not run. Resolve the sandbox issue before retrying the sandboxed command. If policy and interactive approval allow it, a one-shot run with sandbox=\"unsandboxed\" may be requested; user approval is required."
+        }
+      ],
+      "terminalStatus": ["completed", "completed", "completed", "completed", "completed"],
+      "initialCacheWrite": 5552,
+      "writesAboveLargestContext": 0,
+      "usd": 0.002230655,
+      "observedSkillRead": true,
+      "observedPublicTestSuccess": false,
+      "qualityPass": null,
+      "grade": null,
+      "elapsedMsIncludingGrading": null
+    }
+  ],
+  "limitations": [
+    "Rates applied independently with integer nanodollar arithmetic; provider invoice unavailable",
+    "Scripted fixtures and hosted CI excluded",
+    "Tool errors may violate capability guardrail; inspect run details",
+    "Small stochastic task sample cannot establish equivalence or general cache-routing causality"
+  ]
+}

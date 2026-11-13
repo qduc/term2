@@ -1,0 +1,14 @@
+[
+  {
+    "run": "affinity-openai-pagination-r1-baseline",
+    "exit": 0,
+    "stdout": "{\"passed\":14,\"total\":14,\"pass\":true,\"checks\":[{\"label\":\"module-export\",\"pass\":true},{\"label\":\"falsy-cursors-empty-pages-order\",\"pass\":true},{\"label\":\"typed-cursors-distinct\",\"pass\":true},{\"label\":\"cycle-before-refetch\",\"pass\":true},{\"label\":\"max-pages-before-extra-fetch\",\"pass\":true},{\"label\":\"invalid-options-no-fetch\",\"pass\":true},{\"label\":\"malformed-pages\",\"pass\":true},{\"label\":\"abort-before-fetch\",\"pass\":true},{\"label\":\"abort-after-fetch\",\"pass\":true},{\"label\":\"does-not-mutate\",\"pass\":true},{\"label\":\"default-page-limit-is-100\",\"pass\":true},{\"label\":\"null-abort-reason\",\"pass\":true},{\"label\":\"cli-valid\",\"pass\":true},{\"label\":\"cli-error-clean-stdout\",\"pass\":true}]}\n",
+    "stderr": ""
+  },
+  {
+    "run": "affinity-openai-pagination-r1-affinity",
+    "exit": 0,
+    "stdout": "{\"passed\":14,\"total\":14,\"pass\":true,\"checks\":[{\"label\":\"module-export\",\"pass\":true},{\"label\":\"falsy-cursors-empty-pages-order\",\"pass\":true},{\"label\":\"typed-cursors-distinct\",\"pass\":true},{\"label\":\"cycle-before-refetch\",\"pass\":true},{\"label\":\"max-pages-before-extra-fetch\",\"pass\":true},{\"label\":\"invalid-options-no-fetch\",\"pass\":true},{\"label\":\"malformed-pages\",\"pass\":true},{\"label\":\"abort-before-fetch\",\"pass\":true},{\"label\":\"abort-after-fetch\",\"pass\":true},{\"label\":\"does-not-mutate\",\"pass\":true},{\"label\":\"default-page-limit-is-100\",\"pass\":true},{\"label\":\"null-abort-reason\",\"pass\":true},{\"label\":\"cli-valid\",\"pass\":true},{\"label\":\"cli-error-clean-stdout\",\"pass\":true}]}\n",
+    "stderr": ""
+  }
+]

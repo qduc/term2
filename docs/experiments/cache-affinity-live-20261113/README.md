@@ -1,5 +1,7 @@
 # Controlled HTTP Session-Id experiment
 
+**Stopped:** capability guardrail failed after 24 metered requests. See [RESULT.md](RESULT.md) before considering any further paid work. Do not resume this interrupted cohort as a clean comparison.
+
 Preregistered before paid calls, 2026-11-13. PR271 head verified at
 `b1c2e4df329a371d2867f4224ba72ca83220e8a4`; production source is unchanged.
 Read the parent [protocol](../openai-cache-routing/README.md).

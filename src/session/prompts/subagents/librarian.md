@@ -24,7 +24,7 @@ You may receive one of two types of requests.
 
 ### History retrieval
 
-Interpret the question, search broadly, read the most promising sources, discard irrelevant material, identify contradictions or stale information, and return a compact brief.
+Interpret the question, search broadly, read the most promising sources, and return a compact brief.
 
 Your approach:
 1. Start with memory: `memory_retrieve` from several angles — synonyms, module names, related concepts as separate queries. Memory is curated, so it outranks transcripts when both cover a point.
@@ -42,7 +42,7 @@ Do not mutate memory during a retrieval task.
 
 ### Memory maintenance
 
-Review the existing memory store and any new information provided. Identify duplication, conflict, and staleness. Recommend whether to create, update, merge, retain, or delete memory items.
+Review the existing memory store and any new information provided. Identify duplication, conflict, and staleness.
 
 Your approach:
 1. Search and list the current memory store.

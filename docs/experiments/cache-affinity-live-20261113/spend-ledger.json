@@ -18,5 +18,14 @@
   "approvalBlock": "Resolved by explicit user approval naming synthetic task/prompt/tool/output payload and api.openai.com destination",
   "durablePhysicalLedger": "live-evidence.zip:wire-live/ledger.json",
   "finalCoordinatorState": "terminated only after all physical requests settled; stale lock retained as stopped-coordinator-lock",
-  "noFurtherPaidWork": "Missing socat plus denied agent test commands violate capability guardrail"
+  "noFurtherPaidWork": "Original paid cohort remains stopped. PATH repaired; no new paid cohort started.",
+  "followup": {
+    "status": "PATH repair and no-cost tool preflight pass",
+    "additionalPaidRequests": 0,
+    "additionalPaidCostUsd": 0,
+    "additionalUncertainExposureUsd": 0,
+    "securitySettingsChanged": false,
+    "softwareInstalled": false,
+    "exactPreflightHead": "76a92a1b1a06d84e860a3e2dfe0bc5bf67df9043"
+  }
 }

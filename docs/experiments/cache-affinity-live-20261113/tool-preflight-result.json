@@ -1,0 +1,17 @@
+{
+  "passed": true,
+  "mode": "loopback-fixture-only",
+  "paidRequests": 0,
+  "paidCostUsd": 0,
+  "requests": 4,
+  "errors": [],
+  "sourceEdited": true,
+  "externalPublicTestsExitCode": 0,
+  "sandboxModeRequested": "default",
+  "unsandboxedRequests": 0,
+  "choreModelConfigured": false,
+  "securitySettingChanges": [],
+  "pathRepair": "/workspace/.local/usr/bin",
+  "socatBinarySha256": "676c9fda367e480b51d752259399d56ee4f1eb3ff811d935db22f917d8dc9499",
+  "scriptSha256": "9e4be82997481e8526c0cab79d9f39034b68ae45dd534494ad0131b2a6d81c2c"
+}

@@ -1,5 +1,7 @@
 # Inconclusive: stopped on capability guardrail failure
 
+Follow-up: [the configured existing socat path was restored and a no-cost tool-using preflight passed](FOLLOWUP.md). The historical paid result below remains inconclusive; no additional paid cohort has run.
+
 Paid work stopped after one complete matched pagination pair and an interrupted
 classifier treatment. All **24 physical native requests** are metered:
 **$0.009997785 estimated**, **$0 uncertain exposure**, no pending requests.

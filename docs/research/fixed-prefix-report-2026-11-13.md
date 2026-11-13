@@ -142,3 +142,33 @@ These need rewording or a product decision, so they are outside lossless deletio
 - **`run_code`'s "Agent capability"** section (1,725 characters of the headless description) is worded
   "when present"; a scripted probe in the headless root found the `agent` global
   present, so it is not advertised-but-missing there.
+
+## Round 3a: run_code and read_file rewording
+
+The product owner approved non-lossless rewording for these two tools: the
+wording may change, every instruction, limit and failure rule must stay. Measured
+with `pnpm prefix:report` on the parent build and on the round's build.
+
+- **`run_code`** (description, parameters, catalogue, Agent capability): 8,616 to
+  7,639 characters in the headless root (-977, 11.3%); 8,748 to 7,771 in the TUI;
+  8,157 to 7,325 for `gpt-5.5` / codex. The largest single cut is the catalogue no
+  longer repeating a clipped description for essential tools that are also offered
+  directly (`read_file`, `create_file`, `search_replace`, `apply_patch`); see
+  `docs/plans/tools/run-code/run-code-authoring-friction.md`.
+- **`read_file`**: the line-range advice is stated once instead of on both
+  `start_line` and `end_line` (-53 in every request that offers `read_file`), and its
+  scripted return guidance no longer repeats field types.
+
+| Scenario | Before | After |
+| --- | ---: | ---: |
+| Headless root (`mock-alpha`, sonnet, kimi) | 21,223 | 20,193 |
+| Headless root, `--goal` | 24,738 | 23,708 |
+| Headless root, `gpt-5.5` / codex | 20,354 | 19,469 |
+| TUI root (`mock-alpha`, sonnet, kimi) | 24,614 | 23,584 |
+| TUI root, `gpt-5.5` / codex | 23,745 | 22,860 |
+| Subagents offered `read_file` (generic, explorer, worker, all model ids) | | 53 smaller each |
+| Mentor, reviewer, librarian | | unchanged |
+
+The 25% target for `run_code` was not reached: most of its remaining text is
+distinct instructions (each mapped in the round's handoff), and the rest is the
+generated signatures and return types, which must stay exact.

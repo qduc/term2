@@ -31,7 +31,7 @@
             },
             {
               "name": "read_file",
-              "schema": "a697894bf1c8d6f0"
+              "schema": "743ec429dfca7469"
             },
             {
               "name": "create_file",
@@ -47,7 +47,7 @@
             },
             {
               "name": "run_code",
-              "schema": "e7ab07b6beaa4e03"
+              "schema": "b252cb662eb572db"
             }
           ],
           "other": {
@@ -97,7 +97,7 @@
             },
             {
               "name": "read_file",
-              "schema": "a697894bf1c8d6f0"
+              "schema": "743ec429dfca7469"
             },
             {
               "name": "create_file",
@@ -113,7 +113,7 @@
             },
             {
               "name": "run_code",
-              "schema": "e7ab07b6beaa4e03"
+              "schema": "b252cb662eb572db"
             }
           ],
           "other": {

@@ -219,3 +219,34 @@ and were fixed in the `run-code-dx` branch:
 
 The M4 re-measure gate still needs ~≥100 strictly post-M1 scripts across ≥5
 sessions; this scan does not satisfy it.
+
+## Model-facing text compression (2026-11-13)
+
+The `run_code` description, its parameter text, the catalogue (`renderToolsHeader`
+in `src/tools/system/run-code/tools-header.ts`) and the Agent capability section
+(`renderAgentCapabilitySection` in `src/delegation/run-code/run-code-tool.ts`) were
+reworded to cut about 1,000 characters from every root request, with the product
+owner's approval for non-lossless wording. No instruction was dropped. These
+sentences trace to failures recorded in this plan and in
+[the September log audit](../../../research/tool-real-world-log-audit-2026-09-05.md),
+so a later rewrite may shorten them but must keep each one:
+
+- patch or file text with backticks or `${...}` goes through `inputs`, not the code
+  (M5 syntax failures);
+- independent reads use `Promise.allSettled` and map rejections to
+  `{error: r.reason.message}` (M4 batch loss);
+- return only needed fields, with the 30,000-character limit, and follow
+  `Full output saved to` or a scripted `read_file` `fullOutputPath` instead of
+  repeating completed calls (audit section B);
+- the 200-call budget, partial results on exhaustion, and "Do not repeat completed
+  tool effects";
+- "Return the value you want the model to receive", stated in the description and
+  again on the `code` parameter: a script that only logs gets no result
+  (`code-mode-field-test.md`, concern 1).
+
+The catalogue no longer repeats a clipped one-line description for an essential
+tool that `isDirectlyCallable` reports as direct. When `run_code` is offered,
+`buildAgentTools` in `src/app/lib/agent-factory.ts` returns exactly the tools that
+satisfy that predicate, so the full description is already in the same request.
+If a profile ever offers `run_code` with a different direct surface, restore the
+one-liner for the tools it hides.

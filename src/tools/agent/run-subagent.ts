@@ -12,7 +12,7 @@ import { SUBAGENT_RUN_NAME_PATTERN, SubagentRegistryError } from '../subagents/l
 import { isAbortLike, formatSubagentResult } from '../subagents/utils.js';
 import { relaxedNumber } from '../utils.js';
 import { AGENT_SPEC_TOOL_NAMES } from './agent-spec-tools.js';
-import { withRunSubagentShapes } from './run-subagent-shape.js';
+import { withInterpretation, withRunSubagentShapes } from './run-subagent-shape.js';
 
 function getRunSubagentDescription(backgroundEnabled: boolean): string {
   return (
@@ -396,13 +396,20 @@ export function createRunSubagentToolDefinition(
     needsApproval: () => false,
     execute: async (rawParams: unknown, context, details) => {
       const resolved = shapes.resolve(rawParams);
-      const output = await executeRunSubagent(resolved.params as RunSubagentParams, context, details);
-      return resolved.interpretation ? withInterpretation(output, resolved.interpretation) : output;
+      const launch = { started: false };
+      const output = await executeRunSubagent(resolved.params as RunSubagentParams, context, details, launch);
+      // The line describes a launch; a refused or failed launch says nothing about how the call was read.
+      return resolved.interpretation && launch.started ? withInterpretation(output, resolved.interpretation) : output;
     },
     formatCommandMessage: formatRunSubagentCommandMessage,
   };
 
-  async function executeRunSubagent(params: RunSubagentParams, context: unknown, details: unknown): Promise<string> {
+  async function executeRunSubagent(
+    params: RunSubagentParams,
+    context: unknown,
+    details: unknown,
+    launch: { started: boolean },
+  ): Promise<string> {
     // Beside background, foreground is offered only to roles that cannot write files.
     if (
       resolvedCallbacks.runSubagentAsync &&
@@ -444,6 +451,7 @@ export function createRunSubagentToolDefinition(
           context,
           details,
         );
+        launch.started = true;
         // The user moved the live child to the background; its completion arrives as a notification.
         if (result.status === 'running')
           return formatBackgroundHandle({
@@ -480,6 +488,7 @@ export function createRunSubagentToolDefinition(
         context,
         details,
       );
+      launch.started = true;
       if (params.check_in !== undefined && resolvedCallbacks.configureCheckIn) {
         resolvedCallbacks.configureCheckIn(
           { kind: 'subagent', id: handle.runId },
@@ -504,12 +513,4 @@ export function createRunSubagentToolDefinition(
       });
     }
   }
-}
-
-/** One line telling the model how a mixed-shape call was read; JSON results carry it as a field. */
-function withInterpretation(output: string, interpretation: string): string {
-  const parsed = safeJsonParse(output);
-  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed))
-    return JSON.stringify({ ...(parsed as Record<string, unknown>), interpretation });
-  return `${output}\n\nInterpretation: ${interpretation}`;
 }

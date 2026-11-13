@@ -2,29 +2,25 @@
  * Recoverable `run_subagent` argument shapes.
  *
  * Real runs showed a model's first call mixing the two documented shapes: a
- * named `role` (with or without `task`) plus an `agent_spec`, or agent_spec
- * fields (`doneWhen`, `tools`) at the top level. The schema rejected those and
- * every retry asked again for the named role with a task, costing one provider
- * request each time. This module rewrites such a call to the one shape the
- * retries chose, or names the single shape to send when the two disagree on
- * authority. The canonical schema still validates the rewritten call.
+ * read-only `explorer` (with or without `task`) plus an `agent_spec`, or
+ * agent_spec fields (`doneWhen`, `tools`) at the top level. The schema rejected
+ * those and every retry but one asked for the named role with a task, costing a
+ * provider request each time. All 48 recorded rejections named `explorer`.
  *
- * Authority: the rewritten call is always plain `role` + `task`, so it grants
- * exactly what that role alone grants. Nothing from the dropped agent_spec is
- * merged into the run except text. A spec that asks for a capability the role
- * lacks, or for a model, is a genuine conflict and is rejected.
+ * Only a read-only role (explorer, librarian) is rewritten, and only when every
+ * spec field is either text for the child or a limit we may drop because the
+ * role cannot write: a writing role, or any scope, model or unknown field the
+ * model may rely on, keeps the rejection that names the one shape to send. The
+ * rewritten call is plain `role` + `task`, so it grants exactly what that role
+ * grants alone. The canonical schema still validates the rewritten call.
  */
 import type { ZodTypeAny } from 'zod';
 import { z } from 'zod';
 import { normalizeObjectParams } from '../tool-invoke.js';
+import { safeJsonParse } from '../format-helpers.js';
 
-/**
- * Tools each named role is offered, in agent_spec's tool vocabulary (from the
- * `can*` frontmatter of `session/prompts/subagents/<role>.md`). Used only to
- * decide that a spec asks for something the role does not provide; the
- * rewritten call is a plain role launch, so this table never grants anything.
- */
-const ROLE_TOOLS: Readonly<Record<string, readonly string[]>> = {
+/** Tools each rewritable role is offered, in agent_spec's vocabulary (`can*` frontmatter of its role prompt). */
+const READ_ONLY_ROLE_TOOLS: Readonly<Record<string, readonly string[]>> = {
   explorer: [
     'read_file',
     'grep',
@@ -35,34 +31,18 @@ const ROLE_TOOLS: Readonly<Record<string, readonly string[]>> = {
     'web_fetch',
     'shell',
   ],
-  worker: [
-    'read_file',
-    'grep',
-    'glob',
-    'read_code_outline',
-    'code_context_search',
-    'shell',
-    'apply_patch',
-    'search_replace',
-    'create_file',
-  ],
   librarian: [],
-  mentor: [],
-  reviewer: [],
 };
 
-/** agent_spec fields that are only text for the child, folded into the task. */
-const SPEC_TEXT_FIELDS = ['goal', 'constraints', 'doneWhen', 'context'] as const;
-/** agent_spec fields seen misplaced at the top level of a role call. */
-const STRAY_TOP_LEVEL_FIELDS = ['doneWhen', 'constraints', 'tools'] as const;
-
-type RunSubagentShape =
+type Shape =
   | { readonly ok: true; readonly value: unknown; readonly interpretation?: string }
   | { readonly ok: false; readonly message: string };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
+const nonEmpty = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0;
 
+/** A tool list sent as an array or a JSON array string; anything else is malformed. */
 function toolList(value: unknown): string[] | undefined {
   if (typeof value === 'string') {
     try {
@@ -74,137 +54,204 @@ function toolList(value: unknown): string[] | undefined {
   return Array.isArray(value) && value.every((entry) => typeof entry === 'string') ? value : undefined;
 }
 
-function constraintLines(value: unknown): string[] {
-  if (typeof value === 'string') return value.trim() ? [value.trim()] : [];
-  return Array.isArray(value)
-    ? value.filter((entry): entry is string => typeof entry === 'string' && !!entry.trim())
-    : [];
+/** Constraints as an array of strings or one string; anything else is malformed. */
+function constraintList(value: unknown): string[] | undefined {
+  if (typeof value === 'string') return [value];
+  return Array.isArray(value) && value.every((entry) => typeof entry === 'string') ? value : undefined;
 }
 
-/** Text the child would have read from the dropped fields, minus what the task already says. */
-function foldedTask(base: string, source: Record<string, unknown>): string {
-  const has = (text: string) => base.includes(text.trim());
-  const parts = [base];
-  const constraints = constraintLines(source.constraints).filter((line) => !has(line));
-  if (constraints.length) parts.push(`Constraints:\n${constraints.map((line) => `- ${line}`).join('\n')}`);
-  if (typeof source.doneWhen === 'string' && source.doneWhen.trim() && !has(source.doneWhen))
-    parts.push(`Done when: ${source.doneWhen.trim()}`);
-  if (isRecord(source.context) && Object.keys(source.context).length > 0)
-    parts.push(`Context: ${JSON.stringify(source.context)}`);
-  return parts.join('\n\n');
-}
+const positiveInt = (value: unknown) => typeof value === 'number' && Number.isInteger(value) && value > 0;
 
 // The diagnostic keeps about 160 characters of this message, so the instruction comes first.
-function conflict(reason: string): RunSubagentShape {
-  return { ok: false, message: `Send role+task without agent_spec, or agent_spec alone (${reason})` };
-}
+const reject = (reason: string): Shape => ({
+  ok: false,
+  message: `Send role+task without agent_spec, or agent_spec alone (${reason})`,
+});
 
-const WRITE_TOOLS = ['apply_patch', 'search_replace', 'create_file'];
-
-/** The spec's authority claims that disagree with what the named role grants on its own. */
-function specConflict(role: string, spec: Record<string, unknown>, source = 'agent_spec'): string | undefined {
-  const allowed = ROLE_TOOLS[role];
-  if (!allowed) return `role "${role}" has no known tool set`;
-  if (spec.model !== undefined) return `${source}.model is not used by role ${role}`;
-  const permissions = isRecord(spec.permissions) ? spec.permissions : {};
-  const listed = [toolList(spec.tools), toolList(permissions.tools)].filter((list) => list !== undefined);
-  const requested = listed.flat();
-  const missing = [...new Set(requested.filter((tool) => !allowed.includes(tool)))];
-  if (missing.length) return `${source} asks for ${missing.join(', ')}, which ${role} lacks`;
-  const filesystem = isRecord(permissions.filesystem) ? permissions.filesystem : {};
-  const writes = Array.isArray(filesystem.write) && filesystem.write.length > 0;
-  if (writes && !allowed.some((tool) => WRITE_TOOLS.includes(tool))) return `${role} cannot write files`;
-  // A spec without writes (no tools means read-only defaults) must not become a writing role.
-  const withholdsWrites =
-    (Array.isArray(filesystem.write) && filesystem.write.length === 0) ||
-    !listed.some((list) => list.some((tool) => WRITE_TOOLS.includes(tool)));
-  if (withholdsWrites && allowed.some((tool) => WRITE_TOOLS.includes(tool)))
-    return `${source} is read-only but ${role} writes files`;
-  if (isRecord(permissions.agents) && permissions.agents.create === true) return `${role} cannot create agents`;
-  return undefined;
-}
+type Pieces = { goal?: string; constraints: string[]; doneWhen?: string; context?: Record<string, unknown> };
 
 /**
- * Rewrite a recoverable call to `role` + `task`, or report a conflict. Any other
- * input, valid or not, is returned unchanged for the canonical schema to judge.
+ * Text fields to append and limits to drop, or the reason the spec must be sent as its own shape.
+ * Dropped: a tool list within the role's own tools, `budget`, `permissions.tools` within the role's
+ * tools, `permissions.agents.maxDepth`, and `permissions.readOnly: true` — none can widen what a
+ * read-only role does. Rejected: everything else, including filesystem and network scopes, which the
+ * model may rely on for safety and which the role would not enforce.
  */
-function normalizeRunSubagentShape(raw: unknown): RunSubagentShape {
-  if (!isRecord(raw) || typeof raw.role !== 'string' || !raw.role) return { ok: true, value: raw };
-  const role = raw.role;
-  const task = typeof raw.task === 'string' && raw.task.trim() ? raw.task : undefined;
-  const spec = isRecord(raw.agent_spec) ? raw.agent_spec : undefined;
-  const stray = STRAY_TOP_LEVEL_FIELDS.filter((field) => raw[field] !== undefined);
+function readSpec(role: string, spec: Record<string, unknown>, source: string): Pieces | string {
+  const allowed = READ_ONLY_ROLE_TOOLS[role]!;
+  const pieces: Pieces = { constraints: [] };
+  const toolsWithin = (value: unknown, field: string): string | undefined => {
+    const tools = toolList(value);
+    if (!tools) return `${field} must be a list of tool names`;
+    const missing = tools.filter((tool) => !allowed.includes(tool));
+    return missing.length ? `${field} asks for ${missing.join(', ')}, which ${role} lacks` : undefined;
+  };
+  for (const [key, value] of Object.entries(spec)) {
+    if (value === undefined) continue;
+    if (key === 'goal' || key === 'doneWhen') {
+      if (typeof value !== 'string') return `${source}.${key} must be a string`;
+      if (key === 'goal') pieces.goal = value;
+      else pieces.doneWhen = value;
+    } else if (key === 'constraints') {
+      const list = constraintList(value);
+      if (!list) return `${source}.constraints must be strings`;
+      pieces.constraints = list.filter(nonEmpty).map((line) => line.trim());
+    } else if (key === 'context') {
+      if (!isRecord(value)) return `${source}.context must be an object`;
+      pieces.context = value;
+    } else if (key === 'tools') {
+      const problem = toolsWithin(value, `${source}.tools`);
+      if (problem) return problem;
+    } else if (key === 'budget') {
+      if (
+        !isRecord(value) ||
+        !Object.entries(value).every(([k, v]) => ['maxTurns', 'maxTokens'].includes(k) && positiveInt(v))
+      )
+        return `${source}.budget must hold only positive maxTurns and maxTokens`;
+    } else if (key === 'permissions') {
+      if (!isRecord(value)) return `${source}.permissions must be an object`;
+      for (const [field, entry] of Object.entries(value)) {
+        if (entry === undefined) continue;
+        if (field === 'tools') {
+          const problem = toolsWithin(entry, `${source}.permissions.tools`);
+          if (problem) return problem;
+        } else if (field === 'readOnly' && entry === true) {
+          continue;
+        } else if (
+          field === 'agents' &&
+          isRecord(entry) &&
+          Object.entries(entry).every(([k, v]) => k === 'maxDepth' && typeof v === 'number')
+        ) {
+          continue;
+        } else {
+          return `${source}.permissions.${field} would not be enforced by ${role}`;
+        }
+      }
+    } else {
+      return `${source}.${key} is not used by role ${role}`;
+    }
+  }
+  return pieces;
+}
 
-  if (spec) {
-    const reason = specConflict(role, spec);
-    if (reason) return conflict(reason);
-    const goal = typeof spec.goal === 'string' && spec.goal.trim() ? spec.goal : undefined;
-    const base = task ?? goal;
+/** Append whole items the task does not already hold; return the task and the names of what was appended. */
+function fold(task: string, pieces: Pieces, includeGoal: boolean): { task: string; appended: string[] } {
+  const present = new Set(
+    task
+      .split('\n')
+      .map((line) => line.replace(/^\s*-\s*/, '').trim())
+      .filter(Boolean),
+  );
+  present.add(task.trim());
+  const parts = [task];
+  const appended: string[] = [];
+  if (includeGoal && nonEmpty(pieces.goal) && !present.has(pieces.goal.trim())) {
+    parts.push(`Goal: ${pieces.goal.trim()}`);
+    appended.push('goal');
+  }
+  const constraints = [...new Set(pieces.constraints)].filter((line) => !present.has(line));
+  if (constraints.length) {
+    parts.push(`Constraints:\n${constraints.map((line) => `- ${line}`).join('\n')}`);
+    appended.push('constraints');
+  }
+  if (nonEmpty(pieces.doneWhen) && !present.has(pieces.doneWhen.trim())) {
+    parts.push(`Done when: ${pieces.doneWhen.trim()}`);
+    appended.push('doneWhen');
+  }
+  if (pieces.context && Object.keys(pieces.context).length > 0) {
+    parts.push(`Context: ${JSON.stringify(pieces.context)}`);
+    appended.push('context');
+  }
+  return { task: parts.join('\n\n'), appended };
+}
+
+function describe(role: string, unused: string, appended: string[], ignored: string[]): string {
+  return (
+    `Read as role "${role}" with task; ${unused}` +
+    (appended.length ? `; appended to the task: ${appended.join(', ')}` : '') +
+    (ignored.length ? `; ignored (the role's own tools and limits apply): ${ignored.join(', ')}` : '') +
+    '.'
+  );
+}
+
+/** Rewrite a recoverable call to `role` + `task`, or report why it cannot be. Other input passes unchanged. */
+function normalizeRunSubagentShape(raw: unknown): Shape {
+  if (!isRecord(raw) || !nonEmpty(raw.role)) return { ok: true, value: raw };
+  const role = raw.role;
+  const task = nonEmpty(raw.task) ? raw.task : undefined;
+  const stray = (['doneWhen', 'constraints', 'tools'] as const).filter((field) => raw[field] !== undefined);
+  const spec = raw.agent_spec;
+  if (spec === undefined && (!stray.length || !task)) return { ok: true, value: raw };
+  // Writing roles (and roles with no recorded mixed call) are never rewritten: a dropped scope could widen them.
+  if (!(role in READ_ONLY_ROLE_TOOLS))
+    return reject(`role ${role} is not combined with ${spec !== undefined ? 'agent_spec' : stray.join(', ')}`);
+
+  if (spec !== undefined) {
+    if (!isRecord(spec)) return { ok: true, value: raw };
+    const read = readSpec(role, spec, 'agent_spec');
+    if (typeof read === 'string') return reject(read);
+    const base = task ?? (nonEmpty(read.goal) ? read.goal : undefined);
     if (!base) return { ok: true, value: raw };
     const { agent_spec: _dropped, ...rest } = raw;
-    // When the model also wrote a task, the spec's goal restated it in every recorded call; keep the task.
-    const value = { ...rest, task: foldedTask(base, spec) };
+    const folded = fold(base, read, task !== undefined);
     const ignored = ['tools', 'permissions', 'budget'].filter((field) => spec[field] !== undefined);
-    const folded = SPEC_TEXT_FIELDS.filter((field) => spec[field] !== undefined && (field !== 'goal' || !task));
     return {
       ok: true,
-      value,
-      interpretation:
-        `Ran as role "${role}" with task; agent_spec was not used` +
-        (folded.length ? ` (its ${folded.join(', ')} added to the task)` : '') +
-        (ignored.length ? `; its ${ignored.join(', ')} not applied, the role's own tools and limits apply` : '') +
-        '.',
+      value: { ...rest, task: folded.task },
+      interpretation: describe(
+        role,
+        'agent_spec was not launched',
+        [...(task ? [] : ['goal (as the task)']), ...folded.appended],
+        ignored,
+      ),
     };
   }
 
-  if (!stray.length || !task) return { ok: true, value: raw };
-  if (raw.tools !== undefined) {
-    const tools = toolList(raw.tools);
-    if (!tools) return { ok: true, value: raw };
-    const reason = specConflict(role, { tools }, 'top-level tools');
-    if (reason) return conflict(reason);
-  }
+  const read = readSpec(role, Object.fromEntries(stray.map((field) => [field, raw[field]])), 'top-level');
+  if (typeof read === 'string') return reject(read);
   const { doneWhen: _d, constraints: _c, tools: _t, ...rest } = raw;
-  const folded = stray.filter((field) => field !== 'tools');
+  const folded = fold(task!, read, false);
   return {
     ok: true,
-    value: { ...rest, task: foldedTask(task, raw) },
-    interpretation:
-      `Ran as role "${role}" with task` +
-      (folded.length ? `; top-level ${folded.join(', ')} added to the task` : '') +
-      (stray.includes('tools') ? "; top-level tools not applied, the role's own tools apply" : '') +
-      '.',
+    value: { ...rest, task: folded.task },
+    interpretation: describe(
+      role,
+      `top-level ${stray.join(', ')} not taken as fields`,
+      folded.appended,
+      stray.includes('tools') ? ['tools'] : [],
+    ),
   };
 }
 
 /**
- * Wrap the canonical schema so validation sees the rewritten call. The parsed
- * value is the rewritten call; its interpretation line is kept by identity for
- * the executor, which receives that exact object from either invocation path.
+ * Wrap the canonical schema so validation sees the rewritten call. The wrapper is a plain preprocess, so it
+ * renders as the canonical schema's JSON form. The interpretation line is kept by identity of the parsed
+ * value, which is the object the executor receives on the native path; a direct caller re-derives it.
  */
 export function withRunSubagentShapes(canonical: ZodTypeAny): {
   readonly schema: ZodTypeAny;
   readonly resolve: (params: unknown) => { readonly params: unknown; readonly interpretation?: string };
 } {
   const interpretations = new WeakMap<object, string>();
-  const shape = (raw: unknown): RunSubagentShape => normalizeRunSubagentShape(normalizeObjectParams(raw, canonical));
-  const schema = z.unknown().transform((raw, ctx) => {
-    const shaped = shape(raw);
-    if (!shaped.ok) {
-      ctx.addIssue({ code: 'custom', message: shaped.message });
-      return z.NEVER;
-    }
-    const parsed = canonical.safeParse(shaped.value);
-    if (!parsed.success) {
-      for (const issue of parsed.error.issues) ctx.addIssue({ ...issue, code: 'custom', message: issue.message });
-      return z.NEVER;
-    }
-    const value: unknown = parsed.data;
-    const inherited = isRecord(raw) ? interpretations.get(raw) : undefined;
-    const interpretation = shaped.interpretation ?? inherited;
-    if (interpretation && isRecord(value)) interpretations.set(value, interpretation);
-    return value;
-  });
+  const shape = (raw: unknown): Shape => normalizeRunSubagentShape(normalizeObjectParams(raw, canonical));
+  // Set by the preprocess and read by the refinement of the same synchronous parse.
+  let pending: string | undefined;
+  const schema = z.preprocess(
+    (raw, ctx) => {
+      pending = isRecord(raw) ? interpretations.get(raw) : undefined;
+      const shaped = shape(raw);
+      if (!shaped.ok) {
+        ctx.addIssue({ code: 'custom', message: shaped.message });
+        return raw;
+      }
+      pending = shaped.interpretation ?? pending;
+      return shaped.value;
+    },
+    canonical.superRefine((value) => {
+      if (pending && isRecord(value)) interpretations.set(value, pending);
+      pending = undefined;
+    }),
+  );
   return {
     schema,
     resolve(params) {
@@ -214,4 +261,12 @@ export function withRunSubagentShapes(canonical: ZodTypeAny): {
       return shaped.ok ? { params: shaped.value, interpretation: shaped.interpretation } : { params };
     },
   };
+}
+
+/** One line telling the model how a mixed-shape call was read; JSON results carry it as a field. */
+export function withInterpretation(output: string, interpretation: string): string {
+  const parsed = safeJsonParse(output);
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed))
+    return JSON.stringify({ ...(parsed as Record<string, unknown>), interpretation });
+  return `${output}\n\nInterpretation: ${interpretation}`;
 }

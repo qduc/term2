@@ -174,9 +174,13 @@ it('runs a role call that also carries an agent_spec as that role, and says so i
     expect(children).toHaveLength(1);
     const launch = JSON.parse(toolResults(roots[1]!.body)[0]!) as Record<string, unknown>;
     expect(launch).toMatchObject({ status: 'running' });
-    expect(launch.interpretation).toMatch(/^Ran as role "explorer" with task; agent_spec was not used/);
+    expect(launch.interpretation).toBe(
+      'Read as role "explorer" with task; agent_spec was not launched; appended to the task: goal (as the task), ' +
+        "constraints, doneWhen; ignored (the role's own tools and limits apply): tools.",
+    );
     const childTask = userText(children[0]!.body);
     expect(childTask).toContain('Find where parseInvoice is defined');
+    expect(childTask).toContain('Constraints:\n- Read-only: do not modify files.');
     expect(childTask).toContain('Done when: The defining file is reported with a line number.');
     // The role preset ran: its own tools (web and shell), not the spec's three-tool list.
     const childTools = children[0]!.body.tools!.map((tool) => tool.function.name);
@@ -187,24 +191,50 @@ it('runs a role call that also carries an agent_spec as that role, and says so i
   }
 });
 
-it('rejects a role call whose agent_spec asks for tools the role lacks, naming the shape to send', async () => {
+// Each call would lose something the model asked for if rewritten to role + task: a writing role's
+// scope, a model choice, a grant to create agents, or a tool the role lacks. All are refused.
+it('rejects role calls whose agent_spec or top-level fields the role cannot honour, naming the shape to send', async () => {
+  const refused: [args: Record<string, unknown>, reason: string][] = [
+    [
+      { role: 'explorer', agent_spec: { goal: 'Edit a.js', tools: ['apply_patch'] } },
+      'apply_patch, which explorer lacks',
+    ],
+    [
+      { role: 'explorer', task: 'Find a', agent_spec: { goal: 'Find a', model: 'capable' } },
+      'model is not used by role',
+    ],
+    [
+      { role: 'explorer', agent_spec: { goal: 'Find a', permissions: { agents: { create: true } } } },
+      'permissions.agents would not be enforced',
+    ],
+    [
+      { role: 'explorer', agent_spec: { goal: 'Find a', permissions: { filesystem: { read: ['src'] } } } },
+      'permissions.filesystem would not be enforced',
+    ],
+    [{ role: 'explorer', task: 'Find a', tools: ['create_file'] }, 'create_file, which explorer lacks'],
+    [
+      { role: 'worker', task: 'Edit a.js', agent_spec: { goal: 'Edit a.js', permissions: { readOnly: true } } },
+      'role worker is not combined with agent_spec',
+    ],
+    [{ role: 'worker', task: 'Edit a.js', doneWhen: 'a.js is edited' }, 'role worker is not combined with doneWhen'],
+  ];
   const provider = await startProvider((entry, rootIndex) => {
     if (!entry.root) return text('unexpected child');
     if (rootIndex === 1)
-      return calls({
-        name: 'run_subagent',
-        args: { execution: 'background', role: 'explorer', agent_spec: { goal: 'Edit a.js', tools: ['apply_patch'] } },
-      });
+      return calls(...refused.map(([args]) => ({ name: 'run_subagent', args: { execution: 'background', ...args } })));
     return text('Stopped.');
   });
   try {
     const result = await runCli(['Edit a.js']);
     expect(result.status, result.stderr).toBe(0);
     expect(provider.seen.filter((s) => !s.root)).toHaveLength(0);
-    const rejection = toolResults(provider.seen.filter((s) => s.root)[1]!.body)[0]!;
-    expect(rejection).toContain('Send role+task without agent_spec, or agent_spec alone');
-    expect(rejection).toContain('apply_patch, which explorer lacks');
-    expect(runSubagentCalls(provider.seen)).toBe(1);
+    const rejections = toolResults(provider.seen.filter((s) => s.root)[1]!.body);
+    expect(rejections).toHaveLength(refused.length);
+    rejections.forEach((rejection, index) => {
+      expect(rejection).toContain('Send role+task without agent_spec, or agent_spec alone');
+      expect(rejection).toContain(refused[index]![1]);
+      expect(rejection).not.toContain('Read as');
+    });
   } finally {
     await provider.close();
   }

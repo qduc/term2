@@ -1,8 +1,87 @@
 # Parallel safe-tool dispatch
 
-Status: **implemented and merged** (`b7eada1e`).
+Status: **implemented and merged** (`b7eada1e`) in the legacy run loop, where it
+never took effect for policy-approved calls (below). In the direct CLI the engine
+(`@qduc/agent-core`, `TurnTools.#settle`) groups calls; `approvalFor` in
+`src/app/source-tools.ts` decides which calls it may group.
 
-## Resume here
+## Direct CLI dispatch
+
+**Defect (found 2026-11-13).** Contiguous parallel-safe calls ran one after the
+other at the root and in subagent children, in every approval mode except
+`shell.autoApproveMode: always`. With a policy registry attached,
+`wrapNeedsApproval` returns `true` for every valid call that no interceptor
+refuses, and `approvalFor` marked every policy-approved call
+`{ kind: 'none', batched: true }`. The engine stages batched calls in its
+approval batch (`turn-tool-batch.ts`) and `readyParallel` never groups one. In
+`always` mode `wrapNeedsApproval` returns `false`, the call is unbatched, and
+grouping already worked. The flag came from `48284cb7` (2026-11-04, "Decide a
+response's tool calls like legacy's approval batch"), which copied legacy: the
+legacy loop at `b7eada1e` read the same wrapped `needsApproval` and computed
+`parallelSafe` only for calls it returned `false` for, so outside `always` mode
+the merged feature was never effective in production either (read from the
+code; the legacy loop was not run).
+
+**Fix.** A policy-approved call whose definition is parallel-safe for this input
+is now `{ kind: 'none' }`: it is not staged, needs no decision, and may join a
+parallel group. `approvalFor` reads `parallelSafe` the way the engine does (only
+a literal `true`; a throw means serial). Every other policy-approved call stays
+`batched`. Prompts (`ask`), questions, denials, interceptor refusals, YELLOW/RED
+shell prompts, the outside-sandbox escape and Docker host control take the same
+branches as before; only the auto-approve branch changed.
+
+**Order of one response's calls.** Call the first ask, question or batched
+(non-parallel-safe, policy-approved) call the *first staged call*.
+
+1. Calls before the first staged call run before any prompt is shown.
+2. Then every staged call is decided, in call order (`runApprovalBatch`).
+3. Then the remaining calls run in call order.
+
+In steps 1 and 3, contiguous unstaged parallel-safe calls run together, up to
+`agent.maxParallelToolCalls` (default 3; 1 makes everything serial). Every other
+call runs alone, and the next call waits until it settles. Results are appended
+in call order whatever order the work finishes in, after the whole group settles.
+
+**Behaviour this changed, deliberately.** The batch asks every still-undecided
+staged call once per pass and pops one staged call per pass, so a prompt is
+asked once more for every staged call after it. Parallel-safe policy-approved
+calls are no longer staged, so:
+
+- a prompt followed only by such calls is asked once instead of once per call
+  after it (an outside read followed by two workspace reads: 3 prompts before,
+  1 after; headless answered the same way each time);
+- such calls before the first staged call run before the prompt instead of
+  after all prompts are answered;
+- when an Escaped question or a stop decision is the first staged call, the turn
+  now stops after the response settles; a parallel-safe read before it used to
+  hold the last pass and hide the stop (read from `runApprovalBatch`; headless
+  offers no question, so this was not run).
+
+Prompt order, the decision applied to each call and the request bodies sent to
+the provider are unchanged. If exact prompt counts must be kept, the alternative
+is upstream: drop `!batched(plan.approval)` from `readyParallel` in
+`agent-runtime/packages/core/src/engine/turn-tools.ts` and revert this change.
+Batched calls would then stay staged but be grouped once the batch is decided.
+
+**Shared state under concurrency.** Root and child source tools scope their
+workspace root, ask-user answer, trim configuration and shell task registry with
+`AsyncLocalStorage` (`tool-surface.ts`, `shell-tools.ts`, `output-trim.ts`);
+`invalidInputs` and `shellEscapeCwds` are keyed by each call's own input object.
+Generic `shell` is not parallel-safe, so the sandbox lease
+(`AnthropicShellSandboxRunner.acquire`) is not newly contended by root calls.
+`read_file` keeps no read-before-edit or cache state. A `read_file` of a FIFO
+blocks a libuv thread and is not abortable: SIGINT then waits for it, on the old
+serial path too, and the parallel path can hold up to `maxParallelToolCalls`
+of the four default threads.
+
+**Evidence.** `bare-file-tools.blackbox.ts` ("dispatches auto-approved
+parallel-safe reads together…") gates FIFO reads: two reads must both be
+waiting before either is released, the shell call and the later read must not
+start until what precedes them has settled, results must arrive in call order,
+and the outside read must be asked once, after the leading reads and before the
+shell call. It fails on the pre-fix build at the overlap assertion.
+
+## Resume here (legacy run loop, historical)
 
 The user observed a parent model claiming it was launching parallel explorers,
 but provider traffic for session `90021615-6778-485f-9b8f-0faebb25eaa6` showed

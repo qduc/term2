@@ -196,9 +196,16 @@ async function approvalFor(
     ((!docker || !options.shellEscapeCwd) &&
       shouldBypassToolApproval(definition.name, options.settings.get('shell.autoApproveMode')))
   ) {
-    // Legacy stages every call whose definition needs approval, even when policy then approves it.
+    // Legacy stages every call whose definition needs approval (with a policy registry, every valid call) even
+    // when policy approves it; the engine never groups a staged call, so a parallel-safe one leaves the batch.
     const invocation = invocationFor(context, options.sessionId);
-    return (await definition.needsApproval(input, invocation)) ? { kind: 'none', batched: true } : { kind: 'none' };
+    if (!(await definition.needsApproval(input, invocation))) return { kind: 'none' };
+    // Read as the engine reads it: only a literal true is parallel-safe, and a throw means serial.
+    const safe = definition.parallelSafe as boolean | ((p: unknown, c: unknown) => unknown) | undefined;
+    const parallel = await Promise.resolve()
+      .then(() => (typeof safe === 'function' ? safe(input, invocation) : safe))
+      .catch(() => false);
+    return parallel === true ? { kind: 'none' } : { kind: 'none', batched: true };
   }
   return {
     kind: 'ask',

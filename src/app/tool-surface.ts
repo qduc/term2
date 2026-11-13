@@ -170,7 +170,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     // Session owns the live goal tool and applicability context.
     ...delegation.callbacks,
     getAskUserAnswer: () => answers.getStore(),
-    // Root goal_check remains available; dropped workflows no longer offer propose_goal.
+    // Session binds root goal_check once a goal exists; dropped workflows no longer offer propose_goal.
     ...(options.interactive === true ? goalDeps : {}),
     async checkToolInterceptors(name, params, callId) {
       for (const interceptor of interceptors) {

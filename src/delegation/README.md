@@ -62,15 +62,26 @@ with a canonical one that first rewrites recoverable mixed shapes
 (`run-subagent-shape.ts`): a named `role` sent together with an `agent_spec`,
 or agent_spec fields (`doneWhen`, `constraints`, `tools`) at the top level of
 a role call. Recorded real-model runs sent these as 48 of 487 first delegation
-calls, and every retry but one asked for the named role with a task. The
-rewrite is always plain `role` + `task`: the spec's goal (when no task was
-sent), constraints, doneWhen and context are appended to the task as text, and
-its tools, permissions and budget are not applied, so the launch grants exactly
-what that role grants on its own. The result carries one `interpretation` line
-saying so. A spec that asks for a tool or write the role lacks, a model, agent
-creation, or (for a writing role) only read-only tools still rejects, with a
-message that names the single shape to send. The role tool table there only
-decides rejection; it never grants anything. Presented parameters and
+calls, all naming `explorer`, and every retry but one asked for the named role
+with a task. The rewrite is always plain `role` + `task`, so the launch grants
+exactly what that role grants on its own. It applies only where dropping the
+spec cannot cost the model something it asked for:
+
+| Role | Spec or top-level content | Result |
+| --- | --- | --- |
+| any writing role (worker, …) | any agent_spec or top-level spec field | reject |
+| explorer, librarian | `goal`, `constraints` (strings), `doneWhen`, `context` | append to the task as whole items not already in it |
+| explorer, librarian | `tools` / `permissions.tools` within the role's own tools, `budget` (positive `maxTurns`/`maxTokens`), `permissions.readOnly: true`, `permissions.agents.maxDepth` | drop; the role's own tools and limits apply |
+| explorer, librarian | `permissions.filesystem`, `permissions.network`, `permissions.agents.create` | reject: a scope the model may rely on for safety, which the role would not enforce |
+| explorer, librarian | a tool the role lacks, `model`, any other key (`reasoningEffort`, `provider`, `readOnly`, …), a malformed value | reject |
+
+A writing role is never rewritten because a dropped `filesystem.write` or tool
+subset would widen it. Rejections name the single shape to send. When the
+launch succeeds, the result carries one `interpretation` line ("Read as role
+… with task; …") naming what was appended and what was ignored; a refused or
+failed launch carries none. The wrapper is a `z.preprocess` around the
+canonical schema, so the canonical JSON Schema stays introspectable. All 48
+recorded calls still rewrite under these rules. Presented parameters and
 description are unchanged.
 
 ## Foreground beside background
@@ -97,7 +108,11 @@ is kept now:
   (Ctrl+G task manager, `task_control` `background`), `runOrTransfer` returns
   `running` and the tool replies with the ordinary background handle; the same
   child's completion then arrives as a background notification. Before, that
-  outcome became a `failed` result although the child kept running.
+  outcome became a `failed` result although the child kept running. Callers
+  that cannot hold a handle (the reviewer's `run_explorer`, mentor consultation,
+  `run_code` `agent.run`) get a `failed` result naming the run and saying its
+  result arrives as a background notification; before, they got an internal
+  "Expected a subagent result" error.
 - Approvals: a foreground child's approval is a task interaction the client
   answers (the TUI prompts; headless applies its policy), not an `interrupted`
   result. A background child still cannot ask and fails at such a call.

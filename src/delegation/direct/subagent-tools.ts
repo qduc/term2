@@ -416,11 +416,15 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
     if (result.outcome.kind !== 'background') return projectResult(result, role, evidence);
     return { agentId: result.outcome.runId, role, status: 'running', finalText: '', filesChanged: [], toolsUsed: [] };
   };
-  // Callers without a running-handle reply (explorer runner, mentor, run_code agent.run) keep a settled result.
+  // Explorer runner, mentor and agent.run cannot return a running handle; name where the result goes.
   const run = async (params: Launch): Promise<SubagentResult> => {
     const result = await runOrTransfer(params);
-    if (result.status === 'running') throw new Error('Expected a subagent result, received background admission');
-    return result as SubagentResult;
+    if (result.status !== 'running') return result as SubagentResult;
+    return {
+      ...result,
+      status: 'failed',
+      error: `Moved to the background by the user as run ${result.agentId}; its result arrives as a background notification.`,
+    };
   };
   const start = async (params: Launch): Promise<SubagentRunHandle> => {
     const context = current();

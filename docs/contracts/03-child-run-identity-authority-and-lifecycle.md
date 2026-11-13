@@ -8,7 +8,10 @@ delegation also run foreground `explorer`/`librarian` children
 runtime a foreground child's approval is a task interaction answered by the
 client, not the `interrupted` result §5 records for the retired runner; a
 user's move to background returns a `running` handle from the original call
-(C3.2, C3.5) and the child is detached from the parent signal (C3.4). Covered
+(C3.2, C3.5) and the child is detached from the parent signal (C3.4); a caller
+that cannot hold a handle (reviewer `run_explorer`, mentor, `agent.run`) gets a
+`failed` result naming the run instead. A role call mixed with `agent_spec` is
+rewritten only for explorer and librarian and never gains authority (C3.3). Covered
 by `tests/cli/subagent-delegation.integration.test.ts` and
 `tests/cli/foreground-subagent-transfer.e2e.test.ts`.
 

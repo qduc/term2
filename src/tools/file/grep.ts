@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { z } from 'zod';
 import { exec } from 'child_process';
 import { homedir } from 'node:os';
@@ -71,6 +72,21 @@ function shellQuoteArg(value: string): string {
 // containerized shells can resolve `~` to a different user (for example
 // /root). Remote commands intentionally leave it for the remote shell, whose
 // home directory is not available to the local process.
+/**
+ * Name a search root inside the working directory relative to it. The command
+ * runs in `cwd`, so both spellings reach the same directory, but the tool prints
+ * the root on every match line: a scripted call arrives with its path bound to
+ * an absolute one, and repeating the workspace prefix per match is pure cost.
+ * A root outside `cwd` (or `~`) is left as given.
+ */
+function relativeToCwd(value: string, cwd: string, isRemote: boolean): string {
+  const paths = isRemote ? path.posix : path;
+  if (!paths.isAbsolute(value) || !paths.isAbsolute(cwd)) return value;
+  const relative = paths.relative(cwd, value);
+  if (relative === '') return '.';
+  return relative === '..' || relative.startsWith(`..${paths.sep}`) || paths.isAbsolute(relative) ? value : relative;
+}
+
 function shellQuoteSearchPath(value: string, isRemote: boolean): string {
   if (!isRemote) {
     const expandedPath = value.startsWith('~') ? value.replace(/^~/, homedir()) : value;
@@ -253,6 +269,8 @@ export const createGrepToolDefinition = (
 
       const useRg = hasRipgrep ? await hasRipgrep() : await checkRgAvailability(executionContext);
       let command = '';
+      const isRemote = executionContext?.isRemote() ?? false;
+      const searchTarget = relativeToCwd(searchPath, executionContext?.getCwd() || process.cwd(), isRemote);
 
       // A scripted call is not protected by the 50-line default: the match
       // list goes to the script, not into model context, and a silently
@@ -292,7 +310,7 @@ export const createGrepToolDefinition = (
         // Shell-quote the pattern; do not regex-escape it.
         args.push('--', shellQuoteArg(pattern));
 
-        args.push(shellQuoteSearchPath(searchPath, executionContext?.isRemote() ?? false));
+        args.push(shellQuoteSearchPath(searchTarget, isRemote));
         command = args.join(' ');
       } else {
         // Fallback to grep
@@ -315,7 +333,7 @@ export const createGrepToolDefinition = (
         // Shell-quote the pattern; do not regex-escape it.
         args.push('--', shellQuoteArg(pattern));
 
-        args.push(shellQuoteSearchPath(searchPath, executionContext?.isRemote() ?? false));
+        args.push(shellQuoteSearchPath(searchTarget, isRemote));
         command = args.join(' ');
       }
 

@@ -39,34 +39,19 @@ export type { RunCodeActionOutcome, RunCodeActionReceipt, RunCodeCallRecord } fr
 const MAX_OUTPUT_CHARS = 30_000;
 
 const RUN_CODE_DESCRIPTION =
-  'Write a JavaScript program and execute it. Return the value you want the model to receive; that completion value is ' +
-  'the result of the run. Most tools you already have are available inside the script as ' +
-  "`tools.<tool_name>(params)`, returning a promise that resolves to that tool's normal result and rejecting when " +
-  'the call fails, so you can try/catch it. Parameters are exactly the parameters documented for that tool; they are ' +
-  'validated against the real schema before the tool runs. Prefer this over many separate tool calls when the work ' +
-  'is a loop, a fan-out over many files, or a multi-step computation whose intermediate values you do not need to ' +
-  'see. `console.log` is a debugging trace: it is suppressed on successful runs unless you set `include_console: true`, ' +
-  'but it is included when the script fails or times out. The code runs in an isolated ' +
-  'context with no filesystem, network, timers, require, or eval: `tools.*` is the only way out. Auto-approved tools ' +
-  'run immediately. Tools that require user approval present the existing approval prompt and resume this script after ' +
-  'a decision; denial is catchable. The catalogue below is the complete set of tools a script can call: a name that is ' +
-  'absent from it is not available inside the script, even when the direct tool surface offers it.\n\n' +
-  `Each script may admit at most ${RUN_CODE_LIMITS.maxCalls} tools.* calls. Track progress and split large work into chunks; catch individual ` +
-  'failures or use Promise.allSettled so you can return partial results. When the call budget is exhausted, the error ' +
-  'reports calls admitted and calls remaining: return the partial results and start another run_code call only for ' +
-  'unattempted work. Do not repeat completed tool effects. Return only the fields, line ranges, or summaries you need: ' +
-  'model-visible output is limited to 30,000 characters, ' +
-  'and larger host results can fail before rendering. For independent reads, preserve successful siblings with ' +
-  '`Promise.allSettled`, mapping rejections to `{error: r.reason.message}` before returning. ' +
-  'If the final result says `Full output saved to`, read that exact path with `read_file` rather than repeating completed calls; ' +
-  'for a large artifact, read line ranges or the fields you need instead of transferring the whole value. A scripted ' +
-  '`read_file` result may itself have ' +
-  '`truncated: true` and a `fullOutputPath`; follow that path or narrow the projection before returning it. ' +
-  'Use `tools.describe` before guessing parameters or returned fields. If a patch or file body contains JavaScript ' +
-  'syntax such as backticks or `${...}`, pass it through the `inputs` parameter and read it from the global `inputs` ' +
-  'object instead of embedding it in code. Code and serialized inputs share the 65,536-byte admission limit. ' +
-  'Example: `const r = await Promise.allSettled([tools.read_file({path:"a.ts"}), tools.read_file({path:"b.ts"})]); ' +
-  'return r.map(x => x.status === "fulfilled" ? {content:(typeof x.value === "string" ? x.value : x.value.content).slice(0,2000)} : {error:x.reason.message});`';
+  'Execute JavaScript as an async function body; return the result you need. Use for loops, independent fan-out, or multi-step work whose intermediate results need not reach the model. ' +
+  'Only the listed tools are callable as await tools.name(params), with real-schema validation and catchable failures; direct-only tools are unavailable here. ' +
+  'tools.describe(name) supplies full descriptions, parameter schemas and return guidance: use it rather than guessing.\n\n' +
+  'The isolated context has no filesystem, network, timers, require or eval; use tools.*. Existing tool approval policy applies: approved tools run immediately; ' +
+  'approval prompts pause and resume the script, and denial is catchable. console.log is debug-only, suppressed on success unless include_console=true; failures/timeouts include it.\n\n' +
+  `Limits: ${RUN_CODE_LIMITS.maxCalls} tools.* calls per script; code plus serialized inputs <=65,536 bytes; model-visible result <=30,000 characters (larger host results may fail earlier). ` +
+  'Pass patch/file text containing backticks or ${...} via global inputs, not embedded JavaScript. Return only needed fields, ranges or summaries.\n\n' +
+  'Chunk large work and preserve partial results. For independent calls use Promise.allSettled; map rejected results to {error:r.reason.message}. ' +
+  'Call-budget errors report admitted/remaining calls. Continue only unattempted work; never repeat completed effects. ' +
+  'If output says "Full output saved to", read that exact path with read_file, selecting ranges/fields instead of repeating calls. ' +
+  'For a scripted read_file result with truncated=true and fullOutputPath, retrieve that path or narrow your projection before returning.\n\n' +
+  'Example: const r = await Promise.allSettled([tools.read_file({path:"a.ts"}), tools.read_file({path:"b.ts"})]); ' +
+  'return r.map(x => x.status === "fulfilled" ? {content:(typeof x.value === "string" ? x.value : x.value.content).slice(0,2000)} : {error:x.reason.message});';
 
 export type RunCodeExecutionResult =
   | (string & { readonly [RUN_CODE_EXECUTION_RESULT]: RunCodeExecution })

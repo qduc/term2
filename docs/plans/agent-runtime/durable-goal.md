@@ -34,10 +34,17 @@ closes, rather than proposing for approval.
 
 ## Active-goal stop check
 
-`goal_check` applies only when a durable session goal is active. With no goal set,
-the prompt explicitly directs the model to continue the ordinary request/tool
-workflow without calling it. The catalog stays stable so a goal set during a
-session can take effect; visibility of the tool does not imply an active goal or
+`goal_check` applies only when a durable session goal is active. A session that
+has never had a goal carries neither the tool nor its notice: together they cost
+2,319 characters (about 9% of a headless root request's fixed prefix) on every
+request of sessions that mostly never set a goal. Tools and instructions are
+bound per request (`planRequest` in `src/session/capabilities.ts`), so a goal set
+later still takes effect on the next request; the goal context changes the
+instructions at that point anyway, so the added tool costs no extra cache break.
+Once any goal has existed (`goalEverSet`), the catalog stays stable through every
+later change, including clearing: history may then hold `goal_check` calls, and
+the prompt directs the model to continue the ordinary request/tool workflow
+without calling it. Visibility of the tool does not imply an active goal or
 authorize creating one. An absent-goal call is rejected without recording a check.
 
 While the goal is `active`, a root turn may not end normally until the working

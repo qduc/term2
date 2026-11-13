@@ -15,6 +15,7 @@ import type { ExecutionContext } from '../../tools/execution-context.js';
 import { resolveActiveEnforcement } from '../../config/profiles/active-profile.js';
 import { SubagentPoolEntrySchema } from '../../config/settings/settings-schema.js';
 import { SkillsService } from '../../tools/skills/skills-service.js';
+import { withoutDeadToolReferences } from '../subagents/dead-tool-references.js';
 import { buildInstructions, loadRoleDefinition, resolveSubagentSearchViaShell } from '../subagents/role-loader.js';
 import { SubagentRolePoolSelector } from '../subagents/subagent-role-pool-selector.js';
 import { SubagentToolFactory, SubagentToolPolicy } from '../subagents/tool-policy.js';
@@ -259,7 +260,7 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
             return ask(question);
           }
         : undefined;
-    const definitions = factory
+    const offered = factory
       .buildToolDefinitions(
         definition,
         filesChanged,
@@ -280,37 +281,37 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
             (askOrchestrator && tool.name === 'ask_orchestrator') ||
             (definition.role === 'reviewer' && tool.name === 'run_explorer')) &&
           (!executionContext.isRemote() || !options.remoteUnavailable.has(tool.name)),
-      )
-      .map(
-        (tool): AnyToolDefinition => ({
-          ...tool,
-          parallelSafe:
-            typeof tool.parallelSafe === 'function'
-              ? (input, invocation) =>
-                  withInvocation(tool.name, invocation, async () =>
-                    (tool.parallelSafe as (input: unknown, invocation: unknown) => boolean | Promise<boolean>)(
-                      input,
-                      invocation,
-                    ),
-                  )
-              : tool.parallelSafe,
-          needsApproval: (input, invocation) =>
-            withInvocation(tool.name, invocation, async () => tool.needsApproval(input, invocation)),
-          execute: (input, invocation, details) =>
-            withInvocation(tool.name, invocation, async () => {
-              // Source empty-scope semantics must not turn an explicit denial into
-              // an unrestricted read/write in this native authority snapshot.
-              const write = ['apply_patch', 'search_replace', 'create_file'].includes(tool.name);
-              const read = WORKSPACE_READ_TOOLS.has(tool.name);
-              if (
-                (write && definition.filesystemScope?.write.length === 0) ||
-                (read && definition.filesystemScope?.read.length === 0)
-              )
-                throw new Error(`No filesystem ${write ? 'write' : 'read'} scope for ${tool.name}`);
-              return tool.execute(input, invocation, details);
-            }),
-        }),
       );
+    const definitions = withoutDeadToolReferences(offered).map(
+      (tool): AnyToolDefinition => ({
+        ...tool,
+        parallelSafe:
+          typeof tool.parallelSafe === 'function'
+            ? (input, invocation) =>
+                withInvocation(tool.name, invocation, async () =>
+                  (tool.parallelSafe as (input: unknown, invocation: unknown) => boolean | Promise<boolean>)(
+                    input,
+                    invocation,
+                  ),
+                )
+            : tool.parallelSafe,
+        needsApproval: (input, invocation) =>
+          withInvocation(tool.name, invocation, async () => tool.needsApproval(input, invocation)),
+        execute: (input, invocation, details) =>
+          withInvocation(tool.name, invocation, async () => {
+            // Source empty-scope semantics must not turn an explicit denial into
+            // an unrestricted read/write in this native authority snapshot.
+            const write = ['apply_patch', 'search_replace', 'create_file'].includes(tool.name);
+            const read = WORKSPACE_READ_TOOLS.has(tool.name);
+            if (
+              (write && definition.filesystemScope?.write.length === 0) ||
+              (read && definition.filesystemScope?.read.length === 0)
+            )
+              throw new Error(`No filesystem ${write ? 'write' : 'read'} scope for ${tool.name}`);
+            return tool.execute(input, invocation, details);
+          }),
+      }),
+    );
     const wrapped = factory.buildAgentTools(definitions, {
       providerId: definition.provider,
       approvalPolicyRegistry: policies,

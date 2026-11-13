@@ -178,7 +178,12 @@ function buildAvailableToolGuidance(
     const searchTools = ['grep', 'glob'].filter(hasTool).map((name) => `\`${name}\``);
     lines.push(`For workspace search, use the dedicated search tools: ${searchTools.join(', ')}.`);
   } else {
-    lines.push('No dedicated workspace search tool is available. Use `read_file` and provided context where possible.');
+    // Name `read_file` only for a child that was actually offered it.
+    lines.push(
+      `No dedicated workspace search tool is available. Use ${
+        hasTool('read_file') ? '`read_file` and ' : ''
+      }provided context where possible.`,
+    );
   }
 
   if (hasTool('read_code_outline') || hasTool('code_context_search')) {

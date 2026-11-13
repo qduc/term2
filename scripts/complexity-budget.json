@@ -70,8 +70,8 @@
       "reason": "Verbatim port of legacy source/components/prompt/ApprovalPrompt.tsx (every approval and ask_user layout and key path); only its data access changed, so it matches legacy by construction."
     },
     "src/protocol/wire.ts": {
-      "lines": 503,
-      "reason": "The wire type catalogue keeps accepted usage dimensions beside the existing counters; cache creation and its one-hour subset add two optional fields without changing older messages. Splitting those fields from the usage contract would obscure the public shape. Retire this ceiling if wire types are generated or reorganized by complete protocol domains."
+      "lines": 505,
+      "reason": "The wire type catalogue keeps accepted usage dimensions beside the existing counters; cache creation, its one-hour subset and provider-reported reasoning tokens (which agent-core's Usage cannot carry yet, so they ride the accepted usage fact) add three optional fields without changing older messages. Splitting those fields from the usage contract would obscure the public shape. Retire this ceiling if wire types are generated or reorganized by complete protocol domains."
     },
     "src/session/conversation.ts": {
       "lines": 524,

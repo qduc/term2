@@ -46,9 +46,10 @@ function getRunSubagentDescription(backgroundEnabled: boolean): string {
 const FOREGROUND_ROLES = ['explorer', 'worker', 'reviewer', 'librarian'] as const;
 const BACKGROUND_ROLES = ['explorer', 'worker', 'mentor', 'reviewer', 'librarian'] as const;
 const ALL_ROLES = ['explorer', 'worker', 'mentor', 'reviewer', 'librarian'] as const;
-// The explorer task rules are stated once, in the tool description's Task Requirements.
+// The explorer sentence stays: the description's Task Requirements state narrower deliverables, not
+// "recommendations" or "the parent task itself".
 const SUBAGENT_TASK_DESCRIPTION =
-  'Complete description of one bounded delegated unit with one objective, ownership boundary, and done condition.';
+  'Complete description of one bounded delegated unit with one objective, ownership boundary, and done condition. For explorer, specify concrete evidence to collect and choose breadth or depth, never both; do not delegate diagnosis, recommendations, or the parent task itself.';
 
 export const agentSpecSchema = z
   .object({

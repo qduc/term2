@@ -118,6 +118,7 @@ export function loadRoleDefinition(role: SubagentRole, settings: ISettingsServic
     role,
     name: frontmatter.name ?? role,
     instructions: body,
+    instructionsSource: 'role-file',
     canRead: frontmatter.canRead ?? false,
     canWrite: frontmatter.canWrite ?? false,
     canSearchWeb: frontmatter.canSearchWeb ?? false,
@@ -185,24 +186,25 @@ const NON_FILE_WRITING_TOOLS: ReadonlySet<string> = new Set([
 ]);
 /** Write to persistent memory: an edit, though not to workspace files. */
 const MEMORY_WRITE_TOOLS: ReadonlySet<string> = new Set(['memory_create', 'memory_update', 'memory_delete']);
-const FILE_EDITING_TOOLS: readonly string[] = ['apply_patch', 'search_replace', 'create_file'];
 
-/** What a child can do, read from its final offered tool names (never its role). */
+/**
+ * What a child provably cannot do, read from its final offered tool names (never its role).
+ * Only absence is proof: an offered editor can still be denied every write (an empty write scope,
+ * a read-only session), so no text is deleted because a tool was offered.
+ */
 function writeCapability(toolNames: readonly string[]) {
   const cannotWriteFiles = toolNames.every((name) => NON_FILE_WRITING_TOOLS.has(name));
   return {
     cannotWriteFiles,
     /** Nothing to edit with at all: no file writer and no memory writer. */
     cannotEdit: cannotWriteFiles && !toolNames.some((name) => MEMORY_WRITE_TOOLS.has(name)),
-    hasFileEditingTool: toolNames.some((name) => FILE_EDITING_TOOLS.includes(name)),
   };
 }
 
 /** Addressed to a child that has an editing tool; deleted when it has nothing to edit with. */
 const EDITING_TOOL_SENTENCE =
   'When an in-scope edit is already authorized, perform it with the editing tool without asking again. ';
-/** Worktree Hygiene lines name their audience. */
-const READ_ONLY_AUDIENCE_LINE = /^- Read-only roles .*(?:\r?\n|$)/gm;
+/** The Worktree Hygiene lines addressed to worker roles. */
 const WORKER_AUDIENCE_LINE = /^- Worker roles .*(?:\r?\n|$)/gm;
 const ASK_ORCHESTRATOR_SECTION = /^## Asking the orchestrator\r?\n[\s\S]*?(?=^## |(?![\s\S]))/m;
 
@@ -210,25 +212,30 @@ const ASK_ORCHESTRATOR_SECTION = /^## Asking the orchestrator\r?\n[\s\S]*?(?=^##
  * Shared prompt text is written for every child. Delete only the parts
  * addressed to a capability this child's offered tools provably lack; never
  * reword. Unrecognised text is left as written.
+ *
+ * Every input is Term2-authored: the two fragment files, and a named role's
+ * own role file (`roleFile`). Text a parent or user wrote (an agent_spec's
+ * constraints, completion criterion and context, project instructions, the
+ * skill catalog) is never passed here, so no pattern can match inside it.
  */
 function withoutDeadAudienceText(
-  text: { skillConflicts: string; worktreeHygiene: string; roleInstructions: string },
+  text: { skillConflicts: string; worktreeHygiene: string; roleFile: string | undefined },
   toolNames: readonly string[],
 ) {
   const capability = writeCapability(toolNames);
-  let worktreeHygiene = text.worktreeHygiene;
-  // A child with an editing tool is not a read-only role; one that cannot write files is not a worker.
-  if (capability.hasFileEditingTool) worktreeHygiene = worktreeHygiene.replace(READ_ONLY_AUDIENCE_LINE, '');
-  if (capability.cannotWriteFiles) worktreeHygiene = worktreeHygiene.replace(WORKER_AUDIENCE_LINE, '');
   return {
     skillConflicts: capability.cannotEdit
       ? text.skillConflicts.replace(EDITING_TOOL_SENTENCE, '')
       : text.skillConflicts,
-    worktreeHygiene: worktreeHygiene.trimEnd(),
+    // A child that cannot write files is not a worker.
+    worktreeHygiene: capability.cannotWriteFiles
+      ? text.worktreeHygiene.replace(WORKER_AUDIENCE_LINE, '').trimEnd()
+      : text.worktreeHygiene,
     // The section is only about the ask_orchestrator tool, which a foreground child is not offered.
-    roleInstructions: toolNames.includes('ask_orchestrator')
-      ? text.roleInstructions
-      : text.roleInstructions.replace(ASK_ORCHESTRATOR_SECTION, ''),
+    roleFile:
+      text.roleFile === undefined || toolNames.includes('ask_orchestrator')
+        ? text.roleFile
+        : text.roleFile.replace(ASK_ORCHESTRATOR_SECTION, ''),
   };
 }
 
@@ -308,11 +315,14 @@ export function buildInstructions(
   const agentsInstructions = executionContext?.isRemote() ? '' : getAgentsInstructions(cwd);
 
   const modelPrompt = resolvePrompt(path.join(PROMPTS_DIR, selectSubagentBasePromptFile(definition.model)));
+  // A named role's instructions are its Term2 role file; any other definition's (an agent_spec
+  // child's) were written by its parent and stay exactly as written.
+  const roleFile = definition.instructionsSource === 'role-file' ? definition.instructions : undefined;
   const shared = withoutDeadAudienceText(
     {
       skillConflicts: resolvePrompt(path.join(BASE_PROMPT_PATH, 'fragments/skill-instruction-conflicts.md')),
       worktreeHygiene: resolvePrompt(path.join(PROMPTS_DIR, 'worktree-hygiene.md')),
-      roleInstructions: definition.instructions,
+      roleFile,
     },
     toolDefinitions.map((tool) => tool.name),
   );
@@ -344,7 +354,7 @@ export function buildInstructions(
     modelPrompt,
     shared.skillConflicts,
     shared.worktreeHygiene,
-    shared.roleInstructions,
+    shared.roleFile ?? definition.instructions,
     memoryCapability?.guidance,
     memoryCapability?.context,
     toolGuidance,

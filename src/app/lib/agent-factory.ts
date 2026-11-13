@@ -2,7 +2,6 @@ import { buildModelSettings, getProviderCapabilities } from './agent-model-setti
 import type { NestedRunDriverFactory, NestedModelBinding } from '../../tools/nested-run-driver.js';
 import type { DiscordSend } from '../../clients/discord/discord-outbound.js';
 import { getRunCodeExecutionResult, RUN_CODE_EXECUTION_RESULT } from '../../tools/system/run-code/run-code.js';
-import { z } from 'zod';
 import type { ApplicationAgent } from '../../tools/nested-run-driver.js';
 import type { ReasoningEffortSetting } from '../../tools/conversation.js';
 import { getAgentDefinition } from '../agent.js';
@@ -17,6 +16,7 @@ import { isScriptedToolCall } from '../../shared/utils/output/bound-tool-result.
 import { SkillsService } from '../../tools/skills/skills-service.js';
 import { injectRunBudgetWarning } from '../../session/inject-warning-into-tool-output.js';
 import { toOpenAIStrictToolSchema } from '../../shared/lib/openai-strict-tool-schema.js';
+import { modelToolJsonSchema } from '../../shared/lib/model-tool-json-schema.js';
 import {
   shouldUseNativePatchTool as shouldUseNativePatchToolPolicy,
   shouldUseStrictToolSchema,
@@ -28,7 +28,6 @@ import type { AgentLauncher } from '../../session/agent-runtime/types.js';
 import {
   isZodToolParameterSchema,
   type AnyToolDefinition,
-  type JsonSchemaObject,
   type PostExecutePauseCapability,
   type ToolRegistry,
 } from '../../tools/types.js';
@@ -235,7 +234,7 @@ export function buildAgentTools({
             ? // Strict-schema path: `parameters` is replaced at runtime by its JSON
               // schema form (the run loop's schema guard handles that). This is
               // an honest JSON-schema substitution, not an erased Zod schema.
-              (z.toJSONSchema(toOpenAIStrictToolSchema(providerParameters)) as JsonSchemaObject)
+              modelToolJsonSchema(toOpenAIStrictToolSchema(providerParameters))
             : definition.parameters,
         needsApproval: wrapNeedsApproval(
           {

@@ -1,5 +1,6 @@
 /** Root goal data and tools. Session supplies all state and accepts every write. */
 import { z } from 'zod';
+import { modelToolJsonSchema } from '../shared/lib/model-tool-json-schema.js';
 import { createDurableGoal, MAX_GOAL_FIELD_LENGTH } from './conversation/durable-goal.js';
 import { GOAL_CHANGED_PROBLEM, GOAL_CHECK_DESCRIPTION } from '../tools/agent/goal-check.js';
 import { goalCheckParameters } from '../tools/agent/goal-check-contract.js';
@@ -86,7 +87,7 @@ export function createDirectGoalCheckTool(deps: {
     spec: {
       name: 'goal_check',
       description: GOAL_CHECK_DESCRIPTION,
-      inputSchema: z.toJSONSchema(directGoalCheckSchema),
+      inputSchema: modelToolJsonSchema(directGoalCheckSchema),
     },
     parallelSafe: false,
     parse: (raw) => directGoalCheckSchema.parse(raw),

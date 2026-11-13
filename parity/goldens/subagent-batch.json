@@ -12,7 +12,7 @@
           "messages": [
             {
               "role": "system",
-              "content": "You are a coding assistant running inside Term2, a coding agent harness. Help users inspect files, run commands, and modify code.\n\n<tools>\n- read_file: Read file contents\n- shell: Execute shell commands\n- search_replace: Make precise edits to existing files using exact text replacement\n- create_file: Create files\n\nAdditional tools may be available.\n</tools>\n\n<rules>\n- Use shell for file operations like ls, rg, and find.\n- Use read_file to examine files instead of cat or sed.\n- Use search_replace for targeted changes. Match the tool's exact replacement schema.\n- Keep replacement matches short and unique; avoid including large unchanged regions.\n- Use create_file for new files.\n- Be concise in your responses.\n- Show file paths clearly when working with files.\n</rules>\n\nEnvironment: OS: <OS>; shell: unknown; cwd (you're already here, don't `cd` to it): <WORKSPACE>; home (`~`): <HOME>; date: <DATE>\n\nUnattended mode: Never ask the user questions; nobody can answer. Make reasonable low-risk assumptions within existing permissions, keep going, and state any assumptions in your final response. If something essential is missing, report blocked and say what is needed."
+              "content": "You are a coding assistant running inside Term2, a coding agent harness. Help users inspect files, run commands, and modify code.\n\n<tools>\n- read_file: Read file contents\n- shell: Execute shell commands\n- search_replace: Make precise edits to existing files using exact text replacement\n- create_file: Create files\n\nAdditional tools may be available.\n</tools>\n\n<rules>\n- Use shell for file operations like ls, rg, and find.\n- Use read_file to examine files instead of cat or sed.\n- Use search_replace for targeted changes. Match the tool's exact replacement schema.\n- Keep replacement matches short and unique; avoid including large unchanged regions.\n- Use create_file for new files.\n- Be concise in your responses.\n- Show file paths clearly when working with files.\n</rules>\n\nEnvironment: OS: <OS>; shell: unknown; cwd (you're already here, don't `cd` to it): <WORKSPACE>; home (`~`): <HOME>; date: <DATE>\n\nUnattended mode: Never ask the user questions; nobody can answer. Make reasonable low-risk assumptions within existing permissions, keep going, and state any assumptions in your final response. If something essential is missing, report blocked and say what is needed.\n\n## Durable session goal applicability\nNo durable session goal is set. Continue the ordinary request/tool workflow; do not call goal_check. Only an active durable session goal requires a goal_check before ending a turn. This does not authorize creating a goal or grant any permission."
             },
             {
               "role": "user",
@@ -27,27 +27,31 @@
           "tools": [
             {
               "name": "shell",
-              "schema": "23a8b74ecf2b7b03"
+              "schema": "72bf04ea010edeba"
+            },
+            {
+              "name": "goal_check",
+              "schema": "53255e256b5565eb"
             },
             {
               "name": "read_file",
-              "schema": "812d0e3375822a63"
+              "schema": "a697894bf1c8d6f0"
             },
             {
               "name": "create_file",
-              "schema": "d47b2c57674d3820"
+              "schema": "a84adf3549ed55dc"
             },
             {
               "name": "search_replace",
-              "schema": "c47dfed554fe21c5"
+              "schema": "b4234835362af15a"
             },
             {
               "name": "run_subagent",
-              "schema": "b45d1b1b0a8ed3fa"
+              "schema": "03dd1e900a8f44d1"
             },
             {
               "name": "run_code",
-              "schema": "23642c6de2ea49df"
+              "schema": "c857c4909f69f89c"
             }
           ],
           "other": {
@@ -63,7 +67,7 @@
           "messages": [
             {
               "role": "system",
-              "content": "You are a coding assistant running inside Term2, a coding agent harness. Help users inspect files, run commands, and modify code.\n\n<tools>\n- read_file: Read file contents\n- shell: Execute shell commands\n- search_replace: Make precise edits to existing files using exact text replacement\n- create_file: Create files\n\nAdditional tools may be available.\n</tools>\n\n<rules>\n- Use shell for file operations like ls, rg, and find.\n- Use read_file to examine files instead of cat or sed.\n- Use search_replace for targeted changes. Match the tool's exact replacement schema.\n- Keep replacement matches short and unique; avoid including large unchanged regions.\n- Use create_file for new files.\n- Be concise in your responses.\n- Show file paths clearly when working with files.\n</rules>\n\nEnvironment: OS: <OS>; shell: unknown; cwd (you're already here, don't `cd` to it): <WORKSPACE>; home (`~`): <HOME>; date: <DATE>\n\nUnattended mode: Never ask the user questions; nobody can answer. Make reasonable low-risk assumptions within existing permissions, keep going, and state any assumptions in your final response. If something essential is missing, report blocked and say what is needed."
+              "content": "You are a coding assistant running inside Term2, a coding agent harness. Help users inspect files, run commands, and modify code.\n\n<tools>\n- read_file: Read file contents\n- shell: Execute shell commands\n- search_replace: Make precise edits to existing files using exact text replacement\n- create_file: Create files\n\nAdditional tools may be available.\n</tools>\n\n<rules>\n- Use shell for file operations like ls, rg, and find.\n- Use read_file to examine files instead of cat or sed.\n- Use search_replace for targeted changes. Match the tool's exact replacement schema.\n- Keep replacement matches short and unique; avoid including large unchanged regions.\n- Use create_file for new files.\n- Be concise in your responses.\n- Show file paths clearly when working with files.\n</rules>\n\nEnvironment: OS: <OS>; shell: unknown; cwd (you're already here, don't `cd` to it): <WORKSPACE>; home (`~`): <HOME>; date: <DATE>\n\nUnattended mode: Never ask the user questions; nobody can answer. Make reasonable low-risk assumptions within existing permissions, keep going, and state any assumptions in your final response. If something essential is missing, report blocked and say what is needed.\n\n## Durable session goal applicability\nNo durable session goal is set. Continue the ordinary request/tool workflow; do not call goal_check. Only an active durable session goal requires a goal_check before ending a turn. This does not authorize creating a goal or grant any permission."
             },
             {
               "role": "user",
@@ -93,27 +97,31 @@
           "tools": [
             {
               "name": "shell",
-              "schema": "23a8b74ecf2b7b03"
+              "schema": "72bf04ea010edeba"
+            },
+            {
+              "name": "goal_check",
+              "schema": "53255e256b5565eb"
             },
             {
               "name": "read_file",
-              "schema": "812d0e3375822a63"
+              "schema": "a697894bf1c8d6f0"
             },
             {
               "name": "create_file",
-              "schema": "d47b2c57674d3820"
+              "schema": "a84adf3549ed55dc"
             },
             {
               "name": "search_replace",
-              "schema": "c47dfed554fe21c5"
+              "schema": "b4234835362af15a"
             },
             {
               "name": "run_subagent",
-              "schema": "b45d1b1b0a8ed3fa"
+              "schema": "03dd1e900a8f44d1"
             },
             {
               "name": "run_code",
-              "schema": "23642c6de2ea49df"
+              "schema": "c857c4909f69f89c"
             }
           ],
           "other": {
@@ -144,55 +152,55 @@
           "tools": [
             {
               "name": "ask_orchestrator",
-              "schema": "3136d302294a5fb6"
+              "schema": "4d631c9c6764c68a"
             },
             {
               "name": "memory_list",
-              "schema": "b05c5bc13e36a3b2"
+              "schema": "bce936d1342a1002"
             },
             {
               "name": "memory_get",
-              "schema": "3a09674301cfb4e3"
+              "schema": "d329bf813fd3673d"
             },
             {
               "name": "memory_search",
-              "schema": "124bb18298cfd037"
+              "schema": "2d0ff54ea1fe2793"
             },
             {
               "name": "memory_retrieve",
-              "schema": "e90b294561fdc69b"
+              "schema": "e017c3bc994b0076"
             },
             {
               "name": "read_file",
-              "schema": "812d0e3375822a63"
+              "schema": "a697894bf1c8d6f0"
             },
             {
               "name": "grep",
-              "schema": "bc84595369bcaca6"
+              "schema": "01125290720a3994"
             },
             {
               "name": "glob",
-              "schema": "74b21b28732d082e"
+              "schema": "0d1d12522935b1d6"
             },
             {
               "name": "read_code_outline",
-              "schema": "c8d22cc11e68c657"
+              "schema": "2985f166d0c2ff95"
             },
             {
               "name": "code_context_search",
-              "schema": "3e21eb6289cb0fe2"
+              "schema": "b0c98963d5524a2c"
             },
             {
               "name": "web_search",
-              "schema": "3c981af9c62f32c8"
+              "schema": "53640fe7d6cd9dba"
             },
             {
               "name": "web_fetch",
-              "schema": "a79b5166a8cd300f"
+              "schema": "0e680fa9300dfa2f"
             },
             {
               "name": "shell",
-              "schema": "9992383275cf56ed"
+              "schema": "25da30b7c7496d51"
             }
           ],
           "other": {
@@ -208,7 +216,7 @@
           "messages": [
             {
               "role": "system",
-              "content": "You are a coding assistant running inside Term2, a coding agent harness. Help users inspect files, run commands, and modify code.\n\n<tools>\n- read_file: Read file contents\n- shell: Execute shell commands\n- search_replace: Make precise edits to existing files using exact text replacement\n- create_file: Create files\n\nAdditional tools may be available.\n</tools>\n\n<rules>\n- Use shell for file operations like ls, rg, and find.\n- Use read_file to examine files instead of cat or sed.\n- Use search_replace for targeted changes. Match the tool's exact replacement schema.\n- Keep replacement matches short and unique; avoid including large unchanged regions.\n- Use create_file for new files.\n- Be concise in your responses.\n- Show file paths clearly when working with files.\n</rules>\n\nEnvironment: OS: <OS>; shell: unknown; cwd (you're already here, don't `cd` to it): <WORKSPACE>; home (`~`): <HOME>; date: <DATE>\n\nUnattended mode: Never ask the user questions; nobody can answer. Make reasonable low-risk assumptions within existing permissions, keep going, and state any assumptions in your final response. If something essential is missing, report blocked and say what is needed."
+              "content": "You are a coding assistant running inside Term2, a coding agent harness. Help users inspect files, run commands, and modify code.\n\n<tools>\n- read_file: Read file contents\n- shell: Execute shell commands\n- search_replace: Make precise edits to existing files using exact text replacement\n- create_file: Create files\n\nAdditional tools may be available.\n</tools>\n\n<rules>\n- Use shell for file operations like ls, rg, and find.\n- Use read_file to examine files instead of cat or sed.\n- Use search_replace for targeted changes. Match the tool's exact replacement schema.\n- Keep replacement matches short and unique; avoid including large unchanged regions.\n- Use create_file for new files.\n- Be concise in your responses.\n- Show file paths clearly when working with files.\n</rules>\n\nEnvironment: OS: <OS>; shell: unknown; cwd (you're already here, don't `cd` to it): <WORKSPACE>; home (`~`): <HOME>; date: <DATE>\n\nUnattended mode: Never ask the user questions; nobody can answer. Make reasonable low-risk assumptions within existing permissions, keep going, and state any assumptions in your final response. If something essential is missing, report blocked and say what is needed.\n\n## Durable session goal applicability\nNo durable session goal is set. Continue the ordinary request/tool workflow; do not call goal_check. Only an active durable session goal requires a goal_check before ending a turn. This does not authorize creating a goal or grant any permission."
             },
             {
               "role": "user",
@@ -256,27 +264,31 @@
           "tools": [
             {
               "name": "shell",
-              "schema": "23a8b74ecf2b7b03"
+              "schema": "72bf04ea010edeba"
+            },
+            {
+              "name": "goal_check",
+              "schema": "53255e256b5565eb"
             },
             {
               "name": "read_file",
-              "schema": "812d0e3375822a63"
+              "schema": "a697894bf1c8d6f0"
             },
             {
               "name": "create_file",
-              "schema": "d47b2c57674d3820"
+              "schema": "a84adf3549ed55dc"
             },
             {
               "name": "search_replace",
-              "schema": "c47dfed554fe21c5"
+              "schema": "b4234835362af15a"
             },
             {
               "name": "run_subagent",
-              "schema": "b45d1b1b0a8ed3fa"
+              "schema": "03dd1e900a8f44d1"
             },
             {
               "name": "run_code",
-              "schema": "23642c6de2ea49df"
+              "schema": "c857c4909f69f89c"
             }
           ],
           "other": {

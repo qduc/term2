@@ -76,7 +76,6 @@ const PROBE_TOOL: ToolSpec = {
   description:
     'Read-only repository evidence. read_file reads a relative file (bounded to 64000 characters); list_files lists tracked/untracked paths; diff shows HEAD changes; diff_check checks whitespace. No command execution.',
   inputSchema: {
-    $schema: 'https://json-schema.org/draft/2020-12/schema',
     type: 'object',
     properties: { kind: { type: 'string', enum: probeKinds.options }, path: { type: 'string' } },
     required: ['kind'],

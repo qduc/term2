@@ -26,6 +26,7 @@ import type { DirectLaunchBase } from './launch-types.js';
 import type { DirectCommandConfiguration } from '../session/command-types.js';
 import type { InteractivePickerRequest } from '../model/models/model-resolution.js';
 import { HARNESS_IDLE_ENV } from '../shared/lib/harness-input-idle.js';
+import { exitAfterDrain, settledExitCode } from '../shared/lib/exit-after-drain.js';
 import { formatResumeList } from '../session/conversation/resume-list.js';
 import { isControlSocketName } from '../clients/control-socket/control-socket.js';
 import { createSettingsService, type SettingsService } from './settings.js';
@@ -160,9 +161,11 @@ async function runWithSignals(request: DirectHeadlessRequest): Promise<{
   let turnHasStarted = false;
   let receivedSignal: NodeJS.Signals | undefined;
 
-  // Nothing awaits between the durable terminal and `process.exit`, so a handler
-  // never runs after the result. An await added there would let a second signal win.
+  // After the durable terminal only the stdio drain precedes `process.exit`; a
+  // signal then keeps the settled code, so a second signal cannot win.
   const onSignal = (signal: NodeJS.Signals): void => {
+    const settled = settledExitCode();
+    if (settled !== undefined) process.exit(settled);
     if (receivedSignal !== undefined) {
       process.exit(exitCodeForSignal(signal));
     }
@@ -485,12 +488,12 @@ async function main(argv: readonly string[]): Promise<number> {
   }
 }
 
-// Exit explicitly. Draining naturally would hand signals back to their default
-// action during shutdown, so a late signal could override a durable result.
+// Exit explicitly, after stdio drains (a pipe loses queued writes on exit). Draining the event
+// loop naturally would hand signals back to their default action, so a late signal could win.
 void main(process.argv.slice(2)).then(
-  (code) => process.exit(code),
+  (code) => exitAfterDrain(code),
   (error: unknown) => {
     stderr.write(error instanceof ResumeRefusal ? `${error.message}\n` : `error ${errorMessage(error)}\n`);
-    process.exit(error instanceof UsageError ? error.exitCode : 1);
+    return exitAfterDrain(error instanceof UsageError ? error.exitCode : 1);
   },
 );

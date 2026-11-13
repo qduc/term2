@@ -244,7 +244,7 @@ it('accounts for cache creation, whole-request context tiers and one-hour writes
         agents: [
           { agent: 'root', role: null, models: [{ provider: fixture.provider, model: fixture.model }], requests: 1 },
         ],
-        tools: { calls: 0, errors: 0, repeatedReads: 0, repeatedShellCommands: 0 },
+        tools: { calls: 0, errors: 0, repeatedReads: { sameRange: 0, otherRange: 0 }, repeatedShellCommands: 0 },
       });
       expect(summaries[0].tokens.cacheWrite ?? 0).toBe(fixture.write);
       if (fixture.provider === 'chat-cost-fixture') {

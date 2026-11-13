@@ -121,10 +121,13 @@ imports Session, Engine or adopted code, and never opens conversation storage.
 
 ## `run_summary` (JSON only)
 
-Every `--json` run writes exactly one `{"type":"run_summary","version":1,...}`
-record: on success immediately before `completed` (which stays the last line),
-otherwise as the last line after the error/terminal records. Plain output has no
-summary; there is no existing place for it. It adds a record and changes no
+A `--json` run that reaches the headless driver's result writes at most one
+`{"type":"run_summary","version":1,...}` record: on success immediately before
+`completed` (which stays the last line), otherwise as the last line after the
+error/terminal records. A run refused before the driver starts (argument,
+settings or session-open failures) writes no JSON at all, and a process killed
+or exited by a second signal may never reach it. Plain output has no summary;
+there is no existing place for it. It adds a record and changes no
 existing one. `run-summary.ts` computes it only from accepted wire events the run
 already receives: `request_cost_recorded`, `usage`, `tool_finished`,
 `compaction_*`, `task_changed` and `subagent`. The driver passes every event of
@@ -132,7 +135,16 @@ the session to `observe` before its turn filter, because a background child's
 requests can settle between the run's turns. Only request trees rooted in a turn
 this run drove (`turnIds`) count, so a resumed run does not recount history.
 
-Fields (unknown is `null`, never `0`):
+Measurement never affects the run. `output.ts` catches any failure to observe an
+event, build the record or serialize it; the run then writes the error variant
+`{"type":"run_summary","version":1,"sessionId":…,"outcome":…,"error":"<message>"}`
+instead of partial numbers, and `completed` and the exit code are unchanged. The
+accumulator keeps per request its cost record and per settled tool call only its
+name, error flag, rejection class and the normalized read path/range or trimmed
+shell command, never tool output; building is linear in requests and tool calls
+(150k requests build in well under a second).
+
+Fields (unknown is `null`, never `0`; `version` 1):
 
 - `sessionId`, `outcome` (the run's `DirectHeadlessOutcome`), `turnIds`.
 - `cost`: `usd`/`usdMicros` (sum of priced requests; `null` when none is
@@ -143,7 +155,10 @@ Fields (unknown is `null`, never `0`):
   (`input - cacheRead - cacheWrite`), `cacheRead`, `cacheWrite` (`null` when no
   request reported one), `output`, `reasoning` (`null` when no request reported
   it), `requestsWithUsage`, `requestsWithReasoning`. Requests without usage add
-  nothing; compare `requestsWithUsage` to `requests.total`.
+  nothing; compare `requestsWithUsage` to `requests.total`. When no request
+  reported usage, `input`, `fresh`, `cacheRead` and `output` are `null` too
+  (here and per agent). A reported cache read of zero cannot be told from an
+  unreported one: providers' adapters default it to `0`.
 - `cacheHitRatio`: `overall` = cacheRead / input; `rootAfterFirst` the same over
   the root agent's model requests after its first (compaction requests excluded).
   4 decimals; `null` with no input.
@@ -158,10 +173,19 @@ Fields (unknown is `null`, never `0`):
   subagents): `calls`, `byName`, `errors` (`isError`), `rejections` split by the
   host's own refusal text (`invalidInput`: the schema diagnostic of
   `runToolInputDiagnostics`; `unknownTool`: agent-core's `Unknown tool:` result),
-  `repeatedReads` (a `read_file` of a normalized path an earlier successful
-  `read_file` in the run already read, by any agent) and `repeatedShellCommands`
-  (a `shell` command string identical to an earlier one). Calls that never
-  settled (cancelled before a result) are not counted.
+  `repeatedReads` and `repeatedShellCommands`. Calls that never settled
+  (cancelled before a result) are not counted.
+  - `repeatedReads.sameRange`: a `read_file` whose path and `start_line`/
+    `end_line` (both absent for a whole-file read) equal those of an earlier
+    successful `read_file` in the run. This is the clear waste signal.
+    `repeatedReads.otherRange`: the path was read successfully before, but only
+    with other ranges; it may be legitimate paging. The path is the model's
+    argument after `path.normalize` (so `./a.txt` equals `a.txt`), not resolved
+    against a working directory: the wire carries no per-agent cwd, so a child
+    working in another worktree that reads the same relative path counts as a
+    repeat of the root's read. Repeats are counted run-wide, across agents.
+  - `repeatedShellCommands`: a `shell` command whose trimmed string equals an
+    earlier one in the run; outcome and description are ignored.
 
 Reasoning tokens: agent-core's `Usage` has no reasoning field and its cost record
 copies named fields only, so `toUsage` (`model/provider-items.ts`) keeps the

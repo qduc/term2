@@ -1,6 +1,7 @@
 /** Run-level cost evidence for one headless run: the `run_summary` --json record.
  * Computed only from accepted wire events the run already receives; it never asks
- * the session for anything and never prices or estimates on its own.
+ * the session for anything and never prices or estimates on its own. Callers must
+ * keep it from affecting the run (see `output.ts`): it is measurement only.
  */
 import path from 'node:path';
 import type { ModelRequestCost } from '../../shared/cost/model-cost.js';
@@ -21,7 +22,17 @@ type CostEntry = {
   /** Provider-reported reasoning for this request; undefined when not reported. */
   readonly reasoningTokens: number | undefined;
 };
-type ToolEntry = { readonly turnId: string; readonly result: WireToolResult };
+/** Only what the summary needs from a settled tool result; the output itself is not retained. */
+type ToolEntry = {
+  readonly turnId: string;
+  readonly name: string;
+  readonly isError: boolean;
+  readonly rejection?: 'invalidInput' | 'unknownTool';
+  /** read_file: normalized path and requested line range. */
+  readonly read?: { readonly path: string; readonly range: string };
+  /** shell: trimmed command string. */
+  readonly command?: string;
+};
 type Agent = { readonly agentId: string; readonly role?: string; readonly rootTurnId?: string };
 
 type TokenTotals = {
@@ -48,10 +59,25 @@ function emptyTotals(): TokenTotals {
   };
 }
 
+/** With no usage reported at all, every token dimension is unknown, not zero. */
+function publicTotals(totals: TokenTotals) {
+  const known = totals.requestsWithUsage > 0;
+  return {
+    input: known ? totals.input : null,
+    fresh: known ? totals.fresh : null,
+    cacheRead: known ? totals.cacheRead : null,
+    cacheWrite: totals.cacheWrite,
+    output: known ? totals.output : null,
+    reasoning: totals.reasoning,
+    requestsWithUsage: totals.requestsWithUsage,
+    requestsWithReasoning: totals.requestsWithReasoning,
+  };
+}
+
 /** Total input as agent-core recorded it: prompt_tokens excludes cache writes, includes cache reads. */
 function inputOf(record: ModelRequestCost): number | null {
   const usage = record.usage;
-  if (usage?.prompt_tokens === undefined) return null;
+  if (typeof usage?.prompt_tokens !== 'number') return null;
   return usage.prompt_tokens + (usage.cache_creation_tokens ?? 0);
 }
 
@@ -73,8 +99,8 @@ function addTokens(totals: TokenTotals, entry: CostEntry): void {
   }
 }
 
-function ratio(numerator: number, denominator: number): number | null {
-  return denominator > 0 ? Number((numerator / denominator).toFixed(4)) : null;
+function ratio(cacheRead: number, input: number): number | null {
+  return input > 0 ? Number((cacheRead / input).toFixed(4)) : null;
 }
 
 function costOf(records: readonly ModelRequestCost[]) {
@@ -89,18 +115,50 @@ function costOf(records: readonly ModelRequestCost[]) {
   };
 }
 
-function stringField(input: unknown, key: string): string | undefined {
+function field(input: unknown, key: string): unknown {
   if (input === null || typeof input !== 'object' || Array.isArray(input)) return undefined;
-  const value = (input as Record<string, unknown>)[key];
-  return typeof value === 'string' ? value : undefined;
+  return (input as Record<string, unknown>)[key];
+}
+
+function toolEntry(turnId: string, result: WireToolResult): ToolEntry {
+  const name = typeof result.toolName === 'string' ? result.toolName : 'unknown';
+  const isError = result.isError === true;
+  const output = typeof result.output === 'string' ? result.output : '';
+  const rejection = !isError
+    ? undefined
+    : INVALID_INPUT_PREFIXES.some((prefix) => output.startsWith(prefix))
+    ? ('invalidInput' as const)
+    : output.startsWith(UNKNOWN_TOOL_PREFIX)
+    ? ('unknownTool' as const)
+    : undefined;
+  const rawPath = name === 'read_file' ? field(result.input, 'path') : undefined;
+  const command = name === 'shell' ? field(result.input, 'command') : undefined;
+  return {
+    turnId,
+    name,
+    isError,
+    ...(rejection !== undefined ? { rejection } : {}),
+    ...(typeof rawPath === 'string'
+      ? {
+          read: {
+            path: path.normalize(rawPath.trim()),
+            range: `${String(field(result.input, 'start_line') ?? '')}-${String(
+              field(result.input, 'end_line') ?? '',
+            )}`,
+          },
+        }
+      : {}),
+    ...(typeof command === 'string' ? { command: command.trim() } : {}),
+  };
 }
 
 /** One accumulator per headless run. `observe` sees every event of the run's session, including
  * those that arrive between the run's turns (background subagent spend); `build` keeps only the
- * request trees rooted in a turn this run drove.
+ * request trees rooted in a turn this run drove. Retained state is per request and per settled
+ * tool call, never tool output.
  */
 export function createRunSummary() {
-  const runTurns: string[] = [];
+  const runTurns = new Set<string>();
   const costs = new Map<string, CostEntry>();
   /** The accepted usage of each turn's in-flight request; its cost record follows it in the same turn. */
   const pendingUsage = new Map<string, WireUsage>();
@@ -116,11 +174,11 @@ export function createRunSummary() {
         pendingUsage.set(turnId, event.payload.usage);
         break;
       case 'tool_finished':
-        tools.set(event.payload.executionId, { turnId, result: event.payload });
+        tools.set(event.payload.executionId, toolEntry(turnId, event.payload));
         break;
       case 'compaction_completed':
       case 'compaction_failed':
-        for (const request of event.payload.requests) compactionRequests.add(request.requestId);
+        for (const request of event.payload.requests ?? []) compactionRequests.add(request.requestId);
         break;
       default:
         break;
@@ -129,7 +187,7 @@ export function createRunSummary() {
 
   return {
     observe(event: WireEvent, targetTurnId: string | null): void {
-      if (targetTurnId !== null && !runTurns.includes(targetTurnId)) runTurns.push(targetTurnId);
+      if (targetTurnId !== null) runTurns.add(targetTurnId);
       switch (event.type) {
         case 'request_cost_recorded': {
           const { turnId, rootTurnId, record } = event.payload;
@@ -157,7 +215,7 @@ export function createRunSummary() {
         }
         case 'subagent': {
           const payload = event.payload;
-          const branchTurn = payload.turnId ?? payload.event.turnId ?? undefined;
+          const branchTurn = payload.turnId ?? payload.event?.turnId ?? undefined;
           if (branchTurn !== undefined && !agents.has(branchTurn))
             agents.set(branchTurn, {
               agentId: payload.agentId,
@@ -166,7 +224,7 @@ export function createRunSummary() {
                 ? { rootTurnId: payload.rootTurnId ?? payload.parentTurnId }
                 : {}),
             });
-          observeTurnEvent(payload.event, branchTurn);
+          if (payload.event !== undefined) observeTurnEvent(payload.event, branchTurn);
           break;
         }
         default:
@@ -176,84 +234,102 @@ export function createRunSummary() {
     },
 
     build(context: { readonly sessionId: string; readonly outcome: string }) {
-      const inRun = (turnId: string | undefined): boolean => turnId !== undefined && runTurns.includes(turnId);
-      const entries = [...costs.values()].filter((entry) => inRun(entry.rootTurnId) || inRun(entry.turnId));
+      const inRun = (turnId: string | undefined): boolean => turnId !== undefined && runTurns.has(turnId);
       const agentOf = (turnId: string): string => (inRun(turnId) ? 'root' : agents.get(turnId)?.agentId ?? turnId);
 
+      const entries: CostEntry[] = [];
       const totals = emptyTotals();
-      for (const entry of entries) addTokens(totals, entry);
-
-      const rootModel = entries.filter(
-        (entry) => agentOf(entry.turnId) === 'root' && !compactionRequests.has(entry.record.requestId),
-      );
-      const rootInputs = rootModel.map((entry) => inputOf(entry.record));
       const afterFirst = emptyTotals();
-      for (const entry of rootModel.slice(1)) addTokens(afterFirst, entry);
-      const knownInputs = rootInputs.filter((value): value is number => value !== null);
+      const rootInputs: (number | null)[] = [];
+      let maxInput: number | null = null;
+      const requests = { total: 0, completed: 0, failed: 0, cancelled: 0, compaction: 0 };
+      // Per agent: root first, then subagents in first-request order. Appended in place.
+      const groups = new Map<string, CostEntry[]>([['root', []]]);
+      for (const entry of costs.values()) {
+        if (!inRun(entry.rootTurnId) && !inRun(entry.turnId)) continue;
+        entries.push(entry);
+        addTokens(totals, entry);
+        requests.total += 1;
+        if (entry.record.outcome === 'completed') requests.completed += 1;
+        else if (entry.record.outcome === 'failed') requests.failed += 1;
+        else if (entry.record.outcome === 'cancelled') requests.cancelled += 1;
+        const compaction = compactionRequests.has(entry.record.requestId);
+        if (compaction) requests.compaction += 1;
+        const agent = agentOf(entry.turnId);
+        let group = groups.get(agent);
+        if (group === undefined) groups.set(agent, (group = []));
+        group.push(entry);
+        if (agent !== 'root' || compaction) continue;
+        const input = inputOf(entry.record);
+        if (rootInputs.length > 0) addTokens(afterFirst, entry);
+        if (rootInputs.length < CONTEXT_GROWTH_LIST_LIMIT + 1) rootInputs.push(input);
+        if (input !== null && (maxInput === null || input > maxInput)) maxInput = input;
+      }
+      let rootRequests = 0;
+      let lastInput: number | null = null;
+      for (const entry of groups.get('root') ?? []) {
+        if (compactionRequests.has(entry.record.requestId)) continue;
+        rootRequests += 1;
+        lastInput = inputOf(entry.record);
+      }
 
       // Tool results of the run, in the order they settled.
-      const runTools = [...tools.values()].filter(
-        (tool) => inRun(tool.turnId) || inRun(agents.get(tool.turnId)?.rootTurnId),
-      );
       const byName: Record<string, number> = {};
+      let calls = 0;
       let errors = 0;
       let invalidInput = 0;
       let unknownTool = 0;
-      let repeatedReads = 0;
+      let sameRange = 0;
+      let otherRange = 0;
       let repeatedShellCommands = 0;
-      const readPaths = new Set<string>();
+      /** Normalized path -> ranges already read successfully. */
+      const readPaths = new Map<string, Set<string>>();
       const commands = new Set<string>();
       const agentToolCalls = new Map<string, number>();
-      for (const { turnId, result } of runTools) {
-        const name = result.toolName ?? 'unknown';
-        byName[name] = (byName[name] ?? 0) + 1;
-        agentToolCalls.set(agentOf(turnId), (agentToolCalls.get(agentOf(turnId)) ?? 0) + 1);
-        if (result.isError) {
-          errors += 1;
-          if (INVALID_INPUT_PREFIXES.some((prefix) => result.output.startsWith(prefix))) invalidInput += 1;
-          else if (result.output.startsWith(UNKNOWN_TOOL_PREFIX)) unknownTool += 1;
-        }
-        if (name === 'read_file') {
-          const raw = stringField(result.input, 'path');
-          if (raw !== undefined) {
-            const key = path.normalize(raw.trim());
-            if (readPaths.has(key)) repeatedReads += 1;
-            if (!result.isError) readPaths.add(key);
+      for (const tool of tools.values()) {
+        if (!inRun(tool.turnId) && !inRun(agents.get(tool.turnId)?.rootTurnId)) continue;
+        calls += 1;
+        byName[tool.name] = (byName[tool.name] ?? 0) + 1;
+        const agent = agentOf(tool.turnId);
+        agentToolCalls.set(agent, (agentToolCalls.get(agent) ?? 0) + 1);
+        if (tool.isError) errors += 1;
+        if (tool.rejection === 'invalidInput') invalidInput += 1;
+        if (tool.rejection === 'unknownTool') unknownTool += 1;
+        if (tool.read !== undefined) {
+          const ranges = readPaths.get(tool.read.path);
+          if (ranges?.has(tool.read.range)) sameRange += 1;
+          else if (ranges !== undefined) otherRange += 1;
+          if (!tool.isError) {
+            if (ranges === undefined) readPaths.set(tool.read.path, new Set([tool.read.range]));
+            else ranges.add(tool.read.range);
           }
         }
-        if (name === 'shell') {
-          const command = stringField(result.input, 'command');
-          if (command !== undefined) {
-            if (commands.has(command)) repeatedShellCommands += 1;
-            commands.add(command);
-          }
+        if (tool.command !== undefined) {
+          if (commands.has(tool.command)) repeatedShellCommands += 1;
+          commands.add(tool.command);
         }
       }
 
-      // Per agent: root first, then subagents in first-request order.
-      const groups = new Map<string, CostEntry[]>([['root', []]]);
-      for (const entry of entries) {
-        const key = agentOf(entry.turnId);
-        groups.set(key, [...(groups.get(key) ?? []), entry]);
-      }
       const agentRows = [...groups.entries()].map(([agentId, group]) => {
         const turn = group[0]?.turnId;
         const known = turn !== undefined ? agents.get(turn) : undefined;
         const task = roles.get(agentId);
         const role = agentId === 'root' ? null : task?.role ?? known?.role ?? null;
-        const models = [
-          ...new Map(group.map(({ record }) => [`${record.provider}\u0000${record.model}`, record])).values(),
-        ].map(({ provider, model }) => ({ provider, model }));
+        const models = new Map<string, { provider: string; model: string }>();
         const tokens = emptyTotals();
-        for (const entry of group) addTokens(tokens, entry);
+        for (const entry of group) {
+          const { provider, model } = entry.record;
+          models.set(`${provider}\u0000${model}`, { provider, model });
+          addTokens(tokens, entry);
+        }
         return {
           agent: agentId,
           role,
           ...(task?.mode !== undefined ? { mode: task.mode } : {}),
-          models,
+          models: [...models.values()],
           requests: group.length,
           cost: costOf(group.map(({ record }) => record)),
-          tokens,
+          tokens: publicTotals(tokens),
           toolCalls: agentToolCalls.get(agentId) ?? 0,
         };
       });
@@ -265,32 +341,26 @@ export function createRunSummary() {
         outcome: context.outcome,
         turnIds: [...runTurns],
         cost: costOf(entries.map(({ record }) => record)),
-        requests: {
-          total: entries.length,
-          completed: entries.filter(({ record }) => record.outcome === 'completed').length,
-          failed: entries.filter(({ record }) => record.outcome === 'failed').length,
-          cancelled: entries.filter(({ record }) => record.outcome === 'cancelled').length,
-          compaction: entries.filter(({ record }) => compactionRequests.has(record.requestId)).length,
-        },
-        tokens: totals,
+        requests,
+        tokens: publicTotals(totals),
         cacheHitRatio: {
           overall: ratio(totals.cacheRead, totals.input),
           rootAfterFirst: ratio(afterFirst.cacheRead, afterFirst.input),
         },
         contextGrowth: {
-          rootRequests: rootInputs.length,
+          rootRequests,
           first: rootInputs[0] ?? null,
-          last: rootInputs.at(-1) ?? null,
-          max: knownInputs.length > 0 ? Math.max(...knownInputs) : null,
-          ...(rootInputs.length <= CONTEXT_GROWTH_LIST_LIMIT ? { inputTokens: rootInputs } : {}),
+          last: lastInput,
+          max: maxInput,
+          ...(rootRequests <= CONTEXT_GROWTH_LIST_LIMIT ? { inputTokens: rootInputs } : {}),
         },
         agents: agentRows,
         tools: {
-          calls: runTools.length,
+          calls,
           byName,
           errors,
           rejections: { invalidInput, unknownTool },
-          repeatedReads,
+          repeatedReads: { sameRange, otherRange },
           repeatedShellCommands,
         },
       };

@@ -1,0 +1,29 @@
+{
+  "verdict": "accept",
+  "scope": "independent no-cost HTTP gateway and retained CLI fixture verification; no live provider calls",
+  "harnessSha256": {
+    "budget-gateway.mjs": "38c061ad950d8698f4ffafb7388ae85756714b784f118f992dd8f6c70cc0dcc1",
+    "grade-candidate.mjs": "74d964bde89bc529b0727112409f4201f82b9451a9e092b70b78c427f803f4a4",
+    "run-comparison.mjs": "6b9486f8da59f93102340e43e4d0a878f7aff4e9178a920e8ae742e5145785f6",
+    "workloads.mjs": "3b58731c2ab8d55b952e2b07371f0ec28ad7967ee2969c88b3ef75630b250345"
+  },
+  "checks": {
+    "threeCliFixtures": "complete; normalized request bodies differ only prompt_cache_key",
+    "identicalBodyAcrossRelayArms": "PASS; fake upstream received exactly equal bytes",
+    "sessionHeaderOnlyInTreatment": "PASS; expected key, following baseline absent",
+    "diagnosticHeaderPreserved": "PASS; x-client-request-id unchanged",
+    "concurrencyRefusal": "PASS; 502, no second physical dispatch",
+    "missingUsageReservation": "PASS; 0.582 USD retained",
+    "sameProcessHalt": "PASS; 502, physical count unchanged",
+    "restartHalt": "PASS; 502, ledger remains one entry",
+    "budgetRefusal": "PASS; cap0.5 returns402 before physical dispatch, empty ledger",
+    "candidateArtifactRetention": "source fix inspected; copies owned task workspace before next run",
+    "productionSource": "git status shows only new experiment folder"
+  },
+  "limits": [
+    "Live provider behavior and routing semantics unverified",
+    "Current elapsedMs includes post-child grading; request timestamps support physical HTTP durations",
+    "No hosted CI performed",
+    "check-baselines reports inherited legacy deviations; this change does not edit baseline configuration"
+  ]
+}

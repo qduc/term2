@@ -47,11 +47,11 @@
             },
             {
               "name": "run_subagent",
-              "schema": "b45d1b1b0a8ed3fa"
+              "schema": "d612685169886ded"
             },
             {
               "name": "run_code",
-              "schema": "23642c6de2ea49df"
+              "schema": "29a6fca2feef9628"
             }
           ],
           "other": {
@@ -127,11 +127,11 @@
             },
             {
               "name": "run_subagent",
-              "schema": "b45d1b1b0a8ed3fa"
+              "schema": "d612685169886ded"
             },
             {
               "name": "run_code",
-              "schema": "23642c6de2ea49df"
+              "schema": "29a6fca2feef9628"
             }
           ],
           "other": {

@@ -28,6 +28,12 @@ export interface SubagentDefinition {
   role: SubagentRole;
   name: string;
   instructions: string;
+  /**
+   * `role-file` only when `instructions` is a Term2 role file's body (`loadRoleDefinition`).
+   * Prompt assembly deletes audience-dead text only from Term2-authored text, so any other
+   * definition's instructions (a parent's agent_spec) are sent exactly as written.
+   */
+  instructionsSource?: 'role-file';
   canRead: boolean;
   canWrite: boolean;
   canSearchWeb: boolean;

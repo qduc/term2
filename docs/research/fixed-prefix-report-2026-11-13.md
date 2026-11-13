@@ -40,15 +40,15 @@ characters; its system prompt was 1,245 characters against 1,251 here, the
 
 | Scenario | Prefix chars | ~tok | System | Tools (count / chars) |
 | --- | ---: | ---: | ---: | ---: |
-| Headless root (`mock-alpha`, also `claude-sonnet-4-5`, `kimi-k2`) | 21,223 | 5,306 | 1,251 | 6 / 19,972 |
-| Headless root, `--goal` | 24,738 | 6,185 | 2,789 | 7 / 21,949 |
-| Headless root, `gpt-5.5` / `gpt-5.3-codex` | 20,354 | 5,089 | 1,163 | 5 / 19,191 |
-| TUI root (`mock-alpha`, also sonnet, kimi) | 24,614 | 6,154 | 982 | 7 / 23,632 |
-| TUI root, `gpt-5.5` / `gpt-5.3-codex` | 23,745 | 5,936 | 894 | 6 / 22,851 |
+| Headless root (`mock-alpha`, also `claude-sonnet-4-5`, `kimi-k2`) | 21,386 | 5,347 | 1,251 | 6 / 20,135 |
+| Headless root, `--goal` | 24,901 | 6,225 | 2,789 | 7 / 22,112 |
+| Headless root, `gpt-5.5` / `gpt-5.3-codex` | 20,517 | 5,129 | 1,163 | 5 / 19,354 |
+| TUI root (`mock-alpha`, also sonnet, kimi) | 24,777 | 6,194 | 982 | 7 / 23,795 |
+| TUI root, `gpt-5.5` / `gpt-5.3-codex` | 23,908 | 5,977 | 894 | 6 / 23,014 |
 | Subagent `agent_spec` (no role) | 5,902 | 1,476 | 1,833 | 3 / 4,069 |
 | Subagent explorer | 19,203 | 4,801 | 6,545 | 13 / 12,658 |
-| Subagent worker | 19,576 | 4,894 | 7,156 | 13 / 12,420 |
-| Subagent worker, `gpt-5.5` / codex | 19,336 | 4,834 | 7,137 | 12 / 12,199 |
+| Subagent worker | 19,667 | 4,917 | 7,247 | 13 / 12,420 |
+| Subagent worker, `gpt-5.5` / codex | 19,427 | 4,857 | 7,228 | 12 / 12,199 |
 | Subagent mentor | 2,586 | 647 | 2,586 | 0 / 0 |
 | Subagent reviewer | 3,788 | 947 | 3,268 | 1 / 520 |
 | Subagent librarian | 11,467 | 2,867 | 7,256 | 8 / 4,211 |
@@ -60,11 +60,11 @@ Explorer with a gpt, codex or sonnet model id differs from `mock-alpha` by under
 
 Tool sizes are the full definition; the description alone is in brackets.
 
-- **Headless root:** `run_code` 8,616 [7,573], `run_subagent` 5,972 [2,280],
+- **Headless root:** `run_code` 8,616 [7,573], `run_subagent` 6,135 [2,280],
   `search_replace` 2,043 [1,131], `read_file` 1,255, `shell` 1,243, `create_file` 843.
   The system prompt is 1,251 in total. Tools are 94% of the prefix.
 - **`--goal`:** adds `goal_check` 1,977 [854] and a 1,536-character goal section.
-- **TUI root:** `run_code` 8,748, `run_subagent` 5,972, `shell` 2,430 (background and
+- **TUI root:** `run_code` 8,748, `run_subagent` 6,135, `shell` 2,430 (background and
   monitor options appear only with a background job registry), `session_rollover`
   2,341 [1,685, TUI only], `search_replace` 2,043. The TUI has no "Unattended mode"
   paragraph, so its system prompt is smaller than headless.
@@ -95,26 +95,33 @@ would add (`orchestrator.md` 11,187, `plan-mode-info.md` 3,633, `mentor-addon.md
 
 ## Changes since the first snapshot
 
-Lossless deletions only: text repeated elsewhere in the same request, or addressed
-to a tool the recipient's offered tool list lacks. Every change below was checked
-as a pure character deletion against a `--dump` of the parent build.
+Lossless deletions only: text repeated elsewhere in the same request with no
+narrower meaning, or addressed to a tool the recipient was not offered. Only a
+tool's absence is proof; being offered a tool is not (an editor can be offered
+with an empty write scope). Only Term2-authored text is edited: parent- or
+user-written text (an `agent_spec`'s constraints, completion criterion and
+context, project instructions) is sent exactly as written. Every change below was
+checked as a pure character deletion against a `--dump` of the parent build.
 
 - **Subagents, from the offered tool names** (`buildInstructions` in
-  `src/delegation/subagents/role-loader.ts`): a child with a file editor drops the
-  Worktree Hygiene "Read-only roles" line; a child that cannot write files (no
-  editor, `shell`, `run_code` or `run_subagent`) drops both "Worker roles" lines and
-  the "or editing" of its `read_file` guidance; one that also has no memory writer
-  drops "When an in-scope edit is already authorized, perform it with the editing
-  tool without asking again." A child without `ask_orchestrator` (a foreground
-  child, such as the reviewer's explorer, 553 characters smaller) drops its role's
-  "Asking the orchestrator" section. Explorers keep everything: their `shell` is
-  read-only by policy, which the tool list does not show.
+  `src/delegation/subagents/role-loader.ts`): a child that cannot write files (no
+  editor, `shell`, `run_code` or `run_subagent`) drops both Worktree Hygiene
+  "Worker roles" lines and the "or editing" of its `read_file` guidance; one that
+  also has no memory writer drops "When an in-scope edit is already authorized,
+  perform it with the editing tool without asking again." A child without
+  `ask_orchestrator` (a foreground child, such as the reviewer's explorer, 553
+  characters smaller) drops its role file's "Asking the orchestrator" section; an
+  `agent_spec` child's parent-written instructions are never searched for it.
+  Explorers keep everything: their `shell` is read-only by policy, which the tool
+  list does not show. Every child keeps the "Read-only roles" line.
 - **Repeated sentences:** the foreground `shell` `timeout_ms` advice (explorer and
-  worker, 132); `run_subagent`'s `task` explorer sentence and `worktree` "create it
-  first" sentence (every root, 257); `run_explorer`'s parallel and breadth-or-depth
-  sentences, which `reviewer.md` states; four `LIBRARIAN_GUIDANCE` sentences that
-  `librarian.md` states.
-- Mentor 313 smaller, reviewer 389, librarian 408, `agent_spec` 324, worker 223.
+  worker, 132); `run_subagent`'s `worktree` "create it first" sentence (every root,
+  94); `run_explorer`'s parallel and breadth-or-depth sentences, which `reviewer.md`
+  states; four `LIBRARIAN_GUIDANCE` sentences that `librarian.md` states.
+  `run_subagent`'s `task` explorer sentence is kept: the description's Task
+  Requirements are narrower than "recommendations, or the parent task itself".
+- Roots 94 smaller, mentor 313, reviewer 389, librarian 408, `agent_spec` 324,
+  worker 132, explorer 132.
 
 ## Observations (not acted on)
 

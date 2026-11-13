@@ -31,6 +31,9 @@ const SCRIPT_SURFACE_CLAUSES: readonly RegExp[] = [
  * another tool. A pointer whose deletion would change what the remaining
  * sentence says (web_fetch's "referenced by tools.web_search(...) inside
  * run_code or by the user") does not match and is left as written.
+ *
+ * Every tool a child can be offered has a Term2-authored description; a tool
+ * whose description carries external text (an MCP server's) must be skipped.
  */
 export function withoutDeadToolReferences<T extends Pick<AnyToolDefinition, 'name' | 'description'>>(
   tools: readonly T[],

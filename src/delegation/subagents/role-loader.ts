@@ -154,6 +154,84 @@ export function resolveSubagentSearchViaShell(settings: ISettingsService, canRun
   return settings.get('app.searchViaShell') === 'on' && canRunShell;
 }
 
+/**
+ * Tools that cannot change workspace files. A child offered only these
+ * provably cannot write files. Any other tool counts as possibly writing:
+ * `shell` (a writable generic child's shell can edit), `run_code`,
+ * `run_subagent`, and tools added later.
+ */
+const NON_FILE_WRITING_TOOLS: ReadonlySet<string> = new Set([
+  'read_file',
+  'grep',
+  'glob',
+  'read_code_outline',
+  'code_context_search',
+  'web_search',
+  'web_fetch',
+  'memory_list',
+  'memory_get',
+  'memory_search',
+  'memory_retrieve',
+  'memory_create',
+  'memory_update',
+  'memory_delete',
+  'session_list',
+  'session_search',
+  'session_read',
+  'ask_orchestrator',
+  'activate_skill',
+  // Starts a read-only explorer.
+  'run_explorer',
+]);
+/** Write to persistent memory: an edit, though not to workspace files. */
+const MEMORY_WRITE_TOOLS: ReadonlySet<string> = new Set(['memory_create', 'memory_update', 'memory_delete']);
+const FILE_EDITING_TOOLS: readonly string[] = ['apply_patch', 'search_replace', 'create_file'];
+
+/** What a child can do, read from its final offered tool names (never its role). */
+function writeCapability(toolNames: readonly string[]) {
+  const cannotWriteFiles = toolNames.every((name) => NON_FILE_WRITING_TOOLS.has(name));
+  return {
+    cannotWriteFiles,
+    /** Nothing to edit with at all: no file writer and no memory writer. */
+    cannotEdit: cannotWriteFiles && !toolNames.some((name) => MEMORY_WRITE_TOOLS.has(name)),
+    hasFileEditingTool: toolNames.some((name) => FILE_EDITING_TOOLS.includes(name)),
+  };
+}
+
+/** Addressed to a child that has an editing tool; deleted when it has nothing to edit with. */
+const EDITING_TOOL_SENTENCE =
+  'When an in-scope edit is already authorized, perform it with the editing tool without asking again. ';
+/** Worktree Hygiene lines name their audience. */
+const READ_ONLY_AUDIENCE_LINE = /^- Read-only roles .*(?:\r?\n|$)/gm;
+const WORKER_AUDIENCE_LINE = /^- Worker roles .*(?:\r?\n|$)/gm;
+const ASK_ORCHESTRATOR_SECTION = /^## Asking the orchestrator\r?\n[\s\S]*?(?=^## |(?![\s\S]))/m;
+
+/**
+ * Shared prompt text is written for every child. Delete only the parts
+ * addressed to a capability this child's offered tools provably lack; never
+ * reword. Unrecognised text is left as written.
+ */
+function withoutDeadAudienceText(
+  text: { skillConflicts: string; worktreeHygiene: string; roleInstructions: string },
+  toolNames: readonly string[],
+) {
+  const capability = writeCapability(toolNames);
+  let worktreeHygiene = text.worktreeHygiene;
+  // A child with an editing tool is not a read-only role; one that cannot write files is not a worker.
+  if (capability.hasFileEditingTool) worktreeHygiene = worktreeHygiene.replace(READ_ONLY_AUDIENCE_LINE, '');
+  if (capability.cannotWriteFiles) worktreeHygiene = worktreeHygiene.replace(WORKER_AUDIENCE_LINE, '');
+  return {
+    skillConflicts: capability.cannotEdit
+      ? text.skillConflicts.replace(EDITING_TOOL_SENTENCE, '')
+      : text.skillConflicts,
+    worktreeHygiene: worktreeHygiene.trimEnd(),
+    // The section is only about the ask_orchestrator tool, which a foreground child is not offered.
+    roleInstructions: toolNames.includes('ask_orchestrator')
+      ? text.roleInstructions
+      : text.roleInstructions.replace(ASK_ORCHESTRATOR_SECTION, ''),
+  };
+}
+
 function buildAvailableToolGuidance(
   toolDefinitions: readonly Pick<AnyToolDefinition, 'name'>[],
   searchViaShell: boolean,
@@ -194,7 +272,12 @@ function buildAvailableToolGuidance(
   }
 
   if (hasTool('read_file')) {
-    lines.push('Use `read_file` for exact file contents before drawing conclusions or editing.');
+    // "or editing" only for a child that may be able to write files.
+    lines.push(
+      `Use \`read_file\` for exact file contents before drawing conclusions${
+        writeCapability(toolNames).cannotWriteFiles ? '' : ' or editing'
+      }.`,
+    );
   }
   if (hasTool('shell')) {
     lines.push('Use `shell` only for commands that are safe, bounded, and relevant to the assigned task.');
@@ -225,7 +308,14 @@ export function buildInstructions(
   const agentsInstructions = executionContext?.isRemote() ? '' : getAgentsInstructions(cwd);
 
   const modelPrompt = resolvePrompt(path.join(PROMPTS_DIR, selectSubagentBasePromptFile(definition.model)));
-  const worktreeHygiene = resolvePrompt(path.join(PROMPTS_DIR, 'worktree-hygiene.md'));
+  const shared = withoutDeadAudienceText(
+    {
+      skillConflicts: resolvePrompt(path.join(BASE_PROMPT_PATH, 'fragments/skill-instruction-conflicts.md')),
+      worktreeHygiene: resolvePrompt(path.join(PROMPTS_DIR, 'worktree-hygiene.md')),
+      roleInstructions: definition.instructions,
+    },
+    toolDefinitions.map((tool) => tool.name),
+  );
   const toolGuidance = buildAvailableToolGuidance(toolDefinitions, searchViaShell);
   const memoryCapability = executionContext?.isRemote()
     ? undefined
@@ -252,9 +342,9 @@ export function buildInstructions(
 
   return [
     modelPrompt,
-    resolvePrompt(path.join(BASE_PROMPT_PATH, 'fragments/skill-instruction-conflicts.md')),
-    worktreeHygiene,
-    definition.instructions,
+    shared.skillConflicts,
+    shared.worktreeHygiene,
+    shared.roleInstructions,
     memoryCapability?.guidance,
     memoryCapability?.context,
     toolGuidance,

@@ -8,13 +8,14 @@ const RUN_SUBAGENT = 'run_subagent';
  * Clauses that point at the `run_code` script surface (`tools.<name>(...)`),
  * each matched with its own delimiter so deleting it leaves the surrounding
  * sentence intact:
- * - ` (inside run_code, use tools.grep(...))`, ` (inside run_code, use shell)`
+ * - ` (inside run_code, use tools.grep(...))`; not ` (inside run_code, use shell)`, a
+ *   redirect that stays true for a child offered `shell` directly
  * - ` (use tools.code_context_search(...) inside run_code)`, ` (use tools.glob(...))`
  * - `; inside run_code, use tools.read_file(...)` before the sentence's full stop
  * - ` (more from inside run_code)`
  */
 const SCRIPT_SURFACE_CLAUSES: readonly RegExp[] = [
-  / \((?:inside run_code, use (?:tools\.\w+\(\.\.\.\)|shell)(?: instead)?|use tools\.\w+\(\.\.\.\)(?: inside run_code)?)\)/g,
+  / \((?:inside run_code, use tools\.\w+\(\.\.\.\)(?: instead)?|use tools\.\w+\(\.\.\.\)(?: inside run_code)?)\)/g,
   /; inside run_code, use tools\.\w+\(\.\.\.\)(?: instead)?(?=\.)/g,
   / \(more from inside run_code\)/g,
 ];

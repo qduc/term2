@@ -28,6 +28,17 @@ to a tool it cannot call. It reads the offered tool names, not the role, and
 never rewords or redirects; a pointer whose deletion would change the rest of
 its sentence stays as written.
 
+`buildInstructions` (`subagents/role-loader.ts`) applies the same rule to the
+shared prompt text, again from the offered tool names. A child that can write
+files only through tools outside a fixed non-writing set (any editor, `shell`,
+`run_code`, `run_subagent`, or an unknown tool) is treated as possibly writing.
+A child with a file editor loses the Worktree Hygiene line for read-only roles.
+A child that cannot write files loses the two worker lines and the "or editing"
+in its `read_file` guidance, and, when it has no memory writer either, the
+skills section's "perform it with the editing tool" sentence. A child without
+`ask_orchestrator` (every foreground child, such as a reviewer's explorer) loses
+its role's "Asking the orchestrator" section. Text that does not match is kept.
+
 Filesystem scope checks use the execution context's workspace root, or the
 active session root when no execution context is available. The resolver takes
 that root explicitly and resolves symlinks before comparing paths, so concurrent

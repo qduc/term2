@@ -156,7 +156,8 @@ checks or failure evidence. The
 [token-efficiency measurements](../research/bare-token-efficiency-20261024.md)
 record the tested scope, failures, and limits rather than promise a universal gain.
 
-Root sessions also expose `goal_check`. A supplied `--goal` uses the existing
+Root sessions expose `goal_check` once the session has had a goal (see
+[durable goal](../plans/agent-runtime/durable-goal.md)). A supplied `--goal` uses the existing
 request-time goal context, stop checks, and configured completion verification.
 Bare does not waive required review. Ordinary replies without an active goal do
 not trigger goal verification. When required review cannot run through the

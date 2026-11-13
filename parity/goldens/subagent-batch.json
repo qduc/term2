@@ -43,7 +43,7 @@
             },
             {
               "name": "run_subagent",
-              "schema": "03dd1e900a8f44d1"
+              "schema": "74dc08cd9bb0a566"
             },
             {
               "name": "run_code",
@@ -109,7 +109,7 @@
             },
             {
               "name": "run_subagent",
-              "schema": "03dd1e900a8f44d1"
+              "schema": "74dc08cd9bb0a566"
             },
             {
               "name": "run_code",
@@ -192,7 +192,7 @@
             },
             {
               "name": "shell",
-              "schema": "f92aba61155d8c13"
+              "schema": "91c6b9ebef8bf4ea"
             }
           ],
           "other": {
@@ -272,7 +272,7 @@
             },
             {
               "name": "run_subagent",
-              "schema": "03dd1e900a8f44d1"
+              "schema": "74dc08cd9bb0a566"
             },
             {
               "name": "run_code",

@@ -206,12 +206,24 @@ const EDITING_TOOL_SENTENCE =
   'When an in-scope edit is already authorized, perform it with the editing tool without asking again. ';
 /** The Worktree Hygiene lines addressed to worker roles. */
 const WORKER_AUDIENCE_LINE = /^- Worker roles .*(?:\r?\n|$)/gm;
-const ASK_ORCHESTRATOR_SECTION = /^## Asking the orchestrator\r?\n[\s\S]*?(?=^## |(?![\s\S]))/m;
+/** Runs to the next `#` or `##` heading (a `###` is a subsection of it) or the end of the file. */
+const ASK_ORCHESTRATOR_SECTION = /^## Asking the orchestrator\r?\n[\s\S]*?(?=^#{1,2} |(?![\s\S]))/m;
+/** The section's one rule that is not about the tool; it survives the section's deletion. */
+const NO_DIRECT_USER_CONTACT = /\bdo not contact the user directly\b/i;
+
+/** Deletes the `ask_orchestrator` section but keeps its standalone "do not contact the user directly". */
+function withoutAskOrchestratorSection(roleFile: string): string {
+  return roleFile.replace(ASK_ORCHESTRATOR_SECTION, (section) =>
+    NO_DIRECT_USER_CONTACT.test(section) ? 'Do not contact the user directly.\n\n' : '',
+  );
+}
 
 /**
  * Shared prompt text is written for every child. Delete only the parts
  * addressed to a capability this child's offered tools provably lack; never
- * reword. Unrecognised text is left as written.
+ * reword, except that a deleted "Asking the orchestrator" section leaves its
+ * "do not contact the user directly" standing as one sentence. Unrecognised
+ * text is left as written.
  *
  * Every input is Term2-authored: the two fragment files, and a named role's
  * own role file (`roleFile`). Text a parent or user wrote (an agent_spec's
@@ -231,11 +243,12 @@ function withoutDeadAudienceText(
     worktreeHygiene: capability.cannotWriteFiles
       ? text.worktreeHygiene.replace(WORKER_AUDIENCE_LINE, '').trimEnd()
       : text.worktreeHygiene,
-    // The section is only about the ask_orchestrator tool, which a foreground child is not offered.
+    // The section is about the ask_orchestrator tool, which a foreground child is not offered,
+    // except for "do not contact the user directly", which still applies to that child.
     roleFile:
       text.roleFile === undefined || toolNames.includes('ask_orchestrator')
         ? text.roleFile
-        : text.roleFile.replace(ASK_ORCHESTRATOR_SECTION, ''),
+        : withoutAskOrchestratorSection(text.roleFile),
   };
 }
 

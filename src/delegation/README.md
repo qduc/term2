@@ -39,7 +39,10 @@ two Worktree Hygiene worker lines and the "or editing" in its `read_file`
 guidance, and, when it has no memory writer either, the skills section's
 "perform it with the editing tool" sentence. A child without `ask_orchestrator`
 (every foreground child, such as a reviewer's explorer) loses its role file's
-"Asking the orchestrator" section. Text that does not match is kept.
+"Asking the orchestrator" section, up to the next `#` or `##` heading, except
+its "do not contact the user directly", which applies with or without the tool
+and is kept as the sentence "Do not contact the user directly.". Text that does
+not match is kept.
 
 These deletions run only on Term2-authored text, before it is joined with
 anything else: the two fragment files and a named role's role file

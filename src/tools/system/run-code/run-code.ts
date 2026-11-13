@@ -39,12 +39,6 @@ export type { RunCodeActionOutcome, RunCodeActionReceipt, RunCodeCallRecord } fr
 const MAX_OUTPUT_CHARS = 30_000;
 
 // Model-facing contract. Several sentences exist because of observed failures
-// (docs/research/tool-real-world-log-audit-2026-09-05.md and
-// docs/plans/tools/run-code/run-code-authoring-friction.md): patch text embedded
-// in JavaScript broke on backticks, one rejected Promise.all lost successful
-// sibling reads, and oversized returns were clipped or re-run. Compress the
-// wording if you must, but keep each of those instructions.
-// Model-facing contract. Several sentences exist because of observed failures
 // (docs/research/tool-real-world-log-audit-2026-09-05.md,
 // docs/plans/tools/run-code/run-code-authoring-friction.md): patch text embedded
 // in JavaScript broke on backticks, one rejected Promise.all lost successful
@@ -58,17 +52,18 @@ const RUN_CODE_DESCRIPTION =
   'available in the script, even if you can call that tool directly. Prefer one script over many tool calls for a ' +
   'loop, a fan-out over many files, or multi-step work whose intermediate values you do not need to see. The ' +
   'script is isolated, with no filesystem, network, timers, require, or eval; `tools.*` is the only way out. ' +
-  'Auto-approved tools run immediately; others show the usual approval prompt and the script resumes after the ' +
-  'decision. `console.log` is a debugging trace, shown only when the script fails or times out, or with ' +
+  'Auto-approved tools run immediately; tools that need approval show the usual approval prompt and the script ' +
+  'resumes after the decision. `console.log` is a debugging trace, shown only when the script fails or times out, or with ' +
   '`include_console: true`.\n\n' +
   `Each script may make at most ${RUN_CODE_LIMITS.maxCalls} tools.* calls; split large work into chunks and track ` +
   'progress. Catch individual failures or use `Promise.allSettled` to keep partial results; for independent reads, ' +
-  'map rejections to `{error: r.reason.message}` so successful siblings survive. When the call budget is exhausted, ' +
+  'use `Promise.allSettled` and map rejections to `{error: r.reason.message}` so successful siblings survive. When the call budget is exhausted, ' +
   'the error reports calls admitted and remaining: return the partial results and start another run_code call only ' +
   'for unattempted work. Do not repeat completed tool effects. Return only the fields, line ranges, or summaries you ' +
   'need: model-visible output is limited to 30,000 characters, and larger host results can fail before rendering. ' +
-  "If the run's result says `Full output saved to`, read that exact path with `read_file`, taking line ranges " +
-  'or only the fields you need, instead of repeating completed calls or transferring the whole value. In the ' +
+  "If the run's result says `Full output saved to`, read that exact path with `read_file` instead of repeating " +
+  'completed calls; for any large artifact, take line ranges or only the fields you need instead of transferring ' +
+  'the whole value. In the ' +
   'script, a `read_file` result may have `truncated: true` and a `fullOutputPath`: follow that path or narrow the ' +
   'projection before returning it. Use `tools.describe(name)` for the full schema and description of a tool rather ' +
   'than guessing parameters or returned fields. Pass patch or file text that contains JavaScript syntax such as ' +

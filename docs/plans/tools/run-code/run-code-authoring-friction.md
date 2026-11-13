@@ -226,7 +226,7 @@ The `run_code` description, its parameter text, the catalogue (`renderToolsHeade
 in `src/tools/system/run-code/tools-header.ts`) and the Agent capability section
 (`renderAgentCapabilitySection` in `src/delegation/run-code/run-code-tool.ts`) were
 reworded to cut about 1,000 characters from every root request, with the product
-owner's approval for non-lossless wording. No instruction was dropped. These
+owner's approval for non-lossless wording. No instruction was dropped; an independent review restored four sentences whose merged wording had shifted meaning. These
 sentences trace to failures recorded in this plan and in
 [the September log audit](../../../research/tool-real-world-log-audit-2026-09-05.md),
 so a later rewrite may shorten them but must keep each one:

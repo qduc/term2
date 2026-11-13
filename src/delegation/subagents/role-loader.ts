@@ -267,12 +267,18 @@ function withoutDeadAudienceText(
 function buildAvailableToolGuidance(toolDefinitions: readonly OfferedTool[], searchViaShell: boolean): string {
   const toolNames = toolDefinitions.map((tool) => tool.name);
   const hasTool = (name: string) => toolNames.includes(name);
+  // The offered tools are the request's tool definitions; they are not listed again here.
+  if (toolNames.length === 0) {
+    return [
+      '## Available Tool Guidance',
+      '',
+      'No tools are offered in this run, so any tool mentioned elsewhere is not available. Use provided context where possible.',
+    ].join('\n');
+  }
   const lines = [
     '## Available Tool Guidance',
     '',
-    `Registered tools: ${toolNames.length > 0 ? toolNames.map((name) => `\`${name}\``).join(', ') : 'none'}.`,
-    '',
-    'Use only these tools. If a tool mentioned elsewhere is not listed here, it is not available.',
+    'Use only the tools offered in this request. If a tool mentioned elsewhere is not offered, it is not available.',
   ];
 
   if (searchViaShell && hasTool('shell')) {

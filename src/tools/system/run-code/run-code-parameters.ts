@@ -39,9 +39,9 @@ const decodeValidatedInputKeys = (value: Record<string, JsonValue>): Record<stri
   return decode(value) as Record<string, JsonValue>;
 };
 
+// The shared code-plus-inputs admission limit is stated once, in the tool description.
 const RUN_CODE_INPUTS_DESCRIPTION =
-  'JSON data exposed to the script as the global `inputs`. Use this for patch or file text. ' +
-  'Code and serialized inputs share the 65,536-byte admission limit.';
+  'JSON data exposed to the script as the global `inputs`. Use this for patch or file text.';
 
 const runCodeInputsSchema = z
   .preprocess(encodeInputKeysForValidation, z.record(z.string(), z.json()))

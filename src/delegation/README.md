@@ -19,6 +19,15 @@ owns source-definition adaptation, local execution-context construction, and
 the bridge from physical invocation to native tool context; these are injected
 ports, not imports back into app.
 
+Tool descriptions are written for the root surface. Before a child's graph is
+wrapped, `withoutDeadToolReferences` (`subagents/dead-tool-references.ts`)
+deletes whole pointer clauses to the `run_code` script surface from a child
+whose final tool list lacks `run_code`, and the shell's pointer to
+`run_subagent` from a child that lacks `run_subagent`, so the child is not sent
+to a tool it cannot call. It reads the offered tool names, not the role, and
+never rewords or redirects; a pointer whose deletion would change the rest of
+its sentence stays as written.
+
 Filesystem scope checks use the execution context's workspace root, or the
 active session root when no execution context is available. The resolver takes
 that root explicitly and resolves symlinks before comparing paths, so concurrent

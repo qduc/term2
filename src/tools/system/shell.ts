@@ -667,6 +667,9 @@ export const formatShellCommandMessage: FormatCommandMessage = (item, index, too
   ];
 };
 
+/** Removed from a child's copy when that child was not offered `run_subagent`. */
+export const SHELL_DELEGATION_POINTER = '; use `run_subagent` instead';
+
 const getShellDescription = (searchViaShell: boolean, background = true) =>
   'Execute a single shell command. ' +
   'Long output is truncated and the full output is saved to a file; ' +
@@ -674,7 +677,7 @@ const getShellDescription = (searchViaShell: boolean, background = true) =>
     ? 'Do NOT use this to write. Use the specialized tools for those tasks. '
     : 'Do NOT use this to read, write or search. Use the specialized tools for those tasks. ') +
   'Do NOT write multi-line inline scripts, it is prone to escaping mistakes. Create a temporary script then use this tool to run it. ' +
-  'Do NOT use this for complex multi-step edits or broad codebase exploration; use `run_subagent` instead. ' +
+  `Do NOT use this for complex multi-step edits or broad codebase exploration${SHELL_DELEGATION_POINTER}. ` +
   (background
     ? 'For a background job whose output should trigger notifications, set background: true and provide monitor in the same call; wait for shell_output notifications instead of polling. ' +
       'Known long-running work needs an explicit finite timeout_ms sized to the expected horizon: the 120s foreground and 30min background defaults are not ceilings, do not guarantee completion, and a long-lived watcher or full-suite validation will be terminated at the background default unless you pass a larger explicit timeout_ms. '

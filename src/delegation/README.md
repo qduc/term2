@@ -34,10 +34,7 @@ counts as proof: an offered editor can still be denied every write (an
 agent_spec with `filesystem.write: []`, a read-only session), so no text is
 deleted because a tool was offered. A child offered any tool outside a fixed
 non-writing set (any editor, `shell`, `run_code`, `run_subagent`, or an unknown
-tool) is treated as possibly writing, unless the policy wrapper that built it
-refuses every file-changing call and marks it `cannotWriteFiles`: the read-only
-shell (`wrapReadOnlyShellTool`, GREEN commands without write targets) that every
-non-writing child with `shell` gets, such as an explorer. A child that cannot write files loses the
+tool) is treated as possibly writing. A child that cannot write files loses the
 two Worktree Hygiene worker lines and the "or editing" in its `read_file`
 guidance, and, when it has no memory writer either, the skills section's
 "perform it with the editing tool" sentence. A child without `ask_orchestrator`

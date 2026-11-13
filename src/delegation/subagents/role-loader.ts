@@ -157,9 +157,8 @@ export function resolveSubagentSearchViaShell(settings: ISettingsService, canRun
 
 /**
  * Tools that cannot change workspace files. A child offered only these
- * provably cannot write files. Any other tool counts as possibly writing unless
- * its policy wrapper marks it `cannotWriteFiles`: `shell` (a writable generic
- * child's shell can edit; a read-only child's shell is marked), `run_code`,
+ * provably cannot write files. Any other tool counts as possibly writing:
+ * `shell` (a writable generic child's shell can edit), `run_code`,
  * `run_subagent`, and tools added later.
  */
 const NON_FILE_WRITING_TOOLS: ReadonlySet<string> = new Set([
@@ -188,20 +187,17 @@ const NON_FILE_WRITING_TOOLS: ReadonlySet<string> = new Set([
 /** Write to persistent memory: an edit, though not to workspace files. */
 const MEMORY_WRITE_TOOLS: ReadonlySet<string> = new Set(['memory_create', 'memory_update', 'memory_delete']);
 
-type OfferedTool = Pick<AnyToolDefinition, 'name' | 'cannotWriteFiles'>;
-
 /**
- * What a child provably cannot do, read from its final offered tools (never its role).
+ * What a child provably cannot do, read from its final offered tool names (never its role).
  * Only absence is proof: an offered editor can still be denied every write (an empty write scope,
- * a read-only session), so no text is deleted because a tool was offered. A tool whose policy
- * wrapper refuses every file-changing call (`cannotWriteFiles`, the read-only shell) is not a writer.
+ * a read-only session), so no text is deleted because a tool was offered.
  */
-function writeCapability(tools: readonly OfferedTool[]) {
-  const cannotWriteFiles = tools.every((tool) => NON_FILE_WRITING_TOOLS.has(tool.name) || tool.cannotWriteFiles);
+function writeCapability(toolNames: readonly string[]) {
+  const cannotWriteFiles = toolNames.every((name) => NON_FILE_WRITING_TOOLS.has(name));
   return {
     cannotWriteFiles,
     /** Nothing to edit with at all: no file writer and no memory writer. */
-    cannotEdit: cannotWriteFiles && !tools.some((tool) => MEMORY_WRITE_TOOLS.has(tool.name)),
+    cannotEdit: cannotWriteFiles && !toolNames.some((name) => MEMORY_WRITE_TOOLS.has(name)),
   };
 }
 
@@ -244,9 +240,9 @@ function withoutAskOrchestratorSection(roleFile: string): string {
  */
 function withoutDeadAudienceText(
   text: { skillConflicts: string; worktreeHygiene: string; roleFile: string | undefined },
-  tools: readonly OfferedTool[],
+  toolNames: readonly string[],
 ) {
-  const capability = writeCapability(tools);
+  const capability = writeCapability(toolNames);
   return {
     skillConflicts: capability.cannotEdit
       ? text.skillConflicts.replace(EDITING_TOOL_SENTENCE, '')
@@ -258,13 +254,16 @@ function withoutDeadAudienceText(
     // The section is about the ask_orchestrator tool, which a foreground child is not offered,
     // except for "do not contact the user directly", which still applies to that child.
     roleFile:
-      text.roleFile === undefined || tools.some((tool) => tool.name === 'ask_orchestrator')
+      text.roleFile === undefined || toolNames.includes('ask_orchestrator')
         ? text.roleFile
         : withoutAskOrchestratorSection(text.roleFile),
   };
 }
 
-function buildAvailableToolGuidance(toolDefinitions: readonly OfferedTool[], searchViaShell: boolean): string {
+function buildAvailableToolGuidance(
+  toolDefinitions: readonly Pick<AnyToolDefinition, 'name'>[],
+  searchViaShell: boolean,
+): string {
   const toolNames = toolDefinitions.map((tool) => tool.name);
   const hasTool = (name: string) => toolNames.includes(name);
   // The offered tools are the request's tool definitions; they are not listed again here.
@@ -310,7 +309,7 @@ function buildAvailableToolGuidance(toolDefinitions: readonly OfferedTool[], sea
     // "or editing" only for a child that may be able to write files.
     lines.push(
       `Use \`read_file\` for exact file contents before drawing conclusions${
-        writeCapability(toolDefinitions).cannotWriteFiles ? '' : ' or editing'
+        writeCapability(toolNames).cannotWriteFiles ? '' : ' or editing'
       }.`,
     );
   }
@@ -332,7 +331,7 @@ function buildAvailableToolGuidance(toolDefinitions: readonly OfferedTool[], sea
  * Remote execution omits local project instructions and local memory sections. */
 export function buildInstructions(
   definition: SubagentDefinition,
-  toolDefinitions: readonly OfferedTool[],
+  toolDefinitions: readonly Pick<AnyToolDefinition, 'name'>[],
   searchViaShell: boolean,
   settings: ISettingsService,
   executionContext?: ExecutionContext,
@@ -357,7 +356,7 @@ export function buildInstructions(
       worktreeHygiene: resolvePrompt(path.join(PROMPTS_DIR, 'worktree-hygiene.md')),
       roleFile,
     },
-    toolDefinitions,
+    toolDefinitions.map((tool) => tool.name),
   );
   const toolGuidance = buildAvailableToolGuidance(toolDefinitions, searchViaShell);
   const memoryCapability = executionContext?.isRemote()

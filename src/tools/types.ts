@@ -141,11 +141,6 @@ export interface SchemaToolDefinition<TSchema extends ZodTypeAny, TName extends 
   canRequireApproval?: boolean;
   /** Declares a successful call as an observable mutation for stall detection. */
   effect?: 'mutating';
-  /**
-   * Set by a policy wrapper that refuses every call that could change workspace files (a subagent's
-   * read-only shell). Prompt assembly may then treat the tool as unable to write files. Not sent to models.
-   */
-  cannotWriteFiles?: true;
   /** Result is already serialized and bounded; generic string trimming would corrupt its contract. */
   preserveSerializedOutput?: boolean;
   /**
@@ -274,11 +269,6 @@ export interface AnyToolDefinition {
   canRequireApproval?: boolean;
   /** Declares a successful call as an observable mutation for stall detection. */
   effect?: 'mutating';
-  /**
-   * Set by a policy wrapper that refuses every call that could change workspace files (a subagent's
-   * read-only shell). Prompt assembly may then treat the tool as unable to write files. Not sent to models.
-   */
-  cannotWriteFiles?: true;
   /** Result is already serialized and bounded; generic string trimming would corrupt its contract. */
   preserveSerializedOutput?: boolean;
   /**

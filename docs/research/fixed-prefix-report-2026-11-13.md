@@ -7,9 +7,9 @@ system prompt plus the tool definitions. Measured with
 ## Scope and how to read the numbers
 
 - **Revision:** product source at the commit that adds this revision of the note
-  (branch `prefix-round2`, parent `b83994f`), built with `pnpm build`. The first
-  version of this note measured `0f3fa7f`; the section "Changes since the first
-  snapshot" lists what moved.
+  (branch `prefix-round4`, parent `127f80c`), built with `pnpm build`. Earlier
+  versions measured `0f3fa7f` (first snapshot), `prefix-round2` and round 3a; the
+  sections after "Not captured" list what moved in each round.
 - **Estimate, not a tokenizer count.** `~tok` is characters / 4. Tool size is the
   length of each tool definition's JSON exactly as sent, so it includes the schema,
   not only the description.
@@ -40,18 +40,18 @@ characters; its system prompt was 1,245 characters against 1,251 here, the
 
 | Scenario | Prefix chars | ~tok | System | Tools (count / chars) |
 | --- | ---: | ---: | ---: | ---: |
-| Headless root (`mock-alpha`, also `claude-sonnet-4-5`, `kimi-k2`) | 21,386 | 5,347 | 1,251 | 6 / 20,135 |
-| Headless root, `--goal` | 24,901 | 6,225 | 2,789 | 7 / 22,112 |
-| Headless root, `gpt-5.5` / `gpt-5.3-codex` | 20,517 | 5,129 | 1,163 | 5 / 19,354 |
-| TUI root (`mock-alpha`, also sonnet, kimi) | 24,777 | 6,194 | 982 | 7 / 23,795 |
-| TUI root, `gpt-5.5` / `gpt-5.3-codex` | 23,908 | 5,977 | 894 | 6 / 23,014 |
-| Subagent `agent_spec` (no role) | 5,902 | 1,476 | 1,833 | 3 / 4,069 |
-| Subagent explorer | 19,203 | 4,801 | 6,545 | 13 / 12,658 |
-| Subagent worker | 19,667 | 4,917 | 7,247 | 13 / 12,420 |
-| Subagent worker, `gpt-5.5` / codex | 19,427 | 4,857 | 7,228 | 12 / 12,199 |
-| Subagent mentor | 2,586 | 647 | 2,586 | 0 / 0 |
-| Subagent reviewer | 3,788 | 947 | 3,268 | 1 / 520 |
-| Subagent librarian | 11,467 | 2,867 | 7,256 | 8 / 4,211 |
+| Headless root (`mock-alpha`, also `claude-sonnet-4-5`, `kimi-k2`) | 19,897 | 4,974 | 1,251 | 6 / 18,646 |
+| Headless root, `--goal` | 23,412 | 5,853 | 2,789 | 7 / 20,623 |
+| Headless root, `gpt-5.5` / `gpt-5.3-codex` | 19,173 | 4,793 | 1,163 | 5 / 18,010 |
+| TUI root (`mock-alpha`, also sonnet, kimi) | 23,288 | 5,822 | 982 | 7 / 22,306 |
+| TUI root, `gpt-5.5` / `gpt-5.3-codex` | 22,564 | 5,641 | 894 | 6 / 21,670 |
+| Subagent `agent_spec` (no role) | 5,717 | 1,429 | 1,695 | 3 / 4,022 |
+| Subagent explorer | 18,903 | 4,726 | 6,292 | 13 / 12,611 |
+| Subagent worker | 19,361 | 4,840 | 6,988 | 13 / 12,373 |
+| Subagent worker, `gpt-5.5` / codex | 19,139 | 4,785 | 6,987 | 12 / 12,152 |
+| Subagent mentor | 2,357 | 589 | 2,357 | 0 / 0 |
+| Subagent reviewer | 3,437 | 859 | 3,143 | 1 / 294 |
+| Subagent librarian | 9,798 | 2,450 | 5,587 | 8 / 4,211 |
 
 Explorer with a gpt, codex or sonnet model id differs from `mock-alpha` by under
 20 characters (the subagent base prompt varies; the tools do not).
@@ -60,20 +60,20 @@ Explorer with a gpt, codex or sonnet model id differs from `mock-alpha` by under
 
 Tool sizes are the full definition; the description alone is in brackets.
 
-- **Headless root:** `run_code` 8,616 [7,573], `run_subagent` 6,135 [2,280],
-  `search_replace` 2,043 [1,131], `read_file` 1,255, `shell` 1,243, `create_file` 843.
+- **Headless root:** `run_code` 7,715 [6,721], `run_subagent` 5,594 [2,081],
+  `search_replace` 2,043 [1,131], `shell` 1,243, `read_file` 1,208, `create_file` 843.
   The system prompt is 1,251 in total. Tools are 94% of the prefix.
 - **`--goal`:** adds `goal_check` 1,977 [854] and a 1,536-character goal section.
-- **TUI root:** `run_code` 8,748, `run_subagent` 6,135, `shell` 2,430 (background and
+- **TUI root:** `run_code` 7,847, `run_subagent` 5,594, `shell` 2,430 (background and
   monitor options appear only with a background job registry), `session_rollover`
   2,341 [1,685, TUI only], `search_replace` 2,043. The TUI has no "Unattended mode"
   paragraph, so its system prompt is smaller than headless.
 - **Explorer:** `web_search` 1,840, `shell` 1,729, `grep` 1,456, `glob` 1,405;
-  prompt sections Approach 1,190, Persistent memory 1,118, Available Tool Guidance 970.
+  prompt sections Approach 1,190, Persistent memory 1,118, Worktree Hygiene 812.
 - **Worker:** `search_replace` 1,998 (or `apply_patch` 2,564 for gpt), `shell` 1,729,
   `grep`, `glob`; prompt sections Final Report 1,531, Persistent memory 1,118.
-- **Librarian:** prompt sections History retrieval 1,488 and Memory librarian 1,236
-  dominate; the largest tool is `memory_update` 870.
+- **Librarian:** prompt section History retrieval 1,380 is the largest; Memory
+  librarian is 290 (it was 1,236 before round 4). The largest tool is `memory_update` 870.
 
 Prompt sections are split at Markdown headings and lone XML-style tags, a heuristic:
 a role body without its own heading is counted in the section before it (the
@@ -93,7 +93,7 @@ loudly if one becomes reachable. The same applies to the workflow texts those pr
 would add (`orchestrator.md` 11,187, `plan-mode-info.md` 3,633, `mentor-addon.md`
 4,465, `pair-mode.md` 2,725) and to the mode stubs.
 
-## Changes since the first snapshot
+## Round 2: changes since the first snapshot
 
 Lossless deletions only: text repeated elsewhere in the same request with no
 narrower meaning, or addressed to a tool the recipient was not offered. Only a
@@ -127,16 +127,15 @@ checked as a pure character deletion against a `--dump` of the parent build.
 
 These need rewording or a product decision, so they are outside lossless deletion.
 
-- **Librarian:** `librarian.md` says "Inside `run_code`, you have" and names
-  `tools.memory_*(...)`, but the librarian is offered the memory tools directly and
-  no `run_code`.
-- **Mentor:** its base prompt says "use the available tools deliberately", and it has
-  no tools.
+- **Librarian** (resolved in round 3b, `9137818`): `librarian.md` said "Inside
+  `run_code`, you have" and named `tools.memory_*(...)`, but the librarian is offered
+  the memory tools directly and no `run_code`.
+- **Mentor** (resolved in round 3b, `3ada6f8`): its base prompt said "use the
+  available tools deliberately", and it has no tools.
 - **`run_subagent`** repeats the child tool enum in `agent_spec.tools` and
-  `agent_spec.permissions.tools`. Its three background sentences overlap, but each
-  carries something the others lack ("running handle", "do not duplicate them",
-  "end the turn"). It mentions `get_subagent_result`, which both measured roots reach
-  as a `run_code` script tool.
+  `agent_spec.permissions.tools` (a schema matter, left alone). Its three background
+  sentences were merged into one paragraph in round 3b (`1ae29e5`). It mentions
+  `get_subagent_result`, which both measured roots reach as a `run_code` script tool.
 - **`--goal`:** the goal section and the `goal_check` description share about 400
   characters ("Reporting achieved proposes completion ...").
 - **`run_code`'s "Agent capability"** section (1,725 characters of the headless description) is worded
@@ -172,3 +171,100 @@ with `pnpm prefix:report` on the parent build and on the round's build.
 The 25% target for `run_code` was not reached: most of its remaining text is
 distinct instructions (each mapped in the round's handoff), and the rest is the
 generated signatures and return types, which must stay exact.
+
+The round 3a "After" figures were measured before `1e30223`, which restored four
+sentences whose meaning the rewording had shifted (the `start_line` range advice,
+`Promise.allSettled` for independent reads, large artifacts beyond saved output,
+and tools that reject without an approval prompt). At `45c3264` plus that fix the
+headless root measured 20,356, not 20,193.
+
+## Round 3b: subagent prompts and `run_subagent`
+
+Measured with `pnpm prefix:report` at `45c3264` (round 3a, including `1e30223`'s
+restorations) and at `894d720`.
+
+- `1ae29e5`: `run_subagent`'s three background sentences and the `execution` note
+  merged into one paragraph, the `task` parameter's explorer limits moved into Task
+  Requirements, and repeated field lists dropped (every root, -543 at that commit).
+- `f35a14f`: a child without `ask_orchestrator` keeps "Do not contact the user
+  directly." where the deleted "Asking the orchestrator" section was.
+- `9137818`: `librarian.md` names the memory and session tools as offered, not as
+  `tools.*(...)` inside `run_code`.
+- `115f00e`: the skills-pause rule is stated for delegated readers only (only
+  subagents receive that fragment).
+- `3ada6f8`: a child offered no tools (the mentor) loses "use the available tools
+  deliberately" or "careful tool use" from its base prompt.
+- `e3dd7aa`: the "Registered tools" line no longer lists the tool names the request
+  already carries.
+- `225b91a` was **reverted** by `894d720`. It treated a subagent whose only
+  possibly-writing tool was the wrapped read-only shell as unable to write files,
+  and dropped its worker hygiene lines and editing guidance. The premise is false:
+  the read-only shell admits commands that write files (`sort -o`, `uniq` with an
+  output file, `sed`'s `w`, `git --output=`), and the marker was also set on the
+  writable worker's shell. A wrapped shell is not proof that a child cannot write,
+  so `shell` stays outside the non-writing tool set.
+
+| Scenario | Round 3a | `894d720` |
+| --- | ---: | ---: |
+| Headless root (`mock-alpha`, sonnet, kimi) | 20,356 | 19,897 |
+| Headless root, `--goal` | 23,871 | 23,412 |
+| Headless root, `gpt-5.5` / codex | 19,632 | 19,173 |
+| TUI root (`mock-alpha`, sonnet, kimi) | 23,747 | 23,288 |
+| TUI root, `gpt-5.5` / codex | 23,023 | 22,564 |
+| Subagent `agent_spec` | 5,849 | 5,767 |
+| Subagent explorer | 19,150 | 18,903 |
+| Subagent worker | 19,614 | 19,361 |
+| Subagent mentor | 2,586 | 2,357 |
+| Subagent reviewer | 3,788 | 3,713 |
+| Subagent librarian | 11,467 | 10,945 |
+
+## Round 4: same-request duplication in librarian, reviewer and `agent_spec` children
+
+Same rule as round 2, with meaning-preserving rewording allowed: every instruction a
+recipient received must still be in the same request, no narrower and no broader;
+only Term2-authored text changes; tool schemas (names, types, enums,
+required-ness) are unchanged. Each deletion was checked against a `--dump` of
+`894d720`.
+
+- **`LIBRARIAN_GUIDANCE`** (`src/tools/memory/memory-capabilities.ts`, -946). Its
+  only audience is a librarian child: `buildInstructions` is the only caller that
+  builds memory capability for a subagent, an `agent_spec` child has role `agent`
+  and no memory, and every librarian definition comes from `librarian.md`. So the
+  guidance is always sent beside that role file. Dropped: the identity line, the
+  general and per-task procedures, mutation-only-on-request and the citation rule
+  (all in `librarian.md`), and the write tools' `scope` parameter (required in their
+  schemas). Kept: the shared public memory API, that read tools span both scopes
+  (`memory_get`'s description does not say so), and presenting the reviewable
+  proposal before any mutation.
+- **`librarian.md`** (-151): the history-retrieval and maintenance summaries no
+  longer repeat their own numbered steps (discard irrelevant material, flag
+  contradictions or staleness; recommend create, update, merge, retain or delete).
+- **`run_explorer`** (reviewer, -226): only the reviewer is offered it, always beside
+  `reviewer.md`, whose Capabilities and Approach sections state what the description
+  and `task` parameter said. The description keeps "Start a read-only explorer
+  subagent." and the parameter "Self-contained evidence request."
+- **"Code-context tools are not available in this run."** (`buildInstructions`,
+  -50 for every child offered some tools but neither code-context tool; measured on
+  `agent_spec`, reviewer and librarian): the section's first line already says that
+  a tool not offered is not available. A child with no tools (the mentor) never got
+  the line.
+
+| Scenario | `894d720` | Round 4 |
+| --- | ---: | ---: |
+| Subagent `agent_spec` | 5,767 | 5,717 |
+| Subagent reviewer | 3,713 | 3,437 |
+| Subagent librarian | 10,945 | 9,798 |
+| Roots, explorer, worker, mentor | | unchanged |
+
+Not applied (proposals; each needs rewording or a product decision):
+
+- The "Available Tool Guidance" line "No dedicated workspace search tool is
+  available. Use provided context where possible." overlaps the reviewer's "You
+  cannot read files, search, ..." and the librarian's "You have no filesystem, shell,
+  or web access", but adds "use provided context", so it stays.
+- `reviewer.md`'s "Do not modify anything." and the Worktree Hygiene "Read-only
+  roles ... never modify files" overlap; the role line is broader (anything, not
+  files) and the hygiene line adds "treat dirty files as the current source of
+  truth", so neither is a pure duplicate.
+- `librarian.md`'s "Cite every claim" principle and its brief's "A source for every
+  claim" overlap; the principle also covers maintenance reports.

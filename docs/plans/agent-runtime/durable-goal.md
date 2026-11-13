@@ -36,7 +36,7 @@ closes, rather than proposing for approval.
 
 `goal_check` applies only when a durable session goal is active. A session that
 has never had a goal carries neither the tool nor its notice: together they cost
-2,319 characters (about 9% of a headless root request's fixed prefix) on every
+about 2,300 characters (about 9% of a headless root request's fixed prefix) on every
 request of sessions that mostly never set a goal. Tools and instructions are
 bound per request (`planRequest` in `src/session/capabilities.ts`), so a goal set
 later still takes effect on the next request; the goal context changes the

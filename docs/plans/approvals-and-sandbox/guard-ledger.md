@@ -3932,7 +3932,7 @@ outcome (`completion_verification_blocked`, exit 2), retains work and the active
 goal, and reports the cause. Other headless profiles retain their existing
 unavailable-verifier notice behavior. Verified FAIL still repairs or blocks;
 PASS still requires authoritative goal persistence. No-goal and transient runs
-remain outside goal verification. The root-only `goal_check` tool is available
+remain outside goal verification. The root-only `goal_check` tool becomes available once the session has a goal,
 so goals added later in a session can use the same boundary.
 
 Red evidence: the filesystem/provider-backed root Bare scenario ended with an

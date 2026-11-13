@@ -67,7 +67,6 @@ export function createConfigureTaskCheckInToolDefinition(
       'Use this to mute future check-ins when a task is expected to run quietly until completion, or to adjust how frequently or when next you want to be checked in on.',
     parameters: configureTaskCheckInSchema,
     needsApproval: () => false,
-    parallelSafe: true,
     execute: (rawParams) => {
       const parsed = configureTaskCheckInSchema.safeParse(rawParams);
       if (!parsed.success) {

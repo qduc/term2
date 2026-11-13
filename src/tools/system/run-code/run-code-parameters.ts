@@ -60,14 +60,14 @@ export const runCodeParametersSchema = z.object({
     .string()
     .min(1)
     .describe(
-      'JavaScript (not TypeScript) executed as the body of an async function. Top-level await is available. ' +
-        'Return the value you want the model to receive. Use console.log only for debugging.',
+      'JavaScript (not TypeScript) run as the body of an async function, so top-level await works. ' +
+        'Return the value you want the model to receive.',
     ),
   inputs: runCodeInputsSchema.optional().describe(RUN_CODE_INPUTS_DESCRIPTION),
   include_console: z
     .boolean()
     .optional()
-    .describe('Include console.log debugging trace in the successful result. Defaults to false.'),
+    .describe('Also include the console.log trace in a successful result. Defaults to false.'),
   // Non-positive is rejected because `setTimeout(fn, 0)` fires promptly; it
   // does not disable the timer. Values above 2**31-1 wrap to ~1 ms in Node.
   timeout_ms: relaxedNumber

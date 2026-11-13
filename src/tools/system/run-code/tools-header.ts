@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { isZodToolParameterSchema, type ToolRegistry } from '../../types.js';
 import { getScriptedReturnContract } from '../../scripted-return-contract.js';
+import { isDirectlyCallable } from './script-surface.js';
 
 /** A JSON-Schema subset rich enough for the tool schemas this repo defines. */
 interface JsonSchemaNode {
@@ -146,9 +147,17 @@ export function renderCompactSignature(tool: {
   return `tools.${tool.name}({ ${fields.join(', ')} })`.replace('({  })', '()');
 }
 
-/** The header bullet for a fully rendered tool: signature plus one-line description and declared return shape. */
-export function renderDetailedEntry(tool: ToolRegistry[number]): string {
-  const description = typeof tool.description === 'string' && tool.description ? ` — ${oneLine(tool.description)}` : '';
+/**
+ * The header bullet for a fully rendered tool: signature, one-line description
+ * and declared return shape. `omitDescription` drops the one-line description
+ * for a tool whose full description the model already has from its direct
+ * definition in the same request.
+ */
+export function renderDetailedEntry(tool: ToolRegistry[number], options: { omitDescription?: boolean } = {}): string {
+  const description =
+    !options.omitDescription && typeof tool.description === 'string' && tool.description
+      ? ` — ${oneLine(tool.description)}`
+      : '';
   const scriptedReturn = scriptedReturnDescription(tool);
   const returns = `\n    returns ${scriptedReturn.value}${
     scriptedReturn.legacy ? ` (guidance: ${scriptedReturn.legacy})` : ''
@@ -187,10 +196,21 @@ export function renderToolsHeader(
     options.otherTools === 'names'
       ? [`Other tools (call tools.describe(name) before use): ${other.map((tool) => tool.name).join(', ')}`]
       : ['Other tools:', ...other.map(renderCompactEntry)];
+  // When run_code is offered, agent-factory's direct surface is exactly the
+  // tools that satisfy isDirectlyCallable, so their full descriptions are
+  // already in the request; repeating a clipped copy here only costs tokens.
+  const described = essential.map((tool) => ({ tool, direct: isDirectlyCallable(tool) }));
+  const anyDirect = described.some((entry) => entry.direct);
   const lines = [
-    'Available inside the script (parameter shapes are approximate; each call is validated against the tool’s real schema):',
-    'Use tools.describe(name) when you need the full schema and description for a tool.',
-    ...(essential.length > 0 ? ['Essential tools:', ...essential.map(renderDetailedEntry)] : []),
+    anyDirect
+      ? 'Available inside the script (parameter shapes are approximate; tools you can also call directly are described in their own definitions):'
+      : 'Available inside the script (parameter shapes are approximate):',
+    ...(essential.length > 0
+      ? [
+          'Essential tools:',
+          ...described.map(({ tool, direct }) => renderDetailedEntry(tool, { omitDescription: direct })),
+        ]
+      : []),
     ...(other.length > 0 ? [...(essential.length > 0 ? [''] : []), ...otherLines] : []),
   ];
   return lines.join('\n');

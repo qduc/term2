@@ -63,6 +63,19 @@ is upstream: drop `!batched(plan.approval)` from `readyParallel` in
 `agent-runtime/packages/core/src/engine/turn-tools.ts` and revert this change.
 Batched calls would then stay staged but be grouped once the batch is decided.
 
+**Which tools this affects.** Every tool that declares `parallelSafe` and that
+policy approves without a prompt: `read_file`, `grep`, `glob`,
+`read_code_outline`, `code_context_search`, `web_search`, `web_fetch`,
+`list_models`, `activate_skill`, `ask_mentor`, `run_explorer`, `get_shell_job`,
+`get_subagent_status`, `get_subagent_result` and foreground `run_subagent`. A
+reviewer child's `run_explorer` calls therefore start together. MCP tools and
+generic `shell` declare nothing and stay serial. `configure_task_check_in`
+changes state, so it no longer declares `parallelSafe`: two calls for one target
+apply in call order. Any tool that declares `parallelSafe` can now run before a
+prompt later in the same response is answered or Escaped, and in a background
+child before a later call fails the run for needing approval, so only tools
+without side effects should declare it.
+
 **Shared state under concurrency.** Root and child source tools scope their
 workspace root, ask-user answer, trim configuration and shell task registry with
 `AsyncLocalStorage` (`tool-surface.ts`, `shell-tools.ts`, `output-trim.ts`);

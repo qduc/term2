@@ -261,6 +261,18 @@ whole-request context-price tiers from pi-ai; thresholds are strict `>` and all
 input, read, write and output rates change together. Provider-reported charges
 remain authoritative. Displayed input totals include creation.
 
+Chat Completions usage frames are priced by `reportedUsageCost`
+(`providers/openai-compatible-response-normalizer.ts`). An OpenRouter bring-your-own-key frame
+(`is_byok: true`) reports only OpenRouter's fee in `cost`, often 0, and the
+upstream provider's charge in `cost_details.upstream_inference_cost`; the
+request is priced at their sum. Reading `cost` alone recorded those requests
+as an exact $0, so run summaries showed nothing and a run-budget cost ceiling
+never fired. Without BYOK both fields describe the same charge (recorded
+`is_byok: false` frames in `fixtures/openrouter` show `cost` ≈ upstream), so
+`cost` alone is used and adding them would double count. A frame with no `cost`
+falls back to the upstream figure. The AI SDK adapters (Anthropic, Google) keep
+their own extraction and never see these fields.
+
 The current catalog preserves pi-ai 1.3.0 model capacities and base prices and
 supplements matching-rate context tiers from the recorded pi-ai 1.5.2 snapshot.
 A changed-rate OpenRouter `~openai/gpt-terra-latest` entry retains its old snapshot

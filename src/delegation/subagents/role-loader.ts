@@ -208,6 +208,14 @@ function writeCapability(tools: readonly OfferedTool[]) {
 /** Addressed to a child that has an editing tool; deleted when it has nothing to edit with. */
 const EDITING_TOOL_SENTENCE =
   'When an in-scope edit is already authorized, perform it with the editing tool without asking again. ';
+/**
+ * Base-prompt wording about using tools, and its replacement for a child offered no tools at all (the
+ * mentor). Each pair names an exact Term2 base-prompt phrase; a phrase that is not found is left as written.
+ */
+const TOOL_USE_BASE_PHRASES: readonly (readonly [string, string])[] = [
+  ['use the available tools deliberately, ', ''],
+  ['accurate synthesis, careful tool use, and concise reporting', 'accurate synthesis and concise reporting'],
+];
 /** The Worktree Hygiene lines addressed to worker roles. */
 const WORKER_AUDIENCE_LINE = /^- Worker roles .*(?:\r?\n|$)/gm;
 /** Runs to the next `#` or `##` heading (a `###` is a subsection of it) or the end of the file. */
@@ -328,7 +336,12 @@ export function buildInstructions(
   const cwd = executionContext?.getCwd() ?? process.cwd();
   const agentsInstructions = executionContext?.isRemote() ? '' : getAgentsInstructions(cwd);
 
-  const modelPrompt = resolvePrompt(path.join(PROMPTS_DIR, selectSubagentBasePromptFile(definition.model)));
+  const basePrompt = resolvePrompt(path.join(PROMPTS_DIR, selectSubagentBasePromptFile(definition.model)));
+  // A child with no tools has nothing to use deliberately or carefully.
+  const modelPrompt =
+    toolDefinitions.length === 0
+      ? TOOL_USE_BASE_PHRASES.reduce((text, [phrase, replacement]) => text.replace(phrase, replacement), basePrompt)
+      : basePrompt;
   // A named role's instructions are its Term2 role file; any other definition's (an agent_spec
   // child's) were written by its parent and stay exactly as written.
   const roleFile = definition.instructionsSource === 'role-file' ? definition.instructions : undefined;

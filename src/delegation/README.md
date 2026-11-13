@@ -55,6 +55,24 @@ can be offered has a Term2-authored description (the child factory builds no MCP
 tools); offering a child a tool with external description text would need that
 function to skip it.
 
+## Model-facing call shapes
+
+`run_subagent` (`tools/agent/run-subagent.ts`) presents one schema and validates
+with a canonical one that first rewrites recoverable mixed shapes
+(`run-subagent-shape.ts`): a named `role` sent together with an `agent_spec`,
+or agent_spec fields (`doneWhen`, `constraints`, `tools`) at the top level of
+a role call. Recorded real-model runs sent these as 48 of 487 first delegation
+calls, and every retry but one asked for the named role with a task. The
+rewrite is always plain `role` + `task`: the spec's goal (when no task was
+sent), constraints, doneWhen and context are appended to the task as text, and
+its tools, permissions and budget are not applied, so the launch grants exactly
+what that role grants on its own. The result carries one `interpretation` line
+saying so. A spec that asks for a tool or write the role lacks, a model, agent
+creation, or (for a writing role) only read-only tools still rejects, with a
+message that names the single shape to send. The role tool table there only
+decides rejection; it never grants anything. Presented parameters and
+description are unchanged.
+
 Filesystem scope checks use the execution context's workspace root, or the
 active session root when no execution context is available. The resolver takes
 that root explicitly and resolves symlinks before comparing paths, so concurrent

@@ -218,7 +218,7 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/tools/agent/run-subagent.ts": {
-      "lines": 581,
+      "lines": 578,
       "reason": "Inherited source schema/presentation module; launcher request typing now derives from its own schema rather than importing the engine's policy types. Two further lines are comments recording why two schema descriptions keep or drop wording the tool description also states."
     },
     "src/tools/file/apply-patch.ts": {

@@ -14,6 +14,7 @@ import { SUBAGENT_RUN_NAME_PATTERN, SubagentRegistryError } from '../subagents/l
 import { isAbortLike, formatSubagentResult } from '../subagents/utils.js';
 import { relaxedNumber } from '../utils.js';
 import { AGENT_SPEC_TOOL_NAMES } from './agent-spec-tools.js';
+import { withRunSubagentShapes } from './run-subagent-shape.js';
 
 function getRunSubagentDescription(backgroundEnabled: boolean): string {
   return (
@@ -134,6 +135,10 @@ const worktreeField = {
     ),
 };
 
+const hasOneShape = (value: { agent_spec?: unknown; role?: unknown; task?: unknown }) =>
+  value.agent_spec ? value.role === undefined && value.task === undefined : Boolean(value.role) && Boolean(value.task);
+const ONE_SHAPE_MESSAGE = { message: 'Provide agent_spec, or both role and task.' };
+
 const runSubagentSchema = z
   .object({
     execution: z
@@ -148,15 +153,7 @@ const runSubagentSchema = z
     ...backgroundFields,
   })
   .strict()
-  .refine(
-    (value) =>
-      value.agent_spec
-        ? value.role === undefined && value.task === undefined
-        : Boolean(value.role) && Boolean(value.task),
-    {
-      message: 'Provide agent_spec, or both role and task.',
-    },
-  );
+  .refine(hasOneShape, ONE_SHAPE_MESSAGE);
 
 export type ForegroundRunSubagentParams = {
   role?: (typeof FOREGROUND_ROLES)[number] | 'agent';
@@ -217,15 +214,7 @@ function createRunSubagentSchema({ runSubagent, runSubagentAsync }: RunSubagentT
         ...backgroundFields,
       })
       .strict()
-      .refine(
-        (value) =>
-          value.agent_spec
-            ? value.role === undefined && value.task === undefined
-            : Boolean(value.role) && Boolean(value.task),
-        {
-          message: 'Provide agent_spec, or both role and task.',
-        },
-      );
+      .refine(hasOneShape, ONE_SHAPE_MESSAGE);
   }
 
   if (runSubagent && !runSubagentAsync) {
@@ -238,15 +227,7 @@ function createRunSubagentSchema({ runSubagent, runSubagentAsync }: RunSubagentT
         ...worktreeField,
       })
       .strict()
-      .refine(
-        (value) =>
-          value.agent_spec
-            ? value.role === undefined && value.task === undefined
-            : Boolean(value.role) && Boolean(value.task),
-        {
-          message: 'Provide agent_spec, or both role and task.',
-        },
-      );
+      .refine(hasOneShape, ONE_SHAPE_MESSAGE);
   }
 
   return runSubagentSchema;
@@ -476,106 +457,122 @@ export function createRunSubagentToolDefinition(
   const legacyForegroundOnly = typeof callbacks === 'function';
   const resolvedCallbacks: RunSubagentToolCallbacks = legacyForegroundOnly ? { runSubagent: callbacks } : callbacks;
   const parameters = createRunSubagentSchema(resolvedCallbacks);
+  // The presented schema is unchanged; the canonical one first rewrites recoverable mixed shapes.
+  const shapes = withRunSubagentShapes(parameters);
 
   return {
     name: 'run_subagent',
     description: getRunSubagentDescription(Boolean(resolvedCallbacks.runSubagentAsync)),
     parameters,
+    canonicalParameters: shapes.schema,
     parallelSafe: (params: unknown) => {
-      const candidate = params as Partial<RunSubagentParams>;
+      const candidate = shapes.resolve(params).params as Partial<RunSubagentParams>;
       return candidate.execution === 'foreground' && (candidate.role === 'explorer' || candidate.role === 'librarian');
     },
     needsApproval: () => false,
     execute: async (rawParams: unknown, context, details) => {
-      const params = rawParams as RunSubagentParams;
-      if (resolvedCallbacks.runSubagentAsync && params.execution === 'foreground') {
-        return JSON.stringify({
-          status: 'failed',
-          error: {
-            code: 'foreground_unavailable',
-            message: 'Foreground execution is unavailable in this session; use execution: "background".',
-          },
-        });
-      }
-      if (params.execution === 'foreground' || (legacyForegroundOnly && params.execution === undefined)) {
-        if (params.name != null || params.continue_run_id != null) {
-          return failedForegroundResult(
-            params.role ?? 'agent',
-            'Background-only inputs name and continue_run_id cannot be used with execution: "foreground".',
-          );
-        }
-        if (!resolvedCallbacks.runSubagent) {
-          return failedForegroundResult(params.role ?? 'agent', 'Foreground execution is unavailable in this session.');
-        }
-        if (!params.agent_spec && !FOREGROUND_ROLES.includes(params.role as (typeof FOREGROUND_ROLES)[number])) {
-          return failedForegroundResult(
-            params.role ?? 'agent',
-            `Role "${params.role}" is unavailable for foreground execution.`,
-          );
-        }
-        try {
-          const result = await resolvedCallbacks.runSubagent(
-            {
-              role: params.agent_spec ? 'agent' : (params.role as (typeof FOREGROUND_ROLES)[number]),
-              task: params.agent_spec?.goal ?? params.task,
-              ...(params.agent_spec ? { agent_spec: params.agent_spec } : {}),
-              ...(params.worktree ? { worktree: params.worktree } : {}),
-            },
-            context,
-            details,
-          );
-          return formatSubagentResult(result as SubagentResult);
-        } catch (error: unknown) {
-          if (isAbortLike(error instanceof Error ? error.message : undefined, error)) {
-            throw error;
-          }
-          return failedForegroundResult(params.role ?? 'agent', error);
-        }
-      }
+      const resolved = shapes.resolve(rawParams);
+      const output = await executeRunSubagent(resolved.params as RunSubagentParams, context, details);
+      return resolved.interpretation ? withInterpretation(output, resolved.interpretation) : output;
+    },
+    formatCommandMessage: formatRunSubagentCommandMessage,
+  };
 
-      if (!resolvedCallbacks.runSubagentAsync) {
-        return JSON.stringify({
-          status: 'failed',
-          error: { code: 'background_unavailable', message: 'Background execution is unavailable in this session.' },
-        });
+  async function executeRunSubagent(params: RunSubagentParams, context: unknown, details: unknown): Promise<string> {
+    if (resolvedCallbacks.runSubagentAsync && params.execution === 'foreground') {
+      return JSON.stringify({
+        status: 'failed',
+        error: {
+          code: 'foreground_unavailable',
+          message: 'Foreground execution is unavailable in this session; use execution: "background".',
+        },
+      });
+    }
+    if (params.execution === 'foreground' || (legacyForegroundOnly && params.execution === undefined)) {
+      if (params.name != null || params.continue_run_id != null) {
+        return failedForegroundResult(
+          params.role ?? 'agent',
+          'Background-only inputs name and continue_run_id cannot be used with execution: "foreground".',
+        );
+      }
+      if (!resolvedCallbacks.runSubagent) {
+        return failedForegroundResult(params.role ?? 'agent', 'Foreground execution is unavailable in this session.');
+      }
+      if (!params.agent_spec && !FOREGROUND_ROLES.includes(params.role as (typeof FOREGROUND_ROLES)[number])) {
+        return failedForegroundResult(
+          params.role ?? 'agent',
+          `Role "${params.role}" is unavailable for foreground execution.`,
+        );
       }
       try {
-        const handle = await resolvedCallbacks.runSubagentAsync(
+        const result = await resolvedCallbacks.runSubagent(
           {
-            role: params.agent_spec ? 'agent' : params.role,
+            role: params.agent_spec ? 'agent' : (params.role as (typeof FOREGROUND_ROLES)[number]),
             task: params.agent_spec?.goal ?? params.task,
             ...(params.agent_spec ? { agent_spec: params.agent_spec } : {}),
-            name: params.name ?? undefined,
-            continue_run_id: params.continue_run_id ?? undefined,
             ...(params.worktree ? { worktree: params.worktree } : {}),
           },
           context,
           details,
         );
-        if (params.check_in !== undefined && resolvedCallbacks.configureCheckIn) {
-          resolvedCallbacks.configureCheckIn(
-            { kind: 'subagent', id: handle.runId },
-            {
-              enabled: params.check_in.enabled,
-              intervalMs:
-                params.check_in.interval_seconds !== undefined ? params.check_in.interval_seconds * 1000 : undefined,
-            },
-          );
-        }
-        return formatBackgroundHandle(handle);
+        return formatSubagentResult(result as SubagentResult);
       } catch (error: unknown) {
         if (isAbortLike(error instanceof Error ? error.message : undefined, error)) {
           throw error;
         }
-        if (error instanceof SubagentRegistryError) {
-          return JSON.stringify({ status: 'failed', error: { code: error.code, message: error.message } });
-        }
-        return JSON.stringify({
-          status: 'failed',
-          error: { code: 'execution_failed', message: error instanceof Error ? error.message : String(error) },
-        });
+        return failedForegroundResult(params.role ?? 'agent', error);
       }
-    },
-    formatCommandMessage: formatRunSubagentCommandMessage,
-  };
+    }
+
+    if (!resolvedCallbacks.runSubagentAsync) {
+      return JSON.stringify({
+        status: 'failed',
+        error: { code: 'background_unavailable', message: 'Background execution is unavailable in this session.' },
+      });
+    }
+    try {
+      const handle = await resolvedCallbacks.runSubagentAsync(
+        {
+          role: params.agent_spec ? 'agent' : params.role,
+          task: params.agent_spec?.goal ?? params.task,
+          ...(params.agent_spec ? { agent_spec: params.agent_spec } : {}),
+          name: params.name ?? undefined,
+          continue_run_id: params.continue_run_id ?? undefined,
+          ...(params.worktree ? { worktree: params.worktree } : {}),
+        },
+        context,
+        details,
+      );
+      if (params.check_in !== undefined && resolvedCallbacks.configureCheckIn) {
+        resolvedCallbacks.configureCheckIn(
+          { kind: 'subagent', id: handle.runId },
+          {
+            enabled: params.check_in.enabled,
+            intervalMs:
+              params.check_in.interval_seconds !== undefined ? params.check_in.interval_seconds * 1000 : undefined,
+          },
+        );
+      }
+      return formatBackgroundHandle(handle);
+    } catch (error: unknown) {
+      if (isAbortLike(error instanceof Error ? error.message : undefined, error)) {
+        throw error;
+      }
+      if (error instanceof SubagentRegistryError) {
+        return JSON.stringify({ status: 'failed', error: { code: error.code, message: error.message } });
+      }
+      return JSON.stringify({
+        status: 'failed',
+        error: { code: 'execution_failed', message: error instanceof Error ? error.message : String(error) },
+      });
+    }
+  }
+}
+
+/** One line telling the model how a mixed-shape call was read; JSON results carry it as a field. */
+function withInterpretation(output: string, interpretation: string): string {
+  const parsed = safeJsonParse(output);
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed))
+    return JSON.stringify({ ...(parsed as Record<string, unknown>), interpretation });
+  return `${output}\n\nInterpretation: ${interpretation}`;
 }

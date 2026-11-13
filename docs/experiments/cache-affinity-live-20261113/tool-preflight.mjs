@@ -10,7 +10,10 @@ import { BudgetGateway } from './budget-gateway.mjs';
 import { runCandidate } from './run-comparison.mjs';
 import { assertFreshBuild } from '../../../scripts/build-provenance.mjs';
 
-assertFreshBuild(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..'), 'direct');
+const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+assertFreshBuild(repo, 'direct');
+const buildReceipt = JSON.parse(fs.readFileSync(path.join(repo, 'dist/.term2-build-provenance.json'), 'utf8'));
+process.env.BENCH_MEASURED_SOURCE_COMMIT = buildReceipt.inputs.head;
 
 const root = process.env.BENCH_ROOT;
 if (!root || !path.isAbsolute(root)) throw new Error('Set a new absolute BENCH_ROOT');
@@ -143,6 +146,7 @@ const summary = {
     .update(fs.readFileSync(fileURLToPath(import.meta.url)))
     .digest('hex'),
 };
+fs.copyFileSync(path.join(repo, 'dist/.term2-build-provenance.json'), path.join(root, 'build-receipt.json'));
 fs.writeFileSync(path.join(root, 'tool-preflight.json'), JSON.stringify(summary, null, 2) + '\n');
 console.log(JSON.stringify(summary));
 if (!passed) process.exitCode = 1;

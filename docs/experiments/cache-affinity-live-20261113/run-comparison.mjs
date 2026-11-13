@@ -26,7 +26,13 @@ const plan = [];
 for (let rep = 1; rep <= 2; rep++)
   for (const [i, task] of Object.keys(WORKLOADS).entries())
     for (const arm of (i + rep) % 2 ? ['baseline', 'affinity'] : ['affinity', 'baseline'])
-      plan.push({ id: `affinity-openai-${task}-r${rep}-${arm}`, provider: 'openai', task, rep, arm });
+      plan.push({
+        id: `${cohort ? cohort + '-' : ''}affinity-openai-${task}-r${rep}-${arm}`,
+        provider: 'openai',
+        task,
+        rep,
+        arm,
+      });
 
 async function fakeProvider() {
   const server = createServer(async (req, res) => {
@@ -212,6 +218,7 @@ export async function runCandidate(spec, gateway, { fixture = false } = {}) {
     }
   }, 305_000);
   const [exitCode, signal] = await once(child, 'exit');
+  const childElapsedMs = Date.now() - started;
   clearTimeout(timer);
   clearTimeout(killer);
   const rawOut = Buffer.concat(stdout).toString(),
@@ -294,6 +301,51 @@ export async function runCandidate(spec, gateway, { fixture = false } = {}) {
     }
   }
   const requestEntries = gateway.ledger.filter((r) => r.runId === runId);
+  const calls = new Map();
+  const returnedTools = [];
+  for (const entry of requestEntries) {
+    const prefix = path.join(gateway.directory, entry.id);
+    const body = JSON.parse(fs.readFileSync(prefix + '-request.json', 'utf8'));
+    for (const item of body.input ?? [])
+      if (item.type === 'function_call_output') returnedTools.push({ item, call: calls.get(item.call_id) });
+    if (!fs.existsSync(prefix + '-response.json')) continue;
+    const events = JSON.parse(fs.readFileSync(prefix + '-response.json', 'utf8'));
+    if (!Array.isArray(events)) continue;
+    const terminal = events.findLast((e) =>
+      ['response.completed', 'response.failed', 'response.incomplete'].includes(e.type),
+    )?.response;
+    for (const item of terminal?.output ?? [])
+      if (item.type === 'function_call') {
+        try {
+          calls.set(item.call_id, { name: item.name, args: JSON.parse(item.arguments) });
+        } catch {
+          /* Retain wire evidence for malformed arguments. */
+        }
+      }
+  }
+  const agentSkillRead = returnedTools.some(
+    ({ item, call }) =>
+      /node-contracts.*SKILL.md/.test(JSON.stringify(call?.args ?? {})) &&
+      String(item.output).includes('Read the task') &&
+      String(item.output).includes('Do not mutate caller inputs'),
+  );
+  const publicCaseNames = [...WORKLOADS[spec.task].files['test/public.test.mjs'].matchAll(/test\('([^']+)'/g)].map(
+    (match) => match[1],
+  );
+  const agentPublicTestSuccess = returnedTools.some(
+    ({ item, call }) =>
+      call?.name === 'shell' &&
+      /node\s+--test|(?:npm|pnpm)\s+(?:run\s+)?test/.test(call.args.command ?? '') &&
+      String(item.output).startsWith('exit 0\n') &&
+      /\bpass [1-9][0-9]*\b/.test(String(item.output)) &&
+      /\bfail 0\b/.test(String(item.output)) &&
+      publicCaseNames.length > 0 &&
+      publicCaseNames.every((name) => String(item.output).includes(name)),
+  );
+  const requestedUnsandboxedCalls = [...calls.values()].filter(
+    (call) => call.name === 'shell' && call.args.sandbox === 'unsandboxed',
+  ).length;
+
   const result = {
     ...spec,
     runId,
@@ -301,6 +353,10 @@ export async function runCandidate(spec, gateway, { fixture = false } = {}) {
     exitCode,
     signal,
     timedOut,
+    childElapsedMs,
+    agentSkillRead,
+    agentPublicTestSuccess,
+    requestedUnsandboxedCalls,
     elapsedMs: Date.now() - started,
     stdoutRawSha256: hash(rawOut),
     stdoutSanitizedSha256: hash(sanitizedOut),
@@ -346,10 +402,42 @@ export async function runCandidate(spec, gateway, { fixture = false } = {}) {
 
 async function main() {
   assertFreshBuild(repo, 'direct');
+  process.env.BENCH_MEASURED_SOURCE_COMMIT = JSON.parse(
+    fs.readFileSync(path.join(repo, 'dist/.term2-build-provenance.json'), 'utf8'),
+  ).inputs.head;
   fs.mkdirSync(root, { recursive: true });
+  if (live) {
+    if (!cohort || fs.existsSync(path.join(root, 'stopped.json')))
+      throw new Error('Use a fresh preregistered cohort; stopped cohorts cannot resume');
+    const preflightRoot = process.env.BENCH_PREFLIGHT_ROOT;
+    if (!preflightRoot) throw new Error('A current no-cost tool preflight is required');
+    const preflight = JSON.parse(fs.readFileSync(path.join(preflightRoot, 'tool-preflight.json'), 'utf8'));
+    const receipt = JSON.parse(fs.readFileSync(path.join(preflightRoot, 'build-receipt.json'), 'utf8'));
+    const current = JSON.parse(fs.readFileSync(path.join(repo, 'dist/.term2-build-provenance.json'), 'utf8'));
+    if (
+      !preflight.passed ||
+      preflight.paidRequests !== 0 ||
+      preflight.unsandboxedRequests !== 0 ||
+      JSON.stringify(receipt) !== JSON.stringify(current)
+    )
+      throw new Error('Preflight or tested build mismatch');
+    const starting = fs.readFileSync(path.join(root, 'starting-ledger.json'));
+    if (hash(starting) !== process.env.BENCH_PRIOR_LEDGER_SHA256)
+      throw new Error('Prior cumulative ledger snapshot mismatch');
+    const currentLedger = JSON.parse(fs.readFileSync(path.join(root, 'wire-live/ledger.json'), 'utf8'));
+    const startingEntries = JSON.parse(starting);
+    if (
+      startingEntries.length !== 24 ||
+      hash(JSON.stringify(currentLedger.slice(0, 24), null, 2) + '\n') !== hash(starting)
+    )
+      throw new Error('Prior paid requests missing or altered');
+  }
   fs.copyFileSync(path.join(repo, 'dist/.term2-build-provenance.json'), path.join(root, 'build-receipt.json'));
   write(path.join(root, 'protocol.json'), {
     approvedCapUsd: 100,
+    cohort,
+    priorLedgerSha256: process.env.BENCH_PRIOR_LEDGER_SHA256 ?? null,
+    preflightRoot: process.env.BENCH_PREFLIGHT_ROOT ?? null,
     operationalCapUsd: 2,
     concurrency: 1,
     maximumPhysicalRequests: 240,
@@ -382,7 +470,17 @@ async function main() {
         throw new Error('Live run requires the explicit approved $100 total cap');
       for (const spec of plan.filter((s) => !only || s.id === only)) {
         if (fs.existsSync(path.join(root, 'runs', spec.id, 'result.json'))) continue;
-        await runCandidate(spec, gateway);
+        if (gateway.halted || gateway.ledger.some((e) => e.runId === spec.id))
+          throw new Error('Halted ledger or unfinalized prior attempt; refuse duplicate live work');
+        const result = await runCandidate(spec, gateway);
+        if (
+          gateway.halted ||
+          !result.agentSkillRead ||
+          !result.agentPublicTestSuccess ||
+          result.requestedUnsandboxedCalls ||
+          result.unauthorizedChanges.length
+        )
+          throw new Error('Capability guardrail failed; stop paid cohort');
         if (gateway.ledger.some((r) => !r.priced && !r.settledForBudget))
           throw new Error('Unresolved usage: stop paid work and inspect retained reservation');
       }
@@ -396,6 +494,14 @@ async function main() {
         if (!result.fixtureReply || result.exitCode !== 0) throw new Error('Fixture did not traverse meter');
       }
     }
+  } catch (error) {
+    if (live)
+      write(path.join(root, 'stopped.json'), {
+        at: new Date().toISOString(),
+        reason: gateway.safe(String(error.message)),
+        paidWorkStopped: true,
+      });
+    throw error;
   } finally {
     await gateway.close();
     if (fake) await fake.close();

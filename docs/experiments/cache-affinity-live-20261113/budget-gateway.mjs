@@ -111,7 +111,9 @@ export class BudgetGateway {
         throw new Error('Invalid saved budget ledger');
     this.runs = new Set();
     this.activeUpstream = false;
-    this.halted = this.ledger.some((e) => !e.priced || e.httpStatus !== 200);
+    this.halted =
+      this.ledger.some((e) => !e.priced || e.httpStatus !== 200) ||
+      fs.existsSync(path.join(directory, 'guardrail-stop.json'));
     this.pending = new Set();
     this.secrets = [process.env.OPENAI_API_KEY, process.env.ANTHROPIC_API_KEY].filter(Boolean);
   }
@@ -220,6 +222,30 @@ export class BudgetGateway {
       throw new Error('Experiment halted, concurrent, or request cap');
     if (typeof body.prompt_cache_key !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(body.prompt_cache_key))
       throw new Error('Invalid cache key');
+    const guardrailResult = body.input?.find(
+      (item) =>
+        item.type === 'function_call_output' &&
+        /Shell sandbox unavailable|Tool execution was not approved|Heuristic validation failed|LLM auto-approval evaluation failed|LLM evaluation rejected|Sandbox denied read|Sandbox blocked/.test(
+          String(item.output ?? ''),
+        ),
+    );
+    if (guardrailResult) {
+      this.halted = true;
+      fs.writeFileSync(
+        path.join(this.directory, 'guardrail-stop.json'),
+        JSON.stringify(
+          {
+            runId,
+            at: new Date().toISOString(),
+            reason: 'Tool capability/approval failure before further paid dispatch',
+            toolResult: this.safe(String(guardrailResult.output).slice(0, 1600)),
+          },
+          null,
+          2,
+        ) + '\n',
+      );
+      throw new Error('Capability guardrail failed; no further paid dispatch');
+    }
     const reservedUsd = RESERVATIONS[provider];
     if (
       this.exposureUsd() + reservedUsd > this.capUsd - 0.01 ||
@@ -304,6 +330,34 @@ export class BudgetGateway {
       entry.usage = usage;
       entry.priced = priceUsage(provider, usage, body);
       entry.status = entry.priced ? 'metered' : 'unknown_usage_reservation_retained';
+      const terminal = events.findLast((e) =>
+        ['response.completed', 'response.failed', 'response.incomplete'].includes(e.type),
+      )?.response;
+      const unsandboxed = terminal?.output?.some((item) => {
+        if (item.type !== 'function_call' || item.name !== 'shell') return false;
+        try {
+          return JSON.parse(item.arguments).sandbox === 'unsandboxed';
+        } catch {
+          return false;
+        }
+      });
+      if (unsandboxed) {
+        this.halted = true;
+        fs.writeFileSync(
+          path.join(this.directory, 'guardrail-stop.json'),
+          JSON.stringify(
+            {
+              runId,
+              requestId: entry.id,
+              at: new Date().toISOString(),
+              reason: 'Model requested an unsandboxed shell call; cohort guardrail failed',
+            },
+            null,
+            2,
+          ) + '\n',
+        );
+      }
+
       entry.responseSha256 = crypto.createHash('sha256').update(text).digest('hex');
       fs.writeFileSync(
         `${prefix}-response.json`,

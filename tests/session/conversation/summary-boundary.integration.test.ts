@@ -172,7 +172,7 @@ it('keeps chunk summaries tool-free after session preparation and restores norma
   }
   const reopened = await f.reopen();
   await drain(reopened.run({ ...request, input: [user('after-chunked-compaction')] }));
-  expect(f.requests.at(-1)!.tools.map((tool) => tool.name)).toEqual(['fixture_tool', 'goal_check']);
+  expect(f.requests.at(-1)!.tools.map((tool) => tool.name)).toEqual(['fixture_tool']);
   expect(f.requests.at(-1)!.toolChoice).toBeUndefined();
 });
 

@@ -201,9 +201,20 @@ export function planDirectInstructions(
     ? base.replace(DIRECT_MEMORY_GUIDANCE_MARKER, () => suffix)
     : base + (suffix ? `\n\n${suffix}` : '');
   return {
-    instructions: instructions + renderDurableGoalContext(goal.goal),
+    // A session that never had a goal carries neither goal_check nor its notice.
+    instructions: goalEverSet(goal) ? instructions + renderDurableGoalContext(goal.goal) : instructions,
     requestGoal: goal,
   };
+}
+
+/**
+ * Whether this session has had a goal at any point. One predicate decides both
+ * the goal notice and `goal_check` visibility, so a request never carries one
+ * without the other. It stays true after a goal is cleared: history may then
+ * hold `goal_check` calls, and the notice says why they no longer apply.
+ */
+export function goalEverSet(state: Pick<DirectGoalState, 'generation' | 'goal'>): boolean {
+  return state.goal !== undefined || state.generation > 0;
 }
 
 /**

@@ -4,6 +4,7 @@ import type { Item, ItemId, ModelRequest } from '../model/index.js';
 import type { Tool, ToolRegistry } from '../tools/index.js';
 import type { Fact, FactLine } from './facts.js';
 import {
+  goalEverSet,
   planDirectInstructions,
   startsDirectHumanWindow,
   planDirectHumanContext,
@@ -98,8 +99,10 @@ export function bindDirectCapabilities(options: {
       capabilities.memory,
     );
     const bound: Tool[] = [...(capabilities.memory?.tools ?? [])];
-    // Visibility is stable across goal changes; execution rejects an inactive goal.
-    bound.push(createDirectGoalCheckTool({ requestGoal, readGoal: () => options.read().goal }));
+    // Absent until this session first has a goal, then stable across every later
+    // change, including clearing; execution rejects an inactive goal.
+    if (goalEverSet(requestGoal))
+      bound.push(createDirectGoalCheckTool({ requestGoal, readGoal: () => options.read().goal }));
     if (capabilities.modelRollover !== false && options.canRollover?.())
       bound.push(
         createDirectRolloverTool((request) =>

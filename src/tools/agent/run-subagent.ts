@@ -18,34 +18,38 @@ import { AGENT_SPEC_TOOL_NAMES } from './agent-spec-tools.js';
 function getRunSubagentDescription(backgroundEnabled: boolean): string {
   return (
     'Delegate a bounded task to the general agent runtime. Use agent_spec for dynamic goal/context/tools/constraints/model/budget; legacy named roles are compatibility presets. ' +
-    'The subagent runs in its own context and returns only a summary, preserving your context.\n\n' +
     (backgroundEnabled
-      ? ''
+      ? 'This session requires background execution: the tool returns a running handle immediately and a later completion notification. '
+      : 'This session uses foreground execution and returns the structured result in this turn. ') +
+    'The subagent runs in its own context and returns only a summary, preserving your context. ' +
+    '(When to reach for this vs. doing it yourself is covered by the delegation guidance in your system instructions.)\n\n' +
+    (backgroundEnabled
+      ? 'Background launches return immediately; do not duplicate them or call get_subagent_result until the completion notification arrives.\n\n'
       : 'Independent foreground explorer and librarian calls in the same model response may run in parallel; keep worker calls and dependent tasks serial.\n\n') +
     '## Task Requirements\n' +
     'Give the task one clear objective, one ownership boundary, and one concrete done condition. Include the task-specific scope, non-discoverable parent findings or decisions, constraints, deliverable or acceptance criteria, and validation when applicable. ' +
     'Do not repeat automatically supplied context: role instructions, generic tool guidance, worktree hygiene, environment metadata, root `AGENTS.md`, or skills catalog. ' +
     'The subagent does not see your conversation or reasoning. ' +
-    "For explorer, request concrete evidence to collect for a bounded question and choose breadth or depth, never both: map one defined surface shallowly or trace one narrow seam thoroughly. Do not ask explorer to diagnose, make recommendations, choose an approach, or own the parent task itself or the user's complete investigation, review, diagnosis, or planning deliverable. " +
+    "For explorer, request concrete evidence to collect for a bounded question and choose breadth or depth, never both: map one defined surface shallowly or trace one narrow seam thoroughly. Do not ask explorer to diagnose, recommend a fix, choose an approach, or own the user's complete investigation, review, diagnosis, or planning deliverable. " +
     'For worker, assign one cohesive implementation unit. For mentor, ask one decision or challenge question. ' +
     'For reviewer, describe the artifact to review (diff range, files, plan) and the review criteria; it gathers evidence only through explorers. ' +
     'For librarian, assign one history question to answer from memory and prior sessions, or one memory-maintenance topic boundary.\n\n' +
-    'For isolated edits by a worker or a generic writable agent, create a git worktree under the workspace root first ' +
-    '(`git worktree add .worktrees/<slug> -b <slug>`) and pass its directory basename or branch name as `worktree`; this does not re-root this session.\n\n' +
+    'For isolated worker edits, create a git worktree under the workspace root first ' +
+    '(`git worktree add .worktrees/<slug> -b <slug>`), then pass `worktree` as that directory basename or branch name. ' +
+    '`worktree` pins the child into that existing tree without re-rooting this session; generic writable agents may use it too.\n\n' +
     (backgroundEnabled
-      ? 'This session requires background execution: the tool returns a running handle immediately, and a completion notification arrives later. ' +
-        'A "running" status means the launch succeeded: end the turn and wait for the notification. ' +
-        'Do not duplicate a launch or call get_subagent_result before the notification arrives.'
-      : 'Only foreground execution is available in this session: the tool returns, in this turn, a structured result with status (completed, failed, cancelled, or interrupted), any final text, a list of tools used, and files changed.')
+      ? 'A background status of "running" means launch succeeded: end the turn and wait for the completion notification.'
+      : 'Foreground returns a summary with status (completed, failed, cancelled, or interrupted), any final text, a list of tools used, and files changed.')
   );
 }
 
 const FOREGROUND_ROLES = ['explorer', 'worker', 'reviewer', 'librarian'] as const;
 const BACKGROUND_ROLES = ['explorer', 'worker', 'mentor', 'reviewer', 'librarian'] as const;
 const ALL_ROLES = ['explorer', 'worker', 'mentor', 'reviewer', 'librarian'] as const;
-// The explorer limits this used to repeat are stated once, in the description's Task Requirements.
+// The explorer sentence stays: the description's Task Requirements state narrower deliverables, not
+// "recommendations" or "the parent task itself".
 const SUBAGENT_TASK_DESCRIPTION =
-  'Complete description of one bounded delegated unit, written to the Task Requirements in the tool description.';
+  'Complete description of one bounded delegated unit with one objective, ownership boundary, and done condition. For explorer, specify concrete evidence to collect and choose breadth or depth, never both; do not delegate diagnosis, recommendations, or the parent task itself.';
 
 export const agentSpecSchema = z
   .object({
@@ -90,44 +94,35 @@ export const agentSpecSchema = z
 /** Input contract for the injected launcher; runtime resolution stays host-side. */
 type AgentSpec = z.infer<typeof agentSpecSchema>;
 
-/**
- * Fields only a background launch accepts. `onlyBackground` drops their "Background only." note for a
- * schema whose `execution` can only be "background".
- */
-function backgroundFields(onlyBackground: boolean) {
-  const backgroundOnly = onlyBackground ? '' : ' Background only.';
-  return {
-    name: z
-      .string()
-      .regex(SUBAGENT_RUN_NAME_PATTERN)
-      .optional()
-      .describe(
-        `Optional active-run alias: lowercase letter first, then up to 31 lowercase letters, digits, underscores, or hyphens.${backgroundOnly}`,
-      ),
-    continue_run_id: z
-      .string()
-      .optional()
-      .describe(
-        `Continue a completed background run using its runId.${
-          onlyBackground ? '' : ' Background only.'
-        } Writable generic runs and workers cannot continue.`,
-      ),
-    check_in: z
-      .object({
-        enabled: z
-          .boolean()
-          .optional()
-          .describe('Enable or disable proactive check-ins for this background subagent. Defaults to true.'),
-        interval_seconds: relaxedNumber
-          .int()
-          .positive()
-          .optional()
-          .describe('Custom interval in seconds between proactive check-ins.'),
-      })
-      .optional()
-      .describe(`Optional check-in configuration for this background subagent.${backgroundOnly}`),
-  };
-}
+const backgroundFields = {
+  name: z
+    .string()
+    .regex(SUBAGENT_RUN_NAME_PATTERN)
+    .optional()
+    .describe(
+      'Optional active-run alias: lowercase letter first, then up to 31 lowercase letters, digits, underscores, or hyphens. Background only.',
+    ),
+  continue_run_id: z
+    .string()
+    .optional()
+    .describe(
+      'Continue a completed background run using its runId. Background only; writable generic runs and workers cannot continue.',
+    ),
+  check_in: z
+    .object({
+      enabled: z
+        .boolean()
+        .optional()
+        .describe('Enable or disable proactive check-ins for this background subagent. Defaults to true.'),
+      interval_seconds: relaxedNumber
+        .int()
+        .positive()
+        .optional()
+        .describe('Custom interval in seconds between proactive check-ins.'),
+    })
+    .optional()
+    .describe('Optional check-in configuration for this background subagent. Background only.'),
+};
 
 // Creating the worktree first, and not re-rooting this session, is stated once, in the tool description.
 const worktreeField = {
@@ -146,9 +141,11 @@ const runSubagentSchema = z
       .describe('"foreground" returns the result in this turn; "background" returns a running handle immediately.'),
     role: z.enum(ALL_ROLES).optional().describe('Optional legacy role preset. Omit when supplying agent_spec.'),
     task: z.string().optional().describe(SUBAGENT_TASK_DESCRIPTION),
-    agent_spec: agentSpecSchema.optional().describe('No named role required.'),
+    agent_spec: agentSpecSchema
+      .optional()
+      .describe('Dynamic goal/context/tools/constraints/model/budget; no named role required.'),
     ...worktreeField,
-    ...backgroundFields(false),
+    ...backgroundFields,
   })
   .strict()
   .refine(
@@ -212,13 +209,12 @@ function createRunSubagentSchema({ runSubagent, runSubagentAsync }: RunSubagentT
   if (runSubagentAsync) {
     return z
       .object({
-        // The description states that this session requires background execution.
-        execution: z.literal('background'),
+        execution: z.literal('background').describe('Only background execution is available in this session.'),
         role: z.enum(BACKGROUND_ROLES).optional().describe('Optional legacy role preset.'),
         task: z.string().optional().describe(SUBAGENT_TASK_DESCRIPTION),
         agent_spec: runSubagentSchema.shape.agent_spec,
         ...worktreeField,
-        ...backgroundFields(true),
+        ...backgroundFields,
       })
       .strict()
       .refine(
@@ -235,8 +231,7 @@ function createRunSubagentSchema({ runSubagent, runSubagentAsync }: RunSubagentT
   if (runSubagent && !runSubagentAsync) {
     return z
       .object({
-        // The description states that this session uses foreground execution.
-        execution: z.literal('foreground'),
+        execution: z.literal('foreground').describe('Only foreground execution is available in this session.'),
         role: z.enum(FOREGROUND_ROLES).optional().describe('Optional legacy role preset.'),
         task: z.string().optional().describe(SUBAGENT_TASK_DESCRIPTION),
         agent_spec: runSubagentSchema.shape.agent_spec,

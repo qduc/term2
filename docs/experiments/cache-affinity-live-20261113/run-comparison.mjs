@@ -153,7 +153,7 @@ export async function runCandidate(spec, gateway, { fixture = false } = {}) {
     NODE_USE_ENV_PROXY: '1',
     AGENT_TRANSPORT: 'http',
     AGENT_MAX_OUTPUT_TOKENS: '32000',
-    PATH: `/workspace/scratch/sandbox-bin:${process.env.PATH}`,
+    PATH: `/workspace/.local/usr/bin:${process.env.PATH}`,
     NO_COLOR: '1',
   });
   const prompt = fixture ? 'Reply only PREFLIGHT_OK. Do not use tools.' : prepared.prompt;

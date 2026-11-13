@@ -46,8 +46,9 @@ function getRunSubagentDescription(backgroundEnabled: boolean): string {
 const FOREGROUND_ROLES = ['explorer', 'worker', 'reviewer', 'librarian'] as const;
 const BACKGROUND_ROLES = ['explorer', 'worker', 'mentor', 'reviewer', 'librarian'] as const;
 const ALL_ROLES = ['explorer', 'worker', 'mentor', 'reviewer', 'librarian'] as const;
+// The explorer task rules are stated once, in the tool description's Task Requirements.
 const SUBAGENT_TASK_DESCRIPTION =
-  'Complete description of one bounded delegated unit with one objective, ownership boundary, and done condition. For explorer, specify concrete evidence to collect and choose breadth or depth, never both; do not delegate diagnosis, recommendations, or the parent task itself.';
+  'Complete description of one bounded delegated unit with one objective, ownership boundary, and done condition.';
 
 export const agentSpecSchema = z
   .object({
@@ -122,13 +123,13 @@ const backgroundFields = {
     .describe('Optional check-in configuration for this background subagent. Background only.'),
 };
 
+// Creating the worktree first, and not re-rooting this session, is stated once, in the tool description.
 const worktreeField = {
   worktree: z
     .string()
     .optional()
     .describe(
-      'For write-capable workers or generic agent specs. Directory basename or branch of an existing git worktree to pin the child into. ' +
-        'Create the worktree first under the workspace root; this does not re-root the parent session.',
+      'For write-capable workers or generic agent specs. Directory basename or branch of an existing git worktree to pin the child into.',
     ),
 };
 

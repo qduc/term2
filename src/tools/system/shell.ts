@@ -690,8 +690,9 @@ const SHELL_DESCRIPTION_ORCHESTRATOR =
 const foregroundShellParameters = shellParametersSchema
   .omit({ background: true, monitor: true, check_in: true })
   .extend({
+    // The long-running timeout advice is stated once, in the foreground description it is paired with.
     timeout_ms: shellParametersSchema.shape.timeout_ms.describe(
-      'Optional timeout in milliseconds for each command. Defaults to shell.timeout if not specified. Choose an explicit finite timeout for known long-running work: the 120s default is not a ceiling and does not guarantee completion.',
+      'Optional timeout in milliseconds for each command. Defaults to shell.timeout if not specified.',
     ),
   });
 

@@ -19,6 +19,8 @@ import type { createDirectHooks, DirectHookAcceptedMetadata } from './hooks.js';
 import { createDirectRolloverTool, type DirectRolloverRequestOutcome } from './rollover.js';
 import type { DirectBackgroundTasks } from './background.js';
 
+const GOAL_TOOLS: ReadonlySet<string> = new Set(['propose_goal', 'goal_check']);
+
 export type DirectContextPort = {
   readonly sessionId: string;
   /** Live read-only physical identity; sessionId remains the original logical owner. */
@@ -144,13 +146,10 @@ export function bindDirectCapabilities(options: {
       const memoryNames = memory.map((tool) => tool.spec.name);
       const rollover = overrides.get('session_rollover');
       if (rollover) insertAfter([...slots.beforeRollover, ...memoryNames], [rollover]);
-      const namesBeforeGoal = [...slots.beforeGoal, ...memoryNames, ...(rollover ? ['session_rollover'] : [])];
-      const goalTools = ['propose_goal', 'goal_check'].flatMap((name) => {
-        const tool = overrides.get(name);
-        return tool ? [tool] : [];
-      });
-      insertAfter(namesBeforeGoal, goalTools);
-    } else ordered.push(...bound.map((tool) => tool.spec));
+    } else ordered.push(...bound.filter((tool) => !GOAL_TOOLS.has(tool.spec.name)).map((tool) => tool.spec));
+    // Goal tools go last. goal_check first appears mid-session, when a goal is first set; appending it
+    // leaves every earlier tool definition byte-identical, so the provider's cached tool prefix survives.
+    ordered.push(...bound.filter((tool) => GOAL_TOOLS.has(tool.spec.name)).map((tool) => tool.spec));
     return { request: { ...request, instructions, tools: ordered }, tools };
   };
 

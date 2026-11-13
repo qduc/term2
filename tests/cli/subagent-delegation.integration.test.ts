@@ -209,3 +209,156 @@ it('rejects a role call whose agent_spec asks for tools the role lacks, naming t
     await provider.close();
   }
 });
+
+const explorer = (task: string, execution = 'foreground') => ({
+  name: 'run_subagent',
+  args: { execution, role: 'explorer', task },
+});
+
+function savedFacts(): Record<string, unknown>[] {
+  const dir = path.join(home, 'conversations');
+  const file = fs.readdirSync(dir).find((name) => name.endsWith('.jsonl'));
+  if (!file) return [];
+  return fs
+    .readFileSync(path.join(dir, file), 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as Record<string, unknown>)
+    .map((record) => (record.fact as Record<string, unknown> | undefined) ?? record);
+}
+
+it('returns a foreground explorer result as the tool result of the same root turn', async () => {
+  const provider = await startProvider((entry, rootIndex) => {
+    if (!entry.root) return text('Child evidence: parseInvoice is in src/a.js:2');
+    if (rootIndex === 1) return calls(explorer('Find where parseInvoice is defined'));
+    return text('parseInvoice is defined in src/a.js.');
+  });
+  try {
+    const result = await runCli(['Find parseInvoice']);
+    expect(result.status, result.stderr).toBe(0);
+    const roots = provider.seen.filter((s) => s.root);
+    // Launch and final answer: no waiting reply, no notification turn (the background path takes three).
+    expect(roots).toHaveLength(2);
+    expect(provider.seen.filter((s) => !s.root)).toHaveLength(1);
+    const offered = roots[0]!.body.tools!.find((tool) => tool.function.name === 'run_subagent')!.function
+      .parameters as { properties: { execution: { enum: string[] } } };
+    expect(offered.properties.execution.enum).toEqual(['foreground', 'background']);
+    const [toolResult] = toolResults(roots[1]!.body);
+    expect(toolResult).toMatch(/^Status: completed\n\nChild evidence: parseInvoice is in src\/a\.js:2/);
+    expect(toolResult).not.toContain('Assess it');
+    expect(result.stdout).toContain('parseInvoice is defined in src/a.js.');
+    expect(savedFacts().some((fact) => fact.type === 'background_notice_enqueued')).toBe(false);
+  } finally {
+    await provider.close();
+  }
+});
+
+// Both calls are parallel-safe, but the direct CLI marks every policy-approved call `batched`
+// (src/app/source-tools.ts approvalFor), and the engine runs batched calls one at a time. This
+// pins the order and the results; it asserts no concurrency the CLI does not have.
+it('runs two foreground explorers from one response and returns both results in call order', async () => {
+  const provider = await startProvider((entry, rootIndex) => {
+    if (!entry.root) {
+      const first = userText(entry.body).includes('alpha');
+      return { ...text(first ? 'alpha evidence' : 'beta evidence'), delayMs: first ? 300 : 0 };
+    }
+    if (rootIndex === 1) return calls(explorer('Collect alpha'), explorer('Collect beta'));
+    return text('Both collected.');
+  });
+  try {
+    const result = await runCli(['Collect both']);
+    expect(result.status, result.stderr).toBe(0);
+    expect(provider.seen.filter((s) => !s.root)).toHaveLength(2);
+    const roots = provider.seen.filter((s) => s.root);
+    expect(roots).toHaveLength(2);
+    const results = toolResults(roots[1]!.body);
+    expect(results).toHaveLength(2);
+    expect(results[0]).toContain('alpha evidence');
+    expect(results[1]).toContain('beta evidence');
+  } finally {
+    await provider.close();
+  }
+});
+
+it('refuses foreground for a writing role and keeps background launches for it', async () => {
+  const provider = await startProvider((entry, rootIndex) => {
+    if (!entry.root) return text('unexpected child');
+    if (rootIndex === 1)
+      return calls({ name: 'run_subagent', args: { execution: 'foreground', role: 'worker', task: 'Edit a.js' } });
+    return text('Stopped.');
+  });
+  try {
+    const result = await runCli(['Edit a.js']);
+    expect(result.status, result.stderr).toBe(0);
+    expect(provider.seen.filter((s) => !s.root)).toHaveLength(0);
+    const refusal = JSON.parse(toolResults(provider.seen.filter((s) => s.root)[1]!.body)[0]!);
+    expect(refusal).toMatchObject({ status: 'failed', error: { code: 'foreground_unavailable' } });
+  } finally {
+    await provider.close();
+  }
+});
+
+it('routes a foreground child approval to the headless policy and returns the child result', async () => {
+  const outside = path.join(home, 'outside.txt');
+  fs.writeFileSync(outside, 'secret outside the workspace');
+  let childRequests = 0;
+  const provider = await startProvider((entry, rootIndex) => {
+    if (!entry.root) {
+      childRequests += 1;
+      if (childRequests === 1) return calls({ name: 'read_file', args: { path: outside } });
+      return text(`Child saw: ${toolResults(entry.body).join(' | ')}`);
+    }
+    if (rootIndex === 1) return calls(explorer('Read the outside file'));
+    return text('Done.');
+  });
+  try {
+    const result = await runCli(['Read the outside file']);
+    expect(result.status, result.stderr).toBe(0);
+    const facts = savedFacts();
+    // The child's approval was a task interaction answered by the headless policy (deny without --auto-approve).
+    expect(facts.some((fact) => fact.type === 'task_interaction_opened')).toBe(true);
+    const childResult = toolResults(provider.seen.filter((s) => !s.root)[1]!.body).join('\n');
+    expect(childResult).not.toContain('secret outside the workspace');
+    const [toolResult] = toolResults(provider.seen.filter((s) => s.root)[1]!.body);
+    expect(toolResult).toMatch(/^Status: completed\n\nChild saw: /);
+  } finally {
+    await provider.close();
+  }
+});
+
+it('cancels a running foreground child with the root turn', async () => {
+  const provider = await startProvider((entry, rootIndex) => {
+    if (!entry.root) return { ...text('too late'), delayMs: 30_000 };
+    if (rootIndex === 1) return calls(explorer('Take a long time'));
+    return text('unexpected root request');
+  });
+  try {
+    const running = runCli(['Start a long explorer']);
+    await expect.poll(() => provider.seen.some((s) => !s.root), { timeout: 15_000 }).toBe(true);
+    const started = Date.now();
+    const pid = Number(
+      fs
+        .readdirSync('/proc')
+        .filter((name) => /^\d+$/.test(name))
+        .find((name) => {
+          try {
+            const cmd = fs.readFileSync(`/proc/${name}/cmdline`, 'utf8');
+            return cmd.includes(cliPath()) && cmd.includes('Start a long explorer');
+          } catch {
+            return false;
+          }
+        }),
+    );
+    process.kill(pid, 'SIGINT');
+    const result = await running;
+    expect(Date.now() - started).toBeLessThan(10_000);
+    expect(result.status).not.toBe(0);
+    expect(provider.seen.filter((s) => s.root)).toHaveLength(1);
+    const finished = savedFacts().find((fact) => fact.type === 'task_finished') as
+      | { result?: { kind?: string } }
+      | undefined;
+    expect(finished?.result?.kind).toBe('cancelled');
+  } finally {
+    await provider.close();
+  }
+});

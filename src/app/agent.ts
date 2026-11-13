@@ -306,10 +306,10 @@ export const getAgentDefinition = (
     Boolean(getSubagentStatus) &&
     Boolean(sendSubagentMessage) &&
     Boolean(cancelSubagentRun);
-  // A complete async capability owns the model-facing delegation contract. The
-  // nested runner remains wired for foreground-only compatibility sessions and
-  // for legacy lifecycle controls, but is not selectable alongside async work.
-  const runSubagentForegroundEnabled = Boolean(runSubagent) && !asyncSubagentEnabled;
+  // Beside a complete async capability, foreground stays selectable only for
+  // the roles that write no files (run_subagent enforces which); background
+  // keeps workers, mentors, reviewers and agent_spec launches.
+  const runSubagentForegroundEnabled = Boolean(runSubagent);
   let profile: ReturnType<typeof resolveActiveProfile>;
   try {
     profile = resolveActiveProfile(settingsService, {

@@ -20,6 +20,7 @@ export interface ResolvedSubagentLaunch {
 import type { AgentSpec } from '../../session/agent-runtime/types.js';
 import { SubagentPoolEntrySchema } from '../../config/settings/settings-schema.js';
 import type {
+  NestedSubagentResult,
   SubagentResult,
   SubagentRunHandle,
   SubagentRunStatus,
@@ -59,7 +60,7 @@ export type ExecutionEvidence = {
   settled?: Promise<SubagentResult>;
 };
 type DelegationCallbacks = {
-  runSubagent(params: Launch): Promise<SubagentResult>;
+  runSubagent(params: Launch): Promise<NestedSubagentResult>;
   runSubagentAsync(params: Launch): Promise<SubagentRunHandle>;
   runResolvedSubagent(params: ResolvedSubagentLaunch): Promise<SubagentResult>;
   runResolvedSubagentAsync(params: ResolvedSubagentLaunch): Promise<SubagentRunHandle>;
@@ -78,11 +79,12 @@ export function createDirectDelegationCallbacks(
   ports: {
     readonly current: () => ToolContext;
     readonly run: (params: Launch) => Promise<SubagentResult>;
+    readonly runOrTransfer: (params: Launch) => Promise<NestedSubagentResult>;
     readonly start: (params: Launch) => Promise<SubagentRunHandle>;
   },
   executionEvidence: ReadonlyMap<string, ExecutionEvidence>,
 ): DelegationCallbacks {
-  const { current, run, start } = ports;
+  const { current, run, runOrTransfer, start } = ports;
   const controls = () => {
     const context = current();
     if (!context.app.subagents) throw new Error('Session subagent controls are unavailable');
@@ -102,7 +104,7 @@ export function createDirectDelegationCallbacks(
     };
   };
   const callbacks: DelegationCallbacks = {
-    runSubagent: (params) => run(params),
+    runSubagent: (params) => runOrTransfer(params),
     runSubagentAsync: start,
     runResolvedSubagent: (params) => run(resolved(params)),
     runResolvedSubagentAsync: (params) => start(resolved(params)),

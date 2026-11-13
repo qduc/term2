@@ -1,6 +1,4 @@
 import { z } from 'zod';
-import fs from 'node:fs';
-import path from 'node:path';
 import type { DirectToolDefinition, FormatCommandMessage } from '../types.js';
 import {
   getOutputText,
@@ -20,7 +18,7 @@ function getRunSubagentDescription(backgroundEnabled: boolean): string {
   return (
     'Delegate a bounded task to the general agent runtime. Use agent_spec for dynamic goal/context/tools/constraints/model/budget; legacy named roles are compatibility presets. ' +
     (backgroundEnabled
-      ? 'This session requires background execution: the tool returns a running handle immediately and a later completion notification. '
+      ? 'execution "foreground" (explorer and librarian only) waits for the child and returns its result in this call: use it when you need the result before your next step. "background" returns a running handle immediately and a later completion notification: use it for long or parallel independent work. '
       : 'This session uses foreground execution and returns the structured result in this turn. ') +
     'The subagent runs in its own context and returns only a summary, preserving your context. ' +
     '(When to reach for this vs. doing it yourself is covered by the delegation guidance in your system instructions.)\n\n' +
@@ -45,6 +43,8 @@ function getRunSubagentDescription(backgroundEnabled: boolean): string {
 }
 
 const FOREGROUND_ROLES = ['explorer', 'worker', 'reviewer', 'librarian'] as const;
+/** Foreground roles offered beside background: they write no files, so a wait never holds an edit. */
+const WAITABLE_ROLES = ['explorer', 'librarian'] as const;
 const BACKGROUND_ROLES = ['explorer', 'worker', 'mentor', 'reviewer', 'librarian'] as const;
 const ALL_ROLES = ['explorer', 'worker', 'mentor', 'reviewer', 'librarian'] as const;
 // The explorer sentence stays: the description's Task Requirements state narrower deliverables, not
@@ -206,7 +206,11 @@ function createRunSubagentSchema({ runSubagent, runSubagentAsync }: RunSubagentT
   if (runSubagentAsync) {
     return z
       .object({
-        execution: z.literal('background').describe('Only background execution is available in this session.'),
+        execution: z
+          .enum(['foreground', 'background'])
+          .describe(
+            '"foreground" (explorer or librarian only) returns the result in this call; "background" returns a running handle immediately.',
+          ),
         role: z.enum(BACKGROUND_ROLES).optional().describe('Optional legacy role preset.'),
         task: z.string().optional().describe(SUBAGENT_TASK_DESCRIPTION),
         agent_spec: runSubagentSchema.shape.agent_spec,
@@ -346,86 +350,6 @@ export const formatRunSubagentCommandMessage: FormatCommandMessage = (item, inde
   ];
 };
 
-export function getSubagentsRolesSection({
-  includeLibrarian = true,
-  includeMentor = true,
-}: { includeLibrarian?: boolean; includeMentor?: boolean } = {}): string {
-  let promptsDir = path.join(import.meta.dirname, '../prompts/subagents');
-  if (!fs.existsSync(promptsDir)) {
-    const altDir = path.join(import.meta.dirname, '../../src/session/prompts/subagents');
-    if (fs.existsSync(altDir)) {
-      promptsDir = altDir;
-    }
-  }
-
-  if (!fs.existsSync(promptsDir)) {
-    return (
-      '## Roles\n' +
-      '- `explorer`: read-only evidence collection + web search + safe shell commands. Use for breadth across one defined surface or depth into one narrow seam, never both in one run.\n' +
-      (includeMentor ? '- `mentor`: advisory only, no workspace access. Use for technical advice.\n' : '') +
-      (includeLibrarian
-        ? '- `librarian`: memory reasoning. Use for retrieving context from persistent memory and recommending memory maintenance.\n'
-        : '') +
-      '- `worker`: read + write + shell access. Use for implementing bounded file changes or general purpose works that does not fit any role above.\n\n'
-    );
-  }
-
-  try {
-    const files = fs
-      .readdirSync(promptsDir)
-      .filter((file) => file.endsWith('.md'))
-      .sort();
-    const roles: string[] = [];
-
-    for (const file of files) {
-      const roleName = path.basename(file, '.md');
-      if ((roleName === 'librarian' && !includeLibrarian) || (roleName === 'mentor' && !includeMentor)) continue;
-      const content = fs.readFileSync(path.join(promptsDir, file), 'utf-8');
-      const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
-      let description = '';
-      if (match) {
-        const frontmatterText = match[1];
-        for (const line of frontmatterText.split('\n')) {
-          const colonIdx = line.indexOf(':');
-          if (colonIdx !== -1) {
-            const key = line.slice(0, colonIdx).trim();
-            if (key === 'description') {
-              let val = line.slice(colonIdx + 1).trim();
-              if (
-                val.length >= 2 &&
-                ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'")))
-              ) {
-                val = val.slice(1, -1);
-              }
-              description = val;
-              break;
-            }
-          }
-        }
-      }
-      if (description) {
-        roles.push(`- \`${roleName}\`: ${description}`);
-      }
-    }
-
-    if (roles.length > 0) {
-      return '## Roles\n' + roles.join('\n') + '\n\n';
-    }
-  } catch (_error) {
-    // Fallback on error
-  }
-
-  return (
-    '## Roles\n' +
-    '- `explorer`: read-only evidence collection + web search + safe shell commands. Use for breadth across one defined surface or depth into one narrow seam, never both in one run.\n' +
-    (includeMentor ? '- `mentor`: advisory only, no workspace access. Use for technical advice.\n' : '') +
-    (includeLibrarian
-      ? '- `librarian`: memory reasoning. Use for retrieving context from persistent memory and recommending memory maintenance.\n'
-      : '') +
-    '- `worker`: read + write access. Use for implementing bounded file changes.\n\n'
-  );
-}
-
 function formatBackgroundHandle(handle: SubagentRunHandle): string {
   const output: Record<string, string> = { runId: handle.runId, status: handle.status };
   if (handle.name) output.name = handle.name;
@@ -479,12 +403,17 @@ export function createRunSubagentToolDefinition(
   };
 
   async function executeRunSubagent(params: RunSubagentParams, context: unknown, details: unknown): Promise<string> {
-    if (resolvedCallbacks.runSubagentAsync && params.execution === 'foreground') {
+    // Beside background, foreground is offered only to roles that cannot write files.
+    if (
+      resolvedCallbacks.runSubagentAsync &&
+      params.execution === 'foreground' &&
+      (params.agent_spec || !WAITABLE_ROLES.includes(params.role as (typeof WAITABLE_ROLES)[number]))
+    ) {
       return JSON.stringify({
         status: 'failed',
         error: {
           code: 'foreground_unavailable',
-          message: 'Foreground execution is unavailable in this session; use execution: "background".',
+          message: 'Foreground execution is available only for explorer and librarian; use execution: "background".',
         },
       });
     }
@@ -515,6 +444,14 @@ export function createRunSubagentToolDefinition(
           context,
           details,
         );
+        // The user moved the live child to the background; its completion arrives as a notification.
+        if (result.status === 'running')
+          return formatBackgroundHandle({
+            runId: result.agentId,
+            role: result.role,
+            status: 'running',
+            task: params.task ?? '',
+          });
         return formatSubagentResult(result as SubagentResult);
       } catch (error: unknown) {
         if (isAbortLike(error instanceof Error ? error.message : undefined, error)) {

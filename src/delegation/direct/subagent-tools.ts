@@ -21,6 +21,7 @@ import { SubagentRolePoolSelector } from '../subagents/subagent-role-pool-select
 import { SubagentToolFactory, SubagentToolPolicy } from '../subagents/tool-policy.js';
 import type { ValidationCapture } from '../subagents/validation-evidence.js';
 import type { SubagentResult, SubagentDefinition, SubagentRunHandle } from '../subagents/types.js';
+import type { NestedSubagentResult } from '../../tools/subagents/types.js';
 import { SUBAGENT_ROLES } from '../../tools/subagents/types.js';
 import { DirectSubagentSessions } from './subagent-sessions.js';
 import { SUBAGENT_RUN_NAME_PATTERN, SubagentRegistryError } from '../../tools/subagents/launch-contract.js';
@@ -403,14 +404,23 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
     preparedSessions.set(request, { key: prior?.key, definition });
     return request;
   };
-  const run = async (params: Launch): Promise<SubagentResult> => {
+  /** A foreground run, or `running` when the user moved the same live child to the background. */
+  const runOrTransfer = async (params: Launch): Promise<NestedSubagentResult> => {
     const context = current();
     const request = await prepare(params, 'foreground');
     const result = await context.runNested(request);
     const evidence = preparedEvidence.get(request)!;
     const runId = result.runId ?? (result.outcome.kind === 'background' ? result.outcome.runId : undefined);
     if (runId) executionEvidence.set(runId, evidence);
-    return projectResult(result, request.role ?? 'agent', evidence);
+    const role = request.role ?? 'agent';
+    if (result.outcome.kind !== 'background') return projectResult(result, role, evidence);
+    return { agentId: result.outcome.runId, role, status: 'running', finalText: '', filesChanged: [], toolsUsed: [] };
+  };
+  // Callers without a running-handle reply (explorer runner, mentor, run_code agent.run) keep a settled result.
+  const run = async (params: Launch): Promise<SubagentResult> => {
+    const result = await runOrTransfer(params);
+    if (result.status === 'running') throw new Error('Expected a subagent result, received background admission');
+    return result as SubagentResult;
   };
   const start = async (params: Launch): Promise<SubagentRunHandle> => {
     const context = current();
@@ -435,7 +445,11 @@ export function createDirectSubagentTools(options: DirectSubagentToolsOptions) {
       task: request.input,
     };
   };
-  const callbacks = createDirectDelegationCallbacks(settings, { current, run, start }, executionEvidence);
+  const callbacks = createDirectDelegationCallbacks(
+    settings,
+    { current, run, runOrTransfer, start },
+    executionEvidence,
+  );
   return {
     callbacks,
     withInvocation,

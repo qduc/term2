@@ -1,4 +1,4 @@
-import { getSubagentsRolesSection } from '../../tools/agent/run-subagent.js';
+import { getSubagentsRolesSection } from '../../tools/subagents/roles-section.js';
 
 /**
  * Single source of truth for model-facing subagent delegation.
@@ -20,15 +20,20 @@ export function getSubagentDelegationAddendum({
   backgroundEnabled?: boolean;
   controlsEnabled?: boolean;
 } = {}): string {
-  const executions = backgroundEnabled
-    ? '- `execution: "background"`: the only execution mode in this session. It starts a conversation-scoped run and returns `{ runId, status: "running" }` immediately.'
-    : foregroundEnabled
-    ? '- `execution: "foreground"`: the only execution mode in this session. It runs through the nested subagent path and returns its structured result in this turn.'
-    : '';
+  const executions =
+    backgroundEnabled && foregroundEnabled
+      ? '- `execution: "foreground"`: explorer and librarian only. It waits for the run and returns its structured result in this turn; use it when you need the result before your next step.\n- `execution: "background"`: starts a conversation-scoped run and returns `{ runId, status: "running" }` immediately; use it for long or parallel independent work.'
+      : backgroundEnabled
+      ? '- `execution: "background"`: the only execution mode in this session. It starts a conversation-scoped run and returns `{ runId, status: "running" }` immediately.'
+      : foregroundEnabled
+      ? '- `execution: "foreground"`: the only execution mode in this session. It runs through the nested subagent path and returns its structured result in this turn.'
+      : '';
 
   const header = `### Delegating to subagents
 
-You have one \`run_subagent\` tool. A subagent runs in its own context and returns only a summary, keeping your own context focused on high-level reasoning. Its required \`execution\` field identifies the only lifecycle available in this session:
+You have one \`run_subagent\` tool. A subagent runs in its own context and returns only a summary, keeping your own context focused on high-level reasoning. Its required \`execution\` field identifies ${
+    backgroundEnabled && foregroundEnabled ? 'the lifecycle' : 'the only lifecycle available in this session'
+  }:
 
 ${executions}`;
 

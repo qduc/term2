@@ -43,7 +43,7 @@ import { resolveAncillaryModelTier } from '../../session/agent-runtime/model-res
 import { extractPatchPaths } from '../../tools/file/upstream-apply-patch.js';
 import { createSearchReplaceToolDefinition } from '../../tools/file/search-replace.js';
 import { createCreateFileToolDefinition } from '../../tools/file/create-file.js';
-import { createShellToolDefinition } from '../../tools/system/shell.js';
+import { createShellToolDefinition, presentForegroundShell } from '../../tools/system/shell.js';
 import { createAskOrchestratorToolDefinition } from '../../tools/agent/ask-orchestrator.js';
 import { createRunExplorerToolDefinition, type ExplorerRunner } from '../../tools/agent/run-explorer.js';
 import type { SkillsService } from '../../tools/skills/skills-service.js';
@@ -1201,15 +1201,14 @@ export class SubagentToolFactory {
         fsReadScope,
       );
 
-      if (definition.canWrite && !this.#readOnly) {
-        tools.push(
-          nestedApprovals
+      // A subagent has no background job registry, so its shell is foreground-only.
+      const guardedShell =
+        definition.canWrite && !this.#readOnly
+          ? nestedApprovals
             ? this.#toolPolicy.wrapNestedShellTool(shellDef, cwd)
-            : this.#toolPolicy.wrapShellTool(shellDef, cwd, filesChanged, taskContext, validationCapture),
-        );
-      } else {
-        tools.push(this.#toolPolicy.wrapReadOnlyShellTool(shellDef));
-      }
+            : this.#toolPolicy.wrapShellTool(shellDef, cwd, filesChanged, taskContext, validationCapture)
+          : this.#toolPolicy.wrapReadOnlyShellTool(shellDef);
+      tools.push(presentForegroundShell(guardedShell, { searchViaShell }));
     }
 
     if (definition.canWrite && !this.#readOnly) {
@@ -1358,10 +1357,16 @@ export class SubagentToolFactory {
           useStrictSchema && isZodToolParameterSchema(definition.parameters)
             ? toOpenAIStrictToolSchema(definition.parameters)
             : definition.parameters,
-        needsApproval: wrapNeedsApproval(definition, {
-          bypassApproval: () => shouldBypassToolApproval(definition.name, this.#settings.get('shell.autoApproveMode')),
-          registry: options.approvalPolicyRegistry,
-        }),
+        // Presentation may omit unavailable options. It must never replace the
+        // schema that normalizes, validates, or authorizes execution.
+        needsApproval: wrapNeedsApproval(
+          { ...definition, ...(canonicalParameters ? { parameters: canonicalParameters } : {}) },
+          {
+            bypassApproval: () =>
+              shouldBypassToolApproval(definition.name, this.#settings.get('shell.autoApproveMode')),
+            registry: options.approvalPolicyRegistry,
+          },
+        ),
         execute: async (params, context, details) => {
           options.onToolStart?.(
             definition.name,
@@ -1389,11 +1394,7 @@ export class SubagentToolFactory {
           return typeof trimmedResult === 'string' ? injectRunBudgetWarning(trimmedResult, context) : trimmedResult;
         },
       };
-      return wrapToolInvoke(
-        wrapped,
-        isZodToolParameterSchema(definition.parameters) ? definition.parameters : undefined,
-        { argumentParsing: definition.argumentParsing },
-      );
+      return wrapToolInvoke(wrapped, canonicalParameters, { argumentParsing: definition.argumentParsing });
     });
   }
 }

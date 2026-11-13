@@ -9,7 +9,12 @@ import { logValidationError as logValidationErrorUtil } from '../shell/command-l
 import { executeShellCommand } from '../shell/execute-shell.js';
 import type { ShellChildRegistry } from '../shell/shell-child-registry.js';
 import { formatShellExecutionOutput } from '../../shared/utils/shell/shell-output.js';
-import type { PostExecutePauseDescriptor, ScriptedToolDefinition, FormatCommandMessage } from '../types.js';
+import type {
+  AnyScriptedToolDefinition,
+  PostExecutePauseDescriptor,
+  ScriptedToolDefinition,
+  FormatCommandMessage,
+} from '../types.js';
 import type { ILoggingService, ISettingsService } from '../../shared/service-interfaces.js';
 import {
   coerceToText,
@@ -662,7 +667,7 @@ export const formatShellCommandMessage: FormatCommandMessage = (item, index, too
   ];
 };
 
-const getShellDescription = (searchViaShell: boolean) =>
+const getShellDescription = (searchViaShell: boolean, background = true) =>
   'Execute a single shell command. ' +
   'Long output is truncated and the full output is saved to a file; ' +
   (searchViaShell
@@ -670,11 +675,42 @@ const getShellDescription = (searchViaShell: boolean) =>
     : 'Do NOT use this to read, write or search. Use the specialized tools for those tasks. ') +
   'Do NOT write multi-line inline scripts, it is prone to escaping mistakes. Create a temporary script then use this tool to run it. ' +
   'Do NOT use this for complex multi-step edits or broad codebase exploration; use `run_subagent` instead. ' +
-  'For a background job whose output should trigger notifications, set background: true and provide monitor in the same call; wait for shell_output notifications instead of polling. ' +
-  'Known long-running work needs an explicit finite timeout_ms sized to the expected horizon: the 120s foreground and 30min background defaults are not ceilings, do not guarantee completion, and a long-lived watcher or full-suite validation will be terminated at the background default unless you pass a larger explicit timeout_ms. A timeout is a deadline, not a retry grant: when a command times out, diagnose the failure and do not blindly re-run a command whose earlier effects may already have landed.';
+  (background
+    ? 'For a background job whose output should trigger notifications, set background: true and provide monitor in the same call; wait for shell_output notifications instead of polling. ' +
+      'Known long-running work needs an explicit finite timeout_ms sized to the expected horizon: the 120s foreground and 30min background defaults are not ceilings, do not guarantee completion, and a long-lived watcher or full-suite validation will be terminated at the background default unless you pass a larger explicit timeout_ms. '
+    : 'Known long-running work needs an explicit finite timeout_ms sized to the expected horizon: the 120s default is not a ceiling and does not guarantee completion. ') +
+  'A timeout is a deadline, not a retry grant: when a command times out, diagnose the failure and do not blindly re-run a command whose earlier effects may already have landed.';
 const SHELL_DESCRIPTION_ORCHESTRATOR =
   'Execute a single shell command. Directly inspect, test, or perform a small clear operation when that is the most efficient path. By default, local shell commands run inside the sandbox when available. Use sandbox: "unsandboxed" only for network or outside-host access; it requires explicit user approval and must be run by the main agent. Long output is truncated, the full output is saved to a file; ' +
   'delegate complex, risky, or separable work when specialization, context compression, or safe parallelism provides meaningful leverage. For background output notifications, set background: true and monitor in the same call, then wait for shell_output rather than polling. Known long-running work (watchers, full-suite validation) needs an explicit finite timeout_ms sized to the job: the background default is not a ceiling, and a timeout is a deadline to diagnose, not a license to re-run a command whose earlier effects may already have landed.';
+
+const foregroundShellParameters = shellParametersSchema
+  .omit({ background: true, monitor: true, check_in: true })
+  .extend({
+    timeout_ms: shellParametersSchema.shape.timeout_ms.describe(
+      'Optional timeout in milliseconds for each command. Defaults to shell.timeout if not specified. Choose an explicit finite timeout for known long-running work: the 120s default is not a ceiling and does not guarantee completion.',
+    ),
+  });
+
+/**
+ * Advertise only foreground execution to a session that has no background job
+ * registry, where `background: true` can only return an error. This changes
+ * what the model is shown, not what runs: `canonicalParameters` stays the full
+ * schema, and every consumer that normalizes, validates or authorizes a call
+ * must read that one, so an unadvertised field is still handled exactly as
+ * before.
+ */
+export function presentForegroundShell<T extends AnyScriptedToolDefinition>(
+  tool: T,
+  options: { searchViaShell: boolean },
+): AnyScriptedToolDefinition {
+  return {
+    ...tool,
+    description: getShellDescription(options.searchViaShell, false),
+    parameters: foregroundShellParameters,
+    canonicalParameters: shellParametersSchema,
+  };
+}
 
 export function createShellToolDefinition(deps: {
   loggingService: ILoggingService;

@@ -20,6 +20,7 @@ import {
 } from '../../protocol/json.js';
 import type { DirectHeadlessOptions, HeadlessIo } from './types.js';
 import { displaySessionId } from '../../protocol/session-id.js';
+import { createRunSummary } from './run-summary.js';
 
 const RECOVERABLE_ERROR_KINDS = new Set([
   'context_overflow',
@@ -62,6 +63,14 @@ export function createHeadlessOutput(options: DirectHeadlessOptions, storedId: s
   const json = (record: unknown): void => {
     io.stdout.write(`${JSON.stringify(record)}\n`);
   };
+  const summary = createRunSummary();
+  let summaryEmitted = false;
+  /** The one run_summary record; `completed` stays the last line of a successful run. */
+  const runSummary = (outcome: string): void => {
+    if (output !== 'json' || summaryEmitted) return;
+    summaryEmitted = true;
+    json(summary.build({ sessionId, outcome }));
+  };
   if (output === 'json')
     json({
       type: 'session_start',
@@ -100,6 +109,11 @@ export function createHeadlessOutput(options: DirectHeadlessOptions, storedId: s
     },
     errorText,
     reportBudgetPause,
+    /** Every event of the run's session, before any turn filter, so between-turn child spend is counted. */
+    observe(event: WireEvent, targetTurnId: string | null): void {
+      if (output === 'json') summary.observe(event, targetTurnId);
+    },
+    runSummary,
     budgetEvidence(evidence: WireBudgetEvidence): void {
       if (output === 'json') json(legacyRunBudget(evidence));
     },
@@ -117,7 +131,10 @@ export function createHeadlessOutput(options: DirectHeadlessOptions, storedId: s
     },
     finish(): string {
       if (output === 'plain') io.stdout.write('\n');
-      else json({ type: 'completed', finalText: completedText });
+      else {
+        runSummary('completed');
+        json({ type: 'completed', finalText: completedText });
+      }
       return completedText;
     },
     event(event: WireEvent, targetTurnId: string | null): void {

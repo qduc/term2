@@ -27,7 +27,7 @@
           "tools": [
             {
               "name": "read_file",
-              "schema": "743ec429dfca7469"
+              "schema": "1abd153e33995e7d"
             },
             {
               "name": "grep",

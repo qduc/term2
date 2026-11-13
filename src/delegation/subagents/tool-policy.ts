@@ -576,8 +576,6 @@ export class SubagentToolPolicy {
     const originalNeedsApproval = definition.needsApproval.bind(definition);
     return {
       ...definition,
-      // Only GREEN commands with no write target run, so this shell cannot change workspace files.
-      cannotWriteFiles: true,
       needsApproval: () => false,
       execute: async (params: z.infer<S>, context?: unknown, details?: unknown) => {
         const unsandboxedError = rejectUnsandboxedSubagentShell(params);
@@ -730,8 +728,6 @@ export class SubagentToolPolicy {
     const cwd = this.#executionContext?.getCwd() ?? process.cwd();
     return {
       ...definition,
-      // Only GREEN commands with no write target run, so this shell cannot change workspace files.
-      cannotWriteFiles: true,
       needsApproval: () => false,
       execute: async (params: z.infer<S>, context?: unknown, details?: unknown) => {
         const unsandboxedError = rejectUnsandboxedSubagentShell(params);

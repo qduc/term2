@@ -301,9 +301,8 @@ function buildAvailableToolGuidance(
   if (hasTool('read_code_outline') || hasTool('code_context_search')) {
     const codeContextTools = ['read_code_outline', 'code_context_search'].filter(hasTool).map((name) => `\`${name}\``);
     lines.push(`For code structure and symbol context, use: ${codeContextTools.join(', ')}.`);
-  } else {
-    lines.push('Code-context tools are not available in this run.');
   }
+  // No "not available" line without them: the first line already says a tool not offered is not available.
 
   if (hasTool('read_file')) {
     // "or editing" only for a child that may be able to write files.

@@ -1,0 +1,1012 @@
+[
+  {
+    "run": "clean-r1-affinity-openai-pagination-r1-baseline",
+    "exit": 0,
+    "grade": {
+      "passed": 14,
+      "total": 14,
+      "pass": true,
+      "checks": [
+        {
+          "label": "module-export",
+          "pass": true
+        },
+        {
+          "label": "falsy-cursors-empty-pages-order",
+          "pass": true
+        },
+        {
+          "label": "typed-cursors-distinct",
+          "pass": true
+        },
+        {
+          "label": "cycle-before-refetch",
+          "pass": true
+        },
+        {
+          "label": "max-pages-before-extra-fetch",
+          "pass": true
+        },
+        {
+          "label": "invalid-options-no-fetch",
+          "pass": true
+        },
+        {
+          "label": "malformed-pages",
+          "pass": true
+        },
+        {
+          "label": "abort-before-fetch",
+          "pass": true
+        },
+        {
+          "label": "abort-after-fetch",
+          "pass": true
+        },
+        {
+          "label": "does-not-mutate",
+          "pass": true
+        },
+        {
+          "label": "default-page-limit-is-100",
+          "pass": true
+        },
+        {
+          "label": "null-abort-reason",
+          "pass": true
+        },
+        {
+          "label": "cli-valid",
+          "pass": true
+        },
+        {
+          "label": "cli-error-clean-stdout",
+          "pass": true
+        }
+      ]
+    },
+    "stderr": "",
+    "matchesRetainedGrade": true
+  },
+  {
+    "run": "clean-r1-affinity-openai-pagination-r1-affinity",
+    "exit": 0,
+    "grade": {
+      "passed": 14,
+      "total": 14,
+      "pass": true,
+      "checks": [
+        {
+          "label": "module-export",
+          "pass": true
+        },
+        {
+          "label": "falsy-cursors-empty-pages-order",
+          "pass": true
+        },
+        {
+          "label": "typed-cursors-distinct",
+          "pass": true
+        },
+        {
+          "label": "cycle-before-refetch",
+          "pass": true
+        },
+        {
+          "label": "max-pages-before-extra-fetch",
+          "pass": true
+        },
+        {
+          "label": "invalid-options-no-fetch",
+          "pass": true
+        },
+        {
+          "label": "malformed-pages",
+          "pass": true
+        },
+        {
+          "label": "abort-before-fetch",
+          "pass": true
+        },
+        {
+          "label": "abort-after-fetch",
+          "pass": true
+        },
+        {
+          "label": "does-not-mutate",
+          "pass": true
+        },
+        {
+          "label": "default-page-limit-is-100",
+          "pass": true
+        },
+        {
+          "label": "null-abort-reason",
+          "pass": true
+        },
+        {
+          "label": "cli-valid",
+          "pass": true
+        },
+        {
+          "label": "cli-error-clean-stdout",
+          "pass": true
+        }
+      ]
+    },
+    "stderr": "",
+    "matchesRetainedGrade": true
+  },
+  {
+    "run": "clean-r1-affinity-openai-classifier-r1-affinity",
+    "exit": 0,
+    "grade": {
+      "passed": 25,
+      "total": 26,
+      "pass": false,
+      "checks": [
+        {
+          "label": "module-exports",
+          "pass": true
+        },
+        {
+          "label": "http-402",
+          "pass": true
+        },
+        {
+          "label": "http-401",
+          "pass": true
+        },
+        {
+          "label": "http-403",
+          "pass": true
+        },
+        {
+          "label": "http-429",
+          "pass": true
+        },
+        {
+          "label": "http-408",
+          "pass": true
+        },
+        {
+          "label": "http-409",
+          "pass": true
+        },
+        {
+          "label": "http-500",
+          "pass": true
+        },
+        {
+          "label": "http-599",
+          "pass": true
+        },
+        {
+          "label": "http-400",
+          "pass": true
+        },
+        {
+          "label": "http-404",
+          "pass": true
+        },
+        {
+          "label": "http-413",
+          "pass": true
+        },
+        {
+          "label": "http-422",
+          "pass": true
+        },
+        {
+          "label": "nested-quota-codes",
+          "pass": true
+        },
+        {
+          "label": "status-shapes-priority",
+          "pass": true
+        },
+        {
+          "label": "numeric-prefix-quota",
+          "pass": false,
+          "error": "Expected values to be strictly deep-equal:\n+ actual - expected\n\n  {\n+   kind: 'unknown',\n-   kind: 'quota',\n    retryable: false\n  }\n"
+        },
+        {
+          "label": "vague-message-and-unknown",
+          "pass": true
+        },
+        {
+          "label": "network-codes",
+          "pass": true
+        },
+        {
+          "label": "header-seconds-ms-precedence",
+          "pass": true
+        },
+        {
+          "label": "header-date-and-invalid",
+          "pass": true
+        },
+        {
+          "label": "long-delay-refuses",
+          "pass": true
+        },
+        {
+          "label": "retry-success-and-delay",
+          "pass": true
+        },
+        {
+          "label": "exhaustion-exact-identity",
+          "pass": true
+        },
+        {
+          "label": "quota-no-retry",
+          "pass": true
+        },
+        {
+          "label": "retry-validation",
+          "pass": true
+        },
+        {
+          "label": "abort-boundaries",
+          "pass": true
+        }
+      ]
+    },
+    "stderr": "",
+    "matchesRetainedGrade": true
+  },
+  {
+    "run": "clean-r1-affinity-openai-classifier-r1-baseline",
+    "exit": 0,
+    "grade": {
+      "passed": 23,
+      "total": 26,
+      "pass": false,
+      "checks": [
+        {
+          "label": "module-exports",
+          "pass": true
+        },
+        {
+          "label": "http-402",
+          "pass": true
+        },
+        {
+          "label": "http-401",
+          "pass": true
+        },
+        {
+          "label": "http-403",
+          "pass": true
+        },
+        {
+          "label": "http-429",
+          "pass": true
+        },
+        {
+          "label": "http-408",
+          "pass": true
+        },
+        {
+          "label": "http-409",
+          "pass": true
+        },
+        {
+          "label": "http-500",
+          "pass": true
+        },
+        {
+          "label": "http-599",
+          "pass": true
+        },
+        {
+          "label": "http-400",
+          "pass": true
+        },
+        {
+          "label": "http-404",
+          "pass": true
+        },
+        {
+          "label": "http-413",
+          "pass": true
+        },
+        {
+          "label": "http-422",
+          "pass": true
+        },
+        {
+          "label": "nested-quota-codes",
+          "pass": true
+        },
+        {
+          "label": "status-shapes-priority",
+          "pass": false,
+          "error": "Expected values to be strictly equal:\n+ actual - expected\n\n+ 'unknown'\n- 'rate_limit'\n"
+        },
+        {
+          "label": "numeric-prefix-quota",
+          "pass": false,
+          "error": "Expected values to be strictly deep-equal:\n+ actual - expected\n\n  {\n+   kind: 'unknown',\n-   kind: 'quota',\n    retryable: false\n  }\n"
+        },
+        {
+          "label": "vague-message-and-unknown",
+          "pass": true
+        },
+        {
+          "label": "network-codes",
+          "pass": true
+        },
+        {
+          "label": "header-seconds-ms-precedence",
+          "pass": true
+        },
+        {
+          "label": "header-date-and-invalid",
+          "pass": false,
+          "error": "The expression evaluated to a falsy value:\n\n  assert.ok(\n"
+        },
+        {
+          "label": "long-delay-refuses",
+          "pass": true
+        },
+        {
+          "label": "retry-success-and-delay",
+          "pass": true
+        },
+        {
+          "label": "exhaustion-exact-identity",
+          "pass": true
+        },
+        {
+          "label": "quota-no-retry",
+          "pass": true
+        },
+        {
+          "label": "retry-validation",
+          "pass": true
+        },
+        {
+          "label": "abort-boundaries",
+          "pass": true
+        }
+      ]
+    },
+    "stderr": "",
+    "matchesRetainedGrade": true
+  },
+  {
+    "run": "clean-r1-affinity-openai-jsonl-r1-baseline",
+    "exit": 0,
+    "grade": {
+      "passed": 13,
+      "total": 13,
+      "pass": true,
+      "checks": [
+        {
+          "label": "module-export",
+          "pass": true
+        },
+        {
+          "label": "empty-input",
+          "pass": true
+        },
+        {
+          "label": "cross-account-corrections",
+          "pass": true
+        },
+        {
+          "label": "tie-last-wins",
+          "pass": true
+        },
+        {
+          "label": "invalid-schema-lines",
+          "pass": true
+        },
+        {
+          "label": "code-unit-sort-and-spaces",
+          "pass": true
+        },
+        {
+          "label": "async-stream",
+          "pass": true
+        },
+        {
+          "label": "source-iterator-failure",
+          "pass": true
+        },
+        {
+          "label": "overflow-rejects",
+          "pass": true
+        },
+        {
+          "label": "cli-files-and-invalid-exit",
+          "pass": true
+        },
+        {
+          "label": "cli-stdin",
+          "pass": true
+        },
+        {
+          "label": "cli-invalid-args-and-io",
+          "pass": true
+        },
+        {
+          "label": "cli-uses-streams",
+          "pass": true
+        }
+      ]
+    },
+    "stderr": "",
+    "matchesRetainedGrade": true
+  },
+  {
+    "run": "clean-r1-affinity-openai-jsonl-r1-affinity",
+    "exit": 0,
+    "grade": {
+      "passed": 13,
+      "total": 13,
+      "pass": true,
+      "checks": [
+        {
+          "label": "module-export",
+          "pass": true
+        },
+        {
+          "label": "empty-input",
+          "pass": true
+        },
+        {
+          "label": "cross-account-corrections",
+          "pass": true
+        },
+        {
+          "label": "tie-last-wins",
+          "pass": true
+        },
+        {
+          "label": "invalid-schema-lines",
+          "pass": true
+        },
+        {
+          "label": "code-unit-sort-and-spaces",
+          "pass": true
+        },
+        {
+          "label": "async-stream",
+          "pass": true
+        },
+        {
+          "label": "source-iterator-failure",
+          "pass": true
+        },
+        {
+          "label": "overflow-rejects",
+          "pass": true
+        },
+        {
+          "label": "cli-files-and-invalid-exit",
+          "pass": true
+        },
+        {
+          "label": "cli-stdin",
+          "pass": true
+        },
+        {
+          "label": "cli-invalid-args-and-io",
+          "pass": true
+        },
+        {
+          "label": "cli-uses-streams",
+          "pass": true
+        }
+      ]
+    },
+    "stderr": "",
+    "matchesRetainedGrade": true
+  },
+  {
+    "run": "clean-r1-affinity-openai-pagination-r2-affinity",
+    "exit": 0,
+    "grade": {
+      "passed": 14,
+      "total": 14,
+      "pass": true,
+      "checks": [
+        {
+          "label": "module-export",
+          "pass": true
+        },
+        {
+          "label": "falsy-cursors-empty-pages-order",
+          "pass": true
+        },
+        {
+          "label": "typed-cursors-distinct",
+          "pass": true
+        },
+        {
+          "label": "cycle-before-refetch",
+          "pass": true
+        },
+        {
+          "label": "max-pages-before-extra-fetch",
+          "pass": true
+        },
+        {
+          "label": "invalid-options-no-fetch",
+          "pass": true
+        },
+        {
+          "label": "malformed-pages",
+          "pass": true
+        },
+        {
+          "label": "abort-before-fetch",
+          "pass": true
+        },
+        {
+          "label": "abort-after-fetch",
+          "pass": true
+        },
+        {
+          "label": "does-not-mutate",
+          "pass": true
+        },
+        {
+          "label": "default-page-limit-is-100",
+          "pass": true
+        },
+        {
+          "label": "null-abort-reason",
+          "pass": true
+        },
+        {
+          "label": "cli-valid",
+          "pass": true
+        },
+        {
+          "label": "cli-error-clean-stdout",
+          "pass": true
+        }
+      ]
+    },
+    "stderr": "",
+    "matchesRetainedGrade": true
+  },
+  {
+    "run": "clean-r1-affinity-openai-pagination-r2-baseline",
+    "exit": 0,
+    "grade": {
+      "passed": 14,
+      "total": 14,
+      "pass": true,
+      "checks": [
+        {
+          "label": "module-export",
+          "pass": true
+        },
+        {
+          "label": "falsy-cursors-empty-pages-order",
+          "pass": true
+        },
+        {
+          "label": "typed-cursors-distinct",
+          "pass": true
+        },
+        {
+          "label": "cycle-before-refetch",
+          "pass": true
+        },
+        {
+          "label": "max-pages-before-extra-fetch",
+          "pass": true
+        },
+        {
+          "label": "invalid-options-no-fetch",
+          "pass": true
+        },
+        {
+          "label": "malformed-pages",
+          "pass": true
+        },
+        {
+          "label": "abort-before-fetch",
+          "pass": true
+        },
+        {
+          "label": "abort-after-fetch",
+          "pass": true
+        },
+        {
+          "label": "does-not-mutate",
+          "pass": true
+        },
+        {
+          "label": "default-page-limit-is-100",
+          "pass": true
+        },
+        {
+          "label": "null-abort-reason",
+          "pass": true
+        },
+        {
+          "label": "cli-valid",
+          "pass": true
+        },
+        {
+          "label": "cli-error-clean-stdout",
+          "pass": true
+        }
+      ]
+    },
+    "stderr": "",
+    "matchesRetainedGrade": true
+  },
+  {
+    "run": "clean-r1-affinity-openai-classifier-r2-baseline",
+    "exit": 0,
+    "grade": {
+      "passed": 26,
+      "total": 26,
+      "pass": true,
+      "checks": [
+        {
+          "label": "module-exports",
+          "pass": true
+        },
+        {
+          "label": "http-402",
+          "pass": true
+        },
+        {
+          "label": "http-401",
+          "pass": true
+        },
+        {
+          "label": "http-403",
+          "pass": true
+        },
+        {
+          "label": "http-429",
+          "pass": true
+        },
+        {
+          "label": "http-408",
+          "pass": true
+        },
+        {
+          "label": "http-409",
+          "pass": true
+        },
+        {
+          "label": "http-500",
+          "pass": true
+        },
+        {
+          "label": "http-599",
+          "pass": true
+        },
+        {
+          "label": "http-400",
+          "pass": true
+        },
+        {
+          "label": "http-404",
+          "pass": true
+        },
+        {
+          "label": "http-413",
+          "pass": true
+        },
+        {
+          "label": "http-422",
+          "pass": true
+        },
+        {
+          "label": "nested-quota-codes",
+          "pass": true
+        },
+        {
+          "label": "status-shapes-priority",
+          "pass": true
+        },
+        {
+          "label": "numeric-prefix-quota",
+          "pass": true
+        },
+        {
+          "label": "vague-message-and-unknown",
+          "pass": true
+        },
+        {
+          "label": "network-codes",
+          "pass": true
+        },
+        {
+          "label": "header-seconds-ms-precedence",
+          "pass": true
+        },
+        {
+          "label": "header-date-and-invalid",
+          "pass": true
+        },
+        {
+          "label": "long-delay-refuses",
+          "pass": true
+        },
+        {
+          "label": "retry-success-and-delay",
+          "pass": true
+        },
+        {
+          "label": "exhaustion-exact-identity",
+          "pass": true
+        },
+        {
+          "label": "quota-no-retry",
+          "pass": true
+        },
+        {
+          "label": "retry-validation",
+          "pass": true
+        },
+        {
+          "label": "abort-boundaries",
+          "pass": true
+        }
+      ]
+    },
+    "stderr": "",
+    "matchesRetainedGrade": true
+  },
+  {
+    "run": "clean-r1-affinity-openai-classifier-r2-affinity",
+    "exit": 0,
+    "grade": {
+      "passed": 24,
+      "total": 26,
+      "pass": false,
+      "checks": [
+        {
+          "label": "module-exports",
+          "pass": true
+        },
+        {
+          "label": "http-402",
+          "pass": true
+        },
+        {
+          "label": "http-401",
+          "pass": true
+        },
+        {
+          "label": "http-403",
+          "pass": true
+        },
+        {
+          "label": "http-429",
+          "pass": true
+        },
+        {
+          "label": "http-408",
+          "pass": true
+        },
+        {
+          "label": "http-409",
+          "pass": true
+        },
+        {
+          "label": "http-500",
+          "pass": true
+        },
+        {
+          "label": "http-599",
+          "pass": true
+        },
+        {
+          "label": "http-400",
+          "pass": true
+        },
+        {
+          "label": "http-404",
+          "pass": true
+        },
+        {
+          "label": "http-413",
+          "pass": true
+        },
+        {
+          "label": "http-422",
+          "pass": true
+        },
+        {
+          "label": "nested-quota-codes",
+          "pass": true
+        },
+        {
+          "label": "status-shapes-priority",
+          "pass": false,
+          "error": "Expected values to be strictly equal:\n+ actual - expected\n\n+ 'unknown'\n- 'rate_limit'\n"
+        },
+        {
+          "label": "numeric-prefix-quota",
+          "pass": false,
+          "error": "Expected values to be strictly deep-equal:\n+ actual - expected\n\n  {\n+   kind: 'unknown',\n-   kind: 'quota',\n    retryable: false\n  }\n"
+        },
+        {
+          "label": "vague-message-and-unknown",
+          "pass": true
+        },
+        {
+          "label": "network-codes",
+          "pass": true
+        },
+        {
+          "label": "header-seconds-ms-precedence",
+          "pass": true
+        },
+        {
+          "label": "header-date-and-invalid",
+          "pass": true
+        },
+        {
+          "label": "long-delay-refuses",
+          "pass": true
+        },
+        {
+          "label": "retry-success-and-delay",
+          "pass": true
+        },
+        {
+          "label": "exhaustion-exact-identity",
+          "pass": true
+        },
+        {
+          "label": "quota-no-retry",
+          "pass": true
+        },
+        {
+          "label": "retry-validation",
+          "pass": true
+        },
+        {
+          "label": "abort-boundaries",
+          "pass": true
+        }
+      ]
+    },
+    "stderr": "",
+    "matchesRetainedGrade": true
+  },
+  {
+    "run": "clean-r1-affinity-openai-jsonl-r2-affinity",
+    "exit": 0,
+    "grade": {
+      "passed": 13,
+      "total": 13,
+      "pass": true,
+      "checks": [
+        {
+          "label": "module-export",
+          "pass": true
+        },
+        {
+          "label": "empty-input",
+          "pass": true
+        },
+        {
+          "label": "cross-account-corrections",
+          "pass": true
+        },
+        {
+          "label": "tie-last-wins",
+          "pass": true
+        },
+        {
+          "label": "invalid-schema-lines",
+          "pass": true
+        },
+        {
+          "label": "code-unit-sort-and-spaces",
+          "pass": true
+        },
+        {
+          "label": "async-stream",
+          "pass": true
+        },
+        {
+          "label": "source-iterator-failure",
+          "pass": true
+        },
+        {
+          "label": "overflow-rejects",
+          "pass": true
+        },
+        {
+          "label": "cli-files-and-invalid-exit",
+          "pass": true
+        },
+        {
+          "label": "cli-stdin",
+          "pass": true
+        },
+        {
+          "label": "cli-invalid-args-and-io",
+          "pass": true
+        },
+        {
+          "label": "cli-uses-streams",
+          "pass": true
+        }
+      ]
+    },
+    "stderr": "",
+    "matchesRetainedGrade": true
+  },
+  {
+    "run": "clean-r1-affinity-openai-jsonl-r2-baseline",
+    "exit": 0,
+    "grade": {
+      "passed": 13,
+      "total": 13,
+      "pass": true,
+      "checks": [
+        {
+          "label": "module-export",
+          "pass": true
+        },
+        {
+          "label": "empty-input",
+          "pass": true
+        },
+        {
+          "label": "cross-account-corrections",
+          "pass": true
+        },
+        {
+          "label": "tie-last-wins",
+          "pass": true
+        },
+        {
+          "label": "invalid-schema-lines",
+          "pass": true
+        },
+        {
+          "label": "code-unit-sort-and-spaces",
+          "pass": true
+        },
+        {
+          "label": "async-stream",
+          "pass": true
+        },
+        {
+          "label": "source-iterator-failure",
+          "pass": true
+        },
+        {
+          "label": "overflow-rejects",
+          "pass": true
+        },
+        {
+          "label": "cli-files-and-invalid-exit",
+          "pass": true
+        },
+        {
+          "label": "cli-stdin",
+          "pass": true
+        },
+        {
+          "label": "cli-invalid-args-and-io",
+          "pass": true
+        },
+        {
+          "label": "cli-uses-streams",
+          "pass": true
+        }
+      ]
+    },
+    "stderr": "",
+    "matchesRetainedGrade": true
+  }
+]

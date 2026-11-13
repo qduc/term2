@@ -1,0 +1,1858 @@
+{
+  "cohort": "clean-r1",
+  "testedHead": "7d58e97cca77734c3595f824d54667ac19f84bcb",
+  "cumulativeRequests": 154,
+  "cumulativeEstimatedUsd": 0.0653817,
+  "priorEstimatedUsd": 0.009997785,
+  "uncertainExposureUsd": 0,
+  "peakReservedPlusEstimatedUsd": 0.64689781,
+  "cleanRequests": 130,
+  "cleanEstimatedUsd": 0.055383915,
+  "arms": {
+    "baseline": {
+      "runs": 6,
+      "requests": 63,
+      "input": 519647,
+      "fresh": 189,
+      "read": 432767,
+      "write": 86691,
+      "output": 25400,
+      "nanoUsd": 27882945,
+      "httpMs": 327971.0,
+      "childElapsedMs": 338557,
+      "writesAboveLargestContext": 15538,
+      "initialRead": 0,
+      "initialWrite": 32752,
+      "zeroReadContinuations": 2,
+      "externalQualityPasses": 5,
+      "actualSkillReads": 6,
+      "actualPublicTestSuccesses": 6,
+      "requestedUnsandboxedCalls": 0,
+      "componentNanoUsd": {
+        "fresh": 18900,
+        "read": 4327670,
+        "write": 10836375,
+        "output": 12700000
+      },
+      "usd": 0.027882945
+    },
+    "affinity": {
+      "runs": 6,
+      "requests": 67,
+      "input": 565704,
+      "fresh": 201,
+      "read": 495087,
+      "write": 70416,
+      "output": 27456,
+      "nanoUsd": 27500970,
+      "httpMs": 354539.0,
+      "childElapsedMs": 365544,
+      "writesAboveLargestContext": 0,
+      "initialRead": 0,
+      "initialWrite": 32732,
+      "zeroReadContinuations": 0,
+      "externalQualityPasses": 4,
+      "actualSkillReads": 6,
+      "actualPublicTestSuccesses": 6,
+      "requestedUnsandboxedCalls": 0,
+      "componentNanoUsd": {
+        "fresh": 20100,
+        "read": 4950870,
+        "write": 8802000,
+        "output": 13728000
+      },
+      "usd": 0.02750097
+    }
+  },
+  "pairs": [
+    {
+      "task": "classifier",
+      "rep": 1,
+      "order": ["affinity", "baseline"],
+      "initialBodiesEqualExceptKey": true,
+      "treatmentMinusBaseline": {
+        "requests": 3,
+        "input": 37466,
+        "fresh": 9,
+        "read": 34640,
+        "write": 2817,
+        "output": 1028,
+        "nanoUsd": 1213425,
+        "httpMs": 23003.0,
+        "childElapsedMs": 23247,
+        "writesAboveLargestContext": 0,
+        "initialRead": 0,
+        "initialWrite": 0
+      }
+    },
+    {
+      "task": "classifier",
+      "rep": 2,
+      "order": ["baseline", "affinity"],
+      "initialBodiesEqualExceptKey": true,
+      "treatmentMinusBaseline": {
+        "requests": -1,
+        "input": -18950,
+        "fresh": -3,
+        "read": -10939,
+        "write": -8008,
+        "output": -599,
+        "nanoUsd": -1410190,
+        "httpMs": -5966.0,
+        "childElapsedMs": -6040,
+        "writesAboveLargestContext": -5572,
+        "initialRead": 0,
+        "initialWrite": -20
+      }
+    },
+    {
+      "task": "jsonl",
+      "rep": 1,
+      "order": ["baseline", "affinity"],
+      "initialBodiesEqualExceptKey": true,
+      "treatmentMinusBaseline": {
+        "requests": -1,
+        "input": -15183,
+        "fresh": -3,
+        "read": -12849,
+        "write": -2331,
+        "output": -355,
+        "nanoUsd": -597665,
+        "httpMs": -6484.0,
+        "childElapsedMs": -6848,
+        "writesAboveLargestContext": 0,
+        "initialRead": 0,
+        "initialWrite": 0
+      }
+    },
+    {
+      "task": "jsonl",
+      "rep": 2,
+      "order": ["affinity", "baseline"],
+      "initialBodiesEqualExceptKey": true,
+      "treatmentMinusBaseline": {
+        "requests": -2,
+        "input": -20251,
+        "fresh": -6,
+        "read": -9401,
+        "write": -10844,
+        "output": -884,
+        "nanoUsd": -1892110,
+        "httpMs": -14290.0,
+        "childElapsedMs": -14541,
+        "writesAboveLargestContext": -9966,
+        "initialRead": 0,
+        "initialWrite": 0
+      }
+    },
+    {
+      "task": "pagination",
+      "rep": 1,
+      "order": ["baseline", "affinity"],
+      "initialBodiesEqualExceptKey": true,
+      "treatmentMinusBaseline": {
+        "requests": 1,
+        "input": 18150,
+        "fresh": 3,
+        "read": 17360,
+        "write": 787,
+        "output": 1217,
+        "nanoUsd": 880775,
+        "httpMs": 11754.0,
+        "childElapsedMs": 11925,
+        "writesAboveLargestContext": 0,
+        "initialRead": 0,
+        "initialWrite": 0
+      }
+    },
+    {
+      "task": "pagination",
+      "rep": 2,
+      "order": ["affinity", "baseline"],
+      "initialBodiesEqualExceptKey": true,
+      "treatmentMinusBaseline": {
+        "requests": 4,
+        "input": 44825,
+        "fresh": 12,
+        "read": 43509,
+        "write": 1304,
+        "output": 1649,
+        "nanoUsd": 1423790,
+        "httpMs": 18551.0,
+        "childElapsedMs": 19244,
+        "writesAboveLargestContext": 0,
+        "initialRead": 0,
+        "initialWrite": 0
+      }
+    }
+  ],
+  "pairedDirections": {
+    "requests": {
+      "treatmentLower": 3,
+      "tie": 0,
+      "treatmentHigher": 3
+    },
+    "input": {
+      "treatmentLower": 3,
+      "tie": 0,
+      "treatmentHigher": 3
+    },
+    "fresh": {
+      "treatmentLower": 3,
+      "tie": 0,
+      "treatmentHigher": 3
+    },
+    "read": {
+      "treatmentLower": 3,
+      "tie": 0,
+      "treatmentHigher": 3
+    },
+    "write": {
+      "treatmentLower": 3,
+      "tie": 0,
+      "treatmentHigher": 3
+    },
+    "output": {
+      "treatmentLower": 3,
+      "tie": 0,
+      "treatmentHigher": 3
+    },
+    "nanoUsd": {
+      "treatmentLower": 3,
+      "tie": 0,
+      "treatmentHigher": 3
+    },
+    "httpMs": {
+      "treatmentLower": 3,
+      "tie": 0,
+      "treatmentHigher": 3
+    },
+    "childElapsedMs": {
+      "treatmentLower": 3,
+      "tie": 0,
+      "treatmentHigher": 3
+    },
+    "writesAboveLargestContext": {
+      "treatmentLower": 2,
+      "tie": 4,
+      "treatmentHigher": 0
+    },
+    "initialRead": {
+      "treatmentLower": 0,
+      "tie": 6,
+      "treatmentHigher": 0
+    },
+    "initialWrite": {
+      "treatmentLower": 1,
+      "tie": 5,
+      "treatmentHigher": 0
+    }
+  },
+  "runs": [
+    {
+      "runId": "clean-r1-affinity-openai-pagination-r1-baseline",
+      "requestIds": ["00025", "00026", "00027", "00028", "00029", "00030", "00031", "00032", "00033"],
+      "input": 65317,
+      "fresh": 27,
+      "read": 54708,
+      "write": 10582,
+      "output": 3368,
+      "nanoUsd": 3556530,
+      "componentNanoUsd": {
+        "fresh": 2700,
+        "read": 547080,
+        "write": 1322750,
+        "output": 1684000
+      },
+      "httpMs": 50332.0,
+      "durationsMs": [2376.0, 2112.0, 11053.0, 5191.0, 1584.0, 3589.0, 9078.0, 4036.0, 11313.0],
+      "largestContext": 10582,
+      "zeroReadContinuations": [],
+      "terminalStatuses": [
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed"
+      ],
+      "initialBodySha256ExcludingKey": "afa6b867e8d9f1b60574af4988f698dd92b13086d5621f7f54fe50ecf38ce7d0",
+      "initialRead": 0,
+      "initialWrite": 5379,
+      "cacheKey": "conv_adc06de0-e619-4f9f-8e88-b92b511b8e56",
+      "task": "pagination",
+      "rep": 1,
+      "arm": "baseline",
+      "qualityPass": true,
+      "grade": {
+        "passed": 14,
+        "total": 14,
+        "pass": true,
+        "checks": [
+          {
+            "label": "module-export",
+            "pass": true
+          },
+          {
+            "label": "falsy-cursors-empty-pages-order",
+            "pass": true
+          },
+          {
+            "label": "typed-cursors-distinct",
+            "pass": true
+          },
+          {
+            "label": "cycle-before-refetch",
+            "pass": true
+          },
+          {
+            "label": "max-pages-before-extra-fetch",
+            "pass": true
+          },
+          {
+            "label": "invalid-options-no-fetch",
+            "pass": true
+          },
+          {
+            "label": "malformed-pages",
+            "pass": true
+          },
+          {
+            "label": "abort-before-fetch",
+            "pass": true
+          },
+          {
+            "label": "abort-after-fetch",
+            "pass": true
+          },
+          {
+            "label": "does-not-mutate",
+            "pass": true
+          },
+          {
+            "label": "default-page-limit-is-100",
+            "pass": true
+          },
+          {
+            "label": "null-abort-reason",
+            "pass": true
+          },
+          {
+            "label": "cli-valid",
+            "pass": true
+          },
+          {
+            "label": "cli-error-clean-stdout",
+            "pass": true
+          }
+        ]
+      },
+      "agentSkillRead": true,
+      "agentPublicTestSuccess": true,
+      "requestedUnsandboxedCalls": 0,
+      "childElapsedMs": 52036,
+      "requests": 9,
+      "usd": 0.00355653,
+      "writesAboveLargestContext": 0,
+      "medianHttpMs": 4036.0
+    },
+    {
+      "runId": "clean-r1-affinity-openai-pagination-r1-affinity",
+      "requestIds": ["00034", "00035", "00036", "00037", "00038", "00039", "00040", "00041", "00042", "00043"],
+      "input": 83467,
+      "fresh": 30,
+      "read": 72068,
+      "write": 11369,
+      "output": 4585,
+      "nanoUsd": 4437305,
+      "componentNanoUsd": {
+        "fresh": 3000,
+        "read": 720680,
+        "write": 1421125,
+        "output": 2292500
+      },
+      "httpMs": 62086.0,
+      "durationsMs": [3019.0, 2133.0, 17254.0, 3899.0, 5088.0, 5649.0, 4805.0, 10782.0, 6206.0, 3251.0],
+      "largestContext": 11369,
+      "zeroReadContinuations": [],
+      "terminalStatuses": [
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed"
+      ],
+      "initialBodySha256ExcludingKey": "afa6b867e8d9f1b60574af4988f698dd92b13086d5621f7f54fe50ecf38ce7d0",
+      "initialRead": 0,
+      "initialWrite": 5379,
+      "cacheKey": "conv_2dcf3c58-394a-4d75-bcd9-117cd556b9e4",
+      "task": "pagination",
+      "rep": 1,
+      "arm": "affinity",
+      "qualityPass": true,
+      "grade": {
+        "passed": 14,
+        "total": 14,
+        "pass": true,
+        "checks": [
+          {
+            "label": "module-export",
+            "pass": true
+          },
+          {
+            "label": "falsy-cursors-empty-pages-order",
+            "pass": true
+          },
+          {
+            "label": "typed-cursors-distinct",
+            "pass": true
+          },
+          {
+            "label": "cycle-before-refetch",
+            "pass": true
+          },
+          {
+            "label": "max-pages-before-extra-fetch",
+            "pass": true
+          },
+          {
+            "label": "invalid-options-no-fetch",
+            "pass": true
+          },
+          {
+            "label": "malformed-pages",
+            "pass": true
+          },
+          {
+            "label": "abort-before-fetch",
+            "pass": true
+          },
+          {
+            "label": "abort-after-fetch",
+            "pass": true
+          },
+          {
+            "label": "does-not-mutate",
+            "pass": true
+          },
+          {
+            "label": "default-page-limit-is-100",
+            "pass": true
+          },
+          {
+            "label": "null-abort-reason",
+            "pass": true
+          },
+          {
+            "label": "cli-valid",
+            "pass": true
+          },
+          {
+            "label": "cli-error-clean-stdout",
+            "pass": true
+          }
+        ]
+      },
+      "agentSkillRead": true,
+      "agentPublicTestSuccess": true,
+      "requestedUnsandboxedCalls": 0,
+      "childElapsedMs": 63961,
+      "requests": 10,
+      "usd": 0.004437305,
+      "writesAboveLargestContext": 0,
+      "medianHttpMs": 4946.5
+    },
+    {
+      "runId": "clean-r1-affinity-openai-classifier-r1-affinity",
+      "requestIds": [
+        "00044",
+        "00045",
+        "00046",
+        "00047",
+        "00048",
+        "00049",
+        "00050",
+        "00051",
+        "00052",
+        "00053",
+        "00054",
+        "00055"
+      ],
+      "input": 109063,
+      "fresh": 36,
+      "read": 95617,
+      "write": 13410,
+      "output": 5558,
+      "nanoUsd": 5415020,
+      "componentNanoUsd": {
+        "fresh": 3600,
+        "read": 956170,
+        "write": 1676250,
+        "output": 2779000
+      },
+      "httpMs": 71777.0,
+      "durationsMs": [
+        1941.0, 1596.0, 10787.0, 9687.0, 7081.0, 5359.0, 10342.0, 2727.0, 4005.0, 10296.0, 5509.0, 2447.0
+      ],
+      "largestContext": 13410,
+      "zeroReadContinuations": [],
+      "terminalStatuses": [
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed"
+      ],
+      "initialBodySha256ExcludingKey": "ff96c1af648fa631adbfff30b3bbde0023c94cbd635d4eb158a754e2a63fcf7b",
+      "initialRead": 0,
+      "initialWrite": 5552,
+      "cacheKey": "conv_40b6a014-3e28-4424-8490-043468178609",
+      "task": "classifier",
+      "rep": 1,
+      "arm": "affinity",
+      "qualityPass": false,
+      "grade": {
+        "passed": 25,
+        "total": 26,
+        "pass": false,
+        "checks": [
+          {
+            "label": "module-exports",
+            "pass": true
+          },
+          {
+            "label": "http-402",
+            "pass": true
+          },
+          {
+            "label": "http-401",
+            "pass": true
+          },
+          {
+            "label": "http-403",
+            "pass": true
+          },
+          {
+            "label": "http-429",
+            "pass": true
+          },
+          {
+            "label": "http-408",
+            "pass": true
+          },
+          {
+            "label": "http-409",
+            "pass": true
+          },
+          {
+            "label": "http-500",
+            "pass": true
+          },
+          {
+            "label": "http-599",
+            "pass": true
+          },
+          {
+            "label": "http-400",
+            "pass": true
+          },
+          {
+            "label": "http-404",
+            "pass": true
+          },
+          {
+            "label": "http-413",
+            "pass": true
+          },
+          {
+            "label": "http-422",
+            "pass": true
+          },
+          {
+            "label": "nested-quota-codes",
+            "pass": true
+          },
+          {
+            "label": "status-shapes-priority",
+            "pass": true
+          },
+          {
+            "label": "numeric-prefix-quota",
+            "pass": false,
+            "error": "Expected values to be strictly deep-equal:\n+ actual - expected\n\n  {\n+   kind: 'unknown',\n-   kind: 'quota',\n    retryable: false\n  }\n"
+          },
+          {
+            "label": "vague-message-and-unknown",
+            "pass": true
+          },
+          {
+            "label": "network-codes",
+            "pass": true
+          },
+          {
+            "label": "header-seconds-ms-precedence",
+            "pass": true
+          },
+          {
+            "label": "header-date-and-invalid",
+            "pass": true
+          },
+          {
+            "label": "long-delay-refuses",
+            "pass": true
+          },
+          {
+            "label": "retry-success-and-delay",
+            "pass": true
+          },
+          {
+            "label": "exhaustion-exact-identity",
+            "pass": true
+          },
+          {
+            "label": "quota-no-retry",
+            "pass": true
+          },
+          {
+            "label": "retry-validation",
+            "pass": true
+          },
+          {
+            "label": "abort-boundaries",
+            "pass": true
+          }
+        ]
+      },
+      "agentSkillRead": true,
+      "agentPublicTestSuccess": true,
+      "requestedUnsandboxedCalls": 0,
+      "childElapsedMs": 73579,
+      "requests": 12,
+      "usd": 0.00541502,
+      "writesAboveLargestContext": 0,
+      "medianHttpMs": 5434.0
+    },
+    {
+      "runId": "clean-r1-affinity-openai-classifier-r1-baseline",
+      "requestIds": ["00056", "00057", "00058", "00059", "00060", "00061", "00062", "00063", "00064"],
+      "input": 71597,
+      "fresh": 27,
+      "read": 60977,
+      "write": 10593,
+      "output": 4530,
+      "nanoUsd": 4201595,
+      "componentNanoUsd": {
+        "fresh": 2700,
+        "read": 609770,
+        "write": 1324125,
+        "output": 2265000
+      },
+      "httpMs": 48774.0,
+      "durationsMs": [1749.0, 2682.0, 1643.0, 10481.0, 8620.0, 5443.0, 4148.0, 5423.0, 8585.0],
+      "largestContext": 10593,
+      "zeroReadContinuations": [],
+      "terminalStatuses": [
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed"
+      ],
+      "initialBodySha256ExcludingKey": "ff96c1af648fa631adbfff30b3bbde0023c94cbd635d4eb158a754e2a63fcf7b",
+      "initialRead": 0,
+      "initialWrite": 5552,
+      "cacheKey": "conv_88c7f064-c5b2-475f-af19-f8251d696ed9",
+      "task": "classifier",
+      "rep": 1,
+      "arm": "baseline",
+      "qualityPass": false,
+      "grade": {
+        "passed": 23,
+        "total": 26,
+        "pass": false,
+        "checks": [
+          {
+            "label": "module-exports",
+            "pass": true
+          },
+          {
+            "label": "http-402",
+            "pass": true
+          },
+          {
+            "label": "http-401",
+            "pass": true
+          },
+          {
+            "label": "http-403",
+            "pass": true
+          },
+          {
+            "label": "http-429",
+            "pass": true
+          },
+          {
+            "label": "http-408",
+            "pass": true
+          },
+          {
+            "label": "http-409",
+            "pass": true
+          },
+          {
+            "label": "http-500",
+            "pass": true
+          },
+          {
+            "label": "http-599",
+            "pass": true
+          },
+          {
+            "label": "http-400",
+            "pass": true
+          },
+          {
+            "label": "http-404",
+            "pass": true
+          },
+          {
+            "label": "http-413",
+            "pass": true
+          },
+          {
+            "label": "http-422",
+            "pass": true
+          },
+          {
+            "label": "nested-quota-codes",
+            "pass": true
+          },
+          {
+            "label": "status-shapes-priority",
+            "pass": false,
+            "error": "Expected values to be strictly equal:\n+ actual - expected\n\n+ 'unknown'\n- 'rate_limit'\n"
+          },
+          {
+            "label": "numeric-prefix-quota",
+            "pass": false,
+            "error": "Expected values to be strictly deep-equal:\n+ actual - expected\n\n  {\n+   kind: 'unknown',\n-   kind: 'quota',\n    retryable: false\n  }\n"
+          },
+          {
+            "label": "vague-message-and-unknown",
+            "pass": true
+          },
+          {
+            "label": "network-codes",
+            "pass": true
+          },
+          {
+            "label": "header-seconds-ms-precedence",
+            "pass": true
+          },
+          {
+            "label": "header-date-and-invalid",
+            "pass": false,
+            "error": "The expression evaluated to a falsy value:\n\n  assert.ok(\n"
+          },
+          {
+            "label": "long-delay-refuses",
+            "pass": true
+          },
+          {
+            "label": "retry-success-and-delay",
+            "pass": true
+          },
+          {
+            "label": "exhaustion-exact-identity",
+            "pass": true
+          },
+          {
+            "label": "quota-no-retry",
+            "pass": true
+          },
+          {
+            "label": "retry-validation",
+            "pass": true
+          },
+          {
+            "label": "abort-boundaries",
+            "pass": true
+          }
+        ]
+      },
+      "agentSkillRead": true,
+      "agentPublicTestSuccess": true,
+      "requestedUnsandboxedCalls": 0,
+      "childElapsedMs": 50332,
+      "requests": 9,
+      "usd": 0.004201595,
+      "writesAboveLargestContext": 0,
+      "medianHttpMs": 5423.0
+    },
+    {
+      "runId": "clean-r1-affinity-openai-jsonl-r1-baseline",
+      "requestIds": ["00065", "00066", "00067", "00068", "00069", "00070", "00071", "00072", "00073", "00074", "00075"],
+      "input": 88299,
+      "fresh": 33,
+      "read": 76629,
+      "write": 11637,
+      "output": 3706,
+      "nanoUsd": 4077215,
+      "componentNanoUsd": {
+        "fresh": 3300,
+        "read": 766290,
+        "write": 1454625,
+        "output": 1853000
+      },
+      "httpMs": 50051.0,
+      "durationsMs": [2150.0, 1130.0, 10560.0, 5589.0, 4319.0, 3459.0, 5642.0, 5172.0, 3065.0, 3664.0, 5301.0],
+      "largestContext": 11637,
+      "zeroReadContinuations": [],
+      "terminalStatuses": [
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed"
+      ],
+      "initialBodySha256ExcludingKey": "f5b53bc7cd2b938f63f19a80e33ea77103f0fd39a273f55ecec6d3fba38aa0dd",
+      "initialRead": 0,
+      "initialWrite": 5435,
+      "cacheKey": "conv_86324a3d-edc7-4391-8b2a-4c5b222b1b42",
+      "task": "jsonl",
+      "rep": 1,
+      "arm": "baseline",
+      "qualityPass": true,
+      "grade": {
+        "passed": 13,
+        "total": 13,
+        "pass": true,
+        "checks": [
+          {
+            "label": "module-export",
+            "pass": true
+          },
+          {
+            "label": "empty-input",
+            "pass": true
+          },
+          {
+            "label": "cross-account-corrections",
+            "pass": true
+          },
+          {
+            "label": "tie-last-wins",
+            "pass": true
+          },
+          {
+            "label": "invalid-schema-lines",
+            "pass": true
+          },
+          {
+            "label": "code-unit-sort-and-spaces",
+            "pass": true
+          },
+          {
+            "label": "async-stream",
+            "pass": true
+          },
+          {
+            "label": "source-iterator-failure",
+            "pass": true
+          },
+          {
+            "label": "overflow-rejects",
+            "pass": true
+          },
+          {
+            "label": "cli-files-and-invalid-exit",
+            "pass": true
+          },
+          {
+            "label": "cli-stdin",
+            "pass": true
+          },
+          {
+            "label": "cli-invalid-args-and-io",
+            "pass": true
+          },
+          {
+            "label": "cli-uses-streams",
+            "pass": true
+          }
+        ]
+      },
+      "agentSkillRead": true,
+      "agentPublicTestSuccess": true,
+      "requestedUnsandboxedCalls": 0,
+      "childElapsedMs": 51884,
+      "requests": 11,
+      "usd": 0.004077215,
+      "writesAboveLargestContext": 0,
+      "medianHttpMs": 4319.0
+    },
+    {
+      "runId": "clean-r1-affinity-openai-jsonl-r1-affinity",
+      "requestIds": ["00076", "00077", "00078", "00079", "00080", "00081", "00082", "00083", "00084", "00085"],
+      "input": 73116,
+      "fresh": 30,
+      "read": 63780,
+      "write": 9306,
+      "output": 3351,
+      "nanoUsd": 3479550,
+      "componentNanoUsd": {
+        "fresh": 3000,
+        "read": 637800,
+        "write": 1163250,
+        "output": 1675500
+      },
+      "httpMs": 43567.0,
+      "durationsMs": [1563.0, 1601.0, 9350.0, 5054.0, 2198.0, 3925.0, 5044.0, 4731.0, 3800.0, 6301.0],
+      "largestContext": 9306,
+      "zeroReadContinuations": [],
+      "terminalStatuses": [
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed"
+      ],
+      "initialBodySha256ExcludingKey": "f5b53bc7cd2b938f63f19a80e33ea77103f0fd39a273f55ecec6d3fba38aa0dd",
+      "initialRead": 0,
+      "initialWrite": 5435,
+      "cacheKey": "conv_f4c24d1e-5ce5-42b7-bd61-4b38baf9189e",
+      "task": "jsonl",
+      "rep": 1,
+      "arm": "affinity",
+      "qualityPass": true,
+      "grade": {
+        "passed": 13,
+        "total": 13,
+        "pass": true,
+        "checks": [
+          {
+            "label": "module-export",
+            "pass": true
+          },
+          {
+            "label": "empty-input",
+            "pass": true
+          },
+          {
+            "label": "cross-account-corrections",
+            "pass": true
+          },
+          {
+            "label": "tie-last-wins",
+            "pass": true
+          },
+          {
+            "label": "invalid-schema-lines",
+            "pass": true
+          },
+          {
+            "label": "code-unit-sort-and-spaces",
+            "pass": true
+          },
+          {
+            "label": "async-stream",
+            "pass": true
+          },
+          {
+            "label": "source-iterator-failure",
+            "pass": true
+          },
+          {
+            "label": "overflow-rejects",
+            "pass": true
+          },
+          {
+            "label": "cli-files-and-invalid-exit",
+            "pass": true
+          },
+          {
+            "label": "cli-stdin",
+            "pass": true
+          },
+          {
+            "label": "cli-invalid-args-and-io",
+            "pass": true
+          },
+          {
+            "label": "cli-uses-streams",
+            "pass": true
+          }
+        ]
+      },
+      "agentSkillRead": true,
+      "agentPublicTestSuccess": true,
+      "requestedUnsandboxedCalls": 0,
+      "childElapsedMs": 45036,
+      "requests": 10,
+      "usd": 0.00347955,
+      "writesAboveLargestContext": 0,
+      "medianHttpMs": 4328.0
+    },
+    {
+      "runId": "clean-r1-affinity-openai-pagination-r2-affinity",
+      "requestIds": [
+        "00086",
+        "00087",
+        "00088",
+        "00089",
+        "00090",
+        "00091",
+        "00092",
+        "00093",
+        "00094",
+        "00095",
+        "00096",
+        "00097"
+      ],
+      "input": 107908,
+      "fresh": 36,
+      "read": 94989,
+      "write": 12883,
+      "output": 4985,
+      "nanoUsd": 5056365,
+      "componentNanoUsd": {
+        "fresh": 3600,
+        "read": 949890,
+        "write": 1610375,
+        "output": 2492500
+      },
+      "httpMs": 61596.0,
+      "durationsMs": [1821.0, 1624.0, 11081.0, 4605.0, 3702.0, 4470.0, 7631.0, 9624.0, 4040.0, 6587.0, 4512.0, 1899.0],
+      "largestContext": 12883,
+      "zeroReadContinuations": [],
+      "terminalStatuses": [
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed"
+      ],
+      "initialBodySha256ExcludingKey": "afa6b867e8d9f1b60574af4988f698dd92b13086d5621f7f54fe50ecf38ce7d0",
+      "initialRead": 0,
+      "initialWrite": 5379,
+      "cacheKey": "conv_5c934842-bbb1-4b00-abb7-e166d3c38324",
+      "task": "pagination",
+      "rep": 2,
+      "arm": "affinity",
+      "qualityPass": true,
+      "grade": {
+        "passed": 14,
+        "total": 14,
+        "pass": true,
+        "checks": [
+          {
+            "label": "module-export",
+            "pass": true
+          },
+          {
+            "label": "falsy-cursors-empty-pages-order",
+            "pass": true
+          },
+          {
+            "label": "typed-cursors-distinct",
+            "pass": true
+          },
+          {
+            "label": "cycle-before-refetch",
+            "pass": true
+          },
+          {
+            "label": "max-pages-before-extra-fetch",
+            "pass": true
+          },
+          {
+            "label": "invalid-options-no-fetch",
+            "pass": true
+          },
+          {
+            "label": "malformed-pages",
+            "pass": true
+          },
+          {
+            "label": "abort-before-fetch",
+            "pass": true
+          },
+          {
+            "label": "abort-after-fetch",
+            "pass": true
+          },
+          {
+            "label": "does-not-mutate",
+            "pass": true
+          },
+          {
+            "label": "default-page-limit-is-100",
+            "pass": true
+          },
+          {
+            "label": "null-abort-reason",
+            "pass": true
+          },
+          {
+            "label": "cli-valid",
+            "pass": true
+          },
+          {
+            "label": "cli-error-clean-stdout",
+            "pass": true
+          }
+        ]
+      },
+      "agentSkillRead": true,
+      "agentPublicTestSuccess": true,
+      "requestedUnsandboxedCalls": 0,
+      "childElapsedMs": 63714,
+      "requests": 12,
+      "usd": 0.005056365,
+      "writesAboveLargestContext": 0,
+      "medianHttpMs": 4491.0
+    },
+    {
+      "runId": "clean-r1-affinity-openai-pagination-r2-baseline",
+      "requestIds": ["00098", "00099", "00100", "00101", "00102", "00103", "00104", "00105"],
+      "input": 63083,
+      "fresh": 24,
+      "read": 51480,
+      "write": 11579,
+      "output": 3336,
+      "nanoUsd": 3632575,
+      "componentNanoUsd": {
+        "fresh": 2400,
+        "read": 514800,
+        "write": 1447375,
+        "output": 1668000
+      },
+      "httpMs": 43045.0,
+      "durationsMs": [2900.0, 1794.0, 14056.0, 5865.0, 6465.0, 4171.0, 2561.0, 5233.0],
+      "largestContext": 11579,
+      "zeroReadContinuations": [],
+      "terminalStatuses": [
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed"
+      ],
+      "initialBodySha256ExcludingKey": "afa6b867e8d9f1b60574af4988f698dd92b13086d5621f7f54fe50ecf38ce7d0",
+      "initialRead": 0,
+      "initialWrite": 5379,
+      "cacheKey": "conv_b17b1dae-b8a7-45b8-87f1-875e3da4921e",
+      "task": "pagination",
+      "rep": 2,
+      "arm": "baseline",
+      "qualityPass": true,
+      "grade": {
+        "passed": 14,
+        "total": 14,
+        "pass": true,
+        "checks": [
+          {
+            "label": "module-export",
+            "pass": true
+          },
+          {
+            "label": "falsy-cursors-empty-pages-order",
+            "pass": true
+          },
+          {
+            "label": "typed-cursors-distinct",
+            "pass": true
+          },
+          {
+            "label": "cycle-before-refetch",
+            "pass": true
+          },
+          {
+            "label": "max-pages-before-extra-fetch",
+            "pass": true
+          },
+          {
+            "label": "invalid-options-no-fetch",
+            "pass": true
+          },
+          {
+            "label": "malformed-pages",
+            "pass": true
+          },
+          {
+            "label": "abort-before-fetch",
+            "pass": true
+          },
+          {
+            "label": "abort-after-fetch",
+            "pass": true
+          },
+          {
+            "label": "does-not-mutate",
+            "pass": true
+          },
+          {
+            "label": "default-page-limit-is-100",
+            "pass": true
+          },
+          {
+            "label": "null-abort-reason",
+            "pass": true
+          },
+          {
+            "label": "cli-valid",
+            "pass": true
+          },
+          {
+            "label": "cli-error-clean-stdout",
+            "pass": true
+          }
+        ]
+      },
+      "agentSkillRead": true,
+      "agentPublicTestSuccess": true,
+      "requestedUnsandboxedCalls": 0,
+      "childElapsedMs": 44470,
+      "requests": 8,
+      "usd": 0.003632575,
+      "writesAboveLargestContext": 0,
+      "medianHttpMs": 4702.0
+    },
+    {
+      "runId": "clean-r1-affinity-openai-classifier-r2-baseline",
+      "requestIds": [
+        "00106",
+        "00107",
+        "00108",
+        "00109",
+        "00110",
+        "00111",
+        "00112",
+        "00113",
+        "00114",
+        "00115",
+        "00116",
+        "00117"
+      ],
+      "input": 117954,
+      "fresh": 36,
+      "read": 97284,
+      "write": 20634,
+      "output": 6308,
+      "nanoUsd": 6709690,
+      "componentNanoUsd": {
+        "fresh": 3600,
+        "read": 972840,
+        "write": 2579250,
+        "output": 3154000
+      },
+      "httpMs": 73031.0,
+      "durationsMs": [1828.0, 2412.0, 8138.0, 8901.0, 3567.0, 5170.0, 4748.0, 12398.0, 8239.0, 10740.0, 4800.0, 2090.0],
+      "largestContext": 15062,
+      "zeroReadContinuations": ["00107"],
+      "terminalStatuses": [
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed"
+      ],
+      "initialBodySha256ExcludingKey": "ff96c1af648fa631adbfff30b3bbde0023c94cbd635d4eb158a754e2a63fcf7b",
+      "initialRead": 0,
+      "initialWrite": 5572,
+      "cacheKey": "conv_b59fb016-1784-4b58-878b-a930add0fbde",
+      "task": "classifier",
+      "rep": 2,
+      "arm": "baseline",
+      "qualityPass": true,
+      "grade": {
+        "passed": 26,
+        "total": 26,
+        "pass": true,
+        "checks": [
+          {
+            "label": "module-exports",
+            "pass": true
+          },
+          {
+            "label": "http-402",
+            "pass": true
+          },
+          {
+            "label": "http-401",
+            "pass": true
+          },
+          {
+            "label": "http-403",
+            "pass": true
+          },
+          {
+            "label": "http-429",
+            "pass": true
+          },
+          {
+            "label": "http-408",
+            "pass": true
+          },
+          {
+            "label": "http-409",
+            "pass": true
+          },
+          {
+            "label": "http-500",
+            "pass": true
+          },
+          {
+            "label": "http-599",
+            "pass": true
+          },
+          {
+            "label": "http-400",
+            "pass": true
+          },
+          {
+            "label": "http-404",
+            "pass": true
+          },
+          {
+            "label": "http-413",
+            "pass": true
+          },
+          {
+            "label": "http-422",
+            "pass": true
+          },
+          {
+            "label": "nested-quota-codes",
+            "pass": true
+          },
+          {
+            "label": "status-shapes-priority",
+            "pass": true
+          },
+          {
+            "label": "numeric-prefix-quota",
+            "pass": true
+          },
+          {
+            "label": "vague-message-and-unknown",
+            "pass": true
+          },
+          {
+            "label": "network-codes",
+            "pass": true
+          },
+          {
+            "label": "header-seconds-ms-precedence",
+            "pass": true
+          },
+          {
+            "label": "header-date-and-invalid",
+            "pass": true
+          },
+          {
+            "label": "long-delay-refuses",
+            "pass": true
+          },
+          {
+            "label": "retry-success-and-delay",
+            "pass": true
+          },
+          {
+            "label": "exhaustion-exact-identity",
+            "pass": true
+          },
+          {
+            "label": "quota-no-retry",
+            "pass": true
+          },
+          {
+            "label": "retry-validation",
+            "pass": true
+          },
+          {
+            "label": "abort-boundaries",
+            "pass": true
+          }
+        ]
+      },
+      "agentSkillRead": true,
+      "agentPublicTestSuccess": true,
+      "requestedUnsandboxedCalls": 0,
+      "childElapsedMs": 75010,
+      "requests": 12,
+      "usd": 0.00670969,
+      "writesAboveLargestContext": 5572,
+      "medianHttpMs": 4985.0
+    },
+    {
+      "runId": "clean-r1-affinity-openai-classifier-r2-affinity",
+      "requestIds": ["00118", "00119", "00120", "00121", "00122", "00123", "00124", "00125", "00126", "00127", "00128"],
+      "input": 99004,
+      "fresh": 33,
+      "read": 86345,
+      "write": 12626,
+      "output": 5709,
+      "nanoUsd": 5299500,
+      "componentNanoUsd": {
+        "fresh": 3300,
+        "read": 863450,
+        "write": 1578250,
+        "output": 2854500
+      },
+      "httpMs": 67065.0,
+      "durationsMs": [2591.0, 3267.0, 8254.0, 9509.0, 5247.0, 5734.0, 10354.0, 9487.0, 4842.0, 4908.0, 2872.0],
+      "largestContext": 12626,
+      "zeroReadContinuations": [],
+      "terminalStatuses": [
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed"
+      ],
+      "initialBodySha256ExcludingKey": "ff96c1af648fa631adbfff30b3bbde0023c94cbd635d4eb158a754e2a63fcf7b",
+      "initialRead": 0,
+      "initialWrite": 5552,
+      "cacheKey": "conv_28b66aac-54de-423e-982c-df08882389e6",
+      "task": "classifier",
+      "rep": 2,
+      "arm": "affinity",
+      "qualityPass": false,
+      "grade": {
+        "passed": 24,
+        "total": 26,
+        "pass": false,
+        "checks": [
+          {
+            "label": "module-exports",
+            "pass": true
+          },
+          {
+            "label": "http-402",
+            "pass": true
+          },
+          {
+            "label": "http-401",
+            "pass": true
+          },
+          {
+            "label": "http-403",
+            "pass": true
+          },
+          {
+            "label": "http-429",
+            "pass": true
+          },
+          {
+            "label": "http-408",
+            "pass": true
+          },
+          {
+            "label": "http-409",
+            "pass": true
+          },
+          {
+            "label": "http-500",
+            "pass": true
+          },
+          {
+            "label": "http-599",
+            "pass": true
+          },
+          {
+            "label": "http-400",
+            "pass": true
+          },
+          {
+            "label": "http-404",
+            "pass": true
+          },
+          {
+            "label": "http-413",
+            "pass": true
+          },
+          {
+            "label": "http-422",
+            "pass": true
+          },
+          {
+            "label": "nested-quota-codes",
+            "pass": true
+          },
+          {
+            "label": "status-shapes-priority",
+            "pass": false,
+            "error": "Expected values to be strictly equal:\n+ actual - expected\n\n+ 'unknown'\n- 'rate_limit'\n"
+          },
+          {
+            "label": "numeric-prefix-quota",
+            "pass": false,
+            "error": "Expected values to be strictly deep-equal:\n+ actual - expected\n\n  {\n+   kind: 'unknown',\n-   kind: 'quota',\n    retryable: false\n  }\n"
+          },
+          {
+            "label": "vague-message-and-unknown",
+            "pass": true
+          },
+          {
+            "label": "network-codes",
+            "pass": true
+          },
+          {
+            "label": "header-seconds-ms-precedence",
+            "pass": true
+          },
+          {
+            "label": "header-date-and-invalid",
+            "pass": true
+          },
+          {
+            "label": "long-delay-refuses",
+            "pass": true
+          },
+          {
+            "label": "retry-success-and-delay",
+            "pass": true
+          },
+          {
+            "label": "exhaustion-exact-identity",
+            "pass": true
+          },
+          {
+            "label": "quota-no-retry",
+            "pass": true
+          },
+          {
+            "label": "retry-validation",
+            "pass": true
+          },
+          {
+            "label": "abort-boundaries",
+            "pass": true
+          }
+        ]
+      },
+      "agentSkillRead": true,
+      "agentPublicTestSuccess": true,
+      "requestedUnsandboxedCalls": 0,
+      "childElapsedMs": 68970,
+      "requests": 11,
+      "usd": 0.0052995,
+      "writesAboveLargestContext": 0,
+      "medianHttpMs": 5247.0
+    },
+    {
+      "runId": "clean-r1-affinity-openai-jsonl-r2-affinity",
+      "requestIds": [
+        "00129",
+        "00130",
+        "00131",
+        "00132",
+        "00133",
+        "00134",
+        "00135",
+        "00136",
+        "00137",
+        "00138",
+        "00139",
+        "00140"
+      ],
+      "input": 93146,
+      "fresh": 36,
+      "read": 82288,
+      "write": 10822,
+      "output": 3268,
+      "nanoUsd": 3813230,
+      "componentNanoUsd": {
+        "fresh": 3600,
+        "read": 822880,
+        "write": 1352750,
+        "output": 1634000
+      },
+      "httpMs": 48448.0,
+      "durationsMs": [1429.0, 1539.0, 8767.0, 5281.0, 1509.0, 3283.0, 5654.0, 3656.0, 5116.0, 2892.0, 3768.0, 5554.0],
+      "largestContext": 10822,
+      "zeroReadContinuations": [],
+      "terminalStatuses": [
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed"
+      ],
+      "initialBodySha256ExcludingKey": "f5b53bc7cd2b938f63f19a80e33ea77103f0fd39a273f55ecec6d3fba38aa0dd",
+      "initialRead": 0,
+      "initialWrite": 5435,
+      "cacheKey": "conv_10f6c871-465c-4551-836d-0fd480160d5f",
+      "task": "jsonl",
+      "rep": 2,
+      "arm": "affinity",
+      "qualityPass": true,
+      "grade": {
+        "passed": 13,
+        "total": 13,
+        "pass": true,
+        "checks": [
+          {
+            "label": "module-export",
+            "pass": true
+          },
+          {
+            "label": "empty-input",
+            "pass": true
+          },
+          {
+            "label": "cross-account-corrections",
+            "pass": true
+          },
+          {
+            "label": "tie-last-wins",
+            "pass": true
+          },
+          {
+            "label": "invalid-schema-lines",
+            "pass": true
+          },
+          {
+            "label": "code-unit-sort-and-spaces",
+            "pass": true
+          },
+          {
+            "label": "async-stream",
+            "pass": true
+          },
+          {
+            "label": "source-iterator-failure",
+            "pass": true
+          },
+          {
+            "label": "overflow-rejects",
+            "pass": true
+          },
+          {
+            "label": "cli-files-and-invalid-exit",
+            "pass": true
+          },
+          {
+            "label": "cli-stdin",
+            "pass": true
+          },
+          {
+            "label": "cli-invalid-args-and-io",
+            "pass": true
+          },
+          {
+            "label": "cli-uses-streams",
+            "pass": true
+          }
+        ]
+      },
+      "agentSkillRead": true,
+      "agentPublicTestSuccess": true,
+      "requestedUnsandboxedCalls": 0,
+      "childElapsedMs": 50284,
+      "requests": 12,
+      "usd": 0.00381323,
+      "writesAboveLargestContext": 0,
+      "medianHttpMs": 3712.0
+    },
+    {
+      "runId": "clean-r1-affinity-openai-jsonl-r2-baseline",
+      "requestIds": [
+        "00141",
+        "00142",
+        "00143",
+        "00144",
+        "00145",
+        "00146",
+        "00147",
+        "00148",
+        "00149",
+        "00150",
+        "00151",
+        "00152",
+        "00153",
+        "00154"
+      ],
+      "input": 113397,
+      "fresh": 42,
+      "read": 91689,
+      "write": 21666,
+      "output": 4152,
+      "nanoUsd": 5705340,
+      "componentNanoUsd": {
+        "fresh": 4200,
+        "read": 916890,
+        "write": 2708250,
+        "output": 2076000
+      },
+      "httpMs": 62738.0,
+      "durationsMs": [
+        1770.0, 1966.0, 9131.0, 5632.0, 2413.0, 4155.0, 3467.0, 6625.0, 3890.0, 4954.0, 6297.0, 4035.0, 2386.0, 6017.0
+      ],
+      "largestContext": 11700,
+      "zeroReadContinuations": ["00152"],
+      "terminalStatuses": [
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed"
+      ],
+      "initialBodySha256ExcludingKey": "f5b53bc7cd2b938f63f19a80e33ea77103f0fd39a273f55ecec6d3fba38aa0dd",
+      "initialRead": 0,
+      "initialWrite": 5435,
+      "cacheKey": "conv_01555f2a-d515-4da4-a3d2-a460e59c54cb",
+      "task": "jsonl",
+      "rep": 2,
+      "arm": "baseline",
+      "qualityPass": true,
+      "grade": {
+        "passed": 13,
+        "total": 13,
+        "pass": true,
+        "checks": [
+          {
+            "label": "module-export",
+            "pass": true
+          },
+          {
+            "label": "empty-input",
+            "pass": true
+          },
+          {
+            "label": "cross-account-corrections",
+            "pass": true
+          },
+          {
+            "label": "tie-last-wins",
+            "pass": true
+          },
+          {
+            "label": "invalid-schema-lines",
+            "pass": true
+          },
+          {
+            "label": "code-unit-sort-and-spaces",
+            "pass": true
+          },
+          {
+            "label": "async-stream",
+            "pass": true
+          },
+          {
+            "label": "source-iterator-failure",
+            "pass": true
+          },
+          {
+            "label": "overflow-rejects",
+            "pass": true
+          },
+          {
+            "label": "cli-files-and-invalid-exit",
+            "pass": true
+          },
+          {
+            "label": "cli-stdin",
+            "pass": true
+          },
+          {
+            "label": "cli-invalid-args-and-io",
+            "pass": true
+          },
+          {
+            "label": "cli-uses-streams",
+            "pass": true
+          }
+        ]
+      },
+      "agentSkillRead": true,
+      "agentPublicTestSuccess": true,
+      "requestedUnsandboxedCalls": 0,
+      "childElapsedMs": 64825,
+      "requests": 14,
+      "usd": 0.00570534,
+      "writesAboveLargestContext": 9966,
+      "medianHttpMs": 4095.0
+    }
+  ],
+  "plannedRuns": 12,
+  "finalizedRuns": 12,
+  "stopped": false,
+  "notes": [
+    "All prices are native-usage standard-rate estimates, not invoices",
+    "Historical failed cohort remains in cumulative spend, excluded from clean arm comparison",
+    "HTTP sums differ from wall-clock duration; child duration excludes external grading",
+    "Writes above largest context and fresh input are derived, not native counters or proven savings",
+    "Fixed balanced order; six stochastic task pairs do not establish general equivalence"
+  ]
+}

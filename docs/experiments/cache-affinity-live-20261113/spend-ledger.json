@@ -1,24 +1,24 @@
 {
-  "status": "stopped_capability_guardrail_failure",
+  "status": "bounded_clean_cohort_complete",
   "approvedInvestigationCapUsd": 100,
   "operationalCeilingUsd": 2,
-  "physicalLiveRequests": 24,
-  "completedControlRuns": 1,
-  "completedTreatmentRuns": 1,
+  "physicalLiveRequests": 154,
+  "completedControlRuns": 7,
+  "completedTreatmentRuns": 7,
   "interruptedTreatmentRuns": 1,
   "confirmedInvoiceSpendUsd": null,
   "invoiceStatus": "Unavailable; native usage and price arithmetic independently reconciled",
-  "nativeUsageEstimatedSpendUsd": 0.009997785,
+  "nativeUsageEstimatedSpendUsd": 0.0653817,
   "uncertainExposureUsd": 0,
   "pendingRequests": 0,
   "fixturePaidSpendUsd": 0,
-  "peakReservedPlusEstimatedUsd": 0.591232985,
-  "remainingCapAtPublishedRatesUsd": 99.990002215,
+  "peakReservedPlusEstimatedUsd": 0.64689781,
+  "remainingCapAtPublishedRatesUsd": 99.9346183,
   "deniedLaunchAttemptsBeforeExplicitDisclosureApproval": 2,
   "approvalBlock": "Resolved by explicit user approval naming synthetic task/prompt/tool/output payload and api.openai.com destination",
-  "durablePhysicalLedger": "live-evidence.zip:wire-live/ledger.json",
-  "finalCoordinatorState": "terminated only after all physical requests settled; stale lock retained as stopped-coordinator-lock",
-  "noFurtherPaidWork": "Original paid cohort remains stopped. PATH repaired; no new paid cohort started.",
+  "durablePhysicalLedger": "clean-evidence.zip:wire-live/ledger.json",
+  "finalCoordinatorState": "normal completion, exclusive writer closed and all 154 requests settled",
+  "noFurtherPaidWork": "Fixed balanced cohort finished; no additional paid requests or scheduled continuation",
   "followup": {
     "status": "PATH repair and no-cost tool preflight pass",
     "additionalPaidRequests": 0,
@@ -27,5 +27,23 @@
     "securitySettingsChanged": false,
     "softwareInstalled": false,
     "exactPreflightHead": "76a92a1b1a06d84e860a3e2dfe0bc5bf67df9043"
-  }
+  },
+  "cohorts": [
+    {
+      "name": "historical-stopped",
+      "requests": 24,
+      "estimatedUsd": 0.009997785,
+      "matchedPairs": 1,
+      "interruptedTreatments": 1
+    },
+    {
+      "name": "clean-r1",
+      "requests": 130,
+      "estimatedUsd": 0.055383915,
+      "matchedPairs": 6,
+      "controlRuns": 6,
+      "treatmentRuns": 6,
+      "testedHead": "7d58e97cca77734c3595f824d54667ac19f84bcb"
+    }
+  ]
 }

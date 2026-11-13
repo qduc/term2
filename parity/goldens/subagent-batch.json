@@ -31,7 +31,7 @@
             },
             {
               "name": "read_file",
-              "schema": "a697894bf1c8d6f0"
+              "schema": "743ec429dfca7469"
             },
             {
               "name": "create_file",
@@ -47,7 +47,7 @@
             },
             {
               "name": "run_code",
-              "schema": "e7ab07b6beaa4e03"
+              "schema": "b252cb662eb572db"
             }
           ],
           "other": {
@@ -97,7 +97,7 @@
             },
             {
               "name": "read_file",
-              "schema": "a697894bf1c8d6f0"
+              "schema": "743ec429dfca7469"
             },
             {
               "name": "create_file",
@@ -113,7 +113,7 @@
             },
             {
               "name": "run_code",
-              "schema": "e7ab07b6beaa4e03"
+              "schema": "b252cb662eb572db"
             }
           ],
           "other": {
@@ -164,7 +164,7 @@
             },
             {
               "name": "read_file",
-              "schema": "602f2878dfd50cbc"
+              "schema": "19b91d5a9ab45090"
             },
             {
               "name": "grep",
@@ -260,7 +260,7 @@
             },
             {
               "name": "read_file",
-              "schema": "a697894bf1c8d6f0"
+              "schema": "743ec429dfca7469"
             },
             {
               "name": "create_file",
@@ -276,7 +276,7 @@
             },
             {
               "name": "run_code",
-              "schema": "e7ab07b6beaa4e03"
+              "schema": "b252cb662eb572db"
             }
           ],
           "other": {

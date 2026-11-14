@@ -3,6 +3,7 @@ import * as fs from 'fs/promises';
 import { resolveWorkspacePath, relaxedNumber } from '../utils.js';
 import type { ScriptedToolDefinition, FormatCommandMessage } from '../types.js';
 import { isReadPreApproved } from './read-access.js';
+import { readFileGlobPathNote } from './glob-path-hint.js';
 import type { ISettingsService } from '../../shared/service-interfaces.js';
 import type { FileReadAccessPort, NestedReadAccessPort } from '../access-port.js';
 import {
@@ -399,7 +400,12 @@ export const createReadFileToolDefinition = (
       } catch (error: any) {
         if (isScriptedToolCall(context)) {
           if (error.code === 'ENOENT') {
-            throw new Error(`File not found: ${filePath}`);
+            throw new Error(
+              `File not found: ${filePath}${readFileGlobPathNote(
+                filePath,
+                executionContext?.getCwd() || process.cwd(),
+              )}`,
+            );
           }
           if (error.code === 'EISDIR') {
             throw new Error(`Path is a directory: ${filePath}`);
@@ -417,7 +423,10 @@ export const createReadFileToolDefinition = (
           return `Error: ${error.message}`;
         }
         if (error.code === 'ENOENT') {
-          return `Error: File not found: ${filePath}`;
+          return `Error: File not found: ${filePath}${readFileGlobPathNote(
+            filePath,
+            executionContext?.getCwd() || process.cwd(),
+          )}`;
         }
         if (error.code === 'EACCES') {
           return `Error: Permission denied: ${filePath}`;

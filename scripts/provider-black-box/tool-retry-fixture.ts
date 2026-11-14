@@ -29,6 +29,8 @@ export async function runScriptedToolCalls(options: {
   files?: Readonly<Record<string, string>>;
   readBack?: readonly string[];
   calls: readonly ScriptedToolCall[];
+  /** Model id sent through the fixture provider (default `meta/muse-ember`). GPT-5 ids select the patch editing surface. */
+  model?: string;
   settings?: Record<string, unknown>;
   args?: string[];
 }): Promise<ScriptedToolRun> {
@@ -61,7 +63,7 @@ export async function runScriptedToolCalls(options: {
       `data: ${JSON.stringify({
         id: `response-${requests.length}`,
         object: 'chat.completion.chunk',
-        model: 'meta/muse-ember',
+        model: options.model ?? 'meta/muse-ember',
         choices: [{ index: 0, delta, finish_reason: next ? 'tool_calls' : 'stop' }],
       })}\n\ndata: [DONE]\n\n`,
     );
@@ -81,7 +83,7 @@ export async function runScriptedToolCalls(options: {
         join(paths.logDir, 'settings.json'),
         JSON.stringify({
           agent: {
-            modelSelection: { provider: 'openrouter', model: 'meta/muse-ember' },
+            modelSelection: { provider: 'openrouter', model: options.model ?? 'meta/muse-ember' },
             retryAttempts: 0,
             openrouter: { apiKey: 'fixture', baseUrl: `http://127.0.0.1:${address.port}/v1` },
           },

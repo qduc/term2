@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { normalizeObjectParams } from '../tool-invoke.js';
+import { describeSearchMismatch } from './closest-line.js';
 import { normalizeSearchReplaceShape, readSearchReplaceArguments } from './search-replace-input.js';
 import { readFile, writeFile } from 'fs/promises';
 import path from 'path';
@@ -520,9 +521,12 @@ export function createSearchReplaceToolDefinition(deps: {
             }
 
             if (!usedHealing) {
+              const nearest = describeSearchMismatch(search_content, content);
               const reasonSuffix = healingFailureReason ? ` Reason: ${healingFailureReason}.` : '';
               return fail(
-                `Search content not found. Auto-healing attempted but no match found.${reasonSuffix} Try splitting changes into smaller patterns.`,
+                `Search content not found. Auto-healing attempted but no match found.${reasonSuffix} Try splitting changes into smaller patterns.${
+                  nearest ? ` ${nearest}` : ''
+                }`,
                 { healing_failure_reason: healingFailureReason },
               );
             }
@@ -535,7 +539,8 @@ export function createSearchReplaceToolDefinition(deps: {
         });
 
         if (!replacementResult.success) {
-          return fail(replacementResult.error);
+          const hint = matchInfo.type === 'none' ? describeSearchMismatch(search_content, content) : '';
+          return fail(hint ? `${replacementResult.error} ${hint}` : replacementResult.error);
         }
 
         if (enableFileLogging) {

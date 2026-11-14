@@ -14,7 +14,7 @@ import {
   normalizeToolArguments,
 } from '../../format-helpers.js';
 import { renderToolsHeader } from './tools-header.js';
-import { describeFailureMessage } from './run-code-failure-report.js';
+import { renderFailureSections } from './run-code-failure-report.js';
 import { createMcpCatalog, isMcpToolDefinition, renderMcpCatalog } from './mcp-script-surface.js';
 import type { McpToolSource } from '../../mcp/mcp-tool-source.js';
 import type { RunCodeRuntimePort, RunCodeRuntimeGraph } from './runtime-port.js';
@@ -381,7 +381,7 @@ const renderActionReceipts = (receipts: readonly RunCodeActionReceipt[], include
   ].join('\n');
 };
 
-function renderResult(
+async function renderResult(
   execution: RunCodeExecution,
   output: readonly string[],
   includeConsole: boolean,
@@ -391,37 +391,7 @@ function renderResult(
   const calls = execution.calls;
   const receipts = execution.actions;
   if (execution.script.status === 'failed') {
-    const { code } = execution.script.diagnostic;
-    const message = describeFailureMessage(execution.script.diagnostic, calls);
-    sections.push(
-      code === 'timeout'
-        ? `Script timed out. ${message}`
-        : code === 'deadline'
-        ? `Script exceeded its deadline. ${message}`
-        : code === 'cancellation'
-        ? `Script was cancelled. ${message}`
-        : `Script failed: ${message}`,
-    );
-    if (calls.some((call) => call.recovery)) {
-      sections.push(
-        'Recovered nested results (host-observed):\n' +
-          JSON.stringify(
-            calls
-              .filter((call) => call.outcome !== 'describe')
-              .map((call) => ({
-                callId: call.callId,
-                tool: call.tool,
-                outcome: call.outcome,
-                ...(call.recovery?.truncated ? { truncated: true } : {}),
-                ...(call.recovery?.fullOutputPath ? { fullOutputPath: call.recovery.fullOutputPath } : {}),
-                ...(call.recovery?.unavailable ? { unavailable: true } : {}),
-                ...(call.reason ? { reason: call.reason } : {}),
-                ...(call.recovery ? { result: call.recovery.result } : {}),
-              })),
-          ) +
-          '\nUse these completed results instead of repeating calls. Unknown outcomes are not proof of failure; inspect state before retrying. This is call evidence, not task success.',
-      );
-    }
+    sections.push(...(await renderFailureSections(execution.script.diagnostic, calls)));
   } else if (execution.script.voidOutput) {
     sections.push('Script returned no result. Return a value from the script to send it to the model.');
   } else {
@@ -485,8 +455,6 @@ function renderResult(
         }
       : undefined,
   );
-  if (media.length > 0) {
-    return clipped.then((text) => [{ type: 'text', text }, ...media]);
-  }
+  if (media.length > 0) return [{ type: 'text', text: await clipped }, ...media];
   return clipped;
 }

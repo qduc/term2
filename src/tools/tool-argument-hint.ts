@@ -34,6 +34,11 @@ function readShape(schema: unknown, depth = 0): NonNullable<ZodLike['shape']> | 
 export class ToolArgumentNames {
   readonly #tools = new Map<string, { all: ReadonlySet<string>; required: readonly string[] }>();
 
+  /** Record an offered tool's argument names, from its canonical schema when it has one. */
+  registerDefinition(tool: { name?: string; canonicalParameters?: unknown; parameters?: unknown }): void {
+    this.register(tool.name, tool.canonicalParameters ?? tool.parameters);
+  }
+
   /** Record a tool's argument names. Ignored when the schema has no readable object shape. */
   register(toolName: string | undefined, schema: unknown): void {
     const shape = readShape(schema);

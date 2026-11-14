@@ -401,6 +401,38 @@ it.skipIf(process.platform !== 'linux')(
   120000,
 );
 
+it.skipIf(process.platform !== 'linux')(
+  'apply_patch gives no nearest-line hint for a file the caller may edit but not read',
+  async () => {
+    // outside/ needs approval to edit and a separate grant to read; approving the edit grants no read.
+    const patch = (path: string, context: string) =>
+      ['*** Begin Patch', `*** Update File: ${path}`, '@@', context, '-REGION=eu', '+REGION=us', '*** End Patch'].join(
+        '\n',
+      );
+    const { toolResults } = await captureApprovalPrompts({
+      model: 'openai/gpt-5',
+      files: {
+        'outside/secrets.env': 'AWS_SECRET_ACCESS_KEY=hunter2hunter2\nREGION=eu\n',
+        'project/inside.env': 'PUBLIC_VALUE=visible_value_123\nREGION=eu\n',
+      },
+      calls: [
+        ['apply_patch', { patch: patch('../outside/secrets.env', ' AWS_SECRET_ACCESS_KEY=hunter2hunter3') }],
+        ['apply_patch', { patch: patch('inside.env', ' PUBLIC_VALUE=visible_value_124') }],
+      ],
+      awaitText: ['Agent wants to run: apply_patch'],
+    });
+    const joined = toolResults.join('\n');
+    // Withheld: the plain not-found report, and none of the file's content.
+    expect(toolResults[0]).toContain('could not be found anywhere in the file.');
+    expect(toolResults[0]).not.toContain('closest is');
+    expect(toolResults[0]).not.toContain('no similar line');
+    expect(toolResults[0]).not.toContain('hunter2hunter2');
+    // Allowed: inside the workspace the same report carries the hint.
+    expect(joined).toContain('closest is line 1: "PUBLIC_VALUE=visible_value_123"');
+  },
+  120000,
+);
+
 const toolNames = (request: { tools?: unknown[] } | undefined): string[] =>
   ((request?.tools ?? []) as Array<{ function?: { name?: string } }>).map((tool) => tool.function?.name ?? '').sort();
 const runCodeCatalogue = (request: { tools?: unknown[] } | undefined): string =>

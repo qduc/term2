@@ -142,6 +142,8 @@ export async function captureApprovalPrompts(options: {
   /** Text that identifies a rendered prompt for the call at the same index. */
   awaitText: readonly string[];
   prompt?: string;
+  /** Model id the TUI is configured with (GPT-5 ids select the patch editing surface). */
+  model?: string;
 }): Promise<{ screens: string[]; toolResults: string[] }> {
   const { createIsolatedWorkspaceLease, writePtyTextAndSubmit } = await import('./provider-test-harness.js');
   const { testCliPath } = await import('../../tests/helpers/terminal-e2e.js');
@@ -195,7 +197,7 @@ export async function captureApprovalPrompts(options: {
         join(paths.logDir, 'settings.json'),
         JSON.stringify({
           agent: {
-            modelSelection: { provider: 'openrouter', model: 'meta/muse-ember' },
+            modelSelection: { provider: 'openrouter', model: options.model ?? 'meta/muse-ember' },
             retryAttempts: 0,
             openrouter: { apiKey: 'fixture', baseUrl: `http://127.0.0.1:${address.port}/v1` },
           },

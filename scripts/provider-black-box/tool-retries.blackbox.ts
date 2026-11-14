@@ -69,3 +69,76 @@ it('search_replace skips a no-op pair in a batch, names the failing replacement,
     'search_content and replace_content are identical, so there is nothing to change',
   );
 });
+
+const NEAR_MISS_FILE = [
+  'import os',
+  '',
+  'def compute_totals(items, tax_rate):',
+  '    subtotal = sum(item.price for item in items)',
+  '    return subtotal * (1 + tax_rate)',
+  '',
+  'def unrelated():',
+  '    return 42',
+  '',
+].join('\n');
+
+it('apply_patch names the closest file line for a context line it cannot find, and nothing when none is close', async () => {
+  const patch = (context: string) =>
+    [
+      '*** Begin Patch',
+      '*** Update File: calc.py',
+      '@@',
+      context,
+      '-    return 42',
+      '+    return 43',
+      '*** End Patch',
+    ].join('\n');
+  const run = await runScriptedToolCalls({
+    model: 'openai/gpt-5',
+    files: { 'calc.py': NEAR_MISS_FILE },
+    readBack: ['calc.py'],
+    calls: [
+      ['apply_patch', { patch: patch(' def compute_total(items, tax_rate):') }],
+      ['apply_patch', { patch: patch(' zebra_quantum_flux_capacitor = engage()') }],
+    ],
+  });
+  expect(run.exitCode, run.stderr + run.stdout).toBe(0);
+  expect(run.toolResults[0]).toContain(
+    'could not be found anywhere in the file; closest is line 3: "def compute_totals(items, tax_rate):"',
+  );
+  expect(run.toolResults[1]).toContain('could not be found anywhere in the file; no similar line found in the file');
+  expect(run.toolResults[1]).not.toContain('closest is line');
+  expect(run.files['calc.py']).toBe(NEAR_MISS_FILE);
+});
+
+it('search_replace names the closest file line when the search text is not found', async () => {
+  const run = await runScriptedToolCalls({
+    files: { 'calc.py': NEAR_MISS_FILE },
+    readBack: ['calc.py'],
+    calls: [
+      [
+        'search_replace',
+        {
+          path: 'calc.py',
+          replacements: [
+            {
+              search_content: 'def compute_totals(items, tax_rate):\n    subtotal = sum(i.price for i in items)',
+              replace_content: 'x',
+            },
+          ],
+        },
+      ],
+      [
+        'search_replace',
+        { path: 'calc.py', replacements: [{ search_content: 'zebra_quantum_flux = engage()', replace_content: 'x' }] },
+      ],
+    ],
+  });
+  expect(run.exitCode, run.stderr + run.stdout).toBe(0);
+  expect(run.toolResults[0]).toContain('Search content not found.');
+  expect(run.toolResults[0]).toContain(
+    'For search line 2 ("subtotal = sum(i.price for i in items)"), closest is line 4: "subtotal = sum(item.price for item in items)".',
+  );
+  expect(run.toolResults[1]).toContain('no similar line found in the file');
+  expect(run.files['calc.py']).toBe(NEAR_MISS_FILE);
+});

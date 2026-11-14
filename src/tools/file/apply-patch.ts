@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { describeClosestLine } from './closest-line.js';
 import { readFile, writeFile, mkdir, unlink } from 'fs/promises';
 import path from 'path';
 import { applyDiff } from '../../shared/utils/apply-diff.js';
@@ -739,7 +740,9 @@ export function diagnoseContextMismatch(contextText: string, original: string): 
     });
 
     if (matchIndices.length === 0) {
-      reports.push(`- Line ${i + 1}: "${trimmedContext}" could not be found anywhere in the file.`);
+      // Only the first reports are shown, so only they pay for a nearest-line search.
+      const nearest = reports.length < 5 ? `; ${describeClosestLine(trimmedContext, originalLines)}` : '';
+      reports.push(`- Line ${i + 1}: "${trimmedContext}" could not be found anywhere in the file${nearest}.`);
     } else {
       // Check if ANY of the matches in the original file are exact matches (including indentation)
       const exactMatch = matchIndices.some((idx) => originalLines[idx] === contextLine);

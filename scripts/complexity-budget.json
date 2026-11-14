@@ -77,10 +77,6 @@
       "lines": 532,
       "reason": "The Conversation's turn driver; candidate 2 keeps both the question-cancel notice (a3) and the cross-turn compaction hold (solo/tools), each closing over the same driver state. Direct admission checks foreign native compaction coverage before accepting a turn, using the same configured provider and history as the driver. Eight lines decorate the turn's model history with cache-preserving effort markers (effort-timeline.ts) at the one place a turn's history, new input and settings meet, after admission."
     },
-    "src/session/replay-fold.ts": {
-      "lines": 503,
-      "reason": "The replay fold; candidate 2 keeps both cancelled-turn settlings (a3's unstarted calls and tools' in-flight step), which run on the same fold state."
-    },
     "src/app/agent.ts": {
       "lines": 800,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."

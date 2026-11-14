@@ -3,7 +3,7 @@ import { isAbortLike } from './subagents/utils.js';
 import { unwrapSchema } from '../config/settings/setting-schema-utils.js';
 import type { AnyToolDefinition, ToolParameterSchema } from './types.js';
 import { isZodToolParameterSchema } from './types.js';
-import type { ToolArgumentNames } from './tool-argument-hint.js';
+import { describeForeignArguments, type OfferedTool } from './tool-argument-hint.js';
 
 /**
  * Maximum payload size (in characters) for which JSON repair is attempted.
@@ -382,7 +382,7 @@ export const runToolInputDiagnostics = (
   toolName: string,
   schema: z.ZodTypeAny,
   rawInput: any,
-  argumentNames?: ToolArgumentNames,
+  offeredTools?: readonly OfferedTool[],
 ): string => {
   let parsedInput: any;
   try {
@@ -404,7 +404,7 @@ export const runToolInputDiagnostics = (
         return `${field} ${msg}`;
       });
       const issueText = issues.join('; ');
-      const foreignHint = argumentNames?.describeForeign(toolName, parsedInput) ?? '';
+      const foreignHint = offeredTools ? describeForeignArguments(toolName, parsedInput, offeredTools) : '';
       const feedback = `Tool input did not match schema for ${toolName}: ${issueText}${
         issueText.endsWith('.') ? '' : '.'
       } ${describeValidationInput(parsedInput)}${
@@ -427,11 +427,10 @@ export const runToolInputDiagnostics = (
 export const wrapToolInvoke = <T extends AnyToolDefinition>(
   tool: T,
   originalSchema?: z.ZodTypeAny,
-  options: { argumentParsing?: ToolInputNormalizationMode; argumentNames?: ToolArgumentNames } = {},
+  options: { argumentParsing?: ToolInputNormalizationMode; offeredTools?: readonly OfferedTool[] } = {},
 ): T => {
   const targetSchema = originalSchema || tool.parameters;
   const originalExecute = tool.execute.bind(tool);
-  options.argumentNames?.register(tool.name, targetSchema);
 
   tool.execute = async (params: any, context: unknown, details: any) => {
     try {
@@ -459,7 +458,7 @@ export const wrapToolInvoke = <T extends AnyToolDefinition>(
           tool.name ?? 'unknown',
           targetSchema as any,
           normalizedInput,
-          options.argumentNames,
+          options.offeredTools,
         );
       }
 
@@ -468,7 +467,7 @@ export const wrapToolInvoke = <T extends AnyToolDefinition>(
       if (isInvalidToolInputError(error)) {
         // Surface schema diagnostics as a non-fatal tool result so the model
         // can self-correct within the same turn, rather than aborting the run.
-        return runToolInputDiagnostics(tool.name ?? 'unknown', targetSchema as any, params, options.argumentNames);
+        return runToolInputDiagnostics(tool.name ?? 'unknown', targetSchema as any, params, options.offeredTools);
       }
       throw error;
     }

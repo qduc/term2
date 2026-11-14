@@ -2,7 +2,6 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { withTrimConfig } from '../shared/utils/output/output-trim.js';
-import { ToolArgumentNames } from '../tools/tool-argument-hint.js';
 import { normalizeToolInput, runToolInputDiagnostics } from '../tools/tool-invoke.js';
 import { isCancellationError, isHarnessInvariantError } from '../shared/lib/harness-invariant-error.js';
 import { modelToolJsonSchema } from '../shared/lib/model-tool-json-schema.js';
@@ -53,8 +52,7 @@ type SourceToolOptions = {
   readonly shellEscapeCwd?: () => string;
   readonly confirmSandboxedShell?: (command: string) => boolean;
   readonly withAnswer: <T>(answer: string, operation: () => Promise<T>) => Promise<T>;
-  /** Names of the offered tools' arguments (wrong-tool hint). */
-  readonly argumentNames: ToolArgumentNames;
+  readonly offered?: readonly AnyToolDefinition[];
 };
 
 /** Gate only scripted physical bodies. The source wrapper retains its raw return value. */
@@ -90,7 +88,7 @@ export function sourceToolSpec(definition: AnyToolDefinition): ToolSpec {
   };
 }
 
-function parseInput(definition: AnyToolDefinition, raw: unknown, argumentNames: ToolArgumentNames): unknown {
+function parseInput(definition: AnyToolDefinition, raw: unknown, offered?: readonly AnyToolDefinition[]): unknown {
   const schema =
     definition.canonicalParameters ??
     (isZodToolParameterSchema(definition.parameters) ? definition.parameters : undefined);
@@ -105,7 +103,7 @@ function parseInput(definition: AnyToolDefinition, raw: unknown, argumentNames: 
     if (!schema || !(error instanceof z.ZodError || error instanceof SyntaxError)) throw error;
     // Legacy wrapToolInvoke: invalid input never asks for approval; execute returns the schema diagnostic,
     // which the tool's own formatter draws as a failed row. Keep the arguments for that row.
-    const diagnostic = runToolInputDiagnostics(definition.name, schema, parsed, argumentNames);
+    const diagnostic = runToolInputDiagnostics(definition.name, schema, parsed, offered);
     const input = parsed && typeof parsed === 'object' ? parsed : { input: parsed };
     invalidInputs.set(input, diagnostic);
     return input;
@@ -365,7 +363,6 @@ async function questionAnswer(definition: AnyToolDefinition, input: unknown, con
 }
 
 function adaptTool(definition: AnyToolDefinition, options: SourceToolOptions, owners: Set<NestedApprovalOwner>): Tool {
-  options.argumentNames.registerDefinition(definition);
   const tool: Tool = {
     spec: sourceToolSpec(definition),
     parallelSafe:
@@ -377,7 +374,7 @@ function adaptTool(definition: AnyToolDefinition, options: SourceToolOptions, ow
               invocationFor(context, options.sessionId),
             )
         : definition.parallelSafe,
-    parse: (raw) => parseInput(definition, raw, options.argumentNames),
+    parse: (raw) => parseInput(definition, raw, options.offered),
     approval: (input, context) =>
       invalidInput(input) !== undefined
         ? Promise.resolve({ kind: 'none' })
@@ -468,11 +465,11 @@ function adaptTool(definition: AnyToolDefinition, options: SourceToolOptions, ow
 /** Adapt only the directly offered definitions. run_code already retains the complete wrapped graph. */
 export function createSourceToolRegistry(
   definitions: readonly AnyToolDefinition[],
-  base: Omit<SourceToolOptions, 'argumentNames'>,
+  base: Omit<SourceToolOptions, 'offered'>,
 ): ToolRegistry & { adaptTool(definition: AnyToolDefinition): Tool; dispose(): void } {
   const owners = new Set<NestedApprovalOwner>();
   const tools = new Map<string, Tool>();
-  const options: SourceToolOptions = { ...base, argumentNames: new ToolArgumentNames() };
+  const options: SourceToolOptions = { ...base, offered: definitions };
   for (const definition of definitions) {
     if (tools.has(definition.name)) throw new Error(`Duplicate offered tool: ${definition.name}`);
     tools.set(definition.name, adaptTool(definition, options, owners));

@@ -79,7 +79,7 @@ const AgentSettingsObjectSchema = z.object({
     .enum(['off', 'first-party', 'any-endpoint'])
     .default('off')
     .describe(
-      'Change reasoning effort mid-conversation without losing the prompt cache, on models that support it (GPT-6 on OpenAI/Codex, Claude Haiku/Sonnet 5.5 on Anthropic). first-party: only the providers own endpoints; any-endpoint: also gateways and base-URL overrides. Turned off automatically for the session if an endpoint rejects it.',
+      'Keep prompt cache on /effort changes. Off by default: endpoints unverified. Turns off for the session if a request with it is rejected as invalid.',
     ),
   // Temperature controls randomness. We keep it optional so providers/models
   // can use their own defaults when unset.

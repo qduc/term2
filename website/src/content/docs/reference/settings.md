@@ -34,6 +34,7 @@ This page is generated from `src/config/settings/` by `pnpm --dir website build`
 | `agent.cheapReasoningEffort` | `default \\| none \\| minimal \\| low \\| medium \\| high \\| xhigh` | — | ✓ Yes | — | Reasoning effort for cheap-tier helper agents (simple, high-volume side tasks). Falls back to agent.reasoningEffort when unset. |
 | `agent.choreModel` | `array` | — | ✓ Yes | — | Models for small background jobs like repairing failed file edits and reviewing shell auto-approvals (auto-approval reviews, edit healing). Falls back to agent.modelSelection when unset. |
 | `agent.reasoningEffort` | `default \\| none \\| minimal \\| low \\| medium \\| high \\| xhigh` | `"default"` | ✓ Yes | — | Reasoning effort (none\|minimal\|low\|medium\|high\|xhigh\|default) |
+| `agent.cachePreservingEffort` | `off \\| first-party \\| any-endpoint` | `"off"` | ✓ Yes | — | Keep prompt cache on /effort changes. Off by default: endpoints unverified. Turns off for the session if a request with it is rejected as invalid. |
 | `agent.temperature` | `number` | — | ✓ Yes | — | Model temperature (0-2, controls randomness) |
 | `agent.favoriteModels` | `array` | `[]` | ✓ Yes | — | Ordered list of favorited models as "provider/modelId" strings; matched before any provider catalog loads |
 | `agent.modelNicknames` | `map of string to string` | `{}` | ✓ Yes | — | Map of nickname -> "provider/modelId" (with optional ":effort" suffix); an exact nickname match wins for --model before any provider catalog loads. Browse them on the model picker Nicknames tab |

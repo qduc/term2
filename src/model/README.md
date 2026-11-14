@@ -78,12 +78,19 @@ direct endpoint was checked.
   sends today's request rather than failing. A caller that pins Anthropic
   thinking or effort in provider options gets today's request. Codex native
   compaction drops markers (the compact endpoint takes no effort).
-- **Fallback.** If an endpoint refuses a request that carries a marker with an
-  invalid-request error before any output, the registry retries that request once
-  without markers, with the effective effort top-level, keeps markers off for that
-  registry, and marks the response (`providerMetadata.term2EffortUpdatesRejected`).
-  Session reads the mark from the log, stops deriving markers for the rest of the
-  session (also after resume) and tells the user once on that turn.
+- **Fallback** (`effort-fallback.ts`). If an endpoint refuses a request that carries
+  a marker with an invalid-request error before any output, the registry retries
+  that request once without markers, with the effective effort top-level. Any
+  invalid-request error on such a request counts, including one the marker did
+  not cause. The session log is the only record: the registry writes an
+  `effort_updates_rejected` context fact as soon as it decides to retry, whether
+  or not the retry succeeds, and asks the log (`ProviderRegistryDeps.effortUpdatesRejection`,
+  wired in `app/application-runtime.ts`) before every request. So markers stay off
+  for the rest of that session across registry rebuilds (`/effort`, `/model`) and
+  after resume, and a new session starts with them on again. Session tells the
+  user once, on the turn's end. A rejection that arrives after output has
+  started is not retried and does not turn the mechanism off: the request fails
+  like any other and the next change sends a marker again.
 - Anything else gets today's request: the registry strips markers and sends the
   effective effort top-level (`withoutEffortUpdates`), and Session declines an
   unsupported level, a default (`null`) effort, or a turn whose effort it cannot
@@ -92,7 +99,8 @@ direct endpoint was checked.
 
 Evidence: `scripts/provider-black-box/effort-change.blackbox.ts` (mock provider:
 default off, scope gate, GPT-6 anchor and resume, pre-GPT-6, compaction, Claude
-prefix and resume, unanswered turn, fallback on both paths). Not verified on
+prefix and resume, unanswered turn, fallback on both paths, and a retry that also
+fails still turning markers off across a registry rebuild and resume). Not verified on
 real traffic: the direct OpenAI, Codex and Anthropic endpoints, Codex acceptance
 of `configuration_update` at all, and the in-history persistence assumption.
 

@@ -27,6 +27,8 @@ export type DirectLegacyNotification =
       readonly status: string;
       readonly error?: string;
       readonly formattedResult: string;
+      /** The run was lost with its process: there is no result to assess (recovery's notice only). */
+      readonly unobserved?: true;
     }
   | {
       readonly kind: 'question';
@@ -104,6 +106,8 @@ export function formatDirectLegacyNotifications(notifications: readonly DirectLe
 
   if (completions.length > 0) {
     const noun = completions.length === 1 ? 'run' : 'runs';
+    const lost = completions.filter((notification) => notification.unobserved).length;
+    const verb = lost === completions.length ? 'interrupted' : 'finished';
     const entries = completions.map((notification) =>
       [
         `- runId: ${notification.runId} | role: ${notification.role} | status: ${notification.status}`,
@@ -114,11 +118,15 @@ export function formatDirectLegacyNotifications(notifications: readonly DirectLe
     );
     sections.push(
       [
-        `Background subagent ${noun} finished (${completions.length}). This is an automatic system notification, not a user message.`,
+        `Background subagent ${noun} ${verb} (${completions.length}). This is an automatic system notification, not a user message.`,
         '',
         ...entries,
-        '',
-        'The full result is inlined above; you do not need to call tools.get_subagent_result(...) inside run_code. Assess it against the task before you accept it, then continue through the next necessary steps yourself rather than stopping at the fact that a run finished. Tell the user concisely, in your own words, what you concluded — the report is input to your judgement, not a message to relay.',
+        ...(lost === completions.length
+          ? []
+          : [
+              '',
+              'The full result is inlined above; you do not need to call tools.get_subagent_result(...) inside run_code. Assess it against the task before you accept it, then continue through the next necessary steps yourself rather than stopping at the fact that a run finished. Tell the user concisely, in your own words, what you concluded — the report is input to your judgement, not a message to relay.',
+            ]),
       ].join('\n'),
     );
   }

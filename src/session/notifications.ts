@@ -280,6 +280,18 @@ function subagentCompletion(
     .map((part) => part.text)
     .join('')
     .trim();
+  if (result.kind === 'interrupted' && result.reason === 'outcome_unobserved' && !result.value) {
+    // Recovery's notice for a run lost with its process: say so, and give the model nothing to assess.
+    return {
+      kind: 'completion',
+      runId: task.taskId,
+      role: task.role ?? 'agent',
+      status: result.kind,
+      unobserved: true,
+      formattedResult:
+        'Interrupted: the session ended before the run finished. Its outcome was not observed and no result is available. Start the run again if it is still needed.',
+    };
+  }
   const lines = [
     `Status: ${result.kind}`,
     ...(error ? [`Error: ${error}`] : []),

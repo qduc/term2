@@ -137,7 +137,25 @@ const worktreeField = {
 
 const hasOneShape = (value: { agent_spec?: unknown; role?: unknown; task?: unknown }) =>
   value.agent_spec ? value.role === undefined && value.task === undefined : Boolean(value.role) && Boolean(value.task);
-const ONE_SHAPE_MESSAGE = { message: 'Provide agent_spec, or both role and task.' };
+
+// The diagnostic keeps about 160 characters of an issue, so this stays short: what is wrong, then the two shapes.
+const VALID_SHAPES = 'needs either role+task (e.g. {"role":"explorer","task":"…"}) or agent_spec:{goal:"…"}';
+
+/** Name what is missing (or conflicting) for the one-shape rule, then show both valid shapes. */
+const checkOneShape = (
+  value: { agent_spec?: unknown; role?: unknown; task?: unknown },
+  ctx: { addIssue: (issue: { code: 'custom'; message: string }) => void },
+) => {
+  if (hasOneShape(value)) return;
+  const reason = value.agent_spec
+    ? 'agent_spec cannot be combined with role or task'
+    : !value.role && !value.task
+    ? 'missing role and task'
+    : !value.role
+    ? 'task sent without role'
+    : 'role sent without task';
+  ctx.addIssue({ code: 'custom', message: `${reason}: ${VALID_SHAPES}` });
+};
 
 const runSubagentSchema = z
   .object({
@@ -153,7 +171,7 @@ const runSubagentSchema = z
     ...backgroundFields,
   })
   .strict()
-  .refine(hasOneShape, ONE_SHAPE_MESSAGE);
+  .superRefine(checkOneShape);
 
 export type ForegroundRunSubagentParams = {
   role?: (typeof FOREGROUND_ROLES)[number] | 'agent';
@@ -218,7 +236,7 @@ function createRunSubagentSchema({ runSubagent, runSubagentAsync }: RunSubagentT
         ...backgroundFields,
       })
       .strict()
-      .refine(hasOneShape, ONE_SHAPE_MESSAGE);
+      .superRefine(checkOneShape);
   }
 
   if (runSubagent && !runSubagentAsync) {
@@ -231,7 +249,7 @@ function createRunSubagentSchema({ runSubagent, runSubagentAsync }: RunSubagentT
         ...worktreeField,
       })
       .strict()
-      .refine(hasOneShape, ONE_SHAPE_MESSAGE);
+      .superRefine(checkOneShape);
   }
 
   return runSubagentSchema;

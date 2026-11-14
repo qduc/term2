@@ -142,3 +142,22 @@ it('search_replace names the closest file line when the search text is not found
   expect(run.toolResults[1]).toContain('no similar line found in the file');
   expect(run.files['calc.py']).toBe(NEAR_MISS_FILE);
 });
+
+it('run_subagent names what is missing and shows both valid shapes', async () => {
+  const run = await runScriptedToolCalls({
+    calls: [
+      ['run_subagent', { execution: 'foreground', name: 'scout', check_in: { enabled: true } }],
+      ['run_subagent', { execution: 'foreground', role: 'explorer' }],
+      ['run_subagent', { execution: 'foreground', role: 'worker', task: 'look', agent_spec: { goal: 'look' } }],
+    ],
+  });
+  expect(run.exitCode, run.stderr + run.stdout).toBe(0);
+  const shapes = 'needs either role+task (e.g. {"role":"explorer","task":"…"}) or agent_spec:{goal:"…"}';
+  expect(run.toolResults[0]).toContain(`input missing role and task: ${shapes}`);
+  expect(run.toolResults[0]).toContain('Received keys: check_in, execution, name.');
+  expect(run.toolResults[1]).toContain(`role sent without task: ${shapes}`);
+  // A writing role is still not rewritten: the mixed-shape tolerance stays limited to read-only roles.
+  expect(run.toolResults[2]).toContain('Send role+task without agent_spec, or agent_spec alone');
+  // The double full stop of the old message is gone.
+  for (const text of run.toolResults) expect(text).not.toContain('..');
+});

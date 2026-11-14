@@ -418,6 +418,16 @@ it('web_search is offered to root and explorer only when a search provider is co
   expect(runCodeCatalogue(without.requests[0])).not.toMatch(/\bweb_search\b/);
   expect(toolNames(without.requests[1])).toContain('web_fetch');
   expect(toolNames(without.requests[1])).not.toContain('web_search');
+  // Prompt and tool list agree: no request, root or child, names the absent tool. The one remaining
+  // mention is the name list of run_subagent's agent_spec `tools` schema, which is not conditional.
+  const agentSpecEnum = /(code_context_search\\?",\\?")web_search/g;
+  without.requests.forEach((request, index) => {
+    const text = JSON.stringify(request).replace(agentSpecEnum, '$1');
+    expect(text.match(/.{60}web_search.{60}/g), `request ${index}`).toBeNull();
+  });
+  const explorerText = JSON.stringify(without.requests[1]);
+  expect(explorerText).toContain('have a web fetch tool');
+  expect(explorerText).not.toContain('have web search and web fetch tools');
   const withKey = await runScriptedToolCalls({
     calls: [explore],
     settings: { webSearch: { tavily: { apiKey: 'fixture-key' } } },
@@ -426,6 +436,13 @@ it('web_search is offered to root and explorer only when a search provider is co
   expect(runCodeCatalogue(withKey.requests[0])).toMatch(/\bweb_search\b/);
   expect(toolNames(withKey.requests[1])).toContain('web_search');
   expect(toolNames(withKey.requests[1])).toContain('web_fetch');
+  // Configured, the wording is exactly what it was before web_search became conditional.
+  const keyedExplorer = JSON.stringify(withKey.requests[1]);
+  expect(keyedExplorer).toContain('have web search and web fetch tools');
+  expect(keyedExplorer).toContain(
+    '- Use `web_search` to find relevant external documentation, articles, or current information.\\n',
+  );
+  expect(keyedExplorer).toContain('referenced by tools.web_search(...) inside run_code or by the user.');
   // Configured, the explorer's tool list is exactly the unconfigured one plus web_search.
   expect(toolNames(withKey.requests[1]).filter((name) => name !== 'web_search')).toEqual(
     toolNames(without.requests[1]),

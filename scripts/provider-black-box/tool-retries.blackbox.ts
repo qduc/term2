@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { expect, it } from 'vitest';
-import { runScriptedToolCalls } from './tool-retry-fixture.js';
+import { captureApprovalPrompts, runScriptedToolCalls } from './tool-retry-fixture.js';
 
 /**
  * Harness-caused tool retries found by auditing real benchmark runs: each scenario scripts the
@@ -204,3 +204,39 @@ it('a trimmed shell result states the trimmed line range and the spooled file to
   expect(file[to]).toBe(shown[markerAt + 1]);
   expect(to - from + 1).toBe(1090 - 400 - 400);
 });
+
+it.skipIf(process.platform !== 'linux')(
+  'regression guard: the approval prompt shows the flat search_replace form like the array form',
+  async () => {
+    // Guards existing behaviour, not a fix: arguments are normalised before they reach the
+    // prompt on every shipped path (root and nested run_code), so this passes without any
+    // prompt-side handling. It fails if that normalisation is ever lost.
+    // The targets are outside the project, so each call needs the user's approval.
+    const edit = (old: string, next: string) => ({ search_content: old, replace_content: next });
+    const [flat, array, nested] = await captureApprovalPrompts({
+      files: { 'outside/a.txt': 'flat_old\n', 'outside/b.txt': 'array_old\n', 'outside/c.txt': 'nested_old\n' },
+      calls: [
+        ['search_replace', { path: '../outside/a.txt', ...edit('flat_old', 'flat_new') }],
+        ['search_replace', { path: '../outside/b.txt', replacements: [edit('array_old', 'array_new')] }],
+        [
+          'run_code',
+          {
+            description: 'Edit through the script surface',
+            code: "return await tools.search_replace({ path: '../outside/c.txt', search_content: 'nested_old', replace_content: 'nested_new' });",
+          },
+        ],
+      ],
+      awaitText: ['flat_new', 'array_new', 'nested_new'],
+    });
+    for (const [screen, old, next] of [
+      [flat, 'flat_old', 'flat_new'],
+      [array, 'array_old', 'array_new'],
+      [nested, 'nested_old', 'nested_new'],
+    ] as const) {
+      expect(screen).toContain('[SEARCH & REPLACE]');
+      expect(screen).toContain(`-${old}`);
+      expect(screen).toContain(`+${next}`);
+    }
+  },
+  120000,
+);

@@ -52,12 +52,15 @@ changed message on:
   `turn_started`) applied only to turns of the current process.
 
 None of that remains: `replay-fold.ts` returns items as recorded, and
-`conversation-notice.ts` re-applies every recorded decoration. A call logged
+`conversation-notice.ts` re-applies the recorded decoration of an earlier
+process's turn when that turn ran in the mode the session is in now (a notice
+for a mode that is no longer on, such as a dropped profile reopened as Bare, is
+not resent; `dropped-profile-restart.blackbox.ts` holds that). A call logged
 without `rawArguments` (older logs) still renders from its parsed input, as
 before. Headless to headless, the resumed request's prefix is byte-identical to
 the live session's last request, system prompt included. What can still differ:
 a resume in the other mode (TUI to headless or back) sends the other mode's
-system prompt; a changed model, profile, tool set or settings changes the
+system prompt; a changed model, mode, profile, tool set or settings changes the
 request as it would in a live session; compaction and rollover replace history
 by design; and a pending notice (below) or recovery notice is new content, not
 a difference from the live session.

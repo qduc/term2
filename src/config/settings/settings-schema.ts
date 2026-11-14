@@ -72,7 +72,7 @@ const AgentSettingsObjectSchema = z.object({
       'Reasoning effort for cheap-tier helper agents (simple, high-volume side tasks). Falls back to agent.reasoningEffort when unset.',
     ),
   choreModel: tierModelPoolSchema(
-    'Models for small background jobs like repairing failed file edits and reviewing shell auto-approvals (auto-approval reviews, edit healing). Falls back to agent.modelSelection when unset.',
+    'Models for small background jobs like reviewing shell auto-approvals. Falls back to agent.modelSelection when unset.',
   ),
   reasoningEffort: z.enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh']).default('default'),
   cachePreservingEffort: z
@@ -432,7 +432,6 @@ export const AppSettingsSchema = z.object({
 
 const ToolsSettingsObjectSchema = z.object({
   logFileOperations: z.boolean().optional().default(true),
-  enableEditHealing: z.boolean().optional().default(true),
   // Per-tool-group kill switches for the main agent. Each masks exactly one
   // capability group from the profile's tool capabilities (tool-toggles.ts),
   // removing that group's tools and capability-gated prompt fragments on the
@@ -851,7 +850,6 @@ export interface SettingsWithSources {
   };
   tools: {
     logFileOperations: SettingWithSource<boolean>;
-    enableEditHealing: SettingWithSource<boolean>;
     shell: { enabled: SettingWithSource<boolean> };
     web: { enabled: SettingWithSource<boolean> };
     fileRead: { enabled: SettingWithSource<boolean> };
@@ -1005,7 +1003,6 @@ export const SETTING_KEYS = {
   APP_NOTIFICATIONS_ON_COMPLETE: 'app.notificationsOnComplete',
   APP_SEARCH_VIA_SHELL: 'app.searchViaShell',
   TOOLS_LOG_FILE_OPS: 'tools.logFileOperations',
-  TOOLS_ENABLE_EDIT_HEALING: 'tools.enableEditHealing',
   TOOLS_SHELL_ENABLED: 'tools.shell.enabled',
   TOOLS_WEB_ENABLED: 'tools.web.enabled',
   TOOLS_FILE_READ_ENABLED: 'tools.fileRead.enabled',
@@ -1300,7 +1297,6 @@ export const DEFAULT_SETTINGS: SettingsData = {
   },
   tools: {
     logFileOperations: true,
-    enableEditHealing: true,
     shell: { enabled: true },
     web: { enabled: true },
     fileRead: { enabled: true },

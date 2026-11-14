@@ -46,10 +46,6 @@
     "src/tools": {
       "files": 22,
       "reason": "Root tool exports, execution facades, and adoption registries; bridges system and language tools to the agent runtime. tool-argument-hint.ts (the 'these arguments belong to another tool' sentence of the schema diagnostic) has one caller, tool-invoke.ts, which is itself over its size ceiling and should not absorb it. Lower the ceiling when tool-invoke.ts is split and the diagnostics move together."
-    },
-    "src/tools/file": {
-      "files": 16,
-      "reason": "File tools plus their helpers. closest-line.ts (the nearest-line hint apply_patch and search_replace share) is one job with two importers; folding it into either would grow a file already over its size ceiling. Lower the ceiling when the search_replace files move into a subfolder."
     }
   },
   "fileCeilings": {
@@ -82,7 +78,7 @@
       "reason": "The Conversation's turn driver; candidate 2 keeps both the question-cancel notice (a3) and the cross-turn compaction hold (solo/tools), each closing over the same driver state. Direct admission checks foreign native compaction coverage before accepting a turn, using the same configured provider and history as the driver. Eight lines decorate the turn's model history with cache-preserving effort markers (effort-timeline.ts) at the one place a turn's history, new input and settings meet, after admission. Two lines hand notices an earlier process left pending to the background owner (ConversationBackground.deliverReopened) before the turn's history snapshot is taken; the delivery has to precede the turn's admission, so it cannot live in the later notice preparation."
     },
     "src/app/agent.ts": {
-      "lines": 812,
+      "lines": 802,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Twelve lines since then: the edit tools' nearest-line hint read gate (createHintReadAccess, built beside the tools that take it) and the one web_search availability decision that the prompt wording and the tool list share. Lower the ceiling when the agent assembly is split."
     },
     "src/app/application-runtime.ts": {
@@ -90,7 +86,7 @@
       "reason": "The direct runtime commits each model configuration change and decides in the same commit whether global defaults should be persisted. ACP sessions keep their changes local. Lower the ceiling when the model reconfiguration transaction can move together with its settings writes. Three lines give the registry selection the session's log-backed record of a refused cache-preserving effort marker (application-models.ts holds the logic); this is the one place the selection is built before the session port exists, so the late-bound port is named here."
     },
     "src/app/lib/agent-factory.ts": {
-      "lines": 555,
+      "lines": 552,
       "reason": "Agent graph assembly and tool invocation wrappers retain their existing shared execution/approval dependencies. Provider capability resolution and model request settings now live in app/lib/agent-model-settings.ts; this lowered ceiling records the remaining assembly body without authorizing growth."
     },
     "src/clients/control-socket/control-socket.ts": {
@@ -106,7 +102,7 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/config/settings/settings-schema.ts": {
-      "lines": 1371,
+      "lines": 1367,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Ten lines declare `agent.cachePreservingEffort` through the mandatory setting touchpoints (schema with description, key, typed field, default, runtime-modifiable list)."
     },
     "src/app/settings-service.ts": {
@@ -114,7 +110,7 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/config/settings/settings-ui-metadata.ts": {
-      "lines": 544,
+      "lines": 542,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. One line labels `agent.cachePreservingEffort`."
     },
     "src/session/agent-runtime/permission-boundary.ts": {
@@ -222,7 +218,7 @@
       "reason": "Inherited source schema/presentation module; launcher request typing now derives from its own schema rather than importing the engine's policy types. Mixed-shape rewriting and its interpretation line live in run-subagent-shape.ts; the executor keeps only the launch-started flag that gates that line, because only it knows whether a launch happened. Two further lines are comments recording why two schema descriptions keep or drop wording the tool description also states."
     },
     "src/tools/file/apply-patch.ts": {
-      "lines": 882,
+      "lines": 833,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Seven lines wire the nearest-line hint (closest-line.ts) into the one 'could not be found anywhere' report and its read gate, which only this file knows at the point the patch fails."
     },
     "src/tools/file/code-context.ts": {
@@ -230,7 +226,7 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/tools/file/search-replace.ts": {
-      "lines": 702,
+      "lines": 630,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Up from 661: the optional read gate for the nearest-line hint, the skip and labelled-failure calls in the batch loop, and the flat-shape canonical schema. Result wording and shape recovery already live in search-replace-protocol.ts; what remains is wiring beside the batch state (file content, the single write). Lower the ceiling when the batch executor moves out of this file."
     },
     "src/tools/mcp/mcp-connection-manager.ts": {
@@ -254,7 +250,7 @@
       "reason": "The shell executor checks one-use escape evidence against the actual cwd and foreground invocation at the point where it selects sandbox mode. Moving only that check would separate it from the execution context that enforces it. Lower the ceiling when the shell execution pipeline can move as a whole. Forty lines since then are the foreground-only presentation shown to sessions without a background job registry (presentForegroundShell, its narrowed parameter schema and the description variant). They stay here because they are derived from the shell schema and description in this file and must not drift from the canonical schema that validates and authorizes calls; they can move out with the description text when the model-facing shell presentation is split from the executor."
     },
     "src/delegation/subagents/tool-policy.ts": {
-      "lines": 1414,
+      "lines": 1401,
       "reason": "Inherited child capability factory and policy wrappers, with validation evidence capture now owned by subagents/validation-evidence.ts. The remaining authority checks, scope enforcement, and provider-compatible wrappers still share one graph; this lower ceiling records that existing cohesive body without authorizing further growth. Fifteen lines since then wire two decisions that exist only where a child's tools are assembled: the read gate for the edit tools' nearest-line hint (the call into createHintReadAccess with the role's read scope) and the child's offered tool list handed to the schema diagnostic, net of the shorter web tool wiring. The worker shell review retains a bounded explanation for its existing non-interactive rejection and distinguishes disabled review from failures; move that review with its shell authority wrapper if the shared graph is split. One further line comes from handing a child the foreground-only shell presentation while approval and argument validation keep reading the canonical schema."
     },
     "src/delegation/run-code/run-code-agent-capability.ts": {

@@ -1,5 +1,5 @@
 import { buildModelSettings, getProviderCapabilities } from './agent-model-settings.js';
-import type { NestedRunDriverFactory, NestedModelBinding } from '../../tools/nested-run-driver.js';
+import type { NestedModelBinding } from '../../tools/nested-run-driver.js';
 import type { DiscordSend } from '../../clients/discord/discord-outbound.js';
 import { getRunCodeExecutionResult, RUN_CODE_EXECUTION_RESULT } from '../../tools/system/run-code/run-code.js';
 import type { ApplicationAgent } from '../../tools/nested-run-driver.js';
@@ -47,7 +47,6 @@ import type { NestedSubagentResult, SubagentRunHandle } from '../../tools/subage
 import type { ResolvedSubagentLaunch } from '../../delegation/direct/subagent-callbacks.js';
 
 export interface AgentFactoryDeps {
-  driverFactory?: NestedRunDriverFactory;
   modelBinding?: NestedModelBinding;
   settings: ISettingsService;
   logger: ILoggingService;
@@ -444,8 +443,6 @@ export function buildAgent(
     tools: toolDefinitions,
   } = getAgentDefinition(
     {
-      driverFactory: deps.driverFactory,
-      modelBinding: deps.modelBinding,
       settingsService: deps.settings,
       loggingService: deps.logger,
       ...(deps.getGoal ? { getGoal: deps.getGoal } : {}),

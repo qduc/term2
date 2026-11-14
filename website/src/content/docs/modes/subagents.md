@@ -62,6 +62,6 @@ Subagent roles are mapped to configurable tiers in your settings:
 - **`agent.smartModel` / `agent.smartProvider`**: High-reasoning model for complex architecture, mentor advisory, and planning.
 - **`agent.balancedModel` / `agent.balancedProvider`**: General implementation model for code writing and edits. Multiple models form a round-robin pool for subagent spawns.
 - **`agent.cheapModel` / `agent.cheapProvider`**: Fast, lightweight model for high-volume searches and indexing. Multiple models form a round-robin pool for subagent spawns.
-- **`agent.choreModel` / `agent.choreProvider`**: Narrow utility model for patch self-healing and auto-approval evaluation.
+- **`agent.choreModel` / `agent.choreProvider`**: Narrow utility model for auto-approval evaluation.
 
 Pool values are configured in the settings UI or as arrays in the corresponding tier settings. Non-subagent consumers use the first configured model.

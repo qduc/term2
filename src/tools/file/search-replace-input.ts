@@ -13,7 +13,7 @@ const FLAT_FIELDS = ['search_content', 'replace_content', 'match_all'] as const;
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 
-export const MIXED_SHAPE_MESSAGE =
+const MIXED_SHAPE_MESSAGE =
   'send either replacements:[{search_content, replace_content}] or search_content+replace_content at the top level, not both';
 
 export type SearchReplaceShape =

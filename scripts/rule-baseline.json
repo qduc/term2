@@ -1284,24 +1284,12 @@
       "reason": "Internal tools constant or variable \"formatCreateFileCommandMessage\" in tools/file/create-file.ts used within its file; export keyword retained pending Phase 3 module cleanup."
     },
     {
-      "export": "tools/file/edit-healing.ts DEFAULT_CONFIDENCE_THRESHOLD",
-      "reason": "Internal tools constant or variable \"DEFAULT_CONFIDENCE_THRESHOLD\" in tools/file/edit-healing.ts used within its file; export keyword retained pending Phase 3 module cleanup."
-    },
-    {
       "export": "tools/file/glob.ts formatFindFilesCommandMessage",
       "reason": "Internal tools constant or variable \"formatFindFilesCommandMessage\" in tools/file/glob.ts used within its file; export keyword retained pending Phase 3 module cleanup."
     },
     {
       "export": "tools/file/grep.ts formatGrepCommandMessage",
       "reason": "Internal tools constant or variable \"formatGrepCommandMessage\" in tools/file/grep.ts used within its file; export keyword retained pending Phase 3 module cleanup."
-    },
-    {
-      "export": "tools/file/patch-healing.ts countContextMatchesInFile",
-      "reason": "Internal tools helper function \"countContextMatchesInFile\" in tools/file/patch-healing.ts used within its file; export keyword retained pending Phase 3 module cleanup."
-    },
-    {
-      "export": "tools/file/patch-healing.ts parseDiffStructure",
-      "reason": "Internal tools helper function \"parseDiffStructure\" in tools/file/patch-healing.ts used within its file; export keyword retained pending Phase 3 module cleanup."
     },
     {
       "export": "tools/file/read-file.ts formatReadFileCommandMessage",

@@ -121,7 +121,6 @@ export const SETTING_LABELS: Record<string, string> = {
   [SETTING_KEYS.APP_NOTIFICATIONS_ON_COMPLETE]: 'Completion notifications',
   [SETTING_KEYS.APP_SEARCH_VIA_SHELL]: 'Code search via shell',
   [SETTING_KEYS.TOOLS_LOG_FILE_OPS]: 'Log file operations',
-  [SETTING_KEYS.TOOLS_ENABLE_EDIT_HEALING]: 'Edit healing',
   [SETTING_KEYS.TOOLS_SHELL_ENABLED]: 'Shell tools',
   [SETTING_KEYS.TOOLS_WEB_ENABLED]: 'Web tools',
   [SETTING_KEYS.TOOLS_FILE_READ_ENABLED]: 'File read tools',
@@ -287,7 +286,6 @@ const FALLBACK_SETTING_DESCRIPTIONS: Record<string, string> = {
   [SETTING_KEYS.LOGGING_DISABLE]: 'Disable all file logging (true|false)',
   [SETTING_KEYS.LOGGING_DEBUG]: 'Enable debug logging to disk (true|false)',
   [SETTING_KEYS.LOGGING_SUPPRESS_CONSOLE]: 'Suppress console output (true|false) to avoid interfering with Ink UI',
-  [SETTING_KEYS.TOOLS_ENABLE_EDIT_HEALING]: 'Use AI to automatically correct failed search_replace operations',
   [SETTING_KEYS.TOOLS_SHELL_ENABLED]:
     'Enable shell tools for the main agent (true|false). Does not restrict subagents; applies on the next model request.',
   [SETTING_KEYS.TOOLS_WEB_ENABLED]:

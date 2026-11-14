@@ -49,7 +49,7 @@ export function prepareConversationNotice(
   const rawHistory = planned?.history ?? snapshotHistory;
   // Legacy keeps a notice on the message it decorated in every later request. History stays raw; the turn's
   // recorded notice is applied again each time a request is built.
-  const recorded = recordedNotices(journal.facts, journal.openedAt);
+  const recorded = recordedNotices(journal.facts);
   let modelHistory: readonly Item[] = rawHistory.map((item) => {
     const text = item.type === 'user_message' ? recorded.get(item.id) : undefined;
     return text ? withNotice([item], text)[0]! : item;
@@ -68,18 +68,19 @@ export function prepareConversationNotice(
 
 /**
  * Each decorated turn's notice, by the user message it was applied to (the turn's first; a retry's is its source
- * turn's). Only turns this process started: legacy's resumed history is raw.
+ * turn's). Every turn in the log, including those of an earlier process: the model was sent the decoration, and a
+ * resumed request that left it off would change the prefix from that message on.
  */
-function recordedNotices(facts: readonly Fact[], openedAt: number): ReadonlyMap<string, string> {
+function recordedNotices(facts: readonly Fact[]): ReadonlyMap<string, string> {
   const firstMessage = new Map<string, string>();
   const notices = new Map<string, string>();
-  facts.forEach((fact, index) => {
+  facts.forEach((fact) => {
     if (fact.type !== 'turn_started') return;
     const first = fact.retryContext
       ? firstMessage.get(fact.retryContext.sourceTurnId)
       : fact.input.find((item) => item.type === 'user_message')?.id;
     if (first) firstMessage.set(fact.turnId, first);
-    if (index >= openedAt && fact.requestNotice && first && !notices.has(first)) notices.set(first, fact.requestNotice);
+    if (fact.requestNotice && first && !notices.has(first)) notices.set(first, fact.requestNotice);
   });
   return notices;
 }

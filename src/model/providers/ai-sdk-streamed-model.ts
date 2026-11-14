@@ -11,6 +11,7 @@ import type {
   JSONSchema7,
 } from '@ai-sdk/provider';
 import { withMergedAssistantMessages } from './ai-sdk-message-normalizer.js';
+import { reportedUsageCost } from '../../shared/cost/model-cost.js';
 import type {
   StreamedModelMessagePart,
   StreamedModelToolResultPart,
@@ -458,12 +459,6 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
 
-function parseCostValue(value: unknown): number | string | undefined {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string' && value.trim().length > 0) return value;
-  return undefined;
-}
-
 /**
  * Extract provider-reported cost (USD amount or credits) from AI SDK
  * provider metadata or usage when present (e.g. OpenRouter usage accounting).
@@ -472,7 +467,7 @@ function extractAiSdkCostUsd(providerMetadata?: Record<string, unknown>, usage?:
   const usageRecord = asRecord(usage);
   if (usageRecord) {
     const rawRecord = asRecord(usageRecord.raw);
-    const rawCost = parseCostValue(rawRecord?.cost ?? usageRecord.cost);
+    const rawCost = reportedUsageCost({ ...rawRecord, cost: rawRecord?.cost ?? usageRecord.cost });
     if (rawCost !== undefined) return rawCost;
   }
 
@@ -483,10 +478,9 @@ function extractAiSdkCostUsd(providerMetadata?: Record<string, unknown>, usage?:
     const record = asRecord(value);
     if (record) {
       const nestedUsage = asRecord(record.usage);
-      const costDetails = asRecord(nestedUsage?.costDetails) ?? asRecord(nestedUsage?.cost_details);
-      const nestedCost = parseCostValue(
-        nestedUsage?.cost ?? record.cost ?? costDetails?.upstreamInferenceCost ?? costDetails?.upstream_inference_cost,
-      );
+      // Same precedence as before for `cost`; the upstream figure and the BYOK sum come from
+      // reportedUsageCost, which the chat-completions path also uses.
+      const nestedCost = reportedUsageCost({ ...nestedUsage, cost: nestedUsage?.cost ?? record.cost });
       if (nestedCost !== undefined) return nestedCost;
     }
   }

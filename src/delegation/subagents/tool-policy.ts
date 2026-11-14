@@ -541,6 +541,7 @@ export class SubagentToolPolicy {
   }
 
   async reviewYellowCommand(command: string, taskContext: string): Promise<ApprovalReviewResult> {
+    if (this.#settings.get('shell.autoApproveMode') === 'off') return { kind: 'not_reviewed', approved: false };
     if (!this.#agentClient) return { kind: 'unavailable', approved: false };
     try {
       const advisories = await evaluateShellAutoApprovalAdvisories({

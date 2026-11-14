@@ -1005,6 +1005,7 @@ describe('ACP v1 built CLI compatibility for Air', () => {
           expect(new Set(permissions.map(({ toolCall }) => toolCall.toolCallId)).size).toBe(2);
           for (const { toolCall, options } of permissions) {
             expect(toolCall.title).toContain(`Run outside sandbox once in ${workspace}: ${command}`);
+            expect(toolCall.title).toContain('Not reviewed automatically');
             expect(toolCall.rawInput).toMatchObject({ command, sandbox: 'unsandboxed' });
             expect(options.map(({ optionId, kind }) => [optionId, kind])).toEqual([
               ['unsandboxed-once', 'allow_once'],

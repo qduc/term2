@@ -6,6 +6,7 @@ export type ApprovalReviewResult =
       readonly kind: 'reviewed';
       readonly approved: boolean;
       readonly advisory: {
+        readonly approved: boolean;
         readonly reasoning: string;
         readonly model: string;
         readonly source?: 'llm' | 'system';
@@ -26,7 +27,7 @@ export function sanitizeApprovalReviewText(text: string): string {
 
 /** Bounded, terminal-safe text for a human-facing review explanation. */
 export function formatApprovalReview(result: ApprovalReviewResult): string {
-  if (result.kind === 'not_reviewed') return 'Not reviewed automatically; manual approval required.';
+  if (result.kind === 'not_reviewed') return 'Not reviewed automatically.';
   if (result.kind === 'unavailable') return 'Approval review unavailable.';
   const advisory = result.advisory;
   const reasoning = sanitizeApprovalReviewText(advisory.reasoning);

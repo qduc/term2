@@ -254,8 +254,8 @@
       "reason": "The shell executor checks one-use escape evidence against the actual cwd and foreground invocation at the point where it selects sandbox mode. Moving only that check would separate it from the execution context that enforces it. Lower the ceiling when the shell execution pipeline can move as a whole."
     },
     "src/delegation/subagents/tool-policy.ts": {
-      "lines": 1404,
-      "reason": "Inherited child capability factory and policy wrappers, with validation evidence capture now owned by subagents/validation-evidence.ts. The remaining authority checks, scope enforcement, and provider-compatible wrappers still share one graph; this lower ceiling records that existing cohesive body without authorizing further growth. The worker shell review retains a bounded explanation for its existing non-interactive rejection; move that review with its shell authority wrapper if the shared graph is split."
+      "lines": 1405,
+      "reason": "Inherited child capability factory and policy wrappers, with validation evidence capture now owned by subagents/validation-evidence.ts. The remaining authority checks, scope enforcement, and provider-compatible wrappers still share one graph; this lower ceiling records that existing cohesive body without authorizing further growth. The worker shell review retains a bounded explanation for its existing non-interactive rejection and distinguishes disabled review from failures; move that review with its shell authority wrapper if the shared graph is split."
     },
     "src/delegation/run-code/run-code-agent-capability.ts": {
       "lines": 529,

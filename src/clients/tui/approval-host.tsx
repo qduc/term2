@@ -84,6 +84,7 @@ function approvalDescriptor(
   const presentation = (view.presentation ?? {}) as Record<string, unknown>;
   const record = (value: unknown) =>
     value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+  const advisory = record(presentation.llmAdvisory);
   return {
     agentName,
     toolName: view.toolName ?? view.title,
@@ -91,6 +92,22 @@ function approvalDescriptor(
     // The turn's own interruption keeps its raw arguments (the prompt reads `sandbox` from them).
     ...(owner === 'turn' ? { rawInterruption: { arguments: JSON.stringify(view.input ?? {}) } } : {}),
     ...(view.callId ? { callId: view.callId } : {}),
+    ...(advisory &&
+    typeof advisory.reasoning === 'string' &&
+    typeof advisory.model === 'string' &&
+    typeof advisory.approved === 'boolean'
+      ? {
+          llmAdvisory: {
+            reasoning: advisory.reasoning,
+            model: advisory.model,
+            approved: advisory.approved,
+            ...(advisory.source === 'system' || advisory.source === 'llm' ? { source: advisory.source } : {}),
+            ...(typeof advisory.riskLevel === 'string' ? { riskLevel: advisory.riskLevel } : {}),
+            ...(typeof advisory.authorization === 'string' ? { authorization: advisory.authorization } : {}),
+            ...(typeof advisory.confidence === 'string' ? { confidence: advisory.confidence } : {}),
+          },
+        }
+      : {}),
     dockerHostControl:
       presentation.dockerHostControl === true || /: Docker host control \(this call only\)$/.test(view.summary ?? ''),
     ...(record(presentation.deniedRead)
@@ -180,6 +197,9 @@ function Host({
   const [reviewResult, setReviewResult] = useState<ApprovalReviewResult | null>(
     () => reviewResults.current.get(interaction.id) ?? null,
   );
+  const [reviewStopped, setReviewStopped] = useState(
+    () => reviewed.current.has(interaction.id) && !reviewResults.current.has(interaction.id),
+  );
   const [entry, setEntry] = useState<'reason' | 'answer' | null>(null);
   const [answers, setAnswers] = useState<readonly AskUserAnswer[]>([]);
   const [questionIndex, setQuestionIndex] = useState(0);
@@ -190,18 +210,22 @@ function Host({
   const reviewCancelled = useRef(false);
   const cancelReview = () => {
     reviewCancelled.current = true;
+    if (
+      owner === 'turn' &&
+      interaction.kind === 'approval' &&
+      reviewApproval &&
+      !reviewResults.current.has(interaction.id)
+    )
+      setReviewStopped(true);
     reviewed.current.add(interaction.id);
     reviewController.current?.abort();
   };
-  const reviewInput = interaction.input as { sandbox?: unknown } | null;
-  const reviewEligible =
-    request.owner === 'turn' &&
-    interaction.kind === 'approval' &&
-    interaction.toolName === 'shell' &&
-    reviewInput?.sandbox === 'unsandboxed';
+  const reviewEligible = request.owner === 'turn' && interaction.kind === 'approval';
   useEffect(() => {
     if (!reviewApproval || !reviewEligible || reviewCancelled.current || reviewed.current.has(interaction.id)) return;
-    reviewed.current.add(interaction.id);
+    const reviewedRequests = reviewed.current;
+    const completedReviews = reviewResults.current;
+    reviewedRequests.add(interaction.id);
     const controller = new AbortController();
     reviewController.current = controller;
     void reviewApproval(connection.sessionId, interaction.id, controller.signal)
@@ -230,6 +254,7 @@ function Host({
       .finally(() => publishHarnessApprovalReviewSettled(interaction.id));
     return () => {
       controller.abort();
+      if (!reviewCancelled.current && !completedReviews.has(interaction.id)) reviewedRequests.delete(interaction.id);
     };
   }, [connection, interaction.id, reviewApproval, reviewEligible, reviewed, reviewResults]);
   const fail = (error: unknown) => setNotice(error instanceof Error ? error.message : String(error));
@@ -370,14 +395,18 @@ function Host({
           <ApprovalPrompt
             approval={{
               ...approval,
-              ...(reviewResult?.kind === 'reviewed'
-                ? { llmAdvisory: { ...reviewResult.advisory, approved: reviewResult.approved } }
-                : {}),
+              ...(reviewResult?.kind === 'reviewed' ? { llmAdvisory: reviewResult.advisory } : {}),
             }}
             reviewStatus={
-              reviewResult?.kind === 'unavailable'
+              reviewResult?.kind === 'reviewed' && !reviewResult.approved
+                ? 'Automatic approval not granted; manual approval required.'
+                : reviewResult?.kind === 'unavailable'
                 ? 'Approval review unavailable; manual approval required.'
                 : reviewResult?.kind === 'not_reviewed'
+                ? 'Not reviewed automatically; manual approval required.'
+                : reviewEligible && reviewApproval && reviewStopped && !approval.llmAdvisory
+                ? 'Approval review stopped; manual approval required.'
+                : interaction.kind === 'approval' && !approval.llmAdvisory && (!reviewEligible || !reviewApproval)
                 ? 'Not reviewed automatically; manual approval required.'
                 : undefined
             }

@@ -891,6 +891,8 @@ describe('ACP v1 built CLI compatibility for Air', () => {
         await expectConfined();
         expect(reviews()).toHaveLength(2);
         expect(permissions).toHaveLength(1);
+        expect(permissions[0]!.toolCall.title).toContain('Deterministic approval review');
+        expect(permissions[0]!.toolCall.title).toContain('risk: high');
 
         expect(mode(await setMode('always'))).toMatchObject({ currentValue: 'always' });
         const sibling = await context.request(acp.methods.agent.session.new, setup);

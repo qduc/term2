@@ -1,3 +1,4 @@
+import type { ApprovalReviewResult } from '../shared/contracts/approval-review.js';
 /**
  * The direct application: one store, one in-process host and the runtime each
  * session needs. Every mode is a client of this host. Only `host.dispose()` ends
@@ -97,7 +98,7 @@ export type DirectApplication = {
     approvalMode?: DirectApprovalMode,
   ): Promise<void>;
   /** Review an exact, live foreground approval in the installed Assisted generation. */
-  reviewApproval(sessionId: string, requestId: string, signal: AbortSignal): Promise<boolean>;
+  reviewApproval(sessionId: string, requestId: string, signal: AbortSignal): Promise<ApprovalReviewResult>;
   /** `undefined` clears it. Throws if another write got there first. */
   setGoal(sessionId: string, goal: DurableGoal | undefined, source: 'user' | 'launcher'): Promise<void>;
   /** The durable goal of a session, and whether one is set at all. */
@@ -278,11 +279,11 @@ export async function createDirectApplication(options: DirectApplicationOptions)
       );
     },
     async reviewApproval(sessionId, requestId, signal) {
-      if (signal.aborted || !runtimes.get(sessionId)) return false;
+      if (signal.aborted || !runtimes.get(sessionId)) return { kind: 'not_reviewed', approved: false };
       const session = await store.open(sessionId);
       const runtime = runtimes.get(sessionId);
-      const approved = await reviewLiveApproval(session, runtime, requestId, signal);
-      return approved && runtimes.get(sessionId) === runtime;
+      const result = await reviewLiveApproval(session, runtime, requestId, signal);
+      return runtimes.get(sessionId) === runtime ? result : { kind: 'not_reviewed', approved: false };
     },
     async setGoal(sessionId, goal, source) {
       writeGoal(await store.open(sessionId), goal, source);

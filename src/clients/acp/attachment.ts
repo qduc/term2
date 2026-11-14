@@ -1,3 +1,4 @@
+import type { ApprovalReviewResult } from '../../shared/contracts/approval-review.js';
 import type { AcpClient } from './contract.js';
 import * as acp from '@agentclientprotocol/sdk/experimental/v2';
 import type { DirectConnection } from '../../host/in-process-direct-types.js';
@@ -80,7 +81,7 @@ export class AcpAttachment {
     readonly connection: DirectConnection,
     private readonly client: AcpClient,
     private readonly logger: AcpLogger,
-    private readonly reviewApproval?: (requestId: string, signal: AbortSignal) => Promise<boolean>,
+    private readonly reviewApproval?: (requestId: string, signal: AbortSignal) => Promise<ApprovalReviewResult>,
     private readonly readTitle?: () => Promise<string | undefined>,
   ) {
     this.foregroundTurnId = connection.snapshot.activeTurnId;
@@ -353,16 +354,16 @@ export class AcpAttachment {
     const { sessionId } = this.connection;
     this.openRequest(interaction.requestId, interaction.turnId, async (signal) => {
       const { requestId } = interaction;
-      const approved =
+      const review =
         interaction.kind === 'approval' &&
         !interaction.supportedGrants.includes('unsandboxed-once') &&
         (await this.reviewApproval?.(requestId, signal).catch((error: unknown) => {
           if (!signal.aborted)
             this.logger.error('ACP approval review failed', { sessionId, error: errorMessage(error) });
-          return false;
+          return { kind: 'unavailable', approved: false } as const;
         }));
       signal.throwIfAborted();
-      if (approved) {
+      if (review && review.approved) {
         return {
           type: 'answer',
           requestId,
@@ -373,7 +374,13 @@ export class AcpAttachment {
       return {
         type: 'answer',
         requestId,
-        ...(await requestPermission({ sessionId, interaction, client: this.client, signal })),
+        ...(await requestPermission({
+          sessionId,
+          interaction,
+          client: this.client,
+          signal,
+          ...(review ? { review } : {}),
+        })),
       };
     });
   }

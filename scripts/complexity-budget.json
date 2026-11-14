@@ -66,7 +66,7 @@
       "reason": "The session wires the composer to the ported legacy menu stack (useMenuStack, double-Escape) and routes every report into the transcript as legacy's addSystemMessage does; that wiring closes over submit, rewind and the viewport, declared later in the same component, so moving it out would add ref plumbing rather than a job seam. The composer's JSX also sits inside ComposerWidth (legacy InputBox's width-0 first frame), which only wraps it, and the command path preserves each menu's composer routing. The approval panel's Escape adds legacy's Stopped line through the viewport (one prop). The approval host also receives the TUI review callback so it can cancel automatic review on human input (one prop). The menu stack's first-run setup prompt sits under the live divider as legacy BottomArea places it (one line; the gate itself lives in menus/use-first-run-setup.ts). Candidate 2 adds the ported approval prompt host and tasks panel around the hidden composer box (legacy BottomArea order), which the same routing owns. The harness composer acknowledgement waits for the input to remount after an Esc-closed menu (two lines). Issue #221 adds submit-path wiring that has to close over submit's own locals: the /compact branch and the steer-to-auto delivery rule call compactTracker in commands.ts, which owns the in-flight count and outcome notice, and the in-flight draft restore compares against the text as typed so it does not duplicate it. The three submit-capture lines synchronize the actual child image draft before this callback enters submit and records its revision; moving that ordering into a separate helper would couple it back to both the pending-send ref and editor. Lower this ceiling when the composer boundary and its submit callback move together."
     },
     "src/clients/tui/approval-prompt.tsx": {
-      "lines": 1145,
+      "lines": 1057,
       "reason": "Verbatim port of legacy source/components/prompt/ApprovalPrompt.tsx (every approval and ask_user layout and key path); only its data access changed, so it matches legacy by construction."
     },
     "src/protocol/wire.ts": {
@@ -254,8 +254,8 @@
       "reason": "The shell executor checks one-use escape evidence against the actual cwd and foreground invocation at the point where it selects sandbox mode. Moving only that check would separate it from the execution context that enforces it. Lower the ceiling when the shell execution pipeline can move as a whole."
     },
     "src/delegation/subagents/tool-policy.ts": {
-      "lines": 1399,
-      "reason": "Inherited child capability factory and policy wrappers, with validation evidence capture now owned by subagents/validation-evidence.ts. The remaining authority checks, scope enforcement, and provider-compatible wrappers still share one graph; this lower ceiling records that existing cohesive body without authorizing further growth."
+      "lines": 1404,
+      "reason": "Inherited child capability factory and policy wrappers, with validation evidence capture now owned by subagents/validation-evidence.ts. The remaining authority checks, scope enforcement, and provider-compatible wrappers still share one graph; this lower ceiling records that existing cohesive body without authorizing further growth. The worker shell review retains a bounded explanation for its existing non-interactive rejection; move that review with its shell authority wrapper if the shared graph is split."
     },
     "src/delegation/run-code/run-code-agent-capability.ts": {
       "lines": 529,

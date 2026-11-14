@@ -302,6 +302,8 @@ it('routes approval keys while a slash menu is suspended', { timeout: TIMEOUT_MS
 it.each([
   { risk: 'low', automatic: true, delayedDenial: false, mode: 'auto', sandbox: true },
   { risk: 'high', automatic: false, delayedDenial: false, mode: 'auto', sandbox: true },
+  { risk: 'low', confidence: 'low', automatic: false, delayedDenial: false, mode: 'auto', sandbox: true },
+  { risk: 'low', reviewFails: true, automatic: false, delayedDenial: false, mode: 'auto', sandbox: true },
   { risk: 'low', automatic: false, delayedDenial: true, mode: 'auto', sandbox: true },
   { risk: 'low', automatic: false, delayedDenial: false, mode: 'off', sandbox: true },
   { risk: 'low', automatic: false, delayedDenial: false, mode: 'advisory', sandbox: true },
@@ -309,7 +311,7 @@ it.each([
 ])(
   'handles root unsandboxed review (mode=$mode sandbox=$sandbox risk=$risk denial=$delayedDenial)',
   { timeout: TIMEOUT_MS },
-  async ({ risk, automatic, delayedDenial, mode, sandbox }) => {
+  async ({ risk, automatic, delayedDenial, mode, sandbox, confidence = 'high', reviewFails = false }) => {
     root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-unsandboxed-review-')));
     const home = path.join(root, 'home');
     const workspace = path.join(root, 'workspace');
@@ -327,13 +329,15 @@ it.each([
         { call: { id: 'unsandboxed-call', args: { command, sandbox: 'unsandboxed' } } },
         ...(reviewExpected
           ? [
-              {
-                text: JSON.stringify({
-                  results: [
-                    { reasoning: 'fixture review', riskLevel: risk, authorization: 'explicit', confidence: 'high' },
-                  ],
-                }),
-              },
+              reviewFails
+                ? { error: 'review unavailable' }
+                : {
+                    text: JSON.stringify({
+                      results: [
+                        { reasoning: 'fixture review', riskLevel: risk, authorization: 'explicit', confidence },
+                      ],
+                    }),
+                  },
             ]
           : []),
         { text: 'UNSANDBOXED_FINISHED' },
@@ -391,6 +395,15 @@ it.each([
         if (reviewExpected)
           await vi.waitFor(() => expect(fs.existsSync(`${idlePath}.approval-review`)).toBe(true), { timeout: 30_000 });
         expect(fs.existsSync(marker)).toBe(false);
+        if (reviewExpected && !reviewFails) {
+          await session.waitForOutput('fixture review', 30_000);
+          expect(session.getVisibleOutput()).toContain(`Confidence: ${confidence}`);
+        } else {
+          await session.waitForOutput(
+            reviewFails ? 'Approval review unavailable' : 'Not reviewed automatically',
+            30_000,
+          );
+        }
         session.write('\r');
       }
     }

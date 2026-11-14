@@ -1,3 +1,4 @@
+import type { ApprovalReviewResult } from '../../shared/contracts/approval-review.js';
 import type * as acp from '@agentclientprotocol/sdk/experimental/v2';
 import type { SessionConfigOption, SetSessionConfigOptionRequest } from '@agentclientprotocol/sdk';
 import type { WireModel, WireConfigureRequest } from '../../protocol/wire.js';
@@ -69,7 +70,7 @@ export type BackendOptions = {
   readonly approval?: {
     get(sessionId: string): Promise<AcpApprovalMode>;
     set(sessionId: string, mode: AcpApprovalMode): Promise<void>;
-    review(sessionId: string, requestId: string, signal: AbortSignal): Promise<boolean>;
+    review(sessionId: string, requestId: string, signal: AbortSignal): Promise<ApprovalReviewResult>;
   };
   /** Accepted session intent, preserving Default even when its effective effort is concrete. */
   readonly configuration?: (sessionId: string) => Promise<{

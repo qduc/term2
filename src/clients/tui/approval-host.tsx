@@ -1,3 +1,4 @@
+import type { ApprovalReviewResult } from '../../shared/contracts/approval-review.js';
 /**
  * Hosts the ported legacy approval/ask_user prompt for the foreground turn's request, as legacy's app.tsx,
  * BottomArea and use-app-keyboard-shortcuts do: the prompt replaces the composer under the divider; `y`/`n` are
@@ -110,7 +111,12 @@ function approveDecision(answer: string | undefined): WireDecision {
 
 type HostProps = {
   readonly reviewed: MutableRefObject<Set<string>>;
-  readonly reviewApproval?: (sessionId: string, requestId: string, signal: AbortSignal) => Promise<boolean>;
+  readonly reviewResults: MutableRefObject<Map<string, ApprovalReviewResult>>;
+  readonly reviewApproval?: (
+    sessionId: string,
+    requestId: string,
+    signal: AbortSignal,
+  ) => Promise<ApprovalReviewResult>;
   readonly request: PromptRequest;
   /** The foreground turn a stop cancels; a background child's request may outlive it. */
   readonly activeTurnId: string | null;
@@ -135,12 +141,13 @@ type HostProps = {
 export function ApprovalHost({
   request,
   ...props
-}: Omit<HostProps, 'request' | 'reviewed'> & {
+}: Omit<HostProps, 'request' | 'reviewed' | 'reviewResults'> & {
   readonly request: PromptRequest | undefined;
 }): React.ReactElement | null {
   const reviewed = useRef(new Set<string>());
+  const reviewResults = useRef(new Map<string, ApprovalReviewResult>());
   return request ? (
-    <Host key={request.interaction.id} request={request} reviewed={reviewed} {...props} />
+    <Host key={request.interaction.id} request={request} reviewed={reviewed} reviewResults={reviewResults} {...props} />
   ) : (
     <>{props.panel}</>
   );
@@ -149,6 +156,7 @@ export function ApprovalHost({
 function Host({
   request,
   reviewed,
+  reviewResults,
   reviewApproval,
   activeTurnId,
   connection,
@@ -169,6 +177,9 @@ function Host({
   const { interaction, owner } = request;
   const approval = approvalDescriptor(interaction, request.agentName, owner);
   const isAskUser = approval.toolName === 'ask_user';
+  const [reviewResult, setReviewResult] = useState<ApprovalReviewResult | null>(
+    () => reviewResults.current.get(interaction.id) ?? null,
+  );
   const [entry, setEntry] = useState<'reason' | 'answer' | null>(null);
   const [answers, setAnswers] = useState<readonly AskUserAnswer[]>([]);
   const [questionIndex, setQuestionIndex] = useState(0);
@@ -194,25 +205,33 @@ function Host({
     const controller = new AbortController();
     reviewController.current = controller;
     void reviewApproval(connection.sessionId, interaction.id, controller.signal)
-      .then(async (approved) => {
-        if (!approved || controller.signal.aborted || pending.current) return;
+      .then(async (result) => {
+        if (controller.signal.aborted || pending.current) return;
+        reviewResults.current.set(interaction.id, result);
+        setReviewResult(result);
+        if (!result.approved) return;
         pending.current = true;
-        const result = await connection.send({
+        const receipt = await connection.send({
           type: 'answer',
           requestId: interaction.id,
           decision: { kind: 'allow' },
           provenance: { source: 'policy', automaticApproval: true },
         });
-        if (!result.ok && !controller.signal.aborted) pending.current = false;
+        if (!receipt.ok && !controller.signal.aborted) pending.current = false;
       })
       .catch(() => {
-        if (!controller.signal.aborted) pending.current = false;
+        if (!controller.signal.aborted) {
+          pending.current = false;
+          const result = { kind: 'unavailable', approved: false } as const;
+          reviewResults.current.set(interaction.id, result);
+          setReviewResult(result);
+        }
       })
       .finally(() => publishHarnessApprovalReviewSettled(interaction.id));
     return () => {
       controller.abort();
     };
-  }, [connection, interaction.id, reviewApproval, reviewEligible, reviewed]);
+  }, [connection, interaction.id, reviewApproval, reviewEligible, reviewed, reviewResults]);
   const fail = (error: unknown) => setNotice(error instanceof Error ? error.message : String(error));
 
   const send = (decision: WireDecision) => {
@@ -349,7 +368,19 @@ function Host({
             <Text color={theme.warning}>Background approval · {request.backgroundCount - 1} queued</Text>
           ) : null}
           <ApprovalPrompt
-            approval={approval}
+            approval={{
+              ...approval,
+              ...(reviewResult?.kind === 'reviewed'
+                ? { llmAdvisory: { ...reviewResult.advisory, approved: reviewResult.approved } }
+                : {}),
+            }}
+            reviewStatus={
+              reviewResult?.kind === 'unavailable'
+                ? 'Approval review unavailable; manual approval required.'
+                : reviewResult?.kind === 'not_reviewed'
+                ? 'Not reviewed automatically; manual approval required.'
+                : undefined
+            }
             inputHandler={promptInput}
             onApprove={onApprove}
             onReject={onReject}

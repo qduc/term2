@@ -300,26 +300,25 @@ export class ConversationBackground {
    * drain gives it, and the newer instruction stays the last thing it reads. It costs no request of its own: the
    * delivery is committed before that turn's admission, so the turn's history already holds it.
    */
-  deliverReopened(turnId: TurnId): readonly Fact[] {
+  deliverReopened(turnId: TurnId): void {
     const pending = this.#pending();
-    if (!pending.length) return [];
+    if (!pending.length) return;
     const reopened = new Set(
       this.journal.facts
         .slice(0, this.journal.reopenedAt)
         .flatMap((fact) => (fact.type === 'background_notice_enqueued' ? [fact.notice.id] : [])),
     );
     const notices = pending.filter((notice) => reopened.has(notice.id));
-    if (!notices.length) return [];
+    if (!notices.length) return;
     const text = directNoticeText(notices);
-    return [
-      {
-        type: 'background_notices_delivered',
-        clientRequestId: `inject_${randomUUID()}`,
-        turnId,
-        notificationIds: notices.map((notice) => notice.id),
-        injected: { messageId: `background:${randomUUID()}`, text },
-      },
-    ];
+    const delivered: Fact = {
+      type: 'background_notices_delivered',
+      clientRequestId: `inject_${randomUUID()}`,
+      turnId,
+      notificationIds: notices.map((notice) => notice.id),
+      injected: { messageId: `background:${randomUUID()}`, text },
+    };
+    if (!this.journal.commit([delivered])) throw new Error(this.journal.failure!.message);
   }
   #pending() {
     // Only accepted closure disproves a question notice. In particular, a

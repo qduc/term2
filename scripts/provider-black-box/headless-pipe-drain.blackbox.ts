@@ -13,7 +13,15 @@ import { createIsolatedWorkspaceLease } from './provider-test-harness.js';
 // than the kernel pipe buffer plus the reader's stream buffer.
 const FINAL_TEXT = `${'x'.repeat(400_000)}END`;
 
-it('flushes every --json record to a slow pipe reader before exiting', async () => {
+type PausedRun = {
+  readonly exit: { code: number | null; signal: NodeJS.Signals | null };
+  readonly served: number;
+  readonly stdout: string;
+  readonly stderr: string;
+};
+
+/** Runs the CLI with stdout paused; then `read` drains the pipe, `close` destroys the read end. */
+async function runWithPausedStdout(then: 'read' | 'close'): Promise<PausedRun> {
   let served = 0;
   let onServed: () => void = () => {};
   const lastResponse = new Promise<void>((resolve) => (onServed = resolve));
@@ -74,7 +82,7 @@ it('flushes every --json record to a slow pipe reader before exiting', async () 
     const chunks: Buffer[] = [];
     let stderr = '';
     child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString()));
-    const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) =>
+    const exited = new Promise<PausedRun['exit']>((resolve) =>
       child.once('exit', (code, signal) => resolve({ code, signal })),
     );
     const closed = new Promise<void>((resolve) => child.stdout.once('close', () => resolve()));
@@ -83,23 +91,14 @@ it('flushes every --json record to a slow pipe reader before exiting', async () 
     // signal marks a correct CLI blocked on that write; on the parent commit this whole scenario took
     // ~0.6 s, and a race lost to slowness only weakens the red proof, never the pass.
     await Promise.race([exited, new Promise((resolve) => setTimeout(resolve, 1000))]);
-    child.stdout.on('data', (chunk: Buffer) => chunks.push(chunk));
-    child.stdout.resume();
+    if (then === 'close') child.stdout.destroy();
+    else {
+      child.stdout.on('data', (chunk: Buffer) => chunks.push(chunk));
+      child.stdout.resume();
+    }
     const exit = await exited;
     await closed;
-    const stdout = Buffer.concat(chunks).toString('utf8');
-
-    expect(exit, stderr).toEqual({ code: 0, signal: null });
-    expect(served).toBe(1);
-    expect(stdout.length).toBeGreaterThan(2 * FINAL_TEXT.length);
-    expect(stdout.endsWith('\n')).toBe(true);
-    const events = stdout
-      .trim()
-      .split('\n')
-      .map((line) => JSON.parse(line) as Record<string, any>);
-    expect(events.find((event) => event.type === 'final')).toMatchObject({ finalText: FINAL_TEXT });
-    expect(events.at(-2)).toMatchObject({ type: 'run_summary', outcome: 'completed' });
-    expect(events.at(-1)).toMatchObject({ type: 'completed', finalText: FINAL_TEXT });
+    return { exit, served, stdout: Buffer.concat(chunks).toString('utf8'), stderr };
   } finally {
     clearTimeout(deadline);
     if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
@@ -107,4 +106,28 @@ it('flushes every --json record to a slow pipe reader before exiting', async () 
     server.closeAllConnections();
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
+}
+
+it('flushes every --json record to a slow pipe reader before exiting', async () => {
+  const { exit, served, stdout, stderr } = await runWithPausedStdout('read');
+  expect(exit, stderr).toEqual({ code: 0, signal: null });
+  expect(served).toBe(1);
+  expect(stdout.length).toBeGreaterThan(2 * FINAL_TEXT.length);
+  expect(stdout.endsWith('\n')).toBe(true);
+  const events = stdout
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line) as Record<string, any>);
+  expect(events.find((event) => event.type === 'final')).toMatchObject({ finalText: FINAL_TEXT });
+  expect(events.at(-2)).toMatchObject({ type: 'run_summary', outcome: 'completed' });
+  expect(events.at(-1)).toMatchObject({ type: 'completed', finalText: FINAL_TEXT });
+});
+
+// The reader closes the pipe while the CLI waits for its queued tail. The queued writes fail with
+// EPIPE; the run's settled exit code must survive that, without an unhandled 'error' crash.
+it('keeps the settled exit code when the reader closes the pipe during the drain', async () => {
+  const { exit, served, stderr } = await runWithPausedStdout('close');
+  expect(served).toBe(1);
+  expect(stderr).not.toMatch(/EPIPE|Unhandled 'error' event/);
+  expect(exit, stderr).toEqual({ code: 0, signal: null });
 });

@@ -10,8 +10,14 @@ export function settledExitCode(): number | undefined {
 /** Resolves once every write queued on `stream` so far has reached the OS, or the stream has failed. */
 function drained(stream: NodeJS.WriteStream): Promise<void> {
   if (stream.destroyed || stream.writableEnded) return Promise.resolve();
-  // Writes complete in order, so an empty write's callback runs after every earlier one.
-  return new Promise((resolve) => stream.write('', () => resolve()));
+  return new Promise((resolve) => {
+    // A reader that closes the pipe mid-drain fails the queued writes with EPIPE. Without a
+    // listener that 'error' crashed the process with exit 1 and a stack trace instead of the
+    // settled code; the listener stays until exit because the event can follow the callback.
+    stream.on('error', () => resolve());
+    // Writes complete in order, so an empty write's callback runs after every earlier one.
+    stream.write('', () => resolve());
+  });
 }
 
 /**

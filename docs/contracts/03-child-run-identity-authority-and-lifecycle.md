@@ -2,6 +2,19 @@
 
 Status: **historical seam record (owner-reviewed 2026-08-14).** In the rewrite and #197, the pre-rewrite subagent runtime (`createSubagentRuntime`, `SubagentAsyncRegistry`, `NestedSubagentRunner`, `ExecutionSubagentRunner`, `MentorRunner`, and `SubagentBridge`) was removed. Child agents now execute as native session branches (`src/session/branches.ts`) started via `startNestedTurn` in `src/engine/turn.ts`, launched by `createDirectSubagentTools` (`src/delegation/direct/subagent-tools.ts`). Delegation policy (role loader, tool policy, role pools, worker worktrees) lives in `src/delegation/subagents/` (see `src/delegation/README.md`). Memory capability derivation lives in `src/session/memory.ts`. The invariants below record the behavioral contract that governs child runs.
 
+**Native foreground beside background (2026-11-13).** Sessions with background
+delegation also run foreground `explorer`/`librarian` children
+(`src/delegation/README.md`, "Foreground beside background"). In the native
+runtime a foreground child's approval is a task interaction answered by the
+client, not the `interrupted` result §5 records for the retired runner; a
+user's move to background returns a `running` handle from the original call
+(C3.2, C3.5) and the child is detached from the parent signal (C3.4); a caller
+that cannot hold a handle (reviewer `run_explorer`, mentor, `agent.run`) gets a
+`failed` result naming the run instead. A role call mixed with `agent_spec` is
+rewritten only for explorer and librarian and never gains authority (C3.3). Covered
+by `tests/cli/subagent-delegation.integration.test.ts` and
+`tests/cli/foreground-subagent-transfer.e2e.test.ts`.
+
 **C3.7 extension landed docs-only 2026-08-16** under the remaining-SB slice I
 grant; the owner-reviewed 2026-08-14 baseline rows C3.1–C3.6 are unchanged.
 

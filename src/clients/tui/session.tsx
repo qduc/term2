@@ -228,9 +228,10 @@ export function TuiSession({
     cancelQueueEdit,
   });
   useInput((input, key) => {
+    // A foreground interaction suspends the menu, even if its frame remains open.
+    if (interactionActive) return void interactionInput.current?.(input, key);
     if (menuStack.open) return;
     if (confirmation.handleKey(input, key)) return;
-    if (interactionActive) return void interactionInput.current?.(input, key);
     if (taskOpen || budgetOpen) return;
     if (composerActive && key.escape && handoffFlow.escape()) return;
     if (composerActive && key.escape && !viewport.expanded && queue.index < 0 && !editing && interruptConfirm.press())

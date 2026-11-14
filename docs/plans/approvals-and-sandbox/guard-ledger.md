@@ -3374,7 +3374,6 @@ Catalogued, no hypothesized failure mode:
 - Rollback: revert ba428dd7 (7-line production change, independently revertible); foreground returns to raw-request thresholds with outer trim still bounding model-visible text.
 | `boundToolResultText` | 40k UTF-8 bytes, spools artifact + path (`verified safe`) | no |
 | Hook callback timeout | 5s | no |
-| Patch/edit healing timeout and file-size cap | helper defaults | no |
 | Web fetch character cap | 10k default, 200k max, with continuation | yes |
 | Subagent continuation segments | 3 | injectable |
 | Subagent question length | 1200 chars; throws | no |

@@ -49,7 +49,7 @@
     },
     "src/tools/file": {
       "files": 16,
-      "reason": "File tools plus their helpers. closest-line.ts (nearest-line hint shared by apply_patch and search_replace) and search-replace-input.ts (flat-argument recovery) are each a single job with their own importers; folding either back into search-replace.ts or apply-patch.ts would grow files that are already over their size ceilings. Lower the ceiling when the search_replace files move into a subfolder."
+      "reason": "File tools plus their helpers. closest-line.ts (nearest-line hint shared by apply_patch and search_replace) and search-replace-protocol.ts (flat-argument recovery and batch result wording) are each a single job with their own importers; folding either back into search-replace.ts or apply-patch.ts would grow files that are already over their size ceilings. Lower the ceiling when the search_replace files move into a subfolder."
     }
   },
   "fileCeilings": {
@@ -230,8 +230,8 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/tools/file/search-replace.ts": {
-      "lines": 711,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Grew ~50 lines for the tool-retries work: the batch executor now skips a no-op pair, names the failing replacement by index, and appends the nearest-line hint. Those edits sit in the single execute loop that owns the batch's all-or-nothing write, so moving them out would separate them from the state they report on. Lower the ceiling when the batch executor moves out of this file."
+      "lines": 702,
+      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Up from 661 for the tool-retries work: the optional read-access gate for the nearest-line hint, the skip and labelled-failure calls in the batch loop, and the flat-shape canonical schema. Result wording and shape recovery already live in search-replace-protocol.ts; what remains here is wiring beside the batch state (file content, the single write). Lower the ceiling when the batch executor moves out of this file."
     },
     "src/tools/mcp/mcp-connection-manager.ts": {
       "lines": 606,

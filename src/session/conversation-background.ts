@@ -271,12 +271,10 @@ export class ConversationBackground {
   };
   /**
    * Legacy's interactive app hands notices that settle during a turn to that turn at its next request boundary,
-   * as one user message after any steers, instead of waking a turn of its own afterwards. Headless runs do not,
-   * except for notices an earlier process left pending (or recovery wrote on open): they are delivered to the first
-   * turn of the resumed session instead of waiting behind its answer.
+   * as one user message after any steers, instead of waking a turn of its own afterwards. Headless runs do not.
    */
   inject(turnId: TurnId): { readonly facts: readonly Fact[]; readonly items: readonly Item[] } {
-    const notices = this.#injectable();
+    const notices = this.generation.supplied?.unattended === false ? this.#pending() : [];
     if (!notices.length) return { facts: [], items: [] };
     const item: Item = {
       type: 'user_message',
@@ -296,16 +294,32 @@ export class ConversationBackground {
       items: [item],
     };
   }
-  #injectable() {
-    if (this.generation.supplied?.unattended === false) return this.#pending();
+  /**
+   * Notices an earlier process left pending (or recovery wrote on open), delivered ahead of the first human message
+   * of the turn about to start, so that the model reads them before the new instruction, as the TUI's attach-time
+   * drain gives it, and the newer instruction stays the last thing it reads. It costs no request of its own: the
+   * delivery is committed before that turn's admission, so the turn's history already holds it.
+   */
+  deliverReopened(turnId: TurnId): readonly Fact[] {
     const pending = this.#pending();
-    if (!pending.length) return pending;
+    if (!pending.length) return [];
     const reopened = new Set(
       this.journal.facts
         .slice(0, this.journal.reopenedAt)
         .flatMap((fact) => (fact.type === 'background_notice_enqueued' ? [fact.notice.id] : [])),
     );
-    return pending.filter((notice) => reopened.has(notice.id));
+    const notices = pending.filter((notice) => reopened.has(notice.id));
+    if (!notices.length) return [];
+    const text = directNoticeText(notices);
+    return [
+      {
+        type: 'background_notices_delivered',
+        clientRequestId: `inject_${randomUUID()}`,
+        turnId,
+        notificationIds: notices.map((notice) => notice.id),
+        injected: { messageId: `background:${randomUUID()}`, text },
+      },
+    ];
   }
   #pending() {
     // Only accepted closure disproves a question notice. In particular, a

@@ -118,8 +118,6 @@ export function createReplayFold(): ReplayFold {
   /** Facts consumed so far, and each cancelled turn with the index of its end. */
   let consumed = 0;
   const cancelledTurns: { readonly turn: ActiveTurn; readonly index: number }[] = [];
-  /** The fact index of each tool call, so a later process can tell those it resumed (openedAt). */
-  const itemFacts = new Map<Item['id'], number>();
   const consume = (fact: Fact): void => {
     consumed++;
     // Display observations never enter provider slots, admission or lifecycle state.
@@ -130,8 +128,9 @@ export function createReplayFold(): ReplayFold {
       return;
     }
     if (fact.type === 'background_notices_delivered' && fact.injected) {
-      // Delivered into the running turn at a request boundary: its message joins that turn's history.
-      requireActive(fact.turnId, fact.type);
+      // Delivered into the running turn at a request boundary: its message joins that turn's history. With no
+      // turn open it precedes the turn that is about to start (an earlier process's notices, ahead of the new message).
+      if (active !== null || startedTurns.has(fact.turnId)) requireActive(fact.turnId, fact.type);
       notifications = foldFact({ notifications }, fact).notifications;
       slots.push({
         item: {
@@ -273,7 +272,6 @@ export function createReplayFold(): ReplayFold {
         break;
       }
       case 'item':
-        if (fact.item.type === 'tool_call') itemFacts.set(fact.item.id, consumed - 1);
         appendReplayItem(requireActive(fact.turnId, fact.type), fact, slots);
         break;
       case 'tool_started':
@@ -455,7 +453,7 @@ export function createReplayFold(): ReplayFold {
     recoveryFacts.push(...background.recoveryFacts);
     return {
       status: unfinished() !== null || lastOutcome === 'interrupted' ? 'interrupted' : 'idle',
-      history: slots.flatMap(({ item }) => (item === null ? [] : resumedItem(item, itemFacts, options.openedAt ?? 0))),
+      history: slots.flatMap(({ item }) => (item === null ? [] : [item])),
       nextTurn: queue.nextTurn,
       recoveryFacts,
       queue: queue.state,
@@ -469,17 +467,4 @@ export function createReplayFold(): ReplayFold {
     };
   };
   return { consume, finish };
-}
-
-/**
- * An item from before this process opened the session, as legacy reloads it: a call's arguments are
- * re-serialized as compact JSON. Harness "[Mode Notice]" reminders and background notice messages stay
- * where the live session had them: the model was shown them, and dropping them on reopen would change the
- * request prefix (a cache miss) and hide a child's findings, so a resumed history matches the live one.
- */
-function resumedItem(item: Item, itemFacts: ReadonlyMap<Item['id'], number>, openedAt: number): Item[] {
-  if ((itemFacts.get(item.id) ?? openedAt) >= openedAt) return [item];
-  if (item.type !== 'tool_call' || item.rawArguments === undefined) return [item];
-  const { rawArguments: _raw, argumentsSnapshot: _snapshot, ...call } = item;
-  return [call];
 }

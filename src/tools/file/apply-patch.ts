@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { describeClosestLine } from './closest-line.js';
 import { readFile, writeFile, mkdir, unlink } from 'fs/promises';
 import path from 'path';
 import { applyDiff } from '../../shared/utils/apply-diff.js';
@@ -229,6 +230,8 @@ export function createApplyPatchToolDefinition(deps: {
   resolveHealingModel: () => { model: string; provider: string };
   executionContext?: ExecutionContext;
   sessionAccess?: FileEditAccessPort;
+  /** Whether the caller may also read this file; the nearest-line hint echoes content only if it says yes. */
+  readAccess?: (absolutePath: string, context: unknown) => Promise<boolean>;
   patchHealing?: typeof healPatchOperation;
 }): ScriptedToolDefinition<typeof applyPatchParametersSchema> {
   const { loggingService, settingsService, executionContext, sessionAccess, patchHealing } = deps;
@@ -564,11 +567,12 @@ export function createApplyPatchToolDefinition(deps: {
                 }
 
                 if (!usedHealing || patched === undefined) {
+                  const mayEchoContent = (await deps.readAccess?.(targetPath, context)) === true;
                   return {
                     success: false,
                     operation: 'update_file',
                     path: filePath,
-                    error: formatPatchError(err, diff, original),
+                    error: formatPatchError(err, diff, original, mayEchoContent),
                   };
                 }
               }
@@ -715,7 +719,7 @@ function findClosestContextBlocks(contextLines: string[], originalLines: string[
     );
 }
 
-export function diagnoseContextMismatch(contextText: string, original: string): string {
+export function diagnoseContextMismatch(contextText: string, original: string, closestHints = false): string {
   const contextLines = contextText.split(/\r?\n/);
   const originalLines = original.split(/\r?\n/);
 
@@ -739,7 +743,10 @@ export function diagnoseContextMismatch(contextText: string, original: string): 
     });
 
     if (matchIndices.length === 0) {
-      reports.push(`- Line ${i + 1}: "${trimmedContext}" could not be found anywhere in the file.`);
+      // Only the first reports are shown, so only they pay for a nearest-line search.
+      const hint = closestHints && reports.length < 5 ? describeClosestLine(trimmedContext, originalLines) : '';
+      const nearest = hint ? `; ${hint}` : '';
+      reports.push(`- Line ${i + 1}: "${trimmedContext}" could not be found anywhere in the file${nearest}.`);
     } else {
       // Check if ANY of the matches in the original file are exact matches (including indentation)
       const exactMatch = matchIndices.some((idx) => originalLines[idx] === contextLine);
@@ -803,7 +810,7 @@ export function diagnoseContextMismatch(contextText: string, original: string): 
 /**
  * Format errors from applyDiff to be clearer and more actionable.
  */
-function formatPatchError(error: Error, diff: string, original?: string): string {
+function formatPatchError(error: Error, diff: string, original?: string, closestHints = false): string {
   const message = error.message || String(error);
   let formatted = '';
 
@@ -853,7 +860,7 @@ function formatPatchError(error: Error, diff: string, original?: string): string
       const contextMatch = message.match(/^Invalid (?:EOF )?Context \d+:\n([\s\S]*)$/);
       if (contextMatch && original !== undefined) {
         const contextText = contextMatch[1];
-        formatted = diagnoseContextMismatch(contextText, original);
+        formatted = diagnoseContextMismatch(contextText, original, closestHints);
       }
       // 6. Handle "Invalid Line" error
       else {

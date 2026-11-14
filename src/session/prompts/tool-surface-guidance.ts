@@ -35,7 +35,7 @@ export function renderBareToolGuidance(
   return content.replace('{{bare_tool_list}}', tools.join('\n')).replace('{{bare_tool_rules}}', rules.join('\n'));
 }
 
-export function getScriptPrimaryToolsAddendum(editorSurface: ScriptEditorSurface): string {
+export function getScriptPrimaryToolsAddendum(editorSurface: ScriptEditorSurface, webSearchEnabled = true): string {
   const editorBullets =
     editorSurface === 'patch'
       ? [
@@ -53,7 +53,7 @@ export function getScriptPrimaryToolsAddendum(editorSurface: ScriptEditorSurface
     '- For an exact substring or code symbol, call `tools.grep({ pattern, fixed_strings: true })`; otherwise `pattern` is a regular expression, so regex metacharacters must be escaped.',
     ...editorBullets,
     '- For multiline edit text or data containing quotes, backticks, or `${...}`, pass it through the `run_code` `inputs` parameter instead of embedding it in JavaScript source.',
-    '- Web: `tools.web_search` and `tools.web_fetch`.',
+    webSearchEnabled ? '- Web: `tools.web_search` and `tools.web_fetch`.' : '- Web: `tools.web_fetch`.',
     '- `shell` is available directly and as `tools.shell(...)` inside `run_code` for terminal commands, builds, git, and scripts. Both paths use the same approvals and sandbox. Do not use Python to read files when `tools.read_file` is available.',
   ];
   const toolsIntro = editorSurface === 'none' ? 'File, search, and web tools' : 'File, search, web, and edit tools';

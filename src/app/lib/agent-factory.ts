@@ -339,6 +339,7 @@ export function buildAgentTools({
       // into a schema diagnostic naming the offending fields.
       const validatedDefinition = wrapToolInvoke(wrappedDefinition, canonicalParameters, {
         argumentParsing: definition.argumentParsing,
+        offeredTools: toolDefinitions,
       });
       const shim: ToolInvokeShim = {
         type: 'function',

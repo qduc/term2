@@ -11,10 +11,14 @@ import type { ISettingsService, ILoggingService } from '../../shared/service-int
 import { boundToolResultText, resolveResultMaxBytesForCall } from '../../shared/utils/output/bound-tool-result.js';
 import { formatFullOutputSavedNote, saveOutputArtifact } from '../../shared/utils/shell/shell-output.js';
 
-const WEB_FETCH_DESCRIPTION =
+/** Without a configured search provider `web_search` is not offered, so the description must not point at it. */
+const webFetchDescription = (searchAvailable: boolean) =>
   'Fetch a web page and convert its HTML content to Markdown. ' +
-  'Use this when you need the full content of a specific URL referenced by tools.web_search(...) inside run_code or by the user. ' +
-  'Do NOT use this for broad queries; inside run_code, use tools.web_search(...) instead. ' +
+  (searchAvailable
+    ? 'Use this when you need the full content of a specific URL referenced by tools.web_search(...) inside run_code or by the user. ' +
+      'Do NOT use this for broad queries; inside run_code, use tools.web_search(...) instead. '
+    : 'Use this when you need the full content of a specific URL referenced by the user. ' +
+      'Do NOT use this for broad queries. ') +
   'Returns the page title, URL, table of contents, and extracted Markdown. ' +
   'Initial fetches are truncated to max_chars; the full content is saved to a temporary file when exceeded ' +
   '(look for "Full output saved to" and read that path when you need more).';
@@ -69,15 +73,18 @@ export const formatWebFetchCommandMessage: FormatCommandMessage = (item, index, 
   ];
 };
 
-export const createWebFetchToolDefinition = (deps: {
-  settingsService: ISettingsService;
-  loggingService: ILoggingService;
-}): ScriptedToolDefinition<typeof webFetchSchema> => {
+export const createWebFetchToolDefinition = (
+  deps: {
+    settingsService: ISettingsService;
+    loggingService: ILoggingService;
+  },
+  searchAvailable = true,
+): ScriptedToolDefinition<typeof webFetchSchema> => {
   const { loggingService } = deps;
 
   return {
     name: 'web_fetch',
-    description: WEB_FETCH_DESCRIPTION,
+    description: webFetchDescription(searchAvailable),
     scriptedReturnShape:
       'string: "Title: \u2026\nURL: \u2026" plus page markdown and truncation/continuation notes; "Error: \u2026" on failure',
     scriptedReturnSchema: z.string(),

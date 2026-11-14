@@ -1,0 +1,482 @@
+import { readFile } from 'node:fs/promises';
+import { expect, it } from 'vitest';
+import { captureApprovalPrompts, runScriptedToolCalls } from './tool-retry-fixture.js';
+
+/**
+ * Harness-caused tool retries found by auditing real benchmark runs: each scenario scripts the
+ * model's bad call and asserts the result text the model is shown and the effect on disk.
+ */
+
+it('search_replace accepts the flat single-replacement shape the schema does not advertise', async () => {
+  const run = await runScriptedToolCalls({
+    files: { 'target.txt': 'alpha\nbeta\n' },
+    readBack: ['target.txt'],
+    calls: [
+      ['search_replace', { path: 'target.txt', search_content: 'beta', replace_content: 'gamma' }],
+      ['search_replace', { path: 'target.txt', search_content: 'alpha', replace_content: 'one', replacements: [] }],
+    ],
+  });
+  expect(run.exitCode, run.stderr + run.stdout).toBe(0);
+  expect(run.toolResults[0]).toMatch(/^Updated target\.txt/);
+  expect(run.files['target.txt']).toBe('alpha\ngamma\n');
+  expect(run.toolResults[1]).toContain('not both');
+  // The presented schema keeps the array form only.
+  const tool = (run.requests[0]!.tools as Array<{ function: { name: string; parameters: any } }>).find(
+    (t) => t.function.name === 'search_replace',
+  )!;
+  expect(Object.keys(tool.function.parameters.properties).sort()).toEqual(['path', 'replacements']);
+});
+
+it('search_replace skips a no-op pair in a batch, names the failing replacement, and keeps a lone no-op an error', async () => {
+  const run = await runScriptedToolCalls({
+    files: { 'a.txt': 'one\ntwo\nthree\n', 'b.txt': 'x\ny\n' },
+    readBack: ['a.txt', 'b.txt'],
+    calls: [
+      [
+        'search_replace',
+        {
+          path: 'a.txt',
+          replacements: [
+            { search_content: 'one', replace_content: 'one' },
+            { search_content: 'two', replace_content: '2' },
+            { search_content: 'three', replace_content: '3' },
+          ],
+        },
+      ],
+      [
+        'search_replace',
+        {
+          path: 'b.txt',
+          replacements: [
+            { search_content: 'x', replace_content: 'X' },
+            { search_content: 'absent', replace_content: 'Z' },
+          ],
+        },
+      ],
+      ['search_replace', { path: 'b.txt', replacements: [{ search_content: 'y', replace_content: 'y' }] }],
+    ],
+  });
+  expect(run.exitCode, run.stderr + run.stdout).toBe(0);
+  // (a) the no-op pair is skipped and reported; the rest is applied.
+  expect(run.toolResults[0]).toContain('replacement 1 skipped: search and replace are identical');
+  expect(run.toolResults[0]).not.toContain('Batch aborted');
+  expect(run.files['a.txt']).toBe('one\n2\n3\n');
+  // A real failure still aborts the batch atomically, and names which replacement failed and why.
+  expect(run.toolResults[1]).toContain('replacement 2 of 2: Search content not found');
+  expect(run.toolResults[1]).toContain('replacement 1 not applied: replacement 2 failed');
+  expect(run.files['b.txt']).toBe('x\ny\n');
+  // A single no-op call is the model's own mistake: still an error, with a clear reason.
+  expect(run.toolResults[2]).toContain(
+    'search_content and replace_content are identical, so there is nothing to change',
+  );
+});
+
+it('search_replace words skipped no-ops truthfully, says when nothing was written, and keeps single errors plain', async () => {
+  const run = await runScriptedToolCalls({
+    files: { 'a.txt': 'one\ntwo\n' },
+    readBack: ['a.txt'],
+    calls: [
+      [
+        'search_replace',
+        {
+          path: 'a.txt',
+          replacements: [
+            { search_content: 'one', replace_content: 'one' },
+            { search_content: 'absent text', replace_content: 'absent text' },
+          ],
+        },
+      ],
+      ['search_replace', { path: 'a.txt', replacements: [{ search_content: 'missing', replace_content: 'x' }] }],
+    ],
+  });
+  expect(run.exitCode, run.stderr + run.stdout).toBe(0);
+  const lines = run.toolResults[0]!.split('\n');
+  expect(lines).toEqual([
+    'replacement 1 skipped: search and replace are identical',
+    'replacement 2 skipped: search and replace are identical, and that text does not appear in the file either',
+    'No changes were written.',
+  ]);
+  expect(run.files['a.txt']).toBe('one\ntwo\n');
+  expect(run.toolResults[1]).toContain('Search content not found');
+  expect(run.toolResults[1]).not.toContain('batch aborted');
+  expect(run.toolResults[1]).not.toContain('replacement 1 of 1');
+});
+
+const NEAR_MISS_FILE = [
+  'import os',
+  '',
+  'def compute_totals(items, tax_rate):',
+  '    subtotal = sum(item.price for item in items)',
+  '    return subtotal * (1 + tax_rate)',
+  '',
+  'def unrelated():',
+  '    return 42',
+  '',
+].join('\n');
+
+it('apply_patch names the closest file line for a context line it cannot find, and nothing when none is close', async () => {
+  const patch = (context: string) =>
+    [
+      '*** Begin Patch',
+      '*** Update File: calc.py',
+      '@@',
+      context,
+      '-    return 42',
+      '+    return 43',
+      '*** End Patch',
+    ].join('\n');
+  const run = await runScriptedToolCalls({
+    model: 'openai/gpt-5',
+    files: { 'calc.py': NEAR_MISS_FILE },
+    readBack: ['calc.py'],
+    calls: [
+      ['apply_patch', { patch: patch(' def compute_total(items, tax_rate):') }],
+      ['apply_patch', { patch: patch(' zebra_quantum_flux_capacitor = engage()') }],
+    ],
+  });
+  expect(run.exitCode, run.stderr + run.stdout).toBe(0);
+  expect(run.toolResults[0]).toContain(
+    'could not be found anywhere in the file; closest is line 3: "def compute_totals(items, tax_rate):"',
+  );
+  expect(run.toolResults[1]).toContain('could not be found anywhere in the file; no similar line found in the file');
+  expect(run.toolResults[1]).not.toContain('closest is line');
+  expect(run.files['calc.py']).toBe(NEAR_MISS_FILE);
+});
+
+it('search_replace names the closest file line when the search text is not found', async () => {
+  const run = await runScriptedToolCalls({
+    files: { 'calc.py': NEAR_MISS_FILE },
+    readBack: ['calc.py'],
+    calls: [
+      [
+        'search_replace',
+        {
+          path: 'calc.py',
+          replacements: [
+            {
+              search_content: 'def compute_totals(items, tax_rate):\n    subtotal = sum(i.price for i in items)',
+              replace_content: 'x',
+            },
+          ],
+        },
+      ],
+      [
+        'search_replace',
+        { path: 'calc.py', replacements: [{ search_content: 'zebra_quantum_flux = engage()', replace_content: 'x' }] },
+      ],
+    ],
+  });
+  expect(run.exitCode, run.stderr + run.stdout).toBe(0);
+  expect(run.toolResults[0]).toContain('Search content not found.');
+  expect(run.toolResults[0]).toContain(
+    'For search line 2 ("subtotal = sum(i.price for i in items)"), closest is line 4: "subtotal = sum(item.price for item in items)".',
+  );
+  expect(run.toolResults[1]).toContain('no similar line found in the file');
+  expect(run.files['calc.py']).toBe(NEAR_MISS_FILE);
+});
+
+it('run_subagent names what is missing and shows both valid shapes', async () => {
+  const run = await runScriptedToolCalls({
+    calls: [
+      ['run_subagent', { execution: 'foreground', name: 'scout', check_in: { enabled: true } }],
+      ['run_subagent', { execution: 'foreground', role: 'explorer' }],
+      ['run_subagent', { execution: 'foreground', role: 'worker', task: 'look', agent_spec: { goal: 'look' } }],
+    ],
+  });
+  expect(run.exitCode, run.stderr + run.stdout).toBe(0);
+  const shapes = 'needs either role+task (e.g. {"role":"explorer","task":"…"}) or agent_spec:{goal:"…"}';
+  expect(run.toolResults[0]).toContain(`input missing role and task: ${shapes}`);
+  expect(run.toolResults[0]).toContain('Received keys: check_in, execution, name.');
+  expect(run.toolResults[1]).toContain(`role sent without task: ${shapes}`);
+  // A writing role is still not rewritten: the mixed-shape tolerance stays limited to read-only roles.
+  expect(run.toolResults[2]).toContain('Send role+task without agent_spec, or agent_spec alone');
+  // The double full stop of the old message is gone.
+  for (const text of run.toolResults) expect(text).not.toContain('..');
+});
+
+it('a schema mismatch says which tool the arguments belong to', async () => {
+  const run = await runScriptedToolCalls({
+    files: { 'a.txt': 'x\n' },
+    calls: [
+      ['shell', { path: 'a.txt', start_line: 1, end_line: 5 }],
+      ['read_file', { command: 'ls' }],
+      ['shell', { cmd: 'ls' }],
+    ],
+  });
+  expect(run.exitCode, run.stderr + run.stdout).toBe(0);
+  expect(run.toolResults[0]).toContain('These arguments belong to read_file, not shell; shell needs command.');
+  expect(run.toolResults[1]).toContain('These arguments belong to shell, not read_file; read_file needs path.');
+  // An argument no other tool takes gets the plain diagnostic, with no misleading hint.
+  expect(run.toolResults[2]).toContain('Tool input did not match schema for shell');
+  expect(run.toolResults[2]).not.toContain('belong to');
+});
+
+it('the wrong-tool hint names only tools the calling agent is offered', async () => {
+  const run = await runScriptedToolCalls({
+    calls: [
+      ['shell', { execution: 'foreground', role: 'explorer', task: 'look around' }],
+      ['read_file', { search_content: 'a', replace_content: 'b' }],
+      ['run_subagent', { execution: 'foreground', role: 'explorer', task: 'look around' }],
+      ['shell', { execution: 'foreground', role: 'explorer', task: 'look again' }],
+    ],
+  });
+  expect(run.exitCode, run.stderr + run.stdout).toBe(0);
+  const hints = run.allToolResults.filter((text) => text.includes('Tool input did not match schema for shell'));
+  // The root offers run_subagent and is told so; the explorer child it launched cannot call it and is not.
+  expect(hints.filter((text) => text.includes('belong to run_subagent'))).toHaveLength(1);
+  expect(hints.filter((text) => !text.includes('belong to'))).toHaveLength(1);
+  // search_replace's flat keys count as its own for the hint.
+  expect(run.allToolResults.join('\n')).toContain(
+    'These arguments belong to search_replace, not read_file; read_file needs path.',
+  );
+});
+
+/** The spooled file named by a result's "Full output saved to" note, as lines (no trailing empty line). */
+const spoolOf = async (results: string[]): Promise<string[] | undefined> => {
+  const path = /Full output saved to `([^`]+)`/.exec(results[0]!)?.[1];
+  if (!path) return undefined;
+  const lines = (await readFile(path, 'utf8')).split('\n');
+  if (lines.at(-1) === '') lines.pop();
+  return lines;
+};
+
+/**
+ * A trim marker may state a line range only if it is in the spooled file's own numbering: the lines on
+ * either side of the marker are then exactly the file lines around that range, and the note's total
+ * is the file's length. Count-only markers make no range claim, and the total must still be right.
+ */
+const expectHonestTrim = (text: string, file: string[]) => {
+  expect(text).toContain(`(${file.length} lines)`);
+  const shown = text.split('\n');
+  const markerAt = shown.findIndex((line) => /^\.\.\. \[.*trimmed.*\] \.\.\.$/.test(line));
+  expect(markerAt, text.slice(0, 600)).toBeGreaterThan(-1);
+  const range = /lines (\d+)-(\d+) of (\d+) trimmed/.exec(shown[markerAt]!);
+  if (!range) return { ranged: false as const };
+  const [from, to, total] = [Number(range[1]), Number(range[2]), Number(range[3])];
+  expect(total).toBe(file.length);
+  expect(file[from - 2]).toBe(shown[markerAt - 1]);
+  expect(file[to]).toBe(shown[markerAt + 1]);
+  // Everything the marker hides is in the file, and none of it is still in the result.
+  const hidden = file.slice(from - 1, to);
+  expect(hidden.length).toBe(to - from + 1);
+  expect(shown.filter((line) => hidden.includes(line))).toEqual([]);
+  return { ranged: true as const };
+};
+
+it('a trimmed shell result states the trimmed line range and the spooled file total, matching the file', async () => {
+  const run = await runScriptedToolCalls({ calls: [['shell', { command: 'seq 1 1090' }]], inspect: spoolOf });
+  expect(run.exitCode, run.stderr + run.stdout).toBe(0);
+  expect(expectHonestTrim(run.toolResults[0]!, run.inspected as string[]).ranged).toBe(true);
+});
+
+it('trim markers make no wrong range claim when long lines or two streams add trim layers', async () => {
+  const pad = 'x'.repeat(70);
+  const long = await runScriptedToolCalls({
+    calls: [['shell', { command: `seq 1 3000 | sed 's/$/ ${pad}/'` }]],
+    inspect: spoolOf,
+  });
+  expect(long.exitCode, long.stderr + long.stdout).toBe(0);
+  expectHonestTrim(long.toolResults[0]!, long.inspected as string[]);
+  // Both streams over the line limit: the result is trimmed again as a whole after each stream's own trim.
+  const both = await runScriptedToolCalls({
+    calls: [['shell', { command: 'seq 1 1200; seq 5001 6200 >&2' }]],
+    inspect: spoolOf,
+  });
+  expect(both.exitCode, both.stderr + both.stdout).toBe(0);
+  expect(expectHonestTrim(both.toolResults[0]!, both.inspected as string[]).ranged).toBe(false);
+});
+
+it('a bounded read_file result states the spooled file total and makes no wrong range claim', async () => {
+  const text = Array.from({ length: 3000 }, (_, i) => `line ${i + 1} ${'y'.repeat(40)}`).join('\n') + '\n';
+  const run = await runScriptedToolCalls({
+    files: { 'big.txt': text },
+    calls: [['read_file', { path: 'big.txt' }]],
+    inspect: spoolOf,
+  });
+  expect(run.exitCode, run.stderr + run.stdout).toBe(0);
+  const file = run.inspected as string[];
+  expect(file).toBeDefined();
+  expect(run.toolResults[0]).toContain(`(${file.length} lines)`);
+  // The text the result lacks is in the file: its first line is the file's first line.
+  expect(file.join('\n')).toContain('line 3000 ');
+  expect(run.toolResults[0]).not.toContain('line 3000 ');
+  expect(run.toolResults[0]).not.toMatch(/lines \d+-\d+ of \d+ trimmed/);
+});
+
+it('search_replace gives no nearest-line hint for a file beyond the scan budget, rather than a partial answer', async () => {
+  const filler = Array.from({ length: 60000 }, (_, i) => `filler line number ${i} with some padding text`).join('\n');
+  // The real line sits after the first 1.5M characters; a truncated scan would call it absent or pick a wrong line.
+  const big = `${filler}\nconst target_value = computeThing(alpha, beta);\n`;
+  const started = Date.now();
+  const run = await runScriptedToolCalls({
+    files: { 'big.txt': big },
+    calls: [
+      [
+        'search_replace',
+        {
+          path: 'big.txt',
+          replacements: [{ search_content: 'const target_value = computeThing(alpha, bet);', replace_content: 'x' }],
+        },
+      ],
+    ],
+  });
+  expect(run.exitCode, run.stderr + run.stdout).toBe(0);
+  expect(run.toolResults[0]).toContain('Search content not found.');
+  expect(run.toolResults[0]).not.toContain('closest is');
+  expect(run.toolResults[0]).not.toContain('no similar line');
+  expect(Date.now() - started).toBeLessThan(15000);
+});
+
+it.skipIf(process.platform !== 'linux')(
+  'regression guard: the approval prompt shows the flat search_replace form like the array form',
+  async () => {
+    // Guards existing behaviour, not a fix: arguments are normalised before they reach the
+    // prompt on every shipped path (root and nested run_code), so this passes without any
+    // prompt-side handling. It fails if that normalisation is ever lost.
+    // The targets are outside the project, so each call needs the user's approval.
+    const edit = (old: string, next: string) => ({ search_content: old, replace_content: next });
+    const {
+      screens: [flat, array, nested],
+    } = await captureApprovalPrompts({
+      files: { 'outside/a.txt': 'flat_old\n', 'outside/b.txt': 'array_old\n', 'outside/c.txt': 'nested_old\n' },
+      calls: [
+        ['search_replace', { path: '../outside/a.txt', ...edit('flat_old', 'flat_new') }],
+        ['search_replace', { path: '../outside/b.txt', replacements: [edit('array_old', 'array_new')] }],
+        [
+          'run_code',
+          {
+            description: 'Edit through the script surface',
+            code: "return await tools.search_replace({ path: '../outside/c.txt', search_content: 'nested_old', replace_content: 'nested_new' });",
+          },
+        ],
+      ],
+      awaitText: ['flat_new', 'array_new', 'nested_new'],
+    });
+    for (const [screen, old, next] of [
+      [flat, 'flat_old', 'flat_new'],
+      [array, 'array_old', 'array_new'],
+      [nested, 'nested_old', 'nested_new'],
+    ] as const) {
+      expect(screen).toContain('[SEARCH & REPLACE]');
+      expect(screen).toContain(`-${old}`);
+      expect(screen).toContain(`+${next}`);
+    }
+  },
+  120000,
+);
+
+it.skipIf(process.platform !== 'linux')(
+  'the nearest-line hint is given only for files the caller may also read',
+  async () => {
+    // outside/ needs approval to edit and a separate grant to read; approving the edit grants no read.
+    const { toolResults } = await captureApprovalPrompts({
+      files: {
+        'outside/secrets.env': 'AWS_SECRET_ACCESS_KEY=hunter2hunter2\nREGION=eu\n',
+        'project/inside.env': 'PUBLIC_VALUE=visible_value_123\nMODE=dev\n',
+      },
+      calls: [
+        [
+          'search_replace',
+          {
+            path: '../outside/secrets.env',
+            search_content: 'AWS_SECRET_ACCESS_KEY=hunter2hunter3',
+            replace_content: 'x',
+          },
+        ],
+        [
+          'search_replace',
+          { path: 'inside.env', search_content: 'PUBLIC_VALUE=visible_value_124', replace_content: 'x' },
+        ],
+      ],
+      awaitText: ['hunter2hunter3'],
+    });
+    const joined = toolResults.join('\n');
+    // Withheld: the plain not-found text, and none of the file's content.
+    expect(joined).toContain('Search content not found');
+    expect(joined).not.toContain('hunter2hunter2');
+    expect(joined).not.toContain('REGION');
+    // Allowed: inside the workspace the same hint is given.
+    expect(joined).toContain('closest is line 1: "PUBLIC_VALUE=visible_value_123"');
+  },
+  120000,
+);
+
+it.skipIf(process.platform !== 'linux')(
+  'apply_patch gives no nearest-line hint for a file the caller may edit but not read',
+  async () => {
+    // outside/ needs approval to edit and a separate grant to read; approving the edit grants no read.
+    const patch = (path: string, context: string) =>
+      ['*** Begin Patch', `*** Update File: ${path}`, '@@', context, '-REGION=eu', '+REGION=us', '*** End Patch'].join(
+        '\n',
+      );
+    const { toolResults } = await captureApprovalPrompts({
+      model: 'openai/gpt-5',
+      files: {
+        'outside/secrets.env': 'AWS_SECRET_ACCESS_KEY=hunter2hunter2\nREGION=eu\n',
+        'project/inside.env': 'PUBLIC_VALUE=visible_value_123\nREGION=eu\n',
+      },
+      calls: [
+        ['apply_patch', { patch: patch('../outside/secrets.env', ' AWS_SECRET_ACCESS_KEY=hunter2hunter3') }],
+        ['apply_patch', { patch: patch('inside.env', ' PUBLIC_VALUE=visible_value_124') }],
+      ],
+      awaitText: ['Agent wants to run: apply_patch'],
+    });
+    const joined = toolResults.join('\n');
+    // Withheld: the plain not-found report, and none of the file's content.
+    expect(toolResults[0]).toContain('could not be found anywhere in the file.');
+    expect(toolResults[0]).not.toContain('closest is');
+    expect(toolResults[0]).not.toContain('no similar line');
+    expect(toolResults[0]).not.toContain('hunter2hunter2');
+    // Allowed: inside the workspace the same report carries the hint.
+    expect(joined).toContain('closest is line 1: "PUBLIC_VALUE=visible_value_123"');
+  },
+  120000,
+);
+
+const toolNames = (request: { tools?: unknown[] } | undefined): string[] =>
+  ((request?.tools ?? []) as Array<{ function?: { name?: string } }>).map((tool) => tool.function?.name ?? '').sort();
+const runCodeCatalogue = (request: { tools?: unknown[] } | undefined): string =>
+  ((request?.tools ?? []) as Array<{ function?: { name?: string; description?: string } }>).find(
+    (tool) => tool.function?.name === 'run_code',
+  )?.function?.description ?? '';
+
+it('web_search is offered to root and explorer only when a search provider is configured', async () => {
+  const explore = ['run_subagent', { execution: 'foreground', role: 'explorer', task: 'look around' }] as const;
+  const without = await runScriptedToolCalls({ calls: [explore] });
+  expect(without.exitCode, without.stderr + without.stdout).toBe(0);
+  // Requests: root, explorer child, root again. web_fetch needs no configuration and stays.
+  // The root reaches web tools through run_code's catalogue; the explorer has them as direct tools.
+  expect(runCodeCatalogue(without.requests[0])).toMatch(/\bweb_fetch\b/);
+  expect(runCodeCatalogue(without.requests[0])).not.toMatch(/\bweb_search\b/);
+  expect(toolNames(without.requests[1])).toContain('web_fetch');
+  expect(toolNames(without.requests[1])).not.toContain('web_search');
+  // Prompt and tool list agree: no request, root or child, names the absent tool. The one remaining
+  // mention is the name list of run_subagent's agent_spec `tools` schema, which is not conditional.
+  const agentSpecEnum = /(code_context_search\\?",\\?")web_search/g;
+  without.requests.forEach((request, index) => {
+    const text = JSON.stringify(request).replace(agentSpecEnum, '$1');
+    expect(text.match(/.{60}web_search.{60}/g), `request ${index}`).toBeNull();
+  });
+  const explorerText = JSON.stringify(without.requests[1]);
+  expect(explorerText).toContain('have a web fetch tool');
+  expect(explorerText).not.toContain('have web search and web fetch tools');
+  const withKey = await runScriptedToolCalls({
+    calls: [explore],
+    settings: { webSearch: { tavily: { apiKey: 'fixture-key' } } },
+  });
+  expect(withKey.exitCode, withKey.stderr + withKey.stdout).toBe(0);
+  expect(runCodeCatalogue(withKey.requests[0])).toMatch(/\bweb_search\b/);
+  expect(toolNames(withKey.requests[1])).toContain('web_search');
+  expect(toolNames(withKey.requests[1])).toContain('web_fetch');
+  // Configured, the wording is exactly what it was before web_search became conditional.
+  const keyedExplorer = JSON.stringify(withKey.requests[1]);
+  expect(keyedExplorer).toContain('have web search and web fetch tools');
+  expect(keyedExplorer).toContain(
+    '- Use `web_search` to find relevant external documentation, articles, or current information.\\n',
+  );
+  expect(keyedExplorer).toContain('referenced by tools.web_search(...) inside run_code or by the user.');
+  // Configured, the explorer's tool list is exactly the unconfigured one plus web_search.
+  expect(toolNames(withKey.requests[1]).filter((name) => name !== 'web_search')).toEqual(
+    toolNames(without.requests[1]),
+  );
+});

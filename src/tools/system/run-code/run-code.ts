@@ -18,7 +18,11 @@ import { createMcpCatalog, isMcpToolDefinition, renderMcpCatalog } from './mcp-s
 import type { McpToolSource } from '../../mcp/mcp-tool-source.js';
 import type { RunCodeRuntimePort, RunCodeRuntimeGraph } from './runtime-port.js';
 import { RUN_CODE_EXECUTION_RESULT, type RunCodeExecution } from './run-code-execution.js';
-import { formatFullOutputSavedNote, saveOutputArtifact } from '../../../shared/utils/shell/shell-output.js';
+import {
+  countFileLines,
+  formatFullOutputSavedNote,
+  saveOutputArtifact,
+} from '../../../shared/utils/shell/shell-output.js';
 import {
   RUN_CODE_LIMITS,
   RUN_CODE_PROHIBITED_TOOLS,
@@ -152,7 +156,10 @@ const clip = async (
   if (text.length <= MAX_OUTPUT_CHARS) return text;
   let retrieval: string;
   try {
-    retrieval = formatFullOutputSavedNote(await saveOutputArtifact(text, { filenamePrefix: 'run-code' }));
+    retrieval = formatFullOutputSavedNote(
+      await saveOutputArtifact(text, { filenamePrefix: 'run-code' }),
+      countFileLines(text),
+    );
   } catch {
     // Effects have already settled. A disk failure must not invite their replay.
     retrieval =

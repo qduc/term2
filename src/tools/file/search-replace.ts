@@ -1,4 +1,15 @@
 import { z } from 'zod';
+import { normalizeObjectParams } from '../tool-invoke.js';
+import {
+  abortFailedGroup,
+  labelFailure,
+  normalizeSearchReplaceShape,
+  readSearchReplaceArguments,
+  renderBatchResult,
+  skippedNoOp,
+  type BatchEntry,
+} from './search-replace-protocol.js';
+import { describeSearchMismatch } from './closest-line.js';
 import { readFile, writeFile } from 'fs/promises';
 import path from 'path';
 import { isProtectedHookPath, isWorkspacePathPhysicallyInside, resolveWorkspacePath } from '../utils.js';
@@ -64,6 +75,19 @@ const searchReplaceParametersSchema = z.object({
   replacements: z.array(searchReplaceOperationSchema).min(1).describe('The list of replacements to apply to the file'),
 });
 
+/**
+ * Execution-side schema: reads the flat single-edit form as one replacement. The provider is shown
+ * `searchReplaceParametersSchema` (the tool's `parameters`) unchanged; this wraps it as a plain preprocess.
+ */
+const searchReplaceCanonicalSchema = z.preprocess((raw, ctx) => {
+  const shaped = normalizeSearchReplaceShape(normalizeObjectParams(raw, searchReplaceParametersSchema));
+  if (!shaped.ok) {
+    ctx.addIssue({ code: 'custom', message: shaped.message });
+    return raw;
+  }
+  return shaped.value;
+}, searchReplaceParametersSchema);
+
 export type SearchReplaceOperation = z.infer<typeof searchReplaceOperationSchema>;
 export type SearchReplaceToolParams = z.infer<typeof searchReplaceParametersSchema>;
 
@@ -74,7 +98,8 @@ export interface SearchReplaceFullOperation {
   match_all?: boolean;
 }
 
-function getSearchReplaceOperations(params: SearchReplaceToolParams): SearchReplaceFullOperation[] {
+function getSearchReplaceOperations(rawParams: SearchReplaceToolParams): SearchReplaceFullOperation[] {
+  const params = readSearchReplaceArguments(rawParams) as SearchReplaceToolParams;
   return params.replacements.map((rep) => ({
     path: params.path,
     search_content: rep.search_content,
@@ -228,7 +253,7 @@ function executeReplacement(
 
 export const formatSearchReplaceCommandMessage: FormatCommandMessage = (item, index, _toolCallArgumentsById) => {
   const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
-  const args = normalizeToolArguments(normalizedArgs) ?? {};
+  const args = (readSearchReplaceArguments(normalizeToolArguments(normalizedArgs) ?? {}) as Record<string, any>) ?? {};
   const replacements = Array.isArray(args?.replacements) ? args.replacements : [];
   const firstReplacement = replacements[0] ?? {};
   const filePath = args?.path ?? 'unknown';
@@ -273,6 +298,11 @@ export function createSearchReplaceToolDefinition(deps: {
   resolveHealingModel: () => { model: string; provider: string };
   executionContext?: ExecutionContext;
   sessionAccess?: FileEditAccessPort;
+  /**
+   * Whether the caller may also read this file. The nearest-line hint echoes file content, so it is given
+   * only when this says yes (same authority as read_file); absent means never.
+   */
+  readAccess?: (absolutePath: string, context: unknown) => Promise<boolean>;
   /** Absent when no nested run driver exists: a failed match then reports plain not-found guidance. */
   editHealing?: typeof healSearchReplaceParams;
 }): ScriptedToolDefinition<typeof searchReplaceParametersSchema> {
@@ -288,6 +318,7 @@ export function createSearchReplaceToolDefinition(deps: {
     canRequireApproval: true,
     scriptedReturnSchema: z.string(),
     parameters: searchReplaceParametersSchema,
+    canonicalParameters: searchReplaceCanonicalSchema,
     approvalPresentation: getApprovalPresentationCapability('search_replace'),
     needsApproval: async (params) => {
       if (sessionAccess?.isReadOnly) return false;
@@ -403,7 +434,7 @@ export function createSearchReplaceToolDefinition(deps: {
         return true;
       }
     },
-    execute: async (params) => {
+    execute: async (params, context) => {
       if (sessionAccess?.isReadOnly) return 'Error: search_replace is unavailable in a read-only session.';
       const enableFileLogging = settingsService.get('tools.logFileOperations');
       const cwd = executionContext?.getCwd() || process.cwd();
@@ -424,7 +455,11 @@ export function createSearchReplaceToolDefinition(deps: {
         output: { success: false, error, ...extra },
       });
 
-      const applyToContent = async (operation: SearchReplaceFullOperation, content: string) => {
+      const applyToContent = async (
+        operation: SearchReplaceFullOperation,
+        content: string,
+        mayHint: () => Promise<boolean>,
+      ) => {
         const { path: filePath, search_content, replace_content, match_all } = operation;
 
         if (search_content === '') {
@@ -434,7 +469,9 @@ export function createSearchReplaceToolDefinition(deps: {
         }
 
         if (search_content === replace_content) {
-          return fail('search_content and replace_content are identical.');
+          return fail(
+            'search_content and replace_content are identical, so there is nothing to change. Send a different replace_content, or leave this edit out.',
+          );
         }
 
         const markerError = detectSummarizationMarkers(search_content);
@@ -501,9 +538,12 @@ export function createSearchReplaceToolDefinition(deps: {
             }
 
             if (!usedHealing) {
+              const nearest = (await mayHint()) ? describeSearchMismatch(search_content, content) : '';
               const reasonSuffix = healingFailureReason ? ` Reason: ${healingFailureReason}.` : '';
               return fail(
-                `Search content not found. Auto-healing attempted but no match found.${reasonSuffix} Try splitting changes into smaller patterns.`,
+                `Search content not found. Auto-healing attempted but no match found.${reasonSuffix} Try splitting changes into smaller patterns.${
+                  nearest ? ` ${nearest}` : ''
+                }`,
                 { healing_failure_reason: healingFailureReason },
               );
             }
@@ -516,7 +556,9 @@ export function createSearchReplaceToolDefinition(deps: {
         });
 
         if (!replacementResult.success) {
-          return fail(replacementResult.error);
+          const hint =
+            matchInfo.type === 'none' && (await mayHint()) ? describeSearchMismatch(search_content, content) : '';
+          return fail(hint ? `${replacementResult.error} ${hint}` : replacementResult.error);
         }
 
         if (enableFileLogging) {
@@ -588,6 +630,9 @@ export function createSearchReplaceToolDefinition(deps: {
 
             let nextContent = content;
             let changed = false;
+            let hintDecision: Promise<boolean> | undefined;
+            const mayHint = () =>
+              (hintDecision ??= deps.readAccess ? deps.readAccess(targetPath, context) : Promise.resolve(false));
 
             for (const { operation, index } of group) {
               if (!fileExists) {
@@ -611,40 +656,36 @@ export function createSearchReplaceToolDefinition(deps: {
                 continue;
               }
 
-              const result = await applyToContent(operation, nextContent);
+              // A no-op pair inside a batch is skipped and reported, so one redundant pair does not discard
+              // the others. A lone no-op call stays an error (applyToContent): it is the whole call's mistake.
+              if (
+                operations.length > 1 &&
+                operation.search_content !== '' &&
+                operation.search_content === operation.replace_content
+              ) {
+                output[index] = skippedNoOp(index, nextContent.includes(operation.search_content));
+                continue;
+              }
+
+              const result = await applyToContent(operation, nextContent, mayHint);
               output[index] = result.output;
               if (!result.output.success) {
+                output[index] = labelFailure(result.output as BatchEntry, index, operations.length);
                 continue;
               }
               nextContent = (result as { newContent: string }).newContent;
               changed = true;
             }
 
-            const batchFailed = group.some(({ index }) => output[index]?.success === false);
-            if (batchFailed) {
-              for (const { operation, index } of group) {
-                const detail = typeof output[index]?.error === 'string' ? ` ${output[index].error}` : '';
-                output[index] = {
-                  success: false,
-                  operation: 'search_replace',
-                  path: operation.path,
-                  error: `Batch aborted; no changes were written.${detail}`,
-                };
-              }
+            if (abortFailedGroup(group, output as BatchEntry[], operations.length)) {
+              // Nothing is written when any replacement failed.
             } else if (changed) {
               await writeFileFn(targetPath, nextContent);
             }
           });
         }
 
-        return output
-          .filter(Boolean)
-          .map((item: any) =>
-            item.success
-              ? item.message || `Updated ${item.path ?? params.path}`
-              : `Error: ${(item.error || 'unknown error').replace(/\n/g, ' ')}`,
-          )
-          .join('\n');
+        return renderBatchResult(output as BatchEntry[], params.path);
       } catch (error: any) {
         if (enableFileLogging) {
           loggingService.error('File operation failed', {

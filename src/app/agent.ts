@@ -6,6 +6,8 @@ import type { DiscordSend } from '../clients/discord/discord-outbound.js';
 import { createGrepToolDefinition } from '../tools/file/grep.js';
 import { presentBareShell } from '../tools/system/bare-shell.js';
 import { createReadFileToolDefinition } from '../tools/file/read-file.js';
+import { createHintReadAccess } from '../tools/file/read-access.js';
+import { isWebSearchAvailable } from '../tools/web/web-search.js';
 import type { SessionAccessState } from '../session/session/session-access-state.js';
 import { createFindFilesToolDefinition } from '../tools/file/glob.js';
 import { createSearchReplaceToolDefinition } from '../tools/file/search-replace.js';
@@ -399,6 +401,7 @@ export const getAgentDefinition = (
     hasCapability('discord-send') &&
     !profile.enforcement.denials.has('discord-send') &&
     !profile.enforcement.denials.has('filesystem-mutation');
+  const webSearchEnabled = isWebSearchAvailable(settingsService);
   const promptSpec = buildPromptSpec({
     model: resolvedModel,
     profile,
@@ -417,6 +420,7 @@ export const getAgentDefinition = (
     runCodeEnabled: hasCapability('shell'),
     editorSurface: filesystemWriteEnabled ? (usesPatchEditingSurface ? 'patch' : 'editors') : 'none',
     fileReadEnabled: filesystemReadEnabled,
+    webSearchEnabled,
   });
   let prompt = promptSpec.basePromptContent ?? resolvePrompt(path.join(BASE_PROMPT_PATH, promptSpec.basePromptFile!));
 
@@ -481,7 +485,7 @@ export const getAgentDefinition = (
     tools.push(
       bareMode ? presentBareShell(shellTool, { background: Boolean(rootBackgroundShellRegistry) }) : shellTool,
     );
-  if (features.web) tools.push(...createWebToolDefinitions({ settingsService, loggingService }));
+  if (features.web) tools.push(...createWebToolDefinitions({ settingsService, loggingService }, webSearchEnabled));
 
   if (
     backgroundTasksEnabled &&
@@ -591,6 +595,12 @@ export const getAgentDefinition = (
     );
   }
 
+  const editHintReadAccess = createHintReadAccess({
+    enabled: filesystemReadEnabled,
+    executionContext,
+    settingsService,
+    sessionAccess,
+  });
   {
     if (filesystemReadEnabled) {
       tools.push(createReadFileToolDefinition({ executionContext, sessionAccess, settingsService }));
@@ -612,6 +622,7 @@ export const getAgentDefinition = (
             loggingService,
             executionContext,
             sessionAccess,
+            readAccess: editHintReadAccess,
             patchHealing: bindPatchHealing(deps),
           }),
         );
@@ -630,6 +641,7 @@ export const getAgentDefinition = (
             loggingService,
             executionContext,
             sessionAccess,
+            readAccess: editHintReadAccess,
           }),
         );
       }

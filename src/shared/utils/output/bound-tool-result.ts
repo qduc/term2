@@ -1,5 +1,5 @@
 import { getTrimConfig } from './output-trim.js';
-import { formatFullOutputSavedNote, saveOutputArtifact } from '../shell/shell-output.js';
+import { countFileLines, formatFullOutputSavedNote, saveOutputArtifact } from '../shell/shell-output.js';
 
 /** Default byte cap for tool results that enter model context. */
 export const DEFAULT_TOOL_RESULT_MAX_BYTES = 40_000;
@@ -132,8 +132,9 @@ export async function boundToolResultText(params: BoundToolResultTextParams): Pr
   const noteReserve = 120;
   const bodyBudget = Math.max(256, maxBytes - noteReserve);
   const { text: truncatedBody } = truncateToUtf8Bytes(params.fullText, bodyBudget);
-  const artifactPath = await saveOutputArtifact(params.artifactContents ?? params.fullText);
-  const note = formatFullOutputSavedNote(artifactPath);
+  const artifact = params.artifactContents ?? params.fullText;
+  const artifactPath = await saveOutputArtifact(artifact);
+  const note = formatFullOutputSavedNote(artifactPath, countFileLines(artifact));
   return {
     text: `${truncatedBody}\n${note}`,
     truncated: true,

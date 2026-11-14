@@ -182,9 +182,10 @@ it('runs a role call that also carries an agent_spec as that role, and says so i
     expect(childTask).toContain('Find where parseInvoice is defined');
     expect(childTask).toContain('Constraints:\n- Read-only: do not modify files.');
     expect(childTask).toContain('Done when: The defining file is reported with a line number.');
-    // The role preset ran: its own tools (web and shell), not the spec's three-tool list.
+    // The role preset ran: its own tools (web and shell), not the spec's three-tool list. web_search is
+    // absent because no search provider is configured here.
     const childTools = children[0]!.body.tools!.map((tool) => tool.function.name);
-    expect(childTools).toEqual(expect.arrayContaining(['shell', 'web_search', 'grep']));
+    expect(childTools).toEqual(expect.arrayContaining(['shell', 'web_fetch', 'grep']));
     expect(userText(roots[2]!.body)).toContain('Child evidence: parseInvoice is in src/a.js:2');
   } finally {
     await provider.close();

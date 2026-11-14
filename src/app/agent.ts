@@ -592,11 +592,12 @@ export const getAgentDefinition = (
     );
   }
 
-  // The nearest-line hint in edit failures echoes file content, so it follows read authority: only for
-  // files read_file itself could read without asking, and never when this agent has no read capability.
-  const editHintReadAccess = filesystemReadEnabled
-    ? createHintReadAccess({ executionContext, settingsService, sessionAccess })
-    : undefined;
+  const editHintReadAccess = createHintReadAccess({
+    enabled: filesystemReadEnabled,
+    executionContext,
+    settingsService,
+    sessionAccess,
+  });
   {
     if (filesystemReadEnabled) {
       tools.push(createReadFileToolDefinition({ executionContext, sessionAccess, settingsService }));

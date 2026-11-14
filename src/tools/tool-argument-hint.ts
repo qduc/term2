@@ -3,13 +3,16 @@
  *
  * Models occasionally call one tool with another tool's arguments (`shell` with read_file's `path`,
  * `start_line`, `end_line`). The schema diagnostic then only says `command must be string`, and the model
- * has to guess what went wrong. A registry holds the argument names of the tools one agent is offered;
- * when none of the received keys is one of the called tool's own and the keys fit one or two of those
- * tools, the diagnostic names them. The registry is per tool set, never global: a hint must not name a
- * tool the calling agent cannot call (a restricted subagent, a tool switched off). Error text only: the
- * call is never rerouted.
+ * has to guess what went wrong. The diagnostic is given the tools its agent is offered; when none of the
+ * received keys is one of the called tool's own and the keys fit one or two of those tools, it names them.
+ * The list is the caller's own offered set, never a global one: a hint must not name a tool the calling
+ * agent cannot call (a restricted subagent, a tool switched off). Error text only: the call is never
+ * rerouted.
  */
 import { FLAT_SEARCH_REPLACE_FIELDS } from './file/search-replace-protocol.js';
+
+/** The part of an offered tool definition the hint reads. */
+export type OfferedTool = { name?: string; canonicalParameters?: unknown; parameters?: unknown };
 
 type ZodLike = {
   shape?: Record<string, { safeParse?: (value: unknown) => { success: boolean } } | undefined>;
@@ -31,41 +34,33 @@ function readShape(schema: unknown, depth = 0): NonNullable<ZodLike['shape']> | 
   return readShape(def?.out ?? def?.schema, depth + 1);
 }
 
-export class ToolArgumentNames {
-  readonly #tools = new Map<string, { all: ReadonlySet<string>; required: readonly string[] }>();
+/** A tool's argument names (flat aliases included) and the ones its schema requires. */
+function describeArguments(tool: OfferedTool): { all: ReadonlySet<string>; required: string[] } | undefined {
+  const shape = readShape(tool.canonicalParameters ?? tool.parameters);
+  if (!shape) return undefined;
+  const names = Object.keys(shape);
+  const required = names.filter((name) => {
+    const field = shape[name];
+    return typeof field?.safeParse === 'function' && !field.safeParse(undefined).success;
+  });
+  return { all: new Set([...names, ...(ACCEPTED_ALIASES[tool.name ?? ''] ?? [])]), required };
+}
 
-  /** Record an offered tool's argument names, from its canonical schema when it has one. */
-  registerDefinition(tool: { name?: string; canonicalParameters?: unknown; parameters?: unknown }): void {
-    this.register(tool.name, tool.canonicalParameters ?? tool.parameters);
-  }
-
-  /** Record a tool's argument names. Ignored when the schema has no readable object shape. */
-  register(toolName: string | undefined, schema: unknown): void {
-    const shape = readShape(schema);
-    if (!toolName || !shape) return;
-    const names = Object.keys(shape);
-    const required = names.filter((name) => {
-      const field = shape[name];
-      return typeof field?.safeParse === 'function' && !field.safeParse(undefined).success;
-    });
-    this.#tools.set(toolName, { all: new Set([...names, ...(ACCEPTED_ALIASES[toolName] ?? [])]), required });
-  }
-
-  /**
-   * A sentence naming the tool the received arguments belong to, or '' when the call is not plainly another
-   * offered tool's: some received key is the called tool's own, nothing registered fits, or more than two fit.
-   */
-  describeForeign(toolName: string, received: unknown): string {
-    const own = this.#tools.get(toolName);
-    if (!own || !received || typeof received !== 'object' || Array.isArray(received)) return '';
-    const keys = Object.keys(received as Record<string, unknown>);
-    if (keys.length === 0 || keys.some((key) => own.all.has(key))) return '';
-    const owners = [...this.#tools.entries()]
-      .filter(([name, entry]) => name !== toolName && keys.every((key) => entry.all.has(key)))
-      .map(([name]) => name)
-      .sort();
-    if (owners.length === 0 || owners.length > 2) return '';
-    const needs = own.required.length > 0 ? `; ${toolName} needs ${own.required.join(', ')}` : '';
-    return `These arguments belong to ${owners.join(' or ')}, not ${toolName}${needs}.`;
-  }
+/**
+ * A sentence naming the offered tool the received arguments belong to, or '' when the call is not plainly
+ * another offered tool's: some received key is the called tool's own, nothing offered fits, or more than two do.
+ */
+export function describeForeignArguments(toolName: string, received: unknown, offered: readonly OfferedTool[]): string {
+  const ownTool = offered.find((tool) => tool.name === toolName);
+  const own = ownTool && describeArguments(ownTool);
+  if (!own || !received || typeof received !== 'object' || Array.isArray(received)) return '';
+  const keys = Object.keys(received as Record<string, unknown>);
+  if (keys.length === 0 || keys.some((key) => own.all.has(key))) return '';
+  const owners = offered
+    .filter((tool) => tool.name !== toolName && keys.every((key) => describeArguments(tool)?.all.has(key)))
+    .map((tool) => tool.name)
+    .sort();
+  if (owners.length === 0 || owners.length > 2) return '';
+  const needs = own.required.length > 0 ? `; ${toolName} needs ${own.required.join(', ')}` : '';
+  return `These arguments belong to ${owners.join(' or ')}, not ${toolName}${needs}.`;
 }

@@ -23,7 +23,6 @@ import type { Word, WordPart } from 'unbash';
 import { isPathInScopeSafe, isHostInScope } from '../../session/agent-runtime/scope-resolver.js';
 import { getActiveWorkspaceRoot } from '../../tools/workspace/active-workspace-root.js';
 import { getProvider } from '../../model/providers/index.js';
-import { ToolArgumentNames } from '../../tools/tool-argument-hint.js';
 import { wrapToolInvoke, wrapNeedsApproval } from '../../tools/tool-invoke.js';
 import { toOpenAIStrictToolSchema } from '../../shared/lib/openai-strict-tool-schema.js';
 import { shouldUseStrictToolSchema, shouldPreferPatchEditingModel } from '../../model/tool-selection-policy.js';
@@ -1211,23 +1210,16 @@ export class SubagentToolFactory {
       tools.push(presentForegroundShell(guardedShell, { searchViaShell }));
     }
 
-    // The nearest-line hint in edit failures echoes file content, so it needs this agent's read authority:
-    // a read capability, read_file's own approval rule, and the role's read scope when it has one.
-    const editHintReadAccess = definition.canRead
-      ? createHintReadAccess({
-          executionContext,
-          settingsService: this.#settings,
-          nestedCompatibility: this.#nestedCompatibility,
-          inScope:
-            fsReadScope &&
-            ((absolutePath) =>
-              isPathInScopeSafe(
-                absolutePath,
-                fsReadScope,
-                this.#executionContext?.getCwd() ?? getActiveWorkspaceRoot(),
-              )),
-        })
-      : undefined;
+    const editHintReadAccess = createHintReadAccess({
+      enabled: definition.canRead,
+      executionContext,
+      settingsService: this.#settings,
+      nestedCompatibility: this.#nestedCompatibility,
+      inScope:
+        fsReadScope &&
+        ((absolutePath) =>
+          isPathInScopeSafe(absolutePath, fsReadScope, this.#executionContext?.getCwd() ?? getActiveWorkspaceRoot())),
+    });
 
     if (definition.canWrite && !this.#readOnly) {
       const usesPatchEditingSurface = shouldPreferPatchEditingModel(definition.model);
@@ -1359,7 +1351,6 @@ export class SubagentToolFactory {
       capabilities,
     });
 
-    const argumentNames = new ToolArgumentNames();
     return toolDefinitions.map((definition) => {
       const canonicalParameters =
         definition.canonicalParameters ??
@@ -1410,7 +1401,7 @@ export class SubagentToolFactory {
       };
       return wrapToolInvoke(wrapped, canonicalParameters, {
         argumentParsing: definition.argumentParsing,
-        argumentNames,
+        offeredTools: toolDefinitions,
       });
     });
   }

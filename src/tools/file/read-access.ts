@@ -61,15 +61,18 @@ export async function isReadPreApproved(params: {
 }
 
 /**
- * The `readAccess` an edit tool is given for its nearest-line hint: the file must be one this agent could
- * read without asking (isReadPreApproved), and inside its read scope when it has one.
+ * The `readAccess` an edit tool is given for its nearest-line hint, or undefined when the agent has no read
+ * capability (`enabled` false): the file must be one this agent could read without asking
+ * (isReadPreApproved), and inside its read scope when it has one (`inScope`, the caller's scope check).
  */
 export function createHintReadAccess(
   deps: Omit<Parameters<typeof isReadPreApproved>[0], 'path' | 'context'> & {
+    enabled: boolean;
     inScope?: (absolutePath: string) => Promise<boolean>;
   },
-): (absolutePath: string, context: unknown) => Promise<boolean> {
-  const { inScope, ...rest } = deps;
+): ((absolutePath: string, context: unknown) => Promise<boolean>) | undefined {
+  const { enabled, inScope, ...rest } = deps;
+  if (!enabled) return undefined;
   return async (absolutePath, context) =>
     (await isReadPreApproved({ ...rest, path: absolutePath, context })) && (!inScope || (await inScope(absolutePath)));
 }

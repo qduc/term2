@@ -9,6 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { Box, Text } from 'ink';
 import { publishHarnessApprovalReady } from './harness-input.js';
+import { LLMAdvisory } from './presentation/components/prompt/ApprovalAdvisory.js';
 import { useInteractionInput, type InteractionInput } from './interaction-input.js';
 import { generateDiff } from './presentation/utils/output/diff.js';
 import { asDisplayArray } from './presentation/utils/tool-args-display.js';
@@ -55,7 +56,15 @@ function formatDurationMs(ms: number): string {
   return `${ms}ms`;
 }
 
-type LLMAdvisory = { reasoning: string; approved: boolean; model: string; source?: 'llm' | 'system' };
+type LLMAdvisory = {
+  reasoning: string;
+  approved: boolean;
+  model: string;
+  source?: 'llm' | 'system';
+  riskLevel?: string;
+  authorization?: string;
+  confidence?: string;
+};
 
 /** The fields of legacy's ApprovalDescriptor this prompt reads. */
 export type ApprovalDescriptor = {
@@ -78,6 +87,7 @@ const MenuFooter: FC<{ hints: ReadonlyArray<[string, string]> }> = ({ hints }) =
 };
 
 type Props = {
+  reviewStatus?: string;
   approval: ApprovalDescriptor;
   inputHandler: InteractionInput;
   onApprove: (answer?: string) => void;
@@ -305,106 +315,6 @@ const CreateFilePrompt: FC<{ args: CreateFileArgs }> = ({ args }) => {
   );
 };
 
-type SafetyFindingLevel = 'RED' | 'YELLOW' | 'GREEN';
-
-const SAFETY_FINDING_TONES: Record<SafetyFindingLevel, ColorRole> = {
-  RED: 'danger',
-  YELLOW: 'warning',
-  GREEN: 'success',
-};
-
-type ParsedSystemSafetyReasoning = {
-  findings: { level: SafetyFindingLevel; detail: string }[];
-  modelAdvisory?: string;
-};
-
-/**
- * The safety evaluator deliberately keeps its advisory as plain text for
- * transport compatibility. Recover the structured severity markers only at
- * this presentation boundary so mixed findings remain scannable in a narrow
- * terminal.
- */
-function parseSystemSafetyReasoning(reasoning: string): ParsedSystemSafetyReasoning | null {
-  const modelAdvisoryMarker = '\n\nModel advisory:';
-  const modelAdvisoryIndex = reasoning.indexOf(modelAdvisoryMarker);
-  const safetyText = modelAdvisoryIndex >= 0 ? reasoning.slice(0, modelAdvisoryIndex) : reasoning;
-  const modelAdvisory =
-    modelAdvisoryIndex >= 0 ? reasoning.slice(modelAdvisoryIndex + modelAdvisoryMarker.length).trim() : undefined;
-  const match = safetyText.match(
-    /^Blocked by safety heuristics \(RED\): (.*)\. Manual approval is strictly required\.$/s,
-  );
-  if (!match) return null;
-
-  const findings: ParsedSystemSafetyReasoning['findings'] = [];
-  const findingPattern = /(?:^|;\s*)((?:RED|YELLOW|GREEN)):\s*(.*?)(?=;\s*(?:RED|YELLOW|GREEN):|$)/g;
-  for (const finding of match[1].matchAll(findingPattern)) {
-    findings.push({ level: finding[1] as SafetyFindingLevel, detail: finding[2] });
-  }
-
-  // A RED result can have no reason text if the classifier only returns its
-  // status. Still make the blocking status visible instead of rendering an
-  // empty findings section.
-  if (findings.length === 0) {
-    findings.push({ level: 'RED', detail: match[1] });
-  }
-
-  return { findings, ...(modelAdvisory ? { modelAdvisory } : {}) };
-}
-
-const LLMAdvisory: FC<{ advisory: NonNullable<ApprovalDescriptor['llmAdvisory']> }> = ({ advisory }) => {
-  const theme = useTheme();
-  const { ToolSection } = useSkin();
-  const isSystem = advisory.source === 'system';
-  const tone: ColorRole = isSystem ? 'danger' : advisory.approved ? 'success' : 'warning';
-  const label = isSystem ? 'System Safety Check: BLOCKED' : `AI Advisor: ${advisory.approved ? 'SAFE' : 'CAUTION'}`;
-  const parsedSystemReasoning = isSystem ? parseSystemSafetyReasoning(advisory.reasoning) : null;
-
-  return (
-    <Box flexDirection="column" marginTop={1}>
-      <ToolSection
-        variant="callout"
-        tone={tone}
-        title={`${label} (${isSystem ? 'automated heuristic' : advisory.model})`}
-      >
-        {parsedSystemReasoning ? (
-          <Box flexDirection="column" marginTop={1}>
-            <Text bold color={theme.textMuted}>
-              Heuristic findings:
-            </Text>
-            <Box flexDirection="column" marginLeft={1}>
-              {parsedSystemReasoning.findings.map(({ level, detail }, index) => (
-                <Box key={`${level}-${detail}-${index}`}>
-                  <Text color={theme[SAFETY_FINDING_TONES[level]]} bold>
-                    {`${level}:`.padEnd(8)}
-                  </Text>
-                  <Text color={theme.textMuted}>{detail}</Text>
-                </Box>
-              ))}
-            </Box>
-            <Box marginTop={1}>
-              <Text color={theme.textMuted}>Manual approval is strictly required.</Text>
-            </Box>
-            {parsedSystemReasoning.modelAdvisory && (
-              <Box flexDirection="column" marginTop={1}>
-                <Text bold color={theme.textMuted}>
-                  Model advisory:
-                </Text>
-                <Text italic color={theme.textMuted}>
-                  {parsedSystemReasoning.modelAdvisory}
-                </Text>
-              </Box>
-            )}
-          </Box>
-        ) : (
-          <Text italic color={theme.textMuted}>
-            {isSystem ? advisory.reasoning : `"${advisory.reasoning}"`}
-          </Text>
-        )}
-      </ToolSection>
-    </Box>
-  );
-};
-
 /**
  * The shared two-pane approval shape: an option list on the left, and a
  * description of the highlighted option on the right. Previously only the
@@ -516,6 +426,7 @@ function describeStandardApprovalOption(
 }
 
 const ApprovalPrompt: FC<Props> = ({
+  reviewStatus,
   approval,
   inputHandler,
   onApprove,
@@ -1099,6 +1010,7 @@ const ApprovalPrompt: FC<Props> = ({
         </Text>
       )}
       {approval.llmAdvisory && <LLMAdvisory advisory={approval.llmAdvisory} />}
+      {reviewStatus && <Text color={theme.warning}>{reviewStatus}</Text>}
       {plainApprovalSection}
     </>
   );

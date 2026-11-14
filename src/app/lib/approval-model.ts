@@ -1,3 +1,4 @@
+import type { ApprovalReviewResult } from '../../shared/contracts/approval-review.js';
 import type { SessionAccessState } from '../../session/session/session-access-state.js';
 import {
   isAutoApprovableTool,
@@ -108,7 +109,7 @@ export function createAssistedApprovalReview({
       (!unsandboxedOnly && isExplicitShellRequest(request.toolName, request.input)) ||
       isDockerRequest(request.toolName, request.input, sessionAccess)
     )
-      return false;
+      return { kind: 'not_reviewed', approved: false };
     const review = new ShellAutoApprovalResolver({
       record: { getHistory: () => approvalHistory(history) },
       agentClient: { chat: (message, options) => agentClient.chat(message, { ...options, signal }) },
@@ -121,12 +122,16 @@ export function createAssistedApprovalReview({
     const advisory = await withWorkspace(() =>
       review.resolveAdvisoryForInterruption({ interruption, siblings: [interruption] }),
     );
-    return (
-      !signal.aborted &&
-      (!unsandboxedOnly || settings.get('sandbox.enabled') !== false) &&
-      (unsandboxedOnly || advisory?.riskLevel === 'low') &&
-      review.shouldAutoApprove(advisory)
-    );
+    if (!advisory || advisory.isError) return { kind: 'unavailable', approved: false };
+    return {
+      kind: 'reviewed',
+      advisory,
+      approved:
+        !signal.aborted &&
+        (!unsandboxedOnly || settings.get('sandbox.enabled') !== false) &&
+        (unsandboxedOnly || advisory.riskLevel === 'low') &&
+        review.shouldAutoApprove(advisory),
+    };
   };
 }
 
@@ -187,22 +192,22 @@ export async function reviewLiveApproval(
   runtime: DirectRuntimeRecord | undefined,
   requestId: string,
   signal: AbortSignal,
-): Promise<boolean> {
+): Promise<ApprovalReviewResult> {
   const review = runtime?.surface.reviewApproval;
   if (signal.aborted || !runtime || !review || runtime.configurationSettings.get('shell.autoApproveMode') !== 'auto')
-    return false;
+    return { kind: 'not_reviewed', approved: false };
   const { state, unsubscribe } = session.capture(() => undefined);
   unsubscribe();
   const request = state.pendingInteractions.find((pending) => pending.requestId === requestId);
-  if (!request || request.turnId !== state.activeTurnId || 'taskId' in request) return false;
-  const approved = await runtime.scope(() => review(request, session.acceptedHistory(), signal));
+  if (!request || request.turnId !== state.activeTurnId || 'taskId' in request)
+    return { kind: 'not_reviewed', approved: false };
+  const result = await runtime.scope(() => review(request, session.acceptedHistory(), signal));
   const current = session.capture(() => undefined);
   current.unsubscribe();
-  return (
-    approved &&
-    !signal.aborted &&
+  return !signal.aborted &&
     runtime.configurationSettings.get('shell.autoApproveMode') === 'auto' &&
     current.state.activeTurnId === request.turnId &&
     current.state.pendingInteractions.some((pending) => pending.requestId === requestId)
-  );
+    ? result
+    : { kind: 'not_reviewed', approved: false };
 }

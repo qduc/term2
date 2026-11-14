@@ -8,7 +8,10 @@ import type { InteractionInputHandler } from '../../../src/clients/tui/interacti
 it('does not restart a cancelled review when a background request replaces the root prompt', async () => {
   const inputHandler = { current: null as InteractionInputHandler | null };
   const interrupt = { current: null as (() => boolean) | null };
-  const review = vi.fn((_session: string, _request: string, _signal: AbortSignal) => new Promise<boolean>(() => {}));
+  const review = vi.fn(
+    (_session: string, _request: string, _signal: AbortSignal) =>
+      new Promise<import('../../../src/shared/contracts/approval-review.js').ApprovalReviewResult>(() => {}),
+  );
   const connection = { sessionId: 'session', send: vi.fn() } as unknown as TuiConnection;
   const root = {
     interaction: {

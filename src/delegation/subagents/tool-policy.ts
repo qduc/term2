@@ -1,3 +1,4 @@
+import { formatApprovalReview, type ApprovalReviewResult } from '../../shared/contracts/approval-review.js';
 import { healPatchOperation } from '../../tools/file/patch-healing.js';
 import type { NestedRunDriverFactory, NestedModelBinding } from '../../tools/nested-run-driver.js';
 import { healSearchReplaceParams } from '../../tools/file/edit-healing.js';
@@ -539,8 +540,8 @@ export class SubagentToolPolicy {
     return [];
   }
 
-  async isYellowCommandApproved(command: string, taskContext: string): Promise<boolean> {
-    if (!this.#agentClient) return false;
+  async reviewYellowCommand(command: string, taskContext: string): Promise<ApprovalReviewResult> {
+    if (!this.#agentClient) return { kind: 'unavailable', approved: false };
     try {
       const advisories = await evaluateShellAutoApprovalAdvisories({
         commands: [{ id: '__subagent_worker_shell__', command }],
@@ -552,12 +553,14 @@ export class SubagentToolPolicy {
         logger: this.#logger,
         sessionContextService: this.#sessionContextService,
       });
-      return advisories.get('__subagent_worker_shell__')?.approved === true;
+      const advisory = advisories.get('__subagent_worker_shell__');
+      if (!advisory || advisory.isError) return { kind: 'unavailable', approved: false };
+      return { kind: 'reviewed', approved: advisory.approved === true, advisory };
     } catch (error: any) {
       this.#logger.warn('Worker shell YELLOW auto-approval evaluation failed', {
         error: error?.message || String(error),
       });
-      return false;
+      return { kind: 'unavailable', approved: false };
     }
   }
 
@@ -601,9 +604,11 @@ export class SubagentToolPolicy {
             return `Error: command blocked for safety (${status}). Workers cannot run commands that require interactive approval. Command: ${command}`;
           }
           if (status === SafetyStatus.YELLOW) {
-            const approved = await this.isYellowCommandApproved(command, taskContext);
-            if (!approved) {
-              return `Error: command blocked for safety (${status}). Workers cannot run commands that require interactive approval. Command: ${command}`;
+            const review = await this.reviewYellowCommand(command, taskContext);
+            if (!review.approved) {
+              return `Error: command blocked for safety (${status}). Workers cannot run commands that require interactive approval. ${formatApprovalReview(
+                review,
+              )} Command: ${command}`;
             }
           }
         }

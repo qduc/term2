@@ -74,12 +74,8 @@
       "reason": "The wire type catalogue keeps accepted usage dimensions beside the existing counters; cache creation, its one-hour subset and provider-reported reasoning tokens (which agent-core's Usage cannot carry yet, so they ride the accepted usage fact) add three optional fields without changing older messages. Splitting those fields from the usage contract would obscure the public shape. Retire this ceiling if wire types are generated or reorganized by complete protocol domains."
     },
     "src/session/conversation.ts": {
-      "lines": 532,
-      "reason": "The Conversation's turn driver; candidate 2 keeps both the question-cancel notice (a3) and the cross-turn compaction hold (solo/tools), each closing over the same driver state. Direct admission checks foreign native compaction coverage before accepting a turn, using the same configured provider and history as the driver. Eight lines decorate the turn's model history with cache-preserving effort markers (effort-timeline.ts) at the one place a turn's history, new input and settings meet, after admission."
-    },
-    "src/session/replay-fold.ts": {
-      "lines": 503,
-      "reason": "The replay fold; candidate 2 keeps both cancelled-turn settlings (a3's unstarted calls and tools' in-flight step), which run on the same fold state."
+      "lines": 534,
+      "reason": "The Conversation's turn driver; candidate 2 keeps both the question-cancel notice (a3) and the cross-turn compaction hold (solo/tools), each closing over the same driver state. Direct admission checks foreign native compaction coverage before accepting a turn, using the same configured provider and history as the driver. Eight lines decorate the turn's model history with cache-preserving effort markers (effort-timeline.ts) at the one place a turn's history, new input and settings meet, after admission. Two lines hand notices an earlier process left pending to the background owner (ConversationBackground.deliverReopened) before the turn's history snapshot is taken; the delivery has to precede the turn's admission, so it cannot live in the later notice preparation."
     },
     "src/app/agent.ts": {
       "lines": 800,

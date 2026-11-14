@@ -49,7 +49,7 @@ export function prepareConversationNotice(
   const rawHistory = planned?.history ?? snapshotHistory;
   // Legacy keeps a notice on the message it decorated in every later request. History stays raw; the turn's
   // recorded notice is applied again each time a request is built.
-  const recorded = recordedNotices(journal.facts, journal.openedAt);
+  const recorded = recordedNotices(journal.facts, journal.openedAt, request.previewMode);
   let modelHistory: readonly Item[] = rawHistory.map((item) => {
     const text = item.type === 'user_message' ? recorded.get(item.id) : undefined;
     return text ? withNotice([item], text)[0]! : item;
@@ -68,9 +68,16 @@ export function prepareConversationNotice(
 
 /**
  * Each decorated turn's notice, by the user message it was applied to (the turn's first; a retry's is its source
- * turn's). Only turns this process started: legacy's resumed history is raw.
+ * turn's). A turn of this process keeps it. A turn of an earlier process keeps it too when it ran in the mode the
+ * session is in now, so the resumed request matches the one the model was sent and the prompt cache holds; under
+ * another mode (or a dropped profile reopened as Bare) the notice describes a mode that is no longer on, so the
+ * message resumes raw, as before.
  */
-function recordedNotices(facts: readonly Fact[], openedAt: number): ReadonlyMap<string, string> {
+function recordedNotices(
+  facts: readonly Fact[],
+  openedAt: number,
+  mode: string | undefined,
+): ReadonlyMap<string, string> {
   const firstMessage = new Map<string, string>();
   const notices = new Map<string, string>();
   facts.forEach((fact, index) => {
@@ -79,7 +86,8 @@ function recordedNotices(facts: readonly Fact[], openedAt: number): ReadonlyMap<
       ? firstMessage.get(fact.retryContext.sourceTurnId)
       : fact.input.find((item) => item.type === 'user_message')?.id;
     if (first) firstMessage.set(fact.turnId, first);
-    if (index >= openedAt && fact.requestNotice && first && !notices.has(first)) notices.set(first, fact.requestNotice);
+    const current = index >= openedAt || (mode !== undefined && fact.requestConfiguration?.mode === mode);
+    if (current && fact.requestNotice && first && !notices.has(first)) notices.set(first, fact.requestNotice);
   });
   return notices;
 }

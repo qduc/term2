@@ -17,29 +17,21 @@ import { AGENT_SPEC_TOOL_NAMES } from './agent-spec-tools.js';
 
 function getRunSubagentDescription(backgroundEnabled: boolean): string {
   return (
-    'Delegate a bounded task to the general agent runtime. Use agent_spec for dynamic goal/context/tools/constraints/model/budget; legacy named roles are compatibility presets. ' +
+    'Delegate one bounded task using agent_spec (dynamic goal/context/tools/constraints/model/budget), or legacy role plus task. ' +
+    'The child sees neither your conversation nor reasoning and returns a summary. ' +
     (backgroundEnabled
-      ? 'This session requires background execution: the tool returns a running handle immediately and a later completion notification. '
-      : 'This session uses foreground execution and returns the structured result in this turn. ') +
-    'The subagent runs in its own context and returns only a summary, preserving your context. ' +
-    '(When to reach for this vs. doing it yourself is covered by the delegation guidance in your system instructions.)\n\n' +
+      ? 'This session is background-only: a running handle means launch succeeded. Do not duplicate the launch or call get_subagent_result before its completion notification; end the turn and wait.\n\n'
+      : 'This session uses foreground execution and returns the structured result in this turn. Independent foreground explorer and librarian calls in the same model response may run in parallel; keep worker calls and dependent tasks serial.\n\n') +
+    'Include one objective, ownership boundary and done condition, relevant scope, non-discoverable findings/decisions, constraints, deliverable/acceptance criteria and applicable validation. ' +
+    'Omit automatically supplied role instructions, generic tool guidance, worktree hygiene, environment metadata, root AGENTS.md and skills catalog.\n\n' +
+    "Legacy roles: explorer collects concrete evidence for one bounded question, either a shallow map of one surface or a deep trace of one seam, never both. Do not assign diagnosis, recommendations, approach selection or the parent's complete investigation/review/diagnosis/planning deliverable to explorer. " +
+    'Worker owns one cohesive implementation unit; mentor answers one decision/challenge question; reviewer receives artifact (diff/files/plan) and criteria and gathers evidence only through explorers; ' +
+    'librarian owns one memory/history question or memory-maintenance topic.\n\n' +
+    'For isolated worker edits, first create a worktree under the workspace root (`git worktree add .worktrees/<slug> -b <slug>`). ' +
+    'Pass its directory basename or branch as worktree. This pins the child without re-rooting the parent; writable generic agents may use it too.' +
     (backgroundEnabled
-      ? 'Background launches return immediately; do not duplicate them or call get_subagent_result until the completion notification arrives.\n\n'
-      : 'Independent foreground explorer and librarian calls in the same model response may run in parallel; keep worker calls and dependent tasks serial.\n\n') +
-    '## Task Requirements\n' +
-    'Give the task one clear objective, one ownership boundary, and one concrete done condition. Include the task-specific scope, non-discoverable parent findings or decisions, constraints, deliverable or acceptance criteria, and validation when applicable. ' +
-    'Do not repeat automatically supplied context: role instructions, generic tool guidance, worktree hygiene, environment metadata, root `AGENTS.md`, or skills catalog. ' +
-    'The subagent does not see your conversation or reasoning. ' +
-    "For explorer, request concrete evidence to collect for a bounded question and choose breadth or depth, never both: map one defined surface shallowly or trace one narrow seam thoroughly. Do not ask explorer to diagnose, recommend a fix, choose an approach, or own the user's complete investigation, review, diagnosis, or planning deliverable. " +
-    'For worker, assign one cohesive implementation unit. For mentor, ask one decision or challenge question. ' +
-    'For reviewer, describe the artifact to review (diff range, files, plan) and the review criteria; it gathers evidence only through explorers. ' +
-    'For librarian, assign one history question to answer from memory and prior sessions, or one memory-maintenance topic boundary.\n\n' +
-    'For isolated worker edits, create a git worktree under the workspace root first ' +
-    '(`git worktree add .worktrees/<slug> -b <slug>`), then pass `worktree` as that directory basename or branch name. ' +
-    '`worktree` pins the child into that existing tree without re-rooting this session; generic writable agents may use it too.\n\n' +
-    (backgroundEnabled
-      ? 'A background status of "running" means launch succeeded: end the turn and wait for the completion notification.'
-      : 'Foreground returns a summary with status (completed, failed, cancelled, or interrupted), any final text, a list of tools used, and files changed.')
+      ? ''
+      : '\n\nForeground returns a summary with status (completed, failed, cancelled, or interrupted), any final text, a list of tools used, and files changed.')
   );
 }
 

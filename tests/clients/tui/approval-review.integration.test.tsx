@@ -62,3 +62,56 @@ it('does not restart a cancelled review when a background request replaces the r
     screen.unmount();
   }
 });
+
+it('shows the review explanation for a regular shell approval', async () => {
+  const review = vi.fn().mockResolvedValue({
+    kind: 'reviewed',
+    approved: false,
+    advisory: {
+      reasoning: 'The command looks safe.',
+      model: 'review-model',
+      approved: true,
+      riskLevel: 'low',
+      confidence: 'high',
+    },
+  });
+  const connection = { sessionId: 'session', send: vi.fn() } as unknown as TuiConnection;
+  const screen = render(
+    <ApprovalHost
+      request={{
+        interaction: {
+          id: 'regular',
+          kind: 'approval',
+          title: 'shell',
+          turnId: 'turn',
+          choices: [],
+          toolName: 'shell',
+          input: { command: 'git status -sb && gh run list --limit 5' },
+        },
+        owner: 'turn',
+        agentName: 'Agent',
+        backgroundCount: 0,
+      }}
+      connection={connection}
+      inputHandler={{ current: null }}
+      interrupt={{ current: null }}
+      activeTurnId="turn"
+      reviewApproval={review}
+      cancelInput={async () => ''}
+      setNotice={() => {}}
+      onStopped={() => {}}
+      hide={() => {}}
+      editorValue=""
+      changeInput={() => {}}
+      replaceInput={() => {}}
+    />,
+  );
+  try {
+    await vi.waitFor(() => expect(screen.lastFrame()).toContain('The command looks safe.'));
+    expect(screen.lastFrame()).toContain('AI Advisor: SAFE');
+    expect(screen.lastFrame()).toContain('manual approval required');
+    expect(connection.send).not.toHaveBeenCalled();
+  } finally {
+    screen.unmount();
+  }
+});

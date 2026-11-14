@@ -6,6 +6,7 @@ export type ApprovalReviewResult =
       readonly kind: 'reviewed';
       readonly approved: boolean;
       readonly advisory: {
+        readonly approved: boolean;
         readonly reasoning: string;
         readonly model: string;
         readonly source?: 'llm' | 'system';

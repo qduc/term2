@@ -193,12 +193,8 @@ function Host({
     reviewed.current.add(interaction.id);
     reviewController.current?.abort();
   };
-  const reviewInput = interaction.input as { sandbox?: unknown } | null;
   const reviewEligible =
-    request.owner === 'turn' &&
-    interaction.kind === 'approval' &&
-    interaction.toolName === 'shell' &&
-    reviewInput?.sandbox === 'unsandboxed';
+    request.owner === 'turn' && interaction.kind === 'approval' && interaction.toolName === 'shell';
   useEffect(() => {
     if (!reviewApproval || !reviewEligible || reviewCancelled.current || reviewed.current.has(interaction.id)) return;
     reviewed.current.add(interaction.id);
@@ -370,12 +366,12 @@ function Host({
           <ApprovalPrompt
             approval={{
               ...approval,
-              ...(reviewResult?.kind === 'reviewed'
-                ? { llmAdvisory: { ...reviewResult.advisory, approved: reviewResult.approved } }
-                : {}),
+              ...(reviewResult?.kind === 'reviewed' ? { llmAdvisory: reviewResult.advisory } : {}),
             }}
             reviewStatus={
-              reviewResult?.kind === 'unavailable'
+              reviewResult?.kind === 'reviewed' && !reviewResult.approved
+                ? 'Automatic approval not granted; manual approval required.'
+                : reviewResult?.kind === 'unavailable'
                 ? 'Approval review unavailable; manual approval required.'
                 : reviewResult?.kind === 'not_reviewed'
                 ? 'Not reviewed automatically; manual approval required.'

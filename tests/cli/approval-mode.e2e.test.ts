@@ -308,25 +308,35 @@ it.each([
   { risk: 'low', automatic: false, delayedDenial: false, mode: 'off', sandbox: true },
   { risk: 'low', automatic: false, delayedDenial: false, mode: 'advisory', sandbox: true },
   { risk: 'low', automatic: false, delayedDenial: false, mode: 'auto', sandbox: false },
+  { risk: 'high', regular: true, automatic: false, delayedDenial: false, mode: 'auto', sandbox: false },
 ])(
   'handles root unsandboxed review (mode=$mode sandbox=$sandbox risk=$risk denial=$delayedDenial)',
   { timeout: TIMEOUT_MS },
-  async ({ risk, automatic, delayedDenial, mode, sandbox, confidence = 'high', reviewFails = false }) => {
+  async ({
+    risk,
+    automatic,
+    delayedDenial,
+    mode,
+    sandbox,
+    confidence = 'high',
+    reviewFails = false,
+    regular = false,
+  }) => {
     root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-unsandboxed-review-')));
     const home = path.join(root, 'home');
     const workspace = path.join(root, 'workspace');
     fs.mkdirSync(home);
     fs.mkdirSync(workspace);
     const marker = path.join(workspace, 'reviewed');
-    const command = `printf approved > '${marker}'`;
+    const command = `${regular ? 'node -v; ' : ''}printf approved > '${marker}'`;
     let releaseReview!: () => void;
     const reviewGate = new Promise<void>((resolve) => {
       releaseReview = resolve;
     });
-    const reviewExpected = mode === 'auto' && sandbox;
+    const reviewExpected = mode === 'auto' && (sandbox || regular);
     const baseUrl = await startProvider(
       [
-        { call: { id: 'unsandboxed-call', args: { command, sandbox: 'unsandboxed' } } },
+        { call: { id: 'unsandboxed-call', args: regular ? { command } : { command, sandbox: 'unsandboxed' } } },
         ...(reviewExpected
           ? [
               reviewFails
@@ -377,7 +387,7 @@ it.each([
     await waitForHarnessComposerValue(idlePath, 'Write the approved marker outside the sandbox', { timeoutMs: 60_000 });
     session.write('\r');
     if (!automatic) {
-      await session.waitForOutput('wants to run in unsandboxed mode', 60_000);
+      await session.waitForOutput(regular ? 'Agent wants to run: shell' : 'wants to run in unsandboxed mode', 60_000);
       if (reviewExpected)
         await vi.waitFor(() => expect(providerBodies.length).toBeGreaterThanOrEqual(2), { timeout: 30_000 });
       expect(fs.existsSync(marker)).toBe(false);
@@ -410,8 +420,8 @@ it.each([
     await session.waitForOutput('UNSANDBOXED_FINISHED', 60_000);
     if (delayedDenial) expect(fs.existsSync(marker)).toBe(false);
     else expect(fs.readFileSync(marker, 'utf8')).toBe('approved');
-    if (reviewExpected) expect(providerBodies[1]).toMatch(/OUTSIDE the sandbox/i);
-    else expect(JSON.parse(providerBodies[1]).tools.length).toBeGreaterThan(0);
+    if (reviewExpected && !regular) expect(providerBodies[1]).toMatch(/OUTSIDE the sandbox/i);
+    else if (!reviewExpected) expect(JSON.parse(providerBodies[1]).tools.length).toBeGreaterThan(0);
   },
 );
 

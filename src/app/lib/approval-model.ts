@@ -98,7 +98,8 @@ export function createAssistedApprovalReview({
       request.input.sandbox === 'unsandboxed' &&
       !('background' in request.input && request.input.background === true);
     if (
-      (unsandboxedOnly && (!unsandboxed || settings.get('sandbox.enabled') === false)) ||
+      (unsandboxedOnly &&
+        (request.toolName !== 'shell' || (unsandboxed && settings.get('sandbox.enabled') === false))) ||
       signal.aborted ||
       settings.get('shell.autoApproveMode') !== 'auto' ||
       request.kind !== 'approval' ||
@@ -128,7 +129,7 @@ export function createAssistedApprovalReview({
       advisory,
       approved:
         !signal.aborted &&
-        (!unsandboxedOnly || settings.get('sandbox.enabled') !== false) &&
+        (!unsandboxedOnly || (unsandboxed && settings.get('sandbox.enabled') !== false)) &&
         (unsandboxedOnly || advisory.riskLevel === 'low') &&
         review.shouldAutoApprove(advisory),
     };

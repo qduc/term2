@@ -617,6 +617,8 @@ export const CustomProviderSchema = z
     type: CustomProviderTypeSchema,
     baseUrl: z.string().url().optional(),
     apiKey: z.string().optional().meta({ secret: true }),
+    /** Anthropic-format endpoints: accepts per-message effort (model/effort-updates.ts). */
+    perMessageEffort: z.boolean().optional(),
   })
   .passthrough()
   .superRefine((data, ctx) => {
@@ -647,6 +649,7 @@ export const CustomProviderSchema = z
       type: data.type,
       baseUrl: data.baseUrl,
       apiKey: data.apiKey,
+      ...(data.perMessageEffort !== undefined ? { perMessageEffort: data.perMessageEffort } : {}),
     };
   });
 

@@ -54,7 +54,7 @@ let sandboxTempDirReady: boolean | undefined;
  * `TMPDIR` that does not exist breaks `mktemp`, `go build` and similar tools.
  * The outcome is latched so a read-only tmpdir is not retried per command.
  */
-export function ensureSandboxTempDir(): boolean {
+function ensureSandboxTempDir(): boolean {
   if (sandboxTempDirReady === undefined) {
     try {
       mkdirSync(SANDBOX_TEMP_DIR, { recursive: true, mode: 0o700 });

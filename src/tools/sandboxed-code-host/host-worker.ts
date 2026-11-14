@@ -299,7 +299,9 @@ function installContextBindings() {
             callState.state.rejected = true;
             // Name the capability, not a hardcoded 'tools.': a second namespace
             // (agent.*) must report its own failures.
-            callState.state.message = name + '.' + member + ' failed: ' + String(response.error);
+            // "where" is optional context from the capability (which call, its arguments).
+            callState.state.message =
+              name + '.' + member + ' failed' + (typeof response.where === 'string' ? ' (' + response.where + ')' : '') + ': ' + String(response.error);
             throw new Error(callState.state.message);
           }
           return response.result;

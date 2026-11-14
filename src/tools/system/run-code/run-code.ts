@@ -14,6 +14,7 @@ import {
   normalizeToolArguments,
 } from '../../format-helpers.js';
 import { renderToolsHeader } from './tools-header.js';
+import { describeFailureMessage } from './run-code-failure-report.js';
 import { createMcpCatalog, isMcpToolDefinition, renderMcpCatalog } from './mcp-script-surface.js';
 import type { McpToolSource } from '../../mcp/mcp-tool-source.js';
 import type { RunCodeRuntimePort, RunCodeRuntimeGraph } from './runtime-port.js';
@@ -390,7 +391,8 @@ function renderResult(
   const calls = execution.calls;
   const receipts = execution.actions;
   if (execution.script.status === 'failed') {
-    const { code, message } = execution.script.diagnostic;
+    const { code } = execution.script.diagnostic;
+    const message = describeFailureMessage(execution.script.diagnostic, calls);
     sections.push(
       code === 'timeout'
         ? `Script timed out. ${message}`

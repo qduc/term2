@@ -451,7 +451,9 @@ export function createSearchReplaceToolDefinition(deps: {
         }
 
         if (search_content === replace_content) {
-          return fail('search_content and replace_content are identical.');
+          return fail(
+            'search_content and replace_content are identical, so there is nothing to change. Send a different replace_content, or leave this edit out.',
+          );
         }
 
         const markerError = detectSummarizationMarkers(search_content);
@@ -628,24 +630,50 @@ export function createSearchReplaceToolDefinition(deps: {
                 continue;
               }
 
+              // A no-op pair inside a batch is skipped and reported, so one redundant pair does not discard
+              // the others. A lone no-op call stays an error (applyToContent): it is the whole call's mistake.
+              if (
+                operations.length > 1 &&
+                operation.search_content !== '' &&
+                operation.search_content === operation.replace_content
+              ) {
+                output[index] = {
+                  success: true,
+                  message: `replacement ${index + 1} skipped: search and replace are identical`,
+                };
+                continue;
+              }
+
               const result = await applyToContent(operation, nextContent);
               output[index] = result.output;
               if (!result.output.success) {
+                if (operations.length > 1) {
+                  output[index] = {
+                    ...result.output,
+                    error: `replacement ${index + 1} of ${operations.length}: ${
+                      (result.output as { error: string }).error
+                    }`,
+                  };
+                }
                 continue;
               }
               nextContent = (result as { newContent: string }).newContent;
               changed = true;
             }
 
-            const batchFailed = group.some(({ index }) => output[index]?.success === false);
-            if (batchFailed) {
+            const failedIndex = group.find(({ index }) => output[index]?.success === false)?.index;
+            if (failedIndex !== undefined) {
               for (const { operation, index } of group) {
-                const detail = typeof output[index]?.error === 'string' ? ` ${output[index].error}` : '';
+                const failed = output[index]?.success === false;
                 output[index] = {
                   success: false,
                   operation: 'search_replace',
                   path: operation.path,
-                  error: `Batch aborted; no changes were written.${detail}`,
+                  error: failed
+                    ? `${output[index].error} (batch aborted; no changes were written)`
+                    : `replacement ${index + 1} not applied: replacement ${
+                        failedIndex + 1
+                      } failed, so no changes were written.`,
                 };
               }
             } else if (changed) {

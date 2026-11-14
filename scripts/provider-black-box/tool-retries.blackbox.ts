@@ -25,3 +25,47 @@ it('search_replace accepts the flat single-replacement shape the schema does not
   )!;
   expect(Object.keys(tool.function.parameters.properties).sort()).toEqual(['path', 'replacements']);
 });
+
+it('search_replace skips a no-op pair in a batch, names the failing replacement, and keeps a lone no-op an error', async () => {
+  const run = await runScriptedToolCalls({
+    files: { 'a.txt': 'one\ntwo\nthree\n', 'b.txt': 'x\ny\n' },
+    readBack: ['a.txt', 'b.txt'],
+    calls: [
+      [
+        'search_replace',
+        {
+          path: 'a.txt',
+          replacements: [
+            { search_content: 'one', replace_content: 'one' },
+            { search_content: 'two', replace_content: '2' },
+            { search_content: 'three', replace_content: '3' },
+          ],
+        },
+      ],
+      [
+        'search_replace',
+        {
+          path: 'b.txt',
+          replacements: [
+            { search_content: 'x', replace_content: 'X' },
+            { search_content: 'absent', replace_content: 'Z' },
+          ],
+        },
+      ],
+      ['search_replace', { path: 'b.txt', replacements: [{ search_content: 'y', replace_content: 'y' }] }],
+    ],
+  });
+  expect(run.exitCode, run.stderr + run.stdout).toBe(0);
+  // (a) the no-op pair is skipped and reported; the rest is applied.
+  expect(run.toolResults[0]).toContain('replacement 1 skipped: search and replace are identical');
+  expect(run.toolResults[0]).not.toContain('Batch aborted');
+  expect(run.files['a.txt']).toBe('one\n2\n3\n');
+  // A real failure still aborts the batch atomically, and names which replacement failed and why.
+  expect(run.toolResults[1]).toContain('replacement 2 of 2: Search content not found');
+  expect(run.toolResults[1]).toContain('replacement 1 not applied: replacement 2 failed');
+  expect(run.files['b.txt']).toBe('x\ny\n');
+  // A single no-op call is the model's own mistake: still an error, with a clear reason.
+  expect(run.toolResults[2]).toContain(
+    'search_content and replace_content are identical, so there is nothing to change',
+  );
+});

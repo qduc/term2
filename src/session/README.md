@@ -36,27 +36,58 @@ A background notice (a child's or shell job's completion, a "moved to
 background" or stop notice, a check-in, a question, a shell watch firing) is two
 facts: `background_notice_enqueued`, then `background_notices_delivered`, which
 either owns a silent turn whose input is the notice text or, with `injected`,
-puts that text into a running turn at a request boundary. Replay places the
-message in history at that position, like any other input.
+puts that text into a running turn at a request boundary (or, on reopen, ahead
+of the turn about to start; see below). Replay places the message in history at
+that position, like any other input.
 
-A resumed session replays them unchanged. Reopen once dropped every notice
-message and every `[Mode Notice]` reminder an earlier process wrote (a legacy
-reload rule), which hid a finished child's findings from the model and changed
-the request prefix against the live session's, a prompt-cache miss. Only a tool
-call's arguments are still re-serialized as compact JSON for items older than
-`openedAt` (`resumedItem` in `replay-fold.ts`); that is separate and unchanged.
+**A resumed session replays history as the live session sent it.** Reopen once
+rewrote it in three ways (legacy reload parity), each of which changed the
+request prefix against the live session's, a prompt-cache miss from the first
+changed message on:
+
+- every notice message and `[Mode Notice]` reminder from an earlier process was
+  dropped (and with them a finished child's findings);
+- a tool call's `rawArguments` were re-serialized as compact JSON;
+- a user message's request-notice decoration (`requestNotice` on its
+  `turn_started`) applied only to turns of the current process.
+
+None of that remains: `replay-fold.ts` returns items as recorded, and
+`conversation-notice.ts` re-applies every recorded decoration. A call logged
+without `rawArguments` (older logs) still renders from its parsed input, as
+before. Headless to headless, the resumed request's prefix is byte-identical to
+the live session's last request, system prompt included. What can still differ:
+a resume in the other mode (TUI to headless or back) sends the other mode's
+system prompt; a changed model, profile, tool set or settings changes the
+request as it would in a live session; compaction and rollover replace history
+by design; and a pending notice (below) or recovery notice is new content, not
+a difference from the live session.
+
+Replayed notices are not bounded or truncated. Only compaction bounds them: a
+session with many background completions carries them on resume exactly as the
+live session did (measured at roughly 800 tokens per 2.5 KB result).
 
 What reopen adds, all through the log:
 
 - **Pending notices.** A notice enqueued but not delivered when the process
   died stays pending. The TUI drains it on attach, as a silent turn before the
   user types, which is where the live session would have put it. A headless
-  run has no such moment, so `ConversationBackground.inject` also hands the
-  first turn of a resumed session the notices enqueued before the reopen
-  (`journal.reopenedAt`); they follow that turn's user message and cost no
-  extra request. Notices of the live process are still drained after the turn.
+  run has no such moment, so the first human turn of a resumed session delivers
+  the notices enqueued before the reopen (`journal.reopenedAt`) *ahead of* its
+  user message (`ConversationBackground.deliverReopened`, committed before the
+  turn's admission, replayed as an `injected` delivery with no open turn). The
+  new instruction therefore stays the last thing the model reads, and the
+  notice costs no extra request. Notices of the live process are still drained
+  after the turn, or injected at a request boundary in an interactive app.
 - **Lost background tasks.** `recover()` already closed a task the process lost
-  as `interrupted` / `outcome_unobserved`. It now enqueues the same completion
-  notice a live finish would (`recoverDirectBackgroundNotices`), so the model
-  is told the run's outcome was not observed; no result is invented. A
-  foreground task is its parent's tool result and gets no notice, as live.
+  as `interrupted` / `outcome_unobserved`. It now enqueues a completion notice
+  (`recoverDirectBackgroundNotices`). For a subagent it says the run was
+  interrupted when the session ended, its outcome was not observed, no result is
+  available and it should be started again if still needed; it omits the
+  completion boilerplate that tells the model to assess an inlined result. A
+  lost shell job is reported the same way. A foreground task is its parent's tool
+  result and gets no notice, as live.
+
+A log cut between `background_notices_delivered` and its silent `turn_started`
+makes replay fail (`background notice delivery has no silent turn`). The two are
+one buffer in one write, so only a torn write across lines (power loss, a full
+disk) could split them; the writer does not.

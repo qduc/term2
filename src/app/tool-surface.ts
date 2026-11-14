@@ -20,6 +20,7 @@ import type { AnyToolDefinition } from '../tools/types.js';
 import { isMutatingCommand } from '../tools/system/shell.js';
 import { InvalidatableShellChildRegistry } from '../tools/shell/shell-child-registry.js';
 import type { ProviderInputItem } from '../shared/contracts/provider-input.js';
+import { formatApprovalReview } from '../shared/contracts/approval-review.js';
 import type { ToolContextSeed } from '../tools/index.js';
 import type { Workspace } from '../tools/index.js';
 import type { Item, ReasoningEffort } from '../model/index.js';
@@ -336,6 +337,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
         return { kind: 'deny', reason: 'Docker host control requires an explicit interactive approval' };
       }
       const callId = request.sourceCallId ?? request.requestId;
+      let firstReview: string | undefined;
       if (isAutoApprovableTool(request.toolName) && settings.get('shell.autoApproveMode') !== 'always') {
         advisoryHistory = approvalHistory(history);
         const advisory = await withWorkspace(() =>
@@ -345,6 +347,12 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
           }),
         );
         if (advisor.shouldAutoApprove(advisory)) return { kind: 'allow' };
+        if (advisory)
+          firstReview = formatApprovalReview(
+            advisory.isError
+              ? { kind: 'unavailable', approved: false }
+              : { kind: 'reviewed', approved: false, advisory },
+          );
       }
       // Legacy's headless continuation then decides from the session history,
       // which does not yet hold the paused response's unresolved calls.
@@ -361,7 +369,14 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
           getHistory: () => approvalHistory(settledHistory(history)),
         }),
       );
-      return decision.answer === 'y' ? { kind: 'allow' } : { kind: 'deny', reason: decision.rejectionReason };
+      return decision.answer === 'y'
+        ? { kind: 'allow' }
+        : {
+            kind: 'deny',
+            reason: [decision.rejectionReason, firstReview && `Initial review: ${firstReview}`]
+              .filter(Boolean)
+              .join('\n'),
+          };
     },
   };
 }

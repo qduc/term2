@@ -355,13 +355,15 @@ export class AcpAttachment {
     this.openRequest(interaction.requestId, interaction.turnId, async (signal) => {
       const { requestId } = interaction;
       const review =
-        interaction.kind === 'approval' &&
-        !interaction.supportedGrants.includes('unsandboxed-once') &&
-        (await this.reviewApproval?.(requestId, signal).catch((error: unknown) => {
-          if (!signal.aborted)
-            this.logger.error('ACP approval review failed', { sessionId, error: errorMessage(error) });
-          return { kind: 'unavailable', approved: false } as const;
-        }));
+        interaction.kind !== 'approval'
+          ? undefined
+          : interaction.supportedGrants.includes('unsandboxed-once') || !this.reviewApproval
+          ? ({ kind: 'not_reviewed', approved: false } as const)
+          : await this.reviewApproval(requestId, signal).catch((error: unknown) => {
+              if (!signal.aborted)
+                this.logger.error('ACP approval review failed', { sessionId, error: errorMessage(error) });
+              return { kind: 'unavailable', approved: false } as const;
+            });
       signal.throwIfAborted();
       if (review && review.approved) {
         return {

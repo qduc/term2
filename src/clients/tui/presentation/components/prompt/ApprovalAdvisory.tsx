@@ -58,6 +58,9 @@ export const LLMAdvisory: FC<{ advisory: NonNullable<ApprovalDescriptor['llmAdvi
     ...original,
     reasoning: sanitizeApprovalReviewText(original.reasoning),
     model: sanitizeApprovalReviewText(original.model),
+    riskLevel: original.riskLevel && sanitizeApprovalReviewText(original.riskLevel),
+    authorization: original.authorization && sanitizeApprovalReviewText(original.authorization),
+    confidence: original.confidence && sanitizeApprovalReviewText(original.confidence),
   };
   const theme = useTheme();
   const { ToolSection } = useSkin();

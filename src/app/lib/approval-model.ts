@@ -99,9 +99,14 @@ export function createAssistedApprovalReview({
       !('background' in request.input && request.input.background === true);
     if (
       (unsandboxedOnly &&
-        (request.toolName !== 'shell' || (unsandboxed && settings.get('sandbox.enabled') === false))) ||
+        ((unsandboxed && settings.get('sandbox.enabled') === false) ||
+          (request.input !== null &&
+            typeof request.input === 'object' &&
+            'background' in request.input &&
+            request.input.background === true))) ||
       signal.aborted ||
-      settings.get('shell.autoApproveMode') !== 'auto' ||
+      (settings.get('shell.autoApproveMode') !== 'auto' &&
+        (!unsandboxedOnly || settings.get('shell.autoApproveMode') !== 'advisory')) ||
       request.kind !== 'approval' ||
       (request.risk === 'high' && !unsandboxedOnly) ||
       !isAutoApprovableTool(request.toolName) ||
@@ -129,7 +134,8 @@ export function createAssistedApprovalReview({
       advisory,
       approved:
         !signal.aborted &&
-        (!unsandboxedOnly || (unsandboxed && settings.get('sandbox.enabled') !== false)) &&
+        (!unsandboxedOnly ||
+          (request.toolName === 'shell' && unsandboxed && settings.get('sandbox.enabled') !== false)) &&
         (unsandboxedOnly || advisory.riskLevel === 'low') &&
         review.shouldAutoApprove(advisory),
     };
@@ -195,7 +201,8 @@ export async function reviewLiveApproval(
   signal: AbortSignal,
 ): Promise<ApprovalReviewResult> {
   const review = runtime?.surface.reviewApproval;
-  if (signal.aborted || !runtime || !review || runtime.configurationSettings.get('shell.autoApproveMode') !== 'auto')
+  const mode = runtime?.configurationSettings.get('shell.autoApproveMode');
+  if (signal.aborted || !runtime || !review || (mode !== 'auto' && mode !== 'advisory'))
     return { kind: 'not_reviewed', approved: false };
   const { state, unsubscribe } = session.capture(() => undefined);
   unsubscribe();
@@ -206,7 +213,7 @@ export async function reviewLiveApproval(
   const current = session.capture(() => undefined);
   current.unsubscribe();
   return !signal.aborted &&
-    runtime.configurationSettings.get('shell.autoApproveMode') === 'auto' &&
+    runtime.configurationSettings.get('shell.autoApproveMode') === mode &&
     current.state.activeTurnId === request.turnId &&
     current.state.pendingInteractions.some((pending) => pending.requestId === requestId)
     ? result

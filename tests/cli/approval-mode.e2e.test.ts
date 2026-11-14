@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
   dismissNoMatchSlashMenu,
@@ -333,7 +334,7 @@ it.each([
     const reviewGate = new Promise<void>((resolve) => {
       releaseReview = resolve;
     });
-    const reviewExpected = mode === 'auto' && (sandbox || regular);
+    const reviewExpected = (mode === 'auto' || mode === 'advisory') && (sandbox || regular);
     const baseUrl = await startProvider(
       [
         { call: { id: 'unsandboxed-call', args: regular ? { command } : { command, sandbox: 'unsandboxed' } } },
@@ -935,3 +936,64 @@ it('displays the skill request without injected instructions', { timeout: TIMEOU
 it('Ctrl+U deletes only the current line before the cursor', { timeout: TIMEOUT_MS }, () =>
   runCommand('', '', undefined, 'ctrl-u'),
 );
+
+it('preserves the first model review in a non-interactive denial', { timeout: TIMEOUT_MS }, async () => {
+  root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-headless-review-')));
+  const home = path.join(root, 'home');
+  const workspace = path.join(root, 'workspace');
+  fs.mkdirSync(home);
+  fs.mkdirSync(workspace);
+  const baseUrl = await startProvider([
+    { call: { id: 'review-call', command: 'node -v' } },
+    {
+      text: JSON.stringify({
+        results: [
+          { reasoning: 'Headless fixture review', riskLevel: 'high', authorization: 'unknown', confidence: 'high' },
+        ],
+      }),
+    },
+    { text: 'HEADLESS_FINISHED' },
+  ]);
+  const env = createTestChildEnv({
+    HOME: home,
+    XDG_CONFIG_HOME: path.join(home, '.config'),
+    XDG_DATA_HOME: path.join(home, '.local', 'share'),
+    XDG_STATE_HOME: path.join(home, '.local', 'state'),
+    XDG_CACHE_HOME: path.join(home, '.cache'),
+    TERM2_CONFIG_DIR: path.join(home, '.term2'),
+    TERM2_CACHE_DIR: path.join(home, '.cache', 'term2'),
+    TERM2_CONVERSATIONS_DIR: path.join(root, 'conversations'),
+    DISABLE_LOGGING: '1',
+  });
+  const settingsDir = resolveSettingsDirectory({ homeDir: home, env });
+  fs.mkdirSync(settingsDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(settingsDir, 'settings.json'),
+    JSON.stringify({
+      agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
+      providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl, apiKey: 'test-key' }],
+      sandbox: { enabled: false },
+      shell: { autoApproveMode: 'auto' },
+    }),
+  );
+  const child = spawn('node', [builtCli, '--json', 'Check the runtime'], {
+    cwd: workspace,
+    env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let output = '';
+  child.stdout.on('data', (chunk) => {
+    output += String(chunk);
+  });
+  child.stderr.on('data', (chunk) => {
+    output += String(chunk);
+  });
+  const status = await new Promise<number | null>((resolve, reject) => {
+    child.on('error', reject);
+    child.on('close', resolve);
+  });
+  expect(status, output).toBe(0);
+  expect(output).toContain('Headless fixture review');
+  expect(JSON.stringify(providerBodies)).toContain('Headless fixture review');
+  expect(JSON.stringify(providerBodies.slice(2))).toContain('Initial review:');
+});

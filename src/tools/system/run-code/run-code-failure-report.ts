@@ -28,6 +28,16 @@ function describeFailure(diagnostic: FailedScript['diagnostic'], calls: readonly
   const message = diagnostic.message.replace(/ failed \(call (\d+), args /, (_all, position: string) => {
     return ` failed (call ${position} of ${Math.max(total, Number(position))}, args `;
   });
+  if (diagnostic.code === 'unhandled_nested_failure') {
+    // The host prefixes each message with its worker-local request id; that id means nothing to a model.
+    const details = message
+      .replace(/^unhandled_nested_failure: /, '')
+      .replace(/(^|; )\d+: (?=(?:tools|agent)\.)/g, '$1');
+    return (
+      `A tool call failed and the script never awaited or caught it: ${details}\n` +
+      'Await every tools.* call inside try/catch, or collect them with Promise.allSettled, so a failure is handled.'
+    );
+  }
   return clipText(message, MAX_MESSAGE_CHARS, `error cut at ${MAX_MESSAGE_CHARS} characters`);
 }
 

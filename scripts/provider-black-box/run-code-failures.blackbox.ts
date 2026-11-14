@@ -19,7 +19,7 @@ const r = await Promise.all([
 ]);
 return r;`;
 
-it('names the failing call and its arguments when one call of a fan-out fails', async () => {
+it('names the failing call, its arguments and the right parameter when a grep path is a glob', async () => {
   const [result] = await runScriptedRunCode({
     files: { 'main.go': 'func main() {}\n', 'util.go': 'func util() {}\n' },
     scripts: [{ code: fanOutGrep }],
@@ -29,8 +29,6 @@ it('names the failing call and its arguments when one call of a fan-out fails', 
   expect(result).toContain('No such file or directory');
   // the actionable hint
   expect(result).toContain('path "*.go" is a glob pattern, not a path; pass it as include: "*.go"');
-  const [single] = await runScriptedRunCode({ scripts: [{ code: "await tools.read_file({path: 'missing.txt'});" }] });
-  expect(single).toContain('tools.read_file failed (call 1 of 1, args {"path":"missing.txt"}): File not found');
 });
 
 it('says once that the other calls are listed and that Promise.allSettled keeps them', async () => {
@@ -117,4 +115,19 @@ it('does not invent a glob hint for a missing path that is not a pattern', async
   });
   expect(result).toContain('tools.grep failed (call 1 of 1, args {"pattern":"x","path":"nope"})');
   expect(result).not.toContain('glob pattern');
+});
+
+it('reports an uncaught rejection and a non-JSON return in plain terms with a next step', async () => {
+  const [unhandled, notJson] = await runScriptedRunCode({
+    scripts: [{ code: "tools.read_file({path: 'nope.txt'}); return 1;" }, { code: 'return () => 1;' }],
+  });
+  expect(unhandled).toContain(
+    'A tool call failed and the script never awaited or caught it: tools.read_file failed (call 1 of 1',
+  );
+  expect(unhandled).toContain('Promise.allSettled');
+  expect(unhandled).not.toContain('unhandled_nested_failure');
+  expect(unhandled).not.toMatch(/: 1: tools\./);
+  expect(notJson).toContain('the returned value itself is a function');
+  expect(notJson).toContain('call the function and return its result');
+  expect(notJson).not.toContain('0 nested tool calls');
 });

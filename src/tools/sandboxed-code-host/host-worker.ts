@@ -430,12 +430,16 @@ parentPort.on('message', (message) => {
       throw new Error(
         (workerData.subject || 'Script') +
           ' return value is not JSON-safe: ' +
-          serialized.path +
+          (serialized.path === '$' ? 'the returned value itself' : serialized.path) +
           ' is ' +
           serialized.reason +
-          '.\n' +
-          resultsConsumed +
-          ' nested tool calls already completed — inspect state before retrying.',
+          '. Return plain data (strings, numbers, booleans, null, arrays, plain objects)' +
+          (serialized.reason === 'a function' ? ': call the function and return its result' : '') +
+          (serialized.reason === 'a BigInt' ? ': convert it with String(x) or Number(x)' : '') +
+          '.' +
+          (resultsConsumed > 0
+            ? '\n' + resultsConsumed + ' nested tool calls already completed — inspect state before retrying.'
+            : ''),
       );
     admissionClosed = true;
     send('workflow.body-complete', { output: serialized.value });

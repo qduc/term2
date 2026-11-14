@@ -49,7 +49,7 @@ const USAGE_OUTPUT_TOKENS = 73;
 const USAGE_STREAM_MS = 400;
 
 /** One SSE reply per chat request, in order: a single shell call or plain text. */
-async function startProvider(replies: Reply[], withUsage = false): Promise<string> {
+async function startProvider(replies: Reply[], withUsage = false, beforeReply?: Promise<void>): Promise<string> {
   let requests = 0;
   server = http.createServer((req, res) => {
     if (req.method === 'GET' && req.url?.includes('failure')) {
@@ -66,7 +66,8 @@ async function startProvider(replies: Reply[], withUsage = false): Promise<strin
     req.on('data', (chunk) => {
       body += chunk.toString();
     });
-    req.on('end', () => {
+    req.on('end', async () => {
+      if (beforeReply) await beforeReply;
       providerBodies.push(body);
       const reply = replies[requests++] ?? { text: 'done' };
       if (reply.error) {
@@ -209,6 +210,87 @@ it('Ctrl+G leaves a foreground approval on its prompt', { timeout: TIMEOUT_MS },
   session.write('\r');
   await session.waitForOutput('APPROVAL_FINISHED', 30_000);
   expect(fs.readFileSync(marker, 'utf8')).toBe('approved');
+});
+
+it('routes approval keys while a slash menu is suspended', { timeout: TIMEOUT_MS }, async () => {
+  root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-approval-fallback-e2e-')));
+  const home = path.join(root, 'home');
+  const workspace = path.join(root, 'workspace');
+  fs.mkdirSync(home);
+  fs.mkdirSync(workspace);
+  const marker = path.join(workspace, 'approved');
+  let releaseReply!: () => void;
+  const beforeReply = new Promise<void>((resolve) => {
+    releaseReply = resolve;
+  });
+  const baseUrl = await startProvider(
+    [
+      {
+        call: {
+          id: 'approval-call',
+          command: `while [ ! -e '${home}' ]; do sleep 0.05; done; printf approved > '${marker}'`,
+        },
+      },
+      { text: 'APPROVAL_FINISHED' },
+    ],
+    false,
+    beforeReply,
+  );
+  const idlePath = path.join(home, 'input-idle');
+  const env = {
+    HOME: home,
+    XDG_CONFIG_HOME: path.join(home, '.config'),
+    XDG_DATA_HOME: path.join(home, '.local', 'share'),
+    XDG_STATE_HOME: path.join(home, '.local', 'state'),
+    XDG_CACHE_HOME: path.join(home, '.cache'),
+    TERM2_CONFIG_DIR: path.join(home, '.term2'),
+    TERM2_CACHE_DIR: path.join(home, '.cache', 'term2'),
+    TERM2_CONVERSATIONS_DIR: path.join(root, 'conversations'),
+    DISABLE_LOGGING: '1',
+    [HARNESS_IDLE_ENV]: idlePath,
+    CI: 'false',
+  };
+  const settingsDir = resolveSettingsDirectory({ homeDir: home, env: createTestChildEnv(env) });
+  fs.mkdirSync(settingsDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(settingsDir, 'settings.json'),
+    JSON.stringify({
+      agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
+      providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl, apiKey: 'test-key' }],
+      sandbox: { enabled: false },
+    }),
+  );
+  session = spawnTerminal('node', [builtCli], { cwd: workspace, env, cols: 100, rows: 30 });
+  await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
+  const submit = async (text: string) => {
+    session!.write(text);
+    await waitForHarnessComposerValue(idlePath, text, { timeoutMs: 60_000 });
+    // `/model ` opens legacy's model menu: Enter picks the highlighted row, so wait until the catalog lists it.
+    const picked = /^\/model \S+\/(\S+)$/.exec(text)?.[1];
+    if (picked)
+      await expect
+        .poll(() => session!.getVisibleOutput(), { timeout: 30_000 })
+        .toMatch(new RegExp(`❯\\s+(★\\s+)?${picked}|No models match`));
+    // sleep-ok: the picked row stays highlighted; the catalog can reload after it is drawn (its effect reruns
+    // when credentialRevision rebuilds providerIds) and empty the list: without this pause two of 18 loaded runs
+    // showed "Loading models" at Enter and set the typed id. Nothing publishes the end; 500 ms had no such failure.
+    if (picked) await new Promise((resolve) => setTimeout(resolve, 500));
+    session!.write('\r');
+  };
+  await submit('request approval');
+  await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
+  session!.write('/');
+  await waitForHarnessComposerValue(idlePath, '/', { timeoutMs: 30_000 });
+  await session!.waitForOutput('Tab complete', 30_000);
+  releaseReply();
+  await session!.waitForOutput('Allow once', 60_000);
+  session!.write('\r');
+  await session!.waitForOutput('APPROVAL_FINISHED', 30_000);
+  expect(fs.readFileSync(marker, 'utf8')).toBe('approved');
+  // The suspended slash menu and its draft return after the approval.
+  await waitForHarnessComposerValue(idlePath, '/', { timeoutMs: 30_000 });
+  session!.write('\x1b');
+  await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
 });
 
 // The effective approval mode is visible without changing it.

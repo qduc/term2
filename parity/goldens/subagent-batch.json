@@ -47,7 +47,7 @@
             },
             {
               "name": "run_code",
-              "schema": "f11755bd6b191368"
+              "schema": "5c2cf82775acfc86"
             }
           ],
           "other": {
@@ -113,7 +113,7 @@
             },
             {
               "name": "run_code",
-              "schema": "f11755bd6b191368"
+              "schema": "5c2cf82775acfc86"
             }
           ],
           "other": {
@@ -181,10 +181,6 @@
             {
               "name": "code_context_search",
               "schema": "dd305b1569353c8f"
-            },
-            {
-              "name": "web_search",
-              "schema": "79586a7f121c8de6"
             },
             {
               "name": "web_fetch",
@@ -276,7 +272,7 @@
             },
             {
               "name": "run_code",
-              "schema": "f11755bd6b191368"
+              "schema": "5c2cf82775acfc86"
             }
           ],
           "other": {

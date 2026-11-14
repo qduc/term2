@@ -400,3 +400,30 @@ it.skipIf(process.platform !== 'linux')(
   },
   120000,
 );
+
+const toolNames = (request: { tools?: unknown[] } | undefined): string[] =>
+  ((request?.tools ?? []) as Array<{ function?: { name?: string } }>).map((tool) => tool.function?.name ?? '').sort();
+
+it('web_search is offered to root and explorer only when a search provider is configured', async () => {
+  const explore = ['run_subagent', { execution: 'foreground', role: 'explorer', task: 'look around' }] as const;
+  const without = await runScriptedToolCalls({ calls: [explore] });
+  expect(without.exitCode, without.stderr + without.stdout).toBe(0);
+  // Requests: root, explorer child, root again. web_fetch needs no configuration and stays.
+  for (const request of [without.requests[0], without.requests[1]]) {
+    expect(toolNames(request)).not.toContain('web_search');
+    expect(toolNames(request)).toContain('web_fetch');
+  }
+  const withKey = await runScriptedToolCalls({
+    calls: [explore],
+    settings: { webSearch: { tavily: { apiKey: 'fixture-key' } } },
+  });
+  expect(withKey.exitCode, withKey.stderr + withKey.stdout).toBe(0);
+  for (const request of [withKey.requests[0], withKey.requests[1]]) {
+    expect(toolNames(request)).toContain('web_search');
+    expect(toolNames(request)).toContain('web_fetch');
+  }
+  // Configured, the tool list is exactly the unconfigured one plus web_search.
+  expect(toolNames(withKey.requests[0]).filter((name) => name !== 'web_search')).toEqual(
+    toolNames(without.requests[0]),
+  );
+});

@@ -349,12 +349,27 @@ with credit); the ChatGPT Codex backend (a Codex subscription: does it accept `c
 all?). Also unmeasured: Opus/Sonnet 5.5, gpt-6-sol/astra, a change placed after a tool-result-only turn
 (documented: it waits for the next user turn with new input), repeated changes and TTL effects.
 
+What the measurements cover, precisely: `gpt-6-luna` and `gpt-6.1-terra` (Responses through OpenRouter
+on Azure) and `claude-haiku-5.5` (OpenRouter `/messages`, Anthropic BYOK upstream). Nothing else was
+measured. In particular the design rests on an unmeasured assumption: an in-history effort item keeps
+governing later requests in which the starting top-level effort is sent again. The probes put the item
+in the last request only; one weak Luna probe (item before the user turn or in an earlier turn) agreed.
+
 ### What term2 does now
 
-`src/model/README.md` § Cache-preserving effort changes. In short: GPT-6 catalogue models on OpenAI and
-Codex send `configuration_update` and keep the Responses anchor across an effort-only change; Claude
-Haiku/Sonnet 5.5 on a first-party (or opted-in) Anthropic endpoint send the per-message effort message;
-every other path, including OpenRouter, keeps today's top-level effort.
+`src/model/README.md` § Cache-preserving effort changes. Off by default (`agent.cachePreservingEffort`:
+`off` | `first-party` | `any-endpoint`) until the direct endpoints are probed. When on: the GPT-6 ids in
+the direct catalogue (`gpt-6-luna` measured; `gpt-6-astra`, `gpt-6-sol`, `gpt-6.1-sol` from the "GPT-6
+and later" rule; `gpt-6.1-terra` is not in that catalogue) on OpenAI and Codex send `configuration_update`
+and keep the Responses anchor across an effort-only change; Claude Haiku 5.5 (measured) and Sonnet 5.5
+(docs only) on an in-scope Anthropic-format endpoint send the per-message effort message. A rejected item
+falls back to today's request once and turns the mechanism off for the session. Every other path,
+including OpenRouter, keeps today's top-level effort.
+
+Probes that would let the owner turn it on: per endpoint, the four-request design above (cold, warm,
+change, back) with the item kept in the history, plus a request after the change with no further change
+that must still run at the changed effort (thinking tokens) while the starting top-level value is sent; for Codex, first whether the backend accepts
+`configuration_update` at all.
 
 ### Moving term2's OpenRouter provider (owner decision, not done)
 

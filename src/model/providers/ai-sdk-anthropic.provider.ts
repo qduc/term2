@@ -8,8 +8,7 @@ import {
   resolveThinkingBudget,
 } from './ai-sdk-provider-settings.js';
 import { createAiSdkStreamedModel } from './ai-sdk-streamed-model.js';
-import { withAnthropicEffortMessages } from './anthropic-effort-messages.js';
-import type { StreamedModelTurn, StreamedModelTurnRequest } from '../streamed-model-turn.js';
+import type { StreamedModelTurn, StreamedModelTurnInput, StreamedModelTurnRequest } from '../streamed-model-turn.js';
 
 type AiSdkAnthropicModelLike = LanguageModelV3;
 
@@ -233,9 +232,12 @@ export class AiSdkAnthropicProvider {
     return {
       ...turn,
       ...(turn.getResponse
-        ? { getResponse: (request) => turn.getResponse!(withPinnedEffortFallback(request, adaptiveThinking)) }
+        ? {
+            getResponse: (request) =>
+              turn.getResponse!(withEffortSentinels(withPinnedEffortFallback(request, adaptiveThinking))),
+          }
         : {}),
-      stream: (request) => turn.stream(withPinnedEffortFallback(request, adaptiveThinking)),
+      stream: (request) => turn.stream(withEffortSentinels(withPinnedEffortFallback(request, adaptiveThinking))),
     };
   }
 }
@@ -287,4 +289,67 @@ function resolveReasoningOptions(
       : {}),
   };
   return providerOptions;
+}
+
+// ---------- Per-message effort ----------
+// Beta `mid-conversation-output-config-2026-07-01`: an effort-only message
+// `{"role":"system","content":[],"output_config":{"effort":...}}` changes effort for later
+// turns while the top-level `output_config.effort` stays put, so the cached prefix survives
+// (measured on Claude Haiku 5.5, 2026-11-14; model/effort-updates.ts). The AI SDK cannot
+// express that message, so an `effort_update` marker becomes a sentinel text part at the
+// start of the user message it governs, and the fetch wrapper replaces the sentinel with
+// the effort message placed just before that user message, adding the beta header. A body
+// without the sentinel is forwarded untouched, byte for byte.
+
+/** Markers as sentinels on the next user message; with no later user message a marker has no turn to govern. */
+function withEffortSentinels(request: StreamedModelTurnRequest): StreamedModelTurnRequest {
+  if (!request.input.some((item) => item.type === 'effort_update')) return request;
+  const input: StreamedModelTurnInput[] = [];
+  let pending: string | undefined;
+  for (const item of request.input) {
+    if (item.type === 'effort_update') pending = item.effort;
+    else if (pending !== undefined && item.type === 'message' && item.role === 'user') {
+      input.push({ ...item, content: [{ type: 'text', text: effortSentinel(pending) }, ...item.content] });
+      pending = undefined;
+    } else input.push(item);
+  }
+  return { ...request, input };
+}
+
+const ANTHROPIC_EFFORT_BETA = 'mid-conversation-output-config-2026-07-01';
+
+const SENTINEL_PREFIX = 'term2-effort-update:9c4e1f7a:';
+const SENTINEL = /^term2-effort-update:9c4e1f7a:([a-z]+)$/;
+
+function effortSentinel(effort: string): string {
+  return `${SENTINEL_PREFIX}${effort}`;
+}
+
+function withAnthropicEffortMessages(base: typeof fetch): typeof fetch {
+  return (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    const body = init?.body;
+    if (typeof body !== 'string' || !body.includes(SENTINEL_PREFIX)) return base(input, init);
+    const parsed = JSON.parse(body) as { messages?: unknown };
+    if (!Array.isArray(parsed.messages)) throw new Error('Per-message effort marker outside Anthropic messages');
+    parsed.messages = parsed.messages.flatMap((message: any) => {
+      const first = Array.isArray(message?.content) ? message.content[0] : undefined;
+      const match = message?.role === 'user' && first?.type === 'text' ? SENTINEL.exec(first.text) : null;
+      if (!match || message.content.length < 2) return [message];
+      return [
+        { role: 'system', content: [], output_config: { effort: match[1] } },
+        { ...message, content: message.content.slice(1) },
+      ];
+    });
+    const rewritten = JSON.stringify(parsed);
+    // A sentinel the rewrite did not place must never reach the model as text.
+    if (rewritten.includes(SENTINEL_PREFIX)) throw new Error('Per-message effort marker could not be placed');
+    const headers = new Headers(init?.headers);
+    const betas = (headers.get('anthropic-beta') ?? '')
+      .split(',')
+      .map((beta) => beta.trim())
+      .filter(Boolean);
+    if (!betas.includes(ANTHROPIC_EFFORT_BETA))
+      headers.set('anthropic-beta', [...betas, ANTHROPIC_EFFORT_BETA].join(','));
+    return base(input, { ...init, body: rewritten, headers });
+  }) as typeof fetch;
 }

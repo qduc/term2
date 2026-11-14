@@ -26,7 +26,7 @@ export type EffortTimelinePlan = {
   readonly reasoning: ReasoningEffort;
 };
 
-export function planEffortTimeline(input: {
+function planEffortTimeline(input: {
   readonly facts: readonly Fact[];
   readonly history: readonly Item[];
   readonly newItems: readonly Item[];
@@ -79,26 +79,33 @@ export function planEffortTimeline(input: {
   };
 }
 
-/** The turn's history, new items and top-level effort, decorated where the model supports it. */
-export function effortTimelineForTurn(input: {
-  readonly facts: readonly Fact[];
-  readonly history: readonly Item[];
-  readonly newItems: readonly Item[];
-  readonly model: ModelRef | undefined;
-  readonly reasoning: ReasoningEffort | undefined;
-  readonly models: ModelRegistry;
-}): { readonly history: readonly Item[]; readonly newItems: readonly Item[]; readonly reasoning?: ReasoningEffort } {
-  const unchanged = {
-    history: input.history,
-    newItems: input.newItems,
-    ...(input.reasoning !== undefined ? { reasoning: input.reasoning } : {}),
-  };
-  if (!input.model || !input.reasoning) return unchanged;
+/** A turn's model history, new items and top-level effort, decorated where the model supports it. */
+export function effortTimelineForTurn(
+  facts: readonly Fact[],
+  models: ModelRegistry,
+  settings: { readonly model?: ModelRef; readonly reasoning?: ReasoningEffort },
+  turn: { readonly modelHistory: readonly Item[]; readonly sentInput: readonly Item[] },
+): {
+  readonly modelHistory: readonly Item[];
+  readonly sentInput: readonly Item[];
+  readonly reasoning?: ReasoningEffort;
+} {
+  const { model, reasoning } = settings;
+  const unchanged = { ...turn, ...(reasoning !== undefined ? { reasoning } : {}) };
+  if (!model || !reasoning) return unchanged;
   let levels: readonly ReasoningEffort[] | undefined;
   try {
-    levels = effortUpdateLevels(input.models.resolve(input.model));
+    levels = effortUpdateLevels(models.resolve(model));
   } catch {
     return unchanged;
   }
-  return planEffortTimeline({ ...input, model: input.model, levels }) ?? unchanged;
+  const plan = planEffortTimeline({
+    facts,
+    history: turn.modelHistory,
+    newItems: turn.sentInput,
+    model,
+    reasoning,
+    levels,
+  });
+  return plan ? { modelHistory: plan.history, sentInput: plan.newItems, reasoning: plan.reasoning } : unchanged;
 }

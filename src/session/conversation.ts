@@ -257,26 +257,22 @@ function conversation(
       const refusal = foreignCompactionRefusal(snapshot.history, settings.model.provider);
       if (refusal) throw new Error(refusal);
     }
-    const noticed = prepareConversationNotice(
-      turnId,
-      request,
-      planned,
-      snapshot.history,
-      journal,
-      capabilities!,
-      generation,
-      cancelNotice,
-    );
-    // After its admission is durable: the running turn's effort is part of the timeline.
-    const timeline = effortTimelineForTurn({
+    // Decorated after admission is durable, so the running turn's effort is in the timeline.
+    const { modelHistory, sentInput, reasoning } = effortTimelineForTurn(
       facts,
-      history: noticed.modelHistory,
-      newItems: noticed.sentInput,
-      model: settings.model,
-      reasoning: settings.reasoning,
-      models: generation.runtime.models,
-    });
-    const { history: modelHistory, newItems: sentInput } = timeline;
+      generation.runtime.models,
+      settings,
+      prepareConversationNotice(
+        turnId,
+        request,
+        planned,
+        snapshot.history,
+        journal,
+        capabilities!,
+        generation,
+        cancelNotice,
+      ),
+    );
     // A segment that a cancelled question ended stays the chain point: the next request chains from that response
     // and sends the outputs it settled (#150 item 10; legacy left them out and the provider refused the request).
     if (hasHumanInput) generation.continuity?.state?.chainCancelledQuestion(modelHistory, ASK_USER_NO_ANSWER_RESULT);
@@ -293,7 +289,7 @@ function conversation(
       const handle = (planned?.compaction ? startCompaction : startTurn)(
         {
           ...settings,
-          ...(timeline.reasoning !== undefined ? { reasoning: timeline.reasoning } : {}),
+          ...(reasoning !== undefined ? { reasoning } : {}),
           turnId,
           history: modelHistory,
           ...(snapshot.compactionState ? { compactionState: snapshot.compactionState } : {}),

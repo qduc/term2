@@ -46,10 +46,6 @@
     "src/tools": {
       "files": 22,
       "reason": "Root tool exports, execution facades, and adoption registries; bridges system and language tools to the agent runtime. tool-argument-hint.ts (the 'these arguments belong to another tool' sentence of the schema diagnostic) has one caller, tool-invoke.ts, which is itself over its size ceiling and should not absorb it. Lower the ceiling when tool-invoke.ts is split and the diagnostics move together."
-    },
-    "src/tools/file": {
-      "files": 16,
-      "reason": "File tools plus their helpers. closest-line.ts (the nearest-line hint apply_patch and search_replace share) is one job with two importers; folding it into either would grow a file already over its size ceiling. Lower the ceiling when the search_replace files move into a subfolder."
     }
   },
   "fileCeilings": {
@@ -90,7 +86,7 @@
       "reason": "The direct runtime commits each model configuration change and decides in the same commit whether global defaults should be persisted. ACP sessions keep their changes local. Lower the ceiling when the model reconfiguration transaction can move together with its settings writes. Three lines give the registry selection the session's log-backed record of a refused cache-preserving effort marker (application-models.ts holds the logic); this is the one place the selection is built before the session port exists, so the late-bound port is named here."
     },
     "src/app/lib/agent-factory.ts": {
-      "lines": 555,
+      "lines": 552,
       "reason": "Agent graph assembly and tool invocation wrappers retain their existing shared execution/approval dependencies. Provider capability resolution and model request settings now live in app/lib/agent-model-settings.ts; this lowered ceiling records the remaining assembly body without authorizing growth."
     },
     "src/clients/control-socket/control-socket.ts": {
@@ -106,7 +102,7 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/config/settings/settings-schema.ts": {
-      "lines": 1371,
+      "lines": 1367,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Ten lines declare `agent.cachePreservingEffort` through the mandatory setting touchpoints (schema with description, key, typed field, default, runtime-modifiable list)."
     },
     "src/app/settings-service.ts": {
@@ -114,7 +110,7 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/config/settings/settings-ui-metadata.ts": {
-      "lines": 544,
+      "lines": 542,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. One line labels `agent.cachePreservingEffort`."
     },
     "src/session/agent-runtime/permission-boundary.ts": {

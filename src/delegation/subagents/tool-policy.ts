@@ -1,6 +1,6 @@
-import { healPatchOperation } from '../../tools/file/patch-healing.js';
+import { bindPatchHealing } from '../../tools/file/patch-healing.js';
 import type { NestedRunDriverFactory, NestedModelBinding } from '../../tools/nested-run-driver.js';
-import { healSearchReplaceParams } from '../../tools/file/edit-healing.js';
+import { bindEditHealing } from '../../tools/file/edit-healing.js';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -1219,12 +1219,10 @@ export class SubagentToolFactory {
             this.#toolPolicy.wrapWriteTool(
               createApplyPatchToolDefinition({
                 resolveHealingModel: () => resolveAncillaryModelTier('chore', this.#settings),
-                patchHealing: (path, diff, content, diagnosis, model, key, healingDeps) =>
-                  healPatchOperation(path, diff, content, diagnosis, model, key, {
-                    ...healingDeps,
-                    driverFactory: this.#driverFactory,
-                    modelBinding: this.#modelBinding,
-                  }),
+                patchHealing: bindPatchHealing({
+                  driverFactory: this.#driverFactory,
+                  modelBinding: this.#modelBinding,
+                }),
                 settingsService: this.#settings,
                 loggingService: this.#logger,
                 executionContext,
@@ -1245,12 +1243,7 @@ export class SubagentToolFactory {
             this.#toolPolicy.wrapWriteTool(
               createSearchReplaceToolDefinition({
                 resolveHealingModel: () => resolveAncillaryModelTier('chore', this.#settings),
-                editHealing: (params, content, model, key, healingDeps) =>
-                  healSearchReplaceParams(params, content, model, key, {
-                    ...healingDeps,
-                    driverFactory: this.#driverFactory,
-                    modelBinding: this.#modelBinding,
-                  }),
+                editHealing: bindEditHealing({ driverFactory: this.#driverFactory, modelBinding: this.#modelBinding }),
                 settingsService: this.#settings,
                 loggingService: this.#logger,
                 executionContext,

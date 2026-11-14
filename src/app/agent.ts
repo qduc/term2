@@ -1,6 +1,6 @@
-import { healPatchOperation } from '../tools/file/patch-healing.js';
+import { bindPatchHealing } from '../tools/file/patch-healing.js';
 import type { NestedRunDriverFactory, NestedModelBinding } from '../tools/nested-run-driver.js';
-import { healSearchReplaceParams } from '../tools/file/edit-healing.js';
+import { bindEditHealing } from '../tools/file/edit-healing.js';
 import { createDiscordSendToolDefinition } from './discord-send.js';
 import type { DiscordSend } from '../clients/discord/discord-outbound.js';
 import { createGrepToolDefinition } from '../tools/file/grep.js';
@@ -612,12 +612,7 @@ export const getAgentDefinition = (
             loggingService,
             executionContext,
             sessionAccess,
-            patchHealing: (path, diff, content, diagnosis, model, key, healingDeps) =>
-              healPatchOperation(path, diff, content, diagnosis, model, key, {
-                ...healingDeps,
-                driverFactory: deps.driverFactory,
-                modelBinding: deps.modelBinding,
-              }),
+            patchHealing: bindPatchHealing(deps),
           }),
         );
       } else {
@@ -630,12 +625,7 @@ export const getAgentDefinition = (
           }),
           createSearchReplaceToolDefinition({
             resolveHealingModel: () => resolveAncillaryModelTier('chore', settingsService),
-            editHealing: (params, content, model, key, healingDeps) =>
-              healSearchReplaceParams(params, content, model, key, {
-                ...healingDeps,
-                driverFactory: deps.driverFactory,
-                modelBinding: deps.modelBinding,
-              }),
+            editHealing: bindEditHealing(deps),
             settingsService,
             loggingService,
             executionContext,

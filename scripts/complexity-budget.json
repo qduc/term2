@@ -230,7 +230,7 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/tools/file/search-replace.ts": {
-      "lines": 666,
+      "lines": 661,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/tools/mcp/mcp-connection-manager.ts": {
@@ -254,7 +254,7 @@
       "reason": "The shell executor checks one-use escape evidence against the actual cwd and foreground invocation at the point where it selects sandbox mode. Moving only that check would separate it from the execution context that enforces it. Lower the ceiling when the shell execution pipeline can move as a whole."
     },
     "src/delegation/subagents/tool-policy.ts": {
-      "lines": 1399,
+      "lines": 1393,
       "reason": "Inherited child capability factory and policy wrappers, with validation evidence capture now owned by subagents/validation-evidence.ts. The remaining authority checks, scope enforcement, and provider-compatible wrappers still share one graph; this lower ceiling records that existing cohesive body without authorizing further growth."
     },
     "src/delegation/run-code/run-code-agent-capability.ts": {

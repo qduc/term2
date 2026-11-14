@@ -249,10 +249,8 @@ function conversation(
     const hasHumanInput = !planned?.compaction && request.input.some((item) => item.type === 'user_message');
     const cancelNotice = hasHumanInput ? questionCancel.take(planned?.queuedFollowUp === true) : undefined;
     const turnId = planned?.turnId ?? (`turn-${nextTurnId++}` as TurnId);
-    if (hasHumanInput && !planned?.accepted && !planned?.silent && !planned?.retryNotice) {
-      const reopened = background!.deliverReopened(turnId);
-      if (reopened.length && !commit(reopened)) throw new Error(journal.failure!.message);
-    }
+    if (hasHumanInput && !planned?.accepted && !planned?.silent && !planned?.retryNotice)
+      background!.deliverReopened(turnId);
     const snapshot = planned?.accepted
       ? { history: planned.history!, compactionState: planned.compactionState }
       : liveReplay();

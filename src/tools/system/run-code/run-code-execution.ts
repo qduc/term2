@@ -45,6 +45,10 @@ export interface RunCodeExecutionCall {
   readonly directlyCallable?: boolean;
   readonly diagnostic?: RunCodeDiagnosticCode;
   readonly reason?: string;
+  /** 1-based dispatch order among the script's tool calls, when known. */
+  readonly position?: number;
+  /** Compact, truncated echo of the arguments the call received. */
+  readonly args?: string;
   /** Already-normalized script-visible result; bounded by the existing per-call limit. */
   readonly recovery?: {
     readonly result: JsonValue;

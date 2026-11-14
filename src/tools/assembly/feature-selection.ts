@@ -1,7 +1,7 @@
 import type { ILoggingService, ISettingsService } from '../../shared/service-interfaces.js';
 import { createActivateSkillToolDefinition } from '../agent/activate-skill.js';
 import { createWebFetchToolDefinition } from '../web/web-fetch.js';
-import { createWebSearchToolDefinition } from '../web/web-search.js';
+import { createWebSearchToolDefinition, isWebSearchAvailable } from '../web/web-search.js';
 import type { SkillsService } from '../skills/skills-service.js';
 
 /**
@@ -16,8 +16,20 @@ export interface FeatureSelection {
   activateSkill: boolean;
 }
 
+/**
+ * The web tools an agent can actually use. `web_fetch` needs no configuration; `web_search` is left out
+ * (`search` undefined) when no search provider is configured, because every call to it would fail.
+ */
+export function createWebToolPair(deps: { settingsService: ISettingsService; loggingService: ILoggingService }) {
+  return {
+    search: isWebSearchAvailable(deps.settingsService) ? createWebSearchToolDefinition(deps) : undefined,
+    fetch: createWebFetchToolDefinition(deps),
+  };
+}
+
 export function createWebToolDefinitions(deps: { settingsService: ISettingsService; loggingService: ILoggingService }) {
-  return [createWebSearchToolDefinition(deps), createWebFetchToolDefinition(deps)] as const;
+  const { search, fetch } = createWebToolPair(deps);
+  return search ? ([search, fetch] as const) : ([fetch] as const);
 }
 
 export function createSelectedActivateSkillTool(skillsService: SkillsService) {

@@ -37,7 +37,7 @@ import {
 } from '../../tools/file/code-context.js';
 import {
   createSelectedActivateSkillTool,
-  createWebToolDefinitions,
+  createWebToolPair,
   type FeatureSelection,
 } from '../../tools/assembly/feature-selection.js';
 import { createApplyPatchToolDefinition } from '../../tools/file/apply-patch.js';
@@ -1173,14 +1173,12 @@ export class SubagentToolFactory {
     }
 
     if (features.web) {
-      const [webSearch, webFetch] = createWebToolDefinitions({
+      const { search: webSearch, fetch: webFetch } = createWebToolPair({
         settingsService: this.#settings,
         loggingService: this.#logger,
       });
-      tools.push(
-        this.#toolPolicy.wrapNetworkToolWithScope(webSearch, netScope, () => undefined),
-        this.#toolPolicy.wrapNetworkToolWithScope(webFetch, netScope, (params) => params.url),
-      );
+      if (webSearch) tools.push(this.#toolPolicy.wrapNetworkToolWithScope(webSearch, netScope, () => undefined));
+      tools.push(this.#toolPolicy.wrapNetworkToolWithScope(webFetch, netScope, (params) => params.url));
     }
 
     if (definition.canRunShell) {

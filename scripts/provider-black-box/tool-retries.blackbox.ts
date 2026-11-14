@@ -403,27 +403,31 @@ it.skipIf(process.platform !== 'linux')(
 
 const toolNames = (request: { tools?: unknown[] } | undefined): string[] =>
   ((request?.tools ?? []) as Array<{ function?: { name?: string } }>).map((tool) => tool.function?.name ?? '').sort();
+const runCodeCatalogue = (request: { tools?: unknown[] } | undefined): string =>
+  ((request?.tools ?? []) as Array<{ function?: { name?: string; description?: string } }>).find(
+    (tool) => tool.function?.name === 'run_code',
+  )?.function?.description ?? '';
 
 it('web_search is offered to root and explorer only when a search provider is configured', async () => {
   const explore = ['run_subagent', { execution: 'foreground', role: 'explorer', task: 'look around' }] as const;
   const without = await runScriptedToolCalls({ calls: [explore] });
   expect(without.exitCode, without.stderr + without.stdout).toBe(0);
   // Requests: root, explorer child, root again. web_fetch needs no configuration and stays.
-  for (const request of [without.requests[0], without.requests[1]]) {
-    expect(toolNames(request)).not.toContain('web_search');
-    expect(toolNames(request)).toContain('web_fetch');
-  }
+  // The root reaches web tools through run_code's catalogue; the explorer has them as direct tools.
+  expect(runCodeCatalogue(without.requests[0])).toMatch(/\bweb_fetch\b/);
+  expect(runCodeCatalogue(without.requests[0])).not.toMatch(/\bweb_search\b/);
+  expect(toolNames(without.requests[1])).toContain('web_fetch');
+  expect(toolNames(without.requests[1])).not.toContain('web_search');
   const withKey = await runScriptedToolCalls({
     calls: [explore],
     settings: { webSearch: { tavily: { apiKey: 'fixture-key' } } },
   });
   expect(withKey.exitCode, withKey.stderr + withKey.stdout).toBe(0);
-  for (const request of [withKey.requests[0], withKey.requests[1]]) {
-    expect(toolNames(request)).toContain('web_search');
-    expect(toolNames(request)).toContain('web_fetch');
-  }
-  // Configured, the tool list is exactly the unconfigured one plus web_search.
-  expect(toolNames(withKey.requests[0]).filter((name) => name !== 'web_search')).toEqual(
-    toolNames(without.requests[0]),
+  expect(runCodeCatalogue(withKey.requests[0])).toMatch(/\bweb_search\b/);
+  expect(toolNames(withKey.requests[1])).toContain('web_search');
+  expect(toolNames(withKey.requests[1])).toContain('web_fetch');
+  // Configured, the explorer's tool list is exactly the unconfigured one plus web_search.
+  expect(toolNames(withKey.requests[1]).filter((name) => name !== 'web_search')).toEqual(
+    toolNames(without.requests[1]),
   );
 });

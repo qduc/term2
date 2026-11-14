@@ -14,7 +14,7 @@
 import type { Item, Model, ReasoningEffort } from './index.js';
 import type { StreamedModelTurnInput } from './streamed-model-turn.js';
 
-export const EFFORT_UPDATE = 'effort_update';
+const EFFORT_UPDATE = 'effort_update';
 
 /** Levels every wired mechanism accepts. `none`/`minimal` stay on today's top-level path. */
 export const CACHE_SAFE_EFFORT_LEVELS: readonly ReasoningEffort[] = ['low', 'medium', 'high', 'xhigh'];

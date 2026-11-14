@@ -207,27 +207,18 @@ export class ConversationGeneration {
     const notice = this.notice(request.notice);
     const noticed = notice ? withNotice(human.modelInput, notice) : human.modelInput;
     // As the turn would start: its admission (and effort) recorded after the log's facts.
-    const timeline = effortTimelineForTurn({
-      facts: [
-        ...facts,
-        {
-          type: 'turn_started',
-          turnId: 'preview' as TurnId,
-          input: request.input,
-          requestConfiguration: configuration,
-        },
-      ],
-      history,
-      newItems: noticed,
-      model: request.model,
-      reasoning: request.reasoning,
-      models: this.runtime.models,
-    });
-    const modelInput = timeline.newItems;
+    const preview = { type: 'turn_started', turnId: 'preview' as TurnId, input: request.input } as const;
+    const timeline = effortTimelineForTurn(
+      [...facts, { ...preview, requestConfiguration: configuration }],
+      this.runtime.models,
+      request,
+      { modelHistory: history, sentInput: noticed },
+    );
+    const modelInput = timeline.sentInput;
     const canonical: ModelRequest = {
       model: request.model,
       instructions: request.instructions,
-      input: [...timeline.history, ...modelInput],
+      input: [...timeline.modelHistory, ...modelInput],
       tools: request.tools,
       ...(timeline.reasoning !== undefined ? { reasoning: timeline.reasoning } : {}),
       ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),

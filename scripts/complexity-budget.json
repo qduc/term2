@@ -24,8 +24,8 @@
       "reason": "Server gateway, socket dispatch, and transport endpoints; combines direct SSE host and control socket routes."
     },
     "src/model": {
-      "files": 16,
-      "reason": "Model domain types, token usage tracking, and streaming completion contracts; core vocabulary for all provider adapters."
+      "files": 17,
+      "reason": "Model domain types, token usage tracking, and streaming completion contracts; core vocabulary for all provider adapters. effort-updates.ts is the model-layer contract for cache-preserving effort changes shared by the registry, three adapters and Session; no existing file owns that concept."
     },
     "src/model/providers": {
       "files": 58,
@@ -36,8 +36,8 @@
       "reason": "Cross-client event envelopes, serialization codecs, and projection types; stable schemas shared by TUI, headless, and ACP."
     },
     "src/session": {
-      "files": 87,
-      "reason": "Session lifecycle, queue and stream ownership plus the two application-context/pricing composition files and three existing host policy helpers moved from engine for #224. The engine is now only portable package contract surfaces; further Session root decomposition remains planned in #197 and Phase 3."
+      "files": 88,
+      "reason": "Session lifecycle, queue and stream ownership plus the two application-context/pricing composition files and three existing host policy helpers moved from engine for #224. The engine is now only portable package contract surfaces; further Session root decomposition remains planned in #197 and Phase 3. effort-timeline.ts derives a turn's effort markers from the log, like a recorded notice; it is a distinct host policy, not part of an existing module."
     },
     "src/session/conversation": {
       "files": 19,
@@ -74,8 +74,8 @@
       "reason": "The wire type catalogue keeps accepted usage dimensions beside the existing counters; cache creation, its one-hour subset and provider-reported reasoning tokens (which agent-core's Usage cannot carry yet, so they ride the accepted usage fact) add three optional fields without changing older messages. Splitting those fields from the usage contract would obscure the public shape. Retire this ceiling if wire types are generated or reorganized by complete protocol domains."
     },
     "src/session/conversation.ts": {
-      "lines": 524,
-      "reason": "The Conversation's turn driver; candidate 2 keeps both the question-cancel notice (a3) and the cross-turn compaction hold (solo/tools), each closing over the same driver state. Direct admission checks foreign native compaction coverage before accepting a turn, using the same configured provider and history as the driver."
+      "lines": 532,
+      "reason": "The Conversation's turn driver; candidate 2 keeps both the question-cancel notice (a3) and the cross-turn compaction hold (solo/tools), each closing over the same driver state. Direct admission checks foreign native compaction coverage before accepting a turn, using the same configured provider and history as the driver. Eight lines decorate the turn's model history with cache-preserving effort markers (effort-timeline.ts) at the one place a turn's history, new input and settings meet, after admission."
     },
     "src/session/replay-fold.ts": {
       "lines": 503,
@@ -106,12 +106,12 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/config/settings/settings-schema.ts": {
-      "lines": 1361,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
+      "lines": 1364,
+      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Three lines declare and keep a custom provider's `perMessageEffort` opt-in through the entry schema and its field-rebuilding transform."
     },
     "src/app/settings-service.ts": {
-      "lines": 1258,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
+      "lines": 1261,
+      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Three lines carry a custom provider's `perMessageEffort` opt-in into its runtime registration (model/effort-updates.ts), beside the other entry fields."
     },
     "src/config/settings/settings-ui-metadata.ts": {
       "lines": 543,
@@ -142,16 +142,16 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Responses Lite reconnect checks the existing response chain before filtering unpaired tool items; this remains part of the same wire request preparation."
     },
     "src/model/providers/codex.provider.ts": {
-      "lines": 506,
-      "reason": "OAuth token-manager lifecycle and claim parsing now live in providers/runtime/codex-token-manager.ts; this remaining provider transport assembly is ratcheted from 745 to 506 lines."
+      "lines": 508,
+      "reason": "OAuth token-manager lifecycle and claim parsing now live in providers/runtime/codex-token-manager.ts; this remaining provider transport assembly is ratcheted from 745 to 506 lines. Two lines declare the GPT-6 cache-preserving effort capability (model/effort-updates.ts) on the provider definition beside its other capabilities."
     },
     "src/model/providers/model-catalog/catalog.generated.ts": {
       "lines": 4653,
       "reason": "The generated model data now includes context-price tiers and explicit one-hour write rates while preserving every existing model capacity and base rate. A single artifact keeps regeneration and provenance review coherent; splitting at an arbitrary line count would fragment the generator output. Retire this ceiling if catalog generation is deliberately organized into provider artifacts."
     },
     "src/model/providers/openai-responses-model.ts": {
-      "lines": 924,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Ten lines since then carry the GPT-6 Luna native conversation-input flag (#250) through the constructor and three transports; the projection lives in luna-responses-lite-wire-protocol.ts. Three further lines recognize native cache-write usage in response normalization. Lower the ceiling when the transports share one request-body builder or the file is split by transport. Twenty-two further lines validate failed/incomplete terminal usage and emit it before the existing error in both streaming transports. This belongs beside terminal normalization and the transport loops; extracting only the small guard would scatter their shared accounting contract without moving an independent responsibility. Retire this increment when complete Responses terminal normalization is extracted with its usage validation."
+      "lines": 928,
+      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Ten lines since then carry the GPT-6 Luna native conversation-input flag (#250) through the constructor and three transports; the projection lives in luna-responses-lite-wire-protocol.ts. Three further lines recognize native cache-write usage in response normalization. Lower the ceiling when the transports share one request-body builder or the file is split by transport. Twenty-two further lines validate failed/incomplete terminal usage and emit it before the existing error in both streaming transports. This belongs beside terminal normalization and the transport loops; extracting only the small guard would scatter their shared accounting contract without moving an independent responsibility. Retire this increment when complete Responses terminal normalization is extracted with its usage validation. Four lines render an `effort_update` marker as a `configuration_update` item in the shared input projection, beside the other item conversions."
     },
     "src/session/approval/shell-auto-approval-evaluator.ts": {
       "lines": 797,

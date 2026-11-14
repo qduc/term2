@@ -1,5 +1,6 @@
 import type { InteractionRequestId } from '../tools/index.js';
 import type { DirectBackgroundFact, DirectTaskId, DirectTaskState } from './background-types.js';
+import { directTaskNotice, type DirectNotificationFact } from './notifications.js';
 
 /**
  * Pure projection of accepted task facts. Session can fold this alongside its
@@ -76,6 +77,30 @@ export function recoverDirectBackground(
     });
   }
   return recovery;
+}
+
+/**
+ * The completion notice a recovered background task never got: the process that would have enqueued it died
+ * with the task, so without this the model of a resumed session is never told the run's outcome is unknown.
+ * Same notice as a live finish, with the interrupted result recovery records. Foreground tasks are their
+ * parent's tool result, never a notice, as in the live path.
+ */
+export function recoverDirectBackgroundNotices(
+  facts: readonly DirectBackgroundFact[],
+  recovery: readonly DirectBackgroundFact[],
+): readonly DirectNotificationFact[] {
+  const tasks = new Map(projectDirectBackground(facts).map((task) => [task.taskId, task]));
+  return recovery.flatMap((fact) => {
+    const task = fact.type === 'task_finished' ? tasks.get(fact.taskId) : undefined;
+    return fact.type === 'task_finished' && task?.mode === 'background'
+      ? [
+          {
+            type: 'background_notice_enqueued' as const,
+            notice: directTaskNotice(task, 'finished', fact.result, fact.at),
+          },
+        ]
+      : [];
+  });
 }
 
 function applyFact(

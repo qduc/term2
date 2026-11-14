@@ -163,14 +163,23 @@ function shellCompletion(task: DirectTaskState, result: DirectTaskResult, at?: n
         ].join('\n')
       : undefined;
   const error = result.kind === 'failed' && value === undefined ? result.error.message : undefined;
+  // Recovery of a job its process lost: the outcome is unknown, not a failure.
+  const lost =
+    result.kind === 'interrupted' && value === undefined
+      ? 'Interrupted: the session ended before the command finished. Its outcome was not observed; output may be partial and effects may already have occurred.'
+      : undefined;
   const status =
-    result.kind === 'cancelled' ? 'cancelled' : value?.status ?? (result.kind === 'completed' ? 'completed' : 'failed');
+    result.kind === 'cancelled'
+      ? 'cancelled'
+      : result.kind === 'interrupted'
+      ? value?.status ?? 'interrupted'
+      : value?.status ?? (result.kind === 'completed' ? 'completed' : 'failed');
   return {
     kind: 'shell_completion',
     jobId: task.taskId,
     command: task.label,
     status,
-    output: value?.output ?? error ?? cancelledUnstarted ?? '',
+    output: value?.output ?? error ?? cancelledUnstarted ?? lost ?? '',
     ...(error ? { error } : {}),
   };
 }

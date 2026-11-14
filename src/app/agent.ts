@@ -6,7 +6,7 @@ import type { DiscordSend } from '../clients/discord/discord-outbound.js';
 import { createGrepToolDefinition } from '../tools/file/grep.js';
 import { presentBareShell } from '../tools/system/bare-shell.js';
 import { createReadFileToolDefinition } from '../tools/file/read-file.js';
-import { isReadPreApproved } from '../tools/file/read-access.js';
+import { createHintReadAccess } from '../tools/file/read-access.js';
 import type { SessionAccessState } from '../session/session/session-access-state.js';
 import { createFindFilesToolDefinition } from '../tools/file/glob.js';
 import { createSearchReplaceToolDefinition } from '../tools/file/search-replace.js';
@@ -595,8 +595,7 @@ export const getAgentDefinition = (
   // The nearest-line hint in edit failures echoes file content, so it follows read authority: only for
   // files read_file itself could read without asking, and never when this agent has no read capability.
   const editHintReadAccess = filesystemReadEnabled
-    ? (absolutePath: string, context: unknown) =>
-        isReadPreApproved({ path: absolutePath, context, executionContext, settingsService, sessionAccess })
+    ? createHintReadAccess({ executionContext, settingsService, sessionAccess })
     : undefined;
   {
     if (filesystemReadEnabled) {

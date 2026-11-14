@@ -29,7 +29,7 @@ import { wrapToolInvoke, wrapNeedsApproval } from '../../tools/tool-invoke.js';
 import { toOpenAIStrictToolSchema } from '../../shared/lib/openai-strict-tool-schema.js';
 import { shouldUseStrictToolSchema, shouldPreferPatchEditingModel } from '../../model/tool-selection-policy.js';
 import { createReadFileToolDefinition } from '../../tools/file/read-file.js';
-import { isReadPreApproved } from '../../tools/file/read-access.js';
+import { createHintReadAccess } from '../../tools/file/read-access.js';
 import { createGrepToolDefinition } from '../../tools/file/grep.js';
 import { createFindFilesToolDefinition } from '../../tools/file/glob.js';
 import {
@@ -1220,20 +1220,19 @@ export class SubagentToolFactory {
     // The nearest-line hint in edit failures echoes file content, so it needs this agent's read authority:
     // a read capability, read_file's own approval rule, and the role's read scope when it has one.
     const editHintReadAccess = definition.canRead
-      ? async (absolutePath: string, context: unknown) =>
-          (await isReadPreApproved({
-            path: absolutePath,
-            context,
-            executionContext,
-            settingsService: this.#settings,
-            nestedCompatibility: this.#nestedCompatibility,
-          })) &&
-          (fsReadScope === undefined ||
-            (await isPathInScopeSafe(
-              absolutePath,
-              fsReadScope,
-              this.#executionContext?.getCwd() ?? getActiveWorkspaceRoot(),
-            )))
+      ? createHintReadAccess({
+          executionContext,
+          settingsService: this.#settings,
+          nestedCompatibility: this.#nestedCompatibility,
+          inScope:
+            fsReadScope &&
+            ((absolutePath) =>
+              isPathInScopeSafe(
+                absolutePath,
+                fsReadScope,
+                this.#executionContext?.getCwd() ?? getActiveWorkspaceRoot(),
+              )),
+        })
       : undefined;
 
     if (definition.canWrite && !this.#readOnly) {

@@ -53,6 +53,8 @@ type SourceToolOptions = {
   readonly shellEscapeCwd?: () => string;
   readonly confirmSandboxedShell?: (command: string) => boolean;
   readonly withAnswer: <T>(answer: string, operation: () => Promise<T>) => Promise<T>;
+  /** Names of the offered tools' arguments (wrong-tool hint). */
+  readonly argumentNames: ToolArgumentNames;
 };
 
 /** Gate only scripted physical bodies. The source wrapper retains its raw return value. */
@@ -362,17 +364,8 @@ async function questionAnswer(definition: AnyToolDefinition, input: unknown, con
   return decision.kind === 'answer' ? decision.answer : ASK_USER_NO_ANSWER_RESULT;
 }
 
-function adaptTool(
-  definition: AnyToolDefinition,
-  options: SourceToolOptions,
-  owners: Set<NestedApprovalOwner>,
-  argumentNames: ToolArgumentNames,
-): Tool {
-  argumentNames.register(
-    definition.name,
-    definition.canonicalParameters ??
-      (isZodToolParameterSchema(definition.parameters) ? definition.parameters : undefined),
-  );
+function adaptTool(definition: AnyToolDefinition, options: SourceToolOptions, owners: Set<NestedApprovalOwner>): Tool {
+  options.argumentNames.registerDefinition(definition);
   const tool: Tool = {
     spec: sourceToolSpec(definition),
     parallelSafe:
@@ -384,7 +377,7 @@ function adaptTool(
               invocationFor(context, options.sessionId),
             )
         : definition.parallelSafe,
-    parse: (raw) => parseInput(definition, raw, argumentNames),
+    parse: (raw) => parseInput(definition, raw, options.argumentNames),
     approval: (input, context) =>
       invalidInput(input) !== undefined
         ? Promise.resolve({ kind: 'none' })
@@ -475,14 +468,14 @@ function adaptTool(
 /** Adapt only the directly offered definitions. run_code already retains the complete wrapped graph. */
 export function createSourceToolRegistry(
   definitions: readonly AnyToolDefinition[],
-  options: SourceToolOptions,
+  base: Omit<SourceToolOptions, 'argumentNames'>,
 ): ToolRegistry & { adaptTool(definition: AnyToolDefinition): Tool; dispose(): void } {
   const owners = new Set<NestedApprovalOwner>();
   const tools = new Map<string, Tool>();
-  const argumentNames = new ToolArgumentNames();
+  const options: SourceToolOptions = { ...base, argumentNames: new ToolArgumentNames() };
   for (const definition of definitions) {
     if (tools.has(definition.name)) throw new Error(`Duplicate offered tool: ${definition.name}`);
-    tools.set(definition.name, adaptTool(definition, options, owners, argumentNames));
+    tools.set(definition.name, adaptTool(definition, options, owners));
   }
   return {
     get: (name) => tools.get(name),
@@ -493,7 +486,7 @@ export function createSourceToolRegistry(
       // the registration with it would make even reads and auto-mode writes ask.
       // Adaptation does not add authority to the fixed base offering. The native
       // request capability owns which of these tools enters its actual registry.
-      return adaptTool(definition, options, owners, argumentNames);
+      return adaptTool(definition, options, owners);
     },
     dispose() {
       for (const owner of owners) owner.close();

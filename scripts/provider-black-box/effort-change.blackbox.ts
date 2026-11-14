@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage } from 'node:http';
-import { mkdir, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -14,16 +14,32 @@ import {
 /**
  * A between-turn effort change (`/effort`) on a model with a cache-preserving
  * mechanism keeps the request prefix byte-identical and carries the change as
- * input (src/model/effort-updates.ts); every other model keeps today's request.
+ * input (src/model/effort-updates.ts); every other path keeps today's request.
+ * The mechanism is off unless `agent.cachePreservingEffort` enables it; these
+ * fakes are not first-party hosts, so enabled cases use `any-endpoint`.
  * Measured cache behaviour: docs/research/model-effort-step-down-cache-economics.md.
  */
 
 type Captured = { url: string; headers: IncomingMessage['headers']; body: any };
 type Fake = { baseUrl: string; requests: Captured[]; close(): Promise<void> };
+type FakeOptions = {
+  /** 1-based POST number answered 403 (a failed, unanswered turn). */
+  readonly failRequest?: number;
+  /** Answer 400 to any request that carries an effort item, as an endpoint without support would. */
+  readonly rejectEffortItems?: boolean;
+  /** POSTs up to this number answer at length, so a later compaction has something to reduce. */
+  readonly longAnswersThrough?: number;
+};
 
 const ANTHROPIC_BETA = 'mid-conversation-output-config-2026-07-01';
+const SENTINEL = 'term2-effort-update';
 
-async function startFake(): Promise<Fake> {
+const hasEffortItem = (body: any): boolean =>
+  (Array.isArray(body?.input) && body.input.some((item: any) => item?.type === 'configuration_update')) ||
+  (Array.isArray(body?.messages) &&
+    body.messages.some((message: any) => message?.role === 'system' && message.output_config));
+
+async function startFake(options: FakeOptions = {}): Promise<Fake> {
   const requests: Captured[] = [];
   const server = createServer(async (req, res) => {
     let raw = '';
@@ -36,10 +52,22 @@ async function startFake(): Promise<Fake> {
     const body = raw ? JSON.parse(raw) : undefined;
     requests.push({ url: req.url ?? '', headers: req.headers, body });
     const n = requests.length;
+    if (options.failRequest === n) {
+      res.writeHead(403, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: { type: 'permission_error', message: 'fixture refusal' } }));
+      return;
+    }
+    if (options.rejectEffortItems && hasEffortItem(body)) {
+      res.writeHead(400, { 'content-type': 'application/json' });
+      res.end(
+        JSON.stringify({ error: { type: 'invalid_request_error', message: 'fixture: unsupported effort item' } }),
+      );
+      return;
+    }
     res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'close' });
     const send = (data: unknown, event?: string) =>
       res.write(`${event ? `event: ${event}\n` : ''}data: ${JSON.stringify(data)}\n\n`);
-    const text = `effort fixture answer ${n}`;
+    const text = `effort fixture answer ${n}` + (n <= (options.longAnswersThrough ?? 0) ? ' padding'.repeat(600) : '');
     if ((req.url ?? '').endsWith('/messages')) {
       send(
         {
@@ -87,7 +115,8 @@ async function startFake(): Promise<Fake> {
   };
 }
 
-type Route = { kind: 'openai'; model: string } | { kind: 'anthropic'; model: string; perMessageEffort?: boolean };
+type Scope = 'off' | 'first-party' | 'any-endpoint';
+type Route = { kind: 'openai' | 'anthropic'; model: string; scope?: Scope; fake?: FakeOptions };
 
 const cleanups: (() => Promise<unknown>)[] = [];
 afterEach(async () => {
@@ -95,7 +124,7 @@ afterEach(async () => {
 });
 
 async function setup(route: Route) {
-  const fake = await startFake();
+  const fake = await startFake(route.fake);
   cleanups.push(() => fake.close());
   const provider = route.kind === 'openai' ? 'openai' : 'fixture-anthropic-effort';
   const env = route.kind === 'openai' ? { OPENAI_BASE_URL: `${fake.baseUrl}/v1` } : undefined;
@@ -112,20 +141,14 @@ async function setup(route: Route) {
             transport: 'http',
             retryAttempts: 0,
             reasoningEffort: 'medium',
+            ...(route.scope ? { cachePreservingEffort: route.scope } : {}),
             openai: { apiKey: 'fixture-key' },
           },
           app: { liteMode: true },
           ...(route.kind === 'anthropic'
             ? {
                 providers: [
-                  {
-                    id: provider,
-                    name: provider,
-                    type: 'anthropic',
-                    baseUrl: fake.baseUrl,
-                    apiKey: 'fixture-key',
-                    ...(route.perMessageEffort !== undefined ? { perMessageEffort: route.perMessageEffort } : {}),
-                  },
+                  { id: provider, name: provider, type: 'anthropic', baseUrl: fake.baseUrl, apiKey: 'fixture-key' },
                 ],
               }
             : {}),
@@ -134,41 +157,42 @@ async function setup(route: Route) {
     },
   });
   cleanups.push(() => workspace.cleanup());
-  return { fake, workspace, provider, env };
+  const posts = () =>
+    fake.requests.filter((request) => request.url.endsWith(route.kind === 'openai' ? '/responses' : '/messages'));
+  return { fake, workspace, provider, posts };
 }
 
-/** Two turns in one process with `/effort low` between them. */
-async function twoTurnsWithEffortChange(workspace: IsolatedWorkspaceLease, provider: string, model: string) {
+/** Drive one interactive process: prompts, `/effort <level>` and `/compact`, each awaited to idle. */
+async function drive(
+  workspace: IsolatedWorkspaceLease,
+  provider: string,
+  model: string,
+  steps: readonly string[],
+  options: { resume?: boolean; expectVisible?: string } = {},
+) {
+  const resumeId = options.resume
+    ? (await readdir(workspace.paths.conversationsDir)).find((name) => name.endsWith('.jsonl'))!.slice(0, -6)
+    : undefined;
   const child: PtyChildDriver = await workspace.start({
-    args: ['--lite', '--provider', provider, '--model', model],
+    args: [
+      '--lite',
+      '--provider',
+      provider,
+      '--model',
+      model,
+      ...(resumeId ? ['--resume', resumeId.replace(/^conv_/, '')] : []),
+    ],
     env: { TERM2_CONVERSATIONS_DIR: workspace.paths.conversationsDir },
   });
   cleanups.push(() => child.cleanup());
   let idle = await child.waitForIdleInput();
-  await writePtyTextAndSubmit(child, 'first effort question');
-  await child.waitForVisibleOutput('effort fixture answer 1');
-  idle = await child.waitForIdleInput({ after: idle });
-  await writePtyTextAndSubmit(child, '/effort low');
-  await child.waitForVisibleOutput(`${model} · low`);
-  idle = await child.waitForIdleInput({ after: idle });
-  await writePtyTextAndSubmit(child, 'second effort question');
-  await child.waitForVisibleOutput('effort fixture answer 2');
-  await child.waitForIdleInput({ after: idle });
-  await exitInteractive(child);
-}
-
-/** A new process resumes the conversation (full-history request) for a third turn at the current effort. */
-async function resumeInteractive(workspace: IsolatedWorkspaceLease, provider: string, model: string) {
-  const id = (await readdir(workspace.paths.conversationsDir)).find((name) => name.endsWith('.jsonl'))!.slice(0, -6);
-  const child: PtyChildDriver = await workspace.start({
-    args: ['--lite', '--provider', provider, '--model', model, '--resume', id.replace(/^conv_/, '')],
-    env: { TERM2_CONVERSATIONS_DIR: workspace.paths.conversationsDir },
-  });
-  cleanups.push(() => child.cleanup());
-  const idle = await child.waitForIdleInput();
-  await writePtyTextAndSubmit(child, 'third effort question');
-  await child.waitForVisibleOutput('effort fixture answer 3');
-  await child.waitForIdleInput({ after: idle });
+  for (const step of steps) {
+    await writePtyTextAndSubmit(child, step);
+    if (step.startsWith('/effort ')) await child.waitForVisibleOutput(`${model} · ${step.slice('/effort '.length)}`);
+    if (step === '/compact') await child.waitForVisibleOutput('Context compacted locally');
+    idle = await child.waitForIdleInput({ after: idle });
+  }
+  if (options.expectVisible) await child.waitForVisibleOutput(options.expectVisible);
   await exitInteractive(child);
 }
 
@@ -182,11 +206,46 @@ const textOf = (item: any): string =>
     ? item.content
     : (item?.content ?? []).map((part: any) => part?.text ?? '').join('');
 
+/** The effort a request actually runs at: the last in-conversation item, else the top-level value. */
+function effective(body: any): string | undefined {
+  if (Array.isArray(body.input)) {
+    const updates = body.input.filter((item: any) => item?.type === 'configuration_update');
+    return updates.at(-1)?.reasoning.effort ?? body.reasoning?.effort;
+  }
+  const updates = body.messages.filter((message: any) => message.role === 'system' && message.output_config);
+  return updates.at(-1)?.output_config.effort ?? body.output_config?.effort;
+}
+
+const effortItems = (body: any): number =>
+  Array.isArray(body.input)
+    ? body.input.filter((item: any) => item?.type === 'configuration_update').length
+    : body.messages.filter((message: any) => message.role === 'system' && message.output_config).length;
+
+// The TUI wraps the notice; match its first line.
+const FALLBACK_NOTICE = 'This endpoint does not support changing reasoning effort';
+
 describe('cache-preserving effort change', () => {
+  it('is off by default: GPT-6 keeps today, anchor dropped and effort top-level', async () => {
+    const { workspace, posts } = await setup({ kind: 'openai', model: 'gpt-6-sol' });
+    await drive(workspace, 'openai', 'gpt-6-sol', ['first effort question', '/effort low', 'second effort question']);
+    const [, second] = posts();
+    expect(second!.body.reasoning.effort).toBe('low');
+    expect(second!.body.previous_response_id).toBeUndefined();
+    expect(JSON.stringify(second!.body)).not.toContain('configuration_update');
+  });
+
+  it('first-party scope keeps today on an OpenAI base-URL override', async () => {
+    const { workspace, posts } = await setup({ kind: 'openai', model: 'gpt-6-sol', scope: 'first-party' });
+    await drive(workspace, 'openai', 'gpt-6-sol', ['first effort question', '/effort low', 'second effort question']);
+    const [, second] = posts();
+    expect(second!.body.reasoning.effort).toBe('low');
+    expect(JSON.stringify(second!.body)).not.toContain('configuration_update');
+  });
+
   it('GPT-6 on the Responses path keeps the anchor and top-level effort, adding only configuration_update', async () => {
-    const { fake, workspace } = await setup({ kind: 'openai', model: 'gpt-6-sol' });
-    await twoTurnsWithEffortChange(workspace, 'openai', 'gpt-6-sol');
-    const [first, second] = fake.requests.filter((request) => request.url.endsWith('/responses'));
+    const { workspace, posts } = await setup({ kind: 'openai', model: 'gpt-6-sol', scope: 'any-endpoint' });
+    await drive(workspace, 'openai', 'gpt-6-sol', ['first effort question', '/effort low', 'second effort question']);
+    const [first, second] = posts();
     expect(first!.body.reasoning.effort).toBe('medium');
     expect(JSON.stringify(first!.body.input)).not.toContain('configuration_update');
     // Same envelope, so continuity keeps the anchor and sends only the new turn.
@@ -198,45 +257,111 @@ describe('cache-preserving effort change', () => {
     const userIndex = delta.findIndex((item) => textOf(item).includes('second effort question'));
     expect(userIndex).toBeGreaterThan(0);
     expect(delta[userIndex - 1]).toEqual({ type: 'configuration_update', reasoning: { effort: 'low' } });
-    expect(delta.filter((item) => item.type === 'configuration_update')).toHaveLength(1);
+    expect(effortItems(second!.body)).toBe(1);
 
     // Resume (new process, full history): the marker is rebuilt from the log at the same place.
-    await resumeInteractive(workspace, 'openai', 'gpt-6-sol');
-    const third = fake.requests.filter((request) => request.url.endsWith('/responses'))[2]!;
+    await drive(workspace, 'openai', 'gpt-6-sol', ['third effort question'], { resume: true });
+    const third = posts()[2]!;
     expect(third.body.previous_response_id).toBeUndefined();
     expect(third.body.reasoning).toEqual(first!.body.reasoning);
     expect(third.body.instructions).toBe(first!.body.instructions);
     expect(third.body.tools).toEqual(first!.body.tools);
     const full = third.body.input as any[];
-    const types = full.map((item) => (item.type === 'message' ? `${item.role}:${textOf(item).slice(-22)}` : item.type));
-    const firstQuestion = types.findIndex((entry) => entry.endsWith('first effort question'));
-    const secondQuestion = types.findIndex((entry) => entry.endsWith('second effort question'));
+    const secondQuestion = full.findIndex((item) => textOf(item).endsWith('second effort question'));
     expect(full[secondQuestion - 1]).toEqual({ type: 'configuration_update', reasoning: { effort: 'low' } });
-    expect(
-      full.slice(firstQuestion, secondQuestion + 1).filter((item) => item.type === 'configuration_update'),
-    ).toHaveLength(1);
-    // The resumed full request's opening equals the original first request's input.
+    expect(effortItems(third.body)).toBe(1);
     expect(full.slice(0, (first!.body.input as any[]).length)).toEqual(first!.body.input);
   });
 
   it('a pre-GPT-6 Responses model keeps today: anchor dropped, effort top-level, no configuration_update', async () => {
-    const { fake, workspace } = await setup({ kind: 'openai', model: 'gpt-5.6-sol' });
-    await twoTurnsWithEffortChange(workspace, 'openai', 'gpt-5.6-sol');
-    const [first, second] = fake.requests.filter((request) => request.url.endsWith('/responses'));
+    const { workspace, posts } = await setup({ kind: 'openai', model: 'gpt-5.6-sol', scope: 'any-endpoint' });
+    await drive(workspace, 'openai', 'gpt-5.6-sol', ['first effort question', '/effort low', 'second effort question']);
+    const [first, second] = posts();
     expect(first!.body.reasoning.effort).toBe('medium');
     expect(second!.body.reasoning.effort).toBe('low');
     expect(second!.body.previous_response_id).toBeUndefined();
     expect(JSON.stringify(second!.body)).not.toContain('configuration_update');
   });
 
+  it('a compaction starts afresh: no stale marker, and every request runs at the selected effort', async () => {
+    const { workspace, posts } = await setup({
+      kind: 'openai',
+      model: 'gpt-6-sol',
+      scope: 'any-endpoint',
+      fake: { longAnswersThrough: 3 },
+    });
+    await drive(workspace, 'openai', 'gpt-6-sol', [
+      'warmup one',
+      'warmup two',
+      'first effort question',
+      '/effort low',
+      'second effort question',
+      '/compact',
+      'third effort question',
+      '/effort high',
+      'fourth effort question',
+    ]);
+    const requests = posts();
+    const turn = (needle: string) => requests.find((request) => JSON.stringify(request.body).includes(needle))!;
+    const [second, third, fourth] = ['second', 'third', 'fourth'].map((word) => turn(`${word} effort question`));
+    expect(effective(second!.body)).toBe('low');
+    // After the compaction the next turn's effort is the top-level value, with no marker before the summary.
+    expect(third!.body.reasoning.effort).toBe('low');
+    expect(effortItems(third!.body)).toBe(0);
+    expect(effective(fourth!.body)).toBe('high');
+    expect(fourth!.body.reasoning.effort).toBe('low');
+    expect(effortItems(fourth!.body)).toBe(1);
+    const log = await readFile(
+      join(
+        workspace.paths.conversationsDir,
+        (await readdir(workspace.paths.conversationsDir)).find((name) => name.endsWith('.jsonl'))!,
+      ),
+      'utf8',
+    );
+    expect(log).not.toContain('effort_update');
+  });
+
+  it('GPT-6: an endpoint that rejects configuration_update falls back once, says so, and stays off after resume', async () => {
+    const { workspace, posts } = await setup({
+      kind: 'openai',
+      model: 'gpt-6-sol',
+      scope: 'any-endpoint',
+      fake: { rejectEffortItems: true },
+    });
+    await drive(
+      workspace,
+      'openai',
+      'gpt-6-sol',
+      ['first effort question', '/effort low', 'second effort question', '/effort high', 'third effort question'],
+      { expectVisible: FALLBACK_NOTICE },
+    );
+    const requests = posts();
+    const rejected = requests.filter((request) => hasEffortItem(request.body));
+    expect(rejected).toHaveLength(1);
+    const retried = requests[requests.indexOf(rejected[0]!) + 1]!;
+    expect(retried.body.reasoning.effort).toBe('low');
+    expect(effortItems(retried.body)).toBe(0);
+    expect(requests.at(-1)!.body.reasoning.effort).toBe('high');
+    expect(effortItems(requests.at(-1)!.body)).toBe(0);
+    await drive(workspace, 'openai', 'gpt-6-sol', ['/effort medium', 'fourth effort question'], { resume: true });
+    const after = posts().at(-1)!;
+    expect(after.body.reasoning.effort).toBe('medium');
+    expect(effortItems(after.body)).toBe(0);
+    expect(posts().filter((request) => hasEffortItem(request.body))).toHaveLength(1);
+  });
+
   it('Claude Haiku 5.5 keeps the prefix byte-identical and adds only the effort message and beta', async () => {
-    const { fake, workspace, provider } = await setup({
+    const { workspace, provider, posts } = await setup({
       kind: 'anthropic',
       model: 'claude-haiku-5-5',
-      perMessageEffort: true,
+      scope: 'any-endpoint',
     });
-    await twoTurnsWithEffortChange(workspace, provider, 'claude-haiku-5-5');
-    const [first, second] = fake.requests.filter((request) => request.url.endsWith('/messages'));
+    await drive(workspace, provider, 'claude-haiku-5-5', [
+      'first effort question',
+      '/effort low',
+      'second effort question',
+    ]);
+    const [first, second] = posts();
     expect(first!.body.output_config).toEqual({ effort: 'medium' });
     expect(first!.body.thinking).toEqual({ type: 'adaptive' });
     expect(String(first!.headers['anthropic-beta'] ?? '')).not.toContain(ANTHROPIC_BETA);
@@ -252,11 +377,11 @@ describe('cache-preserving effort change', () => {
     expect(tail.map((message) => message.role)).toEqual(['assistant', 'system', 'user']);
     expect(tail[1]).toEqual({ role: 'system', content: [], output_config: { effort: 'low' } });
     expect(textOf(tail[2])).toContain('second effort question');
-    expect(JSON.stringify(second!.body)).not.toContain('term2-effort-update');
+    expect(JSON.stringify(second!.body)).not.toContain(SENTINEL);
 
     // Resume rebuilds the identical prefix, effort message included.
-    await resumeInteractive(workspace, provider, 'claude-haiku-5-5');
-    const third = fake.requests.filter((request) => request.url.endsWith('/messages'))[2]!;
+    await drive(workspace, provider, 'claude-haiku-5-5', ['third effort question'], { resume: true });
+    const third = posts()[2]!;
     const { messages: thirdMessages, ...thirdRest } = third.body;
     expect(withoutCacheControl(thirdRest)).toEqual(withoutCacheControl(firstRest));
     const resumed = withoutCacheControl(thirdMessages) as any[];
@@ -264,10 +389,71 @@ describe('cache-preserving effort change', () => {
     expect(String(third.headers['anthropic-beta'])).toContain(ANTHROPIC_BETA);
   });
 
-  it('a Claude endpoint without per-message effort keeps today: effort top-level, no effort message or beta', async () => {
-    const { fake, workspace, provider } = await setup({ kind: 'anthropic', model: 'claude-haiku-5-5' });
-    await twoTurnsWithEffortChange(workspace, provider, 'claude-haiku-5-5');
-    const [first, second] = fake.requests.filter((request) => request.url.endsWith('/messages'));
+  it('Claude: a turn that got no answer, then another change, places both effort messages', async () => {
+    const { workspace, provider, posts } = await setup({
+      kind: 'anthropic',
+      model: 'claude-haiku-5-5',
+      scope: 'any-endpoint',
+      fake: { failRequest: 2 },
+    });
+    await drive(workspace, provider, 'claude-haiku-5-5', [
+      'first effort question',
+      '/effort low',
+      'second effort question',
+      '/effort high',
+      'third effort question',
+      'fourth effort question',
+    ]);
+    const requests = posts();
+    const third = requests.find((request) => JSON.stringify(request.body).includes('third effort question'))!;
+    expect(third).toBeDefined();
+    expect(JSON.stringify(third.body)).not.toContain(SENTINEL);
+    const roles = third.body.messages.map((message: any) =>
+      message.role === 'system' ? `system:${message.output_config.effort}` : message.role,
+    );
+    expect(roles).toEqual(['user', 'assistant', 'system:low', 'user', 'system:high', 'user']);
+    expect(third.body.output_config).toEqual({ effort: 'medium' });
+    expect(effective(third.body)).toBe('high');
+    const fourth = requests.at(-1)!;
+    expect(textOf(fourth.body.messages.at(-1))).toContain('fourth effort question');
+    expect(effective(fourth.body)).toBe('high');
+  });
+
+  it('Claude: an endpoint that rejects the effort message falls back once and continues', async () => {
+    const { workspace, provider, posts } = await setup({
+      kind: 'anthropic',
+      model: 'claude-haiku-5-5',
+      scope: 'any-endpoint',
+      fake: { rejectEffortItems: true },
+    });
+    await drive(
+      workspace,
+      provider,
+      'claude-haiku-5-5',
+      ['first effort question', '/effort low', 'second effort question', '/effort high', 'third effort question'],
+      { expectVisible: FALLBACK_NOTICE },
+    );
+    const requests = posts();
+    expect(requests.filter((request) => hasEffortItem(request.body))).toHaveLength(1);
+    const retried = requests[requests.findIndex((request) => hasEffortItem(request.body)) + 1]!;
+    expect(retried.body.output_config).toEqual({ effort: 'low' });
+    expect(String(retried.headers['anthropic-beta'] ?? '')).not.toContain(ANTHROPIC_BETA);
+    expect(requests.at(-1)!.body.output_config).toEqual({ effort: 'high' });
+    expect(JSON.stringify(requests)).not.toContain(SENTINEL);
+  });
+
+  it('first-party scope keeps today on an Anthropic-format endpoint that is not api.anthropic.com', async () => {
+    const { workspace, provider, posts } = await setup({
+      kind: 'anthropic',
+      model: 'claude-haiku-5-5',
+      scope: 'first-party',
+    });
+    await drive(workspace, provider, 'claude-haiku-5-5', [
+      'first effort question',
+      '/effort low',
+      'second effort question',
+    ]);
+    const [first, second] = posts();
     expect(first!.body.output_config).toEqual({ effort: 'medium' });
     expect(second!.body.output_config).toEqual({ effort: 'low' });
     expect(second!.body.messages.some((message: any) => message.role === 'system')).toBe(false);

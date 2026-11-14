@@ -567,16 +567,12 @@ export function createApplyPatchToolDefinition(deps: {
                 }
 
                 if (!usedHealing || patched === undefined) {
+                  const mayEchoContent = (await deps.readAccess?.(targetPath, context)) === true;
                   return {
                     success: false,
                     operation: 'update_file',
                     path: filePath,
-                    error: formatPatchError(
-                      err,
-                      diff,
-                      original,
-                      (await deps.readAccess?.(targetPath, context)) === true,
-                    ),
+                    error: formatPatchError(err, diff, original, mayEchoContent),
                   };
                 }
               }

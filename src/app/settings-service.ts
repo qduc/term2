@@ -460,6 +460,9 @@ export class SettingsService {
             type: (p as any)?.type ? String((p as any).type) : 'openai-compatible',
             baseUrl: baseUrl ? String(baseUrl) : undefined,
             apiKey: (p as any)?.apiKey ? String((p as any).apiKey) : undefined,
+            ...(typeof (p as any)?.perMessageEffort === 'boolean'
+              ? { perMessageEffort: (p as any).perMessageEffort as boolean }
+              : {}),
           }),
         );
       } catch (error: any) {

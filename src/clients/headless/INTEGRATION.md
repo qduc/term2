@@ -26,9 +26,11 @@ imports Session, Engine or adopted code, and never opens conversation storage.
    the CLI waits for stdout and stderr to drain before `process.exit`
    (`src/shared/lib/exit-after-drain.ts`): on a pipe, exiting first discarded
    the queued tail, and a slow reader got a `final` record cut mid-line with
-   no `run_summary` or `completed`. A signal during the drain exits at once
+   no `run_summary` or `completed`. A SIGINT or SIGTERM during the drain exits at once
    with the already-settled code, so the tail may be lost but the result is
-   not overridden. `attachments` are passed
+   not overridden. `exitAfterDrain` installs its own temporary handlers for
+   this, so it holds on exits before a run starts (a usage error) as well as
+   after the run's handlers exist. `attachments` are passed
    through as raw padded base64
    image parts; `delivery` is omitted by default, and an explicit non-`auto`
    mode needs the real `submitWithDelivery` capability or is reported

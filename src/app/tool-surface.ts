@@ -309,16 +309,18 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
         await remote?.close();
       },
     },
-    reviewApproval: options.shellEscapeApproval
-      ? createAssistedApprovalReview({
-          agentClient,
-          settings,
-          logger,
-          sessionContext: selection.sessionContext,
-          sessionAccess,
-          withWorkspace,
-        })
-      : undefined,
+    reviewApproval:
+      options.shellEscapeApproval || options.tuiUnsandboxedReview
+        ? createAssistedApprovalReview({
+            unsandboxedOnly: options.tuiUnsandboxedReview === true,
+            agentClient,
+            settings,
+            logger,
+            sessionContext: selection.sessionContext,
+            sessionAccess,
+            withWorkspace,
+          })
+        : undefined,
     async decideInteraction(request, history) {
       if (request.presentation?.requiresExplicitUser === true)
         return { kind: 'deny', reason: 'This decision requires an explicit user answer' };

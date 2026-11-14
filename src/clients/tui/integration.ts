@@ -319,6 +319,8 @@ export interface TuiProviderMenu {
 export interface TuiIntegration {
   /** The legacy menus' data access. Without it the composer opens no menus. */
   readonly menus?: TuiMenus;
+  /** Review a pending root approval; the human retains input ownership. */
+  reviewApproval?(sessionId: string, requestId: string, signal: AbortSignal): Promise<boolean>;
   /** Run an explicit user shell command in the selected workspace, without a model turn. */
   shell?(sessionId: string, command: string): Promise<ShellResult>;
   /** Legacy printUsage: the usage summary written to stdout as a conversation is left for a new one. */

@@ -78,6 +78,7 @@ export function createAssistedApprovalReview({
   sessionContext,
   sessionAccess,
   withWorkspace,
+  unsandboxedOnly = false,
 }: {
   agentClient: ShellAutoApprovalAgentClient;
   settings: ISettingsService;
@@ -85,17 +86,26 @@ export function createAssistedApprovalReview({
   sessionContext: ISessionContextService;
   sessionAccess: SessionAccessState;
   withWorkspace: <T>(operation: () => T) => T;
+  unsandboxedOnly?: boolean;
 }): NonNullable<AgentSurface['reviewApproval']> {
   return async (request, history, signal) => {
+    const unsandboxed =
+      (request.toolName === 'shell' || request.toolName === 'bash') &&
+      request.input !== null &&
+      typeof request.input === 'object' &&
+      'sandbox' in request.input &&
+      request.input.sandbox === 'unsandboxed' &&
+      !('background' in request.input && request.input.background === true);
     if (
+      (unsandboxedOnly && (!unsandboxed || settings.get('sandbox.enabled') === false)) ||
       signal.aborted ||
       settings.get('shell.autoApproveMode') !== 'auto' ||
       request.kind !== 'approval' ||
-      request.risk === 'high' ||
+      (request.risk === 'high' && !unsandboxedOnly) ||
       !isAutoApprovableTool(request.toolName) ||
       request.presentation?.requiresExplicitUser === true ||
       request.presentation?.deniedRead ||
-      isExplicitShellRequest(request.toolName, request.input) ||
+      (!unsandboxedOnly && isExplicitShellRequest(request.toolName, request.input)) ||
       isDockerRequest(request.toolName, request.input, sessionAccess)
     )
       return false;
@@ -111,7 +121,12 @@ export function createAssistedApprovalReview({
     const advisory = await withWorkspace(() =>
       review.resolveAdvisoryForInterruption({ interruption, siblings: [interruption] }),
     );
-    return !signal.aborted && advisory?.riskLevel === 'low' && review.shouldAutoApprove(advisory);
+    return (
+      !signal.aborted &&
+      (!unsandboxedOnly || settings.get('sandbox.enabled') !== false) &&
+      (unsandboxedOnly || advisory?.riskLevel === 'low') &&
+      review.shouldAutoApprove(advisory)
+    );
   };
 }
 
@@ -180,5 +195,14 @@ export async function reviewLiveApproval(
   unsubscribe();
   const request = state.pendingInteractions.find((pending) => pending.requestId === requestId);
   if (!request || request.turnId !== state.activeTurnId || 'taskId' in request) return false;
-  return await runtime.scope(() => review(request, session.acceptedHistory(), signal));
+  const approved = await runtime.scope(() => review(request, session.acceptedHistory(), signal));
+  const current = session.capture(() => undefined);
+  current.unsubscribe();
+  return (
+    approved &&
+    !signal.aborted &&
+    runtime.configurationSettings.get('shell.autoApproveMode') === 'auto' &&
+    current.state.activeTurnId === request.turnId &&
+    current.state.pendingInteractions.some((pending) => pending.requestId === requestId)
+  );
 }

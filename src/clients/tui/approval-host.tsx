@@ -5,7 +5,7 @@
  * "Answer:" prompt with the question kept above; Escape (and Ctrl+C) interrupt. Multi-question answers are
  * collected here like legacy's pending-interaction state, then sent once with the wire's question IDs.
  */
-import React, { useRef, useState, type MutableRefObject } from 'react';
+import React, { useEffect, useRef, useState, type MutableRefObject } from 'react';
 import { Box, Text } from 'ink';
 import { MultilineInput } from 'ink-prompt';
 import { ASK_USER_NO_ANSWER_RESULT, type WireDecision, type WireGrant } from '../../protocol/wire.js';
@@ -108,6 +108,8 @@ function approveDecision(answer: string | undefined): WireDecision {
 }
 
 type HostProps = {
+  readonly reviewed: MutableRefObject<Set<string>>;
+  readonly reviewApproval?: (sessionId: string, requestId: string, signal: AbortSignal) => Promise<boolean>;
   readonly request: PromptRequest;
   /** The foreground turn a stop cancels; a background child's request may outlive it. */
   readonly activeTurnId: string | null;
@@ -132,12 +134,21 @@ type HostProps = {
 export function ApprovalHost({
   request,
   ...props
-}: Omit<HostProps, 'request'> & { readonly request: PromptRequest | undefined }): React.ReactElement | null {
-  return request ? <Host key={request.interaction.id} request={request} {...props} /> : <>{props.panel}</>;
+}: Omit<HostProps, 'request' | 'reviewed'> & {
+  readonly request: PromptRequest | undefined;
+}): React.ReactElement | null {
+  const reviewed = useRef(new Set<string>());
+  return request ? (
+    <Host key={request.interaction.id} request={request} reviewed={reviewed} {...props} />
+  ) : (
+    <>{props.panel}</>
+  );
 }
 
 function Host({
   request,
+  reviewed,
+  reviewApproval,
   activeTurnId,
   connection,
   inputHandler,
@@ -163,9 +174,47 @@ function Host({
   const consumed = useRef(false);
   const pending = useRef(false);
   const promptInput = useRef<InteractionInputHandler | null>(null);
+  const reviewController = useRef<AbortController | null>(null);
+  const reviewCancelled = useRef(false);
+  const cancelReview = () => {
+    reviewCancelled.current = true;
+    reviewed.current.add(interaction.id);
+    reviewController.current?.abort();
+  };
+  const reviewInput = interaction.input as { sandbox?: unknown } | null;
+  const reviewEligible =
+    request.owner === 'turn' &&
+    interaction.kind === 'approval' &&
+    interaction.toolName === 'shell' &&
+    reviewInput?.sandbox === 'unsandboxed';
+  useEffect(() => {
+    if (!reviewApproval || !reviewEligible || reviewCancelled.current || reviewed.current.has(interaction.id)) return;
+    reviewed.current.add(interaction.id);
+    const controller = new AbortController();
+    reviewController.current = controller;
+    void reviewApproval(connection.sessionId, interaction.id, controller.signal)
+      .then(async (approved) => {
+        if (!approved || controller.signal.aborted || pending.current) return;
+        pending.current = true;
+        const result = await connection.send({
+          type: 'answer',
+          requestId: interaction.id,
+          decision: { kind: 'allow' },
+          provenance: { source: 'policy', automaticApproval: true },
+        });
+        if (!result.ok && !controller.signal.aborted) pending.current = false;
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) pending.current = false;
+      });
+    return () => {
+      controller.abort();
+    };
+  }, [connection, interaction.id, reviewApproval, reviewEligible, reviewed]);
   const fail = (error: unknown) => setNotice(error instanceof Error ? error.message : String(error));
 
   const send = (decision: WireDecision) => {
+    cancelReview();
     if (pending.current) return;
     pending.current = true;
     hide(interaction.id);
@@ -176,6 +225,7 @@ function Host({
     });
   };
   const stop = () => {
+    cancelReview();
     if (pending.current) return;
     pending.current = true;
     cancelInput(connection, activeTurnId ?? undefined).then((message) => {
@@ -230,12 +280,14 @@ function Host({
 
   // use-app-keyboard-shortcuts.ts: Ctrl+C clears a typed reason/answer, else stops the turn.
   interrupt.current = () => {
+    cancelReview();
     if (text.length > 0) replaceInput('');
     else if (activeTurnId) stop();
     return true;
   };
   const shortcuts = !isAskUser && !approval.dockerHostControl;
   useInteractionInput(inputHandler, (input, key) => {
+    cancelReview();
     if (pending.current) return;
     if (entry === 'reason') {
       if (key.escape) {

@@ -9,7 +9,7 @@
  * tool the calling agent cannot call (a restricted subagent, a tool switched off). Error text only: the
  * call is never rerouted.
  */
-import { FLAT_SEARCH_REPLACE_FIELDS } from './file/search-replace-input.js';
+import { FLAT_SEARCH_REPLACE_FIELDS } from './file/search-replace-protocol.js';
 
 type ZodLike = {
   shape?: Record<string, { safeParse?: (value: unknown) => { success: boolean } } | undefined>;

@@ -71,6 +71,37 @@ it('search_replace skips a no-op pair in a batch, names the failing replacement,
   );
 });
 
+it('search_replace words skipped no-ops truthfully, says when nothing was written, and keeps single errors plain', async () => {
+  const run = await runScriptedToolCalls({
+    files: { 'a.txt': 'one\ntwo\n' },
+    readBack: ['a.txt'],
+    calls: [
+      [
+        'search_replace',
+        {
+          path: 'a.txt',
+          replacements: [
+            { search_content: 'one', replace_content: 'one' },
+            { search_content: 'absent text', replace_content: 'absent text' },
+          ],
+        },
+      ],
+      ['search_replace', { path: 'a.txt', replacements: [{ search_content: 'missing', replace_content: 'x' }] }],
+    ],
+  });
+  expect(run.exitCode, run.stderr + run.stdout).toBe(0);
+  const lines = run.toolResults[0]!.split('\n');
+  expect(lines).toEqual([
+    'replacement 1 skipped: search and replace are identical',
+    'replacement 2 skipped: search and replace are identical, and that text does not appear in the file either',
+    'No changes were written.',
+  ]);
+  expect(run.files['a.txt']).toBe('one\ntwo\n');
+  expect(run.toolResults[1]).toContain('Search content not found');
+  expect(run.toolResults[1]).not.toContain('batch aborted');
+  expect(run.toolResults[1]).not.toContain('replacement 1 of 1');
+});
+
 const NEAR_MISS_FILE = [
   'import os',
   '',

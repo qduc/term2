@@ -1,7 +1,15 @@
 import { z } from 'zod';
 import { normalizeObjectParams } from '../tool-invoke.js';
+import {
+  abortFailedGroup,
+  labelFailure,
+  normalizeSearchReplaceShape,
+  readSearchReplaceArguments,
+  renderBatchResult,
+  skippedNoOp,
+  type BatchEntry,
+} from './search-replace-protocol.js';
 import { describeSearchMismatch } from './closest-line.js';
-import { normalizeSearchReplaceShape, readSearchReplaceArguments } from './search-replace-input.js';
 import { readFile, writeFile } from 'fs/promises';
 import path from 'path';
 import { isProtectedHookPath, isWorkspacePathPhysicallyInside, resolveWorkspacePath } from '../utils.js';
@@ -655,59 +663,29 @@ export function createSearchReplaceToolDefinition(deps: {
                 operation.search_content !== '' &&
                 operation.search_content === operation.replace_content
               ) {
-                output[index] = {
-                  success: true,
-                  message: `replacement ${index + 1} skipped: search and replace are identical`,
-                };
+                output[index] = skippedNoOp(index, nextContent.includes(operation.search_content));
                 continue;
               }
 
               const result = await applyToContent(operation, nextContent, mayHint);
               output[index] = result.output;
               if (!result.output.success) {
-                if (operations.length > 1) {
-                  output[index] = {
-                    ...result.output,
-                    error: `replacement ${index + 1} of ${operations.length}: ${
-                      (result.output as { error: string }).error
-                    }`,
-                  };
-                }
+                output[index] = labelFailure(result.output as BatchEntry, index, operations.length);
                 continue;
               }
               nextContent = (result as { newContent: string }).newContent;
               changed = true;
             }
 
-            const failedIndex = group.find(({ index }) => output[index]?.success === false)?.index;
-            if (failedIndex !== undefined) {
-              for (const { operation, index } of group) {
-                const failed = output[index]?.success === false;
-                output[index] = {
-                  success: false,
-                  operation: 'search_replace',
-                  path: operation.path,
-                  error: failed
-                    ? `${output[index].error} (batch aborted; no changes were written)`
-                    : `replacement ${index + 1} not applied: replacement ${
-                        failedIndex + 1
-                      } failed, so no changes were written.`,
-                };
-              }
+            if (abortFailedGroup(group, output as BatchEntry[], operations.length)) {
+              // Nothing is written when any replacement failed.
             } else if (changed) {
               await writeFileFn(targetPath, nextContent);
             }
           });
         }
 
-        return output
-          .filter(Boolean)
-          .map((item: any) =>
-            item.success
-              ? item.message || `Updated ${item.path ?? params.path}`
-              : `Error: ${(item.error || 'unknown error').replace(/\n/g, ' ')}`,
-          )
-          .join('\n');
+        return renderBatchResult(output as BatchEntry[], params.path);
       } catch (error: any) {
         if (enableFileLogging) {
           loggingService.error('File operation failed', {

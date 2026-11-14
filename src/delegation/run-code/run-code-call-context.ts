@@ -14,7 +14,7 @@ const MAX_ARGS_CHARS = 160;
  * file text) are cut per value first so one big field cannot crowd out the rest,
  * then the whole line is capped. It restates what the script itself passed.
  */
-export function compactArgs(params: unknown): string {
+function compactArgs(params: unknown): string {
   let text: string;
   try {
     text =

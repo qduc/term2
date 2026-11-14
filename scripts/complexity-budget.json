@@ -258,8 +258,8 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/delegation/run-code/run-code-runtime.ts": {
-      "lines": 1169,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
+      "lines": 1146,
+      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Ratcheted down after the unknown-tool hint helpers moved to run-code-unknown-tool-hints.ts."
     },
     "src/session/background.ts": {
       "lines": 501,

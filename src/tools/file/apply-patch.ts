@@ -24,7 +24,7 @@ import {
   resolveResultMaxBytesForCall,
   truncateToUtf8Bytes,
 } from '../../shared/utils/output/bound-tool-result.js';
-import { healPatchOperation } from './patch-healing.js';
+import type { healPatchOperation } from './patch-healing.js';
 import { parseUpstreamApplyPatch } from './upstream-apply-patch.js';
 
 /**
@@ -231,7 +231,7 @@ export function createApplyPatchToolDefinition(deps: {
   sessionAccess?: FileEditAccessPort;
   patchHealing?: typeof healPatchOperation;
 }): ScriptedToolDefinition<typeof applyPatchParametersSchema> {
-  const { loggingService, settingsService, executionContext, sessionAccess, patchHealing = healPatchOperation } = deps;
+  const { loggingService, settingsService, executionContext, sessionAccess, patchHealing } = deps;
 
   return {
     name: 'apply_patch',
@@ -529,7 +529,7 @@ export function createApplyPatchToolDefinition(deps: {
                 const isContextError = /^Invalid (?:EOF )?Context \d+:/.test(errMessage);
                 const enableEditHealing = settingsService.get('tools.enableEditHealing') ?? true;
 
-                if (isContextError && enableEditHealing) {
+                if (isContextError && enableEditHealing && patchHealing) {
                   const contextMatch = errMessage.match(/^Invalid (?:EOF )?Context \d+:\n([\s\S]*)$/);
                   const contextText = contextMatch ? contextMatch[1] : '';
                   const mismatchDiagnosis = diagnoseContextMismatch(contextText, original);

@@ -14,7 +14,7 @@ import {
   createBaseMessage,
   formatPatchOutputItems,
 } from '../format-helpers.js';
-import { healSearchReplaceParams } from './edit-healing.js';
+import type { healSearchReplaceParams } from './edit-healing.js';
 import { ExecutionContext } from '../execution-context.js';
 import { getApprovalPresentationCapability } from '../tool-capabilities.js';
 import { withFileLock } from './file-locks.js';
@@ -273,15 +273,10 @@ export function createSearchReplaceToolDefinition(deps: {
   resolveHealingModel: () => { model: string; provider: string };
   executionContext?: ExecutionContext;
   sessionAccess?: FileEditAccessPort;
+  /** Absent when no nested run driver exists: a failed match then reports plain not-found guidance. */
   editHealing?: typeof healSearchReplaceParams;
 }): ScriptedToolDefinition<typeof searchReplaceParametersSchema> {
-  const {
-    loggingService,
-    settingsService,
-    executionContext,
-    sessionAccess,
-    editHealing = healSearchReplaceParams,
-  } = deps;
+  const { loggingService, settingsService, executionContext, sessionAccess, editHealing } = deps;
   const editCache = new SearchReplaceEditCache();
 
   return {
@@ -465,7 +460,7 @@ export function createSearchReplaceToolDefinition(deps: {
             );
           }
           const enableEditHealing = settingsService.get('tools.enableEditHealing') ?? true;
-          if (enableEditHealing) {
+          if (enableEditHealing && editHealing) {
             healingAttempted = true;
             const { model: healingModel, provider: healingProvider } = deps.resolveHealingModel();
             const healingResult = await editHealing(

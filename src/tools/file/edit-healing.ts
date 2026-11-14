@@ -243,6 +243,21 @@ export async function runHealingPrompt(
   }
 }
 
+/**
+ * Healing needs a nested run driver to issue its helper-model request with usage,
+ * budget and cancellation accounting. No entry point supplies one today, so this
+ * returns undefined and callers skip healing instead of offering an attempt that
+ * can only fail.
+ */
+export function bindEditHealing(
+  deps: Pick<HealingDeps, 'driverFactory' | 'modelBinding'>,
+): typeof healSearchReplaceParams | undefined {
+  const { driverFactory, modelBinding } = deps;
+  if (!driverFactory) return undefined;
+  return (params, content, model, key, healingDeps) =>
+    healSearchReplaceParams(params, content, model, key, { ...healingDeps, driverFactory, modelBinding });
+}
+
 export async function healSearchReplaceParams(
   originalParams: SearchReplaceFullOperation,
   fileContent: string,

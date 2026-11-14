@@ -151,6 +151,16 @@ function buildPatchUserData(
   );
 }
 
+/** See `bindEditHealing`: undefined while no nested run driver exists, so callers skip healing. */
+export function bindPatchHealing(
+  deps: Pick<PatchHealingDeps, 'driverFactory' | 'modelBinding'>,
+): typeof healPatchOperation | undefined {
+  const { driverFactory, modelBinding } = deps;
+  if (!driverFactory) return undefined;
+  return (path, diff, content, diagnosis, model, key, healingDeps) =>
+    healPatchOperation(path, diff, content, diagnosis, model, key, { ...healingDeps, driverFactory, modelBinding });
+}
+
 export async function healPatchOperation(
   filePath: string,
   failedDiff: string,

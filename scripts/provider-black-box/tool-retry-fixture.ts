@@ -14,6 +14,8 @@ export interface ScriptedToolRun {
   readonly requests: ChatRequest[];
   /** Tool-result texts the model saw, in call order (taken from the final request). */
   readonly toolResults: string[];
+  /** Result of `options.inspect`, run before the isolated workspace is cleaned up. */
+  readonly inspected: unknown;
   /** Final contents of `options.readBack` files (empty string when absent), captured before cleanup. */
   readonly files: Readonly<Record<string, string>>;
 }
@@ -28,6 +30,8 @@ const textOf = (content: unknown): string => (typeof content === 'string' ? cont
 export async function runScriptedToolCalls(options: {
   files?: Readonly<Record<string, string>>;
   readBack?: readonly string[];
+  /** Runs after the CLI exits and before cleanup, with the tool results the model saw. */
+  inspect?: (toolResults: string[]) => Promise<unknown>;
   calls: readonly ScriptedToolCall[];
   /** Model id sent through the fixture provider (default `meta/muse-ember`). GPT-5 ids select the patch editing surface. */
   model?: string;
@@ -105,7 +109,9 @@ export async function runScriptedToolCalls(options: {
     for (const name of options.readBack ?? []) {
       files[name] = await readFile(join(lease.root, 'project', name), 'utf8').catch(() => '');
     }
+    const inspected = await options.inspect?.(toolResults);
     return {
+      inspected,
       exitCode: result.exitCode,
       stdout: result.stdout,
       stderr: result.stderr,

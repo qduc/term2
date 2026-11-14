@@ -35,7 +35,7 @@ export const FULL_OUTPUT_SAVED_NOTE_PREFIX = 'Full output saved to';
 const TOOL_OUTPUT_DIR = path.join(SANDBOX_TEMP_DIR, 'tool-output');
 let toolOutputDirPromise: Promise<string> | undefined;
 
-function buildArtifactContents(params: {
+interface ArtifactInputs {
   command: string;
   cwd: string;
   stdout: string;
@@ -44,11 +44,27 @@ function buildArtifactContents(params: {
   timedOut: boolean;
   durationMs?: number;
   cancelled?: boolean;
-}): string {
+}
+
+/** Lines in `text` as `wc -l` counts a file: newline characters, plus an unterminated last line. */
+export function countFileLines(text: string): number {
+  if (text === '') return 0;
+  let count = 0;
+  for (let index = text.indexOf('\n'); index !== -1; index = text.indexOf('\n', index + 1)) count++;
+  return text.endsWith('\n') ? count : count + 1;
+}
+
+/** Lines of the spooled file at which each captured stream starts (1-based), and the file's total. */
+export interface ArtifactLayout {
+  stdoutFirstLine: number;
+  stderrFirstLine: number;
+  totalLines: number;
+}
+
+function buildArtifact(params: ArtifactInputs): { contents: string; layout: ArtifactLayout } {
   const statusLine = params.cancelled ? 'cancelled' : params.timedOut ? 'timeout' : `exit ${params.exitCode ?? 'null'}`;
   const timedOutColumn = params.timedOut && !params.cancelled ? 'yes' : 'no';
-
-  return [
+  const header = [
     `Command: ${params.command}`,
     `Working directory: ${params.cwd}`,
     `Status: ${statusLine}`,
@@ -56,12 +72,14 @@ function buildArtifactContents(params: {
     `Timed out: ${timedOutColumn}`,
     '',
     'STDOUT:',
-    params.stdout || '(empty)',
-    '',
-    'STDERR:',
-    params.stderr || '(empty)',
-    '',
-  ].join('\n');
+  ].map((line) => line ?? '');
+  const stdout = params.stdout || '(empty)';
+  const stderr = params.stderr || '(empty)';
+  // Joined with newlines below: each element after the header occupies its own line(s).
+  const stdoutFirstLine = header.join('\n').split('\n').length + 1;
+  const stderrFirstLine = stdoutFirstLine + stdout.split('\n').length + 2;
+  const contents = [...header, stdout, '', 'STDERR:', stderr, ''].join('\n');
+  return { contents, layout: { stdoutFirstLine, stderrFirstLine, totalLines: countFileLines(contents) } };
 }
 
 /**
@@ -82,8 +100,9 @@ export async function saveOutputArtifact(contents: string, options?: { filenameP
 }
 
 /** Build the standard truncation note the agent relies on for follow-up reads. */
-export function formatFullOutputSavedNote(artifactPath: string): string {
-  return `${FULL_OUTPUT_SAVED_NOTE_PREFIX} \`${artifactPath}\``;
+export function formatFullOutputSavedNote(artifactPath: string, totalLines?: number): string {
+  const size = totalLines ? ` (${totalLines} line${totalLines === 1 ? '' : 's'})` : '';
+  return `${FULL_OUTPUT_SAVED_NOTE_PREFIX} \`${artifactPath}\`${size}`;
 }
 
 /**
@@ -124,7 +143,13 @@ function buildTerminationNote(params: {
  * data rather than inheriting trimOutput's ten-line minimum. Characters remain
  * independently bounded, and the formatter spools the original streams on loss.
  */
-function trimShellOutput(output: string, maxOutputLines: number, maxOutputLength?: number): string {
+function trimShellOutput(
+  output: string,
+  maxOutputLines: number,
+  maxOutputLength: number | undefined,
+  /** Where this stream sits in the spooled file; marks the trimmed range in the file's own line numbers. */
+  file: () => { firstLine: number; totalLines: number },
+): string {
   const lines = output === '' ? [] : output.split('\n');
   if (output.endsWith('\n')) lines.pop();
   let lineBounded = output;
@@ -132,9 +157,12 @@ function trimShellOutput(output: string, maxOutputLines: number, maxOutputLength
     const keepLines = Math.max(1, Math.floor(maxOutputLines * 0.4));
     const headCount = Math.min(keepLines, maxOutputLines);
     const tailCount = Math.min(keepLines, maxOutputLines - headCount);
+    const { firstLine, totalLines } = file();
+    const from = firstLine + headCount;
+    const to = firstLine + lines.length - tailCount - 1;
     lineBounded = [
       ...lines.slice(0, headCount),
-      `... [${lines.length - headCount - tailCount} lines trimmed] ...`,
+      `... [lines ${from}-${to} of ${totalLines} trimmed] ...`,
       ...(tailCount > 0 ? lines.slice(-tailCount) : []),
     ].join('\n');
   }
@@ -155,8 +183,18 @@ export async function formatShellExecutionOutput({
   timeoutSource,
   cancelled,
 }: FormatShellExecutionOutputParams): Promise<FormatShellExecutionOutputResult> {
-  const stdoutTrimmedOutput = trimShellOutput(stdout, maxOutputLines, maxOutputLength);
-  const stderrTrimmedOutput = trimShellOutput(stderr, maxOutputLines, maxOutputLength);
+  // The spooled file is built (and its layout known) only once a stream actually needs trimming.
+  let artifact: ReturnType<typeof buildArtifact> | undefined;
+  const spooled = () =>
+    (artifact ??= buildArtifact({ command, cwd, stdout, stderr, exitCode, timedOut, durationMs, cancelled }));
+  const stdoutTrimmedOutput = trimShellOutput(stdout, maxOutputLines, maxOutputLength, () => ({
+    firstLine: spooled().layout.stdoutFirstLine,
+    totalLines: spooled().layout.totalLines,
+  }));
+  const stderrTrimmedOutput = trimShellOutput(stderr, maxOutputLines, maxOutputLength, () => ({
+    firstLine: spooled().layout.stderrFirstLine,
+    totalLines: spooled().layout.totalLines,
+  }));
   const stdoutTrimmed = stdoutTrimmedOutput.trimEnd();
   const stderrTrimmed = stderrTrimmedOutput.trimEnd();
   const stdoutTruncated = stdoutTrimmedOutput !== stdout;
@@ -169,12 +207,10 @@ export async function formatShellExecutionOutput({
 
   let artifactPath: string | undefined;
   if (stdoutTruncated || stderrTruncated) {
-    artifactPath = await saveOutputArtifact(
-      buildArtifactContents({ command, cwd, stdout, stderr, exitCode, timedOut, durationMs, cancelled }),
-    );
+    artifactPath = await saveOutputArtifact(spooled().contents);
   }
 
-  const truncationNote = artifactPath ? formatFullOutputSavedNote(artifactPath) : '';
+  const truncationNote = artifactPath ? formatFullOutputSavedNote(artifactPath, spooled().layout.totalLines) : '';
 
   return {
     text: [statusLine, runtimeLine, terminationNote, combinedOutput, emptyOutputNote, truncationNote]

@@ -62,6 +62,20 @@ const VALUE_SUGGESTIONS_BY_KEY: Record<string, SettingValueSuggestion[]> = {
   'shell.maxOutputLines': [{ value: '200' }, { value: '500' }, { value: '1000' }],
   'shell.maxOutputChars': [{ value: '20000' }, { value: '50000' }, { value: '100000' }],
   'ui.historySize': [{ value: '50' }, { value: '100' }, { value: '200' }],
+  // The setting's own description has two screen lines; what each option means is shown here, once chosen.
+  'agent.cachePreservingEffort': [
+    { value: 'off', description: 'Default: a change of effort sends the usual request and rewrites the prompt cache' },
+    {
+      value: 'first-party',
+      description:
+        "Only a provider's own endpoint (OpenAI, Codex, api.anthropic.com); if it rejects a request carrying the change, with any invalid-request error, even one the change did not cause, this turns off for the session",
+    },
+    {
+      value: 'any-endpoint',
+      description:
+        'Also base-URL overrides and Anthropic-format gateways, with the same automatic turn-off for the session',
+    },
+  ],
   'ui.displayMode': [
     { value: 'standard', description: 'Standard output (full details)' },
     { value: 'concise', description: 'Concise output (no reasoning, one-line tool calls)' },

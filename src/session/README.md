@@ -29,3 +29,34 @@ replay aggregation and final/legacy JSON projection. Usage facts count all input
 `cache_creation_tokens`, with `cache_creation_1h_tokens` its TTL subset. UI input
 formatting recombines creation once, while total tokens count each token once.
 Old facts without optional creation counters remain readable.
+
+## Background notices across reopen
+
+A background notice (a child's or shell job's completion, a "moved to
+background" or stop notice, a check-in, a question, a shell watch firing) is two
+facts: `background_notice_enqueued`, then `background_notices_delivered`, which
+either owns a silent turn whose input is the notice text or, with `injected`,
+puts that text into a running turn at a request boundary. Replay places the
+message in history at that position, like any other input.
+
+A resumed session replays them unchanged. Reopen once dropped every notice
+message and every `[Mode Notice]` reminder an earlier process wrote (a legacy
+reload rule), which hid a finished child's findings from the model and changed
+the request prefix against the live session's, a prompt-cache miss. Only a tool
+call's arguments are still re-serialized as compact JSON for items older than
+`openedAt` (`resumedItem` in `replay-fold.ts`); that is separate and unchanged.
+
+What reopen adds, all through the log:
+
+- **Pending notices.** A notice enqueued but not delivered when the process
+  died stays pending. The TUI drains it on attach, as a silent turn before the
+  user types, which is where the live session would have put it. A headless
+  run has no such moment, so `ConversationBackground.inject` also hands the
+  first turn of a resumed session the notices enqueued before the reopen
+  (`journal.reopenedAt`); they follow that turn's user message and cost no
+  extra request. Notices of the live process are still drained after the turn.
+- **Lost background tasks.** `recover()` already closed a task the process lost
+  as `interrupted` / `outcome_unobserved`. It now enqueues the same completion
+  notice a live finish would (`recoverDirectBackgroundNotices`), so the model
+  is told the run's outcome was not observed; no result is invented. A
+  foreground task is its parent's tool result and gets no notice, as live.

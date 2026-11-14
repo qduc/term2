@@ -271,10 +271,12 @@ export class ConversationBackground {
   };
   /**
    * Legacy's interactive app hands notices that settle during a turn to that turn at its next request boundary,
-   * as one user message after any steers, instead of waking a turn of its own afterwards. Headless runs do not.
+   * as one user message after any steers, instead of waking a turn of its own afterwards. Headless runs do not,
+   * except for notices an earlier process left pending (or recovery wrote on open): they are delivered to the first
+   * turn of the resumed session instead of waiting behind its answer.
    */
   inject(turnId: TurnId): { readonly facts: readonly Fact[]; readonly items: readonly Item[] } {
-    const notices = this.generation.supplied?.unattended === false ? this.#pending() : [];
+    const notices = this.#injectable();
     if (!notices.length) return { facts: [], items: [] };
     const item: Item = {
       type: 'user_message',
@@ -293,6 +295,17 @@ export class ConversationBackground {
       ],
       items: [item],
     };
+  }
+  #injectable() {
+    if (this.generation.supplied?.unattended === false) return this.#pending();
+    const pending = this.#pending();
+    if (!pending.length) return pending;
+    const reopened = new Set(
+      this.journal.facts
+        .slice(0, this.journal.reopenedAt)
+        .flatMap((fact) => (fact.type === 'background_notice_enqueued' ? [fact.notice.id] : [])),
+    );
+    return pending.filter((notice) => reopened.has(notice.id));
   }
   #pending() {
     // Only accepted closure disproves a question notice. In particular, a

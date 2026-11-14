@@ -16,8 +16,14 @@
  * today's request: an unsupported model or level, a default (`null`) effort,
  * or a turn whose effort cannot be placed before one of its own items.
  */
-import type { Item, ModelRef, ModelRegistry, ReasoningEffort } from '../model/index.js';
-import { effortUpdateItem, effortUpdateLevels, isEffortUpdateItem } from '../model/effort-updates.js';
+import type { Item, ModelRef, ModelRegistry, ModelRequest, ReasoningEffort } from '../model/index.js';
+import {
+  EFFORT_UPDATES_REJECTED,
+  effortUpdateItem,
+  effortUpdateLevels,
+  isEffortUpdateItem,
+  lastEffortUpdate,
+} from '../model/effort-updates.js';
 import type { Fact } from './facts.js';
 
 export type EffortTimelinePlan = {
@@ -35,11 +41,17 @@ function planEffortTimeline(input: {
   readonly levels: readonly ReasoningEffort[] | undefined;
 }): EffortTimelinePlan | undefined {
   const { facts, history, newItems, model, reasoning, levels } = input;
-  if (!levels || !reasoning || !levels.includes(reasoning)) return undefined;
-  // Item id -> [turn, effort] for this model's configured turns, first item of each.
+  if (!levels || !reasoning || !levels.includes(reasoning) || effortUpdatesRejected(facts)) return undefined;
+  // Item id -> [turn, effort] for this model's configured turns, first item of each. A compaction,
+  // rewind or rollover starts afresh: only turns admitted after the last one count, so the next
+  // turn's own effort becomes the top-level value and nothing before the summary carries a marker.
   const starts = new Map<string, { readonly turnId: string; readonly effort: string | null }>();
   const owned = new Map<string, string>();
-  for (const fact of facts) {
+  let fresh = 0;
+  facts.forEach((fact, index) => {
+    if (fact.type === 'history_replaced' || fact.type === 'session_rotated') fresh = index + 1;
+  });
+  for (const fact of facts.slice(fresh)) {
     if (fact.type !== 'turn_started' || !fact.requestConfiguration) continue;
     const configuration = fact.requestConfiguration;
     if (configuration.provider !== model.provider || configuration.model !== model.model) continue;
@@ -47,7 +59,6 @@ function planEffortTimeline(input: {
     starts.set(fact.turnId, { turnId: fact.turnId, effort: configuration.reasoningEffort });
   }
   const combined = [...history, ...newItems];
-  if (combined.some(isEffortUpdateItem)) return undefined;
   const placed: Item[] = [];
   const seen = new Set<string>();
   let current: string | null | undefined;
@@ -91,7 +102,9 @@ export function effortTimelineForTurn(
   readonly reasoning?: ReasoningEffort;
 } {
   const { model, reasoning } = settings;
-  const unchanged = { ...turn, ...(reasoning !== undefined ? { reasoning } : {}) };
+  // Markers are derived, never history: drop any that reached the log (an older compaction) before re-deriving.
+  const raw = { modelHistory: withoutMarkers(turn.modelHistory), sentInput: withoutMarkers(turn.sentInput) };
+  const unchanged = { ...raw, ...(reasoning !== undefined ? { reasoning } : {}) };
   if (!model || !reasoning) return unchanged;
   let levels: readonly ReasoningEffort[] | undefined;
   try {
@@ -101,11 +114,51 @@ export function effortTimelineForTurn(
   }
   const plan = planEffortTimeline({
     facts,
-    history: turn.modelHistory,
-    newItems: turn.sentInput,
+    history: raw.modelHistory,
+    newItems: raw.sentInput,
     model,
     reasoning,
     levels,
   });
   return plan ? { modelHistory: plan.history, sentInput: plan.newItems, reasoning: plan.reasoning } : unchanged;
+}
+
+const withoutMarkers = (items: readonly Item[]): readonly Item[] =>
+  items.some(isEffortUpdateItem) ? items.filter((item) => !isEffortUpdateItem(item)) : items;
+
+/** An endpoint refused a marker earlier in this session (model/provider.ts retried without it). */
+function effortUpdatesRejected(facts: readonly Fact[]): boolean {
+  return facts.some(
+    (fact) => fact.type === 'model_response_completed' && fact.providerMetadata?.[EFFORT_UPDATES_REJECTED] === true,
+  );
+}
+
+/**
+ * Last line of defence for every request of a turn: the effort in effect must be the one the turn
+ * was admitted at. A marker can be lost to an automatic compaction mid-turn, or be stale; then this
+ * request goes out as today's, with no markers and the turn's effort top-level.
+ */
+export function alignTurnEffort(request: ModelRequest, facts: readonly Fact[], turnId: string): ModelRequest {
+  const started = facts.find((fact) => fact.type === 'turn_started' && fact.turnId === turnId);
+  const configured = started?.type === 'turn_started' ? started.requestConfiguration : undefined;
+  if (!configured || configured.provider !== request.model.provider || configured.model !== request.model.model)
+    return request;
+  const selected = configured.reasoningEffort ?? undefined;
+  if ((lastEffortUpdate(request.input) ?? request.reasoning) === selected) return request;
+  const { reasoning: _stale, ...rest } = request;
+  return {
+    ...rest,
+    input: withoutMarkers(request.input),
+    ...(selected !== undefined ? { reasoning: selected as ReasoningEffort } : {}),
+  };
+}
+
+/** One plain notice on the turn whose response first fell back. */
+export function effortFallbackNotice(facts: readonly Fact[], turnId: string): string | undefined {
+  const fallback = facts.find(
+    (fact) => fact.type === 'model_response_completed' && fact.providerMetadata?.[EFFORT_UPDATES_REJECTED] === true,
+  );
+  return fallback?.type === 'model_response_completed' && fallback.turnId === turnId
+    ? 'This endpoint does not support changing reasoning effort without losing the prompt cache, so that is turned off for this session; effort changes now apply the usual way.'
+    : undefined;
 }

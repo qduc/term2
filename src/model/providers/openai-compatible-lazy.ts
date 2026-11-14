@@ -2,7 +2,7 @@ import { type ProviderDefinition, type ProviderDeps, type ProviderFetch } from '
 import type { CustomProviderConfig } from './openai-compatible.provider.js';
 import { neuralwattDefaultReasoningLevel } from './neuralwatt.provider.js';
 import { resolveProviderCredentialValue } from '../provider-credentials.js';
-import { CACHE_SAFE_EFFORT_LEVELS, supportsPerMessageEffort } from '../effort-updates.js';
+import { CACHE_SAFE_EFFORT_LEVELS, endpointInScope, supportsPerMessageEffort } from '../effort-updates.js';
 
 export function createOpenAICompatibleProviderDefinition(config: CustomProviderConfig): ProviderDefinition {
   const providerId = config.name;
@@ -13,8 +13,10 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
     label,
     isRuntimeDefined: true,
     defaultReasoningLevel: neuralwattDefaultReasoningLevel(providerId),
-    effortUpdateLevels: (model) =>
-      config.type === 'anthropic' && acceptsPerMessageEffort(config) && supportsPerMessageEffort(model)
+    effortUpdateLevels: (model, scope) =>
+      config.type === 'anthropic' &&
+      endpointInScope(config.baseUrl, 'api.anthropic.com', scope) &&
+      supportsPerMessageEffort(model)
         ? CACHE_SAFE_EFFORT_LEVELS
         : undefined,
     createStreamedModel: async (model, { settingsService, loggingService, sessionContextService, onDispatched }) => {
@@ -58,19 +60,4 @@ export function createOpenAICompatibleProviderDefinition(config: CustomProviderC
       supportsConversationChaining: false,
     },
   };
-}
-
-/**
- * Per-message effort is a first-party beta. A gateway may drop the field (OpenRouter's
- * chat endpoint did, measured 2026-11-14) or reject it, so only the first-party API is
- * assumed; any other endpoint opts in with `perMessageEffort: true`.
- */
-function acceptsPerMessageEffort(config: CustomProviderConfig): boolean {
-  if (config.perMessageEffort !== undefined) return config.perMessageEffort;
-  if (!config.baseUrl) return true;
-  try {
-    return new URL(config.baseUrl).hostname === 'api.anthropic.com';
-  } catch {
-    return false;
-  }
 }

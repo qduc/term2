@@ -106,16 +106,16 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/config/settings/settings-schema.ts": {
-      "lines": 1364,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Three lines declare and keep a custom provider's `perMessageEffort` opt-in through the entry schema and its field-rebuilding transform."
+      "lines": 1371,
+      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Ten lines declare `agent.cachePreservingEffort` through the mandatory setting touchpoints (schema with description, key, typed field, default, runtime-modifiable list)."
     },
     "src/app/settings-service.ts": {
-      "lines": 1261,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Three lines carry a custom provider's `perMessageEffort` opt-in into its runtime registration (model/effort-updates.ts), beside the other entry fields."
+      "lines": 1258,
+      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/config/settings/settings-ui-metadata.ts": {
-      "lines": 543,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
+      "lines": 544,
+      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. One line labels `agent.cachePreservingEffort`."
     },
     "src/session/agent-runtime/permission-boundary.ts": {
       "lines": 660,
@@ -142,8 +142,8 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Responses Lite reconnect checks the existing response chain before filtering unpaired tool items; this remains part of the same wire request preparation."
     },
     "src/model/providers/codex.provider.ts": {
-      "lines": 508,
-      "reason": "OAuth token-manager lifecycle and claim parsing now live in providers/runtime/codex-token-manager.ts; this remaining provider transport assembly is ratcheted from 745 to 506 lines. Two lines declare the GPT-6 cache-preserving effort capability (model/effort-updates.ts) on the provider definition beside its other capabilities."
+      "lines": 511,
+      "reason": "OAuth token-manager lifecycle and claim parsing now live in providers/runtime/codex-token-manager.ts; this remaining provider transport assembly is ratcheted from 745 to 506 lines. Five lines declare the GPT-6 cache-preserving effort capability (model/effort-updates.ts), gated on the default Codex host, beside the provider's other capabilities."
     },
     "src/model/providers/model-catalog/catalog.generated.ts": {
       "lines": 4653,

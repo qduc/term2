@@ -54,8 +54,14 @@ import { ModelFailure, toModelFailure } from './failure.js';
 import { physicalModelStream } from './retry.js';
 import { codexCompact } from './provider-compact.js';
 import { historyToInput, toolDefinition } from './provider-items.js';
-import { isEffortUpdateItem, lastEffortUpdate, withoutEffortUpdates } from './effort-updates.js';
-import type { Model, ModelCapabilities, ModelRef, ModelRegistry, ModelRequest } from './index.js';
+import {
+  EFFORT_UPDATES_REJECTED,
+  effortUpdateScope,
+  isEffortUpdateItem,
+  lastEffortUpdate,
+  withoutEffortUpdates,
+} from './effort-updates.js';
+import type { Model, ModelCapabilities, ModelEvent, ModelRef, ModelRegistry, ModelRequest } from './index.js';
 
 export type ProviderRegistryDeps = {
   readonly settings: ISettingsService;
@@ -176,11 +182,17 @@ function lazyModel(
     return created;
   };
   const catalogContextWindow = getModelContextWindow(ref.provider, ref.model);
-  const effortUpdates = provider.effortUpdateLevels?.(ref.model);
+  const scope = effortUpdateScope(deps.settings.get('agent.cachePreservingEffort'));
+  const declared = scope ? provider.effortUpdateLevels?.(ref.model, scope) : undefined;
+  // An endpoint that rejected a marker keeps today's top-level effort for this registry's life;
+  // Session reads the same outcome from the log after resume (effort-timeline.ts).
+  let rejected = false;
   return {
     ref,
     capabilities,
-    ...(effortUpdates?.length ? { effortUpdates } : {}),
+    get effortUpdates() {
+      return rejected ? undefined : declared;
+    },
     contextWindow: catalogContextWindow ?? UNKNOWN_MODEL_CONTEXT_WINDOW,
     ...(catalogContextWindow !== undefined ? { catalogContextWindow } : {}),
     // Legacy uses Codex's compact endpoint for native compaction; other providers compact locally.
@@ -189,7 +201,13 @@ function lazyModel(
           compact: (request, signal, onDispatched) =>
             providerContext.runWithContext(
               requestTrafficContext(request.affinity, deps.sessionContext?.getContext()),
-              () => codexCompact(ref, deps.settings, turnModel)(request, signal, onDispatched),
+              // Markers are derived per request; the compact endpoint takes no effort at all.
+              () =>
+                codexCompact(ref, deps.settings, turnModel)(
+                  { ...request, input: request.input.filter((item) => !isEffortUpdateItem(item)) },
+                  signal,
+                  onDispatched,
+                ),
             ),
         }
       : {}),
@@ -217,57 +235,88 @@ function lazyModel(
           compaction = { disabled: false };
           if (recovery) compactionByRecovery.set(recovery, compaction);
         }
-        const prepared = toProviderRequest(request, signal, {
-          provider,
-          ref,
-          compaction,
-          owner,
-          transport,
-          capabilities,
-          settings: deps.settings,
-          effortUpdates,
-        });
-        const extraBody = isRecord(prepared.providerOptions?.extraBody) ? prepared.providerOptions.extraBody : {};
-        const tier = extraBody.service_tier ?? prepared.providerOptions?.service_tier;
-        yield* physicalModelStream({
-          request,
-          signal,
-          maxRetries: deps.settings.get('agent.retryAttempts') ?? DEFAULT_RETRY_ATTEMPTS,
-          scope: { capabilities, websocket: transport === 'websocket', flex: tier === 'flex' },
-          stream: async function* () {
-            const stopped = new AbortController();
-            const linked = AbortSignal.any([signal, stopped.signal]);
-            try {
-              linked.throwIfAborted();
-              const turn = await providerContext.runWithContext(identity, () => turnModel(transport));
-              linked.throwIfAborted();
-              const projection = new ModelEventProjection(
-                ref.provider,
-                capabilities.continuity
-                  ? {
-                      kind: 'direct_response',
-                      owner,
-                      provider: ref.provider,
-                      model: ref.model,
-                      transport,
-                      ...(prepared.conversationEffort ? { effort: prepared.conversationEffort } : {}),
-                    }
-                  : undefined,
-              );
-              const events = scopeProviderStream(providerContext, identity, onDispatched, (notify) =>
-                turn.stream({ ...prepared, signal: linked, onDispatched: notify }),
-              );
-              for await (const event of events) {
+        const attempt = async function* (
+          effortUpdates: readonly string[] | undefined,
+          fallback: boolean,
+        ): AsyncGenerator<ModelEvent, void> {
+          const prepared = toProviderRequest(request, signal, {
+            provider,
+            ref,
+            compaction,
+            owner,
+            transport,
+            capabilities,
+            settings: deps.settings,
+            effortUpdates,
+          });
+          const extraBody = isRecord(prepared.providerOptions?.extraBody) ? prepared.providerOptions.extraBody : {};
+          const tier = extraBody.service_tier ?? prepared.providerOptions?.service_tier;
+          yield* physicalModelStream({
+            request,
+            signal,
+            maxRetries: deps.settings.get('agent.retryAttempts') ?? DEFAULT_RETRY_ATTEMPTS,
+            scope: { capabilities, websocket: transport === 'websocket', flex: tier === 'flex' },
+            stream: async function* () {
+              const stopped = new AbortController();
+              const linked = AbortSignal.any([signal, stopped.signal]);
+              try {
                 linked.throwIfAborted();
-                yield* projection.project(event);
+                const turn = await providerContext.runWithContext(identity, () => turnModel(transport));
+                linked.throwIfAborted();
+                const projection = new ModelEventProjection(
+                  ref.provider,
+                  capabilities.continuity
+                    ? {
+                        kind: 'direct_response',
+                        owner,
+                        provider: ref.provider,
+                        model: ref.model,
+                        transport,
+                        ...(prepared.conversationEffort ? { effort: prepared.conversationEffort } : {}),
+                      }
+                    : undefined,
+                );
+                const events = scopeProviderStream(providerContext, identity, onDispatched, (notify) =>
+                  turn.stream({ ...prepared, signal: linked, onDispatched: notify }),
+                );
+                for await (const event of events) {
+                  linked.throwIfAborted();
+                  for (const projected of projection.project(event))
+                    yield fallback && projected.type === 'done' ? withEffortUpdatesRejected(projected) : projected;
+                }
+                projection.finish();
+              } finally {
+                // Returning early from a generator alone does not close HTTP/WS.
+                stopped.abort();
               }
-              projection.finish();
-            } finally {
-              // Returning early from a generator alone does not close HTTP/WS.
-              stopped.abort();
-            }
-          },
-        });
+            },
+          });
+        };
+        const levels = rejected ? undefined : declared;
+        const carriesEffort =
+          request.input.some(isEffortUpdateItem) ||
+          (request.continuation as Partial<ResponseContinuation> | undefined)?.effort !== undefined;
+        let produced = false;
+        try {
+          for await (const event of attempt(levels, false)) {
+            produced = true;
+            yield event;
+          }
+        } catch (error) {
+          const failure = toModelFailure(error, signal);
+          // One retry without markers when the endpoint refuses the request before any output: the item is
+          // the plausible cause. Every later request on this registry keeps today's top-level effort.
+          if (!levels || !carriesEffort || produced || signal.aborted || failure.kind !== 'invalid_request')
+            throw failure;
+          if (request.recovery && !request.recovery.budget.claimPhysicalAttempt()) throw failure;
+          rejected = true;
+          deps.logger.warn('Endpoint rejected a cache-preserving effort change; continuing with top-level effort', {
+            provider: ref.provider,
+            model: ref.model,
+            error: failure.message,
+          });
+          yield* attempt(undefined, true);
+        }
       } catch (error) {
         throw toModelFailure(error, signal);
       }
@@ -467,6 +516,11 @@ function resolveContinuation(
   return responseId
     ? { previousResponseId: responseId, disableChaining: false }
     : { previousResponseId: null, disableChaining: true };
+}
+
+/** Record the fallback on the response so Session keeps the mechanism off for the rest of the session. */
+function withEffortUpdatesRejected(event: Extract<ModelEvent, { type: 'done' }>): ModelEvent {
+  return { ...event, providerMetadata: { ...event.providerMetadata, [EFFORT_UPDATES_REJECTED]: true } };
 }
 
 function isRecord(value: unknown): value is Record<string, any> {

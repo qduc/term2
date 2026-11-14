@@ -112,8 +112,8 @@ export const formatWebSearchCommandMessage: FormatCommandMessage = (item, index,
 /**
  * True when the configured search provider has what it needs (its API key or base URL), the same test
  * `execute` applies before searching. Without it every call fails with "not properly configured", so the
- * tool is not offered at all. Tool graphs are built once per session surface, so the answer is stable
- * for the session's request prefix.
+ * tool is not offered at all. It is evaluated when a tool surface is built (see app/README.md), so the
+ * answer is stable between rebuilds and the request prefix changes once when it flips.
  */
 export const isWebSearchAvailable = (settingsService: ISettingsService): boolean => {
   const provider = getConfiguredWebSearchProvider({ settingsService });

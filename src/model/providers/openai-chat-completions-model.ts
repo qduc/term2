@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { assertValidOpenAICompatibleMessages } from './common/openai-compatible-message-contract.js';
 import { OpenAICompatibleError } from './common/provider-errors.js';
 import { OPAQUE_TURN_TOOL_CALL_IDS_KEY, openAICompatibleMessages } from './openai-chat-completions-messages.js';
-import { reportedUsageCost, type CostTrailerCapture } from './openai-compatible-response-normalizer.js';
+import type { CostTrailerCapture } from './openai-compatible-response-normalizer.js';
+import { reportedUsageCost } from '../../shared/cost/model-cost.js';
 import type {
   StreamedModelTurn,
   StreamedModelTurnEvent,

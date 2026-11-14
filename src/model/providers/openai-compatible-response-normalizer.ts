@@ -7,46 +7,6 @@ export interface CostTrailerCapture {
   cost?: string;
 }
 
-function asUsageRecord(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
-}
-
-function usageCostValue(value: unknown): number | string | undefined {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string' && value.trim().length > 0) return value;
-  return undefined;
-}
-
-/**
- * The charge a usage object reports, in provider units (USD for OpenRouter).
- *
- * OpenRouter reports `cost` as what it charged the account's credits and
- * `cost_details.upstream_inference_cost` as what the upstream provider
- * charged. Without bring-your-own-key they describe the same request
- * (`upstream_inference_cost` is OpenRouter's upstream bill, close to `cost`;
- * see the `is_byok: false` frames in fixtures/openrouter), so adding them
- * would double count. With `is_byok: true` OpenRouter bills only its BYOK fee
- * (often `cost: 0`) and the upstream charge goes to the user's own key, so the
- * request's real cost is the sum. Reading `cost` alone recorded those requests
- * as an exact $0, which hid them from run summaries and the run budget.
- *
- * Returns undefined when no cost field is present. A missing `cost` falls back
- * to the upstream charge, the only figure reported.
- */
-export function reportedUsageCost(usage: unknown): number | string | undefined {
-  const record = asUsageRecord(usage);
-  if (!record) return undefined;
-  const cost = usageCostValue(record.cost);
-  const details = asUsageRecord(record.cost_details);
-  const upstream = usageCostValue(details?.upstream_inference_cost);
-  const byok = record.is_byok === true;
-  if (byok && upstream !== undefined) {
-    const total = Number(cost ?? 0) + Number(upstream);
-    if (Number.isFinite(total)) return total;
-  }
-  return cost ?? upstream;
-}
-
 function isCostOnlyTrailer(chunk: any, isProviderTrailer?: (chunk: any) => boolean): boolean {
   if (!chunk || typeof chunk !== 'object') return false;
   const hasEmptyChoices = !chunk.choices || (Array.isArray(chunk.choices) && chunk.choices.length === 0);

@@ -9,7 +9,16 @@ import { createIsolatedWorkspaceLease } from './provider-test-harness.js';
 // (often 0) and the upstream provider's charge in `cost_details.upstream_inference_cost`; the
 // request costs the sum. A non-BYOK frame reports both figures for the same charge and costs
 // `cost` alone. Frame shapes follow sanitized OpenRouter traffic; all amounts are synthetic.
-type Step = { readonly cost: number; readonly upstream: number; readonly byok: boolean; readonly micros: number };
+type Step = {
+  readonly cost: number;
+  readonly upstream: number;
+  readonly byok: boolean;
+  readonly micros: number | undefined;
+  /** Replaces `cost_details` on the wire (`null` omits it). */
+  readonly details?: Record<string, unknown> | null;
+  /** Answers with text, ending the run, instead of a tool call. */
+  readonly final?: boolean;
+};
 const STEPS: readonly Step[] = [
   { cost: 0.0004, upstream: 0.00041, byok: false, micros: 400 },
   { cost: 0.0001, upstream: 0.003, byok: true, micros: 3100 },
@@ -18,7 +27,7 @@ const STEPS: readonly Step[] = [
 // Crossed by the third request (5500) and not before it (3500): the run pauses there.
 const MAX_USD_MICROS = 5000;
 
-it('prices OpenRouter BYOK requests at fee plus upstream cost and enforces the cost ceiling', async () => {
+async function runOpenRouter(steps: readonly Step[]) {
   let served = 0;
   const server = createServer(async (req, res) => {
     if (req.method === 'GET') {
@@ -27,7 +36,7 @@ it('prices OpenRouter BYOK requests at fee plus upstream cost and enforces the c
       return;
     }
     for await (const _chunk of req);
-    const step = STEPS[served++];
+    const step = steps[served++];
     if (step === undefined) {
       res.writeHead(500, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ error: { message: 'unscripted request: the cost ceiling did not pause the run' } }));
@@ -41,11 +50,15 @@ it('prices OpenRouter BYOK requests at fee plus upstream cost and enforces the c
       cost: step.cost,
       is_byok: step.byok,
       prompt_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 },
-      cost_details: {
-        upstream_inference_cost: step.upstream,
-        upstream_inference_prompt_cost: step.upstream / 2,
-        upstream_inference_completions_cost: step.upstream / 2,
-      },
+      ...(step.details === null
+        ? {}
+        : {
+            cost_details: step.details ?? {
+              upstream_inference_cost: step.upstream,
+              upstream_inference_prompt_cost: step.upstream / 2,
+              upstream_inference_completions_cost: step.upstream / 2,
+            },
+          }),
     };
     const call = {
       index: 0,
@@ -58,12 +71,14 @@ it('prices OpenRouter BYOK requests at fee plus upstream cost and enforces the c
       `data: ${JSON.stringify({
         id,
         provider: 'Upstream',
-        choices: [{ delta: { role: 'assistant', tool_calls: [call] } }],
+        choices: [
+          { delta: step.final ? { role: 'assistant', content: 'Done.' } : { role: 'assistant', tool_calls: [call] } },
+        ],
       })}\n\n` +
         `data: ${JSON.stringify({
           id,
           provider: 'Upstream',
-          choices: [{ delta: {}, finish_reason: 'tool_calls' }],
+          choices: [{ delta: {}, finish_reason: step.final ? 'stop' : 'tool_calls' }],
           usage,
         })}\n\n` +
         'data: [DONE]\n\n',
@@ -105,28 +120,51 @@ it('prices OpenRouter BYOK requests at fee plus upstream cost and enforces the c
       .trim()
       .split('\n')
       .map((line) => JSON.parse(line) as Record<string, any>);
-    expect(served, result.stderr + result.stdout).toBe(STEPS.length);
-    expect(result.exitCode, result.stderr).toBe(2);
-
-    const costs = events.filter((event) => event.type === 'cost_update').map((event) => event.record);
-    expect(costs.map((record) => [record.provider, record.source, record.usdMicros])).toEqual(
-      STEPS.map((step) => ['openrouter', 'provider', step.micros]),
-    );
-    const total = STEPS.reduce((sum, step) => sum + step.micros, 0);
-    expect(events.filter((event) => event.type === 'run_budget').map((event) => event.evidence)).toContainEqual(
-      expect.objectContaining({
-        type: 'budget_stage',
-        stage: 'critical',
-        evidence: expect.objectContaining({ dimension: 'usd', used: total, limit: MAX_USD_MICROS }),
-      }),
-    );
-    expect(events.find((event) => event.type === 'run_summary')).toMatchObject({
-      outcome: 'budget_paused',
-      cost: { usdMicros: total, state: 'exact', pricedRequests: STEPS.length, unpricedRequests: 0 },
-    });
+    return { result, events, served };
   } finally {
     await lease.cleanup();
     server.closeAllConnections();
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
+}
+
+it('prices OpenRouter BYOK requests at fee plus upstream cost and enforces the cost ceiling', async () => {
+  const { result, events, served } = await runOpenRouter(STEPS);
+  expect(served, result.stderr + result.stdout).toBe(STEPS.length);
+  expect(result.exitCode, result.stderr).toBe(2);
+
+  const costs = events.filter((event) => event.type === 'cost_update').map((event) => event.record);
+  expect(costs.map((record) => [record.provider, record.source, record.usdMicros])).toEqual(
+    STEPS.map((step) => ['openrouter', 'provider', step.micros]),
+  );
+  const total = STEPS.reduce((sum, step) => sum + step.micros!, 0);
+  expect(events.filter((event) => event.type === 'run_budget').map((event) => event.evidence)).toContainEqual(
+    expect.objectContaining({
+      type: 'budget_stage',
+      stage: 'critical',
+      evidence: expect.objectContaining({ dimension: 'usd', used: total, limit: MAX_USD_MICROS }),
+    }),
+  );
+  expect(events.find((event) => event.type === 'run_summary')).toMatchObject({
+    outcome: 'budget_paused',
+    cost: { usdMicros: total, state: 'exact', pricedRequests: STEPS.length, unpricedRequests: 0 },
+  });
+});
+
+// A BYOK frame whose upstream figure is missing or unusable carries only OpenRouter's fee, so it is
+// not a provider-reported charge: it must not be recorded as an exact $0 (or a fee-only) price.
+it('does not price a BYOK request without a usable upstream cost as exact', async () => {
+  const steps: readonly Step[] = [
+    { cost: 0, upstream: 0, byok: true, micros: undefined, details: null },
+    { cost: 0, upstream: 0, byok: true, micros: undefined, details: { upstream_inference_cost: null } },
+    { cost: 0.0001, upstream: 0, byok: true, micros: undefined, details: { upstream_inference_cost: -1 } },
+    { cost: 0, upstream: 0, byok: true, micros: undefined, details: { upstream_inference_cost: 'n/a' }, final: true },
+  ];
+  const { result, events, served } = await runOpenRouter(steps);
+  expect(served, result.stderr + result.stdout).toBe(steps.length);
+  expect(result.exitCode, result.stderr).toBe(0);
+  const costs = events.filter((event) => event.type === 'cost_update').map((event) => event.record);
+  expect(costs).toHaveLength(steps.length);
+  for (const record of costs) expect(record).not.toMatchObject({ source: 'provider' });
+  expect(events.find((event) => event.type === 'run_summary')?.cost).not.toMatchObject({ state: 'exact' });
 });

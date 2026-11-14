@@ -142,17 +142,20 @@ export async function captureApprovalPrompts(options: {
   /** Text that identifies a rendered prompt for the call at the same index. */
   awaitText: readonly string[];
   prompt?: string;
-}): Promise<string[]> {
+}): Promise<{ screens: string[]; toolResults: string[] }> {
   const { createIsolatedWorkspaceLease, writePtyTextAndSubmit } = await import('./provider-test-harness.js');
   const { testCliPath } = await import('../../tests/helpers/terminal-e2e.js');
   let served = 0;
+  const bodies: ChatRequest[] = [];
   const server = createServer(async (req, res) => {
     if (req.method === 'GET') {
       res.setHeader('content-type', 'application/json');
       res.end(JSON.stringify({ data: [] }));
       return;
     }
-    for await (const chunk of req) void chunk;
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(Buffer.from(chunk));
+    bodies.push(JSON.parse(Buffer.concat(chunks).toString()));
     served++;
     const next = options.calls[served - 1];
     const delta = next
@@ -226,7 +229,11 @@ export async function captureApprovalPrompts(options: {
       // Approve (the files are disposable) so the model's next scripted call is issued.
       await child.write('y');
     }
-    return screens;
+    // Let the remaining scripted calls run to the model's final answer.
+    await child.waitForVisibleOutput('DONE', 30000);
+    const last = bodies.at(-1);
+    const toolResults = (last?.messages ?? []).filter((m) => m.role === 'tool').map((m) => textOf(m.content));
+    return { screens, toolResults };
   } finally {
     await child.cleanup();
     await lease.cleanup();

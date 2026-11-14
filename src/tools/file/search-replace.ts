@@ -290,6 +290,11 @@ export function createSearchReplaceToolDefinition(deps: {
   resolveHealingModel: () => { model: string; provider: string };
   executionContext?: ExecutionContext;
   sessionAccess?: FileEditAccessPort;
+  /**
+   * Whether the caller may also read this file. The nearest-line hint echoes file content, so it is given
+   * only when this says yes (same authority as read_file); absent means never.
+   */
+  readAccess?: (absolutePath: string, context: unknown) => Promise<boolean>;
   /** Absent when no nested run driver exists: a failed match then reports plain not-found guidance. */
   editHealing?: typeof healSearchReplaceParams;
 }): ScriptedToolDefinition<typeof searchReplaceParametersSchema> {
@@ -421,7 +426,7 @@ export function createSearchReplaceToolDefinition(deps: {
         return true;
       }
     },
-    execute: async (params) => {
+    execute: async (params, context) => {
       if (sessionAccess?.isReadOnly) return 'Error: search_replace is unavailable in a read-only session.';
       const enableFileLogging = settingsService.get('tools.logFileOperations');
       const cwd = executionContext?.getCwd() || process.cwd();
@@ -442,7 +447,11 @@ export function createSearchReplaceToolDefinition(deps: {
         output: { success: false, error, ...extra },
       });
 
-      const applyToContent = async (operation: SearchReplaceFullOperation, content: string) => {
+      const applyToContent = async (
+        operation: SearchReplaceFullOperation,
+        content: string,
+        mayHint: () => Promise<boolean>,
+      ) => {
         const { path: filePath, search_content, replace_content, match_all } = operation;
 
         if (search_content === '') {
@@ -521,7 +530,7 @@ export function createSearchReplaceToolDefinition(deps: {
             }
 
             if (!usedHealing) {
-              const nearest = describeSearchMismatch(search_content, content);
+              const nearest = (await mayHint()) ? describeSearchMismatch(search_content, content) : '';
               const reasonSuffix = healingFailureReason ? ` Reason: ${healingFailureReason}.` : '';
               return fail(
                 `Search content not found. Auto-healing attempted but no match found.${reasonSuffix} Try splitting changes into smaller patterns.${
@@ -539,7 +548,8 @@ export function createSearchReplaceToolDefinition(deps: {
         });
 
         if (!replacementResult.success) {
-          const hint = matchInfo.type === 'none' ? describeSearchMismatch(search_content, content) : '';
+          const hint =
+            matchInfo.type === 'none' && (await mayHint()) ? describeSearchMismatch(search_content, content) : '';
           return fail(hint ? `${replacementResult.error} ${hint}` : replacementResult.error);
         }
 
@@ -612,6 +622,9 @@ export function createSearchReplaceToolDefinition(deps: {
 
             let nextContent = content;
             let changed = false;
+            let hintDecision: Promise<boolean> | undefined;
+            const mayHint = () =>
+              (hintDecision ??= deps.readAccess ? deps.readAccess(targetPath, context) : Promise.resolve(false));
 
             for (const { operation, index } of group) {
               if (!fileExists) {
@@ -649,7 +662,7 @@ export function createSearchReplaceToolDefinition(deps: {
                 continue;
               }
 
-              const result = await applyToContent(operation, nextContent);
+              const result = await applyToContent(operation, nextContent, mayHint);
               output[index] = result.output;
               if (!result.output.success) {
                 if (operations.length > 1) {

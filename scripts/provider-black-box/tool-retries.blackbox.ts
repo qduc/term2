@@ -280,7 +280,9 @@ it.skipIf(process.platform !== 'linux')(
     // prompt-side handling. It fails if that normalisation is ever lost.
     // The targets are outside the project, so each call needs the user's approval.
     const edit = (old: string, next: string) => ({ search_content: old, replace_content: next });
-    const [flat, array, nested] = await captureApprovalPrompts({
+    const {
+      screens: [flat, array, nested],
+    } = await captureApprovalPrompts({
       files: { 'outside/a.txt': 'flat_old\n', 'outside/b.txt': 'array_old\n', 'outside/c.txt': 'nested_old\n' },
       calls: [
         ['search_replace', { path: '../outside/a.txt', ...edit('flat_old', 'flat_new') }],
@@ -304,6 +306,42 @@ it.skipIf(process.platform !== 'linux')(
       expect(screen).toContain(`-${old}`);
       expect(screen).toContain(`+${next}`);
     }
+  },
+  120000,
+);
+
+it.skipIf(process.platform !== 'linux')(
+  'the nearest-line hint is given only for files the caller may also read',
+  async () => {
+    // outside/ needs approval to edit and a separate grant to read; approving the edit grants no read.
+    const { toolResults } = await captureApprovalPrompts({
+      files: {
+        'outside/secrets.env': 'AWS_SECRET_ACCESS_KEY=hunter2hunter2\nREGION=eu\n',
+        'project/inside.env': 'PUBLIC_VALUE=visible_value_123\nMODE=dev\n',
+      },
+      calls: [
+        [
+          'search_replace',
+          {
+            path: '../outside/secrets.env',
+            search_content: 'AWS_SECRET_ACCESS_KEY=hunter2hunter3',
+            replace_content: 'x',
+          },
+        ],
+        [
+          'search_replace',
+          { path: 'inside.env', search_content: 'PUBLIC_VALUE=visible_value_124', replace_content: 'x' },
+        ],
+      ],
+      awaitText: ['hunter2hunter3'],
+    });
+    const joined = toolResults.join('\n');
+    // Withheld: the plain not-found text, and none of the file's content.
+    expect(joined).toContain('Search content not found');
+    expect(joined).not.toContain('hunter2hunter2');
+    expect(joined).not.toContain('REGION');
+    // Allowed: inside the workspace the same hint is given.
+    expect(joined).toContain('closest is line 1: "PUBLIC_VALUE=visible_value_123"');
   },
   120000,
 );

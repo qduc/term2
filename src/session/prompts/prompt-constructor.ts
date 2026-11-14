@@ -29,6 +29,8 @@ type PromptConstructorBaseOptions = {
   sessionBrowserEnabled?: boolean;
   executionContext?: ExecutionContext;
   fileReadEnabled?: boolean;
+  /** False when no search provider is configured, so the prompt does not name `web_search`. */
+  webSearchEnabled?: boolean;
 };
 
 export type PromptConstructorOptions = PromptConstructorBaseOptions &
@@ -69,6 +71,7 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
     runCodeEnabled = false,
     editorSurface = 'none',
     fileReadEnabled = false,
+    webSearchEnabled = true,
   } = options;
 
   if (isBareProfile(profile)) {
@@ -141,7 +144,9 @@ export function buildPromptSpec(options: PromptConstructorOptions): PromptSpec {
   }
   if (memoryContext && memoryEnabled) inlineSections.push(memoryContext);
 
-  inlineSections.push(runCodeEnabled ? getScriptPrimaryToolsAddendum(editorSurface) : getDirectEditorToolsAddendum());
+  inlineSections.push(
+    runCodeEnabled ? getScriptPrimaryToolsAddendum(editorSurface, webSearchEnabled) : getDirectEditorToolsAddendum(),
+  );
 
   return {
     basePromptFile: promptProfile.basePromptFile,

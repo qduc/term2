@@ -19,16 +19,23 @@ export interface FeatureSelection {
 /**
  * The web tools an agent can actually use. `web_fetch` needs no configuration; `web_search` is left out
  * (`search` undefined) when no search provider is configured, because every call to it would fail.
+ * Callers that also word a prompt decide `includeSearch` once and use it for both, so tools and prompt agree.
  */
-export function createWebToolPair(deps: { settingsService: ISettingsService; loggingService: ILoggingService }) {
+export function createWebToolPair(
+  deps: { settingsService: ISettingsService; loggingService: ILoggingService },
+  includeSearch = isWebSearchAvailable(deps.settingsService),
+) {
   return {
-    search: isWebSearchAvailable(deps.settingsService) ? createWebSearchToolDefinition(deps) : undefined,
-    fetch: createWebFetchToolDefinition(deps),
+    search: includeSearch ? createWebSearchToolDefinition(deps) : undefined,
+    fetch: createWebFetchToolDefinition(deps, includeSearch),
   };
 }
 
-export function createWebToolDefinitions(deps: { settingsService: ISettingsService; loggingService: ILoggingService }) {
-  const { search, fetch } = createWebToolPair(deps);
+export function createWebToolDefinitions(
+  deps: { settingsService: ISettingsService; loggingService: ILoggingService },
+  includeSearch?: boolean,
+) {
+  const { search, fetch } = createWebToolPair(deps, includeSearch);
   return search ? ([search, fetch] as const) : ([fetch] as const);
 }
 

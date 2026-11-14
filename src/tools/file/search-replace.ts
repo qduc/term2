@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { normalizeObjectParams } from '../tool-invoke.js';
+import { normalizeSearchReplaceShape, readSearchReplaceArguments } from './search-replace-input.js';
 import { readFile, writeFile } from 'fs/promises';
 import path from 'path';
 import { isProtectedHookPath, isWorkspacePathPhysicallyInside, resolveWorkspacePath } from '../utils.js';
@@ -64,6 +66,19 @@ const searchReplaceParametersSchema = z.object({
   replacements: z.array(searchReplaceOperationSchema).min(1).describe('The list of replacements to apply to the file'),
 });
 
+/**
+ * Execution-side schema: reads the flat single-edit form as one replacement. The provider is shown
+ * `searchReplaceParametersSchema` (the tool's `parameters`) unchanged; this wraps it as a plain preprocess.
+ */
+const searchReplaceCanonicalSchema = z.preprocess((raw, ctx) => {
+  const shaped = normalizeSearchReplaceShape(normalizeObjectParams(raw, searchReplaceParametersSchema));
+  if (!shaped.ok) {
+    ctx.addIssue({ code: 'custom', message: shaped.message });
+    return raw;
+  }
+  return shaped.value;
+}, searchReplaceParametersSchema);
+
 export type SearchReplaceOperation = z.infer<typeof searchReplaceOperationSchema>;
 export type SearchReplaceToolParams = z.infer<typeof searchReplaceParametersSchema>;
 
@@ -74,7 +89,8 @@ export interface SearchReplaceFullOperation {
   match_all?: boolean;
 }
 
-function getSearchReplaceOperations(params: SearchReplaceToolParams): SearchReplaceFullOperation[] {
+function getSearchReplaceOperations(rawParams: SearchReplaceToolParams): SearchReplaceFullOperation[] {
+  const params = readSearchReplaceArguments(rawParams) as SearchReplaceToolParams;
   return params.replacements.map((rep) => ({
     path: params.path,
     search_content: rep.search_content,
@@ -228,7 +244,7 @@ function executeReplacement(
 
 export const formatSearchReplaceCommandMessage: FormatCommandMessage = (item, index, _toolCallArgumentsById) => {
   const normalizedArgs = item?.rawItem?.arguments ?? item?.arguments;
-  const args = normalizeToolArguments(normalizedArgs) ?? {};
+  const args = (readSearchReplaceArguments(normalizeToolArguments(normalizedArgs) ?? {}) as Record<string, any>) ?? {};
   const replacements = Array.isArray(args?.replacements) ? args.replacements : [];
   const firstReplacement = replacements[0] ?? {};
   const filePath = args?.path ?? 'unknown';
@@ -288,6 +304,7 @@ export function createSearchReplaceToolDefinition(deps: {
     canRequireApproval: true,
     scriptedReturnSchema: z.string(),
     parameters: searchReplaceParametersSchema,
+    canonicalParameters: searchReplaceCanonicalSchema,
     approvalPresentation: getApprovalPresentationCapability('search_replace'),
     needsApproval: async (params) => {
       if (sessionAccess?.isReadOnly) return false;

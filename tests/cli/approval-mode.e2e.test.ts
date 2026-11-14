@@ -49,7 +49,12 @@ const USAGE_OUTPUT_TOKENS = 73;
 const USAGE_STREAM_MS = 400;
 
 /** One SSE reply per chat request, in order: a single shell call or plain text. */
-async function startProvider(replies: Reply[], withUsage = false, beforeReply?: Promise<void>): Promise<string> {
+async function startProvider(
+  replies: Reply[],
+  withUsage = false,
+  beforeReply?: Promise<void>,
+  beforeReview?: Promise<void>,
+): Promise<string> {
   let requests = 0;
   server = http.createServer((req, res) => {
     if (req.method === 'GET' && req.url?.includes('failure')) {
@@ -70,6 +75,7 @@ async function startProvider(replies: Reply[], withUsage = false, beforeReply?: 
       if (beforeReply) await beforeReply;
       providerBodies.push(body);
       const reply = replies[requests++] ?? { text: 'done' };
+      if (requests === 2 && beforeReview) await beforeReview;
       if (reply.error) {
         res.writeHead(400, { 'content-type': 'application/json' });
         res.end(
@@ -292,6 +298,109 @@ it('routes approval keys while a slash menu is suspended', { timeout: TIMEOUT_MS
   session!.write('\x1b');
   await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
 });
+
+it.each([
+  { risk: 'low', automatic: true, delayedDenial: false, mode: 'auto', sandbox: true },
+  { risk: 'high', automatic: false, delayedDenial: false, mode: 'auto', sandbox: true },
+  { risk: 'low', automatic: false, delayedDenial: true, mode: 'auto', sandbox: true },
+  { risk: 'low', automatic: false, delayedDenial: false, mode: 'off', sandbox: true },
+  { risk: 'low', automatic: false, delayedDenial: false, mode: 'advisory', sandbox: true },
+  { risk: 'low', automatic: false, delayedDenial: false, mode: 'auto', sandbox: false },
+])(
+  'handles root unsandboxed review (mode=$mode sandbox=$sandbox risk=$risk denial=$delayedDenial)',
+  { timeout: TIMEOUT_MS },
+  async ({ risk, automatic, delayedDenial, mode, sandbox }) => {
+    root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-unsandboxed-review-')));
+    const home = path.join(root, 'home');
+    const workspace = path.join(root, 'workspace');
+    fs.mkdirSync(home);
+    fs.mkdirSync(workspace);
+    const marker = path.join(workspace, 'reviewed');
+    const command = `printf approved > '${marker}'`;
+    let releaseReview!: () => void;
+    const reviewGate = new Promise<void>((resolve) => {
+      releaseReview = resolve;
+    });
+    const reviewExpected = mode === 'auto' && sandbox;
+    const baseUrl = await startProvider(
+      [
+        { call: { id: 'unsandboxed-call', args: { command, sandbox: 'unsandboxed' } } },
+        ...(reviewExpected
+          ? [
+              {
+                text: JSON.stringify({
+                  results: [
+                    { reasoning: 'fixture review', riskLevel: risk, authorization: 'explicit', confidence: 'high' },
+                  ],
+                }),
+              },
+            ]
+          : []),
+        { text: 'UNSANDBOXED_FINISHED' },
+      ],
+      false,
+      undefined,
+      delayedDenial ? reviewGate : undefined,
+    );
+    const idlePath = path.join(home, 'input-idle');
+    const env = {
+      HOME: home,
+      XDG_CONFIG_HOME: path.join(home, '.config'),
+      XDG_DATA_HOME: path.join(home, '.local', 'share'),
+      XDG_STATE_HOME: path.join(home, '.local', 'state'),
+      XDG_CACHE_HOME: path.join(home, '.cache'),
+      TERM2_CONFIG_DIR: path.join(home, '.term2'),
+      TERM2_CACHE_DIR: path.join(home, '.cache', 'term2'),
+      TERM2_CONVERSATIONS_DIR: path.join(root, 'conversations'),
+      DISABLE_LOGGING: '1',
+      [HARNESS_IDLE_ENV]: idlePath,
+      CI: 'false',
+    };
+    const settingsDir = resolveSettingsDirectory({ homeDir: home, env: createTestChildEnv(env) });
+    fs.mkdirSync(settingsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(settingsDir, 'settings.json'),
+      JSON.stringify({
+        agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
+        providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl, apiKey: 'test-key' }],
+        sandbox: { enabled: sandbox },
+        shell: { autoApproveMode: mode },
+      }),
+    );
+    session = spawnTerminal('node', [builtCli], { cwd: workspace, env, cols: 100, rows: 30 });
+    await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
+    session.write('Write the approved marker outside the sandbox');
+    await waitForHarnessComposerValue(idlePath, 'Write the approved marker outside the sandbox', { timeoutMs: 60_000 });
+    session.write('\r');
+    if (!automatic) {
+      await session.waitForOutput('wants to run in unsandboxed mode', 60_000);
+      if (reviewExpected)
+        await vi.waitFor(() => expect(providerBodies.length).toBeGreaterThanOrEqual(2), { timeout: 30_000 });
+      expect(fs.existsSync(marker)).toBe(false);
+      if (delayedDenial) {
+        session.write('n');
+        await session.waitForOutput('Why?', 30_000);
+        releaseReview();
+        await vi.waitFor(() => expect(fs.existsSync(`${idlePath}.approval-review`)).toBe(true), { timeout: 30_000 });
+        expect(session.getVisibleOutput()).toContain('Why?');
+        expect(fs.existsSync(marker)).toBe(false);
+        session.write('not allowed');
+        await waitForHarnessComposerValue(idlePath, 'not allowed', { timeoutMs: 30_000 });
+        session.write('\r');
+      } else {
+        if (reviewExpected)
+          await vi.waitFor(() => expect(fs.existsSync(`${idlePath}.approval-review`)).toBe(true), { timeout: 30_000 });
+        expect(fs.existsSync(marker)).toBe(false);
+        session.write('\r');
+      }
+    }
+    await session.waitForOutput('UNSANDBOXED_FINISHED', 60_000);
+    if (delayedDenial) expect(fs.existsSync(marker)).toBe(false);
+    else expect(fs.readFileSync(marker, 'utf8')).toBe('approved');
+    if (reviewExpected) expect(providerBodies[1]).toMatch(/OUTSIDE the sandbox/i);
+    else expect(JSON.parse(providerBodies[1]).tools.length).toBeGreaterThan(0);
+  },
+);
 
 // The effective approval mode is visible without changing it.
 async function runCommand(

@@ -444,6 +444,7 @@ export function TuiSession({
         ) : null}
         <ApprovalHost
           request={shown}
+          reviewApproval={integration.reviewApproval}
           activeTurnId={state.activeTurnId}
           {...{ connection, cancelInput, setNotice, changeInput, replaceInput, editorValue: editor.value }}
           inputHandler={interactionInput}

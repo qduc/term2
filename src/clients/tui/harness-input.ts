@@ -39,6 +39,12 @@ export function publishHarnessApprovalReady(callId: string): void {
   writeAtomically(`${path}.approval`, `${JSON.stringify({ revision: approvalRevision, callId })}\n`);
 }
 
+/** Opt-in signal after an automatic approval review has settled. */
+export function publishHarnessApprovalReviewSettled(requestId: string): void {
+  const path = process.env['TERM2_HARNESS_IDLE_PATH'];
+  if (path) writeAtomically(`${path}.approval-review`, `${JSON.stringify({ requestId })}\n`);
+}
+
 /**
  * Opt-in signal for a held-send confirmation that reads its own keys: published after
  * that prompt's input handler is in place. Ink draws the prompt at commit but subscribes

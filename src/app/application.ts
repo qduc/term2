@@ -280,7 +280,9 @@ export async function createDirectApplication(options: DirectApplicationOptions)
     async reviewApproval(sessionId, requestId, signal) {
       if (signal.aborted || !runtimes.get(sessionId)) return false;
       const session = await store.open(sessionId);
-      return await reviewLiveApproval(session, runtimes.get(sessionId), requestId, signal);
+      const runtime = runtimes.get(sessionId);
+      const approved = await reviewLiveApproval(session, runtime, requestId, signal);
+      return approved && runtimes.get(sessionId) === runtime;
     },
     async setGoal(sessionId, goal, source) {
       writeGoal(await store.open(sessionId), goal, source);

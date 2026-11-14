@@ -575,7 +575,6 @@ export function registerCliScenarios(group: 'startup' | 'headless'): void {
           expect(wire).not.toContain('propose_goal');
           expect((request.tools as { function: { name: string } }[]).map((tool) => tool.function.name).sort()).toEqual([
             'create_file',
-            'goal_check',
             'read_file',
             'run_code',
             'run_subagent',
@@ -1005,15 +1004,16 @@ fs.createWriteStream = (filename, options) => {
           .filter((message) => message.role === 'system')
           .map((message) => message.content)
           .join('\n');
-        expect(system).toContain('No durable session goal is set');
-        expect(system).toContain('do not call goal_check');
+        // A session that never had a goal carries neither the tool nor its notice.
+        expect(system).not.toContain('goal_check');
+        expect(system).not.toContain('durable session goal');
         const toolNames = (requests[0].tools as { function: { name: string } }[]).map((tool) => tool.function.name);
-        expect(toolNames).toContain('goal_check');
+        expect(toolNames).not.toContain('goal_check');
         expect(toolNames).not.toContain('propose_goal');
         if (incidentalCheck) {
           const rejection = (requests[1].messages as WireMessage[]).find((message) => message.role === 'tool')?.content;
-          expect(rejection).toContain('Error: goal_check was not recorded: there is no active durable goal to check.');
-          expect(rejection).toContain('Continue the ordinary request/tool workflow without goal_check');
+          // An unlisted call fails like any other unknown tool; the request still completes.
+          expect(rejection).toBe('Unknown tool: goal_check');
         }
         expect(
           lastWireToolExchange(requests).results.find((result) => result.id === `ordinary-${incidentalCheck ? 2 : 1}`)
@@ -2404,15 +2404,7 @@ fs.createWriteStream = (filename, options) => {
           }
           const names = (request.tools as { function: { name: string } }[]).map((t) => t.function.name).sort();
           // Bare offers the file tools directly; it has no activate_skill, which the shell covers.
-          expect(names).toEqual([
-            'create_file',
-            'goal_check',
-            'read_file',
-            'run_code',
-            'run_subagent',
-            'search_replace',
-            'shell',
-          ]);
+          expect(names).toEqual(['create_file', 'read_file', 'run_code', 'run_subagent', 'search_replace', 'shell']);
           const runCode = (request.tools as { function: { name: string; description: string } }[]).find(
             (t) => t.function.name === 'run_code',
           )!;
@@ -2433,8 +2425,7 @@ fs.createWriteStream = (filename, options) => {
           expect(system).toContain('PROJECT_GUIDANCE_SENTINEL');
           expect(system).toContain('GLOBAL_GUIDANCE_SENTINEL');
           expect(system).toContain('report blocked');
-          expect(system).toContain('No durable session goal is set');
-          expect(system).toContain('do not call goal_check');
+          expect(system).not.toContain('goal_check');
           expect(system).toContain('BARE_SKILL_CATALOG_SENTINEL');
           expect(system).toContain('read the SKILL.md at its\nlocation with the shell');
           expect(system).not.toContain('activate_skill');

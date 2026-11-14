@@ -89,12 +89,8 @@ const readFileParametersSchema = z.object({
     .int()
     .positive()
     .optional()
-    .describe('Starting line number (1-indexed). Optional, specify when you know the exact range to read.'),
-  end_line: relaxedNumber
-    .int()
-    .positive()
-    .optional()
-    .describe('Ending line number (1-indexed, inclusive). Optional, specify when you know the exact range to read.'),
+    .describe('Starting line number (1-indexed). Optional; give a line range when you know the exact range to read.'),
+  end_line: relaxedNumber.int().positive().optional().describe('Ending line number (1-indexed, inclusive).'),
 });
 
 export type ReadFileToolParams = z.infer<typeof readFileParametersSchema>;
@@ -188,7 +184,7 @@ export const createReadFileToolDefinition = (
   return {
     name: 'read_file',
     scriptedReturnShape:
-      '{ path: string, totalLines: number, fromLine: number, toLine: number, content: string, truncated: boolean, fullOutputPath?: string } or content parts [{ type: "text" | "image", ... }] for image files',
+      'the { path, totalLines, fromLine, toLine, content, truncated, fullOutputPath? } object for a text file; content parts [{ type: "text" | "image", ... }] for an image file',
     description: orchestratorMode
       ? READ_FILE_DESCRIPTION_ORCHESTRATOR
       : allowOutsideWorkspace

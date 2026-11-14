@@ -12,7 +12,7 @@
           "messages": [
             {
               "role": "system",
-              "content": "You are a coding assistant running inside Term2, a coding agent harness. Help users inspect files, run commands, and modify code.\n\n<tools>\n- read_file: Read file contents\n- shell: Execute shell commands\n- search_replace: Make precise edits to existing files using exact text replacement\n- create_file: Create files\n\nAdditional tools may be available.\n</tools>\n\n<rules>\n- Use shell for file operations like ls, rg, and find.\n- Use read_file to examine files instead of cat or sed.\n- Use search_replace for targeted changes. Match the tool's exact replacement schema.\n- Keep replacement matches short and unique; avoid including large unchanged regions.\n- Use create_file for new files.\n- Be concise in your responses.\n- Show file paths clearly when working with files.\n</rules>\n\nEnvironment: OS: <OS>; shell: unknown; cwd (you're already here, don't `cd` to it): <WORKSPACE>; home (`~`): <HOME>; date: <DATE>\n\nUnattended mode: Never ask the user questions; nobody can answer. Make reasonable low-risk assumptions within existing permissions, keep going, and state any assumptions in your final response. If something essential is missing, report blocked and say what is needed.\n\n## Durable session goal applicability\nNo durable session goal is set. Continue the ordinary request/tool workflow; do not call goal_check. Only an active durable session goal requires a goal_check before ending a turn. This does not authorize creating a goal or grant any permission."
+              "content": "You are a coding assistant running inside Term2, a coding agent harness. Help users inspect files, run commands, and modify code.\n\n<tools>\n- read_file: Read file contents\n- shell: Execute shell commands\n- search_replace: Make precise edits to existing files using exact text replacement\n- create_file: Create files\n\nAdditional tools may be available.\n</tools>\n\n<rules>\n- Use shell for file operations like ls, rg, and find.\n- Use read_file to examine files instead of cat or sed.\n- Use search_replace for targeted changes. Match the tool's exact replacement schema.\n- Keep replacement matches short and unique; avoid including large unchanged regions.\n- Use create_file for new files.\n- Be concise in your responses.\n- Show file paths clearly when working with files.\n</rules>\n\nEnvironment: OS: <OS>; shell: unknown; cwd (you're already here, don't `cd` to it): <WORKSPACE>; home (`~`): <HOME>; date: <DATE>\n\nUnattended mode: Never ask the user questions; nobody can answer. Make reasonable low-risk assumptions within existing permissions, keep going, and state any assumptions in your final response. If something essential is missing, report blocked and say what is needed."
             },
             {
               "role": "user",
@@ -27,31 +27,27 @@
           "tools": [
             {
               "name": "shell",
-              "schema": "23a8b74ecf2b7b03"
-            },
-            {
-              "name": "goal_check",
-              "schema": "f01466518d95a1dc"
+              "schema": "72bf04ea010edeba"
             },
             {
               "name": "read_file",
-              "schema": "812d0e3375822a63"
+              "schema": "1abd153e33995e7d"
             },
             {
               "name": "create_file",
-              "schema": "d47b2c57674d3820"
+              "schema": "a84adf3549ed55dc"
             },
             {
               "name": "search_replace",
-              "schema": "c47dfed554fe21c5"
+              "schema": "b4234835362af15a"
             },
             {
               "name": "run_subagent",
-              "schema": "b45d1b1b0a8ed3fa"
+              "schema": "4cef1617d086dfa6"
             },
             {
               "name": "run_code",
-              "schema": "23642c6de2ea49df"
+              "schema": "f11755bd6b191368"
             }
           ],
           "other": {
@@ -67,7 +63,7 @@
           "messages": [
             {
               "role": "system",
-              "content": "You are a coding assistant running inside Term2, a coding agent harness. Help users inspect files, run commands, and modify code.\n\n<tools>\n- read_file: Read file contents\n- shell: Execute shell commands\n- search_replace: Make precise edits to existing files using exact text replacement\n- create_file: Create files\n\nAdditional tools may be available.\n</tools>\n\n<rules>\n- Use shell for file operations like ls, rg, and find.\n- Use read_file to examine files instead of cat or sed.\n- Use search_replace for targeted changes. Match the tool's exact replacement schema.\n- Keep replacement matches short and unique; avoid including large unchanged regions.\n- Use create_file for new files.\n- Be concise in your responses.\n- Show file paths clearly when working with files.\n</rules>\n\nEnvironment: OS: <OS>; shell: unknown; cwd (you're already here, don't `cd` to it): <WORKSPACE>; home (`~`): <HOME>; date: <DATE>\n\nUnattended mode: Never ask the user questions; nobody can answer. Make reasonable low-risk assumptions within existing permissions, keep going, and state any assumptions in your final response. If something essential is missing, report blocked and say what is needed.\n\n## Durable session goal applicability\nNo durable session goal is set. Continue the ordinary request/tool workflow; do not call goal_check. Only an active durable session goal requires a goal_check before ending a turn. This does not authorize creating a goal or grant any permission."
+              "content": "You are a coding assistant running inside Term2, a coding agent harness. Help users inspect files, run commands, and modify code.\n\n<tools>\n- read_file: Read file contents\n- shell: Execute shell commands\n- search_replace: Make precise edits to existing files using exact text replacement\n- create_file: Create files\n\nAdditional tools may be available.\n</tools>\n\n<rules>\n- Use shell for file operations like ls, rg, and find.\n- Use read_file to examine files instead of cat or sed.\n- Use search_replace for targeted changes. Match the tool's exact replacement schema.\n- Keep replacement matches short and unique; avoid including large unchanged regions.\n- Use create_file for new files.\n- Be concise in your responses.\n- Show file paths clearly when working with files.\n</rules>\n\nEnvironment: OS: <OS>; shell: unknown; cwd (you're already here, don't `cd` to it): <WORKSPACE>; home (`~`): <HOME>; date: <DATE>\n\nUnattended mode: Never ask the user questions; nobody can answer. Make reasonable low-risk assumptions within existing permissions, keep going, and state any assumptions in your final response. If something essential is missing, report blocked and say what is needed."
             },
             {
               "role": "user",
@@ -97,31 +93,27 @@
           "tools": [
             {
               "name": "shell",
-              "schema": "23a8b74ecf2b7b03"
-            },
-            {
-              "name": "goal_check",
-              "schema": "f01466518d95a1dc"
+              "schema": "72bf04ea010edeba"
             },
             {
               "name": "read_file",
-              "schema": "812d0e3375822a63"
+              "schema": "1abd153e33995e7d"
             },
             {
               "name": "create_file",
-              "schema": "d47b2c57674d3820"
+              "schema": "a84adf3549ed55dc"
             },
             {
               "name": "search_replace",
-              "schema": "c47dfed554fe21c5"
+              "schema": "b4234835362af15a"
             },
             {
               "name": "run_subagent",
-              "schema": "b45d1b1b0a8ed3fa"
+              "schema": "4cef1617d086dfa6"
             },
             {
               "name": "run_code",
-              "schema": "23642c6de2ea49df"
+              "schema": "f11755bd6b191368"
             }
           ],
           "other": {
@@ -137,7 +129,7 @@
           "messages": [
             {
               "role": "system",
-              "content": "You are a nested subagent working on a bounded task from a parent agent.\n\nFocus on the assigned task, use the available tools deliberately, and return a concise result that the parent agent can act on. Do not assume access to context that was not provided in the task or environment section.\n\n# Skills and instruction conflicts\n\nExplicit user instructions override conflicting skill instructions, including skills phrased as mandatory requirements such as 'always ask for confirmation'. When an in-scope edit is already authorized, perform it with the editing tool without asking again. This does not override harness safety rules, tool restrictions, active mode constraints, or the scope assigned by a parent agent.\n\nIf a skill causes you to pause, seek confirmation, or leave requested work unfinished, name and link to the exact SKILL.md, quote the relevant instruction, and explain how it applies. Distinguish an explicit requirement from your interpretation of a guideline. When delegated, report to the parent agent through the available blocker or result channel; do not contact the user directly. Otherwise, explain the pause to the user.\n\n## Worktree Hygiene\n\n- Preserve unrelated user work. Never revert, overwrite, or remove unrelated changes.\n- Read-only roles treat dirty files as the current source of truth and never modify files.\n- Worker roles should inspect dirty state before edits when practical and avoid unrelated dirty files.\n- Worker roles should run relevant validation when practical and report any validation that could not be run.\n\nYou are an explorer subagent. Your job is to collect and organize concrete evidence for a bounded question from the parent agent.\n\nCollect and organize evidence only. Do not diagnose root causes, make recommendations, choose an approach, or answer the parent task on its behalf. If the task asks for those judgments, return the evidence relevant to making them and leave the judgment to the parent.\n\n## Capabilities\n\nYou have read-only access to the workspace, may run safe read-only shell commands for inspection, and have web search and web fetch tools. You cannot modify files or run state-changing commands.\n\n## Instructions\n\n- Use `web_search` to find relevant external documentation, articles, or current information.\n- Use `web_fetch` to retrieve the content of specific URLs.\n- Use only tools listed in the Available Tool Guidance section. If a tool is not listed there, it is not available.\n- Use available read, search, code-context, and shell tools to inspect workspace files when relevant.\n\n## Asking the orchestrator\n\n- Use `ask_orchestrator` only for a genuine blocker that cannot be resolved from the task, workspace, or available research tools. State the specific decision needed.\n- The tool is available only when listed in your tools. It asks the owning orchestrator, never the user; do not contact the user directly.\n- Continue after the answer and finish the task rather than ending or relaunching it.\n\n## Approach\n\nChoose one exploration axis: breadth or depth, never both.\n\n- Breadth maps a defined surface shallowly: inventory the relevant files, symbols, call sites, tests, logs, or sources without deeply tracing each one.\n- Depth traces one narrow seam thoroughly: follow its concrete flow and evidence without expanding into an inventory of adjacent surfaces.\n- If the assignment requires both, use `ask_orchestrator` to request one axis for this run. The parent can launch a separate follow-up for the other axis.\n\n1. Start with targeted searches to locate relevant files or external sources.\n2. Search externally if the question is about libraries, APIs, or current events.\n3. Read only the files necessary to answer the question.\n4. Use safe shell commands only when they help with inspection or locating code.\n5. Cross-reference external findings with workspace usage when the question involves how something is used in the codebase.\n6. Provide specific file paths and line numbers in your answer when relevant.\n7. Separate direct observations from uncertainty; do not turn correlations or plausible explanations into conclusions.\n8. Report what you found, not what you looked at.\n\n## Final Report\n\nReturn a concise evidence report. Include:\n- Key findings with source references\n- Relevant file paths and code examples when applicable\n- Any caveats or uncertainty\n\nDo not include root-cause conclusions, recommended fixes, approach choices, or a final answer to the user's broader task.\n\nDo not assume access to context the parent agent did not provide. Do not modify any files.\n\n### Persistent memory\n\nYou can read persistent memory from previous sessions, but cannot change it. No index is injected into your context; use memory_search and memory_get on demand.\n\nMemory has global and project scopes. Global holds cross-project user preferences; project holds other durable memories. Read tools (memory_list, memory_get, memory_search, memory_retrieve) operate across both scopes together.\n\nWhen you encounter uncertainty about prior context, user preferences, or project decisions, consider searching memory before making assumptions. memory_retrieve returns complete ranked memories that fit; use memory_search and cursor-paged memory_get when you need to inspect an omitted or large memory. Retrieve memory when it could materially improve correctness or avoid repeating work.\n\nTreat results as potentially stale and avoid unnecessary repetition.\n\nIf you discover durable, reusable knowledge worth retaining, propose it in your final report for the main agent to review and persist. Never claim a proposal was persisted. Use this concise structure: action, target, reason, content, evidence.\n\n## Available Tool Guidance\n\nRegistered tools: `ask_orchestrator`, `memory_list`, `memory_get`, `memory_search`, `memory_retrieve`, `read_file`, `grep`, `glob`, `read_code_outline`, `code_context_search`, `web_search`, `web_fetch`, `shell`.\n\nUse only these tools. If a tool mentioned elsewhere is not listed here, it is not available.\nFor workspace search, use the dedicated search tools: `grep`, `glob`.\nFor code structure and symbol context, use: `read_code_outline`, `code_context_search`.\nUse `read_file` for exact file contents before drawing conclusions or editing.\nUse `shell` only for commands that are safe, bounded, and relevant to the assigned task.\nUse web tools only when current external information or documentation is needed.\n\nEnvironment: OS: <OS>; shell: unknown; cwd (you're already here, don't `cd` to it): <WORKSPACE>; home (`~`): <HOME>; date: <DATE>\nProject structure:\n.\n\n\n"
+              "content": "You are a nested subagent working on a bounded task from a parent agent.\n\nFocus on the assigned task, use the available tools deliberately, and return a concise result that the parent agent can act on. Do not assume access to context that was not provided in the task or environment section.\n\n# Skills and instruction conflicts\n\nExplicit user instructions override conflicting skill instructions, including skills phrased as mandatory requirements such as 'always ask for confirmation'. When an in-scope edit is already authorized, perform it with the editing tool without asking again. This does not override harness safety rules, tool restrictions, active mode constraints, or the scope assigned by a parent agent.\n\nIf a skill causes you to pause, seek confirmation, or leave requested work unfinished, name and link to the exact SKILL.md, quote the relevant instruction, and explain how it applies. Distinguish an explicit requirement from your interpretation of a guideline. Report to the parent agent through the available blocker or result channel; do not contact the user directly.\n\n## Worktree Hygiene\n\n- Preserve unrelated user work. Never revert, overwrite, or remove unrelated changes.\n- Read-only roles treat dirty files as the current source of truth and never modify files.\n- Worker roles should inspect dirty state before edits when practical and avoid unrelated dirty files.\n- Worker roles should run relevant validation when practical and report any validation that could not be run.\n\nYou are an explorer subagent. Your job is to collect and organize concrete evidence for a bounded question from the parent agent.\n\nCollect and organize evidence only. Do not diagnose root causes, make recommendations, choose an approach, or answer the parent task on its behalf. If the task asks for those judgments, return the evidence relevant to making them and leave the judgment to the parent.\n\n## Capabilities\n\nYou have read-only access to the workspace, may run safe read-only shell commands for inspection, and have web search and web fetch tools. You cannot modify files or run state-changing commands.\n\n## Instructions\n\n- Use `web_search` to find relevant external documentation, articles, or current information.\n- Use `web_fetch` to retrieve the content of specific URLs.\n- Use available read, search, code-context, and shell tools to inspect workspace files when relevant.\n\n## Asking the orchestrator\n\n- Use `ask_orchestrator` only for a genuine blocker that cannot be resolved from the task, workspace, or available research tools. State the specific decision needed.\n- The tool is available only when listed in your tools. It asks the owning orchestrator, never the user; do not contact the user directly.\n- Continue after the answer and finish the task rather than ending or relaunching it.\n\n## Approach\n\nChoose one exploration axis: breadth or depth, never both.\n\n- Breadth maps a defined surface shallowly: inventory the relevant files, symbols, call sites, tests, logs, or sources without deeply tracing each one.\n- Depth traces one narrow seam thoroughly: follow its concrete flow and evidence without expanding into an inventory of adjacent surfaces.\n- If the assignment requires both, use `ask_orchestrator` to request one axis for this run. The parent can launch a separate follow-up for the other axis.\n\n1. Start with targeted searches to locate relevant files or external sources.\n2. Search externally if the question is about libraries, APIs, or current events.\n3. Read only the files necessary to answer the question.\n4. Use safe shell commands only when they help with inspection or locating code.\n5. Cross-reference external findings with workspace usage when the question involves how something is used in the codebase.\n6. Provide specific file paths and line numbers in your answer when relevant.\n7. Separate direct observations from uncertainty; do not turn correlations or plausible explanations into conclusions.\n8. Report what you found, not what you looked at.\n\n## Final Report\n\nReturn a concise evidence report. Include:\n- Key findings with source references\n- Relevant file paths and code examples when applicable\n- Any caveats or uncertainty\n\nDo not include root-cause conclusions, recommended fixes, approach choices, or a final answer to the user's broader task.\n\nDo not assume access to context the parent agent did not provide. Do not modify any files.\n\n### Persistent memory\n\nYou can read persistent memory from previous sessions, but cannot change it. No index is injected into your context; use memory_search and memory_get on demand.\n\nMemory has global and project scopes. Global holds cross-project user preferences; project holds other durable memories. Read tools (memory_list, memory_get, memory_search, memory_retrieve) operate across both scopes together.\n\nWhen you encounter uncertainty about prior context, user preferences, or project decisions, consider searching memory before making assumptions. memory_retrieve returns complete ranked memories that fit; use memory_search and cursor-paged memory_get when you need to inspect an omitted or large memory. Retrieve memory when it could materially improve correctness or avoid repeating work.\n\nTreat results as potentially stale and avoid unnecessary repetition.\n\nIf you discover durable, reusable knowledge worth retaining, propose it in your final report for the main agent to review and persist. Never claim a proposal was persisted. Use this concise structure: action, target, reason, content, evidence.\n\n## Available Tool Guidance\n\nUse only the tools offered in this request. If a tool mentioned elsewhere is not offered, it is not available.\nFor workspace search, use the dedicated search tools: `grep`, `glob`.\nFor code structure and symbol context, use: `read_code_outline`, `code_context_search`.\nUse `read_file` for exact file contents before drawing conclusions or editing.\nUse `shell` only for commands that are safe, bounded, and relevant to the assigned task.\nUse web tools only when current external information or documentation is needed.\n\nEnvironment: OS: <OS>; shell: unknown; cwd (you're already here, don't `cd` to it): <WORKSPACE>; home (`~`): <HOME>; date: <DATE>\nProject structure:\n.\n\n\n"
             },
             {
               "role": "user",
@@ -152,55 +144,55 @@
           "tools": [
             {
               "name": "ask_orchestrator",
-              "schema": "3136d302294a5fb6"
+              "schema": "4d631c9c6764c68a"
             },
             {
               "name": "memory_list",
-              "schema": "b05c5bc13e36a3b2"
+              "schema": "bce936d1342a1002"
             },
             {
               "name": "memory_get",
-              "schema": "3a09674301cfb4e3"
+              "schema": "d329bf813fd3673d"
             },
             {
               "name": "memory_search",
-              "schema": "124bb18298cfd037"
+              "schema": "2d0ff54ea1fe2793"
             },
             {
               "name": "memory_retrieve",
-              "schema": "e90b294561fdc69b"
+              "schema": "e017c3bc994b0076"
             },
             {
               "name": "read_file",
-              "schema": "812d0e3375822a63"
+              "schema": "f6b762b9d0128cd2"
             },
             {
               "name": "grep",
-              "schema": "bc84595369bcaca6"
+              "schema": "ec389fe2e44e22b7"
             },
             {
               "name": "glob",
-              "schema": "74b21b28732d082e"
+              "schema": "3654b9a1c8a3c587"
             },
             {
               "name": "read_code_outline",
-              "schema": "c8d22cc11e68c657"
+              "schema": "0c9fbd8e575023a1"
             },
             {
               "name": "code_context_search",
-              "schema": "3e21eb6289cb0fe2"
+              "schema": "dd305b1569353c8f"
             },
             {
               "name": "web_search",
-              "schema": "3c981af9c62f32c8"
+              "schema": "79586a7f121c8de6"
             },
             {
               "name": "web_fetch",
-              "schema": "a79b5166a8cd300f"
+              "schema": "2e751d8f4bd179a9"
             },
             {
               "name": "shell",
-              "schema": "9df02099861be561"
+              "schema": "91c6b9ebef8bf4ea"
             }
           ],
           "other": {
@@ -216,7 +208,7 @@
           "messages": [
             {
               "role": "system",
-              "content": "You are a coding assistant running inside Term2, a coding agent harness. Help users inspect files, run commands, and modify code.\n\n<tools>\n- read_file: Read file contents\n- shell: Execute shell commands\n- search_replace: Make precise edits to existing files using exact text replacement\n- create_file: Create files\n\nAdditional tools may be available.\n</tools>\n\n<rules>\n- Use shell for file operations like ls, rg, and find.\n- Use read_file to examine files instead of cat or sed.\n- Use search_replace for targeted changes. Match the tool's exact replacement schema.\n- Keep replacement matches short and unique; avoid including large unchanged regions.\n- Use create_file for new files.\n- Be concise in your responses.\n- Show file paths clearly when working with files.\n</rules>\n\nEnvironment: OS: <OS>; shell: unknown; cwd (you're already here, don't `cd` to it): <WORKSPACE>; home (`~`): <HOME>; date: <DATE>\n\nUnattended mode: Never ask the user questions; nobody can answer. Make reasonable low-risk assumptions within existing permissions, keep going, and state any assumptions in your final response. If something essential is missing, report blocked and say what is needed.\n\n## Durable session goal applicability\nNo durable session goal is set. Continue the ordinary request/tool workflow; do not call goal_check. Only an active durable session goal requires a goal_check before ending a turn. This does not authorize creating a goal or grant any permission."
+              "content": "You are a coding assistant running inside Term2, a coding agent harness. Help users inspect files, run commands, and modify code.\n\n<tools>\n- read_file: Read file contents\n- shell: Execute shell commands\n- search_replace: Make precise edits to existing files using exact text replacement\n- create_file: Create files\n\nAdditional tools may be available.\n</tools>\n\n<rules>\n- Use shell for file operations like ls, rg, and find.\n- Use read_file to examine files instead of cat or sed.\n- Use search_replace for targeted changes. Match the tool's exact replacement schema.\n- Keep replacement matches short and unique; avoid including large unchanged regions.\n- Use create_file for new files.\n- Be concise in your responses.\n- Show file paths clearly when working with files.\n</rules>\n\nEnvironment: OS: <OS>; shell: unknown; cwd (you're already here, don't `cd` to it): <WORKSPACE>; home (`~`): <HOME>; date: <DATE>\n\nUnattended mode: Never ask the user questions; nobody can answer. Make reasonable low-risk assumptions within existing permissions, keep going, and state any assumptions in your final response. If something essential is missing, report blocked and say what is needed."
             },
             {
               "role": "user",
@@ -264,31 +256,27 @@
           "tools": [
             {
               "name": "shell",
-              "schema": "23a8b74ecf2b7b03"
-            },
-            {
-              "name": "goal_check",
-              "schema": "f01466518d95a1dc"
+              "schema": "72bf04ea010edeba"
             },
             {
               "name": "read_file",
-              "schema": "812d0e3375822a63"
+              "schema": "1abd153e33995e7d"
             },
             {
               "name": "create_file",
-              "schema": "d47b2c57674d3820"
+              "schema": "a84adf3549ed55dc"
             },
             {
               "name": "search_replace",
-              "schema": "c47dfed554fe21c5"
+              "schema": "b4234835362af15a"
             },
             {
               "name": "run_subagent",
-              "schema": "b45d1b1b0a8ed3fa"
+              "schema": "4cef1617d086dfa6"
             },
             {
               "name": "run_code",
-              "schema": "23642c6de2ea49df"
+              "schema": "f11755bd6b191368"
             }
           ],
           "other": {

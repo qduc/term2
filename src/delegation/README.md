@@ -19,6 +19,42 @@ owns source-definition adaptation, local execution-context construction, and
 the bridge from physical invocation to native tool context; these are injected
 ports, not imports back into app.
 
+Tool descriptions are written for the root surface. Before a child's graph is
+wrapped, `withoutDeadToolReferences` (`subagents/dead-tool-references.ts`)
+deletes whole pointer clauses to the `run_code` script surface from a child
+whose final tool list lacks `run_code`, and the shell's pointer to
+`run_subagent` from a child that lacks `run_subagent`, so the child is not sent
+to a tool it cannot call. It reads the offered tool names, not the role, and
+never rewords or redirects; a pointer whose deletion would change the rest of
+its sentence stays as written.
+
+`buildInstructions` (`subagents/role-loader.ts`) applies the same rule to the
+shared prompt text, again from the offered tool names. Only a tool's absence
+counts as proof: an offered editor can still be denied every write (an
+agent_spec with `filesystem.write: []`, a read-only session), so no text is
+deleted because a tool was offered. A child offered any tool outside a fixed
+non-writing set (any editor, `shell`, `run_code`, `run_subagent`, or an unknown
+tool) is treated as possibly writing. A child that cannot write files loses the
+two Worktree Hygiene worker lines and the "or editing" in its `read_file`
+guidance, and, when it has no memory writer either, the skills section's
+"perform it with the editing tool" sentence. A child without `ask_orchestrator`
+(every foreground child, such as a reviewer's explorer) loses its role file's
+"Asking the orchestrator" section, up to the next `#` or `##` heading, except
+its "do not contact the user directly", which applies with or without the tool
+and is kept as the sentence "Do not contact the user directly.". Text that does
+not match is kept.
+
+These deletions run only on Term2-authored text, before it is joined with
+anything else: the two fragment files and a named role's role file
+(`instructionsSource: 'role-file'`, set only by `loadRoleDefinition`). An
+agent_spec child's instructions are its parent's constraints, completion
+criterion and context, and are sent exactly as written; project instructions
+and the skill catalog are never passed through a pattern either.
+`withoutDeadToolReferences` edits tool descriptions only, and every tool a child
+can be offered has a Term2-authored description (the child factory builds no MCP
+tools); offering a child a tool with external description text would need that
+function to skip it.
+
 Filesystem scope checks use the execution context's workspace root, or the
 active session root when no execution context is available. The resolver takes
 that root explicitly and resolves symlinks before comparing paths, so concurrent

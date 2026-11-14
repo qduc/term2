@@ -137,7 +137,7 @@ and targeted edits, and the shell for searches and commands. Its tool list and
 rules follow the effective read, write, shell, and patch/editor surface rather
 than advertising tools disabled by settings or authority.
 
-The remaining model-facing tools include the shell, `goal_check` (root sessions), `run_code`, and, in interactive
+The remaining model-facing tools include the shell, `goal_check` (root sessions, once the session has had a goal), `run_code`, and, in interactive
 sessions, `session_rollover`, which scripts cannot call.
 The frozen provider surface omits Bare's proposed `ask_mentor`, `ask_user`,
 and `enter_worktree`/`exit_worktree` add-backs; see [the merge decision](lite-bare-merge.md).
@@ -156,7 +156,8 @@ checks or failure evidence. The
 [token-efficiency measurements](../research/bare-token-efficiency-20261024.md)
 record the tested scope, failures, and limits rather than promise a universal gain.
 
-Root sessions also expose `goal_check`. A supplied `--goal` uses the existing
+Root sessions expose `goal_check` once the session has had a goal (see
+[durable goal](../plans/agent-runtime/durable-goal.md)). A supplied `--goal` uses the existing
 request-time goal context, stop checks, and configured completion verification.
 Bare does not waive required review. Ordinary replies without an active goal do
 not trigger goal verification. When required review cannot run through the

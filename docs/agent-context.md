@@ -24,6 +24,7 @@ Read the relevant documents before touching these areas, starting with **Resume 
 - **Personal memory context:** [Automatic project-scoped summaries](reference/personal-memory-context.md)
 - **Session retrieval UX:** [Observed usage](research/session-retrieval-observed-usage.md), [seek/tail cell](research/session-retrieval-seek-cell.md), [paired protocol](research/session-retrieval-paired-protocol.md), and [cursor format](plans/context-and-memory/memory-progressive-disclosure.md)
 - **Modes:** [Profile architecture](profiles/README.md)
+- **Fixed request prefix:** [Snapshot 2026-11-13](research/fixed-prefix-report-2026-11-13.md) of system prompt and tool sizes per scenario; regenerate with `pnpm prefix:report`
 - **Model/effort step-down:** [Benchmark](plans/providers/model-effort-step-down-benchmark.md) and [cache economics](research/model-effort-step-down-cache-economics.md)
 - **Audited tests:** [Test suite audit](plans/engineering/test-suite-audit.md) — historical; most audited files and `docs/test-audit/` were removed with the unit suite (tags `unit-suite-baseline` / `3eb16591`)
 - **Service contracts:** [Boundary completion](plans/engineering/service-boundary-contract-completion.md) and [contracts](contracts/)

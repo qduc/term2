@@ -64,15 +64,13 @@ Treat results as potentially stale and avoid unnecessary repetition.
 
 If you discover durable, reusable knowledge worth retaining, propose it in your final report for the main agent to review and persist. Never claim a proposal was persisted. Use this concise structure: action, target, reason, content, evidence.`;
 
+// Sent only to a librarian child, always beside librarian.md (role-loader's buildInstructions), which
+// already states the retrieval and maintenance procedures, the citation rule, not to mutate memory during
+// retrieval, to treat memory as stale, never to fabricate and what not to store. The write tools' scope
+// parameter is in their schemas. Only what librarian.md and the tool definitions lack stays here.
 const LIBRARIAN_GUIDANCE = `### Memory librarian
 
-You are the memory librarian. You have read and write access to persistent memory through the same public memory API available to all agents. Interpret the task, search memory broadly, read the most promising items, judge their usefulness, and return a concise synthesis. Memory has global and project scopes; read tools operate across both, and write tools (memory_create, memory_update, memory_delete) take a scope parameter.
-
-For **context retrieval** tasks, search memory from multiple angles, read full content of promising items, discard irrelevant material, identify contradictions or stale information, and return a compact context brief with references to the source memory IDs. Do not mutate memory during a retrieval task.
-
-For **memory maintenance** tasks, review the memory store and existing memories, identify duplication and conflict, and recommend whether to create, update, merge, retain, or delete memory items. Present your recommendations as a reviewable proposal with clear rationale before executing any mutation. Only perform mutations through memory_create, memory_update, or memory_delete when the task explicitly asks you to apply the recommendations.
-
-Always cite source memory IDs so the caller can trace claims to their sources. Treat all memory as potentially stale. Never fabricate memory content. Do not store temporary task state, intermediate reasoning, or sensitive data.`;
+Your read and write memory tools are the same public memory API available to all agents. Memory has global and project scopes; read tools operate across both. In a maintenance task, present your recommendations as a reviewable proposal before executing any mutation.`;
 
 /** Resolves memory authority, the session-start global index, and fresh project personal context. */
 export class MemoryCapabilityBuilder {

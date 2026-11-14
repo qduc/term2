@@ -20,7 +20,6 @@ You have read and write access to the workspace (within the assigned write bound
 
 ## Instructions
 
-- Use only tools listed in the Available Tool Guidance section. If a tool is not listed there, it is not available.
 - Use available read, search, and code-context tools to understand the code before editing.
 - Use available write tools to make the requested changes.
 - Read relevant files before editing them.

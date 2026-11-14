@@ -4,6 +4,7 @@ import type { Item, ItemId, ModelRequest } from '../model/index.js';
 import type { Tool, ToolRegistry } from '../tools/index.js';
 import type { Fact, FactLine } from './facts.js';
 import {
+  goalEverSet,
   planDirectInstructions,
   startsDirectHumanWindow,
   planDirectHumanContext,
@@ -17,6 +18,8 @@ import type { DirectMemoryCapability, DirectAutomaticMemoryNotice } from './memo
 import type { createDirectHooks, DirectHookAcceptedMetadata } from './hooks.js';
 import { createDirectRolloverTool, type DirectRolloverRequestOutcome } from './rollover.js';
 import type { DirectBackgroundTasks } from './background.js';
+
+const GOAL_TOOLS: ReadonlySet<string> = new Set(['propose_goal', 'goal_check']);
 
 export type DirectContextPort = {
   readonly sessionId: string;
@@ -98,8 +101,10 @@ export function bindDirectCapabilities(options: {
       capabilities.memory,
     );
     const bound: Tool[] = [...(capabilities.memory?.tools ?? [])];
-    // Visibility is stable across goal changes; execution rejects an inactive goal.
-    bound.push(createDirectGoalCheckTool({ requestGoal, readGoal: () => options.read().goal }));
+    // Absent until this session first has a goal, then stable across every later
+    // change, including clearing; execution rejects an inactive goal.
+    if (goalEverSet(requestGoal))
+      bound.push(createDirectGoalCheckTool({ requestGoal, readGoal: () => options.read().goal }));
     if (capabilities.modelRollover !== false && options.canRollover?.())
       bound.push(
         createDirectRolloverTool((request) =>
@@ -141,13 +146,10 @@ export function bindDirectCapabilities(options: {
       const memoryNames = memory.map((tool) => tool.spec.name);
       const rollover = overrides.get('session_rollover');
       if (rollover) insertAfter([...slots.beforeRollover, ...memoryNames], [rollover]);
-      const namesBeforeGoal = [...slots.beforeGoal, ...memoryNames, ...(rollover ? ['session_rollover'] : [])];
-      const goalTools = ['propose_goal', 'goal_check'].flatMap((name) => {
-        const tool = overrides.get(name);
-        return tool ? [tool] : [];
-      });
-      insertAfter(namesBeforeGoal, goalTools);
-    } else ordered.push(...bound.map((tool) => tool.spec));
+    } else ordered.push(...bound.filter((tool) => !GOAL_TOOLS.has(tool.spec.name)).map((tool) => tool.spec));
+    // Goal tools go last. goal_check first appears mid-session, when a goal is first set; appending it
+    // leaves every earlier tool definition byte-identical, so the provider's cached tool prefix survives.
+    ordered.push(...bound.filter((tool) => GOAL_TOOLS.has(tool.spec.name)).map((tool) => tool.spec));
     return { request: { ...request, instructions, tools: ordered }, tools };
   };
 

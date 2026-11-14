@@ -118,6 +118,7 @@ export function loadRoleDefinition(role: SubagentRole, settings: ISettingsServic
     role,
     name: frontmatter.name ?? role,
     instructions: body,
+    instructionsSource: 'role-file',
     canRead: frontmatter.canRead ?? false,
     canWrite: frontmatter.canWrite ?? false,
     canSearchWeb: frontmatter.canSearchWeb ?? false,
@@ -154,18 +155,129 @@ export function resolveSubagentSearchViaShell(settings: ISettingsService, canRun
   return settings.get('app.searchViaShell') === 'on' && canRunShell;
 }
 
+/**
+ * Tools that cannot change workspace files. A child offered only these
+ * provably cannot write files. Any other tool counts as possibly writing:
+ * `shell` (a writable generic child's shell can edit), `run_code`,
+ * `run_subagent`, and tools added later.
+ */
+const NON_FILE_WRITING_TOOLS: ReadonlySet<string> = new Set([
+  'read_file',
+  'grep',
+  'glob',
+  'read_code_outline',
+  'code_context_search',
+  'web_search',
+  'web_fetch',
+  'memory_list',
+  'memory_get',
+  'memory_search',
+  'memory_retrieve',
+  'memory_create',
+  'memory_update',
+  'memory_delete',
+  'session_list',
+  'session_search',
+  'session_read',
+  'ask_orchestrator',
+  'activate_skill',
+  // Starts a read-only explorer.
+  'run_explorer',
+]);
+/** Write to persistent memory: an edit, though not to workspace files. */
+const MEMORY_WRITE_TOOLS: ReadonlySet<string> = new Set(['memory_create', 'memory_update', 'memory_delete']);
+
+/**
+ * What a child provably cannot do, read from its final offered tool names (never its role).
+ * Only absence is proof: an offered editor can still be denied every write (an empty write scope,
+ * a read-only session), so no text is deleted because a tool was offered.
+ */
+function writeCapability(toolNames: readonly string[]) {
+  const cannotWriteFiles = toolNames.every((name) => NON_FILE_WRITING_TOOLS.has(name));
+  return {
+    cannotWriteFiles,
+    /** Nothing to edit with at all: no file writer and no memory writer. */
+    cannotEdit: cannotWriteFiles && !toolNames.some((name) => MEMORY_WRITE_TOOLS.has(name)),
+  };
+}
+
+/** Addressed to a child that has an editing tool; deleted when it has nothing to edit with. */
+const EDITING_TOOL_SENTENCE =
+  'When an in-scope edit is already authorized, perform it with the editing tool without asking again. ';
+/**
+ * Base-prompt wording about using tools, and its replacement for a child offered no tools at all (the
+ * mentor). Each pair names an exact Term2 base-prompt phrase; a phrase that is not found is left as written.
+ */
+const TOOL_USE_BASE_PHRASES: readonly (readonly [string, string])[] = [
+  ['use the available tools deliberately, ', ''],
+  ['accurate synthesis, careful tool use, and concise reporting', 'accurate synthesis and concise reporting'],
+];
+/** The Worktree Hygiene lines addressed to worker roles. */
+const WORKER_AUDIENCE_LINE = /^- Worker roles .*(?:\r?\n|$)/gm;
+/** Runs to the next `#` or `##` heading (a `###` is a subsection of it) or the end of the file. */
+const ASK_ORCHESTRATOR_SECTION = /^## Asking the orchestrator\r?\n[\s\S]*?(?=^#{1,2} |(?![\s\S]))/m;
+/** The section's one rule that is not about the tool; it survives the section's deletion. */
+const NO_DIRECT_USER_CONTACT = /\bdo not contact the user directly\b/i;
+
+/** Deletes the `ask_orchestrator` section but keeps its standalone "do not contact the user directly". */
+function withoutAskOrchestratorSection(roleFile: string): string {
+  return roleFile.replace(ASK_ORCHESTRATOR_SECTION, (section) =>
+    NO_DIRECT_USER_CONTACT.test(section) ? 'Do not contact the user directly.\n\n' : '',
+  );
+}
+
+/**
+ * Shared prompt text is written for every child. Delete only the parts
+ * addressed to a capability this child's offered tools provably lack; never
+ * reword, except that a deleted "Asking the orchestrator" section leaves its
+ * "do not contact the user directly" standing as one sentence. Unrecognised
+ * text is left as written.
+ *
+ * Every input is Term2-authored: the two fragment files, and a named role's
+ * own role file (`roleFile`). Text a parent or user wrote (an agent_spec's
+ * constraints, completion criterion and context, project instructions, the
+ * skill catalog) is never passed here, so no pattern can match inside it.
+ */
+function withoutDeadAudienceText(
+  text: { skillConflicts: string; worktreeHygiene: string; roleFile: string | undefined },
+  toolNames: readonly string[],
+) {
+  const capability = writeCapability(toolNames);
+  return {
+    skillConflicts: capability.cannotEdit
+      ? text.skillConflicts.replace(EDITING_TOOL_SENTENCE, '')
+      : text.skillConflicts,
+    // A child that cannot write files is not a worker.
+    worktreeHygiene: capability.cannotWriteFiles
+      ? text.worktreeHygiene.replace(WORKER_AUDIENCE_LINE, '').trimEnd()
+      : text.worktreeHygiene,
+    // The section is about the ask_orchestrator tool, which a foreground child is not offered,
+    // except for "do not contact the user directly", which still applies to that child.
+    roleFile:
+      text.roleFile === undefined || toolNames.includes('ask_orchestrator')
+        ? text.roleFile
+        : withoutAskOrchestratorSection(text.roleFile),
+  };
+}
+
 function buildAvailableToolGuidance(
   toolDefinitions: readonly Pick<AnyToolDefinition, 'name'>[],
   searchViaShell: boolean,
 ): string {
   const toolNames = toolDefinitions.map((tool) => tool.name);
   const hasTool = (name: string) => toolNames.includes(name);
+  // The offered tools are the request's tool definitions; they are not listed again here.
+  if (toolNames.length === 0) {
+    return [
+      '## Available Tool Guidance',
+      '',
+      'No tools are offered in this run, so any tool mentioned elsewhere is not available. Use provided context where possible.',
+    ].join('\n');
+  }
   const lines = [
     '## Available Tool Guidance',
     '',
-    `Registered tools: ${toolNames.length > 0 ? toolNames.map((name) => `\`${name}\``).join(', ') : 'none'}.`,
-    '',
-    'Use only these tools. If a tool mentioned elsewhere is not listed here, it is not available.',
+    'Use only the tools offered in this request. If a tool mentioned elsewhere is not offered, it is not available.',
   ];
 
   if (searchViaShell && hasTool('shell')) {
@@ -178,18 +290,27 @@ function buildAvailableToolGuidance(
     const searchTools = ['grep', 'glob'].filter(hasTool).map((name) => `\`${name}\``);
     lines.push(`For workspace search, use the dedicated search tools: ${searchTools.join(', ')}.`);
   } else {
-    lines.push('No dedicated workspace search tool is available. Use `read_file` and provided context where possible.');
+    // Name `read_file` only for a child that was actually offered it.
+    lines.push(
+      `No dedicated workspace search tool is available. Use ${
+        hasTool('read_file') ? '`read_file` and ' : ''
+      }provided context where possible.`,
+    );
   }
 
   if (hasTool('read_code_outline') || hasTool('code_context_search')) {
     const codeContextTools = ['read_code_outline', 'code_context_search'].filter(hasTool).map((name) => `\`${name}\``);
     lines.push(`For code structure and symbol context, use: ${codeContextTools.join(', ')}.`);
-  } else {
-    lines.push('Code-context tools are not available in this run.');
   }
+  // No "not available" line without them: the first line already says a tool not offered is not available.
 
   if (hasTool('read_file')) {
-    lines.push('Use `read_file` for exact file contents before drawing conclusions or editing.');
+    // "or editing" only for a child that may be able to write files.
+    lines.push(
+      `Use \`read_file\` for exact file contents before drawing conclusions${
+        writeCapability(toolNames).cannotWriteFiles ? '' : ' or editing'
+      }.`,
+    );
   }
   if (hasTool('shell')) {
     lines.push('Use `shell` only for commands that are safe, bounded, and relevant to the assigned task.');
@@ -219,8 +340,23 @@ export function buildInstructions(
   const cwd = executionContext?.getCwd() ?? process.cwd();
   const agentsInstructions = executionContext?.isRemote() ? '' : getAgentsInstructions(cwd);
 
-  const modelPrompt = resolvePrompt(path.join(PROMPTS_DIR, selectSubagentBasePromptFile(definition.model)));
-  const worktreeHygiene = resolvePrompt(path.join(PROMPTS_DIR, 'worktree-hygiene.md'));
+  const basePrompt = resolvePrompt(path.join(PROMPTS_DIR, selectSubagentBasePromptFile(definition.model)));
+  // A child with no tools has nothing to use deliberately or carefully.
+  const modelPrompt =
+    toolDefinitions.length === 0
+      ? TOOL_USE_BASE_PHRASES.reduce((text, [phrase, replacement]) => text.replace(phrase, replacement), basePrompt)
+      : basePrompt;
+  // A named role's instructions are its Term2 role file; any other definition's (an agent_spec
+  // child's) were written by its parent and stay exactly as written.
+  const roleFile = definition.instructionsSource === 'role-file' ? definition.instructions : undefined;
+  const shared = withoutDeadAudienceText(
+    {
+      skillConflicts: resolvePrompt(path.join(BASE_PROMPT_PATH, 'fragments/skill-instruction-conflicts.md')),
+      worktreeHygiene: resolvePrompt(path.join(PROMPTS_DIR, 'worktree-hygiene.md')),
+      roleFile,
+    },
+    toolDefinitions.map((tool) => tool.name),
+  );
   const toolGuidance = buildAvailableToolGuidance(toolDefinitions, searchViaShell);
   const memoryCapability = executionContext?.isRemote()
     ? undefined
@@ -247,9 +383,9 @@ export function buildInstructions(
 
   return [
     modelPrompt,
-    resolvePrompt(path.join(BASE_PROMPT_PATH, 'fragments/skill-instruction-conflicts.md')),
-    worktreeHygiene,
-    definition.instructions,
+    shared.skillConflicts,
+    shared.worktreeHygiene,
+    shared.roleFile ?? definition.instructions,
     memoryCapability?.guidance,
     memoryCapability?.context,
     toolGuidance,

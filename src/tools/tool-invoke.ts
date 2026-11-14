@@ -397,9 +397,10 @@ export const runToolInputDiagnostics = (toolName: string, schema: z.ZodTypeAny, 
         }
         return `${field} ${msg}`;
       });
-      const feedback = `Tool input did not match schema for ${toolName}: ${issues.join(
-        '; ',
-      )}. ${describeValidationInput(parsedInput)} Retry with valid JSON arguments.`;
+      const issueText = issues.join('; ');
+      const feedback = `Tool input did not match schema for ${toolName}: ${issueText}${
+        issueText.endsWith('.') ? '' : '.'
+      } ${describeValidationInput(parsedInput)} Retry with valid JSON arguments.`;
       return truncateValidationText(feedback, MAX_VALIDATION_FEEDBACK_CHARS);
     }
   }

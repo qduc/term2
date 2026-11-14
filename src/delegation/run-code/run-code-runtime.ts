@@ -29,6 +29,8 @@ import {
   validateScriptedReturn,
 } from '../../tools/scripted-return-contract.js';
 import type { AgentSpecAuthoritySnapshot } from '../../session/agent-runtime/permission-boundary.js';
+import { trackNestedCalls } from './run-code-call-context.js';
+import { createUnknownToolHints, unknownToolMessage } from './run-code-unknown-tool-hints.js';
 import {
   createRunCodeAgentCapability,
   isRunCodeAgentBridgeActive,
@@ -52,7 +54,6 @@ export type {
 } from '../../tools/system/run-code/run-code-runtime-contract.js';
 
 import {
-  TOOL_NAME_RUN_CODE,
   TOOL_NAME_DESCRIBE,
   RUN_CODE_LIMITS,
   RUN_CODE_PROHIBITED_TOOLS,
@@ -109,35 +110,6 @@ const parseActionPayload = (raw: unknown): unknown => {
 const MAX_RECEIPT_REASON_CHARS = 280;
 export const clipReason = (reason: string): string =>
   reason.length <= MAX_RECEIPT_REASON_CHARS ? reason : `${reason.slice(0, MAX_RECEIPT_REASON_CHARS)}…`;
-
-function createUnknownToolHints(
-  allTools: ToolRegistry,
-  directToolNames: readonly string[],
-): Readonly<Record<string, string>> {
-  const names = new Set(allTools.map((tool) => tool.name));
-  const hints = Object.create(null) as Record<string, string>;
-  for (const name of directToolNames) {
-    if (name !== TOOL_NAME_RUN_CODE && RUN_CODE_PROHIBITED_TOOLS.has(name))
-      hints[name] = 'This is a direct tool; call it outside run_code instead.';
-  }
-  if (names.has('apply_patch')) {
-    for (const name of ['create_file', 'search_replace']) {
-      if (!names.has(name)) hints[name] = 'Use apply_patch instead (use *** Add File: to create a file).';
-    }
-  }
-  if (!names.has('apply_patch') && (names.has('create_file') || names.has('search_replace'))) {
-    hints.apply_patch = `This tool is unavailable; use ${['create_file', 'search_replace']
-      .filter((name) => names.has(name))
-      .join(' or ')} instead.`;
-  }
-  return hints;
-}
-
-function unknownToolMessage(name: string, registry: ToolRegistry, hints: Readonly<Record<string, string>>): string {
-  const available = registry.map((entry) => entry.name).join(', ');
-  const hint = Object.hasOwn(hints, name) ? ` ${hints[name]}` : '';
-  return `Unknown tool "${name}". Available: ${available}.${hint}`;
-}
 
 export function describeTool(tool: AnyToolDefinition): JsonValue {
   let parameters: JsonValue;
@@ -1028,6 +1000,7 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
       },
     };
 
+    const nestedCalls = trackNestedCalls(tools, bridgeRunId);
     const capabilities: Record<string, CapabilityHandler<any>> = { tools };
     if (options.agentBridge && options.agentSpecAuthority && isRunCodeAgentBridgeActive(options.agentBridge)) {
       capabilities.agent = createRunCodeAgentCapability(
@@ -1141,7 +1114,7 @@ export function createRunCodeRuntime(options: RunCodeRuntimeOptions) {
     const attachments: RunCodeAttachment[] = [];
     const execution = createRunCodeExecution(
       resolvedResult,
-      calls,
+      nestedCalls.annotate(calls),
       receipts,
       consoleValues,
       attachments,

@@ -156,8 +156,8 @@ export async function renderFailureSections(
   const listing = await describeCalls(calls, failingPosition ? Number(failingPosition) : undefined);
   return [
     fanOut
-      ? `${headline}\nThe script stopped at this rejection. The other calls' results are listed below; ` +
-        "Promise.allSettled keeps every call's result when one rejects, while Promise.all drops them."
+      ? `${headline}\nThe script stopped at this rejection. The other calls' results are listed below. ` +
+        'To continue past a failed call, catch it with try/catch; for calls run together, Promise.allSettled keeps every result where Promise.all drops them.'
       : headline,
     ...(listing ? [listing] : []),
   ];

@@ -272,6 +272,30 @@ it('a bounded read_file result states the spooled file total and makes no wrong 
   expect(run.toolResults[0]).not.toMatch(/lines \d+-\d+ of \d+ trimmed/);
 });
 
+it('search_replace gives no nearest-line hint for a file beyond the scan budget, rather than a partial answer', async () => {
+  const filler = Array.from({ length: 60000 }, (_, i) => `filler line number ${i} with some padding text`).join('\n');
+  // The real line sits after the first 1.5M characters; a truncated scan would call it absent or pick a wrong line.
+  const big = `${filler}\nconst target_value = computeThing(alpha, beta);\n`;
+  const started = Date.now();
+  const run = await runScriptedToolCalls({
+    files: { 'big.txt': big },
+    calls: [
+      [
+        'search_replace',
+        {
+          path: 'big.txt',
+          replacements: [{ search_content: 'const target_value = computeThing(alpha, bet);', replace_content: 'x' }],
+        },
+      ],
+    ],
+  });
+  expect(run.exitCode, run.stderr + run.stdout).toBe(0);
+  expect(run.toolResults[0]).toContain('Search content not found.');
+  expect(run.toolResults[0]).not.toContain('closest is');
+  expect(run.toolResults[0]).not.toContain('no similar line');
+  expect(Date.now() - started).toBeLessThan(15000);
+});
+
 it.skipIf(process.platform !== 'linux')(
   'regression guard: the approval prompt shows the flat search_replace form like the array form',
   async () => {

@@ -748,8 +748,8 @@ export function diagnoseContextMismatch(contextText: string, original: string, c
 
     if (matchIndices.length === 0) {
       // Only the first reports are shown, so only they pay for a nearest-line search.
-      const nearest =
-        closestHints && reports.length < 5 ? `; ${describeClosestLine(trimmedContext, originalLines)}` : '';
+      const hint = closestHints && reports.length < 5 ? describeClosestLine(trimmedContext, originalLines) : '';
+      const nearest = hint ? `; ${hint}` : '';
       reports.push(`- Line ${i + 1}: "${trimmedContext}" could not be found anywhere in the file${nearest}.`);
     } else {
       // Check if ANY of the matches in the original file are exact matches (including indentation)

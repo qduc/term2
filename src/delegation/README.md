@@ -113,6 +113,11 @@ is kept now:
   `run_code` `agent.run`) get a `failed` result naming the run and saying its
   result arrives as a background notification; before, they got an internal
   "Expected a subagent result" error.
+- Resume: a background child's completion notification stays in the history a
+  resumed session replays, at the position the live session had it; a child the
+  process lost is reported to the model as interrupted with its outcome
+  unobserved, never as a result (`src/session/README.md`, "Background notices
+  across reopen").
 - Approvals: a foreground child's approval is a task interaction the client
   answers (the TUI prompts; headless applies its policy), not an `interrupted`
   result. A background child still cannot ask and fails at such a call.

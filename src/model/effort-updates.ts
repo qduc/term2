@@ -10,6 +10,11 @@
  * the value the conversation started with; each supported adapter renders the
  * marker natively and every other path gets the effective effort back as the
  * top-level value with the marker removed (`withoutEffortUpdates`).
+ *
+ * Off by default (`agent.cachePreservingEffort`): none of the direct endpoints
+ * (OpenAI, Codex, Anthropic first-party) has been probed on real traffic; the
+ * mechanisms were measured through OpenRouter only. An endpoint that rejects a
+ * marker turns the mechanism off for the rest of the session (`provider.ts`).
  */
 import type { Item, Model, ReasoningEffort } from './index.js';
 import type { StreamedModelTurnInput } from './streamed-model-turn.js';
@@ -21,10 +26,11 @@ export const CACHE_SAFE_EFFORT_LEVELS: readonly ReasoningEffort[] = ['low', 'med
 
 /**
  * OpenAI models that take a `configuration_update` input item on the Responses
- * API. The family is "GPT-6 and later"; these are the GPT-6 ids in the model
- * catalogue (`model-catalog/catalog.generated.ts`, openai and codex). GPT-6 Luna
- * and GPT-6.1 Terra were measured; the others are listed from the family rule.
- * GPT-5.6 and earlier break the cache on any effort change and are not listed.
+ * API: the GPT-6 ids in the direct model catalogue (`catalog.generated.ts`,
+ * openai and codex). Only gpt-6-luna was measured (through OpenRouter on Azure);
+ * gpt-6.1-terra was also measured there but is not in the direct catalogue.
+ * astra, sol and 6.1-sol are enabled from the documented "GPT-6 and later" rule
+ * only. GPT-5.6 and earlier break the cache on any effort change.
  */
 const CONFIGURATION_UPDATE_MODELS: ReadonlySet<string> = new Set([
   'gpt-6-astra',
@@ -39,13 +45,35 @@ export function supportsConfigurationUpdate(model: string): boolean {
 
 /**
  * Claude models whose per-message effort (beta `mid-conversation-output-config-2026-07-01`)
- * term2 can use: the docs list Fable 5.1/5.2, Mythos 5.1/5.2, Opus 5/5.5, Sonnet 5.5 and
+ * term2 can use. Only claude-haiku-5-5 was measured (OpenRouter /messages, Anthropic
+ * upstream); claude-sonnet-5-5 is enabled from the docs. The docs list the docs list Fable 5.1/5.2, Mythos 5.1/5.2, Opus 5/5.5, Sonnet 5.5 and
  * Haiku 5.5, thinking on (adaptive) only. Term2 sends adaptive thinking only to Haiku and
  * Sonnet 5.5 (`ai-sdk-anthropic.provider.ts`); the others get a token budget, which the
  * per-message form does not accept. Extend both lists together.
  */
 export function supportsPerMessageEffort(model: string): boolean {
   return /^claude-(?:haiku|sonnet)-5-5(?:-|$)/.test(model);
+}
+
+/** `agent.cachePreservingEffort`: which endpoints may receive markers. */
+export type EffortUpdateScope = 'first-party' | 'any-endpoint';
+
+export function effortUpdateScope(value: unknown): EffortUpdateScope | undefined {
+  return value === 'first-party' || value === 'any-endpoint' ? value : undefined;
+}
+
+/** The provider's own host (an unset base URL means its default), or any endpoint when the scope allows. */
+export function endpointInScope(
+  baseUrl: string | undefined,
+  firstPartyHost: string,
+  scope: EffortUpdateScope,
+): boolean {
+  if (scope === 'any-endpoint' || !baseUrl) return true;
+  try {
+    return new URL(baseUrl).hostname === firstPartyHost;
+  } catch {
+    return false;
+  }
 }
 
 /** Model property set by the provider registry for models that can take markers. */
@@ -84,3 +112,9 @@ export function withoutEffortUpdates(
   const effective = (lastEffortUpdate(input) ?? carried ?? reasoning) as ReasoningEffort | undefined;
   return { input: input.filter((item) => !isEffortUpdateItem(item)), reasoning: effective };
 }
+
+/**
+ * `providerMetadata` key on a response that the registry retried without markers after the
+ * endpoint refused them. Session reads it from the log and stops sending markers.
+ */
+export const EFFORT_UPDATES_REJECTED = 'term2EffortUpdatesRejected';

@@ -9,8 +9,6 @@ export type CustomProviderConfig = {
   type?: string;
   baseUrl?: string;
   apiKey?: string;
-  /** Per-message effort opt-in for an Anthropic-format endpoint (`effort-updates.ts`). */
-  perMessageEffort?: boolean;
 };
 
 export type CustomProviderRuntimeDeps = {

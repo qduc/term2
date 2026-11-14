@@ -21,6 +21,7 @@ export const SETTINGS_SOURCE_KEYS = {
     cheapReasoningEffort: 'agent.cheapReasoningEffort',
     choreModel: 'agent.choreModel',
     reasoningEffort: 'agent.reasoningEffort',
+    cachePreservingEffort: 'agent.cachePreservingEffort',
     temperature: 'agent.temperature',
     backgroundWaitTimeoutMs: 'agent.backgroundWaitTimeoutMs',
     maxTurns: 'agent.maxTurns',

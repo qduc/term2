@@ -18,6 +18,8 @@ import { ConversationJournal, modelError } from './conversation-journal.js';
 import { isDirectHumanOrigin } from './origin.js';
 import { directPreviewConfiguration } from './preview.js';
 import { planDirectTiming } from './time-gap.js';
+import { effortFallbackNotice } from './effort-timeline.js';
+import { isEffortUpdateItem } from '../model/effort-updates.js';
 
 /** Accept raw admission and memory facts before engine construction; timing is model-only. */
 export function admitConversationTurn(
@@ -127,7 +129,7 @@ export function ownConversationTurn(
       // Live settlement knows the handle has drained, unlike crash recovery.
       // Preserve known outcomes and distinguish unadmitted calls from possible effects.
       const repairs = journal.settledReplay().recoveryFacts.filter((fact) => fact.type !== 'turn_ended');
-      const ended = terminalFact(turnId, outcome);
+      const ended = withFallbackNotice(terminalFact(turnId, outcome), effortFallbackNotice(journal.facts, turnId));
       journal.commit([...repairs, ended]);
     }
     terminal = journal.failure ? { kind: 'failed', error: journal.failure } : outcome;
@@ -369,7 +371,13 @@ export function factFor(
       return { ...event, turnId };
     case 'history_replaced':
       // Legacy leaves the shown transcript as it was after a compaction; only provider context is replaced.
-      return { ...event, turnId, ...(event.reason === 'compaction' ? { retainTranscript: true as const } : {}) };
+      // Effort markers are derived per turn (effort-timeline.ts) and never become durable history.
+      return {
+        ...event,
+        history: event.history.filter((item) => !isEffortUpdateItem(item)),
+        turnId,
+        ...(event.reason === 'compaction' ? { retainTranscript: true as const } : {}),
+      };
     case 'usage':
       return {
         type: 'usage',
@@ -395,6 +403,13 @@ export function factFor(
     default:
       return null;
   }
+}
+
+function withFallbackNotice(
+  ended: Extract<Fact, { type: 'turn_ended' }>,
+  notice: string | undefined,
+): Extract<Fact, { type: 'turn_ended' }> {
+  return notice ? { ...ended, notice: ended.notice ? `${ended.notice}\n\n${notice}` : notice } : ended;
 }
 
 export function terminalFact(turnId: TurnId, result: TurnResult): Extract<Fact, { type: 'turn_ended' }> {

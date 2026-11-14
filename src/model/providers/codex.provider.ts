@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { registerProvider } from './registry.js';
-import { CACHE_SAFE_EFFORT_LEVELS, supportsConfigurationUpdate } from '../effort-updates.js';
+import { CACHE_SAFE_EFFORT_LEVELS, endpointInScope, supportsConfigurationUpdate } from '../effort-updates.js';
 import type { ProviderDeps, ProviderFetch } from './registry.js';
 import { createProviderFetch } from './fetch/composer.js';
 import type { FetchMiddleware } from './fetch/compose.js';
@@ -501,7 +501,10 @@ registerProvider(
     fetchModels: fetchCodexModels,
     clearConversations: undefined,
     sensitiveSettingKeys: [],
-    effortUpdateLevels: (model) => (supportsConfigurationUpdate(model) ? CACHE_SAFE_EFFORT_LEVELS : undefined),
+    effortUpdateLevels: (model, scope) =>
+      supportsConfigurationUpdate(model) && endpointInScope(process.env.CODEX_BASE_URL, 'chatgpt.com', scope)
+        ? CACHE_SAFE_EFFORT_LEVELS
+        : undefined,
     capabilities: CODEX_CAPABILITIES,
   },
   { builtin: true },

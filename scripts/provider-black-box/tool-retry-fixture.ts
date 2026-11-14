@@ -125,3 +125,106 @@ export async function runScriptedToolCalls(options: {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
 }
+
+/**
+ * Interactive variant: the scripted model issues `calls` in the real TUI (approvals on, sandbox off),
+ * and the screen is returned once each call's approval prompt shows `awaitText`.
+ */
+export async function captureApprovalPrompts(options: {
+  files?: Readonly<Record<string, string>>;
+  calls: readonly ScriptedToolCall[];
+  /** Text that identifies a rendered prompt for the call at the same index. */
+  awaitText: readonly string[];
+  prompt?: string;
+}): Promise<string[]> {
+  const { createIsolatedWorkspaceLease, writePtyTextAndSubmit } = await import('./provider-test-harness.js');
+  const { testCliPath } = await import('../../tests/helpers/terminal-e2e.js');
+  let served = 0;
+  const server = createServer(async (req, res) => {
+    if (req.method === 'GET') {
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ data: [] }));
+      return;
+    }
+    for await (const chunk of req) void chunk;
+    served++;
+    const next = options.calls[served - 1];
+    const delta = next
+      ? {
+          tool_calls: [
+            {
+              index: 0,
+              id: `call-${served}`,
+              type: 'function',
+              function: { name: next[0], arguments: JSON.stringify(next[1]) },
+            },
+          ],
+        }
+      : { content: 'DONE' };
+    res.writeHead(200, { 'content-type': 'text/event-stream' });
+    res.end(
+      `data: ${JSON.stringify({
+        id: `response-${served}`,
+        object: 'chat.completion.chunk',
+        model: 'meta/muse-ember',
+        choices: [{ index: 0, delta, finish_reason: next ? 'tool_calls' : 'stop' }],
+      })}\n\ndata: [DONE]\n\n`,
+    );
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Fixture did not bind');
+  const lease = await createIsolatedWorkspaceLease({
+    prepare: async (root, paths) => {
+      await mkdir(join(root, 'project'));
+      for (const [name, content] of Object.entries(options.files ?? {})) {
+        await mkdir(dirname(join(root, name)), { recursive: true });
+        await writeFile(join(root, name), content);
+      }
+      await mkdir(paths.logDir, { recursive: true });
+      await writeFile(
+        join(paths.logDir, 'settings.json'),
+        JSON.stringify({
+          agent: {
+            modelSelection: { provider: 'openrouter', model: 'meta/muse-ember' },
+            retryAttempts: 0,
+            openrouter: { apiKey: 'fixture', baseUrl: `http://127.0.0.1:${address.port}/v1` },
+          },
+          shell: { autoApproveMode: 'off' },
+          sandbox: { enabled: false },
+        }),
+      );
+    },
+  });
+  const child = await lease.start({
+    command: process.execPath,
+    args: [testCliPath(join(process.cwd(), 'dist/cli.js')), '--lite'],
+    cwd: join(lease.root, 'project'),
+    cols: 140,
+    rows: 50,
+  });
+  const screens: string[] = [];
+  try {
+    await child.waitForIdleInput();
+    await writePtyTextAndSubmit(child, options.prompt ?? 'Run the scripted calls.');
+    for (const needle of options.awaitText) {
+      await child.waitForVisibleOutput(needle, 30000).catch((error: unknown) => {
+        throw new Error(
+          `No prompt showing ${JSON.stringify(needle)}; screen:\n${child.readVisibleOutput().slice(-3000)}`,
+          {
+            cause: error,
+          },
+        );
+      });
+      screens.push(child.readVisibleOutput());
+      // Approve (the files are disposable) so the model's next scripted call is issued.
+      await child.write('y');
+    }
+    return screens;
+  } finally {
+    await child.cleanup();
+    await lease.cleanup();
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+}

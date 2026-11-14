@@ -147,26 +147,33 @@ function trimShellOutput(
   output: string,
   maxOutputLines: number,
   maxOutputLength: number | undefined,
-  /** Where this stream sits in the spooled file; marks the trimmed range in the file's own line numbers. */
-  file: () => { firstLine: number; totalLines: number },
-): string {
+  /**
+   * Where this stream sits in the spooled file. When given, the marker names the trimmed range in the file's
+   * own line numbers; when absent it states only how many lines were trimmed.
+   */
+  file?: () => { firstLine: number; totalLines: number },
+): { text: string; exact: boolean } {
   const lines = output === '' ? [] : output.split('\n');
   if (output.endsWith('\n')) lines.pop();
   let lineBounded = output;
+  let ranged = false;
   if (lines.length > maxOutputLines) {
     const keepLines = Math.max(1, Math.floor(maxOutputLines * 0.4));
     const headCount = Math.min(keepLines, maxOutputLines);
     const tailCount = Math.min(keepLines, maxOutputLines - headCount);
-    const { firstLine, totalLines } = file();
-    const from = firstLine + headCount;
-    const to = firstLine + lines.length - tailCount - 1;
-    lineBounded = [
-      ...lines.slice(0, headCount),
-      `... [lines ${from}-${to} of ${totalLines} trimmed] ...`,
-      ...(tailCount > 0 ? lines.slice(-tailCount) : []),
-    ].join('\n');
+    let marker = `... [${lines.length - headCount - tailCount} lines trimmed] ...`;
+    if (file) {
+      const { firstLine, totalLines } = file();
+      marker = `... [lines ${firstLine + headCount}-${
+        firstLine + lines.length - tailCount - 1
+      } of ${totalLines} trimmed] ...`;
+      ranged = true;
+    }
+    lineBounded = [...lines.slice(0, headCount), marker, ...(tailCount > 0 ? lines.slice(-tailCount) : [])].join('\n');
   }
-  return trimOutput(lineBounded, Number.POSITIVE_INFINITY, maxOutputLength);
+  const text = trimOutput(lineBounded, Number.POSITIVE_INFINITY, maxOutputLength);
+  // A character bound that fires re-cuts the already-marked text, so its numbers no longer describe the file.
+  return { text, exact: !ranged || text === lineBounded };
 }
 
 export async function formatShellExecutionOutput({
@@ -187,35 +194,47 @@ export async function formatShellExecutionOutput({
   let artifact: ReturnType<typeof buildArtifact> | undefined;
   const spooled = () =>
     (artifact ??= buildArtifact({ command, cwd, stdout, stderr, exitCode, timedOut, durationMs, cancelled }));
-  const stdoutTrimmedOutput = trimShellOutput(stdout, maxOutputLines, maxOutputLength, () => ({
-    firstLine: spooled().layout.stdoutFirstLine,
-    totalLines: spooled().layout.totalLines,
-  }));
-  const stderrTrimmedOutput = trimShellOutput(stderr, maxOutputLines, maxOutputLength, () => ({
-    firstLine: spooled().layout.stderrFirstLine,
-    totalLines: spooled().layout.totalLines,
-  }));
-  const stdoutTrimmed = stdoutTrimmedOutput.trimEnd();
-  const stderrTrimmed = stderrTrimmedOutput.trimEnd();
-  const stdoutTruncated = stdoutTrimmedOutput !== stdout;
-  const stderrTruncated = stderrTrimmedOutput !== stderr;
-  const combinedOutput = [stdoutTrimmed, stderrTrimmed].filter(Boolean).join('\n').trimEnd();
   const statusLine = cancelled ? 'cancelled' : timedOut ? 'timeout' : `exit ${exitCode ?? 'null'}`;
   const runtimeLine = typeof durationMs === 'number' ? `Runtime: ${durationMs}ms` : '';
   const terminationNote = buildTerminationNote({ timedOut, cancelled, timeoutMs, timeoutSource });
-  const emptyOutputNote = combinedOutput === '' && !timedOut && !cancelled && exitCode === 0 ? '(No output)' : '';
+
+  const render = (ranges: boolean) => {
+    const place = (first: 'stdoutFirstLine' | 'stderrFirstLine') =>
+      ranges ? () => ({ firstLine: spooled().layout[first], totalLines: spooled().layout.totalLines }) : undefined;
+    const out = trimShellOutput(stdout, maxOutputLines, maxOutputLength, place('stdoutFirstLine'));
+    const err = trimShellOutput(stderr, maxOutputLines, maxOutputLength, place('stderrFirstLine'));
+    const combinedOutput = [out.text.trimEnd(), err.text.trimEnd()].filter(Boolean).join('\n').trimEnd();
+    const emptyOutputNote = combinedOutput === '' && !timedOut && !cancelled && exitCode === 0 ? '(No output)' : '';
+    return {
+      truncated: out.text !== stdout || err.text !== stderr,
+      exact: out.exact && err.exact,
+      body: (note: string) =>
+        [statusLine, runtimeLine, terminationNote, combinedOutput, emptyOutputNote, note].filter(Boolean).join('\n'),
+    };
+  };
+
+  // Range markers state the spooled file's own line numbers, so they are used only when nothing after them
+  // re-cuts the text: no character bound re-trimmed a marked stream, and the finished result (with its spool
+  // note) is within the limits the generic tool-result trim applies afterwards. Otherwise only counts are given.
+  let rendered = render(true);
+  if (rendered.truncated && rendered.exact) {
+    const cfg = getTrimConfig();
+    const charLimit = Math.min(maxOutputLength ?? Number.POSITIVE_INFINITY, cfg.maxCharacters);
+    const probe = rendered.body(formatFullOutputSavedNote('x'.repeat(200), spooled().layout.totalLines));
+    if (probe.split('\n').length > cfg.maxLines || probe.length > charLimit) rendered = render(false);
+  } else if (rendered.truncated) {
+    rendered = render(false);
+  }
 
   let artifactPath: string | undefined;
-  if (stdoutTruncated || stderrTruncated) {
+  if (rendered.truncated) {
     artifactPath = await saveOutputArtifact(spooled().contents);
   }
 
   const truncationNote = artifactPath ? formatFullOutputSavedNote(artifactPath, spooled().layout.totalLines) : '';
 
   return {
-    text: [statusLine, runtimeLine, terminationNote, combinedOutput, emptyOutputNote, truncationNote]
-      .filter(Boolean)
-      .join('\n'),
+    text: rendered.body(truncationNote),
     truncated: Boolean(artifactPath),
     artifactPath,
   };

@@ -47,13 +47,16 @@ state is `unknown`, not "probably failed, try again."
   `Full output saved to \`<path>\`` note. The note's shape is load-bearing — the
   agent reads that path back today. Do not change the prose contract without
   updating the shell tool description in the same commit.
-  The prefix and path are unchanged; the note may now end with the file's total
-  line count (`(1090 lines)`), and a line-trimmed stream carries a marker naming
-  the removed range in the spooled file's own line numbers
-  (`... [lines 408-697 of 1101 trimmed] ...`; shell counts the file's header lines
-  too). `trimOutput` markers for results with no spool file use the same wording
-  with the output's own line numbers. Models read the spooled file from line 1
-  before this, because the marker only carried a count. What is kept and how
+  The prefix and path are unchanged; the note may now end with the spooled file's
+  total line count (`(1090 lines)`), which is the file's `wc -l` and always right.
+  A shell stream trimmed by lines carries `... [lines 408-697 of 1101 trimmed] ...`
+  in the spooled file's own line numbers (header lines included) only when no later
+  layer re-cuts it: no character bound re-trimmed the marked stream, and the finished
+  result is within the line and character limits the generic tool-result trim applies
+  afterwards. Otherwise (long lines, stdout and stderr both over the limit, other
+  producers' generic `trimOutput`) the marker is the count-only `... [N lines
+  trimmed] ...`, which makes no range claim. A precise-looking wrong range sends the
+  model to the wrong place, so a range is emitted or not at all. What is kept and how
   much is unchanged.
 - The tool ledger is a recovery structure. `projectProviderHistory` reinserts
   completed call/result pairs that are missing from history, and drops

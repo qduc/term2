@@ -180,29 +180,76 @@ it('a schema mismatch says which tool the arguments belong to', async () => {
   expect(run.toolResults[2]).not.toContain('belong to');
 });
 
-it('a trimmed shell result states the trimmed line range and the spooled file total, matching the file', async () => {
-  const run = await runScriptedToolCalls({
-    calls: [['shell', { command: 'seq 1 1090' }]],
-    inspect: async (results) => {
-      const path = /Full output saved to `([^`]+)`/.exec(results[0]!)?.[1];
-      return path ? (await readFile(path, 'utf8')).split('\n') : undefined;
-    },
-  });
-  expect(run.exitCode, run.stderr + run.stdout).toBe(0);
-  const text = run.toolResults[0]!;
-  const marker = /\.\.\. \[lines (\d+)-(\d+) of (\d+) trimmed\] \.\.\./.exec(text);
-  expect(marker, text).not.toBeNull();
-  const [from, to, total] = [Number(marker![1]), Number(marker![2]), Number(marker![3])];
-  expect(text).toMatch(new RegExp(`Full output saved to \`[^\`]+\` \\(${total} lines\\)`));
-  // The numbers are the spooled file's own line numbers: the trimmed span is exactly what the file
-  // holds between the last kept head line and the first kept tail line.
-  const file = run.inspected as string[];
-  expect(file.length - 1).toBe(total);
+/** The spooled file named by a result's "Full output saved to" note, as lines (no trailing empty line). */
+const spoolOf = async (results: string[]): Promise<string[] | undefined> => {
+  const path = /Full output saved to `([^`]+)`/.exec(results[0]!)?.[1];
+  if (!path) return undefined;
+  const lines = (await readFile(path, 'utf8')).split('\n');
+  if (lines.at(-1) === '') lines.pop();
+  return lines;
+};
+
+/**
+ * A trim marker may state a line range only if it is in the spooled file's own numbering: the lines on
+ * either side of the marker are then exactly the file lines around that range, and the note's total
+ * is the file's length. Count-only markers make no range claim, and the total must still be right.
+ */
+const expectHonestTrim = (text: string, file: string[]) => {
+  expect(text).toContain(`(${file.length} lines)`);
   const shown = text.split('\n');
-  const markerAt = shown.findIndex((line) => line.includes('trimmed] ...'));
+  const markerAt = shown.findIndex((line) => /^\.\.\. \[.*trimmed.*\] \.\.\.$/.test(line));
+  expect(markerAt, text.slice(0, 600)).toBeGreaterThan(-1);
+  const range = /lines (\d+)-(\d+) of (\d+) trimmed/.exec(shown[markerAt]!);
+  if (!range) return { ranged: false as const };
+  const [from, to, total] = [Number(range[1]), Number(range[2]), Number(range[3])];
+  expect(total).toBe(file.length);
   expect(file[from - 2]).toBe(shown[markerAt - 1]);
   expect(file[to]).toBe(shown[markerAt + 1]);
-  expect(to - from + 1).toBe(1090 - 400 - 400);
+  // Everything the marker hides is in the file, and none of it is still in the result.
+  const hidden = file.slice(from - 1, to);
+  expect(hidden.length).toBe(to - from + 1);
+  expect(shown.filter((line) => hidden.includes(line))).toEqual([]);
+  return { ranged: true as const };
+};
+
+it('a trimmed shell result states the trimmed line range and the spooled file total, matching the file', async () => {
+  const run = await runScriptedToolCalls({ calls: [['shell', { command: 'seq 1 1090' }]], inspect: spoolOf });
+  expect(run.exitCode, run.stderr + run.stdout).toBe(0);
+  expect(expectHonestTrim(run.toolResults[0]!, run.inspected as string[]).ranged).toBe(true);
+});
+
+it('trim markers make no wrong range claim when long lines or two streams add trim layers', async () => {
+  const pad = 'x'.repeat(70);
+  const long = await runScriptedToolCalls({
+    calls: [['shell', { command: `seq 1 3000 | sed 's/$/ ${pad}/'` }]],
+    inspect: spoolOf,
+  });
+  expect(long.exitCode, long.stderr + long.stdout).toBe(0);
+  expectHonestTrim(long.toolResults[0]!, long.inspected as string[]);
+  // Both streams over the line limit: the result is trimmed again as a whole after each stream's own trim.
+  const both = await runScriptedToolCalls({
+    calls: [['shell', { command: 'seq 1 1200; seq 5001 6200 >&2' }]],
+    inspect: spoolOf,
+  });
+  expect(both.exitCode, both.stderr + both.stdout).toBe(0);
+  expect(expectHonestTrim(both.toolResults[0]!, both.inspected as string[]).ranged).toBe(false);
+});
+
+it('a bounded read_file result states the spooled file total and makes no wrong range claim', async () => {
+  const text = Array.from({ length: 3000 }, (_, i) => `line ${i + 1} ${'y'.repeat(40)}`).join('\n') + '\n';
+  const run = await runScriptedToolCalls({
+    files: { 'big.txt': text },
+    calls: [['read_file', { path: 'big.txt' }]],
+    inspect: spoolOf,
+  });
+  expect(run.exitCode, run.stderr + run.stdout).toBe(0);
+  const file = run.inspected as string[];
+  expect(file).toBeDefined();
+  expect(run.toolResults[0]).toContain(`(${file.length} lines)`);
+  // The text the result lacks is in the file: its first line is the file's first line.
+  expect(file.join('\n')).toContain('line 3000 ');
+  expect(run.toolResults[0]).not.toContain('line 3000 ');
+  expect(run.toolResults[0]).not.toMatch(/lines \d+-\d+ of \d+ trimmed/);
 });
 
 it.skipIf(process.platform !== 'linux')(

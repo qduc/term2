@@ -56,7 +56,7 @@ export function getTrimConfig(): OutputTrimConfig {
  * @param output - The output string to trim
  * @param maxLines - Optional override for maximum lines (uses trimConfig.maxLines if not provided)
  * @param maxCharacters - Optional override for maximum characters (uses trimConfig.maxCharacters if not provided)
- * @returns The trimmed output string with a marker naming the trimmed line range, e.g. `... [lines 101-875 of 1090 trimmed] ...`
+ * @returns The trimmed output string with a message indicating how many lines were trimmed
  */
 export function trimOutput(output: string, maxLines?: number, maxCharacters?: number): string {
   const lines = output.split('\n');
@@ -101,17 +101,14 @@ export function trimOutput(output: string, maxLines?: number, maxCharacters?: nu
 
   const headLines = lines.slice(0, effectiveKeepLines);
   const tailLines = lines.slice(-effectiveKeepLines);
+  const trimmedCount = lines.length - effectiveKeepLines * 2;
 
-  // 1-based, inclusive range of the removed lines within the original output, so a re-read can start there.
-  const trimmedRange = `lines ${effectiveKeepLines + 1}-${lines.length - effectiveKeepLines} of ${
-    lines.length
-  } trimmed`;
-  const trimMessage = `\n... [${trimmedRange}] ...\n`;
+  const trimMessage = `\n... [${trimmedCount} lines trimmed] ...\n`;
 
   const lineTrimmedOutput = headLines.join('\n') + trimMessage + tailLines.join('\n');
 
   if (lineTrimmedOutput.length > effectiveMaxCharacters) {
-    return trimByCharacters(lineTrimmedOutput, effectiveMaxCharacters, trimmedRange);
+    return trimByCharacters(lineTrimmedOutput, effectiveMaxCharacters, `${trimmedCount} lines trimmed`);
   }
 
   return lineTrimmedOutput;

@@ -24,8 +24,8 @@
       "reason": "Server gateway, socket dispatch, and transport endpoints; combines direct SSE host and control socket routes."
     },
     "src/model": {
-      "files": 17,
-      "reason": "Model domain types, token usage tracking, and streaming completion contracts; core vocabulary for all provider adapters. effort-updates.ts is the model-layer contract for cache-preserving effort changes shared by the registry, three adapters and Session; no existing file owns that concept."
+      "files": 18,
+      "reason": "Model domain types, token usage tracking, and streaming completion contracts; core vocabulary for all provider adapters. effort-updates.ts is the model-layer contract for cache-preserving effort changes shared by the registry, three adapters and Session; no existing file owns that concept. effort-fallback.ts is the retry-once recovery when an endpoint refuses a request carrying such a change; its only importer is provider.ts, which is at its own size ceiling, and effort-updates.ts is imported by the adapters and Session, which should not depend on failure/logging. Lower the ceiling when provider.ts can take it back or the effort files move into a subfolder."
     },
     "src/model/providers": {
       "files": 58,
@@ -86,8 +86,8 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/app/application-runtime.ts": {
-      "lines": 505,
-      "reason": "The direct runtime commits each model configuration change and decides in the same commit whether global defaults should be persisted. ACP sessions keep their changes local. Lower the ceiling when the model reconfiguration transaction can move together with its settings writes."
+      "lines": 508,
+      "reason": "The direct runtime commits each model configuration change and decides in the same commit whether global defaults should be persisted. ACP sessions keep their changes local. Lower the ceiling when the model reconfiguration transaction can move together with its settings writes. Three lines give the registry selection the session's log-backed record of a refused cache-preserving effort marker (application-models.ts holds the logic); this is the one place the selection is built before the session port exists, so the late-bound port is named here."
     },
     "src/app/lib/agent-factory.ts": {
       "lines": 555,

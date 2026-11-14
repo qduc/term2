@@ -50,8 +50,12 @@ export function publicContext(
   };
 }
 /** Exactly one public frame for each native context fact this projection owns. Rollover and
- * rotation are Session boundaries with their own projection paths, not context notices. */
-type ProjectedContextFact = Exclude<DirectContextFact, { type: 'rollover_requested' } | { type: 'session_rotated' }>;
+ * rotation are Session boundaries with their own projection paths, not context notices; a refused
+ * effort marker has no frame of its own (the turn's end carries the notice). */
+type ProjectedContextFact = Exclude<
+  DirectContextFact,
+  { type: 'rollover_requested' } | { type: 'session_rotated' } | { type: 'effort_updates_rejected' }
+>;
 export function contextFactEvent(fact: ProjectedContextFact, state: WireSnapshot, seq: number): WireEvent {
   const base = { sessionId: state.sessionId, seq, turnId: 'turnId' in fact ? fact.turnId : null };
   switch (fact.type) {

@@ -38,7 +38,11 @@ export type DirectContextFact =
   | DirectVerificationFact
   | DirectMemoryFact
   | DirectRolloverFact
-  | DirectSessionRotationFact;
+  | DirectSessionRotationFact
+  | DirectEffortUpdatesRejectedFact;
+
+/** Recorded when the marker-carrying request is refused, before its single retry, whatever the retry's outcome. */
+export type DirectEffortUpdatesRejectedFact = { readonly type: 'effort_updates_rejected' };
 export type DirectContextState = {
   readonly goal: DirectGoalState;
   /** Latest admitted human receipt, retained across provider-context rotation. */
@@ -46,6 +50,8 @@ export type DirectContextState = {
   readonly memory: DirectMemoryState;
   readonly verification: readonly DirectVerificationAttempt[];
   readonly goalReminders: readonly DirectGoalReminderFact[];
+  /** An endpoint refused a request carrying a cache-preserving effort change: no more markers this session. */
+  readonly effortUpdatesRejected: boolean;
 };
 
 /** Fresh projection only; the owning Session folds accepted facts over it on open. */
@@ -55,6 +61,7 @@ export function initialDirectContextState(): DirectContextState {
     memory: { automaticRecorded: false, automaticStopped: false },
     verification: [],
     goalReminders: [],
+    effortUpdatesRejected: false,
   };
 }
 
@@ -74,6 +81,7 @@ const receiptSchema = z.object({
   undo: z.string(),
 });
 const contextFactSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('effort_updates_rejected') }),
   directRolloverFactSchema,
   directSessionRotationSchema,
   z.object({
@@ -161,6 +169,8 @@ export function reduceDirectContext(
         latestHumanInputAt: planDirectTiming(state.latestHumanInputAt, queueRecords, input).latestHumanInputAt,
       };
     }
+    case 'effort_updates_rejected':
+      return { ...state, effortUpdatesRejected: true };
     case 'goal_changed':
     case 'goal_proposed':
       return { ...state, goal: reduceDirectGoal(state.goal, fact) };

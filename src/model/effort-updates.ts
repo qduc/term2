@@ -14,9 +14,10 @@
  * Off by default (`agent.cachePreservingEffort`): none of the direct endpoints
  * (OpenAI, Codex, Anthropic first-party) has been probed on real traffic; the
  * mechanisms were measured through OpenRouter only. An endpoint that rejects a
- * marker turns the mechanism off for the rest of the session (`provider.ts`).
+ * marker turns the mechanism off for the rest of the session (`effort-fallback.ts`).
  */
-import type { Item, Model, ReasoningEffort } from './index.js';
+import type { Item, Model, ModelRequest, ReasoningEffort } from './index.js';
+import type { ResponseContinuation } from './providers/runtime/model-events.js';
 import type { StreamedModelTurnInput } from './streamed-model-turn.js';
 
 const EFFORT_UPDATE = 'effort_update';
@@ -104,7 +105,7 @@ export function lastEffortUpdate(items: readonly Item[]): string | undefined {
 }
 
 /** Today's request for a path without a mechanism: markers removed, the effective effort top-level. */
-export function withoutEffortUpdates(
+function withoutEffortUpdates(
   input: readonly Item[],
   reasoning: ReasoningEffort | undefined,
   carried?: string,
@@ -114,7 +115,28 @@ export function withoutEffortUpdates(
 }
 
 /**
- * `providerMetadata` key on a response that the registry retried without markers after the
- * endpoint refused them. Session reads it from the log and stops sending markers.
+ * `effort_update` markers reach only a model that declares the marker's level; any other
+ * path gets today's request back: no marker, the effective effort as the top-level value.
+ * A request without markers or a carried effort passes through unchanged.
  */
-export const EFFORT_UPDATES_REJECTED = 'term2EffortUpdatesRejected';
+export function resolveEffortUpdates(
+  request: ModelRequest,
+  levels: readonly string[] | undefined,
+): { input: ModelRequest['input']; reasoning: ModelRequest['reasoning']; conversationEffort?: string } {
+  const carried = (request.continuation as Partial<ResponseContinuation> | undefined)?.effort;
+  const markers = request.input.filter(isEffortUpdateItem);
+  if (!markers.length && carried === undefined) return { input: request.input, reasoning: request.reasoning };
+  const supported =
+    !!levels &&
+    !!request.reasoning &&
+    levels.includes(request.reasoning) &&
+    (carried === undefined || levels.includes(carried)) &&
+    markers.every((item) => typeof item.input.effort === 'string' && levels.includes(item.input.effort));
+  if (!supported) return withoutEffortUpdates(request.input, request.reasoning, carried);
+  const effective = lastEffortUpdate(request.input) ?? carried ?? request.reasoning;
+  return {
+    input: request.input,
+    reasoning: request.reasoning,
+    ...(effective && effective !== request.reasoning ? { conversationEffort: effective } : {}),
+  };
+}

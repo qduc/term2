@@ -329,27 +329,81 @@ function withAnthropicEffortMessages(base: typeof fetch): typeof fetch {
   return (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
     const body = init?.body;
     if (typeof body !== 'string' || !body.includes(SENTINEL_PREFIX)) return base(input, init);
-    const parsed = JSON.parse(body) as { messages?: unknown };
-    if (!Array.isArray(parsed.messages)) throw new Error('Per-message effort marker outside Anthropic messages');
-    parsed.messages = parsed.messages.flatMap((message: any) => {
-      const first = Array.isArray(message?.content) ? message.content[0] : undefined;
-      const match = message?.role === 'user' && first?.type === 'text' ? SENTINEL.exec(first.text) : null;
-      if (!match || message.content.length < 2) return [message];
-      return [
-        { role: 'system', content: [], output_config: { effort: match[1] } },
-        { ...message, content: message.content.slice(1) },
-      ];
-    });
-    const rewritten = JSON.stringify(parsed);
-    // A sentinel the rewrite did not place must never reach the model as text.
-    if (rewritten.includes(SENTINEL_PREFIX)) throw new Error('Per-message effort marker could not be placed');
-    const headers = new Headers(init?.headers);
-    const betas = (headers.get('anthropic-beta') ?? '')
-      .split(',')
-      .map((beta) => beta.trim())
-      .filter(Boolean);
-    if (!betas.includes(ANTHROPIC_EFFORT_BETA))
-      headers.set('anthropic-beta', [...betas, ANTHROPIC_EFFORT_BETA].join(','));
-    return base(input, { ...init, body: rewritten, headers });
+    let parsed: { messages?: unknown; output_config?: Record<string, unknown> };
+    try {
+      parsed = JSON.parse(body);
+    } catch {
+      return base(input, init);
+    }
+    const placed = placeEffortMessages(parsed);
+    if (placed) return base(input, { ...init, body: placed, headers: withEffortBeta(init?.headers) });
+    // Never fail a turn over a marker: send today's request, the effective effort top-level.
+    return base(input, { ...init, body: JSON.stringify(withTopLevelEffort(parsed)) });
   }) as typeof fetch;
+}
+
+const sentinelEffort = (part: any): string | undefined =>
+  part?.type === 'text' && typeof part.text === 'string' ? SENTINEL.exec(part.text)?.[1] : undefined;
+
+/**
+ * Each sentinel becomes an effort-only message where it stood. The AI SDK merges consecutive
+ * user messages (a turn that got no answer is followed directly by the next one), so a
+ * sentinel can sit anywhere in a user message; the message is split around it. Undefined when
+ * a sentinel cannot be placed exactly.
+ */
+function placeEffortMessages(parsed: { messages?: unknown }): string | undefined {
+  if (!Array.isArray(parsed.messages)) return undefined;
+  const messages: unknown[] = [];
+  for (const message of parsed.messages as any[]) {
+    if (message?.role !== 'user' || !Array.isArray(message.content)) {
+      messages.push(message);
+      continue;
+    }
+    let segment: unknown[] = [];
+    for (const part of message.content) {
+      const effort = sentinelEffort(part);
+      if (effort === undefined) {
+        segment.push(part);
+        continue;
+      }
+      if (part.cache_control !== undefined) return undefined;
+      if (segment.length) messages.push({ ...message, content: segment });
+      messages.push({ role: 'system', content: [], output_config: { effort } });
+      segment = [];
+    }
+    if (segment.length) messages.push({ ...message, content: segment });
+  }
+  const rewritten = JSON.stringify({ ...parsed, messages });
+  return rewritten.includes(SENTINEL_PREFIX) ? undefined : rewritten;
+}
+
+function withTopLevelEffort(parsed: { messages?: unknown; output_config?: Record<string, unknown> }) {
+  let effort: string | undefined;
+  const messages = Array.isArray(parsed.messages)
+    ? (parsed.messages as any[]).flatMap((message) => {
+        if (!Array.isArray(message?.content)) return [message];
+        const content = message.content.filter((part: unknown) => {
+          const found = sentinelEffort(part);
+          if (found !== undefined) effort = found;
+          return found === undefined;
+        });
+        return content.length ? [{ ...message, content }] : [];
+      })
+    : parsed.messages;
+  return {
+    ...parsed,
+    messages,
+    ...(effort !== undefined ? { output_config: { ...parsed.output_config, effort } } : {}),
+  };
+}
+
+function withEffortBeta(source: HeadersInit | undefined): Headers {
+  const headers = new Headers(source);
+  const betas = (headers.get('anthropic-beta') ?? '')
+    .split(',')
+    .map((beta) => beta.trim())
+    .filter(Boolean);
+  if (!betas.includes(ANTHROPIC_EFFORT_BETA))
+    headers.set('anthropic-beta', [...betas, ANTHROPIC_EFFORT_BETA].join(','));
+  return headers;
 }

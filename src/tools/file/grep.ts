@@ -9,6 +9,7 @@ import { isSessionReadGranted } from './read-access.js';
 import type { FileReadAccessPort, NestedReadAccessPort } from '../access-port.js';
 import type { ISettingsService } from '../../shared/service-interfaces.js';
 import { resolveWorkspacePath } from '../utils.js';
+import { grepGlobPathHint, looksLikeGlob } from './glob-path-hint.js';
 import {
   getOutputText,
   isSuccessOutput,
@@ -356,7 +357,11 @@ export const createGrepToolDefinition = (
           !fixed_strings && /regex parse error/i.test(detail)
             ? '\nThe pattern is a regular expression; pass fixed_strings: true for literal text or escape the metacharacters.'
             : '';
-        throw new Error(`Search failed: ${detail}${regexHint}`);
+        const globHint =
+          looksLikeGlob(searchPath) && /no such file|not found|cannot find/i.test(detail)
+            ? grepGlobPathHint(searchPath, cwd)
+            : '';
+        throw new Error(`Search failed: ${detail}${regexHint}${globHint}`);
       }
 
       const filteredStdout = result.stdout;

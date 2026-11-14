@@ -261,7 +261,7 @@ whole-request context-price tiers from pi-ai; thresholds are strict `>` and all
 input, read, write and output rates change together. Provider-reported charges
 remain authoritative. Displayed input totals include creation.
 
-Chat Completions usage frames are priced by `reportedUsageCost`
+Provider usage frames are priced by `reportedUsageCost`
 (`src/shared/cost/model-cost.ts`). An OpenRouter bring-your-own-key frame
 (`is_byok: true`) reports only OpenRouter's fee in `cost`, often 0, and the
 upstream provider's charge in `cost_details.upstream_inference_cost`; the
@@ -272,8 +272,9 @@ never fired. Without BYOK both fields describe the same charge (recorded
 `cost` alone is used and adding them would double count. A frame with no `cost`
 falls back to the upstream figure. A BYOK frame without a usable upstream figure
 is not priced from the frame (the catalog estimate or unpriced state applies),
-and negative or non-finite values are unusable. The AI SDK adapters (Anthropic,
-Google) keep their own extraction and never see these fields.
+and negative or non-finite values are unusable. The AI SDK adapters
+(`extractAiSdkCostUsd`) and the decision-shadow client apply the same rule, since
+a custom Anthropic-type provider pointed at a gateway can carry these fields.
 
 The current catalog preserves pi-ai 1.3.0 model capacities and base prices and
 supplements matching-rate context tiers from the recorded pi-ai 1.5.2 snapshot.

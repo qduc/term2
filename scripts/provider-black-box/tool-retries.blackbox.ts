@@ -180,6 +180,26 @@ it('a schema mismatch says which tool the arguments belong to', async () => {
   expect(run.toolResults[2]).not.toContain('belong to');
 });
 
+it('the wrong-tool hint names only tools the calling agent is offered', async () => {
+  const run = await runScriptedToolCalls({
+    calls: [
+      ['shell', { execution: 'foreground', role: 'explorer', task: 'look around' }],
+      ['read_file', { search_content: 'a', replace_content: 'b' }],
+      ['run_subagent', { execution: 'foreground', role: 'explorer', task: 'look around' }],
+      ['shell', { execution: 'foreground', role: 'explorer', task: 'look again' }],
+    ],
+  });
+  expect(run.exitCode, run.stderr + run.stdout).toBe(0);
+  const hints = run.allToolResults.filter((text) => text.includes('Tool input did not match schema for shell'));
+  // The root offers run_subagent and is told so; the explorer child it launched cannot call it and is not.
+  expect(hints.filter((text) => text.includes('belong to run_subagent'))).toHaveLength(1);
+  expect(hints.filter((text) => !text.includes('belong to'))).toHaveLength(1);
+  // search_replace's flat keys count as its own for the hint.
+  expect(run.allToolResults.join('\n')).toContain(
+    'These arguments belong to search_replace, not read_file; read_file needs path.',
+  );
+});
+
 /** The spooled file named by a result's "Full output saved to" note, as lines (no trailing empty line). */
 const spoolOf = async (results: string[]): Promise<string[] | undefined> => {
   const path = /Full output saved to `([^`]+)`/.exec(results[0]!)?.[1];

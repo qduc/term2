@@ -23,6 +23,7 @@ import type { Word, WordPart } from 'unbash';
 import { isPathInScopeSafe, isHostInScope } from '../../session/agent-runtime/scope-resolver.js';
 import { getActiveWorkspaceRoot } from '../../tools/workspace/active-workspace-root.js';
 import { getProvider } from '../../model/providers/index.js';
+import { ToolArgumentNames } from '../../tools/tool-argument-hint.js';
 import { wrapToolInvoke, wrapNeedsApproval } from '../../tools/tool-invoke.js';
 import { toOpenAIStrictToolSchema } from '../../shared/lib/openai-strict-tool-schema.js';
 import { shouldUseStrictToolSchema, shouldPreferPatchEditingModel } from '../../model/tool-selection-policy.js';
@@ -1339,6 +1340,7 @@ export class SubagentToolFactory {
       capabilities,
     });
 
+    const argumentNames = new ToolArgumentNames();
     return toolDefinitions.map((definition) => {
       const canonicalParameters =
         definition.canonicalParameters ??
@@ -1387,7 +1389,10 @@ export class SubagentToolFactory {
           return typeof trimmedResult === 'string' ? injectRunBudgetWarning(trimmedResult, context) : trimmedResult;
         },
       };
-      return wrapToolInvoke(wrapped, canonicalParameters, { argumentParsing: definition.argumentParsing });
+      return wrapToolInvoke(wrapped, canonicalParameters, {
+        argumentParsing: definition.argumentParsing,
+        argumentNames,
+      });
     });
   }
 }

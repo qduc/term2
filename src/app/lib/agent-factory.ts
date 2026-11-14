@@ -7,6 +7,7 @@ import type { ReasoningEffortSetting } from '../../tools/conversation.js';
 import { getAgentDefinition } from '../agent.js';
 import { createEditorImpl } from '../../tools/editor-impl.js';
 import { bindRunCodeRegistry, isDirectlyCallable, TOOL_NAME_RUN_CODE } from '../../tools/system/run-code/index.js';
+import { ToolArgumentNames } from '../../tools/tool-argument-hint.js';
 import { normalizeToolParameters, wrapNeedsApproval, wrapToolInvoke } from '../../tools/tool-invoke.js';
 import type { ILoggingService, ISettingsService } from '../../shared/service-interfaces.js';
 import type { ListWorktreesSync } from '../../tools/workspace/worktree-inventory.js';
@@ -196,6 +197,8 @@ export function buildAgentTools({
     providerId: deps.providerId,
     capabilities: providerCapabilities,
   });
+  // Argument names of exactly the tools offered here, for the wrong-tool hint in schema diagnostics.
+  const argumentNames = new ToolArgumentNames();
   let tools: ToolRegistry = toolDefinitions
     .filter(() => true)
     .map((definition) => {
@@ -339,6 +342,7 @@ export function buildAgentTools({
       // into a schema diagnostic naming the offending fields.
       const validatedDefinition = wrapToolInvoke(wrappedDefinition, canonicalParameters, {
         argumentParsing: definition.argumentParsing,
+        argumentNames,
       });
       const shim: ToolInvokeShim = {
         type: 'function',

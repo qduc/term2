@@ -82,7 +82,7 @@
       "reason": "The replay fold; candidate 2 keeps both cancelled-turn settlings (a3's unstarted calls and tools' in-flight step), which run on the same fold state."
     },
     "src/app/agent.ts": {
-      "lines": 810,
+      "lines": 800,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/app/application-runtime.ts": {
@@ -134,7 +134,7 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/model/providers/ai-sdk-streamed-model.ts": {
-      "lines": 532,
+      "lines": 526,
       "reason": "The SDK stream/unary projector owns SDK usage extraction. Nine lines retain the one-hour creation subset in both result paths through one helper; isolating this field would split a single Usage projection. Retire this entry when the complete SDK result and usage translation is extracted as a separate boundary."
     },
     "src/model/providers/codex-responses-model.ts": {

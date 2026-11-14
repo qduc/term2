@@ -222,8 +222,8 @@
       "reason": "Inherited source schema/presentation module; launcher request typing now derives from its own schema rather than importing the engine's policy types."
     },
     "src/tools/file/apply-patch.ts": {
-      "lines": 875,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
+      "lines": 877,
+      "reason": "Inherited patch schema, execution and presentation module from the #87 tree move. Two additional lines keep Update and known-change batching guidance beside the existing tool description; extracting only these sentences would fragment one prompt without separating a responsibility. Retire this increment when the complete patch description or presentation boundary is extracted."
     },
     "src/tools/file/code-context.ts": {
       "lines": 796,

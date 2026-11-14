@@ -158,6 +158,8 @@ export const formatApplyPatchCommandMessage: FormatCommandMessage = (item, index
 };
 
 const APPLY_PATCH_DESCRIPTION =
+  'Prefer *** Update File over delete/recreate for existing files when suitable. ' +
+  'Batch known related changes; do not guess future edits.\n\n' +
   'Apply file changes with a patch script. Write the patch directly — no JSON escaping of the body.\n\n' +
   '```\n' +
   '*** Begin Patch\n' +

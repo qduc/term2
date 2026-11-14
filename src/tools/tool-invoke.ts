@@ -403,13 +403,11 @@ export const runToolInputDiagnostics = (
         }
         return `${field} ${msg}`;
       });
-      const issueText = issues.join('; ');
+      const issueText = issues.join('; ').replace(/\.?$/, '.');
       const foreignHint = offeredTools ? describeForeignArguments(toolName, parsedInput, offeredTools) : '';
-      const feedback = `Tool input did not match schema for ${toolName}: ${issueText}${
-        issueText.endsWith('.') ? '' : '.'
-      } ${describeValidationInput(parsedInput)}${
-        foreignHint ? ` ${foreignHint}` : ''
-      } Retry with valid JSON arguments.`;
+      const feedback = `Tool input did not match schema for ${toolName}: ${issueText} ${describeValidationInput(
+        parsedInput,
+      )}${foreignHint && ` ${foreignHint}`} Retry with valid JSON arguments.`;
       return truncateValidationText(feedback, MAX_VALIDATION_FEEDBACK_CHARS);
     }
   }
@@ -431,6 +429,7 @@ export const wrapToolInvoke = <T extends AnyToolDefinition>(
 ): T => {
   const targetSchema = originalSchema || tool.parameters;
   const originalExecute = tool.execute.bind(tool);
+  const { offeredTools } = options;
 
   tool.execute = async (params: any, context: unknown, details: any) => {
     try {
@@ -454,12 +453,7 @@ export const wrapToolInvoke = <T extends AnyToolDefinition>(
       // non-fatal diagnostic result, matching the old invoke path.
       const zodSchema = getZodSchema(targetSchema);
       if (zodSchema && !zodSchema.safeParse(normalizedInput).success) {
-        return runToolInputDiagnostics(
-          tool.name ?? 'unknown',
-          targetSchema as any,
-          normalizedInput,
-          options.offeredTools,
-        );
+        return runToolInputDiagnostics(tool.name ?? 'unknown', targetSchema as any, normalizedInput, offeredTools);
       }
 
       return await originalExecute(normalizedInput, context, details);
@@ -467,7 +461,7 @@ export const wrapToolInvoke = <T extends AnyToolDefinition>(
       if (isInvalidToolInputError(error)) {
         // Surface schema diagnostics as a non-fatal tool result so the model
         // can self-correct within the same turn, rather than aborting the run.
-        return runToolInputDiagnostics(tool.name ?? 'unknown', targetSchema as any, params, options.offeredTools);
+        return runToolInputDiagnostics(tool.name ?? 'unknown', targetSchema as any, params, offeredTools);
       }
       throw error;
     }

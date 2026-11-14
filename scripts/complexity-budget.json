@@ -45,11 +45,11 @@
     },
     "src/tools": {
       "files": 22,
-      "reason": "Root tool exports, execution facades, and adoption registries; bridges system and language tools to the agent runtime. tool-argument-hint.ts holds the registry of tool argument names behind the schema-diagnostic hint; it is called only by tool-invoke.ts, which is at its own size ceiling and should not take it. Lower the ceiling when tool-invoke.ts is split and the hint moves with the diagnostics."
+      "reason": "Root tool exports, execution facades, and adoption registries; bridges system and language tools to the agent runtime. tool-argument-hint.ts (the 'these arguments belong to another tool' sentence of the schema diagnostic) has one caller, tool-invoke.ts, which is itself over its size ceiling and should not absorb it. Lower the ceiling when tool-invoke.ts is split and the diagnostics move together."
     },
     "src/tools/file": {
       "files": 16,
-      "reason": "File tools plus their helpers. closest-line.ts (nearest-line hint shared by apply_patch and search_replace) and search-replace-protocol.ts (flat-argument recovery and batch result wording) are each a single job with their own importers; folding either back into search-replace.ts or apply-patch.ts would grow files that are already over their size ceilings. Lower the ceiling when the search_replace files move into a subfolder."
+      "reason": "File tools plus their helpers. closest-line.ts (the nearest-line hint apply_patch and search_replace share) is one job with two importers; folding it into either would grow a file already over its size ceiling. Lower the ceiling when the search_replace files move into a subfolder."
     }
   },
   "fileCeilings": {
@@ -82,8 +82,8 @@
       "reason": "The Conversation's turn driver; candidate 2 keeps both the question-cancel notice (a3) and the cross-turn compaction hold (solo/tools), each closing over the same driver state. Direct admission checks foreign native compaction coverage before accepting a turn, using the same configured provider and history as the driver. Eight lines decorate the turn's model history with cache-preserving effort markers (effort-timeline.ts) at the one place a turn's history, new input and settings meet, after admission. Two lines hand notices an earlier process left pending to the background owner (ConversationBackground.deliverReopened) before the turn's history snapshot is taken; the delivery has to precede the turn's admission, so it cannot live in the later notice preparation."
     },
     "src/app/agent.ts": {
-      "lines": 810,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
+      "lines": 812,
+      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Twelve lines since then: the edit tools' nearest-line hint read gate (createHintReadAccess, built beside the tools that take it) and the one web_search availability decision that the prompt wording and the tool list share. Lower the ceiling when the agent assembly is split."
     },
     "src/app/application-runtime.ts": {
       "lines": 508,
@@ -202,8 +202,8 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/tools/tool-invoke.ts": {
-      "lines": 564,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Six lines wire the 'arguments belong to another tool' hint (tool-argument-hint.ts) and the full-stop fix into the single schema-diagnostic builder and wrapToolInvoke, which are the only places that know the tool name and received input."
+      "lines": 567,
+      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Nine lines wire the offered tool list into the single schema-diagnostic builder and wrapToolInvoke (the 'arguments belong to another tool' sentence, tool-argument-hint.ts) and keep the diagnostic's full stop single; these are the only places that know the tool name and the received input."
     },
     "src/tools/shell/execute-shell.ts": {
       "lines": 605,
@@ -222,8 +222,8 @@
       "reason": "Inherited source schema/presentation module; launcher request typing now derives from its own schema rather than importing the engine's policy types. Mixed-shape rewriting and its interpretation line live in run-subagent-shape.ts; the executor keeps only the launch-started flag that gates that line, because only it knows whether a launch happened."
     },
     "src/tools/file/apply-patch.ts": {
-      "lines": 878,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Three lines wire the nearest-line hint (closest-line.ts) into the one 'could not be found anywhere' report."
+      "lines": 882,
+      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Seven lines wire the nearest-line hint (closest-line.ts) into the one 'could not be found anywhere' report and its read gate, which only this file knows at the point the patch fails."
     },
     "src/tools/file/code-context.ts": {
       "lines": 796,
@@ -231,7 +231,7 @@
     },
     "src/tools/file/search-replace.ts": {
       "lines": 702,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Up from 661 for the tool-retries work: the optional read-access gate for the nearest-line hint, the skip and labelled-failure calls in the batch loop, and the flat-shape canonical schema. Result wording and shape recovery already live in search-replace-protocol.ts; what remains here is wiring beside the batch state (file content, the single write). Lower the ceiling when the batch executor moves out of this file."
+      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Up from 661: the optional read gate for the nearest-line hint, the skip and labelled-failure calls in the batch loop, and the flat-shape canonical schema. Result wording and shape recovery already live in search-replace-protocol.ts; what remains is wiring beside the batch state (file content, the single write). Lower the ceiling when the batch executor moves out of this file."
     },
     "src/tools/mcp/mcp-connection-manager.ts": {
       "lines": 606,
@@ -254,8 +254,8 @@
       "reason": "The shell executor checks one-use escape evidence against the actual cwd and foreground invocation at the point where it selects sandbox mode. Moving only that check would separate it from the execution context that enforces it. Lower the ceiling when the shell execution pipeline can move as a whole."
     },
     "src/delegation/subagents/tool-policy.ts": {
-      "lines": 1393,
-      "reason": "Inherited child capability factory and policy wrappers, with validation evidence capture now owned by subagents/validation-evidence.ts. The remaining authority checks, scope enforcement, and provider-compatible wrappers still share one graph; this lower ceiling records that existing cohesive body without authorizing further growth."
+      "lines": 1408,
+      "reason": "Inherited child capability factory and policy wrappers, with validation evidence capture now owned by subagents/validation-evidence.ts. The remaining authority checks, scope enforcement, and provider-compatible wrappers still share one graph; this lower ceiling records that existing cohesive body without authorizing further growth. Fifteen lines since then wire two decisions that exist only where a child's tools are assembled: the read gate for the edit tools' nearest-line hint (the call into createHintReadAccess with the role's read scope) and the child's offered tool list handed to the schema diagnostic, net of the shorter web tool wiring."
     },
     "src/delegation/run-code/run-code-agent-capability.ts": {
       "lines": 529,

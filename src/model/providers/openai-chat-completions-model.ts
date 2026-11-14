@@ -3,6 +3,7 @@ import { assertValidOpenAICompatibleMessages } from './common/openai-compatible-
 import { OpenAICompatibleError } from './common/provider-errors.js';
 import { OPAQUE_TURN_TOOL_CALL_IDS_KEY, openAICompatibleMessages } from './openai-chat-completions-messages.js';
 import type { CostTrailerCapture } from './openai-compatible-response-normalizer.js';
+import { reportedUsageCost } from '../../shared/cost/model-cost.js';
 import type {
   StreamedModelTurn,
   StreamedModelTurnEvent,
@@ -251,9 +252,10 @@ export class OpenAIChatCompletionsModel implements StreamedModelTurn {
         // delta. Retain the latest frame for the application completion;
         // providers may omit it entirely.
         usage = normalizeChatUsage(chunk.usage) as typeof usage;
-        if (chunk.usage.cost !== undefined && costUsd === undefined) {
-          costUsd = chunk.usage.cost;
-        }
+        // OpenRouter BYOK frames report `cost: 0` with the real charge in
+        // `cost_details`; reportedUsageCost owns that rule.
+        const reported = reportedUsageCost(chunk.usage);
+        if (reported !== undefined && costUsd === undefined) costUsd = reported;
       }
       if ((chunk as any).cost !== undefined && costUsd === undefined) {
         costUsd = (chunk as any).cost;

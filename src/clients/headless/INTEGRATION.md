@@ -22,7 +22,15 @@ imports Session, Engine or adopted code, and never opens conversation storage.
    signal. The app keeps ownership of the signal-to-exit-code mapping: a
    `cancelled` result under SIGINT is 130 (SIGTERM 143); without a signal it
    is 1. `context_paused`, `blocked` and `budget_paused` are exit 2. The app/CLI
-   maps `blocked` already and must add `budget_paused`. `attachments` are passed
+   maps `blocked` already and must add `budget_paused`. On every exit code
+   the CLI waits for stdout and stderr to drain before `process.exit`
+   (`src/shared/lib/exit-after-drain.ts`): on a pipe, exiting first discarded
+   the queued tail, and a slow reader got a `final` record cut mid-line with
+   no `run_summary` or `completed`. A SIGINT or SIGTERM during the drain exits at once
+   with the already-settled code, so the tail may be lost but the result is
+   not overridden. `exitAfterDrain` installs its own temporary handlers for
+   this, so it holds on exits before a run starts (a usage error) as well as
+   after the run's handlers exist. `attachments` are passed
    through as raw padded base64
    image parts; `delivery` is omitted by default, and an explicit non-`auto`
    mode needs the real `submitWithDelivery` capability or is reported

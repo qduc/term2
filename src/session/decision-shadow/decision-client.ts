@@ -4,7 +4,7 @@ import {
   type DecisionQuestion,
   type OpenRouterDecisionErrorCode,
 } from '../../model/providers/openrouter-decisions.js';
-import { parseUsdMicros } from '../../shared/cost/model-cost.js';
+import { parseUsdMicros, reportedUsageCost } from '../../shared/cost/model-cost.js';
 
 export type DecisionClientRequest = {
   readonly model: string;
@@ -123,12 +123,11 @@ export function readDecisionChoice<T extends string>(
   return { choice: answer.choice as T, confidence: answer.confidence };
 }
 
-const readCost = (response: Record<string, unknown>): number | string | undefined => {
-  if (typeof response.cost === 'number' || typeof response.cost === 'string') return response.cost;
-  const usage = response.usage;
-  if (!isRecord(usage)) return undefined;
-  return typeof usage.cost === 'number' || typeof usage.cost === 'string' ? usage.cost : undefined;
-};
+// A top-level `cost` still wins; usage goes through the shared rule (OpenRouter BYOK sums the upstream charge).
+const readCost = (response: Record<string, unknown>): number | string | undefined =>
+  typeof response.cost === 'number' || typeof response.cost === 'string'
+    ? response.cost
+    : reportedUsageCost(response.usage);
 
 const readDecisionResponseMetadata = (
   response: Record<string, unknown>,

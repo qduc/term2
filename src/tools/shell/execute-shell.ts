@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from 'child_process';
 import process from 'process';
-import { SANDBOX_TEMP_DIR } from '../../shared/utils/shell/temp-dir.js';
+import { resolveChildTmpDir } from '../../shared/utils/shell/temp-dir.js';
 import { registerSandboxNetworkApprovalPauseController } from './sandbox/sandbox-network-approval.js';
 import { killAllShellChildrenAtProcessExit, ShellChildRegistry } from './shell-child-registry.js';
 
@@ -367,7 +367,7 @@ async function executeShellCommandUnleased(
 
   const childEnv: NodeJS.ProcessEnv = {
     ...(gatewayMode ? env! : env ?? process.env),
-    TMPDIR: gatewayMode ? env!.TMPDIR : env?.TMPDIR ?? SANDBOX_TEMP_DIR,
+    ...resolveChildTmpDir(env, gatewayMode),
   };
   // Child commands may use herdr routing helpers, but must not claim ownership
   // of the interactive pane that launched term2.

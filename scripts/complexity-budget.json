@@ -90,7 +90,7 @@
       "reason": "The direct runtime commits each model configuration change and decides in the same commit whether global defaults should be persisted. ACP sessions keep their changes local. Lower the ceiling when the model reconfiguration transaction can move together with its settings writes. Three lines give the registry selection the session's log-backed record of a refused cache-preserving effort marker (application-models.ts holds the logic); this is the one place the selection is built before the session port exists, so the late-bound port is named here."
     },
     "src/app/lib/agent-factory.ts": {
-      "lines": 554,
+      "lines": 555,
       "reason": "Agent graph assembly and tool invocation wrappers retain their existing shared execution/approval dependencies. Provider capability resolution and model request settings now live in app/lib/agent-model-settings.ts; this lowered ceiling records the remaining assembly body without authorizing growth."
     },
     "src/clients/control-socket/control-socket.ts": {

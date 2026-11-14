@@ -27,6 +27,8 @@ type FakeOptions = {
   readonly failRequest?: number;
   /** Answer 400 to any request that carries an effort item, as an endpoint without support would. */
   readonly rejectEffortItems?: boolean;
+  /** With `rejectEffortItems`: the request right after a rejected one also answers 400, for an unrelated reason. */
+  readonly alsoRejectRetry?: boolean;
   /** POSTs up to this number answer at length, so a later compaction has something to reduce. */
   readonly longAnswersThrough?: number;
 };
@@ -41,6 +43,7 @@ const hasEffortItem = (body: any): boolean =>
 
 async function startFake(options: FakeOptions = {}): Promise<Fake> {
   const requests: Captured[] = [];
+  let rejectedAt = -1;
   const server = createServer(async (req, res) => {
     let raw = '';
     for await (const chunk of req) raw += chunk;
@@ -57,7 +60,13 @@ async function startFake(options: FakeOptions = {}): Promise<Fake> {
       res.end(JSON.stringify({ error: { type: 'permission_error', message: 'fixture refusal' } }));
       return;
     }
+    if (options.alsoRejectRetry && n === rejectedAt + 1) {
+      res.writeHead(400, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: { type: 'invalid_request_error', message: 'fixture: unrelated refusal' } }));
+      return;
+    }
     if (options.rejectEffortItems && hasEffortItem(body)) {
+      rejectedAt = n;
       res.writeHead(400, { 'content-type': 'application/json' });
       res.end(
         JSON.stringify({ error: { type: 'invalid_request_error', message: 'fixture: unsupported effort item' } }),
@@ -347,6 +356,36 @@ describe('cache-preserving effort change', () => {
     const after = posts().at(-1)!;
     expect(after.body.reasoning.effort).toBe('medium');
     expect(effortItems(after.body)).toBe(0);
+    expect(posts().filter((request) => hasEffortItem(request.body))).toHaveLength(1);
+  });
+
+  it('GPT-6: a retry that also fails still switches markers off for the session, across a registry rebuild', async () => {
+    const { workspace, posts } = await setup({
+      kind: 'openai',
+      model: 'gpt-6-sol',
+      scope: 'any-endpoint',
+      fake: { rejectEffortItems: true, alsoRejectRetry: true },
+    });
+    await drive(workspace, 'openai', 'gpt-6-sol', [
+      'first effort question',
+      '/effort low',
+      'second effort question',
+      '/effort high',
+      'third effort question',
+    ]);
+    const requests = posts();
+    // first, rejected marker request, its failing retry (no marker), then the third turn.
+    expect(requests).toHaveLength(4);
+    expect(effortItems(requests[1]!.body)).toBe(1);
+    expect(effortItems(requests[2]!.body)).toBe(0);
+    expect(requests[2]!.body.reasoning.effort).toBe('low');
+    // The second /effort rebuilt the registry: it still sends no marker, and the effort is top-level.
+    expect(effortItems(requests[3]!.body)).toBe(0);
+    expect(requests[3]!.body.reasoning.effort).toBe('high');
+    await drive(workspace, 'openai', 'gpt-6-sol', ['/effort medium', 'fourth effort question'], { resume: true });
+    const after = posts().at(-1)!;
+    expect(effortItems(after.body)).toBe(0);
+    expect(after.body.reasoning.effort).toBe('medium');
     expect(posts().filter((request) => hasEffortItem(request.body))).toHaveLength(1);
   });
 

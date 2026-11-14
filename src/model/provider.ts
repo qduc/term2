@@ -54,13 +54,8 @@ import { ModelFailure, toModelFailure } from './failure.js';
 import { physicalModelStream } from './retry.js';
 import { codexCompact } from './provider-compact.js';
 import { historyToInput, toolDefinition } from './provider-items.js';
-import {
-  EFFORT_UPDATES_REJECTED,
-  effortUpdateScope,
-  isEffortUpdateItem,
-  lastEffortUpdate,
-  withoutEffortUpdates,
-} from './effort-updates.js';
+import { activeEffortLevels, withEffortFallback, type EffortUpdatesRejection } from './effort-fallback.js';
+import { effortUpdateScope, isEffortUpdateItem, resolveEffortUpdates } from './effort-updates.js';
 import type { Model, ModelCapabilities, ModelEvent, ModelRef, ModelRegistry, ModelRequest } from './index.js';
 
 export type ProviderRegistryDeps = {
@@ -72,6 +67,8 @@ export type ProviderRegistryDeps = {
   readonly providers?: Pick<SourceProviderRegistry, 'getAllProviders'>;
   /** Compatibility input for host composition; provider identity never reads this service. */
   readonly sessionContext?: ISessionContextService;
+  /** The session's record of a refused effort marker; without one, a refusal is retried but not remembered. */
+  readonly effortUpdatesRejection?: EffortUpdatesRejection;
 };
 
 const DEFAULT_RETRY_ATTEMPTS = 2;
@@ -184,14 +181,12 @@ function lazyModel(
   const catalogContextWindow = getModelContextWindow(ref.provider, ref.model);
   const scope = effortUpdateScope(deps.settings.get('agent.cachePreservingEffort'));
   const declared = scope ? provider.effortUpdateLevels?.(ref.model, scope) : undefined;
-  // An endpoint that rejected a marker keeps today's top-level effort for this registry's life;
-  // Session reads the same outcome from the log after resume (effort-timeline.ts).
-  let rejected = false;
+  // Whether this session's endpoint refused a marker is the session log's to say (effort-fallback.ts).
   return {
     ref,
     capabilities,
     get effortUpdates() {
-      return rejected ? undefined : declared;
+      return activeEffortLevels(declared, deps.effortUpdatesRejection);
     },
     contextWindow: catalogContextWindow ?? UNKNOWN_MODEL_CONTEXT_WINDOW,
     ...(catalogContextWindow !== undefined ? { catalogContextWindow } : {}),
@@ -237,7 +232,6 @@ function lazyModel(
         }
         const attempt = async function* (
           effortUpdates: readonly string[] | undefined,
-          fallback: boolean,
         ): AsyncGenerator<ModelEvent, void> {
           const prepared = toProviderRequest(request, signal, {
             provider,
@@ -281,8 +275,7 @@ function lazyModel(
                 );
                 for await (const event of events) {
                   linked.throwIfAborted();
-                  for (const projected of projection.project(event))
-                    yield fallback && projected.type === 'done' ? withEffortUpdatesRejected(projected) : projected;
+                  yield* projection.project(event);
                 }
                 projection.finish();
               } finally {
@@ -292,31 +285,15 @@ function lazyModel(
             },
           });
         };
-        const levels = rejected ? undefined : declared;
-        const carriesEffort =
-          request.input.some(isEffortUpdateItem) ||
-          (request.continuation as Partial<ResponseContinuation> | undefined)?.effort !== undefined;
-        let produced = false;
-        try {
-          for await (const event of attempt(levels, false)) {
-            produced = true;
-            yield event;
-          }
-        } catch (error) {
-          const failure = toModelFailure(error, signal);
-          // One retry without markers when the endpoint refuses the request before any output: the item is
-          // the plausible cause. Every later request on this registry keeps today's top-level effort.
-          if (!levels || !carriesEffort || produced || signal.aborted || failure.kind !== 'invalid_request')
-            throw failure;
-          if (request.recovery && !request.recovery.budget.claimPhysicalAttempt()) throw failure;
-          rejected = true;
-          deps.logger.warn('Endpoint rejected a cache-preserving effort change; continuing with top-level effort', {
-            provider: ref.provider,
-            model: ref.model,
-            error: failure.message,
-          });
-          yield* attempt(undefined, true);
-        }
+        yield* withEffortFallback({
+          request,
+          signal,
+          ref,
+          logger: deps.logger,
+          rejection: deps.effortUpdatesRejection,
+          levels: activeEffortLevels(declared, deps.effortUpdatesRejection),
+          attempt,
+        });
       } catch (error) {
         throw toModelFailure(error, signal);
       }
@@ -444,33 +421,6 @@ function toProviderRequest(
   };
 }
 
-/**
- * `effort_update` markers reach only a model that declares the marker's level; any other
- * path gets today's request back: no marker, the effective effort as the top-level value.
- * A request without markers or a carried effort passes through unchanged.
- */
-function resolveEffortUpdates(
-  request: ModelRequest,
-  levels: readonly string[] | undefined,
-): { input: ModelRequest['input']; reasoning: ModelRequest['reasoning']; conversationEffort?: string } {
-  const carried = (request.continuation as Partial<ResponseContinuation> | undefined)?.effort;
-  const markers = request.input.filter(isEffortUpdateItem);
-  if (!markers.length && carried === undefined) return { input: request.input, reasoning: request.reasoning };
-  const supported =
-    !!levels &&
-    !!request.reasoning &&
-    levels.includes(request.reasoning) &&
-    (carried === undefined || levels.includes(carried)) &&
-    markers.every((item) => typeof item.input.effort === 'string' && levels.includes(item.input.effort));
-  if (!supported) return withoutEffortUpdates(request.input, request.reasoning, carried);
-  const effective = lastEffortUpdate(request.input) ?? carried ?? request.reasoning;
-  return {
-    input: request.input,
-    reasoning: request.reasoning,
-    ...(effective && effective !== request.reasoning ? { conversationEffort: effective } : {}),
-  };
-}
-
 /** Reject a foreign/stale opaque token instead of sending an anchorless delta. */
 function resolveContinuation(
   request: ModelRequest,
@@ -516,11 +466,6 @@ function resolveContinuation(
   return responseId
     ? { previousResponseId: responseId, disableChaining: false }
     : { previousResponseId: null, disableChaining: true };
-}
-
-/** Record the fallback on the response so Session keeps the mechanism off for the rest of the session. */
-function withEffortUpdatesRejected(event: Extract<ModelEvent, { type: 'done' }>): ModelEvent {
-  return { ...event, providerMetadata: { ...event.providerMetadata, [EFFORT_UPDATES_REJECTED]: true } };
 }
 
 function isRecord(value: unknown): value is Record<string, any> {

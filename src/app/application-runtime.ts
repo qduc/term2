@@ -23,7 +23,7 @@ import { DEFAULT_BUDGETS } from '../session/completion-verification/contracts.js
 import type { DirectConversationRuntime, DirectRuntimeContext } from '../session/store.js';
 import { createToolSurface } from './tool-surface.js';
 import type { DirectHookRuntime } from './application-hooks.js';
-import { withSessionScope, createSessionScope, type SessionScope } from './application-models.js';
+import { withSessionScope, createSessionScope, withEffortRejection, type SessionScope } from './application-models.js';
 import { createNestedAuthorizer } from './application-nested.js';
 import { prepareSessionRollover } from './application-rollover.js';
 import { createDirectConfigMemoryBinding } from './config-memory.js';
@@ -217,7 +217,10 @@ export function createDirectRuntimes(
       }
       const settings = sessionSettings(options, context);
       const sessionAccountStore = oauthAccounts.createSessionAccountStore(accountRefreshes);
-      const selection = { settings, logger, sessionContext, sessionAccountStore };
+      const selection = withEffortRejection(
+        { settings, logger, sessionContext, sessionAccountStore },
+        () => installed.bound?.port,
+      );
       const providerModels = createProviderRegistry(selection);
       const trimConfig = {
         maxCharacters: settings.get('shell.maxOutputChars'),

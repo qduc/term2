@@ -17,13 +17,7 @@
  * or a turn whose effort cannot be placed before one of its own items.
  */
 import type { Item, ModelRef, ModelRegistry, ModelRequest, ReasoningEffort } from '../model/index.js';
-import {
-  EFFORT_UPDATES_REJECTED,
-  effortUpdateItem,
-  effortUpdateLevels,
-  isEffortUpdateItem,
-  lastEffortUpdate,
-} from '../model/effort-updates.js';
+import { effortUpdateItem, effortUpdateLevels, isEffortUpdateItem, lastEffortUpdate } from '../model/effort-updates.js';
 import type { Fact } from './facts.js';
 
 export type EffortTimelinePlan = {
@@ -126,11 +120,13 @@ export function effortTimelineForTurn(
 const withoutMarkers = (items: readonly Item[]): readonly Item[] =>
   items.some(isEffortUpdateItem) ? items.filter((item) => !isEffortUpdateItem(item)) : items;
 
-/** An endpoint refused a marker earlier in this session (model/provider.ts retried without it). */
+/**
+ * An endpoint refused a marker earlier in this session. The fact is the one record of it: the
+ * registry writes it when the request is refused, before the retry, and every later reader
+ * (this planner, the registry after a rebuild, a resumed session) derives from it.
+ */
 function effortUpdatesRejected(facts: readonly Fact[]): boolean {
-  return facts.some(
-    (fact) => fact.type === 'model_response_completed' && fact.providerMetadata?.[EFFORT_UPDATES_REJECTED] === true,
-  );
+  return facts.some((fact) => fact.type === 'effort_updates_rejected');
 }
 
 /**
@@ -153,12 +149,14 @@ export function alignTurnEffort(request: ModelRequest, facts: readonly Fact[], t
   };
 }
 
-/** One plain notice on the turn whose response first fell back. */
+/** One plain notice on the turn whose request first fell back. */
 export function effortFallbackNotice(facts: readonly Fact[], turnId: string): string | undefined {
-  const fallback = facts.find(
-    (fact) => fact.type === 'model_response_completed' && fact.providerMetadata?.[EFFORT_UPDATES_REJECTED] === true,
-  );
-  return fallback?.type === 'model_response_completed' && fallback.turnId === turnId
+  const rejected = facts.findIndex((fact) => fact.type === 'effort_updates_rejected');
+  if (rejected < 0) return undefined;
+  // The fact carries no turn: it belongs to the turn that was running when it was written.
+  let running: string | undefined;
+  for (const fact of facts.slice(0, rejected)) if (fact.type === 'turn_started') running = fact.turnId;
+  return running === turnId
     ? 'This endpoint does not support changing reasoning effort without losing the prompt cache, so that is turned off for this session; effort changes now apply the usual way.'
     : undefined;
 }

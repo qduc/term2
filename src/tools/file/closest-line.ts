@@ -40,7 +40,7 @@ function shorten(text: string): string {
 }
 
 /** The file line most similar to `needle` (at or above the threshold), or undefined when nothing is close. */
-export function findClosestLine(needle: string, fileLines: readonly string[]): ClosestLine | undefined {
+function findClosestLine(needle: string, fileLines: readonly string[]): ClosestLine | undefined {
   const target = normalize(needle);
   if (target.length < MIN_LINE_CHARS) return undefined;
   const targetGrams = bigrams(target);

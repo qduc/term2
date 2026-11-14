@@ -150,6 +150,25 @@ const summarizeCalls = (calls: readonly RunCodeCallRecord[]): string => {
   return callSummary;
 };
 
+/**
+ * Says how much was cut and what the script can do about it. A `read_file` result
+ * inside a script is an object ({content, ...}) that carries the whole file, which is
+ * how a script ends up returning far more than it meant to.
+ */
+const clipNote = (text: string): string => {
+  const readFileShaped = text.includes('"content":"') || text.includes('"totalLines":');
+  return (
+    `[truncated: output was ${text.length} characters, ${
+      text.length - MAX_OUTPUT_CHARS
+    } over the ${MAX_OUTPUT_CHARS} limit, so the end was cut. ` +
+    'Have the script return a slice or only the matching lines' +
+    (readFileShaped
+      ? ', e.g. result.content.split("\\n").filter(...).join("\\n"), instead of the whole read_file result'
+      : '') +
+    '.]'
+  );
+};
+
 const clip = async (
   text: string,
   protectedAction?: { prefix: string; full: string; compact: string },
@@ -166,7 +185,7 @@ const clip = async (
     retrieval =
       'Full output could not be saved; the omitted text is unavailable. Do not repeat completed tool effects.';
   }
-  const marker = `\n[truncated: output exceeded ${MAX_OUTPUT_CHARS} characters]\n${retrieval}`;
+  const marker = `\n${clipNote(text)}\n${retrieval}`;
   // Preserve the lifecycle heading as well as host evidence. Script-authored
   // output may consume the entire budget; it must not hide action outcomes.
   const available = MAX_OUTPUT_CHARS - marker.length;

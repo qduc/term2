@@ -83,6 +83,19 @@ it('summarises a failed fan-out with large results as one line per call and a sp
   expect(spooled).not.toContain('missing.txt');
 });
 
+it('says how much was cut and how to return less when a read_file result fills the output', async () => {
+  const [result] = await runScriptedRunCode({
+    files: { 'a.txt': lines('a', 500), 'b.txt': lines('b', 500), 'c.txt': lines('c', 500) },
+    scripts: [
+      { code: `return await Promise.all(['a.txt', 'b.txt', 'c.txt'].map((path) => tools.read_file({path})));` },
+    ],
+  });
+  expect(result).toMatch(/\[truncated: output was \d+ characters, \d+ over the 30000 limit, so the end was cut\./);
+  expect(result).toContain('Have the script return a slice or only the matching lines');
+  expect(result).toContain('instead of the whole read_file result');
+  expect(result).toContain('Full output saved to');
+});
+
 it('explains a glob path to the direct read_file tool and to scripted glob', async () => {
   // grep and glob are not directly callable under this model profile; their hint is the same
   // tool code the scripted scenarios above exercise.

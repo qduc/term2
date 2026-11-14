@@ -1,6 +1,9 @@
+import { execFile } from 'node:child_process';
+import { closeSync, constants, openSync, writeSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { promisify } from 'node:util';
 import { expect, it } from 'vitest';
 import { createIsolatedWorkspaceLease } from './provider-test-harness.js';
 import { createConversation } from '../../src/session/conversation.js';
@@ -237,6 +240,171 @@ it('resumes SDK-era Muse reasoning metadata through the chat-completions client'
     expect(assistant?.reasoning_details).toEqual([detail]);
     expect(requests[0]!.messages.flatMap((message) => message.reasoning_details ?? [])).toEqual([detail]);
   } finally {
+    await lease.cleanup();
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+/**
+ * A FIFO's read blocks until a writer opens it, so the gate sees each read start and decides when it ends.
+ * A non-blocking writer open succeeds only while a reader waits; the gate keeps that writer until release.
+ */
+function fifoGate(dir: string, names: readonly string[], barrier: ReadonlySet<string>, fallbackMs: number) {
+  const events = new Map<string, { waitingAt: number; releasedAt?: number; peers: string[] }>();
+  const held = new Map<string, number>();
+  const release = (name: string) => {
+    const fd = held.get(name)!;
+    held.delete(name);
+    writeSync(fd, `content of ${name}\n`);
+    closeSync(fd);
+    events.get(name)!.releasedAt = Date.now();
+  };
+  const timer = setInterval(() => {
+    for (const name of names) {
+      if (events.has(name)) continue;
+      try {
+        held.set(name, openSync(join(dir, name), constants.O_WRONLY | constants.O_NONBLOCK));
+        events.set(name, { waitingAt: Date.now(), peers: [] });
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENXIO') throw error;
+      }
+    }
+    for (const name of held.keys()) events.get(name)!.peers = [...held.keys()].filter((peer) => peer !== name);
+    const waiting = [...held.keys()];
+    const barrierMet = [...barrier].every((name) => held.has(name));
+    for (const name of waiting) {
+      // A serial regression never meets the barrier; the fallback only keeps the CLI from hanging.
+      if (!barrier.has(name) || barrierMet || Date.now() - events.get(name)!.waitingAt >= fallbackMs) release(name);
+    }
+  }, 5);
+  return {
+    events,
+    stop() {
+      clearInterval(timer);
+      for (const fd of held.values()) closeSync(fd);
+      held.clear();
+    },
+  };
+}
+
+it('dispatches auto-approved parallel-safe reads together, keeping serial calls, the prompt and result order', async () => {
+  // One response mixes parallel-safe reads, a serial shell call and an outside read that needs approval.
+  const calls = [
+    ['read_file', { path: 'p1' }],
+    ['read_file', { path: 'p2' }],
+    ['shell', { command: 'cat p3' }],
+    ['read_file', { path: '/etc/hosts' }],
+    ['read_file', { path: 'p4' }],
+    ['read_file', { path: 'note.txt' }],
+  ] as const;
+  const requests: Array<{ messages: Array<{ role: string; tool_call_id?: string; content?: unknown }> }> = [];
+  const server = createServer(async (req, res) => {
+    if (req.method === 'GET') {
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ data: [] }));
+      return;
+    }
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(Buffer.from(chunk));
+    requests.push(JSON.parse(Buffer.concat(chunks).toString()));
+    const first = requests.length === 1;
+    const delta = first
+      ? {
+          tool_calls: calls.map(([name, args], index) => ({
+            index,
+            id: `call-${index}`,
+            type: 'function',
+            function: { name, arguments: JSON.stringify(args) },
+          })),
+        }
+      : { content: 'PARALLEL_READS_OK' };
+    res.writeHead(200, { 'content-type': 'text/event-stream' });
+    res.end(
+      `data: ${JSON.stringify({
+        id: `response-${requests.length}`,
+        object: 'chat.completion.chunk',
+        model: 'meta/muse-ember',
+        choices: [{ index: 0, delta, finish_reason: first ? 'tool_calls' : 'stop' }],
+      })}\n\ndata: [DONE]\n\n`,
+    );
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Fixture did not bind');
+  const lease = await createIsolatedWorkspaceLease({
+    prepare: async (root, paths) => {
+      const project = join(root, 'project');
+      await mkdir(project);
+      for (const name of ['p1', 'p2', 'p3', 'p4']) await promisify(execFile)('mkfifo', [join(project, name)]);
+      await writeFile(join(project, 'note.txt'), 'plain note\n');
+      await mkdir(paths.logDir, { recursive: true });
+      await writeFile(
+        join(paths.logDir, 'settings.json'),
+        JSON.stringify({
+          agent: {
+            modelSelection: { provider: 'openrouter', model: 'meta/muse-ember' },
+            retryAttempts: 0,
+            openrouter: { apiKey: 'fixture', baseUrl: `http://127.0.0.1:${address.port}/v1` },
+          },
+          sandbox: { enabled: false },
+        }),
+      );
+    },
+  });
+  const gate = fifoGate(join(lease.root, 'project'), ['p1', 'p2', 'p3', 'p4'], new Set(['p1', 'p2']), 5000);
+  try {
+    // Without --auto-approve the headless client denies the outside read's prompt.
+    const result = await lease.runCli({
+      cwd: join(lease.root, 'project'),
+      args: ['--json', 'Read the fixtures.'],
+      deadlineMs: 30000,
+    });
+    expect(result.exitCode, result.stderr + result.stdout).toBe(0);
+    expect(result.stdout).toContain('PARALLEL_READS_OK');
+    const at = (name: string) => gate.events.get(name);
+    // p1 and p2 were both waiting at once: the barrier released them, not the fallback.
+    expect(at('p1')?.peers).toContain('p2');
+    expect(at('p2')?.peers).toContain('p1');
+    // The shell call starts only after the group settled, and the later read only after the shell.
+    expect(at('p3')!.waitingAt).toBeGreaterThanOrEqual(Math.max(at('p1')!.releasedAt!, at('p2')!.releasedAt!));
+    expect(at('p3')?.peers).toEqual([]);
+    expect(at('p4')!.waitingAt).toBeGreaterThanOrEqual(at('p3')!.releasedAt!);
+
+    expect(requests).toHaveLength(2);
+    const results = requests[1]!.messages.filter((message) => message.role === 'tool');
+    expect(results.map((message) => message.tool_call_id)).toEqual(calls.map((_, index) => `call-${index}`));
+    const text = results.map((message) => JSON.stringify(message.content));
+    for (const [index, name] of [
+      [0, 'p1'],
+      [1, 'p2'],
+      [2, 'p3'],
+      [4, 'p4'],
+    ] as const)
+      expect(text[index]).toContain(`content of ${name}`);
+    expect(text[3]).toContain('not approved');
+    expect(text[5]).toContain('plain note');
+
+    // The outside read is asked once, after the reads before the first staged call ran and before the shell.
+    const logs = (await readdir(lease.paths.conversationsDir, { recursive: true })).filter((file) =>
+      String(file).endsWith('.jsonl'),
+    );
+    expect(logs).toHaveLength(1);
+    const facts = (await readFile(join(lease.paths.conversationsDir, String(logs[0])), 'utf8'))
+      .trim()
+      .split('\n')
+      .map(
+        (line) => (JSON.parse(line) as { fact: { type: string; callId?: string; resolution?: { kind: string } } }).fact,
+      );
+    const opened = facts.flatMap((fact, index) => (fact.type === 'interaction_opened' ? [index] : []));
+    expect(opened).toHaveLength(1);
+    expect(facts.find((fact) => fact.type === 'interaction_closed')?.resolution?.kind).toBe('deny');
+    const started = (callId: string) =>
+      facts.findIndex((fact) => fact.type === 'tool_started' && fact.callId === callId);
+    expect(started('call-1')).toBeLessThan(opened[0]!);
+    expect(started('call-2')).toBeGreaterThan(opened[0]!);
+  } finally {
+    gate.stop();
     await lease.cleanup();
     server.closeAllConnections();
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));

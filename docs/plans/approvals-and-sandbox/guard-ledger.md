@@ -639,8 +639,11 @@ timeouts, provider continuity, retry or approval behavior changes.
 On failure, recover completed results and call identities; never replay tools
 or infer domain success from resolution. Clipped string values preserve their
 full output in an artifact, or report unavailable storage honestly. Structured
-overflow keeps its existing reject-with-retrieval contract. The aggregate display
-uses the existing 30,000-character clip and retrieval artifact. Recovery data is
+overflow keeps its existing reject-with-retrieval contract. The failed-script
+display is one line per call plus the failing error; completed results over 1,200
+characters are spooled with `saveOutputArtifact` and named by path (see
+`run-code-authoring-friction.md`, "Failure result format"), and the whole
+display still passes the 30,000-character clip. Recovery data is
 not emitted in completion telemetry. Rollback is confined to call recovery
 fields, string overflow preservation and failed-script rendering.
 

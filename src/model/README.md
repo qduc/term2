@@ -19,6 +19,53 @@ Response chaining remains enabled. Continuations send new input and the effort
 update without repeating the initial tool/instruction prefix. Core continuity
 compares the complete request envelope and drops the anchor when instructions,
 tools or configuration change, so the next full request declares a fresh prefix.
+An effort-only change is the exception described in the next section: the
+envelope keeps its effort and the trailing update carries `conversationEffort`.
+
+## Cache-preserving effort changes
+
+Changing the top-level effort between requests rewrites the provider's prompt
+cache from the first changed position (measured 2026-11-14; table and caveats in
+`docs/research/model-effort-step-down-cache-economics.md`, addendum). Models that
+accept an in-conversation effort item keep the cache when the change travels as
+input instead. `effort-updates.ts` owns the contract:
+
+- A provider definition's `effortUpdateLevels(model)` declares support; the
+  registry copies it onto the `Model` as `effortUpdates`. Built-in OpenAI and
+  Codex declare the GPT-6 catalogue ids (`configuration_update`); an
+  Anthropic-format custom provider declares Claude Haiku/Sonnet 5.5, the models
+  term2 sends adaptive thinking, when its endpoint is first-party (no base URL or
+  host `api.anthropic.com`) or the entry sets `perMessageEffort: true`. OpenRouter
+  (chat completions), Google, OpenCode and other compatible endpoints declare
+  nothing.
+- Session (`session/effort-timeline.ts`) keeps the turn's top-level effort at the
+  value of the first surviving turn on the same model and puts an
+  `effort_update` marker (a `provider_input` item) before each later turn whose
+  recorded effort differs. Markers are model-only and re-derived from each turn's
+  `requestConfiguration` on every turn and after resume, so the cached prefix is
+  rebuilt byte for byte. An effort-only `configure` on a supported model also
+  keeps the live model objects and continuity checkpoint
+  (`conversation-generation.ts`), so the Responses anchor survives; continuation
+  tokens and WebSocket state belong to those objects.
+- Adapters: Responses and Codex render `configuration_update`; the Anthropic
+  adapter turns the marker into a sentinel on the next user message and its fetch
+  rewrites it to `{"role":"system","content":[],"output_config":{"effort":...}}`
+  before that message, adding beta `mid-conversation-output-config-2026-07-01`.
+  A request without a marker is forwarded untouched. A caller that pins Anthropic
+  thinking or effort in provider options gets today's request.
+- Anything else gets today's request: the registry strips markers and sends the
+  effective effort top-level (`withoutEffortUpdates`), and Session declines to
+  decorate an unsupported level, a default (`null`) effort, or a turn whose
+  effort it cannot place before one of that turn's own items. Sessions that
+  never change effort are unchanged on the wire (`parity/run.mjs check`).
+- A chained delta without a marker learns the effort in effect from the
+  continuation token (`effort`), which only GPT-6 Luna's trailing update needs.
+
+Evidence: `scripts/provider-black-box/effort-change.blackbox.ts` (mock provider)
+and the gateway probe in the research addendum. The direct OpenAI, Codex and
+Anthropic endpoints themselves were not probed: Codex acceptance of
+`configuration_update` and the Anthropic adapter's rewritten request against
+`api.anthropic.com` are unverified on real traffic.
 
 `createProviderRegistry` in `provider.ts` implements the native `ModelRegistry`
 contract from `index.ts` using registered source streamed-model factories. It

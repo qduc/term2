@@ -47,6 +47,14 @@ state is `unknown`, not "probably failed, try again."
   `Full output saved to \`<path>\`` note. The note's shape is load-bearing — the
   agent reads that path back today. Do not change the prose contract without
   updating the shell tool description in the same commit.
+  The prefix and path are unchanged; the note may now end with the file's total
+  line count (`(1090 lines)`), and a line-trimmed stream carries a marker naming
+  the removed range in the spooled file's own line numbers
+  (`... [lines 408-697 of 1101 trimmed] ...`; shell counts the file's header lines
+  too). `trimOutput` markers for results with no spool file use the same wording
+  with the output's own line numbers. Models read the spooled file from line 1
+  before this, because the marker only carried a count. What is kept and how
+  much is unchanged.
 - The tool ledger is a recovery structure. `projectProviderHistory` reinserts
   completed call/result pairs that are missing from history, and drops
   incomplete ones. Adding a status must not make an unfinished operation look

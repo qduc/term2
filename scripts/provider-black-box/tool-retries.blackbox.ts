@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { expect, it } from 'vitest';
 import { runScriptedToolCalls } from './tool-retry-fixture.js';
 
@@ -177,4 +178,29 @@ it('a schema mismatch says which tool the arguments belong to', async () => {
   // An argument no other tool takes gets the plain diagnostic, with no misleading hint.
   expect(run.toolResults[2]).toContain('Tool input did not match schema for shell');
   expect(run.toolResults[2]).not.toContain('belong to');
+});
+
+it('a trimmed shell result states the trimmed line range and the spooled file total, matching the file', async () => {
+  const run = await runScriptedToolCalls({
+    calls: [['shell', { command: 'seq 1 1090' }]],
+    inspect: async (results) => {
+      const path = /Full output saved to `([^`]+)`/.exec(results[0]!)?.[1];
+      return path ? (await readFile(path, 'utf8')).split('\n') : undefined;
+    },
+  });
+  expect(run.exitCode, run.stderr + run.stdout).toBe(0);
+  const text = run.toolResults[0]!;
+  const marker = /\.\.\. \[lines (\d+)-(\d+) of (\d+) trimmed\] \.\.\./.exec(text);
+  expect(marker, text).not.toBeNull();
+  const [from, to, total] = [Number(marker![1]), Number(marker![2]), Number(marker![3])];
+  expect(text).toMatch(new RegExp(`Full output saved to \`[^\`]+\` \\(${total} lines\\)`));
+  // The numbers are the spooled file's own line numbers: the trimmed span is exactly what the file
+  // holds between the last kept head line and the first kept tail line.
+  const file = run.inspected as string[];
+  expect(file.length - 1).toBe(total);
+  const shown = text.split('\n');
+  const markerAt = shown.findIndex((line) => line.includes('trimmed] ...'));
+  expect(file[from - 2]).toBe(shown[markerAt - 1]);
+  expect(file[to]).toBe(shown[markerAt + 1]);
+  expect(to - from + 1).toBe(1090 - 400 - 400);
 });

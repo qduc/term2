@@ -381,16 +381,15 @@ it.each([
         session.write('n');
         await session.waitForOutput('Why?', 30_000);
         releaseReview();
-        // Let the released review complete while the denial editor still owns the request.
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        await vi.waitFor(() => expect(fs.existsSync(`${idlePath}.approval-review`)).toBe(true), { timeout: 30_000 });
         expect(session.getVisibleOutput()).toContain('Why?');
         expect(fs.existsSync(marker)).toBe(false);
         session.write('not allowed');
         await waitForHarnessComposerValue(idlePath, 'not allowed', { timeoutMs: 30_000 });
         session.write('\r');
       } else {
-        // The provider has responded; give the review time to settle before checking it remains manual.
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        if (reviewExpected)
+          await vi.waitFor(() => expect(fs.existsSync(`${idlePath}.approval-review`)).toBe(true), { timeout: 30_000 });
         expect(fs.existsSync(marker)).toBe(false);
         session.write('\r');
       }

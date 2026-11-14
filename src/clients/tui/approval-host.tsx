@@ -12,6 +12,7 @@ import { ASK_USER_NO_ANSWER_RESULT, type WireDecision, type WireGrant } from '..
 import type { TuiConnection } from './integration.js';
 import type { InteractionView, TuiState } from './state.js';
 import { answerInteraction } from './commands.js';
+import { publishHarnessApprovalReviewSettled } from './harness-input.js';
 import { useInteractionInput, type InteractionInput, type InteractionInputHandler } from './interaction-input.js';
 import ApprovalPrompt, { type ApprovalDescriptor } from './approval-prompt.js';
 import { useTheme } from './presentation/components/theme.js';
@@ -206,7 +207,8 @@ function Host({
       })
       .catch(() => {
         if (!controller.signal.aborted) pending.current = false;
-      });
+      })
+      .finally(() => publishHarnessApprovalReviewSettled(interaction.id));
     return () => {
       controller.abort();
     };

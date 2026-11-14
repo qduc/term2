@@ -1,6 +1,7 @@
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
+import { constants, existsSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { testCliPath } from '../../tests/helpers/terminal-e2e.js';
@@ -131,3 +132,62 @@ it('keeps the settled exit code when the reader closes the pipe during the drain
   expect(stderr).not.toMatch(/EPIPE|Unhandled 'error' event/);
   expect(exit, stderr).toEqual({ code: 0, signal: null });
 });
+
+// A pre-run error (an unknown --provider, exit 1) before any run starts has no run-level signal handlers. Its message is far larger
+// than the pipe buffer and the reader never reads, so the exit stays in the stdout/stderr drain.
+// A SIGINT/SIGTERM then must exit with the decided code, not die by signal (130/143).
+const PIPE_BUFFER_BYTES = 65_536;
+
+/** Bytes the process has written so far (`/proc/<pid>/io` wchar), or 0 if unreadable. */
+async function bytesWritten(pid: number): Promise<number> {
+  try {
+    const io = await readFile(`/proc/${pid}/io`, 'utf8');
+    return Number(/^wchar:\s*(\d+)/m.exec(io)?.[1] ?? 0);
+  } catch {
+    return 0;
+  }
+}
+
+// Readiness reads Linux /proc/<pid>/io.
+it.skipIf(!existsSync('/proc/self/io')).each(['SIGINT', 'SIGTERM'] as const)(
+  'exits with the decided code on %s during a pre-run drain of an unread stderr',
+  async (signal) => {
+    const lease = await createIsolatedWorkspaceLease({
+      prepare: async (root) => {
+        await mkdir(join(root, 'project'));
+      },
+    });
+    // A real pipe (mkfifo), not the socketpair `stdio: 'pipe'` makes: that holds more than the
+    // 100 KB message, so the CLI would never block. The read end is held open and never read.
+    const fifo = join(lease.root, 'stderr.fifo');
+    execFileSync('mkfifo', [fifo]);
+    const readEnd = await open(fifo, constants.O_RDONLY | constants.O_NONBLOCK);
+    const writeEnd = await open(fifo, constants.O_WRONLY);
+    const huge = 'U'.repeat(100_000);
+    const child = spawn(
+      process.execPath,
+      [testCliPath(join(process.cwd(), 'dist/cli.js')), '--json', '--provider', huge, 'hi'],
+      { cwd: join(lease.root, 'project'), env: lease.env, stdio: ['ignore', 'ignore', writeEnd.fd] },
+    );
+    await writeEnd.close();
+    const deadline = setTimeout(() => child.kill('SIGKILL'), 45_000);
+    try {
+      const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) =>
+        child.once('exit', (code, sig) => resolve({ code, signal: sig })),
+      );
+      // Readiness: the stderr pipe is full once the CLI has written a pipe buffer's worth, so the
+      // rest of the message, and the exit, wait on the unread reader.
+      await expect
+        .poll(() => bytesWritten(child.pid!), { interval: 25, timeout: 20_000 })
+        .toBeGreaterThanOrEqual(PIPE_BUFFER_BYTES);
+      expect(child.exitCode, 'CLI exited before the drain was pending').toBeNull();
+      child.kill(signal);
+      expect(await exited).toEqual({ code: 1, signal: null });
+    } finally {
+      clearTimeout(deadline);
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+      await readEnd.close();
+      await lease.cleanup();
+    }
+  },
+);

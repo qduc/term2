@@ -8,7 +8,8 @@
  * canonical object schema and never mentions the flat form.
  */
 
-const FLAT_FIELDS = ['search_content', 'replace_content', 'match_all'] as const;
+export const FLAT_SEARCH_REPLACE_FIELDS = ['search_content', 'replace_content', 'match_all'] as const;
+const FLAT_FIELDS = FLAT_SEARCH_REPLACE_FIELDS;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);

@@ -14,6 +14,8 @@ export interface ScriptedToolRun {
   readonly requests: ChatRequest[];
   /** Tool-result texts the model saw, in call order (taken from the final request). */
   readonly toolResults: string[];
+  /** Tool-result texts across every request (root and child agents), in request order, without repeats. */
+  readonly allToolResults: string[];
   /** Result of `options.inspect`, run before the isolated workspace is cleaned up. */
   readonly inspected: unknown;
   /** Final contents of `options.readBack` files (empty string when absent), captured before cleanup. */
@@ -110,7 +112,11 @@ export async function runScriptedToolCalls(options: {
       files[name] = await readFile(join(lease.root, 'project', name), 'utf8').catch(() => '');
     }
     const inspected = await options.inspect?.(toolResults);
+    const allToolResults = [
+      ...new Set(requests.flatMap((r) => r.messages.filter((m) => m.role === 'tool').map((m) => textOf(m.content)))),
+    ];
     return {
+      allToolResults,
       inspected,
       exitCode: result.exitCode,
       stdout: result.stdout,

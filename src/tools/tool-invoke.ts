@@ -3,7 +3,7 @@ import { isAbortLike } from './subagents/utils.js';
 import { unwrapSchema } from '../config/settings/setting-schema-utils.js';
 import type { AnyToolDefinition, ToolParameterSchema } from './types.js';
 import { isZodToolParameterSchema } from './types.js';
-import { describeForeignArguments, registerToolArgumentNames } from './tool-argument-hint.js';
+import type { ToolArgumentNames } from './tool-argument-hint.js';
 
 /**
  * Maximum payload size (in characters) for which JSON repair is attempted.
@@ -378,7 +378,12 @@ export const toolErrorFunction = (_context: unknown, error: unknown): string => 
  * The model-facing feedback for structurally invalid tool input: legacy's
  * "Tool input did not match schema for …" diagnostic, shared with the direct engine.
  */
-export const runToolInputDiagnostics = (toolName: string, schema: z.ZodTypeAny, rawInput: any): string => {
+export const runToolInputDiagnostics = (
+  toolName: string,
+  schema: z.ZodTypeAny,
+  rawInput: any,
+  argumentNames?: ToolArgumentNames,
+): string => {
   let parsedInput: any;
   try {
     parsedInput = typeof rawInput === 'string' ? JSON.parse(rawInput) : rawInput;
@@ -399,7 +404,7 @@ export const runToolInputDiagnostics = (toolName: string, schema: z.ZodTypeAny, 
         return `${field} ${msg}`;
       });
       const issueText = issues.join('; ');
-      const foreignHint = describeForeignArguments(toolName, parsedInput);
+      const foreignHint = argumentNames?.describeForeign(toolName, parsedInput) ?? '';
       const feedback = `Tool input did not match schema for ${toolName}: ${issueText}${
         issueText.endsWith('.') ? '' : '.'
       } ${describeValidationInput(parsedInput)}${
@@ -422,11 +427,11 @@ export const runToolInputDiagnostics = (toolName: string, schema: z.ZodTypeAny, 
 export const wrapToolInvoke = <T extends AnyToolDefinition>(
   tool: T,
   originalSchema?: z.ZodTypeAny,
-  options: { argumentParsing?: ToolInputNormalizationMode } = {},
+  options: { argumentParsing?: ToolInputNormalizationMode; argumentNames?: ToolArgumentNames } = {},
 ): T => {
   const targetSchema = originalSchema || tool.parameters;
   const originalExecute = tool.execute.bind(tool);
-  registerToolArgumentNames(tool.name, targetSchema);
+  options.argumentNames?.register(tool.name, targetSchema);
 
   tool.execute = async (params: any, context: unknown, details: any) => {
     try {
@@ -450,7 +455,12 @@ export const wrapToolInvoke = <T extends AnyToolDefinition>(
       // non-fatal diagnostic result, matching the old invoke path.
       const zodSchema = getZodSchema(targetSchema);
       if (zodSchema && !zodSchema.safeParse(normalizedInput).success) {
-        return runToolInputDiagnostics(tool.name ?? 'unknown', targetSchema as any, normalizedInput);
+        return runToolInputDiagnostics(
+          tool.name ?? 'unknown',
+          targetSchema as any,
+          normalizedInput,
+          options.argumentNames,
+        );
       }
 
       return await originalExecute(normalizedInput, context, details);
@@ -458,7 +468,7 @@ export const wrapToolInvoke = <T extends AnyToolDefinition>(
       if (isInvalidToolInputError(error)) {
         // Surface schema diagnostics as a non-fatal tool result so the model
         // can self-correct within the same turn, rather than aborting the run.
-        return runToolInputDiagnostics(tool.name ?? 'unknown', targetSchema as any, params);
+        return runToolInputDiagnostics(tool.name ?? 'unknown', targetSchema as any, params, options.argumentNames);
       }
       throw error;
     }

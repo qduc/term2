@@ -10,6 +10,7 @@ import type {
   SharedV3ProviderOptions,
   JSONSchema7,
 } from '@ai-sdk/provider';
+import { effortSentinel } from './anthropic-effort-messages.js';
 import { withMergedAssistantMessages } from './ai-sdk-message-normalizer.js';
 import { reportedUsageCost } from '../../shared/cost/model-cost.js';
 import type {
@@ -284,9 +285,9 @@ function toCallOptions(
       // The AI SDK lane never produces opaque items, so any it sees came from
       // another provider and is inert baggage left by a switch, not a fault.
       // See `provider-opaque-compatibility.ts`.
-      ...request.input
-        .filter((item) => item.type !== 'provider_opaque')
-        .map((item) => toPromptMessage(item, toolNames)),
+      ...withEffortSentinels(request.input.filter((item) => item.type !== 'provider_opaque')).map((item) =>
+        toPromptMessage(item, toolNames),
+      ),
     ],
     ...(request.tools.length ? { tools: request.tools.map(toTool) } : {}),
     ...(request.toolChoice ? { toolChoice: toToolChoice(request.toolChoice) } : {}),
@@ -309,7 +310,37 @@ function toCallOptions(
   };
 }
 
-function toPromptMessage(item: StreamedModelTurnInput, toolNames: Map<string, string>): LanguageModelV3Message {
+/**
+ * The AI SDK has no mid-conversation system message, so an `effort_update` marker
+ * travels as a leading sentinel text part of the next user message and the
+ * Anthropic adapter's fetch rewrites it into the per-message effort form
+ * (`anthropic-effort-messages.ts`). Only models that declare per-message effort
+ * receive markers; with no later user message the marker has no turn to govern.
+ */
+function withEffortSentinels(
+  input: readonly StreamedModelTurnInput[],
+): Exclude<StreamedModelTurnInput, { type: 'effort_update' }>[] {
+  const output: Exclude<StreamedModelTurnInput, { type: 'effort_update' }>[] = [];
+  let pending: string | undefined;
+  for (const item of input) {
+    if (item.type === 'effort_update') {
+      pending = item.effort;
+      continue;
+    }
+    if (pending !== undefined && item.type === 'message' && item.role === 'user') {
+      output.push({ ...item, content: [{ type: 'text', text: effortSentinel(pending) }, ...item.content] });
+      pending = undefined;
+      continue;
+    }
+    output.push(item);
+  }
+  return output;
+}
+
+function toPromptMessage(
+  item: Exclude<StreamedModelTurnInput, { type: 'effort_update' }>,
+  toolNames: Map<string, string>,
+): LanguageModelV3Message {
   if (item.type === 'message') {
     if (item.role === 'system') return { role: 'system', content: item.content.map((part) => part.text).join('') };
     return { role: item.role, content: item.content.map(toMessagePart) };

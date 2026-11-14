@@ -126,6 +126,12 @@ export interface StreamedModelTurnRequest {
   /** Structured output declaration retained for result-shaped callers. */
   readonly outputType?: JsonSchemaDefinition | 'text';
   readonly reasoning?: { readonly effort?: string | null; readonly summary?: 'auto' | 'concise' | 'detailed' | null };
+  /**
+   * The effort in effect after the conversation's `effort_update` markers, set
+   * only when it differs from `reasoning.effort` (which then stays at the
+   * conversation's starting value so the cached prefix survives).
+   */
+  readonly conversationEffort?: string;
   /** Codex-only settings that must never be sent through another provider's escape hatch. */
   readonly codex?: StreamedModelCodexOptions;
   readonly providerOptions?: StreamedModelProviderOptions;
@@ -190,6 +196,16 @@ export type StreamedModelTurnInput =
       readonly provider: string;
       readonly sourceProvider?: string;
       readonly item: Readonly<Record<string, unknown>>;
+    }
+  | {
+      /**
+       * Change reasoning effort from this point of the conversation without
+       * changing the top-level effort (see `effort-updates.ts`). Reaches only
+       * adapters whose model declares `effortUpdates`; the registry removes it
+       * for every other path.
+       */
+      readonly type: 'effort_update';
+      readonly effort: string;
     };
 
 export interface StreamedModelTool {

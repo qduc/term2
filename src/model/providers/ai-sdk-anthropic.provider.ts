@@ -8,6 +8,7 @@ import {
   resolveThinkingBudget,
 } from './ai-sdk-provider-settings.js';
 import { createAiSdkStreamedModel } from './ai-sdk-streamed-model.js';
+import { withAnthropicEffortMessages } from './anthropic-effort-messages.js';
 import type { StreamedModelTurn, StreamedModelTurnRequest } from '../streamed-model-turn.js';
 
 type AiSdkAnthropicModelLike = LanguageModelV3;
@@ -211,19 +212,55 @@ export class AiSdkAnthropicProvider {
 
   getStreamedModel(modelName?: string): StreamedModelTurn {
     const config = this.#resolveConfig();
-    const provider = this.#createProvider(config);
+    const baseFetch = config.fetch;
+    const provider = this.#createProvider({
+      ...config,
+      // Inert unless a request carries a per-message effort marker.
+      fetch: withAnthropicEffortMessages((input, init) => (baseFetch ?? fetch)(input, init)),
+    });
     const resolvedModelName = modelName || this.#defaultModel;
     const model = withAnthropicPromptCaching(
       provider(resolvedModelName),
       this.#shouldApplyPromptCaching,
       resolvedModelName,
     );
+    const adaptiveThinking = /^claude-(?:haiku|sonnet)-5-5(?:-|$)/.test(resolvedModelName);
 
-    return createAiSdkStreamedModel(
+    const turn = createAiSdkStreamedModel(
       withForwardedProviderSettings(model, (options) => forwardExplicitProviderSettings(options, 'anthropic')),
-      (request) => resolveReasoningOptions(request, /^claude-(?:haiku|sonnet)-5-5(?:-|$)/.test(resolvedModelName)),
+      (request) => resolveReasoningOptions(request, adaptiveThinking),
     );
+    return {
+      ...turn,
+      ...(turn.getResponse
+        ? { getResponse: (request) => turn.getResponse!(withPinnedEffortFallback(request, adaptiveThinking)) }
+        : {}),
+      stream: (request) => turn.stream(withPinnedEffortFallback(request, adaptiveThinking)),
+    };
   }
+}
+
+/**
+ * Per-message effort needs adaptive thinking driven by the selected effort. When the
+ * caller pins thinking or effort through provider options, or the model has no
+ * adaptive thinking, the markers cannot apply: send today's request instead, with
+ * the effective effort top-level.
+ */
+function withPinnedEffortFallback(
+  request: StreamedModelTurnRequest,
+  adaptiveThinking: boolean,
+): StreamedModelTurnRequest {
+  const markers = request.input.filter((item) => item.type === 'effort_update');
+  if (!markers.length) return request;
+  const anthropic = (request.providerOptions as SharedV3ProviderOptions | undefined)?.anthropic;
+  if (adaptiveThinking && anthropic?.thinking === undefined && anthropic?.effort === undefined) return request;
+  const effective = request.conversationEffort ?? markers.at(-1)!.effort;
+  const { conversationEffort: _effective, ...rest } = request;
+  return {
+    ...rest,
+    input: request.input.filter((item) => item.type !== 'effort_update'),
+    reasoning: { ...request.reasoning, effort: effective },
+  };
 }
 
 /** Apply anthropic's reasoning options before crossing the SDK boundary. */

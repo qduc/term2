@@ -6,6 +6,12 @@ export interface StoredCustomProviderConfig {
   type: KnownCustomProviderType;
   baseUrl?: string;
   apiKey?: string;
+  /**
+   * Anthropic-format endpoints only: whether the endpoint accepts per-message effort
+   * (beta `mid-conversation-output-config-2026-07-01`). Unset means only the first-party
+   * API (no base URL, or host api.anthropic.com); a gateway must opt in.
+   */
+  perMessageEffort?: boolean;
 }
 
 export const normalizeProviderIdentifier = (value: string): string => value.trim().replace(/\s+/g, '_');
@@ -62,6 +68,7 @@ const decodeStoredCustomProviderConfig = (entry: unknown): StoredCustomProviderC
     type,
     baseUrl,
     apiKey,
+    ...(typeof record.perMessageEffort === 'boolean' ? { perMessageEffort: record.perMessageEffort } : {}),
   };
 };
 

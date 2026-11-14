@@ -6,6 +6,8 @@ import { directPreviewConfiguration, directPreviewOccurrences } from './preview.
 import type { Conversation } from './types.js';
 import type { Fact } from './facts.js';
 import { replay } from './replay.js';
+import { effortTimelineForTurn } from './effort-timeline.js';
+import type { TurnId } from '../engine/index.js';
 /** Accepted configuration generations: validate before durable acceptance, then install once. */
 import { DirectContinuity, type DirectContinuityBinding } from '../engine/recovery-continuity.js';
 import { parseDirectConfigurationFact, type DirectPreparedConfiguration } from './configuration.js';
@@ -163,13 +165,31 @@ export class ConversationGeneration {
     // deliberately NOT accepted. No memory/notice/goal state is consumed.
     const human = capabilities.humanPlan('preview', request.input);
     const notice = this.notice(request.notice);
-    const modelInput = notice ? withNotice(human.modelInput, notice) : human.modelInput;
+    const noticed = notice ? withNotice(human.modelInput, notice) : human.modelInput;
+    // As the turn would start: its admission (and effort) recorded after the log's facts.
+    const timeline = effortTimelineForTurn({
+      facts: [
+        ...facts,
+        {
+          type: 'turn_started',
+          turnId: 'preview' as TurnId,
+          input: request.input,
+          requestConfiguration: configuration,
+        },
+      ],
+      history,
+      newItems: noticed,
+      model: request.model,
+      reasoning: request.reasoning,
+      models: this.runtime.models,
+    });
+    const modelInput = timeline.newItems;
     const canonical: ModelRequest = {
       model: request.model,
       instructions: request.instructions,
-      input: [...history, ...modelInput],
+      input: [...timeline.history, ...modelInput],
       tools: request.tools,
-      ...(request.reasoning !== undefined ? { reasoning: request.reasoning } : {}),
+      ...(timeline.reasoning !== undefined ? { reasoning: timeline.reasoning } : {}),
       ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
       ...(request.maxOutputTokens !== undefined ? { maxOutputTokens: request.maxOutputTokens } : {}),
       ...(request.providerOptions !== undefined ? { providerOptions: request.providerOptions } : {}),

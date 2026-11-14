@@ -10,11 +10,40 @@ import { expect, it } from 'vitest';
 import { createIsolatedWorkspaceLease } from './provider-test-harness.js';
 
 // Crosses native/SDK HTTP adapters, the public core Usage boundary, accepted
-// cost facts, final rollup and built CLI JSON. All token counts are synthetic.
+// cost facts, final rollup, the run_summary record and built CLI JSON. All token
+// counts are synthetic. `reasoning` is what the provider reports; Anthropic's
+// Messages usage has no reasoning count, so its summary must say null, not 0.
 it('accounts for cache creation, whole-request context tiers and one-hour writes', async () => {
-  const cases = [
-    { provider: 'openai', model: 'gpt-6-luna', input: 1000, read: 600, write: 300, long: 0, micros: 104 },
-    { provider: 'chat-cost-fixture', model: 'gpt-6-luna', input: 200, read: 50, write: 100, long: 0, micros: 24 },
+  const cases: {
+    provider: string;
+    model: string;
+    input: number;
+    read: number;
+    write: number;
+    long: number;
+    micros: number;
+    reasoning?: number;
+  }[] = [
+    {
+      provider: 'openai',
+      model: 'gpt-6-luna',
+      input: 1000,
+      read: 600,
+      write: 300,
+      long: 0,
+      micros: 104,
+      reasoning: 40,
+    },
+    {
+      provider: 'chat-cost-fixture',
+      model: 'gpt-6-luna',
+      input: 200,
+      read: 50,
+      write: 100,
+      long: 0,
+      micros: 24,
+      reasoning: 4,
+    },
     { provider: 'anthropic', model: 'claude-haiku-5-5', input: 3, read: 99997, write: 0, long: 0, micros: 1050 },
     { provider: 'anthropic', model: 'claude-haiku-5-5', input: 3, read: 99998, write: 0, long: 0, micros: 5252 },
     {
@@ -50,6 +79,7 @@ it('accounts for cache creation, whole-request context tiers and one-hour writes
           total_tokens: fixture.input + output,
           cache_write_tokens: fixture.write,
           prompt_tokens_details: { cached_tokens: fixture.read },
+          completion_tokens_details: { reasoning_tokens: fixture.reasoning },
         };
         res.end(
           `data: ${JSON.stringify({
@@ -84,6 +114,7 @@ it('accounts for cache creation, whole-request context tiers and one-hour writes
             output_tokens: output,
             total_tokens: fixture.input + output,
             input_tokens_details: { cached_tokens: fixture.read, cache_write_tokens: fixture.write },
+            output_tokens_details: { reasoning_tokens: fixture.reasoning },
           },
         };
         emit({ type: 'response.created', response: { ...response, status: 'in_progress', output: [] } });
@@ -189,6 +220,33 @@ it('accounts for cache creation, whole-request context tiers and one-hour writes
       const final = events.find((event) => event.type === 'final');
       expect(final?.usage.prompt_tokens + (final?.usage.cache_creation_tokens ?? 0)).toBe(fullInput);
       expect(final?.usage.total_tokens).toBe(fullInput + output);
+      // One run_summary per run, just before `completed`, from the same accepted records.
+      const summaries = events.filter((event) => event.type === 'run_summary');
+      expect(summaries).toHaveLength(1);
+      expect(events.at(-2)).toBe(summaries[0]);
+      expect(events.at(-1)?.type).toBe('completed');
+      const read = fixture.read;
+      expect(summaries[0]).toMatchObject({
+        outcome: 'completed',
+        cost: { usdMicros: fixture.micros, pricedRequests: 1, unpricedRequests: 0 },
+        requests: { total: 1, completed: 1 },
+        tokens: {
+          input: fullInput,
+          cacheRead: read,
+          fresh: fullInput - read - fixture.write,
+          output,
+          reasoning: fixture.reasoning ?? null,
+          requestsWithUsage: 1,
+          requestsWithReasoning: fixture.reasoning === undefined ? 0 : 1,
+        },
+        cacheHitRatio: { overall: Number((read / fullInput).toFixed(4)), rootAfterFirst: null },
+        contextGrowth: { rootRequests: 1, first: fullInput, last: fullInput, max: fullInput, inputTokens: [fullInput] },
+        agents: [
+          { agent: 'root', role: null, models: [{ provider: fixture.provider, model: fixture.model }], requests: 1 },
+        ],
+        tools: { calls: 0, errors: 0, repeatedReads: { sameRange: 0, otherRange: 0 }, repeatedShellCommands: 0 },
+      });
+      expect(summaries[0].tokens.cacheWrite ?? 0).toBe(fixture.write);
       if (fixture.provider === 'chat-cost-fixture') {
         // Consume the actual persisted provider response, rather than a hand-built
         // normalized object, through both presentation paths. This catches the raw
@@ -209,7 +267,9 @@ it('accounts for cache creation, whole-request context tiers and one-hour writes
         ] as const) {
           const once = normalize(usages[0]);
           const twice = normalize(once);
-          expect(once).toEqual(cost.usage);
+          // The raw response's reasoning count is not in the cost record: agent-core builds
+          // that record from Usage fields only. run_summary carries it instead (above).
+          expect(once).toEqual({ ...cost.usage, reasoning_tokens: fixture.reasoning });
           expect(twice).toEqual(once);
           expect(format(once)).toContain('200 in');
           expect(format(twice)).toBe(format(once));

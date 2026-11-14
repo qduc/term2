@@ -169,13 +169,20 @@ export function outputToItem(
   }
 }
 
-export function toUsage(usage: StreamedModelUsage): Usage {
+/**
+ * agent-core's `Usage` has no reasoning field, and its cost record copies only the named fields, so a
+ * provider-reported hidden reasoning count rides on this same object instead. The engine publishes the
+ * object unchanged as the accepted `usage` fact, which is how it reaches the log and the wire
+ * (`WireUsage.reasoningTokens`). Absent means the provider did not report it, never zero.
+ */
+export function toUsage(usage: StreamedModelUsage): Usage & { readonly reasoningTokens?: number } {
   return {
     inputTokens: usage.inputTokens ?? 0,
     outputTokens: usage.outputTokens ?? 0,
     cachedInputTokens: usage.cachedInputTokens ?? 0,
     ...(usage.cacheWriteTokens !== undefined ? { cacheWriteTokens: usage.cacheWriteTokens } : {}),
     ...(usage.cacheWrite1hTokens !== undefined ? { cacheWrite1hTokens: usage.cacheWrite1hTokens } : {}),
+    ...(usage.reasoningTokens !== undefined ? { reasoningTokens: usage.reasoningTokens } : {}),
   };
 }
 

@@ -119,6 +119,87 @@ imports Session, Engine or adopted code, and never opens conversation storage.
   `replay.fromSeq`; headless one-shot resume uses `connect(principal, id)` and
   does not reset or replay client state.
 
+## `run_summary` (JSON only)
+
+A `--json` run that reaches the headless driver's result writes at most one
+`{"type":"run_summary","version":1,...}` record: on success immediately before
+`completed` (which stays the last line), otherwise as the last line after the
+error/terminal records. A run refused before the driver starts (argument,
+settings or session-open failures) writes no JSON at all, and a process killed
+or exited by a second signal may never reach it. Plain output has no summary;
+there is no existing place for it. It adds a record and changes no
+existing one. `run-summary.ts` computes it only from accepted wire events the run
+already receives: `request_cost_recorded`, `usage`, `tool_finished`,
+`compaction_*`, `task_changed` and `subagent`. The driver passes every event of
+the session to `observe` before its turn filter, because a background child's
+requests can settle between the run's turns. Only request trees rooted in a turn
+this run drove (`turnIds`) count, so a resumed run does not recount history.
+
+Measurement never affects the run. `output.ts` catches any failure to observe an
+event, build the record or serialize it; the run then writes the error variant
+`{"type":"run_summary","version":1,"sessionId":…,"outcome":…,"error":"<message>"}`
+instead of partial numbers, and `completed` and the exit code are unchanged. The
+accumulator keeps per request its cost record and per settled tool call only its
+name, error flag, rejection class and the normalized read path/range or trimmed
+shell command, never tool output; building is linear in requests and tool calls
+(150k requests build in well under a second).
+
+Fields (unknown is `null`, never `0`; `version` 1):
+
+- `sessionId`, `outcome` (the run's `DirectHeadlessOutcome`), `turnIds`.
+- `cost`: `usd`/`usdMicros` (sum of priced requests; `null` when none is
+  priced), `state` (`exact`/`estimated`/`partial`/`unavailable`, as
+  `summarizeCost`), `pricedRequests`, `unpricedRequests`.
+- `requests`: `total`, `completed`, `failed`, `cancelled`, `compaction`.
+- `tokens`: `input` (all input incl. cache read and write), `fresh`
+  (`input - cacheRead - cacheWrite`), `cacheRead`, `cacheWrite` (`null` when no
+  request reported one), `output`, `reasoning` (`null` when no request reported
+  it), `requestsWithUsage`, `requestsWithReasoning`. Requests without usage add
+  nothing; compare `requestsWithUsage` to `requests.total`. When no request
+  reported usage, `input`, `fresh`, `cacheRead` and `output` are `null` too
+  (here and per agent). A reported cache read of zero cannot be told from an
+  unreported one: providers' adapters default it to `0`.
+- `cacheHitRatio`: `overall` = cacheRead / input; `rootAfterFirst` the same over
+  the root agent's model requests after its first (compaction requests excluded).
+  4 decimals; `null` with no input.
+- `contextGrowth`: root model requests' total input in order: `rootRequests`,
+  `first`, `last`, `max`, and the full `inputTokens` list only up to 64 requests
+  (a request without usage is `null` in the list).
+- `agents`: `root` first, then each subagent by task id with `role` (from the
+  task or subagent frame; `null` for root or when unknown), `mode`, the
+  `models` its requests actually used, and its own `requests`, `cost`, `tokens`
+  and `toolCalls`.
+- `tools`: settled tool results (`tool_finished`, root, run_code children and
+  subagents): `calls`, `byName`, `errors` (`isError`), `rejections` split by the
+  host's own refusal text (`invalidInput`: the schema diagnostic of
+  `runToolInputDiagnostics`; `unknownTool`: agent-core's `Unknown tool:` result),
+  `repeatedReads` and `repeatedShellCommands`. Calls that never settled
+  (cancelled before a result) are not counted.
+  - `repeatedReads.sameRange`: a `read_file` whose path and `start_line`/
+    `end_line` (both absent for a whole-file read) equal those of an earlier
+    successful `read_file` in the run. This is the clear waste signal.
+    `repeatedReads.otherRange`: the path was read successfully before, but only
+    with other ranges; it may be legitimate paging. The path is the model's
+    argument after `path.normalize` (so `./a.txt` equals `a.txt`), not resolved
+    against a working directory: the wire carries no per-agent cwd, so a child
+    working in another worktree that reads the same relative path counts as a
+    repeat of the root's read. Repeats are counted run-wide, across agents.
+  - `repeatedShellCommands`: a `shell` command whose trimmed string equals an
+    earlier one in the run; outcome and description are ignored.
+
+Reasoning tokens: agent-core's `Usage` has no reasoning field and its cost record
+copies named fields only, so `toUsage` (`model/provider-items.ts`) keeps the
+provider's count on the same object. It is persisted on the accepted `usage`
+fact and published as `WireUsage.reasoningTokens`. The summary pairs a turn's
+latest `usage` with that turn's next cost record (they are emitted in that order
+for one request) and only when the output counts match. The legacy
+`usage_update`, `cost_update` and `final` records are unchanged and still have no
+reasoning count. Providers that report it: OpenAI Responses and Codex
+(`output_tokens_details`), chat completions including OpenRouter
+(`completion_tokens_details` or a top-level `reasoning_tokens`), and AI SDK
+adapters that expose `outputTokens.reasoning`. Anthropic Messages reports none,
+so it is `null` there.
+
 ## Internal ownership
 
 `runDirectHeadless` in `direct.ts` owns admission matching, the ordered event
@@ -167,7 +248,8 @@ app can map SIGINT/SIGTERM to their signal exit codes rather than ordinary error
   (`text_delta`, `reasoning_delta`, `tool_call_streaming_delta`,
   `tool_started`/`tool_dispatched` when the wire call ID is present, `retry`
   when required metadata is present, `cost_update`, `command_message`,
-  `run_budget`), and the authoritative `final` from `WireTerminal.finalWindow`.
+  `run_budget`), the authoritative `final` from `WireTerminal.finalWindow`, and
+  the non-legacy `run_summary` described above.
   `session_start` preserves the old profile metadata shape without an added
   capability declaration. The final preserves per-turn public `turnItems`, usage,
   root-tree costs, ordered result items and terminal cause; command messages

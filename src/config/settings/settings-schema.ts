@@ -75,6 +75,12 @@ const AgentSettingsObjectSchema = z.object({
     'Models for small background jobs like repairing failed file edits and reviewing shell auto-approvals (auto-approval reviews, edit healing). Falls back to agent.modelSelection when unset.',
   ),
   reasoningEffort: z.enum(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh']).default('default'),
+  cachePreservingEffort: z
+    .enum(['off', 'first-party', 'any-endpoint'])
+    .default('off')
+    .describe(
+      'Keep prompt cache on /effort changes. Off by default: endpoints unverified. Turns off for the session if a request with it is rejected as invalid.',
+    ),
   // Temperature controls randomness. We keep it optional so providers/models
   // can use their own defaults when unset.
   temperature: z.number().min(0).max(2).optional(),
@@ -736,6 +742,7 @@ export interface SettingsWithSources {
     cheapReasoningEffort: SettingWithSource<string | undefined>;
     choreModel: SettingWithSource<TierModelPoolSetting | undefined>;
     reasoningEffort: SettingWithSource<string>;
+    cachePreservingEffort: SettingWithSource<string>;
     temperature: SettingWithSource<number | undefined>;
     backgroundWaitTimeoutMs: SettingWithSource<number>;
     maxTurns: SettingWithSource<number>;
@@ -910,6 +917,7 @@ export const SETTING_KEYS = {
   AGENT_CHEAP_REASONING_EFFORT: 'agent.cheapReasoningEffort',
   AGENT_CHORE_MODEL: 'agent.choreModel',
   AGENT_REASONING_EFFORT: 'agent.reasoningEffort',
+  AGENT_CACHE_PRESERVING_EFFORT: 'agent.cachePreservingEffort',
   AGENT_TEMPERATURE: 'agent.temperature',
   AGENT_FAVORITE_MODELS: 'agent.favoriteModels',
   AGENT_MODEL_NICKNAMES: 'agent.modelNicknames',
@@ -1054,6 +1062,7 @@ export const RUNTIME_MODIFIABLE_SETTINGS = new Set<string>([
   SETTING_KEYS.AGENT_COMPLETION_VERIFICATION,
   SETTING_KEYS.AGENT_VERIFICATION_MAX_REPAIRS,
   SETTING_KEYS.AGENT_REASONING_EFFORT,
+  SETTING_KEYS.AGENT_CACHE_PRESERVING_EFFORT,
   SETTING_KEYS.AGENT_TEMPERATURE,
   SETTING_KEYS.AGENT_FAVORITE_MODELS,
   SETTING_KEYS.AGENT_MODEL_NICKNAMES,
@@ -1167,6 +1176,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
     cheapReasoningEffort: undefined,
     choreModel: undefined,
     reasoningEffort: 'default',
+    cachePreservingEffort: 'off',
     backgroundWaitTimeoutMs: 3_600_000,
     maxTurns: 100,
     maxRequestInputTokens: null,

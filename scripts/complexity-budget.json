@@ -24,8 +24,8 @@
       "reason": "Server gateway, socket dispatch, and transport endpoints; combines direct SSE host and control socket routes."
     },
     "src/model": {
-      "files": 16,
-      "reason": "Model domain types, token usage tracking, and streaming completion contracts; core vocabulary for all provider adapters."
+      "files": 18,
+      "reason": "Model domain types, token usage tracking, and streaming completion contracts; core vocabulary for all provider adapters. effort-updates.ts is the model-layer contract for cache-preserving effort changes shared by the registry, three adapters and Session; no existing file owns that concept. effort-fallback.ts is the retry-once recovery when an endpoint refuses a request carrying such a change; its only importer is provider.ts, which is at its own size ceiling, and effort-updates.ts is imported by the adapters and Session, which should not depend on failure/logging. Lower the ceiling when provider.ts can take it back or the effort files move into a subfolder."
     },
     "src/model/providers": {
       "files": 58,
@@ -36,8 +36,8 @@
       "reason": "Cross-client event envelopes, serialization codecs, and projection types; stable schemas shared by TUI, headless, and ACP."
     },
     "src/session": {
-      "files": 87,
-      "reason": "Session lifecycle, queue and stream ownership plus the two application-context/pricing composition files and three existing host policy helpers moved from engine for #224. The engine is now only portable package contract surfaces; further Session root decomposition remains planned in #197 and Phase 3."
+      "files": 88,
+      "reason": "Session lifecycle, queue and stream ownership plus the two application-context/pricing composition files and three existing host policy helpers moved from engine for #224. The engine is now only portable package contract surfaces; further Session root decomposition remains planned in #197 and Phase 3. effort-timeline.ts derives a turn's effort markers from the log, like a recorded notice; it is a distinct host policy, not part of an existing module."
     },
     "src/session/conversation": {
       "files": 19,
@@ -74,8 +74,8 @@
       "reason": "The wire type catalogue keeps accepted usage dimensions beside the existing counters; cache creation, its one-hour subset and provider-reported reasoning tokens (which agent-core's Usage cannot carry yet, so they ride the accepted usage fact) add three optional fields without changing older messages. Splitting those fields from the usage contract would obscure the public shape. Retire this ceiling if wire types are generated or reorganized by complete protocol domains."
     },
     "src/session/conversation.ts": {
-      "lines": 524,
-      "reason": "The Conversation's turn driver; candidate 2 keeps both the question-cancel notice (a3) and the cross-turn compaction hold (solo/tools), each closing over the same driver state. Direct admission checks foreign native compaction coverage before accepting a turn, using the same configured provider and history as the driver."
+      "lines": 532,
+      "reason": "The Conversation's turn driver; candidate 2 keeps both the question-cancel notice (a3) and the cross-turn compaction hold (solo/tools), each closing over the same driver state. Direct admission checks foreign native compaction coverage before accepting a turn, using the same configured provider and history as the driver. Eight lines decorate the turn's model history with cache-preserving effort markers (effort-timeline.ts) at the one place a turn's history, new input and settings meet, after admission."
     },
     "src/session/replay-fold.ts": {
       "lines": 503,
@@ -86,8 +86,8 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/app/application-runtime.ts": {
-      "lines": 505,
-      "reason": "The direct runtime commits each model configuration change and decides in the same commit whether global defaults should be persisted. ACP sessions keep their changes local. Lower the ceiling when the model reconfiguration transaction can move together with its settings writes."
+      "lines": 508,
+      "reason": "The direct runtime commits each model configuration change and decides in the same commit whether global defaults should be persisted. ACP sessions keep their changes local. Lower the ceiling when the model reconfiguration transaction can move together with its settings writes. Three lines give the registry selection the session's log-backed record of a refused cache-preserving effort marker (application-models.ts holds the logic); this is the one place the selection is built before the session port exists, so the late-bound port is named here."
     },
     "src/app/lib/agent-factory.ts": {
       "lines": 554,
@@ -106,16 +106,16 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/config/settings/settings-schema.ts": {
-      "lines": 1361,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
+      "lines": 1371,
+      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Ten lines declare `agent.cachePreservingEffort` through the mandatory setting touchpoints (schema with description, key, typed field, default, runtime-modifiable list)."
     },
     "src/app/settings-service.ts": {
       "lines": 1258,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/config/settings/settings-ui-metadata.ts": {
-      "lines": 543,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
+      "lines": 544,
+      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. One line labels `agent.cachePreservingEffort`."
     },
     "src/session/agent-runtime/permission-boundary.ts": {
       "lines": 660,
@@ -134,7 +134,7 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/model/providers/ai-sdk-streamed-model.ts": {
-      "lines": 526,
+      "lines": 530,
       "reason": "The SDK stream/unary projector owns SDK usage extraction. Nine lines retain the one-hour creation subset in both result paths through one helper; isolating this field would split a single Usage projection. Retire this entry when the complete SDK result and usage translation is extracted as a separate boundary."
     },
     "src/model/providers/codex-responses-model.ts": {
@@ -142,16 +142,16 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Responses Lite reconnect checks the existing response chain before filtering unpaired tool items; this remains part of the same wire request preparation."
     },
     "src/model/providers/codex.provider.ts": {
-      "lines": 506,
-      "reason": "OAuth token-manager lifecycle and claim parsing now live in providers/runtime/codex-token-manager.ts; this remaining provider transport assembly is ratcheted from 745 to 506 lines."
+      "lines": 511,
+      "reason": "OAuth token-manager lifecycle and claim parsing now live in providers/runtime/codex-token-manager.ts; this remaining provider transport assembly is ratcheted from 745 to 506 lines. Five lines declare the GPT-6 cache-preserving effort capability (model/effort-updates.ts), gated on the default Codex host, beside the provider's other capabilities."
     },
     "src/model/providers/model-catalog/catalog.generated.ts": {
       "lines": 4653,
       "reason": "The generated model data now includes context-price tiers and explicit one-hour write rates while preserving every existing model capacity and base rate. A single artifact keeps regeneration and provenance review coherent; splitting at an arbitrary line count would fragment the generator output. Retire this ceiling if catalog generation is deliberately organized into provider artifacts."
     },
     "src/model/providers/openai-responses-model.ts": {
-      "lines": 924,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Ten lines since then carry the GPT-6 Luna native conversation-input flag (#250) through the constructor and three transports; the projection lives in luna-responses-lite-wire-protocol.ts. Three further lines recognize native cache-write usage in response normalization. Lower the ceiling when the transports share one request-body builder or the file is split by transport. Twenty-two further lines validate failed/incomplete terminal usage and emit it before the existing error in both streaming transports. This belongs beside terminal normalization and the transport loops; extracting only the small guard would scatter their shared accounting contract without moving an independent responsibility. Retire this increment when complete Responses terminal normalization is extracted with its usage validation."
+      "lines": 928,
+      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Ten lines since then carry the GPT-6 Luna native conversation-input flag (#250) through the constructor and three transports; the projection lives in luna-responses-lite-wire-protocol.ts. Three further lines recognize native cache-write usage in response normalization. Lower the ceiling when the transports share one request-body builder or the file is split by transport. Twenty-two further lines validate failed/incomplete terminal usage and emit it before the existing error in both streaming transports. This belongs beside terminal normalization and the transport loops; extracting only the small guard would scatter their shared accounting contract without moving an independent responsibility. Retire this increment when complete Responses terminal normalization is extracted with its usage validation. Four lines render an `effort_update` marker as a `configuration_update` item in the shared input projection, beside the other item conversions."
     },
     "src/session/approval/shell-auto-approval-evaluator.ts": {
       "lines": 797,

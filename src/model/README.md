@@ -19,6 +19,90 @@ Response chaining remains enabled. Continuations send new input and the effort
 update without repeating the initial tool/instruction prefix. Core continuity
 compares the complete request envelope and drops the anchor when instructions,
 tools or configuration change, so the next full request declares a fresh prefix.
+An effort-only change is the exception described in the next section: the
+envelope keeps its effort and the trailing update carries `conversationEffort`.
+
+## Cache-preserving effort changes
+
+Changing the top-level effort between requests rewrites the provider's prompt
+cache from the first changed position (measured 2026-11-14; table and caveats in
+`docs/research/model-effort-step-down-cache-economics.md`, addendum). Models that
+accept an in-conversation effort item keep the cache when the change travels as
+input instead. `effort-updates.ts` owns the contract.
+
+**Off by default.** `agent.cachePreservingEffort` is `off` (every path sends
+today's request), `first-party` (only a provider's own endpoint: OpenAI with no
+`OPENAI_BASE_URL` override or host `api.openai.com`; Codex at its default
+`chatgpt.com` host; an Anthropic-format custom provider with no base URL or host
+`api.anthropic.com`) or `any-endpoint` (also base-URL overrides and
+Anthropic-format gateways). It stays off because none of those direct endpoints
+has been probed on real traffic; the owner turns it on per scope after probing.
+A provider definition's `effortUpdateLevels(model, scope)` applies the endpoint
+gate and the model list; the registry exposes the result as `Model.effortUpdates`.
+OpenRouter (chat completions), Google, OpenCode and other compatible endpoints
+declare nothing.
+
+**Models.** Measured, through OpenRouter only: `gpt-6-luna` (Responses on Azure)
+and `claude-haiku-5-5` (`/messages`, Anthropic upstream); `gpt-6.1-terra` was also
+measured there but is not in the direct catalogue, so it is not listed. Enabled
+from documentation only: `gpt-6-astra`, `gpt-6-sol`, `gpt-6.1-sol` (the "GPT-6 and
+later" rule) and `claude-sonnet-5-5`. Other Claude models that support the
+per-message form get a thinking budget rather than adaptive thinking from term2,
+which the form does not accept. The core assumption behind the design is also
+unmeasured: an earlier in-history item keeps governing later requests in which
+the starting top-level effort is sent again. One weak Luna probe agreed; no
+direct endpoint was checked.
+
+**Mechanism.**
+
+- Session (`session/effort-timeline.ts`) keeps the turn's top-level effort at the
+  value of the first counted turn on the same model and puts an `effort_update`
+  marker (a `provider_input` item) before each later turn whose recorded effort
+  differs. Markers are derived, never history: they are rebuilt from each turn's
+  `requestConfiguration` on every turn and after resume (so the cached prefix is
+  rebuilt byte for byte), stripped from compaction output before it is logged,
+  and stripped from any history that holds one. A compaction, rewind or rollover
+  starts afresh: only turns admitted after it count, so the next turn's effort is
+  the top-level value. An effort-only `configure` on a supported model keeps the
+  live model objects and continuity checkpoint (`conversation-generation.ts`), so
+  the Responses anchor survives.
+- Before every request of a turn, `alignTurnEffort` checks that the effort in
+  effect is the one the turn was admitted at; a marker lost mid-turn (an
+  automatic compaction) or stale gives today's request for that call.
+- Adapters: Responses and Codex render `configuration_update` (gpt-6-luna's
+  trailing update carries the effort in effect); the Anthropic adapter turns the
+  marker into a sentinel on the next user message and its fetch replaces each
+  sentinel, wherever the AI SDK merged it, with
+  `{"role":"system","content":[],"output_config":{"effort":...}}`, adding beta
+  `mid-conversation-output-config-2026-07-01`. If a sentinel cannot be placed it
+  sends today's request rather than failing. A caller that pins Anthropic
+  thinking or effort in provider options gets today's request. Codex native
+  compaction drops markers (the compact endpoint takes no effort).
+- **Fallback** (`effort-fallback.ts`). If an endpoint refuses a request that carries
+  a marker with an invalid-request error before any output, the registry retries
+  that request once without markers, with the effective effort top-level. Any
+  invalid-request error on such a request counts, including one the marker did
+  not cause. The session log is the only record: the registry writes an
+  `effort_updates_rejected` context fact as soon as it decides to retry, whether
+  or not the retry succeeds, and asks the log (`ProviderRegistryDeps.effortUpdatesRejection`,
+  wired in `app/application-runtime.ts`) before every request. So markers stay off
+  for the rest of that session across registry rebuilds (`/effort`, `/model`) and
+  after resume, and a new session starts with them on again. Session tells the
+  user once, on the turn's end. A rejection that arrives after output has
+  started is not retried and does not turn the mechanism off: the request fails
+  like any other and the next change sends a marker again.
+- Anything else gets today's request: the registry strips markers and sends the
+  effective effort top-level (`withoutEffortUpdates`), and Session declines an
+  unsupported level, a default (`null`) effort, or a turn whose effort it cannot
+  place. With the setting off, and with it on but effort never changed, requests
+  are unchanged on the wire (`parity/run.mjs check`; verifier byte comparison).
+
+Evidence: `scripts/provider-black-box/effort-change.blackbox.ts` (mock provider:
+default off, scope gate, GPT-6 anchor and resume, pre-GPT-6, compaction, Claude
+prefix and resume, unanswered turn, fallback on both paths, and a retry that also
+fails still turning markers off across a registry rebuild and resume). Not verified on
+real traffic: the direct OpenAI, Codex and Anthropic endpoints, Codex acceptance
+of `configuration_update` at all, and the in-history persistence assumption.
 
 `createProviderRegistry` in `provider.ts` implements the native `ModelRegistry`
 contract from `index.ts` using registered source streamed-model factories. It

@@ -27,6 +27,7 @@ import { planDirectQueue, submitDirectQueue } from './queue.js';
 import { directRolloverAtBoundary } from './rollover.js';
 import { DirectRunBudgets } from './run-budget.js';
 import { foreignCompactionRefusal } from '../model/history-compatibility.js';
+import { effortTimelineForTurn } from './effort-timeline.js';
 import type { Conversation, ConversationDeps, StartedConversationTurn, TurnRequest } from './types.js';
 import type { Fact, FactLine, SessionStartedFact } from './facts.js';
 import { replay } from './replay.js';
@@ -256,15 +257,21 @@ function conversation(
       const refusal = foreignCompactionRefusal(snapshot.history, settings.model.provider);
       if (refusal) throw new Error(refusal);
     }
-    const { modelHistory, sentInput } = prepareConversationNotice(
-      turnId,
-      request,
-      planned,
-      snapshot.history,
-      journal,
-      capabilities!,
-      generation,
-      cancelNotice,
+    // Decorated after admission is durable, so the running turn's effort is in the timeline.
+    const { modelHistory, sentInput, reasoning } = effortTimelineForTurn(
+      facts,
+      generation.runtime.models,
+      settings,
+      prepareConversationNotice(
+        turnId,
+        request,
+        planned,
+        snapshot.history,
+        journal,
+        capabilities!,
+        generation,
+        cancelNotice,
+      ),
     );
     // A segment that a cancelled question ended stays the chain point: the next request chains from that response
     // and sends the outputs it settled (#150 item 10; legacy left them out and the provider refused the request).
@@ -282,6 +289,7 @@ function conversation(
       const handle = (planned?.compaction ? startCompaction : startTurn)(
         {
           ...settings,
+          ...(reasoning !== undefined ? { reasoning } : {}),
           turnId,
           history: modelHistory,
           ...(snapshot.compactionState ? { compactionState: snapshot.compactionState } : {}),

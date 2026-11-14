@@ -33,6 +33,7 @@ export const SETTING_LABELS: Record<string, string> = {
   [SETTING_KEYS.AGENT_CHEAP_REASONING_EFFORT]: 'Cheap reasoning effort',
   [SETTING_KEYS.AGENT_CHORE_MODEL]: 'Chore model',
   [SETTING_KEYS.AGENT_REASONING_EFFORT]: 'Reasoning effort',
+  [SETTING_KEYS.AGENT_CACHE_PRESERVING_EFFORT]: 'Cache-preserving effort changes',
   [SETTING_KEYS.AGENT_TEMPERATURE]: 'Temperature',
   [SETTING_KEYS.AGENT_FAVORITE_MODELS]: 'Favorite models',
   [SETTING_KEYS.AGENT_MODEL_NICKNAMES]: 'Model nicknames',

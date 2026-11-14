@@ -54,7 +54,9 @@ import { ModelFailure, toModelFailure } from './failure.js';
 import { physicalModelStream } from './retry.js';
 import { codexCompact } from './provider-compact.js';
 import { historyToInput, toolDefinition } from './provider-items.js';
-import type { Model, ModelCapabilities, ModelRef, ModelRegistry, ModelRequest } from './index.js';
+import { activeEffortLevels, withEffortFallback, type EffortUpdatesRejection } from './effort-fallback.js';
+import { effortUpdateScope, isEffortUpdateItem, resolveEffortUpdates } from './effort-updates.js';
+import type { Model, ModelCapabilities, ModelEvent, ModelRef, ModelRegistry, ModelRequest } from './index.js';
 
 export type ProviderRegistryDeps = {
   readonly settings: ISettingsService;
@@ -65,6 +67,8 @@ export type ProviderRegistryDeps = {
   readonly providers?: Pick<SourceProviderRegistry, 'getAllProviders'>;
   /** Compatibility input for host composition; provider identity never reads this service. */
   readonly sessionContext?: ISessionContextService;
+  /** The session's record of a refused effort marker; without one, a refusal is retried but not remembered. */
+  readonly effortUpdatesRejection?: EffortUpdatesRejection;
 };
 
 const DEFAULT_RETRY_ATTEMPTS = 2;
@@ -175,9 +179,15 @@ function lazyModel(
     return created;
   };
   const catalogContextWindow = getModelContextWindow(ref.provider, ref.model);
+  const scope = effortUpdateScope(deps.settings.get('agent.cachePreservingEffort'));
+  const declared = scope ? provider.effortUpdateLevels?.(ref.model, scope) : undefined;
+  // Whether this session's endpoint refused a marker is the session log's to say (effort-fallback.ts).
   return {
     ref,
     capabilities,
+    get effortUpdates() {
+      return activeEffortLevels(declared, deps.effortUpdatesRejection);
+    },
     contextWindow: catalogContextWindow ?? UNKNOWN_MODEL_CONTEXT_WINDOW,
     ...(catalogContextWindow !== undefined ? { catalogContextWindow } : {}),
     // Legacy uses Codex's compact endpoint for native compaction; other providers compact locally.
@@ -186,7 +196,13 @@ function lazyModel(
           compact: (request, signal, onDispatched) =>
             providerContext.runWithContext(
               requestTrafficContext(request.affinity, deps.sessionContext?.getContext()),
-              () => codexCompact(ref, deps.settings, turnModel)(request, signal, onDispatched),
+              // Markers are derived per request; the compact endpoint takes no effort at all.
+              () =>
+                codexCompact(ref, deps.settings, turnModel)(
+                  { ...request, input: request.input.filter((item) => !isEffortUpdateItem(item)) },
+                  signal,
+                  onDispatched,
+                ),
             ),
         }
       : {}),
@@ -214,48 +230,69 @@ function lazyModel(
           compaction = { disabled: false };
           if (recovery) compactionByRecovery.set(recovery, compaction);
         }
-        const prepared = toProviderRequest(request, signal, {
-          provider,
-          ref,
-          compaction,
-          owner,
-          transport,
-          capabilities,
-          settings: deps.settings,
-        });
-        const extraBody = isRecord(prepared.providerOptions?.extraBody) ? prepared.providerOptions.extraBody : {};
-        const tier = extraBody.service_tier ?? prepared.providerOptions?.service_tier;
-        yield* physicalModelStream({
+        const attempt = async function* (
+          effortUpdates: readonly string[] | undefined,
+        ): AsyncGenerator<ModelEvent, void> {
+          const prepared = toProviderRequest(request, signal, {
+            provider,
+            ref,
+            compaction,
+            owner,
+            transport,
+            capabilities,
+            settings: deps.settings,
+            effortUpdates,
+          });
+          const extraBody = isRecord(prepared.providerOptions?.extraBody) ? prepared.providerOptions.extraBody : {};
+          const tier = extraBody.service_tier ?? prepared.providerOptions?.service_tier;
+          yield* physicalModelStream({
+            request,
+            signal,
+            maxRetries: deps.settings.get('agent.retryAttempts') ?? DEFAULT_RETRY_ATTEMPTS,
+            scope: { capabilities, websocket: transport === 'websocket', flex: tier === 'flex' },
+            stream: async function* () {
+              const stopped = new AbortController();
+              const linked = AbortSignal.any([signal, stopped.signal]);
+              try {
+                linked.throwIfAborted();
+                const turn = await providerContext.runWithContext(identity, () => turnModel(transport));
+                linked.throwIfAborted();
+                const projection = new ModelEventProjection(
+                  ref.provider,
+                  capabilities.continuity
+                    ? {
+                        kind: 'direct_response',
+                        owner,
+                        provider: ref.provider,
+                        model: ref.model,
+                        transport,
+                        ...(prepared.conversationEffort ? { effort: prepared.conversationEffort } : {}),
+                      }
+                    : undefined,
+                );
+                const events = scopeProviderStream(providerContext, identity, onDispatched, (notify) =>
+                  turn.stream({ ...prepared, signal: linked, onDispatched: notify }),
+                );
+                for await (const event of events) {
+                  linked.throwIfAborted();
+                  yield* projection.project(event);
+                }
+                projection.finish();
+              } finally {
+                // Returning early from a generator alone does not close HTTP/WS.
+                stopped.abort();
+              }
+            },
+          });
+        };
+        yield* withEffortFallback({
           request,
           signal,
-          maxRetries: deps.settings.get('agent.retryAttempts') ?? DEFAULT_RETRY_ATTEMPTS,
-          scope: { capabilities, websocket: transport === 'websocket', flex: tier === 'flex' },
-          stream: async function* () {
-            const stopped = new AbortController();
-            const linked = AbortSignal.any([signal, stopped.signal]);
-            try {
-              linked.throwIfAborted();
-              const turn = await providerContext.runWithContext(identity, () => turnModel(transport));
-              linked.throwIfAborted();
-              const projection = new ModelEventProjection(
-                ref.provider,
-                capabilities.continuity
-                  ? { kind: 'direct_response', owner, provider: ref.provider, model: ref.model, transport }
-                  : undefined,
-              );
-              const events = scopeProviderStream(providerContext, identity, onDispatched, (notify) =>
-                turn.stream({ ...prepared, signal: linked, onDispatched: notify }),
-              );
-              for await (const event of events) {
-                linked.throwIfAborted();
-                yield* projection.project(event);
-              }
-              projection.finish();
-            } finally {
-              // Returning early from a generator alone does not close HTTP/WS.
-              stopped.abort();
-            }
-          },
+          ref,
+          logger: deps.logger,
+          rejection: deps.effortUpdatesRejection,
+          levels: activeEffortLevels(declared, deps.effortUpdatesRejection),
+          attempt,
         });
       } catch (error) {
         throw toModelFailure(error, signal);
@@ -296,10 +333,12 @@ function toProviderRequest(
     readonly transport: string;
     readonly capabilities: ModelCapabilities;
     readonly settings: ISettingsService;
+    readonly effortUpdates?: readonly string[];
   },
 ): StreamedModelTurnRequest {
   const { provider, ref, compaction } = scope;
   const continuation = resolveContinuation(request, scope);
+  const effort = resolveEffortUpdates(request, scope.effortUpdates);
   let providerOptions: Record<string, unknown> | undefined = request.providerOptions
     ? { ...request.providerOptions }
     : undefined;
@@ -367,11 +406,12 @@ function toProviderRequest(
   return {
     contextCompactionState: compaction,
     instructions: request.instructions,
-    input: historyToInput(request.input, ref.provider),
+    input: historyToInput(effort.input, ref.provider),
     tools: request.tools.map(toolDefinition),
     ...(request.toolChoice ? { toolChoice: request.toolChoice } : {}),
     ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
-    ...(request.reasoning ? { reasoning: { effort: request.reasoning, summary: 'auto' as const } } : {}),
+    ...(effort.reasoning ? { reasoning: { effort: effort.reasoning, summary: 'auto' as const } } : {}),
+    ...(effort.conversationEffort ? { conversationEffort: effort.conversationEffort } : {}),
     ...(request.maxOutputTokens !== undefined ? { maxTokens: request.maxOutputTokens } : {}),
     ...(codex ? { codex } : {}),
     ...(providerOptions ? { providerOptions } : {}),

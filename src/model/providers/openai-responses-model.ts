@@ -160,6 +160,10 @@ function toResponsesApiInput(
       // Foreign tags were filtered above; anything reaching here is our own.
       return item.item;
     }
+    if (item?.type === 'effort_update') {
+      // GPT-6 and later keep the cached prefix when effort changes as input (effort-updates.ts).
+      return { type: 'configuration_update', reasoning: { effort: item.effort } };
+    }
     return item;
   });
 }
@@ -309,7 +313,7 @@ function requestBody(
     ...(contextManagement ? { context_management: contextManagement } : {}),
   } as any;
 
-  if (conversationConfiguration) applyNativeConversationInput(body);
+  if (conversationConfiguration) applyNativeConversationInput(body, request.conversationEffort);
 
   // Encrypted reasoning is only returned when explicitly requested by the
   // Responses API. Merge this provider requirement with caller/extra-body

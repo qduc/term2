@@ -34,6 +34,8 @@ export interface LargeUncachedInputContext {
   provider?: string | null;
   model?: string | null;
   reasoningEffort?: string | null;
+  /** The effort change travels as input that keeps the provider cache (model/effort-updates.ts). */
+  reasoningEffortCachePreserved?: boolean;
   mode?: string | null;
 }
 
@@ -216,7 +218,8 @@ export class LargeUncachedInputGuard {
       if (
         this.#lastSuccessful.reasoningEffort &&
         context.reasoningEffort &&
-        this.#lastSuccessful.reasoningEffort !== context.reasoningEffort
+        this.#lastSuccessful.reasoningEffort !== context.reasoningEffort &&
+        !context.reasoningEffortCachePreserved
       ) {
         reasons.push('reasoning_effort_changed');
       }

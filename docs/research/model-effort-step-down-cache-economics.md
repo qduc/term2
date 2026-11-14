@@ -22,6 +22,9 @@ not available in the doc.
 
 ## Finding 1 — Effort is NOT cache-safe; this kills the "effort-only" variant
 
+> Superseded in part (2026-11-14): a top-level change still breaks the cache, but GPT-6+ and the
+> Claude 5.5-era models now take a cache-preserving effort change as input. See the addendum at the end.
+
 **Claim:** switching `reasoning.effort` for the same model invalidates the
 prompt cache, just like switching model.
 
@@ -283,3 +286,109 @@ tiers) rather than inventing a parallel one.
 - Industry patterns: backgrind.com (per-subagent models), OpenRouter subagent
   tool docs, Google thought signatures (`ai.google.dev/gemini-api/docs/thought-signatures`),
   "Agentic Routing: The Harness-Native Data Flywheel" (arXiv 2607.11399).
+
+## Addendum (2026-11-14) — Finding 1 is now model-dependent
+
+Since August both providers shipped a cache-preserving way to change effort:
+Anthropic's per-message effort message (`{"role":"system","content":[],"output_config":{"effort":...}}`
+inside `messages[]`, beta `mid-conversation-output-config-2026-07-01`; documented for Fable 5.1/5.2,
+Mythos 5.1/5.2, Opus 5/5.5, Sonnet 5.5 and Haiku 5.5 with adaptive thinking; not Sonnet 5, Opus 4.8 or
+earlier, Haiku 4.5) and OpenAI's `configuration_update` input item (GPT-6 and later on the Responses API;
+GPT-5.6 and earlier still break the cache). A top-level effort change still invalidates on every model
+measured. The "effort-only variant" is therefore cache-safe again on those models, if the change travels
+as input; the rest of this doc's model-swap reasoning is unchanged.
+
+### Measured on real traffic (OpenRouter, synthetic filler)
+
+Probe scripts and raw rows: the session scratchpad `effort-probe/` (`cache.v4.mjs`, `out/results.jsonl`);
+total spend about $0.18. Design: request 1 is a short question that makes the model think, request 2
+adds about 11–16k tokens of filler, request 3 changes effort medium → low, request 4 returns to medium.
+Two repetitions per cell; the two agreed within a few tokens. Columns for request 3: input total /
+cache read / cache write / cost.
+
+| Model, OpenRouter path, mechanism | Request 3 (effort change) | Request 4 (back to medium) |
+|---|---|---|
+| claude-haiku-5.5, `/messages`, top-level `output_config.effort` | 16791 / **0** / 16787 / $0.00219 | reads 16441 (the old medium entry) |
+| claude-haiku-5.5, `/messages`, per-message effort message | 16708 / **16440** / 264 / $0.00028 | reads 16704 (full prefix) |
+| claude-haiku-5.5, `/chat/completions`, `reasoning.effort` (term2's OpenRouter path) | 16719 / **0** / 16715 / $0.00219 | reads 16440 (old entry) |
+| gpt-6-luna, `/responses` (Azure), top-level `reasoning.effort` | 11352 / **0** / 11349 / $0.00145 | reads 11284 (old entry) |
+| gpt-6-luna, `/responses` (Azure), trailing `configuration_update` | 11344 / **11281** / 60 / $0.00017 | reads 11341 (full prefix) |
+| gpt-6-luna, `/chat/completions` (Azure), `reasoning.effort` | 11512 / **0** / 11509 / $0.00147 | reads 11337 (old entry) |
+| gpt-6.1-terra, `/responses` (Azure), top-level | 11346 / **0** / 11343 / $0.01435 | reads 11282 (old entry) |
+| gpt-6.1-terra, `/responses` (Azure), `configuration_update` | 11353 / **11285** / 65 / $0.00106 | reads 11350 (full prefix) |
+
+Findings:
+
+- **The top-level change invalidates only from the first assistant turn that contains thinking**
+  (Haiku 5.5). With the filler in the first user message (before any thinking), the top-level change
+  still read the whole first-message prefix (16332) and missed only what followed; with plain answers
+  and no thinking at all, nothing was lost. In an agent session nearly every assistant turn thinks, so
+  the practical loss is the whole history after the first user message. The probe therefore puts the
+  bulk after the first thinking turn.
+- **Returning to an earlier effort re-hits that effort's old entry** on every model measured (request 4
+  reads the request-2 prefix, not request 3's), matching the August Codex observation.
+- The cache-preserving forms kept the whole prefix on both providers. A break costs a full rewrite:
+  about 8× the preserving request on Haiku/Luna, about 14× on Terra.
+- Effort reaches the model through each form (thinking tokens on a puzzle: Haiku top-level low ≈
+  550–930 vs max ≈ 2470–2580; per-message low ≈ 680–710 vs max ≈ 1660–2280). For Luna the separation is
+  weak but consistent, including a `configuration_update` placed before the user turn or in an earlier
+  turn while every request keeps the starting top-level effort (low ≈ 410–550 vs xhigh ≈ 590–740).
+
+Gateway behaviour (measured): OpenRouter's Anthropic-compatible `/messages` validates and forwards the
+per-message form (an invalid effort is refused; `claude-sonnet-5` is refused as unsupported) and does not
+require the beta header. Its `/chat/completions` silently drops an `output_config` on a message, so
+term2's OpenRouter provider cannot carry either mechanism. Its `/responses` accepts and validates
+`configuration_update` and routes only to upstreams that support it (Bedrock's gpt-6-luna is filtered
+out; with fallbacks off the request 404s). OpenRouter's `/responses` runs `store:false`, so there is no
+`previous_response_id` chaining there.
+
+Not measured (credential needed): the direct Anthropic API through term2's AI SDK adapter (an Anthropic
+API key: confirm the rewritten body is accepted and request 3 reads the prefix); the direct OpenAI
+Responses API with `previous_response_id` chaining and the GPT-6 Luna native-input path (an OpenAI key
+with credit); the ChatGPT Codex backend (a Codex subscription: does it accept `configuration_update` at
+all?). Also unmeasured: Opus/Sonnet 5.5, gpt-6-sol/astra, a change placed after a tool-result-only turn
+(documented: it waits for the next user turn with new input), repeated changes and TTL effects.
+
+What the measurements cover, precisely: `gpt-6-luna` and `gpt-6.1-terra` (Responses through OpenRouter
+on Azure) and `claude-haiku-5.5` (OpenRouter `/messages`, Anthropic BYOK upstream). Nothing else was
+measured. In particular the design rests on an unmeasured assumption: an in-history effort item keeps
+governing later requests in which the starting top-level effort is sent again. The probes put the item
+in the last request only; one weak Luna probe (item before the user turn or in an earlier turn) agreed.
+
+### What term2 does now
+
+`src/model/README.md` § Cache-preserving effort changes. Off by default (`agent.cachePreservingEffort`:
+`off` | `first-party` | `any-endpoint`) until the direct endpoints are probed. When on: the GPT-6 ids in
+the direct catalogue (`gpt-6-luna` measured; `gpt-6-astra`, `gpt-6-sol`, `gpt-6.1-sol` from the "GPT-6
+and later" rule; `gpt-6.1-terra` is not in that catalogue) on OpenAI and Codex send `configuration_update`
+and keep the Responses anchor across an effort-only change; Claude Haiku 5.5 (measured) and Sonnet 5.5
+(docs only) on an in-scope Anthropic-format endpoint send the per-message effort message. A rejected item
+falls back to today's request once and turns the mechanism off for the session. Every other path,
+including OpenRouter, keeps today's top-level effort.
+
+Probes that would let the owner turn it on: per endpoint, the four-request design above (cold, warm,
+change, back) with the item kept in the history, plus a request after the change with no further change
+that must still run at the changed effort (thinking tokens) while the starting top-level value is sent; for Codex, first whether the backend accepts
+`configuration_update` at all.
+
+### Moving term2's OpenRouter provider (owner decision, not done)
+
+OpenRouter could carry both mechanisms only through other endpoints:
+
+- **Claude via `/messages`.** The Anthropic adapter (AI SDK) with OpenRouter as base URL and
+  `anthropic/...` model ids. Gains: per-message effort (measured), Anthropic-native cache breakpoints.
+  Costs and risks: a second wire format for one provider (cost reporting today reads chat-completions
+  `usage.cost`/BYOK fields; `/messages` returns them inside Anthropic `usage`), model ids that the
+  adaptive-thinking and per-message checks (`claude-…-5-5`) do not match, OpenRouter-specific routing,
+  `reasoning_details` sanitising and upstream error detail that would need re-porting, and a cache
+  break for every existing OpenRouter Claude session on the switch.
+- **GPT via `/responses`.** The Responses adapter against OpenRouter. Gains: `configuration_update`
+  (measured) and Responses item fidelity. Costs and risks: `store:false` means no anchor, so every
+  request is full-history (fine for caching, but the continuity machinery would be dead weight); routing
+  is narrowed to upstreams that support the item (Bedrock dropped for Luna), which can raise price or
+  remove a fallback; the `/responses` endpoint is newer on OpenRouter and its streaming and error
+  shapes would need fixtures; same session-switch cache break.
+
+Either move is a product decision with its own black-box fixtures and cost-accounting review; the
+measured gain is about 8–14× on the one request after each effort change, so it only pays where users
+change effort mid-session often.

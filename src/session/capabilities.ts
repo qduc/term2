@@ -17,6 +17,7 @@ import { createDirectGoalVerifier } from './goal-verification.js';
 import type { DirectMemoryCapability, DirectAutomaticMemoryNotice } from './memory.js';
 import type { createDirectHooks, DirectHookAcceptedMetadata } from './hooks.js';
 import { createDirectRolloverTool, type DirectRolloverRequestOutcome } from './rollover.js';
+import { alignTurnEffort } from './effort-timeline.js';
 import type { DirectBackgroundTasks } from './background.js';
 
 const GOAL_TOOLS: ReadonlySet<string> = new Set(['propose_goal', 'goal_check']);
@@ -164,7 +165,7 @@ export function bindDirectCapabilities(options: {
       await ensureStarted();
       input.signal.throwIfAborted();
       if (!options.validTurn(input.turnId)) throw new Error('Stale Session request');
-      return planRequest(request, input.turnId);
+      return planRequest(alignTurnEffort(request, options.facts(), input.turnId), input.turnId);
     },
     async normalStop(input: { turnId: TurnId; signal: AbortSignal }) {
       input.signal.throwIfAborted();

@@ -161,3 +161,20 @@ it('run_subagent names what is missing and shows both valid shapes', async () =>
   // The double full stop of the old message is gone.
   for (const text of run.toolResults) expect(text).not.toContain('..');
 });
+
+it('a schema mismatch says which tool the arguments belong to', async () => {
+  const run = await runScriptedToolCalls({
+    files: { 'a.txt': 'x\n' },
+    calls: [
+      ['shell', { path: 'a.txt', start_line: 1, end_line: 5 }],
+      ['read_file', { command: 'ls' }],
+      ['shell', { cmd: 'ls' }],
+    ],
+  });
+  expect(run.exitCode, run.stderr + run.stdout).toBe(0);
+  expect(run.toolResults[0]).toContain('These arguments belong to read_file, not shell; shell needs command.');
+  expect(run.toolResults[1]).toContain('These arguments belong to shell, not read_file; read_file needs path.');
+  // An argument no other tool takes gets the plain diagnostic, with no misleading hint.
+  expect(run.toolResults[2]).toContain('Tool input did not match schema for shell');
+  expect(run.toolResults[2]).not.toContain('belong to');
+});

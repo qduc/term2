@@ -3,6 +3,7 @@ import { isAbortLike } from './subagents/utils.js';
 import { unwrapSchema } from '../config/settings/setting-schema-utils.js';
 import type { AnyToolDefinition, ToolParameterSchema } from './types.js';
 import { isZodToolParameterSchema } from './types.js';
+import { describeForeignArguments, registerToolArgumentNames } from './tool-argument-hint.js';
 
 /**
  * Maximum payload size (in characters) for which JSON repair is attempted.
@@ -398,9 +399,12 @@ export const runToolInputDiagnostics = (toolName: string, schema: z.ZodTypeAny, 
         return `${field} ${msg}`;
       });
       const issueText = issues.join('; ');
+      const foreignHint = describeForeignArguments(toolName, parsedInput);
       const feedback = `Tool input did not match schema for ${toolName}: ${issueText}${
         issueText.endsWith('.') ? '' : '.'
-      } ${describeValidationInput(parsedInput)} Retry with valid JSON arguments.`;
+      } ${describeValidationInput(parsedInput)}${
+        foreignHint ? ` ${foreignHint}` : ''
+      } Retry with valid JSON arguments.`;
       return truncateValidationText(feedback, MAX_VALIDATION_FEEDBACK_CHARS);
     }
   }
@@ -422,6 +426,7 @@ export const wrapToolInvoke = <T extends AnyToolDefinition>(
 ): T => {
   const targetSchema = originalSchema || tool.parameters;
   const originalExecute = tool.execute.bind(tool);
+  registerToolArgumentNames(tool.name, targetSchema);
 
   tool.execute = async (params: any, context: unknown, details: any) => {
     try {

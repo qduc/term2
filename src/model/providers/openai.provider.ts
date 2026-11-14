@@ -4,6 +4,7 @@ import {
   OpenAIResponsesWSModelWithPromptCacheKey,
 } from './openai-responses-model.js';
 import { registerProvider } from './registry.js';
+import { CACHE_SAFE_EFFORT_LEVELS, supportsConfigurationUpdate } from '../effort-updates.js';
 import { createOpenAIModelCatalog } from './openai-model-catalog.js';
 import { createProviderFetch } from './fetch/composer.js';
 import { NULL_SESSION_CONTEXT_SERVICE } from '../traffic-context.js';
@@ -117,6 +118,7 @@ registerProvider(
     fetchModels: createOpenAIModelCatalog(),
     clearConversations: undefined, // No conversation state to clear
     sensitiveSettingKeys: [],
+    effortUpdateLevels: (model) => (supportsConfigurationUpdate(model) ? CACHE_SAFE_EFFORT_LEVELS : undefined),
     capabilities: OPENAI_CAPABILITIES,
   },
   { builtin: true },

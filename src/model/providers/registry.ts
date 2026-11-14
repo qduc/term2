@@ -4,6 +4,7 @@ import type { ProviderRequestCapture } from './provider-request-capture.js';
 import type { SessionAccountStore } from './oauth-session-account.js';
 import type { ContextCompactionSessionState, StreamedModelTurn } from '../streamed-model-turn.js';
 import type { ProviderRetryInfo } from './retrying-model.js';
+import type { ReasoningEffort } from '../index.js';
 
 export interface ProviderDeps {
   settingsService: ISettingsService;
@@ -61,6 +62,13 @@ export interface ProviderDefinition {
 
   /** Settings keys that are sensitive and should not be persisted to disk */
   sensitiveSettingKeys?: string[];
+
+  /**
+   * Effort levels a model can switch to mid-conversation through an input item
+   * that keeps the prompt cache (`model/effort-updates.ts`); undefined keeps
+   * today's top-level effort on every change.
+   */
+  effortUpdateLevels?: (model: string) => readonly ReasoningEffort[] | undefined;
 
   /** Optional provider capabilities */
   capabilities?: {

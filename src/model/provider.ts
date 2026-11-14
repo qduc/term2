@@ -54,6 +54,7 @@ import { ModelFailure, toModelFailure } from './failure.js';
 import { physicalModelStream } from './retry.js';
 import { codexCompact } from './provider-compact.js';
 import { historyToInput, toolDefinition } from './provider-items.js';
+import { isEffortUpdateItem, lastEffortUpdate, withoutEffortUpdates } from './effort-updates.js';
 import type { Model, ModelCapabilities, ModelRef, ModelRegistry, ModelRequest } from './index.js';
 
 export type ProviderRegistryDeps = {
@@ -175,9 +176,11 @@ function lazyModel(
     return created;
   };
   const catalogContextWindow = getModelContextWindow(ref.provider, ref.model);
+  const effortUpdates = provider.effortUpdateLevels?.(ref.model);
   return {
     ref,
     capabilities,
+    ...(effortUpdates?.length ? { effortUpdates } : {}),
     contextWindow: catalogContextWindow ?? UNKNOWN_MODEL_CONTEXT_WINDOW,
     ...(catalogContextWindow !== undefined ? { catalogContextWindow } : {}),
     // Legacy uses Codex's compact endpoint for native compaction; other providers compact locally.
@@ -222,6 +225,7 @@ function lazyModel(
           transport,
           capabilities,
           settings: deps.settings,
+          effortUpdates,
         });
         const extraBody = isRecord(prepared.providerOptions?.extraBody) ? prepared.providerOptions.extraBody : {};
         const tier = extraBody.service_tier ?? prepared.providerOptions?.service_tier;
@@ -240,7 +244,14 @@ function lazyModel(
               const projection = new ModelEventProjection(
                 ref.provider,
                 capabilities.continuity
-                  ? { kind: 'direct_response', owner, provider: ref.provider, model: ref.model, transport }
+                  ? {
+                      kind: 'direct_response',
+                      owner,
+                      provider: ref.provider,
+                      model: ref.model,
+                      transport,
+                      ...(prepared.conversationEffort ? { effort: prepared.conversationEffort } : {}),
+                    }
                   : undefined,
               );
               const events = scopeProviderStream(providerContext, identity, onDispatched, (notify) =>
@@ -296,10 +307,12 @@ function toProviderRequest(
     readonly transport: string;
     readonly capabilities: ModelCapabilities;
     readonly settings: ISettingsService;
+    readonly effortUpdates?: readonly string[];
   },
 ): StreamedModelTurnRequest {
   const { provider, ref, compaction } = scope;
   const continuation = resolveContinuation(request, scope);
+  const effort = resolveEffortUpdates(request, scope.effortUpdates);
   let providerOptions: Record<string, unknown> | undefined = request.providerOptions
     ? { ...request.providerOptions }
     : undefined;
@@ -367,17 +380,45 @@ function toProviderRequest(
   return {
     contextCompactionState: compaction,
     instructions: request.instructions,
-    input: historyToInput(request.input, ref.provider),
+    input: historyToInput(effort.input, ref.provider),
     tools: request.tools.map(toolDefinition),
     ...(request.toolChoice ? { toolChoice: request.toolChoice } : {}),
     ...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
-    ...(request.reasoning ? { reasoning: { effort: request.reasoning, summary: 'auto' as const } } : {}),
+    ...(effort.reasoning ? { reasoning: { effort: effort.reasoning, summary: 'auto' as const } } : {}),
+    ...(effort.conversationEffort ? { conversationEffort: effort.conversationEffort } : {}),
     ...(request.maxOutputTokens !== undefined ? { maxTokens: request.maxOutputTokens } : {}),
     ...(codex ? { codex } : {}),
     ...(providerOptions ? { providerOptions } : {}),
     signal,
     ...continuation,
     ...(request.recovery ? { recoveryBudget: request.recovery.budget } : {}),
+  };
+}
+
+/**
+ * `effort_update` markers reach only a model that declares the marker's level; any other
+ * path gets today's request back: no marker, the effective effort as the top-level value.
+ * A request without markers or a carried effort passes through unchanged.
+ */
+function resolveEffortUpdates(
+  request: ModelRequest,
+  levels: readonly string[] | undefined,
+): { input: ModelRequest['input']; reasoning: ModelRequest['reasoning']; conversationEffort?: string } {
+  const carried = (request.continuation as Partial<ResponseContinuation> | undefined)?.effort;
+  const markers = request.input.filter(isEffortUpdateItem);
+  if (!markers.length && carried === undefined) return { input: request.input, reasoning: request.reasoning };
+  const supported =
+    !!levels &&
+    !!request.reasoning &&
+    levels.includes(request.reasoning) &&
+    (carried === undefined || levels.includes(carried)) &&
+    markers.every((item) => typeof item.input.effort === 'string' && levels.includes(item.input.effort));
+  if (!supported) return withoutEffortUpdates(request.input, request.reasoning, carried);
+  const effective = lastEffortUpdate(request.input) ?? carried ?? request.reasoning;
+  return {
+    input: request.input,
+    reasoning: request.reasoning,
+    ...(effective && effective !== request.reasoning ? { conversationEffort: effective } : {}),
   };
 }
 

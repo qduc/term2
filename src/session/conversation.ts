@@ -27,6 +27,7 @@ import { planDirectQueue, submitDirectQueue } from './queue.js';
 import { directRolloverAtBoundary } from './rollover.js';
 import { DirectRunBudgets } from './run-budget.js';
 import { foreignCompactionRefusal } from '../model/history-compatibility.js';
+import { effortTimelineForTurn } from './effort-timeline.js';
 import type { Conversation, ConversationDeps, StartedConversationTurn, TurnRequest } from './types.js';
 import type { Fact, FactLine, SessionStartedFact } from './facts.js';
 import { replay } from './replay.js';
@@ -256,7 +257,7 @@ function conversation(
       const refusal = foreignCompactionRefusal(snapshot.history, settings.model.provider);
       if (refusal) throw new Error(refusal);
     }
-    const { modelHistory, sentInput } = prepareConversationNotice(
+    const noticed = prepareConversationNotice(
       turnId,
       request,
       planned,
@@ -266,6 +267,16 @@ function conversation(
       generation,
       cancelNotice,
     );
+    // After its admission is durable: the running turn's effort is part of the timeline.
+    const timeline = effortTimelineForTurn({
+      facts,
+      history: noticed.modelHistory,
+      newItems: noticed.sentInput,
+      model: settings.model,
+      reasoning: settings.reasoning,
+      models: generation.runtime.models,
+    });
+    const { history: modelHistory, newItems: sentInput } = timeline;
     // A segment that a cancelled question ended stays the chain point: the next request chains from that response
     // and sends the outputs it settled (#150 item 10; legacy left them out and the provider refused the request).
     if (hasHumanInput) generation.continuity?.state?.chainCancelledQuestion(modelHistory, ASK_USER_NO_ANSWER_RESULT);
@@ -282,6 +293,7 @@ function conversation(
       const handle = (planned?.compaction ? startCompaction : startTurn)(
         {
           ...settings,
+          ...(timeline.reasoning !== undefined ? { reasoning: timeline.reasoning } : {}),
           turnId,
           history: modelHistory,
           ...(snapshot.compactionState ? { compactionState: snapshot.compactionState } : {}),

@@ -39,7 +39,7 @@ import {
   type FeatureSelection,
 } from '../../tools/assembly/feature-selection.js';
 import { createApplyPatchToolDefinition } from '../../tools/file/apply-patch.js';
-import { extractPatchPaths } from '../../tools/file/upstream-apply-patch.js';
+import { extractPatchPaths } from '../../shared/utils/upstream-apply-patch.js';
 import { createSearchReplaceToolDefinition } from '../../tools/file/search-replace.js';
 import { createCreateFileToolDefinition } from '../../tools/file/create-file.js';
 import { createShellToolDefinition, presentForegroundShell } from '../../tools/system/shell.js';

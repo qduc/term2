@@ -37,7 +37,7 @@ import {
   type RunCodeAgentSpecBridge,
 } from './run-code-agent-capability.js';
 import { resolveWorkspacePath, resolveWorkspacePathPhysically } from '../../tools/utils.js';
-import { parseUpstreamApplyPatch } from '../../tools/file/upstream-apply-patch.js';
+import { parseUpstreamApplyPatch } from '../../shared/utils/upstream-apply-patch.js';
 import { TOOL_NAME_APPLY_PATCH } from '../../tools/tool-names.js';
 import { saveOutputArtifact } from '../../shared/utils/shell/shell-output.js';
 import { getRunCodeExecutionResult } from '../../tools/system/run-code/run-code-execution.js';

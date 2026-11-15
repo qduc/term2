@@ -988,10 +988,6 @@
       "reason": "Internal session helper function \"replayProjection\" in session/replay-fold.ts used within its file; export keyword retained pending Phase 3 module cleanup."
     },
     {
-      "export": "session/state.ts directSubmittedTurn",
-      "reason": "Internal session helper function \"directSubmittedTurn\" in session/state.ts used within its file; export keyword retained pending Phase 3 module cleanup."
-    },
-    {
       "export": "session/tool-execution-ledger.ts outputOf",
       "reason": "Pre-existing unused export \"outputOf\" in session/tool-execution-ledger.ts, retained during this metadata-only conversion so code removal can be reviewed separately. No current consumer is asserted. Remove this exception after a caller and behavior audit deletes the unused declaration or establishes a required consumer."
     },

@@ -214,8 +214,8 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/tools/file/apply-patch.ts": {
-      "lines": 835,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Seven lines wire the nearest-line hint (closest-line.ts) into the one 'could not be found anywhere' report and its read gate, which only this file knows at the point the patch fails. Two lines keep Update and known-change batching guidance beside the existing tool description; extracting only these sentences would fragment one prompt without separating a responsibility. Retire that increment when the complete patch description or presentation boundary is extracted."
+      "lines": 841,
+      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Seven lines wire the nearest-line hint (closest-line.ts) into the one 'could not be found anywhere' report and its read gate, which only this file knows at the point the patch fails. Two lines keep Update and known-change batching guidance beside the existing tool description; extracting only these sentences would fragment one prompt without separating a responsibility. Six lines read the canonical `patch` string from the arguments object as well as from a raw envelope string, so an approval preview of the same call parses what execution will run; retire that increment when apply_patch stops accepting both argument shapes. Retire the reasoning increments when the complete patch description or presentation boundary is extracted."
     },
     "src/tools/file/code-context.ts": {
       "lines": 796,

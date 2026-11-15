@@ -2412,9 +2412,11 @@ fs.createWriteStream = (filename, options) => {
           expect(runCode.function.description).toContain('tools.create_file(');
           expect(runCode.function.description).not.toContain('activate_skill');
           expect(runCode.function.description).toMatch(
-            /Other tools \(call tools\.describe\(name\) before use\): .*web_search/,
+            /Other tools \(call tools\.describe\(name\) before use\): .*web_fetch/,
           );
-          expect(runCode.function.description).not.toContain('tools.web_search(');
+          expect(runCode.function.description).not.toContain('tools.web_fetch(');
+          // No search provider is configured here, so web_search is not offered at all.
+          expect(runCode.function.description).not.toContain('web_search');
           const system = (request.messages as { role: string; content: string }[])
             .filter((m) => m.role === 'system')
             .map((m) => m.content)

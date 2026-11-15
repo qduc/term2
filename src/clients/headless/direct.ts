@@ -90,13 +90,11 @@ export async function runDirectHeadless(
     outcome: DirectHeadlessOutcome,
     exitCode: number,
     final = presentation.finalText,
-  ): DirectHeadlessResult => ({
-    exitCode,
-    outcome,
-    finalText: final,
-    sessionId,
-    turnId: lastTurnId ?? targetTurnId,
-  });
+  ): DirectHeadlessResult => {
+    // A successful run already wrote it before `completed`; any other end writes it last.
+    presentation.runSummary(outcome);
+    return { exitCode, outcome, finalText: final, sessionId, turnId: lastTurnId ?? targetTurnId };
+  };
 
   /** Headless never answers a run-budget check-in; it exits 2 without a grant. */
   const reportBudgetPause = (evidence?: WireBudgetEvidence): DirectHeadlessResult => {
@@ -382,6 +380,7 @@ export async function runDirectHeadless(
       }
       const event = next.value;
       if (event.sessionId !== sessionId) continue;
+      presentation.observe(event, targetTurnId);
 
       if (event.type === 'goal') {
         presentation.event(event, targetTurnId);

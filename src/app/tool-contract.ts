@@ -1,3 +1,4 @@
+import type { ApprovalReviewResult } from '../shared/contracts/approval-review.js';
 import type { ISessionContextService } from '../shared/service-interfaces.js';
 import type { ToolContextSeed } from '../tools/index.js';
 /** Shared assembly result owned by the direct app, implemented in tool-surface.ts. */
@@ -59,6 +60,8 @@ export type ToolSurfaceOptions = {
   readonly allowUnsandboxed?: boolean;
   /** Require a distinct one-time grant for foreground shell escape. */
   readonly shellEscapeApproval?: boolean;
+  /** Permit the local TUI to review root unsandboxed requests in auto mode. */
+  readonly tuiUnsandboxedReview?: boolean;
   readonly discordSend?: import('../clients/discord/discord-outbound.js').DiscordSend;
   readonly isDiscordInputEnabled?: () => boolean;
 };
@@ -96,7 +99,11 @@ export type AgentSurface = {
     dispose?(): void | Promise<void>;
   };
   /** Review eligible ordinary foreground approvals using the accepted session history. */
-  reviewApproval?(request: InteractionRequest, history: readonly Item[], signal: AbortSignal): Promise<boolean>;
+  reviewApproval?(
+    request: InteractionRequest,
+    history: readonly Item[],
+    signal: AbortSignal,
+  ): Promise<ApprovalReviewResult>;
   /** Headless policy only; caller commits its decision through Session's Turn.answer. */
   decideInteraction(request: InteractionRequest, history: readonly Item[]): Promise<InteractionDecision>;
 };

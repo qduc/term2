@@ -1,6 +1,5 @@
-import { healPatchOperation } from '../../tools/file/patch-healing.js';
-import type { NestedRunDriverFactory, NestedModelBinding } from '../../tools/nested-run-driver.js';
-import { healSearchReplaceParams } from '../../tools/file/edit-healing.js';
+import { formatApprovalReview, type ApprovalReviewResult } from '../../shared/contracts/approval-review.js';
+import type { NestedModelBinding } from '../../tools/nested-run-driver.js';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -27,6 +26,7 @@ import { wrapToolInvoke, wrapNeedsApproval } from '../../tools/tool-invoke.js';
 import { toOpenAIStrictToolSchema } from '../../shared/lib/openai-strict-tool-schema.js';
 import { shouldUseStrictToolSchema, shouldPreferPatchEditingModel } from '../../model/tool-selection-policy.js';
 import { createReadFileToolDefinition } from '../../tools/file/read-file.js';
+import { createHintReadAccess } from '../../tools/file/read-access.js';
 import { createGrepToolDefinition } from '../../tools/file/grep.js';
 import { createFindFilesToolDefinition } from '../../tools/file/glob.js';
 import {
@@ -35,15 +35,14 @@ import {
 } from '../../tools/file/code-context.js';
 import {
   createSelectedActivateSkillTool,
-  createWebToolDefinitions,
+  createWebToolPair,
   type FeatureSelection,
 } from '../../tools/assembly/feature-selection.js';
 import { createApplyPatchToolDefinition } from '../../tools/file/apply-patch.js';
-import { resolveAncillaryModelTier } from '../../session/agent-runtime/model-resolver.js';
 import { extractPatchPaths } from '../../tools/file/upstream-apply-patch.js';
 import { createSearchReplaceToolDefinition } from '../../tools/file/search-replace.js';
 import { createCreateFileToolDefinition } from '../../tools/file/create-file.js';
-import { createShellToolDefinition } from '../../tools/system/shell.js';
+import { createShellToolDefinition, presentForegroundShell } from '../../tools/system/shell.js';
 import { createAskOrchestratorToolDefinition } from '../../tools/agent/ask-orchestrator.js';
 import { createRunExplorerToolDefinition, type ExplorerRunner } from '../../tools/agent/run-explorer.js';
 import type { SkillsService } from '../../tools/skills/skills-service.js';
@@ -539,8 +538,9 @@ export class SubagentToolPolicy {
     return [];
   }
 
-  async isYellowCommandApproved(command: string, taskContext: string): Promise<boolean> {
-    if (!this.#agentClient) return false;
+  async reviewYellowCommand(command: string, taskContext: string): Promise<ApprovalReviewResult> {
+    if (this.#settings.get('shell.autoApproveMode') === 'off') return { kind: 'not_reviewed', approved: false };
+    if (!this.#agentClient) return { kind: 'unavailable', approved: false };
     try {
       const advisories = await evaluateShellAutoApprovalAdvisories({
         commands: [{ id: '__subagent_worker_shell__', command }],
@@ -552,12 +552,14 @@ export class SubagentToolPolicy {
         logger: this.#logger,
         sessionContextService: this.#sessionContextService,
       });
-      return advisories.get('__subagent_worker_shell__')?.approved === true;
+      const advisory = advisories.get('__subagent_worker_shell__');
+      if (!advisory || advisory.isError) return { kind: 'unavailable', approved: false };
+      return { kind: 'reviewed', approved: advisory.approved === true, advisory };
     } catch (error: any) {
       this.#logger.warn('Worker shell YELLOW auto-approval evaluation failed', {
         error: error?.message || String(error),
       });
-      return false;
+      return { kind: 'unavailable', approved: false };
     }
   }
 
@@ -601,9 +603,11 @@ export class SubagentToolPolicy {
             return `Error: command blocked for safety (${status}). Workers cannot run commands that require interactive approval. Command: ${command}`;
           }
           if (status === SafetyStatus.YELLOW) {
-            const approved = await this.isYellowCommandApproved(command, taskContext);
-            if (!approved) {
-              return `Error: command blocked for safety (${status}). Workers cannot run commands that require interactive approval. Command: ${command}`;
+            const review = await this.reviewYellowCommand(command, taskContext);
+            if (!review.approved) {
+              return `Error: command blocked for safety (${status}). Workers cannot run commands that require interactive approval. ${formatApprovalReview(
+                review,
+              )} Command: ${command}`;
             }
           }
         }
@@ -996,7 +1000,6 @@ export class SubagentToolPolicy {
 }
 
 export class SubagentToolFactory {
-  #driverFactory?: NestedRunDriverFactory;
   #modelBinding?: NestedModelBinding;
   #settings: ISettingsService;
   #logger: ILoggingService;
@@ -1012,7 +1015,6 @@ export class SubagentToolFactory {
   #sessionBrowser?: SessionBrowser;
 
   constructor(deps: {
-    driverFactory?: NestedRunDriverFactory;
     modelBinding?: NestedModelBinding;
     settings: ISettingsService;
     logger: ILoggingService;
@@ -1026,7 +1028,6 @@ export class SubagentToolFactory {
     /** Prior-session transcript browser; provisioned to the librarian only. */
     sessionBrowser?: SessionBrowser;
   }) {
-    this.#driverFactory = deps.driverFactory;
     this.#modelBinding = deps.modelBinding;
     this.#settings = deps.settings;
     this.#logger = deps.logger;
@@ -1171,14 +1172,12 @@ export class SubagentToolFactory {
     }
 
     if (features.web) {
-      const [webSearch, webFetch] = createWebToolDefinitions({
+      const { search: webSearch, fetch: webFetch } = createWebToolPair({
         settingsService: this.#settings,
         loggingService: this.#logger,
       });
-      tools.push(
-        this.#toolPolicy.wrapNetworkToolWithScope(webSearch, netScope, () => undefined),
-        this.#toolPolicy.wrapNetworkToolWithScope(webFetch, netScope, (params) => params.url),
-      );
+      if (webSearch) tools.push(this.#toolPolicy.wrapNetworkToolWithScope(webSearch, netScope, () => undefined));
+      tools.push(this.#toolPolicy.wrapNetworkToolWithScope(webFetch, netScope, (params) => params.url));
     }
 
     if (definition.canRunShell) {
@@ -1201,16 +1200,26 @@ export class SubagentToolFactory {
         fsReadScope,
       );
 
-      if (definition.canWrite && !this.#readOnly) {
-        tools.push(
-          nestedApprovals
+      // A subagent has no background job registry, so its shell is foreground-only.
+      const guardedShell =
+        definition.canWrite && !this.#readOnly
+          ? nestedApprovals
             ? this.#toolPolicy.wrapNestedShellTool(shellDef, cwd)
-            : this.#toolPolicy.wrapShellTool(shellDef, cwd, filesChanged, taskContext, validationCapture),
-        );
-      } else {
-        tools.push(this.#toolPolicy.wrapReadOnlyShellTool(shellDef));
-      }
+            : this.#toolPolicy.wrapShellTool(shellDef, cwd, filesChanged, taskContext, validationCapture)
+          : this.#toolPolicy.wrapReadOnlyShellTool(shellDef);
+      tools.push(presentForegroundShell(guardedShell, { searchViaShell }));
     }
+
+    const editHintReadAccess = createHintReadAccess({
+      enabled: definition.canRead,
+      executionContext,
+      settingsService: this.#settings,
+      nestedCompatibility: this.#nestedCompatibility,
+      inScope:
+        fsReadScope &&
+        ((absolutePath) =>
+          isPathInScopeSafe(absolutePath, fsReadScope, this.#executionContext?.getCwd() ?? getActiveWorkspaceRoot())),
+    });
 
     if (definition.canWrite && !this.#readOnly) {
       const usesPatchEditingSurface = shouldPreferPatchEditingModel(definition.model);
@@ -1219,16 +1228,10 @@ export class SubagentToolFactory {
           this.#toolPolicy.wrapWriteToolWithScope(
             this.#toolPolicy.wrapWriteTool(
               createApplyPatchToolDefinition({
-                resolveHealingModel: () => resolveAncillaryModelTier('chore', this.#settings),
-                patchHealing: (path, diff, content, diagnosis, model, key, healingDeps) =>
-                  healPatchOperation(path, diff, content, diagnosis, model, key, {
-                    ...healingDeps,
-                    driverFactory: this.#driverFactory,
-                    modelBinding: this.#modelBinding,
-                  }),
                 settingsService: this.#settings,
                 loggingService: this.#logger,
                 executionContext,
+                readAccess: editHintReadAccess,
               }),
               cwd,
               filesChanged,
@@ -1245,16 +1248,10 @@ export class SubagentToolFactory {
           this.#toolPolicy.wrapWriteToolWithScope(
             this.#toolPolicy.wrapWriteTool(
               createSearchReplaceToolDefinition({
-                resolveHealingModel: () => resolveAncillaryModelTier('chore', this.#settings),
-                editHealing: (params, content, model, key, healingDeps) =>
-                  healSearchReplaceParams(params, content, model, key, {
-                    ...healingDeps,
-                    driverFactory: this.#driverFactory,
-                    modelBinding: this.#modelBinding,
-                  }),
                 settingsService: this.#settings,
                 loggingService: this.#logger,
                 executionContext,
+                readAccess: editHintReadAccess,
               }),
               cwd,
               filesChanged,
@@ -1358,10 +1355,16 @@ export class SubagentToolFactory {
           useStrictSchema && isZodToolParameterSchema(definition.parameters)
             ? toOpenAIStrictToolSchema(definition.parameters)
             : definition.parameters,
-        needsApproval: wrapNeedsApproval(definition, {
-          bypassApproval: () => shouldBypassToolApproval(definition.name, this.#settings.get('shell.autoApproveMode')),
-          registry: options.approvalPolicyRegistry,
-        }),
+        // Presentation may omit unavailable options. It must never replace the
+        // schema that normalizes, validates, or authorizes execution.
+        needsApproval: wrapNeedsApproval(
+          { ...definition, ...(canonicalParameters ? { parameters: canonicalParameters } : {}) },
+          {
+            bypassApproval: () =>
+              shouldBypassToolApproval(definition.name, this.#settings.get('shell.autoApproveMode')),
+            registry: options.approvalPolicyRegistry,
+          },
+        ),
         execute: async (params, context, details) => {
           options.onToolStart?.(
             definition.name,
@@ -1389,11 +1392,10 @@ export class SubagentToolFactory {
           return typeof trimmedResult === 'string' ? injectRunBudgetWarning(trimmedResult, context) : trimmedResult;
         },
       };
-      return wrapToolInvoke(
-        wrapped,
-        isZodToolParameterSchema(definition.parameters) ? definition.parameters : undefined,
-        { argumentParsing: definition.argumentParsing },
-      );
+      return wrapToolInvoke(wrapped, canonicalParameters, {
+        argumentParsing: definition.argumentParsing,
+        offeredTools: toolDefinitions,
+      });
     });
   }
 }

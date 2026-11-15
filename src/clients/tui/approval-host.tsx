@@ -1,3 +1,4 @@
+import type { ApprovalReviewResult } from '../../shared/contracts/approval-review.js';
 /**
  * Hosts the ported legacy approval/ask_user prompt for the foreground turn's request, as legacy's app.tsx,
  * BottomArea and use-app-keyboard-shortcuts do: the prompt replaces the composer under the divider; `y`/`n` are
@@ -5,13 +6,14 @@
  * "Answer:" prompt with the question kept above; Escape (and Ctrl+C) interrupt. Multi-question answers are
  * collected here like legacy's pending-interaction state, then sent once with the wire's question IDs.
  */
-import React, { useRef, useState, type MutableRefObject } from 'react';
+import React, { useEffect, useRef, useState, type MutableRefObject } from 'react';
 import { Box, Text } from 'ink';
 import { MultilineInput } from 'ink-prompt';
 import { ASK_USER_NO_ANSWER_RESULT, type WireDecision, type WireGrant } from '../../protocol/wire.js';
 import type { TuiConnection } from './integration.js';
 import type { InteractionView, TuiState } from './state.js';
 import { answerInteraction } from './commands.js';
+import { publishHarnessApprovalReviewSettled } from './harness-input.js';
 import { useInteractionInput, type InteractionInput, type InteractionInputHandler } from './interaction-input.js';
 import ApprovalPrompt, { type ApprovalDescriptor } from './approval-prompt.js';
 import { useTheme } from './presentation/components/theme.js';
@@ -82,6 +84,7 @@ function approvalDescriptor(
   const presentation = (view.presentation ?? {}) as Record<string, unknown>;
   const record = (value: unknown) =>
     value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+  const advisory = record(presentation.llmAdvisory);
   return {
     agentName,
     toolName: view.toolName ?? view.title,
@@ -89,6 +92,22 @@ function approvalDescriptor(
     // The turn's own interruption keeps its raw arguments (the prompt reads `sandbox` from them).
     ...(owner === 'turn' ? { rawInterruption: { arguments: JSON.stringify(view.input ?? {}) } } : {}),
     ...(view.callId ? { callId: view.callId } : {}),
+    ...(advisory &&
+    typeof advisory.reasoning === 'string' &&
+    typeof advisory.model === 'string' &&
+    typeof advisory.approved === 'boolean'
+      ? {
+          llmAdvisory: {
+            reasoning: advisory.reasoning,
+            model: advisory.model,
+            approved: advisory.approved,
+            ...(advisory.source === 'system' || advisory.source === 'llm' ? { source: advisory.source } : {}),
+            ...(typeof advisory.riskLevel === 'string' ? { riskLevel: advisory.riskLevel } : {}),
+            ...(typeof advisory.authorization === 'string' ? { authorization: advisory.authorization } : {}),
+            ...(typeof advisory.confidence === 'string' ? { confidence: advisory.confidence } : {}),
+          },
+        }
+      : {}),
     dockerHostControl:
       presentation.dockerHostControl === true || /: Docker host control \(this call only\)$/.test(view.summary ?? ''),
     ...(record(presentation.deniedRead)
@@ -108,6 +127,13 @@ function approveDecision(answer: string | undefined): WireDecision {
 }
 
 type HostProps = {
+  readonly reviewed: MutableRefObject<Set<string>>;
+  readonly reviewResults: MutableRefObject<Map<string, ApprovalReviewResult>>;
+  readonly reviewApproval?: (
+    sessionId: string,
+    requestId: string,
+    signal: AbortSignal,
+  ) => Promise<ApprovalReviewResult>;
   readonly request: PromptRequest;
   /** The foreground turn a stop cancels; a background child's request may outlive it. */
   readonly activeTurnId: string | null;
@@ -132,12 +158,23 @@ type HostProps = {
 export function ApprovalHost({
   request,
   ...props
-}: Omit<HostProps, 'request'> & { readonly request: PromptRequest | undefined }): React.ReactElement | null {
-  return request ? <Host key={request.interaction.id} request={request} {...props} /> : <>{props.panel}</>;
+}: Omit<HostProps, 'request' | 'reviewed' | 'reviewResults'> & {
+  readonly request: PromptRequest | undefined;
+}): React.ReactElement | null {
+  const reviewed = useRef(new Set<string>());
+  const reviewResults = useRef(new Map<string, ApprovalReviewResult>());
+  return request ? (
+    <Host key={request.interaction.id} request={request} reviewed={reviewed} reviewResults={reviewResults} {...props} />
+  ) : (
+    <>{props.panel}</>
+  );
 }
 
 function Host({
   request,
+  reviewed,
+  reviewResults,
+  reviewApproval,
   activeTurnId,
   connection,
   inputHandler,
@@ -157,15 +194,73 @@ function Host({
   const { interaction, owner } = request;
   const approval = approvalDescriptor(interaction, request.agentName, owner);
   const isAskUser = approval.toolName === 'ask_user';
+  const [reviewResult, setReviewResult] = useState<ApprovalReviewResult | null>(
+    () => reviewResults.current.get(interaction.id) ?? null,
+  );
+  const [reviewStopped, setReviewStopped] = useState(
+    () => reviewed.current.has(interaction.id) && !reviewResults.current.has(interaction.id),
+  );
   const [entry, setEntry] = useState<'reason' | 'answer' | null>(null);
   const [answers, setAnswers] = useState<readonly AskUserAnswer[]>([]);
   const [questionIndex, setQuestionIndex] = useState(0);
   const consumed = useRef(false);
   const pending = useRef(false);
   const promptInput = useRef<InteractionInputHandler | null>(null);
+  const reviewController = useRef<AbortController | null>(null);
+  const reviewCancelled = useRef(false);
+  const cancelReview = () => {
+    reviewCancelled.current = true;
+    if (
+      owner === 'turn' &&
+      interaction.kind === 'approval' &&
+      reviewApproval &&
+      !reviewResults.current.has(interaction.id)
+    )
+      setReviewStopped(true);
+    reviewed.current.add(interaction.id);
+    reviewController.current?.abort();
+  };
+  const reviewEligible = request.owner === 'turn' && interaction.kind === 'approval';
+  useEffect(() => {
+    if (!reviewApproval || !reviewEligible || reviewCancelled.current || reviewed.current.has(interaction.id)) return;
+    const reviewedRequests = reviewed.current;
+    const completedReviews = reviewResults.current;
+    reviewedRequests.add(interaction.id);
+    const controller = new AbortController();
+    reviewController.current = controller;
+    void reviewApproval(connection.sessionId, interaction.id, controller.signal)
+      .then(async (result) => {
+        if (controller.signal.aborted || pending.current) return;
+        reviewResults.current.set(interaction.id, result);
+        setReviewResult(result);
+        if (!result.approved) return;
+        pending.current = true;
+        const receipt = await connection.send({
+          type: 'answer',
+          requestId: interaction.id,
+          decision: { kind: 'allow' },
+          provenance: { source: 'policy', automaticApproval: true },
+        });
+        if (!receipt.ok && !controller.signal.aborted) pending.current = false;
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          pending.current = false;
+          const result = { kind: 'unavailable', approved: false } as const;
+          reviewResults.current.set(interaction.id, result);
+          setReviewResult(result);
+        }
+      })
+      .finally(() => publishHarnessApprovalReviewSettled(interaction.id));
+    return () => {
+      controller.abort();
+      if (!reviewCancelled.current && !completedReviews.has(interaction.id)) reviewedRequests.delete(interaction.id);
+    };
+  }, [connection, interaction.id, reviewApproval, reviewEligible, reviewed, reviewResults]);
   const fail = (error: unknown) => setNotice(error instanceof Error ? error.message : String(error));
 
   const send = (decision: WireDecision) => {
+    cancelReview();
     if (pending.current) return;
     pending.current = true;
     hide(interaction.id);
@@ -176,6 +271,7 @@ function Host({
     });
   };
   const stop = () => {
+    cancelReview();
     if (pending.current) return;
     pending.current = true;
     cancelInput(connection, activeTurnId ?? undefined).then((message) => {
@@ -230,12 +326,14 @@ function Host({
 
   // use-app-keyboard-shortcuts.ts: Ctrl+C clears a typed reason/answer, else stops the turn.
   interrupt.current = () => {
+    cancelReview();
     if (text.length > 0) replaceInput('');
     else if (activeTurnId) stop();
     return true;
   };
   const shortcuts = !isAskUser && !approval.dockerHostControl;
   useInteractionInput(inputHandler, (input, key) => {
+    cancelReview();
     if (pending.current) return;
     if (entry === 'reason') {
       if (key.escape) {
@@ -295,7 +393,23 @@ function Host({
             <Text color={theme.warning}>Background approval · {request.backgroundCount - 1} queued</Text>
           ) : null}
           <ApprovalPrompt
-            approval={approval}
+            approval={{
+              ...approval,
+              ...(reviewResult?.kind === 'reviewed' ? { llmAdvisory: reviewResult.advisory } : {}),
+            }}
+            reviewStatus={
+              reviewResult?.kind === 'reviewed' && !reviewResult.approved
+                ? 'Automatic approval not granted; manual approval required.'
+                : reviewResult?.kind === 'unavailable'
+                ? 'Approval review unavailable; manual approval required.'
+                : reviewResult?.kind === 'not_reviewed'
+                ? 'Not reviewed automatically; manual approval required.'
+                : reviewEligible && reviewApproval && reviewStopped && !approval.llmAdvisory
+                ? 'Approval review stopped; manual approval required.'
+                : interaction.kind === 'approval' && !approval.llmAdvisory && (!reviewEligible || !reviewApproval)
+                ? 'Not reviewed automatically; manual approval required.'
+                : undefined
+            }
             inputHandler={promptInput}
             onApprove={onApprove}
             onReject={onReject}

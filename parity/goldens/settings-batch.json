@@ -12,7 +12,7 @@
           "messages": [
             {
               "role": "system",
-              "content": "You are a coding assistant running inside Term2, a coding agent harness. Help users inspect files, run commands, and modify code.\n\n<tools>\n- read_file: Read file contents\n\nAdditional tools may be available.\n</tools>\n\n<rules>\n- Use read_file to examine files instead of cat or sed.\n- Be concise in your responses.\n- Show file paths clearly when working with files.\n</rules>\n\nEnvironment: OS: <OS>; shell: unknown; cwd (you're already here, don't `cd` to it): <WORKSPACE>; home (`~`): <HOME>; date: <DATE>\n\nUnattended mode: Never ask the user questions; nobody can answer. Make reasonable low-risk assumptions within existing permissions, keep going, and state any assumptions in your final response. If something essential is missing, report blocked and say what is needed.\n\n## Durable session goal applicability\nNo durable session goal is set. Continue the ordinary request/tool workflow; do not call goal_check. Only an active durable session goal requires a goal_check before ending a turn. This does not authorize creating a goal or grant any permission."
+              "content": "You are a coding assistant running inside Term2, a coding agent harness. Help users inspect files, run commands, and modify code.\n\n<tools>\n- read_file: Read file contents\n\nAdditional tools may be available.\n</tools>\n\n<rules>\n- Use read_file to examine files instead of cat or sed.\n- Be concise in your responses.\n- Show file paths clearly when working with files.\n</rules>\n\nEnvironment: OS: <OS>; shell: unknown; cwd (you're already here, don't `cd` to it): <WORKSPACE>; home (`~`): <HOME>; date: <DATE>\n\nUnattended mode: Never ask the user questions; nobody can answer. Make reasonable low-risk assumptions within existing permissions, keep going, and state any assumptions in your final response. If something essential is missing, report blocked and say what is needed."
             },
             {
               "role": "user",
@@ -26,20 +26,16 @@
           ],
           "tools": [
             {
-              "name": "goal_check",
-              "schema": "f01466518d95a1dc"
-            },
-            {
               "name": "read_file",
-              "schema": "812d0e3375822a63"
+              "schema": "1abd153e33995e7d"
             },
             {
               "name": "grep",
-              "schema": "bc84595369bcaca6"
+              "schema": "01125290720a3994"
             },
             {
               "name": "glob",
-              "schema": "74b21b28732d082e"
+              "schema": "0d1d12522935b1d6"
             }
           ],
           "other": {
@@ -47,8 +43,8 @@
               "include_usage": true
             },
             "temperature": 0.2,
-            "max_tokens": 1234,
-            "reasoning_effort": "high"
+            "reasoning_effort": "high",
+            "max_tokens": 1234
           }
         }
       ]

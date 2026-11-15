@@ -70,6 +70,7 @@ function DirectTui({
   const integration: TuiIntegration = useMemo(
     () => ({
       menus: createDirectTuiMenus({ app, persistentSettings, logger, root }),
+      reviewApproval: (sessionId, requestId, signal) => app.reviewApproval(sessionId, requestId, signal),
       async shell(sessionId, command) {
         if (remote) throw new Error('Direct shell commands are not available in SSH workspaces.');
         const settings = app.liveSettings(sessionId);
@@ -180,6 +181,7 @@ async function runTui(
     surface: (sessionId) => ({
       interactive: true,
       sessionBrowser: true,
+      tuiUnsandboxedReview: !target.restart,
       ...bridge.outbound(sessionId),
       ...target.surface,
       ...(mcp ? { mcp } : {}),

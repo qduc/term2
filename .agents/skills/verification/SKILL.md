@@ -6,62 +6,58 @@ description: How to establish that a change works without permanent unit tests â
 # Verification
 
 This repository is running an [evidence-driven development experiment](../../../docs/experiments/evidence-driven-development/README.md).
-Do not commit permanent unit tests. The user-authorized
-[generated verification pilot](../../../docs/experiments/generated-verification/README.md)
+Do not commit permanent unit tests; the pre-commit hook and CI reject them. You choose
+how to verify a change, but the result must be evidence someone else can check, not a
+belief about the code. Reading the code and a passing typecheck are not evidence of
+behavior.
+
+The user-authorized [generated verification pilot](../../../docs/experiments/generated-verification/README.md)
 allows persistent bounded generated properties as an additional method. Use
 `pnpm verify:generated` for its supported history/queue boundaries; retain failed
-seeds, shrinks and source snapshots, and triage the oracle before fixing code. You choose how to verify a change, but the
-result must be evidence someone else can check, not a belief about the code.
+seeds, shrinks and source snapshots, and triage the oracle before fixing code.
 
-## The contract
+## Checks
 
-1. **Claims.** Write down what must be true for the task to count as done. Include
-   behavior that must *not* change.
-2. **Risks.** List what could realistically go wrong: the edge cases, the callers you
-   did not touch, and the failure paths.
-3. **Methods.** For each claim, pick the cheapest check that would actually fail if the
-   claim were false. If the check would pass on a broken implementation, it proves
-   nothing.
-4. **Execute.** Run the checks and keep the output. A plan you did not run is not
-   evidence.
-5. **Report.** Say what was verified and how, what was not, and why.
-
-## Choosing methods
-
-Any technique counts if its evidence supports the claim. Common ones here:
+State the claims, including behavior that must *not* change, and the realistic risks:
+edge cases, callers you did not touch, failure paths. For each claim, pick the cheapest
+check that would fail if the claim were false, run it, and keep the output.
 
 - `pnpm typecheck` and `pnpm lint` for every TypeScript change. They are the floor, not
-  the evidence for a behavioral change.
-- A temporary test or script: write it, run it, keep the output, delete it. It must stay
-  untracked; the pre-commit hook and CI reject committed unit tests.
-- Existing tiers: `pnpm test:integration`, `pnpm test:e2e`, and `pnpm test:provider-black-box`
+  behavioral evidence.
+- A temporary test or script: run it, keep the output, delete it. It must stay
+  untracked. Old tests from tag `unit-suite-baseline` can be run this way.
+- `pnpm test:integration`, `pnpm test:e2e`, and `pnpm test:provider-black-box`
   (see the `provider-testing` skill).
 - Running the product: `pnpm build && pnpm start` for the interactive UI, or a
-  command-line prompt for a scripted non-interactive turn (`--auto-approve` enables
-  tools; only use it in a scratch directory).
-- Inspecting what actually happened: session logs and persisted events
-  (`debugging-logs`), and wire captures (`provider-traffic`).
-- Fault injection: kill the process, drop the network fixture, corrupt a file, and watch
-  recovery.
-- A before/after comparison against the parent commit for performance, token, or output
-  claims.
-
-The deleted unit suite is at tag `unit-suite-baseline`. Running an old test against your
-change is a legitimate temporary check, as long as you don't commit it.
+  command-line prompt for a scripted non-interactive turn. `--auto-approve` enables
+  tools; only use it in a scratch directory.
+- Inspecting what happened: session logs and persisted events (`debugging-logs`), and
+  wire captures (`provider-traffic`).
+- Fault injection, or a before/after comparison against the parent commit, where the
+  claim calls for it.
 
 Prefer a check that crosses the real boundary over one that mocks it. If proving a claim
 means mocking half the system, say so in the report; that is a design signal.
 
+Run the smallest relevant check first. Don't rerun a check during development while its
+existing evidence still answers the question; rerun to verify a fix, cover a relevant
+change, or resolve uncertainty. Run required gates against the revision being delivered.
+
+When an observation fails after an effect may have happened (a launch, a send), inspect
+the actual state before retrying the effect. Integrated protocol tests are not
+live-runtime compatibility: check both endpoints before activation.
+
 ## Risk levels
 
-- **Low:** typos, docs, copy, isolated renames, and changes with no behavior. Typecheck and lint, plus one
-  observation of the change if it is user-visible.
+- **Low:** typos, docs, copy, isolated renames, and changes with no behavior. Typecheck
+  and lint, plus one observation of the change if it is user-visible.
 - **Medium:** behavior inside one module or one UI surface. Direct evidence for every
   claim.
 - **High:** provider/bridge/run loop, session persistence, rollover, compaction, approval
-  and sandbox/security policy, settings migration, tool execution and effects, and anything that
-  can lose user data or run a command the user did not approve. Direct evidence for
-  every claim, at least one failure-path check, and **independent verification**.
+  and sandbox/security policy, settings migration, tool execution and effects, and
+  anything that can lose user data or run a command the user did not approve. Direct
+  evidence for every claim, at least one failure-path check, and **independent
+  verification**.
 
 When unsure between two levels, pick the higher one.
 
@@ -70,43 +66,27 @@ When unsure between two levels, pick the higher one.
 A separate agent that did not write the change verifies it. Give it the task, the diff,
 your claims, and your evidence, but not your conclusion. The verifier:
 
-- checks that each claim's evidence actually supports it and would have failed on a
-  broken implementation;
-- re-runs or extends the checks where the evidence is thin, and adds its own for risks
-  you didn't list;
+- checks that each claim's evidence would have failed on a broken implementation;
+- re-runs or extends thin checks, and adds its own for risks you didn't list;
 - rejects a unit-style test disguised as an `*.integration.*` or `*.e2e.*` file. An
   integration test must cross a real boundary: process, filesystem, network fixture,
   persisted session, or the built CLI;
-- reads the "Recorded deviations added in this change" output of `node scripts/check-baselines.mjs` and
-  rejects any deviation whose reason does not hold, or where fixing the violation would cost less than the
-  exception ([When a gate fails](../../../docs/architecture/layers.md#when-a-gate-fails));
+- reads the "Recorded deviations added in this change" output of
+  `node scripts/check-baselines.mjs` and rejects any deviation whose reason does not
+  hold, or where fixing the violation would cost less than the exception
+  ([When a gate fails](../../../docs/architecture/layers.md#when-a-gate-fails));
 - returns `accept` or `reject` with reasons. On reject, rework and verify again.
 
-Report independent acceptance separately from author checks; neither implies the other ran.
+## Report
 
-## What does not count
+End the task with the claims, the evidence for each (tested revision, command plus
+result, or observation), and an **Uncertain** list. Evidence must come from the revision
+being handed off; label dirty snapshots explicitly. Report independent acceptance
+separately from author checks; neither implies the other ran.
 
-- "I reviewed the code and it looks correct" for a behavioral change.
-- A check that cannot fail, for example asserting what a mock was told to return.
-- A passing typecheck offered as proof of behavior.
-- Evidence from a different commit than the one you are handing off.
-
-## Report useful evidence
-
-End the task with the claims, evidence for each claim (tested revision, command plus
-result, or observation), and an **Uncertain** list. Label dirty snapshots explicitly.
 Routine task/defect/test-result ledgers are retired; do not append or recreate them.
-When a failure teaches something reusable, keep the cause, diagnostic signature,
-failed approach or recovery advice in the relevant existing docs or code. A normal
-successful run belongs in the handoff, not a permanent accounting record.
-
-When an observation fails after an effect may have happened, inspect the actual
-state before retrying the effect. Local Discord cutover probes once missed a
-successful launch because of pane-marker timing, and missed a sent output by
-searching request IDs in the outbox instead of following `proactive.outputs` IDs.
-Neither warranted another launch or send. Likewise, integrated protocol tests
-are not live-runtime compatibility: retained definitions once rejected new reaction
-input/results that the candidate accepted. Check both endpoints before activation.
+When a failure teaches something reusable, keep the cause, diagnostic signature, and
+recovery advice in the relevant existing docs or code.
 
 ## After a bug fix
 

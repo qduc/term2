@@ -273,6 +273,17 @@ snapshot rather than guessed.
 MCP capture in `mcp-source.ts` reserves the executable `describe` name from the
 run-code runtime, the same owner used by tool assembly.
 
+`web_search` is offered only when the configured search provider has its key or
+base URL (`isWebSearchAvailable`); `web_fetch` needs no configuration and is always
+offered with the web capability. Availability is evaluated when the tool surface is
+built: at session setup, on a configuration change that rebuilds the surface, and
+at each child launch. `getAgentDefinition` decides it once and uses the answer for
+both the tool list and the prompt wording (the script tool guidance names only
+`tools.web_fetch` without it); a child's role file and tool descriptions are worded
+from its final tool list. Adding or removing the key mid-session therefore takes
+effect at the next rebuild and changes the tool list once, which is a prompt-prefix
+change at that point, not on every request.
+
 `configure_task_check_in` preserves the source's synchronous `target` callback
 contract and maps seconds to native scheduler milliseconds. Returning a Promise
 here serializes as `{}` in the source tool, while an `id` parameter loses named

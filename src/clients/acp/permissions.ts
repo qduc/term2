@@ -1,3 +1,4 @@
+import { formatApprovalReview, type ApprovalReviewResult } from '../../shared/contracts/approval-review.js';
 import type { AcpClient } from './contract.js';
 import type * as acp from '@agentclientprotocol/sdk/experimental/v2';
 import type { WireGrant, WireInteraction } from '../../protocol/wire.js';
@@ -32,6 +33,7 @@ export async function requestPermission(input: {
   readonly interaction: WireInteraction;
   readonly client: AcpClient;
   readonly signal: AbortSignal;
+  readonly review?: ApprovalReviewResult;
 }): Promise<AcpAnswer> {
   const interaction = input.interaction;
   if (interaction.kind === 'question') return await requestQuestion(input);
@@ -56,7 +58,12 @@ export async function requestPermission(input: {
       {
         sessionId: input.sessionId,
         title: interaction.toolName,
-        description: interaction.detail ?? interaction.summary,
+        description: [
+          interaction.detail ?? interaction.summary,
+          input.review ? formatApprovalReview(input.review) : undefined,
+        ]
+          .filter(Boolean)
+          .join('\n'),
         subject: {
           type: 'tool_call',
           toolCall: {

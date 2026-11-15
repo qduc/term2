@@ -5,8 +5,10 @@ task runs + blind quality judge on 4 tasks. One real quality exception found
 (security-sensitive fix). Not yet implemented in product code. **Follow-up
 research (2026-08-30, see
 `docs/research/model-effort-step-down-cache-economics.md`) found the mid-turn
-premise needs rework**: effort changes invalidate the prompt cache just like
-model changes, GPT-5.6's write-paid caching changes the cost math, and
+premise needs rework**: a top-level effort change invalidates the prompt cache
+just like a model change (on GPT-6+ and the Claude 5.5-era models an effort
+change carried as input keeps it: 2026-11-14 addendum in that file), GPT-5.6's
+write-paid caching changes the cost math, and
 industry routers demote at turn boundaries or via subagents rather than
 mid-turn. Read that file before designing the mechanism.
 

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
   dismissNoMatchSlashMenu,
@@ -49,7 +50,12 @@ const USAGE_OUTPUT_TOKENS = 73;
 const USAGE_STREAM_MS = 400;
 
 /** One SSE reply per chat request, in order: a single shell call or plain text. */
-async function startProvider(replies: Reply[], withUsage = false): Promise<string> {
+async function startProvider(
+  replies: Reply[],
+  withUsage = false,
+  beforeReply?: Promise<void>,
+  beforeReview?: Promise<void>,
+): Promise<string> {
   let requests = 0;
   server = http.createServer((req, res) => {
     if (req.method === 'GET' && req.url?.includes('failure')) {
@@ -66,9 +72,11 @@ async function startProvider(replies: Reply[], withUsage = false): Promise<strin
     req.on('data', (chunk) => {
       body += chunk.toString();
     });
-    req.on('end', () => {
+    req.on('end', async () => {
+      if (beforeReply) await beforeReply;
       providerBodies.push(body);
       const reply = replies[requests++] ?? { text: 'done' };
+      if (requests === 2 && beforeReview) await beforeReview;
       if (reply.error) {
         res.writeHead(400, { 'content-type': 'application/json' });
         res.end(
@@ -210,6 +218,213 @@ it('Ctrl+G leaves a foreground approval on its prompt', { timeout: TIMEOUT_MS },
   await session.waitForOutput('APPROVAL_FINISHED', 30_000);
   expect(fs.readFileSync(marker, 'utf8')).toBe('approved');
 });
+
+it('routes approval keys while a slash menu is suspended', { timeout: TIMEOUT_MS }, async () => {
+  root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-approval-fallback-e2e-')));
+  const home = path.join(root, 'home');
+  const workspace = path.join(root, 'workspace');
+  fs.mkdirSync(home);
+  fs.mkdirSync(workspace);
+  const marker = path.join(workspace, 'approved');
+  let releaseReply!: () => void;
+  const beforeReply = new Promise<void>((resolve) => {
+    releaseReply = resolve;
+  });
+  const baseUrl = await startProvider(
+    [
+      {
+        call: {
+          id: 'approval-call',
+          command: `while [ ! -e '${home}' ]; do sleep 0.05; done; printf approved > '${marker}'`,
+        },
+      },
+      { text: 'APPROVAL_FINISHED' },
+    ],
+    false,
+    beforeReply,
+  );
+  const idlePath = path.join(home, 'input-idle');
+  const env = {
+    HOME: home,
+    XDG_CONFIG_HOME: path.join(home, '.config'),
+    XDG_DATA_HOME: path.join(home, '.local', 'share'),
+    XDG_STATE_HOME: path.join(home, '.local', 'state'),
+    XDG_CACHE_HOME: path.join(home, '.cache'),
+    TERM2_CONFIG_DIR: path.join(home, '.term2'),
+    TERM2_CACHE_DIR: path.join(home, '.cache', 'term2'),
+    TERM2_CONVERSATIONS_DIR: path.join(root, 'conversations'),
+    DISABLE_LOGGING: '1',
+    [HARNESS_IDLE_ENV]: idlePath,
+    CI: 'false',
+  };
+  const settingsDir = resolveSettingsDirectory({ homeDir: home, env: createTestChildEnv(env) });
+  fs.mkdirSync(settingsDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(settingsDir, 'settings.json'),
+    JSON.stringify({
+      agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
+      providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl, apiKey: 'test-key' }],
+      sandbox: { enabled: false },
+    }),
+  );
+  session = spawnTerminal('node', [builtCli], { cwd: workspace, env, cols: 100, rows: 30 });
+  await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
+  const submit = async (text: string) => {
+    session!.write(text);
+    await waitForHarnessComposerValue(idlePath, text, { timeoutMs: 60_000 });
+    // `/model ` opens legacy's model menu: Enter picks the highlighted row, so wait until the catalog lists it.
+    const picked = /^\/model \S+\/(\S+)$/.exec(text)?.[1];
+    if (picked)
+      await expect
+        .poll(() => session!.getVisibleOutput(), { timeout: 30_000 })
+        .toMatch(new RegExp(`❯\\s+(★\\s+)?${picked}|No models match`));
+    // sleep-ok: the picked row stays highlighted; the catalog can reload after it is drawn (its effect reruns
+    // when credentialRevision rebuilds providerIds) and empty the list: without this pause two of 18 loaded runs
+    // showed "Loading models" at Enter and set the typed id. Nothing publishes the end; 500 ms had no such failure.
+    if (picked) await new Promise((resolve) => setTimeout(resolve, 500));
+    session!.write('\r');
+  };
+  await submit('request approval');
+  await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
+  session!.write('/');
+  await waitForHarnessComposerValue(idlePath, '/', { timeoutMs: 30_000 });
+  await session!.waitForOutput('Tab complete', 30_000);
+  releaseReply();
+  await session!.waitForOutput('Allow once', 60_000);
+  session!.write('\r');
+  await session!.waitForOutput('APPROVAL_FINISHED', 30_000);
+  expect(fs.readFileSync(marker, 'utf8')).toBe('approved');
+  // The suspended slash menu and its draft return after the approval.
+  await waitForHarnessComposerValue(idlePath, '/', { timeoutMs: 30_000 });
+  session!.write('\x1b');
+  await waitForHarnessComposerValue(idlePath, '', { timeoutMs: 30_000 });
+});
+
+it.each([
+  { risk: 'low', automatic: true, delayedDenial: false, mode: 'auto', sandbox: true },
+  { risk: 'high', automatic: false, delayedDenial: false, mode: 'auto', sandbox: true },
+  { risk: 'low', confidence: 'low', automatic: false, delayedDenial: false, mode: 'auto', sandbox: true },
+  { risk: 'low', reviewFails: true, automatic: false, delayedDenial: false, mode: 'auto', sandbox: true },
+  { risk: 'low', automatic: false, delayedDenial: true, mode: 'auto', sandbox: true },
+  { risk: 'low', automatic: false, delayedDenial: false, mode: 'off', sandbox: true },
+  { risk: 'low', automatic: false, delayedDenial: false, mode: 'advisory', sandbox: true },
+  { risk: 'low', automatic: false, delayedDenial: false, mode: 'auto', sandbox: false },
+  { risk: 'high', regular: true, automatic: false, delayedDenial: false, mode: 'auto', sandbox: false },
+])(
+  'handles root unsandboxed review (mode=$mode sandbox=$sandbox risk=$risk denial=$delayedDenial)',
+  { timeout: TIMEOUT_MS },
+  async ({
+    risk,
+    automatic,
+    delayedDenial,
+    mode,
+    sandbox,
+    confidence = 'high',
+    reviewFails = false,
+    regular = false,
+  }) => {
+    root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-unsandboxed-review-')));
+    const home = path.join(root, 'home');
+    const workspace = path.join(root, 'workspace');
+    fs.mkdirSync(home);
+    fs.mkdirSync(workspace);
+    const marker = path.join(workspace, 'reviewed');
+    const command = `${regular ? 'node -v; ' : ''}printf approved > '${marker}'`;
+    let releaseReview!: () => void;
+    const reviewGate = new Promise<void>((resolve) => {
+      releaseReview = resolve;
+    });
+    const reviewExpected = (mode === 'auto' || mode === 'advisory') && (sandbox || regular);
+    const baseUrl = await startProvider(
+      [
+        { call: { id: 'unsandboxed-call', args: regular ? { command } : { command, sandbox: 'unsandboxed' } } },
+        ...(reviewExpected
+          ? [
+              reviewFails
+                ? { error: 'review unavailable' }
+                : {
+                    text: JSON.stringify({
+                      results: [
+                        { reasoning: 'fixture review', riskLevel: risk, authorization: 'explicit', confidence },
+                      ],
+                    }),
+                  },
+            ]
+          : []),
+        { text: 'UNSANDBOXED_FINISHED' },
+      ],
+      false,
+      undefined,
+      delayedDenial ? reviewGate : undefined,
+    );
+    const idlePath = path.join(home, 'input-idle');
+    const env = {
+      HOME: home,
+      XDG_CONFIG_HOME: path.join(home, '.config'),
+      XDG_DATA_HOME: path.join(home, '.local', 'share'),
+      XDG_STATE_HOME: path.join(home, '.local', 'state'),
+      XDG_CACHE_HOME: path.join(home, '.cache'),
+      TERM2_CONFIG_DIR: path.join(home, '.term2'),
+      TERM2_CACHE_DIR: path.join(home, '.cache', 'term2'),
+      TERM2_CONVERSATIONS_DIR: path.join(root, 'conversations'),
+      DISABLE_LOGGING: '1',
+      [HARNESS_IDLE_ENV]: idlePath,
+      CI: 'false',
+    };
+    const settingsDir = resolveSettingsDirectory({ homeDir: home, env: createTestChildEnv(env) });
+    fs.mkdirSync(settingsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(settingsDir, 'settings.json'),
+      JSON.stringify({
+        agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
+        providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl, apiKey: 'test-key' }],
+        sandbox: { enabled: sandbox },
+        shell: { autoApproveMode: mode },
+      }),
+    );
+    session = spawnTerminal('node', [builtCli], { cwd: workspace, env, cols: 100, rows: 30 });
+    await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
+    session.write('Write the approved marker outside the sandbox');
+    await waitForHarnessComposerValue(idlePath, 'Write the approved marker outside the sandbox', { timeoutMs: 60_000 });
+    session.write('\r');
+    if (!automatic) {
+      await session.waitForOutput(regular ? 'Agent wants to run: shell' : 'wants to run in unsandboxed mode', 60_000);
+      if (reviewExpected)
+        await vi.waitFor(() => expect(providerBodies.length).toBeGreaterThanOrEqual(2), { timeout: 30_000 });
+      expect(fs.existsSync(marker)).toBe(false);
+      if (delayedDenial) {
+        session.write('n');
+        await session.waitForOutput('Why?', 30_000);
+        releaseReview();
+        await vi.waitFor(() => expect(fs.existsSync(`${idlePath}.approval-review`)).toBe(true), { timeout: 30_000 });
+        expect(session.getVisibleOutput()).toContain('Why?');
+        expect(fs.existsSync(marker)).toBe(false);
+        session.write('not allowed');
+        await waitForHarnessComposerValue(idlePath, 'not allowed', { timeoutMs: 30_000 });
+        session.write('\r');
+      } else {
+        if (reviewExpected)
+          await vi.waitFor(() => expect(fs.existsSync(`${idlePath}.approval-review`)).toBe(true), { timeout: 30_000 });
+        expect(fs.existsSync(marker)).toBe(false);
+        if (reviewExpected && !reviewFails) {
+          await session.waitForOutput('fixture review', 30_000);
+          expect(session.getVisibleOutput()).toContain(`Confidence: ${confidence}`);
+        } else {
+          await session.waitForOutput(
+            reviewFails ? 'Approval review unavailable' : 'Not reviewed automatically',
+            30_000,
+          );
+        }
+        session.write('\r');
+      }
+    }
+    await session.waitForOutput('UNSANDBOXED_FINISHED', 60_000);
+    if (delayedDenial) expect(fs.existsSync(marker)).toBe(false);
+    else expect(fs.readFileSync(marker, 'utf8')).toBe('approved');
+    if (reviewExpected && !regular) expect(providerBodies[1]).toMatch(/OUTSIDE the sandbox/i);
+    else if (!reviewExpected) expect(JSON.parse(providerBodies[1]).tools.length).toBeGreaterThan(0);
+  },
+);
 
 // The effective approval mode is visible without changing it.
 async function runCommand(
@@ -721,3 +936,64 @@ it('displays the skill request without injected instructions', { timeout: TIMEOU
 it('Ctrl+U deletes only the current line before the cursor', { timeout: TIMEOUT_MS }, () =>
   runCommand('', '', undefined, 'ctrl-u'),
 );
+
+it('preserves the first model review in a non-interactive denial', { timeout: TIMEOUT_MS }, async () => {
+  root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-headless-review-')));
+  const home = path.join(root, 'home');
+  const workspace = path.join(root, 'workspace');
+  fs.mkdirSync(home);
+  fs.mkdirSync(workspace);
+  const baseUrl = await startProvider([
+    { call: { id: 'review-call', command: 'node -v' } },
+    {
+      text: JSON.stringify({
+        results: [
+          { reasoning: 'Headless fixture review', riskLevel: 'high', authorization: 'unknown', confidence: 'high' },
+        ],
+      }),
+    },
+    { text: 'HEADLESS_FINISHED' },
+  ]);
+  const env = createTestChildEnv({
+    HOME: home,
+    XDG_CONFIG_HOME: path.join(home, '.config'),
+    XDG_DATA_HOME: path.join(home, '.local', 'share'),
+    XDG_STATE_HOME: path.join(home, '.local', 'state'),
+    XDG_CACHE_HOME: path.join(home, '.cache'),
+    TERM2_CONFIG_DIR: path.join(home, '.term2'),
+    TERM2_CACHE_DIR: path.join(home, '.cache', 'term2'),
+    TERM2_CONVERSATIONS_DIR: path.join(root, 'conversations'),
+    DISABLE_LOGGING: '1',
+  });
+  const settingsDir = resolveSettingsDirectory({ homeDir: home, env });
+  fs.mkdirSync(settingsDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(settingsDir, 'settings.json'),
+    JSON.stringify({
+      agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
+      providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl, apiKey: 'test-key' }],
+      sandbox: { enabled: false },
+      shell: { autoApproveMode: 'auto' },
+    }),
+  );
+  const child = spawn('node', [builtCli, '--json', 'Check the runtime'], {
+    cwd: workspace,
+    env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let output = '';
+  child.stdout.on('data', (chunk) => {
+    output += String(chunk);
+  });
+  child.stderr.on('data', (chunk) => {
+    output += String(chunk);
+  });
+  const status = await new Promise<number | null>((resolve, reject) => {
+    child.on('error', reject);
+    child.on('close', resolve);
+  });
+  expect(status, output).toBe(0);
+  expect(output).toContain('Headless fixture review');
+  expect(JSON.stringify(providerBodies)).toContain('Headless fixture review');
+  expect(JSON.stringify(providerBodies.slice(2))).toContain('Initial review:');
+});

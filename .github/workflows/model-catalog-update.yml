@@ -12,6 +12,8 @@ on:
 
 permissions:
   contents: read
+  # The reusable CI workflow requests this permission even on manual runs.
+  pull-requests: read
 
 # Serialize runs: a weekly tick and a manual dispatch must never race on the
 # same PR branch. A queued run waits rather than cancels, so an in-flight
@@ -60,7 +62,7 @@ jobs:
           curl --fail --silent --show-error https://openrouter.ai/api/v1/models -o "$DATA_DIR/models.json"
           OPENROUTER_DATA_DIR="$DATA_DIR" pnpm exec tsx --eval '
             import { readFileSync, writeFileSync } from "node:fs";
-            import { MODEL_CATALOG } from "./src/model/providers/model-catalog/catalog.generated.ts";
+            import { CATALOG_META, MODEL_CATALOG } from "./src/model/providers/model-catalog/catalog.generated.ts";
             const dir = process.env.OPENROUTER_DATA_DIR;
             const payload = JSON.parse(readFileSync(`${dir}/models.json`, "utf8"));
             if (!Array.isArray(payload.data) || payload.data.length === 0) {
@@ -84,34 +86,55 @@ jobs:
                 },
               };
             }
+            const cost = (entry) => ({
+              input: entry.inputPricePerMTok,
+              output: entry.outputPricePerMTok,
+              cacheRead: entry.cacheReadPricePerMTok,
+              cacheWrite: entry.cacheWritePricePerMTok,
+              cacheWrite1h: entry.cacheWrite1hPricePerMTok,
+            });
             for (const [provider, entries] of Object.entries(MODEL_CATALOG)) {
               if (provider === "openrouter") continue;
               const preserved = Object.fromEntries(Object.entries(entries).map(([id, entry]) => [id, {
                 contextWindow: entry.contextWindow,
                 maxTokens: entry.maxTokens,
-                cost: {
-                  input: entry.inputPricePerMTok,
-                  output: entry.outputPricePerMTok,
-                  cacheRead: entry.cacheReadPricePerMTok,
-                  cacheWrite: entry.cacheWritePricePerMTok,
-                },
+                cost: { ...cost(entry), tiers: entry.pricingTiers?.map((tier) => ({
+                  inputTokensAbove: tier.inputTokensAbove, ...cost(tier),
+                })) },
               }]));
               const file = provider === "codex" ? "openai-codex" : provider;
               writeFileSync(`${dir}/${file}.json`, JSON.stringify({ chat: preserved }));
             }
+            writeFileSync(`${dir}/native-snapshot.json`, JSON.stringify(
+              Object.fromEntries(Object.entries(MODEL_CATALOG).filter(([provider]) => provider !== "openrouter")),
+            ));
             writeFileSync(`${dir}/openrouter.json`, JSON.stringify({ chat: models }));
+            // Keep the timestamp stable until there is actual catalog drift.
+            writeFileSync(`${dir}/.manifest.json`, JSON.stringify({ generatedAt: CATALOG_META.generatedAt }));
           '
           echo "PI_AI_DATA_DIR=$DATA_DIR" >> "$GITHUB_ENV"
 
       - name: Regenerate the model catalog
         run: |
           pnpm catalog:update
+          # Fail closed if generator normalization changes any native metadata or price.
+          node --import tsx --eval '
+            import { deepStrictEqual } from "node:assert";
+            import { readFileSync } from "node:fs";
+            import { MODEL_CATALOG } from "./src/model/providers/model-catalog/catalog.generated.ts";
+            const native = Object.fromEntries(Object.entries(MODEL_CATALOG).filter(([provider]) => provider !== "openrouter"));
+            deepStrictEqual(native, JSON.parse(readFileSync(`${process.env.PI_AI_DATA_DIR}/native-snapshot.json`, "utf8")));
+          '
           # The generator accepts pi-ai-shaped data, but this refresh uses
           # OpenRouter directly and retains the other providers from the snapshot.
           sed -i \
             -e 's/from @earendil-works\/pi-ai data/from OpenRouter data and preserved native-provider snapshots/' \
             -e "s/source: 'pi-ai@unknown'/source: 'https:\/\/openrouter.ai\/api\/v1\/models (native providers preserved)'/" \
             src/model/providers/model-catalog/catalog.generated.ts
+          if ! git diff --quiet -- src/model/providers/model-catalog/catalog.generated.ts; then
+            sed -i "s/generatedAt: '[^']*'/generatedAt: '$(date -u +%Y-%m-%dT%H:%M:%S.000Z)'/" \
+              src/model/providers/model-catalog/catalog.generated.ts
+          fi
 
       - name: Check for generated catalog changes
         id: changes
@@ -154,7 +177,9 @@ jobs:
           git checkout -b "$BRANCH"
           git add src/model/providers/model-catalog/catalog.generated.ts
           git commit -m "$PR_TITLE"
-          git push -u origin "$BRANCH" --force
+          # Refuse to overwrite changes that arrived since observing the branch.
+          REMOTE_HEAD="$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)"
+          git push -u origin "$BRANCH" --force-with-lease="refs/heads/$BRANCH:$REMOTE_HEAD"
 
           PR_NUMBER="$(gh pr list --state open --head "$BRANCH" --base "$BASE" --json number --jq '.[0].number // empty')"
           if [ -n "$PR_NUMBER" ]; then

@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { getActiveWorkspaceRoot } from '../../tools/workspace/active-workspace-root.js';
 import { extractToolTargetPaths } from './shell-auto-approval-resolver.js';
-import { isPathWithin, lexicalPath } from '../../tools/path-identity.js';
+import { isPathWithin, lexicalPath } from '../../tools/workspace/path-identity.js';
 
 /**
  * Computes the authority metadata used by both provider approval prompts and

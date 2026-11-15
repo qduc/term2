@@ -3,16 +3,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import fc from 'fast-check';
-import { canonicalPath, expandHome, lexicalPath } from '../../src/tools/path-identity.ts';
+import { canonicalPath, expandHome, lexicalPath } from '../../src/tools/workspace/path-identity.ts';
 import { SessionAccessState } from '../../src/session/session/session-access-state.ts';
-import {
-  acceptVerdict,
-  decideApproval,
-  describeApproval,
-  routeApproval,
-} from '../../src/session/approval/approval-route.ts';
+import { decideApproval, describeApproval, routeApproval } from '../../src/session/approval/approval-route.ts';
 
-// Contract (src/tools/path-identity.ts, SessionAccessState): a session grant is
+// Contract (src/tools/workspace/path-identity.ts, SessionAccessState): a session grant is
 // stored and matched under one identity, so any spelling of a granted folder
 // (absolute, relative, through a symlink, with `.`/`..` noise, missing tail)
 // matches, while a symlink inside the folder that leads outside does not.
@@ -60,7 +55,8 @@ export const approvalProperties = [
         const access = new SessionAccessState(settings);
         if (kind === 'read') access.allowReadFolder(folder, fixture.base);
         else access.allowEditFolder(folder, fixture.base);
-        const allows = (t) => (kind === 'read' ? access.allowsRead(t, fixture.base) : access.allowsEdit(t, fixture.base));
+        const allows = (t) =>
+          kind === 'read' ? access.allowsRead(t, fixture.base) : access.allowsEdit(t, fixture.base);
         assert.equal(allows(target), true, `granted ${folder} did not cover ${target}`);
         assert.equal(allows(path.join(fixture.root, 'secret', 'key')), false, 'sibling outside the grant matched');
         assert.equal(
@@ -101,7 +97,15 @@ export const approvalProperties = [
     property: fc.asyncProperty(
       fc.record({
         kind: fc.constantFrom('approval', 'question'),
-        toolName: fc.constantFrom('shell', 'bash', 'read_file', 'apply_patch', 'sandbox_network_access', 'propose_goal', 'mcp__x'),
+        toolName: fc.constantFrom(
+          'shell',
+          'bash',
+          'read_file',
+          'apply_patch',
+          'sandbox_network_access',
+          'propose_goal',
+          'mcp__x',
+        ),
         explicitUser: fc.boolean(),
         deniedRead: fc.boolean(),
         docker: fc.boolean(),
@@ -160,9 +164,17 @@ export const approvalProperties = [
         assert.equal(modeAfter, mode, 'approved although the mode changed during review');
         assert.equal(abort, false, 'approved after abort');
         assert.ok(typeof verdict === 'object' && !verdict.isError, 'approved without a usable verdict');
-        assert.ok(acceptVerdict(verdict, mode), 'approved below the one threshold');
+        // Independent statement of the one threshold (owner decision, approval-arbiter.md).
+        assert.ok(
+          verdict.approved &&
+            verdict.source === 'llm' &&
+            ['low', 'medium'].includes(verdict.riskLevel) &&
+            ['explicit', 'implied'].includes(verdict.authorization) &&
+            verdict.confidence === 'high',
+          'approved below the one threshold',
+        );
         const oneTime = ['unsandboxed-once', 'network-allow-once'].find((g) => shape.grants.includes(g));
-        assert.equal(result.grant, oneTime, 'auto-answer grant differs from the request\'s one-time grant');
+        assert.equal(result.grant, oneTime, "auto-answer grant differs from the request's one-time grant");
       },
     ),
   },

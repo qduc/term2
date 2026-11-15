@@ -69,7 +69,8 @@ timeline with call/start-only slots. No new event, sequence or journal is needed
 | item tool_call | tool_called, keyed by execution occurrence |
 | tool_started | tool_started: physical-start fact, not argument streaming |
 | tool_finished / item tool_result | tool_finished upsert, rich accepted display/content where available |
-| interaction_opened / interaction_closed | interaction_opened / interaction_resolved |
+| interaction_opened / interaction_closed | interaction_opened / interaction_resolved; an open whose recorded `review` is approved emits nothing (its policy close follows in the same commit), any other recorded `review` rides on the interaction |
+| transient approval_review | approval_review (`started`/`settled`) for a request the session is reviewing before opening it; reduced into `reviewingApprovals`, never a pending interaction |
 | usage | usage (root accepted token delta, not fabricated cost; `reasoningTokens` only when the provider reported it) |
 | turn_ended | turn_ended, preserving supplied outcome/error/cause/notice and nullable correlated finalText; retained turnResults |
 | budget_opened / budget_closed / budget_observed | one matching typed budget frame per accepted fact; no tool interaction or settled cost invented |
@@ -292,7 +293,12 @@ same current root is already cancelled without stronger terminal evidence;
 Untargeted cancel remains a request acknowledgement, never task completion.
 
 `answer` accepts optional explicit `provenance` and passes it to every native
-resolution path (including structured questions and grants). Missing provenance
+resolution path (including structured questions and grants). Session rejects
+`automaticApproval: true` from any caller: only its approval arbiter
+(`session/approval/approval-arbiter.ts`) records an automatic approval.
+`take_over_review` stops the session's review of a request so a person decides;
+it is stale once the review settled. An `answer` for a request still under
+review stops the review and records the person's decision. Missing provenance
 stays missing; protocol never upgrades a policy/system answer to human. Native
 failed answers can represent policy/validation as well as writer failure, so the
 wire reports generic rejected, not an invented storage diagnosis. `answer_budget`

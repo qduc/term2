@@ -5,6 +5,7 @@ import { historyReplacedMessage, nestedPresentation, replace, withToolTracking }
 import { completedFinalText } from './turn-results.js';
 import { COMPACTING, COMPACTION_NOTICE, compactionOutcome, ENDS_RETRY, retrying } from './reducer-notices.js';
 import type { WireCommandReceipt, WireEvent, WireMessage, WireSnapshot } from './wire.js';
+import { reduceApprovalReview, withoutReview } from './review-projection.js';
 
 function timeline(
   state: WireSnapshot,
@@ -200,9 +201,11 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
         ),
       };
     }
+    case 'approval_review':
+      return reduceApprovalReview(state, event.payload);
     case 'interaction_opened':
       return {
-        ...state,
+        ...withoutReview(state, event.payload.interaction.requestId),
         pendingInteractions: [
           ...state.pendingInteractions.filter((item) => item.requestId !== event.payload.interaction.requestId),
           event.payload.interaction,
@@ -220,7 +223,7 @@ function reducePayload(state: WireSnapshot, event: WireEvent): WireSnapshot {
       );
       const awaiting = pendingInteractions.some((item) => !item.taskId && item.turnId === state.activeTurnId);
       return {
-        ...state,
+        ...withoutReview(state, event.payload.requestId),
         pendingInteractions,
         tasks: state.tasks.map((task) =>
           task.id === event.payload.taskId && task.status !== 'cancelling'

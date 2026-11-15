@@ -485,7 +485,8 @@ it('gives approval advisory requests their own explicit affinity without an ambi
     },
   );
   cleanups.push(() => surface.runtime.dispose?.());
-  await surface.decideInteraction(
+  // The session's reviewer (approval-arbiter.ts) is the one path that asks the approval model.
+  await surface.reviewApproval!(
     {
       kind: 'approval',
       toolName: 'create_file',
@@ -495,6 +496,7 @@ it('gives approval advisory requests their own explicit affinity without an ambi
       turnId: 'turn' as InteractionRequest['turnId'],
     },
     [],
+    new AbortController().signal,
   );
   expect(receipts.length).toBeGreaterThan(0);
   expect(receipts.every((receipt) => receipt.body.prompt_cache_key === 'root-advisory:evaluator')).toBe(true);

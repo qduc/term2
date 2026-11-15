@@ -96,6 +96,8 @@ export type AgentSurface = {
     readonly maxParallelToolCalls: number;
     dispose?(): void | Promise<void>;
   };
+  /** The shared route with this generation's live mode: true when a request is reviewed before anyone is asked. */
+  willReviewApproval?(request: InteractionRequest): boolean;
   /** Review an open approval through the shared decision table (session/approval/approval-route.ts). */
   reviewApproval?(
     request: InteractionRequest,
@@ -103,7 +105,12 @@ export type AgentSurface = {
     signal: AbortSignal,
   ): Promise<ApprovalReviewResult>;
   /** Headless policy only; caller commits its decision through Session's Turn.answer. */
-  decideInteraction(request: InteractionRequest, history: readonly Item[]): Promise<InteractionDecision>;
+  decideInteraction(
+    request: InteractionRequest,
+    history: readonly Item[],
+    /** The session's review before the request opened, when one ran. */
+    review?: import('../shared/contracts/approval-review.js').ApprovalReviewResult,
+  ): Promise<InteractionDecision>;
 };
 
 /** Native home/lease shared by configured surfaces; never publishes the frozen CLI global root. */

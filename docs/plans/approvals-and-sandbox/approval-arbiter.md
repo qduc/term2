@@ -1,6 +1,15 @@
 # Approval arbiter: one owner for approval decisions
 
-**Status:** Proposed. Nothing below is implemented. Written against `main` @ `521062bb9` (2026-11-15); revised the same day after an independent review (see [Review disposition](#review-disposition)).
+**Status:** Phases 1–3 implemented on branch `approval-arbiter` (not yet merged; see the PR). Phase 4 (fatigue features) not started. Written against `main` @ `521062bb9` (2026-11-15) and revised the same day after an independent review (see [Review disposition](#review-disposition)).
+
+**As built, where it differs from the design below:**
+
+- **Descriptor.** `describeApproval` in `src/session/approval/approval-route.ts` derives the profile (hard gate, reviewable, one-time `autoGrant`) from the open `InteractionRequest` (its `kind`, `presentation`, offered `grants`, Docker check), not from a per-tool `ToolApproval` returned by each tool. The question "does a call need approval at all" (`approvalFor` and `nestedGrants` in `src/app/source-tools.ts`) is unchanged and still branches per tool.
+- **No new fact types.** A review is recorded as an optional `review` on `interaction_opened` / `task_interaction_opened`; an approved review commits the policy close with it. A request under review is not durable at all and reaches clients only as the live `approval_review` transient, so session status, ACP and the notifier change only when a person is asked; no `reviewing_approval` status was needed.
+- **Snapshot.** A client attaching mid-review sees `reviewingApprovals` in the snapshot; the recorded `review` rides on live `interaction_opened` events but not on snapshot `pendingInteractions`.
+- **Provenance.** `answer` rejects `automaticApproval: true` from every caller; a client may still send `source: 'policy'` (headless does).
+- **Metrics** (fatigue item 7) are not recorded beyond the review on the open fact.
+
 
 ## Problem
 

@@ -43,6 +43,8 @@ export type WireCommand =
       readonly decision: WireDecision;
       readonly provenance?: WireAnswerProvenance;
     }
+  /** Stop an approval review so a person decides; stale once the review settled. */
+  | { readonly type: 'take_over_review'; readonly requestId: string }
   | {
       readonly type: 'answer_budget';
       readonly requestId: string;

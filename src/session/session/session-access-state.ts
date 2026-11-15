@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { canonicalPath, isPathWithin } from '../../tools/path-identity.js';
+import { canonicalPath, isPathWithin } from '../../tools/workspace/path-identity.js';
 import { getActiveWorkspaceRoot } from '../../tools/workspace/active-workspace-root.js';
 import path from 'node:path';
 import type { ISettingsService } from '../../shared/service-interfaces.js';
@@ -23,7 +23,7 @@ export class SessionAccessState implements FileReadAccessPort, FileEditAccessPor
     private readonly options: { allowEdit?: boolean; isRemote?: () => boolean } = {},
   ) {}
 
-  /** Grants are stored and matched under one identity (src/tools/path-identity.ts). */
+  /** Grants are stored and matched under one identity (src/tools/workspace/path-identity.ts). */
   #identity(target: string, baseDir: string): string {
     return canonicalPath(target, baseDir, { remote: this.options.isRemote?.() ?? false });
   }

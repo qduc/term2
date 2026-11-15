@@ -30,6 +30,8 @@ export type Turn = {
     provenance?: AnswerProvenance,
   ): AnswerResult;
   answer(requestId: InteractionRequestId, decision: InteractionDecision, provenance?: AnswerProvenance): AnswerResult;
+  /** Stop an approval review so a person decides; stale when nothing is under review. */
+  takeOverReview?(requestId: InteractionRequestId): AnswerResult;
 };
 export type TurnRequest = Omit<TurnSpec, 'turnId' | 'history' | 'newItems'> & {
   readonly input: TurnSpec['newItems'];
@@ -77,6 +79,8 @@ export type Conversation = {
   queue(command: DirectQueueCommand): DirectQueueMutation;
   advanceQueue(settings?: Omit<TurnRequest, 'input' | 'submission'>): StartedConversationTurn | undefined;
   answer(requestId: InteractionRequestId, decision: InteractionDecision, provenance?: AnswerProvenance): AnswerResult;
+  /** Stop an approval review (root or task) so a person decides. */
+  takeOverReview(requestId: InteractionRequestId): AnswerResult;
   answerBudget(
     requestId: InteractionRequestId,
     decision: import('../engine/types.js').BudgetDecision,
@@ -124,6 +128,9 @@ export type ConversationDeps = Omit<TurnDeps<Term2ToolAppContext>, 'toolContext'
     readonly publishNotice?: (notice: import('./memory.js').DirectAutomaticMemoryNotice) => void;
     readonly publishBranch?: (event: import('./facade-types.js').DirectBranchTransient) => void;
     readonly publishTask?: (event: import('./background-types.js').DirectBackgroundProgress) => void;
+    readonly publishReview?: (event: import('./approval/approval-arbiter.js').DirectApprovalReviewTransient) => void;
+    /** App reviewer for open approvals; absent means every request opens at once. */
+    readonly approvalReview?: import('./approval/approval-arbiter.js').ApprovalReviewPort;
   };
 export type ReplayedConversation = {
   readonly status: 'idle' | 'interrupted';

@@ -180,6 +180,7 @@ export type DirectSessionUpdate =
             readonly notice: import('./memory.js').DirectAutomaticMemoryNotice;
           }
         | DirectBackgroundProgress
+        | import('./approval/approval-arbiter.js').DirectApprovalReviewTransient
         | DirectArgumentStream
         | DirectBranchTransient
         | {
@@ -243,6 +244,8 @@ export interface DirectSession {
     source?: 'user' | 'launcher',
   ): boolean;
   answer(requestId: InteractionRequestId, decision: InteractionDecision, provenance?: AnswerProvenance): AnswerResult;
+  /** Stop an approval review so a person decides (src/session/approval/approval-arbiter.ts). */
+  takeOverReview(requestId: InteractionRequestId): AnswerResult;
   /** Request task stop; acceptance does not mean cleanup has settled. */
   requestTaskStop(taskId: string): DirectTaskControlResult;
   /** Cancels the selected run, not this Session/connection; cleanup retains admission ownership. */

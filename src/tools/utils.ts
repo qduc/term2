@@ -5,7 +5,7 @@ import { lstat, realpath } from 'fs/promises';
 import { z } from 'zod';
 import { getDiscoveredSkillRoots } from '../shared/utils/skill-discovery-paths.js';
 import { SANDBOX_TEMP_DIR } from '../shared/utils/shell/temp-dir.js';
-import { expandHome } from './path-identity.js';
+import { expandHome } from './workspace/path-identity.js';
 
 /**
  * Resolves a relative path and ensures it's within the workspace

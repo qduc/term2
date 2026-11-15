@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { resolveGlobSearchTarget } from '../../tools/file/glob-target.js';
-import { expandHome } from '../../tools/path-identity.js';
+import { expandHome } from '../../tools/workspace/path-identity.js';
 
 /**
  * The folder a "allow for this session" answer should grant, or null when the

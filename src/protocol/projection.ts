@@ -1,3 +1,4 @@
+import { approvalReviewEvent, reviewedInteraction } from './review-projection.js';
 import { rotationConfiguration, branchSnapshots, projectItem, projectTextDelta } from './projection-parts.js';
 /** One translation from accepted direct Session updates to wire events.
  * Session alone commits/answers; this class only maintains the public read model.
@@ -15,7 +16,7 @@ import { budgetFactEvent } from './budget.js';
 import { publicCompactionCompleted, publicCompactionFailed, publicCompactionStarted } from './compaction.js';
 import { completedFinalText } from './turn-results.js';
 import { publicQueue, publicQueueChange } from './queue.js';
-import { taskFactEvent } from './tasks.js';
+import { taskFactEvents } from './tasks.js';
 import type { Fact } from '../session/facts.js';
 import { withNotice } from '../session/input-notice.js';
 import type { WireEvent, WireEventPayloads, WireEventType, WireSnapshot } from './wire.js';
@@ -82,6 +83,8 @@ export class DirectProjection {
         const task = this.#state.tasks.find((task) => task.id === progress.taskId);
         const { type: _type, ...payload } = progress;
         events = [this.#event('task_progress', payload, null, task?.turnId ?? null)];
+      } else if (update.event.type === 'approval_review') {
+        events = [approvalReviewEvent(this.#state.sessionId, update.event)];
       } else if (update.event.type === 'retrying') {
         const { type: _type, ...retry } = update.event;
         events = [this.#event('retrying', retry, null, this.#state.activeTurnId)];
@@ -214,15 +217,15 @@ export class DirectProjection {
           ),
         ];
       }
+      case 'task_interaction_opened':
       case 'task_started':
       case 'task_backgrounded':
       case 'task_stop_requested':
       case 'task_finished':
-      case 'task_interaction_opened':
       case 'task_question_opened':
       case 'task_question_closed':
       case 'task_interaction_closed':
-        return [taskFactEvent(fact, this.#state, seq)];
+        return taskFactEvents(fact, this.#state, seq);
       case 'background_notice_enqueued':
         return [this.#event('background_notice_enqueued', { notice: structuredClone(fact.notice) }, seq, null)];
       case 'background_notices_delivered':
@@ -413,8 +416,10 @@ export class DirectProjection {
             turnId,
           ),
         ];
-      case 'interaction_opened':
-        return [this.#event('interaction_opened', { interaction: publicInteraction(fact.request) }, seq, turnId)];
+      case 'interaction_opened': {
+        const interaction = reviewedInteraction(publicInteraction(fact.request), fact.review);
+        return interaction ? [this.#event('interaction_opened', { interaction }, seq, turnId)] : [];
+      }
       case 'interaction_closed':
         return [
           this.#event(

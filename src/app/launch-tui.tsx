@@ -61,14 +61,6 @@ function DirectTui({
   const [headerHeight, setHeaderHeight] = useState(4);
   // Holds what this client has folded, for the commands that read it.
   const latest = useRef(initial.snapshot);
-  // Tracks live approval interactions opened since attach so initial history stays silent
-  // and auto-approved requests never trigger a manual-approval notification.
-  const liveApprovalIds = useRef(new Set<string>());
-  const liveApprovalSessionId = useRef(connection.sessionId);
-  if (liveApprovalSessionId.current !== connection.sessionId) {
-    liveApprovalSessionId.current = connection.sessionId;
-    liveApprovalIds.current.clear();
-  }
   // The notifier already owns terminal focus and all three preference gates.
   // Never use launch defaults: attached sessions own separate mutable settings.
   const settings = app.liveSettings(connection.sessionId);
@@ -78,7 +70,6 @@ function DirectTui({
   const integration: TuiIntegration = useMemo(
     () => ({
       menus: createDirectTuiMenus({ app, persistentSettings, logger, root }),
-      reviewApproval: (sessionId, requestId, signal) => app.reviewApproval(sessionId, requestId, signal),
       async shell(sessionId, command) {
         if (remote) throw new Error('Direct shell commands are not available in SSH workspaces.');
         const settings = app.liveSettings(sessionId);
@@ -157,16 +148,11 @@ function DirectTui({
       integration={integration}
       onLiveEvent={(event) => {
         if (event.sessionId !== connection.sessionId) return;
-        if (event.type === 'interaction_opened' && event.payload.interaction.kind === 'approval') {
-          liveApprovalIds.current.add(event.payload.interaction.requestId);
-        }
-        if (event.type === 'interaction_resolved') {
-          liveApprovalIds.current.delete(event.payload.requestId);
-        }
+        // An approval opens only once a person must decide: the session reviews first and never
+        // publishes a request it approves itself (src/session/approval/approval-arbiter.ts).
+        if (event.type === 'interaction_opened' && event.payload.interaction.kind === 'approval')
+          notifier.approvalNeeded();
         if (event.type === 'turn_ended' && event.payload.outcome === 'completed') notifier.turnComplete();
-      }}
-      onManualApprovalNeeded={(interactionId) => {
-        if (liveApprovalIds.current.delete(interactionId)) notifier.approvalNeeded();
       }}
       onSnapshot={(snapshot) => {
         latest.current = snapshot;

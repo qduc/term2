@@ -70,6 +70,8 @@ export type InteractionView = {
   readonly input?: JsonValue;
   readonly summary?: string;
   readonly presentation?: { readonly [key: string]: JsonValue };
+  /** The session's review before this request reached a person, when one ran. */
+  readonly review?: import('../../protocol/wire.js').WireApprovalReview;
 };
 
 export type QueueItem = {
@@ -112,6 +114,8 @@ export type TuiState = {
   readonly budgets: readonly WireBudgetRequest[];
   readonly commands: readonly WireCommandReceipt[];
   readonly interactions: readonly InteractionView[];
+  /** Approvals the session is still reviewing; nothing is asked yet. Absent means none. */
+  readonly reviewing?: readonly import('../../protocol/wire.js').WireReviewingApproval[];
   readonly queue: readonly QueueItem[];
   readonly queueState: string;
   readonly queuePauseReason?: string | null;

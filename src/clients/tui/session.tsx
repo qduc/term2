@@ -50,7 +50,6 @@ export function TuiSession({
   retainedSnapshot,
   onSnapshot,
   onLiveEvent,
-  onManualApprovalNeeded,
   onExit,
   interrupt,
   switchSession,
@@ -114,8 +113,10 @@ export function TuiSession({
   const prompt = promptRequest(state, answeredId);
   const panelOpen = taskOpen || budgetOpen;
   const shown = !panelOpen ? prompt : undefined;
+  // An approval under session review owns the keys as its prompt will: Esc takes over, `n` denies.
+  const reviewingShown = !panelOpen && !prompt && state.reviewing?.length ? state.reviewing : undefined;
   const foregroundInteraction = shown?.interaction;
-  const interactionActive = Boolean(foregroundInteraction);
+  const interactionActive = Boolean(foregroundInteraction || reviewingShown);
   const confirmation = useSendConfirmation(interactionActive);
   const interactionInput = useRef<InteractionInputHandler | null>(null);
   const approvalInterrupt = useRef<(() => boolean) | null>(null);
@@ -219,7 +220,7 @@ export function TuiSession({
   });
   useInterrupt({
     interrupt,
-    approvalInterrupt: foregroundInteraction ? approvalInterrupt : null,
+    approvalInterrupt: foregroundInteraction || reviewingShown ? approvalInterrupt : null,
     connection,
     confirmation,
     state,
@@ -445,15 +446,16 @@ export function TuiSession({
         ) : null}
         <ApprovalHost
           request={shown}
-          reviewApproval={integration.reviewApproval}
-          onManualApprovalNeeded={onManualApprovalNeeded}
+          reviewing={reviewingShown}
           activeTurnId={state.activeTurnId}
           {...{ connection, cancelInput, setNotice, changeInput, replaceInput, editorValue: editor.value }}
           inputHandler={interactionInput}
           interrupt={approvalInterrupt}
           onStopped={() => viewport.appendCommandOutput('Stopped', 'system')}
           hide={setAnsweredId}
-          panel={<TasksPanel {...{ state, connection }} manager={[taskOpen, setTaskOpen]} gap={!shown} />}
+          panel={
+            <TasksPanel {...{ state, connection }} manager={[taskOpen, setTaskOpen]} gap={!shown && !reviewingShown} />
+          }
         />
         <Box flexDirection="column" display={foregroundInteraction || taskOpen ? 'none' : 'flex'}>
           {/* Legacy keeps the queue list in the input surface, which a menu or the paused prompt replaces. */}

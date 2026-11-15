@@ -1,4 +1,3 @@
-import type { ApprovalReviewResult } from '../../shared/contracts/approval-review.js';
 /**
  * Hosts the ported legacy approval/ask_user prompt for the foreground turn's request, as legacy's app.tsx,
  * BottomArea and use-app-keyboard-shortcuts do: the prompt replaces the composer under the divider; `y`/`n` are
@@ -9,7 +8,12 @@ import type { ApprovalReviewResult } from '../../shared/contracts/approval-revie
 import React, { useEffect, useRef, useState, type MutableRefObject } from 'react';
 import { Box, Text } from 'ink';
 import { MultilineInput } from 'ink-prompt';
-import { ASK_USER_NO_ANSWER_RESULT, type WireDecision, type WireGrant } from '../../protocol/wire.js';
+import {
+  ASK_USER_NO_ANSWER_RESULT,
+  type WireDecision,
+  type WireGrant,
+  type WireReviewingApproval,
+} from '../../protocol/wire.js';
 import type { TuiConnection } from './integration.js';
 import type { InteractionView, TuiState } from './state.js';
 import { answerInteraction, WireCommandFailure } from './commands.js';
@@ -129,13 +133,8 @@ function approveDecision(answer: string | undefined): WireDecision {
 }
 
 type HostProps = {
-  readonly reviewed: MutableRefObject<Set<string>>;
-  readonly reviewResults: MutableRefObject<Map<string, ApprovalReviewResult>>;
-  readonly reviewApproval?: (
-    sessionId: string,
-    requestId: string,
-    signal: AbortSignal,
-  ) => Promise<ApprovalReviewResult>;
+  /** Set when `n` was pressed during the review: the prompt opens straight into the reason entry. */
+  readonly rejectOnOpen: MutableRefObject<{ readonly requestId: string; readonly reason: string } | null>;
   readonly request: PromptRequest;
   /** The foreground turn a stop cancels; a background child's request may outlive it. */
   readonly activeTurnId: string | null;
@@ -154,30 +153,111 @@ type HostProps = {
   readonly replaceInput: (text: string) => void;
   /** Legacy BottomArea draws the tasks panel straight under the prompt, above its (hidden) input surface. */
   readonly panel?: React.ReactNode;
-  readonly onManualApprovalNeeded?: (interactionId: string) => void;
 };
 
-/** The request the prompt shows, if any; a new request gets fresh prompt state. */
+/**
+ * The request the prompt shows, if any; a new request gets fresh prompt state. While the session is
+ * still reviewing an approval (src/session/approval/approval-arbiter.ts) and nothing is asked yet, it
+ * shows that review instead; Esc hands the decision to the person, `n` denies it.
+ */
 export function ApprovalHost({
   request,
+  reviewing,
   ...props
-}: Omit<HostProps, 'request' | 'reviewed' | 'reviewResults'> & {
+}: Omit<HostProps, 'request' | 'rejectOnOpen'> & {
   readonly request: PromptRequest | undefined;
+  readonly reviewing?: readonly WireReviewingApproval[];
 }): React.ReactElement | null {
-  const reviewed = useRef(new Set<string>());
-  const reviewResults = useRef(new Map<string, ApprovalReviewResult>());
-  return request ? (
-    <Host key={request.interaction.id} request={request} reviewed={reviewed} reviewResults={reviewResults} {...props} />
-  ) : (
-    <>{props.panel}</>
+  const rejectOnOpen = useRef<{ readonly requestId: string; readonly reason: string } | null>(null);
+  const settled = useRef(new Set<string>());
+  const ids = (reviewing ?? []).map((item) => item.requestId).join('\n');
+  useEffect(() => {
+    const live = new Set(ids ? ids.split('\n') : []);
+    for (const requestId of settled.current)
+      if (!live.has(requestId)) {
+        settled.current.delete(requestId);
+        publishHarnessApprovalReviewSettled(requestId);
+      }
+    for (const requestId of live) settled.current.add(requestId);
+  }, [ids]);
+  if (request) return <Host key={request.interaction.id} request={request} rejectOnOpen={rejectOnOpen} {...props} />;
+  const review = reviewing?.[0];
+  if (review)
+    return (
+      <ReviewingHost
+        key={review.requestId}
+        review={review}
+        connection={props.connection}
+        inputHandler={props.inputHandler}
+        interrupt={props.interrupt}
+        setNotice={props.setNotice}
+        editorValue={props.editorValue}
+        rejectOnOpen={rejectOnOpen}
+        panel={props.panel}
+      />
+    );
+  return <>{props.panel}</>;
+}
+
+function ReviewingHost({
+  review,
+  connection,
+  inputHandler,
+  interrupt,
+  setNotice,
+  editorValue,
+  rejectOnOpen,
+  panel,
+}: Pick<
+  HostProps,
+  'connection' | 'inputHandler' | 'interrupt' | 'setNotice' | 'editorValue' | 'rejectOnOpen' | 'panel'
+> & {
+  readonly review: WireReviewingApproval;
+}): React.ReactElement {
+  const theme = useTheme();
+  const sent = useRef(false);
+  const takeOver = (reject?: string) => {
+    if (sent.current) return;
+    sent.current = true;
+    if (reject !== undefined) rejectOnOpen.current = { requestId: review.requestId, reason: reject };
+    connection
+      .send({ type: 'take_over_review', requestId: review.requestId })
+      .then((receipt) => {
+        // Stale means the review settled first; its prompt (or approval) is already on its way.
+        if (!receipt.ok && receipt.code !== 'stale_interaction')
+          throw new WireCommandFailure(receipt.code, receipt.message);
+      })
+      .catch((error: unknown) => {
+        sent.current = false;
+        setNotice(error instanceof Error ? error.message : String(error));
+      });
+  };
+  // Ctrl+C during a review hands it to the person, like Esc; the prompt then owns stopping the turn.
+  interrupt.current = () => {
+    takeOver();
+    return true;
+  };
+  useInteractionInput(inputHandler, (input, key) => {
+    if (input === '\x1b[I' || input === '[I' || input === '\x1b[O' || input === '[O') return;
+    if (key.escape) return takeOver();
+    // The draft plus whatever followed `n` in the same chunk becomes the reason.
+    if (input[0] === 'n') takeOver(editorValue + input.slice(1));
+  });
+  return (
+    <Box flexDirection="column">
+      <Box flexDirection="column" marginBottom={1}>
+        <Text color={theme.textSubtle}>
+          {`Reviewing ${review.toolName} for automatic approval… (Esc to review manually, n to deny)`}
+        </Text>
+        {panel}
+      </Box>
+    </Box>
   );
 }
 
 function Host({
   request,
-  reviewed,
-  reviewResults,
-  reviewApproval,
+  rejectOnOpen,
   activeTurnId,
   connection,
   inputHandler,
@@ -190,7 +270,6 @@ function Host({
   changeInput,
   replaceInput,
   panel,
-  onManualApprovalNeeded,
 }: HostProps): React.ReactElement {
   const theme = useTheme();
   const { columns, rows } = useTerminalSize();
@@ -198,100 +277,26 @@ function Host({
   const { interaction, owner } = request;
   const approval = approvalDescriptor(interaction, request.agentName, owner);
   const isAskUser = approval.toolName === 'ask_user';
-  const [reviewResult, setReviewResult] = useState<ApprovalReviewResult | null>(
-    () => reviewResults.current.get(interaction.id) ?? null,
-  );
-  const [reviewStopped, setReviewStopped] = useState(
-    () => reviewed.current.has(interaction.id) && !reviewResults.current.has(interaction.id),
-  );
-  const [entry, setEntry] = useState<'reason' | 'answer' | null>(null);
+  // The session's review, recorded before this request reached a person.
+  const reviewResult = interaction.review;
+  const rejected = rejectOnOpen.current?.requestId === interaction.id ? rejectOnOpen.current : null;
+  const [entry, setEntry] = useState<'reason' | 'answer' | null>(() => (rejected ? 'reason' : null));
   const [answers, setAnswers] = useState<readonly AskUserAnswer[]>([]);
   const [questionIndex, setQuestionIndex] = useState(0);
-  const consumed = useRef(false);
+  const consumed = useRef(rejected !== null);
   const pending = useRef(false);
   const promptInput = useRef<InteractionInputHandler | null>(null);
-  const reviewController = useRef<AbortController | null>(null);
-  const reviewCancelled = useRef(false);
-  const hideRef = useRef(hide);
-  hideRef.current = hide;
-  const setNoticeRef = useRef(setNotice);
-  setNoticeRef.current = setNotice;
-  const cancelReview = () => {
-    if (pending.current) return;
-    reviewCancelled.current = true;
-    if (interaction.kind === 'approval' && reviewApproval && !reviewResults.current.has(interaction.id))
-      setReviewStopped(true);
-    reviewed.current.add(interaction.id);
-    reviewController.current?.abort();
-  };
   const isNetworkApproval = approval.toolName === 'sandbox_network_access';
-  const reviewEligible = interaction.kind === 'approval';
-  const reviewing = Boolean(
-    reviewEligible && reviewApproval && !reviewResult && !reviewStopped && !approval.llmAdvisory,
-  );
-  const onManualApprovalNeededRef = useRef(onManualApprovalNeeded);
-  onManualApprovalNeededRef.current = onManualApprovalNeeded;
   useEffect(() => {
-    if (interaction.kind === 'approval' && !reviewing) {
-      onManualApprovalNeededRef.current?.(interaction.id);
-    }
-  }, [interaction.id, interaction.kind, reviewing]);
-  useEffect(() => {
-    if (!reviewApproval || !reviewEligible || reviewCancelled.current || reviewed.current.has(interaction.id)) return;
-    const reviewedRequests = reviewed.current;
-    const completedReviews = reviewResults.current;
-    reviewedRequests.add(interaction.id);
-    const controller = new AbortController();
-    reviewController.current = controller;
-    void reviewApproval(connection.sessionId, interaction.id, controller.signal)
-      .then(
-        async (result) => {
-          if (controller.signal.aborted || pending.current) return;
-          if (!result.approved) {
-            reviewResults.current.set(interaction.id, result);
-            setReviewResult(result);
-            return;
-          }
-          pending.current = true;
-          reviewResults.current.set(interaction.id, result);
-          hideRef.current(interaction.id);
-          try {
-            const receipt = await connection.send({
-              type: 'answer',
-              requestId: interaction.id,
-              decision: result.grant ? { kind: 'grant', grant: result.grant as WireGrant } : { kind: 'allow' },
-              provenance: { source: 'policy', automaticApproval: true },
-            });
-            if (!receipt.ok) throw new WireCommandFailure(receipt.code, receipt.message);
-          } catch (error: unknown) {
-            pending.current = false;
-            const fallback = { ...result, approved: false };
-            reviewResults.current.set(interaction.id, fallback);
-            setReviewResult(fallback);
-            hideRef.current(null);
-            setNoticeRef.current(error instanceof Error ? error.message : String(error));
-          }
-        },
-        () => {
-          if (!controller.signal.aborted) {
-            pending.current = false;
-            const result = { kind: 'unavailable', approved: false } as const;
-            reviewResults.current.set(interaction.id, result);
-            setReviewResult(result);
-          }
-        },
-      )
-      .finally(() => publishHarnessApprovalReviewSettled(interaction.id));
-    return () => {
-      controller.abort();
-      if (!reviewCancelled.current && !completedReviews.has(interaction.id)) reviewedRequests.delete(interaction.id);
-    };
-  }, [connection, interaction.id, reviewApproval, reviewEligible, reviewed, reviewResults]);
+    // `n` during the review: the reason entry opens with the text typed after it.
+    if (!rejected) return;
+    rejectOnOpen.current = null;
+    replaceInput(rejected.reason);
+  }, [rejected, rejectOnOpen, replaceInput]);
   const fail = (error: unknown) => setNotice(error instanceof Error ? error.message : String(error));
 
   const send = (decision: WireDecision) => {
     if (pending.current) return;
-    cancelReview();
     pending.current = true;
     hide(interaction.id);
     answerInteraction(connection, interaction.id, decision).catch((error: unknown) => {
@@ -302,7 +307,6 @@ function Host({
   };
   const stop = () => {
     if (pending.current) return;
-    cancelReview();
     pending.current = true;
     cancelInput(connection, activeTurnId ?? undefined).then((message) => {
       setNotice(message);
@@ -357,7 +361,6 @@ function Host({
   // use-app-keyboard-shortcuts.ts: Ctrl+C clears a typed reason/answer, else stops the turn.
   interrupt.current = () => {
     if (pending.current) return true;
-    cancelReview();
     if (text.length > 0) replaceInput('');
     else if (activeTurnId) stop();
     return true;
@@ -366,21 +369,6 @@ function Host({
   useInteractionInput(inputHandler, (input, key) => {
     if (pending.current) return;
     if (input === '\x1b[I' || input === '[I' || input === '\x1b[O' || input === '[O') return;
-    if (reviewing) {
-      if (key.escape) {
-        cancelReview();
-        return;
-      }
-      if (!entry && shortcuts && !consumed.current && input[0] === 'n') {
-        cancelReview();
-        consumed.current = true;
-        // The draft plus whatever followed `n` in the same chunk becomes the reason.
-        if (input.length > 1) replaceInput(text + input.slice(1));
-        onReject();
-      }
-      return;
-    }
-    cancelReview();
     if (entry === 'reason') {
       if (key.escape) {
         consumed.current = false;
@@ -438,39 +426,31 @@ function Host({
           {request.backgroundCount > 1 ? (
             <Text color={theme.warning}>Background approval · {request.backgroundCount - 1} queued</Text>
           ) : null}
-          {reviewing ? (
-            <Text color={theme.textSubtle}>
-              {`Reviewing ${approval.toolName} for automatic approval… (Esc to review manually, n to deny)`}
-            </Text>
-          ) : (
-            <ApprovalPrompt
-              approval={{
-                ...approval,
-                ...(reviewResult?.kind === 'reviewed' ? { llmAdvisory: reviewResult.advisory } : {}),
-              }}
-              reviewStatus={
-                reviewResult?.kind === 'reviewed' && !reviewResult.approved
-                  ? 'Automatic approval not granted; manual approval required.'
-                  : reviewResult?.kind === 'unavailable'
-                  ? 'Approval review unavailable; manual approval required.'
-                  : reviewResult?.kind === 'not_reviewed'
-                  ? 'Not reviewed automatically; manual approval required.'
-                  : reviewEligible && reviewApproval && reviewStopped && !approval.llmAdvisory
-                  ? 'Approval review stopped; manual approval required.'
-                  : interaction.kind === 'approval' && !approval.llmAdvisory && (!reviewEligible || !reviewApproval)
-                  ? 'Not reviewed automatically; manual approval required.'
-                  : undefined
-              }
-              inputHandler={promptInput}
-              onApprove={onApprove}
-              onReject={onReject}
-              onCancel={onCancel}
-              onTypeAnswer={() => setEntry('answer')}
-              onNavigateQuestion={onNavigateQuestion}
-              currentQuestionIndex={questionIndex}
-              waitingForAskUserAnswer={entry === 'answer'}
-            />
-          )}
+          <ApprovalPrompt
+            approval={{
+              ...approval,
+              ...(reviewResult?.kind === 'reviewed' ? { llmAdvisory: reviewResult.advisory } : {}),
+            }}
+            reviewStatus={
+              reviewResult?.kind === 'reviewed' && !reviewResult.approved
+                ? 'Automatic approval not granted; manual approval required.'
+                : reviewResult?.kind === 'unavailable'
+                ? 'Approval review unavailable; manual approval required.'
+                : reviewResult?.kind === 'not_reviewed'
+                ? 'Not reviewed automatically; manual approval required.'
+                : interaction.kind === 'approval' && !approval.llmAdvisory
+                ? 'Not reviewed automatically; manual approval required.'
+                : undefined
+            }
+            inputHandler={promptInput}
+            onApprove={onApprove}
+            onReject={onReject}
+            onCancel={onCancel}
+            onTypeAnswer={() => setEntry('answer')}
+            onNavigateQuestion={onNavigateQuestion}
+            currentQuestionIndex={questionIndex}
+            waitingForAskUserAnswer={entry === 'answer'}
+          />
           {panel}
         </Box>
       ) : (

@@ -67,7 +67,7 @@ export function routeApproval(mode: AutoApproveMode | undefined, profile: Approv
 }
 
 /** The one threshold a review must clear to answer a request without a person. */
-export function acceptVerdict(advisory: LLMAdvisory | undefined, mode: AutoApproveMode | undefined): boolean {
+function acceptVerdict(advisory: LLMAdvisory | undefined, mode: AutoApproveMode | undefined): boolean {
   return (
     mode === 'auto' &&
     advisory !== undefined &&

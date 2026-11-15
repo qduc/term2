@@ -541,9 +541,14 @@ it(
     await waitForHarnessComposerValue(idlePath, `Read ${firstFile} and ${secondFile}`, { timeoutMs: 60_000 });
     session.write('\r');
     await session.waitForOutput('Allow this folder for this session', 60_000);
-    // Move selection from "Allow once" to "Allow this folder for this session" and confirm.
-    session.write('\x1b[B');
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    // Move selection from "Allow once" to "Allow this folder for this session" and confirm once the
+    // prompt shows that option's description, so Enter cannot land on the previous selection.
+    const prompt = session;
+    const beforeMove = prompt.getOutput().length;
+    prompt.write('\x1b[B');
+    await expect
+      .poll(() => prompt.getOutput().slice(beforeMove).includes('read_file, grep'), { timeout: 30_000 })
+      .toBe(true);
     session.write('\r');
     await session.waitForOutput('FOLDER_SESSION_FINISHED', 60_000);
     expect(providerBodies.length).toBeGreaterThanOrEqual(3);

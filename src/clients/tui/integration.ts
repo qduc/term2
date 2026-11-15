@@ -1,4 +1,3 @@
-import type { ApprovalReviewResult } from '../../shared/contracts/approval-review.js';
 import type { ReactNode } from 'react';
 import type { WireEvent, WireSnapshot } from '../../protocol/wire.js';
 import type { DirectConnection, DirectReplayConnection } from '../../host/in-process-direct-types.js';
@@ -320,8 +319,6 @@ export interface TuiProviderMenu {
 export interface TuiIntegration {
   /** The legacy menus' data access. Without it the composer opens no menus. */
   readonly menus?: TuiMenus;
-  /** Review a pending root approval; the human retains input ownership. */
-  reviewApproval?(sessionId: string, requestId: string, signal: AbortSignal): Promise<ApprovalReviewResult>;
   /** Run an explicit user shell command in the selected workspace, without a model turn. */
   shell?(sessionId: string, command: string): Promise<ShellResult>;
   /** Legacy printUsage: the usage summary written to stdout as a conversation is left for a new one. */
@@ -376,8 +373,6 @@ export interface TuiProps {
   readonly onSnapshot?: (snapshot: WireSnapshot) => void;
   /** New durable events only; snapshot/replay callbacks do not trigger side effects. */
   readonly onLiveEvent?: (event: WireEvent) => void;
-  /** Fires when an approval interaction actually requires manual user input (not while auto-reviewing). */
-  readonly onManualApprovalNeeded?: (interactionId: string) => void;
   readonly onExit: () => void;
 }
 

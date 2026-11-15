@@ -68,6 +68,8 @@ export function prepareConversationGeneration(
     publishTask: deps.publishTask,
     publishBranch: deps.publishBranch,
     publishNotice: deps.publishNotice,
+    publishReview: deps.publishReview,
+    approvalReview: candidate.deps.approvalReview ?? runtimeDeps.approvalReview,
   };
   return {
     configurationFact,

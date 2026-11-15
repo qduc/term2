@@ -30,6 +30,20 @@ replay aggregation and final/legacy JSON projection. Usage facts count all input
 formatting recombines creation once, while total tokens count each token once.
 Old facts without optional creation counters remain readable.
 
+## Approval review before a request opens
+
+`approval/approval-arbiter.ts` owns automatic approval for root and task
+requests. When the app's `approvalReview` port routes a request to review
+(the shared table in `approval/approval-route.ts`), the request stays unopened:
+nothing is durable, and a process that dies here reopens the turn as
+interrupted with the call unanswered. Clients see only the live
+`approval_review` transient. The first of review result, a person's answer,
+`takeOverReview`, or cancellation wins. A settled review commits
+`interaction_opened` (or `task_interaction_opened`) with its `review`; an
+approved review commits the policy close in the same step and answers with the
+request's one-time grant when it offers one. Only this path records
+`automaticApproval: true`; `answer` rejects it from any caller.
+
 ## Background notices across reopen
 
 A background notice (a child's or shell job's completion, a "moved to

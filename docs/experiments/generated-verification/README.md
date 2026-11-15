@@ -94,7 +94,7 @@ or obtain human agreement to defer them. Independently verify high-risk fixes.
   error, missing, throw) and aborts, through `describeApproval`,
   `routeApproval` and `decideApproval`. A hard gate never routes to review; no
   review happens outside `auto`/`advisory`; an approval only follows a usable
-  verdict that clears `acceptVerdict` in `auto` with the mode unchanged and no
+  verdict that clears the one threshold (approved, `llm` source, low or medium risk, explicit or implied authorization, high confidence) in `auto` with the mode unchanged and no
   abort, and answers with the request's one-time grant when it offers one.
 - `approval.expand-home`: `expandHome` expands `~` and `~/…` only; `~user/…` stays
   literal.

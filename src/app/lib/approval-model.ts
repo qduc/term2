@@ -1,4 +1,3 @@
-import type { ApprovalReviewResult } from '../../shared/contracts/approval-review.js';
 import type { SessionAccessState } from '../../session/session/session-access-state.js';
 import { ShellAutoApprovalResolver } from '../../session/approval/shell-auto-approval-resolver.js';
 import { decideApproval, describeApproval } from '../../session/approval/approval-route.js';
@@ -8,9 +7,8 @@ import type { ProviderInputItem } from '../../shared/contracts/provider-input.js
 import { randomUUID } from 'node:crypto';
 import type { Item, ModelAffinity, ModelRegistry, ItemId } from '../../model/index.js';
 import type { ShellAutoApprovalAgentClient } from '../../session/conversation-agent-client.js';
-import type { DirectSession } from '../../session/facade-types.js';
-import type { DirectRuntimeRecord } from '../application-runtime.js';
 import type { AgentSurface, ProfileSelection } from '../tool-contract.js';
+import type { DirectRuntimeRecord } from '../application-runtime.js';
 
 /** One tool-free model request for the existing approval evaluator; never starts an agent loop. */
 export function createApprovalModelClient(
@@ -156,30 +154,21 @@ export function approvalHistory(history: readonly Item[]): ProviderInputItem[] {
   });
 }
 
-/** Review an exact foreground request still owned by the installed tool generation. */
-export async function reviewLiveApproval(
-  session: DirectSession,
-  runtime: DirectRuntimeRecord | undefined,
-  requestId: string,
-  signal: AbortSignal,
-): Promise<ApprovalReviewResult> {
-  const review = runtime?.surface.reviewApproval;
-  const mode = runtime?.configurationSettings.get('shell.autoApproveMode');
-  if (signal.aborted || !runtime || !review || (mode !== 'auto' && mode !== 'advisory'))
-    return { kind: 'not_reviewed', approved: false };
-  const { state, unsubscribe } = session.capture(() => undefined);
-  unsubscribe();
-  const request = state.pendingInteractions.find((pending) => pending.requestId === requestId);
-  const isTaskRequest = Boolean(request && 'taskId' in request);
-  if (!request || (!isTaskRequest && request.turnId !== state.activeTurnId))
-    return { kind: 'not_reviewed', approved: false };
-  const result = await runtime.scope(() => review(request, session.acceptedHistory(), signal));
-  const current = session.capture(() => undefined);
-  current.unsubscribe();
-  return !signal.aborted &&
-    runtime.configurationSettings.get('shell.autoApproveMode') === mode &&
-    (isTaskRequest || current.state.activeTurnId === request.turnId) &&
-    current.state.pendingInteractions.some((pending) => pending.requestId === requestId)
-    ? result
-    : { kind: 'not_reviewed', approved: false };
+/**
+ * The session's reviewer (src/session/approval/approval-arbiter.ts), read from the
+ * session's current tool generation for every request, so a rebuilt surface and
+ * its live mode apply at once.
+ */
+export function sessionApprovalReview(
+  record: () => Pick<DirectRuntimeRecord, 'surface' | 'scope'> | undefined,
+): import('../../session/approval/approval-arbiter.js').ApprovalReviewPort {
+  return {
+    willReview: (request) => record()?.surface.willReviewApproval?.(request) === true,
+    async review(request, history, signal) {
+      const current = record();
+      const review = current?.surface.reviewApproval;
+      if (!current || !review) return { kind: 'not_reviewed', approved: false };
+      return current.scope(() => review(request, history, signal));
+    },
+  };
 }

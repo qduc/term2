@@ -8,7 +8,6 @@ import type {
   WireCommand,
   WireEvent,
   WireInteraction,
-  WireGrant,
 } from '../../protocol/wire.js';
 import { reduceWireEvent } from '../../protocol/reducer.js';
 import type { AcpLogger, EmitUpdate, PromptExecution, PromptOutcome } from './contract.js';
@@ -82,7 +81,6 @@ export class AcpAttachment {
     readonly connection: DirectConnection,
     private readonly client: AcpClient,
     private readonly logger: AcpLogger,
-    private readonly reviewApproval?: (requestId: string, signal: AbortSignal) => Promise<ApprovalReviewResult>,
     private readonly readTitle?: () => Promise<string | undefined>,
   ) {
     this.foregroundTurnId = connection.snapshot.activeTurnId;
@@ -355,26 +353,9 @@ export class AcpAttachment {
     const { sessionId } = this.connection;
     this.openRequest(interaction.requestId, interaction.turnId, async (signal) => {
       const { requestId } = interaction;
-      // Eligibility, threshold and the answer's grant come from the shared decision table.
-      const review =
-        interaction.kind !== 'approval'
-          ? undefined
-          : !this.reviewApproval
-          ? ({ kind: 'not_reviewed', approved: false } as const)
-          : await this.reviewApproval(requestId, signal).catch((error: unknown) => {
-              if (!signal.aborted)
-                this.logger.error('ACP approval review failed', { sessionId, error: errorMessage(error) });
-              return { kind: 'unavailable', approved: false } as const;
-            });
-      signal.throwIfAborted();
-      if (review && review.approved) {
-        return {
-          type: 'answer',
-          requestId,
-          decision: review.grant ? { kind: 'grant', grant: review.grant as WireGrant } : { kind: 'allow' },
-          provenance: { source: 'policy', automaticApproval: true },
-        };
-      }
+      // The session reviewed this request before opening it; it reaches here only when a person decides.
+      const review: ApprovalReviewResult | undefined =
+        interaction.kind !== 'approval' ? undefined : interaction.review ?? { kind: 'not_reviewed', approved: false };
       return {
         type: 'answer',
         requestId,

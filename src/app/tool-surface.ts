@@ -19,6 +19,7 @@ import type { AnyToolDefinition } from '../tools/types.js';
 import { isMutatingCommand } from '../tools/system/shell.js';
 import { InvalidatableShellChildRegistry } from '../tools/shell/shell-child-registry.js';
 import { formatApprovalReview } from '../shared/contracts/approval-review.js';
+import { describeApproval, routeApproval } from '../session/approval/approval-route.js';
 import type { ToolContextSeed } from '../tools/index.js';
 import type { Workspace } from '../tools/index.js';
 import type { Item, ReasoningEffort } from '../model/index.js';
@@ -312,7 +313,14 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
       },
     },
     reviewApproval,
-    async decideInteraction(request, history) {
+    willReviewApproval: (request) =>
+      routeApproval(
+        settings.get('shell.autoApproveMode'),
+        describeApproval(request, {
+          isDockerHostControl: (toolName, input) => isDockerRequest(toolName, input, sessionAccess),
+        }),
+      ) === 'review',
+    async decideInteraction(request, history, review) {
       if (request.presentation?.requiresExplicitUser === true)
         return { kind: 'deny', reason: 'This decision requires an explicit user answer' };
       if (request.kind === 'question') {
@@ -327,9 +335,9 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
         return { kind: 'deny', reason: 'Docker host control requires an explicit interactive approval' };
       }
       const callId = request.sourceCallId ?? request.requestId;
-      const review = await reviewApproval(request, history, advisoryAbort.signal);
-      if (review.approved) return review.grant ? { kind: 'allow', grant: review.grant } : { kind: 'allow' };
-      const firstReview = review.kind === 'not_reviewed' ? undefined : formatApprovalReview(review);
+      // The session already reviewed this request before opening it (approval-arbiter.ts); an approval
+      // never reaches here. Its verdict informs the no-person fallback instead of a second model call.
+      const firstReview = review && review.kind !== 'not_reviewed' ? formatApprovalReview(review) : undefined;
       // Legacy's headless continuation then decides from the session history,
       // which does not yet hold the paused response's unresolved calls.
       const decision = await withWorkspace(() =>
@@ -344,7 +352,7 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
           },
           getHistory: () => approvalHistory(settledHistory(history)),
           // Reuse the verdict above instead of asking the model a second time.
-          ...(review.kind === 'reviewed' ? { priorAdvisory: review.advisory } : {}),
+          ...(review?.kind === 'reviewed' ? { priorAdvisory: review.advisory } : {}),
         }),
       );
       return decision.answer === 'y'

@@ -1,4 +1,4 @@
-## [Unreleased]
+## [1.3.0] - 2026-11-15
 
 ### Features
 - Show Codex five-hour quota usage in the terminal footer alongside the existing seven-day window (#291).

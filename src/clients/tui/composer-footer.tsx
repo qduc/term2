@@ -57,17 +57,20 @@ export function directStatusView(
   largeUncached?: LargeUncachedStatus,
 ): StatusView {
   const now = Date.now();
+  const today = new Date(now);
   const quotaWindows = [
     { label: '5H', quota: state.codexFiveHourQuota },
     { label: '7D', quota: state.codexQuota },
   ].flatMap(({ label, quota }) => {
     if (!quota || quota.resetAt * 1000 <= now) return [];
     const reset = new Date(quota.resetAt * 1000);
+    const isSameDate =
+      reset.getFullYear() === today.getFullYear() &&
+      reset.getMonth() === today.getMonth() &&
+      reset.getDate() === today.getDate();
     const resetDate = `${String(reset.getMonth() + 1).padStart(2, '0')}/${String(reset.getDate()).padStart(2, '0')}`;
-    const resetText =
-      reset.getTime() - now < 86400000
-        ? `${resetDate} ${reset.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}`
-        : resetDate;
+    const resetTime = reset.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    const resetText = label === '7D' && !isSameDate ? resetDate : resetTime;
     return [{ label, percent: quota.usedPercent, resetText }];
   });
   // Legacy StatusBar: every usage figure is the last request's (lastUsage), not a session total.

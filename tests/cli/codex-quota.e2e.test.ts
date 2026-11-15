@@ -139,7 +139,9 @@ it.each(['expiry', 'five-hour-expiry', 'configuration', 'secondary', 'five-hour-
         expect(terminal.getVisibleOutput()).not.toContain('7D 37%');
       } else {
         await terminal.waitForOutput('7D 37%', 30000);
-        expect(terminal.getVisibleOutput()).toMatch(/7D 37%→\d\d\/\d\d/);
+        // The fixture resets within a minute, so the weekly window shows a future clock
+        // time; a run that crosses midnight instead falls back to the reset date.
+        expect(terminal.getVisibleOutput()).toMatch(/7D 37%→(\d\d:\d\d|\d\d\/\d\d)/);
       }
       if (clearBy !== 'secondary') expect(terminal.getVisibleOutput()).toContain('5H 12%');
       const mark = terminal.getVisibleOutput().length;

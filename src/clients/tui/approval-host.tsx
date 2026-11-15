@@ -214,7 +214,7 @@ function ReviewingHost({
 }): React.ReactElement {
   const theme = useTheme();
   const sent = useRef(false);
-  const dispatch = (command: Parameters<TuiConnection['send']>[0]) => {
+  const dispatch = (command: Parameters<TuiConnection['send']>[0], onAccepted?: () => void) => {
     if (sent.current) return;
     sent.current = true;
     connection
@@ -223,6 +223,7 @@ function ReviewingHost({
         // Stale means the review settled first; its prompt (or approval) is already on its way.
         if (!receipt.ok && receipt.code !== 'stale_interaction')
           throw new WireCommandFailure(receipt.code, receipt.message);
+        if (receipt.ok) onAccepted?.();
       })
       .catch((error: unknown) => {
         sent.current = false;
@@ -242,14 +243,17 @@ function ReviewingHost({
     // A deny during the review is atomic in the session: it stops the review and records the person's
     // decision, so a review that would have approved cannot win. The draft plus whatever followed `n`
     // in the same chunk becomes the reason.
+    // The draft clears only once the deny is accepted, so a failed or stale send keeps what was typed.
     const reason = (editorValue + input.slice(1)).trim();
-    replaceInput('');
-    dispatch({
-      type: 'answer',
-      requestId: review.requestId,
-      decision: { kind: 'deny', ...(reason ? { reason } : {}) },
-      provenance: { source: 'user' },
-    });
+    dispatch(
+      {
+        type: 'answer',
+        requestId: review.requestId,
+        decision: { kind: 'deny', ...(reason ? { reason } : {}) },
+        provenance: { source: 'user' },
+      },
+      () => replaceInput(''),
+    );
   });
   return (
     <Box flexDirection="column">

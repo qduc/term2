@@ -96,8 +96,11 @@ export type AgentSurface = {
     readonly maxParallelToolCalls: number;
     dispose?(): void | Promise<void>;
   };
-  /** The shared route with this generation's live mode: true when a request is reviewed before anyone is asked. */
-  willReviewApproval?(request: InteractionRequest): boolean;
+  /**
+   * The shared route with this generation's live mode: `decide` reviews and may answer, `advise`
+   * reviews only to inform the person, `ask_user` asks at once.
+   */
+  approvalRoute?(request: InteractionRequest): 'decide' | 'advise' | 'ask_user';
   /** Review an open approval through the shared decision table (session/approval/approval-route.ts). */
   reviewApproval?(
     request: InteractionRequest,

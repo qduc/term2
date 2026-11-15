@@ -25,6 +25,11 @@ const fixture = (() => {
   fs.symlinkSync(path.join(root, 'secret'), path.join(root, 'data', 'deep', 'escape'));
   // Dangling: a write through it would create the file outside the grant.
   fs.symlinkSync(path.join(root, 'secret', 'not-yet'), path.join(root, 'data', 'deep', 'dangle'));
+  // A relative dangling link reached through a symlinked folder: the kernel resolves it against
+  // the link's real folder (elsewhere/), so a write lands outside the grant.
+  fs.mkdirSync(path.join(root, 'elsewhere', 'inner'), { recursive: true });
+  fs.symlinkSync(path.join(root, 'elsewhere', 'inner'), path.join(root, 'data', 'deep', 'via'));
+  fs.symlinkSync('../missing', path.join(root, 'elsewhere', 'inner', 'rdangle'));
   process.on('exit', () => fs.rmSync(root, { recursive: true, force: true }));
   return { root, base: path.join(root, 'ws') };
 })();
@@ -71,6 +76,11 @@ export const approvalProperties = [
           allows(path.join(fixture.root, 'data', 'deep', 'dangle', 'new.txt')),
           false,
           'a dangling symlink inside the grant escaped it',
+        );
+        assert.equal(
+          allows(path.join(fixture.root, 'data', 'deep', 'via', 'rdangle', 'new.txt')),
+          false,
+          'a relative dangling symlink behind a symlinked folder escaped the grant',
         );
       },
     ),
@@ -194,11 +204,13 @@ export const approvalProperties = [
       fc.record({
         routedAtOpen: fc.boolean(),
         routedAtSettle: fc.boolean(),
+        decidesAtSettle: fc.boolean(),
         outcome: fc.constantFrom('approved', 'rejected', 'throws'),
         stopBeforeResult: fc.boolean(),
       }),
-      async ({ routedAtOpen, routedAtSettle, outcome, stopBeforeResult }) => {
+      async ({ routedAtOpen, routedAtSettle, decidesAtSettle, outcome, stopBeforeResult }) => {
         let routed = routedAtOpen;
+        let decides = true;
         let release;
         const gate = new Promise((resolve) => (release = resolve));
         const settles = [];
@@ -206,6 +218,8 @@ export const approvalProperties = [
         const reviews = new ApprovalReviews(
           {
             willReview: () => routed,
+            // `advisory` still reviews but may not answer; only `auto` decides.
+            mayApprove: () => routed && decides,
             review: async () => {
               await gate;
               if (outcome === 'throws') throw new Error('model down');
@@ -224,6 +238,7 @@ export const approvalProperties = [
         assert.equal(reviews.has('r'), true);
         if (stopBeforeResult) assert.ok(reviews.stop('r'), 'stop did not return the held request');
         routed = routedAtSettle;
+        decides = decidesAtSettle;
         release();
         for (let i = 0; i < 5; i += 1) await Promise.resolve();
         await new Promise((resolve) => setImmediate(resolve));
@@ -234,8 +249,8 @@ export const approvalProperties = [
         const approved = settles[0].approved;
         assert.equal(
           approved,
-          outcome === 'approved' && routedAtSettle,
-          'approval did not follow result and current route',
+          outcome === 'approved' && routedAtSettle && decidesAtSettle,
+          'approval did not follow the result and the current generation deciding',
         );
         if (outcome === 'throws') assert.equal(settles[0].kind, 'unavailable');
       },

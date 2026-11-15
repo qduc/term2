@@ -84,7 +84,7 @@ or obtain human agreement to defer them. Independently verify high-risk fixes.
   folder grant (`SessionAccessState`) given in a generated spelling — absolute
   or relative, through a symlinked alias, with `./` or `er/../` noise — covers
   generated spellings of files, folders and missing paths beneath it, and never
-  covers a sibling outside it or a symlink inside it (resolving or dangling) that leads outside.
+  covers a sibling outside it or a symlink inside it (resolving, dangling, or a relative dangling link reached through a symlinked folder) that leads outside.
 - `approval.remote-stays-lexical`: `canonicalPath` with `remote: true` equals the
   lexical path for generated segment lists, so SSH paths never consult this
   host's filesystem.
@@ -101,7 +101,8 @@ or obtain human agreement to defer them. Independently verify high-risk fixes.
   before the result. It starts a review only when routed, settles at most once
   and never after a stop, announces `started` then `settled` exactly once, and
   passes an approval only when the review approved and the current generation
-  still routes the request to review.
+  would still let a review answer the request (`mayApprove`: mode `auto`; a
+  generation that only advises does not count).
 - `approval.expand-home`: `expandHome` expands `~` and `~/…` only; `~user/…` stays
   literal.
 

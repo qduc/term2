@@ -12,6 +12,8 @@ import type { DirectTaskId, DirectTaskInteraction } from '../background-types.js
  */
 export type ApprovalReviewPort = {
   willReview(request: InteractionRequest | DirectTaskInteraction): boolean;
+  /** The current generation would let a passing review answer this request (mode `auto`), not just inform. */
+  mayApprove(request: InteractionRequest | DirectTaskInteraction): boolean;
   review(
     request: InteractionRequest | DirectTaskInteraction,
     history: readonly Item[],
@@ -81,13 +83,13 @@ export class ApprovalReviews {
   }
 
   /**
-   * An approval stands only if the session's current generation would still review this request:
-   * a rebuild that switched the mode while the review ran (an older generation's settings are a
-   * frozen snapshot) must not record an automatic approval.
+   * An approval stands only if the session's current generation would still let a review answer this
+   * request: a rebuild that switched the mode while the review ran (an older generation's settings
+   * are a frozen snapshot) to `advisory`, `off` or `always` must not record an automatic approval.
    */
   #stillRouted(request: InteractionRequest | DirectTaskInteraction): boolean {
     try {
-      return this.port?.willReview(request) === true;
+      return this.port?.mayApprove(request) === true;
     } catch {
       return false;
     }
@@ -133,6 +135,7 @@ export function conversationApprovalReviews(
   return new ApprovalReviews(
     {
       willReview: (request) => port()?.willReview(request) === true,
+      mayApprove: (request) => port()?.mayApprove(request) === true,
       review: (request, accepted, signal) =>
         port()?.review(request, accepted, signal) ?? Promise.resolve({ kind: 'not_reviewed', approved: false }),
     },

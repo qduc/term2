@@ -313,13 +313,13 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
       },
     },
     reviewApproval,
-    willReviewApproval: (request) =>
-      routeApproval(
-        settings.get('shell.autoApproveMode'),
-        describeApproval(request, {
-          isDockerHostControl: (toolName, input) => isDockerRequest(toolName, input, sessionAccess),
-        }),
-      ) === 'review',
+    approvalRoute: (request) => {
+      const mode = settings.get('shell.autoApproveMode');
+      const profile = describeApproval(request, {
+        isDockerHostControl: (toolName, input) => isDockerRequest(toolName, input, sessionAccess),
+      });
+      return routeApproval(mode, profile) !== 'review' ? 'ask_user' : mode === 'auto' ? 'decide' : 'advise';
+    },
     async decideInteraction(request, history, review) {
       if (request.presentation?.requiresExplicitUser === true)
         return { kind: 'deny', reason: 'This decision requires an explicit user answer' };

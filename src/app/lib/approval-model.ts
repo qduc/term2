@@ -163,7 +163,8 @@ export function sessionApprovalReview(
   record: () => Pick<DirectRuntimeRecord, 'surface' | 'scope'> | undefined,
 ): import('../../session/approval/approval-arbiter.js').ApprovalReviewPort {
   return {
-    willReview: (request) => record()?.surface.willReviewApproval?.(request) === true,
+    willReview: (request) => (record()?.surface.approvalRoute?.(request) ?? 'ask_user') !== 'ask_user',
+    mayApprove: (request) => record()?.surface.approvalRoute?.(request) === 'decide',
     async review(request, history, signal) {
       const current = record();
       const review = current?.surface.reviewApproval;

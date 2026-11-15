@@ -41,9 +41,20 @@ export function canonicalPath(raw: string, baseDir: string, options: { remote?: 
     } catch (error: unknown) {
       const code = (error as { code?: string } | null)?.code;
       if (code !== 'ENOENT' && code !== 'ENOTDIR') return lexical;
-      if (fs.lstatSync(candidate, { throwIfNoEntry: false })?.isSymbolicLink()) {
+      let link = false;
+      try {
+        link = fs.lstatSync(candidate, { throwIfNoEntry: false })?.isSymbolicLink() === true;
+      } catch {
+        return lexical;
+      }
+      if (link) {
         hops += 1;
-        candidate = path.resolve(path.dirname(candidate), fs.readlinkSync(candidate));
+        // The kernel resolves a relative link against the link's real folder, not the spelling used.
+        try {
+          candidate = path.resolve(fs.realpathSync(path.dirname(candidate)), fs.readlinkSync(candidate));
+        } catch {
+          return lexical;
+        }
         continue;
       }
       const parent = path.dirname(candidate);

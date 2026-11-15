@@ -75,6 +75,10 @@ export function toCodexResponsesItem(item: StreamedModelTurnInput): unknown {
       throw new Error(
         `Refusing to serialize provider_opaque from '${item.provider}' into a Codex request: opaque items are only valid on the provider that produced them`,
       );
+    case 'effort_update':
+      // GPT-6 and later keep the cached prefix when effort changes as input (effort-updates.ts).
+      // Not yet probed on the ChatGPT Codex backend itself.
+      return { type: 'configuration_update', reasoning: { effort: item.effort } };
     default:
       return assertNever(item, 'StreamedModelTurnInput');
   }

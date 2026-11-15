@@ -205,3 +205,45 @@ export function createSessionCostAccumulator(options?: {
     },
   };
 }
+
+function costRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+}
+
+/** A usable charge: a finite, non-negative number or numeric string; anything else is unusable. */
+function usableCost(value: unknown): number | string | undefined {
+  if (typeof value === 'number') return Number.isFinite(value) && value >= 0 ? value : undefined;
+  if (typeof value !== 'string' || value.trim() === '') return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? value : undefined;
+}
+
+/**
+ * The charge a provider usage object reports, in provider units (USD for OpenRouter). Reads the
+ * snake_case wire fields and the camelCase forms AI SDK provider metadata uses.
+ *
+ * OpenRouter reports `cost` as what it charged the account's credits and
+ * `cost_details.upstream_inference_cost` as what the upstream provider charged. Without
+ * bring-your-own-key they describe the same request (`upstream_inference_cost` is OpenRouter's
+ * upstream bill, close to `cost`; see the `is_byok: false` frames in the OpenRouter provider
+ * fixtures), so adding them would double count. With `is_byok: true` OpenRouter bills only its
+ * BYOK fee (often `cost: 0`) and the upstream charge goes to the user's own key, so the request
+ * costs the sum. Reading `cost` alone recorded those requests as an exact $0, which hid them from
+ * run summaries and the run budget.
+ *
+ * A BYOK frame without a usable upstream figure (or with an unusable `cost`) returns undefined so
+ * the request is estimated or unpriced rather than an exact fee-only charge. Otherwise a missing
+ * `cost` falls back to the upstream figure. Negative or non-finite values are unusable.
+ */
+export function reportedUsageCost(usage: unknown): number | string | undefined {
+  const record = costRecord(usage);
+  if (!record) return undefined;
+  const cost = usableCost(record.cost);
+  const details = costRecord(record.cost_details) ?? costRecord(record.costDetails);
+  const upstream = usableCost(details?.upstream_inference_cost ?? details?.upstreamInferenceCost);
+  if ((record.is_byok ?? record.isByok) === true) {
+    if (upstream === undefined || (record.cost != null && cost === undefined)) return undefined;
+    return Number(cost ?? 0) + Number(upstream);
+  }
+  return cost ?? upstream;
+}

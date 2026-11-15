@@ -51,3 +51,14 @@ export function withoutDeadToolReferences<T extends Pick<AnyToolDefinition, 'nam
     return description === tool.description ? tool : { ...tool, description };
   });
 }
+
+const WEB_SEARCH_BULLET =
+  '- Use `web_search` to find relevant external documentation, articles, or current information.\n';
+
+/**
+ * A role file written for a child offered both web tools, reworded for one offered only `web_fetch`
+ * (`web_search` is not offered without a configured search provider). The caller applies it only when the
+ * child's final tool list lacks `web_search`, so a configured provider leaves the file byte-identical.
+ */
+export const withoutWebSearchText = (roleFile: string): string =>
+  roleFile.replace(WEB_SEARCH_BULLET, '').replace('have web search and web fetch tools', 'have a web fetch tool');

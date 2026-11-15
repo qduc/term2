@@ -165,6 +165,9 @@ export class DirectProjection {
       case 'automatic_memory_finished':
       case 'automatic_memory_disabled':
         return [contextFactEvent(fact, this.#state, seq)];
+      case 'effort_updates_rejected':
+        // The user hears of it once, on the turn's end (session/effort-timeline.ts).
+        return [];
       case 'queue_submitted':
       case 'queue_edited':
       case 'queue_retracted':

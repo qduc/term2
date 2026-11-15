@@ -22,7 +22,15 @@ imports Session, Engine or adopted code, and never opens conversation storage.
    signal. The app keeps ownership of the signal-to-exit-code mapping: a
    `cancelled` result under SIGINT is 130 (SIGTERM 143); without a signal it
    is 1. `context_paused`, `blocked` and `budget_paused` are exit 2. The app/CLI
-   maps `blocked` already and must add `budget_paused`. `attachments` are passed
+   maps `blocked` already and must add `budget_paused`. On every exit code
+   the CLI waits for stdout and stderr to drain before `process.exit`
+   (`src/shared/lib/exit-after-drain.ts`): on a pipe, exiting first discarded
+   the queued tail, and a slow reader got a `final` record cut mid-line with
+   no `run_summary` or `completed`. A SIGINT or SIGTERM during the drain exits at once
+   with the already-settled code, so the tail may be lost but the result is
+   not overridden. `exitAfterDrain` installs its own temporary handlers for
+   this, so it holds on exits before a run starts (a usage error) as well as
+   after the run's handlers exist. `attachments` are passed
    through as raw padded base64
    image parts; `delivery` is omitted by default, and an explicit non-`auto`
    mode needs the real `submitWithDelivery` capability or is reported
@@ -107,6 +115,16 @@ imports Session, Engine or adopted code, and never opens conversation storage.
   A pending/opened run-budget check-in returns `budget_paused`/exit 2 with
   truthful terminal wording; headless never grants budget. The app must map `blocked`
   and `budget_paused` to exit 2.
+- Exit code 141 (128 + SIGPIPE): the reader closed stdout or stderr while the
+  run was still writing (`term2 --json "…" | head -1`). Node ignores SIGPIPE and
+  reports EPIPE as an `'error'` event on the stream, which used to crash the CLI
+  with a stack trace and exit 1. `onStdioClosed`
+  (`src/shared/lib/exit-on-closed-pipe.ts`) turns it into the SIGINT path: the
+  run is cancelled (model request and running tools/subagents aborted, no further
+  provider request), nothing more is written, no stack trace is printed, and the
+  exit code is 141. The cancelled turn is durable, so the session stays valid and
+  resumable. An EPIPE during the final drain after the exit code is settled keeps
+  that code (see `exitAfterDrain`). Covered by `headless-pipe-drain.blackbox.ts`.
 - An abort before the turn starts detaches without cancelling another turn;
   the app's host disposal owns a queued admission. An abort after it starts
   sends one `cancel` and still waits for `turn_ended`.

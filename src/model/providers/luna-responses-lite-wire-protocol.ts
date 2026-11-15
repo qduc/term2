@@ -145,8 +145,12 @@ export const NATIVE_CONVERSATION_INPUT_MODEL = 'gpt-6-luna';
  *
  * The model is read from the finished body, so an extra-body model override
  * that leaves the native model keeps the classic format.
+ *
+ * After an `effort_update` marker the top-level effort stays at the
+ * conversation's starting value, so the trailing update carries the effort in
+ * effect (`conversationEffort`); otherwise it would undo the marker.
  */
-export function applyNativeConversationInput(body: any): void {
+export function applyNativeConversationInput(body: any, conversationEffort?: string): void {
   if (body.model !== NATIVE_CONVERSATION_INPUT_MODEL) return;
   const prefix: unknown[] = [];
   // Core continuity clears the anchor when instructions or tools change.
@@ -160,7 +164,10 @@ export function applyNativeConversationInput(body: any): void {
   const input = Array.isArray(body.input) ? body.input : [{ type: 'message', role: 'user', content: body.input }];
   body.input = [...prefix, ...input];
   if (body.reasoning?.effort !== undefined) {
-    body.input.push({ type: 'configuration_update', reasoning: { effort: body.reasoning.effort } });
+    body.input.push({
+      type: 'configuration_update',
+      reasoning: { effort: conversationEffort ?? body.reasoning.effort },
+    });
   }
   delete body.tools;
   delete body.instructions;

@@ -8,7 +8,8 @@ import type {
   WireUsage,
 } from '../../protocol/wire.js';
 import { historyReplacedMessage } from '../../protocol/reducer-nested.js';
-import { formatSessionCost, summarizeCost } from '../../shared/cost/model-cost.js';
+import { formatReferenceCost, formatSessionCost, summarizeCost } from '../../shared/cost/model-cost.js';
+import { subscriptionReferenceCost } from '../../protocol/reference-cost.js';
 import { type InteractionView, type Message, type TaskView, type ToolView, type TuiState } from './state.js';
 
 const SILENT_HISTORY_EDITS = new Set(['rewind', 'retry_turn', 'retry_tool', 'compaction'].map(historyReplacedMessage));
@@ -292,7 +293,12 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
     lastUsage: snapshot.lastUsage,
     sessionUsage: snapshot.usage,
     cost: snapshot.requestCosts?.length
-      ? formatSessionCost(summarizeCost(snapshot.requestCosts.map(({ record }) => record)))
+      ? [
+          formatSessionCost(summarizeCost(snapshot.requestCosts.map(({ record }) => record))),
+          formatReferenceCost(subscriptionReferenceCost(snapshot.requestCosts.map(({ record }) => record))),
+        ]
+          .filter(Boolean)
+          .join(' · ') || undefined
       : snapshot.cost
       ? `${snapshot.cost.currency} ${snapshot.cost.totalUsd.toFixed(4)}`
       : undefined,

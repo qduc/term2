@@ -104,6 +104,13 @@ export function formatSessionCost(cost: SessionCostSummary): string | undefined 
   }
 }
 
+/** Compact hypothetical catalog comparison, never an invoice or subscription charge. */
+export function formatReferenceCost(cost: SessionCostSummary | undefined): string | undefined {
+  if (!cost) return undefined;
+  if (cost.state === 'unavailable') return 'Reference (not billed) unavailable';
+  return `Reference (not billed) ${formatUsdMicros(cost.knownUsdMicros)}${cost.state === 'partial' ? '+' : ''}`;
+}
+
 /** Format token and cost totals for each model in a session. */
 export function formatModelUsageBreakdown(breakdowns: readonly ModelUsageBreakdown[]): string {
   if (breakdowns.length === 0) return '';

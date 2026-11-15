@@ -9,6 +9,12 @@ coverage (`src/clients/tui/projection.ts`). The **Resume here** notes below desc
 pre-implementation state and are retained for their design constraints, not as a
 description of current behavior.
 
+Subscription requests also have a separate, explicitly hypothetical reference value in
+the footer and `/usage`: `subscriptionReferenceCost` uses the current catalog and
+recorded request usage, not subscription bills or quota. It is not added to spend or
+budgets. Missing or ambiguous rates and usage remain unavailable or partial; because
+the catalog may change, this comparison can change after a session is resumed.
+
 Scope: provider completion accounting, the application run loop, foreground and
 subagent session accounting, conversation persistence/replay, `/usage`, and the Ink footer.
 

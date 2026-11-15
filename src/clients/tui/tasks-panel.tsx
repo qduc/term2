@@ -36,6 +36,7 @@ type PanelTask = {
   readonly status: PanelStatus;
   readonly error?: string;
   readonly startedAt?: number;
+  readonly completedAt?: number;
   /** Legacy's control-task activity phase; a foreground transfer candidate has none (plain `Running`). */
   readonly phase?: string;
   /** Legacy's newest call of a live subagent (its `└` row). */
@@ -75,6 +76,7 @@ function panelRow(view: TaskView): Row {
       status,
       ...(wire?.result?.error?.message ? { error: wire.result.error.message } : {}),
       ...(wire?.startedAt !== undefined ? { startedAt: wire.startedAt } : {}),
+      ...(wire?.completedAt !== undefined ? { completedAt: wire.completedAt } : {}),
       ...(wire?.mode === 'background' ? { phase: backgroundPhase(view) } : {}),
     },
   };
@@ -190,7 +192,7 @@ const TaskRows: FC<{ readonly state: TuiState; readonly gap: boolean }> = ({ sta
       settledAt.delete(row.key);
       return true;
     }
-    const since = settledAt.get(row.key) ?? now;
+    const since = row.task.completedAt ?? settledAt.get(row.key) ?? now;
     settledAt.set(row.key, since);
     return now - since < GRACE_MS;
   });

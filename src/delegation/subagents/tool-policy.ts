@@ -1,7 +1,5 @@
 import { formatApprovalReview, type ApprovalReviewResult } from '../../shared/contracts/approval-review.js';
-import { bindPatchHealing } from '../../tools/file/patch-healing.js';
-import type { NestedRunDriverFactory, NestedModelBinding } from '../../tools/nested-run-driver.js';
-import { bindEditHealing } from '../../tools/file/edit-healing.js';
+import type { NestedModelBinding } from '../../tools/nested-run-driver.js';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -28,6 +26,7 @@ import { wrapToolInvoke, wrapNeedsApproval } from '../../tools/tool-invoke.js';
 import { toOpenAIStrictToolSchema } from '../../shared/lib/openai-strict-tool-schema.js';
 import { shouldUseStrictToolSchema, shouldPreferPatchEditingModel } from '../../model/tool-selection-policy.js';
 import { createReadFileToolDefinition } from '../../tools/file/read-file.js';
+import { createHintReadAccess } from '../../tools/file/read-access.js';
 import { createGrepToolDefinition } from '../../tools/file/grep.js';
 import { createFindFilesToolDefinition } from '../../tools/file/glob.js';
 import {
@@ -36,11 +35,10 @@ import {
 } from '../../tools/file/code-context.js';
 import {
   createSelectedActivateSkillTool,
-  createWebToolDefinitions,
+  createWebToolPair,
   type FeatureSelection,
 } from '../../tools/assembly/feature-selection.js';
 import { createApplyPatchToolDefinition } from '../../tools/file/apply-patch.js';
-import { resolveAncillaryModelTier } from '../../session/agent-runtime/model-resolver.js';
 import { extractPatchPaths } from '../../tools/file/upstream-apply-patch.js';
 import { createSearchReplaceToolDefinition } from '../../tools/file/search-replace.js';
 import { createCreateFileToolDefinition } from '../../tools/file/create-file.js';
@@ -1002,7 +1000,6 @@ export class SubagentToolPolicy {
 }
 
 export class SubagentToolFactory {
-  #driverFactory?: NestedRunDriverFactory;
   #modelBinding?: NestedModelBinding;
   #settings: ISettingsService;
   #logger: ILoggingService;
@@ -1018,7 +1015,6 @@ export class SubagentToolFactory {
   #sessionBrowser?: SessionBrowser;
 
   constructor(deps: {
-    driverFactory?: NestedRunDriverFactory;
     modelBinding?: NestedModelBinding;
     settings: ISettingsService;
     logger: ILoggingService;
@@ -1032,7 +1028,6 @@ export class SubagentToolFactory {
     /** Prior-session transcript browser; provisioned to the librarian only. */
     sessionBrowser?: SessionBrowser;
   }) {
-    this.#driverFactory = deps.driverFactory;
     this.#modelBinding = deps.modelBinding;
     this.#settings = deps.settings;
     this.#logger = deps.logger;
@@ -1177,14 +1172,12 @@ export class SubagentToolFactory {
     }
 
     if (features.web) {
-      const [webSearch, webFetch] = createWebToolDefinitions({
+      const { search: webSearch, fetch: webFetch } = createWebToolPair({
         settingsService: this.#settings,
         loggingService: this.#logger,
       });
-      tools.push(
-        this.#toolPolicy.wrapNetworkToolWithScope(webSearch, netScope, () => undefined),
-        this.#toolPolicy.wrapNetworkToolWithScope(webFetch, netScope, (params) => params.url),
-      );
+      if (webSearch) tools.push(this.#toolPolicy.wrapNetworkToolWithScope(webSearch, netScope, () => undefined));
+      tools.push(this.#toolPolicy.wrapNetworkToolWithScope(webFetch, netScope, (params) => params.url));
     }
 
     if (definition.canRunShell) {
@@ -1217,6 +1210,17 @@ export class SubagentToolFactory {
       tools.push(presentForegroundShell(guardedShell, { searchViaShell }));
     }
 
+    const editHintReadAccess = createHintReadAccess({
+      enabled: definition.canRead,
+      executionContext,
+      settingsService: this.#settings,
+      nestedCompatibility: this.#nestedCompatibility,
+      inScope:
+        fsReadScope &&
+        ((absolutePath) =>
+          isPathInScopeSafe(absolutePath, fsReadScope, this.#executionContext?.getCwd() ?? getActiveWorkspaceRoot())),
+    });
+
     if (definition.canWrite && !this.#readOnly) {
       const usesPatchEditingSurface = shouldPreferPatchEditingModel(definition.model);
       if (usesPatchEditingSurface) {
@@ -1224,14 +1228,10 @@ export class SubagentToolFactory {
           this.#toolPolicy.wrapWriteToolWithScope(
             this.#toolPolicy.wrapWriteTool(
               createApplyPatchToolDefinition({
-                resolveHealingModel: () => resolveAncillaryModelTier('chore', this.#settings),
-                patchHealing: bindPatchHealing({
-                  driverFactory: this.#driverFactory,
-                  modelBinding: this.#modelBinding,
-                }),
                 settingsService: this.#settings,
                 loggingService: this.#logger,
                 executionContext,
+                readAccess: editHintReadAccess,
               }),
               cwd,
               filesChanged,
@@ -1248,11 +1248,10 @@ export class SubagentToolFactory {
           this.#toolPolicy.wrapWriteToolWithScope(
             this.#toolPolicy.wrapWriteTool(
               createSearchReplaceToolDefinition({
-                resolveHealingModel: () => resolveAncillaryModelTier('chore', this.#settings),
-                editHealing: bindEditHealing({ driverFactory: this.#driverFactory, modelBinding: this.#modelBinding }),
                 settingsService: this.#settings,
                 loggingService: this.#logger,
                 executionContext,
+                readAccess: editHintReadAccess,
               }),
               cwd,
               filesChanged,
@@ -1393,7 +1392,10 @@ export class SubagentToolFactory {
           return typeof trimmedResult === 'string' ? injectRunBudgetWarning(trimmedResult, context) : trimmedResult;
         },
       };
-      return wrapToolInvoke(wrapped, canonicalParameters, { argumentParsing: definition.argumentParsing });
+      return wrapToolInvoke(wrapped, canonicalParameters, {
+        argumentParsing: definition.argumentParsing,
+        offeredTools: toolDefinitions,
+      });
     });
   }
 }

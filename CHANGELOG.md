@@ -1,11 +1,18 @@
-## [1.2.0] - 2026-11-12
+## [1.2.0] - 2026-11-15
 
 ### Features
+- Sandbox network approvals can grant or revoke project-scoped host and port access or listener access with `term2 sandbox-network`; see the sandbox documentation for platform support and security implications (#289).
+- Non-interactive `--json` runs emit a versioned `run_summary` with run-level usage, costs, agents and tools (#280).
+- Explorer and librarian subagents can run in the foreground as well as the background (#282).
+- The opt-in `agent.cachePreservingEffort` setting can change Anthropic reasoning effort while preserving the prompt cache, with a fallback when unsupported (#284).
 - Bare exposes the native file tools directly alongside `run_code`, and its prompt describes the read, write, shell and patch tools that are actually available instead of routing every file operation through the shell (#245, #249).
 - Native OpenAI GPT-6 Luna requests use the model's conversation input (tools and instructions as developer input, followed by the requested reasoning effort) on the unary, HTTP and WebSocket paths. Other models are unchanged (#250).
 - Cost estimates count cache writes, including one-hour writes, and apply long-context price tiers. Totals for earlier sessions are not rewritten, and a provider-reported charge still takes precedence (#253).
 
 ### Improvements
+- Sandbox development workflows support writable temporary directories and project-scoped network approvals; approval prompts show review explanations and handle composer-menu transitions more reliably (#275, #276, #277, #278, #289).
+- Tool calls provide more actionable errors for failed edits, schema mismatches and trimmed output; `web_search` is offered only when a search provider is configured (#288).
+- Compatible policy-approved tool calls can dispatch in parallel, and provider-reported reasoning tokens are retained in usage (#280, #281).
 - OpenRouter runs on the OpenAI chat-completions client instead of the AI SDK provider. Upstream failure detail is included in error messages, and conversations saved by earlier versions replay their stored reasoning details (#245, #246).
 - Models missing from the catalog are assumed to have a 500,000-token context window when scheduling automatic compaction, up from 128,000. Catalog capacities and explicit input ceilings still apply, and the assumption is not an admission limit (#248, #254).
 - When a non-interactive run automatically denies a shell command, the rejection sent back to the model names the risk level without repeating the command (#256).
@@ -13,6 +20,10 @@
 - ACP sessions publish the conversation title to the editor after the first accepted prompt and on load/resume, so clients no longer show the `conv_…` id (#241).
 
 ### Bug Fixes
+- Preserve background subagent notices and their ordering when resuming a session (#285).
+- Drain non-interactive output before exit and account for OpenRouter bring-your-own-key charges more accurately (#283).
+- Fix provider compatibility for adaptive Claude thinking, Gemini thinking levels and OpenAI Chat token limits; retain usage from failed Responses attempts (#255, #259, #260, #262).
+- Preserve submitted image drafts when clearing the composer (#264).
 - Fix native Claude Haiku 5.5 rejecting a named reasoning effort: it now receives adaptive thinking with the requested effort; `minimal` maps to `low` (#251).
 - Fix local context summaries asking the provider to call tools instead of summarizing (#242).
 - Fix providers that reject recursive JSON schemas refusing `run_code` requests; nested JSON inputs are still accepted (#243).

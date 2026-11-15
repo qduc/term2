@@ -10,6 +10,7 @@ import path from 'node:path';
 import { Box, Text } from 'ink';
 import { publishHarnessApprovalReady } from './harness-input.js';
 import { LLMAdvisory } from './presentation/components/prompt/ApprovalAdvisory.js';
+import ApplyPatchPreview from './presentation/components/prompt/ApplyPatchPreview.js';
 import { useInteractionInput, type InteractionInput } from './interaction-input.js';
 import { generateDiff } from './presentation/utils/output/diff.js';
 import { asDisplayArray } from './presentation/utils/tool-args-display.js';
@@ -24,7 +25,7 @@ import { type ColorRole, useTheme } from './presentation/components/theme.js';
 import { SelectionMarker } from './presentation/components/common/SelectionMarker.js';
 import { useSkin } from './presentation/skins/SkinContext.js';
 import { useTerminalSize } from './terminal.js';
-import { parseUpstreamApplyPatch } from '../../shared/utils/upstream-apply-patch.js';
+import { APPLY_PATCH_PREVIEW_PAGE_LINES, applyPatchPreviewLines } from './presentation/utils/apply-patch-display.js';
 
 const ASK_USER_CUSTOM_ANSWER_LABEL = 'Something else… (type your answer)';
 const ASK_USER_SUBMIT_LABEL = 'Submit answer';
@@ -114,13 +115,6 @@ type AskUserArgs = {
   questions: QuestionItem[];
 };
 
-type ApplyPatchArgs = {
-  type: 'create_file' | 'update_file' | 'delete_file';
-  path: string;
-  diff?: string;
-  moveTo?: string;
-};
-
 type ShellArgs = {
   commands?: string;
   command?: string;
@@ -203,69 +197,6 @@ type ProposeGoalArgs = {
   outcome: string;
   successCriteria?: string;
 };
-
-const operationLabels: Record<string, { label: string; tone: ColorRole }> = {
-  create_file: { label: 'CREATE', tone: 'success' },
-  update_file: { label: 'UPDATE', tone: 'warning' },
-  delete_file: { label: 'DELETE', tone: 'danger' },
-};
-
-const ApplyPatchPrompt: FC<{ lines: string[]; page: number; pages: number }> = ({ lines, page, pages }) => {
-  const theme = useTheme();
-  return (
-    <Box flexDirection="column">
-      {lines.map((line, index) => (
-        <Text
-          key={index}
-          color={line.startsWith('+') ? theme.success : line.startsWith('-') ? theme.danger : undefined}
-        >
-          {line || ' '}
-        </Text>
-      ))}
-      <Text color={theme.textSubtle}>
-        Patch preview {page + 1}/{pages} — [ / ] previous / next page
-      </Text>
-    </Box>
-  );
-};
-
-function patchPreviewLines(argumentsText: string): string[] {
-  let value: unknown;
-  try {
-    value = JSON.parse(argumentsText);
-    const record = value as Record<string, unknown> | null;
-    let operations: ApplyPatchArgs[];
-    if (record && typeof record.patch === 'string') {
-      operations = parseUpstreamApplyPatch(record.patch).operations;
-    } else {
-      const candidates = record && Array.isArray(record.operations) ? record.operations : [record];
-      if (
-        !candidates.length ||
-        !candidates.every(
-          (op) =>
-            op &&
-            typeof op === 'object' &&
-            (op.type === 'create_file' || op.type === 'update_file' || op.type === 'delete_file') &&
-            typeof op.path === 'string' &&
-            (op.diff === undefined || typeof op.diff === 'string') &&
-            (op.moveTo === undefined || typeof op.moveTo === 'string'),
-        )
-      )
-        throw new Error('Unknown patch input');
-      operations = candidates as ApplyPatchArgs[];
-    }
-    return operations.flatMap((op) => [
-      `[${operationLabels[op.type].label}] ${op.path}${op.moveTo ? ` → ${op.moveTo}` : ''}`,
-      ...(op.diff ? op.diff.split('\n') : []),
-    ]);
-  } catch {
-    // Show the complete input, not a misleading partial parse.
-    return [
-      '[Raw patch input]',
-      ...(typeof value === 'object' && value !== null ? JSON.stringify(value, null, 2) : argumentsText).split('\n'),
-    ];
-  }
-}
 
 const ShellPrompt: FC<{ args: ShellArgs }> = ({ args }) => {
   const theme = useTheme();
@@ -484,21 +415,11 @@ const ApprovalPrompt: FC<Props> = ({
   const [selectedIndices, setSelectedIndices] = React.useState<Set<number>>(new Set());
   const [patchPage, setPatchPage] = React.useState(0);
   const { columns } = useTerminalSize();
-  const patchLines = React.useMemo(() => {
-    if (approval.toolName !== TOOL_NAME_APPLY_PATCH) return [];
-    const width = Math.max(1, Math.floor((columns - 12) / 2));
-    return patchPreviewLines(approval.argumentsText).flatMap((line) => {
-      const safe = line.replace(
-        /[\x00-\x1f\x7f-\x9f]/g,
-        (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`,
-      );
-      const chars = Array.from(safe);
-      const chunks: string[] = [];
-      for (let i = 0; i < chars.length; i += width) chunks.push(chars.slice(i, i + width).join(''));
-      return chunks.length ? chunks : [''];
-    });
-  }, [approval.argumentsText, approval.toolName, columns]);
-  const patchPages = Math.max(1, Math.ceil(patchLines.length / 4));
+  const patchLines = React.useMemo(
+    () => (approval.toolName === TOOL_NAME_APPLY_PATCH ? applyPatchPreviewLines(approval.argumentsText, columns) : []),
+    [approval.argumentsText, approval.toolName, columns],
+  );
+  const patchPages = Math.max(1, Math.ceil(patchLines.length / APPLY_PATCH_PREVIEW_PAGE_LINES));
   const currentPatchPage = Math.min(patchPage, patchPages - 1);
 
   const isAskUser = approval.toolName === TOOL_NAME_ASK_USER;
@@ -862,8 +783,11 @@ const ApprovalPrompt: FC<Props> = ({
 
   if (approval.toolName === TOOL_NAME_APPLY_PATCH) {
     content = (
-      <ApplyPatchPrompt
-        lines={patchLines.slice(currentPatchPage * 4, currentPatchPage * 4 + 4)}
+      <ApplyPatchPreview
+        lines={patchLines.slice(
+          currentPatchPage * APPLY_PATCH_PREVIEW_PAGE_LINES,
+          (currentPatchPage + 1) * APPLY_PATCH_PREVIEW_PAGE_LINES,
+        )}
         page={currentPatchPage}
         pages={patchPages}
       />

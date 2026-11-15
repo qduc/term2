@@ -62,7 +62,7 @@ export class ServerInteractions {
           { id: 'cancel', label: 'Cancel' },
         ]
       : [
-          { id: 'approve', label: 'Allow' },
+          ...(interaction.toolName === 'sandbox_network_access' ? [] : [{ id: 'approve', label: 'Allow' }]),
           ...interaction.supportedGrants.map((grant) => ({ id: grant, label: grantLabel(grant) })),
           { id: 'reject', label: 'Reject' },
         ];
@@ -214,6 +214,8 @@ function invalid(): never {
 }
 function grantLabel(grant: string): string {
   const labels: Record<string, string> = {
+    'network-allow-once': 'Allow once',
+    'allow-project': 'Allow for project',
     'allow-remember': 'Allow and remember',
     'unsandboxed-once': 'Run unsandboxed once',
     'allow-folder-session': 'Allow folder for session',

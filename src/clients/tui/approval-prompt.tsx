@@ -386,8 +386,6 @@ function describeStandardApprovalOption(
         return 'Allow network access to this host for this command only.';
       case 'Deny':
         return 'Block network access to this host.';
-      case 'Allow host for this session':
-        return 'Allow this host for the rest of this session.';
       case 'Always allow host for this project':
         return 'Always allow this host in this project, persisted across sessions.';
     }
@@ -526,7 +524,7 @@ const ApprovalPrompt: FC<Props> = ({
       return ['Allow this command', 'Deny', 'Allow for this session', 'Always allow for this project'];
     }
     if (isSandboxNetworkApproval) {
-      return ['Allow once', 'Deny', 'Allow host for this session', 'Always allow host for this project'];
+      return ['Allow once', 'Deny', 'Always allow host for this project'];
     }
     if (!isAskUser && !isDeniedReadShell) {
       return isOutsideWorkspaceEdit
@@ -562,8 +560,7 @@ const ApprovalPrompt: FC<Props> = ({
       else if (selected === 'Allow for this session') onApprove('docker-allow-session');
       else if (selected === 'Always allow for this project') onApprove('docker-allow-project');
     } else if (isSandboxNetworkApproval) {
-      if (selected === 'Allow once') onApprove('allow-once');
-      else if (selected === 'Allow host for this session') onApprove('allow-session');
+      if (selected === 'Allow once') onApprove('network-allow-once');
       else if (selected === 'Always allow host for this project') onApprove('allow-project');
     } else if (isDeniedReadShell) {
       if (selected === 'Allow once') onApprove('allow-once');

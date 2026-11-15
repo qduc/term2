@@ -12,7 +12,7 @@ import { MultilineInput } from 'ink-prompt';
 import { ASK_USER_NO_ANSWER_RESULT, type WireDecision, type WireGrant } from '../../protocol/wire.js';
 import type { TuiConnection } from './integration.js';
 import type { InteractionView, TuiState } from './state.js';
-import { answerInteraction } from './commands.js';
+import { answerInteraction, WireCommandFailure } from './commands.js';
 import { publishHarnessApprovalReviewSettled } from './harness-input.js';
 import { useInteractionInput, type InteractionInput, type InteractionInputHandler } from './interaction-input.js';
 import ApprovalPrompt, { type ApprovalDescriptor } from './approval-prompt.js';
@@ -22,6 +22,8 @@ import { useTerminalSize } from './terminal.js';
 
 type AskUserAnswer = string | string[];
 const GRANTS: readonly WireGrant[] = [
+  'network-allow-once',
+  'allow-project',
   'allow-remember',
   'unsandboxed-once',
   'allow-folder-session',
@@ -208,7 +210,12 @@ function Host({
   const promptInput = useRef<InteractionInputHandler | null>(null);
   const reviewController = useRef<AbortController | null>(null);
   const reviewCancelled = useRef(false);
+  const hideRef = useRef(hide);
+  hideRef.current = hide;
+  const setNoticeRef = useRef(setNotice);
+  setNoticeRef.current = setNotice;
   const cancelReview = () => {
+    if (pending.current) return;
     reviewCancelled.current = true;
     if (
       owner === 'turn' &&
@@ -220,7 +227,11 @@ function Host({
     reviewed.current.add(interaction.id);
     reviewController.current?.abort();
   };
-  const reviewEligible = request.owner === 'turn' && interaction.kind === 'approval';
+  const isNetworkApproval = approval.toolName === 'sandbox_network_access';
+  const reviewEligible = request.owner === 'turn' && interaction.kind === 'approval' && !isNetworkApproval;
+  const reviewing = Boolean(
+    reviewEligible && reviewApproval && !reviewResult && !reviewStopped && !approval.llmAdvisory,
+  );
   useEffect(() => {
     if (!reviewApproval || !reviewEligible || reviewCancelled.current || reviewed.current.has(interaction.id)) return;
     const reviewedRequests = reviewed.current;
@@ -229,28 +240,43 @@ function Host({
     const controller = new AbortController();
     reviewController.current = controller;
     void reviewApproval(connection.sessionId, interaction.id, controller.signal)
-      .then(async (result) => {
-        if (controller.signal.aborted || pending.current) return;
-        reviewResults.current.set(interaction.id, result);
-        setReviewResult(result);
-        if (!result.approved) return;
-        pending.current = true;
-        const receipt = await connection.send({
-          type: 'answer',
-          requestId: interaction.id,
-          decision: { kind: 'allow' },
-          provenance: { source: 'policy', automaticApproval: true },
-        });
-        if (!receipt.ok && !controller.signal.aborted) pending.current = false;
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) {
-          pending.current = false;
-          const result = { kind: 'unavailable', approved: false } as const;
+      .then(
+        async (result) => {
+          if (controller.signal.aborted || pending.current) return;
+          if (!result.approved) {
+            reviewResults.current.set(interaction.id, result);
+            setReviewResult(result);
+            return;
+          }
+          pending.current = true;
           reviewResults.current.set(interaction.id, result);
-          setReviewResult(result);
-        }
-      })
+          hideRef.current(interaction.id);
+          try {
+            const receipt = await connection.send({
+              type: 'answer',
+              requestId: interaction.id,
+              decision: { kind: 'allow' },
+              provenance: { source: 'policy', automaticApproval: true },
+            });
+            if (!receipt.ok) throw new WireCommandFailure(receipt.code, receipt.message);
+          } catch (error: unknown) {
+            pending.current = false;
+            const fallback = { ...result, approved: false };
+            reviewResults.current.set(interaction.id, fallback);
+            setReviewResult(fallback);
+            hideRef.current(null);
+            setNoticeRef.current(error instanceof Error ? error.message : String(error));
+          }
+        },
+        () => {
+          if (!controller.signal.aborted) {
+            pending.current = false;
+            const result = { kind: 'unavailable', approved: false } as const;
+            reviewResults.current.set(interaction.id, result);
+            setReviewResult(result);
+          }
+        },
+      )
       .finally(() => publishHarnessApprovalReviewSettled(interaction.id));
     return () => {
       controller.abort();
@@ -260,8 +286,8 @@ function Host({
   const fail = (error: unknown) => setNotice(error instanceof Error ? error.message : String(error));
 
   const send = (decision: WireDecision) => {
-    cancelReview();
     if (pending.current) return;
+    cancelReview();
     pending.current = true;
     hide(interaction.id);
     answerInteraction(connection, interaction.id, decision).catch((error: unknown) => {
@@ -271,8 +297,8 @@ function Host({
     });
   };
   const stop = () => {
-    cancelReview();
     if (pending.current) return;
+    cancelReview();
     pending.current = true;
     cancelInput(connection, activeTurnId ?? undefined).then((message) => {
       setNotice(message);
@@ -326,6 +352,7 @@ function Host({
 
   // use-app-keyboard-shortcuts.ts: Ctrl+C clears a typed reason/answer, else stops the turn.
   interrupt.current = () => {
+    if (pending.current) return true;
     cancelReview();
     if (text.length > 0) replaceInput('');
     else if (activeTurnId) stop();
@@ -333,8 +360,23 @@ function Host({
   };
   const shortcuts = !isAskUser && !approval.dockerHostControl;
   useInteractionInput(inputHandler, (input, key) => {
-    cancelReview();
     if (pending.current) return;
+    if (input === '\x1b[I' || input === '[I' || input === '\x1b[O' || input === '[O') return;
+    if (reviewing) {
+      if (key.escape) {
+        cancelReview();
+        return;
+      }
+      if (!entry && shortcuts && !consumed.current && input[0] === 'n') {
+        cancelReview();
+        consumed.current = true;
+        // The draft plus whatever followed `n` in the same chunk becomes the reason.
+        if (input.length > 1) replaceInput(text + input.slice(1));
+        onReject();
+      }
+      return;
+    }
+    cancelReview();
     if (entry === 'reason') {
       if (key.escape) {
         consumed.current = false;
@@ -346,7 +388,7 @@ function Host({
     if (!entry && shortcuts && !consumed.current) {
       if (input[0] === 'y') {
         consumed.current = true;
-        onApprove(approval.deniedRead ? 'allow-once' : undefined);
+        onApprove(isNetworkApproval ? 'network-allow-once' : approval.deniedRead ? 'allow-once' : undefined);
         return;
       }
       if (input[0] === 'n') {
@@ -392,33 +434,39 @@ function Host({
           {request.backgroundCount > 1 ? (
             <Text color={theme.warning}>Background approval · {request.backgroundCount - 1} queued</Text>
           ) : null}
-          <ApprovalPrompt
-            approval={{
-              ...approval,
-              ...(reviewResult?.kind === 'reviewed' ? { llmAdvisory: reviewResult.advisory } : {}),
-            }}
-            reviewStatus={
-              reviewResult?.kind === 'reviewed' && !reviewResult.approved
-                ? 'Automatic approval not granted; manual approval required.'
-                : reviewResult?.kind === 'unavailable'
-                ? 'Approval review unavailable; manual approval required.'
-                : reviewResult?.kind === 'not_reviewed'
-                ? 'Not reviewed automatically; manual approval required.'
-                : reviewEligible && reviewApproval && reviewStopped && !approval.llmAdvisory
-                ? 'Approval review stopped; manual approval required.'
-                : interaction.kind === 'approval' && !approval.llmAdvisory && (!reviewEligible || !reviewApproval)
-                ? 'Not reviewed automatically; manual approval required.'
-                : undefined
-            }
-            inputHandler={promptInput}
-            onApprove={onApprove}
-            onReject={onReject}
-            onCancel={onCancel}
-            onTypeAnswer={() => setEntry('answer')}
-            onNavigateQuestion={onNavigateQuestion}
-            currentQuestionIndex={questionIndex}
-            waitingForAskUserAnswer={entry === 'answer'}
-          />
+          {reviewing ? (
+            <Text color={theme.textSubtle}>
+              {`Reviewing ${approval.toolName} for automatic approval… (Esc to review manually, n to deny)`}
+            </Text>
+          ) : (
+            <ApprovalPrompt
+              approval={{
+                ...approval,
+                ...(reviewResult?.kind === 'reviewed' ? { llmAdvisory: reviewResult.advisory } : {}),
+              }}
+              reviewStatus={
+                reviewResult?.kind === 'reviewed' && !reviewResult.approved
+                  ? 'Automatic approval not granted; manual approval required.'
+                  : reviewResult?.kind === 'unavailable'
+                  ? 'Approval review unavailable; manual approval required.'
+                  : reviewResult?.kind === 'not_reviewed'
+                  ? 'Not reviewed automatically; manual approval required.'
+                  : reviewEligible && reviewApproval && reviewStopped && !approval.llmAdvisory
+                  ? 'Approval review stopped; manual approval required.'
+                  : interaction.kind === 'approval' && !approval.llmAdvisory && (!reviewEligible || !reviewApproval)
+                  ? 'Not reviewed automatically; manual approval required.'
+                  : undefined
+              }
+              inputHandler={promptInput}
+              onApprove={onApprove}
+              onReject={onReject}
+              onCancel={onCancel}
+              onTypeAnswer={() => setEntry('answer')}
+              onNavigateQuestion={onNavigateQuestion}
+              currentQuestionIndex={questionIndex}
+              waitingForAskUserAnswer={entry === 'answer'}
+            />
+          )}
           {panel}
         </Box>
       ) : (

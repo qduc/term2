@@ -66,12 +66,12 @@
       "reason": "The session wires the composer to the ported legacy menu stack (useMenuStack, double-Escape) and routes every report into the transcript as legacy's addSystemMessage does; that wiring closes over submit, rewind and the viewport, declared later in the same component, so moving it out would add ref plumbing rather than a job seam. The composer's JSX also sits inside ComposerWidth (legacy InputBox's width-0 first frame), which only wraps it, and the command path preserves each menu's composer routing. The approval panel's Escape adds legacy's Stopped line through the viewport (one prop). The approval host also receives the TUI review callback so it can cancel automatic review on human input (one prop). The menu stack's first-run setup prompt sits under the live divider as legacy BottomArea places it (one line; the gate itself lives in menus/use-first-run-setup.ts). Candidate 2 adds the ported approval prompt host and tasks panel around the hidden composer box (legacy BottomArea order), which the same routing owns. The harness composer acknowledgement waits for the input to remount after an Esc-closed menu (two lines). Issue #221 adds submit-path wiring that has to close over submit's own locals: the /compact branch and the steer-to-auto delivery rule call compactTracker in commands.ts, which owns the in-flight count and outcome notice, and the in-flight draft restore compares against the text as typed so it does not duplicate it. The three submit-capture lines synchronize the actual child image draft before this callback enters submit and records its revision; moving that ordering into a separate helper would couple it back to both the pending-send ref and editor. Lower this ceiling when the composer boundary and its submit callback move together."
     },
     "src/clients/tui/approval-prompt.tsx": {
-      "lines": 1057,
+      "lines": 1054,
       "reason": "Verbatim port of legacy source/components/prompt/ApprovalPrompt.tsx (every approval and ask_user layout and key path); only its data access changed, so it matches legacy by construction."
     },
     "src/protocol/wire.ts": {
-      "lines": 505,
-      "reason": "The wire type catalogue keeps accepted usage dimensions beside the existing counters; cache creation, its one-hour subset and provider-reported reasoning tokens (which agent-core's Usage cannot carry yet, so they ride the accepted usage fact) add three optional fields without changing older messages. Splitting those fields from the usage contract would obscure the public shape. Retire this ceiling if wire types are generated or reorganized by complete protocol domains."
+      "lines": 507,
+      "reason": "The wire type catalogue keeps approval grant values together, including the two explicit sandbox network decisions, and keeps accepted usage dimensions beside the existing counters; cache creation, its one-hour subset and provider-reported reasoning tokens (which agent-core's Usage cannot carry yet, so they ride the accepted usage fact) add three optional fields without changing older messages. Splitting either group from its contract would obscure the public shape. Retire this ceiling if wire types are generated or reorganized by complete protocol domains."
     },
     "src/session/conversation.ts": {
       "lines": 534,
@@ -104,6 +104,10 @@
     "src/config/settings/settings-schema.ts": {
       "lines": 1367,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split. Ten lines declare `agent.cachePreservingEffort` through the mandatory setting touchpoints (schema with description, key, typed field, default, runtime-modifiable list)."
+    },
+    "src/app/source-tools.ts": {
+      "lines": 502,
+      "reason": "Adapts each source tool definition into an agent-core tool: input normalization, approval routing and the invocation context a tool runs with. Two lines forward the turn's interact handle to the shell under SANDBOX_NETWORK_INTERACT, beside the existing APPROVED_SHELL_ESCAPE entry, because this is the one place that builds a direct tool invocation. Moving only that spread would separate it from the sibling invocation keys. Retire this ceiling when invocation-context assembly is extracted from adaptTool as a whole."
     },
     "src/app/settings-service.ts": {
       "lines": 1258,
@@ -205,10 +209,6 @@
       "lines": 605,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
-    "src/tools/shell/sandbox/sandbox-policy.ts": {
-      "lines": 564,
-      "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
-    },
     "src/tools/agent/run-subagent-async.ts": {
       "lines": 555,
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
@@ -246,8 +246,8 @@
       "reason": "Moved unchanged from source/ in the #87 tree move; not yet split."
     },
     "src/tools/system/shell.ts": {
-      "lines": 1513,
-      "reason": "The shell executor checks one-use escape evidence against the actual cwd and foreground invocation at the point where it selects sandbox mode. Moving only that check would separate it from the execution context that enforces it. Lower the ceiling when the shell execution pipeline can move as a whole. Forty lines since then are the foreground-only presentation shown to sessions without a background job registry (presentForegroundShell, its narrowed parameter schema and the description variant). They stay here because they are derived from the shell schema and description in this file and must not drift from the canonical schema that validates and authorizes calls; they can move out with the description text when the model-facing shell presentation is split from the executor."
+      "lines": 1529,
+      "reason": "The shell executor owns the sandbox lease and foreground-to-background handoff. Its network approval registration and cleanup follow those same execution boundaries. Destination decision handling lives in sandbox-network-approval.ts. Lower the ceiling when the shell execution pipeline can move as a whole. Forty lines are the foreground-only presentation shown to sessions without a background job registry (presentForegroundShell, its narrowed parameter schema and the description variant). They stay here because they are derived from the shell schema and description in this file and must not drift from the canonical schema that validates and authorizes calls; they can move out with the description text when the model-facing shell presentation is split from the executor."
     },
     "src/delegation/subagents/tool-policy.ts": {
       "lines": 1401,

@@ -1,8 +1,10 @@
 import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import type { SandboxManager as RuntimeSandboxManager, SandboxRuntimeConfig } from '@anthropic-ai/sandbox-runtime';
 import { SANDBOX_TEMP_DIR } from '../../../shared/utils/shell/temp-dir.js';
 import { createSandboxRuntimeConfig, type SandboxAvailability, type ShellSandboxRunner } from './sandbox-policy.js';
 import { requestSandboxNetworkApproval } from './sandbox-network-approval.js';
+import { quoteShellArg } from '../../ssh-service.js';
 
 /**
  * The runtime loads with the first sandbox check or command: importing it at
@@ -55,9 +57,8 @@ export function sandboxFailure(availability?: Exclude<SandboxAvailability, { typ
 }
 
 export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
-  // SandboxManager is a process-wide singleton. Keep configuration and wrapping
-  // together so every generated sandbox command gets the policy it requested.
-  // The lock does not cover process execution: wrapped commands still run concurrently.
+  // The shell holds a lease through execution because SandboxManager owns a
+  // process-wide policy and proxy. Wrapping-only callers take a short lock.
   static #initializedForKey: string | undefined;
   static #initializationFailure: SandboxAvailability | undefined;
   static #managerOperation: Promise<void> = Promise.resolve();
@@ -96,10 +97,27 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
     },
   ): Promise<{ command: string; diagnostics?: string[] }> {
     const operation = async () => {
-      await this.#initialize(options.cwd, options.config);
+      const config = options.config;
+      const directHosts = config?.network.allowLocalBinding ? 'localhost,127.0.0.1,::1' : '';
+      // Self-hosted and private-address services use the same approval proxy.
+      let setup = `export NO_PROXY='${directHosts}' no_proxy='${directHosts}';`;
+      if (process.platform === 'darwin' && config && !config.network.deniedDomains?.includes('*')) {
+        // BSD nc cannot authenticate to the SOCKS proxy. Use authenticated HTTP CONNECT
+        // and let the same proxy decide which destinations may receive SSH traffic.
+        const extension = import.meta.url.endsWith('.ts') ? 'ts' : 'js';
+        const script = fileURLToPath(new URL(`./ssh-proxy-command.${extension}`, import.meta.url));
+        const nodeArguments = [process.execPath, script].map((value) => quoteShellArg(value.replaceAll('%', '%%')));
+        const proxyCommand = `${nodeArguments.join(' ')} '%h' '%p'`;
+        const sshCommand = `ssh -o ControlMaster=no -o ControlPath=none -o ProxyCommand=${quoteShellArg(proxyCommand)}`;
+        setup += ` export GIT_SSH_COMMAND=${quoteShellArg(sshCommand)};`;
+        if (config.filesystem.allowRead) {
+          config.filesystem.allowRead.push(script);
+        }
+      }
+      await this.#initialize(options.cwd, config);
       const SandboxManager = await sandboxManager();
       const wrapped = await withRuntimeTempDir(() =>
-        SandboxManager.wrapWithSandbox(command, undefined, undefined, options.signal),
+        SandboxManager.wrapWithSandbox(`${setup} ${command}`, undefined, undefined, options.signal),
       );
       const diagnostics = SandboxManager.getLinuxGlobPatternWarnings?.() ?? [];
       return { command: wrapped, diagnostics };
@@ -107,13 +125,32 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
     return this.#heldLease ? operation() : this.#withManagerLock(operation);
   }
 
-  async acquire(): Promise<() => void> {
+  async acquire(signal?: AbortSignal): Promise<() => void> {
+    signal?.throwIfAborted();
     const previous = AnthropicShellSandboxRunner.#managerOperation;
     let release!: () => void;
     AnthropicShellSandboxRunner.#managerOperation = new Promise<void>((resolve) => {
       release = resolve;
     });
-    await previous;
+    try {
+      if (signal) {
+        await new Promise<void>((resolve, reject) => {
+          const abort = () => reject(signal.reason);
+          signal.addEventListener('abort', abort, { once: true });
+          void previous.then(() => {
+            signal.removeEventListener('abort', abort);
+            resolve();
+          });
+        });
+        signal.throwIfAborted();
+      } else {
+        await previous;
+      }
+    } catch (error) {
+      // Leave the queue intact until the preceding execution has settled.
+      void previous.then(release);
+      throw error;
+    }
     this.#heldLease = true;
     let released = false;
     return () => {
@@ -124,8 +161,14 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
     };
   }
 
-  cleanupAfterCommand(): void {
-    loadedManager?.cleanupAfterCommand();
+  async cleanupAfterCommand(): Promise<void> {
+    try {
+      loadedManager?.cleanupAfterCommand();
+      // Revoke this command's proxy credential even if a descendant survived.
+      if (AnthropicShellSandboxRunner.#initializedForKey) await loadedManager?.reset();
+    } finally {
+      AnthropicShellSandboxRunner.#initializedForKey = undefined;
+    }
   }
 
   annotateFailure(command: string, stderr: string): string {
@@ -147,7 +190,7 @@ export class AnthropicShellSandboxRunner implements ShellSandboxRunner {
         await SandboxManager.reset();
       }
       const sandboxAskCallback = async ({ host, port }: { host: string; port?: number }): Promise<boolean> => {
-        return requestSandboxNetworkApproval({ host, port });
+        return requestSandboxNetworkApproval({ host, port }, cwd);
       };
       await SandboxManager.initialize(config, sandboxAskCallback);
       AnthropicShellSandboxRunner.#initializedForKey = initializationKey;

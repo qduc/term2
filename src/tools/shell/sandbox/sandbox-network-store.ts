@@ -1,119 +1,59 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
-import { getActiveWorkspaceRoot } from '../../workspace/active-workspace-root.js';
 import path from 'node:path';
+import { sandboxProjectKey, sandboxUserStateRoot } from './sandbox-project.js';
 
-const PROJECT_CONFIG_DIR = '.term2';
-const PROJECT_NETWORK_HOSTS_FILE = 'sandbox-network-hosts.json';
+export function resolveProjectNetworkStateDirectory(): string {
+  return path.join(sandboxUserStateRoot(), 'sandbox-network-approvals');
+}
 
-type ProjectNetworkHostsFile = {
-  version: number;
-  allowHosts: string[];
-};
+function projectDirectory(workspaceRoot: string): string {
+  return path.join(resolveProjectNetworkStateDirectory(), sandboxProjectKey(workspaceRoot));
+}
 
-export class SessionNetworkAllowStore {
-  #allowedHosts = new Set<string>();
+function entryPath(workspaceRoot: string, host: string, port: number): string {
+  const normalizedHost = host.toLowerCase().replace(/^\[|\]$/g, '');
+  const key = createHash('sha256')
+    .update(JSON.stringify([normalizedHost, port]))
+    .digest('hex');
+  return path.join(projectDirectory(workspaceRoot), key);
+}
 
-  add(hostOrHostPort: string): void {
-    this.#allowedHosts.add(hostOrHostPort.toLowerCase());
-  }
+/** Only term2 records approvals. Checkout files are never consulted. */
+export function isHostAllowed(host: string, port: number, workspaceRoot: string): boolean {
+  return hasApproval(entryPath(workspaceRoot, host, port));
+}
 
-  isAllowed(host: string, port?: number): boolean {
-    const lowerHost = host.toLowerCase();
-    if (this.#allowedHosts.has(lowerHost)) return true;
-    if (port != null && this.#allowedHosts.has(`${lowerHost}:${port}`)) return true;
+export function setProjectNetworkApproval(workspaceRoot: string, host: string, port: number, allowed: boolean): void {
+  setApproval(entryPath(workspaceRoot, host, port), allowed);
+}
+
+/** Local listener access is separate from approval of external destinations. */
+export function isProjectListenerAllowed(workspaceRoot: string): boolean {
+  return hasApproval(path.join(projectDirectory(workspaceRoot), 'local-listener'));
+}
+
+export function setProjectListenerApproval(workspaceRoot: string, allowed: boolean): void {
+  setApproval(path.join(projectDirectory(workspaceRoot), 'local-listener'), allowed);
+}
+
+function hasApproval(entry: string): boolean {
+  try {
+    return fs.realpathSync(entry) === entry && fs.lstatSync(entry).isFile();
+  } catch {
     return false;
   }
-
-  clear(): void {
-    this.#allowedHosts.clear();
-  }
 }
 
-export class ProjectNetworkAllowStore {
-  #workspaceRoot: string;
-  #fs: typeof fs;
+function setApproval(entry: string, allowed: boolean): void {
+  let parent = path.dirname(entry);
+  while (!fs.lstatSync(parent, { throwIfNoEntry: false })) parent = path.dirname(parent);
+  if (fs.realpathSync(parent) !== parent) throw new Error('Sandbox approval state must use a canonical directory');
 
-  constructor(workspaceRoot: string, fileSystem: typeof fs = fs) {
-    this.#workspaceRoot = workspaceRoot;
-    this.#fs = fileSystem;
+  if (!allowed) {
+    fs.rmSync(entry, { force: true });
+    return;
   }
-
-  get #configPath(): string {
-    return path.join(this.#workspaceRoot, PROJECT_CONFIG_DIR, PROJECT_NETWORK_HOSTS_FILE);
-  }
-
-  load(): string[] {
-    try {
-      if (!this.#fs.existsSync(this.#configPath)) return [];
-      const raw = this.#fs.readFileSync(this.#configPath, 'utf8');
-      const parsed = JSON.parse(raw) as Partial<ProjectNetworkHostsFile>;
-      if (!parsed || !Array.isArray(parsed.allowHosts)) return [];
-      return Array.from(
-        new Set(parsed.allowHosts.filter((h): h is string => typeof h === 'string').map((h) => h.toLowerCase())),
-      );
-    } catch {
-      return [];
-    }
-  }
-
-  isAllowed(host: string, port?: number): boolean {
-    const hosts = this.load();
-    const lowerHost = host.toLowerCase();
-    if (hosts.includes(lowerHost)) return true;
-    if (port != null && hosts.includes(`${lowerHost}:${port}`)) return true;
-    return false;
-  }
-
-  append(hostOrHostPort: string): void {
-    const normalized = hostOrHostPort.toLowerCase();
-    const current = this.load();
-    if (current.includes(normalized)) return;
-    const next = [...current, normalized];
-    this.#write(next);
-  }
-
-  #write(hosts: string[]): void {
-    const dir = path.dirname(this.#configPath);
-    this.#fs.mkdirSync(dir, { recursive: true });
-    const payload: ProjectNetworkHostsFile = { version: 1, allowHosts: hosts };
-    this.#fs.writeFileSync(this.#configPath, JSON.stringify(payload, null, 2) + '\n', 'utf8');
-  }
-}
-
-export const sessionNetworkAllowStore = new SessionNetworkAllowStore();
-
-let projectNetworkAllowStore: ProjectNetworkAllowStore | null = null;
-let projectNetworkAllowStoreRoot: string | null = null;
-
-export function getProjectNetworkAllowStore(workspaceRoot: string): ProjectNetworkAllowStore {
-  if (!projectNetworkAllowStore || projectNetworkAllowStoreRoot !== workspaceRoot) {
-    projectNetworkAllowStore = new ProjectNetworkAllowStore(workspaceRoot);
-    projectNetworkAllowStoreRoot = workspaceRoot;
-  }
-  return projectNetworkAllowStore;
-}
-
-export function isHostAllowed(host: string, port?: number, workspaceRoot: string = getActiveWorkspaceRoot()): boolean {
-  if (sessionNetworkAllowStore.isAllowed(host, port)) return true;
-  return getProjectNetworkAllowStore(workspaceRoot).isAllowed(host, port);
-}
-
-export function addAllowedHost(
-  host: string,
-  port: number | undefined,
-  scope: 'session' | 'project',
-  workspaceRoot: string = getActiveWorkspaceRoot(),
-): void {
-  const entry = port != null && port !== 80 && port !== 443 ? `${host}:${port}` : host;
-  if (scope === 'session') {
-    sessionNetworkAllowStore.add(entry);
-  } else if (scope === 'project') {
-    getProjectNetworkAllowStore(workspaceRoot).append(entry);
-  }
-}
-
-export function resetSandboxNetworkStoreForTest(): void {
-  sessionNetworkAllowStore.clear();
-  projectNetworkAllowStore = null;
-  projectNetworkAllowStoreRoot = null;
+  fs.mkdirSync(path.dirname(entry), { recursive: true, mode: 0o700 });
+  fs.closeSync(fs.openSync(entry, fs.constants.O_CREAT | fs.constants.O_WRONLY | fs.constants.O_NOFOLLOW, 0o600));
 }

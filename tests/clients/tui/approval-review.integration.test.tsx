@@ -222,3 +222,138 @@ it('displays a child advisory and ignores malformed optional metadata', async ()
     screen.unmount();
   }
 });
+
+it('hides immediately on automatic approval and recovers for manual input if sending fails', async () => {
+  let resolveSend!: (value: { ok: boolean; kind?: string; code?: string; message?: string }) => void;
+  const send = vi
+    .fn()
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveSend = resolve;
+        }),
+    )
+    .mockResolvedValueOnce({ ok: true, kind: 'accepted' });
+  const review = vi.fn().mockResolvedValue({
+    kind: 'reviewed',
+    approved: true,
+    advisory: {
+      reasoning: 'Looks safe.',
+      model: 'review-model',
+      approved: true,
+      riskLevel: 'low',
+      confidence: 'high',
+    },
+  });
+  const setNotice = vi.fn();
+  const inputHandler = { current: null as InteractionInputHandler | null };
+  const request = {
+    interaction: {
+      id: 'auto-req',
+      kind: 'approval' as const,
+      title: 'shell',
+      turnId: 'turn',
+      choices: [],
+      toolName: 'shell',
+      input: { command: 'echo ok', sandbox: 'unsandboxed' },
+    },
+    owner: 'turn' as const,
+    agentName: 'Agent',
+    backgroundCount: 0,
+  };
+  let answeredId: string | null = null;
+  const renderHost = () => (
+    <ApprovalHost
+      request={answeredId === request.interaction.id ? undefined : request}
+      connection={{ sessionId: 'session', send } as unknown as TuiConnection}
+      inputHandler={inputHandler}
+      interrupt={{ current: null }}
+      activeTurnId="turn"
+      reviewApproval={review}
+      cancelInput={async () => ''}
+      setNotice={setNotice}
+      onStopped={() => {}}
+      hide={(id) => {
+        answeredId = id;
+        screen.rerender(renderHost());
+      }}
+      editorValue=""
+      changeInput={() => {}}
+      replaceInput={() => {}}
+    />
+  );
+  const screen = render(renderHost());
+  try {
+    await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+    expect(answeredId).toBe('auto-req');
+    expect(screen.lastFrame()).not.toContain('Allow this action?');
+
+    resolveSend({ ok: false, code: 'busy', message: 'Session busy' });
+    await vi.waitFor(() => expect(setNotice).toHaveBeenCalledWith('Session busy'));
+    await vi.waitFor(() =>
+      expect(screen.lastFrame()).toContain('Automatic approval not granted; manual approval required.'),
+    );
+    expect(review).toHaveBeenCalledTimes(1);
+
+    inputHandler.current?.('y', {} as Parameters<InteractionInputHandler>[1]);
+    await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(2));
+  } finally {
+    screen.unmount();
+  }
+});
+
+it('defers the approval menu while review is pending, ignores focus events, and reveals it on Esc', async () => {
+  const review = vi.fn(
+    (_session: string, _request: string, _signal: AbortSignal) =>
+      new Promise<import('../../../src/shared/contracts/approval-review.js').ApprovalReviewResult>(() => {}),
+  );
+  const connection = { sessionId: 'session', send: vi.fn() } as unknown as TuiConnection;
+  const inputHandler = { current: null as InteractionInputHandler | null };
+  const screen = render(
+    <ApprovalHost
+      request={{
+        interaction: {
+          id: 'pending-review',
+          kind: 'approval',
+          title: 'shell',
+          turnId: 'turn',
+          choices: [],
+          toolName: 'shell',
+          input: { command: 'printf hello', sandbox: 'unsandboxed' },
+        },
+        owner: 'turn',
+        agentName: 'Agent',
+        backgroundCount: 0,
+      }}
+      connection={connection}
+      inputHandler={inputHandler}
+      interrupt={{ current: null }}
+      activeTurnId="turn"
+      reviewApproval={review}
+      cancelInput={async () => ''}
+      setNotice={() => {}}
+      onStopped={() => {}}
+      hide={() => {}}
+      editorValue=""
+      changeInput={() => {}}
+      replaceInput={() => {}}
+    />,
+  );
+  try {
+    await vi.waitFor(() => expect(review).toHaveBeenCalledTimes(1));
+    expect(screen.lastFrame()).toContain('Reviewing shell for automatic approval');
+    expect(screen.lastFrame()).not.toContain('Allow this action?');
+
+    inputHandler.current?.('[O', {} as Parameters<InteractionInputHandler>[1]);
+    inputHandler.current?.('[I', {} as Parameters<InteractionInputHandler>[1]);
+    expect(review.mock.calls[0]![2].aborted).toBe(false);
+    expect(screen.lastFrame()).toContain('Reviewing shell for automatic approval');
+
+    inputHandler.current?.('', { escape: true } as Parameters<InteractionInputHandler>[1]);
+    expect(review.mock.calls[0]![2].aborted).toBe(true);
+    await vi.waitFor(() => expect(screen.lastFrame()).toContain('Approval review stopped; manual approval required.'));
+    expect(screen.lastFrame()).toContain('Allow this action?');
+  } finally {
+    screen.unmount();
+  }
+});

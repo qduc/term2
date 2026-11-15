@@ -90,20 +90,21 @@ export function createAssistedApprovalReview({
   unsandboxedOnly?: boolean;
 }): NonNullable<AgentSurface['reviewApproval']> {
   return async (request, history, signal) => {
+    const backgroundShell =
+      (request.toolName === 'shell' || request.toolName === 'bash') &&
+      request.input !== null &&
+      typeof request.input === 'object' &&
+      'background' in request.input &&
+      request.input.background === true;
     const unsandboxed =
       (request.toolName === 'shell' || request.toolName === 'bash') &&
       request.input !== null &&
       typeof request.input === 'object' &&
       'sandbox' in request.input &&
       request.input.sandbox === 'unsandboxed' &&
-      !('background' in request.input && request.input.background === true);
+      !backgroundShell;
     if (
-      (unsandboxedOnly &&
-        ((unsandboxed && settings.get('sandbox.enabled') === false) ||
-          (request.input !== null &&
-            typeof request.input === 'object' &&
-            'background' in request.input &&
-            request.input.background === true))) ||
+      (unsandboxedOnly && backgroundShell) ||
       signal.aborted ||
       (settings.get('shell.autoApproveMode') !== 'auto' &&
         (!unsandboxedOnly || settings.get('shell.autoApproveMode') !== 'advisory')) ||
@@ -135,7 +136,9 @@ export function createAssistedApprovalReview({
       approved:
         !signal.aborted &&
         (!unsandboxedOnly ||
-          (request.toolName === 'shell' && unsandboxed && settings.get('sandbox.enabled') !== false)) &&
+          (request.toolName === 'shell' &&
+            !backgroundShell &&
+            (unsandboxed || settings.get('sandbox.enabled') === false))) &&
         (unsandboxedOnly || advisory.riskLevel === 'low') &&
         review.shouldAutoApprove(advisory),
     };

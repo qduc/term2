@@ -31,6 +31,7 @@ import { exitCodeForSignal, onStdioClosed } from '../shared/lib/exit-on-closed-p
 import { formatResumeList } from '../session/conversation/resume-list.js';
 import { isControlSocketName } from '../clients/control-socket/control-socket.js';
 import { createSettingsService, type SettingsService } from './settings.js';
+import { runSandboxNetworkCommand } from './lib/cli-sandbox-network.js';
 import { runLogin, runListModelsCommand } from './cli-account-commands.js';
 import { listNativeConversations, resolveNativeResume, ResumeRefusal } from './cli-conversations.js';
 import {
@@ -429,6 +430,8 @@ async function main(argv: readonly string[]): Promise<number> {
     case 'version':
       stdout.write(`${installationVersion}\n`);
       return 0;
+    case 'sandbox-network':
+      return runSandboxNetworkCommand(command.argv);
     case 'discord-help':
       stdout.write(DISCORD_HELP);
       return 0;

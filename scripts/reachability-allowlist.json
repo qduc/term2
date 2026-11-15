@@ -10,5 +10,5 @@
   "src/session/import.ts": "Offline v3 conversation migration (scripts/conversation-migration/migration-command.mjs) imports its emitted module; no CLI command reaches it.",
   "src/session/index.ts": "Layer map: the README's fresh-reader check reads each layer's index.ts. Production imports the layer's files directly, so nothing imports this index.",
   "src/shared/utils/worker-cwd-preload.cts": "Loaded by path, not imported: shared/utils/worker-bootstrap.ts passes it to workers with --require.",
-  "src/tools/shell/sandbox/sandbox-network-validation.ts": "Reached only from session/adopted/network.ts, the offline v3 conversation migration listed above."
+  "src/tools/shell/sandbox/ssh-proxy-command.ts": "OpenSSH starts the emitted file in a separate sandboxed Node process through ProxyCommand. The runner resolves its path by URL to isolate the TCP stream and proxy credentials from the main CLI. Remove this entry when the upstream macOS SSH transport supports authenticated proxying."
 }

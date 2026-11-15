@@ -34,6 +34,8 @@ export type WireUsage = {
   readonly reasoningTokens?: number;
 };
 export type WireGrant =
+  | 'network-allow-once'
+  | 'allow-project'
   | 'allow-remember'
   | 'unsandboxed-once'
   | 'allow-folder-session'

@@ -334,7 +334,7 @@ export const SandboxSettingsSchema = z.object({
   readPolicy: z.enum(['standard', 'strict']).optional().default('standard'),
   allowReadExtra: z.array(z.string()).optional().default([]),
   dockerHostControlProjects: z.array(z.string()).optional().default([]),
-  allowNetworking: z.boolean().optional().default(false),
+  allowNetworking: z.boolean().optional().default(true),
 });
 
 export const AgentWorkflowSettingsSchema = z.object({
@@ -1253,7 +1253,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
     readPolicy: 'standard',
     allowReadExtra: [],
     dockerHostControlProjects: [],
-    allowNetworking: false,
+    allowNetworking: true,
   },
   agentWorkflow: {
     timeoutMs: 120_000,

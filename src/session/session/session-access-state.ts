@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import { getActiveWorkspaceRoot } from '../../tools/workspace/active-workspace-root.js';
 import path from 'node:path';
 import type { ISettingsService } from '../../shared/service-interfaces.js';
@@ -36,15 +37,18 @@ export class SessionAccessState implements FileReadAccessPort, FileEditAccessPor
     this.#createdFiles.delete(path.resolve(baseDir, file));
   }
 
-  allowReadFolder(folder: string): void {
-    this.#readFolders.add(folder);
+  allowReadFolder(folder: string, baseDir: string = getActiveWorkspaceRoot()): void {
+    const resolved = path.resolve(baseDir, expandHomePath(folder));
+    this.#readFolders.add(resolved);
+    this.#readFolders.add(realRoot(resolved));
   }
 
   allowsRead(targetPath: string, baseDir: string = getActiveWorkspaceRoot()): boolean {
-    const target = path.resolve(baseDir, targetPath);
+    const resolvedTarget = path.resolve(baseDir, expandHomePath(targetPath));
+    const targets = [resolvedTarget, realRoot(resolvedTarget)];
     return [...this.#readFolders].some((folder) => {
       const resolvedFolder = path.resolve(baseDir, folder);
-      return target === resolvedFolder || target.startsWith(`${resolvedFolder}${path.sep}`);
+      return targets.some((target) => target === resolvedFolder || target.startsWith(`${resolvedFolder}${path.sep}`));
     });
   }
 
@@ -116,6 +120,12 @@ export class SessionAccessState implements FileReadAccessPort, FileEditAccessPor
     if (!projects.includes(root)) this.settings.set('sandbox.dockerHostControlProjects', [...projects, root]);
   }
 }
+
+const expandHomePath = (target: string): string => {
+  if (target === '~') return os.homedir();
+  if (target.startsWith('~/') || target.startsWith('~\\')) return path.join(os.homedir(), target.slice(2));
+  return target;
+};
 
 const realRoot = (cwd: string): string => {
   const resolved = path.resolve(cwd);

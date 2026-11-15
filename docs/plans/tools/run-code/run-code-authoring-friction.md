@@ -128,6 +128,38 @@ than recoverability. Category tests now cover batch failure, later script error,
 mutation non-replay, normalized snapshots, and clipped-result storage failure.
 The call record owns recovery evidence; telemetry continues to emit counts only.
 
+**Failure result format (current).** `renderFailureSections`
+(`src/tools/system/run-code/run-code-failure-report.ts`) replaced the JSON dump
+of recovered results, which reached 30,000 characters in observed runs. A failed
+script now returns, in this order:
+
+1. `Script failed: tools.<name> failed (call N of M, args {...}): <error>`. The
+   position is the call's dispatch order in the script (`trackNestedCalls` numbers
+   calls before argument preparation, so it is not the ledger's admission id);
+   `M` is the number of calls the ledger saw. Arguments are echoed compactly:
+   strings over 60 characters are cut per value and the line is capped at 160.
+   The worker takes the `(call N, args ...)` text from an optional `where` field
+   on the capability's `{ok:false}` envelope. Regex, invalid-parameter (with the
+   compact signature) and syntax (`Line N: excerpt`) text are unchanged, and the
+   failing call's error is shown whole up to 1,500 characters.
+2. When a nested rejection ended a script that made two or more calls, one
+   sentence says the other calls are listed below and that `Promise.allSettled`
+   keeps every result while `Promise.all` drops them. `tools.*` calls still reject.
+3. `Calls the script made before it stopped`: one line per call (position, tool,
+   arguments, status, result size), at most 15 lines. If the completed results
+   total 1,200 characters or less they follow inline; otherwise they are written
+   with `saveOutputArtifact` (prefix `run-code-recovered`, one `=== call N: ...`
+   block per call) and named with the standard `Full output saved to` note and
+   line count. A failed write says so and tells the model to re-run only what it
+   needs. Nothing is shown that the script had not already received.
+
+`grep`, `glob` and `read_file` append a hint when a path that does not exist
+contains `*`, `?` or `[` (`src/tools/file/glob-path-hint.ts`); the same text
+reaches a direct call. The output clip note states the full size, the overshoot
+and that the script can return a slice or matching lines; the `read_file` result
+shape (`{content, ...}`, no line numbers) is deliberately unchanged. Scenarios:
+`scripts/provider-black-box/run-code-failures.blackbox.ts`.
+
 **Problem.** One bad nested argument rejects the whole `Promise.all`, and
 successful sibling reads are re-run in the next script
 (`~/.local/share/term2-nodejs/conversations/57c18684-1b1e-416d-8d46-73c5ce2f7d96.jsonl:250`).

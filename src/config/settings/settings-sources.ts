@@ -21,6 +21,7 @@ export const SETTINGS_SOURCE_KEYS = {
     cheapReasoningEffort: 'agent.cheapReasoningEffort',
     choreModel: 'agent.choreModel',
     reasoningEffort: 'agent.reasoningEffort',
+    cachePreservingEffort: 'agent.cachePreservingEffort',
     temperature: 'agent.temperature',
     backgroundWaitTimeoutMs: 'agent.backgroundWaitTimeoutMs',
     maxTurns: 'agent.maxTurns',
@@ -132,7 +133,6 @@ export const SETTINGS_SOURCE_KEYS = {
   },
   tools: {
     logFileOperations: 'tools.logFileOperations',
-    enableEditHealing: 'tools.enableEditHealing',
     shell: { enabled: 'tools.shell.enabled' },
     web: { enabled: 'tools.web.enabled' },
     fileRead: { enabled: 'tools.fileRead.enabled' },

@@ -11,6 +11,7 @@ import type {
   JSONSchema7,
 } from '@ai-sdk/provider';
 import { withMergedAssistantMessages } from './ai-sdk-message-normalizer.js';
+import { reportedUsageCost } from '../../shared/cost/model-cost.js';
 import type {
   StreamedModelMessagePart,
   StreamedModelToolResultPart,
@@ -283,9 +284,9 @@ function toCallOptions(
       // The AI SDK lane never produces opaque items, so any it sees came from
       // another provider and is inert baggage left by a switch, not a fault.
       // See `provider-opaque-compatibility.ts`.
-      ...request.input
-        .filter((item) => item.type !== 'provider_opaque')
-        .map((item) => toPromptMessage(item, toolNames)),
+      // An `effort_update` marker reaching this lane has no SDK form; the Anthropic
+      // adapter turns it into a sentinel beforehand (ai-sdk-anthropic.provider.ts).
+      ...request.input.filter(isPromptItem).map((item) => toPromptMessage(item, toolNames)),
     ],
     ...(request.tools.length ? { tools: request.tools.map(toTool) } : {}),
     ...(request.toolChoice ? { toolChoice: toToolChoice(request.toolChoice) } : {}),
@@ -308,7 +309,11 @@ function toCallOptions(
   };
 }
 
-function toPromptMessage(item: StreamedModelTurnInput, toolNames: Map<string, string>): LanguageModelV3Message {
+type PromptItem = Exclude<StreamedModelTurnInput, { type: 'effort_update' }>;
+const isPromptItem = (item: StreamedModelTurnInput): item is PromptItem =>
+  item.type !== 'provider_opaque' && item.type !== 'effort_update';
+
+function toPromptMessage(item: PromptItem, toolNames: Map<string, string>): LanguageModelV3Message {
   if (item.type === 'message') {
     if (item.role === 'system') return { role: 'system', content: item.content.map((part) => part.text).join('') };
     return { role: item.role, content: item.content.map(toMessagePart) };
@@ -458,12 +463,6 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
 
-function parseCostValue(value: unknown): number | string | undefined {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string' && value.trim().length > 0) return value;
-  return undefined;
-}
-
 /**
  * Extract provider-reported cost (USD amount or credits) from AI SDK
  * provider metadata or usage when present (e.g. OpenRouter usage accounting).
@@ -472,7 +471,7 @@ function extractAiSdkCostUsd(providerMetadata?: Record<string, unknown>, usage?:
   const usageRecord = asRecord(usage);
   if (usageRecord) {
     const rawRecord = asRecord(usageRecord.raw);
-    const rawCost = parseCostValue(rawRecord?.cost ?? usageRecord.cost);
+    const rawCost = reportedUsageCost({ ...rawRecord, cost: rawRecord?.cost ?? usageRecord.cost });
     if (rawCost !== undefined) return rawCost;
   }
 
@@ -483,10 +482,9 @@ function extractAiSdkCostUsd(providerMetadata?: Record<string, unknown>, usage?:
     const record = asRecord(value);
     if (record) {
       const nestedUsage = asRecord(record.usage);
-      const costDetails = asRecord(nestedUsage?.costDetails) ?? asRecord(nestedUsage?.cost_details);
-      const nestedCost = parseCostValue(
-        nestedUsage?.cost ?? record.cost ?? costDetails?.upstreamInferenceCost ?? costDetails?.upstream_inference_cost,
-      );
+      // Same precedence as before for `cost`; the upstream figure and the BYOK sum come from
+      // reportedUsageCost, which the chat-completions path also uses.
+      const nestedCost = reportedUsageCost({ ...nestedUsage, cost: nestedUsage?.cost ?? record.cost });
       if (nestedCost !== undefined) return nestedCost;
     }
   }

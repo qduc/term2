@@ -57,5 +57,7 @@ Root calls of one response go through legacy's approval batch first
 (`turn-tool-batch.ts`): questions, approval prompts and policy-approved calls that
 legacy stages are decided in order, only the last decision of each pass applies, and
 calls run in order up to the first undecided one. A question re-asked this way is the
-legacy behaviour, not a bug to fix here. Escape on an approval prompt cancels the
+legacy behaviour, not a bug to fix here. Term2 does not stage a policy-approved call
+that is parallel-safe (`approvalFor` in `app/source-tools.ts`), so it can run in a
+parallel group; the order this gives is in `docs/plans/tools/parallel-safe-tool-dispatch.md`. Escape on an approval prompt cancels the
 turn; Session then drops the calls that never started (call and result) like legacy.

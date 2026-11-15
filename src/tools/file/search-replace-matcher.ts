@@ -74,7 +74,7 @@ function removeLeadingFilepathComment(content: string, filePath: string): string
   return isFilepathComment ? lines.slice(1).join('\n') : content;
 }
 
-export function normalizeSearchContent(content: string, filePath: string, eol: string): string {
+function normalizeSearchContent(content: string, filePath: string, eol: string): string {
   return normalizeToEOL(removeLeadingFilepathComment(content, filePath), eol);
 }
 
@@ -347,7 +347,7 @@ function unescapeSearchContent(content: string): string {
   });
 }
 
-export function findMatchesInContent(content: string, searchContent: string): MatchInfo {
+function findMatchesInContent(content: string, searchContent: string): MatchInfo {
   const unescapedSearch = unescapeSearchContent(searchContent);
   let gapDiagnostic: string | undefined;
 

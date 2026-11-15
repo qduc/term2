@@ -12,7 +12,7 @@ import { SUBAGENT_RUN_NAME_PATTERN, SubagentRegistryError } from '../subagents/l
 import { isAbortLike, formatSubagentResult } from '../subagents/utils.js';
 import { relaxedNumber } from '../utils.js';
 import { AGENT_SPEC_TOOL_NAMES } from './agent-spec-tools.js';
-import { withInterpretation, withRunSubagentShapes } from './run-subagent-shape.js';
+import { checkOneShape, withInterpretation, withRunSubagentShapes } from './run-subagent-shape.js';
 
 function getRunSubagentDescription(backgroundEnabled: boolean): string {
   return (
@@ -135,10 +135,6 @@ const worktreeField = {
     ),
 };
 
-const hasOneShape = (value: { agent_spec?: unknown; role?: unknown; task?: unknown }) =>
-  value.agent_spec ? value.role === undefined && value.task === undefined : Boolean(value.role) && Boolean(value.task);
-const ONE_SHAPE_MESSAGE = { message: 'Provide agent_spec, or both role and task.' };
-
 const runSubagentSchema = z
   .object({
     execution: z
@@ -153,7 +149,7 @@ const runSubagentSchema = z
     ...backgroundFields,
   })
   .strict()
-  .refine(hasOneShape, ONE_SHAPE_MESSAGE);
+  .superRefine(checkOneShape);
 
 export type ForegroundRunSubagentParams = {
   role?: (typeof FOREGROUND_ROLES)[number] | 'agent';
@@ -218,7 +214,7 @@ function createRunSubagentSchema({ runSubagent, runSubagentAsync }: RunSubagentT
         ...backgroundFields,
       })
       .strict()
-      .refine(hasOneShape, ONE_SHAPE_MESSAGE);
+      .superRefine(checkOneShape);
   }
 
   if (runSubagent && !runSubagentAsync) {
@@ -231,7 +227,7 @@ function createRunSubagentSchema({ runSubagent, runSubagentAsync }: RunSubagentT
         ...worktreeField,
       })
       .strict()
-      .refine(hasOneShape, ONE_SHAPE_MESSAGE);
+      .superRefine(checkOneShape);
   }
 
   return runSubagentSchema;

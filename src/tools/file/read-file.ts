@@ -1,8 +1,9 @@
 import { z } from 'zod';
 import * as fs from 'fs/promises';
-import { resolveWorkspacePath, resolveWorkspacePathPhysically, relaxedNumber } from '../utils.js';
+import { resolveWorkspacePath, relaxedNumber } from '../utils.js';
 import type { ScriptedToolDefinition, FormatCommandMessage } from '../types.js';
-import { isSessionReadGranted } from './read-access.js';
+import { isReadPreApproved } from './read-access.js';
+import { readFileGlobPathNote } from './glob-path-hint.js';
 import type { ISettingsService } from '../../shared/service-interfaces.js';
 import type { FileReadAccessPort, NestedReadAccessPort } from '../access-port.js';
 import {
@@ -194,41 +195,16 @@ export const createReadFileToolDefinition = (
     parameters: readFileParametersSchema,
     canRequireApproval: true,
     parallelSafe: true,
-    needsApproval: async (params, context) => {
-      if (allowOutsideWorkspace) {
-        return false;
-      }
-
-      // YOLO mode ('always') approves read-only operations without a prompt,
-      // even outside the workspace. The shared tool wrapper applies the same
-      // mode to mutating tools.
-      if (settingsService?.get('shell.autoApproveMode') === 'always') {
-        return false;
-      }
-
-      try {
-        const cwd = executionContext?.getCwd() || process.cwd();
-        const resolvedPath = resolveWorkspacePath(params.path, cwd, { allowOutsideWorkspace: true });
-        // A lexical workspace path can point outside through a symlink. Match
-        // the physical authority check used by scripted reads before deciding
-        // that a local direct read needs no approval. Never resolve an SSH path
-        // against this host's filesystem.
-        const remote = executionContext?.isRemote() ?? false;
-        const target = remote ? resolvedPath : await resolveWorkspacePathPhysically(resolvedPath, cwd);
-        const root = remote ? cwd : await resolveWorkspacePathPhysically(cwd, cwd);
-        if (!target || !root) return true;
-        if (isSessionReadGranted(target, root, context, { sessionAccess, nestedCompatibility })) {
-          return false;
-        }
-
-        resolveWorkspacePath(target, root, {
-          allowDiscoveredSkillFolders: true,
-        });
-        return false;
-      } catch {
-        return true;
-      }
-    },
+    needsApproval: async (params, context) =>
+      !(await isReadPreApproved({
+        path: params.path,
+        context,
+        executionContext,
+        allowOutsideWorkspace,
+        settingsService,
+        sessionAccess,
+        nestedCompatibility,
+      })),
     execute: async (params, context) => {
       const { path: filePath, start_line, end_line } = params;
       const cwd = executionContext?.getCwd() || process.cwd();
@@ -424,7 +400,12 @@ export const createReadFileToolDefinition = (
       } catch (error: any) {
         if (isScriptedToolCall(context)) {
           if (error.code === 'ENOENT') {
-            throw new Error(`File not found: ${filePath}`);
+            throw new Error(
+              `File not found: ${filePath}${readFileGlobPathNote(
+                filePath,
+                executionContext?.getCwd() || process.cwd(),
+              )}`,
+            );
           }
           if (error.code === 'EISDIR') {
             throw new Error(`Path is a directory: ${filePath}`);
@@ -442,7 +423,10 @@ export const createReadFileToolDefinition = (
           return `Error: ${error.message}`;
         }
         if (error.code === 'ENOENT') {
-          return `Error: File not found: ${filePath}`;
+          return `Error: File not found: ${filePath}${readFileGlobPathNote(
+            filePath,
+            executionContext?.getCwd() || process.cwd(),
+          )}`;
         }
         if (error.code === 'EACCES') {
           return `Error: Permission denied: ${filePath}`;

@@ -9,7 +9,7 @@ import {
 } from '../shared/cost/model-cost.js';
 import { formatSessionUsageBreakdown } from '../clients/tui/presentation/utils/ai/token-usage.js';
 import type { WireSnapshot } from '../protocol/wire.js';
-import { subscriptionReferenceCost } from '../protocol/reference-cost.js';
+import { subscriptionReferenceCost } from '../protocol/costs.js';
 
 /** The session's counts, as legacy's accumulators hold them (reset on /clear, rollover and resume). */
 function totals(snapshot: WireSnapshot | undefined) {

@@ -25,7 +25,7 @@ import {
   resolveResultMaxBytesForCall,
   truncateToUtf8Bytes,
 } from '../../shared/utils/output/bound-tool-result.js';
-import { parseUpstreamApplyPatch } from './upstream-apply-patch.js';
+import { parseUpstreamApplyPatch } from '../../shared/utils/upstream-apply-patch.js';
 
 /**
  * Error thrown when patch validation fails (malformed diff)

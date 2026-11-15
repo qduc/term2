@@ -639,8 +639,11 @@ timeouts, provider continuity, retry or approval behavior changes.
 On failure, recover completed results and call identities; never replay tools
 or infer domain success from resolution. Clipped string values preserve their
 full output in an artifact, or report unavailable storage honestly. Structured
-overflow keeps its existing reject-with-retrieval contract. The aggregate display
-uses the existing 30,000-character clip and retrieval artifact. Recovery data is
+overflow keeps its existing reject-with-retrieval contract. The failed-script
+display is one line per call plus the failing error; completed results over 1,200
+characters are spooled with `saveOutputArtifact` and named by path (see
+`run-code-authoring-friction.md`, "Failure result format"), and the whole
+display still passes the 30,000-character clip. Recovery data is
 not emitted in completion telemetry. Rollback is confined to call recovery
 fields, string overflow preservation and failed-script rendering.
 
@@ -3374,7 +3377,6 @@ Catalogued, no hypothesized failure mode:
 - Rollback: revert ba428dd7 (7-line production change, independently revertible); foreground returns to raw-request thresholds with outer trim still bounding model-visible text.
 | `boundToolResultText` | 40k UTF-8 bytes, spools artifact + path (`verified safe`) | no |
 | Hook callback timeout | 5s | no |
-| Patch/edit healing timeout and file-size cap | helper defaults | no |
 | Web fetch character cap | 10k default, 200k max, with continuation | yes |
 | Subagent continuation segments | 3 | injectable |
 | Subagent question length | 1200 chars; throws | no |

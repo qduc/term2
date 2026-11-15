@@ -1,6 +1,8 @@
 import type { ISessionContextService } from '../shared/service-interfaces.js';
 /** Puts one session's provider traffic in that session's attribution scope. */
 import type { Model, ModelEvent, ModelRegistry, ModelRequest, ModelAffinity } from '../model/index.js';
+import type { EffortUpdatesRejection } from '../model/effort-fallback.js';
+import type { DirectContextPort } from '../session/capabilities.js';
 
 /** Runs an operation inside one session's traffic attribution. */
 export type SessionScope = <T>(operation: () => T) => T;
@@ -49,6 +51,29 @@ export function withSessionScope(models: ModelRegistry, scope: SessionScope, aff
             }
           : {}),
       };
+    },
+  };
+}
+
+/**
+ * Give a registry selection the session log as its one record of a refused effort marker
+ * (model/effort-fallback.ts). The port is read late: it exists only once the session has started,
+ * and a rebuilt registry or a resumed session reads back what the log already holds.
+ */
+export function withEffortRejection<T extends object>(
+  selection: T,
+  port: () => DirectContextPort | undefined,
+): T & { readonly effortUpdatesRejection: EffortUpdatesRejection } {
+  return {
+    ...selection,
+    effortUpdatesRejection: {
+      rejected: () => port()?.read().effortUpdatesRejected === true,
+      record() {
+        const live = port();
+        // A lost compare-and-swap (a goal change in between) is retried once against the new generation.
+        for (let attempt = 0; live && attempt < 2; attempt++)
+          if (live.commit(live.read().goal.generation, [{ type: 'effort_updates_rejected' }])) return;
+      },
     },
   };
 }

@@ -115,6 +115,16 @@ imports Session, Engine or adopted code, and never opens conversation storage.
   A pending/opened run-budget check-in returns `budget_paused`/exit 2 with
   truthful terminal wording; headless never grants budget. The app must map `blocked`
   and `budget_paused` to exit 2.
+- Exit code 141 (128 + SIGPIPE): the reader closed stdout or stderr while the
+  run was still writing (`term2 --json "…" | head -1`). Node ignores SIGPIPE and
+  reports EPIPE as an `'error'` event on the stream, which used to crash the CLI
+  with a stack trace and exit 1. `onStdioClosed`
+  (`src/shared/lib/exit-on-closed-pipe.ts`) turns it into the SIGINT path: the
+  run is cancelled (model request and running tools/subagents aborted, no further
+  provider request), nothing more is written, no stack trace is printed, and the
+  exit code is 141. The cancelled turn is durable, so the session stays valid and
+  resumable. An EPIPE during the final drain after the exit code is settled keeps
+  that code (see `exitAfterDrain`). Covered by `headless-pipe-drain.blackbox.ts`.
 - An abort before the turn starts detaches without cancelling another turn;
   the app's host disposal owns a queued admission. An abort after it starts
   sends one `cancel` and still waits for `turn_ended`.

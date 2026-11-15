@@ -284,9 +284,9 @@ function toCallOptions(
       // The AI SDK lane never produces opaque items, so any it sees came from
       // another provider and is inert baggage left by a switch, not a fault.
       // See `provider-opaque-compatibility.ts`.
-      ...request.input
-        .filter((item) => item.type !== 'provider_opaque')
-        .map((item) => toPromptMessage(item, toolNames)),
+      // An `effort_update` marker reaching this lane has no SDK form; the Anthropic
+      // adapter turns it into a sentinel beforehand (ai-sdk-anthropic.provider.ts).
+      ...request.input.filter(isPromptItem).map((item) => toPromptMessage(item, toolNames)),
     ],
     ...(request.tools.length ? { tools: request.tools.map(toTool) } : {}),
     ...(request.toolChoice ? { toolChoice: toToolChoice(request.toolChoice) } : {}),
@@ -309,7 +309,11 @@ function toCallOptions(
   };
 }
 
-function toPromptMessage(item: StreamedModelTurnInput, toolNames: Map<string, string>): LanguageModelV3Message {
+type PromptItem = Exclude<StreamedModelTurnInput, { type: 'effort_update' }>;
+const isPromptItem = (item: StreamedModelTurnInput): item is PromptItem =>
+  item.type !== 'provider_opaque' && item.type !== 'effort_update';
+
+function toPromptMessage(item: PromptItem, toolNames: Map<string, string>): LanguageModelV3Message {
   if (item.type === 'message') {
     if (item.role === 'system') return { role: 'system', content: item.content.map((part) => part.text).join('') };
     return { role: item.role, content: item.content.map(toMessagePart) };

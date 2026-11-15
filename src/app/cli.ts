@@ -27,6 +27,7 @@ import type { DirectCommandConfiguration } from '../session/command-types.js';
 import type { InteractivePickerRequest } from '../model/models/model-resolution.js';
 import { HARNESS_IDLE_ENV } from '../shared/lib/harness-input-idle.js';
 import { exitAfterDrain, settledExitCode } from '../shared/lib/exit-after-drain.js';
+import { exitCodeForSignal, onStdioClosed } from '../shared/lib/exit-on-closed-pipe.js';
 import { formatResumeList } from '../session/conversation/resume-list.js';
 import { isControlSocketName } from '../clients/control-socket/control-socket.js';
 import { createSettingsService, type SettingsService } from './settings.js';
@@ -146,10 +147,6 @@ function chooseProfile(options: Pick<SessionOptions, 'profile' | 'lite'>, settin
   return String(settings.get('app.activeProfileId'));
 }
 
-function exitCodeForSignal(signal: NodeJS.Signals): number {
-  return signal === 'SIGINT' ? 130 : 143;
-}
-
 async function runWithSignals(request: DirectHeadlessRequest): Promise<{
   readonly kind: 'completed' | 'cancelled' | 'failed' | 'context_paused' | 'blocked' | 'budget_paused';
   readonly signal?: NodeJS.Signals;
@@ -186,6 +183,7 @@ async function runWithSignals(request: DirectHeadlessRequest): Promise<{
   // handled here runs only after it returns, so that turn can still end durably.
   process.on('SIGINT', () => onSignal('SIGINT'));
   process.on('SIGTERM', () => onSignal('SIGTERM'));
+  onStdioClosed(() => onSignal('SIGPIPE'));
 
   const handle = runDirectHeadlessOnHost(request);
   turnHasStarted = handle.turnActive();

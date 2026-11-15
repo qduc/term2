@@ -8,7 +8,7 @@ import {
   resolveThinkingBudget,
 } from './ai-sdk-provider-settings.js';
 import { createAiSdkStreamedModel } from './ai-sdk-streamed-model.js';
-import type { StreamedModelTurn, StreamedModelTurnRequest } from '../streamed-model-turn.js';
+import type { StreamedModelTurn, StreamedModelTurnInput, StreamedModelTurnRequest } from '../streamed-model-turn.js';
 
 type AiSdkAnthropicModelLike = LanguageModelV3;
 
@@ -211,19 +211,58 @@ export class AiSdkAnthropicProvider {
 
   getStreamedModel(modelName?: string): StreamedModelTurn {
     const config = this.#resolveConfig();
-    const provider = this.#createProvider(config);
+    const baseFetch = config.fetch;
+    const provider = this.#createProvider({
+      ...config,
+      // Inert unless a request carries a per-message effort marker.
+      fetch: withAnthropicEffortMessages((input, init) => (baseFetch ?? fetch)(input, init)),
+    });
     const resolvedModelName = modelName || this.#defaultModel;
     const model = withAnthropicPromptCaching(
       provider(resolvedModelName),
       this.#shouldApplyPromptCaching,
       resolvedModelName,
     );
+    const adaptiveThinking = /^claude-(?:haiku|sonnet)-5-5(?:-|$)/.test(resolvedModelName);
 
-    return createAiSdkStreamedModel(
+    const turn = createAiSdkStreamedModel(
       withForwardedProviderSettings(model, (options) => forwardExplicitProviderSettings(options, 'anthropic')),
-      (request) => resolveReasoningOptions(request, /^claude-(?:haiku|sonnet)-5-5(?:-|$)/.test(resolvedModelName)),
+      (request) => resolveReasoningOptions(request, adaptiveThinking),
     );
+    return {
+      ...turn,
+      ...(turn.getResponse
+        ? {
+            getResponse: (request) =>
+              turn.getResponse!(withEffortSentinels(withPinnedEffortFallback(request, adaptiveThinking))),
+          }
+        : {}),
+      stream: (request) => turn.stream(withEffortSentinels(withPinnedEffortFallback(request, adaptiveThinking))),
+    };
   }
+}
+
+/**
+ * Per-message effort needs adaptive thinking driven by the selected effort. When the
+ * caller pins thinking or effort through provider options, or the model has no
+ * adaptive thinking, the markers cannot apply: send today's request instead, with
+ * the effective effort top-level.
+ */
+function withPinnedEffortFallback(
+  request: StreamedModelTurnRequest,
+  adaptiveThinking: boolean,
+): StreamedModelTurnRequest {
+  const markers = request.input.filter((item) => item.type === 'effort_update');
+  if (!markers.length) return request;
+  const anthropic = (request.providerOptions as SharedV3ProviderOptions | undefined)?.anthropic;
+  if (adaptiveThinking && anthropic?.thinking === undefined && anthropic?.effort === undefined) return request;
+  const effective = request.conversationEffort ?? markers.at(-1)!.effort;
+  const { conversationEffort: _effective, ...rest } = request;
+  return {
+    ...rest,
+    input: request.input.filter((item) => item.type !== 'effort_update'),
+    reasoning: { ...request.reasoning, effort: effective },
+  };
 }
 
 /** Apply anthropic's reasoning options before crossing the SDK boundary. */
@@ -250,4 +289,121 @@ function resolveReasoningOptions(
       : {}),
   };
   return providerOptions;
+}
+
+// ---------- Per-message effort ----------
+// Beta `mid-conversation-output-config-2026-07-01`: an effort-only message
+// `{"role":"system","content":[],"output_config":{"effort":...}}` changes effort for later
+// turns while the top-level `output_config.effort` stays put, so the cached prefix survives
+// (measured on Claude Haiku 5.5, 2026-11-14; model/effort-updates.ts). The AI SDK cannot
+// express that message, so an `effort_update` marker becomes a sentinel text part at the
+// start of the user message it governs, and the fetch wrapper replaces the sentinel with
+// the effort message placed just before that user message, adding the beta header. A body
+// without the sentinel is forwarded untouched, byte for byte.
+
+/** Markers as sentinels on the next user message; with no later user message a marker has no turn to govern. */
+function withEffortSentinels(request: StreamedModelTurnRequest): StreamedModelTurnRequest {
+  if (!request.input.some((item) => item.type === 'effort_update')) return request;
+  const input: StreamedModelTurnInput[] = [];
+  let pending: string | undefined;
+  for (const item of request.input) {
+    if (item.type === 'effort_update') pending = item.effort;
+    else if (pending !== undefined && item.type === 'message' && item.role === 'user') {
+      input.push({ ...item, content: [{ type: 'text', text: effortSentinel(pending) }, ...item.content] });
+      pending = undefined;
+    } else input.push(item);
+  }
+  return { ...request, input };
+}
+
+const ANTHROPIC_EFFORT_BETA = 'mid-conversation-output-config-2026-07-01';
+
+const SENTINEL_PREFIX = 'term2-effort-update:9c4e1f7a:';
+const SENTINEL = /^term2-effort-update:9c4e1f7a:([a-z]+)$/;
+
+function effortSentinel(effort: string): string {
+  return `${SENTINEL_PREFIX}${effort}`;
+}
+
+function withAnthropicEffortMessages(base: typeof fetch): typeof fetch {
+  return (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    const body = init?.body;
+    if (typeof body !== 'string' || !body.includes(SENTINEL_PREFIX)) return base(input, init);
+    let parsed: { messages?: unknown; output_config?: Record<string, unknown> };
+    try {
+      parsed = JSON.parse(body);
+    } catch {
+      return base(input, init);
+    }
+    const placed = placeEffortMessages(parsed);
+    if (placed) return base(input, { ...init, body: placed, headers: withEffortBeta(init?.headers) });
+    // Never fail a turn over a marker: send today's request, the effective effort top-level.
+    return base(input, { ...init, body: JSON.stringify(withTopLevelEffort(parsed)) });
+  }) as typeof fetch;
+}
+
+const sentinelEffort = (part: any): string | undefined =>
+  part?.type === 'text' && typeof part.text === 'string' ? SENTINEL.exec(part.text)?.[1] : undefined;
+
+/**
+ * Each sentinel becomes an effort-only message where it stood. The AI SDK merges consecutive
+ * user messages (a turn that got no answer is followed directly by the next one), so a
+ * sentinel can sit anywhere in a user message; the message is split around it. Undefined when
+ * a sentinel cannot be placed exactly.
+ */
+function placeEffortMessages(parsed: { messages?: unknown }): string | undefined {
+  if (!Array.isArray(parsed.messages)) return undefined;
+  const messages: unknown[] = [];
+  for (const message of parsed.messages as any[]) {
+    if (message?.role !== 'user' || !Array.isArray(message.content)) {
+      messages.push(message);
+      continue;
+    }
+    let segment: unknown[] = [];
+    for (const part of message.content) {
+      const effort = sentinelEffort(part);
+      if (effort === undefined) {
+        segment.push(part);
+        continue;
+      }
+      if (part.cache_control !== undefined) return undefined;
+      if (segment.length) messages.push({ ...message, content: segment });
+      messages.push({ role: 'system', content: [], output_config: { effort } });
+      segment = [];
+    }
+    if (segment.length) messages.push({ ...message, content: segment });
+  }
+  const rewritten = JSON.stringify({ ...parsed, messages });
+  return rewritten.includes(SENTINEL_PREFIX) ? undefined : rewritten;
+}
+
+function withTopLevelEffort(parsed: { messages?: unknown; output_config?: Record<string, unknown> }) {
+  let effort: string | undefined;
+  const messages = Array.isArray(parsed.messages)
+    ? (parsed.messages as any[]).flatMap((message) => {
+        if (!Array.isArray(message?.content)) return [message];
+        const content = message.content.filter((part: unknown) => {
+          const found = sentinelEffort(part);
+          if (found !== undefined) effort = found;
+          return found === undefined;
+        });
+        return content.length ? [{ ...message, content }] : [];
+      })
+    : parsed.messages;
+  return {
+    ...parsed,
+    messages,
+    ...(effort !== undefined ? { output_config: { ...parsed.output_config, effort } } : {}),
+  };
+}
+
+function withEffortBeta(source: HeadersInit | undefined): Headers {
+  const headers = new Headers(source);
+  const betas = (headers.get('anthropic-beta') ?? '')
+    .split(',')
+    .map((beta) => beta.trim())
+    .filter(Boolean);
+  if (!betas.includes(ANTHROPIC_EFFORT_BETA))
+    headers.set('anthropic-beta', [...betas, ANTHROPIC_EFFORT_BETA].join(','));
+  return headers;
 }

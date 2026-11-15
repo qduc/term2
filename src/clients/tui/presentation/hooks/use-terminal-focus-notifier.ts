@@ -1,14 +1,29 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { createContext, createElement, useContext, useEffect, useMemo, useRef, type FC, type ReactNode } from 'react';
 import { useInput } from 'ink';
 import { sendNotification } from '../../../notification-service.js';
-import type { LoggingService } from '../../../../session/logging/logging-service.js';
-import type { SettingsService } from '../../../../app/settings-service.js';
+import type { ILoggingService, ISettingsService } from '../../../../shared/service-interfaces.js';
 import type { TerminalWriter } from '../../../../shared/types/terminal.js';
+
+type TuiServicesContextValue = {
+  readonly settingsService?: Pick<ISettingsService, 'get'>;
+  readonly loggingService?: ILoggingService;
+};
+
+const TuiServicesContext = createContext<TuiServicesContextValue>({});
+
+export const TuiServicesProvider: FC<{
+  settingsService: Pick<ISettingsService, 'get'>;
+  loggingService: ILoggingService;
+  children?: ReactNode;
+}> = ({ settingsService, loggingService, children }) => {
+  const value = useMemo(() => ({ settingsService, loggingService }), [settingsService, loggingService]);
+  return createElement(TuiServicesContext.Provider, { value }, children);
+};
 
 interface UseTerminalFocusNotifierOptions {
   stdout: TerminalWriter;
-  settingsService: SettingsService;
-  loggingService: LoggingService;
+  settingsService?: Pick<ISettingsService, 'get'>;
+  loggingService?: ILoggingService;
 }
 
 export const useTerminalFocusNotifier = ({
@@ -16,6 +31,14 @@ export const useTerminalFocusNotifier = ({
   settingsService,
   loggingService,
 }: UseTerminalFocusNotifierOptions) => {
+  const contextServices = useContext(TuiServicesContext);
+  const resolvedSettingsService = settingsService ?? contextServices.settingsService;
+  const resolvedLoggingService = loggingService ?? contextServices.loggingService;
+  if (!resolvedSettingsService || !resolvedLoggingService) {
+    throw new Error(
+      'useTerminalFocusNotifier requires TuiServicesProvider or explicit settingsService and loggingService.',
+    );
+  }
   // Default to "focused" so we stay silent when focus state is unknown.
   const focusedRef = useRef(true);
 
@@ -27,20 +50,20 @@ export const useTerminalFocusNotifier = ({
   }, [stdout]);
 
   useInput((rawInput: string) => {
-    loggingService.debug('Received terminal raw input sequence', {
+    resolvedLoggingService.debug('Received terminal raw input sequence', {
       rawInput: JSON.stringify(rawInput),
       length: rawInput.length,
     });
 
     if (rawInput === '\x1b[I' || rawInput === '[I') {
-      loggingService.debug('Terminal focus changed to IN (focused)', {
+      resolvedLoggingService.debug('Terminal focus changed to IN (focused)', {
         prevFocused: focusedRef.current,
       });
       focusedRef.current = true;
       return;
     }
     if (rawInput === '\x1b[O' || rawInput === '[O') {
-      loggingService.debug('Terminal focus changed to OUT (unfocused)', {
+      resolvedLoggingService.debug('Terminal focus changed to OUT (unfocused)', {
         prevFocused: focusedRef.current,
       });
       focusedRef.current = false;
@@ -48,7 +71,7 @@ export const useTerminalFocusNotifier = ({
     }
 
     if (!focusedRef.current) {
-      loggingService.debug('Terminal focus restored via user input heuristic', {
+      resolvedLoggingService.debug('Terminal focus restored via user input heuristic', {
         rawInput: JSON.stringify(rawInput),
       });
       focusedRef.current = true;
@@ -58,28 +81,28 @@ export const useTerminalFocusNotifier = ({
   return useMemo(
     () => ({
       approvalNeeded() {
-        loggingService.debug('notifier.approvalNeeded check', {
+        resolvedLoggingService.debug('notifier.approvalNeeded check', {
           focused: focusedRef.current,
-          appNotifications: settingsService.get('app.notifications'),
-          appNotificationsOnApproval: settingsService.get('app.notificationsOnApproval'),
+          appNotifications: resolvedSettingsService.get('app.notifications'),
+          appNotificationsOnApproval: resolvedSettingsService.get('app.notificationsOnApproval'),
         });
         if (focusedRef.current) return;
-        if (!settingsService.get('app.notifications')) return;
-        if (!settingsService.get('app.notificationsOnApproval')) return;
-        sendNotification('Approval needed', 'Agent is waiting for your approval', { logger: loggingService });
+        if (!resolvedSettingsService.get('app.notifications')) return;
+        if (!resolvedSettingsService.get('app.notificationsOnApproval')) return;
+        sendNotification('Approval needed', 'Agent is waiting for your approval', { logger: resolvedLoggingService });
       },
       turnComplete() {
-        loggingService.debug('notifier.turnComplete check', {
+        resolvedLoggingService.debug('notifier.turnComplete check', {
           focused: focusedRef.current,
-          appNotifications: settingsService.get('app.notifications'),
-          appNotificationsOnComplete: settingsService.get('app.notificationsOnComplete'),
+          appNotifications: resolvedSettingsService.get('app.notifications'),
+          appNotificationsOnComplete: resolvedSettingsService.get('app.notificationsOnComplete'),
         });
         if (focusedRef.current) return;
-        if (!settingsService.get('app.notifications')) return;
-        if (!settingsService.get('app.notificationsOnComplete')) return;
-        sendNotification('Response ready', 'Agent has finished responding', { logger: loggingService });
+        if (!resolvedSettingsService.get('app.notifications')) return;
+        if (!resolvedSettingsService.get('app.notificationsOnComplete')) return;
+        sendNotification('Response ready', 'Agent has finished responding', { logger: resolvedLoggingService });
       },
     }),
-    [settingsService, loggingService],
+    [resolvedSettingsService, resolvedLoggingService],
   );
 };

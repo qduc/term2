@@ -53,6 +53,8 @@ export class NonInteractiveApprovalPolicy {
     autoApprove: boolean;
     approval: ApprovalDescriptor;
     getHistory?: () => unknown[];
+    /** A verdict the shared review already produced for this request; reused instead of a second model call. */
+    priorAdvisory?: { readonly approved: boolean; readonly reasoning: string };
   }): Promise<NonInteractiveApprovalDecision> {
     if (!input.autoApprove) {
       return { answer: 'n', rejectionReason: NON_INTERACTIVE_REJECTION_REASON, reportRejection: false };
@@ -106,6 +108,16 @@ export class NonInteractiveApprovalPolicy {
 
     if (classification.status !== SafetyStatus.YELLOW) {
       return { answer: 'y' };
+    }
+
+    if (input.priorAdvisory) {
+      return input.priorAdvisory.approved
+        ? { answer: 'y' }
+        : {
+            answer: 'n',
+            rejectionReason: `LLM evaluation rejected the command: ${input.priorAdvisory.reasoning}`,
+            reportRejection: true,
+          };
     }
 
     const autoApproveModel =

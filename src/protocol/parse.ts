@@ -271,6 +271,9 @@ export function parseWireCommand(raw: unknown): WireCommand {
         decision: decision(value.decision),
         ...(value.provenance !== undefined ? { provenance: provenance(value.provenance) } : {}),
       };
+    case 'take_over_review':
+      fields(value, ['type', 'requestId']);
+      return { type: 'take_over_review', requestId: id(value.requestId, 'requestId') };
     case 'answer_budget':
       fields(value, ['type', 'requestId', 'decision', 'provenance']);
       return {

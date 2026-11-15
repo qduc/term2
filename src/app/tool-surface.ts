@@ -8,7 +8,6 @@ import { getCatalogModel } from '../model/providers/model-catalog/catalog.js';
 import { resolveRequestOutput } from '../session/agent-runtime/model-context-policy.js';
 import { NonInteractiveApprovalPolicy } from '../session/approval/non-interactive-approval-policy.js';
 import { ToolApprovalPolicyRegistry } from '../session/approval/tool-approval-policy-registry.js';
-import { isAutoApprovableTool, ShellAutoApprovalResolver } from '../session/approval/shell-auto-approval-resolver.js';
 import type { ExecutionContext } from '../tools/execution-context.js';
 import { LocalExecutionContext } from './tool-contract.js';
 import { installPlanModeInterceptor } from '../tools/plan-mode-interceptor.js';
@@ -19,8 +18,8 @@ import { TOOL_NAME_DESCRIBE } from '../tools/system/run-code/script-surface.js';
 import type { AnyToolDefinition } from '../tools/types.js';
 import { isMutatingCommand } from '../tools/system/shell.js';
 import { InvalidatableShellChildRegistry } from '../tools/shell/shell-child-registry.js';
-import type { ProviderInputItem } from '../shared/contracts/provider-input.js';
 import { formatApprovalReview } from '../shared/contracts/approval-review.js';
+import { describeApproval, routeApproval } from '../session/approval/approval-route.js';
 import type { ToolContextSeed } from '../tools/index.js';
 import type { Workspace } from '../tools/index.js';
 import type { Item, ReasoningEffort } from '../model/index.js';
@@ -71,7 +70,10 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
   skillsService?.discoverSkills();
   const policies = new ToolApprovalPolicyRegistry();
   const readOnly = remote?.sourcePolicy.readOnly ?? workspace.access === 'read';
-  const sessionAccess = new SessionAccessState(settings, { allowEdit: remote?.sourcePolicy.allowEdit ?? !readOnly });
+  const sessionAccess = new SessionAccessState(settings, {
+    allowEdit: remote?.sourcePolicy.allowEdit ?? !readOnly,
+    isRemote: () => executionContext.isRemote(),
+  });
   const shellChildren = new InvalidatableShellChildRegistry();
   const sessionId = randomUUID();
   const advisoryAbort = new AbortController();
@@ -213,10 +215,12 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     withAnswer: (answer, operation) => answers.run(answer, operation),
     checkInterceptors: deps.checkToolInterceptors,
     shellEscapeCwd: options.shellEscapeApproval && !remote && !readOnly ? () => executionContext.getCwd() : undefined,
-    confirmSandboxedShell:
-      options.shellEscapeApproval && settings.get('shell.autoApproveMode') === 'auto'
-        ? (command) => withWorkspace(() => isMutatingCommand(command, executionContext.getCwd(), logger))
-        : undefined,
+    // Read the mode per call: a mode change must apply to the next command, not the next surface.
+    confirmSandboxedShell: options.shellEscapeApproval
+      ? (command) =>
+          settings.get('shell.autoApproveMode') === 'auto' &&
+          withWorkspace(() => isMutatingCommand(command, executionContext.getCwd(), logger))
+      : undefined,
   });
   const modelSettings = agent.modelSettings;
   const maxOutputTokens = resolveRequestOutput(
@@ -232,16 +236,14 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
     advisoryAbort.signal,
     options.affinity ?? { conversationKey: sessionId, cacheKey: sessionId },
   );
-  // Legacy's in-loop advisory (approval batch coordinator): it sees the pending
-  // call in history and caches per call id; `auto` mode may approve from it.
-  let advisoryHistory: ProviderInputItem[] = [];
-  const advisor = new ShellAutoApprovalResolver({
-    record: { getHistory: () => advisoryHistory },
+  // The one review path every surface uses (src/session/approval/approval-route.ts).
+  const reviewApproval = createAssistedApprovalReview({
     agentClient,
+    settings,
     logger,
-    settingsService: settings,
-    sessionContextService: selection.sessionContext,
+    sessionContext: selection.sessionContext,
     sessionAccess,
+    withWorkspace,
   });
   const policy = new NonInteractiveApprovalPolicy({
     settingsService: settings,
@@ -310,19 +312,15 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
         await remote?.close();
       },
     },
-    reviewApproval:
-      options.shellEscapeApproval || options.tuiUnsandboxedReview
-        ? createAssistedApprovalReview({
-            unsandboxedOnly: options.tuiUnsandboxedReview === true,
-            agentClient,
-            settings,
-            logger,
-            sessionContext: selection.sessionContext,
-            sessionAccess,
-            withWorkspace,
-          })
-        : undefined,
-    async decideInteraction(request, history) {
+    reviewApproval,
+    approvalRoute: (request) => {
+      const mode = settings.get('shell.autoApproveMode');
+      const profile = describeApproval(request, {
+        isDockerHostControl: (toolName, input) => isDockerRequest(toolName, input, sessionAccess),
+      });
+      return routeApproval(mode, profile) !== 'review' ? 'ask_user' : mode === 'auto' ? 'decide' : 'advise';
+    },
+    async decideInteraction(request, history, review) {
       if (request.presentation?.requiresExplicitUser === true)
         return { kind: 'deny', reason: 'This decision requires an explicit user answer' };
       if (request.kind === 'question') {
@@ -337,23 +335,9 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
         return { kind: 'deny', reason: 'Docker host control requires an explicit interactive approval' };
       }
       const callId = request.sourceCallId ?? request.requestId;
-      let firstReview: string | undefined;
-      if (isAutoApprovableTool(request.toolName) && settings.get('shell.autoApproveMode') !== 'always') {
-        advisoryHistory = approvalHistory(history);
-        const advisory = await withWorkspace(() =>
-          advisor.resolveAdvisoryForInterruption({
-            interruption: { name: request.toolName, arguments: request.input, callId },
-            siblings: [{ name: request.toolName, arguments: request.input, callId }],
-          }),
-        );
-        if (advisor.shouldAutoApprove(advisory)) return { kind: 'allow' };
-        if (advisory)
-          firstReview = formatApprovalReview(
-            advisory.isError
-              ? { kind: 'unavailable', approved: false }
-              : { kind: 'reviewed', approved: false, advisory },
-          );
-      }
+      // The session already reviewed this request before opening it (approval-arbiter.ts); an approval
+      // never reaches here. Its verdict informs the no-person fallback instead of a second model call.
+      const firstReview = review && review.kind !== 'not_reviewed' ? formatApprovalReview(review) : undefined;
       // Legacy's headless continuation then decides from the session history,
       // which does not yet hold the paused response's unresolved calls.
       const decision = await withWorkspace(() =>
@@ -367,6 +351,8 @@ export function createToolSurface(selection: ProfileSelection, options: ToolSurf
             callId,
           },
           getHistory: () => approvalHistory(settledHistory(history)),
+          // Reuse the verdict above instead of asking the model a second time.
+          ...(review?.kind === 'reviewed' ? { priorAdvisory: review.advisory } : {}),
         }),
       );
       return decision.answer === 'y'

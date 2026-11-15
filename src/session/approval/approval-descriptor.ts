@@ -1,7 +1,7 @@
 import path from 'node:path';
-import { homedir } from 'node:os';
 import { getActiveWorkspaceRoot } from '../../tools/workspace/active-workspace-root.js';
 import { extractToolTargetPaths } from './shell-auto-approval-resolver.js';
+import { isPathWithin, lexicalPath } from '../../tools/workspace/path-identity.js';
 
 /**
  * Computes the authority metadata used by both provider approval prompts and
@@ -17,10 +17,7 @@ export function resolveOutsideWorkspaceEdit(
   const targets = extractToolTargetPaths(toolName, args);
   const resolvedRoot = path.resolve(workspaceRoot);
   const target = targets
-    .map((rawPath) => {
-      const expandedPath = rawPath.startsWith('~') ? rawPath.replace(/^~/, homedir()) : rawPath;
-      return path.isAbsolute(expandedPath) ? path.normalize(expandedPath) : path.resolve(resolvedRoot, expandedPath);
-    })
-    .find((candidate) => candidate !== resolvedRoot && !candidate.startsWith(resolvedRoot + path.sep));
+    .map((rawPath) => lexicalPath(rawPath, resolvedRoot))
+    .find((candidate) => !isPathWithin(candidate, resolvedRoot));
   return target ? { path: target, folder: path.dirname(target) } : undefined;
 }

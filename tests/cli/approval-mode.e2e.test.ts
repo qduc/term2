@@ -397,15 +397,13 @@ it.each([
         await vi.waitFor(() => expect(providerBodies.length).toBeGreaterThanOrEqual(2), { timeout: 30_000 });
       expect(fs.existsSync(marker)).toBe(false);
       if (delayedDenial) {
-        session.write('n');
-        await session.waitForOutput('Why?', 30_000);
-        releaseReview();
+        // `n` during the review is a deny the session records at once (approval-arbiter.ts): the
+        // approving review released afterwards finds the request settled and cannot run it.
+        session.write('n not allowed');
+        await session.waitForOutput('DENIED', 30_000);
         await vi.waitFor(() => expect(fs.existsSync(`${idlePath}.approval-review`)).toBe(true), { timeout: 30_000 });
-        expect(session.getVisibleOutput()).toContain('Why?');
+        releaseReview();
         expect(fs.existsSync(marker)).toBe(false);
-        session.write('not allowed');
-        await waitForHarnessComposerValue(idlePath, 'not allowed', { timeoutMs: 30_000 });
-        session.write('\r');
       } else {
         if (reviewExpected)
           await vi.waitFor(() => expect(fs.existsSync(`${idlePath}.approval-review`)).toBe(true), { timeout: 30_000 });
@@ -427,6 +425,132 @@ it.each([
     else expect(fs.readFileSync(marker, 'utf8')).toBe('approved');
     if (reviewExpected && !regular) expect(providerBodies[1]).toMatch(/OUTSIDE the sandbox/i);
     else if (!reviewExpected) expect(JSON.parse(providerBodies[1]).tools.length).toBeGreaterThan(0);
+  },
+);
+
+it(
+  'auto-approves read_file outside workspace in auto mode when LLM review passes',
+  { timeout: TIMEOUT_MS },
+  async () => {
+    root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-read-outside-auto-')));
+    const home = path.join(root, 'home');
+    const workspace = path.join(root, 'workspace');
+    const outsideFile = path.join(root, 'outside.txt');
+    fs.mkdirSync(home);
+    fs.mkdirSync(workspace);
+    fs.writeFileSync(outsideFile, 'OUTSIDE_CONTENT');
+    const baseUrl = await startProvider([
+      { call: { id: 'read-outside-call', tool: 'read_file', args: { path: outsideFile } } },
+      {
+        text: JSON.stringify({
+          results: [
+            { reasoning: 'task-aligned read', riskLevel: 'low', authorization: 'explicit', confidence: 'high' },
+          ],
+        }),
+      },
+      { text: 'READ_OUTSIDE_FINISHED' },
+    ]);
+    const idlePath = path.join(home, 'input-idle');
+    const env = {
+      HOME: home,
+      XDG_CONFIG_HOME: path.join(home, '.config'),
+      XDG_DATA_HOME: path.join(home, '.local', 'share'),
+      XDG_STATE_HOME: path.join(home, '.local', 'state'),
+      XDG_CACHE_HOME: path.join(home, '.cache'),
+      TERM2_CONFIG_DIR: path.join(home, '.term2'),
+      TERM2_CACHE_DIR: path.join(home, '.cache', 'term2'),
+      TERM2_CONVERSATIONS_DIR: path.join(root, 'conversations'),
+      DISABLE_LOGGING: '1',
+      [HARNESS_IDLE_ENV]: idlePath,
+      CI: 'false',
+    };
+    const settingsDir = resolveSettingsDirectory({ homeDir: home, env: createTestChildEnv(env) });
+    fs.mkdirSync(settingsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(settingsDir, 'settings.json'),
+      JSON.stringify({
+        agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
+        providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl, apiKey: 'test-key' }],
+        sandbox: { enabled: true },
+        shell: { autoApproveMode: 'auto' },
+      }),
+    );
+    session = spawnTerminal('node', [builtCli], { cwd: workspace, env, cols: 100, rows: 30 });
+    await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
+    session.write(`Read ${outsideFile}`);
+    await waitForHarnessComposerValue(idlePath, `Read ${outsideFile}`, { timeoutMs: 60_000 });
+    session.write('\r');
+    await session.waitForOutput('READ_OUTSIDE_FINISHED', 60_000);
+    expect(providerBodies.length).toBeGreaterThanOrEqual(3);
+    expect(providerBodies[2]).toContain('OUTSIDE_CONTENT');
+  },
+);
+
+it(
+  'persists allow-folder-session for read_file outside workspace across symlinked paths',
+  { timeout: TIMEOUT_MS },
+  async () => {
+    root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-read-folder-session-')));
+    const home = path.join(root, 'home');
+    const workspace = path.join(root, 'workspace');
+    const realOutside = path.join(root, 'real-outside');
+    const linkedOutside = path.join(root, 'linked-outside');
+    fs.mkdirSync(home);
+    fs.mkdirSync(workspace);
+    fs.mkdirSync(realOutside);
+    fs.symlinkSync(realOutside, linkedOutside);
+    const firstFile = path.join(linkedOutside, 'first.txt');
+    const secondFile = path.join(linkedOutside, 'second.txt');
+    fs.writeFileSync(firstFile, 'FIRST_OUTSIDE');
+    fs.writeFileSync(secondFile, 'SECOND_OUTSIDE');
+    const baseUrl = await startProvider([
+      { call: { id: 'read-1', tool: 'read_file', args: { path: firstFile } } },
+      { call: { id: 'read-2', tool: 'read_file', args: { path: secondFile } } },
+      { text: 'FOLDER_SESSION_FINISHED' },
+    ]);
+    const idlePath = path.join(home, 'input-idle');
+    const env = {
+      HOME: home,
+      XDG_CONFIG_HOME: path.join(home, '.config'),
+      XDG_DATA_HOME: path.join(home, '.local', 'share'),
+      XDG_STATE_HOME: path.join(home, '.local', 'state'),
+      XDG_CACHE_HOME: path.join(home, '.cache'),
+      TERM2_CONFIG_DIR: path.join(home, '.term2'),
+      TERM2_CACHE_DIR: path.join(home, '.cache', 'term2'),
+      TERM2_CONVERSATIONS_DIR: path.join(root, 'conversations'),
+      DISABLE_LOGGING: '1',
+      [HARNESS_IDLE_ENV]: idlePath,
+      CI: 'false',
+    };
+    const settingsDir = resolveSettingsDirectory({ homeDir: home, env: createTestChildEnv(env) });
+    fs.mkdirSync(settingsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(settingsDir, 'settings.json'),
+      JSON.stringify({
+        agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
+        providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl, apiKey: 'test-key' }],
+        sandbox: { enabled: true },
+        shell: { autoApproveMode: 'off' },
+      }),
+    );
+    session = spawnTerminal('node', [builtCli], { cwd: workspace, env, cols: 100, rows: 30 });
+    await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
+    session.write(`Read ${firstFile} and ${secondFile}`);
+    await waitForHarnessComposerValue(idlePath, `Read ${firstFile} and ${secondFile}`, { timeoutMs: 60_000 });
+    session.write('\r');
+    await session.waitForOutput('Allow this folder for this session', 60_000);
+    // Move selection from "Allow once" to "Allow this folder for this session" and confirm once the
+    // prompt shows that option's description, so Enter cannot land on the previous selection.
+    const prompt = session;
+    const beforeMove = prompt.getOutput().length;
+    prompt.write('\x1b[B');
+    await expect
+      .poll(() => prompt.getOutput().slice(beforeMove).includes('read_file, grep'), { timeout: 30_000 })
+      .toBe(true);
+    session.write('\r');
+    await session.waitForOutput('FOLDER_SESSION_FINISHED', 60_000);
+    expect(providerBodies.length).toBeGreaterThanOrEqual(3);
+    expect(providerBodies[2]).toContain('SECOND_OUTSIDE');
   },
 );
 

@@ -70,7 +70,6 @@ function DirectTui({
   const integration: TuiIntegration = useMemo(
     () => ({
       menus: createDirectTuiMenus({ app, persistentSettings, logger, root }),
-      reviewApproval: (sessionId, requestId, signal) => app.reviewApproval(sessionId, requestId, signal),
       async shell(sessionId, command) {
         if (remote) throw new Error('Direct shell commands are not available in SSH workspaces.');
         const settings = app.liveSettings(sessionId);
@@ -149,6 +148,8 @@ function DirectTui({
       integration={integration}
       onLiveEvent={(event) => {
         if (event.sessionId !== connection.sessionId) return;
+        // An approval opens only once a person must decide: the session reviews first and never
+        // publishes a request it approves itself (src/session/approval/approval-arbiter.ts).
         if (event.type === 'interaction_opened' && event.payload.interaction.kind === 'approval')
           notifier.approvalNeeded();
         if (event.type === 'turn_ended' && event.payload.outcome === 'completed') notifier.turnComplete();
@@ -181,7 +182,6 @@ async function runTui(
     surface: (sessionId) => ({
       interactive: true,
       sessionBrowser: true,
-      tuiUnsandboxedReview: !target.restart,
       ...bridge.outbound(sessionId),
       ...target.surface,
       ...(mcp ? { mcp } : {}),

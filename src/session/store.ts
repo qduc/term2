@@ -36,7 +36,7 @@ export type DirectRuntimeContext = {
 };
 export type DirectConversationRuntime = {
   /** The store supplies the log and the live publishers itself; app supplies neither. */
-  readonly deps: Omit<ConversationDeps, 'log' | 'publishTask' | 'publishBranch' | 'publishNotice'>;
+  readonly deps: Omit<ConversationDeps, 'log' | 'publishTask' | 'publishBranch' | 'publishNotice' | 'publishReview'>;
   readonly request: Omit<TurnRequest, 'input' | 'model' | 'submission'>;
   readonly profile: SessionStartedFact['profile'];
   readonly appVersion: string;
@@ -222,6 +222,8 @@ export function createDirectSessionStore(options: DirectSessionStoreOptions): Di
             rotationBoundary: () => rollingLog.head(),
             publishTask: (event: import('./background-types.js').DirectBackgroundProgress) => publish(event),
             publishBranch: (event: import('./facade-types.js').DirectBranchTransient) => publish(event),
+            publishReview: (event: import('./approval/approval-arbiter.js').DirectApprovalReviewTransient) =>
+              publish(event),
             publishNotice: (notice: import('./memory.js').DirectAutomaticMemoryNotice) =>
               publish({ type: 'automatic_memory_notice', notice }),
           };

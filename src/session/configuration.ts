@@ -17,7 +17,10 @@ export type DirectConfigurationState = {
 };
 export type DirectConfigurationFact = DirectConfigurationState & { readonly type: 'configuration_changed' };
 export type DirectPreparedConfiguration = DirectConfigurationState & {
-  readonly deps: Omit<ConversationDeps, 'log' | 'context' | 'publishTask' | 'publishBranch' | 'publishNotice'>;
+  readonly deps: Omit<
+    ConversationDeps,
+    'log' | 'context' | 'publishTask' | 'publishBranch' | 'publishNotice' | 'publishReview'
+  >;
   readonly request: Omit<TurnRequest, 'input' | 'model' | 'submission'>;
   readonly capabilities: DirectContextCapabilities;
   /** Source-style one-shot transition text; native queues it for the next

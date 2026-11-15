@@ -26,6 +26,10 @@ export function canonicalCandidate(
   switch (event.type) {
     case 'codex_quota':
       return null;
+    case 'approval_review':
+      // Live-only review progress; the pinned agent-wire has no event for it. A request
+      // that needs a person still arrives as interaction_opened.
+      return null;
     case 'session_rotated':
       // The logical Session is unchanged, and pinned agent-wire has no rotation/reset event.
       // Direct SSE retains the actual accepted boundary; do not invent session_created or a

@@ -21,6 +21,7 @@ import type { DirectVerificationOperations } from '../session/goal-verification.
 import { DEFAULT_BUDGETS } from '../session/completion-verification/contracts.js';
 import type { DirectConversationRuntime, DirectRuntimeContext } from '../session/store.js';
 import { createToolSurface } from './tool-surface.js';
+import { sessionApprovalReview } from './lib/approval-model.js';
 import type { DirectHookRuntime } from './application-hooks.js';
 import { withSessionScope, createSessionScope, withEffortRejection, type SessionScope } from './application-models.js';
 import { createNestedAuthorizer } from './application-nested.js';
@@ -272,6 +273,7 @@ export function createDirectRuntimes(
         runtime,
         decideInteraction: _decide,
         reviewApproval: _review,
+        approvalRoute: _route,
         ...request
       } = surface;
       let tasks: DirectBackgroundTasks | undefined;
@@ -465,6 +467,7 @@ export function createDirectRuntimes(
           authorizeNested: createNestedAuthorizer(runtime.resolveNestedAuthority),
           rollover,
           configure,
+          approvalReview: sessionApprovalReview(() => records.get(context.id)),
         },
         request: {
           ...request,

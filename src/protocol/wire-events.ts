@@ -59,6 +59,8 @@ export type WireSnapshot = {
   /** Results without accepted call metadata are retained, never assigned an invented tool name. */
   readonly unmatchedToolResults?: readonly WireToolResult[];
   readonly pendingInteractions: readonly WireInteraction[];
+  /** Live only: approvals under review, not yet open; absent means none. */
+  readonly reviewingApprovals?: readonly import('./wire.js').WireReviewingApproval[];
   readonly pendingBudgets?: readonly WireBudgetRequest[];
   readonly turnResults?: readonly WireTurnResult[];
   readonly requestCosts?: readonly WireRequestCost[];
@@ -175,6 +177,11 @@ export type WireEventPayloads = {
   tool_progress: { readonly executionId: string; readonly chunk: string };
   tool_finished: WireToolResult;
   interaction_opened: { readonly interaction: WireInteraction };
+  /** Live only: the session started or settled reviewing an approval before anyone is asked. */
+  approval_review: {
+    readonly phase: 'started' | 'settled';
+    readonly approval: import('./wire.js').WireReviewingApproval;
+  };
   interaction_resolved: {
     readonly taskId?: string;
     readonly taskOwner?: WireTaskOwner;

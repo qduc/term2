@@ -231,7 +231,7 @@ it('disconnects a backpressured live reader and releases the native attachment',
 
 it('carries native orchestrator question lifecycle through HTTP SSE and the pinned browser parser', async () => {
   const { DirectTaskQuestions } = await import('../../../src/session/task-questions.js');
-  const { taskFactEvent } = await import('../../../src/protocol/tasks.js');
+  const { taskFactEvents } = await import('../../../src/protocol/tasks.js');
   const { directQuestionNotice } = await import('../../../src/session/notifications.js');
   const taskId = 'child' as DirectTaskId;
   const task = {
@@ -250,10 +250,12 @@ it('carries native orchestrator question lifecycle through HTTP SSE and the pinn
     (fact) => {
       if (fact.type !== 'task_question_opened' && fact.type !== 'task_question_closed')
         throw new Error('Unexpected non-question fact');
-      events.push({
-        ...taskFactEvent(fact, state as unknown as Parameters<typeof taskFactEvent>[1], events.length + 1),
-        occurredAt: new Date(fact.at).toISOString(),
-      });
+      for (const event of taskFactEvents(
+        fact,
+        state as unknown as Parameters<typeof taskFactEvents>[1],
+        events.length + 1,
+      ))
+        events.push({ ...event, occurredAt: new Date(fact.at).toISOString() });
     },
     () => 2,
   );

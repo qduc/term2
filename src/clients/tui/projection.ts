@@ -144,6 +144,7 @@ function interactionView(interaction: WireInteraction, callId: string | undefine
     input: interaction.input,
     summary: interaction.summary,
     ...(interaction.presentation ? { presentation: interaction.presentation } : {}),
+    ...(interaction.review ? { review: interaction.review } : {}),
     ...(callId ? { callId } : {}),
   };
 }
@@ -252,6 +253,7 @@ export function projectSnapshot(snapshot: WireSnapshot): TuiState {
     interactions: snapshot.pendingInteractions.map((interaction) =>
       interactionView(interaction, snapshot.tools.find((tool) => tool.executionId === interaction.executionId)?.callId),
     ),
+    ...(snapshot.reviewingApprovals?.length ? { reviewing: snapshot.reviewingApprovals } : {}),
     queue: snapshot.queue.map((entry) => {
       const skill = skillPresentation(submissions.get(entry.messageId));
       return {

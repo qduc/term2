@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { canonicalPath, isPathWithin } from '../../tools/workspace/path-identity.js';
 import { getActiveWorkspaceRoot } from '../../tools/workspace/active-workspace-root.js';
 import path from 'node:path';
 import type { ISettingsService } from '../../shared/service-interfaces.js';
@@ -17,52 +18,53 @@ export class SessionAccessState implements FileReadAccessPort, FileEditAccessPor
   readonly #dockerRoots = new Set<string>();
   readonly #dockerDenials = new Set<string>();
 
-  constructor(private readonly settings: ISettingsService, private readonly options: { allowEdit?: boolean } = {}) {}
+  constructor(
+    private readonly settings: ISettingsService,
+    private readonly options: { allowEdit?: boolean; isRemote?: () => boolean } = {},
+  ) {}
+
+  /** Grants are stored and matched under one identity (src/tools/workspace/path-identity.ts). */
+  #identity(target: string, baseDir: string): string {
+    return canonicalPath(target, baseDir, { remote: this.options.isRemote?.() ?? false });
+  }
 
   get isReadOnly(): boolean {
     return this.options.allowEdit === false;
   }
 
   recordCreatedFile(file: string, baseDir: string = getActiveWorkspaceRoot()): void {
-    this.#createdFiles.add(path.resolve(baseDir, file));
+    this.#createdFiles.add(this.#identity(file, baseDir));
   }
 
   isCreatedInSession(targetPath: string, baseDir: string = getActiveWorkspaceRoot()): boolean {
-    const target = path.resolve(baseDir, targetPath);
-    return this.#createdFiles.has(target);
+    return this.#createdFiles.has(this.#identity(targetPath, baseDir));
   }
 
   removeCreatedFile(file: string, baseDir: string = getActiveWorkspaceRoot()): void {
-    this.#createdFiles.delete(path.resolve(baseDir, file));
+    this.#createdFiles.delete(this.#identity(file, baseDir));
   }
 
-  allowReadFolder(folder: string): void {
-    this.#readFolders.add(folder);
+  allowReadFolder(folder: string, baseDir: string = getActiveWorkspaceRoot()): void {
+    this.#readFolders.add(this.#identity(folder, baseDir));
   }
 
   allowsRead(targetPath: string, baseDir: string = getActiveWorkspaceRoot()): boolean {
-    const target = path.resolve(baseDir, targetPath);
-    return [...this.#readFolders].some((folder) => {
-      const resolvedFolder = path.resolve(baseDir, folder);
-      return target === resolvedFolder || target.startsWith(`${resolvedFolder}${path.sep}`);
-    });
+    const target = this.#identity(targetPath, baseDir);
+    return [...this.#readFolders].some((folder) => isPathWithin(target, folder));
   }
 
   allowEditFile(file: string, baseDir: string = getActiveWorkspaceRoot()): void {
-    this.#editFiles.add(path.resolve(baseDir, file));
+    this.#editFiles.add(this.#identity(file, baseDir));
   }
 
   allowEditFolder(folder: string, baseDir: string = getActiveWorkspaceRoot()): void {
-    this.#editFolders.add(path.resolve(baseDir, folder));
+    this.#editFolders.add(this.#identity(folder, baseDir));
   }
 
   allowsEdit(targetPath: string, baseDir: string = getActiveWorkspaceRoot()): boolean {
     if (this.options.allowEdit === false) return false;
-    const target = path.resolve(baseDir, targetPath);
-    return (
-      this.#editFiles.has(target) ||
-      [...this.#editFolders].some((folder) => target === folder || target.startsWith(`${folder}${path.sep}`))
-    );
+    const target = this.#identity(targetPath, baseDir);
+    return this.#editFiles.has(target) || [...this.#editFolders].some((folder) => isPathWithin(target, folder));
   }
 
   requiresDockerApproval(command: string): boolean {

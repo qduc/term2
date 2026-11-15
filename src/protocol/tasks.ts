@@ -1,6 +1,7 @@
 /** Mapping of the committed M4 helper data, not a task runner or durable owner.
  * Session must accept/validate these facts and expose task state before production use.
  */
+import { reviewedInteraction } from './review-projection.js';
 import type {
   DirectBackgroundFact,
   DirectTaskInteraction,
@@ -113,8 +114,12 @@ export function publicTaskOwner(task: WireTask): WireTaskOwner {
 export function publicTaskInteraction(request: DirectTaskInteraction, task: WireTask) {
   return { ...publicInteraction(request), taskOwner: publicTaskOwner(task) };
 }
+/** An accepted task fact's events; a request the session's review approved is never published as open. */
+export function taskFactEvents(fact: DirectBackgroundFact, state: WireSnapshot, seq: number): readonly WireEvent[] {
+  return fact.type === 'task_interaction_opened' && fact.review?.approved ? [] : [taskFactEvent(fact, state, seq)];
+}
 /** One accepted task fact maps to one cursor-addressable event, never a root answer. */
-export function taskFactEvent(fact: DirectBackgroundFact, state: WireSnapshot, seq: number): WireEvent {
+function taskFactEvent(fact: DirectBackgroundFact, state: WireSnapshot, seq: number): WireEvent {
   const base = { sessionId: state.sessionId, seq };
   if (fact.type === 'task_started') {
     return {
@@ -142,7 +147,7 @@ export function taskFactEvent(fact: DirectBackgroundFact, state: WireSnapshot, s
       ...base,
       turnId: task.turnId ?? null,
       type: 'interaction_opened',
-      payload: { interaction: publicTaskInteraction(fact.request, task) },
+      payload: { interaction: reviewedInteraction(publicTaskInteraction(fact.request, task), fact.review)! },
     };
   }
   if (fact.type === 'task_interaction_closed') {

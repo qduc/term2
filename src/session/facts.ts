@@ -130,7 +130,13 @@ export type DirectTurnFact =
       readonly executionId: ExecutionId;
       readonly result: ToolResult;
     }
-  | { readonly type: 'interaction_opened'; readonly turnId: TurnId; readonly request: InteractionRequest }
+  | {
+      readonly type: 'interaction_opened';
+      readonly turnId: TurnId;
+      readonly request: InteractionRequest;
+      /** The arbiter's review before the request opened; `approved` means a policy close follows at once. */
+      readonly review?: import('../shared/contracts/approval-review.js').ApprovalReviewResult;
+    }
   | {
       readonly type: 'interaction_closed';
       readonly turnId: TurnId;

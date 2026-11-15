@@ -1,3 +1,4 @@
+import { conversationApprovalReviews } from './approval/approval-arbiter.js';
 import { bindTerm2ToolContext } from './tool-context.js';
 import { abortConversation } from './conversation-abort.js';
 import { ASK_USER_NO_ANSWER_RESULT, QuestionCancelNotice } from './conversation-question-cancel.js';
@@ -124,6 +125,12 @@ function conversation(
     destination: () => commands.destination(),
   });
   const tasks = background.tasks;
+  const reviews = conversationApprovalReviews(
+    () => generation.runtime.approvalReview,
+    () => replay(facts, { recoverQueue: false, recoverActiveTurn: false, openedAt: journal.openedAt }).history,
+    (event) => deps.publishReview?.(event),
+  );
+  tasks.useApprovalReviews(reviews);
   const configureTaskCheckIn = background.configureTaskCheckIn;
   const contextCommit = (generation: number, next: readonly DirectContextFact[], turnId?: TurnId): boolean => {
     if (
@@ -319,6 +326,7 @@ function conversation(
         requestCost: (record) => runBudgets.costFact(turnId, record),
         capabilities: capabilities!,
         publishNotice: deps.publishNotice,
+        reviews,
         released: () => {
           if (active?.turnId === turnId) active = null;
         },
@@ -503,6 +511,13 @@ function conversation(
       if (root?.kind === 'accepted') questionCancel.answered(decision);
       if (root && root.kind !== 'stale') return root;
       return tasks!.answer(requestId, decision, provenance);
+    },
+    takeOverReview(requestId) {
+      if (closed || journal.failure)
+        return journal.failure ? { kind: 'failed', error: journal.failure } : { kind: 'stale' };
+      const root = active?.takeOverReview?.(requestId);
+      if (root && root.kind !== 'stale') return root;
+      return tasks!.takeOverReview(requestId);
     },
     async close() {
       closed = true;

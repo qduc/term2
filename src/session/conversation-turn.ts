@@ -20,6 +20,8 @@ import { directPreviewConfiguration } from './preview.js';
 import { planDirectTiming } from './time-gap.js';
 import { effortFallbackNotice } from './effort-timeline.js';
 import { isEffortUpdateItem } from '../model/effort-updates.js';
+import { REVIEW_STOPPED, type ApprovalReviews } from './approval/approval-arbiter.js';
+import type { ApprovalReviewResult } from '../shared/contracts/approval-review.js';
 
 /** Accept raw admission and memory facts before engine construction; timing is model-only. */
 export function admitConversationTurn(
@@ -85,6 +87,8 @@ export function ownConversationTurn(
     readonly requestCost: (record: ModelRequestCost) => DirectRequestCostFact;
     readonly capabilities: ReturnType<typeof bindDirectCapabilities>;
     readonly publishNotice: ConversationDeps['publishNotice'];
+    /** Reviews a request before it opens (src/session/approval/approval-arbiter.ts). */
+    readonly reviews?: ApprovalReviews;
     released(): void;
   },
 ): OwnedConversationTurn {
@@ -99,7 +103,9 @@ export function ownConversationTurn(
   let streamFailure: ModelError | null = null;
 
   const closeInteractions = (): void => {
-    const closures: Fact[] = [...requests.keys()].map((requestId) => ({
+    // A request still under review never opened, so it has nothing to close.
+    const opened = [...requests.keys()].filter((requestId) => options.reviews?.stop(requestId) === undefined);
+    const closures: Fact[] = opened.map((requestId) => ({
       type: 'interaction_closed',
       turnId,
       requestId,
@@ -134,6 +140,47 @@ export function ownConversationTurn(
     }
     terminal = journal.failure ? { kind: 'failed', error: journal.failure } : outcome;
   };
+  const openFact = (request: InteractionRequest, review: ApprovalReviewResult): Fact => ({
+    type: 'interaction_opened',
+    turnId,
+    request,
+    review,
+  });
+  /** Open a reviewed request: a policy close with it when approved, else wait for a person. */
+  function settleReview(request: InteractionRequest, review: ApprovalReviewResult): void {
+    if (released || cancelled || terminal || !requests.has(request.requestId)) return;
+    const decision: InteractionDecision | undefined = review.approved
+      ? review.grant
+        ? { kind: 'allow', grant: review.grant }
+        : { kind: 'allow' }
+      : undefined;
+    const automatic = decision && validDecision(request, decision) ? decision : undefined;
+    const facts: Fact[] = [
+      openFact(request, automatic ? review : ({ ...review, approved: false } as ApprovalReviewResult)),
+    ];
+    if (automatic)
+      facts.push({
+        type: 'interaction_closed',
+        turnId,
+        requestId: request.requestId,
+        resolution: automatic,
+        resolutionSource: 'policy',
+        automaticApproval: true,
+      });
+    let committed = false;
+    try {
+      committed = journal.commit(facts);
+    } catch {
+      committed = false;
+    }
+    if (!committed) {
+      cancel();
+      return;
+    }
+    if (!automatic) return;
+    requests.delete(request.requestId);
+    handle.answer(request.requestId, automatic);
+  }
   const consume = ({ token, event }: AcceptedTurnEvent, draining: boolean): TurnEvent | null => {
     if (event.type === 'turn_ended') {
       settle(event.result);
@@ -151,6 +198,15 @@ export function ownConversationTurn(
       event.type === 'request_cost' ||
       (event.type === 'item' && event.item.type === 'tool_result');
     if ((cancelled || draining) && !cleanup) return null;
+    // A reviewable request stays unopened until its review settles or a person steps in.
+    if (event.type === 'interaction_required' && !cancelled && !draining && options.reviews) {
+      requests.set(event.request.requestId, event.request);
+      if (options.reviews.begin(event.request, { settle: settleReview })) {
+        handle.accept(token);
+        return null;
+      }
+      requests.delete(event.request.requestId);
+    }
     // Cost is a fact, never a client event: its views come from the accepted fact.
     const fact = event.type === 'request_cost' ? options.requestCost(event.record) : factFor(turnId, event);
     if (fact && !journal.commit([fact])) {
@@ -276,8 +332,14 @@ export function ownConversationTurn(
       if (released || cancelled || terminal || !request) return { kind: 'stale' };
       if (!validDecision(request, decision))
         return { kind: 'failed', error: modelError('invalid interaction decision') };
+      // Only the arbiter records an automatic approval; a client cannot claim one.
+      if (provenance.automaticApproval === true)
+        return { kind: 'failed', error: modelError('automatic approval is recorded by the session only') };
+      // A person answered while the review ran: it opens and closes with their decision.
+      const underReview = options.reviews?.stop(requestId) !== undefined;
       if (
         !journal.commit([
+          ...(underReview ? [openFact(request, REVIEW_STOPPED)] : []),
           {
             type: 'interaction_closed',
             turnId,
@@ -296,6 +358,16 @@ export function ownConversationTurn(
       // body (or unanswered question result) must settle first. The engine
       // suppresses later bodies/model steps while retaining cleanup ownership.
       handle.answer(requestId, decision);
+      return { kind: 'accepted' };
+    },
+    takeOverReview(requestId): AnswerResult {
+      const request = requests.get(requestId);
+      if (released || cancelled || terminal || !request || options.reviews?.stop(requestId) === undefined)
+        return { kind: 'stale' };
+      if (!journal.commit([openFact(request, REVIEW_STOPPED)])) {
+        cancel();
+        return { kind: 'failed', error: journal.failure! };
+      }
       return { kind: 'accepted' };
     },
   };

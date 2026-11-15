@@ -40,7 +40,8 @@ references point to tag `unit-suite-baseline`.
 
 **GitHub-first workflow:** Work in isolated branches/worktrees and deliver changes
 through PRs. Do not merge locally into `main`, push directly to it, or merge a PR
-unless explicitly asked. Preserve the shared checkout and other agents’ work.
+unless explicitly asked. Commit completed work without waiting for the user to ask.
+Preserve the shared checkout and other agents’ work.
 
 ## Parallel work isolation
 

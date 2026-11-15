@@ -88,6 +88,14 @@ or obtain human agreement to defer them. Independently verify high-risk fixes.
 - `approval.remote-stays-lexical`: `canonicalPath` with `remote: true` equals the
   lexical path for generated segment lists, so SSH paths never consult this
   host's filesystem.
+- `approval.decision-table`: generated request shapes (tool, question,
+  explicit-user, denied-read, Docker, offered grants), modes before and after
+  review, reviewer verdicts (approve/deny, risk, authorization, confidence,
+  error, missing, throw) and aborts, through `describeApproval`,
+  `routeApproval` and `decideApproval`. A hard gate never routes to review; no
+  review happens outside `auto`/`advisory`; an approval only follows a usable
+  verdict that clears `acceptVerdict` in `auto` with the mode unchanged and no
+  abort, and answers with the request's one-time grant when it offers one.
 - `approval.expand-home`: `expandHome` expands `~` and `~/…` only; `~user/…` stays
   literal.
 
@@ -98,7 +106,7 @@ were retired with their unused pre-rewrite implementations in #197.
 They did not exercise the live Session/engine path. Historical pilot evidence is
 retained in the plans below.
 
-Not covered: parallel command interleavings, persistence failures, approval routing,
+Not covered: parallel command interleavings, persistence failures, live approval delivery,
 steering, real provider transports, multi-call chat envelopes, full journal/crash
 recovery, reused-call reopening policy, arbitrary malformed inputs, compaction
 summary quality, full continuity selection, or disputed opaque compatibility.
@@ -112,6 +120,6 @@ are tracked in [PLAN.md](PLAN.md).
 
 The ledger rollout evidence and limits are in [LEDGER-PLAN.md](LEDGER-PLAN.md).
 The remaining hotspot rollout is tracked in [HOTSPOTS-PLAN.md](HOTSPOTS-PLAN.md).
-The default now samples fourteen properties (14,000 cases total); `--target history`
+The default now samples fifteen properties (15,000 cases total); `--target history`
 samples the three history properties. A recorded replay can report fewer cases
 because it continues from a shrunk path, not a fresh full seed run.

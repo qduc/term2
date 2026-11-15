@@ -5,6 +5,12 @@ import path from 'node:path';
 import fc from 'fast-check';
 import { canonicalPath, expandHome, lexicalPath } from '../../src/tools/path-identity.ts';
 import { SessionAccessState } from '../../src/session/session/session-access-state.ts';
+import {
+  acceptVerdict,
+  decideApproval,
+  describeApproval,
+  routeApproval,
+} from '../../src/session/approval/approval-route.ts';
 
 // Contract (src/tools/path-identity.ts, SessionAccessState): a session grant is
 // stored and matched under one identity, so any spelling of a granted folder
@@ -87,6 +93,76 @@ export const approvalProperties = [
         assert.equal(expandHome('~', home), home);
         assert.equal(expandHome(`~/${tail}`, home), path.join(home, tail));
         assert.equal(expandHome(`~${user}/${tail}`, home), `~${user}/${tail}`, '~user must stay literal');
+      },
+    ),
+  },
+  {
+    name: 'approval.decision-table',
+    property: fc.asyncProperty(
+      fc.record({
+        kind: fc.constantFrom('approval', 'question'),
+        toolName: fc.constantFrom('shell', 'bash', 'read_file', 'apply_patch', 'sandbox_network_access', 'propose_goal', 'mcp__x'),
+        explicitUser: fc.boolean(),
+        deniedRead: fc.boolean(),
+        docker: fc.boolean(),
+        grants: fc.subarray(['unsandboxed-once', 'network-allow-once', 'allow-project', 'allow-folder-session']),
+      }),
+      fc.constantFrom('off', 'advisory', 'auto', 'always', undefined),
+      fc.constantFrom('off', 'advisory', 'auto', 'always', undefined),
+      fc.oneof(
+        fc.constant('throws'),
+        fc.constant('none'),
+        fc.record({
+          approved: fc.boolean(),
+          reasoning: fc.string({ maxLength: 8 }),
+          model: fc.constant('m'),
+          source: fc.constantFrom('llm', 'system'),
+          riskLevel: fc.constantFrom('low', 'medium', 'high'),
+          authorization: fc.constantFrom('explicit', 'implied', 'weak', 'unknown'),
+          confidence: fc.constantFrom('high', 'low'),
+          isError: fc.boolean(),
+        }),
+      ),
+      fc.boolean(),
+      async (shape, mode, modeAfter, verdict, abort) => {
+        const request = {
+          kind: shape.kind,
+          toolName: shape.toolName,
+          input: { command: 'x' },
+          grants: shape.grants,
+          presentation: {
+            ...(shape.explicitUser ? { requiresExplicitUser: true } : {}),
+            ...(shape.deniedRead ? { deniedRead: { path: '/x' } } : {}),
+          },
+        };
+        const profile = describeApproval(request, { isDockerHostControl: () => shape.docker });
+        const route = routeApproval(mode, profile);
+        if (profile.hardGate) assert.equal(route, 'ask_user', 'a hard gate was routed to review');
+        if (mode !== 'auto' && mode !== 'advisory') assert.equal(route, 'ask_user', 'reviewed outside auto/advisory');
+        const controller = new AbortController();
+        let calls = 0;
+        const result = await decideApproval({
+          request,
+          profile,
+          signal: controller.signal,
+          currentMode: () => (calls === 0 ? mode : modeAfter),
+          review: async () => {
+            calls += 1;
+            if (abort) controller.abort();
+            if (verdict === 'throws') throw new Error('model down');
+            return verdict === 'none' ? undefined : verdict;
+          },
+        });
+        if (route !== 'review') assert.equal(calls, 0, 'reviewed a request routed to a person');
+        if (!result.approved) return;
+        assert.equal(route, 'review');
+        assert.equal(mode, 'auto', 'approved outside auto mode');
+        assert.equal(modeAfter, mode, 'approved although the mode changed during review');
+        assert.equal(abort, false, 'approved after abort');
+        assert.ok(typeof verdict === 'object' && !verdict.isError, 'approved without a usable verdict');
+        assert.ok(acceptVerdict(verdict, mode), 'approved below the one threshold');
+        const oneTime = ['unsandboxed-once', 'network-allow-once'].find((g) => shape.grants.includes(g));
+        assert.equal(result.grant, oneTime, 'auto-answer grant differs from the request\'s one-time grant');
       },
     ),
   },

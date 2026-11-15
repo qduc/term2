@@ -8,6 +8,7 @@ import type {
   WireCommand,
   WireEvent,
   WireInteraction,
+  WireGrant,
 } from '../../protocol/wire.js';
 import { reduceWireEvent } from '../../protocol/reducer.js';
 import type { AcpLogger, EmitUpdate, PromptExecution, PromptOutcome } from './contract.js';
@@ -354,10 +355,11 @@ export class AcpAttachment {
     const { sessionId } = this.connection;
     this.openRequest(interaction.requestId, interaction.turnId, async (signal) => {
       const { requestId } = interaction;
+      // Eligibility, threshold and the answer's grant come from the shared decision table.
       const review =
-        interaction.kind !== 'approval' || interaction.toolName === 'sandbox_network_access'
+        interaction.kind !== 'approval'
           ? undefined
-          : interaction.supportedGrants.includes('unsandboxed-once') || !this.reviewApproval
+          : !this.reviewApproval
           ? ({ kind: 'not_reviewed', approved: false } as const)
           : await this.reviewApproval(requestId, signal).catch((error: unknown) => {
               if (!signal.aborted)
@@ -369,7 +371,7 @@ export class AcpAttachment {
         return {
           type: 'answer',
           requestId,
-          decision: { kind: 'allow' },
+          decision: review.grant ? { kind: 'grant', grant: review.grant as WireGrant } : { kind: 'allow' },
           provenance: { source: 'policy', automaticApproval: true },
         };
       }

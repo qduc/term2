@@ -1,9 +1,7 @@
 import type { ApprovalReviewResult } from '../../shared/contracts/approval-review.js';
 import type { SessionAccessState } from '../../session/session/session-access-state.js';
-import {
-  isAutoApprovableTool,
-  ShellAutoApprovalResolver,
-} from '../../session/approval/shell-auto-approval-resolver.js';
+import { ShellAutoApprovalResolver } from '../../session/approval/shell-auto-approval-resolver.js';
+import { decideApproval, describeApproval } from '../../session/approval/approval-route.js';
 import type { ILoggingService, ISessionContextService, ISettingsService } from '../../shared/service-interfaces.js';
 import type { ProviderInputItem } from '../../shared/contracts/provider-input.js';
 /** Tool-free model bridge used by the application's approval evaluators. */
@@ -71,7 +69,11 @@ export function createApprovalModelClient(
   };
 }
 
-/** Only an authorized, low-risk review can replace a foreground permission exchange. */
+/**
+ * Review an open approval through the shared decision table
+ * (src/session/approval/approval-route.ts). Every surface uses this one
+ * function; it never branches on the surface or the tool name.
+ */
 export function createAssistedApprovalReview({
   agentClient,
   settings,
@@ -79,7 +81,6 @@ export function createAssistedApprovalReview({
   sessionContext,
   sessionAccess,
   withWorkspace,
-  unsandboxedOnly = false,
 }: {
   agentClient: ShellAutoApprovalAgentClient;
   settings: ISettingsService;
@@ -87,65 +88,30 @@ export function createAssistedApprovalReview({
   sessionContext: ISessionContextService;
   sessionAccess: SessionAccessState;
   withWorkspace: <T>(operation: () => T) => T;
-  unsandboxedOnly?: boolean;
 }): NonNullable<AgentSurface['reviewApproval']> {
   return async (request, history, signal) => {
-    const unsandboxed =
-      (request.toolName === 'shell' || request.toolName === 'bash') &&
-      request.input !== null &&
-      typeof request.input === 'object' &&
-      'sandbox' in request.input &&
-      request.input.sandbox === 'unsandboxed';
-    if (
-      signal.aborted ||
-      (settings.get('shell.autoApproveMode') !== 'auto' &&
-        (!unsandboxedOnly || settings.get('shell.autoApproveMode') !== 'advisory')) ||
-      request.kind !== 'approval' ||
-      (request.risk === 'high' && !unsandboxedOnly) ||
-      !isAutoApprovableTool(request.toolName) ||
-      request.presentation?.requiresExplicitUser === true ||
-      request.presentation?.deniedRead ||
-      (!unsandboxedOnly && isExplicitShellRequest(request.toolName, request.input)) ||
-      isDockerRequest(request.toolName, request.input, sessionAccess)
-    )
-      return { kind: 'not_reviewed', approved: false };
-    const review = new ShellAutoApprovalResolver({
-      record: { getHistory: () => approvalHistory(history) },
-      agentClient: { chat: (message, options) => agentClient.chat(message, { ...options, signal }) },
-      logger,
-      settingsService: settings,
-      sessionContextService: sessionContext,
-      sessionAccess,
+    const profile = describeApproval(request, {
+      isDockerHostControl: (toolName, input) => isDockerRequest(toolName, input, sessionAccess),
     });
-    const interruption = { name: request.toolName, arguments: request.input, callId: request.requestId };
-    const advisory = await withWorkspace(() =>
-      review.resolveAdvisoryForInterruption({ interruption, siblings: [interruption] }),
-    );
-    if (!advisory || advisory.isError) return { kind: 'unavailable', approved: false };
-    return {
-      kind: 'reviewed',
-      advisory,
-      approved:
-        !signal.aborted &&
-        (!unsandboxedOnly ||
-          request.toolName === 'read_file' ||
-          request.toolName === 'sandbox_network_access' ||
-          ((request.toolName === 'shell' || request.toolName === 'bash') &&
-            (unsandboxed || settings.get('sandbox.enabled') === false))) &&
-        (unsandboxedOnly || advisory.riskLevel === 'low') &&
-        review.shouldAutoApprove(advisory),
-    };
+    return decideApproval({
+      request,
+      profile,
+      signal,
+      currentMode: () => settings.get('shell.autoApproveMode'),
+      review: () => {
+        const resolver = new ShellAutoApprovalResolver({
+          record: { getHistory: () => approvalHistory(history) },
+          agentClient: { chat: (message, options) => agentClient.chat(message, { ...options, signal }) },
+          logger,
+          settingsService: settings,
+          sessionContextService: sessionContext,
+          sessionAccess,
+        });
+        const interruption = { name: request.toolName, arguments: request.input, callId: request.requestId };
+        return withWorkspace(() => resolver.resolveAdvisoryForInterruption({ interruption, siblings: [interruption] }));
+      },
+    });
   };
-}
-
-function isExplicitShellRequest(name: string, input: unknown): boolean {
-  return (
-    (name === 'shell' || name === 'bash') &&
-    input !== null &&
-    typeof input === 'object' &&
-    'sandbox' in input &&
-    input.sandbox === 'unsandboxed'
-  );
 }
 
 export function isDockerRequest(name: string, input: unknown, access: SessionAccessState): boolean {

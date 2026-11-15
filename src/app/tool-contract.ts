@@ -60,8 +60,6 @@ export type ToolSurfaceOptions = {
   readonly allowUnsandboxed?: boolean;
   /** Require a distinct one-time grant for foreground shell escape. */
   readonly shellEscapeApproval?: boolean;
-  /** Permit the local TUI to review root unsandboxed requests in auto mode. */
-  readonly tuiUnsandboxedReview?: boolean;
   readonly discordSend?: import('../clients/discord/discord-outbound.js').DiscordSend;
   readonly isDiscordInputEnabled?: () => boolean;
 };
@@ -98,7 +96,7 @@ export type AgentSurface = {
     readonly maxParallelToolCalls: number;
     dispose?(): void | Promise<void>;
   };
-  /** Review eligible ordinary foreground approvals using the accepted session history. */
+  /** Review an open approval through the shared decision table (session/approval/approval-route.ts). */
   reviewApproval?(
     request: InteractionRequest,
     history: readonly Item[],

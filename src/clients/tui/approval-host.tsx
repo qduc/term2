@@ -259,7 +259,7 @@ function Host({
             const receipt = await connection.send({
               type: 'answer',
               requestId: interaction.id,
-              decision: isNetworkApproval ? { kind: 'grant', grant: 'network-allow-once' } : { kind: 'allow' },
+              decision: result.grant ? { kind: 'grant', grant: result.grant as WireGrant } : { kind: 'allow' },
               provenance: { source: 'policy', automaticApproval: true },
             });
             if (!receipt.ok) throw new WireCommandFailure(receipt.code, receipt.message);
@@ -286,7 +286,7 @@ function Host({
       controller.abort();
       if (!reviewCancelled.current && !completedReviews.has(interaction.id)) reviewedRequests.delete(interaction.id);
     };
-  }, [connection, interaction.id, isNetworkApproval, reviewApproval, reviewEligible, reviewed, reviewResults]);
+  }, [connection, interaction.id, reviewApproval, reviewEligible, reviewed, reviewResults]);
   const fail = (error: unknown) => setNotice(error instanceof Error ? error.message : String(error));
 
   const send = (decision: WireDecision) => {

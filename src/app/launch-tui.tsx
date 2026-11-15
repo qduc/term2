@@ -196,7 +196,6 @@ async function runTui(
     surface: (sessionId) => ({
       interactive: true,
       sessionBrowser: true,
-      tuiUnsandboxedReview: true,
       ...bridge.outbound(sessionId),
       ...target.surface,
       ...(mcp ? { mcp } : {}),

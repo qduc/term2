@@ -4,7 +4,7 @@ This describes term2's source tree, `src/`, which began as the term2-next
 rewrite. Its production entry is `src/app/cli.ts`, built by `pnpm build` to
 `dist/src/app/cli.js` and started by the package's `dist/cli.js` (#86). Term2 application code lives in
 `src/`; the reusable turn loop and contracts live in `@qduc/agent-core`, developed in
-[qduc/agent-runtime](https://github.com/qduc/agent-runtime) and vendored here (paths below written
+[qduc/agent-runtime](https://github.com/qduc/agent-runtime) (`packages/core/`) and consumed here as an exact-pinned npm prerelease (paths below written
 `agent-runtime/packages/core/src/...` are in that repository). Legacy code the CLI no longer reached was deleted (#88) and the rest of
 the old `source/` tree was moved into these layers (#87). Tests live in the
 root `tests/` folder, laid out by the same layer names.
@@ -15,7 +15,7 @@ Each folder in `src/` is one layer, named after its job. A layer may only use
 the layers listed after its name, so dependencies always point down.
 
 Every file under `src/` is reached from `src/app/cli.ts`; the reachability
-check below enforces it, and its allowlist names the five exceptions with
+check below enforces it, and its allowlist names the 12 exceptions with
 reasons. `session/adopted/` is the one adopted folder left: it keeps the old
 session-fact validator for the offline v3 conversation migration and is not
 reached from the CLI.
@@ -24,7 +24,7 @@ reached from the CLI.
 | ----------- | ------------------------------------------------------------- | ------------------------------ |
 | `clients/`  | Render the protocol (TUI, headless, ACP, control, Discord)    | host, protocol                 |
 | `host/`     | Transport and access: in-process host, HTTP server, auth      | protocol, session              |
-| `protocol/` | The one public event and command format, one projection       | session and everything below   |
+| `protocol/` | The one public event and command format, one projection       | delegation and everything below |
 | `delegation/` | Child agents, roles/pools, runners and workflow execution   | session and everything below   |
 | `session/`  | One durable conversation and its host policy: log, replay, branches, permissions, completion and billing | engine, model, tools |
 | `engine/`   | Compatibility types and continuity/history helpers for the portable harness | portable package contracts |
@@ -38,11 +38,11 @@ Both `config/` (pure schemas and profile definitions) and `shared/` (pure helper
 
 ### Known exceptions
 
-The scheduled architecture cleanup (#181) reduced allowlisted crossing edges from 116 down to 7, then #197 removed two obsolete runtime edges. The 5 remaining edges correspond to
-[Phase 3 of the architecture cleanup plan](../plans/engineering/architecture-cleanup.md#phase-3-the-seven-real-design-problems-ports-when-touched),
-addressed pay-as-you-go when those components are next touched. Each edge and its reason, which names its
-Phase 3 row and what removes it, live in `scripts/layer-allowlist.json` rather than here, so the reason sits
-next to the entry it justifies. `node scripts/gate-exceptions.mjs layer-direction` prints them.
+The scheduled architecture cleanup (#181) reduced allowlisted crossing edges from 116 down to 7, #197 removed two obsolete runtime edges, `1b618d5bc` removed the obsolete `Banner.tsx -> engine/agent-runtime/model-resolver.ts` edge, and #299 removed the three `clients/tui` edges (rows 3.1 and 3.2). The one remaining edge is
+[Phase 3 of the architecture cleanup plan](../plans/engineering/architecture-cleanup.md#phase-3-the-seven-real-design-problems-ports-when-touched)
+row 3.5, addressed pay-as-you-go when those components are next touched. Its reason, which names the
+Phase 3 row and what removes it, lives in `scripts/layer-allowlist.json` rather than here, so the reason sits
+next to the entry it justifies. `node scripts/gate-exceptions.mjs layer-direction` prints it.
 `check-layers.mjs` fails on any unlisted edge and prints listed edges that no longer exist.
 
 The portable harness owns turn mechanics and imports only its own contracts,
@@ -73,7 +73,7 @@ See [the delegation public interface](../../src/delegation/README.md).
   answer it, and the session alone writes the pending interaction to the log.
   A process that dies while a turn waits reopens that turn as interrupted;
   nothing resumes on its own.
-- **Names are jobs.** No layer or file under `src/` is called service, adapter or orchestrator.
+- **Names are jobs.** No new layer or file under `src/` is called service, adapter or orchestrator (14 pre-#87 paths remain grandfathered under `jobNameExceptions` in `scripts/rule-baseline.json`).
 
 ## Rule checks
 
@@ -91,7 +91,7 @@ loaded 7-core box.
 | Dependencies point down the layer table | `check-layers.mjs` | every commit | 4.1 s |
 | Only `session/` reads the log (`app/`, `clients/` ask the live session) | `check-layers.mjs` (log-reader guard) | every commit | in the above |
 | One projection: wire events are built only in `protocol/` | `check-rules.mjs` (one recorded exception: deferred web server) | every commit | 2.4 s |
-| Names are jobs (no service/adapter/orchestrator file or folder) | `check-rules.mjs` | every commit | in the above |
+| Names are jobs (no service/adapter/orchestrator file or folder; grandfathered exceptions in `rule-baseline.json`) | `check-rules.mjs` | every commit | in the above |
 | No new unused runtime exports (recorded in `rule-baseline.json`, reported by `scripts/arch-report.mjs`) | `check-rules.mjs` | every commit | in the above |
 | File basenames are unique under `src/` unless recorded with a reason | `check-rules.mjs` | every commit | in the above |
 | Every runtime file is reached by value edges from `app/cli.ts` | `check-reachability.mjs` | every commit | 1.2 s |
@@ -100,7 +100,7 @@ loaded 7-core box.
 | Root directory contains only allowlisted files | `check-root.mjs` | every commit | 0.05 s |
 | A message's path stays short and runs through the production direct files | `bench/hops.mts` | integration lane | 5.8 s |
 | The engine waits instead of calling up | layer table above (no upward import); `check-engine-callbacks.mjs` for the callbacks that write facts (audit F1): every `TurnDeps`/`TurnBudget` callback that reaches the session writer must be recorded in `rule-baseline.json` (`engineCallbackWrites`) with a reason. It follows calls it can resolve to a body, interface members into the object literals and classes that implement them, and port signatures named `commit*`/`accept*`/`append`; a write reached only through a value the checker cannot resolve is not seen | every commit | 10 s |
-| One log: no second state to keep in sync | only the log-reader half is checked; the duplicate-reducer half (audit H1) is **not** | every commit | - |
+| One log: no second state to keep in sync | `check-layers.mjs` (`log-readers`: scans `app/` and `clients/` for calls matching seven log-reader function names); `check-rules.mjs` (`one-fold`: outside `session/fold-fact.ts`, `session/queue-replay.ts` and `session/queue.ts`, rejects import/export specifiers naming any of the five leaf reducers `reduceDirectCommandReceipts`, `reduceDirectNotifications`, `reduceDirectContext`, `reduceDirectQueue`, or `reduceDirectBackground`, plus default, namespace, `export *`, namespace re-export, or relative-literal dynamic `import()` of `command-receipts`, `notifications`, `context`, `queue-state`, `queue`, or `background-replay`); still does **not** check `host/`–`shared/` or direct file reads for log parsing, how those three allowed files combine reducers, extra calls to `foldFact`/replay, or duplicate state and inline reducers written without importing those names or relative basenames | every commit | in `check-layers.mjs` + `check-rules.mjs` |
 | Speed stays within 1.2x of legacy on a large session | queue job, run on each candidate at load under 9 | per candidate | minutes |
 | A fresh reader can explain how a message travels from this README and the `index.ts` files | queue job `measure-fresh-reader-review`, each milestone | per milestone | minutes |
 
@@ -331,11 +331,11 @@ behaves as it does today.
   `/sandbox` command and the tool surface's `allowUnsandboxed` posture
   (`app/tool-surface.ts`) remain, and `term2 serve` and `term2 acp` warn when
   the sandbox is unavailable. A real return needs shell policy in
-  `src/shared/utils/shell/sandbox/`, approval rules and the sandboxed code-host
+  `src/tools/shell/sandbox/`, approval rules and the sandboxed code-host
   lifecycle together. Shared settings remain.
 - **Web server/browser and canonical v2 wire — deferred, not dropped.** Retain
   candidate server/browser code, branches and the vendored wire artifact; gates
-  remain closed (`AGENT_WIRE_V2_RUNTIME_AVAILABLE` is `false`). Web is the
+  are open (`AGENT_WIRE_V2_RUNTIME_AVAILABLE` is `true` in `src/host/server-wire-v2.ts`), while HTTP/browser parity work remains deferred. Web is the
   milestone after kept-core M6 and before the default flip, so there must be no
   gap where neither CLI serves it. The existing `host/server*` and
   browser/protocol seams still need the canonical gate,
@@ -347,9 +347,8 @@ behaves as it does today.
 
 The traced direct control/Discord runtime uses the in-process host and direct
 protocol plus the `clients/control-socket/` and `clients/discord/` modules,
-not the HTTP server or ACP backend. The CLI
-still statically imports `src/host/gateway/serve-args.ts` and
-`src/clients/acp-v2/serve-args.ts`; preserve those modules while the imports exist.
+not the HTTP server or ACP backend. CLI argument parsing (`src/app/cli-args.ts`) still statically imports
+`src/host/gateway/serve-args.ts` and `src/app/serve-args.ts`; preserve those modules while the imports exist.
 No live SSH fixture was identified in that trace.
 
 ## Build receipts

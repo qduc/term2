@@ -1,5 +1,7 @@
 /** One headless run as a client of the direct host. `cli.ts` owns signals, through the returned handle. */
 import fs from 'node:fs';
+import process from 'node:process';
+import { probeTerminal } from '../clients/terminal-probe.js';
 import { openDirectApplicationMcp } from './application-mcp.js';
 import type { DirectMcp } from './mcp.js';
 import { runDirectHeadless } from '../clients/headless/index.js';
@@ -18,6 +20,14 @@ export function runDirectHeadlessOnHost(request: DirectHeadlessRequest): DirectH
     let target: DirectSessionTarget | null = null;
     let mcp: DirectMcp | undefined;
     let profileMetadata: Readonly<Record<string, unknown>> = {};
+    // Only a run attached to a terminal on both ends is probed (e.g. inside hc);
+    // pipes and redirects answer "no" at once. Sent first so it overlaps startup.
+    const programStatus = probeTerminal({
+      stdin: process.stdin,
+      stdout: process.stdout,
+      background: false,
+      programStatus: true,
+    }).then((result) => result.programStatus);
     try {
       const opened = await openDirectSessionTarget(request.ssh, request.lite === true, stop.signal);
       target = opened;
@@ -40,7 +50,7 @@ export function runDirectHeadlessOnHost(request: DirectHeadlessRequest): DirectH
         surface: () => ({ autoApprove, interactive: false, ...opened.surface, ...(mcp ? { mcp } : {}) }),
         authority: opened.authority,
         ...(opened.binding ? { sessionBinding: opened.binding } : {}),
-        hooks: { root: fs.realpathSync(process.cwd()), mode: 'non-interactive' },
+        hooks: { root: fs.realpathSync(process.cwd()), mode: 'non-interactive', programStatus },
         onSurface(_surface, profile) {
           profileMetadata = profile;
         },

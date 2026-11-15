@@ -1,17 +1,18 @@
 /**
  * What the interactive launcher asks of the terminal before the TUI loads. Nothing
  * else reads stdin until Ink renders, so these run first and in this order: the
- * home-directory confirmation (a line prompt), then the background colour query,
- * whose reply is read just before rendering.
+ * home-directory confirmation (a line prompt), then the terminal probe (background
+ * colour and OSC 7501 program-status support), whose replies are read just before
+ * rendering and when status is first reported.
  *
- * Sending the query before the TUI's modules initialize lets its round trip, or
+ * Sending the probe before the TUI's modules initialize lets its round trip, or
  * the timeout of a terminal that never answers, overlap that work and the rest of
  * startup instead of following it.
  */
 import { homedir } from 'node:os';
 import { stderr, stdin, stdout } from 'node:process';
 import { createInterface } from 'node:readline/promises';
-import { detectTerminalBackground } from '../clients/tui/presentation/theme/detect-terminal-background.js';
+import { probeTerminal } from '../clients/terminal-probe.js';
 import { shouldDetectBackground, type BackgroundMode } from '../clients/tui/presentation/theme/resolve-theme.js';
 import {
   confirmHomeDirectoryStart,
@@ -24,6 +25,8 @@ type InteractiveRequest = Extract<DirectLaunchRequest, { readonly kind: 'interac
 
 /** The terminal's answer to the background query, still arriving. */
 export type TerminalBackground = Promise<BackgroundMode | undefined>;
+/** Whether the terminal speaks OSC 7501 program status, still arriving. */
+export type TerminalProgramStatus = Promise<boolean>;
 
 async function confirmHomeStart({ lite, resumeId, ssh }: InteractiveRequest): Promise<boolean> {
   const isNonLiteStart = !lite && resumeId === undefined && !ssh;
@@ -38,14 +41,19 @@ async function confirmHomeStart({ lite, resumeId, ssh }: InteractiveRequest): Pr
   }
 }
 
-/** Confirms the start and sends the background query; `undefined` when the user declined to start. */
+/** Confirms the start and sends the terminal probe; `undefined` when the user declined to start. */
 export async function prepareInteractiveTerminal(
   request: InteractiveRequest,
-): Promise<{ readonly background: TerminalBackground } | undefined> {
+): Promise<{ readonly background: TerminalBackground; readonly programStatus: TerminalProgramStatus } | undefined> {
   if (!(await confirmHomeStart(request))) return undefined;
+  const probe = probeTerminal({
+    stdin,
+    stdout,
+    background: shouldDetectBackground(request.selection.settings.get('ui.theme'), process.env),
+    programStatus: true,
+  });
   return {
-    background: shouldDetectBackground(request.selection.settings.get('ui.theme'), process.env)
-      ? detectTerminalBackground({ stdin, stdout })
-      : Promise.resolve(undefined),
+    background: probe.then((result) => result.background),
+    programStatus: probe.then((result) => result.programStatus),
   };
 }

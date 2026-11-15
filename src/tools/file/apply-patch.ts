@@ -25,7 +25,6 @@ import {
   resolveResultMaxBytesForCall,
   truncateToUtf8Bytes,
 } from '../../shared/utils/output/bound-tool-result.js';
-import type { healPatchOperation } from './patch-healing.js';
 import { parseUpstreamApplyPatch } from './upstream-apply-patch.js';
 
 /**
@@ -227,14 +226,12 @@ const APPLY_PATCH_DESCRIPTION =
 export function createApplyPatchToolDefinition(deps: {
   loggingService: ILoggingService;
   settingsService: ISettingsService;
-  resolveHealingModel: () => { model: string; provider: string };
   executionContext?: ExecutionContext;
   sessionAccess?: FileEditAccessPort;
   /** Whether the caller may also read this file; the nearest-line hint echoes content only if it says yes. */
   readAccess?: (absolutePath: string, context: unknown) => Promise<boolean>;
-  patchHealing?: typeof healPatchOperation;
 }): ScriptedToolDefinition<typeof applyPatchParametersSchema> {
-  const { loggingService, settingsService, executionContext, sessionAccess, patchHealing } = deps;
+  const { loggingService, settingsService, executionContext, sessionAccess } = deps;
 
   return {
     name: 'apply_patch',
@@ -523,58 +520,17 @@ export function createApplyPatchToolDefinition(deps: {
               }
 
               // Re-apply validation against the locked, current content.
-              let patched: string | undefined;
-              let usedHealing = false;
+              let patched: string;
               try {
                 patched = diff ? applyDiff(original, diff) : original;
               } catch (err: any) {
-                const errMessage = err?.message || String(err);
-                const isContextError = /^Invalid (?:EOF )?Context \d+:/.test(errMessage);
-                const enableEditHealing = settingsService.get('tools.enableEditHealing') ?? true;
-
-                if (isContextError && enableEditHealing && patchHealing) {
-                  const contextMatch = errMessage.match(/^Invalid (?:EOF )?Context \d+:\n([\s\S]*)$/);
-                  const contextText = contextMatch ? contextMatch[1] : '';
-                  const mismatchDiagnosis = diagnoseContextMismatch(contextText, original);
-
-                  try {
-                    const { model: healingModel, provider: providerId } = deps.resolveHealingModel();
-
-                    const healingResult = await patchHealing(
-                      filePath,
-                      diff,
-                      original,
-                      mismatchDiagnosis,
-                      healingModel,
-                      process.env.OPENAI_API_KEY ?? '',
-                      {
-                        settingsService,
-                        loggingService,
-                        providerId,
-                      },
-                    );
-
-                    if (healingResult.wasModified && healingResult.healedDiff) {
-                      patched = applyDiff(original, healingResult.healedDiff);
-                      usedHealing = true;
-                    }
-                  } catch (healingError: any) {
-                    loggingService.warn('apply_patch self-healing failed', {
-                      path: filePath,
-                      error: healingError?.message || String(healingError),
-                    });
-                  }
-                }
-
-                if (!usedHealing || patched === undefined) {
-                  const mayEchoContent = (await deps.readAccess?.(targetPath, context)) === true;
-                  return {
-                    success: false,
-                    operation: 'update_file',
-                    path: filePath,
-                    error: formatPatchError(err, diff, original, mayEchoContent),
-                  };
-                }
+                const mayEchoContent = (await deps.readAccess?.(targetPath, context)) === true;
+                return {
+                  success: false,
+                  operation: 'update_file',
+                  path: filePath,
+                  error: formatPatchError(err, diff, original, mayEchoContent),
+                };
               }
               if (moveTo) {
                 if (isRemote) throw new Error('Move operations are not supported for remote workspaces.');
@@ -592,7 +548,6 @@ export function createApplyPatchToolDefinition(deps: {
                     path: filePath,
                     originalLength: original.length,
                     patchedLength: patched.length,
-                    healed: usedHealing,
                     ...(moveTo ? { moveTo } : {}),
                   });
                 } catch (_error) {
@@ -604,11 +559,7 @@ export function createApplyPatchToolDefinition(deps: {
                 success: true,
                 operation: 'update_file',
                 path: filePath,
-                message: moveTo
-                  ? `Updated ${filePath} and moved to ${moveTo}`
-                  : usedHealing
-                  ? `Updated ${filePath} (healed)`
-                  : `Updated ${filePath}`,
+                message: moveTo ? `Updated ${filePath} and moved to ${moveTo}` : `Updated ${filePath}`,
               };
             });
           }

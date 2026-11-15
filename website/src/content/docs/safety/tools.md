@@ -10,7 +10,7 @@ For example, ask “Find where this error is reported, explain the cause, and su
 ## Filesystem Tools
 
 - **`read_file`**: Reads file contents with support for line-number ranges (`start_line` and `end_line`, inclusive and 1-based) and size bounds.
-- **`apply_patch`**: Applies unified patches to files with preview and self-healing syntax recovery.
+- **`apply_patch`**: Applies unified patches to files with preview.
 - **`search_replace`**: Replaces a block of text in a file.
 - **`create_file`**: Creates a new file in the workspace (or overwrites an existing file if explicitly approved).
 - **`glob`**: Finds files and directories using glob patterns (uses `fd` when installed).

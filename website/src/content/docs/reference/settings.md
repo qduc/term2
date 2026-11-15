@@ -32,7 +32,7 @@ This page is generated from `src/config/settings/` by `pnpm --dir website build`
 | `agent.balancedReasoningEffort` | `default \\| none \\| minimal \\| low \\| medium \\| high \\| xhigh` | — | ✓ Yes | — | Reasoning effort for balanced-tier helper agents (everyday side tasks). Falls back to agent.reasoningEffort when unset. |
 | `agent.cheapModel` | `array` | — | ✓ Yes | — | Models for cheap-tier helper agents (simple, high-volume side tasks); subagent spawns round-robin the pool, other consumers use the first entry. Falls back to agent.modelSelection when unset. |
 | `agent.cheapReasoningEffort` | `default \\| none \\| minimal \\| low \\| medium \\| high \\| xhigh` | — | ✓ Yes | — | Reasoning effort for cheap-tier helper agents (simple, high-volume side tasks). Falls back to agent.reasoningEffort when unset. |
-| `agent.choreModel` | `array` | — | ✓ Yes | — | Models for small background jobs like repairing failed file edits and reviewing shell auto-approvals (auto-approval reviews, edit healing). Falls back to agent.modelSelection when unset. |
+| `agent.choreModel` | `array` | — | ✓ Yes | — | Models for small background jobs like reviewing shell auto-approvals. Falls back to agent.modelSelection when unset. |
 | `agent.reasoningEffort` | `default \\| none \\| minimal \\| low \\| medium \\| high \\| xhigh` | `"default"` | ✓ Yes | — | Reasoning effort (none\|minimal\|low\|medium\|high\|xhigh\|default) |
 | `agent.cachePreservingEffort` | `off \\| first-party \\| any-endpoint` | `"off"` | ✓ Yes | — | Keep prompt cache on /effort changes. Off by default: endpoints unverified. Turns off for the session if a request with it is rejected as invalid. |
 | `agent.temperature` | `number` | — | ✓ Yes | — | Model temperature (0-2, controls randomness) |
@@ -127,7 +127,6 @@ This page is generated from `src/config/settings/` by `pnpm --dir website build`
 | Key | Type | Default | Runtime Modifiable | Environment Variable | Description |
 | :--- | :--- | :--- | :---: | :--- | :--- |
 | `tools.logFileOperations` | `boolean` | `true` | No | `LOG_FILE_OPERATIONS` | Log file operations to disk (true\|false) |
-| `tools.enableEditHealing` | `boolean` | `true` | No | — | Use AI to automatically correct failed search_replace operations |
 | `tools.shell.enabled` | `boolean` | `true` | ✓ Yes | — | Enable shell tools for the main agent (true\|false). Does not restrict subagents; applies on the next model request. |
 | `tools.web.enabled` | `boolean` | `true` | ✓ Yes | — | Enable web_search and web_fetch tools for the main agent (true\|false). Does not restrict subagents; applies on the next model request. |
 | `tools.fileRead.enabled` | `boolean` | `true` | ✓ Yes | — | Enable file read tools for the main agent (true\|false); applies on the next model request. |

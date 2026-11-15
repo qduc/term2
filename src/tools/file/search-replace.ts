@@ -25,13 +25,10 @@ import {
   createBaseMessage,
   formatPatchOutputItems,
 } from '../format-helpers.js';
-import type { healSearchReplaceParams } from './edit-healing.js';
 import { ExecutionContext } from '../execution-context.js';
 import { getApprovalPresentationCapability } from '../tool-capabilities.js';
 import { withFileLock } from './file-locks.js';
 import {
-  findMatchesInContent,
-  normalizeSearchContent,
   normalizeToEOL,
   prepareMatchContext,
   SearchReplaceEditCache,
@@ -295,7 +292,6 @@ const SEARCH_REPLACE_DESCRIPTION =
 export function createSearchReplaceToolDefinition(deps: {
   loggingService: ILoggingService;
   settingsService: ISettingsService;
-  resolveHealingModel: () => { model: string; provider: string };
   executionContext?: ExecutionContext;
   sessionAccess?: FileEditAccessPort;
   /**
@@ -303,10 +299,8 @@ export function createSearchReplaceToolDefinition(deps: {
    * only when this says yes (same authority as read_file); absent means never.
    */
   readAccess?: (absolutePath: string, context: unknown) => Promise<boolean>;
-  /** Absent when no nested run driver exists: a failed match then reports plain not-found guidance. */
-  editHealing?: typeof healSearchReplaceParams;
 }): ScriptedToolDefinition<typeof searchReplaceParametersSchema> {
-  const { loggingService, settingsService, executionContext, sessionAccess, editHealing } = deps;
+  const { loggingService, settingsService, executionContext, sessionAccess } = deps;
   const editCache = new SearchReplaceEditCache();
 
   return {
@@ -479,75 +473,13 @@ export function createSearchReplaceToolDefinition(deps: {
           return fail(markerError);
         }
 
-        let usedHealing = false;
-        let healingAttempted = false;
-        let healingSucceeded = false;
-        let healedSearchLength = 0;
-        let matchTypeAfterHealing: MatchInfo['type'] = 'none';
-        let healingFailureReason: string | undefined;
+        const { eol, matchInfo } = prepareMatchContext(operation, content, editCache);
 
-        // eslint-disable-next-line prefer-const -- eol is not reassigned but normalizedSearchContent and matchInfo are
-        let { eol, normalizedSearchContent, matchInfo } = prepareMatchContext(operation, content, editCache);
-
-        if (matchInfo.type === 'none') {
-          if (containsGapMarker(search_content)) {
-            return fail(
-              (matchInfo.diagnostic ?? 'Gap pattern did not match. Recheck the head and tail anchor lines.') +
-                ' Gap (<...>) edits are not auto-healed — fix the anchors and retry.',
-            );
-          }
-          const enableEditHealing = settingsService.get('tools.enableEditHealing') ?? true;
-          if (enableEditHealing && editHealing) {
-            healingAttempted = true;
-            const { model: healingModel, provider: healingProvider } = deps.resolveHealingModel();
-            const healingResult = await editHealing(
-              operation,
-              content,
-              healingModel,
-              process.env.OPENAI_API_KEY ?? '',
-              {
-                settingsService,
-                loggingService,
-                providerId: healingProvider,
-              },
-            );
-
-            healedSearchLength = healingResult.params.search_content.length;
-            healingFailureReason = healingResult.failureReason;
-
-            if (healingResult.wasModified) {
-              normalizedSearchContent = normalizeSearchContent(healingResult.params.search_content, filePath, eol);
-              matchInfo = findMatchesInContent(content, normalizedSearchContent);
-              matchTypeAfterHealing = matchInfo.type;
-              if (matchInfo.type !== 'none') {
-                usedHealing = true;
-                healingSucceeded = true;
-              }
-            }
-
-            if (enableFileLogging) {
-              loggingService.debug('search_replace healing attempt', {
-                path: filePath,
-                healing_attempted: healingAttempted,
-                healing_succeeded: healingSucceeded,
-                original_search_length: search_content.length,
-                healed_search_length: healedSearchLength,
-                match_type_after_healing: matchTypeAfterHealing,
-                failure_reason: healingFailureReason,
-              });
-            }
-
-            if (!usedHealing) {
-              const nearest = (await mayHint()) ? describeSearchMismatch(search_content, content) : '';
-              const reasonSuffix = healingFailureReason ? ` Reason: ${healingFailureReason}.` : '';
-              return fail(
-                `Search content not found. Auto-healing attempted but no match found.${reasonSuffix} Try splitting changes into smaller patterns.${
-                  nearest ? ` ${nearest}` : ''
-                }`,
-                { healing_failure_reason: healingFailureReason },
-              );
-            }
-          }
+        if (matchInfo.type === 'none' && containsGapMarker(search_content)) {
+          return fail(
+            (matchInfo.diagnostic ?? 'Gap pattern did not match. Recheck the head and tail anchor lines.') +
+              ' Gap (<...>) edits are not auto-healed — fix the anchors and retry.',
+          );
         }
 
         const replacementResult = executeReplacement(matchInfo, content, eol, {
@@ -565,15 +497,12 @@ export function createSearchReplaceToolDefinition(deps: {
           loggingService.debug(`File updated (${replacementResult.matchType} match)`, {
             path: filePath,
             count: replacementResult.replacedCount,
-            healed: usedHealing,
           });
         }
 
-        const successMessage = usedHealing
-          ? `Updated ${filePath} (Search param has minor difference with actual file, auto healing was used. Reread the file to make sure the edit is correct)`
-          : `Updated ${filePath} (${replacementResult.replacedCount} ${replacementResult.matchType} match${
-              replacementResult.replacedCount > 1 ? 'es' : ''
-            })`;
+        const successMessage = `Updated ${filePath} (${replacementResult.replacedCount} ${
+          replacementResult.matchType
+        } match${replacementResult.replacedCount > 1 ? 'es' : ''})`;
         return {
           newContent: replacementResult.newContent,
           output: {
@@ -581,7 +510,6 @@ export function createSearchReplaceToolDefinition(deps: {
             operation: 'search_replace',
             path: filePath,
             message: successMessage,
-            healed: usedHealing,
           },
         };
       };

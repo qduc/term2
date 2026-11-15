@@ -1,6 +1,3 @@
-import { bindPatchHealing } from '../tools/file/patch-healing.js';
-import type { NestedRunDriverFactory, NestedModelBinding } from '../tools/nested-run-driver.js';
-import { bindEditHealing } from '../tools/file/edit-healing.js';
 import { createDiscordSendToolDefinition } from './discord-send.js';
 import type { DiscordSend } from '../clients/discord/discord-outbound.js';
 import { createGrepToolDefinition } from '../tools/file/grep.js';
@@ -75,7 +72,6 @@ import { SkillsService } from '../tools/skills/skills-service.js';
 import { createProposeGoalToolDefinition } from '../tools/agent/propose-goal.js';
 import { createGoalCheckToolDefinition } from '../tools/agent/goal-check.js';
 import { createDurableGoal } from '../session/conversation/durable-goal.js';
-import { resolveAncillaryModelTier } from '../session/agent-runtime/model-resolver.js';
 import { createRunAgentWorkflowToolDefinition } from '../tools/run-agent-workflow.js';
 import { createWorktreeToolDefinitions } from '../tools/system/worktree.js';
 import { createRunCodeToolDefinition } from '../delegation/index.js';
@@ -164,8 +160,6 @@ function positiveIntegerSetting(
  */
 export const getAgentDefinition = (
   deps: {
-    driverFactory?: NestedRunDriverFactory;
-    modelBinding?: NestedModelBinding;
     settingsService: ISettingsService;
     loggingService: ILoggingService;
     getGoal?: () => DurableGoal | undefined;
@@ -617,13 +611,11 @@ export const getAgentDefinition = (
       if (usesPatchEditingSurface) {
         tools.push(
           createApplyPatchToolDefinition({
-            resolveHealingModel: () => resolveAncillaryModelTier('chore', settingsService),
             settingsService,
             loggingService,
             executionContext,
             sessionAccess,
             readAccess: editHintReadAccess,
-            patchHealing: bindPatchHealing(deps),
           }),
         );
       } else {
@@ -635,8 +627,6 @@ export const getAgentDefinition = (
             sessionAccess,
           }),
           createSearchReplaceToolDefinition({
-            resolveHealingModel: () => resolveAncillaryModelTier('chore', settingsService),
-            editHealing: bindEditHealing(deps),
             settingsService,
             loggingService,
             executionContext,

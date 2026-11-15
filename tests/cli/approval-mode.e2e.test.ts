@@ -430,6 +430,64 @@ it.each([
   },
 );
 
+it(
+  'auto-approves read_file outside workspace in auto mode when LLM review passes',
+  { timeout: TIMEOUT_MS },
+  async () => {
+    root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'term2-read-outside-auto-')));
+    const home = path.join(root, 'home');
+    const workspace = path.join(root, 'workspace');
+    const outsideFile = path.join(root, 'outside.txt');
+    fs.mkdirSync(home);
+    fs.mkdirSync(workspace);
+    fs.writeFileSync(outsideFile, 'OUTSIDE_CONTENT');
+    const baseUrl = await startProvider([
+      { call: { id: 'read-outside-call', tool: 'read_file', args: { path: outsideFile } } },
+      {
+        text: JSON.stringify({
+          results: [
+            { reasoning: 'task-aligned read', riskLevel: 'low', authorization: 'explicit', confidence: 'high' },
+          ],
+        }),
+      },
+      { text: 'READ_OUTSIDE_FINISHED' },
+    ]);
+    const idlePath = path.join(home, 'input-idle');
+    const env = {
+      HOME: home,
+      XDG_CONFIG_HOME: path.join(home, '.config'),
+      XDG_DATA_HOME: path.join(home, '.local', 'share'),
+      XDG_STATE_HOME: path.join(home, '.local', 'state'),
+      XDG_CACHE_HOME: path.join(home, '.cache'),
+      TERM2_CONFIG_DIR: path.join(home, '.term2'),
+      TERM2_CACHE_DIR: path.join(home, '.cache', 'term2'),
+      TERM2_CONVERSATIONS_DIR: path.join(root, 'conversations'),
+      DISABLE_LOGGING: '1',
+      [HARNESS_IDLE_ENV]: idlePath,
+      CI: 'false',
+    };
+    const settingsDir = resolveSettingsDirectory({ homeDir: home, env: createTestChildEnv(env) });
+    fs.mkdirSync(settingsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(settingsDir, 'settings.json'),
+      JSON.stringify({
+        agent: { retryAttempts: 0, modelSelection: { model: 'mock-alpha', provider: 'mockprov' } },
+        providers: [{ name: 'mockprov', type: 'openai-compatible', baseUrl, apiKey: 'test-key' }],
+        sandbox: { enabled: true },
+        shell: { autoApproveMode: 'auto' },
+      }),
+    );
+    session = spawnTerminal('node', [builtCli], { cwd: workspace, env, cols: 100, rows: 30 });
+    await waitForHarnessIdleGeneration(idlePath, { timeoutMs: 60_000 });
+    session.write(`Read ${outsideFile}`);
+    await waitForHarnessComposerValue(idlePath, `Read ${outsideFile}`, { timeoutMs: 60_000 });
+    session.write('\r');
+    await session.waitForOutput('READ_OUTSIDE_FINISHED', 60_000);
+    expect(providerBodies.length).toBeGreaterThanOrEqual(3);
+    expect(providerBodies[2]).toContain('OUTSIDE_CONTENT');
+  },
+);
+
 // The effective approval mode is visible without changing it.
 async function runCommand(
   command: string,

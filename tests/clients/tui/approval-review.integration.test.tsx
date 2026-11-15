@@ -157,3 +157,48 @@ it('displays a child advisory and ignores malformed optional metadata', async ()
     screen.unmount();
   }
 });
+
+it('says the review is advisory when the advisory mode reviewed the request', async () => {
+  const connection = { sessionId: 'session', send: vi.fn() } as unknown as TuiConnection;
+  const screen = render(
+    <ApprovalHost
+      {...props(connection, { current: null })}
+      request={request({
+        kind: 'reviewed',
+        approved: false,
+        advisoryOnly: true,
+        advisory: { approved: true, reasoning: 'Looks routine', model: 'review', source: 'llm' },
+      })}
+    />,
+  );
+  try {
+    await vi.waitFor(() => expect(screen.lastFrame()).toContain('Looks routine'));
+    expect(screen.lastFrame()).toContain('AI review is advisory; manual approval required.');
+    expect(screen.lastFrame()).not.toContain('Automatic approval not granted');
+  } finally {
+    screen.unmount();
+  }
+});
+
+it('denies without a reason on an empty Enter in the reason box', async () => {
+  const send = vi.fn(async () => ({ ok: true as const }));
+  const connection = { sessionId: 'session', send } as unknown as TuiConnection;
+  const inputHandler = { current: null as InteractionInputHandler | null };
+  const screen = render(<ApprovalHost {...props(connection, inputHandler)} request={request()} />);
+  try {
+    await vi.waitFor(() => expect(inputHandler.current).not.toBeNull());
+    inputHandler.current?.('n', {} as Key);
+    await vi.waitFor(() => expect(screen.lastFrame()).toContain('Esc to cancel'));
+    screen.stdin.write('\r');
+    await vi.waitFor(() =>
+      expect(send).toHaveBeenCalledWith({
+        type: 'answer',
+        requestId: 'req',
+        decision: { kind: 'deny' },
+        provenance: { source: 'user' },
+      }),
+    );
+  } finally {
+    screen.unmount();
+  }
+});

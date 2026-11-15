@@ -7,6 +7,8 @@ export type ApprovalReviewResult =
       readonly approved: boolean;
       /** The grant an approved review answers with; absent means a plain allow. */
       readonly grant?: string;
+      /** Reviewed in `advisory` mode: the verdict informs the person and never answers the request. */
+      readonly advisoryOnly?: true;
       readonly advisory: {
         readonly approved: boolean;
         readonly reasoning: string;

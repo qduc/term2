@@ -3,7 +3,6 @@ import { Box, measureElement, type DOMElement } from 'ink';
 import { useTerminalColumns } from '../../hooks/use-terminal-columns.js';
 import { createRequire } from 'node:module';
 import { useSetting } from '../../hooks/use-setting.js';
-import { getProvider } from '../../../../../model/providers/index.js';
 import type { ISettingsService } from '../../../../../shared/service-interfaces.js';
 import { useSkin } from '../../skins/SkinContext.js';
 
@@ -41,10 +40,11 @@ const version = resolveDisplayVersion();
 
 interface BannerProps {
   settingsService: ISettingsService;
+  providerLabel: string;
   onHeightChange?: (height: number) => void;
 }
 
-const Banner: FC<BannerProps> = ({ settingsService, onHeightChange }) => {
+const Banner: FC<BannerProps> = ({ settingsService, providerLabel, onHeightChange }) => {
   const container = useRef<DOMElement>(null);
   // Ink recomputes Yoga on resize without rerendering React. The width hook makes
   // the measurement run again after a wrap or a skin's responsive layout changes.
@@ -55,11 +55,8 @@ const Banner: FC<BannerProps> = ({ settingsService, onHeightChange }) => {
   const { Banner: SkinBanner } = useSkin();
   const selection = useSetting(settingsService, 'agent.modelSelection');
   const model = selection.model;
-  const providerKey = selection.provider;
   const reasoningEffort = useSetting(settingsService, 'agent.reasoningEffort') ?? 'default';
 
-  const providerDef = getProvider(providerKey);
-  const providerLabel = providerDef?.label || providerKey;
   const banner = (
     <SkinBanner version={version} providerLabel={providerLabel} model={model} reasoningEffort={reasoningEffort} />
   );

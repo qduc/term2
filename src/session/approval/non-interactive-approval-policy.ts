@@ -106,18 +106,18 @@ export class NonInteractiveApprovalPolicy {
       };
     }
 
-    if (classification.status !== SafetyStatus.YELLOW) {
-      return { answer: 'y' };
+    // A rejection by the session's review stands whatever the classifier says:
+    // --auto-approve lets an unreviewed GREEN command through, never a rejected one.
+    if (input.priorAdvisory && !input.priorAdvisory.approved) {
+      return {
+        answer: 'n',
+        rejectionReason: `LLM evaluation rejected the command: ${input.priorAdvisory.reasoning}`,
+        reportRejection: true,
+      };
     }
 
-    if (input.priorAdvisory) {
-      return input.priorAdvisory.approved
-        ? { answer: 'y' }
-        : {
-            answer: 'n',
-            rejectionReason: `LLM evaluation rejected the command: ${input.priorAdvisory.reasoning}`,
-            reportRejection: true,
-          };
+    if (classification.status !== SafetyStatus.YELLOW || input.priorAdvisory?.approved) {
+      return { answer: 'y' };
     }
 
     const autoApproveModel =

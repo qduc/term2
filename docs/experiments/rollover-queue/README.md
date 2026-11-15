@@ -8,8 +8,8 @@ records. They remain historical and unchanged. The current retained runner now
 also stages `journal-repair.fixture.tsx.txt`: five real journal-writer/rotation/
 replay/raw-count controls in addition to the original eleven (sixteen total).
 `journal-cancel.fixture.tsx.txt` preserves the reviewer's unmodified three-case
-probe. New red/rework/green identities and logs are under `evidence/journal-repair/`;
-[`JOURNAL_REPAIR_REPORT.md`](handoff/JOURNAL_REPAIR_REPORT.md) and [`JOURNAL_REPAIR_MANIFEST.json`](handoff/JOURNAL_REPAIR_MANIFEST.json) identify the repaired
+probe. New red/rework/green identities and logs were moved out of `docs/experiments/` (originally under `evidence/journal-repair/` and `handoff/JOURNAL_REPAIR_MANIFEST.json`; recoverable from `v1.3.0`);
+[`JOURNAL_REPAIR_REPORT.md`](handoff/JOURNAL_REPAIR_REPORT.md) identifies the repaired
 candidate, not the original root manifest. Independent recheck is still required.
 
 R1 transfers already-journaled pending user records at the existing successor

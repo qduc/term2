@@ -1,4 +1,0 @@
-$ node docs/experiments/idle-uncached-confirm/verify.mjs
-PASS: below/exact/above idle boundary; resumed session; provider-change warning preserved
-
-exit: 0

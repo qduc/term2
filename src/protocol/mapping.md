@@ -69,7 +69,7 @@ timeline with call/start-only slots. No new event, sequence or journal is needed
 | item tool_call | tool_called, keyed by execution occurrence |
 | tool_started | tool_started: physical-start fact, not argument streaming |
 | tool_finished / item tool_result | tool_finished upsert, rich accepted display/content where available |
-| interaction_opened / interaction_closed | interaction_opened / interaction_resolved; an open whose recorded `review` is approved emits nothing (its policy close follows in the same commit), any other recorded `review` rides on the interaction |
+| interaction_opened / interaction_closed | interaction_opened / interaction_resolved; an open whose recorded `review` is approved emits nothing (its policy close follows in the same commit), any other recorded `review` rides on the interaction (`advisoryOnly` marks a review run in `advisory` mode); a person's answer during the review records the open and close together, so clients see `interaction_opened` immediately followed by `interaction_resolved` |
 | transient approval_review | approval_review (`started`/`settled`) for a request the session is reviewing before opening it; reduced into `reviewingApprovals`, never a pending interaction |
 | usage | usage (root accepted token delta, not fabricated cost; `reasoningTokens` only when the provider reported it) |
 | turn_ended | turn_ended, preserving supplied outcome/error/cause/notice and nullable correlated finalText; retained turnResults |

@@ -399,10 +399,13 @@ function Host({
   });
 
   const submit = (value: string) => {
+    if (entry === 'reason') {
+      // Empty Enter in the reason box denies without a reason (INTEGRATION.md).
+      replaceInput('');
+      return send(value.trim() ? { kind: 'deny', reason: value } : { kind: 'deny' });
+    }
     if (!value.trim()) return;
-    if (entry !== 'reason') return onApprove(value);
-    replaceInput('');
-    send({ kind: 'deny', reason: value });
+    onApprove(value);
   };
   const composer = entry ? (
     <Box flexDirection="column">
@@ -436,7 +439,9 @@ function Host({
               ...(reviewResult?.kind === 'reviewed' ? { llmAdvisory: reviewResult.advisory } : {}),
             }}
             reviewStatus={
-              reviewResult?.kind === 'reviewed' && !reviewResult.approved
+              reviewResult?.kind === 'reviewed' && reviewResult.advisoryOnly
+                ? 'AI review is advisory; manual approval required.'
+                : reviewResult?.kind === 'reviewed' && !reviewResult.approved
                 ? 'Automatic approval not granted; manual approval required.'
                 : reviewResult?.kind === 'unavailable'
                 ? 'Approval review unavailable; manual approval required.'

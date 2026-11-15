@@ -368,7 +368,9 @@ it.each([
       TERM2_CONFIG_DIR: path.join(home, '.term2'),
       TERM2_CACHE_DIR: path.join(home, '.cache', 'term2'),
       TERM2_CONVERSATIONS_DIR: path.join(root, 'conversations'),
-      DISABLE_LOGGING: '1',
+      // Debug logs record each notifier check (use-terminal-focus-notifier.ts).
+      DISABLE_LOGGING: automatic ? '1' : '0',
+      LOG_LEVEL: 'debug',
       [HARNESS_IDLE_ENV]: idlePath,
       CI: 'false',
     };
@@ -411,6 +413,8 @@ it.each([
         if (reviewExpected && !reviewFails) {
           await session.waitForOutput('fixture review', 30_000);
           expect(session.getVisibleOutput()).toContain(`Confidence: ${confidence}`);
+          // Advisory mode never answers a request, so its prompt does not say approval was "not granted".
+          if (mode === 'advisory') expect(session.getVisibleOutput()).toContain('AI review is advisory');
         } else {
           await session.waitForOutput(
             reviewFails ? 'Approval review unavailable' : 'Not reviewed automatically',
@@ -421,6 +425,18 @@ it.each([
       }
     }
     await session.waitForOutput('UNSANDBOXED_FINISHED', 60_000);
+    if (!automatic) {
+      // A request a person denied during its review opened and closed together: no "approval needed"
+      // notification. One that waited for a person notifies. The turn-complete check is the flush barrier.
+      const logText = () =>
+        fs
+          .readdirSync(home, { recursive: true, encoding: 'utf8' })
+          .filter((file) => /term2-.*\.log$/.test(file))
+          .map((file) => fs.readFileSync(path.join(home, file), 'utf8'))
+          .join('\n');
+      await vi.waitFor(() => expect(logText()).toContain('notifier.turnComplete check'), { timeout: 30_000 });
+      expect(logText().includes('notifier.approvalNeeded check')).toBe(!delayedDenial);
+    }
     if (delayedDenial) expect(fs.existsSync(marker)).toBe(false);
     else expect(fs.readFileSync(marker, 'utf8')).toBe('approved');
     if (reviewExpected && !regular) expect(providerBodies[1]).toMatch(/OUTSIDE the sandbox/i);

@@ -42,14 +42,29 @@ references point to tag `unit-suite-baseline`.
 through PRs. Do not merge locally into `main`, push directly to it, or merge a PR
 unless explicitly asked. Preserve the shared checkout and other agents’ work.
 
-Several agents share the primary checkout. Bug fixes and features use worktrees
-under `.worktrees/` because sibling checkouts fall outside the shell sandbox's
-write scope. Each worktree needs its own `pnpm install`; symlinked `node_modules`
-previously broke command resolution. Keep the primary branch in place and preserve
-other agents' uncommitted work. The [isolation procedure](docs/agent-context.md#parallel-work-isolation)
-covers integration and cleanup. Reports, manifests, and evidence for a task in
-flight go in `.handoff/` (or under the task's experiment folder), never in the
-repository root, which is governed by an allowlist check.
+## Parallel work isolation
+
+- Create a branch and worktree under `.worktrees/` from the intended remote base;
+  sibling directories are outside the shell sandbox's write scope.
+- Run `pnpm install` in each worktree; symlinking `node_modules` broke command
+  resolution. Finish builds before built-CLI tests or verifier runs: builds
+  replace `dist/`. Avoid rebuilding while those readers run.
+- Never switch branches in the primary checkout or stash other agents' edits.
+  Coordinate around their work. Put task reports and evidence in `.handoff/`
+  or the relevant experiment folder, not the allowlisted repository root.
+
+## Shell safety for agents
+
+- Never include destructive commands or overwriting redirections in ad-hoc
+  probes. Pipes, `&&`, `2>/dev/null`, and command substitution are fine when
+  the payload is safe.
+- For command parsing or safety classification, keep dangerous examples as data
+  in quoted fixture files and run the test harness, not inline shell commands.
+- Before a command could modify or delete files outside the intended edit set,
+  use read-only inspection or ask for approval.
+- CLI approval fixtures must isolate the child's `TMPDIR`/`TEMP`/`TMP` from
+  ordinary workspace and outside-file targets: inherited scratch paths can
+  change approval classification. Intentional scratch tests target that root.
 
 
 UI components use `useTheme()` for colours and `useSkin()` for layout. Skins live
@@ -74,12 +89,6 @@ handoff. Retain a note in existing docs when it explains a cause, failed approac
 recovery or recurring debugging trap; do not recreate routine result ledgers.
 
 Repository docs provide orientation and rationale; the relevant implementation
-establishes current behavior. Area-specific plans and service contracts are indexed
-in [agent context](docs/agent-context.md#plans-and-area-specific-context).
-Consult the relevant area documents before changing that area. The repository's
+establishes current behavior. Consult relevant area documents before making changes. The repository's
 `verification` and `testing` skills describe evidence standards, risk levels,
 and available test tiers for the experiment.
-
-For shell probes and command-safety classification work, read
-[Shell Safety For Agents](docs/agent-context.md#shell-safety-for-agents) before
-executing probes; it preserves the repository's explicit safety constraints.

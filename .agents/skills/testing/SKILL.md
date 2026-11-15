@@ -211,7 +211,7 @@ and `68ef50ff` (local-only evidence), not a result file to resume appending.
   created. Isolate child `TMPDIR`/`TEMP`/`TMP`, keep ordinary outside targets
   outside both workspace and child scratch, and retain intentional scratch-write
   controls. A unique directory is not a distinct permission root. See
-  `docs/agent-context.md`, “Shell Safety For Agents”.
+  `AGENTS.md`, “Shell safety for agents”.
 - **PTY waits:** `turn-decisions.blackbox.ts` has recorded 40,000ms repeated-question
   waits with Amber/Violet or `SELECT_A_SECOND_COLOR` visible; restart e2e has a
   5,000ms composer acknowledgement wait “after revision 2; got revision 3”.

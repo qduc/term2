@@ -33,7 +33,7 @@ Record of what was verified, in order:
 4. **Commit and integrate — DONE.** Committed as `26ac5635`, merged into `main`
    as `ef99e3ac` with `--no-ff`, then `git worktree remove` and
    `git branch -d rc-tool-schemas` per
-   `docs/agent-context.md#parallel-work-isolation`.
+   `AGENTS.md#parallel-work-isolation`.
 
 ## Design as implemented (settled — do not re-derive)
 
@@ -242,7 +242,7 @@ independent evidence.
 ## Verification (remaining)
 
 1. Commit on the branch; integrate and clean up per
-   `docs/agent-context.md#parallel-work-isolation`.
+   `AGENTS.md#parallel-work-isolation`.
 
 ## Ruled out (do not revisit)
 

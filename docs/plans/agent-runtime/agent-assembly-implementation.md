@@ -27,7 +27,7 @@ coupled execution/lifecycle changes out unless separately justified and verified
 If they cannot be separated safely, report that integration constraint.
 
 Code changes use an isolated worktree under `.worktrees/` with its own dependency
-installation, following [parallel work isolation](../../agent-context.md#parallel-work-isolation).
+installation, following [parallel work isolation](../../../AGENTS.md#parallel-work-isolation).
 Keep the primary branch and unrelated changes intact. One implementing owner
 handles this work; no workers or subagents without explicit human authorization.
 

@@ -80,6 +80,18 @@ export type WireInteraction = {
   readonly questions?: readonly WireQuestion[];
   /** Only grants the tool request itself offers; Session rejects any other. */
   readonly supportedGrants: readonly WireGrant[];
+  /** The session's approval review before this request reached a person, when one ran. */
+  readonly review?: WireApprovalReview;
+};
+/** src/shared/contracts/approval-review.ts, as recorded on the open fact. */
+export type WireApprovalReview = import('../shared/contracts/approval-review.js').ApprovalReviewResult;
+/** A request the session is reviewing; it is not open and no one is asked yet. */
+export type WireReviewingApproval = {
+  readonly requestId: string;
+  readonly toolName: string;
+  readonly summary: string;
+  readonly turnId?: string;
+  readonly taskId?: string;
 };
 export type WireMessage = {
   readonly id: string;

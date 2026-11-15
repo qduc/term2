@@ -54,23 +54,16 @@ export function createAcpBackend(options: BackendOptions): AcpBackend {
     return attachment;
   };
   const attach = async (connection: DirectConnection, client: AcpClient, replay: boolean): Promise<void> => {
-    const review = client.supportsShellEscape ? options.approval?.review : undefined;
-    const attachment = new AcpAttachment(
-      connection,
-      client,
-      options.logger,
-      review ? (requestId, signal) => review(connection.sessionId, requestId, signal) : undefined,
-      async () => {
-        let cursor: string | undefined;
-        do {
-          const page = await options.host.listSessions(options.principal, cursor);
-          const session = page.sessions.find(({ id }) => id === connection.sessionId);
-          if (session) return session.title;
-          cursor = page.cursor;
-        } while (cursor !== undefined);
-        return undefined;
-      },
-    );
+    const attachment = new AcpAttachment(connection, client, options.logger, async () => {
+      let cursor: string | undefined;
+      do {
+        const page = await options.host.listSessions(options.principal, cursor);
+        const session = page.sessions.find(({ id }) => id === connection.sessionId);
+        if (session) return session.title;
+        cursor = page.cursor;
+      } while (cursor !== undefined);
+      return undefined;
+    });
     try {
       available();
       if (attachments.has(connection.sessionId)) throw new acp.RequestError(-32000, 'Session is already attached');

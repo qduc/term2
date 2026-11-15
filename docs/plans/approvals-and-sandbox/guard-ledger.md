@@ -282,6 +282,14 @@ The paired pilot remains paused; its earlier outcomes are unchanged.
 Status: repaired in `721795e1`; focused evidence passes. Broader gate outcomes and independent
 verification disposition are archived at `42724797` in the former experiment task records.
 
+Later change (approval arbiter, 2026-11-15): with `shell.autoApproveMode` `auto`
+or `advisory`, the session reviews the request once before opening it
+(`src/session/approval/approval-arbiter.ts`), with the accepted history as its
+evidence, and `NonInteractiveApprovalPolicy` reuses that verdict
+(`priorAdvisory`) instead of a second model call. The reference fixture now makes
+its one review decide and asserts exactly one review carrying the user request;
+with mode `off` the session does not review and the fallback's own evaluation path is unchanged.
+
 ## Agent model discovery pages (2026-10-19)
 
 Harm prevented: a discovery query injecting hundreds of verbose catalog rows into

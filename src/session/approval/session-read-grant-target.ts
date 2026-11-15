@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { resolveGlobSearchTarget } from '../../tools/file/glob-target.js';
+import { expandHome } from '../../tools/workspace/path-identity.js';
 
 /**
  * The folder a "allow for this session" answer should grant, or null when the
@@ -9,7 +10,7 @@ import { resolveGlobSearchTarget } from '../../tools/file/glob-target.js';
  */
 export function resolveSessionReadFolder(toolName: string | undefined, args: unknown): string | null {
   const record = args && typeof args === 'object' ? (args as Record<string, unknown>) : null;
-  const rawPath = typeof record?.path === 'string' ? record.path.trim() : '';
+  const rawPath = typeof record?.path === 'string' ? expandHome(record.path.trim()) : '';
 
   if (toolName === 'read_file') {
     return rawPath ? path.dirname(rawPath) : null;

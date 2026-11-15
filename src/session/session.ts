@@ -362,6 +362,10 @@ export function createDirectSession(options: DirectSessionOptions): DirectLiveSe
       if (closing || fault) return { kind: 'stale' };
       return conversation.answer(requestId, structuredClone(decision), provenance);
     },
+    takeOverReview(requestId) {
+      if (closing || fault) return { kind: 'stale' };
+      return conversation.takeOverReview(requestId);
+    },
     requestTaskStop: (taskId) => conversation.tasks.requestStop(taskId),
     listingHints() {
       const current = publicState();

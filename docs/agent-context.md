@@ -33,6 +33,7 @@ Read the relevant documents before touching these areas, starting with **Resume 
 - **Live provider canaries:** Deferred pending CI, secret/billing, and OAuth-storage decisions; no plan doc
 - **Candidate gates:** [Decision portal](../scripts/candidate-gates.ts) — dormant; see its file header before extending
 - **Shell deadlines:** [Evidence-backed timeouts](plans/approvals-and-sandbox/evidence-backed-shell-timeouts.md)
+- **Approval decisions:** [Approval arbiter](plans/approvals-and-sandbox/approval-arbiter.md) — proposed single owner for review routing, grants and canonical subjects
 - **Rollover:** [Session handoff](plans/sessions/session-rollover-handoff.md)
 - **Grok Responses/credits:** [Provider plan](plans/providers/grok-responses-and-credits.md)
 - **Run budgets:** [Stall escalation](plans/agent-runtime/run-budget-stall-escalation.md) and [review (historical)](https://github.com/qduc/term2/blob/1cc5a0a91e164215edbcbb4291ffb0c0c1726cc2/docs/plans/run-budget-stall-escalation-review.md)

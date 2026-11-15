@@ -191,7 +191,6 @@ export async function launchAcp(request: AcpRequest): Promise<number> {
           if (protocolVersion !== 1) throw new Error('Approval mode is available only in ACP v1.');
           await app.applyLaunchConfiguration(sessionId, {}, nativeApprovalMode[mode]);
         },
-        review: app.reviewApproval,
       },
       async configuration(sessionId) {
         const state = await app.sessionConfiguration(sessionId);

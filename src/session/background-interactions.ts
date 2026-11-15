@@ -9,6 +9,8 @@ import type {
 } from './background-types.js';
 import { directTaskAbortError, directTaskError } from './background-types.js';
 import { grantOffered } from './conversation-turn.js';
+import { REVIEW_STOPPED, type ApprovalReviews } from './approval/approval-arbiter.js';
+import type { ApprovalReviewResult } from '../shared/contracts/approval-review.js';
 
 type Pending = {
   readonly request: DirectTaskInteraction;
@@ -26,9 +28,58 @@ export class DirectBackgroundInteractions {
   readonly #accept: (fact: DirectBackgroundFact) => void;
   readonly #pending = new Map<InteractionRequestId, Pending>();
   readonly #used = new Set<InteractionRequestId>();
+  #reviews: ApprovalReviews | undefined;
 
   constructor(accept: (fact: DirectBackgroundFact) => void) {
     this.#accept = accept;
+  }
+
+  /** Review requests before they open (src/session/approval/approval-arbiter.ts). */
+  useReviews(reviews: ApprovalReviews): void {
+    this.#reviews = reviews;
+  }
+
+  /** Stop a review so a person decides; stale when the request is not under review. */
+  takeOverReview(requestId: InteractionRequestId): AnswerResult {
+    const entry = this.#pending.get(requestId);
+    if (!entry || this.#reviews?.stop(requestId) === undefined) return { kind: 'stale' };
+    try {
+      this.#accept({ type: 'task_interaction_opened', request: entry.request, review: REVIEW_STOPPED });
+    } catch (error) {
+      return { kind: 'failed', error: directTaskError(error) };
+    }
+    return { kind: 'accepted' };
+  }
+
+  #settleReview(entry: Pending, review: ApprovalReviewResult): void {
+    if (this.#pending.get(entry.request.requestId) !== entry) return;
+    const decision: InteractionDecision | undefined = review.approved
+      ? review.grant
+        ? { kind: 'allow', grant: review.grant }
+        : { kind: 'allow' }
+      : undefined;
+    const automatic = decision && validDecision(entry.request, decision) ? decision : undefined;
+    try {
+      this.#accept({
+        type: 'task_interaction_opened',
+        request: entry.request,
+        review: automatic ? review : ({ ...review, approved: false } as ApprovalReviewResult),
+      });
+      if (!automatic) return;
+      this.#accept({
+        type: 'task_interaction_closed',
+        taskId: entry.request.taskId,
+        requestId: entry.request.requestId,
+        resolution: { kind: 'decision', decision: automatic },
+        resolutionSource: 'policy',
+        automaticApproval: true,
+      });
+    } catch (error) {
+      this.poison(new Error(directTaskError(error).message));
+      return;
+    }
+    this.#remove(entry);
+    entry.resolve(automatic);
   }
 
   /** Allocate a globally unique ID for tool pauses without an engine-supplied ID. */
@@ -38,9 +89,13 @@ export class DirectBackgroundInteractions {
 
   /** Returns immutable presentation data, never live continuations. */
   pending(taskId?: DirectTaskId): readonly DirectTaskInteraction[] {
-    return [...this.#pending.values()]
-      .filter((entry) => taskId === undefined || entry.request.taskId === taskId)
-      .map((entry) => structuredClone(entry.request));
+    return (
+      [...this.#pending.values()]
+        .filter((entry) => taskId === undefined || entry.request.taskId === taskId)
+        // Under review is not yet waiting on a person.
+        .filter((entry) => !this.#reviews?.has(entry.request.requestId))
+        .map((entry) => structuredClone(entry.request))
+    );
   }
 
   /** Open one exact occurrence, and wait without blocking other tasks or turns. */
@@ -65,7 +120,11 @@ export class DirectBackgroundInteractions {
       };
       this.#pending.set(request.requestId, entry);
       try {
-        this.#accept({ type: 'task_interaction_opened', request: acceptedRequest });
+        // A reviewable request stays unopened until its review settles or a person steps in.
+        const reviewing =
+          acceptedRequest.kind === 'approval' &&
+          this.#reviews?.begin(acceptedRequest, { settle: (_request, review) => this.#settleReview(entry, review) });
+        if (!reviewing) this.#accept({ type: 'task_interaction_opened', request: acceptedRequest });
         signal.addEventListener('abort', onAbort, { once: true });
         if (signal.aborted) onAbort();
       } catch (error) {
@@ -93,8 +152,21 @@ export class DirectBackgroundInteractions {
         },
       };
     }
+    // Only the arbiter records an automatic approval; a client cannot claim one.
+    if (provenance.automaticApproval === true)
+      return {
+        kind: 'failed',
+        error: {
+          kind: 'invalid_request',
+          message: 'Automatic approval is recorded by the session only.',
+          retryable: false,
+        },
+      };
     const acceptedDecision = structuredClone(decision);
     try {
+      // A person answered while the review ran: it opens and closes with their decision.
+      if (this.#reviews?.stop(requestId) !== undefined)
+        this.#accept({ type: 'task_interaction_opened', request: entry.request, review: REVIEW_STOPPED });
       this.#accept({
         type: 'task_interaction_closed',
         taskId: entry.request.taskId,
@@ -129,6 +201,12 @@ export class DirectBackgroundInteractions {
   }
 
   #close(entry: Pending, resolution: DirectTaskInteractionResolution): void {
+    // A request still under review never opened, so it has nothing to close.
+    if (this.#reviews?.stop(entry.request.requestId) !== undefined) {
+      this.#remove(entry);
+      entry.reject(directTaskAbortError());
+      return;
+    }
     try {
       this.#accept({
         type: 'task_interaction_closed',

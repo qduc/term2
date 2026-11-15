@@ -81,7 +81,6 @@ export class AcpAttachment {
     readonly connection: DirectConnection,
     private readonly client: AcpClient,
     private readonly logger: AcpLogger,
-    private readonly reviewApproval?: (requestId: string, signal: AbortSignal) => Promise<ApprovalReviewResult>,
     private readonly readTitle?: () => Promise<string | undefined>,
   ) {
     this.foregroundTurnId = connection.snapshot.activeTurnId;
@@ -354,25 +353,9 @@ export class AcpAttachment {
     const { sessionId } = this.connection;
     this.openRequest(interaction.requestId, interaction.turnId, async (signal) => {
       const { requestId } = interaction;
-      const review =
-        interaction.kind !== 'approval' || interaction.toolName === 'sandbox_network_access'
-          ? undefined
-          : interaction.supportedGrants.includes('unsandboxed-once') || !this.reviewApproval
-          ? ({ kind: 'not_reviewed', approved: false } as const)
-          : await this.reviewApproval(requestId, signal).catch((error: unknown) => {
-              if (!signal.aborted)
-                this.logger.error('ACP approval review failed', { sessionId, error: errorMessage(error) });
-              return { kind: 'unavailable', approved: false } as const;
-            });
-      signal.throwIfAborted();
-      if (review && review.approved) {
-        return {
-          type: 'answer',
-          requestId,
-          decision: { kind: 'allow' },
-          provenance: { source: 'policy', automaticApproval: true },
-        };
-      }
+      // The session reviewed this request before opening it; it reaches here only when a person decides.
+      const review: ApprovalReviewResult | undefined =
+        interaction.kind !== 'approval' ? undefined : interaction.review ?? { kind: 'not_reviewed', approved: false };
       return {
         type: 'answer',
         requestId,

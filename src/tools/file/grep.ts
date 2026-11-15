@@ -1,7 +1,6 @@
 import path from 'node:path';
 import { z } from 'zod';
 import { exec } from 'child_process';
-import { homedir } from 'node:os';
 import util from 'util';
 import { trimOutput } from '../../shared/utils/output/output-trim.js';
 import type { ScriptedToolDefinition, FormatCommandMessage } from '../types.js';
@@ -10,6 +9,7 @@ import type { FileReadAccessPort, NestedReadAccessPort } from '../access-port.js
 import type { ISettingsService } from '../../shared/service-interfaces.js';
 import { resolveWorkspacePath } from '../utils.js';
 import { grepGlobPathHint, looksLikeGlob } from './glob-path-hint.js';
+import { expandHome } from '../workspace/path-identity.js';
 import {
   getOutputText,
   isSuccessOutput,
@@ -90,8 +90,8 @@ function relativeToCwd(value: string, cwd: string, isRemote: boolean): string {
 
 function shellQuoteSearchPath(value: string, isRemote: boolean): string {
   if (!isRemote) {
-    const expandedPath = value.startsWith('~') ? value.replace(/^~/, homedir()) : value;
-    return shellQuoteArg(expandedPath);
+    // The same spelling rule as the approval check (resolveWorkspacePath), so the searched path is the one approved.
+    return shellQuoteArg(expandHome(value));
   }
 
   if (value === '~') {

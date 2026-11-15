@@ -65,6 +65,8 @@ async function dispatch(
       );
       return answerResult(answer);
     }
+    case 'take_over_review':
+      return answerResult(session.takeOverReview(command.requestId as InteractionRequestId));
     case 'answer_budget':
       return answerResult(
         session.answerBudget(

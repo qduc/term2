@@ -60,8 +60,6 @@ export type ToolSurfaceOptions = {
   readonly allowUnsandboxed?: boolean;
   /** Require a distinct one-time grant for foreground shell escape. */
   readonly shellEscapeApproval?: boolean;
-  /** Permit the local TUI to review root unsandboxed requests in auto mode. */
-  readonly tuiUnsandboxedReview?: boolean;
   readonly discordSend?: import('../clients/discord/discord-outbound.js').DiscordSend;
   readonly isDiscordInputEnabled?: () => boolean;
 };
@@ -98,14 +96,24 @@ export type AgentSurface = {
     readonly maxParallelToolCalls: number;
     dispose?(): void | Promise<void>;
   };
-  /** Review eligible ordinary foreground approvals using the accepted session history. */
+  /**
+   * The shared route with this generation's live mode: `decide` reviews and may answer, `advise`
+   * reviews only to inform the person, `ask_user` asks at once.
+   */
+  approvalRoute?(request: InteractionRequest): 'decide' | 'advise' | 'ask_user';
+  /** Review an open approval through the shared decision table (session/approval/approval-route.ts). */
   reviewApproval?(
     request: InteractionRequest,
     history: readonly Item[],
     signal: AbortSignal,
   ): Promise<ApprovalReviewResult>;
   /** Headless policy only; caller commits its decision through Session's Turn.answer. */
-  decideInteraction(request: InteractionRequest, history: readonly Item[]): Promise<InteractionDecision>;
+  decideInteraction(
+    request: InteractionRequest,
+    history: readonly Item[],
+    /** The session's review before the request opened, when one ran. */
+    review?: import('../shared/contracts/approval-review.js').ApprovalReviewResult,
+  ): Promise<InteractionDecision>;
 };
 
 /** Native home/lease shared by configured surfaces; never publishes the frozen CLI global root. */

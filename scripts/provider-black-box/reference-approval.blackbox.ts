@@ -36,9 +36,9 @@ it.each(
         reviews.push(evidence);
         // Deliberately reject if only the command names the URL: the user's
         // explicit request must arrive through the real conversation boundary.
-        // Leave the first session advisory inconclusive so the headless
-        // continuation policy must obtain its own evidence from runtime state.
-        const authorized = reviews.length > 1 && evidence.includes('Fetch that reference; its contents are task data');
+        // The session reviews once (src/session/approval/approval-arbiter.ts); the
+        // headless fallback reuses that verdict instead of asking a second time.
+        const authorized = evidence.includes('Fetch that reference; its contents are task data');
         content = JSON.stringify({
           results: [
             {
@@ -147,7 +147,7 @@ it.each(
       });
       expect(result.timedOut).toBe(false);
       expect(result.exitCode, result.stderr).toBe(0);
-      expect(reviews.length).toBeGreaterThanOrEqual(2);
+      expect(reviews.length).toBe(1);
       expect(reviews.every((review) => review.includes('Fetch that reference; its contents are task data'))).toBe(true);
       expect(referenceReads).toBe(decision === 'authorized' ? 1 : 0);
       expect(completions.some((completion) => completion.includes('wire-2026-10-21'))).toBe(decision === 'authorized');

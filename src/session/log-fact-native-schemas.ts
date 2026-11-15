@@ -15,6 +15,20 @@ import {
 
 const directSessionId = /^conv_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
+/** An approval review recorded on an open fact (src/shared/contracts/approval-review.ts). */
+const validateReview = (fact: Record<string, unknown>, check: FactValidation): void => {
+  if (!('review' in fact)) return;
+  const review = check.object(fact['review'], 'review');
+  if (!['not_reviewed', 'unavailable', 'reviewed'].includes(review['kind'] as string)) check.fail('review.kind');
+  if (typeof review['approved'] !== 'boolean') check.fail('review.approved');
+  if (review['kind'] !== 'reviewed' && review['approved'] !== false) check.fail('review.approved');
+  if ('grant' in review && typeof review['grant'] !== 'string') check.fail('review.grant');
+  if (review['kind'] === 'reviewed') {
+    const advisory = check.object(review['advisory'], 'review.advisory');
+    if (typeof advisory['reasoning'] !== 'string') check.fail('review.advisory.reasoning');
+  }
+};
+
 const validateCompactionSchema: FactSchema = (fact, check) => {
   validateCompactionFact(fact, check.fail);
 };
@@ -216,6 +230,7 @@ export const nativeSchemas: Record<string, FactSchema> = {
       if (!Array.isArray(grants) || grants.some((grant) => typeof grant !== 'string')) check.fail('request.grants');
     }
     check.hasInput(request);
+    validateReview(fact, check);
   },
   interaction_closed: (fact, check) => {
     check.text(fact['turnId'], 'turnId');
@@ -404,6 +419,7 @@ export const nativeSchemas: Record<string, FactSchema> = {
     check.text(request['sessionId'], 'request.sessionId');
     if ('origin' in request && !validDirectQueueOrigin(request['origin'])) check.fail('request.origin');
     validateFact({ type: 'interaction_opened', turnId: request['turnId'], request }, where);
+    validateReview(fact, check);
   },
   task_interaction_closed: (fact, check) => {
     if ('resolutionSource' in fact && !['user', 'policy', 'system'].includes(fact['resolutionSource'] as string))

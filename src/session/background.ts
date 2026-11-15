@@ -144,6 +144,17 @@ export class DirectBackgroundTasks {
     return this.#state(entry);
   }
 
+  /** Review task approvals before they open (src/session/approval/approval-arbiter.ts). */
+  useApprovalReviews(reviews: import('./approval/approval-arbiter.js').ApprovalReviews): void {
+    this.#interactions.useReviews(reviews);
+  }
+
+  /** Stop a task approval review so a person decides. */
+  takeOverReview(requestId: InteractionRequestId): AnswerResult {
+    if (this.#failure) return { kind: 'failed', error: this.#failure };
+    return this.#interactions.takeOverReview(requestId);
+  }
+
   /** All task interactions, independently of the foreground Turn's lifetime. */
   pendingInteractions() {
     return this.#interactions.pending();

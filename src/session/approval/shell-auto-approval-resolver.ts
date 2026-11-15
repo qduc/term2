@@ -29,6 +29,7 @@ export function isAutoApprovableTool(toolName: string | undefined): boolean {
   return (
     toolName === 'shell' ||
     toolName === 'bash' ||
+    toolName === 'sandbox_network_access' ||
     FILE_READ_AUTO_APPROVE_TOOLS.has(toolName) ||
     FILE_MUTATION_AUTO_APPROVE_TOOLS.has(toolName)
   );
@@ -87,6 +88,11 @@ function formatToolOperationDescription(toolName: string, rawArgs: unknown): str
   }
   if (toolName === 'apply_patch') {
     return `apply patch outside workspace`;
+  }
+  if (toolName === 'sandbox_network_access') {
+    const host = typeof rec.host === 'string' ? rec.host : 'unknown host';
+    const target = typeof rec.port === 'number' ? `${host}:${rec.port}` : host;
+    return `sandbox network access to ${target}`;
   }
   return `${toolName} outside workspace`;
 }

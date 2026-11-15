@@ -120,7 +120,12 @@ export type DirectBackgroundFact =
       readonly at: number;
       readonly result: DirectTaskResult;
     }
-  | { readonly type: 'task_interaction_opened'; readonly request: DirectTaskInteraction }
+  | {
+      readonly type: 'task_interaction_opened';
+      readonly request: DirectTaskInteraction;
+      /** The arbiter's review before the request opened; `approved` means a policy close follows at once. */
+      readonly review?: import('../shared/contracts/approval-review.js').ApprovalReviewResult;
+    }
   | {
       readonly type: 'task_interaction_closed';
       readonly taskId: DirectTaskId;

@@ -38,6 +38,19 @@ Usage:
 
 ---
 
+## Sandbox Network Approvals (`term2 sandbox-network`)
+
+| Form | Description |
+| :--- | :--- |
+| `term2 sandbox-network allow <host> <port>` | Grant a host-and-port approval for the current project. |
+| `term2 sandbox-network revoke <host> <port>` | Revoke a host-and-port approval for the current project. |
+| `term2 sandbox-network listen allow` | Grant the current project listener approval. |
+| `term2 sandbox-network listen revoke` | Revoke the current project listener approval. |
+
+See [sandbox network access](/term2/safety/sandbox/) for platform details and the risks of listener access.
+
+---
+
 ## Web Gateway Launcher (`term2 serve`)
 
 ```

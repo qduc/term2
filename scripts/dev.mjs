@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 // Node's watcher supports workspace filesystems without native fanotify handles.
-const compiler = fileURLToPath(new URL('./bin/tsc6', import.meta.resolve('typescript/package.json')));
+const compiler = fileURLToPath(new URL('./bin/tsc', import.meta.resolve('typescript-7/package.json')));
 
 const watchers = [];
 let stopping = false;

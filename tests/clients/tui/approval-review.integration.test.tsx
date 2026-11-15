@@ -54,10 +54,10 @@ it('does not restart a cancelled review when a background request replaces the r
     inputHandler.current?.('n', {} as Parameters<InteractionInputHandler>[1]);
     expect(signal.aborted).toBe(true);
     screen.rerender(<ApprovalHost {...props} request={background} />);
-    await vi.waitFor(() => expect(screen.lastFrame()).toContain('Background'));
+    await vi.waitFor(() => expect(review).toHaveBeenCalledTimes(2));
     screen.rerender(<ApprovalHost {...props} request={root} />);
     await vi.waitFor(() => expect(screen.lastFrame()).toContain('Approval review stopped'));
-    expect(review).toHaveBeenCalledTimes(1);
+    expect(review).toHaveBeenCalledTimes(2);
   } finally {
     screen.unmount();
   }
@@ -164,10 +164,10 @@ it('restarts an interrupted foreground review when a background prompt is dismis
     await vi.waitFor(() => expect(review).toHaveBeenCalledTimes(1));
     const firstSignal = review.mock.calls[0]![2];
     screen.rerender(<ApprovalHost {...props} request={background} />);
-    await vi.waitFor(() => expect(screen.lastFrame()).toContain('Not reviewed automatically'));
+    await vi.waitFor(() => expect(review).toHaveBeenCalledTimes(2));
     expect(firstSignal.aborted).toBe(true);
     screen.rerender(<ApprovalHost {...props} request={root} />);
-    await vi.waitFor(() => expect(review).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(review).toHaveBeenCalledTimes(3));
     expect(connection.send).not.toHaveBeenCalled();
   } finally {
     screen.unmount();

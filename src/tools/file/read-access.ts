@@ -1,7 +1,36 @@
+import { realpath } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import path from 'node:path';
 import type { FileReadAccessPort, NestedReadAccessPort } from '../access-port.js';
 import type { ExecutionContext } from '../execution-context.js';
 import type { ISettingsService } from '../../shared/service-interfaces.js';
+import { getDiscoveredSkillRoots } from '../../shared/utils/skill-discovery-paths.js';
 import { resolveWorkspacePath, resolveWorkspacePathPhysically } from '../utils.js';
+
+function isWithin(targetPath: string, rootPath: string): boolean {
+  const normalizedRoot = path.resolve(rootPath);
+  const rootPrefix = normalizedRoot.endsWith(path.sep) ? normalizedRoot : normalizedRoot + path.sep;
+  return targetPath === normalizedRoot || targetPath.startsWith(rootPrefix);
+}
+
+async function isInsideDiscoveredSkillRoot(target: string, resolvedPath: string, root: string): Promise<boolean> {
+  const home = homedir();
+  const realHome = await realpath(home).catch(() => home);
+  const roots = new Set([...getDiscoveredSkillRoots(root, home), ...getDiscoveredSkillRoots(root, realHome)]);
+  for (const skillRoot of roots) {
+    const physicalRoot = await realpath(skillRoot).catch(() => skillRoot);
+    if (isWithin(target, physicalRoot)) return true;
+    for (const candidateRoot of [skillRoot, physicalRoot]) {
+      if (!isWithin(resolvedPath, candidateRoot)) continue;
+      const rel = path.relative(candidateRoot, resolvedPath);
+      const firstSegment = rel.split(path.sep)[0];
+      if (!firstSegment || firstSegment === '..') continue;
+      const physicalEntry = await realpath(path.join(candidateRoot, firstSegment)).catch(() => undefined);
+      if (physicalEntry && isWithin(target, physicalEntry)) return true;
+    }
+  }
+  return false;
+}
 
 /** Prefer root-bound authority; only legacy nested calls consult their session-keyed grant. */
 export function isSessionReadGranted(
@@ -53,6 +82,7 @@ export async function isReadPreApproved(params: {
     const root = remote ? cwd : await resolveWorkspacePathPhysically(cwd, cwd);
     if (!target || !root) return false;
     if (isSessionReadGranted(target, root, params.context, params)) return true;
+    if (!remote && (await isInsideDiscoveredSkillRoot(target, resolvedPath, root))) return true;
     resolveWorkspacePath(target, root, { allowDiscoveredSkillFolders: true });
     return true;
   } catch {

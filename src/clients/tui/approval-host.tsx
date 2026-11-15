@@ -219,18 +219,13 @@ function Host({
   const cancelReview = () => {
     if (pending.current) return;
     reviewCancelled.current = true;
-    if (
-      owner === 'turn' &&
-      interaction.kind === 'approval' &&
-      reviewApproval &&
-      !reviewResults.current.has(interaction.id)
-    )
+    if (interaction.kind === 'approval' && reviewApproval && !reviewResults.current.has(interaction.id))
       setReviewStopped(true);
     reviewed.current.add(interaction.id);
     reviewController.current?.abort();
   };
   const isNetworkApproval = approval.toolName === 'sandbox_network_access';
-  const reviewEligible = request.owner === 'turn' && interaction.kind === 'approval' && !isNetworkApproval;
+  const reviewEligible = interaction.kind === 'approval';
   const reviewing = Boolean(
     reviewEligible && reviewApproval && !reviewResult && !reviewStopped && !approval.llmAdvisory,
   );
@@ -264,7 +259,7 @@ function Host({
             const receipt = await connection.send({
               type: 'answer',
               requestId: interaction.id,
-              decision: { kind: 'allow' },
+              decision: isNetworkApproval ? { kind: 'grant', grant: 'network-allow-once' } : { kind: 'allow' },
               provenance: { source: 'policy', automaticApproval: true },
             });
             if (!receipt.ok) throw new WireCommandFailure(receipt.code, receipt.message);
@@ -291,7 +286,7 @@ function Host({
       controller.abort();
       if (!reviewCancelled.current && !completedReviews.has(interaction.id)) reviewedRequests.delete(interaction.id);
     };
-  }, [connection, interaction.id, reviewApproval, reviewEligible, reviewed, reviewResults]);
+  }, [connection, interaction.id, isNetworkApproval, reviewApproval, reviewEligible, reviewed, reviewResults]);
   const fail = (error: unknown) => setNotice(error instanceof Error ? error.message : String(error));
 
   const send = (decision: WireDecision) => {

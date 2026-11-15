@@ -90,21 +90,13 @@ export function createAssistedApprovalReview({
   unsandboxedOnly?: boolean;
 }): NonNullable<AgentSurface['reviewApproval']> {
   return async (request, history, signal) => {
-    const backgroundShell =
-      (request.toolName === 'shell' || request.toolName === 'bash') &&
-      request.input !== null &&
-      typeof request.input === 'object' &&
-      'background' in request.input &&
-      request.input.background === true;
     const unsandboxed =
       (request.toolName === 'shell' || request.toolName === 'bash') &&
       request.input !== null &&
       typeof request.input === 'object' &&
       'sandbox' in request.input &&
-      request.input.sandbox === 'unsandboxed' &&
-      !backgroundShell;
+      request.input.sandbox === 'unsandboxed';
     if (
-      (unsandboxedOnly && backgroundShell) ||
       signal.aborted ||
       (settings.get('shell.autoApproveMode') !== 'auto' &&
         (!unsandboxedOnly || settings.get('shell.autoApproveMode') !== 'advisory')) ||
@@ -137,8 +129,8 @@ export function createAssistedApprovalReview({
         !signal.aborted &&
         (!unsandboxedOnly ||
           request.toolName === 'read_file' ||
+          request.toolName === 'sandbox_network_access' ||
           ((request.toolName === 'shell' || request.toolName === 'bash') &&
-            !backgroundShell &&
             (unsandboxed || settings.get('sandbox.enabled') === false))) &&
         (unsandboxedOnly || advisory.riskLevel === 'low') &&
         review.shouldAutoApprove(advisory),
@@ -151,7 +143,8 @@ function isExplicitShellRequest(name: string, input: unknown): boolean {
     (name === 'shell' || name === 'bash') &&
     input !== null &&
     typeof input === 'object' &&
-    (('sandbox' in input && input.sandbox === 'unsandboxed') || ('background' in input && input.background === true))
+    'sandbox' in input &&
+    input.sandbox === 'unsandboxed'
   );
 }
 
@@ -211,14 +204,15 @@ export async function reviewLiveApproval(
   const { state, unsubscribe } = session.capture(() => undefined);
   unsubscribe();
   const request = state.pendingInteractions.find((pending) => pending.requestId === requestId);
-  if (!request || request.turnId !== state.activeTurnId || 'taskId' in request)
+  const isTaskRequest = Boolean(request && 'taskId' in request);
+  if (!request || (!isTaskRequest && request.turnId !== state.activeTurnId))
     return { kind: 'not_reviewed', approved: false };
   const result = await runtime.scope(() => review(request, session.acceptedHistory(), signal));
   const current = session.capture(() => undefined);
   current.unsubscribe();
   return !signal.aborted &&
     runtime.configurationSettings.get('shell.autoApproveMode') === mode &&
-    current.state.activeTurnId === request.turnId &&
+    (isTaskRequest || current.state.activeTurnId === request.turnId) &&
     current.state.pendingInteractions.some((pending) => pending.requestId === requestId)
     ? result
     : { kind: 'not_reviewed', approved: false };

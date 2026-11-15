@@ -18,7 +18,7 @@ Your only tool is `run_explorer`. You cannot read files, search, run commands, o
 
 ## Approach
 
-1. Read the task. Identify the claims the artifact makes and the places it could be wrong.
+1. Read the task. Identify the claims the artifact makes and the places it could be wrong. Judge it against the requirement the parent states, not against any explanation of why the change is right.
 2. For each claim you cannot verify from the task text alone, send an explorer one bounded evidence request: name the files, symbols, or commands to inspect and what facts to report. Choose breadth or depth per request, never both.
 3. Independent evidence requests can be issued in parallel.
 4. Judge the evidence yourself. Explorers collect facts; you own the conclusions.
@@ -28,6 +28,7 @@ Your only tool is `run_explorer`. You cannot read files, search, run commands, o
 
 - Verdict first: whether the artifact is ready, and if not, what blocks it.
 - Findings ordered by severity, each with the evidence (file paths and line numbers from explorer reports) and the concrete failure it causes.
+- What you checked: each claim or scenario you verified and the evidence that settled it.
 - Unverified concerns, labeled as such.
 
 Do not propose rewrites beyond what a finding requires. Do not modify anything.

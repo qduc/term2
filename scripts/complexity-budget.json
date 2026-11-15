@@ -265,10 +265,6 @@
       "lines": 501,
       "reason": "Session task lifecycle remains one coordinator; ACP answer provenance adds four signature lines to the existing answer forwarding method (497 to 501). Interaction validation and persistence already live in background-interactions.ts. Splitting this forwarding check into another file would add a boundary without moving an independent responsibility. Remove this ceiling when lifecycle work yields a substantive extraction."
     },
-    "src/session/state.ts": {
-      "lines": 501,
-      "reason": "The session snapshot reducer accumulates accepted cache creation and one-hour usage beside existing input/output/read counters. Keeping the scalar accumulation together preserves replay totals without a second usage fold. Retire this ceiling when the complete usage reduction is extracted from the session snapshot reducer."
-    },
     "src/shared/utils/ai/token-usage.ts": {
       "lines": 521,
       "reason": "The shared usage boundary now preserves cache creation and one-hour counts and disambiguates raw inclusive input from canonical split counters before existing renderers consume them. Separating only the new counters would scatter that normalization contract. Retire this ceiling when the complete public usage normalizer and its compatibility entry points are consolidated."

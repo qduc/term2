@@ -133,6 +133,7 @@ export type DirectSessionState = {
   readonly lastUsage?: Usage;
   readonly lastSpeed?: { readonly tps: number; readonly approximate: boolean };
   readonly codexQuota?: import('../model/index.js').CodexWeeklyQuota;
+  readonly codexFiveHourQuota?: import('../model/index.js').CodexWeeklyQuota;
   readonly commands: import('./command-types.js').DirectCommandReceipts;
   readonly notifications: import('./notifications.js').DirectNotificationState;
   readonly requestCosts: readonly import('./facts.js').DirectRequestCostFact[];
@@ -181,7 +182,11 @@ export type DirectSessionUpdate =
         | DirectBackgroundProgress
         | DirectArgumentStream
         | DirectBranchTransient
-        | { readonly type: 'codex_quota'; readonly quota: import('../model/index.js').CodexWeeklyQuota | null }
+        | {
+            readonly type: 'codex_quota';
+            readonly quota: import('../model/index.js').CodexWeeklyQuota | null;
+            readonly fiveHourQuota?: import('../model/index.js').CodexWeeklyQuota | null;
+          }
         | Extract<import('../engine/index.js').TurnEvent, { readonly type: 'retrying' }>
         | { readonly type: 'reasoning_delta'; readonly delta: string }
         | { readonly type: 'tool_progress'; readonly executionId: ExecutionId; readonly chunk: string };

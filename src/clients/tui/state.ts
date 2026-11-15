@@ -119,6 +119,7 @@ export type TuiState = {
   readonly notices: readonly string[];
   readonly usage?: string;
   readonly codexQuota?: { readonly usedPercent: number; readonly resetAt: number };
+  readonly codexFiveHourQuota?: { readonly usedPercent: number; readonly resetAt: number };
   readonly retry?: {
     readonly id: number;
     readonly attempt: number;

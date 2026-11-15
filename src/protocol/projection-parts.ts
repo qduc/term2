@@ -31,9 +31,9 @@ type EventFactory = <K extends WireEventType>(
 ) => WireEvent;
 type ToolIdentity = (executionId: string) => Partial<WireEventPayloads['tool_finished']>;
 
-/** Public configuration copied from the accepted rotation header; never intent/profile. */
+/** Public configuration copied from an accepted configuration or rotation; never intent/profile. */
 export function rotationConfiguration(
-  fact: DirectSessionRotationFact,
+  fact: DirectSessionRotationFact | Extract<Fact, { type: 'configuration_changed' }>,
 ): WireConfiguration & { readonly model: WireModel } {
   return {
     model: { provider: fact.configuration.model.provider, model: fact.configuration.model.model },

@@ -1,6 +1,30 @@
 /** Pure queue projection. Session owns its lifetime and folds facts in accepted log order. */
 import type { ContentPart, Item, ItemId } from '../model/index.js';
 import type { DirectQueueEdit, DirectQueueFact, DirectQueueRecord, DirectQueueState } from './queue-types.js';
+import type { Fact } from './facts.js';
+
+/** Reads exactly the durable user item named by turn_started submission correlation. */
+export function directSubmittedTurn(fact: Extract<Fact, { readonly type: 'turn_started' }>) {
+  if (!fact.submission) return null;
+  const submission = fact.submission;
+  const item = fact.input.find((entry) => entry.type === 'user_message' && entry.id === submission.messageId);
+  if (!submission.clientRequestId?.trim() || item?.type !== 'user_message') {
+    throw new Error('invalid direct turn submission correlation');
+  }
+  return {
+    request: {
+      clientRequestId: submission.clientRequestId,
+      content: item.content,
+      ...(submission.origin ? { origin: submission.origin } : {}),
+    },
+    admission: {
+      kind: 'started',
+      clientRequestId: submission.clientRequestId,
+      messageId: submission.messageId,
+      turnId: fact.turnId,
+    } as const,
+  };
+}
 
 /** Empty projection; reopening then folds accepted facts without dispatching anything. */
 export function createDirectQueueState(): DirectQueueState {
